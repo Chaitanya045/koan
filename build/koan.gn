@@ -1,0 +1,11 @@
+# GN args for Koan development builds, tuned for an 8-core / 16 GB machine.
+is_debug = false
+dcheck_always_on = true
+is_component_build = true
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+enable_nacl = false
+use_sysroot = true
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
