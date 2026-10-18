@@ -19,6 +19,8 @@ _Last updated: 2026-10-18_
   Progress 2026-10-18 ~15:15 local: 19,113 / 76,235 steps (25%) after ~2 h.
   Progress 2026-10-18 16:37 local: 24,322 / 72,608 (33%) after 3 h 25 m;
   rate fell to ~63 steps/min in the Blink/mojom phase (avg ~119/min).
+  Progress 2026-10-18 18:35 local: 31,300 / 70,533 (44%) after 5 h 23 m;
+  ~59 steps/min over the last 2 h.
   Background watcher tasks are capped at 2 h and are not restarted, so
   check progress manually with `siso ps`.
 
