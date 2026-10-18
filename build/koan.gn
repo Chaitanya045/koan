@@ -5,7 +5,6 @@ is_component_build = true
 symbol_level = 0
 blink_symbol_level = 0
 v8_symbol_level = 0
-enable_nacl = false
 use_sysroot = true
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
