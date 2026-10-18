@@ -37,5 +37,5 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
 
 ## Status
 
-- [ ] Phase 0 — Chromium checkout downloading
+- [ ] Phase 0 — checkout done (Chromium 158.0.8111.0, main @ 67e29b8); first build running
 - [x] Upstream research (`research-upstream.md`)
