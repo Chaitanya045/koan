@@ -303,3 +303,22 @@ build has finished.
 
 Incremental rebuilds after each step only recompile the touched files and
 relink: minutes, not hours (component build).
+
+## 7. Open issues (from review)
+
+- **Views anchored below the toolbar in compact mode** (raised by DeepSeek V4.1
+  Flash). With `contents_top = 0` and the top container drawn as an overlay,
+  the infobar container, bookmark bar and find bar lose their anchor. Decide
+  per view before step 6: bookmark bar hides with the toolbar; infobars and
+  the find bar anchor to the contents top while hidden and to the toolbar
+  bottom while revealed.
+- **Hit-testing of the hidden toolbar** (raised by GLM 5.3 Flash). A layer
+  transform animated through `AnimationBuilder` moves pixels but not the
+  view's bounds, so a "hidden" toolbar can still receive clicks and hovers
+  over the page. While hidden, the top container must be
+  `SetCanProcessEventsWithinSubtree(false)` (or `SetVisible(false)` after the
+  hide animation ends), with the hot zone as the only event target.
+- **Edge hot zone vs. upstream hover trigger.** The 4–6 px hot-zone view is
+  separate from upstream's expand-on-hover trigger and could swallow
+  clicks at the window edge (e.g. on scrollbars of RTL pages). Prototype
+  both, and prefer extending the upstream trigger if it can fire at width 0.

@@ -13,6 +13,13 @@ Provider instance `opencode`, reasoning `variant: high`, in this order:
   design attempts died on the second model call. One research task (web
   research, small context per call) succeeded on DeepSeek free.
   → Give free models small, focused tasks; check for partial output.
+- Retest at 08:55 UTC the same day: both free models completed a ~45 KB
+  read-and-review task in new top-level T3 threads in ~25 s each, no errors.
+  The earlier failures were a temporary provider outage, not a context limit.
+  If they fail again, retry once after a few minutes before falling back to Go.
+- Both free models gave useful design review (they caught two real gaps in
+  phase1-design.md §7). GLM's technical claims need checking: it wrongly
+  doubted that ui::Layer transform animations are compositor-threaded.
 - **T3 model catalog is cached at app start.** `opencode-go/*` models are
   rejected by `delegate_task` (`model_unavailable`) until T3 Code restarts.
 - OpenCode auth: `opencode auth login` saved the user's console key under
