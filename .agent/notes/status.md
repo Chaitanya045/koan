@@ -16,6 +16,9 @@ _Last updated: 2026-10-18_
   Log: `logs/build.log` (siso prints little; use
   `siso ps -C out/Koan` from `chromium/src` with depot_tools on PATH).
   Check alive: `pgrep -f scripts/build.sh`.
+  Progress 2026-10-18 ~15:15 local: 19,113 / 76,235 steps (25%) after ~2 h.
+  Background watcher tasks are capped at 2 h and are not restarted, so
+  check progress manually with `siso ps`.
 
 ## Next
 1. When the build finishes: launch
