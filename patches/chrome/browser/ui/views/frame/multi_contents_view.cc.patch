@@ -1,0 +1,63 @@
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
+index a756f076ffce50efa86bb84421b4ff8a77e8c581..c6efe93a58f43d39ff07e31fd02d85fd43a72cb8 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
+@@ -41,6 +41,7 @@
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
++#include "koan/browser/ui/views/koan_content_card.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/ozone_buildflags.h"
+ #include "ui/compositor/layer.h"
+@@ -228,7 +229,8 @@ void MultiContentsView::SetBackgroundRadii(const gfx::RoundedCornersF& radii) {
+   background_view_->SetRoundedCorners(radii);
+ 
+   if (!IsInSplitView()) {
+-    GetActiveContentsContainerView()->SetRoundedCorners(radii);
++    GetActiveContentsContainerView()->SetRoundedCorners(
++        koan::ActiveContentsRadii(browser_view_, radii));
+     GetInactiveContentsContainerView()->SetRoundedCorners(
+         gfx::RoundedCornersF());
+   }
+@@ -507,8 +509,10 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+ 
+   gfx::Rect available_space = gfx::Rect(width, height);
+ 
++  const bool koan_card =
++      !IsInSplitView() && koan::UseContentCard(browser_view_);
+   const bool show_background =
+-      drop_target_view_->GetVisible() || IsInSplitView();
++      drop_target_view_->GetVisible() || IsInSplitView() || koan_card;
+   layouts.child_layouts.emplace_back(background_view_.get(), show_background,
+                                      available_space);
+ 
+@@ -522,6 +526,8 @@ views::ProposedLayout MultiContentsView::CalculateProposedLayout(
+ 
+   if (IsInSplitView()) {
+     available_space.Inset(split_view_insets_);
++  } else if (koan_card) {
++    available_space.Inset(koan::ContentCardInsets());
+   }
+   ViewSizes sizes = GetViewSizes(available_space);
+ 
+@@ -658,7 +664,7 @@ gfx::Rect MultiContentsView::CalculateDropTargetLayout(
+ gfx::Rect MultiContentsView::CalculateSeparatorLayouts(
+     const gfx::Rect& available_space,
+     views::ProposedLayout::ChildLayoutList& child_layouts) const {
+-  if (IsInSplitView()) {
++  if (IsInSplitView() || koan::UseContentCard(browser_view_)) {
+     child_layouts.emplace_back(contents_separators_.top_separator.get(), false,
+                                gfx::Rect());
+     child_layouts.emplace_back(contents_separators_.leading_separator.get(),
+@@ -802,7 +808,9 @@ void MultiContentsView::UpdateContentsBorderAndOverlay() {
+     contents_container_view->SetRoundedCorners(
+         is_in_split
+             ? kSplitViewContentRoundedCorners
+-            : (is_active ? GetBackgroundRadii() : gfx::RoundedCornersF()));
++            : (is_active ? koan::ActiveContentsRadii(browser_view_,
++                                                     GetBackgroundRadii())
++                         : gfx::RoundedCornersF()));
+     contents_container_view->UpdateBorderAndOverlay(
+         is_in_split, is_active, is_active && active_contents_view_highlighted_);
+   }

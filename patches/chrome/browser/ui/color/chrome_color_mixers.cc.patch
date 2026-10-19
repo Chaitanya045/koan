@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/ui/color/chrome_color_mixers.cc b/chrome/browser/ui/color/chrome_color_mixers.cc
+index 8432f4946834648a5f63ddee567ee63174e26b0f..3b0f7a6fbae26f1af87057d18122318999e4d4a4 100644
+--- a/chrome/browser/ui/color/chrome_color_mixers.cc
++++ b/chrome/browser/ui/color/chrome_color_mixers.cc
+@@ -23,6 +23,7 @@
+ #include "chrome/browser/ui/color/omnibox_color_mixer.h"
+ #include "chrome/browser/ui/color/product_specifications_color_mixer.h"
+ #include "chrome/browser/ui/color/tab_strip_color_mixer.h"
++#include "koan/browser/ui/color/koan_color_mixer.h"
+ #include "ui/color/color_provider_utils.h"
+ 
+ namespace {
+@@ -87,6 +88,7 @@ void AddChromeColorMixers(ui::ColorProvider* provider,
+ 
+   // Must be the last one in order to override other mixer colors.
+   AddNativeChromeColorMixer(provider, key);
++  koan::AddKoanColorMixer(provider, key);
+ 
+   if (key.custom_theme) {
+     key.custom_theme->AddColorMixers(provider, key);

@@ -28,8 +28,19 @@
   Wayland.
 - `scripts/cdp_eval.mjs <port> <url> <expr>` evaluates JS on any page incl.
   `chrome://prefs-internals` (pref values with default/user metadata).
-- `pkill -f <pattern>` from the agent shell can kill the shell itself (exit
-  144) because the pattern is in its own command line.
+- **Native view tree with bounds:** start Koan with
+  `--enable-ui-devtools=<port>` (plus the headless Ozone flags) and run
+  `node scripts/ui_tree.mjs <port> [regex]`. The UI DevTools server is
+  WebSocket-only (`ws://127.0.0.1:<port>/0`; HTTP `/json` hits NOTREACHED and
+  just logs). Bounds come from `CSS.getMatchedStylesForNode` (`X/Y/Width/
+  Height/Visible`). Never query the root node: `RootElement::GetBounds()` is
+  NOTREACHED and aborts the browser.
+- Don't start a background process and `sleep` in the same foreground Bash
+  call; it hung until timeout. Start long-lived test browsers with
+  `run_in_background: true`, then probe in separate calls.
+- `pkill -f <pattern>` / `pgrep -f` from the agent shell match the shell
+  itself (its command line contains the pattern): pkill kills the whole
+  command (exit 144), pgrep always "finds" something. Kill by PID instead.
 - Long runs must be detached (`setsid nohup ... & disown`): background Bash
   tasks are capped at 2 h, and a T3 Code restart kills child processes.
 - Foreground `sleep` is blocked in the agent shell; wait with a background

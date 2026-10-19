@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/color/BUILD.gn b/chrome/browser/ui/color/BUILD.gn
+index a73bb082108a171f1a3e5506ce99552badf657f5..16349517dfbb9c8918923a4b0e197c2bf3ce3aa1 100644
+--- a/chrome/browser/ui/color/BUILD.gn
++++ b/chrome/browser/ui/color/BUILD.gn
+@@ -58,6 +58,7 @@ source_set("mixers") {
+     "//components/compose:buildflags",
+     "//components/omnibox/common",
+     "//components/search",
++    "//koan/browser/ui/color",
+     "//ui/base:buildflags",
+     "//ui/color",
+     "//ui/color:mixers",

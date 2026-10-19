@@ -6,8 +6,14 @@
 # dependency-light so upstream targets can depend on it without cycles; the
 # definitions live in :impl, linked through //chrome/browser:browser.
 source_set("views") {
-  sources = [ "koan_browser_view_hooks.h" ]
-  public_deps = [ "//base" ]
+  sources = [
+    "koan_browser_view_hooks.h",
+    "koan_content_card.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
 }
 
 source_set("impl") {
@@ -15,10 +21,13 @@ source_set("impl") {
     "koan_browser_view_controller.cc",
     "koan_browser_view_controller.h",
     "koan_browser_view_hooks.cc",
+    "koan_content_card.cc",
   ]
   deps = [
     ":views",
     "//chrome/browser/ui/views/frame:browser_view_header",
+    "//chrome/browser/ui/views/frame:contents_container_view",
+    "//chrome/browser/ui/views/frame:multi_contents_view",
     "//koan/browser:features",
     "//ui/base",
     "//ui/views",

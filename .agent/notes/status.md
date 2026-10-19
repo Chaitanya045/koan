@@ -33,10 +33,17 @@ _Last updated: 2026-10-19_
   (`--enable-logging=stderr --vmodule=koan_browser_view_controller=1`), clean
   exit, no DCHECKs.
 
+- Phase 1 step 4a (Zen surfaces): Koan colour mixer (toolbar = frame colour,
+  no content/sidebar separators) and the content card (MultiContentsView
+  insets the single contents by 8px right/bottom, 8px radius on the active
+  contents only, separators hidden). Screenshots: `docs/screenshots/step4-*`.
+  Light, dark (`--force-dark-mode`) and flag-off all checked.
+
 ## Running
 - Nothing.
 
 ## Next
-1. Phase 1 step 4 from `docs/phase1-design.md` §6: Zen styling (colour
-   mixer, header buttons, floating rounded content card).
-2. Don't apply patches under `chromium/src` while a build is running.
+1. Phase 1 step 4b: sidebar header buttons (hide what Zen doesn't have),
+   maybe a subtle card shadow; check split view still looks right.
+2. Then step 5: compact mode sidebar.
+3. Don't apply patches under `chromium/src` while a build is running.

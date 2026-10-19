@@ -6,7 +6,7 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_CONTROLLER_H_
 
 #include "base/memory/raw_ptr.h"
-#include "base/scoped_observation.h"
+#include "base/scoped_multi_source_observation.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 
@@ -39,9 +39,16 @@ class KoanBrowserViewController : public views::ViewObserver {
  private:
   // views::ViewObserver:
   void OnViewAddedToWidget(views::View* observed_view) override;
+  void OnViewBoundsChanged(views::View* observed_view) override;
+
+  // Rounds the content card's corners when it is shown, restores upstream's
+  // corners otherwise. Runs after each layout of the contents area, since the
+  // card depends on tab strip mode and fullscreen state.
+  void UpdateContentCard();
 
   const raw_ptr<BrowserView> browser_view_;
-  base::ScopedObservation<views::View, views::ViewObserver> observation_{this};
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      observations_{this};
 };
 
 }  // namespace koan

@@ -8,6 +8,9 @@
 
 #include "base/logging.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/contents_container_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "koan/browser/ui/views/koan_content_card.h"
 #include "ui/base/class_property.h"
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(koan::KoanBrowserViewController*)
@@ -26,7 +29,10 @@ int g_live_count = 0;
 KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
     : browser_view_(browser_view) {
   ++g_live_count;
-  observation_.Observe(browser_view);
+  observations_.AddObservation(browser_view);
+  if (MultiContentsView* contents = browser_view->multi_contents_view()) {
+    observations_.AddObservation(contents);
+  }
   VLOG(1) << "Koan: window created (" << g_live_count << " open)";
 }
 
@@ -61,7 +67,28 @@ int KoanBrowserViewController::live_count() {
 
 void KoanBrowserViewController::OnViewAddedToWidget(
     views::View* observed_view) {
-  VLOG(1) << "Koan: window attached to widget";
+  if (observed_view == browser_view_) {
+    VLOG(1) << "Koan: window attached to widget";
+  }
+}
+
+void KoanBrowserViewController::OnViewBoundsChanged(
+    views::View* observed_view) {
+  if (observed_view == browser_view_->multi_contents_view()) {
+    UpdateContentCard();
+  }
+}
+
+void KoanBrowserViewController::UpdateContentCard() {
+  MultiContentsView* contents = browser_view_->multi_contents_view();
+  if (!contents || contents->IsInSplitView()) {
+    return;
+  }
+  // MultiContentsView applies the same radii on tab and split changes (see
+  // the hooks in multi_contents_view.cc); this covers layout-only changes
+  // such as fullscreen or switching the tab strip mode.
+  contents->GetActiveContentsContainerView()->SetRoundedCorners(
+      ActiveContentsRadii(browser_view_, contents->GetBackgroundRadii()));
 }
 
 }  // namespace koan

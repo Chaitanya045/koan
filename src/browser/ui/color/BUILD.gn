@@ -1,0 +1,17 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Koan colour overrides, registered from
+# chrome/browser/ui/color/chrome_color_mixers.cc.
+source_set("color") {
+  sources = [
+    "koan_color_mixer.cc",
+    "koan_color_mixer.h",
+  ]
+  deps = [
+    "//chrome/browser/ui/color:color_headers",
+    "//koan/browser:features",
+    "//ui/color",
+  ]
+}

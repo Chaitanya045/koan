@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index fe04b6950550f3e8f037dde1af7effbeaddc0e5f..e81f1dd3e7a31f6f8c8979587f94464a530e7d3d 100644
+index fe04b6950550f3e8f037dde1af7effbeaddc0e5f..1f21c020a7e00ebd27f67987d92d5e71b24578ba 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
 @@ -959,6 +959,7 @@ source_set("browser_view") {
@@ -10,3 +10,11 @@ index fe04b6950550f3e8f037dde1af7effbeaddc0e5f..e81f1dd3e7a31f6f8c8979587f94464a
      "//media/capture:capture_switches",
      "//third_party/blink/public/common:headers",
      "//ui/accessibility",
+@@ -3211,6 +3212,7 @@ source_set("multi_contents_view_impl") {
+     "//components/tabs:public",
+     "//content/public/browser",
+     "//content/public/common",
++    "//koan/browser/ui/views",
+     "//ui/base:ozone_buildflags",
+     "//ui/base/metadata",
+     "//ui/compositor",

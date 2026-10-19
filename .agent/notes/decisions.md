@@ -27,3 +27,10 @@
   `chrome/browser/flag-metadata.json` / `enums.xml` (`LoginCustomFlags`), so
   `AboutFlagsTest.EveryFlagHasMetadata` and `AboutFlagsHistogramTest` will
   fail. Add the entries before running those tests (Phase 4).
+- **Zen look via colours + MultiContentsView card, not new views.** The
+  toolbar takes the frame colour (Koan colour mixer, runs after Chrome's
+  mixers, before custom themes), and the single contents become a card using
+  the same mechanism as upstream split view (insets + rounded active
+  contents). Only the active contents are rounded: rounding
+  MultiContentsView's background too leaves unpainted (black) corners
+  because nothing is drawn behind it.
