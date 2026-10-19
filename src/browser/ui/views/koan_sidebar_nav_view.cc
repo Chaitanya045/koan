@@ -15,10 +15,11 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "components/favicon/content/content_favicon_driver.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
@@ -27,7 +28,6 @@
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/image/image.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
@@ -193,42 +193,21 @@ void KoanSidebarNavView::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
-  if (selection.active_tab_changed()) {
+  // A replaced tab (e.g. discarded and reloaded) can be the active one
+  // without a selection change.
+  if (selection.active_tab_changed() ||
+      change.type() == TabStripModelChange::kReplaced) {
     ObserveActiveTab();
   }
 }
 
-void KoanSidebarNavView::PrimaryPageChanged(content::Page& page) {
-  UpdateUrl();
-}
-
-void KoanSidebarNavView::TitleWasSet(content::NavigationEntry* entry) {
-  UpdateUrl();
-}
-
-void KoanSidebarNavView::WebContentsDestroyed() {
-  // The favicon driver goes with its WebContents.
-  favicon_observation_.Reset();
-}
-
-void KoanSidebarNavView::OnFaviconUpdated(
-    favicon::FaviconDriver* favicon_driver,
-    NotificationIconType notification_icon_type,
-    const GURL& icon_url,
-    bool icon_url_changed,
-    const gfx::Image& image) {
-  UpdateUrl();
-}
-
 void KoanSidebarNavView::ObserveActiveTab() {
-  content::WebContents* contents =
-      browser_view_->browser()->GetTabStripModel()->GetActiveWebContents();
-  Observe(contents);
-  favicon_observation_.Reset();
-  if (auto* driver =
-          contents ? favicon::ContentFaviconDriver::FromWebContents(contents)
-                   : nullptr) {
-    favicon_observation_.Observe(driver);
+  tab_ui_subscription_ = {};
+  tabs::TabInterface* tab =
+      browser_view_->browser()->GetTabStripModel()->GetActiveTab();
+  if (TabUIHelper* helper = tab ? TabUIHelper::From(tab) : nullptr) {
+    tab_ui_subscription_ = helper->AddTabUIChangeCallback(base::BindRepeating(
+        &KoanSidebarNavView::UpdateUrl, base::Unretained(this)));
   }
   UpdateUrl();
 }
@@ -239,18 +218,21 @@ void KoanSidebarNavView::UpdateUrl() {
     url_pill_->SetImageModel(views::Button::STATE_NORMAL, ui::ImageModel());
     return;
   }
-  const std::u16string text = DisplayUrl(web_contents());
+  tabs::TabInterface* tab =
+      browser_view_->browser()->GetTabStripModel()->GetActiveTab();
+  const std::u16string text = DisplayUrl(tab ? tab->GetContents() : nullptr);
   url_pill_->SetText(text.empty() ? u"Search or enter address" : text);
 
-  // The site's icon, or a globe.
-  ui::ImageModel icon = ui::ImageModel::FromVectorIcon(
-      vector_icons::kGlobeIcon, kColorTabForegroundActiveFrameActive,
-      gfx::kFaviconSize);
-  if (favicon_observation_.IsObserving()) {
-    const gfx::Image favicon = favicon_observation_.GetSource()->GetFavicon();
-    if (!favicon.IsEmpty()) {
-      icon = ui::ImageModel::FromImage(favicon);
-    }
+  // The site's icon, as the tab shows it, or a globe.
+  ui::ImageModel icon;
+  if (TabUIHelper* helper = tab ? TabUIHelper::From(tab) : nullptr;
+      helper && helper->ShouldDisplayFavicon()) {
+    icon = helper->GetFavicon();
+  }
+  if (icon.IsEmpty()) {
+    icon = ui::ImageModel::FromVectorIcon(vector_icons::kGlobeIcon,
+                                          kColorTabForegroundActiveFrameActive,
+                                          gfx::kFaviconSize);
   }
   url_pill_->SetImageModel(views::Button::STATE_NORMAL, icon);
 }

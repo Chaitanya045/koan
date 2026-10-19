@@ -149,6 +149,15 @@ void KoanCompactModeController::OnBrowserViewLayout() {
       ApplyToolbarTransform(/*animate=*/false);
     }
     LayoutFloatingUrlBar();
+    // The tab strip may not have existed yet when the mode was activated;
+    // add the header outside of layout.
+    if ((mode_ == Mode::kSingleToolbar || compact_keeps_sidebar_nav_) &&
+        (!sidebar_nav_.view() || !sidebar_nav_buttons_.view())) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&KoanCompactModeController::InstallSidebarNav,
+                         weak_factory_.GetWeakPtr()));
+    }
   }
 }
 
@@ -236,7 +245,44 @@ void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
 void KoanCompactModeController::OnViewBoundsChanged(
     views::View* observed_view) {
   // BrowserView's layout puts the top container back at full width.
-  LayoutFloatingUrlBar();
+  if (observed_view == browser_view_->top_container() ||
+      observed_view == browser_view_->toolbar()) {
+    LayoutFloatingUrlBar();
+  }
+}
+
+void KoanCompactModeController::OnViewVisibilityChanged(
+    views::View* observed_view,
+    views::View* starting_view,
+    bool visible) {
+  // A toolbar view that other code shows while the URL bar floats: it
+  // should be visible afterwards, but not inside the floating card.
+  auto it = floating_restore_.find(observed_view);
+  if (observed_view != starting_view || it == floating_restore_.end() ||
+      changing_toolbar_visibility_ || !visible) {
+    return;
+  }
+  it->second = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&KoanCompactModeController::HideToolbarForFloating,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void KoanCompactModeController::OnViewIsDeleting(views::View* observed_view) {
+  if (floating_restore_.erase(observed_view)) {
+    floating_siblings_observation_.RemoveObservation(observed_view);
+  }
+}
+
+void KoanCompactModeController::HideToolbarForFloating() {
+  if (!url_bar_floating_) {
+    return;
+  }
+  base::AutoReset<bool> changing(&changing_toolbar_visibility_, true);
+  for (const auto& [view, restore] : floating_restore_) {
+    view->SetVisible(false);
+  }
 }
 
 void KoanCompactModeController::SetUrlBarFloating(bool floating) {
@@ -252,20 +298,19 @@ void KoanCompactModeController::SetUrlBarFloating(bool floating) {
     }
     url_bar_floating_ = true;
     toolbar_revealed_ = false;
-    if (sidebar_nav_) {
-      sidebar_nav_->SetEditing(true);
+    if (sidebar_nav()) {
+      sidebar_nav()->SetEditing(true);
     }
     toolbar_hide_timer_.Stop();
-    // Just the location bar: hide the rest of the toolbar.
+    // Just the location bar: hide the rest of the toolbar, remembering what
+    // to restore (and watching for other code showing things meanwhile).
     for (views::View* sibling : location_bar->parent()->children()) {
-      if (sibling != location_bar && sibling->GetVisible()) {
-        hidden_for_floating_.push_back(
-            std::make_unique<views::ViewTracker>(sibling));
+      if (sibling != location_bar) {
+        floating_restore_[sibling] = sibling->GetVisible();
+        floating_siblings_observation_.AddObservation(sibling);
       }
     }
-    for (const auto& tracker : hidden_for_floating_) {
-      tracker->view()->SetVisible(false);
-    }
+    HideToolbarForFloating();
     top_container->SetCanProcessEventsWithinSubtree(true);
     ui::Layer* layer = top_container->layer();
     layer->GetAnimator()->AbortAllAnimations();
@@ -285,17 +330,19 @@ void KoanCompactModeController::SetUrlBarFloating(bool floating) {
   }
 
   url_bar_floating_ = false;
-  if (sidebar_nav_) {
-    sidebar_nav_->SetEditing(false);
+  if (sidebar_nav()) {
+    sidebar_nav()->SetEditing(false);
   }
   top_container_observation_.Reset();
   toolbar_observation_.Reset();
-  for (const auto& tracker : hidden_for_floating_) {
-    if (tracker->view()) {
-      tracker->view()->SetVisible(true);
+  floating_siblings_observation_.RemoveAllObservations();
+  {
+    base::AutoReset<bool> changing(&changing_toolbar_visibility_, true);
+    for (const auto& [view, restore] : floating_restore_) {
+      view->SetVisible(restore);
     }
   }
-  hidden_for_floating_.clear();
+  floating_restore_.clear();
   if (ui::Layer* layer = top_container->layer()) {
     layer->GetAnimator()->AbortAllAnimations();
     layer->SetOpacity(1.0f);
@@ -310,8 +357,9 @@ void KoanCompactModeController::SetUrlBarFloating(bool floating) {
 void KoanCompactModeController::LayoutFloatingUrlBar() {
   views::View* top_container = browser_view_->top_container();
   ToolbarView* toolbar = browser_view_->toolbar();
+  // Fullscreen deactivates the mode (which ends floating) right after.
   if (!url_bar_floating_ || laying_out_floating_ || !toolbar ||
-      !top_container->parent()) {
+      !top_container->parent() || browser_view_->IsFullscreen()) {
     return;
   }
   base::AutoReset<bool> laying_out(&laying_out_floating_, true);
@@ -319,6 +367,8 @@ void KoanCompactModeController::LayoutFloatingUrlBar() {
       browser_view_, top_container->parent(), browser_view_->GetLocalBounds());
   const int width = std::min(area.width() * 2 / 3, kFloatingUrlBarMaxWidth);
   const int height = toolbar->GetPreferredSize().height();
+  // The card is the toolbar row only (a bookmarks bar is clipped), like
+  // Zen's floating URL bar.
   const int top = std::max(0, (area.height() - kFloatingUrlBarOpenHeight) / 2);
   top_container->SetBoundsRect(gfx::Rect(area.x() + (area.width() - width) / 2,
                                          area.y() + top, width, height));
@@ -435,7 +485,8 @@ void KoanCompactModeController::Activate(Mode mode) {
 
 void KoanCompactModeController::InstallSidebarNav() {
   views::View* region = browser_view_->tab_strip_view();
-  if (sidebar_nav_ || !region ||
+  if ((mode_ != Mode::kSingleToolbar && !compact_keeps_sidebar_nav_) ||
+      (sidebar_nav_.view() && sidebar_nav_buttons_.view()) || !region ||
       region->GetClassName() != "VerticalTabStripRegionView") {
     return;
   }
@@ -443,18 +494,22 @@ void KoanCompactModeController::InstallSidebarNav() {
     // The navigation buttons go in the top row, next to the sidebar toggle
     // (laid out by the koan_sidebar_header.h hooks).
     if (child->GetClassName() == "VerticalTabStripTopContainer" &&
-        !sidebar_nav_buttons_) {
-      sidebar_nav_buttons_ = child->AddChildView(
-          std::make_unique<KoanSidebarNavButtons>(browser_view_));
+        !sidebar_nav_buttons_.view()) {
+      sidebar_nav_buttons_.SetView(child->AddChildView(
+          std::make_unique<KoanSidebarNavButtons>(browser_view_)));
       child->InvalidateLayout();
     }
     // The URL pill at the top of the content area (a FlexLayoutView), above
     // the separator and the tabs.
-    if (child->GetClassName() == "FlexLayoutView" && !sidebar_nav_) {
-      sidebar_nav_ = child->AddChildViewAt(
-          std::make_unique<KoanSidebarNavView>(browser_view_), 0);
+    if (child->GetClassName() == "FlexLayoutView" && !sidebar_nav_.view()) {
+      sidebar_nav_.SetView(child->AddChildViewAt(
+          std::make_unique<KoanSidebarNavView>(browser_view_), 0));
     }
   }
+}
+
+KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
+  return static_cast<KoanSidebarNavView*>(sidebar_nav_.view());
 }
 
 void KoanCompactModeController::Deactivate() {
@@ -463,14 +518,16 @@ void KoanCompactModeController::Deactivate() {
   SetUrlBarFloating(false);
   mode_ = Mode::kNone;
   compact_keeps_sidebar_nav_ = false;
-  if (sidebar_nav_) {
-    sidebar_nav_->parent()->RemoveChildViewT(
-        std::exchange(sidebar_nav_, nullptr));
-  }
-  if (sidebar_nav_buttons_) {
-    views::View* row = sidebar_nav_buttons_->parent();
-    row->RemoveChildViewT(std::exchange(sidebar_nav_buttons_, nullptr));
-    row->InvalidateLayout();
+  // The trackers clear themselves if upstream destroyed the views (e.g. a
+  // tab strip mode change).
+  for (views::ViewTracker* tracker : {&sidebar_nav_, &sidebar_nav_buttons_}) {
+    views::View* view = tracker->view();
+    tracker->SetView(nullptr);
+    if (view && view->parent()) {
+      views::View* parent = view->parent();
+      parent->RemoveChildViewT(view);
+      parent->InvalidateLayout();
+    }
   }
 
   toolbar_hide_timer_.Stop();

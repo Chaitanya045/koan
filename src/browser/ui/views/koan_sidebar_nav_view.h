@@ -5,13 +5,10 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_NAV_VIEW_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_NAV_VIEW_H_
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
-#include "base/scoped_observation.h"
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
-#include "components/favicon/core/favicon_driver.h"
-#include "components/favicon/core/favicon_driver_observer.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/view.h"
@@ -52,10 +49,7 @@ class KoanSidebarNavButtons : public views::BoxLayoutView,
   raw_ptr<views::Button> forward_ = nullptr;
 };
 
-class KoanSidebarNavView : public views::View,
-                           public TabStripModelObserver,
-                           public content::WebContentsObserver,
-                           public favicon::FaviconDriverObserver {
+class KoanSidebarNavView : public views::View, public TabStripModelObserver {
   METADATA_HEADER(KoanSidebarNavView, views::View)
 
  public:
@@ -73,18 +67,6 @@ class KoanSidebarNavView : public views::View,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
 
-  // content::WebContentsObserver:
-  void PrimaryPageChanged(content::Page& page) override;
-  void TitleWasSet(content::NavigationEntry* entry) override;
-  void WebContentsDestroyed() override;
-
-  // favicon::FaviconDriverObserver:
-  void OnFaviconUpdated(favicon::FaviconDriver* favicon_driver,
-                        NotificationIconType notification_icon_type,
-                        const GURL& icon_url,
-                        bool icon_url_changed,
-                        const gfx::Image& image) override;
-
  private:
   void ObserveActiveTab();
   void UpdateUrl();
@@ -93,9 +75,9 @@ class KoanSidebarNavView : public views::View,
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<views::LabelButton> url_pill_ = nullptr;
   bool editing_ = false;
-  base::ScopedObservation<favicon::FaviconDriver,
-                          favicon::FaviconDriverObserver>
-      favicon_observation_{this};
+  // The active tab's UI changes (URL, title, favicon), from the same
+  // TabUIHelper the tab strip draws from.
+  base::CallbackListSubscription tab_ui_subscription_;
 };
 
 }  // namespace koan
