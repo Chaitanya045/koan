@@ -1,0 +1,25 @@
+diff --git a/third_party/blink/renderer/core/loader/navigation_policy.cc b/third_party/blink/renderer/core/loader/navigation_policy.cc
+index 38e665443baf77286fd470fef6071f92113fe948..110e9eb6c26bc24759e41137819565ca82911c8f 100644
+--- a/third_party/blink/renderer/core/loader/navigation_policy.cc
++++ b/third_party/blink/renderer/core/loader/navigation_policy.cc
+@@ -31,6 +31,7 @@
+ #include "third_party/blink/renderer/core/loader/navigation_policy.h"
+ 
+ #include "build/build_config.h"
++#include "koan/browser/koan_features.h"
+ #include "third_party/blink/public/common/input/web_keyboard_event.h"
+ #include "third_party/blink/public/common/input/web_mouse_event.h"
+ #include "third_party/blink/public/web/web_navigation_policy.h"
+@@ -67,6 +68,12 @@ NavigationPolicy NavigationPolicyFromEventModifiers(int16_t button,
+     return shift ? kNavigationPolicyNewForegroundTab
+                  : kNavigationPolicyNewBackgroundTab;
+   }
++  // Koan Glance: Alt+click previews the link, like Zen. Link clicks never
++  // produce a popup policy otherwise, so the browser can recognise it
++  // (koan/browser/ui/views/koan_glance.h).
++  if (alt && !shift && koan::features::IsGlanceEnabled()) {
++    return kNavigationPolicyNewPopup;
++  }
+   return shift ? kNavigationPolicyNewWindow : kNavigationPolicyDownload;
+ }
+ 
