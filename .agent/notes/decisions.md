@@ -34,3 +34,14 @@
   contents). Only the active contents are rounded: rounding
   MultiContentsView's background too leaves unpainted (black) corners
   because nothing is drawn behind it.
+- **Zen's shortcuts, not Chrome's, where they collide** (#11): Koan follows
+  Zen's defaults (ZenKeyboardShortcuts.mjs v21) in one table,
+  `KoanShortcutController`, registered after BrowserView's accelerators so
+  it wins; contextual ones fall through.
+- **Glance on Alt+click via blink** (#17): with Koan Glance on, an Alt-only
+  click becomes `kNavigationPolicyNewPopup`, which link clicks never produce
+  otherwise; synthesized Alt+clicks and window.open() keep upstream
+  behaviour. Constraint: blink core links its own copy of
+  `//koan/browser:features` (component build), so a Koan feature must only
+  be read in one process type (browser *or* renderer) unless the target is
+  made a proper exported component.

@@ -86,6 +86,12 @@ _Last updated: 2026-10-19 (all planned phases done)_
   docs/REBASE.md) and a cheap mode check on each layout.
 - About-menu ensō icon verified in chrome://settings.
 
+- 2026-10-19: public repo github.com/Chaitanya045/koan (MIT, default
+  branch `develop`, protected: PR + CI). Issues/PRs: #1/#8 release config,
+  #2/#9 CI, #7/#10 contributing, #3/#11 Zen shortcuts, #4/#17 Alt+click
+  Glance, #15/#16 Zen parity doc. Open: #5/#13 packaging (draft), #6/#14
+  benchmarks (draft) - both wait for the release build (out/Release).
+
 ## Known issues / design notes
 - In compact mode the revealed toolbar floats across the full width, over
   the expanded sidebar's header too (Zen's floating toolbar behaves the
