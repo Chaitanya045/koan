@@ -14,3 +14,7 @@ KOAN_HEADLESS_UI_FLAGS=(--ozone-platform=headless --in-process-gpu --disable-gpu
   --window-size=1280,800)
 
 koan_new_profile() { mktemp -d "$KOAN_TEST_DIR/prof-XXXX"; }
+
+# Removes test dirs; retries once because Chromium's child processes can
+# still be writing into the profile for a moment after the browser exits.
+koan_rm() { rm -rf "$@" 2>/dev/null || { sleep 1; rm -rf "$@"; }; }

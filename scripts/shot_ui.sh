@@ -9,7 +9,7 @@ out=$1; shift
 flags=(); while [[ $# -gt 0 && $1 != -- ]]; do flags+=("$1"); shift; done; shift
 prof=$(koan_new_profile); dump=$(mktemp -d "$KOAN_TEST_DIR/dump-XXXX")
 pid=
-cleanup() { [[ -n $pid ]] && kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; rm -rf "$prof" "$dump" "$prof.log"; }
+cleanup() { [[ -n $pid ]] && kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; koan_rm "$prof" "$dump" "$prof.log"; }
 trap cleanup EXIT
 if [[ -n ${PREFS:-} ]]; then mkdir -p "$prof/Default"; printf '%s' "$PREFS" > "$prof/Default/Preferences"; fi
 "$KOAN_CHROME" "${KOAN_HEADLESS_UI_FLAGS[@]}" --ozone-dump-file="$dump" \
