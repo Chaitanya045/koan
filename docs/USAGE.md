@@ -105,6 +105,10 @@ close, **expand to a tab**, or **open in split view** with the current tab.
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance.
 
+Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
+classic, always-visible scrollbars start Koan with
+`--disable-features=OverlayScrollbar`.
+
 ## Install in the app menu
 
 ```sh
