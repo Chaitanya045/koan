@@ -58,8 +58,8 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
 Deviations from the original plan, and why, are in
 `.agent/notes/decisions.md`: hook patches instead of a `chromium_src`
 shadow tree (no global include changes, no full rebuilds); Glance on
-Glance on Alt+click via a one-line blink policy hook (Chromium decides
-Alt+click as a download in the renderer);
+Alt+click via a small blink policy hook (Chromium decides Alt+click as a
+download in the renderer);
 workspace themes via Chromium's user colour instead of custom gradients.
 
 Known gaps are tracked in `.agent/notes/status.md`.
