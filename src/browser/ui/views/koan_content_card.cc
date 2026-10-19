@@ -22,10 +22,14 @@ bool UseContentCard(const BrowserView* browser_view) {
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
   if (IsToolbarHidden(browser_view)) {
     // No toolbar above the card: it reaches the top of the window, leaving
-    // only a gutter, or the strip where the frame draws its caption buttons
-    // (they paint above the client view and would otherwise sit on the page).
-    const int top = std::max(kContentCardMargin,
-                             GetCaptionButtonAreaSize(browser_view).height());
+    // only a gutter, or (while revealed) the strip where the frame draws its
+    // caption buttons; they paint above the client view and would otherwise
+    // sit on the page.
+    const int top =
+        IsCaptionStripCollapsed(browser_view)
+            ? kContentCardMargin
+            : std::max(kContentCardMargin,
+                       GetCaptionButtonAreaSize(browser_view).height());
     // Compact mode also hides the sidebar: gutter on the leading side too.
     const int leading =
         IsCompactModeActive(browser_view) ? kContentCardMargin : 0;

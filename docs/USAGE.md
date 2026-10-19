@@ -61,6 +61,10 @@ result closes it.
 
 ![Floating URL bar](screenshots/floating-url-bar.png)
 
+As in Zen, nothing sits above the page but a thin margin: move the pointer
+to the top edge of the window to show the window buttons (close, ...); the
+page moves down to make room and back up when you leave.
+
 Ctrl+Alt+B switches to the multiple-toolbars layout (a toolbar above the
 page, as in Chrome) and back. The layout applies to all windows and
 persists.

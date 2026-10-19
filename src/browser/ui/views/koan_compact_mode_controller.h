@@ -74,6 +74,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool hides_toolbar() const { return mode_ != Mode::kNone; }
   bool is_toolbar_revealed() const { return toolbar_revealed_; }
   bool is_url_bar_floating() const { return url_bar_floating_; }
+  // Single toolbar (also in compact mode): the caption-button strip is
+  // collapsed until the pointer reaches the top edge.
+  bool caption_strip_collapsed() const {
+    return caption_strip_collapsible_ && !caption_strip_revealed_;
+  }
 
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
@@ -126,6 +131,15 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   void CheckSidebarPeek();
 
+  // The caption-button strip (single toolbar).
+  void OnCaptionHotZoneHovered(bool hovered);
+  void SetCaptionStripRevealed(bool revealed);
+  void CheckCaptionStripHide();
+  // Fades the frame's caption buttons in or out with the strip.
+  void UpdateCaptionButtons();
+  // The content card's insets changed: lay out the contents area and Glance.
+  void OnContentCardChanged();
+
   void OnSidebarHotZoneHovered(bool hovered);
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
@@ -155,6 +169,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;
+  raw_ptr<KoanHotZone> caption_hot_zone_ = nullptr;
+  bool caption_strip_collapsible_ = false;
+  bool caption_strip_revealed_ = false;
+  base::RepeatingTimer caption_hide_timer_;
+  std::optional<base::TimeTicks> caption_unwanted_since_;
   // Koan views inside upstream's tab strip region (KoanSidebarNavView,
   // KoanSidebarNavButtons).
   views::ViewTracker sidebar_nav_;

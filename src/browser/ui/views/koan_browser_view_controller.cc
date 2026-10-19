@@ -125,4 +125,11 @@ bool IsToolbarHidden(const views::View* browser_view) {
   return controller && controller->compact_mode()->hides_toolbar();
 }
 
+bool IsCaptionStripCollapsed(const views::View* browser_view) {
+  const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  const KoanBrowserViewController* controller =
+      view ? KoanBrowserViewController::From(view) : nullptr;
+  return controller && controller->compact_mode()->caption_strip_collapsed();
+}
+
 }  // namespace koan

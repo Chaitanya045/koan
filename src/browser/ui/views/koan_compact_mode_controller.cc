@@ -15,7 +15,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+#include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/browser_widget.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
@@ -28,6 +31,7 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
@@ -66,6 +70,7 @@ constexpr int kFloatingUrlBarMaxWidth = 750;
 constexpr int kFloatingUrlBarOpenHeight = 330;
 constexpr int kFloatingUrlBarRadius = 12;
 constexpr base::TimeDelta kFloatingUrlBarFadeDuration = base::Milliseconds(120);
+constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
 
 // Returns the BrowserView's top-container overlay view: a child of the
 // widget's NonClientView, drawn above the client view (and so above the
@@ -82,6 +87,14 @@ views::View* GetTopContainerOverlayView(BrowserView* browser_view) {
     }
   }
   return nullptr;
+}
+
+// Whether `view` is one of the frame's caption buttons (minimize, maximize,
+// restore, close): image buttons in the GTK-native frame, Material buttons
+// in Chrome's own (e.g. themed) frame.
+bool IsCaptionButton(const views::View* view) {
+  return view->GetClassName() == "ImageButton" ||
+         view->GetClassName() == "FrameCaptionButton";
 }
 
 }  // namespace
@@ -151,6 +164,7 @@ void KoanCompactModeController::OnBrowserViewLayout() {
       ApplyToolbarTransform(/*animate=*/false);
     }
     LayoutFloatingUrlBar();
+    UpdateCaptionButtons();
     // The tab strip may not have existed yet when the mode was activated;
     // add the header outside of layout.
     if ((mode_ == Mode::kSingleToolbar || compact_keeps_sidebar_nav_) &&
@@ -417,8 +431,17 @@ void KoanCompactModeController::UpdateActive() {
   if (desired != Mode::kNone) {
     Activate(desired);
   }
-  // The content card's insets changed; Glance sits over the card, and the
-  // contents area itself may not move.
+  OnContentCardChanged();
+}
+
+void KoanCompactModeController::OnContentCardChanged() {
+  // The contents area may keep its bounds while the card inside it moves, so
+  // lay it out explicitly; Glance sits over the card.
+  if (MultiContentsView* contents = browser_view_->multi_contents_view()) {
+    contents->InvalidateLayout();
+  }
+  browser_view_->InvalidateLayout();
+  LayoutHotZones();
   if (auto* controller = KoanBrowserViewController::From(browser_view_)) {
     controller->glance()->OnBrowserViewLayout();
   }
@@ -459,6 +482,14 @@ void KoanCompactModeController::Activate(Mode mode) {
       mode == Mode::kCompact && DesiredCompactKeepsSidebarNav();
   if (mode == Mode::kSingleToolbar || compact_keeps_sidebar_nav_) {
     InstallSidebarNav();
+    // Zen: no strip for the window buttons; they appear at the top edge.
+    caption_strip_collapsible_ = true;
+    caption_strip_revealed_ = false;
+    caption_hot_zone_ = browser_view_->AddChildView(
+        std::make_unique<KoanHotZone>(base::BindRepeating(
+            &KoanCompactModeController::OnCaptionHotZoneHovered,
+            base::Unretained(this))));
+    UpdateCaptionButtons();
   }
   if (mode == Mode::kSingleToolbar) {
     browser_view_->InvalidateLayout();
@@ -525,6 +556,14 @@ void KoanCompactModeController::Deactivate() {
   SetUrlBarFloating(false);
   mode_ = Mode::kNone;
   compact_keeps_sidebar_nav_ = false;
+  caption_strip_collapsible_ = false;
+  caption_strip_revealed_ = false;
+  caption_hide_timer_.Stop();
+  caption_unwanted_since_.reset();
+  if (caption_hot_zone_) {
+    browser_view_->RemoveChildViewT(std::exchange(caption_hot_zone_, nullptr));
+  }
+  UpdateCaptionButtons();
   // The trackers clear themselves if upstream destroyed the views (e.g. a
   // tab strip mode change).
   for (views::ViewTracker* tracker : {&sidebar_nav_, &sidebar_nav_buttons_}) {
@@ -688,6 +727,90 @@ void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
   }
 }
 
+void KoanCompactModeController::OnCaptionHotZoneHovered(bool hovered) {
+  if (hovered && caption_strip_collapsible_ &&
+      !GetCaptionButtonAreaSize(browser_view_).IsEmpty()) {
+    SetCaptionStripRevealed(true);
+  }
+}
+
+void KoanCompactModeController::SetCaptionStripRevealed(bool revealed) {
+  if (!caption_strip_collapsible_ || caption_strip_revealed_ == revealed) {
+    return;
+  }
+  caption_strip_revealed_ = revealed;
+  caption_unwanted_since_.reset();
+  if (revealed) {
+    caption_hide_timer_.Start(
+        FROM_HERE, kToolbarHideCheckInterval, this,
+        &KoanCompactModeController::CheckCaptionStripHide);
+  } else {
+    caption_hide_timer_.Stop();
+  }
+  UpdateCaptionButtons();
+  OnContentCardChanged();
+}
+
+void KoanCompactModeController::CheckCaptionStripHide() {
+  bool wanted = caption_hot_zone_ && caption_hot_zone_->IsMouseHovered();
+  if (const BrowserFrameView* frame =
+          browser_view_->browser_widget()
+              ? browser_view_->browser_widget()->GetFrameView()
+              : nullptr) {
+    for (const views::View* child : frame->children()) {
+      if (IsCaptionButton(child) && child->IsMouseHovered()) {
+        wanted = true;
+      }
+    }
+  }
+  if (wanted) {
+    caption_unwanted_since_.reset();
+    return;
+  }
+  const base::TimeTicks now = base::TimeTicks::Now();
+  if (!caption_unwanted_since_) {
+    caption_unwanted_since_ = now;
+    return;
+  }
+  if (now - *caption_unwanted_since_ >= kToolbarHideDelay) {
+    SetCaptionStripRevealed(false);
+  }
+}
+
+void KoanCompactModeController::UpdateCaptionButtons() {
+  BrowserWidget* widget = browser_view_->browser_widget();
+  BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
+  if (!frame) {
+    return;
+  }
+  const bool shown = !caption_strip_collapsed();
+  // The frame sets the caption buttons' visibility in its layout, so fade
+  // them on a layer instead and let a hidden one ignore the pointer.
+  for (views::View* child : frame->children()) {
+    if (!IsCaptionButton(child)) {
+      continue;
+    }
+    child->SetCanProcessEventsWithinSubtree(shown);
+    if (!child->layer()) {
+      if (shown) {
+        continue;
+      }
+      child->SetPaintToLayer();
+      child->layer()->SetFillsBoundsOpaquely(false);
+      child->layer()->SetOpacity(1.0f);
+    }
+    const float opacity = shown ? 1.0f : 0.0f;
+    if (child->layer()->GetTargetOpacity() != opacity) {
+      views::AnimationBuilder()
+          .SetPreemptionStrategy(
+              ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
+          .Once()
+          .SetDuration(kCaptionButtonFadeDuration)
+          .SetOpacity(child, opacity, gfx::Tween::EASE_OUT);
+    }
+  }
+}
+
 void KoanCompactModeController::LayoutHotZones() {
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
   const gfx::Insets gutter = ContentCardInsets(browser_view_);
@@ -698,6 +821,14 @@ void KoanCompactModeController::LayoutHotZones() {
   if (toolbar_hot_zone_) {
     toolbar_hot_zone_->SetBoundsRect(
         gfx::Rect(bounds.x(), bounds.y(), bounds.width(), gutter.top()));
+  }
+  // Above the card, beside the sidebar (whose top row has its own buttons).
+  if (caption_hot_zone_) {
+    const int x = browser_view_->multi_contents_view()
+                      ? browser_view_->multi_contents_view()->x()
+                      : bounds.x();
+    caption_hot_zone_->SetBoundsRect(
+        gfx::Rect(x, bounds.y(), bounds.right() - x, gutter.top()));
   }
 }
 

@@ -16,6 +16,7 @@ point of Koan.
 | Page as a floating rounded card | Same | |
 | Sidebar and toolbar on one surface | Same | |
 | Single-toolbar layout (address in the sidebar), the default | Same | Sidebar top row: toggle, back / forward / reload (plus Chromium's tab groups / tab search); URL pill with the site's icon below. |
+| Window buttons hidden until the pointer reaches the top edge (single toolbar) | Same | The page starts 8px below the window top; the strip with the frame's buttons opens on hover and pushes the page down, like Zen's. |
 | Floating URL bar when editing the address | Same | Centred card, `min(2/3 window width, 750px)`. Zen floats it once you type; Koan floats it on focus (Zen's "floating" setting). Esc closes the suggestions first, then the bar, as in Chrome. |
 | Multiple-toolbars layout | Same | Ctrl+Alt+B (Zen sets this in Settings). |
 | Ctrl+T opens the floating URL bar instead of a new-tab page | Missing | Ctrl+T opens Chrome's new-tab page. |
