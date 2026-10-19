@@ -41,9 +41,10 @@ class KoanSidebarNavView : public views::View,
   void EnabledStateChangedForCommand(int id, bool enabled) override;
 
   // TabStripModelObserver:
-  void OnTabStripModelChanged(TabStripModel* tab_strip_model,
-                              const TabStripModelChange& change,
-                              const TabStripSelectionChange& selection) override;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
 
   // content::WebContentsObserver:
   void PrimaryPageChanged(content::Page& page) override;

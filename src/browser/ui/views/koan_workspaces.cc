@@ -26,16 +26,16 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+#include "components/prefs/pref_service.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
-#include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
-#include "ui/base/mojom/themes.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/themes.mojom.h"
 #include "ui/color/color_provider.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -121,8 +121,7 @@ class KoanWorkspaceButton : public views::Button {
 
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    const bool frame_active =
-        GetWidget() && GetWidget()->ShouldPaintAsActive();
+    const bool frame_active = GetWidget() && GetWidget()->ShouldPaintAsActive();
     const SkColor fill =
         color_ ? provider->GetColor(
                      GetTabGroupTabStripColorId(*color_, frame_active))
@@ -148,9 +147,9 @@ class KoanWorkspaceButton : public views::Button {
     }
 
     const SkColor text = color_utils::GetColorWithMaxContrast(fill);
-    canvas->DrawStringRectWithFlags(label_, gfx::FontList().DeriveWithSizeDelta(-1),
-                                    text, GetLocalBounds(),
-                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+    canvas->DrawStringRectWithFlags(
+        label_, gfx::FontList().DeriveWithSizeDelta(-1), text, GetLocalBounds(),
+        gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
  private:
@@ -195,9 +194,8 @@ class KoanWorkspaceSwitcherView : public views::BoxLayoutView {
       const TabGroup* group = model->group_model()->GetTabGroup(id);
       const tab_groups::TabGroupVisualData* visuals = group->visual_data();
       std::u16string title = visuals->title();
-      std::u16string label =
-          title.empty() ? base::NumberToString16(number)
-                        : std::u16string(1, title.front());
+      std::u16string label = title.empty() ? base::NumberToString16(number)
+                                           : std::u16string(1, title.front());
       if (title.empty()) {
         title = u"Workspace " + base::NumberToString16(number);
       }
@@ -339,7 +337,8 @@ KoanWorkspaceController::GetActiveWorkspace() const {
 void KoanWorkspaceController::SwitchTo(
     const tab_groups::TabGroupId& workspace) {
   TabStripModel* model = tab_strip_model();
-  if (!model->group_model() || !model->group_model()->ContainsTabGroup(workspace) ||
+  if (!model->group_model() ||
+      !model->group_model()->ContainsTabGroup(workspace) ||
       model->group_model()->GetTabGroup(workspace)->tab_count() == 0) {
     return;
   }

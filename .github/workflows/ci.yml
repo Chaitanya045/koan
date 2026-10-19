@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  patches:
+    name: Patches apply to pinned Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check every hook patch against CHROMIUM_VERSION
+        run: scripts/ci/check_patches.sh
+
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Branding rules
+        run: python -I -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned linters
+        run: pip install clang-format==22.1.8 shellcheck-py==0.11.0.1
+      - name: clang-format (Chromium style)
+        run: |
+          git ls-files 'src/*.cc' 'src/*.h' |
+            xargs clang-format --style=file --dry-run --Werror
+      - name: shellcheck
+        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh
+      - name: Node scripts parse
+        run: for f in scripts/*.mjs; do node --check "$f"; done
+      - name: Python compiles
+        run: python -m py_compile scripts/*.py scripts/tests/*.py

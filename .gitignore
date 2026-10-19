@@ -4,3 +4,5 @@
 /.test-profiles/
 /.branding-pristine/
 /branding/out/
+/.cache/
+__pycache__/

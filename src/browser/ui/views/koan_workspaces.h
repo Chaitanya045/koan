@@ -57,9 +57,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   TabStripModel* tab_strip_model() const;
 
   // TabStripModelObserver:
-  void OnTabStripModelChanged(TabStripModel* tab_strip_model,
-                              const TabStripModelChange& change,
-                              const TabStripSelectionChange& selection) override;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
   void OnTabGroupChanged(const TabGroupChange& change) override;
   void OnTabGroupFocusChanged(
       std::optional<tab_groups::TabGroupId> new_focused_group_id,

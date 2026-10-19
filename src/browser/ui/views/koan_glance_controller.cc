@@ -12,8 +12,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -87,8 +87,8 @@ class KoanGlanceView : public views::View {
     card_->layer()->SetRoundedCornerRadius(
         gfx::RoundedCornersF(kCardCornerRadius));
     card_->SetLayoutManager(std::make_unique<views::FillLayout>());
-    web_view_ = card_->AddChildView(std::make_unique<views::WebView>(
-        contents->GetBrowserContext()));
+    web_view_ = card_->AddChildView(
+        std::make_unique<views::WebView>(contents->GetBrowserContext()));
     web_view_->SetWebContents(contents);
 
     buttons_ = AddChildView(std::make_unique<views::BoxLayoutView>());
@@ -111,8 +111,8 @@ class KoanGlanceView : public views::View {
   views::WebView* web_view() { return web_view_; }
 
   void PlayOpenAnimation() {
-    gfx::Transform from = gfx::GetScaleTransform(
-        gfx::Rect(card_->size()).CenterPoint(), 0.94f);
+    gfx::Transform from =
+        gfx::GetScaleTransform(gfx::Rect(card_->size()).CenterPoint(), 0.94f);
     card_->layer()->SetOpacity(0.f);
     card_->layer()->SetTransform(from);
     scrim_->layer()->SetOpacity(0.f);
@@ -225,8 +225,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   }
   source_ = source;
 
-  content::WebContents::CreateParams create_params(
-      browser_view_->GetProfile());
+  content::WebContents::CreateParams create_params(browser_view_->GetProfile());
   contents_ = content::WebContents::Create(create_params);
   contents_->SetDelegate(this);
   contents_->GetController().LoadURLWithParams(
@@ -251,8 +250,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   view_->web_view()->RequestFocus();
 }
 
-void KoanGlanceController::PostAction(
-    void (KoanGlanceController::*action)()) {
+void KoanGlanceController::PostAction(void (KoanGlanceController::*action)()) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(action, weak_factory_.GetWeakPtr()));
 }
