@@ -114,6 +114,12 @@ check('...a URL pill below it', pill?.shown && pill.h > 0, `height ${pill?.h}`);
 const top = find(vs, 'TopContainerView');
 check('...and no top toolbar in the layout',
       top?.path.includes('TopContainerOverlayView'), top?.path.at(-1));
+// Like Zen, no strip is kept for the window buttons: the page card starts
+// at the thin gutter, and a hot zone along the top edge reveals the buttons.
+const card = vs.find(v => v.cls === 'ContentsContainerView' && v.shown);
+check('...the page reaches the top of the window (8px gutter)', card?.y === 8, `y ${card?.y}`);
+check('...with a hot zone for the window buttons along the top edge',
+      vs.filter(v => v.cls === 'KoanHotZone' && v.shown).length === 1);
 
 await key(VK.L, CTRL, 'l');
 vs = await views();

@@ -123,8 +123,9 @@ const VK = { S: 83, C: 67, D: 68, K: 75, V: 86, H: 72, U: 85, N: 78, B: 66, RIGH
 await key(VK.S, CTRL, 's');
 let vs = await views();
 // With single toolbar (the default) compact mode hides only the sidebar,
-// like Zen, so there is just the sidebar's edge hot zone.
-check('Ctrl+S turns compact mode on', count(vs, 'KoanHotZone') === 1 &&
+// like Zen: hot zones for the sidebar and the window buttons' strip, none
+// for a toolbar.
+check('Ctrl+S turns compact mode on', count(vs, 'KoanHotZone') === 2 &&
       vs.find(v => v.cls === 'VerticalTabStripRegionView')?.w === 0);
 await key(VK.S, CTRL | ALT, 's');
 vs = await views();
@@ -136,7 +137,7 @@ const after = vs.find(v => v.cls === 'VerticalTabStripRegionView');
 check('...and hides it again when the pointer stays away', after && after.w === 0, `width ${after?.w}`);
 await key(VK.S, CTRL, 's');
 vs = await views();
-check('Ctrl+S turns compact mode off', count(vs, 'KoanHotZone') === 0);
+check('Ctrl+S turns compact mode off', count(vs, 'KoanHotZone') === 1);
 
 // Copy URL / as Markdown.
 await key(VK.C, CTRL | SHIFT, 'c');

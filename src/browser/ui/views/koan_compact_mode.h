@@ -21,6 +21,12 @@ bool IsCompactModeActive(const views::View* browser_view);
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);
 
+// Whether the strip at the top of the window where the frame draws its
+// caption buttons (close, ...) is collapsed: like Zen, those buttons only
+// show while the pointer is at the top edge, and the page card otherwise
+// reaches up to a thin gutter.
+bool IsCaptionStripCollapsed(const views::View* browser_view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_

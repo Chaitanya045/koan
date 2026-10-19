@@ -91,4 +91,15 @@
   Glance; hide them with injected CSS for screenshots.
 - Glance only opens http(s) links (file:// opens a popup window), so serve
   test pages with `python3 -I -m http.server` for Glance tests.
+- Reliable fresh desktop captures: force a full repaint first by resizing
+  the window by 2px and back over CDP (`Browser.setWindowBounds`), then
+  `import -window`. A Glance page needs its own poke (any Runtime.evaluate).
+- Xvfb without installing: the `xorg-server-xvfb` package extracted into
+  `.cache/xvfb` runs (`.cache/xvfb/usr/bin/Xvfb :113`); XTest pointer moves
+  via ctypes (`libXtst`). Without a window manager Chrome draws no caption
+  buttons, so it can't test those. Display :99 belongs to someone else.
+- The Linux frame has two kinds of caption buttons: `ImageButton`s in the
+  GTK-native frame, `FrameCaptionButton`s in Chrome's own frame (used once
+  a theme applies, e.g. a workspace tint). The frame is recreated on theme
+  changes.
 

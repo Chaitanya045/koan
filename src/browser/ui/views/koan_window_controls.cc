@@ -4,6 +4,8 @@
 
 #include "koan/browser/ui/views/koan_window_controls.h"
 
+#include <algorithm>
+
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
@@ -17,10 +19,14 @@ gfx::Size GetCaptionButtonAreaSize(const BrowserView* browser_view) {
   if (!frame) {
     return gfx::Size();
   }
-  const gfx::SizeF area =
-      frame->GetBrowserLayoutParams().trailing_exclusion.content;
-  return gfx::Size(static_cast<int>(area.width()),
-                   static_cast<int>(area.height()));
+  // Caption buttons can be on either edge (e.g. GNOME's "close:" layout puts
+  // them on the leading one), or both.
+  const BrowserLayoutParams params = frame->GetBrowserLayoutParams();
+  const gfx::SizeF leading = params.leading_exclusion.content;
+  const gfx::SizeF trailing = params.trailing_exclusion.content;
+  return gfx::Size(
+      static_cast<int>(leading.width() + trailing.width()),
+      static_cast<int>(std::max(leading.height(), trailing.height())));
 }
 
 }  // namespace koan
