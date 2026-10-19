@@ -6,3 +6,9 @@
   <p><a id="download" href="data:text/plain,hello" download="hello.txt"
         style="display: inline-block; width: 300px; height: 40px">download me</a></p>
 </body>
+<a id="synth" href="https://example.com/?synth=1">synthesized target</a>
+<script>
+  // A page faking an Alt+click must not open Glance (or a popup).
+  window.fakeAltClick = () => document.getElementById('synth').dispatchEvent(
+      new MouseEvent('click', {altKey: true, bubbles: true, cancelable: true}));
+</script>

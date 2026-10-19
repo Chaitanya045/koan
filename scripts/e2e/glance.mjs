@@ -125,5 +125,14 @@ check('Shift+click opens a new window', !(await glanceOpen()) &&
 await clickLink('download', ALT);
 check('Alt+click on a download link does not open Glance', !(await glanceOpen()));
 
+// A synthesized Alt+click (script, no user gesture) opens neither Glance
+// nor a popup window. Last: it may navigate the test page away.
+const windowsBefore = await windowCount();
+const testPage = (await tabs()).find(t => t.url.endsWith('/glance.html'));
+await withPage(testPage, c => c.send('Runtime.evaluate', { expression: 'fakeAltClick()' }));
+await sleep(2000);
+check('A scripted Alt+click opens neither Glance nor a popup',
+      !(await glanceOpen()) && (await windowCount()) === windowsBefore);
+
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);

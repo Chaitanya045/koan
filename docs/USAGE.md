@@ -75,9 +75,11 @@ when both are on.
 
 ## Glance
 
-Alt+click a link to preview it in a card over the page, as in Zen.
-(Shift+click opens a new window, as in Zen and Firefox; links with a
-`download` attribute still download.) Beside the card:
+Alt+click a link (or Alt+Enter on a focused link) to preview it in a card
+over the page, as in Zen. Shift+click opens a new window, as in Zen and
+Firefox. Same-site links with a `download` attribute still download;
+cross-site ones open in Glance (Chromium ignores `download` across sites,
+so there Alt+click was the only way to download). Beside the card:
 close, **expand to a tab**, or **open in split view** with the current tab.
 
 ## Turning things off
