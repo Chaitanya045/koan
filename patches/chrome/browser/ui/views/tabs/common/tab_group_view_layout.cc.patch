@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
+index 6fa2cecd5166050e7634f97a6ceb6dd2831d5d0e..74efc6693f0dda63d6e0340bda4d8a6a29eac3dc 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_layout_utils.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "components/tabs/public/tab_group.h"
++#include "koan/browser/koan_features.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/views/view.h"
+@@ -86,7 +87,9 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+   }
+ 
+   if (tab_group_view->unfocus_header_) {
+-    if (tab_group_view->IsGroupFocused()) {
++    // Koan workspaces: the sidebar switcher replaces the "Unfocus" pill.
++    if (tab_group_view->IsGroupFocused() &&
++        !koan::features::IsWorkspacesEnabled()) {
+       gfx::Rect unfocus_bounds;
+       unfocus_bounds.set_x(header_bounds.x());
+       unfocus_bounds.set_y(height);

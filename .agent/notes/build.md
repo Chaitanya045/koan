@@ -59,6 +59,11 @@
 - Never leave a test browser running across a build: regenerated .pak files
   make the running one abort ("Unable to find resource").
 - Changing `BRANDING`/string .grd files rebuilds ~3.6k steps (~45 min).
+- **Browser keyboard shortcuts off-screen:** UI DevTools key events go
+  straight to a view and skip accelerators. Instead send keys to the page
+  with `scripts/cdp_key.mjs <cdp-port> <keycode> <modifiers>`; unhandled
+  keys bubble to BrowserView::HandleKeyboardEvent and the FocusManager,
+  like real input.
 - `pkill -f <pattern>` / `pgrep -f` from the agent shell match the shell
   itself (its command line contains the pattern): pkill kills the whole
   command (exit 144), pgrep always "finds" something. Kill by PID instead.

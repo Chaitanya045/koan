@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/views/tabs/common/BUILD.gn b/chrome/browser/ui/views/tabs/common/BUILD.gn
+index 757102728783f573692f756fb643c3952813562f..ec7f3fae895cdf570d0ba27ecccb245f69a03428 100644
+--- a/chrome/browser/ui/views/tabs/common/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/common/BUILD.gn
+@@ -141,6 +141,7 @@ source_set("impl") {
+     "//components/tab_groups",
+     "//components/tabs:impl",
+     "//content/public/browser",
++    "//koan/browser:features",
+     "//skia",
+     "//third_party/abseil-cpp:absl",
+     "//ui/accessibility:ax_base",

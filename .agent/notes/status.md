@@ -62,17 +62,19 @@ _Last updated: 2026-10-19_
   `scripts/install_desktop.sh`, `scripts/update_chromium.sh` +
   `docs/REBASE.md`, `docs/USAGE.md`.
 
+- Keyboard shortcuts verified off-screen through the real key path
+  (`scripts/cdp_key.mjs`: page -> unhandled -> FocusManager): Ctrl+Alt+C,
+  Ctrl+Alt+N, Ctrl+Alt+Left/Right.
+- Focused workspace hides upstream's "Unfocus" pill (hook in
+  `tab_group_view_layout.cc`); the switcher's ∞ replaces it.
+
 ## Known issues
 - Compact mode: Koan draws its own min/max/close buttons in the revealed
   toolbar's trailing corner when the frame reports caption buttons there
   (frame-drawn ones are under the page in compact mode). Headless has no
   caption buttons, so this path is untested until a desktop run.
-- Keyboard shortcuts registered on the FocusManager (Ctrl+Alt+C,
-  Ctrl+Alt+Left/Right/N) can't be exercised headless (UI DevTools key events
-  bypass accelerator processing); verify on the desktop.
 - Settings side menu still shows the Chromium vector icon next to
   "About Koan" (WebUI icon, not a PNG asset).
-- Upstream focus-mode UI ("Unfocus" pill, group header) is unstyled.
 - Phase 1b (Zen "single toolbar": URL bar inside the sidebar) not done.
 - Compact toolbar spans the full width and overlaps the expanded sidebar's
   header.
