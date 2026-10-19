@@ -92,9 +92,15 @@ async function key(page, code, modifiers, keyName) {
   await sleep(1200);
 }
 
-async function shot(page, name) {
+async function shot(page, name, colorScheme = 'light') {
   if (!SHOTS) return;
-  const r = await onPage(page, c => c.send('Page.captureScreenshot', { format: 'png' }));
+  // Emulation lasts as long as the session, so capture in the same one.
+  const r = await onPage(page, async c => {
+    await c.send('Emulation.setEmulatedMedia',
+        { features: [{ name: 'prefers-color-scheme', value: colorScheme }] });
+    await sleep(300);
+    return c.send('Page.captureScreenshot', { format: 'png' });
+  });
   const fs = await import('node:fs');
   fs.writeFileSync(`${SHOTS}/${name}.png`, Buffer.from(r.result.data, 'base64'));
 }
@@ -237,10 +243,7 @@ check('Find in Settings searches settings and shortcuts',
 
 if (SHOTS) {
   await evalIn(settings, `document.querySelector('#category-looks').click()`);
-  await onPage(settings, c => c.send('Emulation.setEmulatedMedia',
-      { features: [{ name: 'prefers-color-scheme', value: 'dark' }] }));
-  await sleep(300);
-  await shot(settings, 'settings-look-and-feel-dark');
+  await shot(settings, 'settings-look-and-feel-dark', 'dark');
 }
 
 // Ctrl+, opens the settings page (Zen's "Open Preferences").

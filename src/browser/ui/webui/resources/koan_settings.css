@@ -298,7 +298,8 @@ button.reset-button {
   border: 3px solid transparent;
   border-radius: 10px;
   background:
-      linear-gradient(160deg, #f6c177 0%, #eb6f92 55%, #9ccfd8 100%);
+      linear-gradient(160deg, #f6c177 0%, #eb6f92 55%, #9ccfd8 100%)
+      padding-box;
 }
 
 .layout-card.selected .preview {
