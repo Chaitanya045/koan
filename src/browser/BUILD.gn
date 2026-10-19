@@ -35,3 +35,16 @@ source_set("prefs") {
 source_set("branding") {
   sources = [ "koan_branding.h" ]
 }
+
+# Default-state overrides for upstream features, registered from
+# chrome/browser/chrome_browser_field_trials.cc.
+source_set("feature_overrides") {
+  sources = [
+    "koan_feature_overrides.cc",
+    "koan_feature_overrides.h",
+  ]
+  deps = [
+    "//chrome/browser/ui:ui_features",
+    "//components/variations",
+  ]
+}

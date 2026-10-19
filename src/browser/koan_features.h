@@ -15,8 +15,12 @@ BASE_DECLARE_FEATURE(kKoanSidebar);
 // Compact mode (auto-hiding sidebar and toolbar) is available.
 BASE_DECLARE_FEATURE(kKoanCompactMode);
 
+// Workspaces (tab groups shown one at a time) with a switcher in the sidebar.
+BASE_DECLARE_FEATURE(kKoanWorkspaces);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
+bool IsWorkspacesEnabled();
 
 }  // namespace koan::features
 

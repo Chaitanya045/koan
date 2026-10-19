@@ -1,0 +1,401 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "koan/browser/ui/views/koan_workspaces.h"
+
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
+#include "chrome/browser/ui/tabs/tab_group_theme.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/tab_group.h"
+#include "components/tabs/public/tab_interface.h"
+#include "koan/browser/koan_features.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_provider.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
+#include "ui/gfx/font_list.h"
+#include "ui/views/controls/button/button.h"
+#include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/box_layout_view.h"
+#include "ui/views/view_class_properties.h"
+#include "ui/views/widget/widget.h"
+#include "url/gurl.h"
+
+namespace koan {
+
+namespace {
+
+constexpr int kButtonSize = 24;
+constexpr int kButtonSpacing = 6;
+
+// Colours offered to new workspaces, in order.
+constexpr tab_groups::TabGroupColorId kWorkspaceColors[] = {
+    tab_groups::TabGroupColorId::kBlue,   tab_groups::TabGroupColorId::kGreen,
+    tab_groups::TabGroupColorId::kPurple, tab_groups::TabGroupColorId::kOrange,
+    tab_groups::TabGroupColorId::kPink,   tab_groups::TabGroupColorId::kCyan,
+    tab_groups::TabGroupColorId::kRed,    tab_groups::TabGroupColorId::kYellow,
+};
+
+}  // namespace
+
+// A round workspace button: a filled circle in the workspace's colour with
+// its initial, ringed when active.
+class KoanWorkspaceButton : public views::Button {
+  METADATA_HEADER(KoanWorkspaceButton, views::Button)
+
+ public:
+  KoanWorkspaceButton(PressedCallback callback,
+                      std::u16string label,
+                      std::optional<tab_groups::TabGroupColorId> color,
+                      bool active,
+                      std::u16string tooltip)
+      : views::Button(std::move(callback)),
+        label_(std::move(label)),
+        color_(color),
+        active_(active) {
+    SetTooltipText(tooltip);
+    GetViewAccessibility().SetName(tooltip);
+  }
+
+  // views::Button:
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
+    return gfx::Size(kButtonSize, kButtonSize);
+  }
+
+  void PaintButtonContents(gfx::Canvas* canvas) override {
+    const ui::ColorProvider* provider = GetColorProvider();
+    const bool frame_active =
+        GetWidget() && GetWidget()->ShouldPaintAsActive();
+    const SkColor fill =
+        color_ ? provider->GetColor(
+                     GetTabGroupTabStripColorId(*color_, frame_active))
+               : provider->GetColor(kColorTabBackgroundActiveFrameActive);
+    const gfx::RectF bounds(GetLocalBounds());
+    const gfx::PointF center = bounds.CenterPoint();
+    const float radius = std::min(bounds.width(), bounds.height()) / 2.f;
+
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    // Inactive workspaces are muted so the active one stands out.
+    flags.setColor(active_ || !color_ || GetState() == STATE_HOVERED
+                       ? fill
+                       : SkColorSetA(fill, 0x80));
+    canvas->DrawCircle(center, radius - (active_ ? 3.f : 1.f), flags);
+
+    if (active_) {
+      flags.setStyle(cc::PaintFlags::kStroke_Style);
+      flags.setStrokeWidth(1.5f);
+      flags.setColor(fill);
+      canvas->DrawCircle(center, radius - 0.75f, flags);
+    }
+
+    const SkColor text = color_utils::GetColorWithMaxContrast(fill);
+    canvas->DrawStringRectWithFlags(label_, gfx::FontList().DeriveWithSizeDelta(-1),
+                                    text, GetLocalBounds(),
+                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
+
+ private:
+  const std::u16string label_;
+  const std::optional<tab_groups::TabGroupColorId> color_;
+  const bool active_;
+};
+
+BEGIN_METADATA(KoanWorkspaceButton)
+END_METADATA
+
+// The row of workspace buttons at the bottom of the sidebar.
+class KoanWorkspaceSwitcherView : public views::BoxLayoutView {
+  METADATA_HEADER(KoanWorkspaceSwitcherView, views::BoxLayoutView)
+
+ public:
+  explicit KoanWorkspaceSwitcherView(KoanWorkspaceController* controller)
+      : controller_(controller) {
+    SetOrientation(views::BoxLayout::Orientation::kHorizontal);
+    SetMainAxisAlignment(views::BoxLayout::MainAxisAlignment::kCenter);
+    SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kCenter);
+    SetBetweenChildSpacing(kButtonSpacing);
+    SetInsideBorderInsets(gfx::Insets::VH(8, 8));
+    SetProperty(views::kElementIdentifierKey, kWorkspaceSwitcherElementId);
+  }
+
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kWorkspaceSwitcherElementId);
+
+  void Rebuild() {
+    RemoveAllChildViews();
+    const std::optional<tab_groups::TabGroupId> active =
+        controller_->GetActiveWorkspace();
+    TabStripModel* model = controller_->tab_strip_model();
+
+    AddChildView(std::make_unique<KoanWorkspaceButton>(
+        base::BindRepeating(&KoanWorkspaceController::ShowAllTabs,
+                            base::Unretained(controller_)),
+        u"∞", std::nullopt, !active.has_value(), u"All tabs"));
+
+    int number = 1;
+    for (const tab_groups::TabGroupId& id : controller_->GetWorkspaces()) {
+      const TabGroup* group = model->group_model()->GetTabGroup(id);
+      const tab_groups::TabGroupVisualData* visuals = group->visual_data();
+      std::u16string title = visuals->title();
+      std::u16string label =
+          title.empty() ? base::NumberToString16(number)
+                        : std::u16string(1, title.front());
+      if (title.empty()) {
+        title = u"Workspace " + base::NumberToString16(number);
+      }
+      AddChildView(std::make_unique<KoanWorkspaceButton>(
+          base::BindRepeating(&KoanWorkspaceController::SwitchTo,
+                              base::Unretained(controller_), id),
+          std::move(label), visuals->color(), active == id, std::move(title)));
+      ++number;
+    }
+
+    AddChildView(std::make_unique<KoanWorkspaceButton>(
+        base::BindRepeating(&KoanWorkspaceController::CreateWorkspace,
+                            base::Unretained(controller_)),
+        u"+", std::nullopt, /*active=*/false, u"New workspace (Ctrl+Alt+N)"));
+  }
+
+ private:
+  const raw_ptr<KoanWorkspaceController> controller_;
+};
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(KoanWorkspaceSwitcherView,
+                                      kWorkspaceSwitcherElementId);
+
+BEGIN_METADATA(KoanWorkspaceSwitcherView)
+END_METADATA
+
+KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
+    : browser_view_(browser_view),
+      next_accelerator_(ui::VKEY_RIGHT, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
+      previous_accelerator_(ui::VKEY_LEFT,
+                            ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
+      new_accelerator_(ui::VKEY_N, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN) {
+  if (IsEnabled()) {
+    tab_strip_model()->AddObserver(this);
+  }
+}
+
+KoanWorkspaceController::~KoanWorkspaceController() {
+  if (focus_manager_) {
+    focus_manager_->UnregisterAccelerators(this);
+  }
+}
+
+bool KoanWorkspaceController::IsEnabled() const {
+  return features::IsWorkspacesEnabled() &&
+         base::FeatureList::IsEnabled(::features::kTabGroupsFocusing) &&
+         browser_view_->GetIsNormalType() &&
+         browser_view_->browser()->GetTabStripModel()->SupportsTabGroups();
+}
+
+TabStripModel* KoanWorkspaceController::tab_strip_model() const {
+  return browser_view_->browser()->GetTabStripModel();
+}
+
+void KoanWorkspaceController::OnAddedToWidget() {
+  if (!IsEnabled()) {
+    return;
+  }
+  if (!focus_manager_ && browser_view_->GetFocusManager()) {
+    focus_manager_ = browser_view_->GetFocusManager();
+    for (const ui::Accelerator& accelerator :
+         {next_accelerator_, previous_accelerator_, new_accelerator_}) {
+      focus_manager_->RegisterAccelerator(
+          accelerator, ui::AcceleratorManager::kNormalPriority, this);
+    }
+  }
+  InstallSwitcher();
+}
+
+void KoanWorkspaceController::OnBrowserViewDestroying() {
+  if (focus_manager_) {
+    focus_manager_->UnregisterAccelerators(this);
+    focus_manager_ = nullptr;
+  }
+  if (switcher_) {
+    switcher_->parent()->RemoveChildViewT(std::exchange(switcher_, nullptr));
+  }
+  if (IsEnabled()) {
+    tab_strip_model()->RemoveObserver(this);
+  }
+}
+
+void KoanWorkspaceController::InstallSwitcher() {
+  if (switcher_) {
+    return;
+  }
+  // The switcher goes at the bottom of the vertical tab strip's content area
+  // (a FlexLayoutView whose new-tab container flexes to fill the space, so
+  // anything appended after it sits at the bottom of the sidebar).
+  views::View* region = browser_view_->tab_strip_view();
+  if (!region || region->GetClassName() != "VerticalTabStripRegionView") {
+    return;
+  }
+  for (views::View* child : region->children()) {
+    if (child->GetClassName() == "FlexLayoutView") {
+      switcher_ = child->AddChildView(
+          std::make_unique<KoanWorkspaceSwitcherView>(this));
+      UpdateSwitcher();
+      return;
+    }
+  }
+}
+
+void KoanWorkspaceController::UpdateSwitcher() {
+  if (switcher_) {
+    switcher_->Rebuild();
+  }
+}
+
+std::vector<tab_groups::TabGroupId> KoanWorkspaceController::GetWorkspaces()
+    const {
+  TabStripModel* model = tab_strip_model();
+  if (!model->group_model()) {
+    return {};
+  }
+  std::vector<tab_groups::TabGroupId> groups =
+      model->group_model()->ListTabGroups();
+  std::ranges::sort(groups, {}, [model](const tab_groups::TabGroupId& id) {
+    return model->group_model()->GetTabGroup(id)->ListTabs().start();
+  });
+  return groups;
+}
+
+std::optional<tab_groups::TabGroupId>
+KoanWorkspaceController::GetActiveWorkspace() const {
+  return tab_strip_model()->GetFocusedGroup();
+}
+
+void KoanWorkspaceController::SwitchTo(
+    const tab_groups::TabGroupId& workspace) {
+  TabStripModel* model = tab_strip_model();
+  if (!model->group_model() || !model->group_model()->ContainsTabGroup(workspace) ||
+      model->group_model()->GetTabGroup(workspace)->tab_count() == 0) {
+    return;
+  }
+  model->EnterFocusMode(workspace);
+}
+
+void KoanWorkspaceController::ShowAllTabs() {
+  tab_strip_model()->ExitFocusMode();
+}
+
+void KoanWorkspaceController::Cycle(bool forward) {
+  tab_strip_model()->RotateFocusedGroup(forward);
+}
+
+void KoanWorkspaceController::CreateWorkspace() {
+  TabStripModel* model = tab_strip_model();
+  const size_t existing = GetWorkspaces().size();
+  chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
+                   /*foreground=*/true);
+  const tab_groups::TabGroupId group =
+      model->AddToNewGroup({model->count() - 1});
+  model->ChangeTabGroupVisuals(
+      group, tab_groups::TabGroupVisualData(
+                 u"Space " + base::NumberToString16(existing + 1),
+                 kWorkspaceColors[existing % std::size(kWorkspaceColors)]));
+  model->EnterFocusMode(group);
+}
+
+void KoanWorkspaceController::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (change.type() == TabStripModelChange::kInserted &&
+      tab_strip_model->GetFocusedGroup().has_value() && !adopt_pending_) {
+    for (const auto& inserted : change.GetInsert()->contents) {
+      if (!inserted.tab->GetGroup() && !inserted.tab->IsPinned()) {
+        // New tabs belong to the active workspace. The model can't be
+        // modified from inside its own notification, so do it right after.
+        adopt_pending_ = true;
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+            base::BindOnce(&KoanWorkspaceController::AdoptUngroupedTabs,
+                           weak_factory_.GetWeakPtr()));
+        break;
+      }
+    }
+  }
+  if (change.type() != TabStripModelChange::kSelectionOnly) {
+    UpdateSwitcher();
+  }
+}
+
+void KoanWorkspaceController::AdoptUngroupedTabs() {
+  adopt_pending_ = false;
+  TabStripModel* model = tab_strip_model();
+  const std::optional<tab_groups::TabGroupId> focused =
+      model->GetFocusedGroup();
+  if (!focused) {
+    return;
+  }
+  // Adopt the active tab only: Ctrl+T, the new-tab button and Alt+Enter in
+  // the omnibox all activate the new tab. Background tabs opened from links
+  // already join their opener's group upstream.
+  const int active = model->active_index();
+  if (active == TabStripModel::kNoTab) {
+    return;
+  }
+  tabs::TabInterface* tab = model->GetTabAtIndex(active);
+  if (tab->GetGroup() || tab->IsPinned()) {
+    return;
+  }
+  model->AddToExistingGroup({active}, *focused, /*add_to_end=*/true);
+}
+
+void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
+  UpdateSwitcher();
+}
+
+void KoanWorkspaceController::OnTabGroupFocusChanged(
+    std::optional<tab_groups::TabGroupId> new_focused_group_id,
+    std::optional<tab_groups::TabGroupId> old_focused_group_id) {
+  UpdateSwitcher();
+}
+
+bool KoanWorkspaceController::AcceleratorPressed(
+    const ui::Accelerator& accelerator) {
+  if (accelerator == next_accelerator_) {
+    Cycle(/*forward=*/true);
+  } else if (accelerator == previous_accelerator_) {
+    Cycle(/*forward=*/false);
+  } else if (accelerator == new_accelerator_) {
+    CreateWorkspace();
+  } else {
+    return false;
+  }
+  return true;
+}
+
+bool KoanWorkspaceController::CanHandleAccelerators() const {
+  return IsEnabled();
+}
+
+}  // namespace koan

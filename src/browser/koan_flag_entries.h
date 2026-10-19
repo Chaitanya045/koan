@@ -17,6 +17,10 @@
    FEATURE_VALUE_TYPE(koan::features::kKoanSidebar)},                        \
       {"koan-compact-mode", "Koan compact mode",                             \
        "Auto-hiding sidebar and toolbar, toggled with Ctrl+Alt+C.",          \
-       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanCompactMode)},
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanCompactMode)},    \
+      {"koan-workspaces", "Koan workspaces",                                 \
+       "Tab groups shown one at a time, switched from the sidebar or with "  \
+       "Ctrl+Alt+Left/Right.",                                               \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanWorkspaces)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_
