@@ -2,3 +2,5 @@
 /chromium/
 /logs/
 /.test-profiles/
+/.branding-pristine/
+/branding/out/
