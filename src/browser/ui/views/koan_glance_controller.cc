@@ -37,6 +37,8 @@
 #include "ui/base/window_open_disposition.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animation_element.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/animation/tween.h"
@@ -129,7 +131,8 @@ class KoanGlanceView : public views::View {
                          .SetDuration(kOpenDuration)
                          .SetOpacity(scrim_, 1.f, gfx::Tween::EASE_OUT)
                          .SetOpacity(buttons_, 1.f, gfx::Tween::EASE_OUT);
-    if (aura::Window* page = web_view_->holder()->native_view()) {
+    if (aura::Window* page = web_view_->holder()->native_view();
+        page && page->layer()) {
       page->layer()->SetOpacity(0.f);
       page->layer()->SetTransform(gfx::GetScaleTransform(
           gfx::Rect(page->bounds().size()).CenterPoint(), 0.94f));
@@ -140,6 +143,14 @@ class KoanGlanceView : public views::View {
 
   // views::View:
   void Layout(PassKey) override {
+    // A relayout during the open animation would have NativeViewHost write
+    // the page's transform (snapping it for a frame); finish the scale-in
+    // first.
+    if (aura::Window* page = web_view_->holder()->native_view();
+        page && page->layer()) {
+      page->layer()->GetAnimator()->StopAnimatingProperty(
+          ui::LayerAnimationElement::TRANSFORM);
+    }
     const gfx::Rect bounds = GetLocalBounds();
     scrim_->SetBoundsRect(bounds);
     // Zen-like proportions: most of the width, a little air above and below,

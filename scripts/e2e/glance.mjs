@@ -126,12 +126,18 @@ const glancePage = (await targets()).find(t => t.url.includes('glance=1'));
 check('Glance hosts the linked page', !!glancePage, glancePage?.url ?? 'no target');
 if (glancePage) {
   // The page fills its card once the open animation is over (it used to
-  // keep the animation's starting 94% size).
-  await sleep(500);
-  const card = await glanceCardSize();
-  const page = await withPage(glancePage, async c => (await c.send('Runtime.evaluate', {
+  // keep the animation's starting 94% size). Poll until the size settles.
+  const pageSize = () => withPage(glancePage, async c => (await c.send('Runtime.evaluate', {
     expression: '`${innerWidth}x${innerHeight}`', returnByValue: true,
   })).result?.result?.value);
+  let page = await pageSize();
+  for (let i = 0; i < 20; i++) {
+    await sleep(100);
+    const next = await pageSize();
+    if (next === page) break;
+    page = next;
+  }
+  const card = await glanceCardSize();
   check('The Glance page fills its card', card && page === card, `page ${page}, card ${card}`);
   await keyTo(glancePage, 27, 0, 'Escape');
   check('Esc closes Glance', !(await glanceOpen()));
