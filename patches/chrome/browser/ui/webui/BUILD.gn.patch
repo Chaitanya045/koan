@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/webui/BUILD.gn b/chrome/browser/ui/webui/BUILD.gn
+index d591f473242c921dcb49033ca04dbe0b172e6fd1..20c17f73a7235241f1bfe9ec09ca4a6ff75af5d5 100644
+--- a/chrome/browser/ui/webui/BUILD.gn
++++ b/chrome/browser/ui/webui/BUILD.gn
+@@ -94,6 +94,7 @@ source_set("configs") {
+     "//components/lens:buildflags",
+     "//components/notebooks/internals/webui",
+     "//components/webui/user_actions",
++    "//koan/browser/ui/webui",
+     "//skia",
+     "//third_party/abseil-cpp:absl",
+     "//ui/webui:buildflags",

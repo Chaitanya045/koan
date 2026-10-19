@@ -1,0 +1,44 @@
+<!doctype html>
+<html dir="ltr" lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<link rel="stylesheet" href="koan_settings.css">
+<script type="module" src="koan_settings.js"></script>
+</head>
+<body>
+<nav id="navigation">
+  <h1 id="brand">
+    <svg viewBox="0 0 256 256" aria-hidden="true">
+      <defs>
+        <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f6c177"/>
+          <stop offset="0.55" stop-color="#eb6f92"/>
+          <stop offset="1" stop-color="#9ccfd8"/>
+        </linearGradient>
+      </defs>
+      <path d="M 171.7 79.9 A 68 68 0 1 0 193.7 114.4" fill="none"
+            stroke="url(#ink)" stroke-width="32" stroke-linecap="round"/>
+    </svg>
+    Settings
+  </h1>
+  <div id="categories" role="tablist" aria-orientation="vertical"></div>
+  <hr>
+  <a class="category" href="chrome://settings">
+    <span class="icon icon-chromium"></span>Chromium settings
+  </a>
+  <hr>
+  <a class="category" href="chrome://extensions">
+    <span class="icon icon-extensions"></span>Extensions and themes
+  </a>
+</nav>
+<main>
+  <div id="search-box">
+    <span class="icon icon-search"></span>
+    <input id="search" type="search" placeholder="Find in Settings"
+           aria-label="Find in Settings">
+  </div>
+  <div id="pane" role="tabpanel"></div>
+</main>
+</body>
+</html>

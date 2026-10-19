@@ -1,0 +1,54 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# chrome://koan-settings. Linked through //chrome/browser/ui/webui:configs,
+# which registers it.
+source_set("webui") {
+  sources = [
+    "koan_settings_handler.cc",
+    "koan_settings_handler.h",
+    "koan_settings_rows.cc",
+    "koan_settings_rows.h",
+    "koan_settings_ui.cc",
+    "koan_settings_ui.h",
+  ]
+  public_deps = [
+    "//content/public/browser",
+    "//ui/views",
+  ]
+  deps = [
+    ":resources",
+    "//base",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui:accelerator_table",
+    "//components/prefs",
+    "//content/public/common",
+    "//koan/browser:features",
+    "//koan/browser:prefs",
+    "//koan/browser:shortcut_table",
+    "//koan/common:url_constants",
+    "//ui/base",
+    "//ui/events:event_constants",
+  ]
+}
+
+# The page's files as C++ strings (koan_settings_resources.h).
+action("resources") {
+  script = "embed_resources.py"
+  sources = [
+    "resources/koan_settings.css",
+    "resources/koan_settings.html",
+    "resources/koan_settings.js",
+  ]
+  outputs = [ "$target_gen_dir/koan_settings_resources.h" ]
+  args = [
+    rebase_path(outputs[0], root_build_dir),
+    "kKoanSettingsHtml=" +
+        rebase_path("resources/koan_settings.html", root_build_dir),
+    "kKoanSettingsCss=" +
+        rebase_path("resources/koan_settings.css", root_build_dir),
+    "kKoanSettingsJs=" +
+        rebase_path("resources/koan_settings.js", root_build_dir),
+  ]
+}
