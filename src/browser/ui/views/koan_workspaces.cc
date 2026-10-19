@@ -78,21 +78,28 @@ constexpr struct {
     {tab_groups::TabGroupColorId::kYellow, u"\u2B50"},      // star
 };
 
+// Whether `text` starts with an emoji (a pictograph or a flag).
+bool StartsWithEmoji(const std::u16string& text) {
+  if (text.empty()) {
+    return false;
+  }
+  const int32_t code_point = base::i18n::UTF16CharIterator(text).get();
+  return u_hasBinaryProperty(code_point, UCHAR_EXTENDED_PICTOGRAPHIC) ||
+         u_hasBinaryProperty(code_point, UCHAR_REGIONAL_INDICATOR);
+}
+
 // Splits a workspace name into its icon and display name. A leading emoji
 // (one grapheme cluster, so ZWJ sequences and flags stay whole) is the icon;
 // otherwise the icon is the name's first character.
 std::pair<std::u16string, std::u16string> SplitIcon(std::u16string name) {
+  base::TrimWhitespace(name, base::TRIM_ALL, &name);
   base::i18n::BreakIterator iter(name,
                                  base::i18n::BreakIterator::BREAK_CHARACTER);
   if (name.empty() || !iter.Init() || !iter.Advance()) {
     return {std::u16string(), std::move(name)};
   }
   std::u16string first(iter.GetString());
-  const int32_t code_point = base::i18n::UTF16CharIterator(first).get();
-  const bool emoji =
-      u_hasBinaryProperty(code_point, UCHAR_EXTENDED_PICTOGRAPHIC) ||
-      u_hasBinaryProperty(code_point, UCHAR_REGIONAL_INDICATOR);
-  if (!emoji) {
+  if (!StartsWithEmoji(first)) {
     return {std::move(first), std::move(name)};
   }
   std::u16string rest;
@@ -143,7 +150,7 @@ class KoanWorkspaceButton : public views::Button {
                       std::u16string tooltip)
       : views::Button(std::move(callback)),
         label_(std::move(label)),
-        emoji_(!label_.empty() && label_.front() > 0x2000),
+        emoji_(StartsWithEmoji(label_)),
         color_(color),
         active_(active) {
     SetTooltipText(tooltip);
