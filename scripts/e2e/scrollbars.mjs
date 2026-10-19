@@ -5,9 +5,11 @@
 //   scripts/e2e/run.sh scrollbars
 const CDP_PORT = process.env.CDP_PORT;
 
+// Evaluates `expression` in the test page; resolves undefined after 5 s so
+// a wedged renderer fails the check instead of hanging the run.
 async function evaluate(expression) {
   const page = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .find(t => t.type === 'page');
+      .find(t => t.type === 'page' && t.url.endsWith('/scrollbars.html'));
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise(r => (ws.onopen = r));
   const result = await new Promise(resolve => {
@@ -15,6 +17,8 @@ async function evaluate(expression) {
       const m = JSON.parse(e.data);
       if (m.id === 1) resolve(m.result?.result?.value);
     };
+    ws.onclose = () => resolve(undefined);
+    setTimeout(() => resolve(undefined), 5000);
     ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate',
                              params: { expression, returnByValue: true } }));
   });
