@@ -420,7 +420,8 @@ bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
       top_container->Contains(focus_manager_->GetFocusedView())) {
     return true;
   }
-  return views::MenuController::GetActiveInstance() != nullptr;
+  return views::MenuController::GetForOwnerWidget(
+             browser_view_->GetWidget()) != nullptr;
 }
 
 void KoanCompactModeController::CheckToolbarHide() {

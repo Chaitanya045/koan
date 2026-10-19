@@ -275,9 +275,8 @@ void KoanWorkspaceController::OnBrowserViewDestroying() {
   if (switcher_) {
     switcher_->parent()->RemoveChildViewT(std::exchange(switcher_, nullptr));
   }
-  if (IsEnabled()) {
-    tab_strip_model()->RemoveObserver(this);
-  }
+  // Unconditional: removing an observer that was never added is a no-op.
+  tab_strip_model()->RemoveObserver(this);
 }
 
 void KoanWorkspaceController::InstallSwitcher() {
@@ -442,27 +441,34 @@ void KoanWorkspaceController::UpdateTint() {
     return;
   }
   const std::optional<tab_groups::TabGroupId> active = GetActiveWorkspace();
+  const std::optional<SkColor> current = theme->GetUserColor();
+  const SkColor applied =
+      static_cast<SkColor>(prefs->GetInteger(prefs::kWorkspaceTintApplied));
+  // Whether the browser still shows the tint Koan applied (as opposed to the
+  // user's own colour, including one picked while a workspace was active).
+  const bool showing_tint = applied && current == applied;
   if (active) {
-    if (!prefs->GetBoolean(prefs::kWorkspaceTintSaved)) {
-      const std::optional<SkColor> user_color = theme->GetUserColor();
+    if (!showing_tint) {
       prefs->SetInteger(prefs::kWorkspaceTintSavedColor,
-                        user_color ? static_cast<int>(*user_color) : 0);
+                        current ? static_cast<int>(*current) : 0);
       prefs->SetInteger(prefs::kWorkspaceTintSavedVariant,
                         static_cast<int>(theme->GetBrowserColorVariant()));
-      prefs->SetBoolean(prefs::kWorkspaceTintSaved, true);
     }
     const SkColor seed = TintSeed(tab_strip_model()
                                       ->group_model()
                                       ->GetTabGroup(*active)
                                       ->visual_data()
                                       ->color());
-    if (theme->GetUserColor() != seed) {
+    prefs->SetInteger(prefs::kWorkspaceTintApplied, static_cast<int>(seed));
+    if (current != seed) {
       theme->SetUserColorAndBrowserColorVariant(
           seed, ui::mojom::BrowserColorVariant::kTonalSpot);
     }
     return;
   }
-  if (!prefs->GetBoolean(prefs::kWorkspaceTintSaved)) {
+  // All tabs: put the user's colour back, unless they changed it since.
+  prefs->SetInteger(prefs::kWorkspaceTintApplied, 0);
+  if (!showing_tint) {
     return;
   }
   const SkColor saved =
@@ -475,7 +481,6 @@ void KoanWorkspaceController::UpdateTint() {
     theme->SetUserColor(std::nullopt);
     theme->SetBrowserColorVariant(variant);
   }
-  prefs->SetBoolean(prefs::kWorkspaceTintSaved, false);
 }
 
 bool KoanWorkspaceController::AcceleratorPressed(

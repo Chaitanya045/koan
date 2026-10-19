@@ -23,10 +23,12 @@ inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
 // per-workspace themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
 
-// The user's own colour, saved while a workspace tint is applied so that
-// "All tabs" can restore it. kWorkspaceTintSaved says whether a value is
-// saved; kWorkspaceTintSavedColor is 0 for "no user colour".
-inline constexpr char kWorkspaceTintSaved[] = "koan.workspaces.tint_saved";
+// The workspace tint Koan last applied as the browser's user colour (0:
+// none), and the user's own colour from before it, so "All tabs" can restore
+// it. Restoring only happens while Koan's tint is still the current colour,
+// so a colour the user picks meanwhile is never overwritten.
+// kWorkspaceTintSavedColor is 0 for "no user colour".
+inline constexpr char kWorkspaceTintApplied[] = "koan.workspaces.tint_applied";
 inline constexpr char kWorkspaceTintSavedColor[] =
     "koan.workspaces.tint_saved_color";
 inline constexpr char kWorkspaceTintSavedVariant[] =

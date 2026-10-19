@@ -390,8 +390,9 @@ content::WebContents* KoanGlanceController::AddNewContents(
 }
 
 void KoanGlanceController::CloseContents(content::WebContents* source) {
+  // window.close() arrives mid renderer message; tear down afterwards.
   if (source == contents_.get()) {
-    Close();
+    PostAction(&KoanGlanceController::Close);
   }
 }
 
@@ -400,7 +401,9 @@ bool KoanGlanceController::HandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
   if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown &&
       event.windows_key_code == ui::VKEY_ESCAPE) {
-    Close();
+    // The key event is still being dispatched to the overlay's own window;
+    // destroy it once that unwinds.
+    PostAction(&KoanGlanceController::Close);
     return true;
   }
   // Everything else (Ctrl+T, Ctrl+W, ...) behaves as in a tab.
@@ -411,9 +414,23 @@ void KoanGlanceController::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
-  // Glance belongs to the tab it was opened from.
-  if (is_open() && selection.active_tab_changed()) {
-    Close();
+  // Glance belongs to the tab it was opened from: close it when another tab
+  // becomes active or the source tab leaves this tab strip.
+  if (!is_open()) {
+    return;
+  }
+  bool source_removed = false;
+  if (change.type() == TabStripModelChange::kRemoved) {
+    for (const auto& removed : change.GetRemove()->contents) {
+      source_removed |= removed.contents == source_;
+    }
+  }
+  if (source_removed) {
+    // The source is going away: drop the pointer now, close right after.
+    source_ = nullptr;
+  }
+  if (source_removed || selection.active_tab_changed()) {
+    PostAction(&KoanGlanceController::Close);
   }
 }
 

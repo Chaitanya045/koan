@@ -12,7 +12,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCompactModeEnabled, false);
   registry->RegisterBooleanPref(kSingleToolbarEnabled, false);
   registry->RegisterBooleanPref(kWorkspaceTint, true);
-  registry->RegisterBooleanPref(kWorkspaceTintSaved, false);
+  registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
 }
