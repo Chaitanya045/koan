@@ -26,6 +26,7 @@ Chrome.
 | Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
 | Close all unpinned tabs (in the workspace) | Ctrl+Shift+K | |
 | Expand Glance to a tab | Ctrl+O while Glance is open | Open file (still, otherwise) |
+| Glance a link | Alt+click | (Alt+click downloaded the link) |
 | Close Glance | Esc, or click the dimmed page | |
 | Save page | Ctrl+Alt+Shift+S | |
 | Library (history) | Alt+Shift+L | |
@@ -74,7 +75,11 @@ when both are on.
 
 ## Glance
 
-Shift+click a link to preview it in a card over the page. Beside the card:
+Alt+click a link (or Alt+Enter on a focused link) to preview it in a card
+over the page, as in Zen. Shift+click opens a new window, as in Zen and
+Firefox. Same-site links with a `download` attribute still download;
+cross-site ones open in Glance (Chromium ignores `download` across sites,
+so there Alt+click was the only way to download). Beside the card:
 close, **expand to a tab**, or **open in split view** with the current tab.
 
 ## Turning things off

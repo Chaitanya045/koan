@@ -18,7 +18,7 @@ BASE_DECLARE_FEATURE(kKoanCompactMode);
 // Workspaces (tab groups shown one at a time) with a switcher in the sidebar.
 BASE_DECLARE_FEATURE(kKoanWorkspaces);
 
-// Glance: Shift+click a link to preview it in a floating card.
+// Glance: Alt+click a link to preview it in a floating card, like Zen.
 BASE_DECLARE_FEATURE(kKoanGlance);
 
 bool IsSidebarEnabled();

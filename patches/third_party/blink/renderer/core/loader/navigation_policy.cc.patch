@@ -1,0 +1,53 @@
+diff --git a/third_party/blink/renderer/core/loader/navigation_policy.cc b/third_party/blink/renderer/core/loader/navigation_policy.cc
+index 38e665443baf77286fd470fef6071f92113fe948..f24cd6641ddf029f6c380a89b6ac4ac1474d62d1 100644
+--- a/third_party/blink/renderer/core/loader/navigation_policy.cc
++++ b/third_party/blink/renderer/core/loader/navigation_policy.cc
+@@ -31,6 +31,7 @@
+ #include "third_party/blink/renderer/core/loader/navigation_policy.h"
+ 
+ #include "build/build_config.h"
++#include "koan/browser/koan_features.h"
+ #include "third_party/blink/public/common/input/web_keyboard_event.h"
+ #include "third_party/blink/public/common/input/web_mouse_event.h"
+ #include "third_party/blink/public/web/web_navigation_policy.h"
+@@ -67,6 +68,12 @@ NavigationPolicy NavigationPolicyFromEventModifiers(int16_t button,
+     return shift ? kNavigationPolicyNewForegroundTab
+                  : kNavigationPolicyNewBackgroundTab;
+   }
++  // Koan Glance: Alt+click previews the link, like Zen. Link clicks never
++  // produce a popup policy otherwise, so the browser can recognise it
++  // (koan/browser/ui/views/koan_glance.h).
++  if (alt && !shift && koan::features::IsGlanceEnabled()) {
++    return kNavigationPolicyNewPopup;
++  }
+   return shift ? kNavigationPolicyNewWindow : kNavigationPolicyDownload;
+ }
+ 
+@@ -157,6 +164,12 @@ NavigationPolicy NavigationPolicyFromEvent(const Event* event) {
+     return kNavigationPolicyCurrentTab;
+   }
+ 
++  if (event_policy == kNavigationPolicyNewPopup &&
++      input_policy != kNavigationPolicyNewPopup) {
++    // Koan Glance: no Glance (or popup) from synthesized Alt+clicks.
++    return kNavigationPolicyCurrentTab;
++  }
++
+   return event_policy;
+ }
+ 
+@@ -182,9 +195,11 @@ NavigationPolicy NavigationPolicyForCreateWindow(
+     return app_policy;
+   }
+ 
+-  if (user_policy == kNavigationPolicyDownload) {
+-    // When the input event suggests a download, but the navigation was
+-    // initiated by script, we should not override it.
++  if (user_policy == kNavigationPolicyDownload ||
++      user_policy == kNavigationPolicyNewPopup) {
++    // When the input event suggests a download (or, with Koan Glance, an
++    // Alt+click), but the navigation was initiated by script, we should not
++    // override it.
+     return app_policy;
+   }
+ 

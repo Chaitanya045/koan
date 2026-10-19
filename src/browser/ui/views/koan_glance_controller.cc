@@ -184,11 +184,11 @@ bool MaybeOpenGlance(BrowserWindowInterface* browser,
   if (!features::IsGlanceEnabled() || !browser || !source) {
     return false;
   }
-  // A real Shift+click on a link: a renderer-initiated new-window navigation
-  // from a trusted user gesture. Context-menu "Open link in new window" is
-  // browser-initiated and scripted window.open() has no trusted gesture, so
-  // both keep their usual behaviour.
-  if (params.disposition != WindowOpenDisposition::NEW_WINDOW ||
+  // A real Alt+click on a link (see koan_glance.h): renderer-initiated
+  // NEW_POPUP from a trusted user gesture. window.open() popups take the
+  // CreateNewWindow path, not OpenURLFromTab, and context-menu actions are
+  // browser-initiated, so neither is caught here.
+  if (params.disposition != WindowOpenDisposition::NEW_POPUP ||
       !params.is_renderer_initiated || !params.user_gesture ||
       params.triggering_event_info !=
           blink::mojom::TriggeringEventInfo::kFromTrustedEvent ||

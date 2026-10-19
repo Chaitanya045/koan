@@ -49,7 +49,7 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
       new tabs join the active workspace, restored on restart, per-workspace
       tint); Essentials = upstream pinned-tab grid. Research:
       `phase2-research.md`.
-- [x] Phase 3 — Glance (Shift+click; expand to tab / split / close),
+- [x] Phase 3 — Glance (Alt+click like Zen; expand to tab / split / close),
       upstream split view kept. Research: `phase3-research.md`.
 - [x] Phase 4 — branding (name, logos, profile dir, desktop id, launcher),
       stable feature defaults, rebase tooling (`REBASE.md`,
@@ -58,7 +58,8 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
 Deviations from the original plan, and why, are in
 `.agent/notes/decisions.md`: hook patches instead of a `chromium_src`
 shadow tree (no global include changes, no full rebuilds); Glance on
-Shift+click instead of Alt+click (Alt+click is a renderer-side download);
+Alt+click via a small blink policy hook (Chromium decides Alt+click as a
+download in the renderer);
 workspace themes via Chromium's user colour instead of custom gradients.
 
 Known gaps are tracked in `.agent/notes/status.md`.
