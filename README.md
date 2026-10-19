@@ -41,7 +41,8 @@ koan/
 ./scripts/bootstrap.sh          # depot_tools + Chromium checkout + hooks (long)
 ./scripts/apply_patches.sh      # link //koan, apply hook patches
 ./scripts/apply_branding.sh     # Koan name and logos
-JOBS=4 ./scripts/build.sh       # out/Koan/chrome
+JOBS=4 ./scripts/build.sh       # development build: out/Koan/chrome
+KOAN_CONFIG=release ./scripts/build.sh   # release build: out/Release/chrome
 ./scripts/install_desktop.sh    # optional: app menu entry
 ```
 

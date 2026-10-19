@@ -1,0 +1,17 @@
+# GN args for Koan release builds (what gets packaged).
+#
+# Optimised, single binary (no component build), no DCHECKs, no debug
+# symbols. Not is_official_build: official builds add ThinLTO + PGO, whose
+# link step needs far more than this machine's 16 GB of RAM.
+is_debug = false
+is_official_build = false
+dcheck_always_on = false
+is_component_build = false
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+enable_iterator_debugging = false
+use_sysroot = true
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+disable_fieldtrial_testing_config = true
