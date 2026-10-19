@@ -24,7 +24,9 @@
 #include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
+#include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -414,6 +416,11 @@ void KoanCompactModeController::UpdateActive() {
   }
   if (desired != Mode::kNone) {
     Activate(desired);
+  }
+  // The content card's insets changed; Glance sits over the card, and the
+  // contents area itself may not move.
+  if (auto* controller = KoanBrowserViewController::From(browser_view_)) {
+    controller->glance()->OnBrowserViewLayout();
   }
 }
 

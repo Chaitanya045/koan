@@ -81,6 +81,7 @@ source_set("impl") {
     "//components/prefs",
     "//koan/browser:features",
     "//koan/browser:prefs",
+    "//ui/aura",
     "//ui/base",
     "//ui/base/clipboard",
     "//ui/base/metadata",

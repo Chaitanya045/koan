@@ -27,14 +27,18 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/frame/triggering_event_info.mojom-shared.h"
+#include "ui/aura/window.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animation_element.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/animation/tween.h"
@@ -78,7 +82,9 @@ class KoanGlanceView : public views::View {
     // A textured (not solid-colour) layer, so its opacity can animate.
     scrim_->SetPaintToLayer();
     scrim_->layer()->SetFillsBoundsOpaquely(false);
-    scrim_->SetBackground(views::CreateSolidBackground(kScrimColor));
+    // Over the content card, so with the card's rounded corners.
+    scrim_->SetBackground(views::CreateRoundedRectBackground(
+        kScrimColor, kContentCardCornerRadius));
     scrim_->SetCanProcessEventsWithinSubtree(false);
 
     card_ = AddChildView(std::make_unique<views::View>());
@@ -92,6 +98,8 @@ class KoanGlanceView : public views::View {
     web_view_->SetWebContents(contents);
 
     buttons_ = AddChildView(std::make_unique<views::BoxLayoutView>());
+    buttons_->SetPaintToLayer();
+    buttons_->layer()->SetFillsBoundsOpaquely(false);
     buttons_->SetOrientation(views::BoxLayout::Orientation::kVertical);
     buttons_->SetBetweenChildSpacing(kButtonGap);
     AddButton(vector_icons::kCloseIcon, u"Close (Esc)",
@@ -110,22 +118,39 @@ class KoanGlanceView : public views::View {
 
   views::WebView* web_view() { return web_view_; }
 
+  // Call once laid out. The page is a native window positioned by the
+  // WebView's NativeViewHost, not part of `card_`'s layer tree, so the card
+  // grows in by animating that window's layer. (Transforming `card_` would
+  // neither scale nor fade the page, and NativeViewHost would size the page
+  // with the start transform and keep it.)
   void PlayOpenAnimation() {
-    gfx::Transform from =
-        gfx::GetScaleTransform(gfx::Rect(card_->size()).CenterPoint(), 0.94f);
-    card_->layer()->SetOpacity(0.f);
-    card_->layer()->SetTransform(from);
     scrim_->layer()->SetOpacity(0.f);
-    views::AnimationBuilder()
-        .Once()
-        .SetDuration(kOpenDuration)
-        .SetOpacity(card_, 1.f, gfx::Tween::EASE_OUT)
-        .SetTransform(card_, gfx::Transform(), gfx::Tween::EASE_OUT)
-        .SetOpacity(scrim_, 1.f, gfx::Tween::EASE_OUT);
+    buttons_->layer()->SetOpacity(0.f);
+    views::AnimationBuilder builder;
+    auto& sequence = builder.Once()
+                         .SetDuration(kOpenDuration)
+                         .SetOpacity(scrim_, 1.f, gfx::Tween::EASE_OUT)
+                         .SetOpacity(buttons_, 1.f, gfx::Tween::EASE_OUT);
+    if (aura::Window* page = web_view_->holder()->native_view();
+        page && page->layer()) {
+      page->layer()->SetOpacity(0.f);
+      page->layer()->SetTransform(gfx::GetScaleTransform(
+          gfx::Rect(page->bounds().size()).CenterPoint(), 0.94f));
+      sequence.SetOpacity(page, 1.f, gfx::Tween::EASE_OUT)
+          .SetTransform(page, gfx::Transform(), gfx::Tween::EASE_OUT);
+    }
   }
 
   // views::View:
   void Layout(PassKey) override {
+    // A relayout during the open animation would have NativeViewHost write
+    // the page's transform (snapping it for a frame); finish the scale-in
+    // first.
+    if (aura::Window* page = web_view_->holder()->native_view();
+        page && page->layer()) {
+      page->layer()->GetAnimator()->StopAnimatingProperty(
+          ui::LayerAnimationElement::TRANSFORM);
+    }
     const gfx::Rect bounds = GetLocalBounds();
     scrim_->SetBoundsRect(bounds);
     // Zen-like proportions: most of the width, a little air above and below,
@@ -246,6 +271,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
       std::make_unique<KoanGlanceView>(this, contents_.get()));
   LayoutWidget();
   widget_->Show();
+  widget_->LayoutRootViewIfNecessary();
   view_->PlayOpenAnimation();
   view_->web_view()->RequestFocus();
 }
@@ -347,9 +373,14 @@ void KoanGlanceController::LayoutWidget() {
   if (!widget_) {
     return;
   }
+  // Over the content card, not its gutter: at the top of the window that
+  // is where the frame paints the caption buttons, above everything else.
   MultiContentsView* contents_view = browser_view_->multi_contents_view();
-  widget_->SetBounds(
-      contents_view->ConvertRectToWidget(contents_view->GetLocalBounds()));
+  gfx::Rect bounds = contents_view->GetLocalBounds();
+  if (UseContentCard(browser_view_)) {
+    bounds.Inset(ContentCardInsets(browser_view_));
+  }
+  widget_->SetBounds(contents_view->ConvertRectToWidget(bounds));
 }
 
 content::WebContents* KoanGlanceController::OpenURLFromTab(

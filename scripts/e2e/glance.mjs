@@ -42,6 +42,33 @@ async function glanceOpen() {
   return found;
 }
 
+// The size of the Glance card's WebView (UI DevTools), as "WxH".
+async function glanceCardSize() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  let webView = null;
+  (function walk(n, inGlance) {
+    const a = n.attributes ?? [];
+    const cls = a[a.indexOf('class') + 1];
+    inGlance = inGlance || cls === 'KoanGlanceView';
+    if (inGlance && cls === 'WebView') webView = n;
+    (n.children ?? []).forEach(c => walk(c, inGlance));
+  })(doc, false);
+  let size = null;
+  if (webView) {
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: webView.nodeId });
+    const p = {};
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+    }
+    size = `${p.Width}x${p.Height}`;
+  }
+  ui.close();
+  return size;
+}
+
 async function windowCount() {
   const v = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
   const c = await connect(v.webSocketDebuggerUrl);
@@ -98,6 +125,20 @@ check('Alt+click opens Glance', await glanceOpen());
 const glancePage = (await targets()).find(t => t.url.includes('glance=1'));
 check('Glance hosts the linked page', !!glancePage, glancePage?.url ?? 'no target');
 if (glancePage) {
+  // The page fills its card once the open animation is over (it used to
+  // keep the animation's starting 94% size). Poll until the size settles.
+  const pageSize = () => withPage(glancePage, async c => (await c.send('Runtime.evaluate', {
+    expression: '`${innerWidth}x${innerHeight}`', returnByValue: true,
+  })).result?.result?.value);
+  let page = await pageSize();
+  for (let i = 0; i < 20; i++) {
+    await sleep(100);
+    const next = await pageSize();
+    if (next === page) break;
+    page = next;
+  }
+  const card = await glanceCardSize();
+  check('The Glance page fills its card', card && page === card, `page ${page}, card ${card}`);
   await keyTo(glancePage, 27, 0, 'Escape');
   check('Esc closes Glance', !(await glanceOpen()));
 }
