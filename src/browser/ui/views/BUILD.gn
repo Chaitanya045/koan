@@ -1,0 +1,26 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Hook declarations called from upstream views code. Header-only and
+# dependency-light so upstream targets can depend on it without cycles; the
+# definitions live in :impl, linked through //chrome/browser:browser.
+source_set("views") {
+  sources = [ "koan_browser_view_hooks.h" ]
+  public_deps = [ "//base" ]
+}
+
+source_set("impl") {
+  sources = [
+    "koan_browser_view_controller.cc",
+    "koan_browser_view_controller.h",
+    "koan_browser_view_hooks.cc",
+  ]
+  deps = [
+    ":views",
+    "//chrome/browser/ui/views/frame:browser_view_header",
+    "//koan/browser:features",
+    "//ui/base",
+    "//ui/views",
+  ]
+}

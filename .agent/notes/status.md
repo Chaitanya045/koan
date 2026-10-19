@@ -25,10 +25,18 @@ _Last updated: 2026-10-19_
   (`docs/screenshots/step2-*.png`); `--disable-features=KoanSidebar` gives
   horizontal tabs.
 
+- Phase 1 step 3: `koan::OnBrowserViewCreated/Destroying` hooks at the end
+  of the BrowserView ctor / start of the dtor; `KoanBrowserViewController`
+  per window, owned by the BrowserView via an owned ui::ClassProperty
+  (`KoanBrowserViewController::From(browser_view)`). Verified: 3 windows
+  opened/closed via CDP, balanced create/destroy logs
+  (`--enable-logging=stderr --vmodule=koan_browser_view_controller=1`), clean
+  exit, no DCHECKs.
+
 ## Running
 - Nothing.
 
 ## Next
-1. Phase 1 step 3 from `docs/phase1-design.md` §6: hook plumbing
-   (`koan_browser_view_hooks`, `browser_view.cc` patch), no visible change.
+1. Phase 1 step 4 from `docs/phase1-design.md` §6: Zen styling (colour
+   mixer, header buttons, floating rounded content card).
 2. Don't apply patches under `chromium/src` while a build is running.

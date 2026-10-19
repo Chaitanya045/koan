@@ -1,0 +1,26 @@
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index d1f00fb02a47e3c8b51028b2d820983eb2d306b2..3b0d741295e1ccb68b8020df61e524399776c84c 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -309,6 +309,7 @@
+ #include "content/public/common/content_switches.h"
+ #include "content/public/common/drop_data.h"
+ #include "extensions/common/command.h"
++#include "koan/browser/ui/views/koan_browser_view_hooks.h"
+ #include "media/capture/capture_switches.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+@@ -1116,9 +1117,13 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
+   auto* const animation_controller = BrowserAnimationController::From(browser_);
+   CHECK(animation_controller);
+   animation_controller->set_browser_view(this);
++
++  koan::OnBrowserViewCreated(this);
+ }
+ 
+ BrowserView::~BrowserView() {
++  koan::OnBrowserViewDestroying(this);
++
+   // Remove the layout manager to avoid dangling. This needs to be earlier than
+   // other cleanups that destroy views referenced in the layout manager.
+   SetLayoutManager(nullptr);

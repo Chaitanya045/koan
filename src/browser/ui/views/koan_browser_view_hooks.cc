@@ -1,0 +1,19 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "koan/browser/ui/views/koan_browser_view_hooks.h"
+
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
+
+namespace koan {
+
+void OnBrowserViewCreated(BrowserView* browser_view) {
+  KoanBrowserViewController::CreateFor(browser_view);
+}
+
+void OnBrowserViewDestroying(BrowserView* browser_view) {
+  KoanBrowserViewController::DestroyFor(browser_view);
+}
+
+}  // namespace koan

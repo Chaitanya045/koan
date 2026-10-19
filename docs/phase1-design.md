@@ -290,6 +290,13 @@ build has finished.
    Disabled gives horizontal tabs.
 3. **Hook plumbing.** `koan_browser_view_hooks`, patch 2, no visible change.
    Test: a log line per window, no crashes opening/closing windows.
+   *Done:* `OnBrowserViewCreated` runs at the end of the constructor (no
+   widget yet; the controller observes `OnViewAddedToWidget`),
+   `OnBrowserViewDestroying` first thing in the destructor. Per-window state
+   is a `KoanBrowserViewController` owned by the BrowserView through an owned
+   `ui::ClassProperty`, so there is no global map. `:impl` is linked from
+   `chrome/browser:browser`'s toolkit_views deps; `frame:browser_view` depends
+   only on the header target.
 4. **Zen styling.** Colour mixer (patch 4), header-button hook (patch 3),
    rounded floating content card. Test: screenshots against Zen, light and
    dark themes.
