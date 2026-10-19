@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_
 #define KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_
 
+#include "components/performance_manager/public/features.h"
 #include "components/webui/flags/feature_entry_macros.h"
 #include "koan/browser/koan_features.h"
 
@@ -25,6 +26,18 @@
       {"koan-glance", "Koan Glance",                                        \
        "Alt+click a link to preview it in a floating card; expand it to a " \
        "tab or open it in split view.",                                     \
-       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanGlance)},
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanGlance)},        \
+      {"koan-restore-tabs-on-demand", "Koan restore tabs on demand",        \
+       "Restored background tabs load when you first open them instead "    \
+       "of all at startup, like Zen.",                                      \
+       kOsDesktop,                                                          \
+       FEATURE_VALUE_TYPE(koan::features::kKoanRestoreTabsOnDemand)},       \
+      {"koan-freeze-background-tabs", "Koan freeze background tabs",        \
+       "Background tabs other than the 5 most recently used stop running "  \
+       "(except for 5 s each minute) unless they play audio, use WebRTC, "  \
+       "devices or notifications. On by default in Koan.",                  \
+       kOsDesktop,                                                          \
+       FEATURE_VALUE_TYPE(                                                  \
+           performance_manager::features::kInfiniteTabsFreezing)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

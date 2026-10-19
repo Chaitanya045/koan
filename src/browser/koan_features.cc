@@ -10,6 +10,7 @@ BASE_FEATURE(kKoanSidebar, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanCompactMode, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWorkspaces, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanGlance, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanRestoreTabsOnDemand, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kKoanSidebar);
@@ -25,6 +26,10 @@ bool IsWorkspacesEnabled() {
 
 bool IsGlanceEnabled() {
   return base::FeatureList::IsEnabled(kKoanGlance);
+}
+
+bool IsRestoreTabsOnDemandEnabled() {
+  return base::FeatureList::IsEnabled(kKoanRestoreTabsOnDemand);
 }
 
 }  // namespace koan::features

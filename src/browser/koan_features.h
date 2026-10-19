@@ -21,10 +21,16 @@ BASE_DECLARE_FEATURE(kKoanWorkspaces);
 // Glance: Alt+click a link to preview it in a floating card, like Zen.
 BASE_DECLARE_FEATURE(kKoanGlance);
 
+// Restored background tabs (session restore, reopened windows) load when
+// first shown instead of all at startup, like Zen. Read in the browser
+// process only.
+BASE_DECLARE_FEATURE(kKoanRestoreTabsOnDemand);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
 bool IsGlanceEnabled();
+bool IsRestoreTabsOnDemandEnabled();
 
 }  // namespace koan::features
 

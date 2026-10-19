@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/performance_manager/BUILD.gn b/chrome/browser/performance_manager/BUILD.gn
+index 1f8d6f40431d298efdbd315ecbbaef9b080d9c77..60e349bcd0925d134bee3f1b3a89f49b3596d308 100644
+--- a/chrome/browser/performance_manager/BUILD.gn
++++ b/chrome/browser/performance_manager/BUILD.gn
+@@ -186,6 +186,7 @@
+     "//components/user_prefs",
+     "//content/public/browser",
+     "//content/public/common",
++    "//koan/browser:features",
+     "//services/metrics/public/cpp:metrics_cpp",
+     "//services/metrics/public/cpp:ukm_builders",
+     "//third_party/blink/public/common:headers",

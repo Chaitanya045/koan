@@ -18,17 +18,23 @@ source_set("flag_entries") {
   sources = [ "koan_flag_entries.h" ]
   public_deps = [
     ":features",
+    "//components/performance_manager",
     "//components/webui/flags",
   ]
 }
 
-# Koan profile prefs.
+# Koan profile prefs, and Koan's defaults for upstream local-state prefs.
 source_set("prefs") {
   sources = [
     "koan_prefs.cc",
     "koan_prefs.h",
   ]
-  deps = [ "//components/pref_registry" ]
+  deps = [
+    "//base",
+    "//components/performance_manager",
+    "//components/pref_registry",
+    "//components/prefs",
+  ]
 }
 
 # Koan's keyboard shortcuts as data, for the shortcut controller and the
@@ -75,6 +81,7 @@ source_set("feature_overrides") {
   deps = [
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/tabs:features",
+    "//components/performance_manager",
     "//components/variations",
   ]
 }

@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/performance_manager/policies/background_tab_loading_policy.cc b/chrome/browser/performance_manager/policies/background_tab_loading_policy.cc
+index 5af2184d7104116fe58c77579c3efb1bb5106b57..8190fe5dde653ac5a57297d2afa723a0764ea516 100644
+--- a/chrome/browser/performance_manager/policies/background_tab_loading_policy.cc
++++ b/chrome/browser/performance_manager/policies/background_tab_loading_policy.cc
+@@ -36,6 +36,7 @@
+ #include "content/public/browser/permission_descriptor_util.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
++#include "koan/browser/koan_features.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "url/gurl.h"
+ 
+@@ -181,6 +182,9 @@
+   max_simultaneous_tab_loads_ = CalculateMaxSimultaneousTabLoads(
+       kMinSimultaneousTabLoads, kMaxSimultaneousTabLoads,
+       kCoresPerSimultaneousTabLoad, base::SysInfo::NumberOfProcessors());
++  if (koan::features::IsRestoreTabsOnDemandEnabled()) {
++    min_tabs_to_load_ = max_tabs_to_load_ = 0;
++  }
+ }
+ 
+ BackgroundTabLoadingPolicy::~BackgroundTabLoadingPolicy() = default;

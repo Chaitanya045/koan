@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_KOAN_PREFS_H_
 #define KOAN_BROWSER_KOAN_PREFS_H_
 
+class PrefRegistrySimple;
+
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
@@ -65,6 +67,12 @@ inline constexpr char kCtrlTabSkipPending[] = "koan.tabs.ctrl_tab_skip_pending";
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+// Changes the defaults of upstream local-state prefs for Koan's power and
+// memory behaviour (see docs/PERFORMANCE.md); a value the user sets in
+// Settings > Performance still wins. Called from
+// chrome/browser/prefs/browser_prefs.cc after upstream registered them.
+void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry);
 
 }  // namespace koan::prefs
 
