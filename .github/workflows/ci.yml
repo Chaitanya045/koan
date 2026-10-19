@@ -54,8 +54,8 @@ jobs:
           git ls-files 'src/*.cc' 'src/*.h' |
             xargs clang-format --style=file --dry-run --Werror
       - name: shellcheck
-        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh
+        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
       - name: Node scripts parse
-        run: for f in scripts/*.mjs; do node --check "$f"; done
+        run: for f in scripts/*.mjs scripts/e2e/*.mjs; do node --check "$f"; done
       - name: Python compiles
         run: python -m py_compile scripts/*.py scripts/tests/*.py

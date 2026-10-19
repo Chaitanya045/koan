@@ -49,6 +49,8 @@ constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
 // How long the pointer must be away before the toolbar hides again.
 constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
 constexpr base::TimeDelta kToolbarHideCheckInterval = base::Milliseconds(100);
+// How long a keyboard-opened sidebar stays before hover decides.
+constexpr base::TimeDelta kSidebarPeekGrace = base::Seconds(3);
 
 // Returns the BrowserView's top-container overlay view: a child of the
 // widget's NonClientView, drawn above the client view (and so above the
@@ -97,10 +99,7 @@ BEGIN_METADATA(KoanHotZone)
 END_METADATA
 
 KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
-    : browser_view_(browser_view),
-      compact_accelerator_(ui::VKEY_C, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
-      single_toolbar_accelerator_(ui::VKEY_B,
-                                  ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN) {
+    : browser_view_(browser_view) {
   pref_change_registrar_.Init(browser_view_->GetProfile()->GetPrefs());
   for (const char* pref :
        {prefs::kCompactModeEnabled, prefs::kSingleToolbarEnabled}) {
@@ -112,7 +111,6 @@ KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
 
 KoanCompactModeController::~KoanCompactModeController() {
   if (focus_manager_) {
-    focus_manager_->UnregisterAccelerators(this);
     focus_manager_->RemoveFocusChangeListener(this);
   }
 }
@@ -120,11 +118,6 @@ KoanCompactModeController::~KoanCompactModeController() {
 void KoanCompactModeController::OnAddedToWidget() {
   if (!focus_manager_ && browser_view_->GetFocusManager()) {
     focus_manager_ = browser_view_->GetFocusManager();
-    for (const ui::Accelerator& accelerator :
-         {compact_accelerator_, single_toolbar_accelerator_}) {
-      focus_manager_->RegisterAccelerator(
-          accelerator, ui::AcceleratorManager::kNormalPriority, this);
-    }
     focus_manager_->AddFocusChangeListener(this);
   }
   UpdateActiveSoon();
@@ -150,7 +143,6 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
     Deactivate();
   }
   if (focus_manager_) {
-    focus_manager_->UnregisterAccelerators(this);
     focus_manager_->RemoveFocusChangeListener(this);
     focus_manager_ = nullptr;
   }
@@ -168,20 +160,44 @@ void KoanCompactModeController::ToggleSingleToolbar() {
                     !prefs->GetBoolean(prefs::kSingleToolbarEnabled));
 }
 
-bool KoanCompactModeController::AcceleratorPressed(
-    const ui::Accelerator& accelerator) {
-  if (accelerator == compact_accelerator_) {
-    ToggleCompactMode();
-  } else if (accelerator == single_toolbar_accelerator_) {
-    ToggleSingleToolbar();
-  } else {
+bool KoanCompactModeController::PeekSidebar() {
+  if (!hides_sidebar()) {
     return false;
   }
+  if (!sidebar_lock_) {
+    if (auto* tab_strip = browser_view_->tab_strip_view()) {
+      sidebar_lock_ =
+          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    }
+  }
+  sidebar_unhovered_since_.reset();
+  sidebar_peek_started_ = base::TimeTicks::Now();
+  sidebar_peek_timer_.Start(FROM_HERE, kToolbarHideCheckInterval, this,
+                            &KoanCompactModeController::CheckSidebarPeek);
   return true;
 }
 
-bool KoanCompactModeController::CanHandleAccelerators() const {
-  return features::IsCompactModeEnabled() && browser_view_->GetIsNormalType();
+void KoanCompactModeController::CheckSidebarPeek() {
+  auto* tab_strip = browser_view_->tab_strip_view();
+  if (!sidebar_lock_ || !tab_strip) {
+    sidebar_peek_timer_.Stop();
+    return;
+  }
+  const base::TimeTicks now = base::TimeTicks::Now();
+  // Give the pointer time to reach the sidebar after a keyboard peek.
+  if (tab_strip->IsMouseHovered() ||
+      now - sidebar_peek_started_ < kSidebarPeekGrace) {
+    sidebar_unhovered_since_.reset();
+    return;
+  }
+  if (!sidebar_unhovered_since_) {
+    sidebar_unhovered_since_ = now;
+    return;
+  }
+  if (now - *sidebar_unhovered_since_ >= kToolbarHideDelay) {
+    sidebar_peek_timer_.Stop();
+    sidebar_lock_.reset();
+  }
 }
 
 void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
@@ -316,6 +332,7 @@ void KoanCompactModeController::Deactivate() {
 
   toolbar_hide_timer_.Stop();
   toolbar_unwanted_since_.reset();
+  sidebar_peek_timer_.Stop();
   sidebar_lock_.reset();
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));

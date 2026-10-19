@@ -12,14 +12,9 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/tab_groups/tab_group_id.h"
-#include "ui/base/accelerators/accelerator.h"
 
 class BrowserView;
 class TabStripModel;
-
-namespace views {
-class FocusManager;
-}
 
 namespace koan {
 
@@ -31,11 +26,9 @@ class KoanWorkspaceSwitcherView;
 // only its tabs (plus pinned tabs, which act as Essentials shared by all
 // workspaces). With no focused group every tab is shown ("All tabs").
 //
-// Owns the switcher at the bottom of the sidebar, keyboard shortcuts
-// (Ctrl+Alt+Left/Right to cycle, Ctrl+Alt+N for a new workspace), and keeps
-// new tabs in the active workspace.
-class KoanWorkspaceController : public TabStripModelObserver,
-                                public ui::AcceleratorTarget {
+// Owns the switcher at the bottom of the sidebar and keeps new tabs in the
+// active workspace. Keyboard shortcuts live in KoanShortcutController.
+class KoanWorkspaceController : public TabStripModelObserver {
  public:
   explicit KoanWorkspaceController(BrowserView* browser_view);
   KoanWorkspaceController(const KoanWorkspaceController&) = delete;
@@ -66,10 +59,6 @@ class KoanWorkspaceController : public TabStripModelObserver,
       std::optional<tab_groups::TabGroupId> new_focused_group_id,
       std::optional<tab_groups::TabGroupId> old_focused_group_id) override;
 
-  // ui::AcceleratorTarget:
-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
-  bool CanHandleAccelerators() const override;
-
  private:
   bool IsEnabled() const;
   void InstallSwitcher();
@@ -84,14 +73,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void UpdateTint();
 
   const raw_ptr<BrowserView> browser_view_;
-  raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   raw_ptr<KoanWorkspaceSwitcherView> switcher_ = nullptr;
   bool adopt_pending_ = false;
   bool rebuild_pending_ = false;
-
-  const ui::Accelerator next_accelerator_;
-  const ui::Accelerator previous_accelerator_;
-  const ui::Accelerator new_accelerator_;
 
   base::WeakPtrFactory<KoanWorkspaceController> weak_factory_{this};
 };

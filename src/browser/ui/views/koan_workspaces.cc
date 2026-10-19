@@ -223,21 +223,13 @@ BEGIN_METADATA(KoanWorkspaceSwitcherView)
 END_METADATA
 
 KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
-    : browser_view_(browser_view),
-      next_accelerator_(ui::VKEY_RIGHT, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
-      previous_accelerator_(ui::VKEY_LEFT,
-                            ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
-      new_accelerator_(ui::VKEY_N, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN) {
+    : browser_view_(browser_view) {
   if (IsEnabled()) {
     tab_strip_model()->AddObserver(this);
   }
 }
 
-KoanWorkspaceController::~KoanWorkspaceController() {
-  if (focus_manager_) {
-    focus_manager_->UnregisterAccelerators(this);
-  }
-}
+KoanWorkspaceController::~KoanWorkspaceController() = default;
 
 bool KoanWorkspaceController::IsEnabled() const {
   return features::IsWorkspacesEnabled() &&
@@ -254,22 +246,10 @@ void KoanWorkspaceController::OnAddedToWidget() {
   if (!IsEnabled()) {
     return;
   }
-  if (!focus_manager_ && browser_view_->GetFocusManager()) {
-    focus_manager_ = browser_view_->GetFocusManager();
-    for (const ui::Accelerator& accelerator :
-         {next_accelerator_, previous_accelerator_, new_accelerator_}) {
-      focus_manager_->RegisterAccelerator(
-          accelerator, ui::AcceleratorManager::kNormalPriority, this);
-    }
-  }
   InstallSwitcher();
 }
 
 void KoanWorkspaceController::OnBrowserViewDestroying() {
-  if (focus_manager_) {
-    focus_manager_->UnregisterAccelerators(this);
-    focus_manager_ = nullptr;
-  }
   if (switcher_) {
     switcher_->parent()->RemoveChildViewT(std::exchange(switcher_, nullptr));
   }
@@ -480,24 +460,6 @@ void KoanWorkspaceController::UpdateTint() {
     theme->SetUserColor(std::nullopt);
     theme->SetBrowserColorVariant(variant);
   }
-}
-
-bool KoanWorkspaceController::AcceleratorPressed(
-    const ui::Accelerator& accelerator) {
-  if (accelerator == next_accelerator_) {
-    Cycle(/*forward=*/true);
-  } else if (accelerator == previous_accelerator_) {
-    Cycle(/*forward=*/false);
-  } else if (accelerator == new_accelerator_) {
-    CreateWorkspace();
-  } else {
-    return false;
-  }
-  return true;
-}
-
-bool KoanWorkspaceController::CanHandleAccelerators() const {
-  return IsEnabled();
 }
 
 }  // namespace koan

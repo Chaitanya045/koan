@@ -32,6 +32,8 @@ source_set("impl") {
     "koan_window_controls.cc",
     "koan_window_controls.h",
     "koan_glance_controller.h",
+    "koan_shortcuts.cc",
+    "koan_shortcuts.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
   ]
@@ -76,6 +78,7 @@ source_set("impl") {
     "//koan/browser:features",
     "//koan/browser:prefs",
     "//ui/base",
+    "//ui/base/clipboard",
     "//ui/base/metadata",
     "//ui/compositor",
     "//ui/events",
