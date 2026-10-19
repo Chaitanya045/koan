@@ -48,3 +48,9 @@ JOBS=4 ./scripts/build.sh       # out/Koan/chrome
 The first build takes 10–15 hours on an 8-core / 16 GB machine; Koan-only
 changes rebuild in a couple of minutes. Updating Chromium:
 [docs/REBASE.md](docs/REBASE.md).
+
+## License
+
+Koan's code is MIT licensed (see `LICENSE`). Koan is built on Chromium,
+whose code (including the files modified by `patches/`) stays under
+Chromium's BSD-style license; see `THIRD_PARTY_NOTICES.md`.
