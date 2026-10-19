@@ -86,14 +86,16 @@ _Last updated: 2026-10-19 (all planned phases done)_
   docs/REBASE.md) and a cheap mode check on each layout.
 - About-menu ensō icon verified in chrome://settings.
 
-## Known issues
-- Compact toolbar spans the full width and overlaps the expanded sidebar's
-  header.
+## Known issues / design notes
+- In compact mode the revealed toolbar floats across the full width, over
+  the expanded sidebar's header too (Zen's floating toolbar behaves the
+  same way).
 
 ## Running
 - Nothing.
 
-## Next
-1. Finish compact mode: keyboard toggle test, desktop check, caption
-   buttons; then Phase 1b (single toolbar) or Phase 2.
-3. Don't apply patches under `chromium/src` while a build is running.
+## Next (maintenance)
+1. Each Chromium milestone: `scripts/update_chromium.sh <ref>`, rebuild,
+   run the checks in `docs/REBASE.md`.
+2. Don't apply patches or branding under `chromium/src` while a build runs,
+   and don't keep a test browser open across a build.
