@@ -9,6 +9,7 @@ plain Chromium (rendering, DevTools, extensions, `chrome://` pages).
 | Action | Keys |
 |---|---|
 | Toggle compact mode | Ctrl+Alt+C |
+| Toggle single toolbar (URL bar in the sidebar) | Ctrl+Alt+B |
 | Next / previous workspace | Ctrl+Alt+Right / Ctrl+Alt+Left |
 | New workspace | Ctrl+Alt+N |
 | Glance a link | Shift+click the link |
@@ -36,6 +37,15 @@ Ctrl+Alt+C hides the sidebar and toolbar; the page fills the window with a
 thin margin. Move the pointer to the left edge to slide the sidebar out, or
 to the top edge (or press Ctrl+L) to slide the toolbar down. The setting
 applies to all windows and persists.
+
+## Single toolbar
+
+Ctrl+Alt+B switches to Zen's single-toolbar layout: no toolbar across the
+top; back / forward / reload and a pill with the current site sit at the top
+of the sidebar, and the page reaches the top of the window. Click the pill
+or press Ctrl+L to edit the address: the toolbar slides down over the page
+as a floating URL bar and slides away when you're done. Compact mode wins
+when both are on.
 
 ## Glance
 

@@ -20,6 +20,11 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
   if (IsCompactModeActive(browser_view)) {
     return gfx::Insets(kContentCardMargin);
   }
+  if (IsToolbarHidden(browser_view)) {
+    // Single toolbar: the card reaches the top of the window, with a gutter.
+    return gfx::Insets::TLBR(kContentCardMargin, 0, kContentCardMargin,
+                             kContentCardMargin);
+  }
   // The vertical tab strip already leaves a gap on the leading side, and the
   // toolbar sits directly above the card.
   return gfx::Insets::TLBR(0, 0, kContentCardMargin, kContentCardMargin);

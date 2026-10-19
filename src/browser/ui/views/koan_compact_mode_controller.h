@@ -23,7 +23,16 @@ namespace koan {
 
 class KoanHotZone;
 
-// Zen-style compact mode for one window. When active:
+// Zen's compact mode and single-toolbar layout for one window.
+//
+// Single toolbar (Ctrl+Alt+B, pref koan.single_toolbar): there is no top
+// toolbar. The top container is hidden in the overlay (below), the page card
+// reaches the top of the window, and KoanSidebarNavView at the top of the
+// sidebar has the navigation buttons and a URL pill; focusing the omnibox
+// slides the toolbar down as a floating URL bar.
+//
+// Compact mode (Ctrl+Alt+C, pref koan.compact_mode.enabled; wins over single
+// toolbar):
 // - the vertical tab strip is collapsed to zero width and slides over the
 //   page (upstream's expand-on-hover overlay) when the pointer reaches the
 //   leading edge;
@@ -44,7 +53,13 @@ class KoanCompactModeController : public views::FocusChangeListener,
       delete;
   ~KoanCompactModeController() override;
 
-  bool is_active() const { return active_; }
+  enum class Mode { kNone, kCompact, kSingleToolbar };
+
+  Mode mode() const { return mode_; }
+  // Compact mode: the sidebar takes no layout space.
+  bool hides_sidebar() const { return mode_ == Mode::kCompact; }
+  // Compact mode or single toolbar: the top toolbar takes no layout space.
+  bool hides_toolbar() const { return mode_ != Mode::kNone; }
   bool is_toolbar_revealed() const { return toolbar_revealed_; }
 
   // Called by KoanBrowserViewController.
@@ -52,8 +67,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnBrowserViewLayout();
   void OnBrowserViewDestroying();
 
-  // Flips the profile pref.
-  void Toggle();
+  // Flip the profile prefs.
+  void ToggleCompactMode();
+  void ToggleSingleToolbar();
 
   // ui::AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
@@ -64,10 +80,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
                         views::View* focused_now) override;
 
  private:
-  bool ShouldBeActive() const;
+  Mode DesiredMode() const;
   void UpdateActiveSoon();
   void UpdateActive();
-  void Activate();
+  void Activate(Mode mode);
   void Deactivate();
 
   void SetToolbarRevealed(bool revealed, bool animate);
@@ -81,6 +97,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // toolbar instead. Only shown when the frame reserves room for caption
   // buttons there (custom, client-side-decorated frame).
   void UpdateWindowControls();
+  // Single toolbar: adds KoanSidebarNavView to the top of the sidebar.
+  void InstallSidebarNav();
 
   void OnSidebarHotZoneHovered(bool hovered);
   void OnToolbarHotZoneHovered(bool hovered);
@@ -89,9 +107,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   const raw_ptr<BrowserView> browser_view_;
   PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
-  const ui::Accelerator toggle_accelerator_;
+  const ui::Accelerator compact_accelerator_;
+  const ui::Accelerator single_toolbar_accelerator_;
 
-  bool active_ = false;
+  Mode mode_ = Mode::kNone;
   bool toolbar_revealed_ = false;
   std::optional<bool> collapsed_before_;
   std::optional<size_t> top_container_index_;
@@ -99,6 +118,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;
   raw_ptr<views::View> window_controls_ = nullptr;
+  raw_ptr<views::View> sidebar_nav_ = nullptr;
   std::unique_ptr<ExpandOnHoverLock> sidebar_lock_;
 
   base::RepeatingTimer toolbar_hide_timer_;

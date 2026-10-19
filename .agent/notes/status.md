@@ -68,14 +68,16 @@ _Last updated: 2026-10-19_
 - Focused workspace hides upstream's "Unfocus" pill (hook in
   `tab_group_view_layout.cc`); the switcher's ∞ replaces it.
 
+- Phase 1b single toolbar: KoanCompactModeController has modes (compact /
+  single toolbar); KoanSidebarNavView in the sidebar; Ctrl+L / pill reveal
+  the toolbar as a floating URL bar. Verified off-screen.
+- WebUI `cr:chrome-product` icon replaced with the ensō by branding.py.
+
 ## Known issues
 - Compact mode: Koan draws its own min/max/close buttons in the revealed
   toolbar's trailing corner when the frame reports caption buttons there
   (frame-drawn ones are under the page in compact mode). Headless has no
   caption buttons, so this path is untested until a desktop run.
-- Settings side menu still shows the Chromium vector icon next to
-  "About Koan" (WebUI icon, not a PNG asset).
-- Phase 1b (Zen "single toolbar": URL bar inside the sidebar) not done.
 - Compact toolbar spans the full width and overlaps the expanded sidebar's
   header.
 

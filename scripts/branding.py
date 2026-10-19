@@ -31,6 +31,9 @@ STRING_FILES = [
     'components/components_chromium_strings.grd',
 ]
 
+# WebUI icon set: cr:chrome-product (Settings menu "About", etc.).
+CR_ICONS_FILE = 'ui/webui/resources/cr_elements/icons.html.ts'
+
 BRANDING_FILE = 'chrome/app/theme/chromium/BRANDING'
 BRANDING = """COMPANY_FULLNAME=The Koan Authors
 COMPANY_SHORTNAME=The Koan Authors
@@ -81,7 +84,7 @@ LOGOS = {
     'product_logo_name_22_white.png': 'wordmark_44_white.png',
 }
 
-BRANDED_FILES = STRING_FILES + [BRANDING_FILE] + sorted(LOGOS)
+BRANDED_FILES = STRING_FILES + [CR_ICONS_FILE, BRANDING_FILE] + sorted(LOGOS)
 
 # "Chromium" as the product name: not ChromiumOS (no word boundary), not the
 # project or its authors, not the linked project name in credits.
@@ -110,6 +113,39 @@ def rebrand_messages(text):
   return MESSAGE.sub(fix, text)
 
 
+def enso_path(size, y_offset=0.0):
+  """A filled open ring (the ensō) as an SVG path in a size x size box.
+
+  Same geometry as branding/logo.svg: from -50 degrees the long way round to
+  -15 degrees.
+  """
+  import math
+  cx, cy = size / 2, size / 2 + y_offset
+  outer, inner = size * 0.40, size * 0.25
+
+  def point(r, deg):
+    a = math.radians(deg)
+    return f'{cx + r * math.cos(a):.2f} {cy + r * math.sin(a):.2f}'
+
+  return (f'M{point(outer, -50)} A{outer:.2f} {outer:.2f} 0 1 0 '
+          f'{point(outer, -15)} L{point(inner, -15)} '
+          f'A{inner:.2f} {inner:.2f} 0 1 1 {point(inner, -50)} Z')
+
+
+def rebrand_cr_icons(text):
+  """Replaces the product icon paths in the cr icon set with the ensō."""
+  icon = re.compile(
+      r'(<g id="chrome-product"( viewBox="0 -960 960 960")?>\s*<path\s+d=")'
+      r'[^"]*(")')
+
+  def fix(match):
+    big = match.group(2) is not None
+    path = enso_path(960, -960) if big else enso_path(24)
+    return match.group(1) + path + match.group(3)
+
+  return icon.sub(fix, text)
+
+
 def save_pristine(rel):
   dst = PRISTINE / rel
   if not dst.exists():
@@ -132,6 +168,13 @@ def apply():
       path.write_text(new)
       changed += 1
       print(f'rebranded  {rel}')
+  save_pristine(CR_ICONS_FILE)
+  old = (SRC / CR_ICONS_FILE).read_text()
+  new = rebrand_cr_icons(old)
+  if new != old:
+    (SRC / CR_ICONS_FILE).write_text(new)
+    changed += 1
+    print(f'rebranded  {CR_ICONS_FILE}')
   save_pristine(BRANDING_FILE)
   if (SRC / BRANDING_FILE).read_text() != BRANDING:
     (SRC / BRANDING_FILE).write_text(BRANDING)

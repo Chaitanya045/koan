@@ -15,6 +15,10 @@ namespace koan::prefs {
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
 
+// Zen's single-toolbar layout: no top toolbar; navigation and a URL pill at
+// the top of the sidebar.
+inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
+
 // Whether the browser takes the active workspace's colour (Zen's
 // per-workspace themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";

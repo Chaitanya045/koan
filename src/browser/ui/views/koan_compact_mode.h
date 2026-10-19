@@ -17,6 +17,10 @@ namespace koan {
 // Called from BrowserViewTabbedLayoutImpl.
 bool IsCompactModeActive(const views::View* browser_view);
 
+// Whether the top toolbar is hidden (compact mode or single toolbar), so the
+// page card reaches the top of the window.
+bool IsToolbarHidden(const views::View* browser_view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_

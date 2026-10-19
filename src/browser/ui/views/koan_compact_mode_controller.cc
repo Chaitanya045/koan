@@ -25,6 +25,8 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_content_card.h"
+#include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
@@ -105,12 +107,16 @@ END_METADATA
 
 KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
     : browser_view_(browser_view),
-      toggle_accelerator_(ui::VKEY_C, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN) {
+      compact_accelerator_(ui::VKEY_C, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
+      single_toolbar_accelerator_(ui::VKEY_B,
+                                  ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN) {
   pref_change_registrar_.Init(browser_view_->GetProfile()->GetPrefs());
-  pref_change_registrar_.Add(
-      prefs::kCompactModeEnabled,
-      base::BindRepeating(&KoanCompactModeController::UpdateActiveSoon,
-                          base::Unretained(this)));
+  for (const char* pref :
+       {prefs::kCompactModeEnabled, prefs::kSingleToolbarEnabled}) {
+    pref_change_registrar_.Add(
+        pref, base::BindRepeating(&KoanCompactModeController::UpdateActiveSoon,
+                                  base::Unretained(this)));
+  }
 }
 
 KoanCompactModeController::~KoanCompactModeController() {
@@ -123,8 +129,11 @@ KoanCompactModeController::~KoanCompactModeController() {
 void KoanCompactModeController::OnAddedToWidget() {
   if (!focus_manager_ && browser_view_->GetFocusManager()) {
     focus_manager_ = browser_view_->GetFocusManager();
-    focus_manager_->RegisterAccelerator(
-        toggle_accelerator_, ui::AcceleratorManager::kNormalPriority, this);
+    for (const ui::Accelerator& accelerator :
+         {compact_accelerator_, single_toolbar_accelerator_}) {
+      focus_manager_->RegisterAccelerator(
+          accelerator, ui::AcceleratorManager::kNormalPriority, this);
+    }
     focus_manager_->AddFocusChangeListener(this);
   }
   UpdateActiveSoon();
@@ -133,10 +142,10 @@ void KoanCompactModeController::OnAddedToWidget() {
 void KoanCompactModeController::OnBrowserViewLayout() {
   // Fullscreen and tab strip mode changes show up as layouts. Re-evaluate
   // outside of layout, since (de)activation reparents views.
-  if (active_ != ShouldBeActive()) {
+  if (mode_ != DesiredMode()) {
     UpdateActiveSoon();
   }
-  if (active_) {
+  if (mode_ != Mode::kNone) {
     LayoutHotZones();
     UpdateWindowControls();
     // The top container's height may have changed (e.g. bookmarks bar).
@@ -147,7 +156,7 @@ void KoanCompactModeController::OnBrowserViewLayout() {
 }
 
 void KoanCompactModeController::OnBrowserViewDestroying() {
-  if (active_) {
+  if (mode_ != Mode::kNone) {
     Deactivate();
   }
   if (focus_manager_) {
@@ -157,18 +166,27 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   }
 }
 
-void KoanCompactModeController::Toggle() {
+void KoanCompactModeController::ToggleCompactMode() {
   PrefService* prefs = browser_view_->GetProfile()->GetPrefs();
   prefs->SetBoolean(prefs::kCompactModeEnabled,
                     !prefs->GetBoolean(prefs::kCompactModeEnabled));
 }
 
+void KoanCompactModeController::ToggleSingleToolbar() {
+  PrefService* prefs = browser_view_->GetProfile()->GetPrefs();
+  prefs->SetBoolean(prefs::kSingleToolbarEnabled,
+                    !prefs->GetBoolean(prefs::kSingleToolbarEnabled));
+}
+
 bool KoanCompactModeController::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
-  if (accelerator != toggle_accelerator_) {
+  if (accelerator == compact_accelerator_) {
+    ToggleCompactMode();
+  } else if (accelerator == single_toolbar_accelerator_) {
+    ToggleSingleToolbar();
+  } else {
     return false;
   }
-  Toggle();
   return true;
 }
 
@@ -180,18 +198,27 @@ void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
                                                  views::View* focused_now) {
   // Focusing anything in the toolbar (e.g. Ctrl+L) reveals it; the hide
   // timer keeps it revealed until focus leaves.
-  if (active_ && focused_now &&
+  if (hides_toolbar() && focused_now &&
       browser_view_->top_container()->Contains(focused_now)) {
     SetToolbarRevealed(true, /*animate=*/true);
   }
 }
 
-bool KoanCompactModeController::ShouldBeActive() const {
-  return features::IsCompactModeEnabled() &&
-         browser_view_->GetProfile()->GetPrefs()->GetBoolean(
-             prefs::kCompactModeEnabled) &&
-         GetTopContainerOverlayView(browser_view_) &&
-         UseContentCard(browser_view_);
+KoanCompactModeController::Mode KoanCompactModeController::DesiredMode()
+    const {
+  if (!features::IsCompactModeEnabled() ||
+      !GetTopContainerOverlayView(browser_view_) ||
+      !UseContentCard(browser_view_)) {
+    return Mode::kNone;
+  }
+  const PrefService* prefs = browser_view_->GetProfile()->GetPrefs();
+  if (prefs->GetBoolean(prefs::kCompactModeEnabled)) {
+    return Mode::kCompact;
+  }
+  if (prefs->GetBoolean(prefs::kSingleToolbarEnabled)) {
+    return Mode::kSingleToolbar;
+  }
+  return Mode::kNone;
 }
 
 void KoanCompactModeController::UpdateActiveSoon() {
@@ -201,25 +228,28 @@ void KoanCompactModeController::UpdateActiveSoon() {
 }
 
 void KoanCompactModeController::UpdateActive() {
-  const bool should_be_active = ShouldBeActive();
-  if (should_be_active == active_) {
+  const Mode desired = DesiredMode();
+  if (desired == mode_) {
     return;
   }
-  if (should_be_active) {
-    Activate();
-  } else {
+  if (mode_ != Mode::kNone) {
     Deactivate();
+  }
+  if (desired != Mode::kNone) {
+    Activate(desired);
   }
 }
 
-void KoanCompactModeController::Activate() {
-  active_ = true;
-  VLOG(1) << "Koan: compact mode on";
+void KoanCompactModeController::Activate(Mode mode) {
+  mode_ = mode;
+  VLOG(1) << (mode == Mode::kCompact ? "Koan: compact mode on"
+                                     : "Koan: single toolbar on");
 
-  // Sidebar: collapse it; the layout then gives it zero width and upstream's
-  // expand-on-hover draws it over the page.
+  // Compact: collapse the sidebar; the layout then gives it zero width and
+  // upstream's expand-on-hover draws it over the page.
   if (auto* state = tabs::VerticalTabStripStateController::From(
-          browser_view_->browser())) {
+          browser_view_->browser());
+      state && mode == Mode::kCompact) {
     collapsed_before_ = state->IsCollapsed();
     if (!state->IsCollapsed()) {
       state->RequestCollapse(true);
@@ -240,6 +270,12 @@ void KoanCompactModeController::Activate() {
     overlay->SetVisible(true);
   }
   SetToolbarRevealed(false, /*animate=*/false);
+
+  if (mode == Mode::kSingleToolbar) {
+    InstallSidebarNav();
+    browser_view_->InvalidateLayout();
+    return;
+  }
 
   // Edge hot zones, below the tab strip so the expanded strip gets the
   // pointer, above the page.
@@ -266,62 +302,46 @@ void KoanCompactModeController::Activate() {
 
 void KoanCompactModeController::UpdateWindowControls() {
   views::View* top_container = browser_view_->top_container();
-  const BrowserFrameView* frame =
-      browser_view_->browser_widget()
-          ? browser_view_->browser_widget()->GetFrameView()
-          : nullptr;
-  const BrowserLayoutParams params =
-      frame ? frame->GetBrowserLayoutParams() : BrowserLayoutParams();
-  const gfx::SizeF area = params.trailing_exclusion.content;
-  if (!active_ || area.IsEmpty()) {
+  const gfx::Size area = GetCaptionButtonAreaSize(browser_view_);
+  if (mode_ != Mode::kCompact || area.IsEmpty()) {
     if (window_controls_) {
       top_container->RemoveChildViewT(std::exchange(window_controls_, nullptr));
     }
     return;
   }
   if (!window_controls_) {
-    auto controls = std::make_unique<views::BoxLayoutView>();
-    controls->SetOrientation(views::BoxLayout::Orientation::kHorizontal);
-    views::Widget* widget = browser_view_->GetWidget();
-    const auto add = [&](const gfx::VectorIcon& icon, std::u16string name,
-                         base::RepeatingClosure action) {
-      auto button = views::CreateVectorImageButtonWithNativeTheme(
-          base::BindRepeating(
-              [](base::RepeatingClosure action, const ui::Event&) {
-                action.Run();
-              },
-              std::move(action)),
-          icon, /*dip_size=*/16);
-      button->SetTooltipText(name);
-      button->GetViewAccessibility().SetName(name);
-      controls->AddChildView(std::move(button));
-    };
-    add(views::kChromeMinimizeIcon, u"Minimize",
-        base::BindRepeating(&views::Widget::Minimize,
-                            base::Unretained(widget)));
-    add(views::kChromeMaximizeIcon, u"Maximize",
-        base::BindRepeating(
-            [](views::Widget* w) {
-              w->IsMaximized() ? w->Restore() : w->Maximize();
-            },
-            base::Unretained(widget)));
-    add(vector_icons::kCloseIcon, u"Close",
-        base::BindRepeating(&views::Widget::Close, base::Unretained(widget)));
-    window_controls_ = top_container->AddChildView(std::move(controls));
+    window_controls_ = top_container->AddChildView(
+        CreateWindowControls(browser_view_, gfx::Size(area.width() / 3,
+                                                      area.height())));
   }
-  const int width = static_cast<int>(area.width());
-  const int height = static_cast<int>(area.height());
-  for (views::View* button : window_controls_->children()) {
-    button->SetPreferredSize(
-        gfx::Size(width / static_cast<int>(window_controls_->children().size()),
-                  height));
+  window_controls_->SetBounds(top_container->width() - area.width(), 0,
+                              area.width(), area.height());
+}
+
+void KoanCompactModeController::InstallSidebarNav() {
+  // Top of the vertical tab strip's content area (a FlexLayoutView), above
+  // the separator and the tabs.
+  views::View* region = browser_view_->tab_strip_view();
+  if (sidebar_nav_ || !region ||
+      region->GetClassName() != "VerticalTabStripRegionView") {
+    return;
   }
-  window_controls_->SetBounds(top_container->width() - width, 0, width, height);
+  for (views::View* child : region->children()) {
+    if (child->GetClassName() == "FlexLayoutView") {
+      sidebar_nav_ = child->AddChildViewAt(
+          std::make_unique<KoanSidebarNavView>(browser_view_), 0);
+      return;
+    }
+  }
 }
 
 void KoanCompactModeController::Deactivate() {
-  active_ = false;
-  VLOG(1) << "Koan: compact mode off";
+  VLOG(1) << (mode_ == Mode::kCompact ? "Koan: compact mode off"
+                                      : "Koan: single toolbar off");
+  mode_ = Mode::kNone;
+  if (sidebar_nav_) {
+    sidebar_nav_->parent()->RemoveChildViewT(std::exchange(sidebar_nav_, nullptr));
+  }
 
   toolbar_hide_timer_.Stop();
   toolbar_unwanted_since_.reset();
@@ -371,7 +391,7 @@ void KoanCompactModeController::Deactivate() {
 
 void KoanCompactModeController::SetToolbarRevealed(bool revealed,
                                                    bool animate) {
-  if (!active_) {
+  if (mode_ == Mode::kNone) {
     return;
   }
   const bool changed = toolbar_revealed_ != revealed;
@@ -452,7 +472,7 @@ void KoanCompactModeController::CheckToolbarHide() {
 }
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
-  if (!active_) {
+  if (mode_ == Mode::kNone) {
     return;
   }
   if (hovered) {
