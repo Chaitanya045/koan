@@ -30,8 +30,8 @@
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/animation/tween.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/menu/menu_controller.h"
@@ -194,8 +194,7 @@ void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
   }
 }
 
-KoanCompactModeController::Mode KoanCompactModeController::DesiredMode()
-    const {
+KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
   if (!features::IsCompactModeEnabled() ||
       !GetTopContainerOverlayView(browser_view_) ||
       !UseContentCard(browser_view_)) {
@@ -237,8 +236,8 @@ void KoanCompactModeController::Activate(Mode mode) {
 
   // Compact: collapse the sidebar; the layout then gives it zero width and
   // upstream's expand-on-hover draws it over the page.
-  if (auto* state = tabs::VerticalTabStripStateController::From(
-          browser_view_->browser());
+  if (auto* state =
+          tabs::VerticalTabStripStateController::From(browser_view_->browser());
       state && mode == Mode::kCompact) {
     collapsed_before_ = state->IsCollapsed();
     if (!state->IsCollapsed()) {
@@ -275,14 +274,14 @@ void KoanCompactModeController::Activate(Mode mode) {
   }
   const size_t insert_at = index.value_or(browser_view_->children().size());
   sidebar_hot_zone_ = browser_view_->AddChildViewAt(
-      std::make_unique<KoanHotZone>(
-          base::BindRepeating(&KoanCompactModeController::OnSidebarHotZoneHovered,
-                              base::Unretained(this))),
+      std::make_unique<KoanHotZone>(base::BindRepeating(
+          &KoanCompactModeController::OnSidebarHotZoneHovered,
+          base::Unretained(this))),
       insert_at);
   toolbar_hot_zone_ = browser_view_->AddChildViewAt(
-      std::make_unique<KoanHotZone>(
-          base::BindRepeating(&KoanCompactModeController::OnToolbarHotZoneHovered,
-                              base::Unretained(this))),
+      std::make_unique<KoanHotZone>(base::BindRepeating(
+          &KoanCompactModeController::OnToolbarHotZoneHovered,
+          base::Unretained(this))),
       insert_at);
 
   browser_view_->InvalidateLayout();
@@ -311,7 +310,8 @@ void KoanCompactModeController::Deactivate() {
                                       : "Koan: single toolbar off");
   mode_ = Mode::kNone;
   if (sidebar_nav_) {
-    sidebar_nav_->parent()->RemoveChildViewT(std::exchange(sidebar_nav_, nullptr));
+    sidebar_nav_->parent()->RemoveChildViewT(
+        std::exchange(sidebar_nav_, nullptr));
   }
 
   toolbar_hide_timer_.Stop();
@@ -403,9 +403,9 @@ void KoanCompactModeController::ApplyToolbarTransform(bool animate) {
       .Once()
       .SetDuration(toolbar_revealed_ ? kToolbarRevealDuration
                                      : kToolbarHideDuration)
-      .SetTransform(top_container, target,
-                    toolbar_revealed_ ? gfx::Tween::EASE_OUT
-                                      : gfx::Tween::EASE_IN);
+      .SetTransform(
+          top_container, target,
+          toolbar_revealed_ ? gfx::Tween::EASE_OUT : gfx::Tween::EASE_IN);
 }
 
 bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
@@ -420,8 +420,8 @@ bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
       top_container->Contains(focus_manager_->GetFocusedView())) {
     return true;
   }
-  return views::MenuController::GetForOwnerWidget(
-             browser_view_->GetWidget()) != nullptr;
+  return views::MenuController::GetForOwnerWidget(browser_view_->GetWidget()) !=
+         nullptr;
 }
 
 void KoanCompactModeController::CheckToolbarHide() {
@@ -446,8 +446,8 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   if (hovered) {
     if (!sidebar_lock_) {
       if (auto* tab_strip = browser_view_->tab_strip_view()) {
-        sidebar_lock_ =
-            tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+        sidebar_lock_ = tab_strip->GetExpandOnHoverLock(
+            ExpandOnHoverLockType::kKeepExpanded);
       }
     }
     return;

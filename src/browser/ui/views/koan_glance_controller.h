@@ -76,9 +76,10 @@ class KoanGlanceController : public content::WebContentsDelegate,
                            const input::NativeWebKeyboardEvent& event) override;
 
   // TabStripModelObserver:
-  void OnTabStripModelChanged(TabStripModel* tab_strip_model,
-                              const TabStripModelChange& change,
-                              const TabStripSelectionChange& selection) override;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
 
  private:
   // Releases the overlay and returns the Glance WebContents (detached from

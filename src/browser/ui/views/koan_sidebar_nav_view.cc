@@ -58,7 +58,8 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
     : browser_view_(browser_view) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
-      gfx::Insets::TLBR(4, kPadding, 8, kPadding), /*between_child_spacing=*/6));
+      gfx::Insets::TLBR(4, kPadding, 8, kPadding),
+      /*between_child_spacing=*/6));
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
 
@@ -87,11 +88,10 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
                         IDC_FORWARD, u"Forward");
   nav_button(vector_icons::kReloadChromeRefreshOldIcon, IDC_RELOAD, u"Reload");
 
-
   // Row 2: the URL pill.
-  url_pill_ = AddChildView(std::make_unique<views::LabelButton>(
-      base::BindRepeating(&KoanSidebarNavView::FocusOmnibox,
-                          base::Unretained(this))));
+  url_pill_ =
+      AddChildView(std::make_unique<views::LabelButton>(base::BindRepeating(
+          &KoanSidebarNavView::FocusOmnibox, base::Unretained(this))));
   url_pill_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   url_pill_->SetPreferredSize(gfx::Size(0, kPillHeight));
   url_pill_->SetBackground(views::CreateRoundedRectBackground(

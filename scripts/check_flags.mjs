@@ -22,5 +22,5 @@ const expr = `(() => {
 })()`;
 const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true });
 console.log(r.result.result.value);
-await send('Page.captureScreenshot', { format: 'png' }).then(s => import('node:fs').then(fs => fs.writeFileSync('process.argv[3] ?? '/tmp/koan-flags.png'', Buffer.from(s.result.data, 'base64'))));
+await send('Page.captureScreenshot', { format: 'png' }).then(s => import('node:fs').then(fs => fs.writeFileSync(process.argv[3] ?? '/tmp/koan-flags.png', Buffer.from(s.result.data, 'base64'))));
 ws.close();

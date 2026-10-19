@@ -39,6 +39,11 @@ fi
 (cd "$SRC" && git fetch --depth=1 origin "$ref" && git checkout --detach FETCH_HEAD)
 (cd "$ROOT/chromium" && gclient sync --nohooks --no-history -D && gclient runhooks)
 
+# Pin the new revision for CI (scripts/ci/check_patches.sh) and reviewers.
+(cd "$SRC" && printf '%s\n%s\n' \
+  "$(sed -n 's/^MAJOR=//p;s/^MINOR=//p;s/^BUILD=//p;s/^PATCH=//p' chrome/VERSION | paste -sd.)" \
+  "$(git rev-parse HEAD)") > "$ROOT/CHROMIUM_VERSION"
+
 if ! "$ROOT/scripts/apply_patches.sh" apply; then
   echo
   echo "Some patches conflict. Port each CONFLICT by hand in chromium/src, then"
