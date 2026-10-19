@@ -3,14 +3,18 @@
 # Renders the full browser window (UI included) with the headless Ozone
 # platform and copies the last dumped frame to <out.png>.
 # Nothing appears on the real desktop. WAIT=<s> changes the render time.
-out=$1; shift; flags=(); while [[ $# -gt 0 && $1 != -- ]]; do flags+=("$1"); shift; done; shift
-prof=$(mktemp -d /tmp/koan-prof-XXXX); dump=$(mktemp -d /tmp/koan-dump-XXXX)
-"$(dirname "$0")/../chromium/src/out/Koan/chrome" --ozone-platform=headless --ozone-dump-file="$dump" \
-  --in-process-gpu --disable-gpu --user-data-dir="$prof" --no-first-run --window-size=1280,800 \
-  "${flags[@]}" "$@" >"$prof.log" 2>&1 &
+# PREFS=<json> seeds Default/Preferences (e.g. '{"koan":{"compact_mode":{"enabled":true}}}').
+source "$(dirname "$0")/koan_test_env.sh"
+out=$1; shift
+flags=(); while [[ $# -gt 0 && $1 != -- ]]; do flags+=("$1"); shift; done; shift
+prof=$(koan_new_profile); dump=$(mktemp -d "$KOAN_TEST_DIR/dump-XXXX")
+pid=
+cleanup() { [[ -n $pid ]] && kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; rm -rf "$prof" "$dump" "$prof.log"; }
+trap cleanup EXIT
+if [[ -n ${PREFS:-} ]]; then mkdir -p "$prof/Default"; printf '%s' "$PREFS" > "$prof/Default/Preferences"; fi
+"$KOAN_CHROME" "${KOAN_HEADLESS_UI_FLAGS[@]}" --ozone-dump-file="$dump" \
+  --user-data-dir="$prof" "${flags[@]}" "$@" >"$prof.log" 2>&1 &
 pid=$!
 sleep "${WAIT:-8}"
-kill $pid; wait $pid 2>/dev/null
 f=$(ls -S "$dump"/*.png 2>/dev/null | head -1)
-[[ -n $f ]] && cp "$f" "$out" && echo "wrote $out from $(ls "$dump")" || { echo "no frames"; tail -5 "$prof.log"; }
-rm -rf "$prof" "$dump"
+if [[ -n $f ]]; then cp "$f" "$out" && echo "wrote $out"; else echo "no frames"; tail -5 "$prof.log"; fi

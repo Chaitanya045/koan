@@ -10,6 +10,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "ui/base/class_property.h"
 
@@ -27,7 +29,8 @@ int g_live_count = 0;
 }  // namespace
 
 KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
-    : browser_view_(browser_view) {
+    : browser_view_(browser_view),
+      compact_mode_(std::make_unique<KoanCompactModeController>(browser_view)) {
   ++g_live_count;
   observations_.AddObservation(browser_view);
   if (MultiContentsView* contents = browser_view->multi_contents_view()) {
@@ -51,6 +54,9 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
 
 // static
 void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
+  if (KoanBrowserViewController* controller = From(browser_view)) {
+    controller->compact_mode_->OnBrowserViewDestroying();
+  }
   browser_view->ClearProperty(kKoanBrowserViewControllerKey);
 }
 
@@ -69,6 +75,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     views::View* observed_view) {
   if (observed_view == browser_view_) {
     VLOG(1) << "Koan: window attached to widget";
+    compact_mode_->OnAddedToWidget();
   }
 }
 
@@ -77,6 +84,7 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   if (observed_view == browser_view_->multi_contents_view()) {
     UpdateContentCard();
   }
+  compact_mode_->OnBrowserViewLayout();
 }
 
 void KoanBrowserViewController::UpdateContentCard() {
@@ -89,6 +97,13 @@ void KoanBrowserViewController::UpdateContentCard() {
   // such as fullscreen or switching the tab strip mode.
   contents->GetActiveContentsContainerView()->SetRoundedCorners(
       ActiveContentsRadii(browser_view_, contents->GetBackgroundRadii()));
+}
+
+bool IsCompactModeActive(const views::View* browser_view) {
+  const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  const KoanBrowserViewController* controller =
+      view ? KoanBrowserViewController::From(view) : nullptr;
+  return controller && controller->compact_mode()->is_active();
 }
 
 }  // namespace koan

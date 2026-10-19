@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+index 7764d4a4728973dc075efb308daa3d67ba2e10b6..5c2b93d19f6e4bf846d560a314fb076d0d89fa78 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+@@ -46,6 +46,7 @@
+ #include "chrome/browser/ui/views/tabs/organizer/layout_constants.h"
+ #include "chrome/browser/ui/views/tabs/organizer/organizer_panel_host.h"
+ #include "chrome/browser/ui/views/tabs/organizer/organizer_tray_view.h"
++#include "koan/browser/ui/views/koan_compact_mode.h"
+ #include "ui/base/ui_base_features.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/gfx/geometry/insets.h"
+@@ -462,6 +463,10 @@ BrowserViewTabbedLayoutImpl::CalculateHorizontalLayout(
+         VerticalTabStripCollapsedState::kCollapsed) {
+       // Collapsed tab strip always gets its preferred size.
+       min_vertical_tab_strip_width = preferred_vertical_tab_strip_width;
++      // Koan compact mode: no space at all; it only appears on hover.
++      if (koan::IsCompactModeActive(views().browser_view)) {
++        min_vertical_tab_strip_width = preferred_vertical_tab_strip_width = 0;
++      }
+ 
+       // Account for grab handle.
+       IncreasePaddingToMinimum(params, GetMinimumGrabHandlePadding());

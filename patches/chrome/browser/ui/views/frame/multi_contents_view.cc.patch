@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/multi_contents_view.cc b/chrome/browser/ui/views/frame/multi_contents_view.cc
-index a756f076ffce50efa86bb84421b4ff8a77e8c581..c6efe93a58f43d39ff07e31fd02d85fd43a72cb8 100644
+index a756f076ffce50efa86bb84421b4ff8a77e8c581..0e8e4071241611e62808c4489eeb4579b4d19ba3 100644
 --- a/chrome/browser/ui/views/frame/multi_contents_view.cc
 +++ b/chrome/browser/ui/views/frame/multi_contents_view.cc
 @@ -41,6 +41,7 @@
@@ -37,7 +37,7 @@ index a756f076ffce50efa86bb84421b4ff8a77e8c581..c6efe93a58f43d39ff07e31fd02d85fd
    if (IsInSplitView()) {
      available_space.Inset(split_view_insets_);
 +  } else if (koan_card) {
-+    available_space.Inset(koan::ContentCardInsets());
++    available_space.Inset(koan::ContentCardInsets(browser_view_));
    }
    ViewSizes sizes = GetViewSizes(available_space);
  

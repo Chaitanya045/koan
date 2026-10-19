@@ -21,3 +21,17 @@ source_set("flag_entries") {
     "//components/webui/flags",
   ]
 }
+
+# Koan profile prefs.
+source_set("prefs") {
+  sources = [
+    "koan_prefs.cc",
+    "koan_prefs.h",
+  ]
+  deps = [ "//components/pref_registry" ]
+}
+
+# Koan product constants (header-only).
+source_set("branding") {
+  sources = [ "koan_branding.h" ]
+}

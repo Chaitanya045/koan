@@ -8,3 +8,6 @@ v8_symbol_level = 0
 use_sysroot = true
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
+# Ship stable feature defaults, not Chromium's experiment config (which, for
+# example, turns on the WebUI toolbar).
+disable_fieldtrial_testing_config = true

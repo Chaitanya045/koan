@@ -38,6 +38,24 @@
 - Don't start a background process and `sleep` in the same foreground Bash
   call; it hung until timeout. Start long-lived test browsers with
   `run_in_background: true`, then probe in separate calls.
+- **/tmp is a 7.8 GB tmpfs.** Fresh test profiles grew to ~700 MB each
+  (component/model downloads) and filled it; the shell then silently
+  truncates heredocs (it buffers them in /tmp) and tool output is lost.
+  Test scripts now source `scripts/koan_test_env.sh`: profiles under
+  `.test-profiles/` (git-ignored), `--disable-component-update`, cleanup
+  traps. siso also leaves ~1 GB of logs in /tmp per full build; delete old
+  `siso.*.log.*` files after big builds.
+- **Interactive UI tests off-screen:** `scripts/ui_session.sh <port> <secs>
+  [flags] -- urls` (run in background) + `node scripts/ui_tree.mjs <port>`
+  + `node scripts/ui_input.mjs <port> <class-regex> <nth> mouse|key ...`.
+  Synthetic events need the `ui-debug-tools-enable-synthetic-events`
+  feature (ui_session.sh enables it). `IsMouseHovered()` uses the real
+  cursor, which headless never moves, so hover-out paths need a desktop.
+- **Field trial testing config:** developer builds apply
+  `fieldtrial_testing_config.json` (enables e.g. `InitialWebUI`, i.e. a
+  WebUI back/forward/reload toolbar). Koan sets
+  `disable_fieldtrial_testing_config = true`; flipping it rebuilt ~1.9k
+  steps.
 - `pkill -f <pattern>` / `pgrep -f` from the agent shell match the shell
   itself (its command line contains the pattern): pkill kills the whole
   command (exit 144), pgrep always "finds" something. Kill by PID instead.

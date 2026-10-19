@@ -8,6 +8,7 @@
 source_set("views") {
   sources = [
     "koan_browser_view_hooks.h",
+    "koan_compact_mode.h",
     "koan_content_card.h",
   ]
   public_deps = [
@@ -21,15 +22,29 @@ source_set("impl") {
     "koan_browser_view_controller.cc",
     "koan_browser_view_controller.h",
     "koan_browser_view_hooks.cc",
+    "koan_compact_mode_controller.cc",
+    "koan_compact_mode_controller.h",
     "koan_content_card.cc",
   ]
   deps = [
     ":views",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/tabs",
+    "//chrome/browser/ui/views/frame",
     "//chrome/browser/ui/views/frame:browser_view_header",
     "//chrome/browser/ui/views/frame:contents_container_view",
     "//chrome/browser/ui/views/frame:multi_contents_view",
+    "//chrome/browser/ui/views/frame:top_container_view",
+    "//chrome/browser/ui/views/infobars",
+    "//components/prefs",
     "//koan/browser:features",
+    "//koan/browser:prefs",
     "//ui/base",
+    "//ui/base/metadata",
+    "//ui/compositor",
+    "//ui/events",
+    "//ui/gfx",
     "//ui/views",
   ]
 }

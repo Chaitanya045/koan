@@ -39,11 +39,31 @@ _Last updated: 2026-10-19_
   contents only, separators hidden). Screenshots: `docs/screenshots/step4-*`.
   Light, dark (`--force-dark-mode`) and flag-off all checked.
 
+- Phase 1 steps 5-7 (compact mode), first cut: `KoanCompactModeController`
+  per window. Sidebar: strip collapsed to 0 width (hook in
+  `CalculateHorizontalLayout`) + upstream expand-on-hover overlay, opened by
+  a leading-edge `KoanHotZone` taking an `ExpandOnHoverLock`. Toolbar: top
+  container reparented into the NonClientView's `TopContainerOverlayView`
+  and slid with a layer transform; top-edge hot zone + omnibox focus reveal,
+  400 ms hide delay. Card gutter on all sides in compact. Ctrl+Alt+C via
+  FocusManager accelerator (no upstream patch); pref
+  `koan.compact_mode.enabled` (registered from tab_strip_prefs.cc). Verified
+  off-screen: hidden state, sidebar reveal, toolbar reveal
+  (`docs/screenshots/step5-*`).
+- Google API keys infobar suppressed (`koan::kShowGoogleApiKeysInfoBar`).
+
+## Known issues
+- Compact mode: Linux CSD caption buttons are painted by the frame view in
+  the root layer, under MultiContentsView's layers, so they are probably
+  hidden in compact mode. Can't be seen headless; check on the desktop and
+  likely add Koan window controls to the revealed toolbar.
+- Compact toolbar spans the full width and overlaps the expanded sidebar's
+  header.
+
 ## Running
 - Nothing.
 
 ## Next
-1. Phase 1 step 4b: sidebar header buttons (hide what Zen doesn't have),
-   maybe a subtle card shadow; check split view still looks right.
-2. Then step 5: compact mode sidebar.
+1. Finish compact mode: keyboard toggle test, desktop check, caption
+   buttons; then Phase 1b (single toolbar) or Phase 2.
 3. Don't apply patches under `chromium/src` while a build is running.

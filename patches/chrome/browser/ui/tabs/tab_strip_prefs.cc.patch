@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/tabs/tab_strip_prefs.cc b/chrome/browser/ui/tabs/tab_strip_prefs.cc
-index 9a855747c23c7f62e34b71004df2cb68850cd7d0..a190b4f0a804627c36b65fbedf8136017ce60b9c 100644
+index 9a855747c23c7f62e34b71004df2cb68850cd7d0..dd479b65340d845fe0dd67f9210862fb6f48721e 100644
 --- a/chrome/browser/ui/tabs/tab_strip_prefs.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_prefs.cc
-@@ -16,6 +16,7 @@
+@@ -16,6 +16,8 @@
  #include "chrome/common/pref_names.h"
  #include "components/pref_registry/pref_registry_syncable.h"
  #include "components/prefs/pref_service.h"
 +#include "koan/browser/koan_features.h"
++#include "koan/browser/koan_prefs.h"
  #include "ui/actions/actions.h"
  
  namespace tabs {
-@@ -25,7 +26,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+@@ -25,7 +27,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
    registry->RegisterBooleanPref(prefs::kOrganizerPanelPinnedToTabstrip, true);
    registry->RegisterBooleanPref(prefs::kEverythingMenuPinnedToTabstrip, true);
    registry->RegisterBooleanPref(prefs::kTabScrollButtonsPinnedToTabstrip, true);
@@ -20,3 +21,11 @@ index 9a855747c23c7f62e34b71004df2cb68850cd7d0..a190b4f0a804627c36b65fbedf813601
    registry->RegisterBooleanPref(prefs::kVerticalTabsExpandOnHoverEnabled, true);
    registry->RegisterBooleanPref(prefs::kVerticalTabsEnabledFirstTime, false);
    registry->RegisterBooleanPref(prefs::kVerticalTabsCollapsedState, false);
+@@ -33,6 +36,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+                                 kVerticalTabStripDefaultUncollapsedWidth);
+   registry->RegisterTimePref(prefs::kVerticalTabsEverythingMenuLastPressed,
+                              base::Time());
++  koan::prefs::RegisterProfilePrefs(registry);
+ }
+ 
+ void MigrateHoverCardMemoryPref(PrefService* local_prefs) {

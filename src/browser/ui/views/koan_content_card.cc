@@ -6,6 +6,7 @@
 
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 
 namespace koan {
 
@@ -15,7 +16,10 @@ bool UseContentCard(const BrowserView* browser_view) {
          !browser_view->IsFullscreen();
 }
 
-gfx::Insets ContentCardInsets() {
+gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
+  if (IsCompactModeActive(browser_view)) {
+    return gfx::Insets(kContentCardMargin);
+  }
   // The vertical tab strip already leaves a gap on the leading side, and the
   // toolbar sits directly above the card.
   return gfx::Insets::TLBR(0, 0, kContentCardMargin, kContentCardMargin);

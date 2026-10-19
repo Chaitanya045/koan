@@ -24,8 +24,9 @@ inline constexpr int kContentCardMargin = 8;
 // layout, which already uses cards.
 bool UseContentCard(const BrowserView* browser_view);
 
-// Insets of the content card inside MultiContentsView.
-gfx::Insets ContentCardInsets();
+// Insets of the content card inside MultiContentsView. In compact mode the
+// card has a gutter on every side (the edge hot zones live there).
+gfx::Insets ContentCardInsets(const BrowserView* browser_view);
 
 // Corner radii for the active contents outside split view: the card's radii
 // when UseContentCard(), otherwise upstream's `default_radii`. Only the

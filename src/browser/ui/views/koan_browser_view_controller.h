@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_CONTROLLER_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_CONTROLLER_H_
 
+#include <memory>
+
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "ui/views/view.h"
@@ -13,6 +15,8 @@
 class BrowserView;
 
 namespace koan {
+
+class KoanCompactModeController;
 
 // Per-window Koan state and behaviour. Owned by its BrowserView through a
 // ui::ClassProperty; created and destroyed by the hooks in
@@ -32,6 +36,9 @@ class KoanBrowserViewController : public views::ViewObserver {
   static KoanBrowserViewController* From(const BrowserView* browser_view);
 
   BrowserView* browser_view() const { return browser_view_; }
+  KoanCompactModeController* compact_mode() const {
+    return compact_mode_.get();
+  }
 
   // Number of live controllers, i.e. open browser windows.
   static int live_count();
@@ -47,6 +54,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   void UpdateContentCard();
 
   const raw_ptr<BrowserView> browser_view_;
+  std::unique_ptr<KoanCompactModeController> compact_mode_;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       observations_{this};
 };
