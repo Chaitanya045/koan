@@ -10,7 +10,7 @@ namespace koan::prefs {
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCompactModeEnabled, false);
-  registry->RegisterBooleanPref(kSingleToolbarEnabled, false);
+  registry->RegisterBooleanPref(kSingleToolbarEnabled, true);
   registry->RegisterBooleanPref(kWorkspaceTint, true);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);

@@ -1,0 +1,38 @@
+diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..177b1fa2fa8dd888c303f7dac5083ac1d45e49b2 100644
+--- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
++++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+@@ -25,6 +25,7 @@
+ #include "chrome/grit/generated_resources.h"
+ #include "components/feature_engagement/public/feature_constants.h"
+ #include "components/prefs/pref_service.h"
++#include "koan/browser/ui/views/koan_sidebar_header.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/compositor/layer.h"
+@@ -190,6 +191,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+       layout.child_layouts.emplace_back(collapse_button_.get(),
+                                         collapse_button_->GetVisible(), bounds);
+       host_size.SetToMax(gfx::Size(bounds.right(), 0));
++      koan::LayoutSidebarHeaderTrailingViews(this, layout, host_size.width(),
++                                             bounds.CenterPoint().y());
+ 
+       current_y += pref_size.height();
+     }
+@@ -326,6 +329,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+       layout.child_layouts.emplace_back(combo_button_.get(),
+                                         combo_button_->GetVisible(), bounds);
+     }
++    koan::LayoutSidebarHeaderTrailingViews(this, layout, right_alignment,
++                                           y_baseline);
+   }
+ 
+   layout.host_size = host_size;
+@@ -516,6 +521,7 @@ int VerticalTabStripTopContainer::GetPreferredWidth() const {
+     total_width += collapse_button_->GetPreferredSize().width() + padding;
+   }
+ 
++  total_width += koan::GetSidebarHeaderTrailingWidth(this);
+   return total_width;
+ }
+ 

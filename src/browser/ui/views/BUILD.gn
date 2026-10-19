@@ -11,6 +11,7 @@ source_set("views") {
     "koan_compact_mode.h",
     "koan_glance.h",
     "koan_content_card.h",
+    "koan_sidebar_header.h",
   ]
   public_deps = [
     "//base",
@@ -46,6 +47,8 @@ source_set("impl") {
     "//chrome/browser/ui:browser_commands",
     "//chrome/browser/ui/views/location_bar",
     "//components/url_formatter",
+    "//components/favicon/content",
+    "//components/favicon/core",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/themes",
     "//ui/base/mojom",
