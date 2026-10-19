@@ -75,6 +75,13 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool ShouldKeepToolbarRevealed() const;
   void CheckToolbarHide();
 
+  // Koan's own minimise/maximise/close buttons, in the top container's
+  // trailing corner where the frame's caption buttons would be: in compact
+  // mode the page covers the frame-drawn ones, so these slide in with the
+  // toolbar instead. Only shown when the frame reserves room for caption
+  // buttons there (custom, client-side-decorated frame).
+  void UpdateWindowControls();
+
   void OnSidebarHotZoneHovered(bool hovered);
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
@@ -91,6 +98,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;
+  raw_ptr<views::View> window_controls_ = nullptr;
   std::unique_ptr<ExpandOnHoverLock> sidebar_lock_;
 
   base::RepeatingTimer toolbar_hide_timer_;

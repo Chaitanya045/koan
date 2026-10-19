@@ -1,12 +1,12 @@
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
-index 66f9c0d285f331355dd808c821307c0467933a4f..c9bb73a9c65ea27709f9676873a01c7bdade69cc 100644
+index 66f9c0d285f331355dd808c821307c0467933a4f..fea0fb318f1a32a5d7397351891ae246f7c842d2 100644
 --- a/chrome/browser/prefs/BUILD.gn
 +++ b/chrome/browser/prefs/BUILD.gn
 @@ -545,6 +545,7 @@ source_set("util_impl") {
      "//components/sync_preferences",
      "//components/ukm",
      "//components/url_formatter",
-+    "//koan/browser:branding",
++    "//koan/common:branding",
    ]
  
    if (is_chromeos) {

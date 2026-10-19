@@ -15,6 +15,19 @@ namespace koan::prefs {
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
 
+// Whether the browser takes the active workspace's colour (Zen's
+// per-workspace themes).
+inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
+
+// The user's own colour, saved while a workspace tint is applied so that
+// "All tabs" can restore it. kWorkspaceTintSaved says whether a value is
+// saved; kWorkspaceTintSavedColor is 0 for "no user colour".
+inline constexpr char kWorkspaceTintSaved[] = "koan.workspaces.tint_saved";
+inline constexpr char kWorkspaceTintSavedColor[] =
+    "koan.workspaces.tint_saved_color";
+inline constexpr char kWorkspaceTintSavedVariant[] =
+    "koan.workspaces.tint_saved_variant";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

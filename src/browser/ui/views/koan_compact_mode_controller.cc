@@ -14,7 +14,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+#include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/browser_widget.h"
+#include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
@@ -33,6 +36,11 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/layout/box_layout_view.h"
+#include "ui/views/window/vector_icons/vector_icons.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
@@ -130,6 +138,7 @@ void KoanCompactModeController::OnBrowserViewLayout() {
   }
   if (active_) {
     LayoutHotZones();
+    UpdateWindowControls();
     // The top container's height may have changed (e.g. bookmarks bar).
     if (!toolbar_revealed_) {
       ApplyToolbarTransform(/*animate=*/false);
@@ -252,6 +261,62 @@ void KoanCompactModeController::Activate() {
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+  UpdateWindowControls();
+}
+
+void KoanCompactModeController::UpdateWindowControls() {
+  views::View* top_container = browser_view_->top_container();
+  const BrowserFrameView* frame =
+      browser_view_->browser_widget()
+          ? browser_view_->browser_widget()->GetFrameView()
+          : nullptr;
+  const BrowserLayoutParams params =
+      frame ? frame->GetBrowserLayoutParams() : BrowserLayoutParams();
+  const gfx::SizeF area = params.trailing_exclusion.content;
+  if (!active_ || area.IsEmpty()) {
+    if (window_controls_) {
+      top_container->RemoveChildViewT(std::exchange(window_controls_, nullptr));
+    }
+    return;
+  }
+  if (!window_controls_) {
+    auto controls = std::make_unique<views::BoxLayoutView>();
+    controls->SetOrientation(views::BoxLayout::Orientation::kHorizontal);
+    views::Widget* widget = browser_view_->GetWidget();
+    const auto add = [&](const gfx::VectorIcon& icon, std::u16string name,
+                         base::RepeatingClosure action) {
+      auto button = views::CreateVectorImageButtonWithNativeTheme(
+          base::BindRepeating(
+              [](base::RepeatingClosure action, const ui::Event&) {
+                action.Run();
+              },
+              std::move(action)),
+          icon, /*dip_size=*/16);
+      button->SetTooltipText(name);
+      button->GetViewAccessibility().SetName(name);
+      controls->AddChildView(std::move(button));
+    };
+    add(views::kChromeMinimizeIcon, u"Minimize",
+        base::BindRepeating(&views::Widget::Minimize,
+                            base::Unretained(widget)));
+    add(views::kChromeMaximizeIcon, u"Maximize",
+        base::BindRepeating(
+            [](views::Widget* w) {
+              w->IsMaximized() ? w->Restore() : w->Maximize();
+            },
+            base::Unretained(widget)));
+    add(vector_icons::kCloseIcon, u"Close",
+        base::BindRepeating(&views::Widget::Close, base::Unretained(widget)));
+    window_controls_ = top_container->AddChildView(std::move(controls));
+  }
+  const int width = static_cast<int>(area.width());
+  const int height = static_cast<int>(area.height());
+  for (views::View* button : window_controls_->children()) {
+    button->SetPreferredSize(
+        gfx::Size(width / static_cast<int>(window_controls_->children().size()),
+                  height));
+  }
+  window_controls_->SetBounds(top_container->width() - width, 0, width, height);
 }
 
 void KoanCompactModeController::Deactivate() {
@@ -261,6 +326,10 @@ void KoanCompactModeController::Deactivate() {
   toolbar_hide_timer_.Stop();
   toolbar_unwanted_since_.reset();
   sidebar_lock_.reset();
+  if (window_controls_) {
+    browser_view_->top_container()->RemoveChildViewT(
+        std::exchange(window_controls_, nullptr));
+  }
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }

@@ -56,6 +56,9 @@
   WebUI back/forward/reload toolbar). Koan sets
   `disable_fieldtrial_testing_config = true`; flipping it rebuilt ~1.9k
   steps.
+- Never leave a test browser running across a build: regenerated .pak files
+  make the running one abort ("Unable to find resource").
+- Changing `BRANDING`/string .grd files rebuilds ~3.6k steps (~45 min).
 - `pkill -f <pattern>` / `pgrep -f` from the agent shell match the shell
   itself (its command line contains the pattern): pkill kills the whole
   command (exit 144), pgrep always "finds" something. Kill by PID instead.

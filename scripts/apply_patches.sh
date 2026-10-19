@@ -7,7 +7,8 @@
 #   apply_patches.sh check     report each patch as applied / applicable / CONFLICT
 #   apply_patches.sh reverse   revert every applied patch
 #   apply_patches.sh export    rewrite patches/ from chromium/src's diff against
-#                              HEAD (all modified tracked files)
+#                              HEAD (all modified tracked files except those
+#                              owned by apply_branding.sh)
 #
 # Also (re)creates the chromium/src/koan -> ../../src symlink.
 # Don't run while a build is running.
@@ -95,7 +96,10 @@ case "$MODE" in
   export)
     # Diff against HEAD so staged changes are included. Write to a temp dir
     # and swap it in only if there is something to export.
-    files="$(git -c core.quotePath=false diff HEAD --name-only)"
+    # Files owned by scripts/apply_branding.sh are rebranded by that script,
+    # not stored as patches.
+    files="$(git -c core.quotePath=false diff HEAD --name-only |
+      grep -vxF -f <("$ROOT/scripts/apply_branding.sh" --list) || true)"
     if [[ -z "$files" ]]; then
       echo "chromium/src has no changes; keeping existing patches" >&2
       exit 1

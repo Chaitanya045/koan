@@ -72,13 +72,21 @@ class KoanWorkspaceController : public TabStripModelObserver,
  private:
   bool IsEnabled() const;
   void InstallSwitcher();
+  // Rebuilds the switcher soon (coalesced). Never synchronously: model
+  // changes are often triggered by a switcher button, which a synchronous
+  // rebuild would destroy inside its own click handler.
   void UpdateSwitcher();
+  void RebuildSwitcher();
   void AdoptUngroupedTabs();
+  // Tints the browser with the active workspace's colour, or restores the
+  // user's colour when no workspace is active.
+  void UpdateTint();
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   raw_ptr<KoanWorkspaceSwitcherView> switcher_ = nullptr;
   bool adopt_pending_ = false;
+  bool rebuild_pending_ = false;
 
   const ui::Accelerator next_accelerator_;
   const ui::Accelerator previous_accelerator_;

@@ -39,3 +39,24 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
 
 - [x] Phase 0 — checkout (Chromium 158.0.8111.0, main @ 67e29b8) and first stock build (~15 h, finished 2026-10-19)
 - [x] Upstream research (`research-upstream.md`)
+- [x] Phase 1 — sidebar look (vertical tabs default, frame-coloured toolbar,
+      floating content card), compact mode (zero-width sidebar overlay on the
+      leading edge, toolbar in the NonClientView overlay sliding on a
+      compositor transform, Ctrl+Alt+C, persisted). Design: `phase1-design.md`.
+- [x] Phase 2 — workspaces on upstream tab group focus mode (switcher, keys,
+      new tabs join the active workspace, restored on restart, per-workspace
+      tint); Essentials = upstream pinned-tab grid. Research:
+      `phase2-research.md`.
+- [x] Phase 3 — Glance (Shift+click; expand to tab / split / close),
+      upstream split view kept. Research: `phase3-research.md`.
+- [x] Phase 4 — branding (name, logos, profile dir, desktop id, launcher),
+      stable feature defaults, rebase tooling (`REBASE.md`,
+      `update_chromium.sh`).
+
+Deviations from the original plan, and why, are in
+`.agent/notes/decisions.md`: hook patches instead of a `chromium_src`
+shadow tree (no global include changes, no full rebuilds); Glance on
+Shift+click instead of Alt+click (Alt+click is a renderer-side download);
+workspace themes via Chromium's user colour instead of custom gradients.
+
+Known gaps are tracked in `.agent/notes/status.md`.

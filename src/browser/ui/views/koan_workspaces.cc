@@ -14,6 +14,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -27,7 +30,10 @@
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
+#include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
+#include "ui/base/mojom/themes.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
@@ -57,6 +63,34 @@ constexpr tab_groups::TabGroupColorId kWorkspaceColors[] = {
     tab_groups::TabGroupColorId::kPink,   tab_groups::TabGroupColorId::kCyan,
     tab_groups::TabGroupColorId::kRed,    tab_groups::TabGroupColorId::kYellow,
 };
+
+// Seed colours for workspace tints, one per tab group colour. Fixed values
+// (not looked up from the current theme, which the tint itself changes).
+SkColor TintSeed(tab_groups::TabGroupColorId color) {
+  switch (color) {
+    case tab_groups::TabGroupColorId::kGrey:
+      return SkColorSetRGB(0x5F, 0x63, 0x68);
+    case tab_groups::TabGroupColorId::kBlue:
+      return SkColorSetRGB(0x1A, 0x73, 0xE8);
+    case tab_groups::TabGroupColorId::kRed:
+      return SkColorSetRGB(0xD9, 0x30, 0x25);
+    case tab_groups::TabGroupColorId::kYellow:
+      return SkColorSetRGB(0xF9, 0xAB, 0x00);
+    case tab_groups::TabGroupColorId::kGreen:
+      return SkColorSetRGB(0x1E, 0x8E, 0x3E);
+    case tab_groups::TabGroupColorId::kPink:
+      return SkColorSetRGB(0xD0, 0x18, 0x84);
+    case tab_groups::TabGroupColorId::kPurple:
+      return SkColorSetRGB(0x93, 0x34, 0xE6);
+    case tab_groups::TabGroupColorId::kCyan:
+      return SkColorSetRGB(0x12, 0xB5, 0xCB);
+    case tab_groups::TabGroupColorId::kOrange:
+      return SkColorSetRGB(0xFA, 0x90, 0x3E);
+    case tab_groups::TabGroupColorId::kNumEntries:
+      break;
+  }
+  return SkColorSetRGB(0x1A, 0x73, 0xE8);
+}
 
 }  // namespace
 
@@ -261,13 +295,24 @@ void KoanWorkspaceController::InstallSwitcher() {
     if (child->GetClassName() == "FlexLayoutView") {
       switcher_ = child->AddChildView(
           std::make_unique<KoanWorkspaceSwitcherView>(this));
-      UpdateSwitcher();
+      RebuildSwitcher();
       return;
     }
   }
 }
 
 void KoanWorkspaceController::UpdateSwitcher() {
+  if (!switcher_ || rebuild_pending_) {
+    return;
+  }
+  rebuild_pending_ = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KoanWorkspaceController::RebuildSwitcher,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KoanWorkspaceController::RebuildSwitcher() {
+  rebuild_pending_ = false;
   if (switcher_) {
     switcher_->Rebuild();
   }
@@ -372,12 +417,65 @@ void KoanWorkspaceController::AdoptUngroupedTabs() {
 
 void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
   UpdateSwitcher();
+  if (change.type == TabGroupChange::kVisualsChanged &&
+      change.group == GetActiveWorkspace()) {
+    UpdateTint();
+  }
 }
 
 void KoanWorkspaceController::OnTabGroupFocusChanged(
     std::optional<tab_groups::TabGroupId> new_focused_group_id,
     std::optional<tab_groups::TabGroupId> old_focused_group_id) {
   UpdateSwitcher();
+  UpdateTint();
+}
+
+void KoanWorkspaceController::UpdateTint() {
+  Profile* profile = browser_view_->GetProfile();
+  if (profile->IsOffTheRecord()) {
+    return;
+  }
+  PrefService* prefs = profile->GetPrefs();
+  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
+  if (!theme || !prefs->GetBoolean(prefs::kWorkspaceTint) ||
+      theme->UsingExtensionTheme()) {
+    return;
+  }
+  const std::optional<tab_groups::TabGroupId> active = GetActiveWorkspace();
+  if (active) {
+    if (!prefs->GetBoolean(prefs::kWorkspaceTintSaved)) {
+      const std::optional<SkColor> user_color = theme->GetUserColor();
+      prefs->SetInteger(prefs::kWorkspaceTintSavedColor,
+                        user_color ? static_cast<int>(*user_color) : 0);
+      prefs->SetInteger(prefs::kWorkspaceTintSavedVariant,
+                        static_cast<int>(theme->GetBrowserColorVariant()));
+      prefs->SetBoolean(prefs::kWorkspaceTintSaved, true);
+    }
+    const SkColor seed = TintSeed(tab_strip_model()
+                                      ->group_model()
+                                      ->GetTabGroup(*active)
+                                      ->visual_data()
+                                      ->color());
+    if (theme->GetUserColor() != seed) {
+      theme->SetUserColorAndBrowserColorVariant(
+          seed, ui::mojom::BrowserColorVariant::kTonalSpot);
+    }
+    return;
+  }
+  if (!prefs->GetBoolean(prefs::kWorkspaceTintSaved)) {
+    return;
+  }
+  const SkColor saved =
+      static_cast<SkColor>(prefs->GetInteger(prefs::kWorkspaceTintSavedColor));
+  const auto variant = static_cast<ui::mojom::BrowserColorVariant>(
+      prefs->GetInteger(prefs::kWorkspaceTintSavedVariant));
+  if (saved) {
+    theme->SetUserColorAndBrowserColorVariant(saved, variant);
+  } else {
+    theme->SetUserColor(std::nullopt);
+    theme->SetBrowserColorVariant(variant);
+  }
+  prefs->SetBoolean(prefs::kWorkspaceTintSaved, false);
 }
 
 bool KoanWorkspaceController::AcceleratorPressed(

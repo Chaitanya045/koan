@@ -1,12 +1,12 @@
 diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
-index e8f2df7fba871598e6313efb8cbf83ca8131b890..a4e1e95760bf12c5b4984433d58705cb82f63dfb 100644
+index e8f2df7fba871598e6313efb8cbf83ca8131b890..5352d9ba2cf5e87ee6e3a0c647524c0ec99316f3 100644
 --- a/chrome/browser/ui/startup/infobar_utils.cc
 +++ b/chrome/browser/ui/startup/infobar_utils.cc
 @@ -41,6 +41,7 @@
  #include "components/tabs/public/tab_interface.h"
  #include "content/public/common/content_switches.h"
  #include "google_apis/google_api_keys.h"
-+#include "koan/browser/koan_branding.h"
++#include "koan/common/koan_branding.h"
  
  #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
  #include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt.h"

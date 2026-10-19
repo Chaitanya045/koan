@@ -12,6 +12,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -94,14 +95,17 @@ class KoanGlanceView : public views::View {
     buttons_->SetOrientation(views::BoxLayout::Orientation::kVertical);
     buttons_->SetBetweenChildSpacing(kButtonGap);
     AddButton(vector_icons::kCloseIcon, u"Close (Esc)",
-              base::BindRepeating(&KoanGlanceController::Close,
-                                  base::Unretained(controller_)));
+              base::BindRepeating(&KoanGlanceController::PostAction,
+                                  base::Unretained(controller_),
+                                  &KoanGlanceController::Close));
     AddButton(kOpenInNewIcon, u"Expand to tab",
-              base::BindRepeating(&KoanGlanceController::ExpandToTab,
-                                  base::Unretained(controller_)));
+              base::BindRepeating(&KoanGlanceController::PostAction,
+                                  base::Unretained(controller_),
+                                  &KoanGlanceController::ExpandToTab));
     AddButton(kSplitSceneIcon, u"Open in split view",
-              base::BindRepeating(&KoanGlanceController::OpenInSplit,
-                                  base::Unretained(controller_)));
+              base::BindRepeating(&KoanGlanceController::PostAction,
+                                  base::Unretained(controller_),
+                                  &KoanGlanceController::OpenInSplit));
   }
 
   views::WebView* web_view() { return web_view_; }
@@ -145,7 +149,7 @@ class KoanGlanceView : public views::View {
   }
 
   void OnMouseReleased(const ui::MouseEvent& event) override {
-    controller_->Close();
+    controller_->PostAction(&KoanGlanceController::Close);
   }
 
  private:
@@ -157,8 +161,10 @@ class KoanGlanceView : public views::View {
     button->SetTooltipText(tooltip);
     button->GetViewAccessibility().SetName(tooltip);
     button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
-    button->SetBackground(views::CreateRoundedRectBackground(
-        ui::kColorDialogBackground, kButtonSize / 2));
+    // Koan's surface colour (the sidebar/toolbar), so the buttons read as
+    // part of the browser chrome against the dimmed page.
+    button->SetBackground(
+        views::CreateRoundedRectBackground(kColorToolbar, kButtonSize / 2));
     buttons_->AddChildView(std::move(button));
   }
 
@@ -243,6 +249,12 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   widget_->Show();
   view_->PlayOpenAnimation();
   view_->web_view()->RequestFocus();
+}
+
+void KoanGlanceController::PostAction(
+    void (KoanGlanceController::*action)()) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(action, weak_factory_.GetWeakPtr()));
 }
 
 void KoanGlanceController::Close() {

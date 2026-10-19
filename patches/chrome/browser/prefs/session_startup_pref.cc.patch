@@ -1,12 +1,12 @@
 diff --git a/chrome/browser/prefs/session_startup_pref.cc b/chrome/browser/prefs/session_startup_pref.cc
-index 72fc94f5160a208d5507c22ad8fe5748cfcb39bb..5f70b2ae26538e4f9ee6c81545275589f558cdad 100644
+index 72fc94f5160a208d5507c22ad8fe5748cfcb39bb..0cf81096536e37d1b66c21e53bbb9576e943a1fa 100644
 --- a/chrome/browser/prefs/session_startup_pref.cc
 +++ b/chrome/browser/prefs/session_startup_pref.cc
 @@ -17,6 +17,7 @@
  #include "components/pref_registry/pref_registry_syncable.h"
  #include "components/prefs/pref_service.h"
  #include "components/url_formatter/url_fixer.h"
-+#include "koan/browser/koan_branding.h"
++#include "koan/common/koan_branding.h"
  
  #if BUILDFLAG(IS_ANDROID)
  #include "base/android/device_info.h"

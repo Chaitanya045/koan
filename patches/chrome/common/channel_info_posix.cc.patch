@@ -1,0 +1,21 @@
+diff --git a/chrome/common/channel_info_posix.cc b/chrome/common/channel_info_posix.cc
+index f6bcb3cc8e8d620db3c5a0459a8e9220c20923b2..da33b87ff751269bfbd2142a4ae419c6e7a7e5df 100644
+--- a/chrome/common/channel_info_posix.cc
++++ b/chrome/common/channel_info_posix.cc
+@@ -17,6 +17,7 @@
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
+ #include "components/version_info/version_info.h"
++#include "koan/common/koan_branding.h"
+ 
+ namespace chrome {
+ 
+@@ -148,7 +149,7 @@ std::string GetDesktopName(base::Environment* env) {
+   if (name.has_value() && !name.value().empty()) {
+     return name.value();
+   }
+-  return "chromium-browser.desktop";
++  return koan::kDesktopFileName;
+ #endif
+ }
+ #endif  // BUILDFLAG(IS_LINUX)

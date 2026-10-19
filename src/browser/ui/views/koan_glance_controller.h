@@ -42,6 +42,11 @@ class KoanGlanceController : public content::WebContentsDelegate,
   bool is_open() const { return contents_ != nullptr; }
   content::WebContents* contents() const { return contents_.get(); }
 
+  // Runs `action` (Close, ExpandToTab, OpenInSplit) after the current event
+  // is done: they destroy the overlay widget, which must not happen inside
+  // one of its own buttons' click handlers.
+  void PostAction(void (KoanGlanceController::*action)());
+
   // Opens `params.url` in Glance, over `source` (the active tab).
   void Open(const content::OpenURLParams& params, content::WebContents* source);
   void Close();
