@@ -14,11 +14,15 @@ _Last updated: 2026-10-19_
   steps). `chrome --version` → Chromium 158.0.8111.0; headless screenshot
   renders correctly.
 
+- Phase 1 step 1 (skeleton): `//koan` symlink, `koan::features`,
+  `KOAN_FEATURE_ENTRIES`, 2 upstream patches (4 lines), `apply_patches.sh`.
+  Incremental rebuild: 5 steps, ~2 min. Verified with
+  `scripts/check_flags.mjs`: both flags listed in chrome://flags.
+
 ## Running
 - Nothing.
 
 ## Next
-1. Phase 1 step 1 from `docs/phase1-design.md` §6: `src/` tree, `chromium/src/koan`
-   symlink, `scripts/apply_patches.sh`, `//koan/browser:features`, BUILD.gn +
-   about_flags patches.
+1. Phase 1 step 2 from `docs/phase1-design.md` §6: vertical tabs by default
+   (patch `chrome/browser/ui/tabs/tab_strip_prefs.cc`).
 2. Don't apply patches under `chromium/src` while a build is running.

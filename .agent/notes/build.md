@@ -17,6 +17,11 @@
 - Builds use **siso**, not ninja; autoninja passes `-j` through.
 - `pgrep -f scripts/build.sh` run from the agent shell matches its own command
   line, so it always reports "alive". Check `siso ps` or `ps ... | grep -v grep`.
+- Headless Chrome won't open `chrome://` URLs passed on the command line (it
+  shows the NTP). Use `--remote-debugging-port` + `scripts/check_flags.mjs`
+  (Node 24 has a global WebSocket).
+- `pkill -f <pattern>` from the agent shell can kill the shell itself (exit
+  144) because the pattern is in its own command line.
 - Long runs must be detached (`setsid nohup ... & disown`): background Bash
   tasks are capped at 2 h, and a T3 Code restart kills child processes.
 - Foreground `sleep` is blocked in the agent shell; wait with a background
