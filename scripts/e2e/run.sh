@@ -3,6 +3,9 @@
 #
 #   scripts/e2e/run.sh <test> [url...]     e.g. scripts/e2e/run.sh shortcuts
 #
+# Without URLs it opens scripts/e2e/pages/<test>.html if that exists, else
+# two example.com tabs.
+#
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
 # scripts/e2e/<test>.mjs, and cleans up. Nothing appears on the desktop.
@@ -12,7 +15,14 @@ source "$(dirname "$0")/../koan_test_env.sh"
 test_name=${1:?usage: run.sh <test> [url...]}
 shift
 urls=("$@")
-[[ ${#urls[@]} -gt 0 ]] || urls=(https://example.com/ https://example.com/?two)
+if [[ ${#urls[@]} -eq 0 ]]; then
+  page="$KOAN_ROOT/scripts/e2e/pages/$test_name.html"
+  if [[ -f $page ]]; then
+    urls=("file://$page")
+  else
+    urls=(https://example.com/ https://example.com/?two)
+  fi
+fi
 
 chrome="$KOAN_ROOT/chromium/src/${KOAN_OUT:-out/Koan}/chrome"
 export UI_PORT=${UI_PORT:-9600} CDP_PORT=${CDP_PORT:-9601}

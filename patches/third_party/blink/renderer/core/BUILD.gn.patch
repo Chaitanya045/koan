@@ -1,0 +1,12 @@
+diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
+index a96e9c9df209abba41bccf9d348eee89058b5f83..1bd87322e9cbaca810e1d83e73a2f472f03424e3 100644
+--- a/third_party/blink/renderer/core/BUILD.gn
++++ b/third_party/blink/renderer/core/BUILD.gn
+@@ -417,6 +417,7 @@ component("core") {
+     "//components/subresource_filter/core/common",
+     "//gin",
+     "//gpu/config",
++    "//koan/browser:features",
+     "//mojo/public/cpp/bindings",
+     "//mojo/public/cpp/system",
+     "//printing/buildflags",
