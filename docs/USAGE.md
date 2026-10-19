@@ -155,10 +155,29 @@ the page in a regular one, like Chromium's settings.
 
 ![Settings](screenshots/settings-look-and-feel.png)
 
+## Memory and power
+
+Koan is set up to stay light (details in `PERFORMANCE.md`):
+
+- **Tabs restore on demand**: after a restart, or when you reopen a closed
+  window, only the tab you see loads; the others load when you open them,
+  as in Zen.
+- **Memory Saver is on**: a tab hidden for 4 hours (for example in a Space
+  you haven't used) is unloaded and reloads when you open it. Pinned tabs,
+  tabs playing audio and sites you exempt are kept. Change it, or add
+  exceptions, in Settings > Performance.
+- **Background tabs freeze**: apart from the 5 tabs you used last, tabs in
+  the background stop running (they wake for a few seconds each minute)
+  unless they play audio, are in a call, use a device or show
+  notifications.
+- **Energy saver** turns on whenever your system's power-saver mode is on
+  (GNOME and KDE switch it on at low battery). Settings > Performance.
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
-Koan sidebar, compact mode, workspaces, Glance.
+Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
+freeze background tabs.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

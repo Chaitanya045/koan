@@ -90,6 +90,18 @@ point of Koan.
 | Ctrl+Tab within Essentials or workspace tabs; ignore pending tabs | Same | Tab Management, off by default. In tab order (Chromium's default), Ctrl+Tab stays in the active workspace plus the Essentials, as upstream's group focus does, and these settings narrow it further. |
 | Ctrl+Tab in recently used order (Firefox's setting, which Zen keeps) | Same | Chromium's own setting: chrome://settings > Appearance > "Cycle through the most recently used tabs with Ctrl+Tab" (off by default). It goes through the profile's tabs in every window and workspace. When it is on it wins for Ctrl+Tab over Koan's two Ctrl+Tab settings, which then apply only to Ctrl+Page Up/Down; the Koan rows say so, like Zen's warning for the same combination. |
 
+## Performance and power
+
+Details, measurements and the reasoning for each default: `PERFORMANCE.md`.
+
+| Zen | Koan | Notes |
+|---|---|---|
+| Restored tabs load when first opened | Same | Chromium loads 4 to 20 background tabs at startup; Koan loads only the visible one (`chrome://flags/#koan-restore-tabs-on-demand`). |
+| Tab unloading after inactivity (Firefox: on low memory only, off on Linux) | Different | Chromium's Memory Saver, on by default: tabs hidden for 4 h are discarded until opened (Settings > Performance). |
+| Unload Space / Unload all other Spaces (workspace menu) | Missing | Koan has no Space menu yet (#34); Memory Saver discards a Space's tabs once they've been hidden for 4 h. |
+| Background tabs throttled (Firefox timer budgets) | Different | Chromium's timer throttling, plus freezing of all but the 5 most recently used background tabs (`chrome://flags/#koan-freeze-background-tabs`). |
+| No energy saver | Different | Chromium's energy saver turns on whenever the system's power-saver profile is on. |
+
 ## Browser basics
 
 | Zen | Koan | Notes |

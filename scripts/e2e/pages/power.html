@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- Test page for scripts/e2e/power.mjs and scripts/perf/profile_ui.mjs.
+     ?busy: a dedicated worker does 20 ms of work every 100 ms (like a busy
+     web app; worker timers aren't throttled in background tabs, so only
+     freezing stops them); `maxGap` is the longest pause between its ticks.
+     ?title: the title changes 4 times a second (like a chat app's unread
+     count or a timer in the title). ?count=<id>: counts this page's loads
+     in localStorage["loads:<id>"]. -->
+<meta charset="utf-8">
+<title>Koan power test</title>
+<style>body { font: 16px sans-serif; margin: 40px; }</style>
+<h1>Koan power test</h1>
+<p id="status"></p>
+<script>
+const params = new URLSearchParams(location.search);
+window.workerTicks = 0;
+window.maxGap = 0;
+if (params.has('busy')) {
+  const code = `setInterval(() => {
+    const end = performance.now() + 20;
+    while (performance.now() < end) {}
+    postMessage(1);
+  }, 100);`;
+  const worker = new Worker(URL.createObjectURL(new Blob([code])));
+  let last = performance.now();
+  worker.onmessage = () => {
+    const now = performance.now();
+    window.maxGap = Math.max(window.maxGap, now - last);
+    last = now;
+    window.workerTicks++;
+  };
+}
+if (params.has('title')) {
+  let n = 0;
+  setInterval(() => (document.title = `(${++n}) Koan power test`), 250);
+}
+if (params.has('count')) {
+  const key = `loads:${params.get('count')}`;
+  localStorage[key] = Number(localStorage[key] ?? 0) + 1;
+}
+document.getElementById('status').textContent = [...params.keys()].join(' ');
+</script>
