@@ -18,12 +18,17 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "ui/events/event_observer.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 
 class BrowserView;
 class ExpandOnHoverLock;
+
+namespace views {
+class EventMonitor;
+}
 
 namespace koan {
 
@@ -57,7 +62,8 @@ class KoanSidebarNavView;
 // Both states are profile prefs shared by all windows. Keyboard shortcuts
 // live in KoanShortcutController.
 class KoanCompactModeController : public views::FocusChangeListener,
-                                  public views::ViewObserver {
+                                  public views::ViewObserver,
+                                  public ui::EventObserver {
  public:
   explicit KoanCompactModeController(BrowserView* browser_view);
   KoanCompactModeController(const KoanCompactModeController&) = delete;
@@ -105,6 +111,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
                                bool visible) override;
   void OnViewIsDeleting(views::View* observed_view) override;
 
+  // ui::EventObserver:
+  void OnEvent(const ui::Event& event) override;
+
  private:
   Mode DesiredMode() const;
   // In compact mode: keep the sidebar header (single toolbar is on).
@@ -118,6 +127,12 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void ApplyToolbarTransform(bool animate);
   bool ShouldKeepToolbarRevealed() const;
   void CheckToolbarHide();
+
+  // While the toolbar, the caption strip or a peeked sidebar is out, watches
+  // the pointer so each hides once it has been away long enough. Nothing
+  // runs while they are hidden or while the pointer rests over them.
+  void UpdatePointerMonitor();
+  void CheckRevealedHides();
 
   // The floating URL bar: shows only the location bar, centred.
   void SetUrlBarFloating(bool floating);
@@ -176,7 +191,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> caption_hot_zone_ = nullptr;
   bool caption_strip_collapsible_ = false;
   bool caption_strip_revealed_ = false;
-  base::RepeatingTimer caption_hide_timer_;
+  base::OneShotTimer caption_hide_timer_;
   std::optional<base::TimeTicks> caption_unwanted_since_;
   // Koan views inside upstream's tab strip region (KoanSidebarNavView,
   // KoanSidebarNavButtons).
@@ -187,11 +202,12 @@ class KoanCompactModeController : public views::FocusChangeListener,
   std::unique_ptr<ExpandOnHoverLock> hover_lock_;
   std::unique_ptr<ExpandOnHoverLock> peek_lock_;
 
-  base::RepeatingTimer toolbar_hide_timer_;
-  base::RepeatingTimer sidebar_peek_timer_;
+  base::OneShotTimer toolbar_hide_timer_;
+  base::OneShotTimer sidebar_peek_timer_;
   std::optional<base::TimeTicks> sidebar_unhovered_since_;
   base::TimeTicks sidebar_peek_started_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
+  std::unique_ptr<views::EventMonitor> pointer_monitor_;
 
   base::WeakPtrFactory<KoanCompactModeController> weak_factory_{this};
 };

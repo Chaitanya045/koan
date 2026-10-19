@@ -45,6 +45,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/menu/menu_controller.h"
+#include "ui/views/event_monitor.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_tracker.h"
@@ -59,7 +60,6 @@ constexpr base::TimeDelta kToolbarRevealDuration = base::Milliseconds(160);
 constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
 // How long the pointer must be away before the toolbar hides again.
 constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
-constexpr base::TimeDelta kToolbarHideCheckInterval = base::Milliseconds(100);
 // How long a keyboard-opened sidebar stays before hover decides.
 constexpr base::TimeDelta kSidebarPeekGrace = base::Seconds(3);
 
@@ -188,6 +188,7 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   if (mode_ != Mode::kNone) {
     Deactivate();
   }
+  pointer_monitor_.reset();
   if (focus_manager_) {
     focus_manager_->RemoveFocusChangeListener(this);
     focus_manager_ = nullptr;
@@ -220,31 +221,39 @@ bool KoanCompactModeController::PeekSidebar() {
   }
   sidebar_unhovered_since_.reset();
   sidebar_peek_started_ = base::TimeTicks::Now();
-  sidebar_peek_timer_.Start(FROM_HERE, kToolbarHideCheckInterval, this,
-                            &KoanCompactModeController::CheckSidebarPeek);
+  sidebar_peek_timer_.Stop();
+  CheckSidebarPeek();
+  UpdatePointerMonitor();
   return true;
 }
 
 void KoanCompactModeController::CheckSidebarPeek() {
+  if (!peek_lock_) {
+    return;
+  }
   auto* tab_strip = browser_view_->tab_strip_view();
-  if (!peek_lock_ || !tab_strip) {
+  if (tab_strip && tab_strip->IsMouseHovered()) {
+    sidebar_unhovered_since_.reset();
     sidebar_peek_timer_.Stop();
     return;
   }
   const base::TimeTicks now = base::TimeTicks::Now();
-  // Give the pointer time to reach the sidebar after a keyboard peek.
-  if (tab_strip->IsMouseHovered() ||
-      now - sidebar_peek_started_ < kSidebarPeekGrace) {
-    sidebar_unhovered_since_.reset();
-    return;
-  }
   if (!sidebar_unhovered_since_) {
     sidebar_unhovered_since_ = now;
-    return;
   }
-  if (now - *sidebar_unhovered_since_ >= kToolbarHideDelay) {
+  // Give the pointer time to reach the sidebar after a keyboard peek.
+  const base::TimeTicks hide_at =
+      std::max(sidebar_peek_started_ + kSidebarPeekGrace,
+               *sidebar_unhovered_since_ + kToolbarHideDelay);
+  if (!tab_strip || now >= hide_at) {
     sidebar_peek_timer_.Stop();
     peek_lock_.reset();
+    UpdatePointerMonitor();
+    return;
+  }
+  if (!sidebar_peek_timer_.IsRunning()) {
+    sidebar_peek_timer_.Start(FROM_HERE, hide_at - now, this,
+                              &KoanCompactModeController::CheckSidebarPeek);
   }
 }
 
@@ -265,6 +274,7 @@ void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
       browser_view_->top_container()->Contains(focused_now)) {
     SetToolbarRevealed(true, /*animate=*/true);
   }
+  CheckToolbarHide();
 }
 
 void KoanCompactModeController::OnViewBoundsChanged(
@@ -300,6 +310,10 @@ void KoanCompactModeController::OnViewIsDeleting(views::View* observed_view) {
   }
 }
 
+void KoanCompactModeController::OnEvent(const ui::Event& event) {
+  CheckRevealedHides();
+}
+
 void KoanCompactModeController::HideToolbarForFloating() {
   if (!url_bar_floating_) {
     return;
@@ -327,6 +341,7 @@ void KoanCompactModeController::SetUrlBarFloating(bool floating) {
       sidebar_nav()->SetEditing(true);
     }
     toolbar_hide_timer_.Stop();
+    UpdatePointerMonitor();
     // Just the location bar: hide the rest of the toolbar, remembering what
     // to restore (and watching for other code showing things meanwhile).
     for (views::View* sibling : location_bar->parent()->children()) {
@@ -593,6 +608,7 @@ void KoanCompactModeController::Deactivate() {
   sidebar_peek_timer_.Stop();
   hover_lock_.reset();
   peek_lock_.reset();
+  pointer_monitor_.reset();
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }
@@ -664,15 +680,10 @@ void KoanCompactModeController::SetToolbarRevealed(bool revealed,
   if (changed || !animate) {
     ApplyToolbarTransform(animate);
   }
-  if (revealed) {
-    toolbar_unwanted_since_.reset();
-    if (!toolbar_hide_timer_.IsRunning()) {
-      toolbar_hide_timer_.Start(FROM_HERE, kToolbarHideCheckInterval, this,
-                                &KoanCompactModeController::CheckToolbarHide);
-    }
-  } else {
-    toolbar_hide_timer_.Stop();
-  }
+  toolbar_unwanted_since_.reset();
+  toolbar_hide_timer_.Stop();
+  UpdatePointerMonitor();
+  CheckToolbarHide();
 }
 
 void KoanCompactModeController::ApplyToolbarTransform(bool animate) {
@@ -722,18 +733,55 @@ bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
 }
 
 void KoanCompactModeController::CheckToolbarHide() {
+  if (!toolbar_revealed_) {
+    return;
+  }
   if (ShouldKeepToolbarRevealed()) {
     toolbar_unwanted_since_.reset();
+    toolbar_hide_timer_.Stop();
+    // A menu closing sends the window no event: look again later.
+    if (views::MenuController::GetForOwnerWidget(browser_view_->GetWidget())) {
+      toolbar_hide_timer_.Start(FROM_HERE, kToolbarHideDelay, this,
+                                &KoanCompactModeController::CheckToolbarHide);
+    }
     return;
   }
   const base::TimeTicks now = base::TimeTicks::Now();
   if (!toolbar_unwanted_since_) {
     toolbar_unwanted_since_ = now;
+  }
+  const base::TimeTicks hide_at = *toolbar_unwanted_since_ + kToolbarHideDelay;
+  if (now >= hide_at) {
+    SetToolbarRevealed(false, /*animate=*/true);
     return;
   }
-  if (now - *toolbar_unwanted_since_ >= kToolbarHideDelay) {
-    SetToolbarRevealed(false, /*animate=*/true);
+  if (!toolbar_hide_timer_.IsRunning()) {
+    toolbar_hide_timer_.Start(FROM_HERE, hide_at - now, this,
+                              &KoanCompactModeController::CheckToolbarHide);
   }
+}
+
+void KoanCompactModeController::UpdatePointerMonitor() {
+  const bool wanted =
+      mode_ != Mode::kNone &&
+      (toolbar_revealed_ || caption_strip_revealed_ || peek_lock_ != nullptr);
+  views::Widget* widget = browser_view_->GetWidget();
+  if (!wanted || !widget) {
+    pointer_monitor_.reset();
+    return;
+  }
+  if (!pointer_monitor_) {
+    pointer_monitor_ = views::EventMonitor::CreateWindowMonitor(
+        this, widget->GetNativeWindow(),
+        {ui::EventType::kMouseMoved, ui::EventType::kMouseDragged,
+         ui::EventType::kMouseEntered, ui::EventType::kMouseExited});
+  }
+}
+
+void KoanCompactModeController::CheckRevealedHides() {
+  CheckToolbarHide();
+  CheckCaptionStripHide();
+  CheckSidebarPeek();
 }
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
@@ -772,18 +820,17 @@ void KoanCompactModeController::SetCaptionStripRevealed(bool revealed) {
   }
   caption_strip_revealed_ = revealed;
   caption_unwanted_since_.reset();
-  if (revealed) {
-    caption_hide_timer_.Start(
-        FROM_HERE, kToolbarHideCheckInterval, this,
-        &KoanCompactModeController::CheckCaptionStripHide);
-  } else {
-    caption_hide_timer_.Stop();
-  }
+  caption_hide_timer_.Stop();
+  UpdatePointerMonitor();
   UpdateCaptionButtons();
   OnContentCardChanged();
+  CheckCaptionStripHide();
 }
 
 void KoanCompactModeController::CheckCaptionStripHide() {
+  if (!caption_strip_revealed_) {
+    return;
+  }
   bool wanted = caption_hot_zone_ && caption_hot_zone_->IsMouseHovered();
   if (const BrowserFrameView* frame =
           browser_view_->browser_widget()
@@ -797,15 +844,22 @@ void KoanCompactModeController::CheckCaptionStripHide() {
   }
   if (wanted) {
     caption_unwanted_since_.reset();
+    caption_hide_timer_.Stop();
     return;
   }
   const base::TimeTicks now = base::TimeTicks::Now();
   if (!caption_unwanted_since_) {
     caption_unwanted_since_ = now;
+  }
+  const base::TimeTicks hide_at = *caption_unwanted_since_ + kToolbarHideDelay;
+  if (now >= hide_at) {
+    SetCaptionStripRevealed(false);
     return;
   }
-  if (now - *caption_unwanted_since_ >= kToolbarHideDelay) {
-    SetCaptionStripRevealed(false);
+  if (!caption_hide_timer_.IsRunning()) {
+    caption_hide_timer_.Start(
+        FROM_HERE, hide_at - now, this,
+        &KoanCompactModeController::CheckCaptionStripHide);
   }
 }
 
