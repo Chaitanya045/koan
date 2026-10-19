@@ -78,3 +78,17 @@
   `while pgrep ...; do sleep 60; done` loop instead.
 - Ubuntu's `install-build-deps.sh` doesn't apply (host is CachyOS/Arch); the
   Debian sysroot (`use_sysroot = true`) covers the target libs.
+
+## Desktop screenshots (X11 via Xwayland)
+- `import -window <id>` can return a stale frame for a window that isn't
+  focused (GNOME/Xwayland): content updates (late images, a just-opened
+  Glance) may be missing. Off-screen dumps (headless Ozone) are the real
+  compositor output. Any CDP call on the page (e.g. Runtime.evaluate) made a
+  fresh frame show up in captures.
+- Trim the window's black border with
+  `magick in.png -bordercolor black -border 1 -fuzz 2% -trim +repage out.png`.
+- Wikipedia's link previews (`.mwe-popups`) appear behind an Alt+click
+  Glance; hide them with injected CSS for screenshots.
+- Glance only opens http(s) links (file:// opens a popup window), so serve
+  test pages with `python3 -I -m http.server` for Glance tests.
+

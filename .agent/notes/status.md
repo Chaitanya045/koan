@@ -102,6 +102,12 @@ _Last updated: 2026-10-19 (all planned phases done)_
   omnibox floats as a centred card; compact + single toolbar hides only the
   sidebar. e2e `scripts/e2e/layout.mjs`.
 
+- 2026-10-19 (later): user: "scroll bars are fat; update README screenshots;
+  exactly like Zen". #25/#26 overlay scrollbars (upstream OverlayScrollbar on
+  Linux, mode overlay; Zen = GTK overlay). Found while shooting the README:
+  #27/#28 Glance page stuck at 94% (NativeViewHost sized with the card's
+  start transform) and buttons under the caption strip. #29 README shots.
+
 ## Known issues / design notes
 - In compact mode the revealed toolbar floats across the full width, over
   the expanded sidebar's header too (Zen's floating toolbar behaves the

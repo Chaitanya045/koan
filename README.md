@@ -9,9 +9,11 @@ Chrome.
 See [docs/USAGE.md](docs/USAGE.md) for features and shortcuts, and
 [docs/ZEN_PARITY.md](docs/ZEN_PARITY.md) for how Koan compares with Zen.
 
-| Zen look | Compact mode | Glance |
-|---|---|---|
-| ![](docs/screenshots/step4-zen-light.png) | ![](docs/screenshots/step5-compact-sidebar.png) | ![](docs/screenshots/phase3-glance.png) |
+| Zen's single-toolbar layout | Floating URL bar (Ctrl+L) |
+|---|---|
+| ![Single toolbar](docs/screenshots/readme-single-toolbar.png) | ![Floating URL bar](docs/screenshots/readme-floating-url-bar.png) |
+| **Compact mode (Ctrl+S), sidebar peeked** | **Glance (Alt+click a link)** |
+| ![Compact mode](docs/screenshots/readme-compact-mode.png) | ![Glance](docs/screenshots/readme-glance.png) |
 
 ## How it's built
 
