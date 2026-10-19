@@ -22,6 +22,7 @@ point of Koan.
 | Collapsed-toolbar layout | Missing | |
 | Sidebar on the right | Missing | |
 | Theme follows the system light/dark mode | Same | |
+| Thin overlay scrollbars, shown while scrolling | Same | Chromium's overlay scrollbars, on by default on Linux in Koan. Zen follows GTK's overlay-scrolling setting; Koan always overlays. |
 | Gradient theme picker | Different | Workspaces tint the browser with one colour (Chromium's Material colour system), no gradient editor. |
 | Zen Mods (community CSS themes) | Missing | Koan's UI is native Views, not CSS, so mods can't apply. Chrome themes from the Chrome Web Store work. |
 
