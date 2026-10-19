@@ -294,9 +294,16 @@ void KoanWorkspaceController::OnAddedToWidget() {
     return;
   }
   InstallSwitcher();
+  // The tint can be switched in chrome://koan-settings.
+  pref_change_registrar_.Init(browser_view_->GetProfile()->GetPrefs());
+  pref_change_registrar_.Add(
+      prefs::kWorkspaceTint,
+      base::BindRepeating(&KoanWorkspaceController::UpdateTint,
+                          base::Unretained(this)));
 }
 
 void KoanWorkspaceController::OnBrowserViewDestroying() {
+  pref_change_registrar_.RemoveAll();
   if (switcher_) {
     switcher_->parent()->RemoveChildViewT(std::exchange(switcher_, nullptr));
   }
@@ -464,11 +471,13 @@ void KoanWorkspaceController::UpdateTint() {
   }
   PrefService* prefs = profile->GetPrefs();
   ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
-  if (!theme || !prefs->GetBoolean(prefs::kWorkspaceTint) ||
-      theme->UsingExtensionTheme()) {
+  if (!theme || theme->UsingExtensionTheme()) {
     return;
   }
-  const std::optional<tab_groups::TabGroupId> active = GetActiveWorkspace();
+  // With the tint switched off, behave as in "All tabs": the user's colour.
+  const std::optional<tab_groups::TabGroupId> active =
+      prefs->GetBoolean(prefs::kWorkspaceTint) ? GetActiveWorkspace()
+                                               : std::nullopt;
   const std::optional<SkColor> current = theme->GetUserColor();
   const SkColor applied =
       static_cast<SkColor>(prefs->GetInteger(prefs::kWorkspaceTintApplied));

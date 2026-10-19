@@ -11,6 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_id.h"
 
 class BrowserView;
@@ -78,6 +79,7 @@ class KoanWorkspaceController : public TabStripModelObserver {
   raw_ptr<KoanWorkspaceSwitcherView> switcher_ = nullptr;
   bool adopt_pending_ = false;
   bool rebuild_pending_ = false;
+  PrefChangeRegistrar pref_change_registrar_;
 
   base::WeakPtrFactory<KoanWorkspaceController> weak_factory_{this};
 };
