@@ -31,7 +31,6 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
-#include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
@@ -728,8 +727,7 @@ void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
 }
 
 void KoanCompactModeController::OnCaptionHotZoneHovered(bool hovered) {
-  if (hovered && caption_strip_collapsible_ &&
-      !GetCaptionButtonAreaSize(browser_view_).IsEmpty()) {
+  if (hovered && caption_strip_collapsible_ && HasPageSideCaptionButtons()) {
     SetCaptionStripRevealed(true);
   }
 }
@@ -777,19 +775,45 @@ void KoanCompactModeController::CheckCaptionStripHide() {
   }
 }
 
+int KoanCompactModeController::PageLeftInFrame(const views::View* frame) const {
+  const views::View* page = browser_view_->multi_contents_view();
+  return page ? views::View::ConvertPointToTarget(page, frame, gfx::Point()).x()
+              : 0;
+}
+
+bool KoanCompactModeController::HasPageSideCaptionButtons() const {
+  const BrowserWidget* widget = browser_view_->browser_widget();
+  const BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
+  if (!frame) {
+    return false;
+  }
+  const int page_left = PageLeftInFrame(frame);
+  for (const views::View* child : frame->children()) {
+    if (IsCaptionButton(child) && child->GetVisible() &&
+        child->bounds().x() >= page_left) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void KoanCompactModeController::UpdateCaptionButtons() {
   BrowserWidget* widget = browser_view_->browser_widget();
   BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
   if (!frame) {
     return;
   }
-  const bool shown = !caption_strip_collapsed();
+  const bool collapsed = caption_strip_collapsed();
+  const int page_left = PageLeftInFrame(frame);
   // The frame sets the caption buttons' visibility in its layout, so fade
   // them on a layer instead and let a hidden one ignore the pointer.
   for (views::View* child : frame->children()) {
     if (!IsCaptionButton(child)) {
       continue;
     }
+    // Only buttons over the page side hide: buttons on the leading edge sit
+    // above the sidebar's top row, which upstream keeps clear for them.
+    const bool shown = !collapsed || child->bounds().x() < page_left;
     child->SetCanProcessEventsWithinSubtree(shown);
     if (!child->layer()) {
       if (shown) {

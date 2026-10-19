@@ -1,0 +1,14 @@
+diff --git a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+--- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
++++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
+@@ -119,7 +119,10 @@
+ };
+ 
+ bool HitTestCaptionButton(views::Button* button, const gfx::Point& point) {
++  // Koan: a button that ignores events (Koan hides the caption buttons
++  // until the pointer reaches the top edge) isn't hit either.
+   return button && button->GetVisible() &&
++         button->GetCanProcessEventsWithinSubtree() &&
+          button->GetMirroredBounds().Contains(point);
+ }
+ 

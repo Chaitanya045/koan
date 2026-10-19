@@ -137,6 +137,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void CheckCaptionStripHide();
   // Fades the frame's caption buttons in or out with the strip.
   void UpdateCaptionButtons();
+  // The x of the page's left edge in `frame`'s coordinates.
+  int PageLeftInFrame(const views::View* frame) const;
+  // Whether the frame has caption buttons over the page side (to reveal).
+  bool HasPageSideCaptionButtons() const;
   // The content card's insets changed: lay out the contents area and Glance.
   void OnContentCardChanged();
 
