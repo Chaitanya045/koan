@@ -18,9 +18,13 @@ BASE_DECLARE_FEATURE(kKoanCompactMode);
 // Workspaces (tab groups shown one at a time) with a switcher in the sidebar.
 BASE_DECLARE_FEATURE(kKoanWorkspaces);
 
+// Glance: Shift+click a link to preview it in a floating card.
+BASE_DECLARE_FEATURE(kKoanGlance);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
+bool IsGlanceEnabled();
 
 }  // namespace koan::features
 

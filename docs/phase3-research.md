@@ -33,22 +33,24 @@ A `views::WebView` stacked **on top of the page**, per pane, feature-gated:
   (`BASE_FEATURE(kGlicActorUi, FEATURE_ENABLED_BY_DEFAULT)`) and
   `chrome/common/chrome_features.cc:385-386` (the `kGlicActorUiOverlay`
   bool param, default `true`).
-- `chrome/browser/actor/ui/actor_overlay_web_view.h:21-30` —
+- `chrome/browser/actor/ui/actor_overlay_web_view.h:21` —
   `class ActorOverlayWebView : public views::WebView`.
 - The controller does the whole show/hide dance
   (`chrome/browser/actor/ui/actor_overlay_web_view.cc`):
   - ctor: `SetBrowserContext(browser->GetProfile())` so the WebView can
-    lazily create its own WebContents (lines 30-31), `SetVisible(false)`,
-    `FocusBehavior::NEVER`, accessibility-ignored (lines 32-33).
-  - `ShowUI()`: on first show `LoadInitialURL(GURL(chrome::kChromeUIActorOverlayURL))`
-    (lines 53-55); blocks all input to the background page with
+    lazily create its own WebContents (ctor lines 23-26: `SetBrowserContext`
+    at 23, `SetVisible(false)` at 24, `FocusBehavior::NEVER` + a11y-ignoring
+    at 25-26).
+  - `ShowUI()` (member function starts line 34): on first show
+    `LoadInitialURL(GURL(chrome::kChromeUIActorOverlayURL))`
+    (line 40); blocks all input to the background page with
     `tab->GetContents()->IgnoreInputEvents(std::nullopt)` guarded by a
-    `content::WebContents::ScopedIgnoreInputEvents` (lines 59-61);
+    `content::WebContents::ScopedIgnoreInputEvents` (lines 44-45);
     makes the overlay WebContents transparent via
     `SetPageBaseBackgroundColor(SK_ColorTRANSPARENT)` + `RenderWidgetHostView::SetBackgroundColor`
-    (lines 64-69); `SetVisible(true)` + `WasShown()` (lines 72-74).
-  - `CloseUI()`: `SetVisible(false)`, reset the
-    `ScopedIgnoreInputEvents`, `WasHidden()` (lines 76-87).
+    (lines 50-54); `SetVisible(true)` + `WasShown()` (lines 56-58).
+  - `CloseUI()` (lines 68-75): `SetVisible(false)` (70), reset the
+    `ScopedIgnoreInputEvents` (73), `WasHidden()` (74).
 - Layout: because it is a fill-layer child of the per-pane container, it
   stays aligned with the contents; `contents_container_view.cc:555-558`
   registers it in the DelegatingLayoutManager's child layouts the same way
@@ -64,7 +66,7 @@ Useful only if a Glance card should auto-size from page layout.
 ### 1.4 Read-anything overlay + Glic selection overlay
 
 Siblings of the actor overlay inside each `ContentsContainerView`:
-`contents_container_view.cc:124-128` (`ReadAnythingImmersiveOverlayView`),
+`contents_container_view.cc:125-129` (`ReadAnythingImmersiveOverlayView`),
 accessors at `contents_container_view.h:83-87`. Same pattern: children of
 the per-pane container above `contents_view_`.
 
@@ -79,10 +81,11 @@ the per-pane container above `contents_view_`.
 - The actual `views::WebView` is created and mounted by
   `OverlayBaseController::CreateViewForOverlay()`:
   `chrome/browser/ui/lens/overlay_base_controller.cc:230-301` — creates
-  `views::WebView(tab_->GetContents()->GetBrowserContext())` (line 265),
-  transparent background (lines 266-271), `web_view->set_allow_accelerators(true)`
-  + `GetWebContents()->SetDelegate(this)` (lines 288-290, this is what
-  enables Esc handling, see Q5), `LoadInitialURL()` (line 291), then
+  `views::WebView(tab_->GetContents()->GetBrowserContext())` (lines 274-275),
+  transparent background via `WebContentsSetBackgroundColor::AddForWebContentsWithColor`
+  (lines 278-279), `web_view->set_allow_accelerators(true)`
+  + `GetWebContents()->SetDelegate(this)` (lines 291-292, this is what
+  enables Esc handling, see Q5), `LoadInitialURL()` (line 295), then
   `host_view->AddChildView(...)` (line 297).
 
 ### 1.6 Side panel and PiP — adjacent / separate-widget, not templates
@@ -166,7 +169,7 @@ then. `content::WebContentsDelegate::OpenURLFromTab` (implemented by
 `BrowserWebContentsDelegate`, `chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc:529-600`)
 only sees dispositions that travelled through the `OpenURL` mojo with
 `params->disposition = NavigationPolicyToDisposition(policy)`
-(`render_frame_impl.cc:6142`; mapping table at
+(`render_frame_impl.cc:6134`; mapping table at
 `render_frame_impl.cc:1273-1303`, e.g. split view at 1298-1303).
 There is a single mojo enum for this:
 `ui/base/mojom/window_open_disposition.mojom` ↔ `ui/base/window_open_disposition.h`
@@ -232,9 +235,9 @@ small set of engines:
 4. `content/renderer/render_frame_impl.cc:1281-1303`
    (`NavigationPolicyToDisposition`) — add the case; add the policy to the
    `ConsumeTransientUserActivation()` list at
-   `content/renderer/render_frame_impl.cc:6155-6170` if Glance consumes
-   the activation (UNVERIFIED: check what `NEW_SPLIT_VIEW` does there and
-   copy).
+   `content/renderer/render_frame_impl.cc:6162-6170` (`kWebNavigationPolicySplitView`
+   is in that list; see line 6167). UNVERIFIED whether Glance-to-popup
+   activation semantics differ; copy the treatment.
 5. The single chrome-side consumer hook:
    `BrowserWebContentsDelegate::OpenURLFromTab`,
    `browser_web_contents_delegate.cc:549` — add next to the
@@ -498,7 +501,7 @@ Zen extras Koan wants:
   (b) `SetWebContentsBlocked(host_contents, true)`. UNVERIFIED whether
   `SetWebContentsBlocked` has any side effects Koan wants (browser
   capabilities hiding); the raw path used by the actor overlay
-  (`ScopedIgnoreInputEvents` only, `actor_overlay_web_view.cc:59-61`)
+  (`ScopedIgnoreInputEvents` only, `actor_overlay_web_view.cc:44-45`)
   dims nothing and blocks only input — pick one of the two profiles.
 - Widget creation behind it: `TabDialogManager::CreateTabScopedDialog`
   makes a `views::Widget` child of the browser window host with
@@ -527,14 +530,14 @@ Zen extras Koan wants:
 ### 5.4 Esc handling — the precedent is `WebContentsDelegate::HandleKeyboardEvent`
 
 - The Lens overlay's WebContents is hosted in a child `views::WebView`
-  with `SetDelegate(controller)` (see §1.5, `overlay_base_controller.cc:289-290`).
+  with `SetDelegate(controller)` (see §1.5, `overlay_base_controller.cc:291-292`).
   Keys the page does not consume come back to the browser via
   `content::WebContentsDelegate::HandleKeyboardEvent`
   (override at `chrome/browser/ui/lens/lens_overlay_controller.{h:633-636,cc:1457-1467}`).
 - The event then goes to `LensOverlayEventHandler::HandleKeyboardEvent`
   (`chrome/browser/ui/lens/lens_overlay_event_handler.{h:23-33,cc:37-70}`):
   `IsEscapeEvent(event)` (raw key down `ui::VKEY_ESCAPE`,
-  `lens_overlay_event_handler.cc:20-23`) →
+  `lens_overlay_event_handler.cc:16-19`; Esc branch at 42-50) →
   `HideOverlay(LensOverlayDismissalSource::kEscapeKeyPress)` and **returns
   true**, i.e. swallow.
 - `views::UnhandledKeyboardEventHandler`
@@ -562,7 +565,7 @@ Zen extras Koan wants:
    `contents_scrim_view()->SetVisible(true)`).
 2. Focus the Glance view: the overlay WebView must be focusable
    (unlike the actor overlay which is `FocusBehavior::NEVER` — see
-   `actor_overlay_web_view.cc:32`); lens's WebView is a normal focus
+   `actor_overlay_web_view.cc:25`); lens's WebView is a normal focus
    child (`overlay_base_controller.cc:265` + view insertion), and its
    `lens_overlay_view_` parent is in the focus chain (`multi_contents_view.cc:131-137`).
    Koan aims for `FocusBehavior::AL`, `RequestFocus()` on show; the Lens
@@ -571,7 +574,7 @@ Zen extras Koan wants:
    Tab walks appropriately between host chrome and the Glance card.
 3. On close: reset `ScopedIgnoreInputEvents`, restore scrim hidden,
    `WasHidden()` on the Glance WebContents (mirror
-   `actor_overlay_web_view.cc:76-87` so closed-over cards keep state
+   `actor_overlay_web_view.cc:68-75` so closed-over cards keep state
    alive if the user re-opened the same URL — decide the keeper
    semantics per Koan Glance UX).
 
@@ -590,8 +593,10 @@ All new logic lives in `//koan` (`koan::features`,
   - keeps its OWN `std::unique_ptr<content::WebContents>` created at
     Glance-open (never a chrome:// WebUI: it hosts real pages to be
     promoted later),
-  - `FocusBehavior::AL` + focus within, since Glance is user-interactive,
-  - close()/show() mirror `actor_overlay_web_view.cc:52-87`.
+  - `FocusBehavior::AL` + focus within, since Glance is user-interactive
+    (the actor overlay uses `FocusBehavior::NEVER`,
+    `actor_overlay_web_view.cc:25`).
+  - close()/show() mirror `actor_overlay_web_view.cc:34-75`.
 - Hook patch in `chrome/browser/ui/views/frame/contents_container_view.cc`
   (+3 lines): `if (koan::features::kKoanGlance.Get()) { koan_glance_view_ =
   AddChildView(koan::CreateGlanceView(browser_view)); }` placed after the
@@ -690,8 +695,8 @@ blink features are surfaced there before patching.
 
 1. **Alt+click = download swap.** Making Alt+click open Glance deletes
    the standard "download link" gesture while the Koan flag is enabled.
-   Mitigation: feature default OFF gradually ramped / enabled at
-   build-time for install experiments; add an about_flags override.
+   Mitigation: ship the Koan flag default-OFF, ramp it gradually; add an
+   about_flags override so a bad rebase can be neutralised.
 2. **Enum growth in `WindowOpenDisposition`.** A new disposition value
    hits every switch + mojo validation (traits). Mitigation: find every
    switch via the commit that introduced `NEW_SPLIT_VIEW` (UNVERIFIED how

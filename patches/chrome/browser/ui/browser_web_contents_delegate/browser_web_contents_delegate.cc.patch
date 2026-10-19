@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+index 2ea589165ccac66b5d4043e60130e4bb26eaa359..d2bdd89ecd10649e45614e142cc7a35b133bb8ce 100644
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+@@ -88,6 +88,7 @@
+ #include "content/public/common/drop_data.h"
+ #include "content/public/common/url_constants.h"
+ #include "content/public/common/window_container_type.mojom-shared.h"
++#include "koan/browser/ui/views/koan_glance.h"
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/browser/extension_system.h"
+ #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
+@@ -542,6 +543,11 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
+                                   std::move(navigation_handle_callback));
+   }
+ 
++  // Koan Glance: Shift+click opens the link in a floating card instead.
++  if (koan::MaybeOpenGlance(&*browser_, source, params)) {
++    return source;
++  }
++
+   // If the source is already split, navigate the other pane instead of
+   // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
+   // sees new_contents == this and skips the DidOpenRequestedURL notification,

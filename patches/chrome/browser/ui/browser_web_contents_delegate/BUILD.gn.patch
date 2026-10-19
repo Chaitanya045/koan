@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
+index 7dbf9fb2fdb74c29b8f149ab7c7bbc098d95a371..c3c48ece4fef15a6086bb731abffb9b923b08ac2 100644
+--- a/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
++++ b/chrome/browser/ui/browser_web_contents_delegate/BUILD.gn
+@@ -14,6 +14,7 @@ if (!is_android) {
+     deps = [
+       "//base",
+       "//chrome/browser:file_select_helper",
++      "//koan/browser/ui/views",
+       "//chrome/browser:repost_form_warning_controller",
+       "//chrome/browser/actor",
+       "//chrome/browser/background",

@@ -9,6 +9,7 @@ namespace koan::features {
 BASE_FEATURE(kKoanSidebar, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanCompactMode, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWorkspaces, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanGlance, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kKoanSidebar);
@@ -20,6 +21,10 @@ bool IsCompactModeEnabled() {
 
 bool IsWorkspacesEnabled() {
   return base::FeatureList::IsEnabled(kKoanWorkspaces);
+}
+
+bool IsGlanceEnabled() {
+  return base::FeatureList::IsEnabled(kKoanGlance);
 }
 
 }  // namespace koan::features

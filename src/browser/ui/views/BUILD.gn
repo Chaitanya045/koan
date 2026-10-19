@@ -9,6 +9,7 @@ source_set("views") {
   sources = [
     "koan_browser_view_hooks.h",
     "koan_compact_mode.h",
+    "koan_glance.h",
     "koan_content_card.h",
   ]
   public_deps = [
@@ -25,12 +26,22 @@ source_set("impl") {
     "koan_compact_mode_controller.cc",
     "koan_compact_mode_controller.h",
     "koan_content_card.cc",
+    "koan_glance_controller.cc",
+    "koan_glance_controller.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
   ]
   deps = [
     ":views",
+    "//chrome/app/vector_icons",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/tabs:tab_enums",
+    "//components/input",
+    "//components/split_tabs",
+    "//components/vector_icons",
+    "//content/public/browser",
+    "//third_party/blink/public/common",
+    "//ui/views/controls/webview",
     "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/color:color_headers",

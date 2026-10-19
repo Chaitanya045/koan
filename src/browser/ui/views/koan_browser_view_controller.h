@@ -17,6 +17,7 @@ class BrowserView;
 namespace koan {
 
 class KoanCompactModeController;
+class KoanGlanceController;
 class KoanWorkspaceController;
 
 // Per-window Koan state and behaviour. Owned by its BrowserView through a
@@ -41,6 +42,7 @@ class KoanBrowserViewController : public views::ViewObserver {
     return compact_mode_.get();
   }
   KoanWorkspaceController* workspaces() const { return workspaces_.get(); }
+  KoanGlanceController* glance() const { return glance_.get(); }
 
   // Number of live controllers, i.e. open browser windows.
   static int live_count();
@@ -58,6 +60,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<KoanCompactModeController> compact_mode_;
   std::unique_ptr<KoanWorkspaceController> workspaces_;
+  std::unique_ptr<KoanGlanceController> glance_;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       observations_{this};
 };
