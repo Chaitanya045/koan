@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-10-19_
+_Last updated: 2026-10-19 (all planned phases done)_
 
 ## Done
 - Project scaffold, scripts, GN args (`build/koan.gn`).
@@ -79,6 +79,12 @@ _Last updated: 2026-10-19_
   showed the frame's caption buttons paint ABOVE the client view, so Koan's
   own window controls were removed; instead the card leaves the caption
   strip free when the toolbar is hidden (`docs/screenshots/desktop-*`).
+
+- Phase 1-3 code review by GLM (`.agent/reviews/phase1-3-review.md`): no
+  blockers; both should-fix items and the menu nit fixed (3650450). Accepted
+  nits: class-name probes for the switcher/nav mount points (listed in
+  docs/REBASE.md) and a cheap mode check on each layout.
+- About-menu ensō icon verified in chrome://settings.
 
 ## Known issues
 - Compact toolbar spans the full width and overlaps the expanded sidebar's
