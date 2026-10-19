@@ -3,9 +3,11 @@
 #
 #   scripts/e2e/run.sh <test> [url...]     e.g. scripts/e2e/run.sh shortcuts
 #
-# Without URLs it opens scripts/e2e/pages/<test>.html if that exists, else
-# two example.com tabs. scripts/e2e/prefs/<test>.json, if it exists, seeds
-# the fresh profile's Preferences.
+# <test> is a name in scripts/e2e/ or a path to any .mjs script (e.g.
+# scripts/perf/profile_ui.mjs). Without URLs it opens
+# scripts/e2e/pages/<test>.html if that exists, else two example.com tabs.
+# scripts/e2e/prefs/<test>.json, if it exists, seeds the fresh profile's
+# Preferences. KOAN_FLAGS adds browser flags (e.g. --disable-features=...).
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -37,9 +39,12 @@ if [[ -f $prefs ]]; then
   cp "$prefs" "$prof/Default/Preferences"
 fi
 
+script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
+[[ $test_name == *.mjs ]] && script=$test_name
+# shellcheck disable=SC2086  # KOAN_FLAGS is a list of flags
 "$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof" \
   --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT" \
-  --enable-features=ui-debug-tools-enable-synthetic-events \
+  --enable-features=ui-debug-tools-enable-synthetic-events ${KOAN_FLAGS:-} \
   "${urls[@]}" >"$prof.log" 2>&1 &
 pid=$!
 for _ in $(seq 1 60); do
@@ -47,4 +52,4 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 sleep 3
-node "$KOAN_ROOT/scripts/e2e/$test_name.mjs"
+node "$script"
