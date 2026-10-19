@@ -239,7 +239,7 @@ offset rather than resized:
 Hook (in `CalculateProposedLayout`, where the top container's bounds are
 computed): `if (koan::CompactModeHidesToolbar(browser_view)) { contents_top = 0; }`.
 
-**Toggle.** Zen's shortcut is Ctrl+Alt+C. Register a Koan command id through
+**Toggle.** (Corrected later: Zen's default is Ctrl+S, see docs/USAGE.md; Koan shortcuts now live in KoanShortcutController, no accelerator-table patch.) Originally planned as Ctrl+Alt+C. Register a Koan command id through
 the accelerator table (`chrome/browser/ui/accelerator_table.cc`, +1
 line) and handle it in `koan::ExecuteKoanCommand`, called from
 `BrowserCommandController` (+3 lines). Persist the state in a Koan profile

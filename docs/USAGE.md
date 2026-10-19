@@ -6,16 +6,41 @@ plain Chromium (rendering, DevTools, extensions, `chrome://` pages).
 
 ## Shortcuts
 
-| Action | Keys |
-|---|---|
-| Toggle compact mode | Ctrl+Alt+C |
-| Toggle single toolbar (URL bar in the sidebar) | Ctrl+Alt+B |
-| Next / previous workspace | Ctrl+Alt+Right / Ctrl+Alt+Left |
-| New workspace | Ctrl+Alt+N |
-| Glance a link | Shift+click the link |
-| Close Glance | Esc (or click the dimmed page) |
-| Split view with a link | Ctrl+Alt+click the link (upstream) |
-| Everything else | Chrome's shortcuts |
+Koan uses Zen's default shortcuts (Zen shortcuts version 21, Linux). Where
+Zen deliberately rebinds a key that Chrome uses, Koan follows Zen; the
+"Chrome had" column says what moved. Everything not listed behaves as in
+Chrome.
+
+| Action | Keys | Chrome had |
+|---|---|---|
+| Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
+| Show the sidebar in compact mode | Ctrl+Alt+S | |
+| Next / previous workspace | Ctrl+Alt+Right / Ctrl+Alt+Left | |
+| Split view: side by side | Ctrl+Alt+V | |
+| Split view: stacked | Ctrl+Alt+H | |
+| Split view: grid (two panes in Chromium) | Ctrl+Alt+G | |
+| Unsplit | Ctrl+Alt+U | |
+| New split with an empty tab | Ctrl+Shift+* | |
+| Copy the page's URL | Ctrl+Shift+C | Inspect element (now Ctrl+Shift+L) |
+| Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
+| Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
+| Close all unpinned tabs (in the workspace) | Ctrl+Shift+K | |
+| Expand Glance to a tab | Ctrl+O while Glance is open | Open file (still, otherwise) |
+| Close Glance | Esc, or click the dimmed page | |
+| Save page | Ctrl+Alt+Shift+S | |
+| Library (history) | Alt+Shift+L | |
+| Inspect element | Ctrl+Shift+L | |
+| New window | Ctrl+Shift+N | New incognito window |
+| New private window | Ctrl+Shift+P | Print using system dialog |
+| Mute site | Ctrl+M | |
+| Bookmarks | Ctrl+B | |
+| Downloads | Ctrl+Shift+Y | |
+| Reading mode | Ctrl+Alt+R | |
+| **Koan only:** toggle single toolbar | Ctrl+Alt+B | |
+| **Koan only:** new workspace | Ctrl+Alt+N | |
+
+When a page uses a key itself (for example Ctrl+S in an online editor), the
+page gets it first, as in every browser.
 
 ## Sidebar
 
@@ -33,7 +58,7 @@ previous session by default; change it in Settings > On startup).
 
 ## Compact mode
 
-Ctrl+Alt+C hides the sidebar and toolbar; the page fills the window with a
+Ctrl+S hides the sidebar and toolbar; the page fills the window with a
 thin margin. Move the pointer to the left edge to slide the sidebar out, or
 to the top edge (or press Ctrl+L) to slide the toolbar down. The setting
 applies to all windows and persists.

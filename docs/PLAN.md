@@ -42,7 +42,7 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
 - [x] Phase 1 — sidebar look (vertical tabs default, frame-coloured toolbar,
       floating content card), compact mode (zero-width sidebar overlay on the
       leading edge, toolbar in the NonClientView overlay sliding on a
-      compositor transform, Ctrl+Alt+C, persisted). Design: `phase1-design.md`.
+      compositor transform, Ctrl+S like Zen, persisted). Design: `phase1-design.md`.
 - [x] Phase 1b — single toolbar (Ctrl+Alt+B): no top toolbar, navigation
       and a URL pill in the sidebar, floating URL bar on focus.
 - [x] Phase 2 — workspaces on upstream tab group focus mode (switcher, keys,

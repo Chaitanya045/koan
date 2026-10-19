@@ -13,7 +13,6 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "ui/base/accelerators/accelerator.h"
 #include "ui/views/focus/focus_manager.h"
 
 class BrowserView;
@@ -31,8 +30,8 @@ class KoanHotZone;
 // sidebar has the navigation buttons and a URL pill; focusing the omnibox
 // slides the toolbar down as a floating URL bar.
 //
-// Compact mode (Ctrl+Alt+C, pref koan.compact_mode.enabled; wins over single
-// toolbar):
+// Compact mode (Ctrl+S like Zen, pref koan.compact_mode.enabled; wins over
+// single toolbar):
 // - the vertical tab strip is collapsed to zero width and slides over the
 //   page (upstream's expand-on-hover overlay) when the pointer reaches the
 //   leading edge;
@@ -42,10 +41,9 @@ class KoanHotZone;
 //   focused;
 // - the page is a card with a gutter on every side; the edge hot zones live
 //   in that gutter, outside the page's native window.
-// Toggled with Ctrl+Alt+C; the state is the profile pref
-// koan::prefs::kCompactModeEnabled, shared by all windows.
-class KoanCompactModeController : public views::FocusChangeListener,
-                                  public ui::AcceleratorTarget {
+// Both states are profile prefs shared by all windows. Keyboard shortcuts
+// live in KoanShortcutController.
+class KoanCompactModeController : public views::FocusChangeListener {
  public:
   explicit KoanCompactModeController(BrowserView* browser_view);
   KoanCompactModeController(const KoanCompactModeController&) = delete;
@@ -71,9 +69,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void ToggleCompactMode();
   void ToggleSingleToolbar();
 
-  // ui::AcceleratorTarget:
-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
-  bool CanHandleAccelerators() const override;
+  // Compact mode: slides the hidden sidebar out (Zen's Ctrl+Alt+S); it
+  // slides away once the pointer isn't over it. Returns false outside
+  // compact mode.
+  bool PeekSidebar();
 
   // views::FocusChangeListener:
   void OnDidChangeFocus(views::View* focused_before,
@@ -94,6 +93,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Single toolbar: adds KoanSidebarNavView to the top of the sidebar.
   void InstallSidebarNav();
 
+  void CheckSidebarPeek();
+
   void OnSidebarHotZoneHovered(bool hovered);
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
@@ -101,8 +102,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   const raw_ptr<BrowserView> browser_view_;
   PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
-  const ui::Accelerator compact_accelerator_;
-  const ui::Accelerator single_toolbar_accelerator_;
 
   Mode mode_ = Mode::kNone;
   bool toolbar_revealed_ = false;
@@ -112,9 +111,15 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;
   raw_ptr<views::View> sidebar_nav_ = nullptr;
-  std::unique_ptr<ExpandOnHoverLock> sidebar_lock_;
+  // Separate locks so the hot zone and a keyboard peek can't release each
+  // other's hold on the sidebar.
+  std::unique_ptr<ExpandOnHoverLock> hover_lock_;
+  std::unique_ptr<ExpandOnHoverLock> peek_lock_;
 
   base::RepeatingTimer toolbar_hide_timer_;
+  base::RepeatingTimer sidebar_peek_timer_;
+  std::optional<base::TimeTicks> sidebar_unhovered_since_;
+  base::TimeTicks sidebar_peek_started_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
 
   base::WeakPtrFactory<KoanCompactModeController> weak_factory_{this};
