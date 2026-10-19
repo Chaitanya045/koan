@@ -8,94 +8,48 @@
 #include <utility>
 #include <vector>
 
+#include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/prefs/pref_service.h"
 #include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
+#include "koan/common/koan_url_constants.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/events/event_constants.h"
-#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/focus/focus_manager.h"
 #include "url/gurl.h"
 
 namespace koan {
 
-namespace {
-
-constexpr int kCtrl = ui::EF_CONTROL_DOWN;
-constexpr int kAlt = ui::EF_ALT_DOWN;
-constexpr int kShift = ui::EF_SHIFT_DOWN;
-
-using Action = KoanShortcutController::Action;
-
-}  // namespace
-
-// static
-std::vector<KoanShortcutController::Binding>
-KoanShortcutController::DefaultBindings() {
-  const auto bind = [](ui::KeyboardCode key, int modifiers, Action action) {
-    return Binding{ui::Accelerator(key, modifiers), action};
-  };
-  return {
-      // Zen: compact mode.
-      bind(ui::VKEY_S, kCtrl, Action::kToggleCompactMode),
-      bind(ui::VKEY_S, kCtrl | kAlt, Action::kCompactModeShowSidebar),
-      // Zen moves Save Page off Ctrl+S.
-      bind(ui::VKEY_S, kCtrl | kAlt | kShift, Action::kSavePage),
-      // Zen: workspaces.
-      bind(ui::VKEY_RIGHT, kCtrl | kAlt, Action::kWorkspaceForward),
-      bind(ui::VKEY_LEFT, kCtrl | kAlt, Action::kWorkspaceBackward),
-      // Zen: split view.
-      bind(ui::VKEY_G, kCtrl | kAlt, Action::kSplitGrid),
-      bind(ui::VKEY_V, kCtrl | kAlt, Action::kSplitVertical),
-      bind(ui::VKEY_H, kCtrl | kAlt, Action::kSplitHorizontal),
-      bind(ui::VKEY_U, kCtrl | kAlt, Action::kUnsplit),
-      // Ctrl+Shift+* : "*" is Shift+8 on most layouts, or the keypad key.
-      bind(ui::VKEY_8, kCtrl | kShift, Action::kNewEmptySplit),
-      bind(ui::VKEY_MULTIPLY, kCtrl | kShift, Action::kNewEmptySplit),
-      // Zen: tabs and pages.
-      bind(ui::VKEY_C, kCtrl | kShift, Action::kCopyUrl),
-      bind(ui::VKEY_C, kCtrl | kShift | kAlt, Action::kCopyUrlMarkdown),
-      bind(ui::VKEY_D, kCtrl | kShift, Action::kTogglePinTab),
-      bind(ui::VKEY_K, kCtrl | kShift, Action::kCloseUnpinnedTabs),
-      bind(ui::VKEY_O, kCtrl, Action::kGlanceExpand),
-      bind(ui::VKEY_L, kAlt | kShift, Action::kLibrary),
-      // Zen moves the inspector off Ctrl+Shift+C.
-      bind(ui::VKEY_L, kCtrl | kShift, Action::kInspect),
-      // Zen (Firefox) windows: Ctrl+Shift+N new window, Ctrl+Shift+P private.
-      bind(ui::VKEY_N, kCtrl | kShift, Action::kNewWindow),
-      bind(ui::VKEY_P, kCtrl | kShift, Action::kNewPrivateWindow),
-      // Zen inherits these from Firefox; Chrome leaves the keys free.
-      bind(ui::VKEY_M, kCtrl, Action::kMuteSite),
-      bind(ui::VKEY_B, kCtrl, Action::kBookmarks),
-      bind(ui::VKEY_Y, kCtrl | kShift, Action::kDownloads),
-      bind(ui::VKEY_R, kCtrl | kAlt, Action::kReaderMode),
-      // Koan-only.
-      bind(ui::VKEY_B, kCtrl | kAlt, Action::kToggleSingleToolbar),
-      bind(ui::VKEY_N, kCtrl | kAlt, Action::kNewWorkspace),
-  };
-}
-
 KoanShortcutController::KoanShortcutController(
     BrowserView* browser_view,
     KoanBrowserViewController* controller)
-    : browser_view_(browser_view),
-      controller_(controller),
-      bindings_(DefaultBindings()) {}
+    : browser_view_(browser_view), controller_(controller) {
+  PrefService* prefs = browser_view_->GetProfile()->GetPrefs();
+  bindings_ = shortcuts::Bindings(prefs->GetDict(prefs::kShortcuts));
+  pref_change_registrar_.Init(prefs);
+  pref_change_registrar_.Add(
+      prefs::kShortcuts,
+      base::BindRepeating(&KoanShortcutController::OnShortcutsChanged,
+                          base::Unretained(this)));
+}
 
 KoanShortcutController::~KoanShortcutController() {
   OnBrowserViewDestroying();
@@ -106,6 +60,10 @@ void KoanShortcutController::OnAddedToWidget() {
     return;
   }
   focus_manager_ = browser_view_->GetFocusManager();
+  RegisterAccelerators();
+}
+
+void KoanShortcutController::RegisterAccelerators() {
   for (const Binding& binding : bindings_) {
     // Normal priority targets are tried most-recently-registered first, so
     // these run before BrowserView's own accelerators for the same keys.
@@ -114,7 +72,17 @@ void KoanShortcutController::OnAddedToWidget() {
   }
 }
 
+void KoanShortcutController::OnShortcutsChanged() {
+  bindings_ = shortcuts::Bindings(
+      browser_view_->GetProfile()->GetPrefs()->GetDict(prefs::kShortcuts));
+  if (focus_manager_) {
+    focus_manager_->UnregisterAccelerators(this);
+    RegisterAccelerators();
+  }
+}
+
 void KoanShortcutController::OnBrowserViewDestroying() {
+  pref_change_registrar_.RemoveAll();
   if (focus_manager_) {
     focus_manager_->UnregisterAccelerators(this);
     focus_manager_ = nullptr;
@@ -219,6 +187,9 @@ bool KoanShortcutController::Run(Action action) {
       return Command(IDC_SHOW_DOWNLOADS);
     case Action::kReaderMode:
       return Command(IDC_SHOW_READING_MODE);
+    case Action::kOpenSettings:
+      ShowSingletonTab(browser_view_->browser(), GURL(kSettingsURL));
+      return true;
   }
   return false;
 }

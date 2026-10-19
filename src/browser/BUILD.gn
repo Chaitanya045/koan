@@ -31,6 +31,23 @@ source_set("prefs") {
   deps = [ "//components/pref_registry" ]
 }
 
+# Koan's keyboard shortcuts as data, for the shortcut controller and the
+# settings page.
+source_set("shortcut_table") {
+  sources = [
+    "koan_shortcut_table.cc",
+    "koan_shortcut_table.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/base",
+  ]
+  deps = [
+    "//ui/events:event_constants",
+    "//ui/events:events_base",
+  ]
+}
+
 # Default-state overrides for upstream features, registered from
 # chrome/browser/chrome_browser_field_trials.cc.
 source_set("feature_overrides") {

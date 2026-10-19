@@ -6,3 +6,8 @@
 source_set("branding") {
   sources = [ "koan_branding.h" ]
 }
+
+# Koan's chrome:// URLs (header-only).
+source_set("url_constants") {
+  sources = [ "koan_url_constants.h" ]
+}

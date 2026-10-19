@@ -34,6 +34,11 @@ inline constexpr char kWorkspaceTintSavedColor[] =
 inline constexpr char kWorkspaceTintSavedVariant[] =
     "koan.workspaces.tint_saved_variant";
 
+// The user's own keyboard shortcuts, set in chrome://koan-settings: a
+// dictionary from a shortcut's id (koan_shortcut_table.h) to its key, or to
+// no key if the user cleared it. Actions not listed keep their default keys.
+inline constexpr char kShortcuts[] = "koan.shortcuts";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
