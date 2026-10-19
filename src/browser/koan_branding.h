@@ -12,6 +12,12 @@ namespace koan {
 // noise. Checked in chrome/browser/ui/startup/infobar_utils.cc.
 inline constexpr bool kShowGoogleApiKeysInfoBar = false;
 
+// Like Zen, Koan reopens the previous session on startup by default, so
+// workspaces and Essentials survive restarts. Users can still change it in
+// Settings > On startup. Checked in
+// chrome/browser/prefs/session_startup_pref.cc.
+inline constexpr bool kRestoreLastSessionByDefault = true;
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_KOAN_BRANDING_H_

@@ -27,7 +27,8 @@ A `views::WebView` stacked **on top of the page**, per pane, feature-gated:
 
 - Created inside `ContentsContainerView` when
   `features::kGlicActorUi` + `features::kGlicActorUiOverlay` are both on:
-  `chrome/browser/ui/views/frame/contents_container_view.cc:136-140`.
+  `chrome/browser/ui/views/frame/contents_container_view.cc:134-140`
+  (feature check at 134-135, creation + AddChildView at 136-140).
   Feature definitions: `chrome/common/chrome_features.cc:308`
   (`BASE_FEATURE(kGlicActorUi, FEATURE_ENABLED_BY_DEFAULT)`) and
   `chrome/common/chrome_features.cc:385-386` (the `kGlicActorUiOverlay`
@@ -55,7 +56,7 @@ A `views::WebView` stacked **on top of the page**, per pane, feature-gated:
 
 ### 1.3 AI overlay dialog — bare `views::WebView` sized from its WebContents
 
-`contents_container_view.cc:118-127`, behind `features::kAiOverlayDialog`:
+`contents_container_view.cc:115-123`, behind `features::kAiOverlayDialog`:
 `std::make_unique<views::WebView>(browser_view->GetProfile())` +
 `EnableSizingFromWebContents(gfx::Size(1,1), gfx::Size(800,600))`.
 Useful only if a Glance card should auto-size from page layout.
@@ -135,7 +136,7 @@ system, and would complicate focus (see Q5).
 - **Upstream already has a split-view click gesture**: Ctrl+Alt+click
   (⌘+Alt on Mac) maps to `kNavigationPolicySplitView`
   (`navigation_policy.cc:60-63`).
-- Synthetised events are vetted by `NavigationPolicyFromEvent()`
+- Synthesized events are vetted by `NavigationPolicyFromEvent()`
   (`navigation_policy.cc:93-131`): the DOM event's policy is only honored
   if it matches the real current input event (`CurrentInputEvent::Get()`,
   `third_party/blink/renderer/core/events/current_input_event.{h,cc}`,
@@ -301,7 +302,7 @@ A Glance WebContents should therefore be kept as
 wrapped in a TabModel, so "expand to tab" is one
 `InsertWebContentsAt(browser->tab_strip_model()->active_index() + 1, std::move(contents), ADD_ACTIVE)`
 call plus opener wiring as in contextual_tasks above. It must NOT be
-attacked to the browser's `TabUIHelper`-associated helpers; UNVERIFIED
+attached to the browser's `TabUIHelper`-associated helpers; UNVERIFIED
 whether all tab-referencing helpers self-heal on adoption — DevTools /
 web_app paths show that moving a raw WebContents in is accepted by
 `TabStripModel` itself.
@@ -319,7 +320,7 @@ web_app paths show that moving a raw WebContents in is accepted by
   `SplitTabLayout::{kSideBySide,kStacked}` and an optional
   `split_ratio` (comment: layout enum mirrored into
   `tab_search.mojom`/`enums.xml`).
-- Clearance for the "Glance expand into split" flow: identify the current
+- Recipe for the "Glance expand into split" flow: identify the current
   tab index (source tab), insert the Glance contents
   (`InsertWebContentsAt`), then `AddToNewSplit({new_index},
   SplitTabVisualData(SplitTabLayout::kSideBySide), source)`. Exactly the
@@ -345,7 +346,7 @@ web_app paths show that moving a raw WebContents in is accepted by
   swap-into-active-split variant is `CommandSwapWithActiveSplit`
   (`tab_menu_model.cc:340-351`). Availability is gated on
   `tabs::IsSplitViewHorizontalDirectAccessEnabledForTab()`
-  (`chrome/browser/ui/tabs/features.cc:47-60`, `kSplitViewHorizontal` +
+  (`chrome/browser/ui/tabs/features.cc:19-31,45-54`, `kSplitViewHorizontal` +
   `kSplitViewHorizontalDirectAccess` param). Zen's "Split with this tab"
   is a relabel/extension of this — Koan can call
   `ExecuteAddToNewSplitCommand` from its own controller instead of adding
@@ -382,7 +383,7 @@ Drop-target machinery:
   today.
 - It hands over to
   `MultiContentsViewDropTargetController::HandleTabDrop()` (declared
-  `multi_contents_view_drop_target_controller.h:90-92`, impl at
+  `multi_contents_view_drop_target_controller.h:61/83`, impl at
   `multi_contents_view_drop_target_controller.cc:262-275`) →
   `MultiContentsViewDelegateImpl::HandleTabDrop()`:
   `chrome/browser/ui/views/frame/multi_contents_view_delegate.cc:142-167`
@@ -398,8 +399,8 @@ Drop-target machinery:
   (`…drop_target_controller.cc:282-313`) →
   `HandleLinkDrop` in `multi_contents_view_delegate.cc:91-140`
   (`Navigate()` then `AddToNewSplit` `kDragAndDropLink`).
-- Which drag types: `MultiContentsDropTargetView::DragType::kTab` (line
-  141) covers tab drags; `kLink` (line 199) OS drags. The "drop target
+- Which drag types: `MultiContentsDropTargetView::DragType::kTab` and
+  `::kLink`; the "drop target
   available" condition is: normal browser type AND
   `prefs::kSplitViewDragAndDropEnabled` AND not already in a split
   (`multi_contents_view.cc:825-830` + `browser_view.cc:2527-2531`).
@@ -411,7 +412,7 @@ Drop-target machinery:
   (`chrome/common/pref_names.h:649-651`). Registered **default true** in
   `chrome/browser/ui/browser_ui_prefs.cc:129`
   (`RegisterBooleanPref(prefs::kSplitViewDragAndDropEnabled, true, ...)`).
-  Cashed by `MultiContentsView` (`multi_contents_view.cc:173-183` —
+  Cached by `MultiContentsView` (`multi_contents_view.cc:173-183` —
   `is_drag_drop_pref_enabled_` + change registrar for live updates).
   ⇒ Drag-to-split is ON by default, unconditionally.
 - `tabs::kSplitViewHorizontal` —
@@ -442,7 +443,7 @@ Zen extras Koan wants:
    style it. If Koan wants it behind a Koan pref instead, gate inside
    `MultiContentsView::IsDragAndDropEnabled()`
    (`multi_contents_view.cc:825-830`) via a hook patch.
-2. **"Split with this tab" action** — upstream menu path noted in §3.3
+2. **"Split with this tab" action** — upstream menu path noted in §3.2
    (`tab_menu_model.cc:337-364` →
    `ExecuteAddToNewSplitCommand`); Koan can drive the same command from
    its own UI (e.g. tab-strip context menu under Koan styling, or from a
@@ -512,15 +513,16 @@ Zen extras Koan wants:
 
 ### 5.3 What the Lens overlay does for the "background darkened" visuals
 
-- Blur, not just dim: `ChromeLensOverlayBlurLayerDelegate` —
+- Blur, not just dim: `LensOverlayBlurLayerDelegate` —
   `chrome/browser/ui/lens/lens_overlay_blur_layer_delegate.h:24-51`
   — a `ui::LayerDelegate` that repeatedly screenshots the background
   `RenderWidgetHost` and paints it blurred;
   `chrome/browser/ui/lens/lens_overlay_blur_layer_delegate.cc` uses
   `RenderWidgetHostView::CopyFromBackBuffer` UNVERIFIED.
-- Opaque ordering: the Lens overlay is *weakly above* the page but below
-  bubbles: anchor views inserted BEFORE the webview in the child list so
-  top-chrome tabs focus first (`overlay_base_controller.cc:240-261`).
+- Z-order/focus bridge: the Lens overlay sits just above the page, and
+  its bubble anchor views are inserted BEFORE the webview in the child
+  list so that top chrome receives focus first when Tabbing
+  (`overlay_base_controller.cc:240-261`).
 
 ### 5.4 Esc handling — the precedent is `WebContentsDelegate::HandleKeyboardEvent`
 
@@ -554,7 +556,7 @@ Zen extras Koan wants:
 
 ### 5.5 Focus semantics checklist for Glance
 
-1. On open: acquire the scan-modal slot (`tab_->CanShowModalUI()`
+1. On open: acquire the tab-modal slot (`tab_->CanShowModalUI()`
    succeeded → `tab_->ShowModalUI()`), block host page input
    (`IgnoreInputEvents`), set scrim visible (via blocked state or direct
    `contents_scrim_view()->SetVisible(true)`).
@@ -563,8 +565,8 @@ Zen extras Koan wants:
    `actor_overlay_web_view.cc:32`); lens's WebView is a normal focus
    child (`overlay_base_controller.cc:265` + view insertion), and its
    `lens_overlay_view_` parent is in the focus chain (`multi_contents_view.cc:131-137`).
-   Koan aims for `FocusBehavior::AL`, `RequestFocus()` on show; observed
-   Tab-escape behavior of lens (anchor views before webview in child
+   Koan aims for `FocusBehavior::AL`, `RequestFocus()` on show; the Lens
+   tab-focus behavior (anchor views before webview in child
    list, `overlay_base_controller.cc:240-261`) should be replicated so
    Tab walks appropriately between host chrome and the Glance card.
 3. On close: reset `ScopedIgnoreInputEvents`, restore scrim hidden,
@@ -605,7 +607,7 @@ All new logic lives in `//koan` (`koan::features`,
 
 - `content::WebContents::ScopedIgnoreInputEvents` +
   `capabilities()->SetWebContentsBlocked(contents, true)` exactly like
-  `tab_dialog_manager.cc:342-348`; the existing
+  `tab_dialog_manager.cc:338-348`; the existing
   `ScrimViewController` (`scrim_view_controller.cc:56-62`) shows the
   real per-pane scrim automatically. If Koan prefers no dialog-style
   capability side-effects (UNVERIFIED), fall back to
@@ -636,10 +638,9 @@ Blink-side gate (Q2.4(a)) is a `blink::features::kKoanGlance` Feature in
 `third_party/blink/common/features.cc` mapping alt-only clicks to
 `KOAN_GLANCE` in `navigation_policy.cc` — still ALLOWING (i.e. not
 breaking) the classic alt-click = download when Koan's flag is off.
-UNVERIFIED: adding a Feature in blink code and exposing it from
-`chrome/browser/about_flags.cc` requires reuse of existing
-blink-feature plumbing; verify with
-`chrome/browser/untrusted_util/... UNVERIFIED` before patching.
+UNVERIFIED: adding a Feature in blink and exposing it from
+`chrome/browser/about_flags.cc` requires checking how existing
+blink features are surfaced there before patching.
 
 ### R4. "Close / expand to tab / open in split" buttons inside the card
 
@@ -660,7 +661,7 @@ blink-feature plumbing; verify with
   `tab_strip_model->AddToNewSplit({inserted_index},
   split_tabs::SplitTabVisualData(SplitTabLayout::kSideBySide),
   split_tabs::SplitTabCreatedSource::kLinkClick)`
-  (  `chrome/browser/ui/tabs/tab_strip_model.h:666-669`,
+  ( `chrome/browser/ui/tabs/tab_strip_model.h:666-669`,
   `split_tab_visual_data.h:25-62`, sources list
   `split_tab_metrics.h:17-33`, link-click precedent
   `browser_navigator.cc:1049-1077`). UNVERIFIED whether
@@ -692,14 +693,14 @@ blink-feature plumbing; verify with
    Mitigation: feature default OFF gradually ramped / enabled at
    build-time for install experiments; add an about_flags override.
 2. **Enum growth in `WindowOpenDisposition`.** A new disposition value
-   hits every switch + mojo VALIDATION (traits). Mitigation: find every
+   hits every switch + mojo validation (traits). Mitigation: find every
    switch via the commit that introduced `NEW_SPLIT_VIEW` (UNVERIFIED how
    large the list is in this checkout; seed from
    `rg -l "NEW_SPLIT_VIEW"`), and add exhaustive default-cases.
 3. **Renderer/blink patch footprint.** The alt-only gesture decision is
    in blink (`navigation_policy.cc`); a Koan feature in
    `blink::features` grows the blink-chrome boundary visibility of our
-   flag. Prefer the smallest, most-rebonded gate: a
+   flag. Prefer the smallest, most-contained gate: a
    `blink::features` Feature flag (single file + enum) with about_flags
    entry only in Chrome.
 4. **`SplitTabCreatedSource` is histogram-LINT-protected**
@@ -730,8 +731,8 @@ blink-feature plumbing; verify with
    systems (UNVERIFIED). Test Wayland and X11.
 9. **UNVERIFIED: `views::FocusManager`-wide Esc when the Glance page has
    focus.** The delegate path only catches keys the page does NOT
-   consume. Some sites use Esc for exit-fullscreen or Escape- disambiguation via
-   `event.preventDefault()`, which would swallow Esc. Union fix:
+   consume. Some sites consume Esc via
+   `event.preventDefault()`, which would swallow Esc. Fallback fix:
    register a `views::FocusManager`-owned `AcceleratorTarget` while
    Glance is open (see Q5.4) — cost: a focus-manager extra entry; verify
    ordering vs WebContents Accelerator handling (`web_view->
@@ -754,8 +755,8 @@ blink-feature plumbing; verify with
 - [ ] Verify whether `blink::features` requires a separate registration
       to be reachable from `chrome://flags` or whether about_flags
       handles blink features generically (UNVERIFIED).
-- [ ] Check `SetWebContentsBlocked`'s full impact when a per-pane off
-      (tab curation, capabilities) before using it.
+- [ ] Check `SetWebContentsBlocked`'s full impact when a pane is in an
+      unwanted state (modal records, browser capabilities) before using it.
 - [ ] Confirm how a `views::FocusManager` accelerator competes with the
       focused WebContents (`set_allow_accelerators`) — write a manual test
       in phase 3 (UNVERIFIED).
