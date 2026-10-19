@@ -20,6 +20,14 @@
 - Headless Chrome won't open `chrome://` URLs passed on the command line (it
   shows the NTP). Use `--remote-debugging-port` + `scripts/check_flags.mjs`
   (Node 24 has a global WebSocket).
+- **UI screenshots without touching the desktop:** `scripts/shot_ui.sh out.png
+  [flags] -- urls...` runs Koan on the headless Ozone platform with
+  `--ozone-dump-file`, which writes each window frame (browser UI included)
+  as PNG. Needs `--in-process-gpu --disable-gpu` so the unsandboxed browser
+  process writes the file. No Xvfb/xdotool on this host; session is GNOME
+  Wayland.
+- `scripts/cdp_eval.mjs <port> <url> <expr>` evaluates JS on any page incl.
+  `chrome://prefs-internals` (pref values with default/user metadata).
 - `pkill -f <pattern>` from the agent shell can kill the shell itself (exit
   144) because the pattern is in its own command line.
 - Long runs must be detached (`setsid nohup ... & disown`): background Bash

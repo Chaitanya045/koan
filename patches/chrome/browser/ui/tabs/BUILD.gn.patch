@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
+index 1c4df06838acdd54323be28c7275ca53bdc7d9bc..4a891399a5517d502bde846ec0aba3e0bdb0cea2 100644
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -428,6 +428,7 @@ if (!is_android) {
+       "//components/tab_groups",
+       "//components/web_modal",
+       "//components/webapps/common",
++      "//koan/browser:features",
+     ]
+   }
+ 

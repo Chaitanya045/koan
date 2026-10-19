@@ -19,10 +19,16 @@ _Last updated: 2026-10-19_
   Incremental rebuild: 5 steps, ~2 min. Verified with
   `scripts/check_flags.mjs`: both flags listed in chrome://flags.
 
+- Phase 1 step 2: vertical tabs default = `IsSidebarEnabled()` (patch
+  `tab_strip_prefs.cc` + `ui/tabs/BUILD.gn` dep). Verified on a fresh profile
+  via chrome://prefs-internals and UI screenshots
+  (`docs/screenshots/step2-*.png`); `--disable-features=KoanSidebar` gives
+  horizontal tabs.
+
 ## Running
 - Nothing.
 
 ## Next
-1. Phase 1 step 2 from `docs/phase1-design.md` §6: vertical tabs by default
-   (patch `chrome/browser/ui/tabs/tab_strip_prefs.cc`).
+1. Phase 1 step 3 from `docs/phase1-design.md` §6: hook plumbing
+   (`koan_browser_view_hooks`, `browser_view.cc` patch), no visible change.
 2. Don't apply patches under `chromium/src` while a build is running.
