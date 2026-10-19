@@ -96,6 +96,9 @@ Registration in chrome://flags: `kFeatureEntries` is at
   expanding to the Koan `FeatureEntry` initialisers, with names and
   descriptions as string literals in that header (no edits to
   `flag_descriptions.{h,cc}`).
+- `about_flags.cc` is compiled in `source_set("core")`
+  (`chrome/browser/BUILD.gn:999`), not `:browser`, so `:core` gets the
+  `//koan/browser:flag_entries` dep (as built in step 1).
 - **Patch `about_flags.cc`** (+2 lines): one `#include` and one
   `KOAN_FEATURE_ENTRIES` line just above the end marker.
 - The flag-metadata unit tests (`about_flags_unittest.cc`,
