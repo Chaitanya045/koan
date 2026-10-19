@@ -39,3 +39,12 @@ Provider instance `opencode`, reasoning `variant: high`, in this order:
   and was cancelled; GLM free redid it in ~40 min with a good, verified
   review. Ask for incremental writes and a time budget; check the child
   thread's `updatedAt` (t3_thread_read) to spot stalls early.
+- 2026-10-19 (later): both free models stalled on PR reviews (~50-60 min,
+  no output). After the T3 restart `opencode-go/glm-5.3-flash` (the user's
+  Go subscription, last in the fallback order) is in the catalog and gave
+  two high-quality, verified reviews (PR #11, #12) in ~20 min each. Check a
+  child thread's `updatedAt` with t3_thread_read; cancel when it stops
+  moving for ~15 min and fall back to the next model.
+- Deleting a stacked PR's base branch on merge closes the stacked PR, and
+  it can't be reopened after a rebase. Retarget stacked PRs to `develop`
+  *before* merging their base (or merge without --delete-branch).
