@@ -15,8 +15,10 @@ point of Koan.
 | Vertical tabs in a sidebar | Same | Upstream Chromium vertical tabs, on by default. |
 | Page as a floating rounded card | Same | |
 | Sidebar and toolbar on one surface | Same | |
-| Multiple-toolbars layout | Same | Default layout. |
-| Single-toolbar layout (address in the sidebar) | Same | Ctrl+Alt+B (Zen sets this in Settings). Editing the address slides the toolbar down as a floating URL bar. |
+| Single-toolbar layout (address in the sidebar), the default | Same | Sidebar top row: toggle, back / forward / reload (plus Chromium's tab groups / tab search); URL pill with the site's icon below. |
+| Floating URL bar when editing the address | Same | Centred card, `min(2/3 window width, 750px)`. Zen floats it once you type; Koan floats it on focus (Zen's "floating" setting). Esc closes the suggestions first, then the bar, as in Chrome. |
+| Multiple-toolbars layout | Same | Ctrl+Alt+B (Zen sets this in Settings). |
+| Ctrl+T opens the floating URL bar instead of a new-tab page | Missing | Ctrl+T opens Chrome's new-tab page. |
 | Collapsed-toolbar layout | Missing | |
 | Sidebar on the right | Missing | |
 | Theme follows the system light/dark mode | Same | |
@@ -28,9 +30,10 @@ point of Koan.
 | Zen | Koan | Notes |
 |---|---|---|
 | Toggle with Ctrl+S | Same | |
-| Hide sidebar and toolbar, reveal at the window edges | Same | |
+| Hide the sidebar, reveal at the left edge | Same | With single toolbar (the default) that's all, like Zen. |
+| Hide the toolbar too (multiple toolbars), reveal at the top edge | Same | |
 | Peek the sidebar (Ctrl+Alt+S) | Same | |
-| Hide only the sidebar / only the toolbar | Different | Koan has both hidden (compact) or toolbar hidden (single toolbar); not sidebar-only. |
+| Choose to hide only the sidebar / only the toolbar | Missing | Tracked in #20. |
 
 ## Workspaces and Essentials
 

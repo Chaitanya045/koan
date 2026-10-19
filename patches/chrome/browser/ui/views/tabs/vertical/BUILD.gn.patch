@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/views/tabs/vertical/BUILD.gn b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+index c924c0c441864620728b8cfcbf2c138b8566b879..d46da99c714d334ee252fee397e053669d60629f 100644
+--- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+@@ -78,6 +78,7 @@ source_set("impl") {
+     "//chrome/browser/ui/views/tabs/shared",
+     "//chrome/browser/ui/views/toolbar",
+     "//chrome/browser/ui/window_metadata",
++    "//koan/browser/ui/views",
+     "//components/contextual_tasks/public:feature_list",
+     "//components/performance_manager",
+     "//components/tab_groups",

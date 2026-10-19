@@ -37,11 +37,33 @@ Chrome.
 | Bookmarks | Ctrl+B | |
 | Downloads | Ctrl+Shift+Y | |
 | Reading mode | Ctrl+Alt+R | |
-| **Koan only:** toggle single toolbar | Ctrl+Alt+B | |
+| Edit the address (floating URL bar) | Ctrl+L, or click the URL pill | |
+| **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
 | **Koan only:** new workspace | Ctrl+Alt+N | |
 
 When a page uses a key itself (for example Ctrl+S in an online editor), the
 page gets it first, as in every browser.
+
+## Layout
+
+Koan starts in Zen's default layout, **single toolbar**: there is no toolbar
+across the top, and the page reaches the top of the window. The top row of
+the sidebar has the sidebar toggle, back / forward / reload and the tab
+groups / tab search buttons; below it is a pill with the current site.
+
+![Single toolbar](screenshots/desktop-single-toolbar.png)
+
+Click the pill or press Ctrl+L to edit the address: like Zen's, the URL bar
+floats in a card centred over the window (two thirds of its width, at most
+750 px) with the suggestions under it, and the pill is empty meanwhile. Esc
+(twice when suggestions are showing), a click on the page or opening a
+result closes it.
+
+![Floating URL bar](screenshots/floating-url-bar.png)
+
+Ctrl+Alt+B switches to the multiple-toolbars layout (a toolbar above the
+page, as in Chrome) and back. The layout applies to all windows and
+persists.
 
 ## Sidebar
 
@@ -53,27 +75,21 @@ workspace, **+** creates one.
 ## Workspaces
 
 A workspace is a tab group shown on its own. Its icon in the switcher is
-the emoji its name starts with (new workspaces get one, e.g. "🌊 Space 1");
-rename it from the group header's menu to change the name or icon. New tabs open in the active
-workspace. Rename or recolour a workspace from its group header's menu.
+the emoji its name starts with (new workspaces get one, e.g. "🌊 Space 1").
+Rename or recolour a workspace from its group header's menu; renaming
+changes the icon too. New tabs open in the active workspace.
 Workspaces and the active one are restored on restart (Koan restores the
 previous session by default; change it in Settings > On startup).
 
 ## Compact mode
 
-Ctrl+S hides the sidebar and toolbar; the page fills the window with a
-thin margin. Move the pointer to the left edge to slide the sidebar out, or
-to the top edge (or press Ctrl+L) to slide the toolbar down. The setting
-applies to all windows and persists.
+Ctrl+S hides the sidebar; the page fills the window with a thin margin.
+Move the pointer to the left edge (or press Ctrl+Alt+S) to slide the
+sidebar out, with its navigation buttons and URL pill. Ctrl+L opens the
+floating URL bar as usual. The setting applies to all windows and persists.
 
-## Single toolbar
-
-Ctrl+Alt+B switches to Zen's single-toolbar layout: no toolbar across the
-top; back / forward / reload and a pill with the current site sit at the top
-of the sidebar, and the page reaches the top of the window. Click the pill
-or press Ctrl+L to edit the address: the toolbar slides down over the page
-as a floating URL bar and slides away when you're done. Compact mode wins
-when both are on.
+In the multiple-toolbars layout compact mode hides the toolbar as well;
+move the pointer to the top edge to slide it down.
 
 ## Glance
 

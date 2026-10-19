@@ -8,12 +8,19 @@
 #include <memory>
 #include <optional>
 
+#include <vector>
+
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/view_observer.h"
+#include "ui/views/view_tracker.h"
 
 class BrowserView;
 class ExpandOnHoverLock;
@@ -21,29 +28,36 @@ class ExpandOnHoverLock;
 namespace koan {
 
 class KoanHotZone;
+class KoanSidebarNavButtons;
+class KoanSidebarNavView;
 
 // Zen's compact mode and single-toolbar layout for one window.
 //
-// Single toolbar (Ctrl+Alt+B, pref koan.single_toolbar): there is no top
-// toolbar. The top container is hidden in the overlay (below), the page card
-// reaches the top of the window, and KoanSidebarNavView at the top of the
-// sidebar has the navigation buttons and a URL pill; focusing the omnibox
-// slides the toolbar down as a floating URL bar.
+// Single toolbar (Zen's default layout; Ctrl+Alt+B, pref koan.single_toolbar):
+// there is no top toolbar. The top container is hidden in the overlay
+// (below), the page card reaches the top of the window, and
+// KoanSidebarNavView at the top of the sidebar has the navigation buttons
+// and a URL pill.
 //
-// Compact mode (Ctrl+S like Zen, pref koan.compact_mode.enabled; wins over
-// single toolbar):
+// Compact mode (Ctrl+S like Zen, pref koan.compact_mode.enabled):
 // - the vertical tab strip is collapsed to zero width and slides over the
 //   page (upstream's expand-on-hover overlay) when the pointer reaches the
 //   leading edge;
-// - the top container (toolbar, bookmarks bar) moves into the BrowserView's
-//   overlay view, above the page, and slides down with a compositor
-//   transform when the pointer reaches the top edge or the omnibox is
-//   focused;
+// - with single toolbar, the sidebar keeps its header, so that is all;
+// - otherwise the top container (toolbar, bookmarks bar) moves into the
+//   BrowserView's overlay view, above the page, and slides down with a
+//   compositor transform when the pointer reaches the top edge;
 // - the page is a card with a gutter on every side; the edge hot zones live
 //   in that gutter, outside the page's native window.
+//
+// In both, focusing the omnibox (the URL pill, Ctrl+L) shows Zen's floating
+// URL bar: just the location bar, in a card centred over the window; it goes
+// away when focus leaves it.
+//
 // Both states are profile prefs shared by all windows. Keyboard shortcuts
 // live in KoanShortcutController.
-class KoanCompactModeController : public views::FocusChangeListener {
+class KoanCompactModeController : public views::FocusChangeListener,
+                                  public views::ViewObserver {
  public:
   explicit KoanCompactModeController(BrowserView* browser_view);
   KoanCompactModeController(const KoanCompactModeController&) = delete;
@@ -59,6 +73,7 @@ class KoanCompactModeController : public views::FocusChangeListener {
   // Compact mode or single toolbar: the top toolbar takes no layout space.
   bool hides_toolbar() const { return mode_ != Mode::kNone; }
   bool is_toolbar_revealed() const { return toolbar_revealed_; }
+  bool is_url_bar_floating() const { return url_bar_floating_; }
 
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
@@ -78,8 +93,17 @@ class KoanCompactModeController : public views::FocusChangeListener {
   void OnDidChangeFocus(views::View* focused_before,
                         views::View* focused_now) override;
 
+  // views::ViewObserver:
+  void OnViewBoundsChanged(views::View* observed_view) override;
+  void OnViewVisibilityChanged(views::View* observed_view,
+                               views::View* starting_view,
+                               bool visible) override;
+  void OnViewIsDeleting(views::View* observed_view) override;
+
  private:
   Mode DesiredMode() const;
+  // In compact mode: keep the sidebar header (single toolbar is on).
+  bool DesiredCompactKeepsSidebarNav() const;
   void UpdateActiveSoon();
   void UpdateActive();
   void Activate(Mode mode);
@@ -89,6 +113,13 @@ class KoanCompactModeController : public views::FocusChangeListener {
   void ApplyToolbarTransform(bool animate);
   bool ShouldKeepToolbarRevealed() const;
   void CheckToolbarHide();
+
+  // The floating URL bar: shows only the location bar, centred.
+  void SetUrlBarFloating(bool floating);
+  void HideToolbarForFloating();
+  void LayoutFloatingUrlBar();
+
+  KoanSidebarNavView* sidebar_nav();
 
   // Single toolbar: adds KoanSidebarNavView to the top of the sidebar.
   void InstallSidebarNav();
@@ -105,12 +136,29 @@ class KoanCompactModeController : public views::FocusChangeListener {
 
   Mode mode_ = Mode::kNone;
   bool toolbar_revealed_ = false;
+  bool url_bar_floating_ = false;
+  // Whether compact mode keeps the sidebar header (single toolbar pref).
+  bool compact_keeps_sidebar_nav_ = false;
+  // While the URL bar floats: the toolbar's other views, hidden, and whether
+  // each is to be visible afterwards. Entries go when a view is deleted.
+  base::flat_map<views::View*, bool> floating_restore_;
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      floating_siblings_observation_{this};
+  bool changing_toolbar_visibility_ = false;
+  bool laying_out_floating_ = false;
+  base::ScopedObservation<views::View, views::ViewObserver>
+      top_container_observation_{this};
+  base::ScopedObservation<views::View, views::ViewObserver>
+      toolbar_observation_{this};
   std::optional<bool> collapsed_before_;
   std::optional<size_t> top_container_index_;
 
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;
-  raw_ptr<views::View> sidebar_nav_ = nullptr;
+  // Koan views inside upstream's tab strip region (KoanSidebarNavView,
+  // KoanSidebarNavButtons).
+  views::ViewTracker sidebar_nav_;
+  views::ViewTracker sidebar_nav_buttons_;
   // Separate locks so the hot zone and a keyboard peek can't release each
   // other's hold on the sidebar.
   std::unique_ptr<ExpandOnHoverLock> hover_lock_;

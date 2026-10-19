@@ -122,7 +122,10 @@ const VK = { S: 83, C: 67, D: 68, K: 75, V: 86, H: 72, U: 85, N: 78, B: 66, RIGH
 // Compact mode: Ctrl+S on, Ctrl+Alt+S peeks the sidebar, Ctrl+S off.
 await key(VK.S, CTRL, 's');
 let vs = await views();
-check('Ctrl+S turns compact mode on', count(vs, 'KoanHotZone') === 2);
+// With single toolbar (the default) compact mode hides only the sidebar,
+// like Zen, so there is just the sidebar's edge hot zone.
+check('Ctrl+S turns compact mode on', count(vs, 'KoanHotZone') === 1 &&
+      vs.find(v => v.cls === 'VerticalTabStripRegionView')?.w === 0);
 await key(VK.S, CTRL | ALT, 's');
 vs = await views();
 const strip = vs.find(v => v.cls === 'VerticalTabStripRegionView');

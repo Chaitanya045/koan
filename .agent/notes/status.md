@@ -92,6 +92,16 @@ _Last updated: 2026-10-19 (all planned phases done)_
   Glance, #15/#16 Zen parity doc. Open: #5/#13 packaging (draft), #6/#14
   benchmarks (draft) - both wait for the release build (out/Release).
 
+- 2026-10-19: user: "the address bar is at the top, not like Zen". Checked a
+  real Zen 1.23.3b (`.cache/zen/`, Marionette chrome-context helper
+  `.cache/marionette.py`): defaults are single toolbar + floating URL bar
+  (`zen.urlbar.behavior=floating-on-type`, width min(innerWidth/1.5, 750),
+  open bar centred vertically). #22: single toolbar is Koan's default too,
+  nav buttons in the sidebar's top row (hook patch in
+  vertical_tab_strip_top_container.cc), URL pill with favicon, focused
+  omnibox floats as a centred card; compact + single toolbar hides only the
+  sidebar. e2e `scripts/e2e/layout.mjs`.
+
 ## Known issues / design notes
 - In compact mode the revealed toolbar floats across the full width, over
   the expanded sidebar's header too (Zen's floating toolbar behaves the

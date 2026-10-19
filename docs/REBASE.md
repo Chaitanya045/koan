@@ -37,6 +37,8 @@ assumes:
 | Toolbar overlay (no patch) | `BrowserView::ReparentTopContainerFor{Start,End}OfImmersive` | Koan's compact controller mirrors these; diff them |
 | Overlay view lookup (no patch) | `TopContainerOverlayView` class name in `browser_view.cc` | still a NonClientView child with that metadata name |
 | Workspace switcher mount (no patch) | `VerticalTabStripRegionView` ctor | content area is still a `FlexLayoutView` child |
+| Sidebar header | `chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc` (`CalculateProposedLayout`, `GetPreferredWidth`) | still a hand-written layout of collapse button + combo button; `VerticalTabStripTopContainer` is still a direct child of `VerticalTabStripRegionView` |
+| Floating URL bar (no patch) | `BrowserViewLayoutImpl::Layout` (top container outside BrowserView) | the layout still sets the top container's and toolbar's bounds each pass (Koan observes them and re-centres); `LocationBarView` is still a direct child of `ToolbarView` |
 | Glance trigger | `chrome/browser/ui/browser_web_contents_delegate/...cc` | Shift+click still arrives as renderer-initiated `NEW_WINDOW` |
 | Colour mixer | `chrome/browser/ui/color/chrome_color_mixers.cc` | Koan mixer still runs after Chrome's, before custom themes |
 | Feature defaults | `chrome/browser/chrome_browser_field_trials.cc` | `RegisterFeatureOverrides` still exists; `kTabGroupsFocusing` still the focus-mode switch |

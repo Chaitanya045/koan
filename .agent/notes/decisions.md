@@ -45,3 +45,11 @@
   `//koan/browser:features` (component build), so a Koan feature must only
   be read in one process type (browser *or* renderer) unless the target is
   made a proper exported component.
+- **Floating URL bar = the real toolbar, narrowed** (#22): while the
+  omnibox has focus in single toolbar / compact mode, the top container
+  (already in the overlay view) is re-laid out as a centred card and every
+  ToolbarView child except LocationBarView is hidden. Koan observes the top
+  container and toolbar bounds to undo BrowserView's full-width layout. No
+  second omnibox, so everything Chrome's omnibox does keeps working; the
+  popup anchors to the location bar by itself. Koan floats on focus, not on
+  the first keystroke as Zen's default does (the pill isn't a text field).

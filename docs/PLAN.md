@@ -43,8 +43,9 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
       floating content card), compact mode (zero-width sidebar overlay on the
       leading edge, toolbar in the NonClientView overlay sliding on a
       compositor transform, Ctrl+S like Zen, persisted). Design: `phase1-design.md`.
-- [x] Phase 1b — single toolbar (Ctrl+Alt+B): no top toolbar, navigation
-      and a URL pill in the sidebar, floating URL bar on focus.
+- [x] Phase 1b — single toolbar (the default, like Zen; Ctrl+Alt+B): no
+      top toolbar, navigation in the sidebar's top row and a URL pill,
+      Zen's centred floating URL bar on focus.
 - [x] Phase 2 — workspaces on upstream tab group focus mode (switcher, keys,
       new tabs join the active workspace, restored on restart, per-workspace
       tint); Essentials = upstream pinned-tab grid. Research:
