@@ -164,9 +164,9 @@ bool KoanCompactModeController::PeekSidebar() {
   if (!hides_sidebar()) {
     return false;
   }
-  if (!sidebar_lock_) {
+  if (!peek_lock_) {
     if (auto* tab_strip = browser_view_->tab_strip_view()) {
-      sidebar_lock_ =
+      peek_lock_ =
           tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
     }
   }
@@ -179,7 +179,7 @@ bool KoanCompactModeController::PeekSidebar() {
 
 void KoanCompactModeController::CheckSidebarPeek() {
   auto* tab_strip = browser_view_->tab_strip_view();
-  if (!sidebar_lock_ || !tab_strip) {
+  if (!peek_lock_ || !tab_strip) {
     sidebar_peek_timer_.Stop();
     return;
   }
@@ -196,7 +196,7 @@ void KoanCompactModeController::CheckSidebarPeek() {
   }
   if (now - *sidebar_unhovered_since_ >= kToolbarHideDelay) {
     sidebar_peek_timer_.Stop();
-    sidebar_lock_.reset();
+    peek_lock_.reset();
   }
 }
 
@@ -333,7 +333,8 @@ void KoanCompactModeController::Deactivate() {
   toolbar_hide_timer_.Stop();
   toolbar_unwanted_since_.reset();
   sidebar_peek_timer_.Stop();
-  sidebar_lock_.reset();
+  hover_lock_.reset();
+  peek_lock_.reset();
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }
@@ -461,9 +462,9 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
     return;
   }
   if (hovered) {
-    if (!sidebar_lock_) {
+    if (!hover_lock_) {
       if (auto* tab_strip = browser_view_->tab_strip_view()) {
-        sidebar_lock_ = tab_strip->GetExpandOnHoverLock(
+        hover_lock_ = tab_strip->GetExpandOnHoverLock(
             ExpandOnHoverLockType::kKeepExpanded);
       }
     }
@@ -471,7 +472,7 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   }
   // Once the strip has slid over the hot zone the pointer is inside the
   // strip, and upstream's hover tracking keeps it open until it leaves.
-  sidebar_lock_.reset();
+  hover_lock_.reset();
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {

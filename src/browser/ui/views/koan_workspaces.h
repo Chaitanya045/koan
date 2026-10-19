@@ -38,6 +38,9 @@ class KoanWorkspaceController : public TabStripModelObserver {
   void OnAddedToWidget();
   void OnBrowserViewDestroying();
 
+  // Whether workspaces apply to this window (feature on, normal window).
+  bool IsEnabled() const;
+
   // Workspaces in sidebar order (by their first tab).
   std::vector<tab_groups::TabGroupId> GetWorkspaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveWorkspace() const;
@@ -60,7 +63,6 @@ class KoanWorkspaceController : public TabStripModelObserver {
       std::optional<tab_groups::TabGroupId> old_focused_group_id) override;
 
  private:
-  bool IsEnabled() const;
   void InstallSwitcher();
   // Rebuilds the switcher soon (coalesced). Never synchronously: model
   // changes are often triggered by a switcher button, which a synchronous

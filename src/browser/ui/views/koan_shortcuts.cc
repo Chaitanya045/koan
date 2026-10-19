@@ -21,6 +21,7 @@
 #include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
@@ -137,6 +138,26 @@ bool KoanShortcutController::CanHandleAccelerators() const {
 bool KoanShortcutController::Run(Action action) {
   KoanCompactModeController* compact = controller_->compact_mode();
   KoanWorkspaceController* workspaces = controller_->workspaces();
+  // Shortcuts for a Koan feature switched off in chrome://flags do nothing
+  // (and let the key through), like the feature itself.
+  switch (action) {
+    case Action::kToggleCompactMode:
+    case Action::kCompactModeShowSidebar:
+    case Action::kToggleSingleToolbar:
+      if (!features::IsCompactModeEnabled()) {
+        return false;
+      }
+      break;
+    case Action::kWorkspaceForward:
+    case Action::kWorkspaceBackward:
+    case Action::kNewWorkspace:
+      if (!workspaces->IsEnabled()) {
+        return false;
+      }
+      break;
+    default:
+      break;
+  }
   switch (action) {
     case Action::kToggleCompactMode:
       compact->ToggleCompactMode();

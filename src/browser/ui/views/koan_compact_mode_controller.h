@@ -111,7 +111,10 @@ class KoanCompactModeController : public views::FocusChangeListener {
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;
   raw_ptr<views::View> sidebar_nav_ = nullptr;
-  std::unique_ptr<ExpandOnHoverLock> sidebar_lock_;
+  // Separate locks so the hot zone and a keyboard peek can't release each
+  // other's hold on the sidebar.
+  std::unique_ptr<ExpandOnHoverLock> hover_lock_;
+  std::unique_ptr<ExpandOnHoverLock> peek_lock_;
 
   base::RepeatingTimer toolbar_hide_timer_;
   base::RepeatingTimer sidebar_peek_timer_;
