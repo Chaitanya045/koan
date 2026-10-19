@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
+index 95f6238cda46734de8d75ae9db2db09dad3d3c9c..351f447ca4f80d4594c5281d683944ac1221b430 100644
+--- a/chrome/browser/about_flags.cc
++++ b/chrome/browser/about_flags.cc
+@@ -236,6 +236,7 @@
+ #include "extensions/buildflags/buildflags.h"
+ #include "gpu/config/gpu_finch_features.h"
+ #include "gpu/config/gpu_switches.h"
++#include "koan/browser/koan_flag_entries.h"
+ #include "media/audio/audio_features.h"
+ #include "media/base/media_switches.h"
+ #include "media/capture/capture_switches.h"
+@@ -14510,6 +14511,8 @@ const FeatureEntry kFeatureEntries[] = {
+      FEATURE_VALUE_TYPE(features::kMixedFixedIntervalMatcher)},
+ #endif  // BUILDFLAG(IS_ANDROID)
+ 
++    KOAN_FEATURE_ENTRIES
++
+     // Add new entries above this line.
+     // NOTE: Adding a new flag requires adding a corresponding entry to enum
+     // "LoginCustomFlags" in tools/metrics/histograms/enums.xml. See "Flag

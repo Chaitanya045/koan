@@ -1,0 +1,20 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "koan/browser/koan_features.h"
+
+namespace koan::features {
+
+BASE_FEATURE(kKoanSidebar, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanCompactMode, base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool IsSidebarEnabled() {
+  return base::FeatureList::IsEnabled(kKoanSidebar);
+}
+
+bool IsCompactModeEnabled() {
+  return base::FeatureList::IsEnabled(kKoanCompactMode);
+}
+
+}  // namespace koan::features

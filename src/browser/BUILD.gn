@@ -1,0 +1,23 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Koan base::Features. Depends on //base only, so any upstream target can
+# depend on it cheaply.
+source_set("features") {
+  sources = [
+    "koan_features.cc",
+    "koan_features.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# chrome://flags entries for the Koan features; included only by
+# chrome/browser/about_flags.cc.
+source_set("flag_entries") {
+  sources = [ "koan_flag_entries.h" ]
+  public_deps = [
+    ":features",
+    "//components/webui/flags",
+  ]
+}

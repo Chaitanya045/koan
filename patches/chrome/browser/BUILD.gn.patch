@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 57276203758798e46dde192a11816f902d247200..367a947114a1944756980d25b308ee50662c736d 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1430,6 +1430,7 @@ source_set("core") {
+     "//components/webui/chrome_urls",
+     "//device/base",
+     "//device/gamepad/public/cpp:switches",
++    "//koan/browser:flag_entries",
+     "//media/capture:capture_switches",
+     "//media/midi",
+     "//media/webrtc",
