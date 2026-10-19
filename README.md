@@ -6,7 +6,8 @@ native C++ (Chromium Views, compositor-driven animations); the engine is
 plain Chromium, so rendering, animations and DevTools behave exactly as in
 Chrome.
 
-See [docs/USAGE.md](docs/USAGE.md) for features and shortcuts.
+See [docs/USAGE.md](docs/USAGE.md) for features and shortcuts, and
+[docs/ZEN_PARITY.md](docs/ZEN_PARITY.md) for how Koan compares with Zen.
 
 | Zen look | Compact mode | Glance |
 |---|---|---|
