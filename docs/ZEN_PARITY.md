@@ -73,8 +73,11 @@ point of Koan.
 |---|---|---|
 | Zen's default shortcuts | Same | All of Zen's defaults (shortcuts version 21, Linux); see `USAGE.md`. |
 | Firefox's shortcuts Zen inherits | Mostly | Where Chrome already uses the key for something else (e.g. Ctrl+J downloads), Koan keeps Chrome's. |
-| Shortcut editor in Settings | Missing | Shortcuts are fixed. |
-| Zen settings pages | Different | Koan features are switched in `chrome://flags` (search "Koan") and with shortcuts. |
+| Shortcut editor in Settings | Same | `chrome://koan-settings` > Keyboard Shortcuts: Zen's groups and labels, Esc saves, Backspace clears, conflicts refused, Reset to Default. Lists Koan's shortcuts (Zen's own and the Firefox ones Koan implements); Chromium's other shortcuts aren't editable. A key needs Ctrl, Alt or Win, or is a function key (Zen accepts any key). |
+| Zen settings pages | Same | `chrome://koan-settings` (Ctrl+,): Look and Feel, Tab Management, Keyboard Shortcuts, with Zen's labels; Chromium's own settings are linked from its sidebar. Only the settings Koan has are shown (see below). |
+| Settings: Only Sidebar / Sidebar and Top Toolbar | Same | Look and Feel > Browser Layout. |
+| Settings: Collapsed Sidebar layout, compact mode variants, dark theme styles, window dragging, Glance, URL bar behaviour | Missing | Added to the settings page as each feature lands (#35, #41, #44, #37, #36). |
+| Settings: tab management (switch to the most recently used tab on close, close tab on Back with no history, Ctrl+Tab options, pinned tab close behaviour, restore pinned tabs) | Missing | The behaviours don't exist in Koan yet (#33, #38). |
 
 ## Browser basics
 
