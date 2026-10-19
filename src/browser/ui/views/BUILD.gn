@@ -39,6 +39,7 @@ source_set("impl") {
   ]
   deps = [
     ":views",
+    "//base:i18n",
     "//chrome/app:command_ids",
     "//chrome/app/vector_icons",
     "//chrome/browser:command_updater_impl",
@@ -54,6 +55,7 @@ source_set("impl") {
     "//components/vector_icons",
     "//content/public/browser",
     "//third_party/blink/public/common",
+    "//third_party/icu",
     "//ui/views/controls/webview",
     "//ui/views/window/vector_icons",
     "//chrome/browser/ui:browser_tabstrip",

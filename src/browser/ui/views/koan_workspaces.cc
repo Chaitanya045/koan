@@ -11,7 +11,11 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/i18n/break_iterator.h"
+#include "base/i18n/char_iterator.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
@@ -33,6 +37,7 @@
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/themes.mojom.h"
@@ -57,12 +62,50 @@ constexpr int kButtonSize = 24;
 constexpr int kButtonSpacing = 6;
 
 // Colours offered to new workspaces, in order.
-constexpr tab_groups::TabGroupColorId kWorkspaceColors[] = {
-    tab_groups::TabGroupColorId::kBlue,   tab_groups::TabGroupColorId::kGreen,
-    tab_groups::TabGroupColorId::kPurple, tab_groups::TabGroupColorId::kOrange,
-    tab_groups::TabGroupColorId::kPink,   tab_groups::TabGroupColorId::kCyan,
-    tab_groups::TabGroupColorId::kRed,    tab_groups::TabGroupColorId::kYellow,
+// Colours offered to new workspaces, in order, with a default icon each
+// (Zen workspaces have an emoji icon; rename a workspace to change it).
+constexpr struct {
+  tab_groups::TabGroupColorId color;
+  const char16_t* icon;
+} kWorkspaceStyles[] = {
+    {tab_groups::TabGroupColorId::kBlue, u"\U0001F30A"},    // water wave
+    {tab_groups::TabGroupColorId::kGreen, u"\U0001F33F"},   // herb
+    {tab_groups::TabGroupColorId::kPurple, u"\U0001F52E"},  // crystal ball
+    {tab_groups::TabGroupColorId::kOrange, u"\U0001F34A"},  // tangerine
+    {tab_groups::TabGroupColorId::kPink, u"\U0001F338"},    // cherry blossom
+    {tab_groups::TabGroupColorId::kCyan, u"\U0001F4A7"},    // droplet
+    {tab_groups::TabGroupColorId::kRed, u"\U0001F525"},     // fire
+    {tab_groups::TabGroupColorId::kYellow, u"\u2B50"},      // star
 };
+
+// Whether `text` starts with an emoji (a pictograph or a flag).
+bool StartsWithEmoji(const std::u16string& text) {
+  if (text.empty()) {
+    return false;
+  }
+  const int32_t code_point = base::i18n::UTF16CharIterator(text).get();
+  return u_hasBinaryProperty(code_point, UCHAR_EXTENDED_PICTOGRAPHIC) ||
+         u_hasBinaryProperty(code_point, UCHAR_REGIONAL_INDICATOR);
+}
+
+// Splits a workspace name into its icon and display name. A leading emoji
+// (one grapheme cluster, so ZWJ sequences and flags stay whole) is the icon;
+// otherwise the icon is the name's first character.
+std::pair<std::u16string, std::u16string> SplitIcon(std::u16string name) {
+  base::TrimWhitespace(name, base::TRIM_ALL, &name);
+  base::i18n::BreakIterator iter(name,
+                                 base::i18n::BreakIterator::BREAK_CHARACTER);
+  if (name.empty() || !iter.Init() || !iter.Advance()) {
+    return {std::u16string(), std::move(name)};
+  }
+  std::u16string first(iter.GetString());
+  if (!StartsWithEmoji(first)) {
+    return {std::move(first), std::move(name)};
+  }
+  std::u16string rest;
+  base::TrimWhitespace(name.substr(first.size()), base::TRIM_LEADING, &rest);
+  return {std::move(first), rest.empty() ? first : std::move(rest)};
+}
 
 // Seed colours for workspace tints, one per tab group colour. Fixed values
 // (not looked up from the current theme, which the tint itself changes).
@@ -107,6 +150,7 @@ class KoanWorkspaceButton : public views::Button {
                       std::u16string tooltip)
       : views::Button(std::move(callback)),
         label_(std::move(label)),
+        emoji_(StartsWithEmoji(label_)),
         color_(color),
         active_(active) {
     SetTooltipText(tooltip);
@@ -118,6 +162,8 @@ class KoanWorkspaceButton : public views::Button {
       const views::SizeBounds& available_size) const override {
     return gfx::Size(kButtonSize, kButtonSize);
   }
+
+  const std::u16string& GetLabel() const { return label_; }
 
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
@@ -148,17 +194,19 @@ class KoanWorkspaceButton : public views::Button {
 
     const SkColor text = color_utils::GetColorWithMaxContrast(fill);
     canvas->DrawStringRectWithFlags(
-        label_, gfx::FontList().DeriveWithSizeDelta(-1), text, GetLocalBounds(),
-        gfx::Canvas::TEXT_ALIGN_CENTER);
+        label_, gfx::FontList().DeriveWithSizeDelta(emoji_ ? 1 : -1), text,
+        GetLocalBounds(), gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
  private:
   const std::u16string label_;
+  const bool emoji_;
   const std::optional<tab_groups::TabGroupColorId> color_;
   const bool active_;
 };
 
 BEGIN_METADATA(KoanWorkspaceButton)
+ADD_READONLY_PROPERTY_METADATA(std::u16string, Label)
 END_METADATA
 
 // The row of workspace buttons at the bottom of the sidebar.
@@ -193,10 +241,9 @@ class KoanWorkspaceSwitcherView : public views::BoxLayoutView {
     for (const tab_groups::TabGroupId& id : controller_->GetWorkspaces()) {
       const TabGroup* group = model->group_model()->GetTabGroup(id);
       const tab_groups::TabGroupVisualData* visuals = group->visual_data();
-      std::u16string title = visuals->title();
-      std::u16string label = title.empty() ? base::NumberToString16(number)
-                                           : std::u16string(1, title.front());
+      auto [label, title] = SplitIcon(visuals->title());
       if (title.empty()) {
+        label = base::NumberToString16(number);
         title = u"Workspace " + base::NumberToString16(number);
       }
       AddChildView(std::make_unique<KoanWorkspaceButton>(
@@ -336,14 +383,16 @@ void KoanWorkspaceController::Cycle(bool forward) {
 void KoanWorkspaceController::CreateWorkspace() {
   TabStripModel* model = tab_strip_model();
   const size_t existing = GetWorkspaces().size();
+  const auto& style = kWorkspaceStyles[existing % std::size(kWorkspaceStyles)];
   chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
                    /*foreground=*/true);
   const tab_groups::TabGroupId group =
       model->AddToNewGroup({model->count() - 1});
   model->ChangeTabGroupVisuals(
       group, tab_groups::TabGroupVisualData(
-                 u"Space " + base::NumberToString16(existing + 1),
-                 kWorkspaceColors[existing % std::size(kWorkspaceColors)]));
+                 base::StrCat({style.icon, u" Space ",
+                               base::NumberToString16(existing + 1)}),
+                 style.color));
   model->EnterFocusMode(group);
 }
 

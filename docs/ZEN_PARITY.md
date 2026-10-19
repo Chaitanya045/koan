@@ -42,7 +42,7 @@ point of Koan.
 | New tabs open in the active workspace | Same | |
 | Restored after restart | Same | Koan restores the previous session by default, like Zen. |
 | Per-workspace colour | Different | One tint colour per workspace (the group colour), not a gradient. |
-| Workspace icons (emoji) | Different | The button shows the workspace's initial. |
+| Workspace icons (emoji) | Same | A leading emoji in the workspace name is its icon; new workspaces get one per colour. |
 | Containers per workspace | Missing | Chromium has profiles, not containers. |
 | Essentials shared by all workspaces | Same | Pinned tabs, shown as a grid at the top of the sidebar. |
 | Per-workspace pinned tabs separate from Essentials | Missing | In Koan, pinned tabs are the Essentials. |

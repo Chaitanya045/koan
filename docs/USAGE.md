@@ -52,7 +52,9 @@ workspace, **+** creates one.
 
 ## Workspaces
 
-A workspace is a tab group shown on its own. New tabs open in the active
+A workspace is a tab group shown on its own. Its icon in the switcher is
+the emoji its name starts with (new workspaces get one, e.g. "🌊 Space 1");
+rename it from the group header's menu to change the name or icon. New tabs open in the active
 workspace. Rename or recolour a workspace from its group header's menu.
 Workspaces and the active one are restored on restart (Koan restores the
 previous session by default; change it in Settings > On startup).
