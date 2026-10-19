@@ -6,8 +6,8 @@
 #   apply_patches.sh [apply]   apply every patch not yet applied
 #   apply_patches.sh check     report each patch as applied / applicable / CONFLICT
 #   apply_patches.sh reverse   revert every applied patch
-#   apply_patches.sh export    rewrite patches/ from the working tree diff of
-#                              chromium/src (all modified tracked files)
+#   apply_patches.sh export    rewrite patches/ from chromium/src's diff against
+#                              HEAD (all modified tracked files)
 #
 # Also (re)creates the chromium/src/koan -> ../../src symlink.
 # Don't run while a build is running.
@@ -21,7 +21,11 @@ MODE="${1:-apply}"
 cd "$SRC"
 
 link_koan() {
-  if [[ ! -L koan ]]; then
+  if [[ -e koan && ! -L koan ]]; then
+    echo "chromium/src/koan exists and is not a symlink; fix by hand" >&2
+    exit 1
+  fi
+  if [[ "$(readlink koan || true)" != "../../src" ]]; then
     ln -sfn ../../src koan
     echo "linked //koan -> $ROOT/src"
   fi
@@ -32,20 +36,27 @@ patch_files() {
   find "$PATCHES" -name '*.patch' -type f | sort
 }
 
+require_patches() {
+  if [[ ! -d "$PATCHES" ]] || [[ -z "$(patch_files)" ]]; then
+    echo "no patches in $PATCHES" >&2
+    exit 1
+  fi
+}
+
 is_applied() { git apply --reverse --check "$1" 2>/dev/null; }
 can_apply() { git apply --check "$1" 2>/dev/null; }
 
 case "$MODE" in
   apply)
+    require_patches
     link_koan
     status=0
-    while read -r p; do
+    while IFS= read -r p; do
       [[ -n "$p" ]] || continue
       rel="${p#"$PATCHES"/}"
       if is_applied "$p"; then
         echo "already applied  ${rel%.patch}"
-      elif can_apply "$p"; then
-        git apply "$p"
+      elif can_apply "$p" && git apply "$p"; then
         echo "applied          ${rel%.patch}"
       else
         echo "CONFLICT         ${rel%.patch}" >&2
@@ -55,8 +66,9 @@ case "$MODE" in
     exit "$status"
     ;;
   check)
+    require_patches
     status=0
-    while read -r p; do
+    while IFS= read -r p; do
       [[ -n "$p" ]] || continue
       rel="${p#"$PATCHES"/}"
       if is_applied "$p"; then
@@ -71,7 +83,7 @@ case "$MODE" in
     exit "$status"
     ;;
   reverse)
-    while read -r p; do
+    while IFS= read -r p; do
       [[ -n "$p" ]] || continue
       if is_applied "$p"; then
         git apply --reverse "$p"
@@ -81,14 +93,22 @@ case "$MODE" in
     done < <(patch_files)
     ;;
   export)
-    rm -rf "$PATCHES"
-    mkdir -p "$PATCHES"
-    while read -r f; do
+    # Diff against HEAD so staged changes are included. Write to a temp dir
+    # and swap it in only if there is something to export.
+    files="$(git -c core.quotePath=false diff HEAD --name-only)"
+    if [[ -z "$files" ]]; then
+      echo "chromium/src has no changes; keeping existing patches" >&2
+      exit 1
+    fi
+    tmp="$(mktemp -d "$ROOT/.patches.XXXXXX")"
+    while IFS= read -r f; do
       [[ -n "$f" ]] || continue
-      mkdir -p "$PATCHES/$(dirname "$f")"
-      git diff --no-color --full-index -- "$f" > "$PATCHES/$f.patch"
+      mkdir -p "$tmp/$(dirname "$f")"
+      git diff HEAD --no-color --full-index -- "$f" > "$tmp/$f.patch"
       echo "exported         $f"
-    done < <(git diff --name-only)
+    done <<< "$files"
+    rm -rf "$PATCHES"
+    mv "$tmp" "$PATCHES"
     ;;
   *)
     echo "usage: $0 [apply|check|reverse|export]" >&2

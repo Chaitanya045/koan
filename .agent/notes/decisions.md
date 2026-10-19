@@ -17,3 +17,13 @@
 - **Track Chromium main for now** (158.0.8111.0); pin a milestone before the
   first release, and re-audit hook points on each rebase.
 - Name: **Koan** (not "Zen"/"Chrome" — trademarks).
+- **Koan feature names must be globally unique and `kKoan`-prefixed.**
+  `BASE_DECLARE_FEATURE` is `extern "C"` (`base/feature.h:48`), so the C++
+  namespace doesn't mangle the symbol. Today all users are in
+  `//chrome/browser` source_sets (one link unit), so no export macro is
+  needed; if a real `component()` ever references one, declare it
+  `COMPONENT_EXPORT(...) BASE_DECLARE_FEATURE(...)`.
+- **Flag metadata deferred:** `koan-*` flags aren't in
+  `chrome/browser/flag-metadata.json` / `enums.xml` (`LoginCustomFlags`), so
+  `AboutFlagsTest.EveryFlagHasMetadata` and `AboutFlagsHistogramTest` will
+  fail. Add the entries before running those tests (Phase 4).

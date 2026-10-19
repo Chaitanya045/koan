@@ -30,3 +30,8 @@ Provider instance `opencode`, reasoning `variant: high`, in this order:
   output file it was asked to write, and spot-check its claims against source.
 - Tell subagents explicitly: read-only under `chromium/src` while a build runs,
   and write output incrementally.
+- 2026-10-19: DeepSeek free (high) reviewed Phase 1 step 1 in ~25 min,
+  read-only while a build ran. Good-quality review with file:line evidence
+  (claims spot-checked: correct). Found 3 real robustness bugs in
+  `apply_patches.sh` export/apply. Its T3 `summary` was only its first
+  sentence; the useful output was the requested file in `.agent/reviews/`.
