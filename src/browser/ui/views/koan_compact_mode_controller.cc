@@ -14,10 +14,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
-#include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/browser_widget.h"
-#include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
@@ -26,7 +23,6 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
-#include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
@@ -38,11 +34,6 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
-#include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/button/image_button_factory.h"
-#include "ui/views/layout/box_layout_view.h"
-#include "ui/views/window/vector_icons/vector_icons.h"
-#include "components/vector_icons/vector_icons.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
@@ -147,7 +138,6 @@ void KoanCompactModeController::OnBrowserViewLayout() {
   }
   if (mode_ != Mode::kNone) {
     LayoutHotZones();
-    UpdateWindowControls();
     // The top container's height may have changed (e.g. bookmarks bar).
     if (!toolbar_revealed_) {
       ApplyToolbarTransform(/*animate=*/false);
@@ -297,25 +287,6 @@ void KoanCompactModeController::Activate(Mode mode) {
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
-  UpdateWindowControls();
-}
-
-void KoanCompactModeController::UpdateWindowControls() {
-  views::View* top_container = browser_view_->top_container();
-  const gfx::Size area = GetCaptionButtonAreaSize(browser_view_);
-  if (mode_ != Mode::kCompact || area.IsEmpty()) {
-    if (window_controls_) {
-      top_container->RemoveChildViewT(std::exchange(window_controls_, nullptr));
-    }
-    return;
-  }
-  if (!window_controls_) {
-    window_controls_ = top_container->AddChildView(
-        CreateWindowControls(browser_view_, gfx::Size(area.width() / 3,
-                                                      area.height())));
-  }
-  window_controls_->SetBounds(top_container->width() - area.width(), 0,
-                              area.width(), area.height());
 }
 
 void KoanCompactModeController::InstallSidebarNav() {
@@ -346,10 +317,6 @@ void KoanCompactModeController::Deactivate() {
   toolbar_hide_timer_.Stop();
   toolbar_unwanted_since_.reset();
   sidebar_lock_.reset();
-  if (window_controls_) {
-    browser_view_->top_container()->RemoveChildViewT(
-        std::exchange(window_controls_, nullptr));
-  }
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }
@@ -500,11 +467,11 @@ void KoanCompactModeController::LayoutHotZones() {
     return;
   }
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
-  const int gutter = kContentCardMargin;
+  const gfx::Insets gutter = ContentCardInsets(browser_view_);
   sidebar_hot_zone_->SetBoundsRect(
-      gfx::Rect(bounds.x(), bounds.y(), gutter, bounds.height()));
+      gfx::Rect(bounds.x(), bounds.y(), gutter.left(), bounds.height()));
   toolbar_hot_zone_->SetBoundsRect(
-      gfx::Rect(bounds.x(), bounds.y(), bounds.width(), gutter));
+      gfx::Rect(bounds.x(), bounds.y(), bounds.width(), gutter.top()));
 }
 
 }  // namespace koan

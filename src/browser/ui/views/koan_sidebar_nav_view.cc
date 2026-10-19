@@ -20,7 +20,6 @@
 #include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
-#include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
@@ -88,14 +87,6 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
                         IDC_FORWARD, u"Forward");
   nav_button(vector_icons::kReloadChromeRefreshOldIcon, IDC_RELOAD, u"Reload");
 
-  auto* spacer = row->AddChildView(std::make_unique<views::View>());
-  row->SetFlexForView(spacer, 1);
-  const gfx::Size caption = GetCaptionButtonAreaSize(browser_view_);
-  if (!caption.IsEmpty()) {
-    // The page card covers the frame's caption buttons in this layout.
-    row->AddChildView(CreateWindowControls(
-        browser_view_, gfx::Size(kButtonSize, kButtonSize)));
-  }
 
   // Row 2: the URL pill.
   url_pill_ = AddChildView(std::make_unique<views::LabelButton>(

@@ -22,10 +22,9 @@ class LabelButton;
 namespace koan {
 
 // Zen's "single toolbar" header, at the top of the sidebar: back / forward /
-// reload (plus window controls when the frame's are hidden) and a URL pill
-// showing the current site. Clicking the pill (or Ctrl+L) focuses the
-// omnibox, which slides the hidden toolbar down over the page as a floating
-// URL bar; it slides away again once focus leaves it.
+// reload and a URL pill showing the current site. Clicking the pill (or
+// Ctrl+L) focuses the omnibox, which slides the hidden toolbar down over the
+// page as a floating URL bar; it slides away again once focus leaves it.
 class KoanSidebarNavView : public views::View,
                            public CommandObserver,
                            public TabStripModelObserver,

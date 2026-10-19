@@ -64,6 +64,11 @@
   with `scripts/cdp_key.mjs <cdp-port> <keycode> <modifiers>`; unhandled
   keys bubble to BrowserView::HandleKeyboardEvent and the FocusManager,
   like real input.
+- **Real desktop check without a screenshot portal:** run Koan with
+  `--ozone-platform=x11` (Xwayland, DISPLAY=:0), find the window with
+  `xprop -root _NET_CLIENT_LIST` + `xprop -id <w> WM_CLASS` (class "Koan"),
+  capture with `import -window <w>`, drive it with `cdp_key.mjs`. Shows a
+  real window briefly; use a throwaway profile.
 - `pkill -f <pattern>` / `pgrep -f` from the agent shell match the shell
   itself (its command line contains the pattern): pkill kills the whole
   command (exit 144), pgrep always "finds" something. Kill by PID instead.

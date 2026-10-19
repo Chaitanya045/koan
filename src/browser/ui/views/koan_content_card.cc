@@ -4,9 +4,12 @@
 
 #include "koan/browser/ui/views/koan_content_card.h"
 
+#include <algorithm>
+
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_window_controls.h"
 
 namespace koan {
 
@@ -17,12 +20,16 @@ bool UseContentCard(const BrowserView* browser_view) {
 }
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
-  if (IsCompactModeActive(browser_view)) {
-    return gfx::Insets(kContentCardMargin);
-  }
   if (IsToolbarHidden(browser_view)) {
-    // Single toolbar: the card reaches the top of the window, with a gutter.
-    return gfx::Insets::TLBR(kContentCardMargin, 0, kContentCardMargin,
+    // No toolbar above the card: it reaches the top of the window, leaving
+    // only a gutter, or the strip where the frame draws its caption buttons
+    // (they paint above the client view and would otherwise sit on the page).
+    const int top = std::max(kContentCardMargin,
+                             GetCaptionButtonAreaSize(browser_view).height());
+    // Compact mode also hides the sidebar: gutter on the leading side too.
+    const int leading =
+        IsCompactModeActive(browser_view) ? kContentCardMargin : 0;
+    return gfx::Insets::TLBR(top, leading, kContentCardMargin,
                              kContentCardMargin);
   }
   // The vertical tab strip already leaves a gap on the leading side, and the

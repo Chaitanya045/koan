@@ -73,11 +73,14 @@ _Last updated: 2026-10-19_
   the toolbar as a floating URL bar. Verified off-screen.
 - WebUI `cr:chrome-product` icon replaced with the ensō by branding.py.
 
+- Real desktop run (X11 window via Xwayland on GNOME, captured with
+  `import -window`): normal, single toolbar, compact, compact + revealed
+  URL bar all correct; WM_CLASS "Koan"; dark theme follows the system. It
+  showed the frame's caption buttons paint ABOVE the client view, so Koan's
+  own window controls were removed; instead the card leaves the caption
+  strip free when the toolbar is hidden (`docs/screenshots/desktop-*`).
+
 ## Known issues
-- Compact mode: Koan draws its own min/max/close buttons in the revealed
-  toolbar's trailing corner when the frame reports caption buttons there
-  (frame-drawn ones are under the page in compact mode). Headless has no
-  caption buttons, so this path is untested until a desktop run.
 - Compact toolbar spans the full width and overlaps the expanded sidebar's
   header.
 
