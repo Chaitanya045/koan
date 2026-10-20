@@ -233,6 +233,15 @@ check('The hidden toolbar does not repaint', !paints.ToolbarView && !paints.Loca
       `toolbar ${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}, ` +
       `tab ${paints.TabView ?? 0} paints in 5 s`);
 
+// The headless platform never moves the pointer from (0, 0); with the window
+// there too, a toolbar that slides in would sit under it and count as
+// hovered, so it would never hide. Move the window off the corner.
+const { windowId } = (await browser.send('Browser.getWindowForTarget',
+                                         { targetId: first.id })).result;
+await browser.send('Browser.setWindowBounds',
+                   { windowId, bounds: { left: 200, top: 150, width: 1280, height: 800 } });
+await sleep(1000);
+
 // Compact mode: a sidebar opened with Ctrl+Alt+S hides again without Koan
 // polling (it used to check the pointer every 100 ms while open).
 await key(CDP_PORT, 83, CTRL, byId(first.id));  // Ctrl+S

@@ -168,13 +168,13 @@ over 20 s starting 5 s after they opened:
 | Freezing off (`--disable-features=InfiniteTabsFreezing`, Chromium's default) | 32.1 s |
 | Koan (freezing on) | 18.4 s |
 
-In `scripts/e2e/power.mjs` (same tabs, 15 s), with freezing on 5 of the 8
-tabs paused for several seconds (7.3–14.9 s and 7.5–17.7 s in two runs),
-i.e. from when they froze until the test opened them; the others count among
-the 5 most recently used tabs, which stay unfrozen. The test asserts at least
-3, since at most 5 of the 8 can be among the most recently used. With
-freezing off no tab paused for more than 0.8 s. A pinned busy tab, the least
-recently used, never pauses (PINNED_GAP).
+In `scripts/e2e/power.mjs` (same tabs, 15 s), with freezing on 4 or 5 of
+the 8 tabs paused for 7–18 s in three runs (from when they froze until the
+test opened them); the others count among the 5 most recently used tabs,
+which stay unfrozen. The test asserts at least 3, since at most 5 of the 8
+can be among the most recently used. With freezing off no tab paused for
+more than 0.8 s. A pinned busy tab, opened before the 8 and so the least
+recently used, never paused for more than 174 ms.
 
 Reopening a closed window with 4 tabs (`scripts/e2e/power.mjs`): with
 upstream's behaviour (`--disable-features=KoanRestoreTabsOnDemand`) all
