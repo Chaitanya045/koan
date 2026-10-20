@@ -268,8 +268,8 @@ void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
   const bool editing =
       focused_now && location_bar && location_bar->Contains(focused_now);
   SetUrlBarFloating(editing);
-  // Focusing anything else in the toolbar (e.g. Alt+F) reveals it; the hide
-  // timer keeps it revealed until focus leaves.
+  // Focusing anything else in the toolbar (e.g. Alt+F) reveals it; it stays
+  // until focus leaves (checked again on each focus change).
   if (!editing && focused_now &&
       browser_view_->top_container()->Contains(focused_now)) {
     SetToolbarRevealed(true, /*animate=*/true);
@@ -354,7 +354,7 @@ void KoanCompactModeController::SetUrlBarFloating(bool floating) {
     top_container->SetCanProcessEventsWithinSubtree(true);
     ui::Layer* layer = top_container->layer();
     layer->GetAnimator()->AbortAllAnimations();
-    layer->SetVisible(top_container->GetVisible());
+    layer->SetVisible(IsTopContainerShown());
     layer->SetTransform(gfx::Transform());
     layer->SetRoundedCornerRadius(gfx::RoundedCornersF(kFloatingUrlBarRadius));
     layer->SetIsFastRoundedCorner(true);
@@ -698,7 +698,7 @@ void KoanCompactModeController::ApplyToolbarTransform(bool animate) {
     // Slide fully above the window, including any drop shadow.
     target.Translate(0, -top_container->height());
   } else {
-    layer->SetVisible(top_container->GetVisible());
+    layer->SetVisible(IsTopContainerShown());
   }
   if (!animate) {
     if (layer->GetAnimator()->is_animating()) {
@@ -721,6 +721,14 @@ void KoanCompactModeController::ApplyToolbarTransform(bool animate) {
       .SetTransform(
           top_container, target,
           toolbar_revealed_ ? gfx::Tween::EASE_OUT : gfx::Tween::EASE_IN);
+}
+
+bool KoanCompactModeController::IsTopContainerShown() const {
+  // Like views' own layer visibility: the view and its ancestors up to the
+  // overlay view, which owns the next layer up.
+  const views::View* top_container = browser_view_->top_container();
+  return top_container->GetVisible() &&
+         (!top_container->parent() || top_container->parent()->GetVisible());
 }
 
 void KoanCompactModeController::HideAwayToolbarLayer() {

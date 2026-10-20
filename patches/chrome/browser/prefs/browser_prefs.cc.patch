@@ -10,7 +10,7 @@ index 24239e48a3d78ae5d6d4f0e7edb2f44f0fdd3ce4..ce4201a2a9e610963eeffa46be376347
  #include "net/http/http_server_properties_manager.h"
  #include "pdf/buildflags.h"
  #include "printing/buildflags/buildflags.h"
-@@ -1776,6 +1777,7 @@
+@@ -1776,6 +1777,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
    headless::RegisterPrefs(registry);
    media_router::RegisterLocalStatePrefs(registry);
    performance_manager::user_tuning::prefs::RegisterLocalStatePrefs(registry);

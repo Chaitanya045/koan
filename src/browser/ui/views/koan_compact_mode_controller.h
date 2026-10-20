@@ -129,6 +129,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
     return !toolbar_revealed_ && !url_bar_floating_;
   }
   void ApplyToolbarTransform(bool animate);
+  // Whether the top container would be drawn if its layer were visible.
+  bool IsTopContainerShown() const;
   void HideAwayToolbarLayer();
   bool ShouldKeepToolbarRevealed() const;
   void CheckToolbarHide();

@@ -10,7 +10,7 @@ index 5af2184d7104116fe58c77579c3efb1bb5106b57..8190fe5dde653ac5a57297d2afa723a0
  #include "third_party/blink/public/common/permissions/permission_utils.h"
  #include "url/gurl.h"
  
-@@ -181,6 +182,9 @@
+@@ -181,6 +182,9 @@ BackgroundTabLoadingPolicy::BackgroundTabLoadingPolicy(
    max_simultaneous_tab_loads_ = CalculateMaxSimultaneousTabLoads(
        kMinSimultaneousTabLoads, kMaxSimultaneousTabLoads,
        kCoresPerSimultaneousTabLoad, base::SysInfo::NumberOfProcessors());
