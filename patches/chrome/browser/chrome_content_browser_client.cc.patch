@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index f238f7139d7179ef4ffd13e66127a29fa45aef7d..74f055d519f1b9b76e889c1e6524112dbad0cc36 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -407,6 +407,7 @@
+ #include "google_apis/google_api_keys.h"
+ #include "gpu/config/gpu_switches.h"
+ #include "ipc/ipc_channel_proxy.h"
++#include "koan/browser/koan_renderer_switches.h"
+ #include "media/base/media_switches.h"
+ #include "media/media_buildflags.h"
+ #include "media/mojo/buildflags.h"
+@@ -3159,6 +3160,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+       for (auto& part : extra_parts_) {
+         part->AppendExtraRendererCommandLineSwitches(command_line, *process);
+       }
++      // Koan: settings blink reads (koan/browser/koan_renderer_switches.h).
++      koan::AppendRendererSwitches(command_line, *process);
+     }
+ 
+ #if BUILDFLAG(IS_CHROMEOS)

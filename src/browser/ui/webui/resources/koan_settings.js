@@ -136,8 +136,8 @@ function renderRow(row) {
   const note = h('p', {class: 'description row-note', dataset: {note: row.pref}},
                  row.note);
   updaters.push(() => {
-    note.hidden = !(prefValue(row.pref) === true &&
-                    prefValue(row.notePref) === true);
+    note.hidden = row.notePref !== undefined &&
+        !(prefValue(row.pref) === true && prefValue(row.notePref) === true);
   });
   const fragment = document.createDocumentFragment();
   fragment.append(el, note);

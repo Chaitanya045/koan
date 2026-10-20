@@ -24,8 +24,8 @@
        "Ctrl+Alt+Left/Right.",                                               \
        kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanWorkspaces)},     \
       {"koan-glance", "Koan Glance",                                         \
-       "Alt+click a link to preview it in a floating card; expand it to a "  \
-       "tab or open it in split view.",                                      \
+       "Alt+click a link (trigger method in Koan's settings) to preview it " \
+       "in a floating card; expand it to a tab or open it in split view.",   \
        kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanGlance)},         \
       {"koan-restore-tabs-on-demand", "Koan restore tabs on demand",         \
        "Restored background tabs load when you first open them instead "     \

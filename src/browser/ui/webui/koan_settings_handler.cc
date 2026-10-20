@@ -304,7 +304,9 @@ base::DictValue KoanSettingsHandler::Settings() const {
       entry.Set("dependsOn", row.depends_on);
       values.Set(row.depends_on, prefs_->GetValue(row.depends_on).Clone());
     }
-    if (row.note && prefs_->FindPreference(row.note_pref)) {
+    if (row.note && !row.note_pref) {
+      entry.Set("note", row.note);
+    } else if (row.note && prefs_->FindPreference(row.note_pref)) {
       entry.Set("note", row.note);
       entry.Set("notePref", row.note_pref);
       values.Set(row.note_pref, prefs_->GetValue(row.note_pref).Clone());
