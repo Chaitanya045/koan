@@ -121,13 +121,17 @@ from its sidebar.
     neighbour (on);
   - **Back** in a tab with no history (one opened from a link in another
     tab) closes it and returns to that tab (on; never for pinned tabs);
-  - **Ctrl+Tab** cycles within the Essentials or within the other tabs,
-    whichever you are on (off), and can skip tabs that haven't loaded yet
-    (off).
+  - **Ctrl+Tab** (and Ctrl+Page Up/Down) cycles within the Essentials or
+    within the other tabs, whichever you are on (off), and can skip tabs
+    that haven't loaded yet (off). If "Cycle through the most recently used
+    tabs with Ctrl+Tab" is on in Chromium's settings (Appearance), Ctrl+Tab
+    follows that instead, as the page notes; Ctrl+Page Up/Down still follow
+    Koan's settings.
 - **Keyboard Shortcuts**: Zen's shortcut editor. Click a shortcut, type
   the new keys and press **Esc** to save them; **Backspace** clears the
   shortcut, **Tab** leaves it unchanged. A key another shortcut already
-  uses is refused ("Conflicts with ..."). A key needs Ctrl, Alt or Win
+  uses is refused ("Conflicts with ..."), and so are Ctrl+Tab and
+  Ctrl+Page Up/Down, which switch tabs. A key needs Ctrl, Alt or Win
   (or is a function key). **Reset to Default** restores Zen's keys.
   Shortcuts for features switched off in `chrome://flags` aren't listed.
 
