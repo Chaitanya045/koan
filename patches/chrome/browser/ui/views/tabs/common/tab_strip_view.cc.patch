@@ -1,0 +1,22 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_strip_view.cc
+@@ -35,6 +35,7 @@
+ #include "components/tabs/public/tab_collection_types.h"
+ #include "components/tabs/public/tab_group.h"
+ #include "content/public/browser/navigation_controller.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/views/background.h"
+@@ -501,6 +502,11 @@
+       return scroll_button_container->IsPositionInWindowCaption(point_in_child);
+     }
+ 
++    // Koan: the New Tab and Clear rows are buttons, not window caption.
++    if (koan::IsSidebarTabRowsView(child)) {
++      return false;
++    }
++
+     auto* scroll_view = views::AsViewClass<views::ScrollView>(child);
+     if (!scroll_view) {
+       return true;

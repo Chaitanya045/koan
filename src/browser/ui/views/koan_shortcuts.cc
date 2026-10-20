@@ -4,6 +4,9 @@
 
 #include "koan/browser/ui/views/koan_shortcuts.h"
 
+#include <algorithm>
+#include <iterator>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,11 +23,13 @@
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/split_tabs/split_tab_visual_data.h"
+#include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
@@ -33,6 +38,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/common/koan_url_constants.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -376,31 +382,74 @@ bool KoanShortcutController::TogglePinTab() {
   return true;
 }
 
+std::optional<ui::Accelerator> KoanShortcutController::GetAccelerator(
+    Action action) const {
+  for (const Binding& binding : bindings_) {
+    if (binding.action == action) {
+      return binding.accelerator;
+    }
+  }
+  return std::nullopt;
+}
+
 bool KoanShortcutController::CloseUnpinnedTabs() {
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
-  // In a workspace, only its tabs (Zen closes the workspace's unpinned tabs).
-  const std::optional<tab_groups::TabGroupId> workspace =
-      model->GetFocusedGroup();
-  std::vector<int> to_close;
-  for (int i = 0; i < model->count(); ++i) {
-    if (model->IsTabPinned(i)) {
-      continue;
-    }
-    if (workspace && model->GetTabGroupForTab(i) != workspace) {
-      continue;
-    }
-    to_close.push_back(i);
-  }
-  if (to_close.empty()) {
+  const std::vector<int> unpinned = UnpinnedTabsForClear(model);
+  if (unpinned.empty()) {
     return true;
   }
-  // Leave the window (and workspace) with a fresh tab, like Zen.
-  chrome::AddTabAt(browser_view_->browser(), GURL(), to_close.back() + 1,
-                   /*foreground=*/true, workspace);
-  for (auto it = to_close.rbegin(); it != to_close.rend(); ++it) {
-    model->CloseWebContentsAt(*it, TabCloseTypes::CLOSE_USER_GESTURE);
+  std::vector<int> to_close;
+  std::ranges::copy_if(
+      unpinned, std::back_inserter(to_close),
+      [model](int index) { return IsClosableByClear(model, index); });
+  // Nothing but kept tabs: Zen closes them all, the selected one included.
+  const bool closes_selected = to_close.empty();
+  if (closes_selected) {
+    to_close = unpinned;
   }
+  // A workspace is a tab group, which goes away with its last tab; Zen's
+  // space survives being emptied. Leave it (or, closing the selected tab, the
+  // window) a fresh tab.
+  const std::optional<tab_groups::TabGroupId> workspace =
+      model->GetFocusedGroup();
+  const bool empties_workspace =
+      workspace &&
+      static_cast<int>(to_close.size()) ==
+          model->group_model()->GetTabGroup(*workspace)->tab_count();
+  if (closes_selected || empties_workspace) {
+    chrome::AddTabAt(browser_view_->browser(), GURL(), to_close.back() + 1,
+                     /*foreground=*/closes_selected, workspace);
+  }
+  for (auto it = to_close.rbegin(); it != to_close.rend(); ++it) {
+    // Into the history, so Ctrl+Shift+T restores them.
+    model->CloseWebContentsAt(*it, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB |
+                                       TabCloseTypes::CLOSE_USER_GESTURE);
+  }
+  controller_->sidebar_tabs()->ShowTabsClosedToast();
   return true;
+}
+
+// static
+std::vector<int> KoanShortcutController::UnpinnedTabsForClear(
+    const TabStripModel* model) {
+  // Zen's Clear closes the space's unpinned tabs. With no workspace focused
+  // ("all tabs"), the tabs in workspaces belong to those, so it leaves them.
+  const std::optional<tab_groups::TabGroupId> workspace =
+      model->GetFocusedGroup();
+  std::vector<int> indices;
+  for (int i = 0; i < model->count(); ++i) {
+    if (!model->IsTabPinned(i) && model->GetTabGroupForTab(i) == workspace) {
+      indices.push_back(i);
+    }
+  }
+  return indices;
+}
+
+// static
+bool KoanShortcutController::IsClosableByClear(const TabStripModel* model,
+                                               int index) {
+  return !model->IsTabSelected(index) &&
+         !model->GetWebContentsAt(index)->IsCurrentlyAudible();
 }
 
 }  // namespace koan

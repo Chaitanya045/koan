@@ -1,0 +1,40 @@
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -61,6 +61,7 @@
+ #include "chrome/grit/generated_resources.h"
+ #include "components/tabs/public/tab_group.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+ #include "ui/base/dragdrop/os_exchange_data.h"
+ #include "ui/base/interaction/element_tracker.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -530,7 +531,8 @@
+   auto min_size = BaseTabStripRegionView::GetMinimumSize();
+   min_size.set_width((state_controller_->IsCollapsed() || IsAnimatingSize())
+                          ? tabs::kVerticalTabStripCollapsedWidth
+-                         : tabs::kVerticalTabStripUncollapsedMinWidth);
++                         : koan::SidebarMinWidth(
++                               tabs::kVerticalTabStripUncollapsedMinWidth));
+   return min_size;
+ }
+ 
+@@ -749,12 +751,16 @@
+ 
+   tabs::VerticalTabStripState new_state;
+   new_state.collapsed =
+-      proposed_width <= tabs::kVerticalTabStripCollapseSnapWidth;
++      proposed_width <=
++      koan::SidebarCollapseSnapWidth(tabs::kVerticalTabStripCollapseSnapWidth);
+   new_state.uncollapsed_width = target_collapse_state_.uncollapsed_width;
+   if (!new_state.collapsed) {
+     new_state.uncollapsed_width =
+-        std::clamp(proposed_width, tabs::kVerticalTabStripUncollapsedMinWidth,
+-                   tabs::kVerticalTabStripUncollapsedMaxWidth);
++        std::clamp(proposed_width,
++                   koan::SidebarMinWidth(
++                       tabs::kVerticalTabStripUncollapsedMinWidth),
++                   koan::SidebarMaxWidth(
++                       tabs::kVerticalTabStripUncollapsedMaxWidth));
+     if (std::abs(new_state.uncollapsed_width -
+                  tabs::kVerticalTabStripDefaultUncollapsedWidth) <
+         kSnapDistance) {

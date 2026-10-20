@@ -6,6 +6,7 @@
 # chrome/browser/ui/color/chrome_color_mixers.cc.
 source_set("color") {
   sources = [
+    "koan_color_id.h",
     "koan_color_mixer.cc",
     "koan_color_mixer.h",
   ]

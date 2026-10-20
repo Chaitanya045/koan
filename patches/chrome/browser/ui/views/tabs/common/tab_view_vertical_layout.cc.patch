@@ -1,0 +1,32 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
+@@ -14,6 +14,8 @@
+ #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
+ #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
+ #include "chrome/browser/ui/views/tabs/tab_style_views.h"
++#include "koan/browser/koan_features.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+ #include "ui/views/view_utils.h"
+ 
+ namespace {
+@@ -37,7 +39,8 @@
+                      /*align_leading=*/false,
+                      /*expand=*/false,
+                      /*decorate_on_collapse=*/true),
+-      TabChildConfig(TabView().icon_, kIconDesignWidth, kHorizontalInset,
++      TabChildConfig(TabView().icon_, kIconDesignWidth,
++                     koan::SidebarTabIconGap(kHorizontalInset),
+                      /*align_leading=*/true,
+                      /*expand=*/false),
+       TabChildConfig(TabView().title_, kTitleMinWidth, kDefaultPadding,
+@@ -186,7 +189,9 @@
+       return TabView().active_ && hovered_or_focused;
+     }
+ 
+-    return TabView().active_ || hovered_or_focused;
++    // Koan (Zen): only while hovered or focused, also on the active tab.
++    return (TabView().active_ && !koan::features::IsSidebarEnabled()) ||
++           hovered_or_focused;
+   }
+ 
+   NOTREACHED() << "Unknown tab child view";
