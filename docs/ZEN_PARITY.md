@@ -99,8 +99,8 @@ Details, measurements and the reasoning for each default: `PERFORMANCE.md`.
 | Restored tabs load when first opened | Same | Chromium loads 4 to 20 background tabs at startup; Koan loads only the visible one (`chrome://flags/#koan-restore-tabs-on-demand`). |
 | Tab unloading after inactivity (Firefox: on low memory only, off on Linux) | Different | Chromium's Memory Saver, on by default: tabs hidden for 4 h are discarded until opened (Settings > Performance). |
 | Unload Space / Unload all other Spaces (workspace menu) | Missing | Koan has no Space menu yet (#34); Memory Saver discards a Space's tabs once they've been hidden for 4 h. |
-| Background tabs throttled (Firefox timer budgets) | Different | Chromium's timer throttling, plus freezing of all but the 5 most recently used background tabs (`chrome://flags/#koan-freeze-background-tabs`). |
-| No energy saver | Different | Chromium's energy saver turns on whenever the system's power-saver profile is on. |
+| Background tabs throttled (Firefox timer budgets) | Different | Chromium's timer throttling, plus freezing of all but the 5 most recently used background tabs; pinned tabs (Essentials) and tabs that played audio are never frozen (`chrome://flags/#koan-freeze-background-tabs`). |
+| No energy saver | Same | Chromium's energy saver never turns on on Linux (no battery level provider), and Koan keeps that default. |
 
 ## Browser basics
 

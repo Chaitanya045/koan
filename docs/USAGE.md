@@ -167,11 +167,13 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   tabs playing audio and sites you exempt are kept. Change it, or add
   exceptions, in Settings > Performance.
 - **Background tabs freeze**: apart from the 5 tabs you used last, tabs in
-  the background stop running (they wake for a few seconds each minute)
-  unless they play audio, are in a call, use a device or show
-  notifications.
-- **Energy saver** turns on whenever your system's power-saver mode is on
-  (GNOME and KDE switch it on at low battery). Settings > Performance.
+  the background stop running (they wake for a few seconds each minute).
+  Pinned tabs never freeze, nor do tabs that played audio since you last
+  looked at them (so media keys still work), are in a call, use a device or
+  show notifications. Sites on Settings > Performance > "Always keep these
+  sites active" never freeze either.
+- **Energy saver** keeps Chromium's default, which never turns it on on
+  Linux (as in Zen, which has none).
 
 ## Turning things off
 
