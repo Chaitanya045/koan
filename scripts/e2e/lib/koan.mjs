@@ -156,6 +156,40 @@ export async function views() {
 
 export const shownViews = (vs, cls) => vs.filter(v => v.cls === cls && v.shown);
 
+// Clicks the first shown native view of class `cls` (UI DevTools; needs the
+// ui-debug-tools-enable-synthetic-events feature, which run.sh enables).
+export async function clickView(cls) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  let target = null;
+  const walk = async (n, shown) => {
+    if (target) return;
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'View' && a[a.indexOf('class') + 1]) {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const prop of rule.rule.style.cssProperties) {
+          if (prop.name === 'Visible' && prop.value === 'false') shown = false;
+        }
+      }
+      if (shown && a[a.indexOf('class') + 1] === cls) {
+        target = n;
+        return;
+      }
+    }
+    for (const c of n.children ?? []) await walk(c, shown);
+  };
+  await walk(doc, true);
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await ui.send('DOM.dispatchMouseEvent', { nodeId: target.nodeId,
+        event: { type, x: 10, y: 10, button: 'left', wheelDirection: 'none' } });
+  }
+  ui.close();
+  await sleep(500);
+}
+
 // Number of shown views of class `cls`.
 export async function countViews(cls) {
   return shownViews(await views(), cls).length;

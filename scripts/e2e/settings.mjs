@@ -171,6 +171,17 @@ check('...and a key without Ctrl, Alt or Win',
       await settingsCall(settings, 'setShortcut', 'mute', { key: VK.Q, modifiers: 0 }) ===
           false);
 
+// Tab switching keys can't be shortcuts (Koan's Ctrl+Tab settings use them).
+check('...and a tab switching key (Ctrl+Tab)',
+      await settingsCall(settings, 'setShortcut', 'mute', { key: VK.TAB, modifiers: 4 }) ===
+          false);
+await focus('mute');
+await key(settings, VK.TAB, CTRL, 'Tab');
+await key(settings, VK.ESC, 0, 'Escape');
+check('The editor refuses Ctrl+Tab, which switches tabs',
+      await note('mute') === 'Ctrl+Tab and Ctrl+Page Up/Down switch tabs' &&
+      await value('mute') === 'Ctrl+M', JSON.stringify(await note('mute')));
+
 // Tab leaves a field unchanged; leaving it otherwise warns, like Zen.
 await focus('mute');
 await key(settings, VK.Q, CTRL | ALT, 'q');
