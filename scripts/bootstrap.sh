@@ -4,18 +4,18 @@
 # the hooks. Works on Linux and macOS.
 #
 # Safe to re-run: depot_tools and .gclient are created only if missing, and
-# the sync is skipped when chromium/src is already at the pinned revision
-# with Koan's patches or branding applied (they would get in its way).
+# the sync is skipped when chromium/src is already at the pinned revision.
+# On macOS, run it with the folder's env.sh sourced (.agent/notes/mac.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/koan_platform.sh
 source "$ROOT/scripts/koan_platform.sh"
+koan_require_env
 export PATH="$ROOT/depot_tools:$PATH"
 export DEPOT_TOOLS_UPDATE=1
 
 OS="$(koan_os)"
-[[ $OS == mac ]] && koan_require_xcode
 
 VERSION="$(sed -n 1p "$ROOT/CHROMIUM_VERSION")"
 REV="$(sed -n 2p "$ROOT/CHROMIUM_VERSION")"
@@ -50,19 +50,15 @@ fi
 
 sync=1
 if [[ -d src/.git ]]; then
-  head="$(git -C src rev-parse HEAD)"
-  dirty="$(git -C src status --porcelain --untracked-files=no)"
-  if [[ -n $dirty ]]; then
-    if [[ $head == "$REV" ]]; then
-      echo "==> chromium/src is at $VERSION with local changes (Koan's patches"
-      echo "    or branding); skipping gclient sync"
-      sync=0
-    else
-      echo "chromium/src has local changes and is not at $REV." >&2
-      echo "Revert them first: scripts/apply_branding.sh --revert &&" \
-        "scripts/apply_patches.sh reverse" >&2
-      exit 1
-    fi
+  if [[ "$(git -C src rev-parse HEAD)" == "$REV" ]]; then
+    # Koan's patches or branding may be applied; leave them be.
+    echo "==> chromium/src is already at $VERSION; skipping gclient sync"
+    sync=0
+  elif [[ -n "$(git -C src status --porcelain --untracked-files=no)" ]]; then
+    echo "chromium/src has local changes and is not at $REV." >&2
+    echo "Revert them first: scripts/apply_branding.sh --revert &&" \
+      "scripts/apply_patches.sh reverse" >&2
+    exit 1
   fi
 fi
 

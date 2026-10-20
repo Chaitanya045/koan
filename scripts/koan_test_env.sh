@@ -6,6 +6,11 @@
 # Test profiles live on the big disk (not /tmp, which is a small tmpfs) and
 # are always removed on exit. Component updates are disabled so fresh
 # profiles don't download hundreds of MB of models.
+if [[ $(uname -s) != Linux ]]; then
+  # Headless Ozone (off-screen UI) exists only on Linux.
+  echo "Koan's off-screen test tools are Linux-only" >&2
+  exit 1
+fi
 KOAN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KOAN_CHROME="$KOAN_ROOT/chromium/src/out/Koan/chrome"
 KOAN_TEST_DIR="$KOAN_ROOT/.test-profiles"

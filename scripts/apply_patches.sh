@@ -16,6 +16,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/koan_platform.sh
+source "$ROOT/scripts/koan_platform.sh"
+koan_require_env
 SRC="$ROOT/chromium/src"
 PATCHES="$ROOT/patches"
 MODE="${1:-apply}"

@@ -7,6 +7,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=scripts/koan_platform.sh
+source "$ROOT/scripts/koan_platform.sh"
+koan_require_env
 COMMIT="$(sed -n 2p "$ROOT/CHROMIUM_VERSION")"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

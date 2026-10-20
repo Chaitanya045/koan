@@ -11,17 +11,20 @@
 # macOS (Apple Silicon):
 #   scripts/build.sh [target]                       build/koan-mac.gn (out/Koan)
 #
-#   One optimised build, Koan.app. Needs a full Xcode: DEVELOPER_DIR (default
-#   /Applications/Xcode.app/Contents/Developer) is used, not xcode-select.
+#   One optimised build, Koan.app. Run with the folder's env.sh sourced
+#   (KOAN_MAC; see .agent/notes/mac.md). Needs a full Xcode: DEVELOPER_DIR
+#   (default /Applications/Xcode.app/Contents/Developer), not xcode-select.
 #
-# JOBS defaults to 4 so a build fits next to other apps in 16 GB of RAM.
+# JOBS (parallel compile jobs) defaults to 2, 4 or 6 depending on the memory
+# available right now, so a build fits next to other apps in 16 GB of RAM.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/koan_platform.sh
 source "$ROOT/scripts/koan_platform.sh"
+koan_require_env
 export PATH="$ROOT/depot_tools:$PATH"
-JOBS="${JOBS:-4}"
+JOBS="${JOBS:-$(koan_default_jobs)}"
 TARGET="${1:-chrome}"
 OS="$(koan_os)"
 
@@ -31,7 +34,6 @@ if [[ $OS == mac ]]; then
     *) echo "on macOS, leave KOAN_CONFIG unset (build/koan-mac.gn)" >&2
        exit 2 ;;
   esac
-  koan_require_xcode
   echo "Xcode: $DEVELOPER_DIR"
 else
   case "${KOAN_CONFIG:-dev}" in
@@ -41,6 +43,7 @@ else
   esac
 fi
 
+echo "$JOBS compile jobs (set JOBS to change)"
 cd "$ROOT/chromium/src"
 mkdir -p "$OUT"
 cp "$ARGS" "$OUT/args.gn"
@@ -53,7 +56,7 @@ if [[ $TARGET == chrome ]]; then
     # (Koan once scripts/apply_branding.sh has run, Chromium before).
     name="$(sed -n 's/^PRODUCT_FULLNAME=//p' chrome/app/theme/chromium/BRANDING)"
     echo "built $PWD/$OUT/$name.app"
-    echo "run:  open \"$PWD/$OUT/$name.app\""
+    echo "test: scripts/run_mac.sh (profile inside \$KOAN_MAC)"
   else
     echo "built $PWD/$OUT/chrome"
   fi
