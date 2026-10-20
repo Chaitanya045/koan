@@ -12,6 +12,9 @@
 #
 # The test gets KOAN_CHROME_ARGS, Koan's command line without the URLs (one
 # argument per line), to restart Koan with the same profile.
+# scripts/e2e/<test>.flags, if it exists, adds browser flags too, one per
+# line; {dump} in them is a directory for frame dumps
+# (--ozone-dump-file={dump}), passed to the test as KOAN_DUMP_DIR.
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -51,7 +54,7 @@ cleanup() {
     sleep 0.5
   done
   # The test's result stands even if the profile can't be removed.
-  koan_rm "$prof" "$prof.log" || echo "run.sh: couldn't remove $prof" >&2
+  koan_rm "$prof" "$prof.log" "$prof.dump" || echo "run.sh: couldn't remove $prof" >&2
 }
 trap cleanup EXIT
 prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
@@ -65,7 +68,16 @@ script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
 # A second --enable-features would replace the first, so merge them.
 features=ui-debug-tools-enable-synthetic-events
 extra=()
-for flag in ${KOAN_FLAGS:-}; do
+file_flags=()
+if [[ -f $KOAN_ROOT/scripts/e2e/$test_name.flags ]]; then
+  export KOAN_DUMP_DIR="$prof.dump"
+  mkdir -p "$KOAN_DUMP_DIR"
+  while IFS= read -r flag; do
+    [[ -z $flag || $flag == \#* ]] && continue
+    file_flags+=("${flag//\{dump\}/"$KOAN_DUMP_DIR"}")
+  done <"$KOAN_ROOT/scripts/e2e/$test_name.flags"
+fi
+for flag in ${KOAN_FLAGS:-} "${file_flags[@]}"; do
   case $flag in
     --enable-features=*) features+=",${flag#--enable-features=}" ;;
     *) extra+=("$flag") ;;

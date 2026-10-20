@@ -45,6 +45,25 @@
   `//koan/browser:features` (component build), so a Koan feature must only
   be read in one process type (browser *or* renderer) unless the target is
   made a proper exported component.
+- **The Glance settings reach blink on the command line** (#37):
+  Zen's `zen.glance.enabled` and `zen.glance.activation-method` are the
+  profile prefs `koan.glance.enabled` / `koan.glance.activation_method`
+  (settings rows). Blink decides the click's disposition, so it needs the
+  method: `koan::AppendRendererSwitches` (hook in
+  `ChromeContentBrowserClient::AppendExtraCommandLineSwitches`) passes it
+  (or "off") to each renderer. A change reaches renderer processes started
+  afterwards (the settings row says so). Live updates would need a
+  `blink::RendererPreferences` field (mojom + traits, a widely included
+  header); a feature parameter (the first version) can't be a setting. The
+  browser side reads the prefs live: a click Glance declines (Glance off,
+  not a web link, not the active tab of a normal window) is reopened with
+  what its modifier means without Glance, so a stale renderer or an odd
+  link never gets a bare popup window. The blink hook runs before upstream's
+  Ctrl (new tab) and plain-click branches.
+- **Koan context menu commands use their own ids** (#37): 55000 for the
+  link menu ("Open Link in Glance", handled before upstream's metrics,
+  which NOTREACHED on unknown ids), 3001 for the tab menu ("Split Out
+  Tab", handled before TabStripModel's command switches).
 - **Floating URL bar = the real toolbar, narrowed** (#22): while the
   omnibox has focus in single toolbar / compact mode, the top container
   (already in the overlay view) is re-laid out as a centred card and every
