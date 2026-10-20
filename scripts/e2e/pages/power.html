@@ -3,7 +3,9 @@
      ?busy: a dedicated worker does 20 ms of work every 100 ms (like a busy
      web app; worker timers aren't throttled in background tabs, so only
      freezing stops them); `maxGap` is the longest pause between its ticks.
-     ?title: the title changes 4 times a second (like a chat app's unread
+     ?burn: the page itself also works for 150 ms every 500 ms (once a
+     second in the background, where timers are throttled), so Chromium
+     counts it as a busy page. ?title: the title changes 4 times a second (like a chat app's unread
      count or a timer in the title). ?count=<id>: counts this page's loads
      in localStorage["loads:<id>"]. -->
 <meta charset="utf-8">
@@ -29,6 +31,12 @@ if (params.has('busy')) {
     last = now;
     window.workerTicks++;
   };
+}
+if (params.has('burn')) {
+  setInterval(() => {
+    const end = performance.now() + 150;
+    while (performance.now() < end) {}
+  }, 500);
 }
 if (params.has('title')) {
   let n = 0;

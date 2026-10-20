@@ -270,17 +270,28 @@ const switchOff = await setKoanPref('performance_tuning.tab_freezing.enabled', f
 const home2 = (await pageTargets(CDP_PORT)).find(byUrl('count=r1')) ??
     (await pageTargets(CDP_PORT))[0];
 const pinned2 = (await browser.send('Target.createTarget',
-                                    { url: `${pages.origin}/power.html?busy&pinned2` }))
+                                    { url: `${pages.origin}/power.html?busy&burn&pinned2` }))
     .result.targetId;
 await sleep(2000);
 await key(CDP_PORT, 68, CTRL | SHIFT, byId(pinned2));  // Ctrl+Shift+D: pin
 await sleep(1000);
 await browser.send('Target.activateTarget', { targetId: home2.id });
 const busy2 = (await browser.send('Target.createTarget',
-                                  { url: `${pages.origin}/power.html?busy&unpinned2`,
+                                  { url: `${pages.origin}/power.html?busy&burn&unpinned2`,
                                     background: true })).result.targetId;
-// Chromium measures CPU once a minute; give it two measurements.
-await sleep(130000);
+// Chromium measures CPU once a minute and freezes after a measurement;
+// wait up to two and a half minutes for the busy tab to stop answering.
+const waitStart = Date.now();
+let answered = true;
+while (answered && Date.now() - waitStart < 150000) {
+  await sleep(10000);
+  const page = (await pageTargets(CDP_PORT)).find(byId(busy2));
+  const probe = await connect(page.webSocketDebuggerUrl);
+  const r = await probe.send('Runtime.evaluate', { expression: 'workerTicks' }, undefined, 3000);
+  probe.close();
+  answered = !r.timedOut;
+}
+const frozeAfter = answered ? 'never' : `${Math.round((Date.now() - waitStart) / 1000)} s`;
 const pauseOf = async id => {
   await browser.send('Target.activateTarget', { targetId: id });
   await sleep(500);
@@ -294,7 +305,7 @@ await setChromePref('performance_tuning.battery_saver_mode.state', 1);
 await setKoanPref('performance_tuning.tab_freezing.enabled', true);
 check('Energy saver freezes a busy background tab', busyGap > 3000,
       `energy saver on: ${energySaverOn}, freeze switch off: ${switchOff}; ` +
-      `longest pause ${busyGap} ms`);
+      `stopped answering after ${frozeAfter}; longest pause ${busyGap} ms`);
 check('...but never a pinned one', pinnedGap2 >= 0 && pinnedGap2 < 3000,
       `longest pause ${pinnedGap2} ms`);
 
