@@ -1,16 +1,41 @@
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index bb705dccfe5d2a94be68f28a088751486b550f87..5c0ce6825b6578dc582773fe2fb3d893f9f7d62f 100644
+index bb705dccfe5d2a94be68f28a088751486b550f87..1b8c9f6849e6e5a16cbb07df65cc06097aaf6ddb 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -117,6 +117,7 @@
+@@ -117,6 +117,8 @@
  #include "content/public/browser/render_widget_host_view.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/common/url_constants.h"
 +#include "koan/browser/koan_tab_hooks.h"
++#include "koan/browser/ui/views/koan_split_view.h"
  #include "media/base/media_switches.h"
  #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
  #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
-@@ -5966,6 +5967,16 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
+@@ -2687,6 +2689,11 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+     return false;
+   }
+ 
++  // Koan: Zen's "Split Out Tab" (koan/browser/ui/views/koan_split_view.h).
++  if (koan::IsSplitOutTabCommand(command_id)) {
++    return koan::CanSplitOutTab(this, context_index);
++  }
++
+   switch (command_id) {
+     case CommandNewTabToRight:
+     case CommandCloseTab:
+@@ -2831,6 +2838,11 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+   if (!ContainsIndex(context_index)) {
+     return;
+   }
++  // Koan: Zen's "Split Out Tab" (koan/browser/ui/views/koan_split_view.h).
++  if (koan::IsSplitOutTabCommand(command_id)) {
++    koan::SplitOutTab(this, context_index);
++    return;
++  }
+   switch (command_id) {
+     case CommandNewTabToRight: {
+       base::UmaHistogramCounts1000(
+@@ -5966,6 +5978,16 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
        }
      }
  

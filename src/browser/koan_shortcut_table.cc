@@ -17,6 +17,8 @@ namespace koan::shortcuts {
 namespace {
 
 constexpr int kCtrl = ui::EF_CONTROL_DOWN;
+// Zen's "accel": Cmd on macOS, Ctrl elsewhere.
+constexpr int kAccel = ui::EF_PLATFORM_ACCELERATOR;
 constexpr int kAlt = ui::EF_ALT_DOWN;
 constexpr int kShift = ui::EF_SHIFT_DOWN;
 constexpr int kModifiers = kCtrl | kAlt | kShift | ui::EF_COMMAND_DOWN;
@@ -117,20 +119,21 @@ std::vector<Binding> DefaultBindings() {
       // Zen: workspaces.
       bind(ui::VKEY_RIGHT, kCtrl | kAlt, Action::kWorkspaceForward),
       bind(ui::VKEY_LEFT, kCtrl | kAlt, Action::kWorkspaceBackward),
-      // Zen: split view.
-      bind(ui::VKEY_G, kCtrl | kAlt, Action::kSplitGrid),
-      bind(ui::VKEY_V, kCtrl | kAlt, Action::kSplitVertical),
-      bind(ui::VKEY_H, kCtrl | kAlt, Action::kSplitHorizontal),
-      bind(ui::VKEY_U, kCtrl | kAlt, Action::kUnsplit),
+      // Zen: split view (Accel+Alt).
+      bind(ui::VKEY_G, kAccel | kAlt, Action::kSplitGrid),
+      bind(ui::VKEY_V, kAccel | kAlt, Action::kSplitVertical),
+      bind(ui::VKEY_H, kAccel | kAlt, Action::kSplitHorizontal),
+      bind(ui::VKEY_U, kAccel | kAlt, Action::kUnsplit),
       // Ctrl+Shift+* : "*" is Shift+8 on most layouts, or the keypad key.
-      bind(ui::VKEY_8, kCtrl | kShift, Action::kNewEmptySplit),
-      bind(ui::VKEY_MULTIPLY, kCtrl | kShift, Action::kNewEmptySplit),
+      bind(ui::VKEY_8, kAccel | kShift, Action::kNewEmptySplit),
+      bind(ui::VKEY_MULTIPLY, kAccel | kShift, Action::kNewEmptySplit),
       // Zen: tabs and pages.
       bind(ui::VKEY_C, kCtrl | kShift, Action::kCopyUrl),
       bind(ui::VKEY_C, kCtrl | kShift | kAlt, Action::kCopyUrlMarkdown),
       bind(ui::VKEY_D, kCtrl | kShift, Action::kTogglePinTab),
       bind(ui::VKEY_K, kCtrl | kShift, Action::kCloseUnpinnedTabs),
-      bind(ui::VKEY_O, kCtrl, Action::kGlanceExpand),
+      // Zen: Accel+O while Glance is open.
+      bind(ui::VKEY_O, kAccel, Action::kGlanceExpand),
       bind(ui::VKEY_L, kAlt | kShift, Action::kLibrary),
       // Zen moves the inspector off Ctrl+Shift+C.
       bind(ui::VKEY_L, kCtrl | kShift, Action::kInspect),
