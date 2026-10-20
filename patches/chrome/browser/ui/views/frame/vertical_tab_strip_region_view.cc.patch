@@ -8,7 +8,19 @@
  #include "ui/base/dragdrop/os_exchange_data.h"
  #include "ui/base/interaction/element_tracker.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -530,7 +531,8 @@
+@@ -205,6 +206,11 @@
+   resize_area_->GetViewAccessibility().SetRole(ax::mojom::Role::kSlider);
+ 
+   state_controller_->SetDelegate(this);
++  // Koan: a width saved with the other sidebar's limits (Koan's on or off).
++  state_controller_->SetUncollapsedWidth(std::clamp(
++      state_controller_->GetUncollapsedWidth(),
++      koan::SidebarMinWidth(tabs::kVerticalTabStripUncollapsedMinWidth),
++      koan::SidebarMaxWidth(tabs::kVerticalTabStripUncollapsedMaxWidth)));
+   target_collapse_state_ = state_controller_->GetState();
+   OnCollapseStateChanged(state_controller_->GetCollapseState());
+   collapsed_state_changed_subscription_ =
+@@ -530,7 +536,8 @@
    auto min_size = BaseTabStripRegionView::GetMinimumSize();
    min_size.set_width((state_controller_->IsCollapsed() || IsAnimatingSize())
                           ? tabs::kVerticalTabStripCollapsedWidth
@@ -18,7 +30,7 @@
    return min_size;
  }
  
-@@ -749,12 +751,16 @@
+@@ -749,12 +756,16 @@
  
    tabs::VerticalTabStripState new_state;
    new_state.collapsed =

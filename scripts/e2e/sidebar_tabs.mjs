@@ -308,16 +308,25 @@ check('Clear in a workspace keeps the workspace',
       workspaceButtons(vs).length === spaces && left.length === 1,
       `${spaces} -> ${workspaceButtons(vs).length} switcher buttons, ${left.length} tab(s) left`);
 
-// In the "all tabs" view, Clear leaves the workspaces' tabs alone.
+// In the "all tabs" view, Clear closes the tabs in no workspace and leaves
+// the workspaces' tabs alone. With an Essential selected it closes them all.
 await key(VK.LEFT, CTRL | ALT);
-const button = find(await views(), 'KoanClearButton');
-if (button?.shown) {
-  await click(button);
-}
+await click(find(await views(), 'KoanNewTabRow'));
 vs = await views();
-check('Clear in the all-tabs view keeps every workspace',
-      workspaceButtons(vs).length === spaces,
-      `${spaces} -> ${workspaceButtons(vs).length} switcher buttons`);
+await click(inContainer(vs, 'TabView', 'PinnedTabContainerView')[0]);
+const button = find(await views(), 'KoanClearButton');
+check('In the all-tabs view, Clear shows with tabs in no workspace',
+      button?.shown === true, JSON.stringify(button && { shown: button.shown }));
+await click(button);
+const allToast = await sizeOf('KoanToastView');
+vs = await views();
+check('...closes them (the toast shows) and keeps every workspace',
+      allToast?.visible && workspaceButtons(vs).length === spaces,
+      `toast ${JSON.stringify(allToast)}, ${spaces} -> ${workspaceButtons(vs).length} switcher buttons`);
+clear = find(vs, 'KoanClearTabsRow');
+check('...and keeps the line above the workspaces\' tabs, without Clear',
+      clear?.shown && !find(vs, 'KoanClearButton')?.shown,
+      JSON.stringify({ row: clear?.shown, button: find(vs, 'KoanClearButton')?.shown }));
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);

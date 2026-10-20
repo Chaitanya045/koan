@@ -24,7 +24,7 @@ Chrome.
 | Copy the page's URL | Ctrl+Shift+C | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
 | Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
-| Close all unpinned tabs (in the workspace; keeps the selected one; Ctrl+Shift+T undoes) | Ctrl+Shift+K | |
+| Close all unpinned tabs (in the workspace; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
 | Expand Glance to a tab | Ctrl+O while Glance is open | Open file (still, otherwise) |
 | Glance a link | Alt+click | (Alt+click downloaded the link) |
 | Close Glance | Esc, or click the dimmed page | |
@@ -84,8 +84,9 @@ While the pointer is over the sidebar, **↓ Clear** appears at the end of
 the line: it closes the workspace's unpinned tabs except the selected one
 and any playing sound (if those are all there is, it closes them too), the
 same as Ctrl+Shift+K. The workspace stays (an emptied one gets a fresh
-tab), and a toast reminds you that Ctrl+Shift+T brings the tabs back. In
-the **∞** view Clear only closes tabs that are in no workspace.
+tab), and a toast reminds you that Ctrl+Shift+T reopens them, the last
+closed tab first, one per press. In the **∞** view Clear only closes tabs
+that are in no workspace (the line stays while workspace tabs are listed).
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). The
 workspace switcher is at the bottom of the sidebar: **∞** shows all tabs,
