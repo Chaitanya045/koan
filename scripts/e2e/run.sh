@@ -38,9 +38,15 @@ pid=
 cleanup() {
   [[ -n $pid ]] && kill "$pid" 2>/dev/null
   wait "$pid" 2>/dev/null || true
-  # A test may have restarted Koan on the same profile.
+  # A test may have restarted Koan on the same profile; let it finish
+  # writing there before the profile goes.
   pkill -f -- "--user-data-dir=$prof" 2>/dev/null || true
-  koan_rm "$prof" "$prof.log"
+  for _ in $(seq 1 20); do
+    pgrep -f -- "--user-data-dir=$prof" >/dev/null || break
+    sleep 0.5
+  done
+  # The test's result stands even if the profile can't be removed.
+  koan_rm "$prof" "$prof.log" || echo "run.sh: couldn't remove $prof" >&2
 }
 trap cleanup EXIT
 prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
