@@ -35,9 +35,14 @@ chrome="$KOAN_ROOT/chromium/src/${KOAN_OUT:-out/Koan}/chrome"
 export UI_PORT=${UI_PORT:-9600} CDP_PORT=${CDP_PORT:-9601}
 prof=$(koan_new_profile)
 pid=
+# Every step tolerates failure: with set -e, one failing command (e.g.
+# killing a browser the test already closed) would end the cleanup early and
+# turn a passing test into a failure.
 cleanup() {
-  [[ -n $pid ]] && kill "$pid" 2>/dev/null
-  wait "$pid" 2>/dev/null || true
+  if [[ -n $pid ]]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
   # A test may have restarted Koan on the same profile; let it finish
   # writing there before the profile goes.
   pkill -f -- "--user-data-dir=$prof" 2>/dev/null || true
