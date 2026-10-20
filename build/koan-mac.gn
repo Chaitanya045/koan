@@ -1,0 +1,27 @@
+# GN args for Koan on macOS: the maintainer's daily-driver build on an
+# Apple Silicon MacBook Air (M4, 16 GB RAM, 256 GB SSD; macOS 27, Xcode 27.1).
+# scripts/build.sh picks this file on macOS and builds out/Koan/Koan.app.
+#
+# Optimised, one binary (no component build), no DCHECKs, and no debug
+# symbols, which keeps out/Koan small on a 256 GB disk.
+#
+# Not enabled yet: is_official_build. Official builds add ThinLTO and PGO
+# (with Chromium's mac-arm64 profiles), which make the browser faster but
+# take far longer to link and need much more memory. They may come later,
+# once this plain build is known to work (issue #51).
+#
+# Only args that apply to macOS: no use_sysroot (a Linux sysroot).
+target_cpu = "arm64"
+is_debug = false
+is_official_build = false
+# Chromium turns DCHECKs on by default in non-official builds.
+dcheck_always_on = false
+is_component_build = false
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+# Ship stable feature defaults, not Chromium's experiment config (which, for
+# example, turns on the WebUI toolbar).
+disable_fieldtrial_testing_config = true

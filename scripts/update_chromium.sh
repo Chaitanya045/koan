@@ -41,7 +41,7 @@ fi
 
 # Pin the new revision for CI (scripts/ci/check_patches.sh) and reviewers.
 (cd "$SRC" && printf '%s\n%s\n' \
-  "$(sed -n 's/^MAJOR=//p;s/^MINOR=//p;s/^BUILD=//p;s/^PATCH=//p' chrome/VERSION | paste -sd.)" \
+  "$(sed -n 's/^MAJOR=//p;s/^MINOR=//p;s/^BUILD=//p;s/^PATCH=//p' chrome/VERSION | paste -sd. -)" \
   "$(git rev-parse HEAD)") > "$ROOT/CHROMIUM_VERSION"
 
 if ! "$ROOT/scripts/apply_patches.sh" apply; then
