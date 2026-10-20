@@ -37,9 +37,9 @@ prof=$(koan_new_profile)
 pid=
 cleanup() {
   [[ -n $pid ]] && kill "$pid" 2>/dev/null
-  wait "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null || true
   # A test may have restarted Koan on the same profile.
-  pkill -f -- "--user-data-dir=$prof" 2>/dev/null
+  pkill -f -- "--user-data-dir=$prof" 2>/dev/null || true
   koan_rm "$prof" "$prof.log"
 }
 trap cleanup EXIT
