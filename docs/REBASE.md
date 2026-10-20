@@ -5,7 +5,10 @@ moving to a new revision is mechanical:
 
 - All Koan code lives in `src/` (seen by GN as `//koan`).
 - Upstream files carry one-to-a-few-line **hook patches**, one file per
-  patched upstream file in `patches/`. Each calls into `//koan`.
+  patched upstream file in `patches/`. Each calls into `//koan`, except the
+  freezing exemptions in `components/performance_manager` (a component
+  can't depend on `//koan`), which carry their logic in the patch; see the
+  table.
 - Bulk branding (product name strings, `BRANDING`, logos) is applied by
   `scripts/apply_branding.sh` rather than stored as patches.
 - Upstream feature defaults Koan relies on are set in one place,
@@ -50,7 +53,7 @@ assumes:
 | Colour mixer | `chrome/browser/ui/color/chrome_color_mixers.cc` | Koan mixer still runs after Chrome's, before custom themes |
 | Feature defaults | `chrome/browser/chrome_browser_field_trials.cc` | `RegisterFeatureOverrides` still exists; `kTabGroupsFocusing` still the focus-mode switch; `kInfiniteTabsFreezing` still exists (Koan turns it on; an upstream launch or removal needs `docs/PERFORMANCE.md` updated) |
 | Power defaults | `chrome/browser/prefs/browser_prefs.cc` (`RegisterLocalState`) | Koan's call still comes after `performance_manager::user_tuning::prefs::RegisterLocalStatePrefs` (it changes defaults of prefs registered there) |
-| Freezing exemptions | `components/performance_manager/freezing/freezing_policy.{h,cc}`, `.../public/freezing/cannot_freeze_reason.h`, `.../freezing/cannot_freeze_reason.cc` | `CannotFreezeReasonsForType()` still decides which reasons block which freezing type; `FreezingPolicy` is still a `PageLiveStateObserver` (pinned state) and still sees `OnIsVisibleChanged` / `OnIsAudibleChanged` |
+| Freezing exemptions | `components/performance_manager/freezing/freezing_policy.{h,cc}`, `.../public/freezing/cannot_freeze_reason.h`, `.../freezing/cannot_freeze_reason.cc` | **Not a call into `//koan`** (a component can't depend on `//koan/browser`): these four patches carry logic (two enum values, a timer, ~30 lines) and must be re-ported by hand when they conflict. Check that `CannotFreezeReasonsForType()` still decides which reasons block which freezing type, that `FreezingPolicy` is still a `PageLiveStateObserver` (pinned state) and still sees `OnIsAudibleChanged` / `OnMainFrameDocumentChanged`, and that `CannotFreezeReason` is still not recorded in a histogram, UKM or mojom enum (Koan's values, appended at the end, would be out of range) |
 | Restore tabs on demand | `chrome/browser/performance_manager/policies/background_tab_loading_policy.cc` (ctor) | `min_tabs_to_load_` / `max_tabs_to_load_` still gate restored-tab loads in `ShouldLoad()`, and a restored tab still loads when shown |
 | Prefs | `chrome/browser/ui/tabs/tab_strip_prefs.cc` | vertical-tabs pref name and registration |
 | Startup, infobar, paths, desktop id | `session_startup_pref.cc`, `infobar_utils.cc`, `chrome_paths_linux.cc`, `chrome_paths_mac.mm`, `channel_info_posix.cc`, `shell_integration_linux.cc` | one-line value swaps |

@@ -41,12 +41,18 @@ default of `performance_tuning.high_efficiency_mode.state` (a hook in
 ### Energy saver: Chromium's default
 
 Energy saver caps frame rates, throttles background work harder and freezes
-CPU-heavy background tabs. On a Mac with a battery, Chromium turns it on
-below 20 % battery, and Settings > Performance > Energy saver lets you
-change that to "when unplugged" or turn it off; while it is on, a leaf
-button in the toolbar says so. Koan keeps that default: "when unplugged"
+CPU-heavy background tabs (outright, without infinite-tabs freezing's 5 s
+each minute; never pinned tabs or tabs that played audio in the last hour,
+see below). On a Mac with a battery, Chromium turns it on below 20 %
+battery, and Settings > Performance > Energy saver lets you change that to
+"when unplugged" or turn it off. Koan keeps that default: "when unplugged"
 would cap animations at 30 fps whenever the MacBook is on battery, which
 changes how Koan looks and feels, and Zen has no energy saver at all.
+
+Chromium shows that energy saver is on with a leaf button in the toolbar.
+Koan's default layout (single toolbar) keeps that toolbar out of the
+window, so there is no sign of it there (it shows in the multiple-toolbars
+layout). A sidebar indicator is a follow-up.
 
 (On the Linux test machine energy saver never turns on: Chromium has no
 battery level provider there, and Settings hides the section.)
@@ -63,8 +69,13 @@ freezing).
 Never frozen:
 - pinned tabs (Koan's Essentials), e.g. a chat app without notification
   permission;
-- tabs that played audio since they were last shown, so a paused player
-  still answers media keys (upstream only protects audio for 5 minutes);
+- tabs that played audio in the last hour, so a paused player still
+  answers media keys (upstream only protects audio for 5 minutes). Exactly:
+  the protection starts when the tab first makes a sound, lasts while it
+  plays and for 1 hour after the sound stops, and ends early when the tab
+  loads a new document (another page, or a reload); same-document
+  navigation, such as a music site moving to the next track, keeps it.
+  Showing the tab doesn't change it;
 - tabs that capture, use WebRTC, USB/Bluetooth/HID/serial devices, hold Web
   Locks or IndexedDB locks, have notification permission or are loading;
 - sites on Settings > Performance > "Always keep these sites active" (the
@@ -72,20 +83,25 @@ Never frozen:
   `kFreezingFollowsDiscardOptOut`).
 
 The first two are Koan's: upstream has no such exemptions. They are a hook in
-`freezing_policy.cc` (two `CannotFreezeReason`s that only block this kind of
-freezing; Chromium's battery-saver freezing is unchanged).
+`freezing_policy.cc`: two `CannotFreezeReason`s that block infinite-tabs
+freezing and energy saver's freezing alike (only the freezing that pages
+vote for themselves ignores them).
 
 Upstream also discards a frozen tab whose memory grows by more than 100 MB,
 whatever the Memory Saver setting. Koan turns that off
 (`kDiscardFrozenBrowsingInstancesWithGrowingPMF`), so Memory Saver remains
-the one switch for discarding tabs.
+the one switch for discarding tabs, and with it the once-a-minute memory
+measurement that only fed it (`kMemoryMeasurementInFreezingPolicy`). The
+once-a-minute CPU measurement stays: energy saver's freezing needs it.
 
 Freezing is an upstream experiment, off by default in Chromium; Koan turns
 it on (`koan_feature_overrides.cc`). Users turn it off in Koan's settings
 (`chrome://koan-settings`, Tab Management > Performance > "Freeze background
 tabs"), which sets Chromium's own `performance_tuning.tab_freezing.enabled`
 (local state; the `BackgroundTabFreezingEnabled` enterprise policy can
-manage it). `chrome://flags/#koan-freeze-background-tabs` removes the
+manage it, and the row is then greyed out, "Set by your organization").
+The switch only covers infinite-tabs freezing; energy saver's freezing
+follows energy saver. `chrome://flags/#koan-freeze-background-tabs` removes the
 feature altogether. Zen has nothing like it: Firefox only throttles
 background timers.
 
@@ -203,3 +219,10 @@ Chrome for reference), the maintainer still has to measure:
   pointer leaves the window. On the Mac, Koan sees that through the window's
   mouse-exited event (`views::EventMonitor` uses an NSEvent local monitor);
   the Linux tests can't check it.
+- The same, with an open Glance card: on macOS the card is a child window
+  of its own, and the monitor only sees events for the browser window.
+  Moving from a revealed toolbar or a peeked sidebar straight onto the card
+  must still hide them (it relies on the browser window's mouse-exited
+  event).
+- Energy saver's freezing on battery: a busy pinned tab (Essential) and a
+  paused player keep running below 20 %.

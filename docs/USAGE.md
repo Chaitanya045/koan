@@ -169,9 +169,9 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   exceptions, in Settings > Performance.
 - **Background tabs freeze**: apart from the 5 tabs you used last, tabs in
   the background stop running (they wake for a few seconds each minute).
-  Pinned tabs never freeze, nor do tabs that played audio since you last
-  looked at them (so media keys still work), are in a call, use a device or
-  show notifications. Sites on Settings > Performance > "Always keep these
+  Pinned tabs never freeze, nor do tabs that played audio in the last hour
+  (so media keys still work), are in a call, use a device or show
+  notifications; that holds under energy saver too. Sites on Settings > Performance > "Always keep these
   sites active" never freeze either. Turn freezing off in Koan's settings
   (`chrome://koan-settings`, Tab Management > Performance).
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
