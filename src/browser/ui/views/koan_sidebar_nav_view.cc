@@ -11,7 +11,9 @@
 
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -19,24 +21,33 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_specification.h"
+#include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
+#include "chrome/common/webui_url_constants.h"
+#include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
+#include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/base/models/image_model.h"
-#include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/proposed_layout.h"
-#include "ui/views/view_class_properties.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -48,12 +59,20 @@ constexpr int kPillHeight = 36;
 constexpr int kPadding = 12;
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
+// The pill's icon buttons (Zen's urlbar page-action size).
+constexpr int kPillButtonSize = 26;
+constexpr int kPillIconSize = 16;
 
 std::u16string DisplayUrl(content::WebContents* contents) {
   if (!contents) {
     return std::u16string();
   }
   const GURL& url = contents->GetVisibleURL();
+  // An empty tab shows Zen's placeholder.
+  if (url.is_empty() || url.IsAboutBlank() ||
+      url == GURL(chrome::kChromeUINewTabURL)) {
+    return std::u16string();
+  }
   if (url.SchemeIsHTTPOrHTTPS() && url.has_host()) {
     // Zen shows just the site in the sidebar.
     return base::UTF8ToUTF16(url_formatter::StripWWW(std::string(url.host())));
@@ -165,6 +184,40 @@ void KoanSidebarNavButtons::EnabledStateChangedForCommand(int id,
 BEGIN_METADATA(KoanSidebarNavButtons)
 END_METADATA
 
+// The URL pill. Pressing it (anywhere but its buttons) edits the address;
+// hovering it (or its buttons) shows the copy button.
+class KoanUrlPill : public views::View {
+  METADATA_HEADER(KoanUrlPill, views::View)
+
+ public:
+  KoanUrlPill(base::RepeatingClosure on_press,
+              base::RepeatingCallback<void(bool)> on_hover)
+      : on_press_(std::move(on_press)), on_hover_(std::move(on_hover)) {
+    SetNotifyEnterExitOnChild(true);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+    GetViewAccessibility().SetName(u"Search or enter address");
+  }
+
+  // views::View:
+  void OnMouseEntered(const ui::MouseEvent& event) override {
+    on_hover_.Run(true);
+  }
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    on_hover_.Run(false);
+  }
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    on_press_.Run();
+    return true;
+  }
+
+ private:
+  base::RepeatingClosure on_press_;
+  base::RepeatingCallback<void(bool)> on_hover_;
+};
+
+BEGIN_METADATA(KoanUrlPill)
+END_METADATA
+
 KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
     : browser_view_(browser_view) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -173,17 +226,59 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
 
-  url_pill_ =
-      AddChildView(std::make_unique<views::LabelButton>(base::BindRepeating(
-          &KoanSidebarNavView::FocusOmnibox, base::Unretained(this))));
-  url_pill_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  url_pill_->SetPreferredSize(gfx::Size(0, kPillHeight));
-  url_pill_->SetBackground(views::CreateRoundedRectBackground(
-      kColorTabBackgroundActiveFrameActive, kPillHeight / 4));
-  url_pill_->SetElideBehavior(gfx::ELIDE_TAIL);
-  url_pill_->SetImageLabelSpacing(10);
-  url_pill_->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 10)));
-  url_pill_->SetTooltipText(u"Search or enter address (Ctrl+L)");
+  // Zen's single-toolbar URL bar: the site's name, then the copy-URL button
+  // (on hover) and the site panel button at the end.
+  auto pill = std::make_unique<KoanUrlPill>(
+      base::BindRepeating(&KoanSidebarNavView::FocusOmnibox,
+                          base::Unretained(this)),
+      base::BindRepeating(&KoanSidebarNavView::OnPillHovered,
+                          base::Unretained(this)));
+  auto* pill_layout = pill->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal,
+      gfx::Insets::TLBR(0, 12, 0, 5), /*between_child_spacing=*/2));
+  pill_layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  pill->SetPreferredSize(gfx::Size(0, kPillHeight));
+  pill->SetBackground(views::CreateRoundedRectBackground(kColorKoanUrlPill,
+                                                         kUrlPillCornerRadius));
+#if BUILDFLAG(IS_MAC)
+  pill->SetTooltipText(u"Search or enter address (\u2318L)");
+#else
+  pill->SetTooltipText(u"Search or enter address (Ctrl+L)");
+#endif
+  url_pill_ = AddChildView(std::move(pill));
+
+  url_label_ = url_pill_->AddChildView(std::make_unique<views::Label>());
+  url_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  url_label_->SetElideBehavior(gfx::ELIDE_TAIL);
+  url_label_->SetFontList(
+      url_label_->font_list().DeriveWithWeight(gfx::Font::Weight::MEDIUM));
+  url_label_->SetCanProcessEventsWithinSubtree(false);
+  pill_layout->SetFlexForView(url_label_, 1);
+
+  const auto pill_button = [&](views::Button::PressedCallback callback,
+                               const gfx::VectorIcon& icon,
+                               std::u16string name) {
+    auto button = views::CreateVectorImageButtonWithNativeTheme(
+        std::move(callback), icon, kPillIconSize);
+    button->SetTooltipText(name);
+    button->GetViewAccessibility().SetName(name);
+    button->SetPreferredSize(gfx::Size(kPillButtonSize, kPillButtonSize));
+    return url_pill_->AddChildView(std::move(button));
+  };
+  // Zen's #zen-copy-url-button ("Copy URL"), confirmed with Zen's toast.
+  copy_button_ =
+      pill_button(base::BindRepeating(&CopyCurrentUrl,
+                                      base::Unretained(browser_view_.get()),
+                                      /*markdown=*/false),
+                  vector_icons::kContentCopyIcon, u"Copy URL");
+  copy_button_->SetVisible(false);
+  // Zen's site panel button (#zen-site-data-icon-button): Chromium's page
+  // info for the site (security, permissions, cookies, site settings).
+  site_button_ =
+      pill_button(base::BindRepeating(&KoanSidebarNavView::ShowSitePanel,
+                                      base::Unretained(this)),
+                  vector_icons::kTuneIcon, u"Site information");
 
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
   ObserveActiveTab();
@@ -191,6 +286,11 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
 
 KoanSidebarNavView::~KoanSidebarNavView() {
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
+}
+
+void KoanSidebarNavView::OnPillHovered(bool hovered) {
+  hovered_ = hovered;
+  UpdateUrl();
 }
 
 void KoanSidebarNavView::SetEditing(bool editing) {
@@ -225,28 +325,20 @@ void KoanSidebarNavView::ObserveActiveTab() {
 }
 
 void KoanSidebarNavView::UpdateUrl() {
-  if (editing_) {
-    url_pill_->SetText(std::u16string());
-    url_pill_->SetImageModel(views::Button::STATE_NORMAL, ui::ImageModel());
-    return;
-  }
-  tabs::TabInterface* tab =
-      browser_view_->browser()->GetTabStripModel()->GetActiveTab();
-  const std::u16string text = DisplayUrl(tab ? tab->GetContents() : nullptr);
-  url_pill_->SetText(text.empty() ? u"Search or enter address" : text);
-
-  // The site's icon, as the tab shows it, or a globe.
-  ui::ImageModel icon;
-  if (TabUIHelper* helper = tab ? TabUIHelper::From(tab) : nullptr;
-      helper && helper->ShouldDisplayFavicon()) {
-    icon = helper->GetFavicon();
-  }
-  if (icon.IsEmpty()) {
-    icon = ui::ImageModel::FromVectorIcon(vector_icons::kGlobeIcon,
-                                          kColorTabForegroundActiveFrameActive,
-                                          gfx::kFaviconSize);
-  }
-  url_pill_->SetImageModel(views::Button::STATE_NORMAL, icon);
+  content::WebContents* contents =
+      browser_view_->browser()->GetTabStripModel()->GetActiveWebContents();
+  const std::u16string text = DisplayUrl(contents);
+  // Zen's placeholder for an empty tab.
+  url_label_->SetText(editing_       ? std::u16string()
+                      : text.empty() ? u"Search..."
+                                     : text);
+  // Like Zen, the buttons are only there for a page (not an empty tab).
+  const bool has_page = !editing_ && !text.empty();
+  copy_button_->SetVisible(
+      has_page && hovered_ &&
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs()->GetBoolean(
+          prefs::kUrlBarShowCopyUrl));
+  site_button_->SetVisible(has_page);
 }
 
 void KoanSidebarNavView::FocusOmnibox() {
@@ -254,6 +346,23 @@ void KoanSidebarNavView::FocusOmnibox() {
     location_bar->FocusLocation(/*is_user_initiated=*/true,
                                 /*clear_focus_if_failed=*/false);
   }
+}
+
+void KoanSidebarNavView::ShowSitePanel() {
+  content::WebContents* contents =
+      browser_view_->browser()->GetTabStripModel()->GetActiveWebContents();
+  content::NavigationEntry* entry =
+      contents ? contents->GetController().GetVisibleEntry() : nullptr;
+  if (!entry || entry->IsInitialEntry() || !GetWidget()) {
+    return;
+  }
+  PageInfoBubbleView::CreatePageInfoBubble(
+      PageInfoBubbleSpecification::Builder(
+          views::BubbleAnchor(site_button_.get()),
+          GetWidget()->GetNativeWindow(), contents, entry->GetVirtualURL())
+          .Build())
+      ->GetWidget()
+      ->Show();
 }
 
 BEGIN_METADATA(KoanSidebarNavView)

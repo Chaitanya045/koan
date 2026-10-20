@@ -15,12 +15,10 @@ point of Koan.
 | Vertical tabs in a sidebar | Same | Upstream Chromium vertical tabs, on by default. |
 | Page as a floating rounded card | Same | |
 | Sidebar and toolbar on one surface | Same | |
-| Single-toolbar layout (address in the sidebar), the default | Same | Sidebar top row: toggle, back / forward / reload (plus Chromium's tab groups / tab search); URL pill with the site's icon below. |
+| Single-toolbar layout (address in the sidebar), the default | Same | Sidebar top row: toggle, back / forward / reload (plus Chromium's tab groups / tab search); URL pill below: the site's name, the copy-URL button on hover, the site panel button. |
 | Window buttons hidden until the pointer reaches the top edge (single toolbar) | Same | The page starts 8px below the window top; the strip with the frame's buttons opens on hover and pushes the page down, like Zen's. Buttons on the sidebar's side stay in its top row, as Zen places them (`ZenVerticalTabsManager._updateEvent`). Where compact mode hides the toolbar, the buttons come with the revealed toolbar. |
 | Window buttons (traffic lights) on macOS | Different | Zen hides them with the toolbars and shows them at the top edge (or in the sidebar's top row, tabs on the left). Koan can't hide AppKit's buttons yet (needs NSWindow's standard window buttons, #51): they stay at the top left, over the page's corner when the sidebar is hidden or on the right; in the sidebar's top row with tabs on the left, as in Zen. |
-| Floating URL bar when editing the address | Same | Centred card, `min(2/3 window width, 750px)`. Zen floats it once you type; Koan floats it on focus (Zen's "floating" setting). Esc closes the suggestions first, then the bar, as in Chrome. |
 | Multiple-toolbars layout | Same | Ctrl+Alt+B (Zen sets this in Settings). |
-| Ctrl+T opens the floating URL bar instead of a new-tab page | Missing | Ctrl+T opens Chrome's new-tab page. |
 | Collapsed-sidebar layout (icons only, expands on hover) | Same | The sidebar toggle collapses it (Chromium's collapsed vertical tabs); the toolbar is then above the page. Like Zen, single toolbar needs the full sidebar: collapsing leaves it, expanding comes back to it. |
 | Tabs on the right (`zen.tabs.vertical.right-side`) | Same | Sidebar context menu, and Settings > Look and Feel > Vertical Tabs. The whole window is mirrored, including the sidebar's top row, its resize edge and the compact-mode reveal edge. Tabs themselves keep their left-to-right layout, as in Zen. Windows without Koan's sidebar (horizontal tabs, popups, apps) aren't mirrored. The setting is logical, like the rest of the UI: in a right-to-left UI it puts the sidebar on the left. |
 | Dragging the sidebar's edge closed hides it | Same | Turns compact mode on with the sidebar hidden, and shows Zen's "Sidebar hidden! Use Ctrl+S to bring the sidebar back" toast once (with the compact mode shortcut as set; ⌘S on macOS). Leaving compact mode brings the sidebar back at its width. With "Hide toolbar" chosen, the drag switches compact mode to hiding both, so that the sidebar does hide (Zen just turns compact mode on, which there hides only the toolbar). |
@@ -33,6 +31,19 @@ point of Koan.
 | Thin overlay scrollbars, shown while scrolling | Same | Chromium's overlay scrollbars, on by default on Linux in Koan. Zen follows GTK's overlay-scrolling setting ("Always Show Scrollbars" in GNOME's accessibility settings); Koan always overlays for now (#30). For classic scrollbars, start Koan with `--disable-features=OverlayScrollbar`. Comparison: `screenshots/scrollbars-zen-vs-koan.png` (Zen left, Koan right, while scrolling). |
 | Gradient theme picker | Different | Workspaces tint the browser with one colour (Chromium's Material colour system), no gradient editor. |
 | Zen Mods (community CSS themes) | Missing | Koan's UI is native Views, not CSS, so mods can't apply. Chrome themes from the Chrome Web Store work. |
+
+## URL bar
+
+| Zen | Koan | Notes |
+|---|---|---|
+| URL bar behaviour: normal / floating only when typing (default) / always floating (`zen.urlbar.behavior`) | Same | `koan.urlbar.behavior`, same values and labels in Koan's settings (Look and Feel > URL Bar). "Floating on type": Ctrl+L and a click on the pill edit in the pill, the first keystroke floats the bar. Zen floats a *mouse*-opened bar never (it stays in place, widened); Koan floats it on typing too, as #36 asks. |
+| Floating URL bar look | Same | Centred card, `min(2/3 window width, 750px)`, centred vertically as if 333px tall, radius 15, text 1.15em, Zen's long shadow (`0 30px 140px -15px`, 80% / 60% black), fades in. Zen doesn't dim the page beyond that shadow. The suggestions are Chrome's. |
+| Click outside closes the floating bar | Different | The click only closes the bar; in Zen it also reaches what you clicked. |
+| Ctrl+T / New Tab opens the URL bar instead of a tab (`zen.urlbar.replace-newtab`) | Same | `koan.urlbar.replace_newtab`. Esc, a click outside or Ctrl+T again create nothing; an unfinished search comes back within 45 s (`zen.urlbar.wait-to-clear`). The sidebar's "+ New Tab" row does the same. What you open goes next to the current tab (Chrome's placement for a new foreground tab); with replace-newtab off, the New Tab row opens its tab at the top of the space, like Zen. Zen also unhighlights the current tab meanwhile; Koan doesn't. |
+| Copy-URL button in the pill on hover (`zen.urlbar.single-toolbar-show-copy-url`) | Same | `koan.urlbar.show_copy_url`. |
+| "Copied current URL!" toast | Same | The same toast as "Tabs Closed!" (one `KoanToast` per window); the copy button, Ctrl+Shift+C and Ctrl+Shift+Alt+C ("Copied current URL as Markdown!") show it. |
+| Site panel (security, permissions, extensions; share, reader mode, screenshot, bookmark) | Different | The pill's site button opens Chromium's page info bubble (security, permissions, cookies, site settings). Extensions and the action row aren't in it yet. |
+| URL bar commands (command palette) | Missing | #40. |
 
 ## Compact mode
 

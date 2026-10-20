@@ -65,7 +65,8 @@ await browserCall('Target.closeTarget', { targetId: child.id });
 await waitFor(async () => !await exists(child));
 await setPref('koan.tabs.close_on_back_with_no_history', true);
 
-// New tabs (Ctrl+T, so no opener decides) titled `name`, at the end.
+// New tabs (Ctrl+T, so no opener decides; the profile turns off Zen's
+// replace-newtab so it opens one right away) titled `name`, at the end.
 async function newTab(name, from = opener) {
   const before = new Set((await pages()).map(p => p.id));
   await key(from, VK.T, CTRL, 't');

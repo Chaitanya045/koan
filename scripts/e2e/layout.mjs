@@ -1,6 +1,7 @@
 // End-to-end test of Zen's default layout against a real build: single
 // toolbar (no top toolbar; navigation buttons and a URL pill in the
-// sidebar), the floating URL bar (Ctrl+L or a click on the pill), and
+// sidebar), the URL bar (Ctrl+L or a click on the pill; it floats on the
+// first keystroke, see urlbar.mjs for the rest), and
 // switching to the multiple-toolbars layout (Ctrl+Alt+B).
 //
 //   scripts/e2e/run.sh layout
@@ -64,11 +65,25 @@ async function uiEvent(view, method, event) {
   ui.close();
 }
 
-async function viewKey(view, keyCode) {
+// Sends a key through the window holding the omnibox (its focus manager,
+// then the focused view and its event handlers), like a real key press.
+// flags: ui::EventFlags (Ctrl = 4).
+async function windowKey(keyCode, flags = 0) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const has = (n, cls) => {
+    const a = n.attributes ?? [];
+    return a[a.indexOf('class') + 1] === cls || (n.children ?? []).some(c => has(c, cls));
+  };
+  const findWidget = n => n.nodeName === 'Widget' && has(n, 'OmniboxViewViews') ? n
+      : (n.children ?? []).map(findWidget).find(Boolean);
+  const widget = findWidget(doc);
   for (const type of ['keyPressed', 'keyReleased']) {
-    await uiEvent(view, 'DOM.dispatchKeyEvent',
-                  { type, keyCode, code: 0, flags: 0, key: 0, isChar: false });
+    await ui.send('DOM.dispatchKeyEvent', { nodeId: widget.nodeId,
+        event: { type, keyCode, code: 0, flags, key: 0, isChar: false } });
   }
+  ui.close();
   await sleep(800);
 }
 
@@ -124,8 +139,9 @@ check('...with a hot zone for the window buttons along the top edge',
 await key(VK.L, CTRL, 'l');
 vs = await views();
 let bar = find(vs, 'TopContainerView');
-check('Ctrl+L floats the URL bar, centred and Zen-sized',
-      bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
+const urlPill = find(vs, 'KoanUrlPill');
+check('Ctrl+L edits the address in the URL pill (Zen: floating on type)',
+      bar?.x === urlPill?.x && bar?.w === urlPill?.w,
       `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
 const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown);
 check('...showing just the location bar',
@@ -133,21 +149,27 @@ check('...showing just the location bar',
       toolbarChildren.map(v => v.cls).join(' '));
 
 const omnibox = find(vs, 'OmniboxViewViews');
-await viewKey(omnibox, VK.ESC);
-await viewKey(omnibox, VK.ESC);
+await uiEvent(omnibox, 'DOM.dispatchKeyEvent',
+              { type: 'keyPressed', keyCode: 0, code: 0, flags: 0, key: 'w'.codePointAt(0), isChar: true });
+await sleep(1000);
 vs = await views();
 bar = find(vs, 'TopContainerView');
-check('Esc closes the floating URL bar', bar?.w === WINDOW_WIDTH, `width ${bar?.w}`);
+check('...and typing floats it, centred and Zen-sized',
+      bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
+      `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
+await windowKey(VK.ESC);
+vs = await views();
+bar = find(vs, 'TopContainerView');
+check('Esc closes the URL bar', bar?.w === WINDOW_WIDTH, `width ${bar?.w}`);
 check('...and the toolbar is back to normal',
       vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown).length > 1);
 
-const pillButton = vs.find(v => v.path.at(-1) === 'KoanSidebarNavView' && v.cls === 'LabelButton');
-await click(pillButton);
+await click(find(vs, 'KoanUrlPill'));
 vs = await views();
 bar = find(vs, 'TopContainerView');
-check('Clicking the URL pill floats the URL bar', bar?.w === FLOAT_WIDTH, `width ${bar?.w}`);
-await viewKey(find(vs, 'OmniboxViewViews'), VK.ESC);
-await viewKey(find(vs, 'OmniboxViewViews'), VK.ESC);
+check('Clicking the URL pill opens the URL bar there', bar?.x === urlPill?.x &&
+      bar?.w === urlPill?.w, `${bar?.w} at ${bar?.x}`);
+await windowKey(VK.ESC);
 
 await key(VK.B, CTRL | ALT, 'b');
 vs = await views();

@@ -17,7 +17,7 @@ class BrowserView;
 
 namespace views {
 class Button;
-class LabelButton;
+class Label;
 }  // namespace views
 
 namespace koan {
@@ -25,11 +25,11 @@ namespace koan {
 // Zen's single-toolbar sidebar header is two pieces:
 // - KoanSidebarNavButtons (back / forward / reload) at the trailing end of
 //   the vertical tab strip's top row, next to the sidebar toggle;
-// - KoanSidebarNavView below it: a URL pill with the site's icon and host.
-// Clicking the pill (or Ctrl+L) focuses the omnibox, which
-// KoanCompactModeController shows as Zen's floating URL bar, centred over
-// the window, until focus leaves it. The pill is empty meanwhile, like Zen.
-
+// - KoanSidebarNavView below it: a URL pill with the site's name, Zen's
+//   copy-URL button on hover (pref koan.urlbar.show_copy_url) and the site
+//   panel button. Clicking the pill (or Ctrl+L) opens Zen's URL bar
+//   (KoanUrlBarController), in the pill or floating; the pill is empty
+//   meanwhile.
 class KoanSidebarNavButtons : public views::BoxLayoutView,
                               public CommandObserver {
   METADATA_HEADER(KoanSidebarNavButtons, views::BoxLayoutView)
@@ -58,7 +58,10 @@ class KoanSidebarNavView : public views::View, public TabStripModelObserver {
   KoanSidebarNavView& operator=(const KoanSidebarNavView&) = delete;
   ~KoanSidebarNavView() override;
 
-  // While the floating URL bar is open the pill is empty.
+  // The pill, over which the URL bar edits in place.
+  views::View* url_pill() const { return url_pill_; }
+
+  // While the URL bar is open the pill is empty.
   void SetEditing(bool editing);
 
   // TabStripModelObserver:
@@ -71,10 +74,16 @@ class KoanSidebarNavView : public views::View, public TabStripModelObserver {
   void ObserveActiveTab();
   void UpdateUrl();
   void FocusOmnibox();
+  void OnPillHovered(bool hovered);
+  void ShowSitePanel();
 
   const raw_ptr<BrowserView> browser_view_;
-  raw_ptr<views::LabelButton> url_pill_ = nullptr;
+  raw_ptr<views::View> url_pill_ = nullptr;
+  raw_ptr<views::Label> url_label_ = nullptr;
+  raw_ptr<views::Button> copy_button_ = nullptr;
+  raw_ptr<views::Button> site_button_ = nullptr;
   bool editing_ = false;
+  bool hovered_ = false;
   // The active tab's UI changes (URL, title, favicon), from the same
   // TabUIHelper the tab strip draws from.
   base::CallbackListSubscription tab_ui_subscription_;

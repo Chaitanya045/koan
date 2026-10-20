@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
@@ -25,8 +24,6 @@
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
-#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
@@ -37,6 +34,7 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -48,7 +46,6 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
@@ -75,13 +72,6 @@ constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
 // How long a keyboard-opened sidebar stays before hover decides.
 constexpr base::TimeDelta kSidebarPeekGrace = base::Seconds(3);
 
-// Zen's floating URL bar (ZenUIManager.mjs, zen-omnibox.css): as wide as
-// two thirds of the window, at most 750 DIP, centred; the open bar with its
-// results (about this tall) is centred vertically.
-constexpr int kFloatingUrlBarMaxWidth = 750;
-constexpr int kFloatingUrlBarOpenHeight = 330;
-constexpr int kFloatingUrlBarRadius = 12;
-constexpr base::TimeDelta kFloatingUrlBarFadeDuration = base::Milliseconds(120);
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
 
 // Zen's flash popup (zen.view.compact.toolbar-flash-popup.duration).
@@ -210,7 +200,7 @@ KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
   pref_change_registrar_.Init(GetPrefs());
   for (const char* pref :
        {prefs::kCompactModeEnabled, prefs::kSingleToolbarEnabled,
-        prefs::kCompactModeHide}) {
+        prefs::kCompactModeHide, prefs::kUrlBarBehavior}) {
     pref_change_registrar_.Add(
         pref, base::BindRepeating(&KoanCompactModeController::UpdateActiveSoon,
                                   base::Unretained(this)));
@@ -272,7 +262,9 @@ void KoanCompactModeController::OnBrowserViewLayout() {
     if (hides_toolbar() && !toolbar_revealed_) {
       ApplyToolbarTransform(/*animate=*/false);
     }
-    LayoutFloatingUrlBar();
+    KoanBrowserViewController::From(browser_view_)
+        ->url_bar()
+        ->OnBrowserViewLayout();
     UpdateCaptionButtons();
     // The tab strip may not have existed yet when the mode was activated;
     // add the header outside of layout.
@@ -617,161 +609,54 @@ void KoanCompactModeController::OnSidebarDragCollapsed() {
 
 void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
                                                  views::View* focused_now) {
-  if (!hides_toolbar()) {
+  // Editing the address (the URL pill, Ctrl+L) opens Zen's URL bar for as
+  // long as the omnibox has focus.
+  KoanUrlBarController* url_bar =
+      KoanBrowserViewController::From(browser_view_)->url_bar();
+  url_bar->OnFocusChanged(focused_now);
+  if (!hides_toolbar() || url_bar->is_open()) {
     return;
   }
-  // Editing the address (the URL pill, Ctrl+L) floats the URL bar until
-  // focus leaves it.
-  LocationBarView* location_bar = browser_view_->GetLocationBarView();
-  const bool editing =
-      focused_now && location_bar && location_bar->Contains(focused_now);
-  SetUrlBarFloating(editing);
   // Focusing anything else in the toolbar (e.g. Alt+F) reveals it; it stays
   // until focus leaves (checked again on each focus change).
-  if (!editing && focused_now &&
-      browser_view_->top_container()->Contains(focused_now)) {
+  if (focused_now && browser_view_->top_container()->Contains(focused_now)) {
     SetToolbarRevealed(true, /*animate=*/true);
   }
   CheckToolbarHide();
 }
 
-void KoanCompactModeController::OnViewBoundsChanged(
-    views::View* observed_view) {
-  // BrowserView's layout puts the top container back at full width.
-  if (observed_view == browser_view_->top_container() ||
-      observed_view == browser_view_->toolbar()) {
-    LayoutFloatingUrlBar();
-  }
-}
-
-void KoanCompactModeController::OnViewVisibilityChanged(
-    views::View* observed_view,
-    views::View* starting_view,
-    bool visible) {
-  // A toolbar view that other code shows while the URL bar floats: it
-  // should be visible afterwards, but not inside the floating card.
-  auto it = floating_restore_.find(observed_view);
-  if (observed_view != starting_view || it == floating_restore_.end() ||
-      changing_toolbar_visibility_ || !visible) {
+void KoanCompactModeController::OnUrlBarOpenChanged() {
+  if (mode_ == Mode::kNone) {
     return;
   }
-  it->second = true;
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&KoanCompactModeController::HideToolbarForFloating,
-                     weak_factory_.GetWeakPtr()));
+  views::View* top_container = browser_view_->top_container();
+  if (IsUrlBarOpen()) {
+    // The URL bar card replaces the toolbar row; its layer may have been
+    // hidden while the toolbar was slid out.
+    toolbar_revealed_ = false;
+    toolbar_unwanted_since_.reset();
+    toolbar_hide_timer_.Stop();
+    UpdatePointerMonitor();
+    if (ui::Layer* layer = top_container->layer()) {
+      layer->SetVisible(IsTopContainerShown());
+    }
+    return;
+  }
+  top_container->SetCanProcessEventsWithinSubtree(toolbar_revealed_);
+  ApplyToolbarTransform(/*animate=*/false);
 }
 
-void KoanCompactModeController::OnViewIsDeleting(views::View* observed_view) {
-  if (floating_restore_.erase(observed_view)) {
-    floating_siblings_observation_.RemoveObservation(observed_view);
-  }
+bool KoanCompactModeController::IsUrlBarOpen() const {
+  auto* controller = KoanBrowserViewController::From(browser_view_);
+  return controller && controller->url_bar()->is_open();
+}
+
+bool KoanCompactModeController::is_toolbar_away() const {
+  return !toolbar_revealed_ && !IsUrlBarOpen();
 }
 
 void KoanCompactModeController::OnEvent(const ui::Event& event) {
   CheckRevealedHides();
-}
-
-void KoanCompactModeController::HideToolbarForFloating() {
-  if (!url_bar_floating_) {
-    return;
-  }
-  base::AutoReset<bool> changing(&changing_toolbar_visibility_, true);
-  for (const auto& [view, restore] : floating_restore_) {
-    view->SetVisible(false);
-  }
-}
-
-void KoanCompactModeController::SetUrlBarFloating(bool floating) {
-  if (floating == url_bar_floating_) {
-    return;
-  }
-  views::View* top_container = browser_view_->top_container();
-  LocationBarView* location_bar = browser_view_->GetLocationBarView();
-  if (floating) {
-    if (mode_ == Mode::kNone || !location_bar || !location_bar->parent() ||
-        !top_container->layer() || !browser_view_->toolbar()) {
-      return;
-    }
-    url_bar_floating_ = true;
-    toolbar_revealed_ = false;
-    if (sidebar_nav()) {
-      sidebar_nav()->SetEditing(true);
-    }
-    toolbar_hide_timer_.Stop();
-    UpdatePointerMonitor();
-    // Just the location bar: hide the rest of the toolbar, remembering what
-    // to restore (and watching for other code showing things meanwhile).
-    for (views::View* sibling : location_bar->parent()->children()) {
-      if (sibling != location_bar) {
-        floating_restore_[sibling] = sibling->GetVisible();
-        floating_siblings_observation_.AddObservation(sibling);
-      }
-    }
-    HideToolbarForFloating();
-    top_container->SetCanProcessEventsWithinSubtree(true);
-    ui::Layer* layer = top_container->layer();
-    layer->GetAnimator()->AbortAllAnimations();
-    layer->SetVisible(IsTopContainerShown());
-    layer->SetTransform(gfx::Transform());
-    layer->SetRoundedCornerRadius(gfx::RoundedCornersF(kFloatingUrlBarRadius));
-    layer->SetIsFastRoundedCorner(true);
-    layer->SetMasksToBounds(true);
-    top_container_observation_.Observe(top_container);
-    toolbar_observation_.Observe(browser_view_->toolbar());
-    LayoutFloatingUrlBar();
-    layer->SetOpacity(0.0f);
-    views::AnimationBuilder()
-        .Once()
-        .SetDuration(kFloatingUrlBarFadeDuration)
-        .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
-    return;
-  }
-
-  url_bar_floating_ = false;
-  if (sidebar_nav()) {
-    sidebar_nav()->SetEditing(false);
-  }
-  top_container_observation_.Reset();
-  toolbar_observation_.Reset();
-  floating_siblings_observation_.RemoveAllObservations();
-  {
-    base::AutoReset<bool> changing(&changing_toolbar_visibility_, true);
-    for (const auto& [view, restore] : floating_restore_) {
-      view->SetVisible(restore);
-    }
-  }
-  floating_restore_.clear();
-  if (ui::Layer* layer = top_container->layer()) {
-    layer->GetAnimator()->AbortAllAnimations();
-    layer->SetOpacity(1.0f);
-    layer->SetRoundedCornerRadius(gfx::RoundedCornersF());
-    layer->SetMasksToBounds(false);
-  }
-  top_container->SetCanProcessEventsWithinSubtree(toolbar_revealed_);
-  ApplyToolbarTransform(/*animate=*/false);
-  browser_view_->InvalidateLayout();
-}
-
-void KoanCompactModeController::LayoutFloatingUrlBar() {
-  views::View* top_container = browser_view_->top_container();
-  ToolbarView* toolbar = browser_view_->toolbar();
-  // Fullscreen deactivates the mode (which ends floating) right after.
-  if (!url_bar_floating_ || laying_out_floating_ || !toolbar ||
-      !top_container->parent() || browser_view_->IsFullscreen()) {
-    return;
-  }
-  base::AutoReset<bool> laying_out(&laying_out_floating_, true);
-  const gfx::Rect area = views::View::ConvertRectToTarget(
-      browser_view_, top_container->parent(), browser_view_->GetLocalBounds());
-  const int width = std::min(area.width() * 2 / 3, kFloatingUrlBarMaxWidth);
-  const int height = toolbar->GetPreferredSize().height();
-  // The card is the toolbar row only (a bookmarks bar is clipped), like
-  // Zen's floating URL bar.
-  const int top = std::max(0, (area.height() - kFloatingUrlBarOpenHeight) / 2);
-  top_container->SetBoundsRect(gfx::Rect(area.x() + (area.width() - width) / 2,
-                                         area.y() + top, width, height));
-  toolbar->SetBoundsRect(gfx::Rect(0, 0, width, height));
 }
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
@@ -863,6 +748,8 @@ void KoanCompactModeController::UpdateActive() {
        (DesiredSingleToolbar() == compact_keeps_sidebar_nav_ &&
         DesiredHideSidebar() == hide_sidebar_ &&
         DesiredHideToolbar() == hide_toolbar_))) {
+    // The URL bar behaviour pref may have changed.
+    KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
     return;
   }
   if (mode_ != Mode::kNone) {
@@ -880,6 +767,7 @@ void KoanCompactModeController::UpdateActive() {
     opened_in_compact_mode_ = false;
   }
   OnContentCardChanged();
+  KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
 }
 
 void KoanCompactModeController::OnContentCardChanged() {
@@ -1023,7 +911,8 @@ KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
 void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   VLOG(1) << (mode_ == Mode::kCompact ? "Koan: compact mode off"
                                       : "Koan: single toolbar off");
-  SetUrlBarFloating(false);
+  // The URL bar lets go of the top container before it moves back.
+  KoanBrowserViewController::From(browser_view_)->url_bar()->EndEditing();
   mode_ = Mode::kNone;
   hide_sidebar_ = false;
   hide_toolbar_ = false;
@@ -1123,7 +1012,8 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
 
 void KoanCompactModeController::SetToolbarRevealed(bool revealed,
                                                    bool animate) {
-  if (!hides_toolbar()) {
+  // The open URL bar owns the top container.
+  if (!hides_toolbar() || IsUrlBarOpen()) {
     return;
   }
   const bool changed = toolbar_revealed_ != revealed;

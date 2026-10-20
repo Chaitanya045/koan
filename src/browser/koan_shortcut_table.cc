@@ -74,6 +74,7 @@ constexpr Info kActions[] = {
     {Action::kToggleSingleToolbar, "toggle-single-toolbar", "zen-other",
      "Switch Single / Multiple Toolbars", features::IsCompactModeEnabled},
     {Action::kNewWindow, "new-window", "windowAndTabManagement", "New Window"},
+    {Action::kNewTab, "new-tab", "windowAndTabManagement", "New Tab"},
     {Action::kCloseUnpinnedTabs, "close-unpinned-tabs",
      "windowAndTabManagement", "Close All Unpinned Tabs"},
     {Action::kNewPrivateWindow, "private-browsing", "navigation",
@@ -129,7 +130,9 @@ std::vector<Binding> DefaultBindings() {
       // Ctrl+Shift+* : "*" is Shift+8 on most layouts, or the keypad key.
       bind(ui::VKEY_8, kAccel | kShift, Action::kNewEmptySplit),
       bind(ui::VKEY_MULTIPLY, kAccel | kShift, Action::kNewEmptySplit),
-      // Zen: tabs and pages.
+      // Zen: tabs and pages. Accel+T opens the URL bar in place of a new tab
+      // (zen.urlbar.replace-newtab).
+      bind(ui::VKEY_T, kAccel, Action::kNewTab),
       bind(ui::VKEY_C, kCtrl | kShift, Action::kCopyUrl),
       bind(ui::VKEY_C, kCtrl | kShift | kAlt, Action::kCopyUrlMarkdown),
       bind(ui::VKEY_D, kCtrl | kShift, Action::kTogglePinTab),

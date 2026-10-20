@@ -6,6 +6,10 @@
 // sidebar, and switching to horizontal tabs and back.
 //
 //   scripts/e2e/run.sh sidebar_tabs
+//
+// The profile (prefs/sidebar_tabs.json) turns off Zen's replace-newtab, so
+// the New Tab row and Ctrl+T open tabs right away; urlbar.mjs tests them
+// with it on.
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));

@@ -42,6 +42,10 @@
       {"koan-command-palette", "Koan command palette",                       \
        "Zen's actions (compact mode, Spaces, pin tab, ...) as suggestions "  \
        "of the URL bar; \">\" or Tab in an empty URL bar lists them all.",   \
-       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanCommandPalette)},
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanCommandPalette)}, \
+      {"koan-url-bar", "Koan URL bar",                                       \
+       "Zen's URL bar: a behaviour setting, Ctrl+T opens it instead of a "   \
+       "new tab, and a copy-URL button in the pill.",                        \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanUrlBar)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

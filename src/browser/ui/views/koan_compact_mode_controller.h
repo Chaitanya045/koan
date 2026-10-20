@@ -10,11 +10,8 @@
 #include <string>
 
 #include "base/callback_list.h"
-#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_multi_source_observation.h"
-#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -23,7 +20,6 @@
 #include "ui/events/event_observer.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/focus/focus_manager.h"
-#include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 
 class BrowserView;
@@ -75,9 +71,8 @@ class KoanSidebarNavView;
 // opens above the page, or, where compact mode hid the toolbar, they come
 // with the revealed toolbar.
 //
-// In both, focusing the omnibox (the URL pill, Ctrl+L) shows Zen's floating
-// URL bar: just the location bar, in a card centred over the window; it goes
-// away when focus leaves it.
+// In both, the omnibox opens out of the hidden toolbar as Zen's URL bar
+// (KoanUrlBarController) while it has focus.
 //
 // Tabs on the right (pref koan.tabs.on_right) mirrors the window: see
 // IsSidebarOnRight() in koan_compact_mode.h.
@@ -86,7 +81,6 @@ class KoanSidebarNavView;
 // live in KoanShortcutController; right-clicking the sidebar opens Zen's
 // toolbar context menu (Compact Mode, Tabs on the right).
 class KoanCompactModeController : public views::FocusChangeListener,
-                                  public views::ViewObserver,
                                   public ui::EventObserver,
                                   public TabStripModelObserver,
                                   public ui::SimpleMenuModel::Delegate {
@@ -110,7 +104,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
            (mode_ == Mode::kCompact && hide_toolbar_);
   }
   bool is_toolbar_revealed() const { return toolbar_revealed_; }
-  bool is_url_bar_floating() const { return url_bar_floating_; }
   // The caption-button strip above the page is collapsed (the card starts at
   // the gutter).
   bool caption_strip_collapsed() const {
@@ -119,6 +112,14 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // The "Tabs on the right" setting. Where the sidebar is, is
   // IsSidebarOnRight() (koan_compact_mode.h), which also checks the window.
   bool tabs_on_right() const { return tabs_on_right_; }
+
+  // The sidebar's URL pill, when it is mounted (single toolbar / compact
+  // mode with the header kept). KoanUrlBarController edits over it.
+  KoanSidebarNavView* sidebar_nav();
+
+  // Called by KoanUrlBarController when the omnibox is lifted out of the
+  // toolbar or put back.
+  void OnUrlBarOpenChanged();
 
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
@@ -155,13 +156,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // views::FocusChangeListener:
   void OnDidChangeFocus(views::View* focused_before,
                         views::View* focused_now) override;
-
-  // views::ViewObserver:
-  void OnViewBoundsChanged(views::View* observed_view) override;
-  void OnViewVisibilityChanged(views::View* observed_view,
-                               views::View* starting_view,
-                               bool visible) override;
-  void OnViewIsDeleting(views::View* observed_view) override;
 
   // ui::EventObserver:
   void OnEvent(const ui::Event& event) override;
@@ -210,10 +204,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
            !compact_keeps_sidebar_nav_;
   }
   void SetToolbarRevealed(bool revealed, bool animate);
-  // The toolbar is slid out of the window (neither revealed nor floating).
-  bool is_toolbar_away() const {
-    return !toolbar_revealed_ && !url_bar_floating_;
-  }
+  // The toolbar is slid out of the window (neither revealed nor open as the
+  // URL bar).
+  bool is_toolbar_away() const;
+  bool IsUrlBarOpen() const;
   void ApplyToolbarTransform(bool animate);
   // Whether the top container would be drawn if its layer were visible.
   bool IsTopContainerShown() const;
@@ -226,13 +220,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // runs while they are hidden or while the pointer rests over them.
   void UpdatePointerMonitor();
   void CheckRevealedHides();
-
-  // The floating URL bar: shows only the location bar, centred.
-  void SetUrlBarFloating(bool floating);
-  void HideToolbarForFloating();
-  void LayoutFloatingUrlBar();
-
-  KoanSidebarNavView* sidebar_nav();
 
   // Single toolbar: adds KoanSidebarNavView to the top of the sidebar.
   void InstallSidebarNav();
@@ -278,20 +265,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool hide_toolbar_ = false;
   bool tabs_on_right_ = false;
   bool toolbar_revealed_ = false;
-  bool url_bar_floating_ = false;
   // Whether compact mode keeps the sidebar header (single toolbar).
   bool compact_keeps_sidebar_nav_ = false;
-  // While the URL bar floats: the toolbar's other views, hidden, and whether
-  // each is to be visible afterwards. Entries go when a view is deleted.
-  base::flat_map<views::View*, bool> floating_restore_;
-  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
-      floating_siblings_observation_{this};
-  bool changing_toolbar_visibility_ = false;
-  bool laying_out_floating_ = false;
-  base::ScopedObservation<views::View, views::ViewObserver>
-      top_container_observation_{this};
-  base::ScopedObservation<views::View, views::ViewObserver>
-      toolbar_observation_{this};
   // Compact mode hid the sidebar: whether it was collapsed before.
   std::optional<bool> collapsed_before_;
   // The window was opened while compact mode was on, and hasn't had its

@@ -8,9 +8,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/layout_constants.h"
 
-// Sizes of Koan's sidebar tab list and toasts, in one place (Zen's today:
-// zen-tabs/vertical-tabs.css, zen-popup.css). Colours are in
-// koan/browser/ui/color/koan_color_id.h.
+// Sizes of Koan's sidebar tab list, URL bar and toasts, in one place (Zen's
+// today: zen-tabs/vertical-tabs.css, zen-omnibox.css, zen-popup.css). Colours
+// are in koan/browser/ui/color/koan_color_id.h.
 namespace koan {
 
 // Shared with Chromium's tab rows and tiles (Koan sets them in the
@@ -60,6 +60,11 @@ inline constexpr int kClearIconGap = 2;
 inline constexpr int kClearPadding = 8;
 // How far the icon moves down while the button is pressed.
 inline constexpr int kClearPressedOffset = 2;
+
+// The sidebar's URL pill (and the URL bar while it edits over the pill), and
+// the floating URL bar (#urlbar[breakout-extend]).
+inline constexpr float kUrlPillCornerRadius = 9;
+inline constexpr float kFloatingUrlBarCornerRadius = 15;
 
 // Toasts, at the top right of the window: Zen's 42px with 6px padding
 // (48px and 8px on macOS), plus 4px around the text.

@@ -1,0 +1,20 @@
+--- a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
++++ b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
+@@ -114,6 +114,7 @@
+ #include "content/public/browser/web_contents_observer.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "net/traffic_annotation/network_traffic_annotation.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+@@ -964,6 +965,9 @@
+                     {header.first, ": ", header.second, "\r\n"});
+   }
+ 
++  // Koan: the URL bar opened in place of a new tab opens a new tab.
++  koan::MaybeAdjustOmniboxDisposition(browser_, &disposition);
++
+   // Store the details necessary to open the omnibox match via browser commands.
+   location_bar_->set_navigation_params(LocationBar::NavigationParams(
+       destination_url, disposition, transition, match_selection_timestamp,

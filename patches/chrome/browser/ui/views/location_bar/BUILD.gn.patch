@@ -1,0 +1,10 @@
+--- a/chrome/browser/ui/views/location_bar/BUILD.gn
++++ b/chrome/browser/ui/views/location_bar/BUILD.gn
+@@ -80,6 +80,7 @@
+     "//chrome/browser/ui/dialogs",
+     "//chrome/browser/ui/select_file_policy",
+     "//chrome/browser/ui/views/frame:browser_view_header",
++    "//koan/browser/ui/views",
+   ]
+ 
+   if (toolkit_views) {

@@ -30,7 +30,7 @@ exactly as they do in Chrome.
 > It runs on Linux and is built from source for now. Expect rough edges,
 > and please [report them](https://github.com/Chaitanya045/koan/issues/new/choose).
 
-| Single-toolbar layout | Floating URL bar (<kbd>Ctrl</kbd>+<kbd>L</kbd>) |
+| Single-toolbar layout | Floating URL bar (<kbd>Ctrl</kbd>+<kbd>T</kbd>, or type after <kbd>Ctrl</kbd>+<kbd>L</kbd>) |
 |---|---|
 | ![Single-toolbar layout](docs/screenshots/readme-single-toolbar.png) | ![Floating URL bar](docs/screenshots/readme-floating-url-bar.png) |
 | **Compact mode (<kbd>Ctrl</kbd>+<kbd>S</kbd>), sidebar peeked** | **Glance (<kbd>Alt</kbd>+click a link)** |

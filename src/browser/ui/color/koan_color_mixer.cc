@@ -24,8 +24,8 @@ constexpr SkAlpha Alpha(float opacity) {
 }
 
 // Koan's own colours (koan_color_id.h), Zen's for now: shades of the toolbar
-// text on the sidebar (zen-tabs/vertical-tabs.css, zen-theme.css) and the
-// accent colour for toasts (zen-popup.css).
+// text on the sidebar (zen-tabs/vertical-tabs.css, zen-theme.css), the URL
+// bar's (zen-omnibox.css) and the accent colour for toasts (zen-popup.css).
 void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   const bool dark = key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
 
@@ -60,6 +60,12 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanEssentialsTileHovered] =
       dark ? ui::ColorTransform(kColorKoanEssentialsTileSelected)
            : ui::ColorTransform(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)));
+
+  // The URL pill on the tab colour; the floating URL bar's long shadow
+  // (box-shadow 0 30px 140px -15px) black at 80% (60% in dark mode).
+  mixer[kColorKoanUrlPill] = {kColorTabBackgroundActiveFrameActive};
+  mixer[kColorKoanFloatingUrlBarShadow] =
+      ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 
   // Toasts: the accent colour fading to 20% darker (towards Zen's #0f0f0f),
   // the text in the accent's contrast colour, the key cap that colour at 40%

@@ -86,6 +86,13 @@ constexpr Option kGlanceTriggers[] = {
     {"meta", "Meta (Command) + Click"},
 };
 
+// Zen's zen.urlbar.behavior choices.
+constexpr Option kUrlBarBehaviors[] = {
+    {prefs::kUrlBarBehaviorNormal, "Normal"},
+    {prefs::kUrlBarBehaviorFloatingOnType, "Floating only when typing"},
+    {prefs::kUrlBarBehaviorFloat, "Always floating"},
+};
+
 constexpr Row kRows[] = {
     // Look and Feel.
     {.group = "layout",
@@ -135,6 +142,25 @@ constexpr Row kRows[] = {
      // Blink reads it when a page's renderer process starts.
      .note = "Applies to pages opened after the change; reload others in a "
              "new tab or restart Koan"},
+    // Zen shows only the behaviour; the other two are its about:config
+    // prefs zen.urlbar.replace-newtab and
+    // zen.urlbar.single-toolbar-show-copy-url.
+    {.group = "urlbar",
+     .control = Control::kMenu,
+     .pref = prefs::kUrlBarBehavior,
+     .label = "Behavior",
+     .options = kUrlBarBehaviors,
+     .is_available = features::IsUrlBarEnabled},
+    {.group = "urlbar",
+     .control = Control::kCheckbox,
+     .pref = prefs::kUrlBarReplaceNewTab,
+     .label = "Open the URL bar instead of a new tab page (Ctrl+T, New Tab)",
+     .is_available = features::IsUrlBarEnabled},
+    {.group = "urlbar",
+     .control = Control::kCheckbox,
+     .pref = prefs::kUrlBarShowCopyUrl,
+     .label = "Show the copy URL button in the sidebar's URL bar",
+     .is_available = features::IsUrlBarEnabled},
     // Tab Management.
     {.group = "workspaces",
      .control = Control::kCheckbox,

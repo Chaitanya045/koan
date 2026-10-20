@@ -21,6 +21,7 @@ Chrome.
 | Split view: grid (two panes in Chromium: side by side) | Ctrl+Alt+G (⌘⌥G) | |
 | Unsplit | Ctrl+Alt+U (⌘⌥U) | macOS: View Source (still in the View menu) |
 | New split with an empty tab | Ctrl+Shift+* (⌘⇧*) | |
+| New tab (opens the URL bar; the tab opens with what you pick) | Ctrl+T (⌘T) | New-tab page |
 | Copy the page's URL | Ctrl+Shift+C | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
 | Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
@@ -37,7 +38,7 @@ Chrome.
 | Bookmarks | Ctrl+B | |
 | Downloads | Ctrl+Shift+Y | |
 | Reading mode | Ctrl+Alt+R | |
-| Edit the address (floating URL bar) | Ctrl+L, or click the URL pill | |
+| Edit the address | Ctrl+L, or click the URL pill | |
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
 | **Koan only:** new workspace | Ctrl+Alt+N | |
 | Koan settings (Zen's "Open Preferences") | Ctrl+, | |
@@ -56,13 +57,7 @@ groups / tab search buttons; below it is a pill with the current site.
 
 ![Single toolbar](screenshots/desktop-single-toolbar.png)
 
-Click the pill or press Ctrl+L to edit the address: like Zen's, the URL bar
-floats in a card centred over the window (two thirds of its width, at most
-750 px) with the suggestions under it, and the pill is empty meanwhile. Esc
-(twice when suggestions are showing), a click on the page or opening a
-result closes it.
-
-![Floating URL bar](screenshots/floating-url-bar.png)
+Click the pill or press Ctrl+L to edit the address (see [URL bar](#url-bar)).
 
 As in Zen, nothing sits above the page but a thin margin: move the pointer
 to the top edge of the window to show the window buttons (close, ...); the
@@ -92,6 +87,42 @@ the left.)
 On macOS the window buttons (traffic lights) stay at the top left: Koan
 can't hide them yet, so with the sidebar hidden or on the right they sit
 over the page's corner.
+
+## URL bar
+
+Like Zen's, the URL bar opens where you are and floats once you type:
+clicking the pill (or Ctrl+L) edits the address right in the pill; the
+first keystroke lifts it into a card centred over the window (two thirds
+of its width, at most 750 px, larger text, a soft shadow over the page)
+with the suggestions under it. The pill is empty meanwhile. Esc (twice
+when suggestions are showing), a click outside the card or opening a
+result closes it. In compact mode, with the sidebar hidden, it floats
+right away.
+
+![Floating URL bar](screenshots/floating-url-bar.png)
+
+**Ctrl+T** (or the sidebar's **+ New Tab**) opens the URL bar, empty,
+instead of a new-tab page: the tab opens only when you open something from
+it, in a new tab next to the current one. Esc, a click outside or Ctrl+T
+again closes it without creating anything; what you had typed comes back if
+you press Ctrl+T again within 45 seconds.
+
+Hover the pill for the **copy** button: it copies the page's URL and says
+so ("Copied current URL!"), as do Ctrl+Shift+C and Ctrl+Shift+Alt+C
+(Markdown link). The button at the end of the pill opens the site's panel
+(security, permissions, cookies and site settings).
+
+Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
+(profile prefs, Zen's names in brackets):
+
+| Setting | Pref | Default |
+|---|---|---|
+| Behavior: **Normal** (always edit in the pill; it widens over the page while you type), **Floating only when typing** (as above), **Always floating** | `koan.urlbar.behavior` (`zen.urlbar.behavior`) | Floating only when typing |
+| Open the URL bar instead of a new tab page | `koan.urlbar.replace_newtab` (`zen.urlbar.replace-newtab`) | on |
+| Show the copy URL button | `koan.urlbar.show_copy_url` (`zen.urlbar.single-toolbar-show-copy-url`) | on |
+
+In the multiple-toolbars layout the address is edited in the toolbar, as
+in Chrome; Ctrl+T still opens it instead of a new-tab page.
 
 ## Command palette
 
@@ -156,8 +187,8 @@ previous session by default; change it in Settings > On startup).
 
 Ctrl+S hides the sidebar; the page fills the window with a thin margin.
 Move the pointer to the left edge (or press Ctrl+Alt+S) to slide the
-sidebar out, with its navigation buttons and URL pill. Ctrl+L opens the
-floating URL bar as usual. The setting applies to all windows and persists.
+sidebar out, with its navigation buttons and URL pill. Ctrl+L and Ctrl+T
+open the floating URL bar. The setting applies to all windows and persists.
 
 In the multiple-toolbars layout you choose what compact mode hides, in the
 sidebar's menu under **Compact Mode**: **Hide sidebar** (the default, as in
