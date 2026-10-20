@@ -182,6 +182,8 @@ const KEY_NAMES = {
 };
 
 // Zen's display: Ctrl+Win+Alt+⇧+Key.
+// TODO(#51): on macOS Zen shows ⌃ ⌥ ⇧ ⌘ separated by spaces, ⌘ for "accel",
+// and ⎋ / ↩ for Escape / Enter; record ⌘ (metaKey) as the accelerator.
 function modifiersText(modifiers) {
   const m = settings.shortcuts.modifiers;
   return [[m.ctrl, 'Ctrl'], [m.meta, 'Win'], [m.alt, 'Alt'], [m.shift, '⇧']]

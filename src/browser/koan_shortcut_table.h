@@ -85,6 +85,11 @@ const Info* FindAction(std::string_view id);
 
 // Zen's defaults (ZenKeyboardShortcuts.mjs, shortcuts version 21, Linux) plus
 // Koan's own, in docs/USAGE.md order. An action may have several keys.
+// TODO(#51): macOS. Zen writes its defaults with "accel" (Cmd on macOS, Ctrl
+// elsewhere) and has Mac-only ones (Ctrl+1..0 switch workspaces); use
+// ui::EF_PLATFORM_ACCELERATOR and Zen's Mac table here, accept Cmd in
+// IsValidCustomAccelerator(), and check how Cmd keys reach
+// KoanShortcutController through Chromium's Cocoa key handling.
 std::vector<Binding> DefaultBindings();
 
 // The bindings in effect: the defaults, with each action the user rebound in
