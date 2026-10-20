@@ -49,6 +49,7 @@ is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 - Linux x86-64, on X11 or Wayland. Koan is developed on an Arch-based
   distribution; any distribution that can build Chromium should work.
+  For macOS, see [macOS](#macos) below.
 - 16 GB of RAM (more is better), and 100 GB or more of free disk space.
 - The tools Chromium's
   [Linux build instructions](https://chromium.googlesource.com/chromium/src/+/main/docs/linux/build_instructions.md)
@@ -71,14 +72,60 @@ parallel compile jobs, and each job can take about 1 GB of RAM.
 `KOAN_CONFIG=release` builds the optimised `out/Release` configuration
 instead.
 
+### macOS
+
+Koan is coming to macOS on Apple Silicon
+([#51](https://github.com/Chaitanya045/koan/issues/51)). It builds from
+source with the same scripts, but the Mac build is new, so expect rough
+edges. You need:
+
+- An Apple Silicon Mac with the full **Xcode** (not only the Command Line
+  Tools). The scripts use `DEVELOPER_DIR`, not `xcode-select`; it defaults
+  to `/Applications/Xcode.app/Contents/Developer`.
+- About **60 GB** of free disk: roughly 30 GB for the checkout and the rest
+  for `out/Koan`. `build/koan-mac.gn` builds without debug symbols to keep
+  it small.
+- `brew install librsvg` to render the logos. Without it,
+  `apply_branding.sh` falls back to macOS's `sips`.
+
+The scripts run with macOS's own bash 3.2 and BSD tools. Keep everything in
+one folder, so Chromium's tools don't scatter caches across your home
+directory: an `env.sh` that points `HOME`, `TMPDIR` and the tool caches into
+that folder, sourced before every Koan command.
+
+```sh
+# ~/work/koan-mac/env.sh, with Koan cloned to ~/work/koan-mac/koan
+export KOAN_MAC="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+export HOME="$KOAN_MAC/home" TMPDIR="$KOAN_MAC/tmp"
+mkdir -p "$HOME" "$TMPDIR"
+export XDG_CACHE_HOME="$HOME/.cache" XDG_CONFIG_HOME="$HOME/.config"
+export VPYTHON_VIRTUALENV_ROOT="$HOME/.vpython-root" CIPD_CACHE_DIR="$HOME/.cipd-cache"
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+export PATH="$KOAN_MAC/koan/depot_tools:$PATH"
+```
+
+```sh
+source ~/work/koan-mac/env.sh && cd "$KOAN_MAC/koan"
+./scripts/bootstrap.sh          # Chromium for target_os mac, at CHROMIUM_VERSION
+./scripts/apply_patches.sh
+./scripts/apply_branding.sh     # also builds the app icon (iconutil, actool)
+./scripts/build.sh              # build/koan-mac.gn: chromium/src/out/Koan/Koan.app
+open chromium/src/out/Koan/Koan.app
+```
+
+The app is unsigned and meant for local use. Its profile lives in
+`~/Library/Application Support/Koan`. `install_desktop.sh` and the
+off-screen test tools (`scripts/e2e/`, `shot_ui.sh`, ...) use Linux's
+headless Ozone platform, so test behaviour on Linux.
+
 ### Repository layout
 
 | Path | Contents |
 |---|---|
 | `src/` | All of Koan's code, built as GN `//koan` (symlinked as `chromium/src/koan`) |
 | `patches/` | Hook patches for Chromium: one `<upstream path>.patch` per changed upstream file |
-| `branding/` | Logo sources (SVG). `scripts/apply_branding.sh` renders them into Chromium |
-| `build/` | GN arguments: `koan.gn` (development), `koan-release.gn` (release) |
+| `branding/` | Logo sources (SVG) and the macOS app icon (`mac/AppIcon.icon`). `scripts/apply_branding.sh` renders them into Chromium |
+| `build/` | GN arguments: `koan.gn` (development), `koan-release.gn` (release), `koan-mac.gn` (macOS) |
 | `scripts/` | Bootstrap, build, patch and branding tools, and test helpers |
 | `scripts/e2e/` | End-to-end tests that drive a real Koan build off-screen |
 | `docs/` | User and maintainer documentation |
