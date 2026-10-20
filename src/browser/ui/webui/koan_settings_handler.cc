@@ -296,7 +296,9 @@ base::DictValue KoanSettingsHandler::Settings() const {
                                 .Set("pref", row.pref)
                                 .Set("label", row.label)
                                 .Set("options", std::move(options))
-                                .Set("indent", row.indent);
+                                .Set("indent", row.indent)
+                                // E.g. set by enterprise policy.
+                                .Set("managed", !pref->IsUserModifiable());
     values.Set(row.pref, pref->GetValue()->Clone());
     if (row.depends_on && prefs_->FindPreference(row.depends_on)) {
       entry.Set("dependsOn", row.depends_on);

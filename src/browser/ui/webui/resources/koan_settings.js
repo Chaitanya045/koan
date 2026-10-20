@@ -62,8 +62,8 @@ async function setPref(row, value) {
 
 function renderRow(row) {
   let el;
-  const disabled = () =>
-      row.dependsOn !== undefined && prefValue(row.dependsOn) !== true;
+  const disabled = () => row.managed ||
+      (row.dependsOn !== undefined && prefValue(row.dependsOn) !== true);
   switch (row.control) {
     case 'checkbox': {
       const input = h('input', {
@@ -126,6 +126,9 @@ function renderRow(row) {
   updaters.push(() => el.classList.toggle('disabled', disabled()));
   el.classList.toggle('indent', row.indent);
   el.dataset.pref = row.pref;
+  if (row.managed) {
+    el.title = 'Set by your organization';
+  }
   if (!row.note) {
     return el;
   }
