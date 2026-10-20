@@ -20,9 +20,15 @@ class WebContents;
 // free of tab strip types so those targets can depend on this one.
 namespace koan {
 
+// Records that `contents` became the active tab: "used" for
+// PickRecentlyUsedTab(). Called by each window's KoanTabActivationTracker.
+void OnTabActivated(content::WebContents* contents);
+
 // The tab to select when the active tab closes and its opener doesn't
-// decide: the most recently used of the tabs `contents_at` returns (null for
-// tabs that can't be selected), if prefs::kSelectRecentlyUsedOnClose is on.
+// decide: the most recently activated of the tabs `contents_at` returns (null
+// for tabs that can't be selected), if prefs::kSelectRecentlyUsedOnClose is
+// on. Tabs never activated (e.g. opened in the background) don't count;
+// without any, upstream decides.
 std::optional<int> PickRecentlyUsedTab(
     content::BrowserContext* context,
     int count,

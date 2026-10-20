@@ -121,6 +121,7 @@ void KoanSettingsHandler::OnJavascriptAllowed() {
   for (const Row& row : settings::Rows()) {
     observe(row.pref);
     observe(row.depends_on);
+    observe(row.note_pref);
   }
   observe(prefs::kShortcuts);
 }
@@ -286,6 +287,11 @@ base::DictValue KoanSettingsHandler::Settings() const {
       entry.Set("dependsOn", row.depends_on);
       values.Set(row.depends_on, prefs_->GetValue(row.depends_on).Clone());
     }
+    if (row.note && prefs_->FindPreference(row.note_pref)) {
+      entry.Set("note", row.note);
+      entry.Set("notePref", row.note_pref);
+      values.Set(row.note_pref, prefs_->GetValue(row.note_pref).Clone());
+    }
     rows.Append(std::move(entry));
   }
   return base::DictValue()
@@ -326,10 +332,17 @@ base::DictValue KoanSettingsHandler::Shortcuts() const {
     chromium.Append(shortcuts::ToPrefValue(
         ui::Accelerator(mapping.keycode, mapping.modifiers)));
   }
+  // Keys no shortcut can take.
+  base::ListValue tab_cycling;
+  for (const shortcuts::CycleKey& key : shortcuts::CycleKeys()) {
+    tab_cycling.Append(
+        shortcuts::ToPrefValue(ui::Accelerator(key.key, key.modifiers)));
+  }
   return base::DictValue()
       .Set("groups", std::move(groups))
       .Set("actions", std::move(actions))
       .Set("chromium", std::move(chromium))
+      .Set("tabCycling", std::move(tab_cycling))
       .Set("modifiers", base::DictValue()
                             .Set("shift", ui::EF_SHIFT_DOWN)
                             .Set("ctrl", ui::EF_CONTROL_DOWN)

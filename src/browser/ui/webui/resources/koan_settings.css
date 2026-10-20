@@ -216,6 +216,11 @@ h1 + .group {
   margin-block: 8px;
 }
 
+.row-note {
+  margin-top: -4px;
+  margin-inline-start: 24px;
+}
+
 .row.indent {
   margin-inline-start: 24px;
 }

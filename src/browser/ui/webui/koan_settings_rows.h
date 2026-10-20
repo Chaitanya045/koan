@@ -70,6 +70,10 @@ struct Row {
   bool (*is_available)() = nullptr;
   // Indented under the row above, like Zen's sub-options.
   bool indent = false;
+  // A note shown under the row while its pref and `note_pref` (a boolean
+  // pref, e.g. one of Chromium's) are both true, like Zen's warnings.
+  const char* note = nullptr;
+  const char* note_pref = nullptr;
 };
 
 // The shortcut editor's pane; the page fills it from the shortcut table.

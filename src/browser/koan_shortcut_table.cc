@@ -9,7 +9,6 @@
 #include <string_view>
 
 #include "koan/browser/koan_features.h"
-
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -184,11 +183,26 @@ std::vector<Binding> Bindings(const base::DictValue& overrides) {
   return bindings;
 }
 
+base::span<const CycleKey> CycleKeys() {
+  static constexpr CycleKey kCycleKeys[] = {
+      {ui::VKEY_TAB, kCtrl, true},
+      {ui::VKEY_TAB, kCtrl | kShift, false},
+      {ui::VKEY_NEXT, kCtrl, true},
+      {ui::VKEY_PRIOR, kCtrl, false},
+  };
+  return kCycleKeys;
+}
+
 bool IsValidCustomAccelerator(const ui::Accelerator& accelerator) {
   const ui::KeyboardCode key = accelerator.key_code();
   if (key == ui::VKEY_UNKNOWN || key > 0xFF ||
       (accelerator.modifiers() & ~kModifiers)) {
     return false;
+  }
+  for (const CycleKey& cycle_key : CycleKeys()) {
+    if (accelerator == ui::Accelerator(cycle_key.key, cycle_key.modifiers)) {
+      return false;
+    }
   }
   switch (key) {
     case ui::VKEY_SHIFT:

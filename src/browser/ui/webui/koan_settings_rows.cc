@@ -40,6 +40,14 @@ constexpr Group kGroups[] = {
      "Manage additional behavior of pinned tabs"},
 };
 
+// Chromium's "Ctrl+Tab in recently used order" (prefs::kCtrlTabMru,
+// chrome://settings > Appearance) takes Ctrl+Tab over Koan's settings.
+constexpr char kCtrlTabMru[] = "browser.ctrl_tab_mru";
+constexpr char kCtrlTabMruNote[] =
+    "Ctrl+Tab will cycle by recently used order, as it is enabled in "
+    "Chromium's settings (Appearance); Ctrl+Page Up/Down still follow this "
+    "setting";
+
 constexpr Option kLayouts[] = {
     {"true", "Only Sidebar", "single"},
     {"false", "Sidebar and Top Toolbar", "multiple"},
@@ -73,11 +81,15 @@ constexpr Row kRows[] = {
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kCtrlTabSkipPending,
-     .label = "Ignore Pending tabs when cycling with Ctrl+Tab"},
+     .label = "Ignore Pending tabs when cycling with Ctrl+Tab",
+     .note = kCtrlTabMruNote,
+     .note_pref = kCtrlTabMru},
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kCtrlTabWithinKind,
-     .label = "Ctrl+Tab cycles within Essential or Workspace tabs only"},
+     .label = "Ctrl+Tab cycles within Essential or Workspace tabs only",
+     .note = kCtrlTabMruNote,
+     .note_pref = kCtrlTabMru},
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kSelectRecentlyUsedOnClose,

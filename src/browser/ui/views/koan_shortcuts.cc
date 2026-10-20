@@ -45,20 +45,6 @@ namespace koan {
 
 namespace {
 
-// Chrome's tab cycling keys. Koan cycles itself while one of Zen's Ctrl+Tab
-// settings is on, and passes the keys on to Chrome otherwise.
-struct CycleKey {
-  ui::KeyboardCode key;
-  int modifiers;
-  bool forward;
-};
-constexpr CycleKey kCycleKeys[] = {
-    {ui::VKEY_TAB, ui::EF_CONTROL_DOWN, true},
-    {ui::VKEY_TAB, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN, false},
-    {ui::VKEY_NEXT, ui::EF_CONTROL_DOWN, true},
-    {ui::VKEY_PRIOR, ui::EF_CONTROL_DOWN, false},
-};
-
 // Zen's "pending" tabs: not loaded yet (discarded, or restored and not
 // shown since).
 bool IsPending(content::WebContents* contents) {
@@ -111,7 +97,10 @@ void KoanShortcutController::RegisterAccelerators() {
     focus_manager_->RegisterAccelerator(
         binding.accelerator, ui::AcceleratorManager::kNormalPriority, this);
   }
-  for (const CycleKey& key : kCycleKeys) {
+  // Chrome's tab cycling keys: Koan cycles itself while one of Zen's Ctrl+Tab
+  // settings is on, and passes the keys on to Chrome otherwise. No binding
+  // uses them (shortcuts::IsValidCustomAccelerator()).
+  for (const shortcuts::CycleKey& key : shortcuts::CycleKeys()) {
     focus_manager_->RegisterAccelerator(ui::Accelerator(key.key, key.modifiers),
                                         ui::AcceleratorManager::kNormalPriority,
                                         this);
@@ -141,9 +130,9 @@ bool KoanShortcutController::AcceleratorPressed(
       return Run(binding.action);
     }
   }
-  for (const CycleKey& key : kCycleKeys) {
+  for (const shortcuts::CycleKey& key : shortcuts::CycleKeys()) {
     if (accelerator == ui::Accelerator(key.key, key.modifiers)) {
-      return CycleTabs(key.forward);
+      return CycleTabs(key);
     }
   }
   return false;
@@ -248,15 +237,32 @@ bool KoanShortcutController::Run(Action action) {
   return false;
 }
 
-bool KoanShortcutController::CycleTabs(bool forward) {
+bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
+  BrowserWindowInterface* browser = browser_view_->browser();
   const PrefService* prefs = GetPrefs();
   const bool within_kind = prefs->GetBoolean(prefs::kCtrlTabWithinKind);
   const bool skip_pending = prefs->GetBoolean(prefs::kCtrlTabSkipPending);
-  TabStripModel* model = browser_view_->browser()->GetTabStripModel();
-  const int active = model->active_index();
-  if ((!within_kind && !skip_pending) || active == TabStripModel::kNoTab) {
+  if (!within_kind && !skip_pending) {
     return false;
   }
+  // Without tab switching (e.g. a popup window) the key goes to the page.
+  if (!chrome::IsCommandEnabled(browser, key.forward
+                                             ? IDC_SELECT_NEXT_TAB
+                                             : IDC_SELECT_PREVIOUS_TAB)) {
+    return false;
+  }
+  // Chromium's "Ctrl+Tab in recently used order" (chrome://settings >
+  // Appearance) wins for Ctrl+Tab, as in Zen, whose settings page warns
+  // about the combination; the Koan rows show the same note.
+  if (key.key == ui::VKEY_TAB && chrome::IsCtrlTabMruEnabled(browser)) {
+    return false;
+  }
+  TabStripModel* model = browser->GetTabStripModel();
+  const int active = model->active_index();
+  if (active == TabStripModel::kNoTab) {
+    return false;
+  }
+  const bool forward = key.forward;
   // The tabs Chrome would cycle through (the workspace's and the
   // Essentials), narrowed by Zen's settings.
   const std::optional<tab_groups::TabGroupId> workspace =

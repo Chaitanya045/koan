@@ -37,6 +37,8 @@ source_set("impl") {
     "koan_glance_controller.h",
     "koan_shortcuts.cc",
     "koan_shortcuts.h",
+    "koan_tab_activation.cc",
+    "koan_tab_activation.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
   ]
@@ -86,6 +88,7 @@ source_set("impl") {
     "//koan/browser:features",
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
+    "//koan/browser:tab_hooks",
     "//koan/common:url_constants",
     "//ui/base",
     "//ui/base/clipboard",

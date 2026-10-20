@@ -126,7 +126,19 @@ function renderRow(row) {
   updaters.push(() => el.classList.toggle('disabled', disabled()));
   el.classList.toggle('indent', row.indent);
   el.dataset.pref = row.pref;
-  return el;
+  if (!row.note) {
+    return el;
+  }
+  // Like Zen's warnings, e.g. zenTabsCycleByAttributeWarning.
+  const note = h('p', {class: 'description row-note', dataset: {note: row.pref}},
+                 row.note);
+  updaters.push(() => {
+    note.hidden = !(prefValue(row.pref) === true &&
+                    prefValue(row.notePref) === true);
+  });
+  const fragment = document.createDocumentFragment();
+  fragment.append(el, note);
+  return fragment;
 }
 
 // The groups of `pane`, under their section headings. With `query`, only
@@ -207,6 +219,10 @@ function isValidKey(key) {
       (key.modifiers & (m.ctrl | m.alt | m.meta)) !== 0;
 }
 
+function isTabCycling(key) {
+  return settings.shortcuts.tabCycling.some(k => sameKey(k, key));
+}
+
 function conflictOf(key, action) {
   return settings.shortcuts.actions.find(
       other => other.id !== action.id && other.keys.some(k => sameKey(k, key)));
@@ -279,11 +295,18 @@ async function onShortcutKeyDown(event, input, action) {
     const key = editor.latest;
     if (key) {
       const conflict = conflictOf(key, action);
-      if (!isValidKey(key) || conflict) {
+      let problem = null;
+      if (conflict) {
+        problem =
+            `Conflicts with ${groupTitle(conflict.group)} -> ${conflict.label}`;
+      } else if (isTabCycling(key)) {
+        problem = 'Ctrl+Tab and Ctrl+Page Up/Down switch tabs';
+      } else if (!isValidKey(key)) {
+        problem = 'Use Ctrl, Alt or Win with the key, or a function key';
+      }
+      if (problem) {
         input.classList.add('invalid');
-        setNote(input, 'conflict', conflict ?
-            `Conflicts with ${groupTitle(conflict.group)} -> ${conflict.label}` :
-            'Use Ctrl, Alt or Win with the key, or a function key');
+        setNote(input, 'conflict', problem);
       } else if (await sendWithPromise('setShortcut', action.id, key)) {
         input.classList.remove('invalid');
         input.classList.add('valid');

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/tabs/back_to_opener/back_to_opener_controller.cc b/chrome/browser/ui/tabs/back_to_opener/back_to_opener_controller.cc
-index b87fe2f7ba923960ae9f4eff3fa88c2b64784502..022c796c175b44df166cb0a1c705c8d6f89a8d3d 100644
+index b87fe2f7ba923960ae9f4eff3fa88c2b64784502..9163be4014777d83afbdcf20bf3248311d4e29b9 100644
 --- a/chrome/browser/ui/tabs/back_to_opener/back_to_opener_controller.cc
 +++ b/chrome/browser/ui/tabs/back_to_opener/back_to_opener_controller.cc
 @@ -17,6 +17,7 @@
@@ -10,15 +10,22 @@ index b87fe2f7ba923960ae9f4eff3fa88c2b64784502..022c796c175b44df166cb0a1c705c8d6
  #include "ui/base/accelerators/menu_label_accelerator_util.h"
  #include "ui/base/base_window.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -249,6 +250,11 @@ bool BackToOpenerController::CanGoBackToOpener() const {
-     return false;
-   }
+@@ -251,7 +252,7 @@ bool BackToOpenerController::CanGoBackToOpener() const {
  
-+  // Koan: Zen's "close tab on Back with no history" setting.
-+  if (!koan::ShouldCloseTabOnBack(tab().GetContents())) {
-+    return false;
-+  }
-+
    // Rely on our cached relationship. HasLiveOriginalOpenerChain is unreliable
    // and often returns false even when a relationship exists.
-   return has_valid_opener_;
+-  return has_valid_opener_;
++  return HasValidOpener();
+ }
+ 
+ void BackToOpenerController::GoBackToOpener() {
+@@ -277,7 +278,8 @@ void BackToOpenerController::GoBackToOpener() {
+ }
+ 
+ bool BackToOpenerController::HasValidOpener() const {
+-  return has_valid_opener_;
++  // Koan: Zen's "close tab on Back with no history" setting.
++  return has_valid_opener_ && koan::ShouldCloseTabOnBack(tab().GetContents());
+ }
+ 
+ GURL BackToOpenerController::GetOpenerOriginalURL() const {

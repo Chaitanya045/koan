@@ -62,7 +62,7 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   bool CloseUnpinnedTabs();
   bool Command(int command_id);
   // Zen's Ctrl+Tab settings; returns false (Chrome cycles) when both are off.
-  bool CycleTabs(bool forward);
+  bool CycleTabs(const shortcuts::CycleKey& key);
 
   // Koan's prefs (the regular profile's, also in incognito).
   PrefService* GetPrefs() const;

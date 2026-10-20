@@ -4,6 +4,9 @@
 
 #include "koan/browser/koan_tab_hooks.h"
 
+#include <memory>
+
+#include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
@@ -15,6 +18,13 @@ namespace koan {
 
 namespace {
 
+constexpr char kActivationKey[] = "koan_tab_activation";
+
+struct Activation : public base::SupportsUserData::Data {
+  explicit Activation(base::TimeTicks activated) : time(activated) {}
+  base::TimeTicks time;
+};
+
 // Incognito's PrefService reads Koan's prefs through to the regular profile
 // (Koan never writes them there; see koan_prefs.h).
 bool GetBoolean(content::BrowserContext* context, const char* pref) {
@@ -22,6 +32,11 @@ bool GetBoolean(content::BrowserContext* context, const char* pref) {
 }
 
 }  // namespace
+
+void OnTabActivated(content::WebContents* contents) {
+  contents->SetUserData(kActivationKey,
+                        std::make_unique<Activation>(base::TimeTicks::Now()));
+}
 
 std::optional<int> PickRecentlyUsedTab(
     content::BrowserContext* context,
@@ -34,17 +49,21 @@ std::optional<int> PickRecentlyUsedTab(
   base::TimeTicks best_time;
   for (int i = 0; i < count; ++i) {
     content::WebContents* contents = contents_at(i);
-    if (contents && (!best || contents->GetLastActiveTimeTicks() > best_time)) {
+    const auto* activation = contents
+                                 ? static_cast<const Activation*>(
+                                       contents->GetUserData(kActivationKey))
+                                 : nullptr;
+    if (activation && (!best || activation->time > best_time)) {
       best = i;
-      best_time = contents->GetLastActiveTimeTicks();
+      best_time = activation->time;
     }
   }
   return best;
 }
 
 bool ShouldCloseTabOnBack(content::WebContents* contents) {
-  return GetBoolean(contents->GetBrowserContext(),
-                    prefs::kCloseOnBackWithNoHistory);
+  return contents && GetBoolean(contents->GetBrowserContext(),
+                                prefs::kCloseOnBackWithNoHistory);
 }
 
 }  // namespace koan

@@ -94,9 +94,19 @@ std::vector<Binding> DefaultBindings();
 // dropped. Malformed entries are ignored, so their action keeps its default.
 std::vector<Binding> Bindings(const base::DictValue& overrides);
 
+// Chromium's tab cycling keys: Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+PgDn and
+// Ctrl+PgUp. KoanShortcutController handles them for Zen's Ctrl+Tab settings,
+// so they can't be custom shortcuts.
+struct CycleKey {
+  ui::KeyboardCode key;
+  int modifiers;
+  bool forward;
+};
+base::span<const CycleKey> CycleKeys();
+
 // Whether `accelerator` may be used for a custom shortcut: a key with Ctrl,
 // Alt or Meta (Shift alone would take a key away from typing), or a function
-// key.
+// key; not a tab cycling key.
 bool IsValidCustomAccelerator(const ui::Accelerator& accelerator);
 
 // The pref value for an action's custom key; `accelerator` is empty

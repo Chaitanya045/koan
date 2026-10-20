@@ -19,6 +19,7 @@ namespace koan {
 class KoanCompactModeController;
 class KoanGlanceController;
 class KoanShortcutController;
+class KoanTabActivationTracker;
 class KoanWorkspaceController;
 
 // Per-window Koan state and behaviour. Owned by its BrowserView through a
@@ -63,6 +64,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   std::unique_ptr<KoanCompactModeController> compact_mode_;
   std::unique_ptr<KoanWorkspaceController> workspaces_;
   std::unique_ptr<KoanGlanceController> glance_;
+  std::unique_ptr<KoanTabActivationTracker> tab_activation_;
   // Last: it calls into the controllers above.
   std::unique_ptr<KoanShortcutController> shortcuts_;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
