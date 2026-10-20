@@ -600,14 +600,21 @@ void KoanCompactModeController::Deactivate() {
       top_container->parent() != browser_view_ && top_container_index_;
 #if BUILDFLAG(IS_MAC)
   // Immersive fullscreen moves the top container into its own overlay
-  // widget, and keeps it there until it ends: leave it, and only hide
-  // Koan's (now empty) overlay.
+  // widget, and keeps it there until it ends: leave it there, hide Koan's
+  // (now empty) overlay, and undo Koan's own state on the top container:
+  // the hidden toolbar's slide out of view and its ignoring the pointer.
+  // The layer stays; the overlay widget paints the top container with it.
   if (const views::Widget* immersive = browser_view_->overlay_widget();
       immersive && top_container->GetWidget() == immersive) {
     restore_top_container = false;
     if (views::View* overlay = GetTopContainerOverlayView(browser_view_)) {
       overlay->SetVisible(false);
     }
+    if (ui::Layer* layer = top_container->layer()) {
+      layer->GetAnimator()->AbortAllAnimations();
+      layer->SetTransform(gfx::Transform());
+    }
+    top_container->SetCanProcessEventsWithinSubtree(true);
   }
 #endif
   if (restore_top_container) {
