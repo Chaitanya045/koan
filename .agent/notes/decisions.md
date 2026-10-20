@@ -9,7 +9,7 @@
   Glance, workspaces, Essentials and Linux compact mode are Koan-native.
 - **Hook patches, not `chromium_src` shadowing** (for now): global include
   changes force a full rebuild; our patch set is ~30 lines. Revisit past ~30
-  patched files. See `docs/phase1-design.md` §1.3.
+  patched files. See `.agent/notes/design-phase1-sidebar-compact.md` §1.3.
 - **Compact mode is not an `ImmersiveModeController`**: that path is tied to
   fullscreen and ChromeOS/macOS frame code. Koan uses its own controller,
   reusing vertical-tab expand-on-hover with collapsed width 0, plus a

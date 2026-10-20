@@ -226,7 +226,7 @@ refactor *under* Koan if (a) proves insufficient.
 
 Adopt **(a)**: workspaces = tab groups + focused-group visibility + a Koan
 switcher/Essentials UI. Reuse `features::kTabGroupsFocusing` semantics. This is
-also the direction `research-upstream.md` §7 anticipated (a "new Koan
+also the direction `.agent/notes/research-upstream-chromium.md` §7 anticipated (a "new Koan
 tab-collection layer over `TabStripModel`"), but with the important discovery
 that the layer can be the existing focus-mode field rather than new model code.
 
@@ -564,4 +564,4 @@ change.
 - **Rebase surface.** The highest-churn files touched are
   `vertical_tab_strip_region_view.cc` and the `tabs/common/` view-model files;
   keep each Koan patch to a single call site and re-check them every rebase,
-  consistent with `phase1-design.md` §0/§5.
+  consistent with `.agent/notes/design-phase1-sidebar-compact.md` §0/§5.

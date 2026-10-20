@@ -1,13 +1,31 @@
 # Status
 
-_Last updated: 2026-10-19 (all planned phases done)_
+_Last updated: 2026-10-20_
+
+## Now
+
+- **Zen parity push:** issues #33–#45, one Claude Opus 5.5 (high) T3 thread
+  each, at most 4 active for memory (see [parallel-agents.md](parallel-agents.md)).
+  - In review: PR #46 (settings page, #39) and PR #47 (performance and
+    power, #45); reviews are in [reviews/](reviews/).
+  - Active: #33 sidebar tabs, #37 Glance/split, #39, #45.
+  - Paused, to resume in this order: #36 URL bar, #34 Spaces, #40 command
+    palette, #35 compact mode, #38 pinned tabs, #42 folders, #41 theme
+    picker, #48, #43 Library, #44 media/toasts.
+- **#48: shadcn/ui is Koan's default look**, with Zen's look as an
+  optional style (decided 2026-10-20). Behaviour, layout and shortcuts stay
+  Zen's. It starts after #41, and all new UI must take its colours and
+  radii from tokens.
+- **Release:** draft PRs #13 (packaging) and #14 (benchmarks) wait for the
+  release build (`out/Release`, paused at about 19.3k objects) once
+  `develop` is stable.
 
 ## Done
 - Project scaffold, scripts, GN args (`build/koan.gn`).
 - Chromium checkout: 158.0.8111.0, main @ 67e29b8, 29 GB, hooks run.
-- Upstream research → `docs/research-upstream.md` (key claims spot-checked
+- Upstream research → `.agent/notes/research-upstream-chromium.md` (key claims spot-checked
   against source and confirmed).
-- Phase 1 design → `docs/phase1-design.md` (written by the lead agent from the
+- Phase 1 design → `.agent/notes/design-phase1-sidebar-compact.md` (written by the lead agent from the
   real source after three subagent attempts failed).
 - First full build of stock Chromium (`out/Koan`, target `chrome`, 4 jobs):
   started 2026-10-18 13:12, finished 2026-10-19 04:21 local (~15 h, ~70.5k
@@ -22,7 +40,7 @@ _Last updated: 2026-10-19 (all planned phases done)_
 - Phase 1 step 2: vertical tabs default = `IsSidebarEnabled()` (patch
   `tab_strip_prefs.cc` + `ui/tabs/BUILD.gn` dep). Verified on a fresh profile
   via chrome://prefs-internals and UI screenshots
-  (`docs/screenshots/step2-*.png`); `--disable-features=KoanSidebar` gives
+  (`.agent/notes/screenshots/step2-*.png`); `--disable-features=KoanSidebar` gives
   horizontal tabs.
 
 - Phase 1 step 3: `koan::OnBrowserViewCreated/Destroying` hooks at the end
@@ -36,7 +54,7 @@ _Last updated: 2026-10-19 (all planned phases done)_
 - Phase 1 step 4a (Zen surfaces): Koan colour mixer (toolbar = frame colour,
   no content/sidebar separators) and the content card (MultiContentsView
   insets the single contents by 8px right/bottom, 8px radius on the active
-  contents only, separators hidden). Screenshots: `docs/screenshots/step4-*`.
+  contents only, separators hidden). Screenshots: `.agent/notes/screenshots/step4-*`.
   Light, dark (`--force-dark-mode`) and flag-off all checked.
 
 - Phase 1 steps 5-7 (compact mode), first cut: `KoanCompactModeController`
@@ -49,7 +67,7 @@ _Last updated: 2026-10-19 (all planned phases done)_
   FocusManager accelerator (no upstream patch); pref
   `koan.compact_mode.enabled` (registered from tab_strip_prefs.cc). Verified
   off-screen: hidden state, sidebar reveal, toolbar reveal
-  (`docs/screenshots/step5-*`).
+  (`.agent/notes/screenshots/step5-*`).
 - Google API keys infobar suppressed (`koan::kShowGoogleApiKeysInfoBar`).
 
 - Phase 2: workspaces (focus mode), switcher, Ctrl+Alt+Left/Right/N, new
@@ -78,9 +96,9 @@ _Last updated: 2026-10-19 (all planned phases done)_
   URL bar all correct; WM_CLASS "Koan"; dark theme follows the system. It
   showed the frame's caption buttons paint ABOVE the client view, so Koan's
   own window controls were removed; instead the card leaves the caption
-  strip free when the toolbar is hidden (`docs/screenshots/desktop-*`).
+  strip free when the toolbar is hidden (`.agent/notes/screenshots/desktop-*`).
 
-- Phase 1-3 code review by GLM (`.agent/reviews/phase1-3-review.md`): no
+- Phase 1-3 code review by GLM (`.agent/notes/reviews/phase1-3-review.md`): no
   blockers; both should-fix items and the menu nit fixed (3650450). Accepted
   nits: class-name probes for the switcher/nav mount points (listed in
   docs/REBASE.md) and a cheap mode check on each layout.

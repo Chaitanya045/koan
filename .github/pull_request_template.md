@@ -1,13 +1,21 @@
-Closes #
+Fixes #<!-- issue number; use "Part of #…" if the issue isn't fully done -->
 
-## What
+## What changed
+<!-- What the user sees, and the main code changes. -->
 
-## Why
+## How Zen does it
+<!-- For behaviour or UI changes: what Zen does, and where Koan differs and why. -->
 
 ## Testing
-<!-- What you built and verified (screenshots for UI changes). -->
+<!-- What you built and ran, which e2e tests, and on which desktop (e.g. GNOME 48, Wayland). -->
 
-- [ ] CI passes
-- [ ] Upstream changes are hook patches exported to `patches/`
+## Screenshots
+<!-- For UI changes: Koan, and Zen for comparison. -->
+
+## Checklist
+
+- [ ] Builds, and `scripts/e2e/run.sh` passes for the affected and existing tests
+- [ ] Upstream changes are minimal hook patches in `patches/`, listed in `docs/REBASE.md`
 - [ ] New behaviour is behind a `koan::features` flag
-- [ ] Docs updated (`docs/USAGE.md` for shortcuts and features)
+- [ ] UI colours and radii come from colour IDs and shared constants, not hard-coded values
+- [ ] `docs/USAGE.md` and `docs/ZEN_PARITY.md` are updated
