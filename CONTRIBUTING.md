@@ -80,26 +80,33 @@ source with the same scripts, but the Mac build is new, so expect rough
 edges. You need:
 
 - An Apple Silicon Mac with the full **Xcode** (not only the Command Line
-  Tools). The scripts use `DEVELOPER_DIR`, not `xcode-select`; it defaults
-  to `/Applications/Xcode.app/Contents/Developer`.
+  Tools). The scripts use `DEVELOPER_DIR`, not `xcode-select`.
 - About **60 GB** of free disk: roughly 30 GB for the checkout and the rest
   for `out/Koan`. `build/koan-mac.gn` builds without debug symbols to keep
   it small.
-- `brew install librsvg` to render the logos. Without it,
-  `apply_branding.sh` falls back to macOS's `sips`.
 
-The scripts run with macOS's own bash 3.2 and BSD tools. Keep everything in
-one folder, so Chromium's tools don't scatter caches across your home
-directory: an `env.sh` that points `HOME`, `TMPDIR` and the tool caches into
-that folder, sourced before every Koan command.
+Nothing else: the logo PNGs the Mac needs are rendered on Linux and
+committed in `branding/mac/rendered/`, and only Xcode's `iconutil` and
+`actool` run on the Mac. The scripts run with macOS's own bash 3.2 and BSD
+tools.
+
+**Everything stays in one folder**, e.g. `~/work/koan-mac`, so Chromium's
+tools (depot_tools, vpython, CIPD, siso) and Apple's don't scatter caches
+across your home directory. The folder's `env.sh` points `HOME`, `TMPDIR`
+and the tool caches into it, and every script refuses to run on macOS until
+it has been sourced:
 
 ```sh
-# ~/work/koan-mac/env.sh, with Koan cloned to ~/work/koan-mac/koan
+# ~/work/koan-mac/env.sh, with Koan cloned to ~/work/koan-mac/koan.
+# Source this before any Koan command on this Mac.
 export KOAN_MAC="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-export HOME="$KOAN_MAC/home" TMPDIR="$KOAN_MAC/tmp"
-mkdir -p "$HOME" "$TMPDIR"
-export XDG_CACHE_HOME="$HOME/.cache" XDG_CONFIG_HOME="$HOME/.config"
-export VPYTHON_VIRTUALENV_ROOT="$HOME/.vpython-root" CIPD_CACHE_DIR="$HOME/.cipd-cache"
+export HOME="$KOAN_MAC/home"
+export TMPDIR="$KOAN_MAC/tmp"
+export XDG_CACHE_HOME="$KOAN_MAC/home/.cache"
+export XDG_CONFIG_HOME="$KOAN_MAC/home/.config"
+export VPYTHON_VIRTUALENV_ROOT="$KOAN_MAC/home/.vpython-root"
+export CIPD_CACHE_DIR="$KOAN_MAC/home/.cipd-cache"
+export DEPOT_TOOLS_METRICS=0
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 export PATH="$KOAN_MAC/koan/depot_tools:$PATH"
 ```
@@ -110,13 +117,30 @@ source ~/work/koan-mac/env.sh && cd "$KOAN_MAC/koan"
 ./scripts/apply_patches.sh
 ./scripts/apply_branding.sh     # also builds the app icon (iconutil, actool)
 ./scripts/build.sh              # build/koan-mac.gn: chromium/src/out/Koan/Koan.app
-open chromium/src/out/Koan/Koan.app
+./scripts/run_mac.sh            # test run, profile in $KOAN_MAC/profile
 ```
 
-The app is unsigned and meant for local use. Its profile lives in
-`~/Library/Application Support/Koan`. `install_desktop.sh` and the
-off-screen test tools (`scripts/e2e/`, `shot_ui.sh`, ...) use Linux's
-headless Ozone platform, so test behaviour on Linux.
+`JOBS` defaults to 2, 4 or 6 compile jobs depending on the memory free when
+the build starts; set it to override.
+
+What still lands outside the folder:
+
+- Xcode itself, in `/Applications`.
+- The app, when you use it day to day (opened from Finder or the Dock):
+  its profile in `~/Library/Application Support/Koan`, its cache in
+  `~/Library/Caches/Koan`, its preferences and saved window state under
+  `~/Library` (`dev.koan.Koan`), a code-signing clone under `/var/folders`,
+  and its "Koan Safe Storage" item in the login keychain.
+  `scripts/run_mac.sh` keeps a test run inside the folder instead.
+- Possibly some caches of Apple's tools under `/var/folders` (e.g. `xcrun`'s
+  lookup cache). The scripts point Apple's tools at the folder's home
+  (`CFFIXED_USER_HOME`), but not every tool honours it.
+
+The app is unsigned and meant for local use. Each rebuild changes its ad-hoc
+signature, so macOS asks again for access to the keychain item.
+`install_desktop.sh` and the off-screen test tools (`scripts/e2e/`,
+`shot_ui.sh`, ...) use Linux's headless Ozone platform, so test behaviour on
+Linux.
 
 ### Repository layout
 
@@ -151,7 +175,9 @@ version stays cheap.
   headers** unless a maintainer agrees. Any of these forces a full rebuild
   of Chromium.
 - **Product name and logos** go through `scripts/apply_branding.sh`, not
-  patches.
+  patches. After changing `branding/*.svg`, run
+  `scripts/apply_branding.sh --render-mac` on Linux and commit
+  `branding/mac/rendered/`.
 - **Every user-visible feature is behind a flag:** a `koan::features`
   `base::Feature` with a `chrome://flags` entry. That lets users and bug
   reports turn it off.

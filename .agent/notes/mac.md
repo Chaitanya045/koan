@@ -25,9 +25,10 @@ are allowed over SSH: `ls`, `cat`, `grep`, `sw_vers`, `which`,
   but not on a non-interactive SSH `PATH`, so the scripts stay bash 3.2
   compatible. `python3` is `/usr/bin/python3`, 3.9 (depot_tools has no
   `python3` on `PATH`, only `vpython3`), so `scripts/branding.py` stays 3.9
-  compatible. `iconutil`, `sips`, `actool` exist;
-  `rsvg-convert` and ImageMagick don't (`brew install librsvg` is the
-  maintainer's call; `apply_branding.sh` falls back to `sips`).
+  compatible. `iconutil`, `sips`, `actool` exist; `rsvg-convert` and
+  ImageMagick don't, and aren't needed: the PNGs the Mac uses are rendered
+  on Linux and committed (`branding/mac/rendered/`, refreshed with
+  `apply_branding.sh --render-mac` after an SVG changes).
 - SSH: `ssh -i ~/.ssh/koan_mac_ed25519 chaitanya@chaitanyas-macbook-air`.
 
 ## One folder
@@ -51,26 +52,70 @@ Everything lives in `~/work/koan-mac`:
 `DEPOT_TOOLS_METRICS=0` and `DEVELOPER_DIR`, and puts depot_tools first on
 `PATH`. The checkout is ~31 GB; with `out/Koan` budget ~60 GB.
 
+**The rule is that everything stays in the folder.** Every script (and
+`branding.py`) refuses to run on macOS unless `KOAN_MAC` is set and `HOME`
+and `TMPDIR` are inside it (`koan_require_mac_env` in
+`scripts/koan_platform.sh`). The scripts also export
+`CFFIXED_USER_HOME="$HOME"`: Apple's tools (`xcodebuild` from `gn gen`,
+`actool`, `ibtoold`) find the home directory through CoreFoundation, which
+ignores `HOME` but honours that.
+
+Still outside the folder (by design or unavoidable):
+
+- Xcode in `/Applications`.
+- The daily-driver app (opened from Finder/Dock, so with the real home):
+  `~/Library/Application Support/Koan` (profile), `~/Library/Caches/Koan`,
+  `~/Library/Preferences/dev.koan.Koan.plist`,
+  `~/Library/Saved Application State/dev.koan.Koan.savedState`, a
+  code-signing clone in `/var/folders/.../dev.koan.Koan.code_sign_clone`,
+  the "Koan Safe Storage" login-keychain item, and its LaunchServices
+  registration.
+- Possibly Apple tool caches in `/var/folders` (`xcrun`'s lookup cache,
+  `DARWIN_USER_CACHE_DIR` users): not verified, since checking needs writes.
+
+`scripts/run_mac.sh` runs a test instance inside the folder: profile and
+cache in `$KOAN_MAC/profile`, `--use-mock-keychain` (no keychain item;
+`KOAN_REAL_KEYCHAIN=1` to use the real one), the code-sign clone off, and
+started directly so it keeps the folder's `HOME`/`CFFIXED_USER_HOME`.
+
 ## Build
 
 ```sh
 source ~/work/koan-mac/env.sh && cd ~/work/koan-mac/koan
 scripts/apply_patches.sh && scripts/apply_branding.sh
 scripts/build.sh               # build/koan-mac.gn -> chromium/src/out/Koan/Koan.app
+scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
 ```
 
 - `build/koan-mac.gn`: arm64, optimised, not a component build, no DCHECKs,
   `symbol_level = 0`. No `is_official_build` yet (ThinLTO + PGO later, if
-  build time and memory allow). `JOBS` defaults to 4.
+  build time and memory allow). Every incremental change relinks the whole
+  framework; a component `koan-mac-dev.gn` could come later for iterating
+  on Mac-only code. `out/Koan` is estimated at 10-15 GB.
+- `JOBS` defaults to 2, 4 or 6 by the memory free at the start (free,
+  inactive, speculative and purgeable pages from `vm_stat`; same thresholds
+  as the shared Linux agent build). macOS swaps rather than killing the
+  build, so too many jobs only slows it down.
 - `scripts/bootstrap.sh` does what `fetch.sh` did: a `.gclient` with
   `target_os = ["mac"]`, `gclient sync --nohooks --no-history --revision
   src@<CHROMIUM_VERSION rev>`, `gclient runhooks`.
-- Branding on macOS also builds `app.icns` (iconutil) and `Assets.car`
-  (actool, from the icon bitmaps plus `branding/mac/AppIcon.icon` for the
-  macOS 26+ icon) and copies them over `chrome/app/theme/chromium/mac/`.
-  The bundle is `Koan.app`, id `dev.koan.Koan`, from `BRANDING`.
+- Branding on macOS copies the committed PNGs (sizes checked), builds
+  `app.icns` (iconutil; 16, 32, 128, 256, 512 as Chromium does) and
+  `Assets.car` (actool, from the icon bitmaps plus
+  `branding/mac/AppIcon.icon` for the macOS 26+ icon) and copies them over
+  `chrome/app/theme/chromium/mac/`. Any actool error, warning or notice
+  fails it, except the two warnings Chromium's `compile_car.py` accepts.
+  The bundle is `Koan.app`, id `dev.koan.Koan`, from `BRANDING`; Finder's
+  kinds become "Koan Extension"/"Koan Shortcut" (`app-Info.plist`).
 - Profile: `~/Library/Application Support/Koan` (hook in
   `chrome_paths_mac.mm`).
+- Keychain: "Koan Safe Storage", account "Koan" (hook in
+  `components/os_crypt/common/keychain_password_mac.mm`). Never rename it
+  once a profile exists: its cookies and passwords would stop decrypting.
+- Each build gets a new ad-hoc signature, so macOS asks again for the
+  keychain item after every rebuild. Signing `Koan.app` with a stable local
+  identity after each build (`codesign --force --deep -s <identity>`) would
+  make "Always Allow" stick; not set up yet.
 
 ## What differs from Linux in the code
 
@@ -78,10 +123,13 @@ scripts/build.sh               # build/koan-mac.gn -> chromium/src/out/Koan/Koan
   `channel_info_posix.cc`, the overlay-scrollbar `IS_LINUX` branch) apply
   but aren't compiled on macOS. `opaque_browser_frame_view.cc` compiles but
   the Mac browser frame is `BrowserFrameViewMac`.
-- No Aura on macOS: Glance doesn't scale the page in (it's an NSView).
+- No Aura on macOS: Glance doesn't scale the page in. The page is an
+  NSView composited under the NativeViewHost's layer; animating
+  `holder()->layer()` may work there, untested.
 - No caption button views: Koan's caption-button hiding is a no-op; the
   traffic lights are AppKit's.
 - Immersive fullscreen keeps the toolbar in `BrowserView::overlay_widget()`;
-  compact mode leaves it there when it deactivates.
+  compact mode leaves it there when it deactivates, but resets its own
+  hidden-toolbar transform and pointer blocking on it.
 - Shortcuts are still Ctrl-based. ⌘ shortcuts, traffic lights in the
   sidebar and trackpad swipes are later parts of #51.
