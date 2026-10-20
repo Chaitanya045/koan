@@ -1,5 +1,5 @@
 diff --git a/components/performance_manager/public/freezing/cannot_freeze_reason.h b/components/performance_manager/public/freezing/cannot_freeze_reason.h
-index e48b752b4af515d32046316145eb662174c2db74..c56d00fb2b3915fd6f0da614f800ad933124b6c6 100644
+index e48b752b4af515d32046316145eb662174c2db74..91aec21dc1f3db46f56337bebae85b1a31e44a75 100644
 --- a/components/performance_manager/public/freezing/cannot_freeze_reason.h
 +++ b/components/performance_manager/public/freezing/cannot_freeze_reason.h
 @@ -39,7 +39,12 @@ enum class CannotFreezeReason {
@@ -7,9 +7,9 @@ index e48b752b4af515d32046316145eb662174c2db74..c56d00fb2b3915fd6f0da614f800ad93
    kMostRecentlyUsed,
    kWebUI,
 -  kMax = kWebUI,  // Upper bound for EnumSet.
-+  // Koan: pinned tabs (Koan's Essentials) and pages that played audio since
-+  // they were last visible (a paused player must answer media keys) are
-+  // exempt from "infinite tabs" freezing.
++  // Koan: pinned tabs (Koan's Essentials), and pages that played audio in the
++  // last hour in their current document (a paused player must answer media
++  // keys), are exempt from "infinite tabs" and battery-saver freezing.
 +  kPinnedTab,
 +  kPlayedAudio,
 +  kMax = kPlayedAudio,  // Upper bound for EnumSet.

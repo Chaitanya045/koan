@@ -113,8 +113,9 @@ constexpr Row kRows[] = {
      .control = Control::kCheckbox,
      .pref = performance_manager::user_tuning::prefs::kTabFreezingEnabled,
      .label = "Freeze background tabs you haven't used recently (they wake "
-              "for a few seconds each minute; pinned tabs and tabs playing "
-              "audio, in a call or showing notifications keep running)",
+              "for a few seconds each minute; pinned tabs and tabs that "
+              "played audio, are in a call or show notifications keep "
+              "running)",
      .is_available = IsTabFreezingAvailable,
      .local_state = true},
 };
