@@ -17,10 +17,13 @@ KOAN_TEST_DIR="$KOAN_ROOT/.test-profiles"
 mkdir -p "$KOAN_TEST_DIR"
 
 # Flags for a full browser UI rendered off-screen (headless Ozone).
+# --password-store=basic: throwaway profiles needn't use the desktop
+# keyring; while it is locked (e.g. after a reboot with nobody logged in),
+# Chromium waits for it to encrypt cookies and no page loads.
 # shellcheck disable=SC2054  # "1280,800" is one value, not two elements
 KOAN_HEADLESS_UI_FLAGS=(--ozone-platform=headless --in-process-gpu --disable-gpu
   --no-first-run --no-default-browser-check --disable-component-update
-  --window-size=1280,800)
+  --password-store=basic --window-size=1280,800)
 
 koan_new_profile() { mktemp -d "$KOAN_TEST_DIR/prof-XXXX"; }
 
