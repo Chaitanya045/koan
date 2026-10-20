@@ -40,6 +40,9 @@ Chrome.
 | Edit the address (floating URL bar) | Ctrl+L, or click the URL pill | |
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
 | **Koan only:** new workspace | Ctrl+Alt+N | |
+| Koan settings (Zen's "Open Preferences") | Ctrl+, | |
+
+Change any of them in Settings > Keyboard Shortcuts (below).
 
 When a page uses a key itself (for example Ctrl+S in an online editor), the
 page gets it first, as in every browser.
@@ -103,6 +106,41 @@ Firefox. Same-site links with a `download` attribute still download;
 cross-site ones open in Glance (Chromium ignores `download` across sites,
 so there Alt+click was the only way to download). Beside the card:
 close, **expand to a tab**, or **open in split view** with the current tab.
+
+## Settings
+
+`chrome://koan-settings` (or Ctrl+,) has Koan's settings, laid out like
+Zen's preferences; everything else is in Chromium's own settings, linked
+from its sidebar.
+
+- **Look and Feel**: the browser layout (Only Sidebar / Sidebar and Top
+  Toolbar) and compact mode.
+- **Tab Management**: whether the active workspace tints the browser, and
+  Zen's tab behaviours (Zen's defaults):
+  - closing a tab switches to the **most recently used** tab rather than a
+    neighbour (on);
+  - **Back** in a tab with no history (one opened from a link in another
+    tab) closes it and returns to that tab (on; never for pinned tabs);
+  - **Ctrl+Tab** (and Ctrl+Page Up/Down) cycles within the Essentials or
+    within the other tabs, whichever you are on (off), and can skip tabs
+    that haven't loaded yet (off). If "Cycle through the most recently used
+    tabs with Ctrl+Tab" is on in Chromium's settings (Appearance), Ctrl+Tab
+    follows that instead, as the page notes; Ctrl+Page Up/Down still follow
+    Koan's settings.
+- **Keyboard Shortcuts**: Zen's shortcut editor. Click a shortcut, type
+  the new keys and press **Esc** to save them; **Backspace** clears the
+  shortcut, **Tab** leaves it unchanged. A key another shortcut already
+  uses is refused ("Conflicts with ..."), and so are Ctrl+Tab and
+  Ctrl+Page Up/Down, which switch tabs. A key needs Ctrl, Alt or Win
+  (or is a function key). **Reset to Default** restores Zen's keys.
+  Shortcuts for features switched off in `chrome://flags` aren't listed.
+
+Changes apply at once to every window, private windows included (they
+share the regular profile's settings), and the page follows changes made
+elsewhere (e.g. Ctrl+S or Ctrl+Alt+B). From a private window, Ctrl+, opens
+the page in a regular one, like Chromium's settings.
+
+![Settings](screenshots/settings-look-and-feel.png)
 
 ## Turning things off
 

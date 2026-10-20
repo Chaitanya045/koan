@@ -31,6 +31,40 @@ source_set("prefs") {
   deps = [ "//components/pref_registry" ]
 }
 
+# Koan's keyboard shortcuts as data, for the shortcut controller and the
+# settings page.
+source_set("shortcut_table") {
+  sources = [
+    "koan_shortcut_table.cc",
+    "koan_shortcut_table.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/base",
+  ]
+  deps = [
+    ":features",
+    "//ui/events:event_constants",
+    "//ui/events:events_base",
+  ]
+}
+
+# Zen's tab behaviours, called from upstream tab code (tab_strip_model.cc,
+# back_to_opener_controller.cc). No tab strip deps, so those can use it.
+source_set("tab_hooks") {
+  sources = [
+    "koan_tab_hooks.cc",
+    "koan_tab_hooks.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":prefs",
+    "//components/prefs",
+    "//components/user_prefs",
+    "//content/public/browser",
+  ]
+}
+
 # Default-state overrides for upstream features, registered from
 # chrome/browser/chrome_browser_field_trials.cc.
 source_set("feature_overrides") {
@@ -40,6 +74,7 @@ source_set("feature_overrides") {
   ]
   deps = [
     "//chrome/browser/ui:ui_features",
+    "//chrome/browser/ui/tabs:features",
     "//components/variations",
   ]
 }

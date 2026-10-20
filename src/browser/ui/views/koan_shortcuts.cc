@@ -8,24 +8,33 @@
 #include <utility>
 #include <vector>
 
+#include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/prefs/pref_service.h"
 #include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
+#include "koan/common/koan_url_constants.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -36,66 +45,38 @@ namespace koan {
 
 namespace {
 
-constexpr int kCtrl = ui::EF_CONTROL_DOWN;
-constexpr int kAlt = ui::EF_ALT_DOWN;
-constexpr int kShift = ui::EF_SHIFT_DOWN;
-
-using Action = KoanShortcutController::Action;
+// Zen's "pending" tabs: not loaded yet (discarded, or restored and not
+// shown since).
+bool IsPending(content::WebContents* contents) {
+  return contents->WasDiscarded() || contents->GetController().NeedsReload();
+}
 
 }  // namespace
-
-// static
-std::vector<KoanShortcutController::Binding>
-KoanShortcutController::DefaultBindings() {
-  const auto bind = [](ui::KeyboardCode key, int modifiers, Action action) {
-    return Binding{ui::Accelerator(key, modifiers), action};
-  };
-  return {
-      // Zen: compact mode.
-      bind(ui::VKEY_S, kCtrl, Action::kToggleCompactMode),
-      bind(ui::VKEY_S, kCtrl | kAlt, Action::kCompactModeShowSidebar),
-      // Zen moves Save Page off Ctrl+S.
-      bind(ui::VKEY_S, kCtrl | kAlt | kShift, Action::kSavePage),
-      // Zen: workspaces.
-      bind(ui::VKEY_RIGHT, kCtrl | kAlt, Action::kWorkspaceForward),
-      bind(ui::VKEY_LEFT, kCtrl | kAlt, Action::kWorkspaceBackward),
-      // Zen: split view.
-      bind(ui::VKEY_G, kCtrl | kAlt, Action::kSplitGrid),
-      bind(ui::VKEY_V, kCtrl | kAlt, Action::kSplitVertical),
-      bind(ui::VKEY_H, kCtrl | kAlt, Action::kSplitHorizontal),
-      bind(ui::VKEY_U, kCtrl | kAlt, Action::kUnsplit),
-      // Ctrl+Shift+* : "*" is Shift+8 on most layouts, or the keypad key.
-      bind(ui::VKEY_8, kCtrl | kShift, Action::kNewEmptySplit),
-      bind(ui::VKEY_MULTIPLY, kCtrl | kShift, Action::kNewEmptySplit),
-      // Zen: tabs and pages.
-      bind(ui::VKEY_C, kCtrl | kShift, Action::kCopyUrl),
-      bind(ui::VKEY_C, kCtrl | kShift | kAlt, Action::kCopyUrlMarkdown),
-      bind(ui::VKEY_D, kCtrl | kShift, Action::kTogglePinTab),
-      bind(ui::VKEY_K, kCtrl | kShift, Action::kCloseUnpinnedTabs),
-      bind(ui::VKEY_O, kCtrl, Action::kGlanceExpand),
-      bind(ui::VKEY_L, kAlt | kShift, Action::kLibrary),
-      // Zen moves the inspector off Ctrl+Shift+C.
-      bind(ui::VKEY_L, kCtrl | kShift, Action::kInspect),
-      // Zen (Firefox) windows: Ctrl+Shift+N new window, Ctrl+Shift+P private.
-      bind(ui::VKEY_N, kCtrl | kShift, Action::kNewWindow),
-      bind(ui::VKEY_P, kCtrl | kShift, Action::kNewPrivateWindow),
-      // Zen inherits these from Firefox; Chrome leaves the keys free.
-      bind(ui::VKEY_M, kCtrl, Action::kMuteSite),
-      bind(ui::VKEY_B, kCtrl, Action::kBookmarks),
-      bind(ui::VKEY_Y, kCtrl | kShift, Action::kDownloads),
-      bind(ui::VKEY_R, kCtrl | kAlt, Action::kReaderMode),
-      // Koan-only.
-      bind(ui::VKEY_B, kCtrl | kAlt, Action::kToggleSingleToolbar),
-      bind(ui::VKEY_N, kCtrl | kAlt, Action::kNewWorkspace),
-  };
-}
 
 KoanShortcutController::KoanShortcutController(
     BrowserView* browser_view,
     KoanBrowserViewController* controller)
-    : browser_view_(browser_view),
-      controller_(controller),
-      bindings_(DefaultBindings()) {}
+    : browser_view_(browser_view), controller_(controller) {
+  bindings_ = shortcuts::Bindings(GetPrefs()->GetDict(prefs::kShortcuts));
+  pref_change_registrar_.Init(GetPrefs());
+  pref_change_registrar_.Add(
+      prefs::kShortcuts,
+      base::BindRepeating(&KoanShortcutController::OnShortcutsChanged,
+                          base::Unretained(this)));
+  // Back's enabled state depends on this setting (back-to-opener).
+  pref_change_registrar_.Add(
+      prefs::kCloseOnBackWithNoHistory,
+      base::BindRepeating(
+          [](BrowserView* browser_view) {
+            chrome::BrowserCommandController::From(browser_view->browser())
+                ->TabStateChanged();
+          },
+          base::Unretained(browser_view_.get())));
+}
+
+PrefService* KoanShortcutController::GetPrefs() const {
+  return browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs();
+}
 
 KoanShortcutController::~KoanShortcutController() {
   OnBrowserViewDestroying();
@@ -106,15 +87,36 @@ void KoanShortcutController::OnAddedToWidget() {
     return;
   }
   focus_manager_ = browser_view_->GetFocusManager();
+  RegisterAccelerators();
+}
+
+void KoanShortcutController::RegisterAccelerators() {
   for (const Binding& binding : bindings_) {
     // Normal priority targets are tried most-recently-registered first, so
     // these run before BrowserView's own accelerators for the same keys.
     focus_manager_->RegisterAccelerator(
         binding.accelerator, ui::AcceleratorManager::kNormalPriority, this);
   }
+  // Chrome's tab cycling keys: Koan cycles itself while one of Zen's Ctrl+Tab
+  // settings is on, and passes the keys on to Chrome otherwise. No binding
+  // uses them (shortcuts::IsValidCustomAccelerator()).
+  for (const shortcuts::CycleKey& key : shortcuts::CycleKeys()) {
+    focus_manager_->RegisterAccelerator(ui::Accelerator(key.key, key.modifiers),
+                                        ui::AcceleratorManager::kNormalPriority,
+                                        this);
+  }
+}
+
+void KoanShortcutController::OnShortcutsChanged() {
+  bindings_ = shortcuts::Bindings(GetPrefs()->GetDict(prefs::kShortcuts));
+  if (focus_manager_) {
+    focus_manager_->UnregisterAccelerators(this);
+    RegisterAccelerators();
+  }
 }
 
 void KoanShortcutController::OnBrowserViewDestroying() {
+  pref_change_registrar_.RemoveAll();
   if (focus_manager_) {
     focus_manager_->UnregisterAccelerators(this);
     focus_manager_ = nullptr;
@@ -126,6 +128,11 @@ bool KoanShortcutController::AcceleratorPressed(
   for (const Binding& binding : bindings_) {
     if (binding.accelerator == accelerator) {
       return Run(binding.action);
+    }
+  }
+  for (const shortcuts::CycleKey& key : shortcuts::CycleKeys()) {
+    if (accelerator == ui::Accelerator(key.key, key.modifiers)) {
+      return CycleTabs(key);
     }
   }
   return false;
@@ -219,8 +226,64 @@ bool KoanShortcutController::Run(Action action) {
       return Command(IDC_SHOW_DOWNLOADS);
     case Action::kReaderMode:
       return Command(IDC_SHOW_READING_MODE);
+    case Action::kOpenSettings:
+      // Like chrome://settings: one tab whatever pane it shows, and in a
+      // regular window (Koan's settings are the regular profile's).
+      ShowSingletonTabOverwritingNTP(
+          browser_view_->GetProfile()->GetOriginalProfile(), GURL(kSettingsURL),
+          NavigateParams::IGNORE_AND_NAVIGATE);
+      return true;
   }
   return false;
+}
+
+bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
+  BrowserWindowInterface* browser = browser_view_->browser();
+  const PrefService* prefs = GetPrefs();
+  const bool within_kind = prefs->GetBoolean(prefs::kCtrlTabWithinKind);
+  const bool skip_pending = prefs->GetBoolean(prefs::kCtrlTabSkipPending);
+  if (!within_kind && !skip_pending) {
+    return false;
+  }
+  // Without tab switching (e.g. a popup window) the key goes to the page.
+  if (!chrome::IsCommandEnabled(browser, key.forward
+                                             ? IDC_SELECT_NEXT_TAB
+                                             : IDC_SELECT_PREVIOUS_TAB)) {
+    return false;
+  }
+  // Chromium's "Ctrl+Tab in recently used order" (chrome://settings >
+  // Appearance) wins for Ctrl+Tab, as in Zen, whose settings page warns
+  // about the combination; the Koan rows show the same note.
+  if (key.key == ui::VKEY_TAB && chrome::IsCtrlTabMruEnabled(browser)) {
+    return false;
+  }
+  TabStripModel* model = browser->GetTabStripModel();
+  const int active = model->active_index();
+  if (active == TabStripModel::kNoTab) {
+    return false;
+  }
+  const bool forward = key.forward;
+  // The tabs Chrome would cycle through (the workspace's and the
+  // Essentials), narrowed by Zen's settings.
+  const std::optional<tab_groups::TabGroupId> workspace =
+      model->GetFocusedGroup();
+  const bool active_pinned = model->IsTabPinned(active);
+  const int count = model->count();
+  for (int step = 1; step < count; ++step) {
+    const int i = (active + (forward ? step : count - step)) % count;
+    tabs::TabInterface* tab = model->GetTabAtIndex(i);
+    if (model->IsTabCollapsed(i) ||
+        (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
+        (within_kind && tab->IsPinned() != active_pinned) ||
+        (skip_pending && IsPending(tab->GetContents()))) {
+      continue;
+    }
+    model->ActivateTabAt(
+        i, TabStripUserGestureDetails(
+               TabStripUserGestureDetails::GestureType::kKeyboard));
+    return true;
+  }
+  return true;
 }
 
 bool KoanShortcutController::Command(int command_id) {

@@ -15,6 +15,11 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
+  registry->RegisterDictionaryPref(kShortcuts);
+  registry->RegisterBooleanPref(kSelectRecentlyUsedOnClose, true);
+  registry->RegisterBooleanPref(kCloseOnBackWithNoHistory, true);
+  registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
+  registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
 }
 
 }  // namespace koan::prefs

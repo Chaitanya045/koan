@@ -23,6 +23,7 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_group_theme.h"
@@ -294,9 +295,30 @@ void KoanWorkspaceController::OnAddedToWidget() {
     return;
   }
   InstallSwitcher();
+  // The tint can be switched in chrome://koan-settings.
+  pref_change_registrar_.Init(
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
+  pref_change_registrar_.Add(
+      prefs::kWorkspaceTint,
+      base::BindRepeating(&KoanWorkspaceController::OnTintPrefChanged,
+                          base::Unretained(this)));
+}
+
+void KoanWorkspaceController::OnTintPrefChanged() {
+  // The tint is the profile's colour, so when it is switched on, the window
+  // the user was last in decides it. Switching it off restores the user's
+  // colour, which any window can do.
+  const BrowserWindowInterface* last_active =
+      GetLastActiveBrowserWindowInterfaceWithAnyProfile();
+  if (pref_change_registrar_.prefs()->GetBoolean(prefs::kWorkspaceTint) &&
+      last_active && last_active != browser_view_->browser()) {
+    return;
+  }
+  UpdateTint();
 }
 
 void KoanWorkspaceController::OnBrowserViewDestroying() {
+  pref_change_registrar_.RemoveAll();
   if (switcher_) {
     switcher_->parent()->RemoveChildViewT(std::exchange(switcher_, nullptr));
   }
@@ -464,11 +486,13 @@ void KoanWorkspaceController::UpdateTint() {
   }
   PrefService* prefs = profile->GetPrefs();
   ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
-  if (!theme || !prefs->GetBoolean(prefs::kWorkspaceTint) ||
-      theme->UsingExtensionTheme()) {
+  if (!theme || theme->UsingExtensionTheme()) {
     return;
   }
-  const std::optional<tab_groups::TabGroupId> active = GetActiveWorkspace();
+  // With the tint switched off, behave as in "All tabs": the user's colour.
+  const std::optional<tab_groups::TabGroupId> active =
+      prefs->GetBoolean(prefs::kWorkspaceTint) ? GetActiveWorkspace()
+                                               : std::nullopt;
   const std::optional<SkColor> current = theme->GetUserColor();
   const SkColor applied =
       static_cast<SkColor>(prefs->GetInteger(prefs::kWorkspaceTintApplied));

@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/tabs/back_to_opener/BUILD.gn b/chrome/browser/ui/tabs/back_to_opener/BUILD.gn
+index 1e0c217d3782ec93c85cf220c1a84c19d6ad11dd..eb28b5389d82431ed0fb1f1bed0eb1f38140b7a2 100644
+--- a/chrome/browser/ui/tabs/back_to_opener/BUILD.gn
++++ b/chrome/browser/ui/tabs/back_to_opener/BUILD.gn
+@@ -28,6 +28,7 @@ source_set("impl") {
+     "//chrome/browser/favicon",
+     "//chrome/browser/ui/browser_window",
+     "//chrome/browser/ui/tabs:tab_strip",
++    "//koan/browser:tab_hooks",
+     "//ui/base",
+   ]
+ }

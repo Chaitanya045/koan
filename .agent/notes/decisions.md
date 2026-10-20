@@ -53,3 +53,15 @@
   second omnibox, so everything Chrome's omnibox does keeps working; the
   popup anchors to the location bar by itself. Koan floats on focus, not on
   the first keystroke as Zen's default does (the pill isn't a text field).
+- **Settings page = chrome://koan-settings, plain WebUI driven by a C++
+  table** (#39): not a section in chrome://settings (that would mean
+  patching its Polymer/TS build). The page's HTML/CSS/JS are embedded into
+  the binary by a GN action (`embed_resources.py`) and served with
+  `WebUIDataSource::SetRequestFilter`, so no grit target, resource id or
+  .pak list changes upstream; one hook patch registers the `WebUIConfig`.
+  What the page shows is `koan_settings_rows.cc` (panes > groups > rows
+  bound to profile prefs); the handler only writes prefs listed there.
+  Features apply changes live by observing their prefs. The shortcut
+  editor suspends the window's FocusManager shortcuts while recording a
+  key (as chrome://extensions/shortcuts does), because Chromium pre-handles
+  non-Chrome accelerators (Koan's) before the page sees them.

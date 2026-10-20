@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
@@ -15,6 +17,7 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
 
@@ -36,6 +39,8 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       compact_mode_(std::make_unique<KoanCompactModeController>(browser_view)),
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
+      tab_activation_(std::make_unique<KoanTabActivationTracker>(
+          browser_view->browser()->GetTabStripModel())),
       shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)) {
   ++g_live_count;
   observations_.AddObservation(browser_view);

@@ -134,7 +134,8 @@ END_METADATA
 
 KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
     : browser_view_(browser_view) {
-  pref_change_registrar_.Init(browser_view_->GetProfile()->GetPrefs());
+  pref_change_registrar_.Init(
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
   for (const char* pref :
        {prefs::kCompactModeEnabled, prefs::kSingleToolbarEnabled}) {
     pref_change_registrar_.Add(
@@ -194,13 +195,15 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
 }
 
 void KoanCompactModeController::ToggleCompactMode() {
-  PrefService* prefs = browser_view_->GetProfile()->GetPrefs();
+  PrefService* prefs =
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs();
   prefs->SetBoolean(prefs::kCompactModeEnabled,
                     !prefs->GetBoolean(prefs::kCompactModeEnabled));
 }
 
 void KoanCompactModeController::ToggleSingleToolbar() {
-  PrefService* prefs = browser_view_->GetProfile()->GetPrefs();
+  PrefService* prefs =
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs();
   prefs->SetBoolean(prefs::kSingleToolbarEnabled,
                     !prefs->GetBoolean(prefs::kSingleToolbarEnabled));
 }
@@ -403,7 +406,8 @@ KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
       !UseContentCard(browser_view_)) {
     return Mode::kNone;
   }
-  const PrefService* prefs = browser_view_->GetProfile()->GetPrefs();
+  const PrefService* prefs =
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs();
   if (prefs->GetBoolean(prefs::kCompactModeEnabled)) {
     return Mode::kCompact;
   }
@@ -414,8 +418,10 @@ KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
 }
 
 bool KoanCompactModeController::DesiredCompactKeepsSidebarNav() const {
-  return browser_view_->GetProfile()->GetPrefs()->GetBoolean(
-      prefs::kSingleToolbarEnabled);
+  return browser_view_->GetProfile()
+      ->GetOriginalProfile()
+      ->GetPrefs()
+      ->GetBoolean(prefs::kSingleToolbarEnabled);
 }
 
 void KoanCompactModeController::UpdateActiveSoon() {

@@ -9,6 +9,11 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
+// Koan's prefs belong to the regular profile. Incognito windows read and
+// write them through Profile::GetOriginalProfile()->GetPrefs(), never their
+// own PrefService: a write there would land in incognito's in-memory layer
+// and hide later changes, so the window would drift from the others and from
+// chrome://koan-settings.
 namespace koan::prefs {
 
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
@@ -33,6 +38,29 @@ inline constexpr char kWorkspaceTintSavedColor[] =
     "koan.workspaces.tint_saved_color";
 inline constexpr char kWorkspaceTintSavedVariant[] =
     "koan.workspaces.tint_saved_variant";
+
+// The user's own keyboard shortcuts, set in chrome://koan-settings: a
+// dictionary from a shortcut's id (koan_shortcut_table.h) to its key, or to
+// no key if the user cleared it. Actions not listed keep their default keys.
+inline constexpr char kShortcuts[] = "koan.shortcuts";
+
+// Zen's Tab Management settings (zen-default-prefs.js, with Zen's defaults).
+// Closing the active tab selects the most recently used tab, not a
+// neighbour, when the closed tab's opener doesn't decide
+// (zen.tabs.select-recently-used-on-close).
+inline constexpr char kSelectRecentlyUsedOnClose[] =
+    "koan.tabs.select_recently_used_on_close";
+// Back in a tab with no history closes it and returns to the tab that opened
+// it (zen.tabs.close-on-back-with-no-history).
+inline constexpr char kCloseOnBackWithNoHistory[] =
+    "koan.tabs.close_on_back_with_no_history";
+// Ctrl+Tab cycles within the Essentials (pinned tabs) or within the
+// workspace's tabs, whichever the active tab belongs to
+// (zen.tabs.ctrl-tab.ignore-essential-tabs).
+inline constexpr char kCtrlTabWithinKind[] = "koan.tabs.ctrl_tab_within_kind";
+// Ctrl+Tab skips tabs that haven't loaded yet (discarded or not yet
+// restored; zen.tabs.ctrl-tab.ignore-pending-tabs).
+inline constexpr char kCtrlTabSkipPending[] = "koan.tabs.ctrl_tab_skip_pending";
 
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
