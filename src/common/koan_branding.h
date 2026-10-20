@@ -33,6 +33,14 @@ inline constexpr char kIconName[] = "koan";
 // chrome/common/chrome_paths_mac.mm.
 inline constexpr char kMacProductDirName[] = "Koan";
 
+// macOS: Koan's own login-keychain item for the key that encrypts cookies,
+// passwords and other profile data, not Chromium's "Chromium Safe Storage"
+// (Chromium's pattern: "<Product> Safe Storage", account "<Product>").
+// Never change these once profiles exist: their data would no longer
+// decrypt. Used by components/os_crypt/common/keychain_password_mac.mm.
+inline constexpr char kMacKeychainServiceName[] = "Koan Safe Storage";
+inline constexpr char kMacKeychainAccountName[] = "Koan";
+
 }  // namespace koan
 
 #endif  // KOAN_COMMON_KOAN_BRANDING_H_
