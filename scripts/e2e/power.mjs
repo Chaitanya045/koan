@@ -3,7 +3,7 @@
 // restored background tabs that load only when opened (like Zen).
 //
 //   scripts/e2e/run.sh power
-import { browserSession, connect, evaluate, key, pageTargets, sleep } from '../perf/cdp.mjs';
+import { browserSession, connect, evaluate, key, pageTargets, sleep, traceUi } from '../perf/cdp.mjs';
 import { servePages } from '../perf/pages_server.mjs';
 
 const CDP_PORT = process.env.CDP_PORT;
@@ -24,17 +24,32 @@ async function navigate(target, url) {
 const byId = id => t => t.id === id;
 const first = (await pageTargets(CDP_PORT))[0];
 
-// Defaults, as chrome://local-state shows them (value and source).
-await navigate(first, 'chrome://local-state');
-await sleep(2500);
-const text = await evaluate(CDP_PORT, byId(first.id), 'document.body.innerText');
-let tuning = {};
-try {
-  tuning = JSON.parse(text.slice(text.indexOf('{'))).performance_tuning ?? {};
-} catch {}
-const memorySaver = tuning.high_efficiency_mode?.state?.value;
+// Single toolbar (the default) slides the toolbar out of the window; it must
+// not repaint there when the page changes (here: its title, 4 times a
+// second). The tabs in the sidebar do repaint.
+await navigate(first, `${pages.origin}/power.html?title`);
+await sleep(2000);
+const ui = await traceUi(browser, () => sleep(5000));
+const paints = Object.fromEntries(ui.paints);
+check('The hidden toolbar does not repaint', !paints.ToolbarView && !paints.LocationBarView,
+      `toolbar ${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}, ` +
+      `tabs ${paints.TabView ?? 0} paints in 5 s`);
+
+// Defaults, as Settings > Performance reads them.
+await navigate(first, 'chrome://settings/performance');
+const pref = async name => {
+  for (let i = 0; i < 20; i++) {
+    const value = await evaluate(CDP_PORT, byId(first.id), `
+        new Promise(r => chrome.settingsPrivate.getPref('${name}', p => r(p?.value)))`);
+    if (value !== undefined) return value;
+    await sleep(500);
+  }
+  console.log(`  could not read ${name} on ${await evaluate(
+      CDP_PORT, byId(first.id), 'location.href')}`);
+};
+const memorySaver = await pref('performance_tuning.high_efficiency_mode.state');
 check('Memory Saver is on by default', memorySaver === 2, `state ${memorySaver}`);
-const energySaver = tuning.battery_saver_mode?.state?.value;
+const energySaver = await pref('performance_tuning.battery_saver_mode.state');
 check('Energy saver turns on whenever the system saves power', energySaver === 2,
       `state ${energySaver}`);
 
@@ -54,8 +69,11 @@ await key(CDP_PORT, 87, 2 | 8, byId(first.id));  // Ctrl+Shift+W: close the wind
 await sleep(2000);
 await key(CDP_PORT, 84, 2 | 8, byId(other));  // Ctrl+Shift+T: reopen it
 await sleep(5000);
-const loads = async () => JSON.parse(await evaluate(
-    CDP_PORT, byId(other), 'JSON.stringify({...localStorage})') ?? '{}');
+// Load counts by page id, e.g. {a: 2, b: 1}.
+const loads = async () => Object.fromEntries(
+    Object.entries(JSON.parse(await evaluate(
+        CDP_PORT, byId(other), 'JSON.stringify({...localStorage})') ?? '{}'))
+        .map(([k, v]) => [k, Number(v)]));
 let n = await loads();
 check('The reopened window loads its active tab', n['loads:a'] === 2,
       `a loaded ${n['loads:a']}x`);

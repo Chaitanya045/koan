@@ -20,5 +20,10 @@ export async function servePages() {
     }
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
-  return { origin: `http://127.0.0.1:${server.address().port}`, close: () => server.close() };
+  // The browser keeps connections alive; drop them so the process can exit.
+  const close = () => {
+    server.closeAllConnections();
+    server.close();
+  };
+  return { origin: `http://127.0.0.1:${server.address().port}`, close };
 }

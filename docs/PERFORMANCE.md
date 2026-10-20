@@ -87,12 +87,21 @@ wake up when nothing changes, and do its animations run on the compositor.
   while they are hidden. (Only while a menu from the revealed toolbar is
   open does Koan look again every 400 ms, because closing a menu sends the
   window no event.)
+- **The hidden toolbar doesn't paint.** In single toolbar (the default)
+  and compact mode the toolbar is slid out of the window, but it was still
+  repainted on every URL, title and load change (the location bar 40 times
+  in 10 s on a page that changes its title 4 times a second). Its layer is
+  now hidden while it is out of the window, so the compositor skips it; the
+  views stay visible, so Ctrl+L still focuses the omnibox.
 - **Compositor animations only.** Every Koan animation is a layer opacity
   or transform animation run by the compositor: the compact toolbar slide,
   the floating URL bar fade, the window buttons' fade, Glance's scale and
   fade. None of them repaints or lays out views per frame. The compact
   sidebar's slide is upstream's vertical tab strip expand-on-hover
-  animation.
+  animation, which animates the strip's width: it lays out and repaints the
+  strip (Koan's URL pill and Space switcher included) every frame, about
+  320 paints for one peek in and out. Making it a transform would mean
+  replacing upstream's animation; left as is.
 
 ## Measurements (dev build)
 
@@ -103,4 +112,38 @@ view paints and layouts by class, browser main-thread tasks by origin and
 CPU time by process type. `scripts/e2e/power.mjs` checks the defaults and
 behaviour above.
 
-MEASUREMENTS
+All numbers: dev build, off-screen (headless Ozone, software compositing),
+8-core machine shared with other builds, so only the comparisons matter.
+
+View paints (`View::OnPaint`) and layouts in the browser process, before
+and after hiding the slid-away toolbar's layer:
+
+| Scenario | Paints before → after | Layouts | Notes |
+|---|---|---|---|
+| Idle 10 s, static page, default layout | 0 → 0 | 0 | No Koan task ran. |
+| Idle 10 s, compact mode | 0 → 0 | 0 | No Koan task ran. |
+| Active tab changes its title 4×/s, 10 s | 200 → 164 | ~1900 | The hidden location bar painted 40 times; now 0. The rest are the tab (title) in the sidebar. |
+| 5 page loads | 154 → 117 | ~2900 | The hidden toolbar, reload and avatar buttons repainted on each load; now 0. |
+| Peek the compact sidebar (Ctrl+Alt+S) until it hides | 321 | ~1900 | Upstream's width animation (see above). |
+
+Browser CPU for these varied between runs by 2× on the shared machine, so
+it isn't reported; the paint counts are deterministic.
+
+Busy background tabs: 8 tabs, each with a dedicated worker doing 20 ms of
+work every 100 ms (worker timers aren't throttled in the background), CPU
+over 20 s starting 5 s after they opened:
+
+| | Renderer CPU |
+|---|---|
+| Freezing off (`--disable-features=InfiniteTabsFreezing`, Chromium's default) | 32.1 s |
+| Koan (freezing on) | 18.4 s |
+
+In `scripts/e2e/power.mjs` (same tabs, 15 s), with freezing on 5 of the 8
+tabs paused for 7–15 s, i.e. from when they froze until the test opened
+them; the others count among the most recently used tabs, which stay
+unfrozen. With freezing off no tab paused for more than 0.8 s.
+
+Reopening a closed window with 4 tabs (`scripts/e2e/power.mjs`): with
+upstream's behaviour (`--disable-features=KoanRestoreTabsOnDemand`) all
+four load again; with Koan's, only the active one does, and a background
+tab loads when it is opened.

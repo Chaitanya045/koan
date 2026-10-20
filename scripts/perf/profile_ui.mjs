@@ -76,3 +76,4 @@ for (const [name, run] of Object.entries(scenarios)) {
 }
 browser.close();
 pages.close();
+process.exit(0);

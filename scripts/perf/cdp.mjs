@@ -4,7 +4,8 @@
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 export { sleep };
 
-// Connects to a DevTools WebSocket. `on(method, fn)` subscribes to events.
+// Connects to a DevTools WebSocket. `on(method, fn)` subscribes to events
+// and returns a function that unsubscribes.
 export async function connect(url) {
   const ws = new WebSocket(url);
   let id = 0;
@@ -29,6 +30,7 @@ export async function connect(url) {
   const on = (method, fn) => {
     if (!listeners.has(method)) listeners.set(method, []);
     listeners.get(method).push(fn);
+    return () => listeners.set(method, listeners.get(method).filter(f => f !== fn));
   };
   return { send, on, close: () => ws.close() };
 }
@@ -82,8 +84,9 @@ export async function processCpu(browser) {
 // posted from.
 export async function traceUi(browser, during) {
   const events = [];
-  browser.on('Tracing.dataCollected', p => events.push(...p.value));
-  const done = new Promise(r => browser.on('Tracing.tracingComplete', r));
+  const offData = browser.on('Tracing.dataCollected', p => events.push(...p.value));
+  let offDone;
+  const done = new Promise(r => (offDone = browser.on('Tracing.tracingComplete', r)));
   await browser.send('Tracing.start', {
     transferMode: 'ReportEvents',
     traceConfig: {
@@ -98,6 +101,8 @@ export async function traceUi(browser, during) {
   const cpuAfter = await processCpu(browser);
   await browser.send('Tracing.end');
   await done;
+  offData();
+  offDone();
 
   const threads = new Map();
   for (const e of events) {
