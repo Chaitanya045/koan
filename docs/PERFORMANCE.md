@@ -178,7 +178,7 @@ test opened them); the others count among the 5 most recently used tabs,
 which stay unfrozen. The test asserts at least 3, since at most 5 of the 8
 can be among the most recently used. With freezing off no tab paused for
 more than 0.8 s. A pinned busy tab, opened before the 8 and so the least
-recently used, never paused for more than 174 ms.
+recently used, never paused for more than 200 ms (158–176 ms in four runs).
 
 Reopening a closed window with 4 tabs (`scripts/e2e/power.mjs`): with
 upstream's behaviour (`--disable-features=KoanRestoreTabsOnDemand`) all
