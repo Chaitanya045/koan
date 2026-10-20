@@ -1,0 +1,21 @@
+diff --git a/chrome/common/chrome_paths_mac.mm b/chrome/common/chrome_paths_mac.mm
+index 6829c9cb92c228dd19d44c9f739bf4595720cc2d..385317904313de1b43749c9e84a3aef733cc82ac 100644
+--- a/chrome/common/chrome_paths_mac.mm
++++ b/chrome/common/chrome_paths_mac.mm
+@@ -20,6 +20,7 @@
+ #include "build/build_config.h"
+ #include "chrome/common/chrome_constants.h"
+ #include "chrome/common/chrome_paths_internal.h"
++#include "koan/common/koan_branding.h"
+ 
+ namespace {
+ 
+@@ -37,7 +38,7 @@ char* ProductDirNameForBundle(NSBundle* chrome_bundle) {
+ #elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
+       product_dir_name = "Google/Chrome";
+ #else
+-      product_dir_name = "Chromium";
++      product_dir_name = koan::kMacProductDirName;
+ #endif
+     }
+ 

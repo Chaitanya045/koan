@@ -28,6 +28,11 @@ inline constexpr char kDataDirBasename[] = "koan";
 inline constexpr char kDesktopFileName[] = "koan.desktop";
 inline constexpr char kIconName[] = "koan";
 
+// macOS: the profile lives in ~/Library/Application Support/Koan, not
+// .../Chromium, so Koan and Chromium can coexist. Used by
+// chrome/common/chrome_paths_mac.mm.
+inline constexpr char kMacProductDirName[] = "Koan";
+
 }  // namespace koan
 
 #endif  // KOAN_COMMON_KOAN_BRANDING_H_

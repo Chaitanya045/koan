@@ -1,5 +1,5 @@
 diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
-index 59bf31b925c2f42b4392e3b4b4a56489e41bc26b..65a489e03549de186633743a9d5b8cb3623db653 100644
+index 59bf31b925c2f42b4392e3b4b4a56489e41bc26b..f427fd59f84cd99494f217107583d368e0c6b0f5 100644
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
 @@ -85,7 +85,10 @@ source_set("channel_info") {
@@ -14,7 +14,7 @@ index 59bf31b925c2f42b4392e3b4b4a56489e41bc26b..65a489e03549de186633743a9d5b8cb3
    public_deps = [
      "//base",
      "//components/version_info",
-@@ -607,6 +610,7 @@ static_library("constants") {
+@@ -607,10 +610,12 @@ static_library("constants") {
    }
    if (is_linux || is_chromeos) {
      sources += [ "chrome_paths_linux.cc" ]
@@ -22,3 +22,8 @@ index 59bf31b925c2f42b4392e3b4b4a56489e41bc26b..65a489e03549de186633743a9d5b8cb3
      deps += [ ":channel_info" ]
    }
    if (is_mac) {
+     sources += [ "chrome_paths_mac.mm" ]
++    deps += [ "//koan/common:branding" ]
+   }
+   if (is_win) {
+     sources += [ "chrome_paths_win.cc" ]
