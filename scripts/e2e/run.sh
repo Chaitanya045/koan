@@ -4,7 +4,8 @@
 #   scripts/e2e/run.sh <test> [url...]     e.g. scripts/e2e/run.sh shortcuts
 #
 # Without URLs it opens scripts/e2e/pages/<test>.html if that exists, else
-# two example.com tabs.
+# two example.com tabs. scripts/e2e/prefs/<test>.json, if it exists, seeds
+# the fresh profile's Preferences.
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -30,6 +31,11 @@ prof=$(koan_new_profile)
 pid=
 cleanup() { [[ -n $pid ]] && kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; koan_rm "$prof" "$prof.log"; }
 trap cleanup EXIT
+prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
+if [[ -f $prefs ]]; then
+  mkdir -p "$prof/Default"
+  cp "$prefs" "$prof/Default/Preferences"
+fi
 
 "$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof" \
   --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT" \
