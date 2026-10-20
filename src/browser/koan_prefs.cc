@@ -32,14 +32,6 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->SetDefaultPrefValue(
       pm::kMemorySaverModeState,
       base::Value(static_cast<int>(pm::MemorySaverModeState::kEnabled)));
-  // Energy saver whenever the system saves power. Chromium's default, "below
-  // 20% battery", never applies on Linux, which has no battery level
-  // provider; "on battery" there means the desktop's power-saver profile is
-  // on (power-profiles-daemon through the XDG portal).
-  registry->SetDefaultPrefValue(
-      pm::kBatterySaverModeState,
-      base::Value(
-          static_cast<int>(pm::BatterySaverModeState::kEnabledOnBattery)));
 }
 
 }  // namespace koan::prefs

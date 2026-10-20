@@ -68,9 +68,9 @@ inline constexpr char kCtrlTabSkipPending[] = "koan.tabs.ctrl_tab_skip_pending";
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-// Changes the defaults of upstream local-state prefs for Koan's power and
-// memory behaviour (see docs/PERFORMANCE.md); a value the user sets in
-// Settings > Performance still wins. Called from
+// Changes the defaults of upstream local-state prefs for Koan's memory
+// behaviour (see docs/PERFORMANCE.md); a value the user sets in Settings >
+// Performance still wins. Called from
 // chrome/browser/prefs/browser_prefs.cc after upstream registered them.
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry);
 
