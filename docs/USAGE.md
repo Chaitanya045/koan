@@ -24,7 +24,7 @@ Chrome.
 | Copy the page's URL | Ctrl+Shift+C | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
 | Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
-| Close all unpinned tabs (in the workspace) | Ctrl+Shift+K | |
+| Close all unpinned tabs (in the workspace; keeps the selected one; Ctrl+Shift+T undoes) | Ctrl+Shift+K | |
 | Expand Glance to a tab | Ctrl+O while Glance is open | Open file (still, otherwise) |
 | Glance a link | Alt+click | (Alt+click downloaded the link) |
 | Close Glance | Esc, or click the dimmed page | |
@@ -74,10 +74,22 @@ persists.
 
 ## Sidebar
 
-Vertical tabs are on by default. Pinned tabs sit in a grid at the top and
-are shared by every workspace (Koan's Essentials). The workspace switcher
-is at the bottom of the sidebar: **∞** shows all tabs, one round button per
-workspace, **+** creates one.
+Vertical tabs are on by default, laid out like Zen's. Pinned tabs are
+Koan's Essentials: square tiles at the top, up to four across, shared by
+every workspace. Below them a thin line separates the tabs; **+ New Tab**
+opens a tab at the top of the workspace's tabs, and the tabs follow. A
+tab's close button shows while you point at it.
+
+While the pointer is over the sidebar, **↓ Clear** appears at the end of
+the line: it closes the workspace's unpinned tabs except the selected one
+and any playing sound (if those are all there is, it closes them too), the
+same as Ctrl+Shift+K. The workspace stays (an emptied one gets a fresh
+tab), and a toast reminds you that Ctrl+Shift+T brings the tabs back. In
+the **∞** view Clear only closes tabs that are in no workspace.
+
+Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). The
+workspace switcher is at the bottom of the sidebar: **∞** shows all tabs,
+one round button per workspace, **+** creates one.
 
 ## Workspaces
 

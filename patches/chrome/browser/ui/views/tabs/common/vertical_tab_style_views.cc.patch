@@ -1,0 +1,25 @@
+--- a/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/ui/views/tabs/tab.h"
+ #include "chrome/browser/ui/views/tabs/tab_slot_controller.h"
+ #include "chrome/grit/theme_resources.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkRRect.h"
+ #include "ui/base/theme_provider.h"
+@@ -76,6 +77,14 @@
+ }
+ 
+ void VerticalTabStyleViews::PaintTab(gfx::Canvas* canvas) const {
++  // Koan (Zen): its tab rows and Essentials tiles.
++  if (koan::PaintSidebarTab(
++          canvas, *delegate_->GetView(), delegate_->IsPinned(),
++          GetSelectionState() != TabStyle::TabSelectionState::kInactive,
++          delegate_->IsHoverAnimationActive() ? GetHoverAnimationValue() : 0,
++          GetCornerRadius())) {
++    return;
++  }
+   std::optional<int> active_tab_fill_id;
+   const ui::ThemeProvider* const theme_provider =
+       delegate_->GetView()->GetThemeProvider();

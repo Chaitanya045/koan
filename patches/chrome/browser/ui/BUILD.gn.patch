@@ -1,0 +1,10 @@
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -1533,6 +1533,7 @@
+     "//chrome/browser/ui:ui_features",
+     "//chrome/common:chrome_features",
+     "//components/omnibox/common",
++    "//koan/browser:features",
+     "//ui/base",
+     "//ui/base:features",
+   ]

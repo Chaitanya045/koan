@@ -169,7 +169,7 @@ await key(VK.U, CTRL | ALT, 'u');
 vs = await views();
 check('Ctrl+Alt+U unsplits', count(vs, 'SplitTabView') === 0);
 
-// Close all unpinned tabs: leaves one fresh tab.
+// Close all unpinned tabs: keeps the selected one, like Zen.
 await key(VK.K, CTRL | SHIFT, 'k');
 let ps = await pages();
 check('Ctrl+Shift+K closes unpinned tabs', ps.length === 1, `${ps.length} page(s)`);

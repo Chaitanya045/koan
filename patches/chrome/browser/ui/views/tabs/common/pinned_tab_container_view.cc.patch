@@ -1,0 +1,19 @@
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "content/public/browser/navigation_controller.h"
++#include "koan/browser/ui/views/koan_essentials.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/controls/scroll_view.h"
+@@ -422,6 +423,8 @@
+                   static_cast<int>(std::floor((available_width - child_width) /
+                                               (child_width + kTabPadding)) +
+                                    1));
++    // Koan (Zen): Essentials are at most four across.
++    children_on_row = koan::ClampEssentialsColumns(children_on_row);
+ 
+     // Allocate extra space to the tabs.
+     available_width -=

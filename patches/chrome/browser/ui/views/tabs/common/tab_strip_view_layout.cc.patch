@@ -1,0 +1,29 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/horizontal/horizontal_tab_closing_helper.h"
+ #include "chrome/browser/ui/views/tabs/horizontal/tab_scroll_button_container.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/separator.h"
+ #include "ui/views/view_utils.h"
+@@ -287,6 +288,9 @@
+       remaining_height -=
+           tabs_separator->GetPreferredSize().height() + region_vertical_padding;
+     }
++    // Koan: Zen's rows between the pinned and unpinned tabs (the separator
++    // with a Clear button and the New Tab row).
++    remaining_height -= koan::GetSidebarTabRowsHeight(tab_strip_view);
+     // Clamp the remaining height to 0 if we have less space.
+     remaining_height = std::max(remaining_height, 0);
+   }
+@@ -332,6 +336,8 @@
+   }
+   layouts.child_layouts.emplace_back(tabs_separator, should_show_separator,
+                                      separator_bounds);
++  y += koan::PlaceSidebarTabRows(tab_strip_view, layouts,
++                                 size_bounds.width().value(), y);
+ 
+   // Place the unpinned container using the entire available width, we do not
+   // inset the x value by `region_horizontal_padding` here because, when the tab

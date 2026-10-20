@@ -1,0 +1,33 @@
+--- a/chrome/browser/ui/layout_constants.cc
++++ b/chrome/browser/ui/layout_constants.cc
+@@ -9,6 +9,7 @@
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "components/omnibox/common/omnibox_features.h"
++#include "koan/browser/koan_features.h"
+ #include "ui/base/pointer/touch_ui_controller.h"
+ #include "ui/base/ui_base_features.h"
+ #include "ui/gfx/geometry/insets.h"
+@@ -19,6 +20,22 @@
+ 
+ int GetLayoutConstant(LayoutConstant constant) {
+   const bool touch_ui = ui::TouchUiController::Get()->touch_ui();
++  if (koan::features::IsSidebarEnabled()) {
++    // Koan (Zen): the sidebar's tab rows (--tab-min-height), Essentials tiles
++    // (46px, at least 48px wide) and their 14px radius (--border-radius-medium).
++    switch (constant) {
++      case LayoutConstant::kVerticalTabCornerRadius:
++        return 14;
++      case LayoutConstant::kVerticalTabHeight:
++        return 36;
++      case LayoutConstant::kVerticalTabPinnedHeight:
++        return 46;
++      case LayoutConstant::kVerticalTabMinWidth:
++        return 48;
++      default:
++        break;
++    }
++  }
+   switch (constant) {
+     case LayoutConstant::kAppMenuProfileRowAvatarIconSize:
+       return 24;

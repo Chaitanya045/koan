@@ -22,6 +22,10 @@ point of Koan.
 | Ctrl+T opens the floating URL bar instead of a new-tab page | Missing | Ctrl+T opens Chrome's new-tab page. |
 | Collapsed-toolbar layout | Missing | |
 | Sidebar on the right | Missing | |
+| Sidebar tab list: "+ New Tab" row above the tabs, tab rows, close button on hover | Same | The row opens the tab at the top of the workspace, as Zen does with its New Tab button on top; Chromium's "+" below the tabs is hidden. Rows are 36px with a 14px radius, Zen's selected (white at 80%, 18% in dark mode) and hover colours, a 16px favicon 10px before the title. Zen's faint shadow under the selected tab isn't drawn. Ctrl+T still opens the tab at the end. |
+| Separator above the tabs with **Clear** on sidebar hover | Same | Shown while the workspace has unpinned tabs. Clear keeps the selected and audible tabs like Zen's, keeps the workspace (an emptied one gets a fresh tab) and Ctrl+Shift+T restores what it closed. Zen also keeps tabs in Picture-in-Picture or sharing camera/mic; Koan doesn't check those yet. In the "∞" view Clear only closes tabs that are in no workspace (Zen has no such view). |
+| "Tabs Closed!" toast | Same | Top right, Zen's look; spring animation approximated with an ease-out scale. |
+| Sidebar width 163–500 px, drag to resize | Same | Upstream resize handle with Zen's limits (Chromium's 126–400 px with the Koan sidebar off). |
 | Theme follows the system light/dark mode | Same | |
 | Thin overlay scrollbars, shown while scrolling | Same | Chromium's overlay scrollbars, on by default on Linux in Koan. Zen follows GTK's overlay-scrolling setting ("Always Show Scrollbars" in GNOME's accessibility settings); Koan always overlays for now (#30). For classic scrollbars, start Koan with `--disable-features=OverlayScrollbar`. Comparison: `screenshots/scrollbars-zen-vs-koan.png` (Zen left, Koan right, while scrolling). |
 | Gradient theme picker | Different | Workspaces tint the browser with one colour (Chromium's Material colour system), no gradient editor. |
@@ -49,9 +53,11 @@ point of Koan.
 | Per-workspace colour | Different | One tint colour per workspace (the group colour), not a gradient. |
 | Workspace icons (emoji) | Same | A leading emoji in the workspace name is its icon; new workspaces get one per colour. |
 | Containers per workspace | Missing | Chromium has profiles, not containers. |
-| Essentials shared by all workspaces | Same | Pinned tabs, shown as a grid at the top of the sidebar. |
+| Essentials shared by all workspaces | Same | Pinned tabs, shown as Zen's tiles (46px tall, up to four across) at the top of the sidebar. |
+| Essentials tile glows with the site's icon colour when selected | Different | The selected tile is plain white at 85% (20% in dark mode), Zen's look with `zen.theme.essentials-favicon-bg` off. |
+| At most 12 Essentials | Missing | Pinning isn't capped yet (pinned tabs and Essentials are #38). |
 | Per-workspace pinned tabs separate from Essentials | Missing | In Koan, pinned tabs are the Essentials. |
-| Close all unpinned tabs (Ctrl+Shift+K) | Same | |
+| Close all unpinned tabs (Ctrl+Shift+K, or Clear in the sidebar) | Same | Keeps the selected tab and the workspace, like Zen; Ctrl+Shift+T restores the tabs. |
 
 ## Glance and split view
 

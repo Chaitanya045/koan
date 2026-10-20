@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SHORTCUTS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SHORTCUTS_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -14,6 +15,7 @@
 
 class BrowserView;
 class PrefService;
+class TabStripModel;
 
 namespace views {
 class FocusManager;
@@ -50,6 +52,23 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   // goes on to Chrome's own handler).
   bool Run(Action action);
 
+  // Closes the unpinned tabs of the focused workspace (or, with none focused,
+  // the tabs in no workspace), like Zen's "Clear" in the sidebar
+  // (koan_sidebar_tabs.cc), and toasts about it. The workspace survives, and
+  // Ctrl+Shift+T brings the tabs back.
+  bool CloseUnpinnedTabs();
+
+  // The indices of the tabs CloseUnpinnedTabs considers: unpinned, in the
+  // focused workspace or, with none focused, in no tab group.
+  static std::vector<int> UnpinnedTabsForClear(const TabStripModel* model);
+
+  // Whether CloseUnpinnedTabs closes the tab at `index`: like Zen, it keeps
+  // the selected tabs and those playing sound, unless that is all of them.
+  static bool IsClosableByClear(const TabStripModel* model, int index);
+
+  // The key currently bound to `action` (the user may rebind it), if any.
+  std::optional<ui::Accelerator> GetAccelerator(Action action) const;
+
   // ui::AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
@@ -59,7 +78,6 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   bool Unsplit();
   bool CopyUrl(bool markdown);
   bool TogglePinTab();
-  bool CloseUnpinnedTabs();
   bool Command(int command_id);
   // Zen's Ctrl+Tab settings; returns false (Chrome cycles) when both are off.
   bool CycleTabs(const shortcuts::CycleKey& key);
