@@ -35,7 +35,13 @@ chrome="$KOAN_ROOT/chromium/src/${KOAN_OUT:-out/Koan}/chrome"
 export UI_PORT=${UI_PORT:-9600} CDP_PORT=${CDP_PORT:-9601}
 prof=$(koan_new_profile)
 pid=
-cleanup() { [[ -n $pid ]] && kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; koan_rm "$prof" "$prof.log"; }
+cleanup() {
+  [[ -n $pid ]] && kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  # A test may have restarted Koan on the same profile.
+  pkill -f -- "--user-data-dir=$prof" 2>/dev/null
+  koan_rm "$prof" "$prof.log"
+}
 trap cleanup EXIT
 prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
 if [[ -f $prefs ]]; then

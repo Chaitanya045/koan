@@ -37,15 +37,20 @@ const koanTasks = trace =>
 
 // --- Defaults -----------------------------------------------------------
 
-// As Settings > Performance reads it.
-await navigate(start, 'chrome://settings/performance');
+// As Settings > Performance reads it (in a tab of its own: navigating a
+// tab from a WebUI page back to the web was unreliable here).
+const settings = (await browser.send('Target.createTarget',
+                                     { url: 'chrome://settings/performance' })).result.targetId;
 let memorySaver;
 for (let i = 0; i < 20 && memorySaver === undefined; i++) {
   await sleep(500);
-  memorySaver = await evaluate(CDP_PORT, byId(start.id), `new Promise(r =>
+  memorySaver = await evaluate(CDP_PORT, byId(settings), `new Promise(r =>
       chrome.settingsPrivate.getPref('performance_tuning.high_efficiency_mode.state',
                                      p => r(p?.value)))`);
 }
+await browser.send('Target.closeTarget', { targetId: settings });
+await browser.send('Target.activateTarget', { targetId: start.id });
+await sleep(1000);
 check('Memory Saver is on by default', memorySaver === 2, `state ${memorySaver}`);
 
 // --- Restoring tabs on demand ---------------------------------------------
@@ -114,6 +119,8 @@ for (let i = 0; i < 40; i++) {
 await sleep(2000);
 const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean);
 relaunched = spawn(args[0], args.slice(1), { stdio: 'ignore' });
+// Never leave it running (it would hold the test ports), even on a crash.
+process.on('exit', () => relaunched.kill());
 for (let i = 0; i < 60; i++) {
   await sleep(500);
   if (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`).catch(() => null)) break;
@@ -130,7 +137,8 @@ check('...nor a tab in another Space', n.s === 1, show(n));
 // Pin a busy tab first (Ctrl+Shift+D), then open 8 more busy tabs in the
 // background. Up to 5 most recently used tabs stay unfrozen, so at least 3
 // of the 8 must freeze; the pinned tab, the least recently used, must not.
-const home = (await pageTargets(CDP_PORT)).find(byUrl('count=r1'));
+const home = (await pageTargets(CDP_PORT)).find(byUrl('count=r1')) ??
+    (await pageTargets(CDP_PORT))[0];
 const pinned = (await browser.send('Target.createTarget',
                                    { url: `${pages.origin}/power.html?busy&pinned` }))
     .result.targetId;
@@ -165,7 +173,8 @@ check('A pinned tab is never frozen', pinnedGap >= 0 && pinnedGap < 3000,
 
 // --- Koan's views (after the restart) -------------------------------------
 
-const first = (await pageTargets(CDP_PORT)).find(byUrl('count=r1'));
+const first = (await pageTargets(CDP_PORT)).find(byUrl('count=r1')) ??
+    (await pageTargets(CDP_PORT))[0];
 
 // Single toolbar (the default) slides the toolbar out of the window; it must
 // not repaint there when the page changes (here: its title, 4 times a

@@ -64,6 +64,10 @@ export async function evaluate(port, match, expression) {
 // Alt=1, Ctrl=2, Shift=8.
 export async function key(port, keyCode, modifiers = 0, match = () => true) {
   const target = (await pageTargets(port)).find(match);
+  if (!target) {
+    console.log(`  no page to send key ${keyCode} to`);
+    return;
+  }
   const page = await connect(target.webSocketDebuggerUrl);
   const base = { windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode, modifiers };
   await page.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
