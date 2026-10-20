@@ -1,0 +1,29 @@
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
+index bb705dccfe5d2a94be68f28a088751486b550f87..5c0ce6825b6578dc582773fe2fb3d893f9f7d62f 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -117,6 +117,7 @@
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
++#include "koan/browser/koan_tab_hooks.h"
+ #include "media/base/media_switches.h"
+ #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
+ #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
+@@ -5966,6 +5967,16 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
+       }
+     }
+ 
++    // Koan: Zen selects the most recently used tab, not a neighbour.
++    if (std::optional<int> recent = koan::PickRecentlyUsedTab(
++            profile(), count(), [&](int i) -> content::WebContents* {
++              return block_tabs.Contains(gfx::Range(i)) || !is_eligible(i)
++                         ? nullptr
++                         : GetWebContentsAt(i);
++            })) {
++      return GetTabIndexAfterClosing(*recent, block_tabs);
++    }
++
+     // Fourth preference is a tab that belongs in the same parent collection as
+     // `tab_or_collection`. A sibling is used even when it is collapsed, because
+     // the block itself was collapsed in that case, so only the focus
