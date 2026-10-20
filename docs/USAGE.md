@@ -115,15 +115,26 @@ from its sidebar.
 
 - **Look and Feel**: the browser layout (Only Sidebar / Sidebar and Top
   Toolbar) and compact mode.
-- **Tab Management**: whether the active workspace tints the browser.
+- **Tab Management**: whether the active workspace tints the browser, and
+  Zen's tab behaviours (Zen's defaults):
+  - closing a tab switches to the **most recently used** tab rather than a
+    neighbour (on);
+  - **Back** in a tab with no history (one opened from a link in another
+    tab) closes it and returns to that tab (on; never for pinned tabs);
+  - **Ctrl+Tab** cycles within the Essentials or within the other tabs,
+    whichever you are on (off), and can skip tabs that haven't loaded yet
+    (off).
 - **Keyboard Shortcuts**: Zen's shortcut editor. Click a shortcut, type
   the new keys and press **Esc** to save them; **Backspace** clears the
   shortcut, **Tab** leaves it unchanged. A key another shortcut already
   uses is refused ("Conflicts with ..."). A key needs Ctrl, Alt or Win
   (or is a function key). **Reset to Default** restores Zen's keys.
+  Shortcuts for features switched off in `chrome://flags` aren't listed.
 
-Changes apply at once to every window, and the page follows changes made
-elsewhere (e.g. Ctrl+S or Ctrl+Alt+B).
+Changes apply at once to every window, private windows included (they
+share the regular profile's settings), and the page follows changes made
+elsewhere (e.g. Ctrl+S or Ctrl+Alt+B). From a private window, Ctrl+, opens
+the page in a regular one, like Chromium's settings.
 
 ![Settings](screenshots/settings-look-and-feel.png)
 
