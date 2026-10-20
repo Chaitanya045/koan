@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/renderer_context_menu/BUILD.gn b/chrome/browser/renderer_context_menu/BUILD.gn
+index acff5f3013d759206abcd8545e8122868a5d5679..17020c3597c54d14ced6fed0d67f7277627b6053 100644
+--- a/chrome/browser/renderer_context_menu/BUILD.gn
++++ b/chrome/browser/renderer_context_menu/BUILD.gn
+@@ -188,6 +188,7 @@ source_set("impl") {
+       "//components/shared_highlighting/core/common",
+       "//components/spellcheck/browser",
+       "//components/user_prefs",
++      "//koan/browser/ui/views:views",
+       "//mojo/public/cpp/bindings",
+       "//pdf:features",
+       "//services/metrics/public/cpp:metrics_cpp",

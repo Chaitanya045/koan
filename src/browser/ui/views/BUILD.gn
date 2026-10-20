@@ -16,9 +16,11 @@ source_set("views") {
     "koan_essentials.h",
     "koan_sidebar_header.h",
     "koan_sidebar_tabs.h",
+    "koan_split_view.h",
   ]
   public_deps = [
     "//base",
+    "//ui/base",
     "//ui/gfx/geometry",
   ]
 }
@@ -43,14 +45,18 @@ source_set("impl") {
     "koan_glance_controller.h",
     "koan_shortcuts.cc",
     "koan_shortcuts.h",
+    "koan_split_view.cc",
     "koan_tab_activation.cc",
     "koan_tab_activation.h",
+    "koan_toast.cc",
+    "koan_toast.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
   ]
   deps = [
     ":views",
     "//base:i18n",
+    "//cc/paint",
     "//chrome/app:command_ids",
     "//chrome/app/vector_icons",
     "//chrome/browser:command_updater_impl",
@@ -101,12 +107,19 @@ source_set("impl") {
     "//koan/browser:tab_hooks",
     "//koan/common:url_constants",
     "//koan/browser/ui/color",
+    "//components/blocked_content",
+    "//components/javascript_dialogs",
+    "//components/user_prefs",
+    "//ui/accessibility",
     "//ui/base",
     "//ui/base/clipboard",
     "//ui/base/metadata",
     "//ui/compositor",
     "//ui/events",
+    "//skia",
     "//ui/gfx",
+    "//ui/gfx/geometry:geometry_skia",
+    "//ui/menus",
     "//ui/views",
   ]
   if (use_aura) {

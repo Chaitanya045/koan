@@ -1,0 +1,46 @@
+diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+index 21568c7fbce946136265066a3b82ecc18106ec32..599a94160abde1ba3b16ed8ee0ccdb493a12bb89 100644
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -254,6 +254,7 @@
+ #include "content/public/common/url_constants.h"
+ #include "content/public/common/url_utils.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/ui/views/koan_glance.h"
+ #include "media/base/media_switches.h"
+ #include "mojo/public/cpp/bindings/associated_remote.h"
+ #include "net/base/network_anonymization_key.h"
+@@ -2120,6 +2121,10 @@ void RenderViewContextMenu::AppendLinkItems() {
+               : vector_icons::kBusinessChromeRefreshOldIcon);
+     }
+ 
++    // Koan: Zen's "Split Link to New Tab" and "Open Link in Glance".
++    koan::AddZenLinkContextMenuItems(source_web_contents_, params_.link_url,
++                                     &menu_model_);
++
+     AppendOpenInWebAppLinkItems();
+     AppendOpenWithLinkItems();
+ 
+@@ -3507,6 +3512,10 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+   }
+ #endif
+ 
++  if (koan::IsGlanceLinkContextMenuCommand(id)) {
++    return true;
++  }
++
+   bool enabled = false;
+   if (RenderViewContextMenuBase::IsCommandIdKnown(id, &enabled)) {
+     return enabled;
+@@ -3901,6 +3910,11 @@ void RenderViewContextMenu::OpenURLWithExtraHeaders(
+ }
+ 
+ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
++  // Koan: "Open Link in Glance" (no upstream metrics id, so before them).
++  if (koan::IsGlanceLinkContextMenuCommand(id)) {
++    koan::OpenLinkInGlance(source_web_contents_, params_);
++    return;
++  }
+   RenderViewContextMenuBase::ExecuteCommand(id, event_flags);
+   if (command_executed_) {
+     return;

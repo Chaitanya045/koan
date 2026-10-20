@@ -71,6 +71,19 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanToastForeground] = {ui::kColorSysOnPrimary};
   mixer[kColorKoanToastKeyBackground] =
       ui::SetAlpha(kColorKoanToastForeground, Alpha(dark ? 0.1f : 0.4f));
+
+  // Glance (zen-glance.css): Zen fades the page behind the card to 30% over
+  // the window background, i.e. that background at 70% over the page; the
+  // card has --zen-big-shadow (black at 24%); the buttons are near-black
+  // (near-white in dark mode) with accent-coloured icons; the close button
+  // asking to confirm is rgb(220, 53, 69) with white.
+  mixer[kColorKoanGlanceBackdrop] = ui::SetAlpha(kColorToolbar, Alpha(0.7f));
+  mixer[kColorKoanGlanceCardShadow] = {
+      ui::kColorShadowValueAmbientShadowElevationFour};
+  mixer[kColorKoanGlanceButton] = {ui::kColorSysInverseSurface};
+  mixer[kColorKoanGlanceButtonIcon] = {ui::kColorSysInversePrimary};
+  mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
+  mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};
 }
 
 }  // namespace

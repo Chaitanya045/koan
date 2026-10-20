@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 2ea589165ccac66b5d4043e60130e4bb26eaa359..f339ca5c743f772208c98aa391b3145cdba36b42 100644
+index 2ea589165ccac66b5d4043e60130e4bb26eaa359..194e78f08af8ca1c11fe9169df011a2c3841803b 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -88,6 +88,7 @@
@@ -10,13 +10,25 @@ index 2ea589165ccac66b5d4043e60130e4bb26eaa359..f339ca5c743f772208c98aa391b3145c
  #include "extensions/browser/extension_registry.h"
  #include "extensions/browser/extension_system.h"
  #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
-@@ -542,6 +543,11 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
+@@ -542,6 +543,23 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
                                    std::move(navigation_handle_callback));
    }
  
-+  // Koan Glance: Alt+click opens the link in a floating card instead.
-+  if (koan::MaybeOpenGlance(&*browser_, source, params)) {
-+    return source;
++  // Koan Glance: an activation click (Alt+click by default) opens the link
++  // in a floating card; one Glance declines gets its modifier's usual
++  // disposition (koan/browser/ui/views/koan_glance.h).
++  WindowOpenDisposition koan_fallback = WindowOpenDisposition::CURRENT_TAB;
++  switch (koan::MaybeOpenGlance(&*browser_, source, params, &koan_fallback)) {
++    case koan::GlanceClick::kOpened:
++      return source;
++    case koan::GlanceClick::kDeclined: {
++      content::OpenURLParams fallback_params(params);
++      fallback_params.disposition = koan_fallback;
++      return OpenURLFromTab(source, fallback_params,
++                            std::move(navigation_handle_callback));
++    }
++    case koan::GlanceClick::kNone:
++      break;
 +  }
 +
    // If the source is already split, navigate the other pane instead of
