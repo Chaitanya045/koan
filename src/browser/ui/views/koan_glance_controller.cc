@@ -126,7 +126,9 @@ class KoanGlanceView : public views::View {
   // grows in by animating that window's layer. (Transforming `card_` would
   // neither scale nor fade the page, and NativeViewHost would size the page
   // with the start transform and keep it.) On macOS the page is an NSView
-  // outside the compositor's layers: only the backdrop and buttons fade in.
+  // composited under the NativeViewHost's own layer, not an aura::Window:
+  // for now only the backdrop and buttons fade in there. (Animating
+  // web_view_->holder()->layer() may do the same on macOS; untested.)
   void PlayOpenAnimation() {
     scrim_->layer()->SetOpacity(0.f);
     buttons_->layer()->SetOpacity(0.f);
