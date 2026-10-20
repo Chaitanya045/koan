@@ -157,3 +157,44 @@ export function printSummary(label, s, top = 12) {
   console.log(`  view layouts: ${layoutTotal}`);
   for (const [k, v] of s.layouts.slice(0, top)) console.log(`    ${v}\t${k}`);
 }
+
+// Native views from UI DevTools (Koan started with --enable-ui-devtools):
+// [{cls, nodeId, shown, x, y, w, h}]. `shown` includes the ancestors'
+// visibility. Never queries the root node (that aborts the browser).
+export async function uiViews(uiPort) {
+  const ui = await connect(`ws://127.0.0.1:${uiPort}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const out = [];
+  const walk = async (n, depth, shown) => {
+    const a = n.attributes ?? [];
+    const cls = a[a.indexOf('class') + 1];
+    if (depth > 0 && n.nodeName === 'View' && cls) {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+      const p = {};
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+      }
+      shown = shown && p.Visible !== 'false';
+      out.push({ cls, nodeId: n.nodeId, shown, x: +p.X, y: +p.Y, w: +p.Width, h: +p.Height });
+    }
+    for (const c of n.children ?? []) await walk(c, depth + 1, shown);
+  };
+  await walk(doc, 0, true);
+  ui.close();
+  return out;
+}
+
+// Sends a native mouse event (e.g. 'mouseEntered') straight to a view.
+// Needs the ui-debug-tools-enable-synthetic-events feature (run.sh sets it).
+export async function uiMouse(uiPort, view, type) {
+  const ui = await connect(`ws://127.0.0.1:${uiPort}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('DOM.getDocument', { depth: -1 });
+  await ui.send('DOM.dispatchMouseEvent', {
+    nodeId: view.nodeId,
+    event: { type, x: 1, y: 1, button: 'none', wheelDirection: 'none' },
+  });
+  ui.close();
+}

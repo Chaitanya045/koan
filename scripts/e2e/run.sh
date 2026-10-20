@@ -7,7 +7,11 @@
 # scripts/perf/profile_ui.mjs). Without URLs it opens
 # scripts/e2e/pages/<test>.html if that exists, else two example.com tabs.
 # scripts/e2e/prefs/<test>.json, if it exists, seeds the fresh profile's
-# Preferences. KOAN_FLAGS adds browser flags (e.g. --disable-features=...).
+# Preferences. KOAN_FLAGS adds browser flags (e.g. --disable-features=...);
+# features in an --enable-features there are added to the ones run.sh needs.
+#
+# The test gets KOAN_CHROME_ARGS, Koan's command line without the URLs (one
+# argument per line), to restart Koan with the same profile.
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -41,11 +45,21 @@ fi
 
 script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
 [[ $test_name == *.mjs ]] && script=$test_name
-# shellcheck disable=SC2086  # KOAN_FLAGS is a list of flags
-"$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof" \
-  --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT" \
-  --enable-features=ui-debug-tools-enable-synthetic-events ${KOAN_FLAGS:-} \
-  "${urls[@]}" >"$prof.log" 2>&1 &
+# A second --enable-features would replace the first, so merge them.
+features=ui-debug-tools-enable-synthetic-events
+extra=()
+for flag in ${KOAN_FLAGS:-}; do
+  case $flag in
+    --enable-features=*) features+=",${flag#--enable-features=}" ;;
+    *) extra+=("$flag") ;;
+  esac
+done
+args=("$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof"
+  --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
+  --enable-features="$features" "${extra[@]}")
+KOAN_CHROME_ARGS=$(printf '%s\n' "${args[@]}")
+export KOAN_CHROME_ARGS
+"${args[@]}" "${urls[@]}" >"$prof.log" 2>&1 &
 pid=$!
 for _ in $(seq 1 60); do
   curl -sf "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null && break
