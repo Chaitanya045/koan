@@ -6,22 +6,24 @@
  * sizes and colours measured from Zen 1.23 in light and dark mode. */
 
 :root {
+  /* Named like shadcn/ui's theme variables, so another style can supply
+   * them (#48); the values are Zen's. */
   color-scheme: light dark;
-  --text: light-dark(#15141a, #fbfbfe);
-  --text-deemphasized: light-dark(#5b5b66, #bfbfc9);
+  --foreground: light-dark(#15141a, #fbfbfe);
+  --muted-foreground: light-dark(#5b5b66, #bfbfc9);
   --background: light-dark(#fbfbfe, #1c1b22);
-  --accent: light-dark(#0a3063, #88aee1);
-  --accent-text: light-dark(#fbfbfe, #15141a);
-  --nav-selected: light-dark(#e8ebf2, #242631);
-  --nav-hover: light-dark(#ececf0, #2b2a33);
-  --separator: light-dark(#cfcfd8, #5b5b66);
-  --field-border: light-dark(#8f8f9d, #8f8f9d);
-  --button: light-dark(#f1f1f1, #363636);
-  --button-hover: light-dark(#e2e2e6, #424242);
-  --border: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.15));
-  --error: light-dark(#d7264c, #ff9aa2);
+  --primary: light-dark(#0a3063, #88aee1);
+  --ring: var(--primary);
+  --accent: light-dark(#e8ebf2, #242631);
+  --muted: light-dark(#ececf0, #2b2a33);
+  --border: light-dark(#cfcfd8, #5b5b66);
+  --input: light-dark(#8f8f9d, #8f8f9d);
+  --secondary: light-dark(#f1f1f1, #363636);
+  --secondary-hover: light-dark(#e2e2e6, #424242);
+  --field-border: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.15));
+  --destructive: light-dark(#d7264c, #ff9aa2);
   --success: light-dark(#017a40, #6ae7a8);
-  accent-color: var(--accent);
+  accent-color: var(--primary);
 }
 
 body {
@@ -29,7 +31,7 @@ body {
   display: flex;
   min-height: 100vh;
   background: var(--background);
-  color: var(--text);
+  color: var(--foreground);
   font: 15px system-ui, sans-serif;
 }
 
@@ -81,12 +83,12 @@ body {
 }
 
 .category:hover {
-  background: var(--nav-hover);
+  background: var(--muted);
 }
 
 .category[aria-selected="true"] {
-  background: var(--nav-selected);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--primary);
   font-weight: 600;
 }
 
@@ -97,13 +99,13 @@ body {
   inset-inline-start: 0;
   width: 4px;
   border-radius: 4px 0 0 4px;
-  background: var(--accent);
+  background: var(--primary);
 }
 
 #navigation hr {
   margin: 16px 0;
   border: none;
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--border);
 }
 
 .icon {
@@ -164,7 +166,7 @@ main {
   inset-inline-start: 12px;
   width: 14px;
   height: 14px;
-  color: var(--text-deemphasized);
+  color: var(--muted-foreground);
 }
 
 #search {
@@ -172,7 +174,7 @@ main {
   width: 100%;
   height: 32px;
   padding: 0 12px 0 34px;
-  border: 1px solid var(--field-border);
+  border: 1px solid var(--input);
   border-radius: 8px;
   background: transparent;
   color: inherit;
@@ -180,7 +182,7 @@ main {
 }
 
 #search:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: -1px;
 }
 
@@ -207,7 +209,7 @@ h1 + .group {
 
 .description {
   margin: 0 0 8px;
-  color: var(--text-deemphasized);
+  color: var(--muted-foreground);
 }
 
 .row {
@@ -248,7 +250,7 @@ button.reset-button {
   padding: 0 16px;
   border: none;
   border-radius: 5px;
-  background: var(--button);
+  background: var(--secondary);
   color: inherit;
   font: inherit;
   font-weight: 600;
@@ -256,7 +258,7 @@ button.reset-button {
 
 select:hover,
 button.reset-button:hover {
-  background: var(--button-hover);
+  background: var(--secondary-hover);
 }
 
 button.reset-button {
@@ -264,7 +266,7 @@ button.reset-button {
 }
 
 .empty {
-  color: var(--text-deemphasized);
+  color: var(--muted-foreground);
 }
 
 /* Zen's browser layout picker (#zenLayoutList). */
@@ -303,7 +305,7 @@ button.reset-button {
 }
 
 .layout-card.selected .preview {
-  border-color: var(--accent);
+  border-color: var(--primary);
 }
 
 .layout-card:focus-visible {
@@ -311,7 +313,7 @@ button.reset-button {
 }
 
 .layout-card:focus-visible .preview {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -401,7 +403,7 @@ button.reset-button {
   box-sizing: border-box;
   width: 40%;
   padding: 5px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   border-radius: 5px;
   background: transparent;
   color: inherit;
@@ -425,11 +427,11 @@ button.reset-button {
 
 .shortcut-input.editing {
   border-color: transparent;
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px var(--ring);
 }
 
 .shortcut-input.invalid {
-  border-color: var(--error);
+  border-color: var(--destructive);
 }
 
 .shortcut-input.valid {
@@ -441,10 +443,10 @@ button.reset-button {
   margin-top: 4px;
   font-size: 12px;
   text-align: end;
-  color: var(--text-deemphasized);
+  color: var(--muted-foreground);
 }
 
 .shortcut-note.conflict,
 .shortcut-note.unsaved {
-  color: var(--error);
+  color: var(--destructive);
 }
