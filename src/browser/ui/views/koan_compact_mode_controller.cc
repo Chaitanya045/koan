@@ -354,6 +354,7 @@ void KoanCompactModeController::SetUrlBarFloating(bool floating) {
     top_container->SetCanProcessEventsWithinSubtree(true);
     ui::Layer* layer = top_container->layer();
     layer->GetAnimator()->AbortAllAnimations();
+    layer->SetVisible(top_container->GetVisible());
     layer->SetTransform(gfx::Transform());
     layer->SetRoundedCornerRadius(gfx::RoundedCornersF(kFloatingUrlBarRadius));
     layer->SetIsFastRoundedCorner(true);
@@ -688,24 +689,30 @@ void KoanCompactModeController::SetToolbarRevealed(bool revealed,
 
 void KoanCompactModeController::ApplyToolbarTransform(bool animate) {
   views::View* top_container = browser_view_->top_container();
-  if (!top_container->layer()) {
+  ui::Layer* layer = top_container->layer();
+  if (!layer) {
     return;
   }
   gfx::Transform target;
-  if (!toolbar_revealed_ && !url_bar_floating_) {
+  if (is_toolbar_away()) {
     // Slide fully above the window, including any drop shadow.
     target.Translate(0, -top_container->height());
+  } else {
+    layer->SetVisible(top_container->GetVisible());
   }
   if (!animate) {
-    if (top_container->layer()->GetAnimator()->is_animating()) {
+    if (layer->GetAnimator()->is_animating()) {
       return;
     }
-    top_container->layer()->SetTransform(target);
+    layer->SetTransform(target);
+    HideAwayToolbarLayer();
     return;
   }
   // Compositor-driven, so the slide stays smooth even if the UI thread is
   // busy.
   views::AnimationBuilder()
+      .OnEnded(base::BindOnce(&KoanCompactModeController::HideAwayToolbarLayer,
+                              weak_factory_.GetWeakPtr()))
       .SetPreemptionStrategy(
           ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
       .Once()
@@ -714,6 +721,16 @@ void KoanCompactModeController::ApplyToolbarTransform(bool animate) {
       .SetTransform(
           top_container, target,
           toolbar_revealed_ ? gfx::Tween::EASE_OUT : gfx::Tween::EASE_IN);
+}
+
+void KoanCompactModeController::HideAwayToolbarLayer() {
+  // A toolbar slid out of the window still repaints on every URL, title and
+  // load change unless its layer is hidden; the views stay visible, so the
+  // omnibox can still take focus (Ctrl+L).
+  ui::Layer* layer = browser_view_->top_container()->layer();
+  if (mode_ != Mode::kNone && is_toolbar_away() && layer) {
+    layer->SetVisible(false);
+  }
 }
 
 bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {

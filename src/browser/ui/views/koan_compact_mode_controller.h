@@ -124,7 +124,12 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void Deactivate();
 
   void SetToolbarRevealed(bool revealed, bool animate);
+  // The toolbar is slid out of the window (neither revealed nor floating).
+  bool is_toolbar_away() const {
+    return !toolbar_revealed_ && !url_bar_floating_;
+  }
   void ApplyToolbarTransform(bool animate);
+  void HideAwayToolbarLayer();
   bool ShouldKeepToolbarRevealed() const;
   void CheckToolbarHide();
 
