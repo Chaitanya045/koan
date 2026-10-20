@@ -29,64 +29,20 @@ async function navigate(target, url) {
 }
 const byId = id => t => t.id === id;
 const byUrl = suffix => t => t.url.endsWith(suffix);
-const first = (await pageTargets(CDP_PORT))[0];
+const start = (await pageTargets(CDP_PORT))[0];
 const CTRL = 2, ALT = 1, SHIFT = 8;
 const paintsOf = trace => Object.fromEntries(trace.paints);
 const koanTasks = trace =>
   trace.tasks.filter(([from]) => from.startsWith('koan_')).reduce((n, [, c]) => n + c, 0);
 
-// --- Koan's views -----------------------------------------------------
-
-// Single toolbar (the default) slides the toolbar out of the window; it must
-// not repaint there when the page changes (here: its title, 4 times a
-// second). The tab in the sidebar does repaint.
-await navigate(first, `${pages.origin}/power.html?title`);
-await sleep(2000);
-let paints = paintsOf(await traceUi(browser, () => sleep(5000)));
-check('The hidden toolbar does not repaint', !paints.ToolbarView && !paints.LocationBarView,
-      `toolbar ${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}, ` +
-      `tab ${paints.TabView ?? 0} paints in 5 s`);
-
-// Compact mode: a sidebar opened with Ctrl+Alt+S hides again without Koan
-// polling (it used to check the pointer every 100 ms while open).
-await key(CDP_PORT, 83, CTRL, byId(first.id));  // Ctrl+S
-await sleep(1500);
-const peek = await traceUi(browser, async () => {
-  await key(CDP_PORT, 83, CTRL | ALT, byId(first.id));  // Ctrl+Alt+S
-  await sleep(6000);
-});
-check('A peeked sidebar hides again without polling', koanTasks(peek) <= 3,
-      `${koanTasks(peek)} Koan task(s) in 6 s; ${paintsOf(peek).TabView ?? 0} tab paints ` +
-      'show the sidebar opened');
-
-// Compact mode with multiple toolbars: the toolbar slides in from the top
-// edge and away again; once away it must stop painting too (its layer is
-// hidden when the slide-out animation ends).
-await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // Ctrl+Alt+B
-await sleep(1500);
-const zones = (await uiViews(UI_PORT))
-    .filter(v => v.cls === 'KoanHotZone' && v.shown && v.w > v.h);
-const reveal = await traceUi(browser, async () => {
-  if (zones[0]) await uiMouse(UI_PORT, zones[0], 'mouseEntered');
-  await sleep(2000);
-});
-paints = paintsOf(await traceUi(browser, () => sleep(4000)));
-check('The toolbar slid back out does not repaint',
-      paintsOf(reveal).ToolbarView > 0 && !paints.ToolbarView && !paints.LocationBarView,
-      `${paintsOf(reveal).ToolbarView ?? 0} toolbar paints while revealed; then toolbar ` +
-      `${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}`);
-await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // back to single toolbar
-await key(CDP_PORT, 83, CTRL, byId(first.id));  // compact mode off
-await sleep(1500);
-
 // --- Defaults -----------------------------------------------------------
 
 // As Settings > Performance reads it.
-await navigate(first, 'chrome://settings/performance');
+await navigate(start, 'chrome://settings/performance');
 let memorySaver;
 for (let i = 0; i < 20 && memorySaver === undefined; i++) {
   await sleep(500);
-  memorySaver = await evaluate(CDP_PORT, byId(first.id), `new Promise(r =>
+  memorySaver = await evaluate(CDP_PORT, byId(start.id), `new Promise(r =>
       chrome.settingsPrivate.getPref('performance_tuning.high_efficiency_mode.state',
                                      p => r(p?.value)))`);
 }
@@ -104,7 +60,7 @@ async function loads(target) {
 const show = n => Object.entries(n).map(([k, v]) => `${k}: ${v}x`).join(', ');
 
 // Reopening a closed window loads its active tab only.
-await navigate(first, count('a'));
+await navigate(start, count('a'));
 for (const id of ['b', 'c', 'd']) {
   await browser.send('Target.createTarget', { url: count(id), background: true });
 }
@@ -112,7 +68,7 @@ await sleep(3000);
 const other = (await browser.send('Target.createTarget',
                                   { url: count('w'), newWindow: true })).result.targetId;
 await sleep(2000);
-await key(CDP_PORT, 87, CTRL | SHIFT, byId(first.id));  // Ctrl+Shift+W
+await key(CDP_PORT, 87, CTRL | SHIFT, byId(start.id));  // Ctrl+Shift+W
 await sleep(2000);
 await key(CDP_PORT, 84, CTRL | SHIFT, byId(other));  // Ctrl+Shift+T
 await sleep(5000);
@@ -126,12 +82,17 @@ if (b) {
   n = await loads(byId(other));
 }
 check('A background tab loads when it is opened', n.b === 2, show(n));
+if (!(n.a === 2 && n.b === 2)) {
+  console.log(`  open pages: ${(await pageTargets(CDP_PORT)).map(t => t.url).join(' ')}`);
+}
 
 // After a restart only the active tab loads: not the window's other tabs,
 // nor a tab in another Space. Window: r1 (active), r2, r3, and s in a
 // Space of its own.
-await key(CDP_PORT, 87, CTRL | SHIFT, byUrl('count=b'));  // close the reopened window
-await sleep(2000);
+if ((await pageTargets(CDP_PORT)).find(byUrl('count=b'))) {
+  await key(CDP_PORT, 87, CTRL | SHIFT, byUrl('count=b'));  // close the reopened window
+  await sleep(2000);
+}
 await navigate((await pageTargets(CDP_PORT)).find(byId(other)), count('r1'));
 await sleep(1000);
 for (const id of ['r2', 'r3']) {
@@ -201,6 +162,52 @@ check('Busy background tabs beyond the 5 most recent are frozen', frozen >= 3,
       `${frozen} of 8 paused > 3 s; longest pauses (ms): ${gaps.join(', ')}`);
 check('A pinned tab is never frozen', pinnedGap >= 0 && pinnedGap < 3000,
       `longest pause ${pinnedGap} ms`);
+
+// --- Koan's views (after the restart) -------------------------------------
+
+const first = (await pageTargets(CDP_PORT)).find(byUrl('count=r1'));
+
+// Single toolbar (the default) slides the toolbar out of the window; it must
+// not repaint there when the page changes (here: its title, 4 times a
+// second). The tab in the sidebar does repaint.
+await navigate(first, `${pages.origin}/power.html?title`);
+await sleep(2000);
+let paints = paintsOf(await traceUi(browser, () => sleep(5000)));
+check('The hidden toolbar does not repaint', !paints.ToolbarView && !paints.LocationBarView,
+      `toolbar ${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}, ` +
+      `tab ${paints.TabView ?? 0} paints in 5 s`);
+
+// Compact mode: a sidebar opened with Ctrl+Alt+S hides again without Koan
+// polling (it used to check the pointer every 100 ms while open).
+await key(CDP_PORT, 83, CTRL, byId(first.id));  // Ctrl+S
+await sleep(1500);
+const peek = await traceUi(browser, async () => {
+  await key(CDP_PORT, 83, CTRL | ALT, byId(first.id));  // Ctrl+Alt+S
+  await sleep(6000);
+});
+check('A peeked sidebar hides again without polling', koanTasks(peek) <= 3,
+      `${koanTasks(peek)} Koan task(s) in 6 s; ${paintsOf(peek).TabView ?? 0} tab paints ` +
+      'show the sidebar opened');
+
+// Compact mode with multiple toolbars: the toolbar slides in from the top
+// edge and away again; once away it must stop painting too (its layer is
+// hidden when the slide-out animation ends).
+await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // Ctrl+Alt+B
+await sleep(1500);
+const zones = (await uiViews(UI_PORT))
+    .filter(v => v.cls === 'KoanHotZone' && v.shown && v.w > v.h);
+const reveal = await traceUi(browser, async () => {
+  if (zones[0]) await uiMouse(UI_PORT, zones[0], 'mouseEntered');
+  await sleep(2000);
+});
+paints = paintsOf(await traceUi(browser, () => sleep(4000)));
+check('The toolbar slid back out does not repaint',
+      paintsOf(reveal).ToolbarView > 0 && !paints.ToolbarView && !paints.LocationBarView,
+      `${paintsOf(reveal).ToolbarView ?? 0} toolbar paints while revealed; then toolbar ` +
+      `${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}`);
+await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // back to single toolbar
+await key(CDP_PORT, 83, CTRL, byId(first.id));  // compact mode off
+await sleep(1500);
 
 browser.close();
 pages.close();
