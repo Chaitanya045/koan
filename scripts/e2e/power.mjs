@@ -63,7 +63,8 @@ async function loadsIn(url) {
   if (!ok) console.log(`  ${url}: ${JSON.stringify(nav)} ${events.join('; ')}`);
   return ok;
 }
-if (!await loadsIn(`${pages.origin}/power.html`)) {
+const pageLoads = await loadsIn(`${pages.origin}/power.html`);
+if (!pageLoads) {
   // Tell a Chrome-side block (any local server, any host name) from a
   // problem with this script's server.
   const dir = new URL('./pages', import.meta.url).pathname;
@@ -75,8 +76,8 @@ if (!await loadsIn(`${pages.origin}/power.html`)) {
                                                    '/power.html')}`);
   console.log(`  example.com: ${await loadsIn('https://example.com/')}`);
   py.kill();
-  check('A test page loads', false);
 }
+check('A test page loads', pageLoads);
 const CTRL = 2, ALT = 1, SHIFT = 8;
 const paintsOf = trace => Object.fromEntries(trace.paints);
 const koanTasks = trace =>
