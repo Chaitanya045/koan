@@ -145,7 +145,7 @@ since a user-set pref value overrides the default.
   `GetVerticalTabStripContentOverlap()` (`…_impl.cc:382`) handles the strip
   overlapping contents during expand-on-hover.
 
-**Mismatch with `research-upstream.md`:** it describes the layout file as
+**Mismatch with `.agent/notes/research-upstream-chromium.md`:** it describes the layout file as
 `browser_view_layout.h` with a tabbed impl. In this checkout the tabbed logic
 lives in `browser_view_tabbed_layout_impl.cc`, which is shared with
 `browser_view_layout_impl.cc` and the popup/app variants. Hooks go into the

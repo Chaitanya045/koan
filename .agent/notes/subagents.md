@@ -1,6 +1,13 @@
 # Subagent notes
 
-## User's model preference (delegate via T3 `delegate_task`)
+## Current choice (2026-10-19)
+Issue threads run on **Claude Opus 5.5, effort `high`** (T3 provider
+`claudeAgent`, model `claude-opus-5-5`, options `[{id: "effort", value:
+"high"}]`), as top-level T3 threads; see [parallel-agents.md](parallel-agents.md).
+The user switched from GLM after its threads stalled: on permission prompts
+nobody could answer, and by ending turns mid-task.
+
+## Earlier preference: free/cheap models (delegate via T3 `delegate_task`)
 Provider instance `opencode`, reasoning `variant: high`, in this order:
 1. `opencode/deepseek-v4.1-flash-free`
 2. `opencode/glm-5.3-flash-free`
@@ -18,7 +25,7 @@ Provider instance `opencode`, reasoning `variant: high`, in this order:
   The earlier failures were a temporary provider outage, not a context limit.
   If they fail again, retry once after a few minutes before falling back to Go.
 - Both free models gave useful design review (they caught two real gaps in
-  phase1-design.md §7). GLM's technical claims need checking: it wrongly
+  .agent/notes/design-phase1-sidebar-compact.md §7). GLM's technical claims need checking: it wrongly
   doubted that ui::Layer transform animations are compositor-threaded.
 - **T3 model catalog is cached at app start.** `opencode-go/*` models are
   rejected by `delegate_task` (`model_unavailable`) until T3 Code restarts.
@@ -34,7 +41,7 @@ Provider instance `opencode`, reasoning `variant: high`, in this order:
   read-only while a build ran. Good-quality review with file:line evidence
   (claims spot-checked: correct). Found 3 real robustness bugs in
   `apply_patches.sh` export/apply. Its T3 `summary` was only its first
-  sentence; the useful output was the requested file in `.agent/reviews/`.
+  sentence; the useful output was the requested file in `.agent/notes/reviews/`.
 - 2026-10-19: DeepSeek free stalled for ~1 h mid-review (no output file)
   and was cancelled; GLM free redid it in ~40 min with a good, verified
   review. Ask for incremental writes and a time budget; check the child

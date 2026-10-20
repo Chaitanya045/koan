@@ -7,7 +7,7 @@ lightweight WebUI (Lit, no React).
 Koan code lives in `chromium/src/koan/`. Upstream files are touched Brave-style:
 a `koan/chromium_src/` shadow tree first, minimal `patches/` as a last resort,
 so each 4-weekly Chromium rebase stays mechanical. Every Koan surface sits
-behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
+behind a Koan-owned `base::Feature`. See `.agent/notes/research-upstream-chromium.md` for sources.
 
 ## What upstream already gives us
 
@@ -38,20 +38,20 @@ behind a Koan-owned `base::Feature`. See `research-upstream.md` for sources.
 ## Status
 
 - [x] Phase 0 — checkout (Chromium 158.0.8111.0, main @ 67e29b8) and first stock build (~15 h, finished 2026-10-19)
-- [x] Upstream research (`research-upstream.md`)
+- [x] Upstream research (`.agent/notes/research-upstream-chromium.md`)
 - [x] Phase 1 — sidebar look (vertical tabs default, frame-coloured toolbar,
       floating content card), compact mode (zero-width sidebar overlay on the
       leading edge, toolbar in the NonClientView overlay sliding on a
-      compositor transform, Ctrl+S like Zen, persisted). Design: `phase1-design.md`.
+      compositor transform, Ctrl+S like Zen, persisted). Design: `.agent/notes/design-phase1-sidebar-compact.md`.
 - [x] Phase 1b — single toolbar (the default, like Zen; Ctrl+Alt+B): no
       top toolbar, navigation in the sidebar's top row and a URL pill,
       Zen's centred floating URL bar on focus.
 - [x] Phase 2 — workspaces on upstream tab group focus mode (switcher, keys,
       new tabs join the active workspace, restored on restart, per-workspace
       tint); Essentials = upstream pinned-tab grid. Research:
-      `phase2-research.md`.
+      `.agent/notes/research-phase2-workspaces-essentials.md`.
 - [x] Phase 3 — Glance (Alt+click like Zen; expand to tab / split / close),
-      upstream split view kept. Research: `phase3-research.md`.
+      upstream split view kept. Research: `.agent/notes/research-phase3-glance-split.md`.
 - [x] Phase 4 — branding (name, logos, profile dir, desktop id, launcher),
       stable feature defaults, rebase tooling (`REBASE.md`,
       `update_chromium.sh`).
