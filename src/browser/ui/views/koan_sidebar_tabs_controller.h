@@ -54,7 +54,7 @@ class KoanSidebarTabsController : public TabStripModelObserver,
 
   // Zen's "Tabs Closed! Use Ctrl+Shift+T to undo." toast at the top right of
   // the window. Shown by KoanShortcutController::CloseUnpinnedTabs (the Clear
-  // button and Ctrl+Shift+K both go through it).
+  // button and Ctrl+Shift+K both go through it). Only with Koan's sidebar on.
   void ShowTabsClosedToast();
 
   // TabStripModelObserver:

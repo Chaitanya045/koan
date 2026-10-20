@@ -310,9 +310,13 @@ class KoanClearTabsRow : public views::View {
     InvalidateLayout();
   }
 
+  void ChildVisibilityChanged(views::View* child) override { SchedulePaint(); }
+
   void OnPaint(gfx::Canvas* canvas) override {
+    // Without the button the line runs to the end, short by the inset.
     const int start = kSeparatorRowPadding + kSeparatorInset;
-    PaintSeparatorLine(canvas, this, start, button_->x() - start);
+    const int end = button_->GetVisible() ? button_->x() : width() - start;
+    PaintSeparatorLine(canvas, this, start, end - start);
   }
 
  private:
@@ -655,11 +659,21 @@ void KoanSidebarTabsController::UpdateClearRow() {
       static_cast<size_t>(std::ranges::count_if(unpinned, [model](int index) {
         return KoanShortcutController::IsClosableByClear(model, index);
       }));
+  // The line separates the pinned from the listed unpinned tabs: in the "all
+  // tabs" view those include the workspaces' tabs, which Clear leaves alone,
+  // so it may have nothing to clear.
+  const std::optional<tab_groups::TabGroupId> workspace =
+      model->GetFocusedGroup();
+  bool listed = false;
+  for (int i = 0; i < model->count() && !listed; ++i) {
+    listed = !model->IsTabPinned(i) &&
+             (!workspace || model->GetTabGroupForTab(i) == workspace);
+  }
   const auto* state =
       tabs::VerticalTabStripStateController::From(browser_view_->browser());
   // In the collapsed sidebar upstream's own separator is enough.
-  rows_->clear_row()->SetVisible(!unpinned.empty() &&
-                                 !(state && state->IsCollapsed()));
+  rows_->clear_row()->SetVisible(listed && !(state && state->IsCollapsed()));
+  rows_->clear_row()->button()->SetVisible(!unpinned.empty());
   // Zen's arrow: Clear closes every unpinned tab, either because all can be
   // closed or because none can (then it closes them all).
   rows_->clear_row()->button()->SetShowIcon(closable == unpinned.size() ||
@@ -702,6 +716,9 @@ void KoanSidebarTabsController::ClearUnpinnedTabs() {
 
 void KoanSidebarTabsController::ShowTabsClosedToast() {
   CloseToast();
+  if (!features::IsSidebarEnabled()) {
+    return;
+  }
   views::Widget* browser_widget = browser_view_->GetWidget();
   if (!browser_widget) {
     return;
