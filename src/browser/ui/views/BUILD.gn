@@ -2,6 +2,8 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//build/config/ui.gni")
+
 # Hook declarations called from upstream views code. Header-only and
 # dependency-light so upstream targets can depend on it without cycles; the
 # definitions live in :impl, linked through //chrome/browser:browser.
@@ -81,7 +83,6 @@ source_set("impl") {
     "//components/prefs",
     "//koan/browser:features",
     "//koan/browser:prefs",
-    "//ui/aura",
     "//ui/base",
     "//ui/base/clipboard",
     "//ui/base/metadata",
@@ -90,4 +91,9 @@ source_set("impl") {
     "//ui/gfx",
     "//ui/views",
   ]
+  if (use_aura) {
+    # Glance animates the page's native window (an aura::Window). macOS
+    # uses NSViews instead and has no Aura.
+    deps += [ "//ui/aura" ]
+  }
 }

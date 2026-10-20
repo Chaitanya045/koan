@@ -12,6 +12,7 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
@@ -90,10 +91,16 @@ views::View* GetTopContainerOverlayView(BrowserView* browser_view) {
 
 // Whether `view` is one of the frame's caption buttons (minimize, maximize,
 // restore, close): image buttons in the GTK-native frame, Material buttons
-// in Chrome's own (e.g. themed) frame.
+// in Chrome's own (e.g. themed) frame. The macOS frame (BrowserFrameViewMac)
+// has none: AppKit draws the window buttons (traffic lights) at the leading
+// edge, so hiding caption buttons is a no-op there.
 bool IsCaptionButton(const views::View* view) {
+#if BUILDFLAG(IS_MAC)
+  return false;
+#else
   return view->GetClassName() == "ImageButton" ||
          view->GetClassName() == "FrameCaptionButton";
+#endif
 }
 
 }  // namespace
@@ -589,7 +596,21 @@ void KoanCompactModeController::Deactivate() {
 
   // Mirrors BrowserView::ReparentTopContainerForEndOfImmersive().
   views::View* top_container = browser_view_->top_container();
-  if (top_container->parent() != browser_view_ && top_container_index_) {
+  bool restore_top_container =
+      top_container->parent() != browser_view_ && top_container_index_;
+#if BUILDFLAG(IS_MAC)
+  // Immersive fullscreen moves the top container into its own overlay
+  // widget, and keeps it there until it ends: leave it, and only hide
+  // Koan's (now empty) overlay.
+  if (const views::Widget* immersive = browser_view_->overlay_widget();
+      immersive && top_container->GetWidget() == immersive) {
+    restore_top_container = false;
+    if (views::View* overlay = GetTopContainerOverlayView(browser_view_)) {
+      overlay->SetVisible(false);
+    }
+  }
+#endif
+  if (restore_top_container) {
     if (top_container->layer()) {
       top_container->layer()->GetAnimator()->AbortAllAnimations();
     }
