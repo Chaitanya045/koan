@@ -32,6 +32,10 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // make Memory Saver no longer the switch for discarding.
   overrides.DisableFeature(performance_manager::features::
                                kDiscardFrozenBrowsingInstancesWithGrowingPMF);
+  // Its once-a-minute memory measurement only feeds that discard. (The CPU
+  // measurement stays: energy saver's freezing of busy tabs needs it.)
+  overrides.DisableFeature(
+      performance_manager::features::kMemoryMeasurementInFreezingPolicy);
 }
 
 }  // namespace koan
