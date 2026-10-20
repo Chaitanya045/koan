@@ -38,7 +38,45 @@ const byId = id => t => t.id === id;
 const byUrl = suffix => t => t.url.endsWith(suffix);
 const start = (await pageTargets(CDP_PORT)).find(t => t.url.endsWith('/power.html')) ??
     (await pageTargets(CDP_PORT))[0];
-console.log(`  pages at start: ${(await pageTargets(CDP_PORT)).map(t => t.url).join(' ')}`);
+
+// Opens `url` in a new tab and reports whether it finished loading, with
+// the network events if it didn't.
+async function loadsIn(url) {
+  const id = (await browser.send('Target.createTarget', { url: 'about:blank' })).result.targetId;
+  const target = (await pageTargets(CDP_PORT)).find(byId(id));
+  const page = await connect(target.webSocketDebuggerUrl);
+  const events = [];
+  for (const e of ['Network.requestWillBeSent', 'Network.responseReceived',
+                   'Network.loadingFailed', 'Page.loadEventFired']) {
+    page.on(e, p => events.push(`${e.split('.')[1]} ${p.request?.url ?? p.response?.status ??
+                                                       p.errorText ?? ''}`));
+  }
+  await page.send('Network.enable');
+  await page.send('Page.enable');
+  const nav = await page.send('Page.navigate', { url });
+  for (let i = 0; i < 40 && !events.some(e => e.startsWith('loadEventFired')); i++) {
+    await sleep(250);
+  }
+  page.close();
+  await browser.send('Target.closeTarget', { targetId: id });
+  const ok = events.some(e => e.startsWith('loadEventFired'));
+  if (!ok) console.log(`  ${url}: ${JSON.stringify(nav)} ${events.join('; ')}`);
+  return ok;
+}
+if (!await loadsIn(`${pages.origin}/power.html`)) {
+  // Tell a Chrome-side block (any local server, any host name) from a
+  // problem with this script's server.
+  const dir = new URL('./pages', import.meta.url).pathname;
+  const py = spawn('python3', ['-I', '-m', 'http.server', '38123', '--bind', '127.0.0.1',
+                               '--directory', dir], { stdio: 'ignore' });
+  await sleep(1500);
+  console.log(`  python http.server: ${await loadsIn('http://127.0.0.1:38123/power.html')}`);
+  console.log(`  localhost name: ${await loadsIn(pages.origin.replace('127.0.0.1', 'localhost') +
+                                                   '/power.html')}`);
+  console.log(`  example.com: ${await loadsIn('https://example.com/')}`);
+  py.kill();
+  check('A test page loads', false);
+}
 const CTRL = 2, ALT = 1, SHIFT = 8;
 const paintsOf = trace => Object.fromEntries(trace.paints);
 const koanTasks = trace =>
