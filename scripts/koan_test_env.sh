@@ -20,10 +20,13 @@ mkdir -p "$KOAN_TEST_DIR"
 # --password-store=basic: throwaway profiles needn't use the desktop
 # keyring; while it is locked (e.g. after a reboot with nobody logged in),
 # Chromium waits for it to encrypt cookies and no page loads.
+# --ozone-override-screen-size: the headless screen defaults to 1x1, which
+# clamps menus (context menus) to nothing; make it as big as the window.
 # shellcheck disable=SC2054  # "1280,800" is one value, not two elements
 KOAN_HEADLESS_UI_FLAGS=(--ozone-platform=headless --in-process-gpu --disable-gpu
   --no-first-run --no-default-browser-check --disable-component-update
-  --password-store=basic --window-size=1280,800)
+  --password-store=basic --window-size=1280,800
+  --ozone-override-screen-size=1280,800)
 
 koan_new_profile() { mktemp -d "$KOAN_TEST_DIR/prof-XXXX"; }
 
