@@ -19,6 +19,7 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
+#include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
 
@@ -38,6 +39,7 @@ int g_live_count = 0;
 KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
     : browser_view_(browser_view),
       compact_mode_(std::make_unique<KoanCompactModeController>(browser_view)),
+      toast_(std::make_unique<KoanToast>(browser_view)),
       sidebar_tabs_(std::make_unique<KoanSidebarTabsController>(browser_view)),
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
@@ -73,6 +75,7 @@ void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
     controller->sidebar_tabs_->OnBrowserViewDestroying();
     controller->workspaces_->OnBrowserViewDestroying();
     controller->glance_->OnBrowserViewDestroying();
+    controller->toast_->Close();
   }
   browser_view->ClearProperty(kKoanBrowserViewControllerKey);
 }
@@ -106,6 +109,7 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   }
   compact_mode_->OnBrowserViewLayout();
   glance_->OnBrowserViewLayout();
+  toast_->OnBrowserViewLayout();
 }
 
 void KoanBrowserViewController::UpdateContentCard() {

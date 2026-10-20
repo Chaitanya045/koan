@@ -14,7 +14,6 @@
 #include "base/i18n/rtl.h"
 #include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
-#include "cc/paint/paint_shader.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -34,29 +33,23 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_toast.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkPoint.h"
-#include "third_party/skia/include/core/SkTileMode.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
-#include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/geometry/transform.h"
-#include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -75,12 +68,6 @@
 namespace koan {
 
 namespace {
-
-// Zen's toast (ZenToasts.mjs): springs in from the top, stays for 2s once in
-// (longer while hovered) and fades out shrinking.
-constexpr base::TimeDelta kToastTimeout = base::Seconds(2);
-constexpr base::TimeDelta kToastShowDuration = base::Milliseconds(400);
-constexpr base::TimeDelta kToastHideDuration = base::Milliseconds(200);
 
 gfx::FontList FontOfSize(int size, gfx::Font::Weight weight) {
   const gfx::FontList base;
@@ -379,82 +366,6 @@ class KoanSidebarTabRowsView : public views::View {
 BEGIN_METADATA(KoanSidebarTabRowsView)
 END_METADATA
 
-// Zen's toast: a line of text with the shortcut in a key cap.
-class KoanToastView : public views::View {
-  METADATA_HEADER(KoanToastView, views::View)
-
- public:
-  KoanToastView(const std::u16string& before,
-                const std::u16string& shortcut,
-                const std::u16string& after,
-                base::RepeatingCallback<void(bool)> on_hover)
-      : on_hover_(std::move(on_hover)) {
-    // The labels are event targets too: hovering them counts.
-    SetNotifyEnterExitOnChild(true);
-    auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kHorizontal,
-        gfx::Insets::VH(0, kToastPadding), kToastGap));
-    layout->set_cross_axis_alignment(
-        views::BoxLayout::CrossAxisAlignment::kCenter);
-    const gfx::FontList font =
-        FontOfSize(kToastFontSize, gfx::Font::Weight::SEMIBOLD);
-    AddChildView(std::make_unique<views::Label>(before))->SetFontList(font);
-    views::Label* key = AddChildView(std::make_unique<views::Label>(shortcut));
-    key->SetFontList(
-        FontOfSize(kToastKeyFontSize, gfx::Font::Weight::SEMIBOLD));
-    key->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets::VH(kToastKeyPaddingVertical, kToastKeyPaddingHorizontal)));
-    key->SetBackground(views::CreateRoundedRectBackground(
-        kColorKoanToastKeyBackground, kToastKeyCornerRadius));
-    AddChildView(std::make_unique<views::Label>(after))->SetFontList(font);
-    for (views::View* child : children()) {
-      auto* label = static_cast<views::Label*>(child);
-      label->SetEnabledColor(kColorKoanToastForeground);
-      label->SetAutoColorReadabilityEnabled(false);
-      label->SetBackgroundColor(SK_ColorTRANSPARENT);
-    }
-  }
-
-  // views::View:
-  gfx::Size CalculatePreferredSize(
-      const views::SizeBounds& available_size) const override {
-    return gfx::Size(
-        views::View::CalculatePreferredSize(available_size).width(),
-        kToastHeight);
-  }
-
-  void OnPaintBackground(gfx::Canvas* canvas) override {
-    // A vertical gradient whose top colour stop sits 40% above the toast,
-    // like Zen's linear-gradient(to bottom, primary -40%, ...).
-    const ui::ColorProvider* provider = GetColorProvider();
-    const SkColor4f colors[] = {
-        SkColor4f::FromColor(provider->GetColor(kColorKoanToastBackgroundTop)),
-        SkColor4f::FromColor(
-            provider->GetColor(kColorKoanToastBackgroundBottom))};
-    const SkPoint points[] = {SkPoint::Make(0, -0.4f * height()),
-                              SkPoint::Make(0, height())};
-    cc::PaintFlags flags;
-    flags.setAntiAlias(true);
-    flags.setShader(cc::PaintShader::MakeLinearGradient(points, colors, nullptr,
-                                                        2, SkTileMode::kClamp));
-    canvas->DrawRoundRect(GetLocalBounds(), kToastCornerRadius, flags);
-  }
-
-  void OnMouseEntered(const ui::MouseEvent& event) override {
-    on_hover_.Run(true);
-  }
-
-  void OnMouseExited(const ui::MouseEvent& event) override {
-    on_hover_.Run(false);
-  }
-
- private:
-  base::RepeatingCallback<void(bool)> on_hover_;
-};
-
-BEGIN_METADATA(KoanToastView)
-END_METADATA
-
 int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view) {
   for (const views::View* child : tab_strip_view->children()) {
     if (IsSidebarTabRowsView(child)) {
@@ -558,7 +469,6 @@ void KoanSidebarTabsController::OnAddedToWidget() {
 }
 
 void KoanSidebarTabsController::OnBrowserViewDestroying() {
-  CloseToast();
   mode_subscription_ = {};
   collapse_subscription_ = {};
   if (started_) {
@@ -715,99 +625,17 @@ void KoanSidebarTabsController::ClearUnpinnedTabs() {
 }
 
 void KoanSidebarTabsController::ShowTabsClosedToast() {
-  CloseToast();
   if (!features::IsSidebarEnabled()) {
     return;
   }
-  views::Widget* browser_widget = browser_view_->GetWidget();
-  if (!browser_widget) {
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  if (!controller) {
     return;
   }
-
-  // A child widget, so the toast sits above the page.
-  views::Widget::InitParams params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
-      views::Widget::InitParams::TYPE_CONTROL);
-  params.parent = browser_widget->GetNativeView();
-  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
-  params.name = "KoanToast";
-  toast_widget_ = std::make_unique<views::Widget>();
-  toast_widget_->Init(std::move(params));
   const std::u16string undo = ShortcutText(ui::VKEY_T, ui::EF_SHIFT_DOWN);
-  toast_view_ = toast_widget_->SetContentsView(std::make_unique<KoanToastView>(
-      u"Tabs Closed! Use", undo, u"to undo.",
-      base::BindRepeating(&KoanSidebarTabsController::OnToastHovered,
-                          weak_factory_.GetWeakPtr())));
-  toast_view_->SetPaintToLayer();
-  toast_view_->layer()->SetFillsBoundsOpaquely(false);
-
-  const gfx::Size size = toast_view_->GetPreferredSize();
-  const int right = browser_widget->GetRootView()->width() - kToastMargin;
-  toast_widget_->SetBounds(
-      gfx::Rect(gfx::Point(right - size.width(), kToastMargin), size));
-  toast_widget_->Show();
-  toast_widget_->LayoutRootViewIfNecessary();
-  toast_view_->GetViewAccessibility().AnnounceAlert(u"Tabs closed. Use " +
-                                                    undo + u" to undo.");
-
-  // Grow from the top centre.
-  ui::Layer* layer = toast_view_->layer();
-  const gfx::PointF pivot(size.width() / 2.f, 0);
-  gfx::Transform start;
-  start.Scale(0.01f, 0.01f);
-  layer->SetTransform(gfx::TransformAboutPivot(pivot, start));
-  {
-    ui::ScopedLayerAnimationSettings settings(layer->GetAnimator());
-    settings.SetTransitionDuration(kToastShowDuration);
-    settings.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN_3);
-    layer->SetTransform(gfx::Transform());
-  }
-  // Like Zen, the time on screen counts from when the toast is fully in.
-  toast_timer_.Start(FROM_HERE, kToastShowDuration + kToastTimeout,
-                     base::BindOnce(&KoanSidebarTabsController::HideToast,
-                                    weak_factory_.GetWeakPtr()));
-}
-
-void KoanSidebarTabsController::OnToastHovered(bool hovered) {
-  // Once it is fading out, the toast goes regardless.
-  if (!toast_view_ || toast_hiding_) {
-    return;
-  }
-  if (hovered) {
-    toast_timer_.Stop();
-  } else {
-    toast_timer_.Start(FROM_HERE, kToastTimeout,
-                       base::BindOnce(&KoanSidebarTabsController::HideToast,
-                                      weak_factory_.GetWeakPtr()));
-  }
-}
-
-void KoanSidebarTabsController::HideToast() {
-  if (!toast_view_) {
-    return;
-  }
-  toast_hiding_ = true;
-  ui::Layer* layer = toast_view_->layer();
-  const gfx::PointF pivot(toast_view_->width() / 2.f, 0);
-  gfx::Transform end;
-  end.Scale(0.5f, 0.5f);
-  ui::ScopedLayerAnimationSettings settings(layer->GetAnimator());
-  settings.SetTransitionDuration(kToastHideDuration);
-  layer->SetOpacity(0.f);
-  layer->SetTransform(gfx::TransformAboutPivot(pivot, end));
-  toast_timer_.Start(FROM_HERE, kToastHideDuration,
-                     base::BindOnce(&KoanSidebarTabsController::CloseToast,
-                                    weak_factory_.GetWeakPtr()));
-}
-
-void KoanSidebarTabsController::CloseToast() {
-  toast_timer_.Stop();
-  toast_hiding_ = false;
-  toast_view_ = nullptr;
-  if (toast_widget_) {
-    toast_widget_->CloseNow();
-    toast_widget_.reset();
-  }
+  controller->toast()->Show(u"Tabs Closed! Use", undo, u"to undo.",
+                            u"Tabs closed. Use " + undo + u" to undo.");
 }
 
 void KoanSidebarTabsController::OnTabStripModelChanged(
