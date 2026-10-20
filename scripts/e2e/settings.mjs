@@ -163,8 +163,9 @@ check('...marked invalid, and the field shows the key that is bound',
       await evalIn(settings, `document.querySelector('#shortcut-compact-mode-show-sidebar')
           .classList.contains('invalid')`) &&
       await value('compact-mode-show-sidebar') === 'Ctrl+Alt+S');
+// Ctrl+Alt+J (modifiers: Ctrl 4 | Alt 8) is Toggle Compact Mode's now.
 check('The browser refuses a conflicting key itself',
-      await settingsCall(settings, 'setShortcut', 'mute', { key: VK.S, modifiers: 4 }) ===
+      await settingsCall(settings, 'setShortcut', 'mute', { key: VK.J, modifiers: 12 }) ===
           false);
 check('...and a key without Ctrl, Alt or Win',
       await settingsCall(settings, 'setShortcut', 'mute', { key: VK.Q, modifiers: 0 }) ===
