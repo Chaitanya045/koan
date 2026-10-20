@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
@@ -67,16 +68,12 @@ std::optional<base::Value> OptionValue(const base::Value& pref_value,
   }
 }
 
-base::DictValue KeyValue(const ui::Accelerator& accelerator) {
-  return shortcuts::ToPrefValue(accelerator);
-}
-
 base::ListValue KeysOf(const std::vector<shortcuts::Binding>& bindings,
                        shortcuts::Action action) {
   base::ListValue keys;
   for (const shortcuts::Binding& binding : bindings) {
     if (binding.action == action) {
-      keys.Append(KeyValue(binding.accelerator));
+      keys.Append(shortcuts::ToPrefValue(binding.accelerator));
     }
   }
   return keys;
@@ -146,13 +143,15 @@ void KoanSettingsHandler::OnPrefChanged(const std::string& pref) {
 }
 
 void KoanSettingsHandler::HandleGetSettings(const base::ListValue& args) {
+  CHECK_EQ(args.size(), 1u);
   AllowJavascript();
   ResolveJavascriptCallback(args[0], Settings());
 }
 
 void KoanSettingsHandler::HandleSetPref(const base::ListValue& args) {
+  CHECK_EQ(args.size(), 3u);
   AllowJavascript();
-  const std::string* name = args.size() == 3 ? args[1].GetIfString() : nullptr;
+  const std::string* name = args[1].GetIfString();
   const Row* row = name ? settings::FindRow(*name) : nullptr;
   const PrefService::Preference* pref =
       row ? prefs_->FindPreference(row->pref) : nullptr;
@@ -173,8 +172,9 @@ void KoanSettingsHandler::HandleSetPref(const base::ListValue& args) {
 }
 
 void KoanSettingsHandler::HandleSetShortcut(const base::ListValue& args) {
+  CHECK_EQ(args.size(), 3u);
   AllowJavascript();
-  const std::string* id = args.size() == 3 ? args[1].GetIfString() : nullptr;
+  const std::string* id = args[1].GetIfString();
   const shortcuts::Info* info = id ? shortcuts::FindAction(*id) : nullptr;
   ui::Accelerator accelerator;
   bool ok = info != nullptr;
@@ -195,9 +195,10 @@ void KoanSettingsHandler::HandleSetShortcut(const base::ListValue& args) {
   }
   if (ok) {
     ScopedDictPrefUpdate update(&*prefs_, prefs::kShortcuts);
-    if (KeysOf(shortcuts::DefaultBindings(), info->action) ==
-        base::ListValue().Append(KeyValue(accelerator))) {
-      // Back to its default key: no longer a custom shortcut.
+    if (KeysOf(shortcuts::DefaultBindings(), info->action)
+            .contains(shortcuts::ToPrefValue(accelerator))) {
+      // One of its default keys: back to the defaults (all of them, e.g.
+      // both of New Empty Split View's).
       update->Remove(info->id);
     } else {
       update->Set(info->id, shortcuts::ToPrefValue(accelerator));
@@ -207,6 +208,7 @@ void KoanSettingsHandler::HandleSetShortcut(const base::ListValue& args) {
 }
 
 void KoanSettingsHandler::HandleResetShortcuts(const base::ListValue& args) {
+  CHECK_EQ(args.size(), 1u);
   AllowJavascript();
   prefs_->ClearPref(prefs::kShortcuts);
   ResolveJavascriptCallback(args[0], true);
@@ -216,6 +218,10 @@ void KoanSettingsHandler::HandleSetEditing(const base::ListValue& args) {
   SuspendShortcuts(!args.empty() && args[0].GetIfBool().value_or(false));
 }
 
+// The FocusManager has one suspended flag, also used by extension
+// keybindings (chrome://extensions/shortcuts suspends every window while it
+// records a key). Recording in both pages at once can clear it under the
+// other; both recordings are short and need focus, so that is left as is.
 void KoanSettingsHandler::SuspendShortcuts(bool suspend) {
   if (views::Widget* widget = suspended_widget_.GetSource()) {
     widget->GetFocusManager()->set_shortcut_handling_suspended(false);
@@ -303,19 +309,22 @@ base::DictValue KoanSettingsHandler::Shortcuts() const {
   }
   base::ListValue actions;
   for (const shortcuts::Info& info : shortcuts::Actions()) {
-    actions.Append(base::DictValue()
-                       .Set("id", info.id)
-                       .Set("group", info.group)
-                       .Set("label", info.label)
-                       .Set("keys", KeysOf(bindings, info.action))
-                       .Set("defaults", KeysOf(defaults, info.action))
-                       .Set("custom", overrides.contains(info.id)));
+    actions.Append(
+        base::DictValue()
+            .Set("id", info.id)
+            .Set("group", info.group)
+            .Set("label", info.label)
+            // Hidden, but still counted for conflicts.
+            .Set("available", !info.is_available || info.is_available())
+            .Set("keys", KeysOf(bindings, info.action))
+            .Set("defaults", KeysOf(defaults, info.action))
+            .Set("custom", overrides.contains(info.id)));
   }
   // Chromium's own shortcuts, so the editor can say when a key replaces one.
   base::ListValue chromium;
   for (const AcceleratorMapping& mapping : GetAcceleratorList()) {
-    chromium.Append(
-        KeyValue(ui::Accelerator(mapping.keycode, mapping.modifiers)));
+    chromium.Append(shortcuts::ToPrefValue(
+        ui::Accelerator(mapping.keycode, mapping.modifiers)));
   }
   return base::DictValue()
       .Set("groups", std::move(groups))

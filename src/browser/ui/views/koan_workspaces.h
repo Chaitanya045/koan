@@ -74,6 +74,7 @@ class KoanWorkspaceController : public TabStripModelObserver {
   // Tints the browser with the active workspace's colour, or restores the
   // user's colour when no workspace is active.
   void UpdateTint();
+  void OnTintPrefChanged();
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<KoanWorkspaceSwitcherView> switcher_ = nullptr;

@@ -13,6 +13,7 @@
 #include "ui/base/accelerators/accelerator.h"
 
 class BrowserView;
+class PrefService;
 
 namespace views {
 class FocusManager;
@@ -25,7 +26,8 @@ class KoanBrowserViewController;
 // Koan's keyboard shortcuts: Zen's defaults (zen-browser/desktop
 // src/zen/kbs/ZenKeyboardShortcuts.mjs, shortcuts version 21, Linux), plus a
 // few Koan-only ones, as rebound in chrome://koan-settings (the table is in
-// koan/browser/koan_shortcut_table.h). Registered on the window's FocusManager
+// koan/browser/koan_shortcut_table.h), and Zen's Ctrl+Tab settings.
+// Registered on the window's FocusManager
 // after BrowserView's own accelerators, so they are tried first; where Zen
 // deliberately rebinds a key Chrome uses (Ctrl+S, Ctrl+Shift+C/D/N/P), Koan
 // follows Zen. A contextual shortcut (Ctrl+O while Glance is open) passes
@@ -59,6 +61,11 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   bool TogglePinTab();
   bool CloseUnpinnedTabs();
   bool Command(int command_id);
+  // Zen's Ctrl+Tab settings; returns false (Chrome cycles) when both are off.
+  bool CycleTabs(bool forward);
+
+  // Koan's prefs (the regular profile's, also in incognito).
+  PrefService* GetPrefs() const;
 
   // Registers `bindings_` with the window's FocusManager.
   void RegisterAccelerators();

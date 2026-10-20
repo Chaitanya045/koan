@@ -4,8 +4,11 @@
 
 #include "koan/browser/koan_shortcut_table.h"
 
+#include <algorithm>
 #include <set>
 #include <string_view>
+
+#include "koan/browser/koan_features.h"
 
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -38,15 +41,16 @@ constexpr Group kGroups[] = {
 
 constexpr Info kActions[] = {
     {Action::kToggleCompactMode, "compact-mode-toggle", "zen-compact-mode",
-     "Toggle Compact Mode"},
+     "Toggle Compact Mode", features::IsCompactModeEnabled},
     {Action::kCompactModeShowSidebar, "compact-mode-show-sidebar",
-     "zen-compact-mode", "Toggle Floating Sidebar"},
+     "zen-compact-mode", "Toggle Floating Sidebar",
+     features::IsCompactModeEnabled},
     {Action::kWorkspaceForward, "workspace-forward", "zen-workspace",
-     "Forward Workspace"},
+     "Forward Workspace", features::IsWorkspacesEnabled},
     {Action::kWorkspaceBackward, "workspace-backward", "zen-workspace",
-     "Backward Workspace"},
+     "Backward Workspace", features::IsWorkspacesEnabled},
     {Action::kNewWorkspace, "workspace-create", "zen-workspace",
-     "Create New Workspace"},
+     "Create New Workspace", features::IsWorkspacesEnabled},
     {Action::kSplitGrid, "split-view-grid", "zen-split-view",
      "Toggle Split View Grid"},
     {Action::kSplitVertical, "split-view-vertical", "zen-split-view",
@@ -61,10 +65,11 @@ constexpr Info kActions[] = {
     {Action::kCopyUrlMarkdown, "copy-url-markdown", "zen-other",
      "Copy current URL as Markdown"},
     {Action::kTogglePinTab, "toggle-pin-tab", "zen-other", "Toggle Pin Tab"},
-    {Action::kGlanceExpand, "glance-expand", "zen-other", "Expand Glance"},
+    {Action::kGlanceExpand, "glance-expand", "zen-other", "Expand Glance",
+     features::IsGlanceEnabled},
     {Action::kLibrary, "library", "zen-other", "Toggle Library"},
     {Action::kToggleSingleToolbar, "toggle-single-toolbar", "zen-other",
-     "Switch Single / Multiple Toolbars"},
+     "Switch Single / Multiple Toolbars", features::IsCompactModeEnabled},
     {Action::kNewWindow, "new-window", "windowAndTabManagement", "New Window"},
     {Action::kCloseUnpinnedTabs, "close-unpinned-tabs",
      "windowAndTabManagement", "Close All Unpinned Tabs"},
@@ -78,7 +83,7 @@ constexpr Info kActions[] = {
     {Action::kMuteSite, "mute", "mediaAndDisplay", "Toggle Mute"},
     {Action::kInspect, "inspector", "devTools", "Toggle Inspector"},
     {Action::kDownloads, "downloads", "other", "Open Downloads"},
-    {Action::kOpenSettings, "open-settings", "other", "Open Settings"},
+    {Action::kOpenSettings, "open-settings", "other", "Open Preferences"},
 };
 
 }  // namespace
@@ -148,20 +153,31 @@ std::vector<Binding> DefaultBindings() {
 
 std::vector<Binding> Bindings(const base::DictValue& overrides) {
   std::vector<Binding> bindings;
+  const auto is_bound = [&bindings](const ui::Accelerator& accelerator) {
+    return std::ranges::any_of(bindings, [&](const Binding& binding) {
+      return binding.accelerator == accelerator;
+    });
+  };
   std::set<Action> custom;
   for (const auto [id, value] : overrides) {
     const Info* info = FindAction(id);
     if (!info || !value.is_dict()) {
       continue;
     }
-    custom.insert(info->action);
-    const ui::Accelerator accelerator = FromPrefValue(value.GetDict());
-    if (accelerator.key_code() != ui::VKEY_UNKNOWN) {
-      bindings.push_back({accelerator, info->action});
+    // Key 0: the user cleared the shortcut.
+    if (value.GetDict().FindInt(kKey) == 0) {
+      custom.insert(info->action);
+      continue;
     }
+    const ui::Accelerator accelerator = FromPrefValue(value.GetDict());
+    if (accelerator.key_code() == ui::VKEY_UNKNOWN || is_bound(accelerator)) {
+      continue;
+    }
+    custom.insert(info->action);
+    bindings.push_back({accelerator, info->action});
   }
   for (const Binding& binding : DefaultBindings()) {
-    if (!custom.contains(binding.action)) {
+    if (!custom.contains(binding.action) && !is_bound(binding.accelerator)) {
       bindings.push_back(binding);
     }
   }

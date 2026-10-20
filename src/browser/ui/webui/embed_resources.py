@@ -36,7 +36,12 @@ def main(argv):
     lines.append(
         f'inline constexpr char {name}[] = R"{DELIMITER}({data}){DELIMITER}";')
     lines.append('')
-  lines += ['}  // namespace koan', '', f'#endif  // KOAN_BROWSER_UI_WEBUI_{guard}', '']
+  lines += [
+      '}  // namespace koan',
+      '',
+      f'#endif  // KOAN_BROWSER_UI_WEBUI_{guard}',
+      '',
+  ]
   with open(out, 'w', encoding='utf-8') as f:
     f.write('\n'.join(lines))
 

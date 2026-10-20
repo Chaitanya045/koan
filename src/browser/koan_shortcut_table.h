@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_KOAN_SHORTCUT_TABLE_H_
 #define KOAN_BROWSER_KOAN_SHORTCUT_TABLE_H_
 
+#include <string_view>
 #include <vector>
 
 #include "base/containers/span.h"
@@ -65,6 +66,8 @@ struct Info {
   const char* group;
   // Zen's label where Zen has the shortcut (zen-preferences.ftl).
   const char* label;
+  // Whether the action's feature is on (chrome://flags). Null: always.
+  bool (*is_available)() = nullptr;
 };
 
 struct Binding {
@@ -86,7 +89,9 @@ std::vector<Binding> DefaultBindings();
 
 // The bindings in effect: the defaults, with each action the user rebound in
 // `overrides` (prefs::kShortcuts) replaced by its one custom key, or by none
-// if the user cleared it.
+// if the user cleared it. No key is bound twice: a user's key wins over a
+// default that has the same key (e.g. one a later Koan added), which is then
+// dropped. Malformed entries are ignored, so their action keeps its default.
 std::vector<Binding> Bindings(const base::DictValue& overrides);
 
 // Whether `accelerator` may be used for a custom shortcut: a key with Ctrl,

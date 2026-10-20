@@ -254,10 +254,12 @@ function onShortcutBlur(input, action) {
   input.classList.remove('editing');
   if (!editor.saved) {
     input.classList.add('unsaved');
-    showKeys(input, action);
     setNote(input, 'unsaved', 'Unsaved shortcut! Please save it by ' +
             'clicking the "Escape" key after retyping it.');
   }
+  // The field shows the key that is bound; a refused one stays explained by
+  // its note.
+  showKeys(input, action);
   editor.action = null;
   editor.latest = null;
   editor.saved = true;
@@ -289,6 +291,9 @@ async function onShortcutKeyDown(event, input, action) {
         if (settings.shortcuts.chromium.some(k => sameKey(k, key))) {
           setNote(input, 'replaces', 'Replaces Chromium\'s shortcut for this key');
         }
+      } else {
+        input.classList.add('invalid');
+        setNote(input, 'conflict', 'This key can\'t be used for a shortcut');
       }
     }
     editor.saved = true;
@@ -338,7 +343,7 @@ function renderShortcuts(query) {
   const groups = [];
   for (const group of settings.shortcuts.groups) {
     const actions = settings.shortcuts.actions.filter(
-        a => a.group === group.id &&
+        a => a.available && a.group === group.id &&
             (!query || matches(query, a.label, group.title)));
     if (actions.length) {
       groups.push(h('section', {class: 'shortcut-group'},
@@ -358,7 +363,12 @@ function renderShortcuts(query) {
       h('button', {
         class: 'reset-button',
         id: 'reset-shortcuts',
-        onclick: () => sendWithPromise('resetShortcuts'),
+        onclick: () => {
+          // Zen asks before resetting too.
+          if (confirm('Reset all keyboard shortcuts to their defaults?')) {
+            sendWithPromise('resetShortcuts');
+          }
+        },
       }, 'Reset to Default'),
       ...groups),
   ];

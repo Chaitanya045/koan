@@ -21,6 +21,8 @@ constexpr Pane kPanes[] = {
 constexpr Group kGroups[] = {
     {"layout", "looks", "Sidebar and tabs layout", "Browser Layout",
      "Choose the layout that suits you best"},
+    {"vertical-tabs", "looks", "Sidebar and tabs layout", "Vertical Tabs",
+     "Manage your tabs in a vertical layout"},
     {"compact", "looks", "Theme Settings", "Show in compact view",
      "Only show the toolbars you use!"},
     {"dark-theme", "looks", "Theme Settings", "Dark Theme Styles",
@@ -62,6 +64,25 @@ constexpr Row kRows[] = {
      .pref = prefs::kWorkspaceTint,
      .label = "Tint the browser with the active workspace's colour",
      .is_available = features::IsWorkspacesEnabled},
+    // Zen keeps its tab behaviours in the workspaces group too.
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kCloseOnBackWithNoHistory,
+     .label = "Close tab and switch to its owner tab (or most recently used "
+              "tab) when going back with no history"},
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kCtrlTabSkipPending,
+     .label = "Ignore Pending tabs when cycling with Ctrl+Tab"},
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kCtrlTabWithinKind,
+     .label = "Ctrl+Tab cycles within Essential or Workspace tabs only"},
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kSelectRecentlyUsedOnClose,
+     .label = "When closing a tab, switch to the most recently used tab "
+              "instead of the next tab"},
 };
 
 }  // namespace
