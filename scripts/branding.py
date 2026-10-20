@@ -14,7 +14,12 @@ adds its desktop icons; macOS adds the app icon: app.icns (iconutil) and the
 asset catalog Assets.car (actool), which Chromium checks in pre-compiled
 (docs/mac/icons.md) and copies into the app bundle. The bundle name, display
 name and bundle id come from BRANDING (PRODUCT_FULLNAME, MAC_BUNDLE_ID); the
-localized Info.plist strings come from the rebranded string files.
+localized Info.plist strings come from the rebranded string files, and the
+few fixed ones from app-Info.plist.
+
+The Mac needs no SVG renderer: the PNGs it uses are rendered on Linux
+(apply_branding.sh --render-mac) and committed in branding/mac/rendered/.
+Only iconutil and actool run on the Mac.
 
 Keep this file Python 3.9 compatible: that is macOS's /usr/bin/python3.
 
@@ -25,10 +30,12 @@ Only the product name changes. The Chromium project keeps its credit:
 
 import argparse
 import json
+import os
 import pathlib
 import plistlib
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -39,6 +46,8 @@ ART = ROOT / 'branding' / 'out'
 MAC_ART = ART / 'mac'
 # Icon Composer document for the macOS 26+ app icon (Liquid Glass).
 MAC_APP_ICON = ROOT / 'branding' / 'mac' / 'AppIcon.icon'
+# The PNGs macOS needs, rendered on Linux and committed.
+MAC_RENDERS = ROOT / 'branding' / 'mac' / 'rendered'
 PRISTINE = ROOT / '.branding-pristine'
 
 STRING_FILES = [
@@ -51,6 +60,11 @@ STRING_FILES = [
 CR_ICONS_FILE = 'ui/webui/resources/cr_elements/icons.html.ts'
 
 BRANDING_FILE = 'chrome/app/theme/chromium/BRANDING'
+
+# macOS: Info.plist strings that aren't localized (Finder's "Kind" for
+# extension and shortcut files).
+INFO_PLIST_FILE = 'chrome/app/app-Info.plist'
+INFO_PLIST_NAMES = ('Extension', 'Shortcut')
 BRANDING = """COMPANY_FULLNAME=The Koan Authors
 COMPANY_SHORTNAME=The Koan Authors
 PRODUCT_FULLNAME=Koan
@@ -124,13 +138,23 @@ def logos_for(platform):
 
 
 # Every platform's files: apply_patches.sh export must skip all of them.
-BRANDED_FILES = STRING_FILES + [CR_ICONS_FILE, BRANDING_FILE] + sorted(
-    {**LOGOS, **LINUX_LOGOS, **MAC_LOGOS})
+BRANDED_FILES = STRING_FILES + [
+    CR_ICONS_FILE, BRANDING_FILE, INFO_PLIST_FILE
+] + sorted({**LOGOS, **LINUX_LOGOS, **MAC_LOGOS})
 
-# The macOS app icon set as (points, scale), the sizes iconutil and actool
-# expect for the mac idiom.
+# The macOS app icon set in the asset catalog, as (points, scale): the
+# sizes actool expects for the mac idiom.
 MAC_ICON_SET = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2),
                 (256, 1), (256, 2), (512, 1), (512, 2)]
+
+# app.icns follows Chromium's convention (docs/mac/icons.md): 16, 32, 128,
+# 256 and 512, no @2x (small @2x variants looked blocky). macOS 26+ uses
+# Assets.car instead; app.icns matters for older macOS and disk images.
+MAC_ICNS_SET = [(16, 1), (32, 1), (128, 1), (256, 1), (512, 1)]
+
+# The document badge ("Icon" in the asset catalog), at 256 points.
+MAC_BADGE = {'icon_256x256.png': 'logo_256.png',
+             'icon_256x256@2x.png': 'logo_512.png'}
 
 # Apple's macOS icon grid: the icon body is 824 px on a 1024 px canvas, the
 # margin leaving room for the shadow. branding/logo.svg's body is the
@@ -197,6 +221,104 @@ def rebrand_cr_icons(text):
     return match.group(1) + path + match.group(3)
 
   return icon.sub(fix, text)
+
+
+def rebrand_info_plist(text):
+  """Renames Finder's "Chromium Extension"/"Chromium Shortcut" kinds."""
+  for name in INFO_PLIST_NAMES:
+    text = text.replace(f'<string>Chromium {name}</string>',
+                        f'<string>Koan {name}</string>')
+  return text
+
+
+def expected_png_size(name):
+  """(width, height) a rendered branding PNG must have, from its name."""
+  match = re.fullmatch(r'(?:logo|appicon)_(\d+)(?:_mono)?\.png', name)
+  if match:
+    return int(match.group(1)), int(match.group(1))
+  match = re.fullmatch(r'wordmark_(22|44)(?:_white)?\.png', name)
+  if match:
+    height = int(match.group(1))
+    return height * 97 // 22, height
+  return None
+
+
+def png_size(path):
+  """(width, height) from a PNG's header, or None if it isn't a PNG."""
+  with open(path, 'rb') as f:
+    head = f.read(24)
+  if len(head) < 24 or head[:8] != b'\x89PNG\r\n\x1a\n' or \
+      head[12:16] != b'IHDR':
+    return None
+  return struct.unpack('>II', head[16:24])
+
+
+def check_png_sizes(paths):
+  """Exits if any branding PNG is missing, isn't a PNG or has the wrong
+  size, before iconutil or actool see it."""
+  problems = []
+  for path in paths:
+    path = pathlib.Path(path)
+    want = expected_png_size(path.name)
+    have = png_size(path) if path.exists() else 'missing'
+    if have != want:
+      problems.append(f'{path}: {have}, expected {want}')
+  if problems:
+    sys.exit('bad branding images:\n  ' + '\n  '.join(problems))
+
+
+def mac_rendered_files():
+  """Names of the PNGs macOS needs: the in-browser logos, the document
+  badge and the app icon bitmaps."""
+  names = {art for art in LOGOS.values()} | set(MAC_BADGE.values())
+  names |= {f'appicon_{px}.png' for px in mac_icon_pixels()}
+  return sorted(names)
+
+
+def art_path(name):
+  """Where a rendered PNG lives under branding/out."""
+  return MAC_ART / name if name.startswith('appicon_') else ART / name
+
+
+def save_mac_renders():
+  """Linux: copies the freshly rendered PNGs macOS needs to
+  branding/mac/rendered/, to be committed."""
+  check_png_sizes(art_path(name) for name in mac_rendered_files())
+  shutil.rmtree(MAC_RENDERS, ignore_errors=True)
+  MAC_RENDERS.mkdir(parents=True)
+  for name in mac_rendered_files():
+    shutil.copyfile(art_path(name), MAC_RENDERS / name)
+  print(f'saved {len(mac_rendered_files())} PNGs to {MAC_RENDERS}; '
+        'commit them')
+
+
+def load_mac_renders():
+  """macOS: copies the committed PNGs to branding/out."""
+  check_png_sizes(MAC_RENDERS / name for name in mac_rendered_files())
+  MAC_ART.mkdir(parents=True, exist_ok=True)
+  for name in mac_rendered_files():
+    shutil.copyfile(MAC_RENDERS / name, art_path(name))
+
+
+def stale_mac_renders():
+  """Linux: names of committed Mac PNGs that differ from a fresh render."""
+  stale = []
+  for name in mac_rendered_files():
+    committed = MAC_RENDERS / name
+    if not committed.exists() or \
+        committed.read_bytes() != art_path(name).read_bytes():
+      stale.append(name)
+  return stale
+
+
+def require_mac_env():
+  """macOS: refuses to run outside the one-folder environment (env.sh), so
+  actool's and iconutil's caches stay in it. See .agent/notes/mac.md."""
+  folder = os.environ.get('KOAN_MAC', '')
+  home = os.environ.get('HOME', '')
+  if not folder or not home.startswith(folder.rstrip('/') + '/'):
+    sys.exit('KOAN_MAC is not set, or HOME is outside it: source the '
+             "folder's env.sh first, e.g. source ~/work/koan-mac/env.sh")
 
 
 def mac_icon_pixels():
@@ -274,16 +396,31 @@ def actool_command(catalog, out, app_icon=None):
   return command
 
 
+def expected_actool_warning(item):
+  """The document warnings Chromium's compile_car.py also accepts."""
+  kind = item.get('type', '') if isinstance(item, dict) else ''
+  message = item.get('message', '') if isinstance(item, dict) else ''
+  return kind == 'Ambiguous Content' or (
+      kind == 'Unsupported Configuration' and
+      message.startswith('Failed to generate flattened icon stack'))
+
+
 def actool_problems(stdout):
-  """Errors and warnings from actool's xml1 output, as strings."""
+  """Everything in actool's xml1 output that should fail the build: errors,
+  warnings and notices (actool reports missing inputs as notices), except
+  the expected document warnings. As strings."""
   try:
     result = plistlib.loads(stdout)
   except Exception:  # Not a plist: actool failed before reporting.
     return [stdout.decode(errors='replace').strip()]
   problems = []
   for key, value in sorted(result.items()):
-    if key.endswith(('errors', 'warnings')) and value:
-      problems += [f'{key}: {item}' for item in value]
+    if not key.endswith(('errors', 'warnings', 'notices')) or not value:
+      continue
+    for item in value:
+      if key.endswith('document.warnings') and expected_actool_warning(item):
+        continue
+      problems.append(f'{key}: {item}')
   return problems
 
 
@@ -302,14 +439,15 @@ def write_asset_catalog(catalog):
       json.dumps(appiconset_contents(), indent=2))
   badge = catalog / 'Icon.iconset'
   badge.mkdir()
-  shutil.copyfile(ART / 'logo_256.png', badge / 'icon_256x256.png')
-  shutil.copyfile(ART / 'logo_512.png', badge / 'icon_256x256@2x.png')
+  for name, art in MAC_BADGE.items():
+    shutil.copyfile(ART / art, badge / name)
 
 
 def compile_asset_catalog(catalog, out):
   """Runs actool; returns out/Assets.car. Tries the Icon Composer icon
-  first, and falls back to the bitmaps alone if actool rejects it (macOS
-  26+ then shows the bitmap icon)."""
+  first, and falls back to the bitmaps alone if actool rejects it or
+  reports any problem with it (macOS 26+ then shows the bitmap icon).
+  Exits on any problem with the bitmaps alone."""
   for app_icon in (MAC_APP_ICON, None):
     if out.exists():
       shutil.rmtree(out)
@@ -321,29 +459,25 @@ def compile_asset_catalog(catalog, out):
     problems = actool_problems(run.stdout)
     for problem in problems:
       print(f'actool: {problem}', file=sys.stderr)
-    if run.returncode == 0 and (out / 'Assets.car').exists():
+    if run.returncode == 0 and not problems and (out /
+                                                 'Assets.car').exists():
       return out / 'Assets.car'
     if app_icon:
       print(f'actool rejected {app_icon.name}; using the bitmap icon only',
             file=sys.stderr)
-  sys.exit('actool failed to compile the asset catalog: '
+  sys.exit('actool failed to compile the asset catalog (see above): '
            + run.stderr.decode(errors='replace'))
 
 
 def mac_assets():
   """macOS: builds branding/out/mac/app.icns and Assets.car from the icon
-  bitmaps apply_branding.sh rendered."""
-  needed = [MAC_ART / f'appicon_{px}.png' for px in mac_icon_pixels()]
-  needed += [ART / 'logo_256.png', ART / 'logo_512.png']
-  missing = [str(path) for path in needed if not path.exists()]
-  if missing:
-    sys.exit(f'missing icon bitmaps {missing} '
-             '(run scripts/apply_branding.sh, which renders them)')
+  bitmaps in branding/out (see load_mac_renders)."""
+  check_png_sizes(art_path(name) for name in mac_rendered_files())
   with tempfile.TemporaryDirectory() as tmp:
     tmp = pathlib.Path(tmp)
     iconset = tmp / 'Koan.iconset'
     iconset.mkdir()
-    for points, scale in MAC_ICON_SET:
+    for points, scale in MAC_ICNS_SET:
       shutil.copyfile(MAC_ART / f'appicon_{points * scale}.png',
                       iconset / mac_iconset_name(points, scale))
     subprocess.run(
@@ -372,6 +506,7 @@ def apply(platform):
   if missing:
     sys.exit(f'missing branding artifacts in {ART}: {missing} '
              '(run scripts/apply_branding.sh, which renders them)')
+  check_png_sizes(ART / a for a in set(logos.values()) if a.endswith('.png'))
   changed = 0
   for rel in STRING_FILES:
     save_pristine(rel)
@@ -389,6 +524,14 @@ def apply(platform):
     (SRC / CR_ICONS_FILE).write_text(new)
     changed += 1
     print(f'rebranded  {CR_ICONS_FILE}')
+  if platform == 'mac':
+    save_pristine(INFO_PLIST_FILE)
+    old = (SRC / INFO_PLIST_FILE).read_text()
+    new = rebrand_info_plist(old)
+    if new != old:
+      (SRC / INFO_PLIST_FILE).write_text(new)
+      changed += 1
+      print(f'rebranded  {INFO_PLIST_FILE}')
   save_pristine(BRANDING_FILE)
   if (SRC / BRANDING_FILE).read_text() != BRANDING:
     (SRC / BRANDING_FILE).write_text(BRANDING)
@@ -417,7 +560,8 @@ def main():
   parser.add_argument('command',
                       choices=[
                           'apply', 'revert', 'list', 'mac-assets',
-                          'mac-icon-sizes', 'mac-icon-svg'
+                          'mac-icon-sizes', 'mac-icon-svg', 'save-mac-renders',
+                          'load-mac-renders', 'check-mac-renders'
                       ])
   parser.add_argument('svg', nargs='?', help='mac-icon-svg: the logo SVG')
   parser.add_argument('--platform',
@@ -425,6 +569,8 @@ def main():
                       default=host_platform(),
                       help='apply: which platform to brand (default: host)')
   args = parser.parse_args()
+  if sys.platform == 'darwin' and args.command != 'list':
+    require_mac_env()
   if args.command == 'apply':
     apply(args.platform)
   elif args.command == 'revert':
@@ -433,6 +579,16 @@ def main():
     print('\n'.join(BRANDED_FILES))
   elif args.command == 'mac-assets':
     mac_assets()
+  elif args.command == 'save-mac-renders':
+    save_mac_renders()
+  elif args.command == 'load-mac-renders':
+    load_mac_renders()
+  elif args.command == 'check-mac-renders':
+    stale = stale_mac_renders()
+    if stale:
+      print(f'branding/mac/rendered is out of date ({", ".join(stale)}): '
+            'run scripts/apply_branding.sh --render-mac and commit it',
+            file=sys.stderr)
   elif args.command == 'mac-icon-sizes':
     print(' '.join(str(px) for px in mac_icon_pixels()))
   else:

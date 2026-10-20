@@ -266,9 +266,31 @@ class ActoolTest(unittest.TestCase):
         }],
     })
     problems = branding.actool_problems(output)
-    self.assertEqual(len(problems), 2)
-    self.assertTrue(any('bad' in p for p in problems))
-    self.assertTrue(any('meh' in p for p in problems))
+    # Notices count too: actool reports missing inputs as notices.
+    self.assertEqual(len(problems), 3)
+    for word in ('bad', 'meh', 'fyi'):
+      self.assertTrue(any(word in p for p in problems), word)
+
+  def test_expected_warnings_pass(self):
+    output = plistlib.dumps({
+        'com.apple.actool.document.warnings': [{
+            'type': 'Ambiguous Content',
+            'message': 'x'
+        }, {
+            'type': 'Unsupported Configuration',
+            'message': 'Failed to generate flattened icon stack for AppIcon'
+        }],
+    })
+    self.assertEqual(branding.actool_problems(output), [])
+
+  def test_other_document_warnings_fail(self):
+    output = plistlib.dumps({
+        'com.apple.actool.document.warnings': [{
+            'type': 'Unsupported Configuration',
+            'message': 'The app icon set has an unassigned child.'
+        }],
+    })
+    self.assertEqual(len(branding.actool_problems(output)), 1)
 
   def test_problems_from_garbage(self):
     self.assertEqual(branding.actool_problems(b'xcrun: error: no actool'),
@@ -277,3 +299,86 @@ class ActoolTest(unittest.TestCase):
 
 if __name__ == '__main__':
   unittest.main()
+
+
+class MacRendersTest(unittest.TestCase):
+  """branding/mac/rendered: the PNGs macOS uses, rendered on Linux."""
+
+  def test_committed_set_is_complete(self):
+    committed = sorted(p.name for p in branding.MAC_RENDERS.iterdir())
+    self.assertEqual(committed, branding.mac_rendered_files())
+
+  def test_committed_sizes(self):
+    for name in branding.mac_rendered_files():
+      with self.subTest(name=name):
+        self.assertEqual(branding.png_size(branding.MAC_RENDERS / name),
+                         branding.expected_png_size(name))
+
+  def test_mac_needs_every_shared_logo_and_icon(self):
+    names = set(branding.mac_rendered_files())
+    self.assertLessEqual(set(branding.LOGOS.values()), names)
+    self.assertLessEqual(set(branding.MAC_BADGE.values()), names)
+    for px in branding.mac_icon_pixels():
+      self.assertIn(f'appicon_{px}.png', names)
+
+  def test_expected_sizes(self):
+    self.assertEqual(branding.expected_png_size('logo_22_mono.png'), (22, 22))
+    self.assertEqual(branding.expected_png_size('appicon_1024.png'),
+                     (1024, 1024))
+    self.assertEqual(branding.expected_png_size('wordmark_22.png'), (97, 22))
+    self.assertEqual(branding.expected_png_size('wordmark_44_white.png'),
+                     (194, 44))
+    self.assertIsNone(branding.expected_png_size('other.png'))
+
+  def test_wrong_size_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      wrong = pathlib.Path(tmp) / 'logo_32.png'
+      wrong.write_bytes((branding.MAC_RENDERS / 'logo_16.png').read_bytes())
+      with self.assertRaises(SystemExit):
+        branding.check_png_sizes([wrong])
+      with self.assertRaises(SystemExit):
+        branding.check_png_sizes([pathlib.Path(tmp) / 'logo_64.png'])
+      not_png = pathlib.Path(tmp) / 'logo_48.png'
+      not_png.write_text('nope')
+      with self.assertRaises(SystemExit):
+        branding.check_png_sizes([not_png])
+
+  def test_icns_follows_chromium_convention(self):
+    self.assertEqual(branding.MAC_ICNS_SET,
+                     [(16, 1), (32, 1), (128, 1), (256, 1), (512, 1)])
+    self.assertLessEqual(set(branding.MAC_ICNS_SET),
+                         set(branding.MAC_ICON_SET))
+
+
+class InfoPlistTest(unittest.TestCase):
+
+  def test_renames_document_kinds(self):
+    text = ('<key>UTTypeDescription</key>\n'
+            '<string>Chromium Extension</string>\n'
+            '<string>Chromium Shortcut</string>\n'
+            '<string>org.chromium.extension</string>')
+    out = branding.rebrand_info_plist(text)
+    self.assertIn('<string>Koan Extension</string>', out)
+    self.assertIn('<string>Koan Shortcut</string>', out)
+    # Type identifiers stay: they tie document types to the declarations.
+    self.assertIn('org.chromium.extension', out)
+    self.assertEqual(branding.rebrand_info_plist(out), out)
+
+  def test_owned_by_branding(self):
+    self.assertIn(branding.INFO_PLIST_FILE, branding.BRANDED_FILES)
+
+
+class MacEnvTest(unittest.TestCase):
+
+  def test_requires_home_inside_folder(self):
+    env = {'KOAN_MAC': '/w/koan-mac', 'HOME': '/Users/me'}
+    with mock.patch.dict(branding.os.environ, env, clear=True):
+      with self.assertRaises(SystemExit):
+        branding.require_mac_env()
+    with mock.patch.dict(branding.os.environ, {'HOME': '/Users/me'},
+                         clear=True):
+      with self.assertRaises(SystemExit):
+        branding.require_mac_env()
+    env = {'KOAN_MAC': '/w/koan-mac', 'HOME': '/w/koan-mac/home'}
+    with mock.patch.dict(branding.os.environ, env, clear=True):
+      branding.require_mac_env()
