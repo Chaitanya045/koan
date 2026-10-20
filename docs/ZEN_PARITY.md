@@ -110,7 +110,8 @@ point of Koan.
 | Actions mode: Tab in an empty URL bar lists every action | Different | Koan types `>` (you can type it too; a second Tab leaves it) instead of showing an "Actions" chip, and lists as many actions as Chromium's popup has rows (about eight) above a "> – search" row; type to filter. As in Zen, Enter runs the first action once two characters are typed. |
 | "Focus on" a Space | Same | Matched by the Space's name, which is shown beside "Focus on". |
 | Add to / Remove from Essentials | Different | Koan's Essentials are its pinned tabs, so these pin and unpin, like Pin / Unpin Tab. |
-| Open Theme Picker, Open Library, New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#41, #43, #42); each feature adds its actions to the palette's registry. |
+| Open Theme Picker, New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#41, #42); each feature adds its actions to the palette's registry. |
+| Open Library | Same | Zen's second action; toggles the Library. |
 | Reset Pinned Tab | Missing | Koan's pinned tabs don't keep their pinned URL yet (#38). |
 | Toggle Tabs on right | Missing | Chromium's vertical tabs can't be on the right (see "Sidebar on the right"). |
 | New Blank Window | Missing | Koan doesn't sync windows, so it would be the same as Open New Window. |
@@ -118,6 +119,30 @@ point of Koan.
 | Extension actions ("Extension" + name) | Missing | An extension's popup opens from its toolbar button, which the single-toolbar layout hides. |
 
 Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (typing) and `screenshots/palette-zen-vs-koan-actions.png` (Tab in an empty URL bar).
+
+## Library
+
+| Zen | Koan | Notes |
+|---|---|---|
+| Library panel sliding in over the sidebar, sections down its side | Same | Downloads, Spaces, History, in Zen's order, with Zen's sizes (418px, 110px side column) and opening spring. With tabs on the right it slides in from the right. Zen also slides the page aside; Koan's panel slides over it (Chromium draws the page in its own native window, which view transforms don't move). |
+| Alt+Shift+L, and History / Downloads keys open their section | Same | Zen's Firefox keys: Ctrl+H, Ctrl+Shift+H (⌘⇧H, ⌘Y on macOS) open History, Ctrl+Shift+Y (⌘⇧J) Downloads; pressed again they close it. Chrome's app menu still opens `chrome://history` and `chrome://downloads`. |
+| Library button in the sidebar's footer | Same | First in the row with the workspace switcher (shown with workspaces on). Zen's hover stack of recent downloads on that button is missing. |
+| Opens on the last section used | Same | |
+| "Open Library" in the command palette | Same | |
+| History: search, when / sort / source filters, grouped by day or site | Same | Default range 120 days, 100 rows at a time, like Zen. |
+| History: closed tabs as a source | Same | From Chromium's recently closed tabs (all windows, tabs only). Zen renames the tab "Archive" then; Koan keeps "History". |
+| History: open, open in background (Ctrl/middle click), forget, reopen | Same | |
+| History: Forget About This Site | Same | Removes the site's history, cookies, site data and cache after asking. |
+| History: clear by range from the tab's menu | Same | Last hour / 12 hours / today / week / month / everything, after asking. |
+| History / Downloads: drag a row out (as a link, as a file) | Missing | |
+| Downloads: search, type and date filters, newest first | Same | |
+| Downloads: progress ring, open when done, show in folder, retry, cancel | Same | |
+| Downloads: menu (open, copy file, copy link, remove, delete) | Same | "Hide from Zen" is "Remove from history". Dangerous downloads are kept or discarded in Chrome's download bubble. |
+| Downloads: picture previews instead of file icons | Same | Decoded out of process. |
+| Spaces: cards with the space's tabs, rename, icon, theme, drag to reorder, add | Same | Thin, on the workspace API: the icon picker offers 40 emoji, not Zen's full picker; the theme is the space's colour (Koan has no gradient editor yet, #41). |
+| Spaces: live copy of each space's sidebar (drag tabs between cards, folders) | Different | Cards list the space's tabs; click one to go there. Moving tabs between spaces is done in the sidebar. |
+| Media and Boosts sections | Missing | Zen-specific features Koan doesn't have. |
+| Opening the Library with a swipe | Missing | |
 
 ## Keyboard and settings
 

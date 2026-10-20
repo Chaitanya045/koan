@@ -6,6 +6,8 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WORKSPACES_H_
 
 #include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -20,6 +22,13 @@ class TabStripModel;
 namespace koan {
 
 class KoanWorkspaceSwitcherView;
+
+// Splits a workspace's title into its icon (a leading emoji, else the first
+// character) and its display name.
+std::pair<std::u16string, std::u16string> SplitWorkspaceTitle(
+    std::u16string title);
+// Whether a workspace's title starts with an emoji icon.
+bool WorkspaceTitleHasIcon(const std::u16string& title);
 
 // Zen-style workspaces for one window, built on upstream tab group focus
 // mode (features::kTabGroupsFocusing): a workspace is a tab group, and the
@@ -52,6 +61,7 @@ class KoanWorkspaceController : public TabStripModelObserver {
   void CreateWorkspace();
 
   TabStripModel* tab_strip_model() const;
+  BrowserView* browser_view() const { return browser_view_; }
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(

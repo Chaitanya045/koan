@@ -38,6 +38,7 @@
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_library.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -138,6 +139,17 @@ SkColor TintSeed(tab_groups::TabGroupColorId color) {
 
 }  // namespace
 
+std::pair<std::u16string, std::u16string> SplitWorkspaceTitle(
+    std::u16string title) {
+  return SplitIcon(std::move(title));
+}
+
+bool WorkspaceTitleHasIcon(const std::u16string& title) {
+  std::u16string trimmed;
+  base::TrimWhitespace(title, base::TRIM_LEADING, &trimmed);
+  return StartsWithEmoji(trimmed);
+}
+
 // A round workspace button: a filled circle in the workspace's colour with
 // its initial, ringed when active.
 class KoanWorkspaceButton : public views::Button {
@@ -229,6 +241,11 @@ class KoanWorkspaceSwitcherView : public views::BoxLayoutView {
 
   void Rebuild() {
     RemoveAllChildViews();
+    // Zen's footer starts with the Library button.
+    if (std::unique_ptr<views::View> library =
+            CreateLibraryButton(controller_->browser_view())) {
+      AddChildView(std::move(library));
+    }
     const std::optional<tab_groups::TabGroupId> active =
         controller_->GetActiveWorkspace();
     TabStripModel* model = controller_->tab_strip_model();

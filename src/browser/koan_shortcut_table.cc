@@ -83,6 +83,8 @@ constexpr Info kActions[] = {
     {Action::kSavePage, "save-page", "pageOperations", "Save Page"},
     {Action::kReaderMode, "reader-mode", "pageOperations",
      "Toggle Reader Mode"},
+    {Action::kLibraryHistory, "history", "historyAndBookmarks",
+     "Show All History"},
     {Action::kBookmarks, "bookmarks", "historyAndBookmarks",
      "Show Bookmarks Sidebar"},
     {Action::kMuteSite, "mute", "mediaAndDisplay", "Toggle Mute"},
@@ -142,6 +144,16 @@ std::vector<Binding> DefaultBindings() {
       // Zen: Accel+O while Glance is open.
       bind(ui::VKEY_O, kAccel, Action::kGlanceExpand),
       bind(ui::VKEY_L, kAlt | kShift, Action::kLibrary),
+  // Firefox's history keys, which Zen sends to the Library's History:
+  // Ctrl+H and Ctrl+Shift+H, on macOS Cmd+Shift+H and Cmd+Y (Cmd+H hides
+  // the app there).
+#if BUILDFLAG(IS_MAC)
+      bind(ui::VKEY_H, kAccel | kShift, Action::kLibraryHistory),
+      bind(ui::VKEY_Y, kAccel, Action::kLibraryHistory),
+#else
+      bind(ui::VKEY_H, kAccel, Action::kLibraryHistory),
+      bind(ui::VKEY_H, kAccel | kShift, Action::kLibraryHistory),
+#endif
       // Zen moves the inspector off Ctrl+Shift+C.
       bind(ui::VKEY_L, kCtrl | kShift, Action::kInspect),
       // Zen (Firefox) windows: Ctrl+Shift+N new window, Ctrl+Shift+P private.
@@ -150,7 +162,13 @@ std::vector<Binding> DefaultBindings() {
       // Zen inherits these from Firefox; Chrome leaves the keys free.
       bind(ui::VKEY_M, kCtrl, Action::kMuteSite),
       bind(ui::VKEY_B, kCtrl, Action::kBookmarks),
+  // Firefox's Downloads key, which Zen sends to the Library's
+  // Downloads: Ctrl+Shift+Y, on macOS Cmd+Shift+J.
+#if BUILDFLAG(IS_MAC)
+      bind(ui::VKEY_J, kAccel | kShift, Action::kDownloads),
+#else
       bind(ui::VKEY_Y, kCtrl | kShift, Action::kDownloads),
+#endif
       bind(ui::VKEY_R, kCtrl | kAlt, Action::kReaderMode),
       // Koan-only.
       bind(ui::VKEY_B, kCtrl | kAlt, Action::kToggleSingleToolbar),
