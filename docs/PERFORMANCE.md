@@ -81,9 +81,13 @@ whatever the Memory Saver setting. Koan turns that off
 the one switch for discarding tabs.
 
 Freezing is an upstream experiment, off by default in Chromium; Koan turns
-it on (`koan_feature_overrides.cc`) with a switch,
-`chrome://flags/#koan-freeze-background-tabs`. Zen has nothing like it:
-Firefox only throttles background timers.
+it on (`koan_feature_overrides.cc`). Users turn it off in Koan's settings
+(`chrome://koan-settings`, Tab Management > Performance > "Freeze background
+tabs"), which sets Chromium's own `performance_tuning.tab_freezing.enabled`
+(local state; the `BackgroundTabFreezingEnabled` enterprise policy can
+manage it). `chrome://flags/#koan-freeze-background-tabs` removes the
+feature altogether. Zen has nothing like it: Firefox only throttles
+background timers.
 
 ### Restoring tabs on demand
 

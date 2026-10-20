@@ -81,7 +81,9 @@ base::ListValue KeysOf(const std::vector<shortcuts::Binding>& bindings,
 
 }  // namespace
 
-KoanSettingsHandler::KoanSettingsHandler(PrefService& prefs) : prefs_(prefs) {}
+KoanSettingsHandler::KoanSettingsHandler(PrefService& prefs,
+                                         PrefService& local_state)
+    : prefs_(prefs), local_state_(local_state) {}
 
 KoanSettingsHandler::~KoanSettingsHandler() {
   SuspendShortcuts(false);
@@ -110,12 +112,18 @@ void KoanSettingsHandler::RegisterMessages() {
 
 void KoanSettingsHandler::OnJavascriptAllowed() {
   pref_change_registrar_.Init(&*prefs_);
+  local_state_change_registrar_.Init(&*local_state_);
   const auto observe = [this](const char* pref) {
-    if (pref && prefs_->FindPreference(pref) &&
-        !pref_change_registrar_.IsObserved(pref)) {
-      pref_change_registrar_.Add(
-          pref, base::BindRepeating(&KoanSettingsHandler::OnPrefChanged,
-                                    base::Unretained(this)));
+    if (!pref) {
+      return;
+    }
+    PrefChangeRegistrar& registrar = &PrefsFor(pref) == &*local_state_
+                                         ? local_state_change_registrar_
+                                         : pref_change_registrar_;
+    if (PrefsFor(pref).FindPreference(pref) && !registrar.IsObserved(pref)) {
+      registrar.Add(pref,
+                    base::BindRepeating(&KoanSettingsHandler::OnPrefChanged,
+                                        base::Unretained(this)));
     }
   };
   for (const Row& row : settings::Rows()) {
@@ -128,6 +136,7 @@ void KoanSettingsHandler::OnJavascriptAllowed() {
 
 void KoanSettingsHandler::OnJavascriptDisallowed() {
   pref_change_registrar_.Reset();
+  local_state_change_registrar_.Reset();
   SuspendShortcuts(false);
 }
 
@@ -140,7 +149,12 @@ void KoanSettingsHandler::OnPrefChanged(const std::string& pref) {
     FireWebUIListener("shortcuts-changed", Shortcuts());
     return;
   }
-  FireWebUIListener("pref-changed", pref, prefs_->GetValue(pref));
+  FireWebUIListener("pref-changed", pref, PrefsFor(pref).GetValue(pref));
+}
+
+PrefService& KoanSettingsHandler::PrefsFor(std::string_view pref) const {
+  const Row* row = settings::FindRow(pref);
+  return row && row->local_state ? *local_state_ : *prefs_;
 }
 
 void KoanSettingsHandler::HandleGetSettings(const base::ListValue& args) {
@@ -155,7 +169,7 @@ void KoanSettingsHandler::HandleSetPref(const base::ListValue& args) {
   const std::string* name = args[1].GetIfString();
   const Row* row = name ? settings::FindRow(*name) : nullptr;
   const PrefService::Preference* pref =
-      row ? prefs_->FindPreference(row->pref) : nullptr;
+      row ? PrefsFor(row->pref).FindPreference(row->pref) : nullptr;
   bool ok = pref && IsAvailable(*row) && pref->IsUserModifiable() &&
             args[2].type() == pref->GetType();
   if (ok && !row->options.empty()) {
@@ -167,7 +181,7 @@ void KoanSettingsHandler::HandleSetPref(const base::ListValue& args) {
     }
   }
   if (ok) {
-    prefs_->Set(row->pref, args[2]);
+    PrefsFor(row->pref).Set(row->pref, args[2]);
   }
   ResolveJavascriptCallback(args[0], ok);
 }
@@ -256,7 +270,8 @@ base::DictValue KoanSettingsHandler::Settings() const {
   base::ListValue rows;
   base::DictValue values;
   for (const Row& row : settings::Rows()) {
-    const PrefService::Preference* pref = prefs_->FindPreference(row.pref);
+    const PrefService::Preference* pref =
+        PrefsFor(row.pref).FindPreference(row.pref);
     if (!pref || !IsAvailable(row)) {
       continue;
     }

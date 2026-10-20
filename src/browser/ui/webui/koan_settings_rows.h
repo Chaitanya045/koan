@@ -13,8 +13,9 @@
 // What chrome://koan-settings shows, as data. The page lays out Zen's
 // preferences: panes in the sidebar, each with sections (big headings), each
 // with groups (a header, a description and the settings). Every setting is a
-// row bound to a Koan profile pref; the page applies a change by setting the
-// pref, and features pick it up live by observing their prefs.
+// row bound to a pref, a Koan profile pref or one of Chromium's local-state
+// prefs; the page applies a change by setting the pref, and features pick it
+// up live by observing their prefs.
 //
 // To add a setting for a feature, add a Row to kRows in
 // koan_settings_rows.cc, in its group (add the group if Zen has one that
@@ -70,6 +71,10 @@ struct Row {
   bool (*is_available)() = nullptr;
   // Indented under the row above, like Zen's sub-options.
   bool indent = false;
+  // `pref` is a local-state pref (browser-wide, e.g. one of Chromium's
+  // performance settings) rather than a profile pref. `depends_on` and
+  // `note_pref` are always profile prefs.
+  bool local_state = false;
   // A note shown under the row while its pref and `note_pref` (a boolean
   // pref, e.g. one of Chromium's) are both true, like Zen's warnings.
   const char* note = nullptr;

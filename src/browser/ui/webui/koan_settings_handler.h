@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_WEBUI_KOAN_SETTINGS_HANDLER_H_
 
 #include <string>
+#include <string_view>
 
 #include "base/memory/raw_ref.h"
 #include "base/scoped_observation.h"
@@ -31,7 +32,9 @@ namespace koan {
 class KoanSettingsHandler : public content::WebUIMessageHandler,
                             public views::WidgetObserver {
  public:
-  explicit KoanSettingsHandler(PrefService& prefs);
+  // `prefs`: the profile's; `local_state`: the browser's, for rows with
+  // Row::local_state.
+  KoanSettingsHandler(PrefService& prefs, PrefService& local_state);
   KoanSettingsHandler(const KoanSettingsHandler&) = delete;
   KoanSettingsHandler& operator=(const KoanSettingsHandler&) = delete;
   ~KoanSettingsHandler() override;
@@ -56,11 +59,16 @@ class KoanSettingsHandler : public content::WebUIMessageHandler,
 
   void OnPrefChanged(const std::string& pref);
 
+  // The pref service that holds `pref`.
+  PrefService& PrefsFor(std::string_view pref) const;
+
   base::DictValue Settings() const;
   base::DictValue Shortcuts() const;
 
   const raw_ref<PrefService> prefs_;
+  const raw_ref<PrefService> local_state_;
   PrefChangeRegistrar pref_change_registrar_;
+  PrefChangeRegistrar local_state_change_registrar_;
   // The window whose shortcuts are suspended, if any.
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       suspended_widget_{this};

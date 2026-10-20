@@ -20,8 +20,10 @@ source_set("webui") {
   deps = [
     ":resources",
     "//base",
+    "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui:accelerator_table",
+    "//components/performance_manager",
     "//components/prefs",
     "//content/public/common",
     "//koan/browser:features",

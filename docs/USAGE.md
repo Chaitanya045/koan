@@ -128,8 +128,9 @@ from its sidebar.
 
 - **Look and Feel**: the browser layout (Only Sidebar / Sidebar and Top
   Toolbar) and compact mode.
-- **Tab Management**: whether the active workspace tints the browser, and
-  Zen's tab behaviours (Zen's defaults):
+- **Tab Management**: whether the active workspace tints the browser,
+  whether background tabs freeze (see "Memory and power"), and Zen's tab
+  behaviours (Zen's defaults):
   - closing a tab switches to the **most recently used** tab rather than a
     neighbour (on);
   - **Back** in a tab with no history (one opened from a link in another
@@ -171,7 +172,8 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   Pinned tabs never freeze, nor do tabs that played audio since you last
   looked at them (so media keys still work), are in a call, use a device or
   show notifications. Sites on Settings > Performance > "Always keep these
-  sites active" never freeze either.
+  sites active" never freeze either. Turn freezing off in Koan's settings
+  (`chrome://koan-settings`, Tab Management > Performance).
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
 
