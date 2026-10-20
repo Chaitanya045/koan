@@ -5,6 +5,7 @@
 #include "koan/browser/ui/views/koan_browser_view_hooks.h"
 
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
 
 namespace koan {
 
@@ -14,6 +15,12 @@ void OnBrowserViewCreated(BrowserView* browser_view) {
 
 void OnBrowserViewDestroying(BrowserView* browser_view) {
   KoanBrowserViewController::DestroyFor(browser_view);
+}
+
+void OnSidebarDragCollapsed(BrowserView* browser_view) {
+  if (auto* controller = KoanBrowserViewController::From(browser_view)) {
+    controller->compact_mode()->OnSidebarDragCollapsed();
+  }
 }
 
 }  // namespace koan

@@ -13,6 +13,7 @@
 #include "cc/paint/paint_shader.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPoint.h"
@@ -47,7 +48,6 @@ namespace {
 
 // Zen's toast (ZenToasts.mjs): springs in from the top, stays for 2s once in
 // (longer while hovered) and fades out shrinking.
-constexpr base::TimeDelta kToastTimeout = base::Seconds(2);
 constexpr base::TimeDelta kToastShowDuration = base::Milliseconds(400);
 constexpr base::TimeDelta kToastHideDuration = base::Milliseconds(200);
 
@@ -149,8 +149,10 @@ KoanToast::~KoanToast() {
 void KoanToast::Show(const std::u16string& text,
                      const std::u16string& shortcut,
                      const std::u16string& after,
-                     const std::u16string& announcement) {
+                     const std::u16string& announcement,
+                     base::TimeDelta timeout) {
   Close();
+  timeout_ = timeout;
   views::Widget* browser_widget = browser_view_->GetWidget();
   if (!browser_widget) {
     return;
@@ -199,7 +201,7 @@ void KoanToast::Show(const std::u16string& text,
     layer->SetTransform(gfx::Transform());
   }
   // Like Zen, the time on screen counts from when the toast is fully in.
-  timer_.Start(FROM_HERE, kToastShowDuration + kToastTimeout,
+  timer_.Start(FROM_HERE, kToastShowDuration + timeout_,
                base::BindOnce(&KoanToast::Hide, weak_factory_.GetWeakPtr()));
 }
 
@@ -209,9 +211,11 @@ void KoanToast::OnBrowserViewLayout() {
     return;
   }
   const gfx::Size size = view_->GetPreferredSize();
-  const int right = browser_widget->GetRootView()->width() - kToastMargin;
-  widget_->SetBounds(
-      gfx::Rect(gfx::Point(right - size.width(), kToastMargin), size));
+  const int x = IsSidebarOnRight(browser_view_)
+                    ? kToastMargin
+                    : browser_widget->GetRootView()->width() - kToastMargin -
+                          size.width();
+  widget_->SetBounds(gfx::Rect(gfx::Point(x, kToastMargin), size));
 }
 
 void KoanToast::OnHovered(bool hovered) {
@@ -222,7 +226,7 @@ void KoanToast::OnHovered(bool hovered) {
   if (hovered) {
     timer_.Stop();
   } else {
-    timer_.Start(FROM_HERE, kToastTimeout,
+    timer_.Start(FROM_HERE, timeout_,
                  base::BindOnce(&KoanToast::Hide, weak_factory_.GetWeakPtr()));
   }
 }

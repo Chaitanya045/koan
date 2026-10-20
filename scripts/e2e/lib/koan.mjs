@@ -128,14 +128,16 @@ export async function readPref(pref) {
   return JSON.parse(text);
 }
 
-// Every native view as {cls, shown, w, h}; `shown` includes the ancestors'.
+// Every native view as {cls, shown, w, h, x, y, nodeId, path}; `shown`
+// includes the ancestors', x/y are in the view's widget, `path` lists the
+// ancestors' classes from the widget's root view.
 export async function views() {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('CSS.enable');
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const out = [];
-  const walk = async (n, depth, shown) => {
+  const walk = async (n, depth, shown, path, ox, oy) => {
     const a = n.attributes ?? [];
     const cls = a[a.indexOf('class') + 1];
     if (depth > 0 && n.nodeName === 'View' && cls) {
@@ -145,13 +147,59 @@ export async function views() {
         for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
       }
       shown = shown && p.Visible !== 'false';
-      out.push({ cls, shown, w: +p.Width, h: +p.Height });
+      const v = { cls, shown, w: +p.Width, h: +p.Height, x: ox + +p.X, y: oy + +p.Y,
+                  nodeId: n.nodeId, path };
+      out.push(v);
+      path = [...path, cls];
+      ox = v.x;
+      oy = v.y;
+    } else if (n.nodeName === 'Widget') {
+      [path, ox, oy] = [[], 0, 0];
     }
-    for (const c of n.children ?? []) await walk(c, depth + 1, shown);
+    for (const c of n.children ?? []) await walk(c, depth + 1, shown, path, ox, oy);
   };
-  await walk(doc, 0, true);
+  await walk(doc, 0, true, [], 0, 0);
   ui.close();
   return out;
+}
+
+// Just the bounds (in the parent view's coordinates) of the views of class
+// `cls`: quicker than views() for timing-sensitive checks.
+export async function boundsOf(cls) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const nodes = [];
+  const walk = n => {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'View' && a[a.indexOf('class') + 1] === cls) nodes.push(n);
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(doc);
+  const out = [];
+  for (const n of nodes) {
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+    const p = {};
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+    }
+    out.push({ x: +p.X, y: +p.Y, w: +p.Width, h: +p.Height });
+  }
+  ui.close();
+  return out;
+}
+
+// Sends a native mouse event to `view` (from views()) at `x`, `y` in its own
+// coordinates. The view gets it directly; sent to a root view, it is routed
+// like real input.
+export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('DOM.getDocument', { depth: -1 });
+  await ui.send('DOM.dispatchMouseEvent', { nodeId: view.nodeId,
+      event: { type, x, y, button, wheelDirection: 'none' } });
+  ui.close();
 }
 
 export const shownViews = (vs, cls) => vs.filter(v => v.cls === cls && v.shown);

@@ -66,11 +66,25 @@ result closes it.
 
 As in Zen, nothing sits above the page but a thin margin: move the pointer
 to the top edge of the window to show the window buttons (close, ...); the
-page moves down to make room and back up when you leave.
+page moves down to make room and back up when you leave. When the buttons
+are on the sidebar's side of the window (e.g. GNOME's buttons with tabs on
+the right, or a "close,minimize,maximize:" button layout with tabs on the
+left), they stay in the sidebar's top row instead, as in Zen.
 
 Ctrl+Alt+B switches to the multiple-toolbars layout (a toolbar above the
 page, as in Chrome) and back. The layout applies to all windows and
 persists.
+
+**Collapsed sidebar**: the sidebar toggle (left end of its top row)
+collapses the sidebar to icons, Zen's "Collapsed Sidebar" layout: the
+toolbar sits above the page, and the sidebar expands over the page while
+the pointer is on it (right-click the toggle to turn that off). Like Zen,
+single toolbar needs the full sidebar: the toggle or Ctrl+Alt+B expands it
+into single toolbar again.
+
+**Tabs on the right**: right-click an empty part of the sidebar and pick
+**Tabs on the right** (or Settings > Look and Feel > Vertical Tabs). Everything mirrors: the sidebar is on the right, its
+top row and resize edge too, and compact mode reveals it at the right edge.
 
 ## Command palette
 
@@ -116,6 +130,11 @@ Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). The
 workspace switcher is at the bottom of the sidebar: **∞** shows all tabs,
 one round button per workspace, **+** creates one.
 
+Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
+**Compact Mode** (below) and **Tabs on the right**. Dragging the sidebar's
+edge resizes it; dragging it closed hides it in compact mode, as in Zen
+("Sidebar hidden! Use Ctrl+S to bring the sidebar back", shown once).
+
 ## Workspaces
 
 A workspace is a tab group shown on its own. Its icon in the switcher is
@@ -132,8 +151,17 @@ Move the pointer to the left edge (or press Ctrl+Alt+S) to slide the
 sidebar out, with its navigation buttons and URL pill. Ctrl+L opens the
 floating URL bar as usual. The setting applies to all windows and persists.
 
-In the multiple-toolbars layout compact mode hides the toolbar as well;
-move the pointer to the top edge to slide it down.
+In the multiple-toolbars layout you choose what compact mode hides, in the
+sidebar's menu under **Compact Mode**: **Hide sidebar** (the default, as in
+Zen), **Hide toolbar** or **Hide both**. A hidden toolbar slides down when
+the pointer reaches the top edge, with the window buttons. With the sidebar
+collapsed to icons and the window buttons on its side, Zen doesn't offer
+hiding just the toolbar, and neither does Koan.
+
+The same choices are in Settings (Ctrl+,) > Look and Feel > Show in
+compact view, with Zen's "Briefly make the toolbar popup when switching or
+opening new tabs in compact mode" (off by default): the hidden sidebar then
+pops up for a moment whenever you switch tabs.
 
 ## Glance
 
@@ -195,7 +223,8 @@ Zen's preferences; everything else is in Chromium's own settings, linked
 from its sidebar.
 
 - **Look and Feel**: the browser layout (Only Sidebar / Sidebar and Top
-  Toolbar) and compact mode.
+  Toolbar), tabs on the right, compact mode, what it hides and its flash
+  popup.
 - **Tab Management**: whether the active workspace tints the browser,
   whether background tabs freeze (see "Memory and power"), and Zen's tab
   behaviours (Zen's defaults):

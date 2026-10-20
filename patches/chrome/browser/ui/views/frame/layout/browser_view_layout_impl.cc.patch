@@ -1,0 +1,69 @@
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc
+@@ -12,6 +12,7 @@
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout_delegate.h"
+ #include "chrome/browser/ui/views/frame/multi_contents_view.h"
++#include "koan/browser/ui/views/koan_compact_mode.h"
+ #include "ui/base/ui_base_features.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
+@@ -238,6 +239,21 @@
+     return;
+   }
+ 
++  // Koan: tabs on the right. Lay out as if the sidebar were on the leading
++  // side, with the frame's caption button areas swapped, then mirror.
++  const bool koan_mirror = koan::IsSidebarOnRight(views().browser_view);
++  const auto koan_mirror_children = [](this const auto& self,
++                                       ProposedLayout& layout, int left,
++                                       int right) -> void {
++    for (auto& [child, child_layout] : layout.children) {
++      child_layout.bounds.set_x(left + right - child_layout.bounds.right());
++      self(child_layout, 0, child_layout.bounds.width());
++    }
++  };
++  if (koan_mirror) {
++    std::swap(params.leading_exclusion, params.trailing_exclusion);
++  }
++
+   DoPreLayoutComputations(params);
+ 
+   // If the top container is separate from the browser view, lay it out now.
+@@ -250,6 +266,11 @@
+     // The computation for the top container components does not change.
+     const gfx::Rect top_container_local_bounds = CalculateTopContainerLayout(
+         top_container_layout, params, /*needs_exclusion=*/true);
++    if (koan_mirror) {
++      koan_mirror_children(top_container_layout,
++                           top_container_local_bounds.x(),
++                           top_container_local_bounds.right());
++    }
+ 
+     // Apply the child layouts for the top container.
+     std::move(top_container_layout)
+@@ -265,8 +286,11 @@
+     // In (for example) fullscreen-with-toolbar, if the size of the top
+     // container changes, then the overall layout dimensions may also change.
+     // See https://crbug.com/519626620 for more information.
+-    const auto new_params =
++    auto new_params =
+         delegate().GetBrowserLayoutParams(/*use_browser_bounds=*/true);
++    if (koan_mirror) {
++      std::swap(new_params.leading_exclusion, new_params.trailing_exclusion);
++    }
+     if (params != new_params) {
+       OnLayoutParamsChanged(params, new_params);
+       params = new_params;
+@@ -275,6 +299,10 @@
+ 
+   // Lay out the browser view itself.
+   auto layout = CalculateProposedLayout(params);
++  if (koan_mirror) {
++    koan_mirror_children(layout, params.visual_client_area.x(),
++                         params.visual_client_area.right());
++  }
+   dialog_top_ = GetDialogTop(layout);
+   dialog_bottom_ = GetDialogBottom(layout);
+   std::move(layout).ApplyLayout(host, [this](views::View* view, bool visible) {

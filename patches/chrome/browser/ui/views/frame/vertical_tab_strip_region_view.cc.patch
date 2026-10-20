@@ -1,14 +1,17 @@
+diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-@@ -61,6 +61,7 @@
+@@ -61,6 +61,9 @@
  #include "chrome/grit/generated_resources.h"
  #include "components/tabs/public/tab_group.h"
  #include "components/tabs/public/tab_interface.h"
++#include "koan/browser/ui/views/koan_browser_view_hooks.h"
++#include "koan/browser/ui/views/koan_compact_mode.h"
 +#include "koan/browser/ui/views/koan_sidebar_tabs.h"
  #include "ui/base/dragdrop/os_exchange_data.h"
  #include "ui/base/interaction/element_tracker.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -205,6 +206,11 @@
+@@ -205,6 +208,11 @@
    resize_area_->GetViewAccessibility().SetRole(ax::mojom::Role::kSlider);
  
    state_controller_->SetDelegate(this);
@@ -20,7 +23,23 @@
    target_collapse_state_ = state_controller_->GetState();
    OnCollapseStateChanged(state_controller_->GetCollapseState());
    collapsed_state_changed_subscription_ =
-@@ -530,7 +536,8 @@
+@@ -505,9 +513,12 @@
+ 
+   // Manually position the resize area as it overlaps views handled by the flex
+   // layout.
+-  resize_area_->SetBoundsRect(gfx::Rect(bounds().right() - resize_area_width_,
+-                                        0, resize_area_width_,
+-                                        bounds().height()));
++  // Koan: with tabs on the right, the resize area is on the leading edge.
++  resize_area_->SetBoundsRect(
++      gfx::Rect(koan::IsSidebarOnRight(browser_view())
++                    ? 0
++                    : bounds().right() - resize_area_width_,
++                0, resize_area_width_, bounds().height()));
+   shadow_frame_->SetBoundsRect(GetLocalBounds());
+ 
+   // Ensure that we update the drop arrow position so that it does not render in
+@@ -530,7 +541,8 @@
    auto min_size = BaseTabStripRegionView::GetMinimumSize();
    min_size.set_width((state_controller_->IsCollapsed() || IsAnimatingSize())
                           ? tabs::kVerticalTabStripCollapsedWidth
@@ -30,7 +49,21 @@
    return min_size;
  }
  
-@@ -749,12 +756,16 @@
+@@ -740,6 +752,13 @@
+     starting_width_on_resize_ = width();
+     state_controller_->SetIsResizing(true);
+   }
++  // Koan: with tabs on the right, dragging toward the leading edge widens.
++  if (koan::IsSidebarOnRight(browser_view())) {
++    resize_amount = -resize_amount;
++  }
++  // Koan: a drag that collapses an expanded strip hides it instead.
++  const bool koan_started_expanded =
++      starting_width_on_resize_.value() > tabs::kVerticalTabStripCollapsedWidth;
+   bool previously_collapsed = target_collapse_state_.collapsed;
+   const int proposed_width = starting_width_on_resize_.value() + resize_amount;
+   if (done_resizing) {
+@@ -749,12 +768,16 @@
  
    tabs::VerticalTabStripState new_state;
    new_state.collapsed =
@@ -50,3 +83,13 @@
      if (std::abs(new_state.uncollapsed_width -
                   tabs::kVerticalTabStripDefaultUncollapsedWidth) <
          kSnapDistance) {
+@@ -801,6 +824,9 @@
+     // happen in AnimationProgressed, instead of here.
+     InvalidateLayout();
+   }
++  if (done_resizing && new_state.collapsed && koan_started_expanded) {
++    koan::OnSidebarDragCollapsed(browser_view());
++  }
+ }
+ 
+ void VerticalTabStripRegionView::SetCollapsedStateUpdatedCallback(

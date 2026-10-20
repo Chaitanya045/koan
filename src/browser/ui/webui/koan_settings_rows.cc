@@ -68,6 +68,13 @@ constexpr Option kLayouts[] = {
     {"false", "Sidebar and Top Toolbar", "multiple"},
 };
 
+// What compact mode hides (zen-preferences.ftl zen-compact-mode-styles-*).
+constexpr Option kCompactModeHides[] = {
+    {prefs::kCompactModeHideSidebar, "Hide Tab bar"},
+    {prefs::kCompactModeHideToolbar, "Hide Top bar"},
+    {prefs::kCompactModeHideBoth, "Hide Both"},
+};
+
 // Zen's Glance trigger methods (zen-glance-trigger-*), in Zen's order. On
 // macOS Ctrl+click is a right-click, so it can't trigger anything.
 constexpr Option kGlanceTriggers[] = {
@@ -92,6 +99,27 @@ constexpr Row kRows[] = {
      .pref = prefs::kCompactModeEnabled,
      .label = "Enable Koan's compact mode",
      .is_available = features::IsCompactModeEnabled},
+    {.group = "compact",
+     .control = Control::kMenu,
+     .pref = prefs::kCompactModeHide,
+     .label = "What compact mode hides",
+     .options = kCompactModeHides,
+     .is_available = features::IsCompactModeEnabled,
+     .indent = true,
+     .note = "With the Only Sidebar layout there is no top bar: compact mode "
+             "hides the sidebar"},
+    {.group = "compact",
+     .control = Control::kCheckbox,
+     .pref = prefs::kCompactModeToolbarFlashPopup,
+     .label = "Briefly make the toolbar popup when switching or opening new "
+              "tabs in compact mode",
+     .is_available = features::IsCompactModeEnabled,
+     .indent = true},
+    {.group = "vertical-tabs",
+     .control = Control::kCheckbox,
+     .pref = prefs::kTabsOnRight,
+     .label = "Tabs on the right",
+     .is_available = features::IsSidebarEnabled},
     {.group = "glance",
      .control = Control::kCheckbox,
      .pref = prefs::kGlanceEnabled,

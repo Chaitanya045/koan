@@ -1,5 +1,4 @@
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..177b1fa2fa8dd888c303f7dac5083ac1d45e49b2 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 @@ -25,6 +25,7 @@
@@ -10,7 +9,7 @@ index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..177b1fa2fa8dd888c303f7dac5083ac1
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/base/metadata/metadata_impl_macros.h"
  #include "ui/compositor/layer.h"
-@@ -190,6 +191,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -190,6 +191,8 @@
        layout.child_layouts.emplace_back(collapse_button_.get(),
                                          collapse_button_->GetVisible(), bounds);
        host_size.SetToMax(gfx::Size(bounds.right(), 0));
@@ -19,16 +18,18 @@ index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..177b1fa2fa8dd888c303f7dac5083ac1
  
        current_y += pref_size.height();
      }
-@@ -326,6 +329,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -326,7 +329,10 @@
        layout.child_layouts.emplace_back(combo_button_.get(),
                                          combo_button_->GetVisible(), bounds);
      }
 +    koan::LayoutSidebarHeaderTrailingViews(this, layout, right_alignment,
 +                                           y_baseline);
    }
++  koan::MirrorSidebarHeaderLayout(this, layout, host_size.width());
  
    layout.host_size = host_size;
-@@ -516,6 +521,7 @@ int VerticalTabStripTopContainer::GetPreferredWidth() const {
+ 
+@@ -516,6 +522,7 @@
      total_width += collapse_button_->GetPreferredSize().width() + padding;
    }
  

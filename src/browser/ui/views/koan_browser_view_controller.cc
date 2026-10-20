@@ -23,6 +23,7 @@
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
+#include "ui/views/widget/widget.h"
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(koan::KoanBrowserViewController*)
 
@@ -147,6 +148,18 @@ bool IsCaptionStripCollapsed(const views::View* browser_view) {
   const KoanBrowserViewController* controller =
       view ? KoanBrowserViewController::From(view) : nullptr;
   return controller && controller->compact_mode()->caption_strip_collapsed();
+}
+
+bool IsSidebarOnRight(const views::View* view) {
+  // Also takes a view inside the window (e.g. in the sidebar).
+  const auto* browser_view = views::AsViewClass<BrowserView>(view);
+  if (!browser_view && view && view->GetWidget()) {
+    browser_view =
+        views::AsViewClass<BrowserView>(view->GetWidget()->client_view());
+  }
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller && controller->compact_mode()->sidebar_on_right();
 }
 
 }  // namespace koan

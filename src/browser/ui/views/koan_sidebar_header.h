@@ -28,6 +28,13 @@ void LayoutSidebarHeaderTrailingViews(const views::View* host,
 // The width of Koan's views in `host`, for its preferred width.
 int GetSidebarHeaderTrailingWidth(const views::View* host);
 
+// With tabs on the right (see koan_compact_mode.h), mirrors the row laid out
+// in `layout` inside `width`, so the space kept for caption buttons and the
+// sidebar toggle end up at the window edge.
+void MirrorSidebarHeaderLayout(const views::View* host,
+                               views::ProposedLayout& layout,
+                               int width);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_HEADER_H_

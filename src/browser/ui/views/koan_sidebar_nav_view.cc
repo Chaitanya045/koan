@@ -23,6 +23,7 @@
 #include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -102,6 +103,17 @@ int GetSidebarHeaderTrailingWidth(const views::View* host) {
     }
   }
   return width;
+}
+
+void MirrorSidebarHeaderLayout(const views::View* host,
+                               views::ProposedLayout& layout,
+                               int width) {
+  if (!IsSidebarOnRight(host)) {
+    return;
+  }
+  for (views::ChildLayout& child : layout.child_layouts) {
+    child.bounds.set_x(width - child.bounds.right());
+  }
 }
 
 KoanSidebarNavButtons::KoanSidebarNavButtons(BrowserView* browser_view)

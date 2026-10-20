@@ -27,6 +27,13 @@ bool IsToolbarHidden(const views::View* browser_view);
 // reaches up to a thin gutter.
 bool IsCaptionStripCollapsed(const views::View* browser_view);
 
+// Whether the sidebar (vertical tab strip) is on the right, everything
+// mirrored (Zen's "Tabs on the right"). `view` is the BrowserView or a view in
+// its window. The browser view's layout is computed as usual with the caption
+// button areas swapped and then mirrored; the sidebar's top row and resize
+// area mirror too.
+bool IsSidebarOnRight(const views::View* view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_
