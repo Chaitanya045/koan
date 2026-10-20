@@ -50,12 +50,19 @@ export async function pageTargets(port) {
 // hanging the run.
 export async function evaluate(port, match, expression) {
   const target = (await pageTargets(port)).find(match);
-  if (!target) return undefined;
+  if (!target) {
+    console.log('  evaluate: no such page');
+    return undefined;
+  }
   const page = await connect(target.webSocketDebuggerUrl);
   const r = await page.send('Runtime.evaluate',
                             { expression, returnByValue: true, awaitPromise: true },
                             undefined, 5000);
   page.close();
+  if (r.timedOut || r.error || r.result?.exceptionDetails) {
+    console.log(`  evaluate on ${target.url} failed: ${JSON.stringify(
+        r.timedOut ? 'timed out' : r.error ?? r.result.exceptionDetails.text)}`);
+  }
   return r.result?.result?.value;
 }
 

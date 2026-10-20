@@ -22,14 +22,23 @@ function check(name, ok, detail = '') {
   if (!ok) failures++;
 }
 
+// Navigates a page and waits until it shows `url`; says so if it doesn't.
 async function navigate(target, url) {
   const page = await connect(target.webSocketDebuggerUrl);
-  await page.send('Page.navigate', { url });
+  const r = await page.send('Page.navigate', { url });
   page.close();
+  for (let i = 0; i < 20; i++) {
+    const now = (await pageTargets(CDP_PORT)).find(byId(target.id));
+    if (now?.url === url) return;
+    await sleep(250);
+  }
+  console.log(`  navigating to ${url} didn't happen: ${JSON.stringify(r)}`);
 }
 const byId = id => t => t.id === id;
 const byUrl = suffix => t => t.url.endsWith(suffix);
-const start = (await pageTargets(CDP_PORT))[0];
+const start = (await pageTargets(CDP_PORT)).find(t => t.url.endsWith('/power.html')) ??
+    (await pageTargets(CDP_PORT))[0];
+console.log(`  pages at start: ${(await pageTargets(CDP_PORT)).map(t => t.url).join(' ')}`);
 const CTRL = 2, ALT = 1, SHIFT = 8;
 const paintsOf = trace => Object.fromEntries(trace.paints);
 const koanTasks = trace =>
