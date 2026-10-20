@@ -172,8 +172,8 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   looked at them (so media keys still work), are in a call, use a device or
   show notifications. Sites on Settings > Performance > "Always keep these
   sites active" never freeze either.
-- **Energy saver** keeps Chromium's default, which never turns it on on
-  Linux (as in Zen, which has none).
+- **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
+  battery (Settings > Performance > Energy saver).
 
 ## Turning things off
 

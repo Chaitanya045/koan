@@ -5,22 +5,23 @@ and what Zen does instead. Each choice is a Chromium mechanism Koan turns on
 or a default it changes, or a fix in Koan's own views. They are all backed by
 a measurement below or by the upstream code that implements them.
 
-Release-build numbers (startup, memory with N tabs, Speedometer, Koan vs
-Zen vs Chromium) come from the benchmark harness (#14) and the release
-configuration (#13); they will be in `docs/BENCHMARKS.md`. The numbers here
-come from the dev build (`out/Koan`: component build, DCHECKs on), so only
-comparisons within it mean anything.
+Koan ships for macOS on Apple Silicon (#51). Everything here is
+platform-neutral Chromium or Views code, so it applies on the Mac as it does
+on Linux, where the agents build and test. The numbers below come from the
+Linux dev build (`out/Koan`: component build, DCHECKs on), so only
+comparisons within it mean anything; the Mac measurements still to be done
+are listed at the end.
 
 ## Defaults
 
-| What | Koan | Chromium | Zen (1.23.3b, Linux) |
+| What | Koan | Chromium | Zen (1.23.3b) |
 |---|---|---|---|
-| Memory Saver | On (balanced: a tab hidden for 4 h is discarded until opened) | Off | No time-based unloading: Firefox unloads tabs only on low memory, and that is off on Linux (`browser.tabs.unloadOnLowMemory`). Zen's settings list `zen.tab-unloader.timeout-minutes` (10), but nothing reads it any more. |
-| Energy saver | Chromium's default (never turns on on Linux, see below) | Below 20 % battery | None (Firefox has no energy saver) |
+| Memory Saver | On (balanced: a tab hidden for 4 h is discarded until opened) | Off | No time-based unloading. Firefox unloads tabs only under memory pressure (`browser.tabs.unloadOnLowMemory`: off in the Linux build checked here; Firefox turns it on for macOS and Windows, not verified on Zen's Mac build). Zen's settings list `zen.tab-unloader.timeout-minutes` (10), but nothing reads it any more. |
+| Energy saver | Chromium's default: on a MacBook, below 20 % battery | Same | None (Firefox has no energy saver) |
 | Freeze background tabs | On: all but the 5 most recently used, never pinned tabs or tabs that played audio | Only CPU-heavy tabs, with energy saver on | None; Firefox throttles background timers |
 | Restored background tabs | Load when first opened | 4 to 20 load at startup | Load when first opened (`browser.sessionstore.restore_on_demand`, pinned tabs too) |
 | Background timer throttling | Chromium's (1 wake-up/s, then 1/min after 5 min hidden) | Same | Firefox's budget-based throttling |
-| Hardware video decoding | Chromium's (VA-API on by default on Linux) | Same | On (VA-API) |
+| Hardware video decoding | Chromium's (VideoToolbox on macOS) | Same | On (VideoToolbox on macOS) |
 
 ### Memory Saver
 
@@ -39,18 +40,16 @@ default of `performance_tuning.high_efficiency_mode.state` (a hook in
 
 ### Energy saver: Chromium's default
 
-Energy saver caps frame rates and throttles background work harder.
-Chromium's default turns it on below 20 % battery, but Linux has no battery
-level provider in Chromium (`HAS_BATTERY_LEVEL_PROVIDER_IMPL` is Windows and
-macOS only), so on Linux it never turns on, which matches Zen. Linux does
-report "on battery" while the desktop's power-saver profile is on
-(`PowerMonitorDeviceSourceLinux`, power-profiles-daemon through the XDG
-PowerProfileMonitor portal), so "turn on when unplugged" would follow the
-system's power saver. Koan doesn't make that the default: Settings only
-shows energy saver on a device with a battery (`DeviceHasBattery()`, false
-on Linux), and its toolbar button sits in Koan's hidden toolbar, so nobody
-could turn it back off. Revisit once Koan's settings page (#39) can show the
-switch.
+Energy saver caps frame rates, throttles background work harder and freezes
+CPU-heavy background tabs. On a Mac with a battery, Chromium turns it on
+below 20 % battery, and Settings > Performance > Energy saver lets you
+change that to "when unplugged" or turn it off; while it is on, a leaf
+button in the toolbar says so. Koan keeps that default: "when unplugged"
+would cap animations at 30 fps whenever the MacBook is on battery, which
+changes how Koan looks and feels, and Zen has no energy saver at all.
+
+(On the Linux test machine energy saver never turns on: Chromium has no
+battery level provider there, and Settings hides the section.)
 
 ### Freezing background tabs
 
@@ -110,9 +109,9 @@ wake up when nothing changes, and do its animations run on the compositor.
   and hide 400 ms after the pointer leaves, with a one-shot timer. (Only
   while a menu from the revealed toolbar is open does Koan look again every
   400 ms, because closing a menu sends the window no event.) Measured for a
-  Ctrl+Alt+S peek that hides by itself: PEEK_TASKS Koan task(s) in 6 s; the
-  100 ms timer meant about 34 for the same peek (3 s grace plus the 400 ms
-  delay; computed from the old code, not measured). The idle rows below
+  Ctrl+Alt+S peek that hides by itself: 1 Koan task in 6 s (the one-shot
+  hide timer); the 100 ms timer meant about 34 for the same peek (3 s grace
+  plus the 400 ms delay; computed from the old code, not measured). The idle rows below
   don't measure this: the old timers also stopped once everything was
   hidden. The case the change matters most for, a pointer resting on the
   revealed toolbar, can't be produced off-screen (the headless platform
@@ -182,3 +181,21 @@ upstream's behaviour (`--disable-features=KoanRestoreTabsOnDemand`) all
 four load again; with Koan's, only the active one does, and a background
 tab loads when it is opened. The test also restarts Koan with a window of
 3 tabs plus one in another Space: only the active tab loads.
+
+## To measure on the Mac
+
+The dev-build numbers above are Linux, software-composited and off-screen.
+On the MacBook Air (M4), with the release build, Koan against Zen (and
+Chrome for reference), the maintainer still has to measure:
+
+- **Energy**: `sudo powermetrics --samplers cpu_power,gpu_power,tasks`
+  and Activity Monitor's Energy Impact, idle with 10 tabs (some in other
+  Spaces), during video playback, and while scrolling; on battery.
+- **Speedometer 3**, **JetStream 2** and **MotionMark**.
+- Startup and memory with N tabs restored (restore on demand shows here).
+- Freezing: CPU of 8 busy background tabs with
+  `--disable-features=InfiniteTabsFreezing` and without.
+- Compact mode on macOS: the toolbar and a peeked sidebar hide again when the
+  pointer leaves the window. On the Mac, Koan sees that through the window's
+  mouse-exited event (`views::EventMonitor` uses an NSEvent local monitor);
+  the Linux tests can't check it.
