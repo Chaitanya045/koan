@@ -1,0 +1,55 @@
+diff --git a/components/performance_manager/freezing/freezing_policy.cc b/components/performance_manager/freezing/freezing_policy.cc
+index 610f1fe35acc940fe003373d776dfb3efdb225d3..222be6d53da220488df9f2d31636b5156e834b7b 100644
+--- a/components/performance_manager/freezing/freezing_policy.cc
++++ b/components/performance_manager/freezing/freezing_policy.cc
+@@ -373,6 +373,8 @@ CannotFreezeReasonSet FreezingPolicy::CannotFreezeReasonsForType(
+     reasons.Remove(CannotFreezeReason::kRecentlyVisible);
+   } else {
+     reasons.Remove(CannotFreezeReason::kMostRecentlyUsed);
++    reasons.Remove(CannotFreezeReason::kPinnedTab);
++    reasons.Remove(CannotFreezeReason::kPlayedAudio);
+   }
+   return reasons;
+ }
+@@ -687,6 +689,12 @@ void FreezingPolicy::OnIsVisibleChanged(const PageNode* page_node) {
+     // Page becomes visible.
+     OnCannotFreezeReasonChange(page_node, /*add=*/true,
+                                CannotFreezeReason::kVisible);
++    if (!page_node->IsAudible() &&
++        page_freezing_state.cannot_freeze_reasons.Has(
++            CannotFreezeReason::kPlayedAudio)) {
++      OnCannotFreezeReasonChange(page_node, /*add=*/false,
++                                 CannotFreezeReason::kPlayedAudio);
++    }
+     if (page_freezing_state.recently_visible_timer.IsRunning()) {
+       page_freezing_state.recently_visible_timer.Stop();
+       OnCannotFreezeReasonChange(page_node, /*add=*/false,
+@@ -737,6 +745,11 @@ void FreezingPolicy::OnIsAudibleChanged(const PageNode* page_node) {
+   if (page_node->IsAudible()) {
+     OnCannotFreezeReasonChange(page_node, /*add=*/true,
+                                CannotFreezeReason::kAudible);
++    if (!page_freezing_state.cannot_freeze_reasons.Has(
++            CannotFreezeReason::kPlayedAudio)) {
++      OnCannotFreezeReasonChange(page_node, /*add=*/true,
++                                 CannotFreezeReason::kPlayedAudio);
++    }
+     if (page_freezing_state.recently_audible_timer.IsRunning()) {
+       page_freezing_state.recently_audible_timer.Stop();
+       OnCannotFreezeReasonChange(page_node, /*add=*/false,
+@@ -994,6 +1007,16 @@ void FreezingPolicy::OnIsCapturingWindowChanged(const PageNode* page_node) {
+                              CannotFreezeReason::kCapturingWindow);
+ }
+ 
++void FreezingPolicy::OnIsPinnedTabChanged(const PageNode* page_node) {
++  const bool pinned =
++      PageLiveStateDecorator::Data::FromPageNode(page_node)->IsPinnedTab();
++  if (pinned != GetFreezingState(page_node).cannot_freeze_reasons.Has(
++                    CannotFreezeReason::kPinnedTab)) {
++    OnCannotFreezeReasonChange(page_node, /*add=*/pinned,
++                               CannotFreezeReason::kPinnedTab);
++  }
++}
++
+ void FreezingPolicy::OnIsCapturingDisplayChanged(const PageNode* page_node) {
+   OnCannotFreezeReasonChange(page_node,
+                              /*add=*/IsPageCapturingDisplay(page_node),

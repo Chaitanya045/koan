@@ -1,0 +1,12 @@
+diff --git a/components/performance_manager/freezing/freezing_policy.h b/components/performance_manager/freezing/freezing_policy.h
+index ea9c96f58e792043f45ce9c70bebb25eeaf9326f..b8b4c8bf18df4ae68236d1da36e73bf8745d619a 100644
+--- a/components/performance_manager/freezing/freezing_policy.h
++++ b/components/performance_manager/freezing/freezing_policy.h
+@@ -228,6 +228,7 @@ class FreezingPolicy : public PageNodeObserver,
+   void OnIsBeingMirroredChanged(const PageNode* page_node) override;
+   void OnIsCapturingWindowChanged(const PageNode* page_node) override;
+   void OnIsCapturingDisplayChanged(const PageNode* page_node) override;
++  void OnIsPinnedTabChanged(const PageNode* page_node) override;
+ 
+   // NodeDataDescriber:
+   base::DictValue DescribePageNodeData(const PageNode* node) const override;
