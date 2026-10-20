@@ -2,7 +2,7 @@
 // the hidden toolbar doesn't repaint, compact mode runs no polling timers,
 // Memory Saver is on, restored background tabs load only when opened (after
 // reopening a window and after a restart, Spaces included), and background
-// tabs freeze, except pinned ones.
+// tabs freeze, except pinned ones (also under energy saver).
 //
 //   scripts/e2e/run.sh power
 import { spawn } from 'node:child_process';
@@ -165,7 +165,12 @@ for (let i = 0; i < 40; i++) {
   if (!await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`).catch(() => null)) break;
 }
 await sleep(2000);
-const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean);
+// The restarted Koan protects a tab it just showed from energy saver's
+// freezing for 10 s instead of 5 minutes, so the energy saver check below
+// fits in the test.
+const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean).map(a =>
+    a.startsWith('--enable-features=') ?
+    `${a},CPUMeasurementInFreezingPolicy:freezing_visible_protection_time/10s` : a);
 relaunched = spawn(args[0], args.slice(1), { stdio: 'ignore' });
 // Never leave it running (it would hold the test ports), even on a crash.
 process.on('exit', () => relaunched.kill());
@@ -179,6 +184,24 @@ n = await loads(byUrl('count=r1'));
 check('After a restart the active tab loads', n.r1 === 2, `r1 was ${active}; ${show(n)}`);
 check('...but not the other tabs', n.r2 === 1 && n.r3 === 1, show(n));
 check('...nor a tab in another Space', n.s === 1, show(n));
+
+// Nothing is lost: the other tabs and the Space's tab are there, and load
+// when opened.
+const restored = (await pageTargets(CDP_PORT)).map(t => t.url);
+check('Every restored tab is there', ['r1', 'r2', 'r3', 's'].every(
+          id => restored.some(u => u.endsWith(`count=${id}`))),
+      restored.filter(u => u.includes('count=')).map(u => u.split('count=')[1]).join(' '));
+for (const id of ['r2', 's']) {
+  const t = (await pageTargets(CDP_PORT)).find(byUrl(`count=${id}`));
+  if (t) await browser.send('Target.activateTarget', { targetId: t.id });
+  await sleep(3000);
+}
+n = await loads(byUrl('count=r1'));
+check('...and a background tab and the Space\'s tab load when opened',
+      n.r2 === 2 && n.s === 2, show(n));
+const back = (await pageTargets(CDP_PORT)).find(byUrl('count=r1'));
+if (back) await browser.send('Target.activateTarget', { targetId: back.id });
+await sleep(1000);
 
 // --- Freezing ---------------------------------------------------------------
 
@@ -218,6 +241,62 @@ check('Busy background tabs beyond the 5 most recent are frozen', frozen >= 3,
       `${frozen} of 8 paused > 3 s; longest pauses (ms): ${gaps.join(', ')}`);
 check('A pinned tab is never frozen', pinnedGap >= 0 && pinnedGap < 3000,
       `longest pause ${pinnedGap} ms`);
+
+// --- Energy saver's freezing ------------------------------------------------
+
+// With energy saver on (here: always, Chromium's "On" setting), Chromium
+// freezes background tabs that use a lot of CPU, without the 5 s each minute
+// that infinite-tabs freezing allows. Pinned tabs must stay exempt there too.
+// Koan's freeze switch is off for this, so only energy saver freezes.
+async function settingsPage(url, expression) {
+  const id = (await browser.send('Target.createTarget', { url, background: true }))
+      .result.targetId;
+  let value;
+  for (let i = 0; i < 20 && value === undefined; i++) {
+    await sleep(500);
+    value = await evaluate(CDP_PORT, byId(id), expression);
+  }
+  await browser.send('Target.closeTarget', { targetId: id });
+  return value;
+}
+const setKoanPref = (pref, value) => settingsPage('chrome://koan-settings',
+    `import('chrome://resources/js/cr.js').then(m => m.sendWithPromise(
+         'setPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
+const setChromePref = (pref, value) => settingsPage('chrome://settings/performance',
+    `new Promise(r => chrome.settingsPrivate.setPref(${JSON.stringify(pref)},
+         ${JSON.stringify(value)}, '', r))`);
+const energySaverOn = await setChromePref('performance_tuning.battery_saver_mode.state', 3);
+const switchOff = await setKoanPref('performance_tuning.tab_freezing.enabled', false);
+const home2 = (await pageTargets(CDP_PORT)).find(byUrl('count=r1')) ??
+    (await pageTargets(CDP_PORT))[0];
+const pinned2 = (await browser.send('Target.createTarget',
+                                    { url: `${pages.origin}/power.html?busy&pinned2` }))
+    .result.targetId;
+await sleep(2000);
+await key(CDP_PORT, 68, CTRL | SHIFT, byId(pinned2));  // Ctrl+Shift+D: pin
+await sleep(1000);
+await browser.send('Target.activateTarget', { targetId: home2.id });
+const busy2 = (await browser.send('Target.createTarget',
+                                  { url: `${pages.origin}/power.html?busy&unpinned2`,
+                                    background: true })).result.targetId;
+// Chromium measures CPU once a minute; give it two measurements.
+await sleep(130000);
+const pauseOf = async id => {
+  await browser.send('Target.activateTarget', { targetId: id });
+  await sleep(500);
+  const gap = Math.round(await evaluate(CDP_PORT, byId(id), 'maxGap') ?? -1);
+  await browser.send('Target.closeTarget', { targetId: id });
+  return gap;
+};
+const busyGap = await pauseOf(busy2);
+const pinnedGap2 = await pauseOf(pinned2);
+await setChromePref('performance_tuning.battery_saver_mode.state', 1);
+await setKoanPref('performance_tuning.tab_freezing.enabled', true);
+check('Energy saver freezes a busy background tab', busyGap > 3000,
+      `energy saver on: ${energySaverOn}, freeze switch off: ${switchOff}; ` +
+      `longest pause ${busyGap} ms`);
+check('...but never a pinned one', pinnedGap2 >= 0 && pinnedGap2 < 3000,
+      `longest pause ${pinnedGap2} ms`);
 
 // --- Koan's views (after the restart) -------------------------------------
 
