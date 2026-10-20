@@ -56,6 +56,11 @@
   WebUI back/forward/reload toolbar). Koan sets
   `disable_fieldtrial_testing_config = true`; flipping it rebuilt ~1.9k
   steps.
+- **Shared out dir:** agent-build.sh points `//koan` at each worktree's
+  `src/` in turn and now recompiles every file that differs from the last
+  build (siso alone goes by mtime, so it used to link another worktree's
+  objects). Never date files in the future: siso aborts on a future mtime,
+  which breaks the shared build for every agent.
 - Never leave a test browser running across a build: regenerated .pak files
   make the running one abort ("Unable to find resource").
 - Changing `BRANDING`/string .grd files rebuilds ~3.6k steps (~45 min).

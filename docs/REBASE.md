@@ -5,7 +5,10 @@ moving to a new revision is mechanical:
 
 - All Koan code lives in `src/` (seen by GN as `//koan`).
 - Upstream files carry one-to-a-few-line **hook patches**, one file per
-  patched upstream file in `patches/`. Each calls into `//koan`.
+  patched upstream file in `patches/`. Each calls into `//koan`, except the
+  freezing exemptions in `components/performance_manager` (a component
+  can't depend on `//koan`), which carry their logic in the patch; see the
+  table.
 - Bulk branding (product name strings, `BRANDING`, logos) is applied by
   `scripts/apply_branding.sh` rather than stored as patches.
 - Upstream feature defaults Koan relies on are set in one place,
@@ -48,7 +51,10 @@ assumes:
 | Sidebar width limits | `chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc` (ctor, `GetMinimumSize`, the resize handler) | the saved width is still read through the state controller in the ctor (Koan clamps it to the active limits); the min/max and collapse snap width are applied in `GetMinimumSize` and the resize handler. Upstream also reads the `vertical_tab_strip_state.h` constants, unhooked, in `browser_view_tabbed_layout_impl.cc` (window minimum width), `tab_view.cc` (`UncollapsedMinWidth`), `vertical_tab_strip_top_container.cc` (combo button switch), `tab_view_vertical_layout.cc` (fallback width) and, on macOS, `browser_native_widget_mac.mm` (`GetGlassFrameWidth` caps the glass frame at 400px, so with Chromium's GlassFrame feature on a Koan sidebar wider than 400px outgrows it; the feature is off in Koan). Recheck that none of these starts depending on the limits |
 | Sidebar rows lookup (no patch) | `VerticalTabStripRegionView`, `BrowserView::OnVerticalTabStripModeChanged` | the region outlives its `TabStripView` (rebuilt on a vertical/horizontal switch, after which Koan re-adds the rows); the region's content area still holds a `FrameSeparator` (hidden by Koan) and a `VerticalTabStripBottomContainer` with a `NewTabButton` (hidden), found by class name |
 | Colour mixer | `chrome/browser/ui/color/chrome_color_mixers.cc` | Koan mixer still runs after Chrome's, before custom themes |
-| Feature defaults | `chrome/browser/chrome_browser_field_trials.cc` | `RegisterFeatureOverrides` still exists; `kTabGroupsFocusing` still the focus-mode switch |
+| Feature defaults | `chrome/browser/chrome_browser_field_trials.cc` | `RegisterFeatureOverrides` still exists; `kTabGroupsFocusing` still the focus-mode switch; `kInfiniteTabsFreezing` still exists (Koan turns it on; an upstream launch or removal needs `docs/PERFORMANCE.md` updated) |
+| Power defaults | `chrome/browser/prefs/browser_prefs.cc` (`RegisterLocalState`) | Koan's call still comes after `performance_manager::user_tuning::prefs::RegisterLocalStatePrefs` (it changes defaults of prefs registered there) |
+| Freezing exemptions | `components/performance_manager/freezing/freezing_policy.{h,cc}`, `.../public/freezing/cannot_freeze_reason.h`, `.../freezing/cannot_freeze_reason.cc` | **Not a call into `//koan`** (a component can't depend on `//koan/browser`): these four patches carry logic (two enum values, a timer, ~30 lines) and must be re-ported by hand when they conflict. Check that `CannotFreezeReasonsForType()` still decides which reasons block which freezing type, that `FreezingPolicy` is still a `PageLiveStateObserver` (pinned state) and still sees `OnIsAudibleChanged` / `OnMainFrameDocumentChanged`, and that `CannotFreezeReason` is still not recorded in a histogram, UKM or mojom enum (Koan's values, appended at the end, would be out of range) |
+| Restore tabs on demand | `chrome/browser/performance_manager/policies/background_tab_loading_policy.cc` (ctor) | `min_tabs_to_load_` / `max_tabs_to_load_` still gate restored-tab loads in `ShouldLoad()`, and a restored tab still loads when shown |
 | Prefs | `chrome/browser/ui/tabs/tab_strip_prefs.cc` | vertical-tabs pref name and registration |
 | Startup, infobar, paths, desktop id | `session_startup_pref.cc`, `infobar_utils.cc`, `chrome_paths_linux.cc`, `chrome_paths_mac.mm`, `channel_info_posix.cc`, `shell_integration_linux.cc` | one-line value swaps |
 | Flags | `chrome/browser/about_flags.cc` | `kFeatureEntries` end marker |
@@ -58,6 +64,12 @@ assumes:
 | Close tab on Back | `chrome/browser/ui/tabs/back_to_opener/back_to_opener_controller.cc` (`HasValidOpener`, which `CanGoBackToOpener` now calls) | upstream's back-to-opener (`tabs::kBackToOpener`, enabled in `koan_feature_overrides.cc`) still closes the tab and activates its opener; `CanGoBack` / `ShouldEnableBackButton` still ask `CanGoBackToOpener` and the back button's menu (`BackForwardMenuModel`) still asks `HasValidOpener` |
 | Ctrl+Tab options (no patch) | `IsReservedCommandOrKey` in `BrowserView::PreHandleKeyboardEvent` | reserved keys still go through `FocusManager::ProcessAccelerator`, so Koan's targets see Ctrl+Tab first; `chrome::IsCtrlTabMruEnabled` still reports Chromium's recently-used Ctrl+Tab (Koan defers to it) |
 | Settings page: shortcut capture (no patch) | `BrowserView::PreHandleKeyboardEvent` | still returns early while the FocusManager's shortcut handling is suspended (the editor suspends it while recording a key) |
+
+Upstream unit and browser tests that expect Chromium's defaults fail with
+Koan's (they aren't run today): `background_tab_loading_policy_unittest.cc`,
+the session-restore browser tests and `tab_restore_browsertest.cc` (restored
+tabs now load on demand), and the `freezing_policy` tests that enumerate
+`CannotFreezeReason`s or expect infinite-tabs freezing of pinned tabs.
 
 Then run the smoke tests (all off-screen, see `.agent/notes/build.md`):
 

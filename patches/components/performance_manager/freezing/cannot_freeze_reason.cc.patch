@@ -1,0 +1,15 @@
+diff --git a/components/performance_manager/freezing/cannot_freeze_reason.cc b/components/performance_manager/freezing/cannot_freeze_reason.cc
+index e3306c548a9f2b832b7bd8789d71fc4541cfc775..eb28dda3dc66ee90d5207d61736f0aa745ccd94d 100644
+--- a/components/performance_manager/freezing/cannot_freeze_reason.cc
++++ b/components/performance_manager/freezing/cannot_freeze_reason.cc
+@@ -56,6 +56,10 @@ const char* CannotFreezeReasonToString(CannotFreezeReason reason) {
+       return "most recently used";
+     case CannotFreezeReason::kWebUI:
+       return "WebUI";
++    case CannotFreezeReason::kPinnedTab:
++      return "pinned tab";
++    case CannotFreezeReason::kPlayedAudio:
++      return "played audio in the last hour";
+   }
+   NOTREACHED();
+ }

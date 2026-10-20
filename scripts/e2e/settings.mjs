@@ -110,9 +110,23 @@ await waitFor(async () => await hotZones() === 1);
 await evalIn(settings, `document.querySelector('#category-tabs').click()`);
 const rowLabels = await evalIn(settings,
     `[...document.querySelectorAll('#pane .row')].map(r => r.textContent)`);
-check('Tab Management has the tint and Zen\'s tab settings', rowLabels?.length === 5 &&
-      rowLabels.some(l => l.startsWith('When closing a tab, switch to the most recently used')),
+check('Tab Management has the tint, Zen\'s tab settings and the freeze switch',
+      rowLabels?.length === 6 &&
+      rowLabels.some(l => l.startsWith('When closing a tab, switch to the most recently used')) &&
+      rowLabels.some(l => l.startsWith('Freeze background tabs')),
       JSON.stringify(rowLabels));
+
+// The freeze switch is Chromium's own (local-state) pref: on by default,
+// and the page can turn it off and back on.
+const freeze = `document.querySelector('[data-pref="performance_tuning.tab_freezing.enabled"] input')`;
+const freezeOn = await evalIn(settings, `${freeze}?.checked`);
+const turnedOff = await settingsCall(settings, 'setPref',
+                                     'performance_tuning.tab_freezing.enabled', false);
+const showsOff = await waitFor(() => evalIn(settings, `${freeze}?.checked === false || null`));
+await settingsCall(settings, 'setPref', 'performance_tuning.tab_freezing.enabled', true);
+check('The freeze switch is on and the page can change it (a local-state pref)',
+      freezeOn === true && turnedOff === true && showsOff === true,
+      `on ${freezeOn}, set ${turnedOff}, shows off ${showsOff}`);
 
 // Keyboard shortcuts.
 await evalIn(settings, `document.querySelector('#category-shortcuts').click()`);

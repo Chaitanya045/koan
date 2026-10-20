@@ -11,6 +11,7 @@
 
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted_memory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -53,7 +54,8 @@ KoanSettingsUI::KoanSettingsUI(content::WebUI* web_ui)
       base::BindRepeating(&ServeResource));
   // Koan's settings are the regular profile's, also from an incognito window.
   web_ui->AddMessageHandler(std::make_unique<KoanSettingsHandler>(
-      *profile->GetOriginalProfile()->GetPrefs()));
+      *profile->GetOriginalProfile()->GetPrefs(),
+      *g_browser_process->local_state()));
 }
 
 KoanSettingsUI::~KoanSettingsUI() = default;

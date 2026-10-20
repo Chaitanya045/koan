@@ -3,9 +3,15 @@
 #
 #   scripts/e2e/run.sh <test> [url...]     e.g. scripts/e2e/run.sh shortcuts
 #
-# Without URLs it opens scripts/e2e/pages/<test>.html if that exists, else
-# two example.com tabs. scripts/e2e/prefs/<test>.json, if it exists, seeds
-# the fresh profile's Preferences.
+# <test> is a name in scripts/e2e/ or a path to any .mjs script (e.g.
+# scripts/perf/profile_ui.mjs). Without URLs it opens
+# scripts/e2e/pages/<test>.html if that exists, else two example.com tabs.
+# scripts/e2e/prefs/<test>.json, if it exists, seeds the fresh profile's
+# Preferences. KOAN_FLAGS adds browser flags (e.g. --disable-features=...);
+# features in an --enable-features there are added to the ones run.sh needs.
+#
+# The test gets KOAN_CHROME_ARGS, Koan's command line without the URLs (one
+# argument per line), to restart Koan with the same profile.
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -29,7 +35,24 @@ chrome="$KOAN_ROOT/chromium/src/${KOAN_OUT:-out/Koan}/chrome"
 export UI_PORT=${UI_PORT:-9600} CDP_PORT=${CDP_PORT:-9601}
 prof=$(koan_new_profile)
 pid=
-cleanup() { [[ -n $pid ]] && kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; koan_rm "$prof" "$prof.log"; }
+# Every step tolerates failure: with set -e, one failing command (e.g.
+# killing a browser the test already closed) would end the cleanup early and
+# turn a passing test into a failure.
+cleanup() {
+  if [[ -n $pid ]]; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  # A test may have restarted Koan on the same profile; let it finish
+  # writing there before the profile goes.
+  pkill -f -- "--user-data-dir=$prof" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    pgrep -f -- "--user-data-dir=$prof" >/dev/null || break
+    sleep 0.5
+  done
+  # The test's result stands even if the profile can't be removed.
+  koan_rm "$prof" "$prof.log" || echo "run.sh: couldn't remove $prof" >&2
+}
 trap cleanup EXIT
 prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
 if [[ -f $prefs ]]; then
@@ -37,14 +60,33 @@ if [[ -f $prefs ]]; then
   cp "$prefs" "$prof/Default/Preferences"
 fi
 
-"$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof" \
-  --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT" \
-  --enable-features=ui-debug-tools-enable-synthetic-events \
-  "${urls[@]}" >"$prof.log" 2>&1 &
+script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
+[[ $test_name == *.mjs ]] && script=$test_name
+# A second --enable-features would replace the first, so merge them.
+features=ui-debug-tools-enable-synthetic-events
+extra=()
+for flag in ${KOAN_FLAGS:-}; do
+  case $flag in
+    --enable-features=*) features+=",${flag#--enable-features=}" ;;
+    *) extra+=("$flag") ;;
+  esac
+done
+args=("$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof"
+  --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
+  --enable-features="$features" "${extra[@]}")
+KOAN_CHROME_ARGS=$(printf '%s\n' "${args[@]}")
+export KOAN_CHROME_ARGS
+"${args[@]}" "${urls[@]}" >"$prof.log" 2>&1 &
 pid=$!
 for _ in $(seq 1 60); do
   curl -sf "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null && break
   sleep 0.5
 done
 sleep 3
-node "$KOAN_ROOT/scripts/e2e/$test_name.mjs"
+status=0
+node "$script" || status=$?
+if [[ $status -ne 0 ]]; then
+  echo "--- last lines of Koan's log ($prof.log)"
+  tail -n 30 "$prof.log"
+fi
+exit "$status"

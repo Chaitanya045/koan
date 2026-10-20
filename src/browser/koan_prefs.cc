@@ -4,7 +4,10 @@
 
 #include "koan/browser/koan_prefs.h"
 
+#include "base/values.h"
+#include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry_simple.h"
 
 namespace koan::prefs {
 
@@ -20,6 +23,15 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCloseOnBackWithNoHistory, true);
   registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
+}
+
+void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
+  namespace pm = performance_manager::user_tuning::prefs;
+  // Memory Saver: discard tabs that have been hidden for 4 hours (the
+  // balanced setting) until they are opened again. Chromium ships it off.
+  registry->SetDefaultPrefValue(
+      pm::kMemorySaverModeState,
+      base::Value(static_cast<int>(pm::MemorySaverModeState::kEnabled)));
 }
 
 }  // namespace koan::prefs

@@ -4,6 +4,9 @@
 
 #include "koan/browser/ui/webui/koan_settings_rows.h"
 
+#include "base/feature_list.h"
+#include "components/performance_manager/public/features.h"
+#include "components/performance_manager/public/user_tuning/prefs.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 
@@ -38,6 +41,10 @@ constexpr Group kGroups[] = {
      "With workspaces, you can have multiple browsing sessions at once!"},
     {"pinned-tabs", "tabs", "Pinned Tabs", "General settings for pinned tabs",
      "Manage additional behavior of pinned tabs"},
+    // Koan's own: Zen has no setting for this.
+    {"background-tabs", "tabs", "Performance", "Background tabs",
+     "Save memory and battery with the tabs you aren't using. Memory Saver "
+     "and Energy Saver are in Chromium's settings (Performance)."},
 };
 
 // Chromium's "Ctrl+Tab in recently used order" (prefs::kCtrlTabMru,
@@ -47,6 +54,13 @@ constexpr char kCtrlTabMruNote[] =
     "Ctrl+Tab will cycle by recently used order, as it is enabled in "
     "Chromium's settings (Appearance); Ctrl+Page Up/Down still follow this "
     "setting";
+
+// The infinite-tabs freezing that the freeze switch controls (on in Koan,
+// chrome://flags/#koan-freeze-background-tabs).
+bool IsTabFreezingAvailable() {
+  return base::FeatureList::IsEnabled(
+      performance_manager::features::kInfiniteTabsFreezing);
+}
 
 constexpr Option kLayouts[] = {
     {"true", "Only Sidebar", "single"},
@@ -95,6 +109,15 @@ constexpr Row kRows[] = {
      .pref = prefs::kSelectRecentlyUsedOnClose,
      .label = "When closing a tab, switch to the most recently used tab "
               "instead of the next tab"},
+    {.group = "background-tabs",
+     .control = Control::kCheckbox,
+     .pref = performance_manager::user_tuning::prefs::kTabFreezingEnabled,
+     .label = "Freeze background tabs you haven't used recently (they wake "
+              "for a few seconds each minute; pinned tabs and tabs that "
+              "played audio, are in a call or show notifications keep "
+              "running)",
+     .is_available = IsTabFreezingAvailable,
+     .local_state = true},
 };
 
 }  // namespace

@@ -128,8 +128,9 @@ from its sidebar.
 
 - **Look and Feel**: the browser layout (Only Sidebar / Sidebar and Top
   Toolbar) and compact mode.
-- **Tab Management**: whether the active workspace tints the browser, and
-  Zen's tab behaviours (Zen's defaults):
+- **Tab Management**: whether the active workspace tints the browser,
+  whether background tabs freeze (see "Memory and power"), and Zen's tab
+  behaviours (Zen's defaults):
   - closing a tab switches to the **most recently used** tab rather than a
     neighbour (on);
   - **Back** in a tab with no history (one opened from a link in another
@@ -155,10 +156,32 @@ the page in a regular one, like Chromium's settings.
 
 ![Settings](screenshots/settings-look-and-feel.png)
 
+## Memory and power
+
+Koan is set up to stay light (details in `PERFORMANCE.md`):
+
+- **Tabs restore on demand**: after a restart, or when you reopen a closed
+  window, only the tab you see loads; the others load when you open them,
+  as in Zen.
+- **Memory Saver is on**: a tab hidden for 4 hours (for example in a Space
+  you haven't used) is unloaded and reloads when you open it. Pinned tabs,
+  tabs playing audio and sites you exempt are kept. Change it, or add
+  exceptions, in Settings > Performance.
+- **Background tabs freeze**: apart from the 5 tabs you used last, tabs in
+  the background stop running (they wake for a few seconds each minute).
+  Pinned tabs never freeze, nor do tabs that played audio in the last hour
+  (so media keys still work), are in a call, use a device or show
+  notifications; that holds under energy saver too. Sites on Settings > Performance > "Always keep these
+  sites active" never freeze either. Turn freezing off in Koan's settings
+  (`chrome://koan-settings`, Tab Management > Performance).
+- **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
+  battery (Settings > Performance > Energy saver).
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
-Koan sidebar, compact mode, workspaces, Glance.
+Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
+freeze background tabs.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

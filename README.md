@@ -136,6 +136,7 @@ koan/
 |---|---|
 | [docs/USAGE.md](docs/USAGE.md) | Features, layouts and keyboard shortcuts |
 | [docs/ZEN_PARITY.md](docs/ZEN_PARITY.md) | Feature-by-feature comparison with Zen |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Memory and power defaults, tab freezing, and measurements of Koan's UI |
 | [docs/REBASE.md](docs/REBASE.md) | Updating Koan to a new Chromium version |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, conventions and pull requests |
 | [.agent/notes/](.agent/notes/README.md) | Design notes, research, decisions and review records |

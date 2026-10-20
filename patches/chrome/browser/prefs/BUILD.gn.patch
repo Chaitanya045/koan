@@ -1,8 +1,16 @@
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
-index 66f9c0d285f331355dd808c821307c0467933a4f..fea0fb318f1a32a5d7397351891ae246f7c842d2 100644
+index 66f9c0d285f331355dd808c821307c0467933a4f..a66d90893b4d1f1c5daa79125312efdf015a3470 100644
 --- a/chrome/browser/prefs/BUILD.gn
 +++ b/chrome/browser/prefs/BUILD.gn
-@@ -545,6 +545,7 @@ source_set("util_impl") {
+@@ -207,6 +207,7 @@ source_set("impl") {
+     "//components/wallet/core/common:prefs",
+     "//components/webui/chrome_urls",
+     "//components/webui/flags",
++    "//koan/browser:prefs",
+     "//services/preferences/public/cpp/tracked",
+     "//services/preferences/public/mojom",
+     "//services/preferences/tracked",
+@@ -545,6 +546,7 @@ source_set("util_impl") {
      "//components/sync_preferences",
      "//components/ukm",
      "//components/url_formatter",
