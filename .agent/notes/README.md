@@ -17,6 +17,8 @@ documentation lives in [`docs/`](../../docs) and
 
 - [build.md](build.md): build setup, machine limits, rebuild-cost traps,
   off-screen testing tricks
+- [mac.md](mac.md): the macOS build: the Mac's setup, the one-folder
+  layout, and consent before anything runs there
 - [agent-brief.md](agent-brief.md): the brief every implementation agent gets
 - [parallel-agents.md](parallel-agents.md): one thread per issue, the
   shared build lock, memory limits and recovery

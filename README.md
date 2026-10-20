@@ -73,7 +73,8 @@ page. Until then, [build Koan from source](#building-from-source).
 | Platform | Status |
 |---|---|
 | Linux x86-64 (X11 and Wayland) | Supported |
-| Windows, macOS | Not yet |
+| macOS (Apple Silicon) | In progress: built from source, see [#51](https://github.com/Chaitanya045/koan/issues/51) |
+| Windows | Not yet |
 
 ## Building from source
 
@@ -94,6 +95,10 @@ git clone https://github.com/Chaitanya045/koan.git && cd koan
 For an optimised build, use `KOAN_CONFIG=release ./scripts/build.sh`, which
 produces `out/Release/chrome`. `JOBS=<n>` limits parallel compile jobs on
 machines with less memory.
+
+On a Mac with Apple Silicon and Xcode, the same scripts build
+`chromium/src/out/Koan/Koan.app`; see
+[CONTRIBUTING.md](CONTRIBUTING.md#macos) for what you need.
 
 The Chromium version Koan is pinned to is in
 [`CHROMIUM_VERSION`](CHROMIUM_VERSION). Moving to a new version is described
@@ -118,8 +123,8 @@ Koan is a small layer on top of an unmodified Chromium checkout:
 koan/
 ├── src/            Koan's C++ code (GN //koan)
 ├── patches/        hook patches for chromium/src, one per upstream file
-├── branding/       logo sources (SVG)
-├── build/          GN arguments for development and release builds
+├── branding/       logo sources (SVG) and the macOS app icon
+├── build/          GN arguments for development, release and macOS builds
 ├── scripts/        bootstrap, build, patches, branding, tests
 ├── docs/           user and maintainer documentation
 └── .agent/notes/   design notes, research and review records

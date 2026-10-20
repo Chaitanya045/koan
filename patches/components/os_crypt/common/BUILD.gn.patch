@@ -1,0 +1,12 @@
+diff --git a/components/os_crypt/common/BUILD.gn b/components/os_crypt/common/BUILD.gn
+index 10db0687101b69542f9dd33592d0655c7343e3c8..613bfda9bbeff806804a12311f23bfb1f0e538af 100644
+--- a/components/os_crypt/common/BUILD.gn
++++ b/components/os_crypt/common/BUILD.gn
+@@ -26,6 +26,7 @@ if (is_apple) {
+       "//base",
+       "//build:branding_buildflags",
+       "//crypto",
++      "//koan/common:branding",
+     ]
+   }
+ }

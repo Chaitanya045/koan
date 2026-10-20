@@ -11,10 +11,14 @@
 #                              owned by apply_branding.sh)
 #
 # Also (re)creates the chromium/src/koan -> ../../src symlink.
-# Don't run while a build is running.
+# Don't run while a build is running. Works on Linux and macOS (bash 3.2,
+# BSD tools).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/koan_platform.sh
+source "$ROOT/scripts/koan_platform.sh"
+koan_require_env
 SRC="$ROOT/chromium/src"
 PATCHES="$ROOT/patches"
 MODE="${1:-apply}"
@@ -34,7 +38,8 @@ link_koan() {
 }
 
 patch_files() {
-  find "$PATCHES" -name '*.patch' -type f | sort
+  # C collation: the same order with GNU and BSD sort.
+  find "$PATCHES" -name '*.patch' -type f | LC_ALL=C sort
 }
 
 require_patches() {

@@ -8,6 +8,11 @@
 #   install_desktop.sh --uninstall   remove both
 set -euo pipefail
 
+if [[ $(uname -s) != Linux ]]; then
+  echo "install_desktop.sh is for Linux desktops; on macOS, run Koan.app" >&2
+  exit 1
+fi
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHROME="$ROOT/chromium/src/out/Koan/chrome"
 ART="$ROOT/branding/out"

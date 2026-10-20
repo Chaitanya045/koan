@@ -31,7 +31,6 @@
 #include "koan/browser/ui/views/koan_glance.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/frame/triggering_event_info.mojom-shared.h"
-#include "ui/aura/window.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/window_open_disposition.h"
@@ -55,6 +54,10 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+
+#if defined(USE_AURA)
+#include "ui/aura/window.h"
+#endif
 
 namespace koan {
 
@@ -122,15 +125,21 @@ class KoanGlanceView : public views::View {
   // WebView's NativeViewHost, not part of `card_`'s layer tree, so the card
   // grows in by animating that window's layer. (Transforming `card_` would
   // neither scale nor fade the page, and NativeViewHost would size the page
-  // with the start transform and keep it.)
+  // with the start transform and keep it.) On macOS the page is an NSView
+  // composited under the NativeViewHost's own layer, not an aura::Window:
+  // for now only the backdrop and buttons fade in there. (Animating
+  // web_view_->holder()->layer() may do the same on macOS; untested.)
   void PlayOpenAnimation() {
     scrim_->layer()->SetOpacity(0.f);
     buttons_->layer()->SetOpacity(0.f);
     views::AnimationBuilder builder;
-    auto& sequence = builder.Once()
-                         .SetDuration(kOpenDuration)
-                         .SetOpacity(scrim_, 1.f, gfx::Tween::EASE_OUT)
-                         .SetOpacity(buttons_, 1.f, gfx::Tween::EASE_OUT);
+    // On Aura the page joins this sequence (below).
+    [[maybe_unused]] auto& sequence =
+        builder.Once()
+            .SetDuration(kOpenDuration)
+            .SetOpacity(scrim_, 1.f, gfx::Tween::EASE_OUT)
+            .SetOpacity(buttons_, 1.f, gfx::Tween::EASE_OUT);
+#if defined(USE_AURA)
     if (aura::Window* page = web_view_->holder()->native_view();
         page && page->layer()) {
       page->layer()->SetOpacity(0.f);
@@ -139,10 +148,12 @@ class KoanGlanceView : public views::View {
       sequence.SetOpacity(page, 1.f, gfx::Tween::EASE_OUT)
           .SetTransform(page, gfx::Transform(), gfx::Tween::EASE_OUT);
     }
+#endif
   }
 
   // views::View:
   void Layout(PassKey) override {
+#if defined(USE_AURA)
     // A relayout during the open animation would have NativeViewHost write
     // the page's transform (snapping it for a frame); finish the scale-in
     // first.
@@ -151,6 +162,7 @@ class KoanGlanceView : public views::View {
       page->layer()->GetAnimator()->StopAnimatingProperty(
           ui::LayerAnimationElement::TRANSFORM);
     }
+#endif
     const gfx::Rect bounds = GetLocalBounds();
     scrim_->SetBoundsRect(bounds);
     // Zen-like proportions: most of the width, a little air above and below,
