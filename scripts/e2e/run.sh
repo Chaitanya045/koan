@@ -72,4 +72,10 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 sleep 3
-node "$script"
+status=0
+node "$script" || status=$?
+if [[ $status -ne 0 ]]; then
+  echo "--- last lines of Koan's log ($prof.log)"
+  tail -n 30 "$prof.log"
+fi
+exit "$status"
