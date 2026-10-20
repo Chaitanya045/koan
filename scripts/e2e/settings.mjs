@@ -91,6 +91,7 @@ check('...and off', await waitFor(async () => await hotZones() === 1));
 
 // Incognito windows use the same settings as the page and the other windows.
 const before = new Set((await pages()).map(p => p.id));
+await front(other);
 await key(other, VK.P, CTRL | SHIFT, 'p');
 const incognito = await waitFor(async () => (await pages()).find(p => !before.has(p.id)));
 check('Ctrl+Shift+P opens a private window', incognito !== undefined);
