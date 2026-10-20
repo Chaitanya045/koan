@@ -196,6 +196,11 @@ can be among the most recently used. With freezing off no tab paused for
 more than 0.8 s. A pinned busy tab, opened before the 8 and so the least
 recently used, never paused for more than 200 ms (158–176 ms in four runs).
 
+Energy saver (forced on, Koan's freeze switch off so only energy saver
+freezes; `scripts/e2e/power.mjs`): a busy background tab froze within two
+and a half minutes (paused 11 s when the test opened it), while a busy
+pinned tab never paused for more than 0.25 s.
+
 Reopening a closed window with 4 tabs (`scripts/e2e/power.mjs`): with
 upstream's behaviour (`--disable-features=KoanRestoreTabsOnDemand`) all
 four load again; with Koan's, only the active one does, and a background
