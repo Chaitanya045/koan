@@ -83,8 +83,15 @@ single toolbar needs the full sidebar: the toggle or Ctrl+Alt+B expands it
 into single toolbar again.
 
 **Tabs on the right**: right-click an empty part of the sidebar and pick
-**Tabs on the right** (or Settings > Look and Feel > Vertical Tabs). Everything mirrors: the sidebar is on the right, its
-top row and resize edge too, and compact mode reveals it at the right edge.
+**Tabs on the right** (or Settings > Look and Feel > Vertical Tabs).
+Everything mirrors: the sidebar is on the right, its top row and resize
+edge too, and compact mode reveals it at the right edge. (In a
+right-to-left UI, where the sidebar is normally on the right, it goes to
+the left.)
+
+On macOS the window buttons (traffic lights) stay at the top left: Koan
+can't hide them yet, so with the sidebar hidden or on the right they sit
+over the page's corner.
 
 ## Command palette
 
@@ -133,7 +140,8 @@ one round button per workspace, **+** creates one.
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
 **Compact Mode** (below) and **Tabs on the right**. Dragging the sidebar's
 edge resizes it; dragging it closed hides it in compact mode, as in Zen
-("Sidebar hidden! Use Ctrl+S to bring the sidebar back", shown once).
+("Sidebar hidden! Use Ctrl+S to bring the sidebar back", shown once). If
+compact mode was set to hide just the toolbar, the drag makes it hide both.
 
 ## Workspaces
 

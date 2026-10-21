@@ -20,7 +20,50 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
  
        // Account for grab handle.
        IncreasePaddingToMinimum(params, GetMinimumGrabHandlePadding());
-@@ -1335,12 +1340,21 @@
+@@ -989,9 +994,16 @@
+                 0.0f);
+   }
+ 
++  // Koan: the layout is mirrored afterwards with tabs on the right, so the
++  // corners beside the strip face the other way.
++  const bool koan_mirror = koan::IsSidebarOnRight(views().browser_view);
++
+   // Position the vertical tabstrip top corner.
+   if (IsParentedTo(views().vertical_tab_strip_top_corner,
+                    views().browser_view)) {
++    views().vertical_tab_strip_top_corner->SetOrientation(
++        koan_mirror ? CornerOrientation::kTopTrailing
++                    : CornerOrientation::kTopLeading);
+     gfx::Rect corner_bounds;
+     const double top_corner = layout_data_->vertical_tabs_top_corner();
+     const bool top_corner_visible =
+@@ -1015,6 +1027,9 @@
+   // Position the vertical tabstrip bottom corner.
+   if (IsParentedTo(views().vertical_tab_strip_bottom_corner,
+                    views().browser_view)) {
++    views().vertical_tab_strip_bottom_corner->SetOrientation(
++        koan_mirror ? CornerOrientation::kBottomTrailing
++                    : CornerOrientation::kBottomLeading);
+     gfx::Rect corner_bounds;
+     const double bottom_corner = layout_data_->vertical_tabs_bottom_corner();
+     const bool bottom_corner_visible =
+@@ -1302,8 +1317,14 @@
+       // Avoid cases where these areas are somehow misaligned (shouldn't happen,
+       // but want to avoid visual artifacts if they are).
+       contents_layout.bounds.Intersect(unclipped_contents_region);
+-      const auto clip_insets =
++      auto clip_insets =
+           unclipped_contents_region.InsetsFrom(contents_layout.bounds);
++      // Koan: mirrored afterwards (tabs on the right).
++      if (koan_mirror) {
++        clip_insets = gfx::Insets::TLBR(clip_insets.top(), clip_insets.right(),
++                                        clip_insets.bottom(),
++                                        clip_insets.left());
++      }
+ 
+       // Set the target size of the contents.
+       views().multi_contents_view->SetTargetContentBounds(
+@@ -1335,12 +1356,21 @@
      int caption_button_width = 0;
  
      // If the toolbar is not in the browser, then the exclusion isn't either.
@@ -44,3 +87,15 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
  
        caption_button_width =
            base::ClampCeil(browser_params.leading_exclusion.content.width()) -
+@@ -1541,6 +1571,11 @@
+     }
+   }
+ 
++  // Koan: mirrored afterwards (tabs on the right).
++  if (koan::IsSidebarOnRight(views().browser_view)) {
++    std::swap(corners[CornerOrientation::kTopLeading],
++              corners[CornerOrientation::kTopTrailing]);
++  }
+   background->SetCorners(corners);
+ }
+ 

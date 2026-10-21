@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/i18n/rtl.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
@@ -211,7 +212,12 @@ void KoanToast::OnBrowserViewLayout() {
     return;
   }
   const gfx::Size size = view_->GetPreferredSize();
-  const int x = IsSidebarOnRight(browser_view_)
+  // The corner away from the sidebar, on screen (the side is logical: in a
+  // right-to-left UI the sidebar is on the right unless it is "on the
+  // right").
+  const bool sidebar_on_screen_right =
+      IsSidebarOnRight(browser_view_) != base::i18n::IsRTL();
+  const int x = sidebar_on_screen_right
                     ? kToastMargin
                     : browser_widget->GetRootView()->width() - kToastMargin -
                           size.width();

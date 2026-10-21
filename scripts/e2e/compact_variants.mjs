@@ -4,7 +4,9 @@
 // to hiding both and to hiding just the sidebar.
 //
 //   scripts/e2e/run.sh compact_variants
-import { ALT, CTRL, check, finish, key, mouseOn, sleep, views, visiblePage }
+import fs from 'node:fs';
+
+import { ALT, CTRL, check, finish, key, mouseOn, sidebarMenu, sleep, views, visiblePage }
     from './lib/koan.mjs';
 
 const find = (vs, cls) => vs.find(v => v.cls === cls);
@@ -16,37 +18,6 @@ const press = async (code, modifiers, name) => {
 };
 
 const VK = { S: 83 };
-
-// Right-clicks an empty part of the sidebar (through the window's root view,
-// so the click is routed like a real one), then picks the menu items at
-// `indices` in turn, each in the newest (sub)menu. Returns what went wrong.
-async function sidebarMenu(...indices) {
-  let vs = await views();
-  const strip = findShown(vs, 'VerticalTabStripRegionView');
-  const root = findShown(vs, 'BrowserRootView');
-  const x = strip.x + strip.w / 2, y = strip.y + strip.h - 120;
-  await mouseOn(root, 'mousePressed', x, y, 'right');
-  await mouseOn(root, 'mouseReleased', x, y, 'right');
-  await sleep(800);
-  for (const index of indices) {
-    vs = await views();
-    // The newest menu widget's root view, and its items.
-    const menuRoot = vs.findLast(v => v.cls.endsWith('RootView') && v.cls !== 'BrowserRootView');
-    const items = vs.slice(vs.indexOf(menuRoot))
-        .filter(v => v.cls === 'MenuItemView' && v.path[0] === menuRoot?.cls);
-    const item = items[index];
-    if (!item) {
-      return `no item ${index}: ${vs.filter(v => /Menu|RootView/.test(v.cls)).map(v => v.cls)}`;
-    }
-    const at = [item.x - menuRoot.x + 10, item.y - menuRoot.y + item.h / 2];
-    await mouseOn(menuRoot, 'mouseMoved', ...at);
-    await sleep(600);
-    await mouseOn(menuRoot, 'mousePressed', ...at);
-    await mouseOn(menuRoot, 'mouseReleased', ...at);
-    await sleep(800);
-  }
-  return null;
-}
 
 // The menu: Compact Mode > (Enable compact mode, Hide sidebar, Hide toolbar,
 // Hide both), Tabs on the right.
@@ -65,6 +36,23 @@ check('...the page reaches up to the gutter', card?.y === bv.y + 8, `y ${card?.y
 check('...one hot zone, along the top edge above the page',
       zones.length === 1 && zones[0].y === bv.y && zones[0].x >= strip.x + strip.w &&
       zones[0].h === 8, JSON.stringify(zones.map(z => [z.x, z.y, z.w, z.h])));
+
+// The toolbar slides in beside the sidebar, above the page only (Zen's
+// navbar), not over the sidebar's top row.
+const toolbarZone = zones[0];
+await mouseOn(toolbarZone, 'mouseEntered');
+top = find(await views(), 'TopContainerView');
+check('...the toolbar is revealed beside the sidebar, not over it',
+      top && top.x === strip.x + strip.w && top.x + top.w === bv.x + bv.w,
+      `toolbar ${top?.x}+${top?.w}, sidebar ${strip.x}+${strip.w}`);
+// SHOTS=<dir> keeps the window's latest frame (compact_variants.flags).
+if (process.env.SHOTS && process.env.KOAN_DUMP_DIR) {
+  const dir = process.env.KOAN_DUMP_DIR;
+  const frame = fs.readdirSync(dir).filter(f => f.endsWith('.png'))
+      .map(f => `${dir}/${f}`).sort((a, b) => fs.statSync(b).size - fs.statSync(a).size)[0];
+  fs.copyFileSync(frame, `${process.env.SHOTS}/compact-revealed-toolbar.png`);
+}
+await sleep(1000);
 
 let missing = await sidebarMenu(COMPACT_MODE, HIDE_BOTH);
 check('The sidebar\'s menu has Compact Mode > Hide both', !missing, missing ?? '');

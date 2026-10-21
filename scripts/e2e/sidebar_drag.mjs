@@ -16,7 +16,9 @@ const press = async (code, modifiers, name) => {
 
 const VK = { S: 83 };
 
-async function dragSidebarEdgeLeft() {
+// Drags the sidebar's edge 260 DIP to the left, calling `midway` (if
+// given) once it has collapsed but before the button is released.
+async function dragSidebarEdgeLeft(midway) {
   const vs = await views();
   const resize = vs.find(v => v.cls === 'ResizeArea' && v.shown &&
                               v.path.includes('VerticalTabStripRegionView'));
@@ -24,6 +26,8 @@ async function dragSidebarEdgeLeft() {
   for (const dx of [-60, -120, -200, -260]) {
     await mouseOn(resize, 'mouseDragged', 2 + dx, 300);
   }
+  await sleep(800);
+  await midway?.();
   await mouseOn(resize, 'mouseReleased', 2 - 260, 300);
   await sleep(1200);
 }
@@ -32,7 +36,13 @@ let vs = await views();
 const bv = findShown(vs, 'BrowserView');
 check('The sidebar starts expanded', findShown(vs, 'VerticalTabStripRegionView')?.w >= 200);
 
-await dragSidebarEdgeLeft();
+await dragSidebarEdgeLeft(async () => {
+  // Zen decides on release: until then the layout stays as it was.
+  const mid = await views();
+  check('Mid-drag, the layout is still single toolbar',
+        find(mid, 'KoanSidebarNavButtons') &&
+        find(mid, 'TopContainerView')?.path.includes('TopContainerOverlayView'));
+});
 vs = await views();
 check('Dragging its edge to zero hides it in compact mode',
       find(vs, 'VerticalTabStripRegionView')?.w === 0 &&

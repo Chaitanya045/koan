@@ -4,7 +4,8 @@
 // the right edge; the multiple-toolbars layout puts the toolbar on the left.
 //
 //   scripts/e2e/run.sh tabs_right
-import { ALT, CTRL, boundsOf, check, finish, key, sleep, views, visiblePage }
+import { ALT, CTRL, boundsOf, check, finish, key, setChromePref, setKoanPref, sleep, views,
+         visiblePage }
     from './lib/koan.mjs';
 
 const find = (vs, cls) => vs.find(v => v.cls === cls);
@@ -40,6 +41,12 @@ check('...its top row is mirrored: navigation buttons left, sidebar toggle right
       nav && toggle && nav.x < toggle.x && toggle.x + toggle.w > row.x + row.w / 2,
       `nav ${nav?.x}, toggle ${toggle?.cls} ${toggle?.x}, row ${row?.x}+${row?.w}`);
 
+// The window buttons' hot zone runs along the top edge above the page.
+const topZone = vs.find(v => v.cls === 'KoanHotZone' && v.shown && v.h === 8);
+check('...the window buttons\' hot zone is along the top above the page',
+      topZone && topZone.y === bv.y && topZone.x === bv.x && topZone.x + topZone.w === strip.x,
+      topZone && `${topZone.x}+${topZone.w}`);
+
 // Compact mode hides the sidebar at the right edge.
 await press(VK.S, CTRL, 's');
 vs = await views();
@@ -67,5 +74,20 @@ check('Multiple toolbars: the toolbar is on the left, beside the sidebar',
       top?.path.at(-1) === 'BrowserView' && top.x === bv.x && top.x + top.w <= strip.x,
       `toolbar ${top?.x}+${top?.w}, strip ${strip?.x}`);
 await press(VK.B, CTRL | ALT, 'b');
+
+// A window without Koan's sidebar (horizontal tabs) isn't mirrored: the
+// setting changes nothing in it.
+const topLevel = async () => (await views())
+    .filter(v => v.shown && v.path.at(-1) === 'BrowserView')
+    .map(v => `${v.cls} ${v.x},${v.y} ${v.w}x${v.h}`).join('; ');
+check('Horizontal tabs', (await setChromePref('vertical_tabs.enabled', false)) === true);
+await sleep(1500);
+const mirrored = await topLevel();
+await setKoanPref('koan.tabs.on_right', false);
+await sleep(1500);
+const plain = await topLevel();
+check('...aren\'t mirrored by tabs on the right', mirrored === plain,
+      mirrored === plain ? '' : `${mirrored} | ${plain}`);
+await setChromePref('vertical_tabs.enabled', true);
 
 finish();

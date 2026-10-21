@@ -144,6 +144,12 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void ShowContextMenu(const gfx::Point& screen_point,
                        ui::mojom::MenuSourceType source_type);
 
+  // Compact mode hides the toolbar but not the sidebar: the revealed toolbar
+  // goes beside the sidebar, as Zen's navbar does.
+  bool reveals_toolbar_beside_sidebar() const {
+    return can_reveal_toolbar() && !hides_sidebar();
+  }
+
   // views::FocusChangeListener:
   void OnDidChangeFocus(views::View* focused_before,
                         views::View* focused_now) override;
@@ -186,6 +192,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Zen's check for a compact variant that would strand the window buttons:
   // collapsed sidebar, buttons on its side, only the toolbar hidden.
   bool IsHideToolbarOnlyBlocked() const;
+  // In that state, a pref asking for just the toolbar becomes the sidebar.
+  void FixBlockedCompactVariant();
   void UpdateActiveSoon();
   void UpdateActive();
   void Activate(Mode mode);
@@ -231,6 +239,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Right-clicking the sidebar opens ShowContextMenu() (the region view is
   // recreated on tab strip mode changes).
   void InstallContextMenu();
+  void OnContextMenuClosed();
 
   void CheckSidebarPeek();
   // Zen's flash popup: the hidden sidebar pops up for a moment.
@@ -320,7 +329,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   views::ViewTracker context_menu_region_;
   std::unique_ptr<ui::SimpleMenuModel> context_menu_model_;
   std::unique_ptr<ui::SimpleMenuModel> compact_menu_model_;
+  // Declared after the models it shows, so it goes first.
   std::unique_ptr<views::MenuRunner> menu_runner_;
+  // Keeps the sidebar out while its menu is open.
+  std::unique_ptr<ExpandOnHoverLock> menu_lock_;
 
   base::WeakPtrFactory<KoanCompactModeController> weak_factory_{this};
 };

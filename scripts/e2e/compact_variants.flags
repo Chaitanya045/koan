@@ -1,0 +1,2 @@
+# Frame dumps, for a screenshot of the revealed toolbar (SHOTS=<dir>).
+--ozone-dump-file={dump}

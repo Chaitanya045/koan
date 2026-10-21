@@ -34,6 +34,22 @@ bool IsCaptionStripCollapsed(const views::View* browser_view);
 // area mirror too.
 bool IsSidebarOnRight(const views::View* view);
 
+// Mirrors the children of `layout` (a BrowserViewLayoutImpl::ProposedLayout,
+// which is protected there) between `left` and `right`, and theirs within
+// their parents, for IsSidebarOnRight().
+template <typename Layout>
+void MirrorLayoutChildren(Layout& layout, int left, int right) {
+  for (auto& [child, child_layout] : layout.children) {
+    child_layout.bounds.set_x(left + right - child_layout.bounds.right());
+    MirrorLayoutChildren(child_layout, 0, child_layout.bounds.width());
+  }
+}
+
+// Where compact mode hides the toolbar but not the sidebar, the width the
+// revealed toolbar leaves for the sidebar (Zen's navbar is above the page
+// only); otherwise 0. Called when the top container is laid out on its own.
+int GetRevealedToolbarSidebarInset(const views::View* browser_view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_

@@ -23,6 +23,9 @@ namespace koan {
 
 class KoanToastView;
 
+// How long Zen's toasts stay once in (ZenToasts.mjs).
+inline constexpr base::TimeDelta kToastDefaultTimeout = base::Seconds(2);
+
 // Zen's toast (ZenToasts.mjs, zen-popup.css) for one window: a pill at the
 // window's top corner away from the sidebar (top right, or top left with
 // tabs on the right) that springs in from the top, stays for 2s once in
@@ -43,7 +46,7 @@ class KoanToast {
             const std::u16string& shortcut = std::u16string(),
             const std::u16string& after = std::u16string(),
             const std::u16string& announcement = std::u16string(),
-            base::TimeDelta timeout = base::Seconds(2));
+            base::TimeDelta timeout = kToastDefaultTimeout);
 
   // Drops the toast at once (e.g. the window is going away).
   void Close();
