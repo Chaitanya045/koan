@@ -337,9 +337,11 @@ check('A peeked sidebar hides again without polling', koanTasks(peek) <= 3,
       `${koanTasks(peek)} Koan task(s) in 6 s; ${paintsOf(peek).TabView ?? 0} tab paints ` +
       'show the sidebar opened');
 
-// Compact mode with multiple toolbars: the toolbar slides in from the top
+// Compact mode with multiple toolbars, hiding the toolbar too (by default
+// it hides just the sidebar, like Zen): the toolbar slides in from the top
 // edge and away again; once away it must stop painting too (its layer is
 // hidden when the slide-out animation ends).
+await setKoanPref('koan.compact_mode.hide', 'both');
 await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // Ctrl+Alt+B
 await sleep(1500);
 const zones = (await uiViews(UI_PORT))
