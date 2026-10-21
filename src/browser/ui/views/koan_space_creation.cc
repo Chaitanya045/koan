@@ -217,7 +217,24 @@ KoanSpaceCreationView::KoanSpaceCreationView(
 KoanSpaceCreationView::~KoanSpaceCreationView() = default;
 
 void KoanSpaceCreationView::FocusName() {
-  name_->RequestFocus();
+  focus_name_pending_ = true;
+  MaybeFocusName();
+}
+
+void KoanSpaceCreationView::MaybeFocusName() {
+  if (focus_name_pending_ && IsDrawn() && !size().IsEmpty()) {
+    focus_name_pending_ = false;
+    name_->RequestFocus();
+  }
+}
+
+void KoanSpaceCreationView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  MaybeFocusName();
+}
+
+void KoanSpaceCreationView::VisibilityChanged(views::View* starting_from,
+                                              bool is_visible) {
+  MaybeFocusName();
 }
 
 void KoanSpaceCreationView::ContentsChanged(

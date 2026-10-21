@@ -14,8 +14,9 @@ Chrome.
 | Action | Keys | Chrome had |
 |---|---|---|
 | Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
-| Show the sidebar in compact mode | Ctrl+Alt+S | |
-| Next / previous Space | Ctrl+Alt+Right / Ctrl+Alt+Left | |
+| Show the sidebar in compact mode | Ctrl+Alt+S (⌘⌥S) | |
+| Next / previous Space | Ctrl+Alt+Right / Ctrl+Alt+Left (⌘⌥→ / ⌘⌥←) | macOS: next / previous tab (still Ctrl+Tab) |
+| Space 1 to 10 | macOS: Ctrl+1 … Ctrl+9, Ctrl+0 (no keys elsewhere, as in Zen; set them in Settings) | |
 | Split view: side by side | Ctrl+Alt+V (⌘⌥V) | |
 | Split view: stacked | Ctrl+Alt+H (⌘⌥H) | macOS: Hide Others |
 | Split view: grid (two panes in Chromium: side by side) | Ctrl+Alt+G (⌘⌥G) | |
@@ -175,7 +176,7 @@ tab first, one per press.
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
 bottom is Zen's bottom bar: one button per Space (its emoji, or a dot; the
 active one in colour, the others grey) and **+**, which opens the Create
-menu: Create Space, Create Folder (not in Koan yet), New Split and New Tab.
+menu: Create Space, New Split and New Tab.
 The Space buttons only show once there is more than one Space.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
@@ -191,25 +192,33 @@ always shows one: a new window starts in a Space named "Space", every tab
 belongs to a Space, and new tabs open in the active one.
 
 - **Create** a Space with **+ > Create Space** (or Ctrl+Alt+N): the sidebar
-  shows Zen's Create-a-Space form. Click the dashed box to pick an emoji
+  shows Zen's Create-a-Space form (a collapsed sidebar expands over the
+  page until you're done). Click the dashed box to pick an emoji
   (search by keyword), type a name, Edit Theme… to pick its colour, then
   Create Space (or Enter); Escape or Cancel goes back.
 - **Rename**: double-click the Space's name in the header (or right-click
   the header > Change Name…) and type; Enter keeps it, Escape cancels.
   Double-click the icon (or Change Icon…) to pick another emoji, or none.
+- From the keyboard, the header takes focus (Tab through the sidebar):
+  Enter or the menu key opens its menu, F2 renames the Space.
 - **Edit Theme…** (right-click the header) picks the Space's colour: the
   browser takes it while the Space is active, or keeps your theme with
   Default.
-- **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (they
-  wrap around), swipe horizontally with two fingers over the sidebar or
-  use a horizontal mouse wheel there; the right-click menu of the header
-  also lists the Spaces. The old Space slides out and the new one in, as
-  in Zen, and you land on the tab you left the Space on.
+- **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
+  on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
+  horizontally with two fingers over the sidebar, or turn the mouse wheel
+  there (horizontally, or vertically while holding Ctrl); the right-click
+  menu of the header also lists the Spaces. The old Space slides out and
+  the new one in, as in Zen, and you land on the tab you left the Space on
+  (also after a restart). Going straight to a tab of another Space (the
+  address bar's "Switch to this tab", tab search) shows that tab.
 - **Move To**: right-click a tab > Move To moves it (and the other
   selected tabs) to another Space and shows it.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
-  frees all the others.
+  frees all the others. Tabs on screen and tabs in use (playing sound, in
+  a call or sharing the screen, open in DevTools, with a half-filled form,
+  and others Memory Saver keeps) stay loaded; a toast says how many.
 - **Delete Space** (same menu) closes the Space's tabs after asking. The
   last Space can't be deleted.
 - Closing a Space's last tab leaves the Space with a new tab, where Zen

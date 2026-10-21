@@ -23,7 +23,8 @@ class KoanSpaceButton;
 // Zen's sidebar bottom bar: one button per Space (its emoji, or a dot),
 // the active one in colour and the others greyed out, and "+" with Zen's
 // Create menu. Like Zen, the Space buttons are hidden while there is only
-// one Space, and inactive ones shrink to dots when they don't fit.
+// one Space, and inactive ones shrink to dots when they don't fit. In a
+// sidebar too narrow for a row (icons only), they stack above "+".
 class KoanSpaceBarView : public views::View {
   METADATA_HEADER(KoanSpaceBarView, views::View)
 
@@ -38,12 +39,14 @@ class KoanSpaceBarView : public views::View {
 
   // Whether the Space buttons don't fit at full size.
   bool overflows() const { return overflows_; }
+  // Whether the buttons stack (a sidebar too narrow for a row).
+  bool IsNarrow(int width) const;
 
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
-  bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
  private:
   const raw_ptr<KoanWorkspaceController> controller_;

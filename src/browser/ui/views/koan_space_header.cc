@@ -9,8 +9,10 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
@@ -19,6 +21,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
+#include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
@@ -30,6 +33,8 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/controls/focus_ring.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/proposed_layout.h"
@@ -38,13 +43,20 @@
 
 namespace koan {
 
-namespace {}  // namespace
-
 KoanSpaceHeaderView::KoanSpaceHeaderView(KoanWorkspaceController* controller)
     : controller_(controller) {
   set_context_menu_controller(this);
   SetNotifyEnterExitOnChild(true);
-  GetViewAccessibility().SetRole(ax::mojom::Role::kHeading);
+  // A button that opens the Space menu, for keyboards and screen readers.
+  SetFocusBehavior(FocusBehavior::ALWAYS);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  GetViewAccessibility().SetHasPopup(ax::mojom::HasPopup::kMenu);
+  GetViewAccessibility().SetDescription(
+      u"Space. Enter opens its menu, F2 renames it");
+  views::InstallRoundRectHighlightPathGenerator(
+      this, gfx::Insets::VH(kSpaceHeaderBackgroundInset, SidebarStripInset()),
+      SidebarRowCornerRadius());
+  views::FocusRing::Install(this);
 
   icon_ = AddChildView(std::make_unique<views::Label>());
   icon_->SetFontList(gfx::FontList().DeriveWithSizeDelta(
@@ -70,7 +82,7 @@ KoanSpaceHeaderView::KoanSpaceHeaderView(KoanWorkspaceController* controller)
   rename_field_->SetController(this);
   rename_field_->GetViewAccessibility().SetName(u"Space Name");
   rename_field_->SetVisible(false);
-  rename_observation_.Observe(rename_field_);
+  child_observations_.AddObservation(rename_field_);
 
   actions_ = AddChildView(views::CreateVectorImageButtonWithNativeTheme(
       base::BindRepeating(
@@ -83,7 +95,12 @@ KoanSpaceHeaderView::KoanSpaceHeaderView(KoanWorkspaceController* controller)
       views::kMoreHorizIcon, /*dip_size=*/16));
   actions_->SetTooltipText(u"Space options");
   actions_->GetViewAccessibility().SetName(u"Space options");
-  actions_->SetVisible(false);
+  // Always in the focus order; drawn only while the header is hovered or
+  // focused.
+  actions_->SetPaintToLayer();
+  actions_->layer()->SetFillsBoundsOpaquely(false);
+  actions_->layer()->SetOpacity(0);
+  child_observations_.AddObservation(actions_);
 }
 
 KoanSpaceHeaderView::~KoanSpaceHeaderView() = default;
@@ -121,12 +138,20 @@ void KoanSpaceHeaderView::StartRename() {
   if (!has_space_ || IsRenaming()) {
     return;
   }
+  renaming_ = controller_->GetActiveSpace();
+  // From the keyboard (F2, or the menu opened with Enter).
+  refocus_after_rename_ = HasFocus();
   rename_field_->SetText(name_->GetText());
   rename_field_->SelectAll(/*reversed=*/false);
   rename_field_->SetVisible(true);
   name_->SetVisible(false);
+  UpdateActionsVisibility();
   InvalidateLayout();
   rename_field_->RequestFocus();
+}
+
+void KoanSpaceHeaderView::CommitRename() {
+  FinishRename(/*keep=*/true);
 }
 
 void KoanSpaceHeaderView::CancelRename() {
@@ -142,15 +167,25 @@ void KoanSpaceHeaderView::FinishRename(bool keep) {
     return;
   }
   // Hide the field first: losing focus calls back in here.
+  const bool had_focus = rename_field_->HasFocus();
   rename_field_->SetVisible(false);
   name_->SetVisible(true);
+  UpdateActionsVisibility();
   InvalidateLayout();
-  if (keep) {
-    if (std::optional<tab_groups::TabGroupId> space =
-            controller_->GetActiveSpace()) {
-      controller_->RenameSpace(*space,
-                               std::u16string(rename_field_->GetText()));
-    }
+  const std::optional<tab_groups::TabGroupId> space =
+      std::exchange(renaming_, std::nullopt);
+  if (keep && space) {
+    // Posted: a Space switch commits the rename from inside a tab strip
+    // notification, where the model can't change.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanWorkspaceController::RenameSpace,
+                                  controller_->GetWeakPtr(), *space,
+                                  std::u16string(rename_field_->GetText())));
+  }
+  // Enter or Escape after a rename started from the keyboard: the keyboard
+  // stays on the header.
+  if (had_focus && refocus_after_rename_) {
+    RequestFocus();
   }
 }
 
@@ -170,29 +205,41 @@ bool KoanSpaceHeaderView::HandleKeyEvent(views::Textfield* sender,
   return false;
 }
 
+void KoanSpaceHeaderView::OnViewFocused(views::View* observed_view) {
+  UpdateActionsVisibility();
+}
+
 void KoanSpaceHeaderView::OnViewBlurred(views::View* observed_view) {
-  FinishRename(/*keep=*/true);
+  if (observed_view == rename_field_) {
+    FinishRename(/*keep=*/true);
+  }
+  UpdateActionsVisibility();
 }
 
 void KoanSpaceHeaderView::Layout(PassKey) {
   const gfx::Rect bounds = GetLocalBounds();
   // The icon where the tabs have their favicon.
   int x = SidebarStripInset() + kNewTabIconX;
+  // (In LTR terms; mirrored for right-to-left.)
+  const auto place = [this](views::View* view, const gfx::Rect& rect) {
+    view->SetBoundsRect(GetMirroredRect(rect));
+  };
   if (icon_->GetVisible()) {
     // An emoji's glyph is wider than the 16px slot: centre it there.
-    icon_->SetBounds(x - kSpaceIconSize / 4, 0, kSpaceIconSize * 3 / 2,
-                     bounds.height());
+    place(icon_, gfx::Rect(x - kSpaceIconSize / 4, 0, kSpaceIconSize * 3 / 2,
+                           bounds.height()));
     x += kSpaceIconSize + kSpaceIconGap;
   }
   const int actions_x =
       bounds.width() - SidebarStripInset() - kSpaceActionsSize - 4;
-  actions_->SetBounds(actions_x, (bounds.height() - kSpaceActionsSize) / 2,
-                      kSpaceActionsSize, kSpaceActionsSize);
+  place(actions_,
+        gfx::Rect(actions_x, (bounds.height() - kSpaceActionsSize) / 2,
+                  kSpaceActionsSize, kSpaceActionsSize));
   const int text_width = std::max(0, actions_x - 4 - x);
-  name_->SetBounds(x, 0, text_width, bounds.height());
+  place(name_, gfx::Rect(x, 0, text_width, bounds.height()));
   const int field_height = rename_field_->GetPreferredSize().height();
-  rename_field_->SetBounds(x - 4, (bounds.height() - field_height) / 2,
-                           text_width + 4, field_height);
+  place(rename_field_, gfx::Rect(x - 4, (bounds.height() - field_height) / 2,
+                                 text_width + 4, field_height));
 }
 
 bool KoanSpaceHeaderView::OnMousePressed(const ui::MouseEvent& event) {
@@ -200,7 +247,7 @@ bool KoanSpaceHeaderView::OnMousePressed(const ui::MouseEvent& event) {
     return event.IsOnlyLeftMouseButton();
   }
   // Zen: double-click the icon to change it, the name to rename the Space.
-  if (icon_->GetVisible() && event.x() < name_->x()) {
+  if (icon_->GetVisible() && icon_->bounds().Contains(event.location())) {
     if (std::optional<tab_groups::TabGroupId> space =
             controller_->GetActiveSpace()) {
       controller_->ShowIconPicker(*space, icon_);
@@ -211,8 +258,34 @@ bool KoanSpaceHeaderView::OnMousePressed(const ui::MouseEvent& event) {
   return true;
 }
 
-bool KoanSpaceHeaderView::OnMouseWheel(const ui::MouseWheelEvent& event) {
-  return controller_->OnMouseWheel(event);
+bool KoanSpaceHeaderView::OnKeyPressed(const ui::KeyEvent& event) {
+  switch (event.key_code()) {
+    case ui::VKEY_RETURN:
+    case ui::VKEY_SPACE: {
+      // Where the "..." button opens it.
+      gfx::Point point = actions_->bounds().bottom_left();
+      views::View::ConvertPointToScreen(this, &point);
+      ShowMenu(point);
+      return true;
+    }
+    case ui::VKEY_F2:
+      StartRename();
+      return true;
+    default:
+      return false;
+  }
+}
+
+void KoanSpaceHeaderView::OnFocus() {
+  views::View::OnFocus();
+  UpdateActionsVisibility();
+  SchedulePaint();
+}
+
+void KoanSpaceHeaderView::OnBlur() {
+  views::View::OnBlur();
+  UpdateActionsVisibility();
+  SchedulePaint();
 }
 
 void KoanSpaceHeaderView::OnMouseEntered(const ui::MouseEvent& event) {
@@ -227,12 +300,17 @@ void KoanSpaceHeaderView::OnMouseExited(const ui::MouseEvent& event) {
   SchedulePaint();
 }
 
+bool KoanSpaceHeaderView::IsHighlighted() const {
+  return hovered_ || HasFocus() || actions_->HasFocus();
+}
+
 void KoanSpaceHeaderView::UpdateActionsVisibility() {
-  actions_->SetVisible(hovered_ && !IsRenaming());
+  actions_->SetVisible(!IsRenaming());
+  actions_->layer()->SetOpacity(IsHighlighted() ? 1 : 0);
 }
 
 void KoanSpaceHeaderView::OnPaintBackground(gfx::Canvas* canvas) {
-  if (!hovered_) {
+  if (!IsHighlighted()) {
     return;
   }
   gfx::RectF bounds(GetLocalBounds());
@@ -271,6 +349,10 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
       form = form_view;
     }
   }
+  // Expanded on hover (or kept expanded for the form), a collapsed sidebar
+  // is wider than its collapsed width: lay it out as expanded, like
+  // upstream's TabView does.
+  collapsed = collapsed && width <= tabs::kVerticalTabStripCollapsedWidth;
   int height = 0;
   if (form) {
     // Zen's Create-a-Space form takes the Space's place (the caller hides

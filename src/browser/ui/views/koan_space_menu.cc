@@ -11,11 +11,6 @@
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
-#include "chrome/app/chrome_command_ids.h"
-#include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "components/vector_icons/vector_icons.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/color/color_id.h"
@@ -39,13 +34,6 @@ enum SpaceMenuCommand {
   kDelete,
   // The Spaces to switch to (opened from the header).
   kFirstSwitch = 100,
-};
-
-enum CreateMenuCommand {
-  kCreateSpaceItem = 1,
-  kCreateFolder,
-  kNewSplit,
-  kNewTab,
 };
 
 // Edit Theme... choices: Default, then the colours.
@@ -190,16 +178,28 @@ bool KoanSpaceMenu::IsCommandIdEnabled(int command_id) const {
 
 // KoanCreateMenu.
 
-KoanCreateMenu::KoanCreateMenu(KoanWorkspaceController* controller,
-                               BrowserView* browser_view)
-    : controller_(controller), browser_view_(browser_view) {
-  model_.AddItemWithIcon(kCreateSpaceItem, u"Create Space",
-                         MenuIcon(vector_icons::kContentCopyIcon));
-  model_.AddItemWithIcon(kCreateFolder, u"Create Folder",
-                         MenuIcon(vector_icons::kFolderChromeRefreshOldIcon));
-  model_.AddSeparator(ui::NORMAL_SEPARATOR);
-  model_.AddItemWithIcon(kNewSplit, u"New Split", MenuIcon(kSplitSceneIcon));
-  model_.AddItemWithIcon(kNewTab, u"New Tab", MenuIcon(kAddIcon));
+KoanCreateMenu::KoanCreateMenu(KoanWorkspaceController* controller)
+    : entries_(controller->create_menu_entries()) {
+  using Section = KoanWorkspaceController::CreateMenuEntry::Section;
+  for (Section section : {Section::kCreate, Section::kTabs}) {
+    bool first = true;
+    for (size_t i = 0; i < entries_.size(); ++i) {
+      const KoanWorkspaceController::CreateMenuEntry& entry = entries_[i];
+      if (entry.section != section) {
+        continue;
+      }
+      if (first && model_.GetItemCount() > 0) {
+        model_.AddSeparator(ui::NORMAL_SEPARATOR);
+      }
+      first = false;
+      const int command_id = static_cast<int>(i) + 1;
+      if (entry.icon) {
+        model_.AddItemWithIcon(command_id, entry.label, MenuIcon(*entry.icon));
+      } else {
+        model_.AddItem(command_id, entry.label);
+      }
+    }
+  }
 }
 
 KoanCreateMenu::~KoanCreateMenu() = default;
@@ -211,35 +211,16 @@ void KoanCreateMenu::RunMenuAt(views::View* anchor) {
 }
 
 void KoanCreateMenu::ExecuteCommand(int command_id, int event_flags) {
+  // Posted, with its own copy: the entry may close this menu (and its
+  // anchor) or change the tab strip.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&KoanCreateMenu::Execute,
-                                weak_factory_.GetWeakPtr(), command_id));
-}
-
-void KoanCreateMenu::Execute(int command_id) {
-  switch (command_id) {
-    case kCreateSpaceItem:
-      controller_->ShowCreateForm();
-      return;
-    case kNewSplit:
-      chrome::ExecuteCommand(browser_view_->browser(), IDC_NEW_SPLIT_TAB);
-      return;
-    case kNewTab:
-      chrome::ExecuteCommand(browser_view_->browser(), IDC_NEW_TAB);
-      return;
-  }
+      FROM_HERE, entries_[command_id - 1].run);
 }
 
 bool KoanCreateMenu::IsCommandIdEnabled(int command_id) const {
-  // Zen's folders (tab folders in the sidebar) aren't in Koan yet.
-  if (command_id == kCreateFolder) {
-    return false;
-  }
-  if (command_id == kNewSplit) {
-    return chrome::IsCommandEnabled(browser_view_->browser(),
-                                    IDC_NEW_SPLIT_TAB);
-  }
-  return true;
+  const KoanWorkspaceController::CreateMenuEntry& entry =
+      entries_[command_id - 1];
+  return entry.is_enabled.is_null() || entry.is_enabled.Run();
 }
 
 // KoanThemeMenu.

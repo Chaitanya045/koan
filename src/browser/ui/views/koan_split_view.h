@@ -15,8 +15,8 @@ class SimpleMenuModel;
 namespace koan {
 
 // Zen's split view item of the tab context menu (tab-zen-split-tabs), called
-// by AddZenTabMenuItems() (koan_tab_menu.h) after upstream's split view items
-// for the tab at `index` (`num_tabs` tabs selected for the command): upstream's
+// by the hook in TabMenuModel::Build() after upstream's split view items for
+// the tab at `index` (`num_tabs` tabs selected for the command): upstream's
 // "Add tab to new split view" / "New split view with current tab" become
 // "Add Split View..." (one tab) or "Join N Tabs" (a selection), and a tab in
 // a split gets "Split Out Tab" ahead of upstream's "Arrange split view".

@@ -42,7 +42,13 @@ class KoanSpaceCreationView : public views::View,
   KoanSpaceCreationView& operator=(const KoanSpaceCreationView&) = delete;
   ~KoanSpaceCreationView() override;
 
+  // Focuses the name field, as soon as the form is on screen (a collapsed
+  // sidebar is still expanding).
   void FocusName();
+
+  // views::View:
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+  void VisibilityChanged(views::View* starting_from, bool is_visible) override;
 
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
@@ -59,6 +65,7 @@ class KoanSpaceCreationView : public views::View,
   // creates the Space if `create`.
   void Finish(bool create);
   void DoFinish(bool create);
+  void MaybeFocusName();
 
   const raw_ptr<KoanWorkspaceController> controller_;
   raw_ptr<views::Label> title_ = nullptr;
@@ -68,6 +75,7 @@ class KoanSpaceCreationView : public views::View,
   raw_ptr<views::LabelButton> theme_button_ = nullptr;
   raw_ptr<views::MdTextButton> create_ = nullptr;
   KoanWorkspaceController::SpaceTheme theme_;
+  bool focus_name_pending_ = false;
   std::unique_ptr<KoanThemeMenu> theme_menu_;
   std::unique_ptr<KoanEmojiPicker::Bubble> picker_;
   base::WeakPtrFactory<KoanSpaceCreationView> weak_factory_{this};

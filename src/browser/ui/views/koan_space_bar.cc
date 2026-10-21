@@ -13,6 +13,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
@@ -57,6 +58,9 @@ class KoanSpaceButton : public views::Button,
     set_context_menu_controller(this);
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
+    // One of a set of choices: screen readers say which Space is active.
+    GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+    GetViewAccessibility().SetCheckedState(ax::mojom::CheckedState::kFalse);
   }
 
   const tab_groups::TabGroupId& space() const { return space_; }
@@ -69,6 +73,9 @@ class KoanSpaceButton : public views::Button,
     active_ = info.active;
     SetTooltipText(info.name);
     GetViewAccessibility().SetName(info.name);
+    GetViewAccessibility().SetCheckedState(
+        active_ ? ax::mojom::CheckedState::kTrue
+                : ax::mojom::CheckedState::kFalse);
     if (changed) {
       UpdateLook(/*animate=*/true);
       SchedulePaint();
@@ -76,7 +83,8 @@ class KoanSpaceButton : public views::Button,
   }
 
   bool IsCollapsed() const {
-    return bar_->overflows() && !active_ && GetState() != STATE_HOVERED;
+    return bar_->overflows() && !active_ && GetState() != STATE_HOVERED &&
+           !HasFocus();
   }
 
   int GetLayoutWidth() const {
@@ -122,8 +130,18 @@ class KoanSpaceButton : public views::Button,
     UpdateLook(/*animate=*/false);
   }
 
-  bool OnMouseWheel(const ui::MouseWheelEvent& event) override {
-    return controller_->OnMouseWheel(event);
+  void OnFocus() override {
+    views::Button::OnFocus();
+    if (bar_->overflows()) {
+      bar_->InvalidateLayout();
+    }
+  }
+
+  void OnBlur() override {
+    views::Button::OnBlur();
+    if (bar_->overflows()) {
+      bar_->InvalidateLayout();
+    }
   }
 
   // views::ContextMenuController: Zen's Space menu, for this Space.
@@ -172,6 +190,8 @@ KoanSpaceBarView::KoanSpaceBarView(KoanWorkspaceController* controller)
   create->SetTooltipText(u"Create New");
   create->GetViewAccessibility().SetName(u"Create New");
   create_button_ = AddChildView(std::move(create));
+  GetViewAccessibility().SetRole(ax::mojom::Role::kRadioGroup);
+  GetViewAccessibility().SetName(u"Spaces");
 }
 
 KoanSpaceBarView::~KoanSpaceBarView() = default;
@@ -210,17 +230,53 @@ void KoanSpaceBarView::Update(
   InvalidateLayout();
 }
 
+bool KoanSpaceBarView::IsNarrow(int width) const {
+  // No room for one Space button between "+" and the room kept for it on
+  // the other side.
+  return width <
+         2 * (SidebarStripInset() + kSpaceButtonSize + kSpaceButtonGap) +
+             kSpaceButtonSize;
+}
+
 gfx::Size KoanSpaceBarView::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
-  return gfx::Size(0, kSpaceButtonSize + 2 * kSpaceBarPadding);
+  const int width = available_size.width().is_bounded()
+                        ? available_size.width().value()
+                        : this->width();
+  int rows = 1;
+  if (IsNarrow(width)) {
+    rows += static_cast<int>(std::ranges::count_if(
+        buttons_,
+        [](const KoanSpaceButton* button) { return button->GetVisible(); }));
+  }
+  return gfx::Size(0, rows * kSpaceButtonSize + (rows - 1) * kSpaceButtonGap +
+                          2 * kSpaceBarPadding);
 }
 
 void KoanSpaceBarView::Layout(PassKey) {
   const gfx::Rect area = GetLocalBounds();
+  // (In LTR terms; mirrored for right-to-left.)
+  const auto place = [this](views::View* view, const gfx::Rect& rect) {
+    view->SetBoundsRect(GetMirroredRect(rect));
+  };
+  if (IsNarrow(area.width())) {
+    // A column, centred, with "+" at the bottom.
+    overflows_ = false;
+    const int x = (area.width() - kSpaceButtonSize) / 2;
+    int y = kSpaceBarPadding;
+    for (KoanSpaceButton* button : buttons_) {
+      if (button->GetVisible()) {
+        place(button, gfx::Rect(x, y, kSpaceButtonSize, kSpaceButtonSize));
+        y += kSpaceButtonSize + kSpaceButtonGap;
+      }
+    }
+    place(create_button_, gfx::Rect(x, y, kSpaceButtonSize, kSpaceButtonSize));
+    return;
+  }
   const int y = (area.height() - kSpaceButtonSize) / 2;
-  create_button_->SetBounds(
-      area.right() - SidebarStripInset() - kSpaceButtonSize, y,
-      kSpaceButtonSize, kSpaceButtonSize);
+  place(create_button_,
+        gfx::Rect(area.right() - SidebarStripInset() - kSpaceButtonSize, y,
+                  kSpaceButtonSize, kSpaceButtonSize));
   // The Space buttons are centred in the room left of "+", keeping as much
   // room on the other side (where Zen has its sidebar button).
   const int side = SidebarStripInset() + kSpaceButtonSize + kSpaceButtonGap;
@@ -236,13 +292,17 @@ void KoanSpaceBarView::Layout(PassKey) {
   int x = side + (room - total) / 2;
   for (KoanSpaceButton* button : buttons_) {
     const int width = button->GetLayoutWidth();
-    button->SetBounds(x, y, width, kSpaceButtonSize);
+    place(button, gfx::Rect(x, y, width, kSpaceButtonSize));
     x += width + gap;
   }
 }
 
-bool KoanSpaceBarView::OnMouseWheel(const ui::MouseWheelEvent& event) {
-  return controller_->OnMouseWheel(event);
+void KoanSpaceBarView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  // Between a row and a column (the sidebar collapsed or expanded): the
+  // height changes too.
+  if (IsNarrow(width()) != IsNarrow(previous_bounds.width())) {
+    PreferredSizeChanged();
+  }
 }
 
 BEGIN_METADATA(KoanSpaceBarView)

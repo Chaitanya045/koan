@@ -19,7 +19,7 @@ source_set("views") {
     "koan_split_view.h",
     "koan_url_bar.h",
     "koan_spaces.h",
-    "koan_tab_menu.h",
+    "koan_tab_menu_hooks.h",
   ]
   public_deps = [
     "//base",
@@ -69,6 +69,8 @@ source_set("impl") {
     "koan_shortcuts.h",
     "koan_split_view.cc",
     "koan_tab_menu.cc",
+    "koan_tab_unload.cc",
+    "koan_tab_unload.h",
     "koan_tab_activation.cc",
     "koan_tab_activation.h",
     "koan_toast.cc",
@@ -90,6 +92,8 @@ source_set("impl") {
     "//chrome/browser/ui/views/omnibox",
     "//chrome/common",
     "//chrome/browser/resource_coordinator",
+    "//chrome/browser/performance_manager",
+    "//components/performance_manager",
     "//chrome/browser/ui:browser_commands",
     "//chrome/browser/ui:singleton_tabs",
     "//chrome/browser/ui/views/location_bar",

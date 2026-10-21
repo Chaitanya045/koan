@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -97,10 +98,21 @@ void KoanShortcutController::OnAddedToWidget() {
 
 void KoanShortcutController::RegisterAccelerators() {
   for (const Binding& binding : bindings_) {
+    auto priority = ui::AcceleratorManager::kNormalPriority;
+#if BUILDFLAG(IS_MAC)
+    // On macOS Chrome runs its menu shortcuts before normal priority
+    // accelerators (ChromeCommandDispatcherDelegate's
+    // prePerformKeyEquivalent), and Zen's Space keys are Chrome's
+    // Cmd+Option+arrow tab switching there: those come first. (The other
+    // keys stay behind text fields and pages.)
+    if (binding.action == Action::kWorkspaceForward ||
+        binding.action == Action::kWorkspaceBackward) {
+      priority = ui::AcceleratorManager::kHighPriority;
+    }
+#endif
     // Normal priority targets are tried most-recently-registered first, so
     // these run before BrowserView's own accelerators for the same keys.
-    focus_manager_->RegisterAccelerator(
-        binding.accelerator, ui::AcceleratorManager::kNormalPriority, this);
+    focus_manager_->RegisterAccelerator(binding.accelerator, priority, this);
   }
   // Chrome's tab cycling keys: Koan cycles itself while one of Zen's Ctrl+Tab
   // settings is on, and passes the keys on to Chrome otherwise. No binding
@@ -168,7 +180,15 @@ bool KoanShortcutController::Run(Action action) {
       }
       break;
     default:
+      if (shortcuts::SwitchWorkspaceNumber(action) &&
+          !workspaces->IsEnabled()) {
+        return false;
+      }
       break;
+  }
+  if (const int number = shortcuts::SwitchWorkspaceNumber(action)) {
+    // Without that many Spaces the key goes on to Chrome.
+    return workspaces->SwitchToNumber(number);
   }
   switch (action) {
     case Action::kToggleCompactMode:
@@ -235,6 +255,18 @@ bool KoanShortcutController::Run(Action action) {
       return Command(IDC_SHOW_DOWNLOADS);
     case Action::kReaderMode:
       return Command(IDC_SHOW_READING_MODE);
+    case Action::kSwitchWorkspace1:
+    case Action::kSwitchWorkspace2:
+    case Action::kSwitchWorkspace3:
+    case Action::kSwitchWorkspace4:
+    case Action::kSwitchWorkspace5:
+    case Action::kSwitchWorkspace6:
+    case Action::kSwitchWorkspace7:
+    case Action::kSwitchWorkspace8:
+    case Action::kSwitchWorkspace9:
+    case Action::kSwitchWorkspace10:
+      // Handled above.
+      return false;
     case Action::kOpenSettings:
       // Like chrome://settings: one tab whatever pane it shows, and in a
       // regular window (Koan's settings are the regular profile's).

@@ -14,12 +14,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/tabs/public/tab_interface.h"
-#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/models/list_selection_model.h"
@@ -28,18 +24,6 @@
 namespace koan {
 
 namespace {
-
-KoanWorkspaceController* SpacesFor(TabStripModel* tab_strip) {
-  BrowserWindowInterface* browser =
-      tab_strip->delegate()->GetBrowserWindowInterface();
-  BrowserView* browser_view =
-      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
-  KoanBrowserViewController* controller =
-      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
-  KoanWorkspaceController* spaces =
-      controller ? controller->workspaces() : nullptr;
-  return spaces && spaces->IsEnabled() ? spaces : nullptr;
-}
 
 // Zen's "Move To" submenu: the other Spaces, each "<icon>  <name>".
 class KoanMoveToSpaceMenuModel : public ui::SimpleMenuModel,
@@ -107,13 +91,13 @@ class KoanMoveToSpaceMenuModel : public ui::SimpleMenuModel,
 
 }  // namespace
 
-std::unique_ptr<ui::SimpleMenuModel> ReplaceTabGroupMenuItems(
-    ui::SimpleMenuModel* menu,
-    TabStripModel* tab_strip,
-    int index) {
-  KoanWorkspaceController* spaces = SpacesFor(tab_strip);
+void ReplaceTabGroupMenuItems(ui::SimpleMenuModel* menu,
+                              TabStripModel* tab_strip,
+                              int index) {
+  KoanWorkspaceController* spaces =
+      KoanWorkspaceController::FromTabStrip(tab_strip);
   if (!spaces) {
-    return nullptr;
+    return;
   }
   std::optional<size_t> first;
   for (int command : {TabStripModel::CommandToggleFocusGroup,
@@ -128,16 +112,16 @@ std::unique_ptr<ui::SimpleMenuModel> ReplaceTabGroupMenuItems(
   // Pinned tabs (Essentials) belong to no Space.
   if (!first || !tab_strip->ContainsIndex(index) ||
       tab_strip->IsTabPinned(index)) {
-    return nullptr;
+    return;
   }
   auto move_to =
       std::make_unique<KoanMoveToSpaceMenuModel>(spaces, tab_strip, index);
   if (move_to->GetItemCount() == 0) {
-    return nullptr;
+    return;
   }
   menu->InsertSubMenuAt(*first, TabStripModel::CommandAddToExistingGroup,
                         u"Move To", move_to.get());
-  return move_to;
+  spaces->KeepTabMenuSubmenu(std::move(move_to));
 }
 
 }  // namespace koan

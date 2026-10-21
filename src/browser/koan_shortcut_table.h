@@ -28,6 +28,17 @@ enum class Action {
   kWorkspaceForward,
   kWorkspaceBackward,
   kNewWorkspace,
+  // Zen's "Switch to Workspace N" (keys on macOS only, like Zen's).
+  kSwitchWorkspace1,
+  kSwitchWorkspace2,
+  kSwitchWorkspace3,
+  kSwitchWorkspace4,
+  kSwitchWorkspace5,
+  kSwitchWorkspace6,
+  kSwitchWorkspace7,
+  kSwitchWorkspace8,
+  kSwitchWorkspace9,
+  kSwitchWorkspace10,
   // Split view.
   kSplitGrid,
   kSplitVertical,
@@ -87,11 +98,12 @@ const Info* FindAction(std::string_view id);
 
 // Zen's defaults (ZenKeyboardShortcuts.mjs, shortcuts version 21, Linux) plus
 // Koan's own, in docs/USAGE.md order. An action may have several keys.
-// TODO(#51): macOS. Zen writes its defaults with "accel" (Cmd on macOS, Ctrl
-// elsewhere) and has Mac-only ones (Ctrl+1..0 switch workspaces); use
-// ui::EF_PLATFORM_ACCELERATOR and Zen's Mac table here, accept Cmd in
-// IsValidCustomAccelerator(), and check how Cmd keys reach
-// KoanShortcutController through Chromium's Cocoa key handling.
+// Zen writes its defaults with "accel" (Cmd on macOS, Ctrl elsewhere): the
+// Space, compact mode sidebar and split view keys follow it here
+// (ui::EF_PLATFORM_ACCELERATOR), and Zen's Mac-only Ctrl+1..0 (switch to
+// Space N) are bound on macOS.
+// TODO(#51): the rest of Zen's Mac table, and Cmd in
+// IsValidCustomAccelerator().
 std::vector<Binding> DefaultBindings();
 
 // The bindings in effect: the defaults, with each action the user rebound in
@@ -121,6 +133,9 @@ bool IsValidCustomAccelerator(const ui::Accelerator& accelerator);
 // glyphs (⌃⌥⇧⌘), which Chromium's accelerator text uses too. The settings
 // page's koan_settings.js has the same table.
 std::u16string DisplayText(const ui::Accelerator& accelerator);
+
+// Action::kSwitchWorkspace1..10: the Space number (1..10), or 0.
+int SwitchWorkspaceNumber(Action action);
 
 // The pref value for an action's custom key; `accelerator` is empty
 // (VKEY_UNKNOWN) for "not set".

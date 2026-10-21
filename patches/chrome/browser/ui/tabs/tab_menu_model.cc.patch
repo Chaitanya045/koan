@@ -5,16 +5,16 @@ diff --git a/chrome/browser/ui/tabs/tab_menu_model.cc b/chrome/browser/ui/tabs/t
  #include "content/public/browser/context_menu_params.h"
  #include "content/public/browser/web_contents.h"
  #include "extensions/buildflags/buildflags.h"
-+#include "koan/browser/ui/views/koan_tab_menu.h"
++#include "koan/browser/ui/views/koan_tab_menu_hooks.h"
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/base/ui_base_features.h"
  #include "ui/base/window_open_disposition.h"
-@@ -476,6 +477,8 @@
-       break;
-     }
-   }
-+  // Koan: Zen's split view items and "Move To" a Space.
-+  koan_submenu_ = koan::AddZenTabMenuItems(this, tab_strip_, index, num_tabs);
+@@ -698,6 +699,8 @@
+                tab_strip_->IsContextMenuCommandEnabled(
+                    index,
+                    TabStripModel::CommandCloseTabsToRight));
++  // Koan: Zen's items (koan_tab_menu_hooks.h).
++  koan::AddKoanTabMenuItems(this, tab_strip_, index, num_tabs);
+ }
  
-   if (ExistingWindowSubMenuModel::ShouldShowSubmenu(tab_strip_->profile())) {
-     // Create submenu with existing windows
+ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TabMenuModel,

@@ -54,6 +54,20 @@ constexpr Info kActions[] = {
      "Backward Workspace", features::IsWorkspacesEnabled},
     {Action::kNewWorkspace, "workspace-create", "zen-workspace",
      "Create New Workspace", features::IsWorkspacesEnabled},
+#define KOAN_SWITCH_WORKSPACE(n)                                         \
+  {Action::kSwitchWorkspace##n, "workspace-switch-" #n, "zen-workspace", \
+   "Switch to Workspace " #n, features::IsWorkspacesEnabled}
+    KOAN_SWITCH_WORKSPACE(1),
+    KOAN_SWITCH_WORKSPACE(2),
+    KOAN_SWITCH_WORKSPACE(3),
+    KOAN_SWITCH_WORKSPACE(4),
+    KOAN_SWITCH_WORKSPACE(5),
+    KOAN_SWITCH_WORKSPACE(6),
+    KOAN_SWITCH_WORKSPACE(7),
+    KOAN_SWITCH_WORKSPACE(8),
+    KOAN_SWITCH_WORKSPACE(9),
+    KOAN_SWITCH_WORKSPACE(10),
+#undef KOAN_SWITCH_WORKSPACE
     {Action::kSplitGrid, "split-view-grid", "zen-split-view",
      "Toggle Split View Grid"},
     {Action::kSplitVertical, "split-view-vertical", "zen-split-view",
@@ -114,15 +128,16 @@ std::vector<Binding> DefaultBindings() {
   const auto bind = [](ui::KeyboardCode key, int modifiers, Action action) {
     return Binding{ui::Accelerator(key, modifiers), action};
   };
-  return {
+  std::vector<Binding> bindings = {
       // Zen: compact mode.
       bind(ui::VKEY_S, kCtrl, Action::kToggleCompactMode),
-      bind(ui::VKEY_S, kCtrl | kAlt, Action::kCompactModeShowSidebar),
+      bind(ui::VKEY_S, kAccel | kAlt, Action::kCompactModeShowSidebar),
       // Zen moves Save Page off Ctrl+S.
       bind(ui::VKEY_S, kCtrl | kAlt | kShift, Action::kSavePage),
-      // Zen: workspaces.
-      bind(ui::VKEY_RIGHT, kCtrl | kAlt, Action::kWorkspaceForward),
-      bind(ui::VKEY_LEFT, kCtrl | kAlt, Action::kWorkspaceBackward),
+      // Zen: workspaces (Accel+Alt; on macOS Cmd+Option+arrows, which
+      // Chrome uses to switch tabs: Koan's keys come first there).
+      bind(ui::VKEY_RIGHT, kAccel | kAlt, Action::kWorkspaceForward),
+      bind(ui::VKEY_LEFT, kAccel | kAlt, Action::kWorkspaceBackward),
       // Zen: split view (Accel+Alt).
       bind(ui::VKEY_G, kAccel | kAlt, Action::kSplitGrid),
       bind(ui::VKEY_V, kAccel | kAlt, Action::kSplitVertical),
@@ -158,6 +173,22 @@ std::vector<Binding> DefaultBindings() {
       // Ctrl+, : Zen's "Open Preferences" (Cmd+, on macOS).
       bind(ui::VKEY_OEM_COMMA, kCtrl, Action::kOpenSettings),
   };
+#if BUILDFLAG(IS_MAC)
+  // Zen on macOS: Ctrl+1..9 and Ctrl+0 switch to Space 1..10.
+  for (int number = 1; number <= 10; ++number) {
+    bindings.push_back(
+        bind(static_cast<ui::KeyboardCode>(ui::VKEY_0 + number % 10), kCtrl,
+             static_cast<Action>(static_cast<int>(Action::kSwitchWorkspace1) +
+                                 number - 1)));
+  }
+#endif
+  return bindings;
+}
+
+int SwitchWorkspaceNumber(Action action) {
+  const int number = static_cast<int>(action) -
+                     static_cast<int>(Action::kSwitchWorkspace1) + 1;
+  return number >= 1 && number <= 10 ? number : 0;
 }
 
 std::vector<Binding> Bindings(const base::DictValue& overrides) {

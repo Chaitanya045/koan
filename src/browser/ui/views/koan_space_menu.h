@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -16,8 +17,6 @@
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/view_tracker.h"
-
-class BrowserView;
 
 namespace gfx {
 class Point;
@@ -63,12 +62,11 @@ class KoanSpaceMenu : public ui::SimpleMenuModel::Delegate {
   base::WeakPtrFactory<KoanSpaceMenu> weak_factory_{this};
 };
 
-// Zen's "+" menu (zenCreateNewPopup): Create Space, Create Folder, New
-// Split, New Tab.
+// Zen's "+" menu (zenCreateNewPopup): the controller's create menu
+// entries, by section (KoanWorkspaceController::AddCreateMenuEntry()).
 class KoanCreateMenu : public ui::SimpleMenuModel::Delegate {
  public:
-  KoanCreateMenu(KoanWorkspaceController* controller,
-                 BrowserView* browser_view);
+  explicit KoanCreateMenu(KoanWorkspaceController* controller);
   KoanCreateMenu(const KoanCreateMenu&) = delete;
   KoanCreateMenu& operator=(const KoanCreateMenu&) = delete;
   ~KoanCreateMenu() override;
@@ -80,13 +78,10 @@ class KoanCreateMenu : public ui::SimpleMenuModel::Delegate {
   bool IsCommandIdEnabled(int command_id) const override;
 
  private:
-  void Execute(int command_id);
-
-  const raw_ptr<KoanWorkspaceController> controller_;
-  const raw_ptr<BrowserView> browser_view_;
+  // The entries as they were when the menu opened, by command id - 1.
+  const std::vector<KoanWorkspaceController::CreateMenuEntry> entries_;
   ui::SimpleMenuModel model_{this};
   std::unique_ptr<views::MenuRunner> runner_;
-  base::WeakPtrFactory<KoanCreateMenu> weak_factory_{this};
 };
 
 // Edit Theme...: the theme a Space can take in Koan (Default, which keeps the

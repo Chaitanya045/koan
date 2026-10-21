@@ -1,10 +1,12 @@
 // End-to-end test of Zen's Spaces on a real build: the window always shows
 // one Space, the Space header (icon and name, its menu: Change Name...,
-// Change Icon..., Unload, Delete with confirmation), the bottom bar (one
-// button per Space, "+" with the Create menu), the Create-a-Space form with
-// the emoji picker, switching (bottom bar, keys with wrap-around, the
-// mouse wheel), each Space's last active tab, "Move To" in the tab context
-// menu and a Space whose last tab closes coming back with a new tab.
+// Change Icon..., Unload, Delete with confirmation) and its keyboard path,
+// the bottom bar (one button per Space, "+" with the Create menu), the
+// Create-a-Space form with the emoji picker (also from a collapsed
+// sidebar), switching (bottom bar, keys with wrap-around), each Space's
+// last active tab, "Move To" in the tab context menu and a Space whose last
+// tab closes coming back with a new tab. (The wheel, swipes and restarts:
+// spaces_switching.mjs.)
 //
 //   scripts/e2e/run.sh spaces
 import {
@@ -27,8 +29,10 @@ async function click(view, button = 'left') {
   await sleep(1200);
 }
 
-async function wheel(view, direction) {
-  await mouse(view, 'mouseWheel', 10, 10, 'none', direction);
+// A key press on a view (UI DevTools).
+async function viewKey(view, keyCode) {
+  await viewEvent(view, 'DOM.dispatchKeyEvent',
+                  { type: 'keyPressed', keyCode, code: 0, flags: 0, key: 0, isChar: false });
   await sleep(1200);
 }
 
@@ -55,7 +59,8 @@ async function pages() {
 // The sidebar's state: Space buttons, header, visible tabs.
 async function sidebar() {
   const vs = await views();
-  const buttons = shown(vs, 'KoanSpaceButton').map(b => ({
+  // In their order on screen (UI DevTools doesn't follow reordered views).
+  const buttons = shown(vs, 'KoanSpaceButton').sort((a, b) => a.ax - b.ax).map(b => ({
     label: b.props.Label ?? '', name: b.props.TooltipText ?? '',
     active: b.props.Active === 'true', view: b }));
   const header = one(vs, 'KoanSpaceHeaderView');
@@ -70,7 +75,7 @@ async function sidebar() {
   };
 }
 
-const VK = { N: 78, T: 84, W: 87, LEFT: 37, RIGHT: 39, RETURN: 13, ESCAPE: 27 };
+const VK = { N: 78, T: 84, W: 87, LEFT: 37, RIGHT: 39, RETURN: 13, ESCAPE: 27, F2: 113 };
 const ROCKET = '\u{1F680}';
 
 // ---- One Space from the start, like Zen.
@@ -83,6 +88,23 @@ check('The bottom bar hides the Space buttons while there is one Space',
 check('No tab group header or Unfocus pill in the Space',
       shown(s.vs, 'TabGroupHeaderView').every(v => v.h === 0 || v.w === 0) &&
       shown(s.vs, 'TabGroupUnfocusButton').length === 0);
+
+// ---- "+": Zen's Create menu (Create Space | New Split, New Tab; features
+// add theirs).
+await click(s.create);
+let plus = menus(await views())[0];
+check('"+" opens the Create menu', plus?.items.length === 3,
+      `${plus?.items.length} item(s)`);
+if (plus) {
+  await chooseMenuItem(plus, plus.items[0]);
+}
+s = await sidebar();
+const plusForm = one(s.vs, 'KoanSpaceCreationView');
+check('...whose Create Space opens the Create-a-Space form', !!plusForm);
+if (plusForm) {
+  await click(shown(s.vs, 'MdTextButton')
+      .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel'));
+}
 
 // ---- The Create-a-Space form (Ctrl+Alt+N), with the emoji picker.
 await key(VK.N, CTRL | ALT, 'n');
@@ -146,13 +168,6 @@ s = await sidebar();
 check('...and wraps around to the first', s.header?.name === 'Space');
 check('Coming back lands on the Space\'s last active tab',
       (await pages()).visible === remembered, remembered);
-await wheel(s.header.view, 'right');
-s = await sidebar();
-check('A horizontal mouse wheel over the sidebar switches Spaces',
-      s.header?.name === 'Research', s.header?.name);
-await wheel(s.header.view, 'left');
-s = await sidebar();
-check('...both ways', s.header?.name === 'Space', s.header?.name);
 
 // ---- The Space menu (right-click the header).
 async function headerMenu() {
@@ -194,6 +209,34 @@ check('...and picking sets the Space\'s icon',
       JSON.stringify([s.header?.icon, picked?.props.Label]));
 await key(VK.ESCAPE);
 
+// The keyboard path: the header takes focus; F2 renames, Enter opens the
+// menu.
+s = await sidebar();
+check('The header is a focusable button with a menu',
+      s.header?.view.props.FocusBehavior === 'ALWAYS',
+      s.header?.view.props.FocusBehavior);
+await viewKey(s.header.view, VK.F2);
+let field = shown(await views(), 'Textfield').find(t => t.path.includes('KoanSpaceHeaderView'));
+check('F2 on the header renames the Space', !!field);
+if (field) {
+  await type(field, '', VK.ESCAPE);
+}
+s = await sidebar();
+check('...and Escape keeps the name', s.header?.name === 'Home' &&
+      !shown(s.vs, 'Textfield').some(t => t.path.includes('KoanSpaceHeaderView')),
+      s.header?.name);
+await viewKey(s.header.view, VK.RETURN);
+menu = menus(await views())[0];
+check('Enter on the header opens the Space menu', menu?.items.length === 9,
+      `${menu?.items.length} item(s)`);
+if (menu) {
+  await chooseMenuItem(menu, menu.items[0]);  // Change Name..., to close it
+  field = shown(await views(), 'Textfield').find(t => t.path.includes('KoanSpaceHeaderView'));
+  if (field) {
+    await type(field, '', VK.ESCAPE);
+  }
+}
+
 // Unload Space frees the Space's other tabs; the active one stays.
 const before = await pages();
 menu = await headerMenu();
@@ -221,8 +264,39 @@ check('Closing its last tab keeps the Space, with a new tab',
       s.buttons.length === 3 && s.header?.name === 'Scratch' && s.tabs === 1,
       JSON.stringify({ spaces: s.buttons.length, header: s.header?.name, tabs: s.tabs }));
 
+// ---- The Create form from a collapsed sidebar: the sidebar expands over
+// the page while the form is open.
+// The sidebar toggle, found again each time: collapsing moves the toolbar.
+const toggle = async () => (await views()).find(v => v.shown && v.w > 0 &&
+    v.path.at(-1) === 'VerticalTabStripTopContainer' && v.cls !== 'KoanSidebarNavButtons');
+await click(await toggle());
+await sleep(1000);
+await key(VK.N, CTRL | ALT, 'n');
+s = await sidebar();
+form = one(s.vs, 'KoanSpaceCreationView');
+check('Collapsed, Ctrl+Alt+N shows the Create form (the sidebar expands)',
+      !!form && form.h > 100 && form.w >= 200, JSON.stringify(form && [form.w, form.h]));
+const cancel = shown(s.vs, 'MdTextButton')
+    .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel');
+await click(cancel);
+await sleep(1000);
+s = await sidebar();
+check('...and Cancel goes back to the collapsed sidebar with the tabs',
+      !one(s.vs, 'KoanSpaceCreationView') && s.tabs === 1 &&
+      (one(s.vs, 'KoanSpaceBarView')?.w ?? 999) < 150,
+      JSON.stringify({ tabs: s.tabs, bar: one(s.vs, 'KoanSpaceBarView')?.w }));
+await click(await toggle());
+await sleep(1000);
+s = await sidebar();
+check('...and the sidebar expands again', !!s.header, JSON.stringify(s.header?.name));
+
 // ---- Move To (tab context menu) moves the tab and shows its Space.
 await click(s.buttons[0].view);
+s = await sidebar();
+// The Space's first tab, made active (Ctrl+1) so that it is the one the
+// Space remembers. (A synthetic click on a tab would leave its drag
+// handling pressed, and the context menu wouldn't open.)
+await key(49, CTRL, '1');
 s = await sidebar();
 const tab = shown(s.vs, 'TabView')[0];
 viewEvent(tab, 'DOM.dispatchMouseEvent',
@@ -248,6 +322,13 @@ s = await sidebar();
 check('Move To moves the tab and shows its new Space',
       s.header?.name === 'Research' && s.tabs === 3,
       JSON.stringify({ header: s.header?.name, tabs: s.tabs }));
+// The Space it left no longer has the tab it remembered.
+await click(s.buttons[0].view);
+s = await sidebar();
+check('...and the Space it left still shows, on one of its own tabs',
+      s.header?.name === 'Home' && s.tabs >= 1,
+      JSON.stringify({ header: s.header?.name, tabs: s.tabs }));
+await click(s.buttons[2].view);
 
 // ---- Delete Space asks first, then shows the Space before it.
 menu = await headerMenu();

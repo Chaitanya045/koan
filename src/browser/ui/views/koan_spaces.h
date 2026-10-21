@@ -5,9 +5,15 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SPACES_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACES_H_
 
-#include <memory>
-
 class TabStripModel;
+
+namespace tab_groups {
+class TabGroupId;
+}
+
+namespace tabs {
+class TabInterface;
+}
 
 namespace ui {
 class SimpleMenuModel;
@@ -34,15 +40,32 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
                      int available_height,
                      views::ProposedLayout& layouts);
 
-// For AddZenTabMenuItems() (koan_tab_menu.h): with Spaces on, replaces the
-// tab group items of the tab context menu for the tab at `index` (focus, add
-// to and remove from a group: a Space is a group) with Zen's "Move To"
-// submenu, listing the other Spaces. Returns the submenu, which the caller
-// keeps alive; null when there is none.
-std::unique_ptr<ui::SimpleMenuModel> ReplaceTabGroupMenuItems(
-    ui::SimpleMenuModel* menu,
-    TabStripModel* tab_strip,
-    int index);
+// For AddKoanTabMenuItems() (koan_tab_menu_hooks.h): with Spaces on,
+// replaces the tab group items of the tab context menu for the tab at
+// `index` (focus, add to and remove from a group: a Space is a group) with
+// Zen's "Move To" submenu, listing the other Spaces. The window's
+// KoanWorkspaceController keeps the submenu.
+void ReplaceTabGroupMenuItems(ui::SimpleMenuModel* menu,
+                              TabStripModel* tab_strip,
+                              int index);
+
+// TabStripModel::EnterFocusMode(), when the active tab isn't in `group`:
+// the tab to show, the Space's last active tab (Zen), instead of the
+// group's first one. Every way of switching Space (Koan's, upstream's swipe
+// and keys) goes through it, so the first tab never loads on the way. Null:
+// upstream decides (no Spaces in the window).
+tabs::TabInterface* PickSpaceTab(TabStripModel* tab_strip,
+                                 const tab_groups::TabGroupId& group);
+
+// TabStripModel::RotateFocusedGroup() (upstream's swipe): whether swiping
+// past the last or first Space wraps around (Zen's
+// zen.workspaces.wrap-around-navigation) instead of leaving focus mode.
+bool WrapsSpaces(TabStripModel* tab_strip);
+
+// TabGroupViewLayout: whether the focused group in `tab_group_view`'s
+// window is a Space, whose header Koan's Space header replaces (with the
+// "Unfocus" pill). Not in windows without Spaces (e.g. Incognito).
+bool ShowsSpaceHeader(const views::View* tab_group_view);
 
 }  // namespace koan
 
