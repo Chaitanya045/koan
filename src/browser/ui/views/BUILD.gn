@@ -90,6 +90,7 @@ source_set("impl") {
     "//chrome/browser/ui:browser_commands",
     "//chrome/browser/ui:singleton_tabs",
     "//chrome/browser/ui/views/location_bar",
+    "//chrome/browser/ui/views/omnibox",
     "//components/omnibox/browser",
     "//components/url_formatter",
     "//chrome/browser/ui:tab_ui_helper",
@@ -140,9 +141,7 @@ source_set("impl") {
     "//components/sessions",
     "//net",
     "//services/data_decoder/public/cpp",
-    "//skia",
     "//ui/base/clipboard:file_info",
-    "//ui/menus",
     "//components/prefs",
     "//koan/browser:features",
     "//koan/browser:prefs",
@@ -163,8 +162,10 @@ source_set("impl") {
     "//ui/base/metadata",
     "//ui/compositor",
     "//ui/events",
+    "//skia",
     "//ui/gfx",
     "//ui/gfx/geometry:geometry_skia",
+    "//ui/menus",
     "//ui/views",
   ]
   if (use_aura) {
