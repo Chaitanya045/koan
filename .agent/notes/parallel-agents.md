@@ -50,6 +50,8 @@ Traps, all fixed in the script:
 - **Editing the script while builds wait** is safe: running instances keep
   the old, deleted inode. But they run the old logic, so kill them and have
   the threads rerun.
+- **Tests, not compiles, hold the lock.** With 6 agents, most lock time went to each agent's 10–17 e2e suites while the CPU idled. Rule: run only your feature's suites while iterating; the full regression set once before pushing for review.
+- **Orphans holding the lock.** A child started under the lock inherits its file descriptor. If the child outlives `agent-build.sh` (a hung screenshot browser did), it holds the lock for everyone. Tests and `AGENT_CMD` now run with `8>&- 9>&-`, and `AGENT_CMD` has a 30-minute timeout. Agents must never run Koan in a separate background job.
 - **Killing a thread's build wakes the thread.** Its background-task
   notification fires, and it may queue a new build. Tell a paused thread to
   stay paused before you kill its build.
