@@ -235,6 +235,8 @@ class SpaceTextButton : public views::LabelButton {
                   const gfx::FontList& font)
       : views::LabelButton(std::move(callback), std::move(text)) {
     label()->SetFontList(font);
+    // On the library's translucent layers.
+    SetTextSubpixelRenderingEnabled(false);
   }
 };
 
@@ -850,10 +852,10 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
           std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
       row->AddChildView(std::move(button));
     }
-    auto none = std::make_unique<views::LabelButton>(
+    auto none = std::make_unique<SpaceTextButton>(
         base::BindRepeating(pick, weak_factory_.GetWeakPtr(),
                             base::Unretained(bubble), id, std::u16string()),
-        u"No icon");
+        u"No icon", Font(13));
     none->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(6, 8)));
     grid->AddChildView(std::move(none));
     delegate->SetContentsView(std::move(grid));

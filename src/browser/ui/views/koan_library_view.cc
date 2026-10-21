@@ -325,6 +325,8 @@ KoanLibraryPill::KoanLibraryPill(PressedCallback callback,
                                  const gfx::Insets& padding)
     : views::LabelButton(std::move(callback), std::move(text)) {
   label()->SetFontList(Font(14, weight));
+  // On the library's translucent layers.
+  SetTextSubpixelRenderingEnabled(false);
   SetEnabledTextColors(kColorKoanLibraryForeground);
   SetBorder(views::CreateEmptyBorder(padding));
   SetImageLabelSpacing(8);

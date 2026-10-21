@@ -113,8 +113,7 @@ std::u16string FormatVisit(base::Time time) {
 
 // "Today", "Yesterday", "3 days ago" within a week, then the date.
 std::u16string FormatDay(base::Time day, base::Time today) {
-  const int days_ago =
-      std::lround((today - day) / base::Days(1));
+  const int days_ago = std::lround((today - day) / base::Days(1));
   if (days_ago <= 1) {
     const std::u16string relative = ui::TimeFormat::RelativeDate(day, today);
     if (!relative.empty()) {

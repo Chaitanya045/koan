@@ -78,7 +78,9 @@ LibraryLabel::LibraryLabel(std::u16string text,
   SetAutoColorReadabilityEnabled(false);
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
   SetElideBehavior(gfx::ELIDE_TAIL);
-  SetBackgroundColor(kColorKoanLibraryBackground);
+  // The library draws on translucent layers, where subpixel text renders
+  // wrongly.
+  SetSubpixelRenderingEnabled(false);
 }
 
 BEGIN_METADATA(LibraryLabel)
