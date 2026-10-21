@@ -94,9 +94,8 @@ Like Zen's, the URL bar opens where you are and floats once you type:
 clicking the pill (or Ctrl+L) edits the address right in the pill; the
 first keystroke lifts it into a card centred over the window (two thirds
 of its width, at most 750 px, larger text, a soft shadow over the page)
-with the suggestions under it. The pill is empty meanwhile. Esc (twice
-when suggestions are showing), a click outside the card or opening a
-result closes it. In compact mode, with the sidebar hidden, it floats
+with the suggestions under it. The pill is empty meanwhile. Esc, a click
+outside the card or opening a result (or running an action) closes it. In compact mode, with the sidebar hidden, it floats
 right away.
 
 | Editing in the pill | Floating once you type | Ctrl+T |
