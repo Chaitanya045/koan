@@ -6,10 +6,10 @@
 // Expects Koan running off-screen with UI DevTools on UI_PORT and the
 // DevTools protocol on CDP_PORT (run.sh starts it, with the profile seeded by
 // scripts/e2e/prefs/palette.json: "New Split View" was passed over five
-// times, and Ctrl+T opens a tab, not the URL bar). Text is typed into the omnibox as character events; Tab, Enter,
-// arrows and Esc go to the browser window's widget, so they take the same
-// path as real keys (pre-target handlers, focus manager, focused view). The
-// rows are read from Chromium's WebUI popup. At the end Koan is restarted on
+// times; Ctrl+T opens a tab). Text is typed into the omnibox as character
+// events; Tab, Enter, arrows and Esc go to the browser window's widget, so
+// they take the same path as real keys (pre-target handlers, focus manager,
+// focused view). The rows are read from Chromium's WebUI popup. At the end Koan is restarted on
 // the same profile to check the opt-outs. Prints one PASS/FAIL line per
 // check; exits non-zero on any failure.
 import { spawn } from 'node:child_process';

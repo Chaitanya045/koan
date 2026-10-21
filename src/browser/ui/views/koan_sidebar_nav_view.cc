@@ -39,6 +39,7 @@
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -253,6 +254,8 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   url_label_->SetFontList(
       url_label_->font_list().DeriveWithWeight(gfx::Font::Weight::MEDIUM));
   url_label_->SetCanProcessEventsWithinSubtree(false);
+  // The pill is named after the site already.
+  url_label_->GetViewAccessibility().SetIsIgnored(true);
   pill_layout->SetFlexForView(url_label_, 1);
 
   const auto pill_button = [&](views::Button::PressedCallback callback,
@@ -271,7 +274,11 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
                                       base::Unretained(browser_view_.get()),
                                       /*markdown=*/false),
                   vector_icons::kContentCopyIcon, u"Copy URL");
-  copy_button_->SetVisible(false);
+  // Like Zen's (opacity 0 until hovered), it keeps its place, so Tab and
+  // screen readers reach it.
+  copy_button_->SetPaintToLayer();
+  copy_button_->layer()->SetFillsBoundsOpaquely(false);
+  copy_button_observation_.Observe(copy_button_.get());
   // Zen's site panel button (#zen-site-data-icon-button): Chromium's page
   // info for the site (security, permissions, cookies, site settings).
   site_button_ =
@@ -289,7 +296,20 @@ KoanSidebarNavView::~KoanSidebarNavView() {
 
 void KoanSidebarNavView::OnPillHovered(bool hovered) {
   hovered_ = hovered;
-  UpdateUrl();
+  UpdateCopyButtonOpacity();
+}
+
+void KoanSidebarNavView::OnViewFocused(views::View* observed_view) {
+  UpdateCopyButtonOpacity();
+}
+
+void KoanSidebarNavView::OnViewBlurred(views::View* observed_view) {
+  UpdateCopyButtonOpacity();
+}
+
+void KoanSidebarNavView::UpdateCopyButtonOpacity() {
+  copy_button_->layer()->SetOpacity(
+      hovered_ || copy_button_->HasFocus() ? 1.0f : 0.0f);
 }
 
 void KoanSidebarNavView::SetEditing(bool editing) {
@@ -331,16 +351,17 @@ void KoanSidebarNavView::UpdateUrl() {
   url_label_->SetText(editing_       ? std::u16string()
                       : text.empty() ? u"Search..."
                                      : text);
-  // The pill reads as the site it shows (the label isn't exposed itself).
+  // The pill reads as the site it shows.
   url_pill_->GetViewAccessibility().SetName(
       text.empty() ? u"Search or enter address" : text);
   // Like Zen, the buttons are only there for a page (not an empty tab).
   const bool has_page = !editing_ && !text.empty();
   copy_button_->SetVisible(
-      has_page && hovered_ &&
+      has_page &&
       browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs()->GetBoolean(
           prefs::kUrlBarShowCopyUrl));
   site_button_->SetVisible(has_page);
+  UpdateCopyButtonOpacity();
 }
 
 void KoanSidebarNavView::FocusOmnibox() {
