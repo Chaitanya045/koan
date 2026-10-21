@@ -16,18 +16,18 @@ Chrome.
 | Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
 | Show the sidebar in compact mode | Ctrl+Alt+S | |
 | Next / previous workspace | Ctrl+Alt+Right / Ctrl+Alt+Left | |
-| Split view: side by side | Ctrl+Alt+V | |
-| Split view: stacked | Ctrl+Alt+H | |
-| Split view: grid (two panes in Chromium) | Ctrl+Alt+G | |
-| Unsplit | Ctrl+Alt+U | |
-| New split with an empty tab | Ctrl+Shift+* | |
+| Split view: side by side | Ctrl+Alt+V (⌘⌥V) | |
+| Split view: stacked | Ctrl+Alt+H (⌘⌥H) | macOS: Hide Others |
+| Split view: grid (two panes in Chromium: side by side) | Ctrl+Alt+G (⌘⌥G) | |
+| Unsplit | Ctrl+Alt+U (⌘⌥U) | macOS: View Source (still in the View menu) |
+| New split with an empty tab | Ctrl+Shift+* (⌘⇧*) | |
 | Copy the page's URL | Ctrl+Shift+C | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
 | Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
 | Close all unpinned tabs (in the workspace; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
-| Expand Glance to a tab | Ctrl+O while Glance is open | Open file (still, otherwise) |
-| Glance a link | Alt+click | (Alt+click downloaded the link) |
-| Close Glance | Esc, or click the dimmed page | |
+| Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still, otherwise) |
+| Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
+| Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
 | Save page | Ctrl+Alt+Shift+S | |
 | Library (history) | Alt+Shift+L | |
 | Inspect element | Ctrl+Shift+L | |
@@ -114,11 +114,55 @@ move the pointer to the top edge to slide it down.
 ## Glance
 
 Alt+click a link (or Alt+Enter on a focused link) to preview it in a card
-over the page, as in Zen. Shift+click opens a new window, as in Zen and
-Firefox. Same-site links with a `download` attribute still download;
-cross-site ones open in Glance (Chromium ignores `download` across sites,
-so there Alt+click was the only way to download). Beside the card:
-close, **expand to a tab**, or **open in split view** with the current tab.
+over the page, as in Zen. The card grows out of the click and shrinks back
+into it when it closes; the page behind fades into the window background.
+**Open Link in Glance** in the link context menu does the same. An Alt+click
+on a link in the Glance page shows that link in the card. Shift+click opens
+a new window, as in Zen and Firefox. Same-site links with a `download`
+attribute still download.
+
+Beside the card: close (Esc, or a click on the faded page), **Expand
+Glance** to a tab (Ctrl+O; ⌘O on macOS) and **Split Glance** with the
+current tab. As in Zen, while you type in the Glance page the first Esc
+only turns the close button red ("Press Esc again to close"); a second Esc
+within 3 seconds closes. A page that asks before you leave it ("Leave
+site?") gets to ask.
+
+On macOS, as in Zen (whose default trigger is `alt` on every platform):
+Alt is the Option key, so ⌥+click opens Glance, Meta is ⌘, and the split
+view shortcuts are ⌘⌥V / ⌘⌥H / ⌘⌥G / ⌘⌥U, which take over View Source
+(⌘⌥U) and Hide Others (⌘⌥H) from the keyboard. Ctrl+click is a right-click
+on macOS, so it isn't offered as a trigger there. On macOS the card
+appears and goes without growing and shrinking (not verified on a Mac
+yet).
+
+**Settings** (Koan's settings, Look and Feel → Glance; Zen's
+`zen.glance.enabled` and `zen.glance.activation-method`): **Enable Glance**,
+and **Trigger method**: Ctrl + Click, Alt + Click (the default), Shift +
+Click or Meta (Command) + Click. The trigger method reaches pages opened
+after the change (pages already open, and new ones that share their
+renderer, keep the old method until Koan restarts). With another trigger
+method, a click Glance can't open (not a web link, an app window) does
+what that modifier does without Glance (Ctrl: a background tab; Shift: a
+window). The "Koan Glance" flag in `chrome://flags` removes Glance
+altogether.
+
+## Split view
+
+Besides the shortcuts above:
+
+- Tab context menu: **Add Split View...** splits the tab with the current
+  one (or with a new tab, for the current tab), **Join 2 Tabs** splits a
+  two-tab selection, **Split Out Tab** separates a split (Zen's labels).
+  Upstream's **Arrange split view** and **Move tab into split view** stay.
+- Link context menu: **Split Link to New Tab** opens the link beside the
+  page; in a split, "Open link in left/right view" loads it in the other
+  view.
+- Drag a tab onto the left or right edge of the page to split with it
+  (Chromium's split view drop targets).
+- Chromium's split views have two panes (Zen's take four, in a grid): a
+  third panel (Split Glance over a split, a split shortcut with more tabs
+  selected) shows Zen's "Can't add more panels to the split view!" toast.
 
 ## Settings
 

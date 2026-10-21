@@ -39,6 +39,7 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/common/koan_url_constants.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -209,7 +210,9 @@ bool KoanShortcutController::Run(Action action) {
       return CloseUnpinnedTabs();
     case Action::kGlanceExpand:
       // Only while Glance is open; otherwise Ctrl+O stays "Open file".
-      if (!controller_->glance()->is_open()) {
+      // (Not while it shrinks away: the key goes to the page then.)
+      if (!controller_->glance()->is_open() ||
+          controller_->glance()->is_closing()) {
         return false;
       }
       controller_->glance()->PostAction(&KoanGlanceController::ExpandToTab);
@@ -310,7 +313,17 @@ bool KoanShortcutController::Split(int layout_index) {
   }
   tabs::TabInterface* active_tab = model->GetTabAtIndex(active);
   if (active_tab->IsSplit()) {
-    // Already split: switch the layout, like Zen.
+    // Zen: with another (unsplit) tab selected this would join a third
+    // panel into the split view, which Chromium's two panes can't take;
+    // Zen shows its split-view limit toast then. With nothing extra
+    // selected, the layout is switched instead.
+    for (int i = 0; i < model->count(); ++i) {
+      if (i != active && model->IsTabSelected(i) &&
+          !model->GetTabAtIndex(i)->IsSplit()) {
+        ShowSplitLimitToast(browser_view_);
+        return true;
+      }
+    }
     model->UpdateSplitLayout(*active_tab->GetSplit(), layout);
     return true;
   }
@@ -321,8 +334,12 @@ bool KoanShortcutController::Split(int layout_index) {
     if (i != active && model->IsTabSelected(i) &&
         !model->GetTabAtIndex(i)->IsSplit()) {
       others.push_back(i);
-      break;
     }
+  }
+  if (others.size() > 1) {
+    // Zen splits up to four tabs; Chromium's split view takes two.
+    ShowSplitLimitToast(browser_view_);
+    return true;
   }
   if (others.empty() && active + 1 < model->count() &&
       !model->GetTabAtIndex(active + 1)->IsSplit() &&

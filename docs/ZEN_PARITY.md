@@ -64,13 +64,21 @@ point of Koan.
 | Zen | Koan | Notes |
 |---|---|---|
 | Alt+click a link opens Glance | Same | |
-| Close with Esc or a click outside | Same | |
-| Expand to a tab (Ctrl+O) | Same | |
-| Open Glance in split view | Same | |
-| Glance grows from the clicked link | Different | Koan's card fades and scales in from the centre. |
-| Split view side by side / stacked | Same | Ctrl+Alt+V / Ctrl+Alt+H. |
-| Split grid of 3–4 tabs (Ctrl+Alt+G) | Different | Chromium's split view has two panes; Ctrl+Alt+G splits side by side. |
-| Drag a tab onto the page to split | Same | Upstream Chromium. |
+| Glance on/off | Same | "Enable Glance" in Koan's settings (Glance group); the "Koan Glance" flag removes it altogether. |
+| Trigger method Alt / Ctrl / Shift / Meta + click | Different | Same choices (no Ctrl on macOS, where Ctrl+click is a right-click; Alt = Option, Zen's default everywhere), but a change only reaches pages in renderer processes started afterwards; Zen applies it at once. |
+| "Open Link in Glance" in the link context menu | Same | |
+| Card grows from the clicked link, shrinks back on close | Similar | Zen's 350 ms, similar easing (no overshoot), card size (80% × full height) and fade timings. Zen grows a snapshot of the link's own rect along a small arc; Koan grows a small card straight out of the click (the browser doesn't know the link's rect). |
+| Page behind fades to 30% and shrinks to 97% | Similar | Same fade (the window background laid over the page at 70%); no shrink, which would show the page's square container behind its rounded corners. |
+| Glance on a link in the Glance page | Different | Zen 1.23 ignores it; Koan shows the link in the card (as #37 asks). |
+| Close with Esc or a click outside | Same | beforeunload can keep the page; while typing, the first Esc turns the close button red and a second closes (Zen asks whenever anything in the page has focus, and labels the button "Confirm"). macOS: no grow/shrink (the page is an NSView); not verified on a Mac. |
+| Expand to a tab (Ctrl+O), split Glance | Same | Zen's button column: 34 px round buttons, 12 px apart, beside the card. No expand animation. |
+| Split view side by side / stacked | Same | Ctrl+Alt+V / Ctrl+Alt+H (⌘⌥ on macOS, Zen's accel). |
+| Split grid of 3–4 tabs (Ctrl+Alt+G) | Missing | Chromium's split view has exactly two panes: `TabStripModel::AddToNewSplit` CHECKs one or two tabs, `SplitTabLayout` is side by side or stacked, `MultiContentsView` holds two contents. Ctrl+Alt+G splits side by side. |
+| Tab context menu "Add Split View… / Join N Tabs / Split Out Tab" | Same | Zen's labels on upstream's split item; "Join N Tabs" is disabled past two tabs. Upstream's "Arrange split view" and "Move tab into split view" submenus stay. |
+| "Split Link to New Tab" in the link context menu | Same | Upstream's item, so it sits before "Open link in incognito window" (Zen: after the private window item, next to "Open Link in Glance"). In a split, upstream's "Open link in left/right view" instead (Zen would add a third panel). |
+| Drag a tab onto the page edge to split | Same | Upstream's split view drop targets (on by default). |
+| Split resize handles | Similar | Both: a gap between the panes with a resize cursor; upstream shows a small handle on hover. No Zen hover header (rearrange / unsplit buttons). |
+| Toast when the split limit is reached | Same | Zen's "Can't add more panels to the split view!" when a third panel would join (Koan's limit is two). |
 | Unsplit (Ctrl+Alt+U) | Same | |
 
 ## Keyboard and settings
@@ -82,7 +90,7 @@ point of Koan.
 | Shortcut editor in Settings | Partial | `chrome://koan-settings` > Keyboard Shortcuts: Zen's groups and labels, Esc saves, Backspace clears, conflicts refused, Reset to Default (confirmed; Zen also restarts). It lists Koan's 26 shortcuts (Zen's own and the Firefox ones Koan implements), not Zen's full list: Chromium's other shortcuts aren't editable, since Koan only adds keys on top of Chromium's. A key needs Ctrl, Alt or Win, or is a function key (Zen accepts any key; Koan's keys also work in the address bar, where a bare letter would break typing). |
 | Zen settings pages | Partial | `chrome://koan-settings` (Ctrl+,): Look and Feel, Tab Management, Keyboard Shortcuts, with Zen's labels; Chromium's own settings are linked from its sidebar. Only the settings Koan has are shown (see below): 7 today, against Zen's few dozen. Comparison: `screenshots/settings-zen-vs-koan.png` (Zen left, Koan right). |
 | Settings: Only Sidebar / Sidebar and Top Toolbar | Same | Look and Feel > Browser Layout. |
-| Settings: Collapsed Sidebar layout, compact mode variants, dark theme styles, window dragging, Glance, URL bar behaviour | Missing | Added to the settings page as each feature lands (#35, #41, #44, #37, #36). |
+| Settings: Collapsed Sidebar layout, compact mode variants, dark theme styles, window dragging, URL bar behaviour | Missing | Added to the settings page as each feature lands (#35, #41, #44, #36). Glance's are there (#37). |
 | Settings: Vertical Tabs group (new tab button on the tab list / at the top, how to expand tabs) | Missing | The group is declared; no Koan setting yet. |
 | Settings: pinned tab close behaviour, restore pinned tabs to their URL, container-specific Essentials | Missing | Pinned tabs / Essentials (#38); Chromium has no containers. |
 | Switch to the most recently used tab on close | Same | Tab Management, on by default like Zen. A tab's opener still comes first, as in Zen (Firefox's owner rule). Only tabs you have looked at count: one opened in the background and never shown doesn't. In a workspace it picks among the workspace's tabs and the Essentials; collapsed groups are skipped. |

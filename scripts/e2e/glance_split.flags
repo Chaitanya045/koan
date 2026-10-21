@@ -1,0 +1,2 @@
+# Frame dumps, to check what the page looks like (scripts/e2e/run.sh).
+--ozone-dump-file={dump}

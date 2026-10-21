@@ -8,6 +8,7 @@ source_set("features") {
   sources = [
     "koan_features.cc",
     "koan_features.h",
+    "koan_switches.h",
   ]
   public_deps = [ "//base" ]
 }
@@ -64,6 +65,23 @@ source_set("tab_hooks") {
   ]
   public_deps = [ "//base" ]
   deps = [
+    ":prefs",
+    "//components/prefs",
+    "//components/user_prefs",
+    "//content/public/browser",
+  ]
+}
+
+# Koan switches for renderer processes, appended from
+# ChromeContentBrowserClient::AppendExtraCommandLineSwitches().
+source_set("renderer_switches") {
+  sources = [
+    "koan_renderer_switches.cc",
+    "koan_renderer_switches.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":features",
     ":prefs",
     "//components/prefs",
     "//components/user_prefs",

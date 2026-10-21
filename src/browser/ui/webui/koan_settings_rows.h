@@ -75,8 +75,9 @@ struct Row {
   // performance settings) rather than a profile pref. `depends_on` and
   // `note_pref` are always profile prefs.
   bool local_state = false;
-  // A note shown under the row while its pref and `note_pref` (a boolean
-  // pref, e.g. one of Chromium's) are both true, like Zen's warnings.
+  // A note shown under the row, like Zen's warnings. With `note_pref` (a
+  // boolean pref, e.g. one of Chromium's), only while the row's pref and
+  // `note_pref` are both true; without, always.
   const char* note = nullptr;
   const char* note_pref = nullptr;
 };

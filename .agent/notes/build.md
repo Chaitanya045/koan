@@ -108,3 +108,16 @@
   a theme applies, e.g. a workspace tint). The frame is recreated on theme
   changes.
 
+- **Off-screen http loads hang after a reboot** (#37): without
+  `--password-store=basic` the network service asks gnome-keyring (D-Bus)
+  for the cookie encryption key, and while the login keyring is locked every
+  http(s) navigation hangs (data:/file:// still load). Symptoms: pages never
+  commit, copy-URL shortcuts copy "", keys sent to a Glance page get lost.
+  `KOAN_HEADLESS_UI_FLAGS` (scripts/koan_test_env.sh) now passes it.
+- **Context menus off-screen:** Ozone/headless has a 1x1 screen unless
+  `--ozone-override-screen-size` is given, so menus were clamped to nothing
+  (UI DevTools showed MenuItemViews 0px wide). Also in
+  `KOAN_HEADLESS_UI_FLAGS`. Menu items are clicked by sending the mouse
+  event to the menu's `MenuHostRootView` at the item's position (the menu
+  controller only takes events through its root view); a tab's context menu
+  likewise opens from a right-click sent to the browser's root view.

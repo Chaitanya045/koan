@@ -18,7 +18,7 @@ BASE_DECLARE_FEATURE(kKoanCompactMode);
 // Workspaces (tab groups shown one at a time) with a switcher in the sidebar.
 BASE_DECLARE_FEATURE(kKoanWorkspaces);
 
-// Glance: Alt+click a link to preview it in a floating card, like Zen.
+// Glance: a modifier+click previews a link in a floating card, like Zen.
 BASE_DECLARE_FEATURE(kKoanGlance);
 
 // Restored background tabs (session restore, reopened windows) load when
@@ -31,6 +31,12 @@ bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
 bool IsGlanceEnabled();
 bool IsRestoreTabsOnDemandEnabled();
+
+// Whether a click with these modifiers opens Glance: Glance is on and the
+// trigger modifier (koan_switches.h, Alt by default) is the only one held. Read
+// by the blink navigation-policy hook (renderer process only, see kKoanGlance's
+// users).
+bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta);
 
 }  // namespace koan::features
 

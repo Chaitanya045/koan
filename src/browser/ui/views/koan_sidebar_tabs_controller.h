@@ -13,7 +13,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
@@ -24,14 +23,9 @@
 
 class BrowserView;
 
-namespace views {
-class Widget;
-}  // namespace views
-
 namespace koan {
 
 class KoanSidebarTabRowsView;
-class KoanToastView;
 
 // Zen's sidebar tab list extras for one window: the "+ New Tab" row above the
 // unpinned tabs, the separator above them with a "Clear" button (closes the
@@ -87,9 +81,6 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   void ClearUnpinnedTabs();
   // "Close all unpinned tabs" with the user's shortcut for it.
   std::u16string GetClearTooltip() const;
-  void OnToastHovered(bool hovered);
-  void HideToast();
-  void CloseToast();
 
   const raw_ptr<BrowserView> browser_view_;
   bool started_ = false;
@@ -100,12 +91,6 @@ class KoanSidebarTabsController : public TabStripModelObserver,
       this};
   base::CallbackListSubscription mode_subscription_;
   base::CallbackListSubscription collapse_subscription_;
-
-  std::unique_ptr<views::Widget> toast_widget_;
-  raw_ptr<KoanToastView> toast_view_ = nullptr;
-  // Hides the toast, then closes it once it has faded out.
-  base::OneShotTimer toast_timer_;
-  bool toast_hiding_ = false;
 
   base::WeakPtrFactory<KoanSidebarTabsController> weak_factory_{this};
 };

@@ -5,6 +5,7 @@
 #include "koan/browser/ui/webui/koan_settings_rows.h"
 
 #include "base/feature_list.h"
+#include "build/build_config.h"
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "koan/browser/koan_features.h"
@@ -67,6 +68,17 @@ constexpr Option kLayouts[] = {
     {"false", "Sidebar and Top Toolbar", "multiple"},
 };
 
+// Zen's Glance trigger methods (zen-glance-trigger-*), in Zen's order. On
+// macOS Ctrl+click is a right-click, so it can't trigger anything.
+constexpr Option kGlanceTriggers[] = {
+#if !BUILDFLAG(IS_MAC)
+    {"ctrl", "Ctrl + Click"},
+#endif
+    {"alt", "Alt + Click"},
+    {"shift", "Shift + Click"},
+    {"meta", "Meta (Command) + Click"},
+};
+
 constexpr Row kRows[] = {
     // Look and Feel.
     {.group = "layout",
@@ -80,6 +92,21 @@ constexpr Row kRows[] = {
      .pref = prefs::kCompactModeEnabled,
      .label = "Enable Koan's compact mode",
      .is_available = features::IsCompactModeEnabled},
+    {.group = "glance",
+     .control = Control::kCheckbox,
+     .pref = prefs::kGlanceEnabled,
+     .label = "Enable Glance",
+     .is_available = features::IsGlanceEnabled},
+    {.group = "glance",
+     .control = Control::kMenu,
+     .pref = prefs::kGlanceActivationMethod,
+     .label = "Trigger method",
+     .options = kGlanceTriggers,
+     .depends_on = prefs::kGlanceEnabled,
+     .is_available = features::IsGlanceEnabled,
+     // Blink reads it when a page's renderer process starts.
+     .note = "Applies to pages opened after the change; reload others in a "
+             "new tab or restart Koan"},
     // Tab Management.
     {.group = "workspaces",
      .control = Control::kCheckbox,

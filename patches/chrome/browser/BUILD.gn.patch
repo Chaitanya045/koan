@@ -1,18 +1,19 @@
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 57276203758798e46dde192a11816f902d247200..56d7b5a2265980263f247bdb2af56bccfa822158 100644
+index 57276203758798e46dde192a11816f902d247200..333a487aa35b14587529c16bf1305d8af7526842 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1430,6 +1430,9 @@ source_set("core") {
+@@ -1430,6 +1430,10 @@ source_set("core") {
      "//components/webui/chrome_urls",
      "//device/base",
      "//device/gamepad/public/cpp:switches",
 +    "//koan/browser:feature_overrides",
 +    "//koan/browser:flag_entries",
++    "//koan/browser:renderer_switches",
 +    "//koan/common:branding",
      "//media/capture:capture_switches",
      "//media/midi",
      "//media/webrtc",
-@@ -4647,6 +4650,7 @@ source_set("browser") {
+@@ -4647,6 +4651,7 @@ source_set("browser") {
        "//components/services/app_service",
        "//components/ui_devtools/views",
        "//components/user_education/views",

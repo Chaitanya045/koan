@@ -43,6 +43,16 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanToastForeground,
   kColorKoanToastKeyBackground,
 
+  // Glance (koan_glance_controller.cc): the window background laid over the
+  // page behind the card, the card's shadow, and the buttons beside it
+  // (normal, and the close button asking to confirm).
+  kColorKoanGlanceBackdrop,
+  kColorKoanGlanceCardShadow,
+  kColorKoanGlanceButton,
+  kColorKoanGlanceButtonIcon,
+  kColorKoanGlanceButtonConfirm,
+  kColorKoanGlanceButtonConfirmIcon,
+
   kKoanColorsEnd,
 };
 
