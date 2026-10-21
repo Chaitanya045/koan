@@ -36,11 +36,14 @@
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
+#include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_icons.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "koan/browser/ui/views/koan_library_view.h"
+#include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -75,18 +78,19 @@ namespace koan {
 
 namespace {
 
-using library::CreateTintBackground;
+using library::CreateStateBackground;
 using library::Font;
-using library::TintLabel;
+using library::LibraryLabel;
 
 // Zen's .zen-library-spaces: 242px cards 24px apart, padding 45px 25px.
 constexpr int kCardWidth = 242;
 constexpr int kCardGap = 24;
 constexpr int kPaddingX = 25;
 constexpr int kPaddingY = 45;
-constexpr int kCardRadius = 14;
 // The add button after the last card.
 constexpr int kPlusSize = 30;
+constexpr float kPlusArm = 5.f;
+constexpr float kPlusStroke = 1.5f;
 // Tabs and titles change often while pages load; redraw at most this often.
 constexpr base::TimeDelta kRebuildDelay = base::Milliseconds(150);
 // Cards slide aside while one is dragged (translate 0.2s ease).
@@ -129,9 +133,9 @@ class SpaceTab : public views::Button {
     auto* icon = AddChildView(std::make_unique<views::ImageView>(favicon));
     icon->SetImageSize(gfx::Size(gfx::kFaviconSize, gfx::kFaviconSize));
     auto* label = AddChildView(
-        std::make_unique<TintLabel>(title, 13, gfx::Font::Weight::NORMAL));
+        std::make_unique<LibraryLabel>(title, 13, gfx::Font::Weight::NORMAL));
     layout->SetFlexForView(label, 1);
-    SetPreferredSize(gfx::Size(0, 36));
+    SetPreferredSize(gfx::Size(0, SidebarRowHeight()));
     SetTooltipText(title);
     GetViewAccessibility().SetName(title);
   }
@@ -139,17 +143,19 @@ class SpaceTab : public views::Button {
   // views::Button:
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    std::optional<SkColor> color;
+    // Like the sidebar's tab rows.
+    std::optional<ui::ColorId> color;
     if (active_) {
-      color = provider->GetColor(kColorTabBackgroundActiveFrameActive);
+      color = kColorKoanSidebarTabSelected;
     } else if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
-      color = library::TextColor(provider, 0.06f);
+      color = kColorKoanSidebarTabHovered;
     }
     if (color) {
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
-      flags.setColor(*color);
-      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), 8, flags);
+      flags.setColor(provider->GetColor(*color));
+      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()),
+                            SidebarRowCornerRadius(), flags);
     }
   }
 
@@ -171,7 +177,7 @@ class RenameField : public views::Textfield, public views::TextfieldController {
       : done_(std::move(done)) {
     SetText(name);
     SetFontList(Font(13, gfx::Font::Weight::MEDIUM));
-    SetTextColorId(library::TextColorId());
+    SetTextColorId(kColorKoanLibraryForeground);
     SetBackgroundEnabled(false);
     SetBorder(views::NullBorder());
     GetViewAccessibility().SetName(u"Space name");
@@ -250,23 +256,22 @@ class PlusButton : public views::Button {
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    const SkColor surface = provider->GetColor(kColorToolbar);
     const bool hovered =
         GetState() == STATE_HOVERED || GetState() == STATE_PRESSED;
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(color_utils::AlphaBlend(library::SectionIconStroke(provider),
-                                           surface, hovered ? 0.7f : 0.5f));
+    flags.setColor(provider->GetColor(hovered ? kColorKoanLibraryAddSpaceHovered
+                                              : kColorKoanLibraryAddSpace));
     const gfx::PointF center = gfx::RectF(GetLocalBounds()).CenterPoint();
     canvas->DrawCircle(center, kPlusSize / 2.f, flags);
-    flags.setColor(SK_ColorWHITE);
-    flags.setStrokeWidth(1.5f);
+    flags.setColor(provider->GetColor(kColorKoanLibraryAddSpaceForeground));
+    flags.setStrokeWidth(kPlusStroke);
     flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
-    canvas->DrawLine(gfx::PointF(center.x() - 5, center.y()),
-                     gfx::PointF(center.x() + 5, center.y()), flags);
-    canvas->DrawLine(gfx::PointF(center.x(), center.y() - 5),
-                     gfx::PointF(center.x(), center.y() + 5), flags);
+    canvas->DrawLine(gfx::PointF(center.x() - kPlusArm, center.y()),
+                     gfx::PointF(center.x() + kPlusArm, center.y()), flags);
+    canvas->DrawLine(gfx::PointF(center.x(), center.y() - kPlusArm),
+                     gfx::PointF(center.x(), center.y() + kPlusArm), flags);
   }
 };
 
@@ -313,22 +318,23 @@ class SpaceCard : public views::View {
   // views::View:
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    // The window's surface tinted with the space's colour, standing in for
-    // Zen's per-space gradient.
+    // The card tinted with the space's colour, standing in for Zen's
+    // per-space gradient (the theme is Koan's tint colour until #41).
     const SkColor tint =
         provider->GetColor(GetTabGroupTabStripColorId(color_, true));
-    const SkColor base = provider->GetColor(kColorToolbar);
+    const SkColor base = provider->GetColor(kColorKoanLibrarySpaceCard);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(color_utils::AlphaBlend(tint, base, 0.22f));
+    flags.setColor(
+        color_utils::AlphaBlend(tint, base, library::kSpaceCardTint));
     const gfx::RectF bounds(GetLocalBounds());
-    canvas->DrawRoundRect(bounds, kCardRadius, flags);
+    canvas->DrawRoundRect(bounds, library::kSpaceCardRadius, flags);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(1);
-    flags.setColor(library::TextColor(provider, 0.08f));
+    flags.setColor(provider->GetColor(kColorKoanLibrarySpaceCardBorder));
     gfx::RectF outline = bounds;
     outline.Inset(0.5f);
-    canvas->DrawRoundRect(outline, kCardRadius, flags);
+    canvas->DrawRoundRect(outline, library::kSpaceCardRadius, flags);
   }
 
  private:
@@ -593,16 +599,20 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
                             base::Unretained(this), id),
         has_icon ? icon : std::u16string(), Font(15));
     icon_button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-    icon_button->SetEnabledTextColors(library::TextColorId());
+    icon_button->SetEnabledTextColors(kColorKoanLibraryForeground);
     icon_button->SetBorder(views::NullBorder());
     icon_button->SetMinSize(gfx::Size(20, 20));
     icon_button->SetMaxSize(gfx::Size(24, 24));
     icon_button->SetTooltipText(u"Change icon");
     icon_button->GetViewAccessibility().SetName(u"Change icon");
     // Without an icon, a dashed outline marks where one can go.
-    icon_button->SetBackground(has_icon
-                                   ? CreateTintBackground(0.f, 6, 0.14f)
-                                   : CreateTintBackground(0.08f, 6, 0.14f));
+    icon_button->SetBackground(
+        has_icon
+            ? CreateStateBackground(std::nullopt, kColorKoanLibraryPillHovered,
+                                    library::kSmallRadius)
+            : CreateStateBackground(kColorKoanLibrarySpaceIconEmpty,
+                                    kColorKoanLibraryPillHovered,
+                                    library::kSmallRadius));
     header->AddChildView(std::move(icon_button));
 
     if (renaming_group_ == id) {
@@ -616,7 +626,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
           base::BindRepeating(&KoanLibrarySpacesSection::StartRename,
                               base::Unretained(this), id),
           name, Font(13, gfx::Font::Weight::MEDIUM));
-      name_button->SetEnabledTextColors(library::TextColorId());
+      name_button->SetEnabledTextColors(kColorKoanLibraryForeground);
       name_button->SetBorder(views::NullBorder());
       name_button->SetTooltipText(u"Rename space");
       name_button->SetElideBehavior(gfx::ELIDE_TAIL);
@@ -624,9 +634,8 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
       header->SetFlexForView(added, 1);
     }
 
-    auto theme =
-        library::CreateIconButton(views::Button::PressedCallback(),
-                                  kBrushFilledIcon, u"Change theme", 16, 6, 6);
+    auto theme = library::CreateIconButton(views::Button::PressedCallback(),
+                                           kBrushFilledIcon, u"Change theme");
     views::Button* theme_button = theme.get();
     theme->SetCallback(base::BindRepeating(
         &KoanLibrarySpacesSection::ShowThemeMenu, base::Unretained(this), id,
@@ -657,7 +666,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
       }
       if (favicon.IsEmpty()) {
         favicon = ui::ImageModel::FromVectorIcon(vector_icons::kGlobeIcon,
-                                                 library::TextColorId(),
+                                                 kColorKoanLibraryForeground,
                                                  gfx::kFaviconSize);
       }
       tabs->AddChildView(std::make_unique<SpaceTab>(
@@ -675,9 +684,9 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     footer->AddChildView(std::make_unique<MoveHandle>(this, index));
     auto* spacer = footer->AddChildView(std::make_unique<views::View>());
     footer->SetFlexForView(spacer, 1);
-    auto more = library::CreateIconButton(views::Button::PressedCallback(),
-                                          views::kMoreHorizIcon,
-                                          u"More options", 16, 6, 6);
+    auto more =
+        library::CreateIconButton(views::Button::PressedCallback(),
+                                  views::kMoreHorizIcon, u"More options");
     views::Button* more_button = more.get();
     more->SetCallback(base::BindRepeating(
         &KoanLibrarySpacesSection::ShowSpaceMenu, base::Unretained(this), id,
@@ -837,7 +846,8 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
       button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
       button->SetPreferredSize(gfx::Size(32, 32));
       button->SetBorder(views::NullBorder());
-      button->SetBackground(CreateTintBackground(0.f, 6, 0.12f));
+      button->SetBackground(CreateStateBackground(
+          std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
       row->AddChildView(std::move(button));
     }
     auto none = std::make_unique<views::LabelButton>(
@@ -975,11 +985,16 @@ MoveHandle::MoveHandle(KoanLibrarySpacesSection* section, int index)
     : views::ImageButton(views::Button::PressedCallback()),
       section_(section),
       index_(index) {
-  SetImageModel(STATE_NORMAL, library::MoveGlyph(16));
+  SetImageModel(STATE_NORMAL, ui::ImageModel::FromVectorIcon(
+                                  kMoveIcon, kColorKoanLibraryForeground,
+                                  library::kSmallButtonIconSize));
   SetImageHorizontalAlignment(ALIGN_CENTER);
   SetImageVerticalAlignment(ALIGN_MIDDLE);
-  SetPreferredSize(gfx::Size(28, 28));
-  SetBackground(CreateTintBackground(0.f, 6, library::kPillHoverAlpha));
+  constexpr int kSize =
+      library::kSmallButtonIconSize + 2 * library::kSmallButtonPadding;
+  SetPreferredSize(gfx::Size(kSize, kSize));
+  SetBackground(CreateStateBackground(
+      std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
   SetTooltipText(u"Drag to reorder");
   GetViewAccessibility().SetName(u"Drag to reorder");
 }

@@ -6,10 +6,10 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_LIBRARY_UI_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
-#include "base/memory/raw_ptr.h"
-#include "third_party/skia/include/core/SkColor.h"
+#include "koan/browser/ui/color/koan_color_id.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/font.h"
@@ -18,14 +18,9 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/view.h"
 
 namespace gfx {
 struct VectorIcon;
-}
-
-namespace ui {
-class ColorProvider;
 }
 
 namespace koan {
@@ -35,8 +30,9 @@ enum class LibrarySection { kDownloads, kSpaces, kHistory };
 
 }  // namespace koan
 
-// Building blocks shared by the Library's sections, sized like Zen's
-// zen-library.css.
+// Sizes of the Library (Zen's zen-library.css), in one place, and building
+// blocks shared by its sections. Colours are in
+// koan/browser/ui/color/koan_color_id.h.
 namespace koan::library {
 
 // The side column with the section tabs, and the width of a list section
@@ -44,53 +40,65 @@ namespace koan::library {
 inline constexpr int kSideWidth = 110;
 inline constexpr int kSectionWidth = 308;
 inline constexpr int kMinWidth = kSideWidth + kSectionWidth;
-// --zen-library-radius.
-inline constexpr int kRadius = 12;
-// Zen's pills: color-mix(currentColor 7%), 12% when hovered.
-inline constexpr float kPillAlpha = 0.07f;
-inline constexpr float kPillHoverAlpha = 0.12f;
 
-// The colour the library draws in (Zen's currentColor): the sidebar's text.
-ui::ColorId TextColorId();
-// The text colour at `alpha`, as Zen's color-mix(currentColor N%).
-SkColor TextColor(const ui::ColorProvider* provider, float alpha = 1.f);
+// Corner radii: pills (search box, Filter, chips and the row buttons;
+// --zen-library-radius), rows, side tabs, Space cards and the small things
+// (header and footer buttons, a Space's icon, picture previews).
+inline constexpr int kPillRadius = 12;
+inline constexpr int kRowRadius = 16;
+inline constexpr int kTabRadius = 10;
+inline constexpr int kSpaceCardRadius = 14;
+inline constexpr int kSmallRadius = 6;
+
+// Row action buttons: an 18px icon with 8px around it.
+inline constexpr int kRowButtonIconSize = 18;
+inline constexpr int kRowButtonPadding = 8;
+// Header and footer buttons: a 16px icon with 6px around it.
+inline constexpr int kSmallButtonIconSize = 16;
+inline constexpr int kSmallButtonPadding = 6;
+
+// The Library button in the sidebar's footer, the size of the workspace
+// buttons beside it.
+inline constexpr int kLibraryButtonSize = 24;
+inline constexpr int kLibraryButtonIconSize = 18;
+
+// How much of a Space's colour tints its card.
+inline constexpr float kSpaceCardTint = 0.22f;
+// Rows whose file is gone, and chips that don't apply, are faded.
+inline constexpr float kMissingOpacity = 0.6f;
+inline constexpr float kUnavailableOpacity = 0.4f;
 
 // The default UI font at `pixel_size`.
 gfx::FontList Font(int pixel_size,
                    gfx::Font::Weight weight = gfx::Font::Weight::NORMAL);
 
-// A rounded rect in the text colour at `alpha`. On a button, `hover_alpha`
-// while it is hovered or pressed (nothing is drawn at alpha 0).
-std::unique_ptr<views::Background> CreateTintBackground(float alpha,
-                                                        int radius,
-                                                        float hover_alpha);
+// A rounded rect in `normal` (none if unset); on a button, in `hovered`
+// while it is hovered or pressed.
+std::unique_ptr<views::Background> CreateStateBackground(
+    std::optional<ui::ColorId> normal,
+    std::optional<ui::ColorId> hovered,
+    int radius);
 
-// A label in the text colour at `alpha`.
-class TintLabel : public views::Label {
-  METADATA_HEADER(TintLabel, views::Label)
+// A label in one of the Library's colours.
+class LibraryLabel : public views::Label {
+  METADATA_HEADER(LibraryLabel, views::Label)
 
  public:
-  TintLabel(std::u16string text,
-            int pixel_size,
-            gfx::Font::Weight weight,
-            float alpha = 1.f);
-
-  // views::Label:
-  void OnThemeChanged() override;
-
- private:
-  const float alpha_;
+  LibraryLabel(std::u16string text,
+               int pixel_size,
+               gfx::Font::Weight weight,
+               ui::ColorId color = kColorKoanLibraryForeground);
 };
 
 // An icon button as in Zen's rows and footers: an icon of `icon_size` in the
-// text colour, with `padding` around it and a tinted rounded rect on hover.
+// text colour, with `padding` around it and a pill behind it while hovered.
 std::unique_ptr<views::ImageButton> CreateIconButton(
     views::Button::PressedCallback callback,
     const gfx::VectorIcon& icon,
     std::u16string tooltip,
-    int icon_size = 16,
-    int padding = 6,
-    int radius = 6);
+    int icon_size = kSmallButtonIconSize,
+    int padding = kSmallButtonPadding,
+    int radius = kSmallRadius);
 
 }  // namespace koan::library
 

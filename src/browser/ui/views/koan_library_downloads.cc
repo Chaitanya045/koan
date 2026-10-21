@@ -28,6 +28,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/icon_loader.h"
@@ -47,6 +48,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
+#include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "koan/browser/ui/views/koan_library_view.h"
@@ -92,6 +94,27 @@ constexpr base::TimeDelta kUpdateDelay = base::Milliseconds(250);
 constexpr int64_t kMaxPreviewBytes = 20 * 1024 * 1024;
 constexpr int kIconSize = 22;
 constexpr int kPreviewSize = 34;
+// A download coming in: an arrow inside a progress ring (Zen's 32px ring,
+// stroke 3 on a 32-unit grid).
+constexpr int kArrowSize = 14;
+constexpr float kRingRadius = 13.f;
+constexpr float kRingWidth = 2.5f;
+// Zen's names for the file manager, and its icon for showing a file there
+// (a magnifier on macOS, a folder elsewhere).
+#if BUILDFLAG(IS_MAC)
+constexpr char16_t kShowInFolder[] = u"Show in Finder";
+constexpr char16_t kOpeningInFolder[] = u"Opening in Finder\u2026";
+const gfx::VectorIcon& ShowInFolderIcon() {
+  return vector_icons::kSearchIcon;
+}
+#else
+constexpr char16_t kShowInFolder[] = u"Show in folder";
+constexpr char16_t kOpeningInFolder[] = u"Opening in file manager\u2026";
+const gfx::VectorIcon& ShowInFolderIcon() {
+  return vector_icons::kFolderOpenIcon;
+}
+#endif
+
 // Zen's statusSeparator and the dot between transfer figures.
 constexpr char16_t kSeparator[] = u" — ";
 constexpr char16_t kDot[] = u" · ";
@@ -319,17 +342,17 @@ class DownloadIconView : public views::View {
     const gfx::PointF center = bounds.CenterPoint();
     if (pending_) {
       // A downward arrow in the accent colour, ringed by the progress.
-      const SkColor accent = provider->GetColor(ui::kColorSysPrimary);
-      const gfx::ImageSkia arrow =
-          gfx::CreateVectorIcon(vector_icons::kDownloadIcon, 14, accent);
-      canvas->DrawImageInt(arrow, std::lround(center.x() - 7),
-                           std::lround(center.y() - 7));
+      const SkColor accent = provider->GetColor(kColorKoanLibraryIcon);
+      const gfx::ImageSkia arrow = gfx::CreateVectorIcon(
+          vector_icons::kDownloadIcon, kArrowSize, accent);
+      canvas->DrawImageInt(arrow, std::lround(center.x() - kArrowSize / 2.f),
+                           std::lround(center.y() - kArrowSize / 2.f));
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
       flags.setStyle(cc::PaintFlags::kStroke_Style);
-      flags.setStrokeWidth(2.5f);
-      flags.setColor(library::TextColor(provider, 0.12f));
-      const float radius = 13.f;
+      flags.setStrokeWidth(kRingWidth);
+      flags.setColor(provider->GetColor(kColorKoanLibraryProgressTrack));
+      const float radius = kRingRadius;
       canvas->DrawCircle(center, radius, flags);
       flags.setColor(accent);
       flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
@@ -344,15 +367,16 @@ class DownloadIconView : public views::View {
     const int size = preview_ ? kPreviewSize : kIconSize;
     gfx::ImageSkia image = image_;
     if (image.isNull()) {
-      image =
-          gfx::CreateVectorIcon(vector_icons::kInsertDriveFileOutlineOldIcon,
-                                kIconSize, library::TextColor(provider));
+      image = gfx::CreateVectorIcon(
+          vector_icons::kInsertDriveFileOutlineOldIcon, kIconSize,
+          provider->GetColor(kColorKoanLibraryForeground));
     }
     const gfx::Rect target(std::lround(center.x() - size / 2.f),
                            std::lround(center.y() - size / 2.f), size, size);
     canvas->Save();
     if (preview_) {
-      SkPath clip = SkPath::RRect(gfx::RectToSkRect(target), 6, 6);
+      SkPath clip = SkPath::RRect(gfx::RectToSkRect(target),
+                                  library::kSmallRadius, library::kSmallRadius);
       canvas->ClipPath(clip, /*do_anti_alias=*/true);
     }
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(), target.x(),
@@ -474,8 +498,12 @@ class KoanLibraryDownloadsSection
   }
   void OnDownloadUpdated(content::DownloadManager* manager,
                          download::DownloadItem* item) override {
-    // A finished download changes its row's actions; rebuild then. Progress
-    // only repaints.
+    // Nothing to show while the library is closed; it catches up when it
+    // opens. A finished download changes its row's actions: rebuild then.
+    // Progress only repaints.
+    if (!library()->is_open()) {
+      return;
+    }
     auto it = rows_.find(item);
     if (it != rows_.end() && it->second.pending != IsPending(item)) {
       ScheduleRebuild();
@@ -550,7 +578,7 @@ class KoanLibraryDownloadsSection
   }
 
   void ScheduleRebuild() {
-    if (!shown_ || rebuild_pending_) {
+    if (!shown_ || !library()->is_open() || rebuild_pending_) {
       return;
     }
     // Not synchronously: a rebuild destroys the rows, which may be in the
@@ -601,26 +629,29 @@ class KoanLibraryDownloadsSection
       row->AddAction(library::CreateIconButton(
           base::BindRepeating(&KoanLibraryDownloadsSection::Cancel,
                               base::Unretained(this), base::Unretained(item)),
-          vector_icons::kCloseIcon, u"Cancel download", 18, 8,
-          library::kRadius));
+          vector_icons::kCloseIcon, u"Cancel download",
+          library::kRowButtonIconSize, library::kRowButtonPadding,
+          library::kPillRadius));
     }
     if (CanRetry(item)) {
       row->AddAction(library::CreateIconButton(
           base::BindRepeating(&KoanLibraryDownloadsSection::Retry,
                               base::Unretained(this), base::Unretained(item)),
-          vector_icons::kReloadChromeRefreshOldIcon, u"Retry download", 18, 8,
-          library::kRadius));
+          vector_icons::kReloadChromeRefreshOldIcon, u"Retry download",
+          library::kRowButtonIconSize, library::kRowButtonPadding,
+          library::kPillRadius));
     }
     if (HasFile(item)) {
       row->AddAction(library::CreateIconButton(
           base::BindRepeating(&download::DownloadItem::ShowDownloadInShell,
                               base::Unretained(item)),
-          vector_icons::kFolderOpenIcon, u"Show in folder", 18, 8,
-          library::kRadius));
+          ShowInFolderIcon(), kShowInFolder, library::kRowButtonIconSize,
+          library::kRowButtonPadding, library::kPillRadius));
     }
     auto more = library::CreateIconButton(
         views::Button::PressedCallback(), views::kMoreHorizIcon,
-        u"More options", 18, 8, library::kRadius);
+        u"More options", library::kRowButtonIconSize,
+        library::kRowButtonPadding, library::kPillRadius);
     views::Button* more_button = more.get();
     more->SetCallback(base::BindRepeating(
         &KoanLibraryDownloadsSection::ShowMenuBelow, base::Unretained(this),
@@ -653,7 +684,7 @@ class KoanLibraryDownloadsSection
     const bool pending = IsPending(item);
     std::u16string status;
     if (item == opening_) {
-      status = u"Opening in file manager…";
+      status = kOpeningInFolder;
     } else if (pending && item->GetOpenWhenComplete()) {
       status = u"Opens when finished";
     } else {
@@ -899,7 +930,7 @@ class KoanLibraryDownloadsSection
                                       base::Unretained(item)),
                   has_file);
     menu->AddItem(
-        u"Show in folder",
+        kShowInFolder,
         base::BindRepeating(&download::DownloadItem::ShowDownloadInShell,
                             base::Unretained(item)),
         has_file);

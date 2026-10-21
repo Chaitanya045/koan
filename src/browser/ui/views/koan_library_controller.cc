@@ -10,6 +10,7 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -18,12 +19,17 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_shortcut_table.h"
+#include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_library.h"
-#include "koan/browser/ui/views/koan_library_icons.h"
 #include "koan/browser/ui/views/koan_library_view.h"
+#include "koan/browser/ui/views/koan_shortcuts.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -88,17 +94,26 @@ class KoanLibraryButton : public views::ImageButton {
   METADATA_HEADER(KoanLibraryButton, views::ImageButton)
 
  public:
-  explicit KoanLibraryButton(KoanLibraryController* library)
+  KoanLibraryButton(KoanLibraryController* library,
+                    std::optional<ui::Accelerator> accelerator)
       : views::ImageButton(
             base::BindRepeating(&KoanLibraryController::Toggle,
                                 base::Unretained(library),
                                 std::optional<LibrarySection>())) {
-    SetImageModel(STATE_NORMAL, library::LibraryGlyph(18));
+    SetImageModel(STATE_NORMAL, ui::ImageModel::FromVectorIcon(
+                                    kLibraryIcon, kColorKoanLibraryForeground,
+                                    library::kLibraryButtonIconSize));
     SetImageHorizontalAlignment(ALIGN_CENTER);
     SetImageVerticalAlignment(ALIGN_MIDDLE);
-    SetPreferredSize(gfx::Size(24, 24));
-    SetBackground(library::CreateTintBackground(0.f, 6, 0.12f));
-    SetTooltipText(u"Library (Alt+Shift+L)");
+    SetPreferredSize(
+        gfx::Size(library::kLibraryButtonSize, library::kLibraryButtonSize));
+    SetBackground(library::CreateStateBackground(
+        std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
+    // The key the user has for it, e.g. "Library (Alt+⇧+L)".
+    SetTooltipText(
+        accelerator ? base::StrCat({u"Library (",
+                                    shortcuts::DisplayText(*accelerator), u")"})
+                    : u"Library");
     GetViewAccessibility().SetName(u"Library");
   }
 };
@@ -326,8 +341,9 @@ void KoanLibraryController::SetProgress(double progress) {
   if (!view_) {
     return;
   }
+  // It slides in from the sidebar's side of the window.
   gfx::Transform transform;
-  transform.Translate(-(1 - progress) * width_, 0);
+  transform.Translate((on_right_ ? 1 : -1) * (1 - progress) * width_, 0);
   view_->layer()->SetTransform(transform);
 }
 
@@ -367,7 +383,12 @@ void KoanLibraryController::LayoutWidget() {
   if (!widget_) {
     return;
   }
+  on_right_ = IsSidebarOnRight(browser_view_);
+  view_->SetOnRight(on_right_);
   gfx::Rect bounds = GetArea();
+  if (on_right_) {
+    bounds.set_x(bounds.right() - width_);
+  }
   bounds.set_width(width_);
   widget_->SetBounds(bounds);
   SetProgress(progress_);
@@ -393,7 +414,9 @@ std::unique_ptr<views::View> CreateLibraryButton(BrowserView* browser_view) {
   if (!controller || !controller->library()->IsAvailable()) {
     return nullptr;
   }
-  return std::make_unique<KoanLibraryButton>(controller->library());
+  return std::make_unique<KoanLibraryButton>(
+      controller->library(),
+      controller->shortcuts()->GetAccelerator(shortcuts::Action::kLibrary));
 }
 
 }  // namespace koan

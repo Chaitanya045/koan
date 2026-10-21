@@ -26,6 +26,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -50,9 +51,11 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/common/referrer.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "koan/browser/ui/views/koan_library_view.h"
+#include "koan/browser/ui/views/koan_toast.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -110,7 +113,8 @@ std::u16string FormatVisit(base::Time time) {
 
 // "Today", "Yesterday", "3 days ago" within a week, then the date.
 std::u16string FormatDay(base::Time day, base::Time today) {
-  const int days_ago = std::lround((today - day).InHoursF() / 24);
+  const int days_ago =
+      std::lround((today - day) / base::Days(1));
   if (days_ago <= 1) {
     const std::u16string relative = ui::TimeFormat::RelativeDate(day, today);
     if (!relative.empty()) {
@@ -483,18 +487,19 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                                       : entry.title);
     // The address, or when it was visited while the row is hovered.
     row->SetSubtitle(FormatUrl(entry.url), FormatVisit(entry.time));
-    row->SetIcon(ui::ImageModel::FromVectorIcon(vector_icons::kGlobeIcon,
-                                                library::TextColorId(), 16),
+    row->SetIcon(ui::ImageModel::FromVectorIcon(
+                     vector_icons::kGlobeIcon, kColorKoanLibraryForeground, 16),
                  16);
     row->AddAction(library::CreateIconButton(
         base::BindRepeating(&KoanLibraryHistorySection::ForgetEntry,
                             base::Unretained(this), entry),
-        vector_icons::kDeleteIcon, u"Remove from history", 18, 8,
-        library::kRadius));
+        kDeleteIcon, u"Remove from history", library::kRowButtonIconSize,
+        library::kRowButtonPadding, library::kPillRadius));
     row->AddAction(library::CreateIconButton(
         base::BindRepeating(&KoanLibraryHistorySection::OpenEntry,
                             base::Unretained(this), entry),
-        vector_icons::kUndoIcon, u"Reopen page", 18, 8, library::kRadius));
+        vector_icons::kUndoIcon, u"Reopen page", library::kRowButtonIconSize,
+        library::kRowButtonPadding, library::kPillRadius));
     row->SetMenuCallback(
         base::BindRepeating(&KoanLibraryHistorySection::ShowRowMenu,
                             base::Unretained(this), entry));
@@ -519,10 +524,11 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
 
   // A click opens the page in a new tab and closes the library; Ctrl+click
-  // or a middle click opens it in the background and keeps the library.
+  // (Cmd+click on macOS) or a middle click opens it in the background and
+  // keeps the library.
   void OpenEntry(const Entry& entry, const ui::Event& event) {
-    const bool background =
-        event.flags() & (ui::EF_CONTROL_DOWN | ui::EF_MIDDLE_MOUSE_BUTTON);
+    const bool background = event.flags() & (ui::EF_PLATFORM_ACCELERATOR |
+                                             ui::EF_MIDDLE_MOUSE_BUTTON);
     Open(entry, background);
   }
 
@@ -561,8 +567,9 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       return;
     }
     library()->KeepOpenWhile(std::move(open_tab));
-    if (KoanLibraryView* view = library()->view()) {
-      view->ShowToast(u"Opened tab in a new tab");
+    if (KoanBrowserViewController* controller =
+            KoanBrowserViewController::From(library()->browser_view())) {
+      controller->toast()->Show(u"Opened tab in a new tab");
     }
   }
 

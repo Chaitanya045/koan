@@ -7,32 +7,12 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, finish, key as keyTo,
+  pages as tabs, setKoanPref, sleep, visiblePage, waitFor,
+} from './lib/koan.mjs';
 
-const UI_PORT = process.env.UI_PORT;
-const CDP_PORT = process.env.CDP_PORT;
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-
-async function connect(url) {
-  const ws = new WebSocket(url);
-  let id = 0;
-  const pending = new Map();
-  ws.onmessage = e => {
-    const m = JSON.parse(e.data);
-    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
-  };
-  await new Promise(r => (ws.onopen = r));
-  const send = (method, params = {}) => new Promise(resolve => {
-    pending.set(++id, resolve);
-    ws.send(JSON.stringify({ id, method, params }));
-    setTimeout(() => resolve({ timedOut: true }), 5000);
-  });
-  return { send, close: () => ws.close() };
-}
-
-const tabs = async () =>
-  (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .filter(t => t.type === 'page');
 
 // The native views of interest, with their properties, ancestry and whether
 // they are shown. Library views live in the Library's own widget.
@@ -109,50 +89,13 @@ async function keyInto(ui, node, keyCode, flags = 0) {
   }
 }
 
-// The tab being shown.
-async function visiblePage() {
-  for (const t of await tabs()) {
-    const c = await connect(t.webSocketDebuggerUrl);
-    const r = await c.send('Runtime.evaluate', {
-      expression: 'document.visibilityState', returnByValue: true,
-    });
-    c.close();
-    if (r.result?.result?.value === 'visible') return t;
-  }
-  return (await tabs())[0];
-}
-
-// Keys to the page, which passes unhandled ones on to the browser like real
-// input (the browser's shortcuts).
+// Keys to the page that is showing, which passes unhandled ones on to the
+// browser like real input (the browser's shortcuts).
 async function key(code, modifiers, keyName = '') {
-  const page = await visiblePage();
-  const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
-  c.close();
-  await sleep(1200);
+  await keyTo(await visiblePage(), code, modifiers, keyName);
+  await sleep(900);
 }
 
-// Polls `fn` until it returns something truthy (or the time is up).
-async function waitFor(fn, ms = 6000) {
-  const end = Date.now() + ms;
-  let value;
-  while (Date.now() < end) {
-    value = await fn();
-    if (value) return value;
-    await sleep(250);
-  }
-  return value;
-}
-
-let failures = 0;
-function check(name, ok, detail = '') {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
-  if (!ok) failures++;
-}
-
-const ALT = 1, CTRL = 2, SHIFT = 8;
 const KEY_L = 76, KEY_H = 72, KEY_Y = 89, KEY_N = 78, ESC = 27;
 
 const library = async () => withViews(nodes => {
@@ -164,6 +107,9 @@ const library = async () => withViews(nodes => {
     open: view?.p.Open === 'true',
     width: +(view?.p.Width ?? 0),
     section: section?.cls ?? null,
+    // Where the section starts in the panel: after the side column, or at
+    // its left edge with the panel mirrored.
+    sectionX: +(section?.p.X ?? -1),
     rows: +(section?.p.RowCount ?? section?.p.CardCount ?? -1),
   };
 });
@@ -301,10 +247,8 @@ check('Ctrl+H again closes it', !(await library()).open);
 // --- A download, then Ctrl+Shift+Y shows it in Downloads. ---
 const downloads = mkdtempSync(join(ROOT, '.test-profiles', 'dl-'));
 try {
-  const version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
-  const browser = await connect(version.webSocketDebuggerUrl);
-  await browser.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
-  browser.close();
+  await browserCall('Browser.setDownloadBehavior',
+                    { behavior: 'allow', downloadPath: downloads });
   const page = (await tabs()).find(t => t.url.startsWith(pageUrl));
   const c = await connect(page.webSocketDebuggerUrl);
   const r = await c.send('Runtime.evaluate', {
@@ -428,9 +372,23 @@ await sleep(1000);
 check('Dragging a card by its handle reorders the spaces',
       (await cardNames()).join(',') === 'Space 2,Work', (await cardNames()).join(','));
 
+check('...with the side column on the left', state.sectionX === 110,
+      `section at x ${state.sectionX}`);
+
 // --- Esc closes the Library. ---
 await key(ESC, 0, 'Escape');
 check('Esc closes the Library', !(await library()).open);
 
-console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
-process.exit(failures ? 1 : 0);
+// --- With tabs on the right, the panel comes from the right, mirrored. ---
+await setKoanPref('koan.tabs.on_right', true);
+await key(KEY_L, ALT | SHIFT, 'L');
+state = await waitFor(async () => {
+  const s = await library();
+  return s.open ? s : null;
+}) ?? await library();
+check('With tabs on the right the side column is on the right',
+      state.open && state.sectionX === 0, `section at x ${state.sectionX}`);
+await key(ESC, 0, 'Escape');
+await setKoanPref('koan.tabs.on_right', false);
+
+finish();

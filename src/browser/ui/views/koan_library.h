@@ -124,6 +124,8 @@ class KoanLibraryController : public TabStripModelObserver,
   // `transition: width 0.3s`.
   gfx::LinearAnimation resize_{this};
   int width_ = 0;
+  // Whether the sidebar, and so the library, is on the right.
+  bool on_right_ = false;
   int width_from_ = 0;
   int width_to_ = 0;
 

@@ -58,6 +58,34 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
 
+  // The Library (koan_library_*.cc): its surface and the side column's
+  // highlight; text, secondary text (subtitles, headers) and dim text (the
+  // search icon); pills (search box, Filter, chips) normal, hovered and
+  // active; a hovered row; side tabs hovered and selected; the section
+  // icons' accent and selected fill, and a download's progress track.
+  kColorKoanLibraryBackground,
+  kColorKoanLibrarySideHighlight,
+  kColorKoanLibraryForeground,
+  kColorKoanLibraryForegroundSecondary,
+  kColorKoanLibraryForegroundDim,
+  kColorKoanLibraryPill,
+  kColorKoanLibraryPillHovered,
+  kColorKoanLibraryChipActive,
+  kColorKoanLibraryRowHovered,
+  kColorKoanLibraryTabHovered,
+  kColorKoanLibraryTabSelected,
+  kColorKoanLibraryIcon,
+  kColorKoanLibraryIconFill,
+  kColorKoanLibraryProgressTrack,
+  // Spaces: a card (tinted with the space's colour on top) and its outline,
+  // an empty icon slot, and the add button with its "+".
+  kColorKoanLibrarySpaceCard,
+  kColorKoanLibrarySpaceCardBorder,
+  kColorKoanLibrarySpaceIconEmpty,
+  kColorKoanLibraryAddSpace,
+  kColorKoanLibraryAddSpaceHovered,
+  kColorKoanLibraryAddSpaceForeground,
+
   kKoanColorsEnd,
 };
 

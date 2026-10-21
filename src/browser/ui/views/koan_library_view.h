@@ -314,11 +314,12 @@ class KoanLibraryView : public views::View {
   // The library opened (or was asked for again).
   void OnOpened();
   bool HandleEscape();
-  // Zen's toast, e.g. "Opened tab in a new tab".
-  void ShowToast(std::u16string text);
   // Progress of the current downloads for the Downloads tab's ring; < 0 when
   // nothing downloads.
   void SetDownloadProgress(float progress);
+
+  // Mirrors the panel for a sidebar on the right.
+  void SetOnRight(bool on_right);
 
   // Shows what a right click on a section's tab offers.
   void ShowTabMenu(LibrarySection section, const gfx::Point& screen_point);
@@ -330,12 +331,11 @@ class KoanLibraryView : public views::View {
  private:
   const raw_ptr<KoanLibraryController> library_;
   raw_ptr<views::View> side_ = nullptr;
-  raw_ptr<views::View> footer_ = nullptr;
+  raw_ptr<views::ImageButton> footer_ = nullptr;
   std::array<raw_ptr<KoanLibraryTab>, 3> tabs_{};
   std::array<raw_ptr<KoanLibrarySection>, 3> sections_{};
-  raw_ptr<views::View> toast_ = nullptr;
-  base::OneShotTimer toast_timer_;
   std::optional<LibrarySection> shown_;
+  bool on_right_ = false;
   std::unique_ptr<KoanLibraryMenu> tab_menu_;
 };
 

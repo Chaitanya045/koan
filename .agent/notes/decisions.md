@@ -91,3 +91,13 @@
   editor suspends the window's FocusManager shortcuts while recording a
   key (as chrome://extensions/shortcuts does), because Chromium pre-handles
   non-Chrome accelerators (Koan's) before the page sees them.
+- **Library = a child widget sliding over the page** (#43): like Glance, the
+  panel is a TYPE_CONTROL child widget (so it sits above the page's native
+  window and gets the pointer), its view layer translated for Zen's spring.
+  Zen also slides the page aside; Chromium draws the page in its own native
+  window, which view transforms don't move, so Koan's panel covers it
+  instead. The widget is kept for 30s after closing (Zen unmounts its
+  sections then) and does no work while closed. History, Downloads and the
+  closed tabs come from Chromium's services (HistoryService,
+  DownloadManager, TabRestoreService); Spaces is a thin view over
+  KoanWorkspaceController (#34/#57 own Space data).

@@ -48,16 +48,14 @@
 
 namespace koan {
 
-using library::CreateTintBackground;
+using library::CreateStateBackground;
 using library::Font;
-using library::TintLabel;
+using library::LibraryLabel;
 
 namespace {
 
 // Zen: SEARCH_DEBOUNCE_MS.
 constexpr base::TimeDelta kSearchDebounce = base::Milliseconds(250);
-// How long Zen's toasts stay up.
-constexpr base::TimeDelta kToastDuration = base::Milliseconds(2500);
 // Loads more once the end of a list is this close (Zen's rootMargin).
 constexpr int kLoadMoreMargin = 200;
 // Below this window height the tab labels go (Zen's max-height: 575px).
@@ -69,6 +67,8 @@ constexpr int kTabMargin = 8;
 constexpr int kTabGap = 8;
 constexpr int kTabPadding = 16;
 constexpr int kTabIconSize = 28;
+// Zen's #zen-library-footer: padding 8px.
+constexpr int kFooterPadding = 8;
 
 std::u16string SectionLabel(LibrarySection section) {
   switch (section) {
@@ -133,33 +133,6 @@ class WrapView : public views::View {
 BEGIN_METADATA(WrapView)
 END_METADATA
 
-// Zen's toast: a short message in a dark pill.
-class ToastView : public views::Label {
-  METADATA_HEADER(ToastView, views::Label)
-
- public:
-  ToastView() {
-    SetFontList(Font(13, gfx::Font::Weight::MEDIUM));
-    SetAutoColorReadabilityEnabled(false);
-    SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(8, 14)));
-    SetPaintToLayer();
-    layer()->SetFillsBoundsOpaquely(false);
-    SetCanProcessEventsWithinSubtree(false);
-  }
-
-  // views::Label:
-  void OnThemeChanged() override {
-    views::Label::OnThemeChanged();
-    const ui::ColorProvider* provider = GetColorProvider();
-    SetEnabledColor(provider->GetColor(kColorToolbar));
-    SetBackground(views::CreateRoundedRectBackground(
-        library::TextColor(provider, 0.92f), 10));
-  }
-};
-
-BEGIN_METADATA(ToastView)
-END_METADATA
-
 }  // namespace
 
 // A section tab in the side column: Zen's animated sprite (here its resting
@@ -175,7 +148,7 @@ class KoanLibraryTab : public views::Button,
                                           section)),
         panel_(panel),
         section_(section) {
-    label_ = AddChildView(std::make_unique<TintLabel>(
+    label_ = AddChildView(std::make_unique<LibraryLabel>(
         SectionLabel(section), 13, gfx::Font::Weight::SEMIBOLD));
     label_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
     label_->SetCanProcessEventsWithinSubtree(false);
@@ -224,27 +197,25 @@ class KoanLibraryTab : public views::Button,
 
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    float alpha = 0.f;
+    std::optional<ui::ColorId> background;
     if (active_) {
-      alpha = 0.10f;
+      background = kColorKoanLibraryTabSelected;
     } else if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
-      alpha = 0.05f;
+      background = kColorKoanLibraryTabHovered;
     }
-    if (alpha > 0.f) {
+    if (background) {
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
-      flags.setColor(library::TextColor(provider, alpha));
-      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), 10, flags);
+      flags.setColor(provider->GetColor(*background));
+      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), library::kTabRadius,
+                            flags);
     }
     const gfx::RectF icon((width() - kTabIconSize) / 2.f, kTabPadding,
                           kTabIconSize, kTabIconSize);
     // The Downloads icon is filled like the selected one while anything
     // downloads (zen-library-downloading).
-    const bool filled = active_ || progress_ >= 0.f;
-    library::PaintSectionIcon(
-        canvas, icon, section_, library::SectionIconStroke(provider),
-        filled ? library::SectionIconFill(provider) : SK_ColorTRANSPARENT,
-        progress_);
+    library::PaintSectionIcon(canvas, icon, section_, provider,
+                              active_ || progress_ >= 0.f, progress_);
   }
 
   // views::ContextMenuController:
@@ -354,7 +325,7 @@ KoanLibraryPill::KoanLibraryPill(PressedCallback callback,
                                  const gfx::Insets& padding)
     : views::LabelButton(std::move(callback), std::move(text)) {
   label()->SetFontList(Font(14, weight));
-  SetEnabledTextColors(library::TextColorId());
+  SetEnabledTextColors(kColorKoanLibraryForeground);
   SetBorder(views::CreateEmptyBorder(padding));
   SetImageLabelSpacing(8);
   SetActive(false);
@@ -364,10 +335,10 @@ KoanLibraryPill::~KoanLibraryPill() = default;
 
 void KoanLibraryPill::SetActive(bool active) {
   active_ = active;
-  // Zen: 7% (12% hovered) of the text colour, 20% for an active chip.
-  SetBackground(CreateTintBackground(
-      active ? 0.20f : library::kPillAlpha, library::kRadius,
-      active ? 0.20f : library::kPillHoverAlpha));
+  SetBackground(CreateStateBackground(
+      active ? kColorKoanLibraryChipActive : kColorKoanLibraryPill,
+      active ? kColorKoanLibraryChipActive : kColorKoanLibraryPillHovered,
+      library::kPillRadius));
   SchedulePaint();
 }
 
@@ -377,7 +348,7 @@ void KoanLibraryPill::SetUnavailable(bool unavailable) {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
   }
-  layer()->SetOpacity(unavailable ? 0.4f : 1.f);
+  layer()->SetOpacity(unavailable ? library::kUnavailableOpacity : 1.f);
 }
 
 BEGIN_METADATA(KoanLibraryPill)
@@ -402,10 +373,11 @@ KoanLibraryRow::KoanLibraryRow(PressedCallback callback)
   text->SetBetweenChildSpacing(2);
   text->SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kStretch);
   text->SetCanProcessEventsWithinSubtree(false);
-  title_ = text->AddChildView(std::make_unique<TintLabel>(
+  title_ = text->AddChildView(std::make_unique<LibraryLabel>(
       std::u16string(), 14, gfx::Font::Weight::MEDIUM));
-  subtitle_ = text->AddChildView(std::make_unique<TintLabel>(
-      std::u16string(), 12, gfx::Font::Weight::NORMAL, 0.6f));
+  subtitle_ = text->AddChildView(std::make_unique<LibraryLabel>(
+      std::u16string(), 12, gfx::Font::Weight::NORMAL,
+      kColorKoanLibraryForegroundSecondary));
   layout->SetFlexForView(text, 1);
 
   auto* actions = AddChildView(std::make_unique<views::BoxLayoutView>());
@@ -477,7 +449,7 @@ void KoanLibraryRow::SetDimmed(bool dimmed) {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
   }
-  layer()->SetOpacity(dimmed ? 0.6f : 1.f);
+  layer()->SetOpacity(dimmed ? library::kMissingOpacity : 1.f);
 }
 
 bool KoanLibraryRow::GetHovered() const {
@@ -495,8 +467,9 @@ void KoanLibraryRow::OnPaintBackground(gfx::Canvas* canvas) {
   }
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(library::TextColor(GetColorProvider(), 0.10f));
-  canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), 16, flags);
+  flags.setColor(GetColorProvider()->GetColor(kColorKoanLibraryRowHovered));
+  canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), library::kRowRadius,
+                        flags);
 }
 
 void KoanLibraryRow::ShowContextMenuForViewImpl(
@@ -606,21 +579,18 @@ KoanLibrarySearchSection::KoanLibrarySearchSection(
   box->SetInsideBorderInsets(gfx::Insets::VH(0, 12));
   box->SetBetweenChildSpacing(8);
   box->SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kCenter);
-  box->SetBackground(CreateTintBackground(library::kPillAlpha, library::kRadius,
-                                          library::kPillAlpha));
+  box->SetBackground(CreateStateBackground(
+      kColorKoanLibraryPill, kColorKoanLibraryPill, library::kPillRadius));
   box->SetPreferredSize(gfx::Size(0, 36));
   header->SetFlexForView(box, 1);
-  auto* glass = box->AddChildView(
+  box->AddChildView(
       std::make_unique<views::ImageView>(ui::ImageModel::FromVectorIcon(
-          vector_icons::kSearchIcon, library::TextColorId(), 16)));
-  glass->SetPaintToLayer();
-  glass->layer()->SetFillsBoundsOpaquely(false);
-  glass->layer()->SetOpacity(0.5f);
+          vector_icons::kSearchIcon, kColorKoanLibraryForegroundDim, 16)));
   search_field_ = box->AddChildView(std::make_unique<views::Textfield>());
   search_field_->SetBackgroundEnabled(false);
   search_field_->SetBorder(views::NullBorder());
   search_field_->SetFontList(Font(14));
-  search_field_->SetTextColorId(library::TextColorId());
+  search_field_->SetTextColorId(kColorKoanLibraryForeground);
   search_field_->SetPlaceholderText(placeholder);
   search_field_->GetViewAccessibility().SetName(placeholder);
   search_field_->set_controller(this);
@@ -640,7 +610,7 @@ KoanLibrarySearchSection::KoanLibrarySearchSection(
   filter_header->SetCrossAxisAlignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   filter_header->SetMinimumCrossAxisSize(36);
-  auto* title = filter_header->AddChildView(std::make_unique<TintLabel>(
+  auto* title = filter_header->AddChildView(std::make_unique<LibraryLabel>(
       std::move(filter_title), 14, gfx::Font::Weight::BOLD));
   filter_header->SetFlexForView(title, 1);
   filter_header->AddChildView(std::make_unique<KoanLibraryPill>(
@@ -686,7 +656,7 @@ void KoanLibrarySearchSection::InitFilters() {
   filter->SetImageModel(
       views::Button::STATE_NORMAL,
       ui::ImageModel::FromVectorIcon(vector_icons::kTuneIcon,
-                                     library::TextColorId(), 16));
+                                     kColorKoanLibraryForeground, 16));
   search_header_->AddChildView(std::move(filter));
   UpdateFilterPanel();
 }
@@ -696,8 +666,8 @@ void KoanLibrarySearchSection::UpdateFilterPanel() {
   // The panel spans the section less its 14px padding.
   const int width = GetContentWidth() - 28;
   for (const FilterGroup& group : GetFilterGroups()) {
-    auto* title = filter_panel_->AddChildView(std::make_unique<TintLabel>(
-        group.title, 13, gfx::Font::Weight::SEMIBOLD, 0.85f));
+    auto* title = filter_panel_->AddChildView(std::make_unique<LibraryLabel>(
+        group.title, 13, gfx::Font::Weight::SEMIBOLD));
     title->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(16, 0, 10, 0)));
     auto* options =
         filter_panel_->AddChildView(std::make_unique<WrapView>(width));
@@ -808,15 +778,17 @@ views::View* KoanLibrarySearchSection::AddGroup(const std::u16string& header) {
   if (!header.empty()) {
     // .zen-library-group h3: 12px bold at 60%, margin 10px 8px 5px.
     auto* label = group->AddChildView(
-        std::make_unique<TintLabel>(header, 12, gfx::Font::Weight::BOLD, 0.6f));
+        std::make_unique<LibraryLabel>(header, 12, gfx::Font::Weight::BOLD,
+                                       kColorKoanLibraryForegroundSecondary));
     label->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(10, 8, 5, 8)));
   }
   return group;
 }
 
 void KoanLibrarySearchSection::ShowEmpty(std::u16string text) {
-  auto* label = list_->AddChildView(std::make_unique<TintLabel>(
-      std::move(text), 14, gfx::Font::Weight::NORMAL, 0.6f));
+  auto* label = list_->AddChildView(std::make_unique<LibraryLabel>(
+      std::move(text), 14, gfx::Font::Weight::NORMAL,
+      kColorKoanLibraryForegroundSecondary));
   label->SetHorizontalAlignment(gfx::ALIGN_CENTER);
   label->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(24, 0)));
 }
@@ -869,10 +841,8 @@ KoanLibraryView::KoanLibraryView(KoanLibraryController* library)
   footer_ = side_->AddChildView(library::CreateIconButton(
       base::BindRepeating(&KoanLibraryController::Close,
                           base::Unretained(library_)),
-      vector_icons::kArrowBackIcon, u"Close library", 16, 8, 8));
-
-  toast_ = AddChildView(std::make_unique<ToastView>());
-  toast_->SetVisible(false);
+      vector_icons::kArrowBackIcon, u"Close library",
+      library::kSmallButtonIconSize, kFooterPadding, library::kSmallRadius));
 }
 
 KoanLibraryView::~KoanLibraryView() = default;
@@ -930,15 +900,6 @@ bool KoanLibraryView::HandleEscape() {
   return section && section->HandleEscape();
 }
 
-void KoanLibraryView::ShowToast(std::u16string text) {
-  static_cast<views::Label*>(toast_.get())->SetText(std::move(text));
-  toast_->SetVisible(true);
-  InvalidateLayout();
-  toast_timer_.Start(FROM_HERE, kToastDuration,
-                     base::BindOnce(&views::View::SetVisible,
-                                    base::Unretained(toast_.get()), false));
-}
-
 void KoanLibraryView::SetDownloadProgress(float progress) {
   if (KoanLibraryTab* tab = tabs_[Index(LibrarySection::kDownloads)]) {
     tab->SetProgress(progress);
@@ -959,15 +920,37 @@ void KoanLibraryView::ShowTabMenu(LibrarySection section,
                  ui::mojom::MenuSourceType::kMouse, base::DoNothing());
 }
 
+void KoanLibraryView::SetOnRight(bool on_right) {
+  if (on_right_ == on_right) {
+    return;
+  }
+  on_right_ = on_right;
+  // Zen turns the back arrow round with the panel.
+  footer_->SetImageModel(
+      views::Button::STATE_NORMAL,
+      ui::ImageModel::FromVectorIcon(on_right ? vector_icons::kArrowForwardIcon
+                                              : vector_icons::kArrowBackIcon,
+                                     kColorKoanLibraryForeground,
+                                     library::kSmallButtonIconSize));
+  InvalidateLayout();
+  SchedulePaint();
+}
+
 void KoanLibraryView::Layout(PassKey) {
   const gfx::Rect bounds = GetLocalBounds();
-  side_->SetBounds(0, 0, library::kSideWidth, bounds.height());
+  // With tabs on the right the panel is mirrored: side column on the right
+  // (Zen's flex-direction: row-reverse).
+  side_->SetBounds(on_right_ ? bounds.width() - library::kSideWidth : 0, 0,
+                   library::kSideWidth, bounds.height());
 
   // The back button at the foot of the side column; the tabs centred in the
   // space above it (Zen's side column: justify-content: space-between).
   const gfx::Size footer = footer_->GetPreferredSize();
-  const int footer_top = bounds.height() - 8 - footer.height();
-  footer_->SetBounds(8, footer_top, footer.width(), footer.height());
+  const int footer_top = bounds.height() - kFooterPadding - footer.height();
+  footer_->SetBounds(on_right_
+                         ? library::kSideWidth - kFooterPadding - footer.width()
+                         : kFooterPadding,
+                     footer_top, footer.width(), footer.height());
   const bool labels = bounds.height() >= kTabLabelMinHeight;
   int tabs_height = 0;
   for (KoanLibraryTab* tab : tabs_) {
@@ -978,7 +961,8 @@ void KoanLibraryView::Layout(PassKey) {
     }
   }
   tabs_height -= kTabGap;
-  int y = std::max(0, (footer_top - 8 - tabs_height) / 2) + kTabMargin;
+  int y =
+      std::max(0, (footer_top - kFooterPadding - tabs_height) / 2) + kTabMargin;
   for (KoanLibraryTab* tab : tabs_) {
     if (!tab) {
       continue;
@@ -988,38 +972,36 @@ void KoanLibraryView::Layout(PassKey) {
     y += size.height() + 2 * kTabMargin + kTabGap;
   }
 
-  const gfx::Rect content(library::kSideWidth, 0,
+  const gfx::Rect content(on_right_ ? 0 : library::kSideWidth, 0,
                           bounds.width() - library::kSideWidth,
                           bounds.height());
   for (KoanLibrarySection* section : sections_) {
     if (section) {
-      gfx::Rect rect = content;
-      rect.set_width(std::min(content.width(), section->GetContentWidth()));
-      section->SetBoundsRect(rect);
+      // Next to the side column.
+      const int width = std::min(content.width(), section->GetContentWidth());
+      section->SetBounds(on_right_ ? content.right() - width : content.x(),
+                         content.y(), width, content.height());
     }
-  }
-  if (toast_->GetVisible()) {
-    const gfx::Size size = toast_->GetPreferredSize();
-    toast_->SetBounds(content.x() + (content.width() - size.width()) / 2,
-                      bounds.height() - 24 - size.height(), size.width(),
-                      size.height());
   }
 }
 
 void KoanLibraryView::OnPaintBackground(gfx::Canvas* canvas) {
   const ui::ColorProvider* provider = GetColorProvider();
   // The library sits on the window's own surface, like the sidebar.
-  canvas->DrawColor(provider->GetColor(kColorToolbar));
+  canvas->DrawColor(provider->GetColor(kColorKoanLibraryBackground));
   // The side column lightens towards the content (Zen: a gradient from
-  // transparent to rgba(255, 255, 255, 0.08)).
-  const SkPoint points[] = {{0, 0}, {library::kSideWidth, 0}};
+  // transparent at the window's edge).
+  const gfx::Rect side = side_->bounds();
+  const SkPoint points[] = {
+      {static_cast<float>(on_right_ ? side.right() : side.x()), 0},
+      {static_cast<float>(on_right_ ? side.x() : side.right()), 0}};
   const SkColor4f colors[] = {
       SkColors::kTransparent,
-      SkColor4f::FromColor(SkColorSetA(SK_ColorWHITE, 0x14))};
+      SkColor4f::FromColor(provider->GetColor(kColorKoanLibrarySideHighlight))};
   cc::PaintFlags flags;
   flags.setShader(cc::PaintShader::MakeLinearGradient(points, colors, nullptr,
                                                       2, SkTileMode::kClamp));
-  canvas->DrawRect(gfx::Rect(0, 0, library::kSideWidth, height()), flags);
+  canvas->DrawRect(side, flags);
 }
 
 BEGIN_METADATA(KoanLibraryView)
