@@ -63,6 +63,7 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/events/event.h"
+#include "ui/gfx/favicon_size.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -178,7 +179,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
   ~KoanLibraryHistorySection() override = default;
 
-  int GetRowCount() const { return row_count_; }
+  int GetRowCount() const { return static_cast<int>(rows_.size()); }
 
   // KoanLibrarySection:
   void OnShown() override {
@@ -424,8 +425,11 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   // Lists `entries` (newest first) the way the sort order groups them.
   void Show(std::vector<Entry> entries) {
     favicon_tracker_.TryCancelAll();
+    // Forget the rows before they are destroyed; callbacks that still come
+    // for them find a newer generation.
+    rows_.clear();
+    ++generation_;
     ClearList();
-    row_count_ = 0;
     entries_ = std::move(entries);
     if (entries_.empty()) {
       ShowEmpty(ShowingClosed() ? u"No closed tabs" : u"No history found");
@@ -502,23 +506,31 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     row->SetMenuCallback(
         base::BindRepeating(&KoanLibraryHistorySection::ShowRowMenu,
                             base::Unretained(this), entry));
-    KoanLibraryRow* added = group->AddChildView(std::move(row));
-    ++row_count_;
+    rows_.push_back(group->AddChildView(std::move(row)));
     if (favicon::FaviconService* favicons =
             FaviconServiceFactory::GetForProfile(
                 profile_, ServiceAccessType::EXPLICIT_ACCESS)) {
-      // Cancelled with `favicon_tracker_` before rows are rebuilt.
       favicons->GetFaviconImageForPageURL(
           entry.url,
-          base::BindOnce(
-              [](KoanLibraryRow* row,
-                 const favicon_base::FaviconImageResult& result) {
-                if (!result.image.IsEmpty()) {
-                  row->SetIcon(ui::ImageModel::FromImage(result.image), 16);
-                }
-              },
-              base::Unretained(added)),
+          base::BindOnce(&KoanLibraryHistorySection::OnFavicon,
+                         weak_factory_.GetWeakPtr(), generation_,
+                         rows_.size() - 1),
           &favicon_tracker_);
+    }
+  }
+
+  // The row `index` of list `generation`, if that list is still shown.
+  KoanLibraryRow* RowAt(int generation, size_t index) const {
+    return generation == generation_ && index < rows_.size() ? rows_[index]
+                                                             : nullptr;
+  }
+
+  void OnFavicon(int generation,
+                 size_t index,
+                 const favicon_base::FaviconImageResult& result) {
+    KoanLibraryRow* row = RowAt(generation, index);
+    if (row && !result.image.IsEmpty()) {
+      row->SetIcon(ui::ImageModel::FromImage(result.image), gfx::kFaviconSize);
     }
   }
 
@@ -677,17 +689,21 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                     entry.url.has_host());
     }
     row->SetMenuOpen(true);
+    const size_t index =
+        static_cast<size_t>(std::ranges::find(rows_, row) - rows_.begin());
     RunMenu(std::move(menu), row, gfx::Rect(point, gfx::Size()),
             views::MenuAnchorPosition::kTopLeft, source_type,
             base::BindRepeating(
                 [](base::WeakPtr<KoanLibraryHistorySection> section,
-                   KoanLibraryRow* row) {
-                  // The row may have been rebuilt by now.
-                  if (section && section->list()->Contains(row)) {
-                    row->SetMenuOpen(false);
+                   int generation, size_t row_index) {
+                  // The list may have been rebuilt by now.
+                  if (KoanLibraryRow* shown =
+                          section ? section->RowAt(generation, row_index)
+                                  : nullptr) {
+                    shown->SetMenuOpen(false);
                   }
                 },
-                weak_factory_.GetWeakPtr(), base::Unretained(row)));
+                weak_factory_.GetWeakPtr(), generation_, index));
   }
 
   void ConfirmClearHistory(int hours) {
@@ -725,7 +741,9 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       restore_observation_{this};
   std::vector<Entry> entries_;
   int limit_ = kPageSize;
-  int row_count_ = 0;
+  // The rows shown, and which list they are (Show() starts a new one).
+  std::vector<raw_ptr<KoanLibraryRow>> rows_;
+  int generation_ = 0;
   bool exhausted_ = false;
   bool fetching_ = false;
   // Data is fetched when the section is first shown, and again then if it

@@ -504,7 +504,7 @@ class KoanLibraryDownloadsSection
     if (!library()->is_open()) {
       return;
     }
-    auto it = rows_.find(item);
+    auto it = rows_.find(item->GetGuid());
     if (it != rows_.end() && it->second.pending != IsPending(item)) {
       ScheduleRebuild();
     } else if (!update_timer_.IsRunning()) {
@@ -516,7 +516,11 @@ class KoanLibraryDownloadsSection
   }
   void OnDownloadRemoved(content::DownloadManager* manager,
                          download::DownloadItem* item) override {
-    rows_.erase(item);
+    // The item is about to go; nothing may keep it, the rows only its GUID.
+    rows_.erase(item->GetGuid());
+    if (opening_ == item->GetGuid()) {
+      opening_.clear();
+    }
     ScheduleRebuild();
     UpdateProgress();
   }
@@ -527,6 +531,30 @@ class KoanLibraryDownloadsSection
     raw_ptr<DownloadIconView> icon;
     bool pending = false;
   };
+
+  using ItemAction =
+      void (KoanLibraryDownloadsSection::*)(download::DownloadItem*);
+
+  // A download by its GUID. Callbacks hold that, never the item, which can
+  // be gone (removed, or cleared from the list) by the time they run.
+  download::DownloadItem* Find(const std::string& guid) const {
+    return notifier_ && notifier_->GetManager()
+               ? notifier_->GetManager()->GetDownloadByGuid(guid)
+               : nullptr;
+  }
+
+  // Runs `action` on the download with `guid`, if it is still there.
+  void RunOn(const std::string& guid, ItemAction action) {
+    if (download::DownloadItem* item = Find(guid)) {
+      (this->*action)(item);
+    }
+  }
+
+  base::RepeatingClosure BindAction(const std::string& guid,
+                                    ItemAction action) {
+    return base::BindRepeating(&KoanLibraryDownloadsSection::RunOn,
+                               weak_factory_.GetWeakPtr(), guid, action);
+  }
 
   std::vector<download::DownloadItem*> Downloads() const {
     std::vector<download::DownloadItem*> items;
@@ -593,8 +621,9 @@ class KoanLibraryDownloadsSection
     rebuild_pending_ = false;
     icon_tracker_.TryCancelAll();
     preview_weak_factory_.InvalidateWeakPtrs();
-    ClearList();
+    // Forget the rows before they are destroyed.
     rows_.clear();
+    ClearList();
     std::vector<download::DownloadItem*> visible;
     for (download::DownloadItem* item : Downloads()) {
       if (Matches(item)) {
@@ -617,36 +646,33 @@ class KoanLibraryDownloadsSection
   }
 
   void AddRow(views::View* group, download::DownloadItem* item) {
+    const std::string& guid = item->GetGuid();
     auto row = std::make_unique<KoanLibraryRow>(
-        base::BindRepeating(&KoanLibraryDownloadsSection::OnRowPressed,
-                            base::Unretained(this), base::Unretained(item)));
+        BindAction(guid, &KoanLibraryDownloadsSection::OnRowPressed));
     row->SetTitle(FileNameOf(item));
     auto icon = std::make_unique<DownloadIconView>();
     DownloadIconView* icon_view = icon.get();
     row->SetIconView(std::move(icon));
 
-    if (IsPending(item)) {
+    const auto add_button = [&](ItemAction action,
+                                const gfx::VectorIcon& button_icon,
+                                std::u16string tooltip) {
       row->AddAction(library::CreateIconButton(
-          base::BindRepeating(&KoanLibraryDownloadsSection::Cancel,
-                              base::Unretained(this), base::Unretained(item)),
-          vector_icons::kCloseIcon, u"Cancel download",
+          BindAction(guid, action), button_icon, std::move(tooltip),
           library::kRowButtonIconSize, library::kRowButtonPadding,
           library::kPillRadius));
+    };
+    if (IsPending(item)) {
+      add_button(&KoanLibraryDownloadsSection::Cancel, vector_icons::kCloseIcon,
+                 u"Cancel download");
     }
     if (CanRetry(item)) {
-      row->AddAction(library::CreateIconButton(
-          base::BindRepeating(&KoanLibraryDownloadsSection::Retry,
-                              base::Unretained(this), base::Unretained(item)),
-          vector_icons::kReloadChromeRefreshOldIcon, u"Retry download",
-          library::kRowButtonIconSize, library::kRowButtonPadding,
-          library::kPillRadius));
+      add_button(&KoanLibraryDownloadsSection::Retry,
+                 vector_icons::kReloadChromeRefreshOldIcon, u"Retry download");
     }
     if (HasFile(item)) {
-      row->AddAction(library::CreateIconButton(
-          base::BindRepeating(&download::DownloadItem::ShowDownloadInShell,
-                              base::Unretained(item)),
-          ShowInFolderIcon(), kShowInFolder, library::kRowButtonIconSize,
-          library::kRowButtonPadding, library::kPillRadius));
+      add_button(&KoanLibraryDownloadsSection::ShowInFolder, ShowInFolderIcon(),
+                 kShowInFolder);
     }
     auto more = library::CreateIconButton(
         views::Button::PressedCallback(), views::kMoreHorizIcon,
@@ -655,35 +681,38 @@ class KoanLibraryDownloadsSection
     views::Button* more_button = more.get();
     more->SetCallback(base::BindRepeating(
         &KoanLibraryDownloadsSection::ShowMenuBelow, base::Unretained(this),
-        base::Unretained(item), base::Unretained(more_button)));
+        guid, base::Unretained(more_button)));
     row->AddAction(std::move(more));
     row->SetMenuCallback(
         base::BindRepeating(&KoanLibraryDownloadsSection::ShowMenuAt,
-                            base::Unretained(this), base::Unretained(item)));
+                            base::Unretained(this), guid));
 
     KoanLibraryRow* added = group->AddChildView(std::move(row));
-    rows_[item] = {added, icon_view, IsPending(item)};
+    rows_[guid] = {added, icon_view, IsPending(item)};
     UpdateRow(item);
     LoadIcon(item);
   }
 
   // Status lines, rings and dimming of the rows, as the downloads progress.
   void UpdateRows() {
-    for (const auto& entry : rows_) {
-      UpdateRow(entry.first);
+    for (const auto& [guid, row] : rows_) {
+      if (download::DownloadItem* item = Find(guid)) {
+        UpdateRow(item);
+      }
     }
     UpdateProgress();
   }
 
   void UpdateRow(download::DownloadItem* item) {
-    auto it = rows_.find(item);
+    auto it = rows_.find(item->GetGuid());
     if (it == rows_.end()) {
       return;
     }
     KoanLibraryRow* row = it->second.row;
     const bool pending = IsPending(item);
+    const bool opening = opening_ == item->GetGuid();
     std::u16string status;
-    if (item == opening_) {
+    if (opening) {
       status = kOpeningInFolder;
     } else if (pending && item->GetOpenWhenComplete()) {
       status = u"Opens when finished";
@@ -692,9 +721,8 @@ class KoanLibraryDownloadsSection
     }
     // Hovered, the row shows where the file came from (not while it comes
     // in or opens).
-    row->SetSubtitle(status, pending || item == opening_
-                                 ? std::u16string()
-                                 : FormatUrl(item->GetURL()));
+    row->SetSubtitle(status, pending || opening ? std::u16string()
+                                                : FormatUrl(item->GetURL()));
     row->SetDimmed(item->GetState() == download::DownloadItem::COMPLETE &&
                    item->GetFileExternallyRemoved());
     const int percent = item->PercentComplete();
@@ -709,15 +737,15 @@ class KoanLibraryDownloadsSection
     if (HasFile(item) && CanPreview(path)) {
       auto preview = previews_.find(path);
       if (preview != previews_.end()) {
-        SetIcon(item, preview->second, /*preview=*/true);
+        SetIcon(item->GetGuid(), preview->second, /*preview=*/true);
         return;
       }
       base::ThreadPool::PostTaskAndReplyWithResult(
           FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
           base::BindOnce(&ReadPreviewFile, path),
           base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewRead,
-                         preview_weak_factory_.GetWeakPtr(),
-                         base::Unretained(item), path));
+                         preview_weak_factory_.GetWeakPtr(), item->GetGuid(),
+                         path));
     }
     IconManager* icons = g_browser_process->icon_manager();
     const ui::Compositor* compositor =
@@ -725,23 +753,23 @@ class KoanLibraryDownloadsSection
     const float scale = compositor ? compositor->device_scale_factor() : 1.f;
     if (gfx::Image* cached =
             icons->LookupIconFromFilepath(path, IconLoader::NORMAL, scale)) {
-      SetIcon(item, *cached->ToImageSkia(), /*preview=*/false);
+      SetIcon(item->GetGuid(), *cached->ToImageSkia(), /*preview=*/false);
       return;
     }
     icons->LoadIcon(path, IconLoader::NORMAL, scale,
                     base::BindOnce(
-                        [](KoanLibraryDownloadsSection* section,
-                           download::DownloadItem* item, gfx::Image image) {
-                          if (!image.IsEmpty()) {
-                            section->SetIcon(item, *image.ToImageSkia(),
+                        [](base::WeakPtr<KoanLibraryDownloadsSection> section,
+                           const std::string& guid, gfx::Image image) {
+                          if (section && !image.IsEmpty()) {
+                            section->SetIcon(guid, *image.ToImageSkia(),
                                              /*preview=*/false);
                           }
                         },
-                        base::Unretained(this), base::Unretained(item)),
+                        preview_weak_factory_.GetWeakPtr(), item->GetGuid()),
                     &icon_tracker_);
   }
 
-  void OnPreviewRead(download::DownloadItem* item,
+  void OnPreviewRead(const std::string& guid,
                      const base::FilePath& path,
                      std::optional<std::string> data) {
     if (!data || data->empty()) {
@@ -753,11 +781,10 @@ class KoanLibraryDownloadsSection
         /*shrink_to_fit=*/true, kMaxPreviewBytes,
         gfx::Size(2 * kPreviewSize, 2 * kPreviewSize),
         base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewDecoded,
-                       preview_weak_factory_.GetWeakPtr(),
-                       base::Unretained(item), path));
+                       preview_weak_factory_.GetWeakPtr(), guid, path));
   }
 
-  void OnPreviewDecoded(download::DownloadItem* item,
+  void OnPreviewDecoded(const std::string& guid,
                         const base::FilePath& path,
                         const SkBitmap& bitmap) {
     if (bitmap.isNull()) {
@@ -770,13 +797,13 @@ class KoanLibraryDownloadsSection
         image, gfx::Rect((bitmap.width() - side) / 2,
                          (bitmap.height() - side) / 2, side, side));
     previews_[path] = square;
-    SetIcon(item, square, /*preview=*/true);
+    SetIcon(guid, square, /*preview=*/true);
   }
 
-  void SetIcon(download::DownloadItem* item,
+  void SetIcon(const std::string& guid,
                const gfx::ImageSkia& image,
                bool preview) {
-    auto it = rows_.find(item);
+    auto it = rows_.find(guid);
     if (it != rows_.end()) {
       it->second.icon->SetImage(image, preview);
     }
@@ -816,19 +843,26 @@ class KoanLibraryDownloadsSection
       return;
     }
     item->ShowDownloadInShell();
-    opening_ = item;
+    opening_ = item->GetGuid();
     UpdateRow(item);
-    opening_timer_.Start(FROM_HERE, kOpeningFeedback,
-                         base::BindOnce(
-                             [](KoanLibraryDownloadsSection* section) {
-                               download::DownloadItem* item =
-                                   std::exchange(section->opening_, nullptr);
-                               section->UpdateRow(item);
-                             },
-                             base::Unretained(this)));
+    opening_timer_.Start(
+        FROM_HERE, kOpeningFeedback,
+        base::BindOnce(
+            [](KoanLibraryDownloadsSection* section) {
+              const std::string guid = std::exchange(section->opening_, {});
+              if (download::DownloadItem* item = section->Find(guid)) {
+                section->UpdateRow(item);
+              }
+            },
+            base::Unretained(this)));
   }
 
   void Cancel(download::DownloadItem* item) { item->Cancel(true); }
+  void ShowInFolder(download::DownloadItem* item) {
+    item->ShowDownloadInShell();
+  }
+  void Open(download::DownloadItem* item) { item->OpenDownload(); }
+  void RemoveItem(download::DownloadItem* item) { item->Remove(); }
 
   void Retry(download::DownloadItem* item) {
     if (item->CanResume()) {
@@ -902,86 +936,79 @@ class KoanLibraryDownloadsSection
     }
   }
 
-  void ShowMenuBelow(download::DownloadItem* item, views::Button* button) {
-    ShowMenu(item, button, button->GetBoundsInScreen(),
+  void ShowMenuBelow(const std::string& guid, views::Button* button) {
+    ShowMenu(guid, button, button->GetBoundsInScreen(),
              views::MenuAnchorPosition::kTopRight,
              ui::mojom::MenuSourceType::kMouse);
   }
 
-  void ShowMenuAt(download::DownloadItem* item,
+  void ShowMenuAt(const std::string& guid,
                   KoanLibraryRow* row,
                   const gfx::Point& point,
                   ui::mojom::MenuSourceType source_type) {
-    ShowMenu(item, row, gfx::Rect(point, gfx::Size()),
+    ShowMenu(guid, row, gfx::Rect(point, gfx::Size()),
              views::MenuAnchorPosition::kTopLeft, source_type);
   }
 
   // Zen's downloads menu.
-  void ShowMenu(download::DownloadItem* item,
+  void ShowMenu(const std::string& guid,
                 views::View* source,
                 const gfx::Rect& bounds,
                 views::MenuAnchorPosition anchor,
                 ui::mojom::MenuSourceType source_type) {
+    download::DownloadItem* item = Find(guid);
+    if (!item) {
+      return;
+    }
     const std::u16string name = FileNameOf(item);
     const bool has_file = HasFile(item);
     auto menu = std::make_unique<KoanLibraryMenu>();
     menu->AddItem(base::StrCat({u"Open ", name}),
-                  base::BindRepeating(&download::DownloadItem::OpenDownload,
-                                      base::Unretained(item)),
+                  BindAction(guid, &KoanLibraryDownloadsSection::Open),
                   has_file);
-    menu->AddItem(
-        kShowInFolder,
-        base::BindRepeating(&download::DownloadItem::ShowDownloadInShell,
-                            base::Unretained(item)),
-        has_file);
+    menu->AddItem(kShowInFolder,
+                  BindAction(guid, &KoanLibraryDownloadsSection::ShowInFolder),
+                  has_file);
     menu->AddSeparator();
-    menu->AddItem(
-        base::StrCat({u"Copy ", name}),
-        base::BindRepeating(&KoanLibraryDownloadsSection::CopyFile,
-                            weak_factory_.GetWeakPtr(), base::Unretained(item)),
-        has_file);
+    menu->AddItem(base::StrCat({u"Copy ", name}),
+                  BindAction(guid, &KoanLibraryDownloadsSection::CopyFile),
+                  has_file);
     menu->AddItem(u"Copy download link",
-                  base::BindRepeating(&KoanLibraryDownloadsSection::CopyLink,
-                                      weak_factory_.GetWeakPtr(),
-                                      base::Unretained(item)));
+                  BindAction(guid, &KoanLibraryDownloadsSection::CopyLink));
     menu->AddSeparator();
     menu->AddItem(u"Remove from history",
-                  base::BindRepeating(&download::DownloadItem::Remove,
-                                      base::Unretained(item)));
-    menu->AddItem(
-        u"Delete File",
-        base::BindRepeating(&KoanLibraryDownloadsSection::Delete,
-                            weak_factory_.GetWeakPtr(), base::Unretained(item)),
-        has_file || IsPending(item));
-    auto row = rows_.find(item);
-    KoanLibraryRow* menu_row =
-        row != rows_.end() ? row->second.row.get() : nullptr;
-    if (menu_row) {
-      menu_row->SetMenuOpen(true);
+                  BindAction(guid, &KoanLibraryDownloadsSection::RemoveItem));
+    menu->AddItem(u"Delete File",
+                  BindAction(guid, &KoanLibraryDownloadsSection::Delete),
+                  has_file || IsPending(item));
+    if (auto row = rows_.find(guid); row != rows_.end()) {
+      row->second.row->SetMenuOpen(true);
     }
     RunMenu(std::move(menu), source, bounds, anchor, source_type,
             base::BindRepeating(
                 [](base::WeakPtr<KoanLibraryDownloadsSection> section,
-                   download::DownloadItem* item) {
+                   const std::string& guid) {
                   if (!section) {
                     return;
                   }
-                  auto it = section->rows_.find(item);
-                  if (it != section->rows_.end()) {
+                  if (auto it = section->rows_.find(guid);
+                      it != section->rows_.end()) {
                     it->second.row->SetMenuOpen(false);
                   }
                 },
-                weak_factory_.GetWeakPtr(), base::Unretained(item)));
+                weak_factory_.GetWeakPtr(), guid));
   }
 
   const raw_ptr<Profile> profile_;
   std::unique_ptr<download::AllDownloadItemNotifier> notifier_;
-  std::map<raw_ptr<download::DownloadItem>, Row> rows_;
+  // The rows shown, by their download's GUID.
+  std::map<std::string, Row> rows_;
   std::map<base::FilePath, gfx::ImageSkia> previews_;
   int limit_ = kPageSize;
   bool shown_ = false;
   bool rebuild_pending_ = false;
-  raw_ptr<download::DownloadItem> opening_ = nullptr;
+  // The download just shown in the file manager, for a moment.
+  std::string opening_;
   base::OneShotTimer opening_timer_;
   base::OneShotTimer update_timer_;
   base::CancelableTaskTracker icon_tracker_;
