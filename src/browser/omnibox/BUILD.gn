@@ -1,0 +1,12 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Hook declarations called from upstream omnibox code. Header-only and
+# dependency-light so //components/omnibox/browser can depend on it without
+# cycles; the definitions live in //koan/browser/ui/views:impl, linked
+# through //chrome/browser:browser.
+source_set("hooks") {
+  sources = [ "koan_omnibox_hooks.h" ]
+  public_deps = [ "//base" ]
+}

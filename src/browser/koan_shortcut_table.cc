@@ -8,6 +8,8 @@
 #include <set>
 #include <string_view>
 
+#include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "koan/browser/koan_features.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -221,6 +223,99 @@ bool IsValidCustomAccelerator(const ui::Accelerator& accelerator) {
     return true;
   }
   return (accelerator.modifiers() & (kCtrl | kAlt | ui::EF_COMMAND_DOWN)) != 0;
+}
+
+std::u16string DisplayText(const ui::Accelerator& accelerator) {
+#if BUILDFLAG(IS_MAC)
+  return accelerator.GetShortcutText();
+#else
+  std::u16string text;
+  if (accelerator.IsCtrlDown()) {
+    text += u"Ctrl+";
+  }
+  if (accelerator.IsCmdDown()) {
+    text += u"Win+";
+  }
+  if (accelerator.IsAltDown()) {
+    text += u"Alt+";
+  }
+  if (accelerator.IsShiftDown()) {
+    text += u"⇧+";
+  }
+  const ui::KeyboardCode key = accelerator.key_code();
+  if ((key >= ui::VKEY_0 && key <= ui::VKEY_9) ||
+      (key >= ui::VKEY_A && key <= ui::VKEY_Z)) {
+    return text + static_cast<char16_t>(key);
+  }
+  if (key >= ui::VKEY_NUMPAD0 && key <= ui::VKEY_NUMPAD9) {
+    return text + u"Num" + base::NumberToString16(key - ui::VKEY_NUMPAD0);
+  }
+  if (key >= ui::VKEY_F1 && key <= ui::VKEY_F24) {
+    return text + u"F" + base::NumberToString16(key - ui::VKEY_F1 + 1);
+  }
+  switch (key) {
+    case ui::VKEY_BACK:
+      return text + u"Backspace";
+    case ui::VKEY_TAB:
+      return text + u"Tab";
+    case ui::VKEY_RETURN:
+      return text + u"Enter";
+    case ui::VKEY_ESCAPE:
+      return text + u"Esc";
+    case ui::VKEY_SPACE:
+      return text + u"Space";
+    case ui::VKEY_PRIOR:
+      return text + u"PageUp";
+    case ui::VKEY_NEXT:
+      return text + u"PageDown";
+    case ui::VKEY_END:
+      return text + u"End";
+    case ui::VKEY_HOME:
+      return text + u"Home";
+    case ui::VKEY_LEFT:
+      return text + u"←";
+    case ui::VKEY_UP:
+      return text + u"↑";
+    case ui::VKEY_RIGHT:
+      return text + u"→";
+    case ui::VKEY_DOWN:
+      return text + u"↓";
+    case ui::VKEY_INSERT:
+      return text + u"Insert";
+    case ui::VKEY_DELETE:
+      return text + u"Delete";
+    case ui::VKEY_MULTIPLY:
+      return text + u"*";
+    case ui::VKEY_ADD:
+    case ui::VKEY_OEM_PLUS:
+      return text + (key == ui::VKEY_ADD ? u"+" : u"=");
+    case ui::VKEY_SUBTRACT:
+    case ui::VKEY_OEM_MINUS:
+      return text + u"-";
+    case ui::VKEY_DECIMAL:
+    case ui::VKEY_OEM_PERIOD:
+      return text + u".";
+    case ui::VKEY_DIVIDE:
+    case ui::VKEY_OEM_2:
+      return text + u"/";
+    case ui::VKEY_OEM_1:
+      return text + u";";
+    case ui::VKEY_OEM_COMMA:
+      return text + u",";
+    case ui::VKEY_OEM_3:
+      return text + u"`";
+    case ui::VKEY_OEM_4:
+      return text + u"[";
+    case ui::VKEY_OEM_5:
+      return text + u"\\";
+    case ui::VKEY_OEM_6:
+      return text + u"]";
+    case ui::VKEY_OEM_7:
+      return text + u"'";
+    default:
+      return text + u"#" + base::NumberToString16(static_cast<int>(key));
+  }
+#endif
 }
 
 base::DictValue ToPrefValue(const ui::Accelerator& accelerator) {

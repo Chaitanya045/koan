@@ -72,6 +72,30 @@ Ctrl+Alt+B switches to the multiple-toolbars layout (a toolbar above the
 page, as in Chrome) and back. The layout applies to all windows and
 persists.
 
+## Command palette
+
+As in Zen, the URL bar runs actions too. Type three or more letters of an
+action ("compact", "pin tab", "dark") and up to three matching actions
+appear right below the first suggestion, with their shortcut; pick one with
+the arrow keys and Enter, or click it. An action you have run comes first
+the next time, and typing its whole name ("toggle compact mode") makes Enter
+run it; actions you keep passing over drop below the search suggestions.
+Typing the start of an address still opens the site.
+
+To see every action, press Tab in an empty URL bar (Ctrl+L, Backspace,
+Tab) or type `>`; Tab again leaves. Typing filters the list, and once you
+have typed two letters Enter runs the first match.
+
+The actions, with Zen's names: Toggle Compact Mode, New Split View, Expand
+current view (unsplit), Copy Current URL, Settings, Open Private Window,
+Open New Window, Pin / Unpin Tab, Add to / Remove from Essentials, Close
+Tab, Reopen Closed Tab, Duplicate Current Tab, Reload Tab, Reload Tab
+Without Cache, Next / Previous Tab, Capture Screenshot, Find in Page, Manage
+Extensions, Switch to Automatic Appearance / Light Mode / Dark Mode, Print;
+with workspaces also New Space, Next / Previous Space and "Focus on" each
+other Space (type its name). Only the actions that apply are offered (Unpin
+Tab on a pinned tab, Next Space with two Spaces, ...).
+
 ## Sidebar
 
 Vertical tabs are on by default, laid out like Zen's. Pinned tabs are
@@ -225,7 +249,7 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
-freeze background tabs.
+freeze background tabs, command palette.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

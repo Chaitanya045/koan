@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_KOAN_SHORTCUT_TABLE_H_
 #define KOAN_BROWSER_KOAN_SHORTCUT_TABLE_H_
 
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -113,6 +114,12 @@ base::span<const CycleKey> CycleKeys();
 // Alt or Meta (Shift alone would take a key away from typing), or a function
 // key; not a tab cycling key.
 bool IsValidCustomAccelerator(const ui::Accelerator& accelerator);
+
+// How Zen shows `accelerator` (its settings page and command palette):
+// Ctrl+Win+Alt+⇧+Key, e.g. "Ctrl+Alt+⇧+C", "Ctrl+,". On macOS the platform's
+// glyphs (⌃⌥⇧⌘), which Chromium's accelerator text uses too. The settings
+// page's koan_settings.js has the same table.
+std::u16string DisplayText(const ui::Accelerator& accelerator);
 
 // The pref value for an action's custom key; `accelerator` is empty
 // (VKEY_UNKNOWN) for "not set".

@@ -1,0 +1,30 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+import("//components/vector_icons/vector_icons.gni")
+
+# Koan's own vector icons (koan::k...Icon), for what Chrome has no icon for.
+# light_mode.icon and automatic_appearance.icon are Chromium's (ash's
+# brightness_up_refresh.icon and unified_menu_dark_mode.icon, BSD, headers
+# kept); the templates follow chrome/app/vector_icons'.
+aggregate_vector_icons("koan_vector_icons") {
+  icon_directory = "."
+
+  sources = [
+    "automatic_appearance.icon",
+    "dark_mode.icon",
+    "light_mode.icon",
+  ]
+}
+
+source_set("vector_icons") {
+  sources = get_target_outputs(":koan_vector_icons")
+
+  deps = [
+    ":koan_vector_icons",
+    "//base",
+    "//skia",
+    "//ui/gfx",
+  ]
+}

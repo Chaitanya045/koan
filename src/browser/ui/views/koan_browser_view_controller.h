@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
@@ -16,6 +17,7 @@ class BrowserView;
 
 namespace koan {
 
+class KoanCommandPalette;
 class KoanCompactModeController;
 class KoanGlanceController;
 class KoanShortcutController;
@@ -52,6 +54,11 @@ class KoanBrowserViewController : public views::ViewObserver {
   }
   KoanGlanceController* glance() const { return glance_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
+  KoanCommandPalette* command_palette() const { return command_palette_.get(); }
+
+  base::WeakPtr<KoanBrowserViewController> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
 
   // Number of live controllers, i.e. open browser windows.
   static int live_count();
@@ -75,8 +82,11 @@ class KoanBrowserViewController : public views::ViewObserver {
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
   // Last: it calls into the controllers above.
   std::unique_ptr<KoanShortcutController> shortcuts_;
+  // Its commands run the shortcuts above.
+  std::unique_ptr<KoanCommandPalette> command_palette_;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       observations_{this};
+  base::WeakPtrFactory<KoanBrowserViewController> weak_factory_{this};
 };
 
 }  // namespace koan

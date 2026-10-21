@@ -68,6 +68,8 @@ class KoanShortcutController : public ui::AcceleratorTarget {
 
   // The key currently bound to `action` (the user may rebind it), if any.
   std::optional<ui::Accelerator> GetAccelerator(Action action) const;
+  // Whether `accelerator` runs a Koan shortcut instead of Chrome's command.
+  bool IsBound(const ui::Accelerator& accelerator) const;
 
   // ui::AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;

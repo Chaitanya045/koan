@@ -295,6 +295,12 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
   return true;
 }
 
+bool KoanShortcutController::IsBound(const ui::Accelerator& accelerator) const {
+  return std::ranges::any_of(bindings_, [&](const Binding& binding) {
+    return binding.accelerator == accelerator;
+  });
+}
+
 bool KoanShortcutController::Command(int command_id) {
   BrowserWindowInterface* browser = browser_view_->browser();
   if (!chrome::IsCommandEnabled(browser, command_id)) {

@@ -1,0 +1,10 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+
+// A crescent moon (Zen's "Switch to Dark Mode").
+CANVAS_DIMENSIONS, 20,
+MOVE_TO, 10, 3,
+ARC_TO, 7, 7, 0, 0, 0, 10, 17,
+ARC_TO, 9, 9, 0, 0, 1, 10, 3,
+CLOSE

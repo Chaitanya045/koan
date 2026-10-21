@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "koan/browser/ui/views/koan_command_palette.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
@@ -45,7 +46,8 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(
           browser_view->browser()->GetTabStripModel())),
-      shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)) {
+      shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)),
+      command_palette_(std::make_unique<KoanCommandPalette>(this)) {
   ++g_live_count;
   observations_.AddObservation(browser_view);
   if (MultiContentsView* contents = browser_view->multi_contents_view()) {
@@ -70,6 +72,7 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
 // static
 void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
   if (KoanBrowserViewController* controller = From(browser_view)) {
+    controller->command_palette_->OnBrowserViewDestroying();
     controller->shortcuts_->OnBrowserViewDestroying();
     controller->compact_mode_->OnBrowserViewDestroying();
     controller->sidebar_tabs_->OnBrowserViewDestroying();
@@ -99,6 +102,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     sidebar_tabs_->OnAddedToWidget();
     workspaces_->OnAddedToWidget();
     shortcuts_->OnAddedToWidget();
+    command_palette_->OnAddedToWidget();
   }
 }
 
