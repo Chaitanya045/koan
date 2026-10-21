@@ -34,6 +34,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
@@ -611,15 +612,19 @@ gfx::Rect KoanUrlBarController::CardBounds() const {
   views::View* pill = nav->url_pill();
   const gfx::Rect pill_bounds =
       views::View::ConvertRectToTarget(pill, overlay, pill->GetLocalBounds());
+  // "normal" widens it over the page, away from the sidebar's edge.
+  const bool sidebar_on_right = IsSidebarOnRight(browser_view_);
   int width = pill_bounds.width();
   if (user_input_in_progress_) {
-    width =
-        std::max(width, std::min({area.width() * 9 / 10, kUrlBarOpenMaxWidth,
-                                  area.right() - pill_bounds.x()}));
+    const int room = sidebar_on_right ? pill_bounds.right() - area.x()
+                                      : area.right() - pill_bounds.x();
+    width = std::max(
+        width, std::min({area.width() * 9 / 10, kUrlBarOpenMaxWidth, room}));
   }
   // Over the pill, keeping its centre, so it reads as the pill being edited.
-  return gfx::Rect(pill_bounds.x(), pill_bounds.CenterPoint().y() - height / 2,
-                   width, height);
+  return gfx::Rect(
+      sidebar_on_right ? pill_bounds.right() - width : pill_bounds.x(),
+      pill_bounds.CenterPoint().y() - height / 2, width, height);
 }
 
 void KoanUrlBarController::OnViewVisibilityChanged(views::View* observed_view,

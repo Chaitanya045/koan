@@ -18,7 +18,7 @@
 // profile was started with. With SHOTS=<dir> (see run.sh) it saves
 // screenshots of each state there.
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
-import { browserCall, settingsCall, visiblePage, waitFor } from './lib/koan.mjs';
+import { browserCall, setKoanPref, visiblePage, waitFor } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -144,12 +144,38 @@ async function windowKey(keyCode, flags = 0) {
   await sleep(800);
 }
 
-// Types into a textfield the way an input method would.
+// The first node of class `cls` in a UI DevTools document. Node ids are
+// handed out in tree order on each DOM.getDocument, so views added earlier
+// in the tree (the floating bar's backdrop) shift them: look a node up in
+// the same session that uses it.
+const nodeOf = (n, cls) => {
+  const a = n.attributes ?? [];
+  if (n.nodeName === 'View' && a[a.indexOf('class') + 1] === cls) return n.nodeId;
+  for (const c of n.children ?? []) {
+    const id = nodeOf(c, cls);
+    if (id) return id;
+  }
+  return null;
+};
+
+// Sends `events` to the first view of class `cls`.
+async function toClass(cls, method, events) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const nodeId = nodeOf(doc, cls);
+  for (const event of events) await ui.send(method, { nodeId, event });
+  ui.close();
+}
+
+// Types into a textfield the way an input method would. The first
+// keystroke may float the bar, which moves the textfield's node: each
+// character finds it again.
 async function type(view, text) {
   for (const ch of text) {
-    await uiEvent(view, 'DOM.dispatchKeyEvent',
-                  { type: 'keyPressed', keyCode: 0, code: 0, flags: 0,
-                    key: ch.codePointAt(0), isChar: true });
+    await toClass(view.cls, 'DOM.dispatchKeyEvent',
+                  [{ type: 'keyPressed', keyCode: 0, code: 0, flags: 0,
+                     key: ch.codePointAt(0), isChar: true }]);
   }
   await sleep(1000);
 }
@@ -396,11 +422,13 @@ check('...and Enter still opens it in a new tab, leaving the page alone',
 // otherwise end once the pointer stays away (about 3 s) and take the pill.
 if (BEHAVIOR !== 'float') {
   await key(VK.S, CTRL, 's');
-  // Find the pill first: reading the views takes long enough for the peek
-  // to end.
-  const hiddenPill = find(await views(), 'KoanUrlPill');
   await key(VK.S, CTRL | ALT, 's');
-  await click(hiddenPill);
+  // Not views(): reading every view's properties takes long enough for the
+  // peek to end.
+  await toClass('KoanUrlPill', 'DOM.dispatchMouseEvent',
+                ['mousePressed', 'mouseReleased'].map(type =>
+                    ({ type, x: 10, y: 10, button: 'left', wheelDirection: 'none' })));
+  await sleep(1000);
   vs = await views();
   const atClick = `at the click: sidebar ${find(vs, 'VerticalTabStripRegionView')?.w}, ` +
       `bar ${bar(vs)?.x}+${bar(vs)?.w}`;
@@ -425,16 +453,6 @@ if (BEHAVIOR !== 'float') {
 // The omnibox stays in the toolbar; Ctrl+T and the app menu's New tab (the
 // New Tab command, or Chromium's kActionNewTab with the action-based menu)
 // still open it for a new tab.
-async function setKoanPref(name, value) {
-  const { targetId } = (await browserCall('Target.createTarget',
-      { url: 'chrome://koan-settings', background: true })).result;
-  const page = await waitFor(async () => (await pages()).find(p => p.id === targetId));
-  await waitFor(() => evalIn(page, `document.readyState === 'complete'`));
-  const ok = await settingsCall(page, 'setPref', name, value);
-  await browserCall('Target.closeTarget', { targetId });
-  await sleep(1000);
-  return ok;
-}
 check('Multiple toolbars', await setKoanPref('koan.single_toolbar', false) === true);
 tabsNow = (await pages()).length;
 current = await visiblePage();
