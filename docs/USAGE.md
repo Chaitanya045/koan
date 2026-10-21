@@ -99,7 +99,9 @@ when suggestions are showing), a click outside the card or opening a
 result closes it. In compact mode, with the sidebar hidden, it floats
 right away.
 
-![Floating URL bar](screenshots/floating-url-bar.png)
+| Editing in the pill | Floating once you type | Ctrl+T |
+|---|---|---|
+| ![In the pill](screenshots/urlbar-in-pill.png) | ![Floating](screenshots/urlbar-floating.png) | ![Ctrl+T](screenshots/urlbar-new-tab.png) |
 
 **Ctrl+T** (or the sidebar's **+ New Tab**) opens the URL bar, empty,
 instead of a new-tab page: the tab opens only when you open something from
