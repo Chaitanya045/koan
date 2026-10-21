@@ -23,7 +23,6 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
@@ -157,22 +156,6 @@ void KoanUrlBarController::UpdateKeyHandler() {
   key_target_.SetView(omnibox);
   if (omnibox) {
     omnibox->AddPreTargetHandler(this);
-  }
-}
-
-void KoanUrlBarController::UpdateSidebarLock() {
-  // Zen keeps the compact sidebar out while its URL bar is edited; without
-  // this, a pill edit from a peeked sidebar would jump to floating once the
-  // pointer leaves the sidebar.
-  if (placement_ != Placement::kInPill || !compact_mode_->hides_sidebar()) {
-    sidebar_lock_.reset();
-    return;
-  }
-  if (!sidebar_lock_) {
-    if (TabStripRegionView* tab_strip = browser_view_->tab_strip_view()) {
-      sidebar_lock_ =
-          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
-    }
   }
 }
 
@@ -385,9 +368,12 @@ KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
   if (!features::IsUrlBarEnabled()) {
     return Placement::kFloating;
   }
+  // Compact mode with the sidebar hidden floats it too when it's opened from
+  // a peeked sidebar's pill: Chromium collapses an expanded-on-hover sidebar
+  // while the omnibox's suggestions are open, which would take the pill away.
   const std::string behavior = Behavior();
   if (floated_ || behavior == prefs::kUrlBarBehaviorFloat ||
-      !IsPillAvailable()) {
+      compact_mode_->hides_sidebar() || !IsPillAvailable()) {
     return Placement::kFloating;
   }
   // Zen's floating-on-type: the first keystroke floats the bar, and the
@@ -435,7 +421,6 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     }
     placement_ = Placement::kNone;
     UpdateKeyHandler();
-    UpdateSidebarLock();
     ApplyCardStyle();
     browser_view_->InvalidateLayout();
     compact_mode_->OnUrlBarOpenChanged();
@@ -468,7 +453,6 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     layer->SetTransform(gfx::Transform());
     compact_mode_->OnUrlBarOpenChanged();
   }
-  UpdateSidebarLock();
   // The style first: the larger floating font can change the toolbar's
   // preferred height.
   ApplyCardStyle();

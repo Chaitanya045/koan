@@ -407,40 +407,29 @@ check('...and leaves the page it was opened from alone',
 vs = await views();
 check('...and the URL bar is closed', bar(vs)?.w === WINDOW_WIDTH, `width ${bar(vs)?.w}`);
 
-// --- Compact mode: a pill edit keeps the peeked sidebar out -------------------
-// Zen keeps the compact sidebar while its URL bar is edited; the peek would
-// otherwise end once the pointer stays away (about 3 s) and take the pill.
-if (BEHAVIOR !== 'float') {
-  await key(VK.S, CTRL, 's');
-  await key(VK.S, CTRL | ALT, 's');
-  // Not views(): reading every view's properties takes long enough for the
-  // peek to end.
-  const peeked = (await propsOf(['VerticalTabStripRegionView']))
-      .VerticalTabStripRegionView.Width;
-  await toClass('KoanUrlPill', 'DOM.dispatchMouseEvent',
-                ['mousePressed', 'mouseReleased'].map(type =>
-                    ({ type, x: 10, y: 10, button: 'left', wheelDirection: 'none' })));
-  await sleep(300);
-  const p = await propsOf(['VerticalTabStripRegionView', 'TopContainerView', 'KoanUrlPill']);
-  const atClick = `peeked ${peeked}; at the click: sidebar ${p.VerticalTabStripRegionView.Width}, ` +
-      `bar ${p.TopContainerView.X}+${p.TopContainerView.Width}, ` +
-      `pill ${p.KoanUrlPill.X}+${p.KoanUrlPill.Width} visible ${p.KoanUrlPill.Visible}`;
-  await sleep(4500);
-  vs = await views();
-  const strip = find(vs, 'VerticalTabStripRegionView');
-  const pillNow = find(vs, 'KoanUrlPill');
-  check('Compact mode: editing in a peeked sidebar\'s pill keeps the sidebar and the pill',
-        strip?.w >= 200 && pillNow?.shown && bar(vs)?.x === pillNow.x && !isFloating(vs),
-        `${atClick}; later: sidebar ${strip?.w}, bar ${bar(vs)?.x}+${bar(vs)?.w}, ` +
-            `pill ${pillNow?.x}`);
-  await closeBar();
-  await sleep(4500);
-  vs = await views();
-  check('...and the sidebar goes once the bar closes',
-        find(vs, 'VerticalTabStripRegionView')?.w === 0,
-        `sidebar ${find(vs, 'VerticalTabStripRegionView')?.w}`);
-  await key(VK.S, CTRL, 's');
-}
+// --- Compact mode: the pill of a peeked sidebar floats the bar --------------
+// Chromium collapses an expanded-on-hover sidebar while the omnibox's
+// suggestions are open, which would take the pill away mid-edit: with the
+// sidebar hidden, the bar floats from the start, in every behaviour.
+await key(VK.S, CTRL, 's');
+await key(VK.S, CTRL | ALT, 's');
+// Not views(): reading every view's properties takes long enough for the
+// peek to end.
+const peeked = (await propsOf(['VerticalTabStripRegionView'])).VerticalTabStripRegionView.Width;
+await toClass('KoanUrlPill', 'DOM.dispatchMouseEvent',
+              ['mousePressed', 'mouseReleased'].map(type =>
+                  ({ type, x: 10, y: 10, button: 'left', wheelDirection: 'none' })));
+await sleep(1000);
+vs = await views();
+check('Compact mode: the pill of a peeked sidebar opens the URL bar floating',
+      +peeked >= 200 && isFloating(vs),
+      `peeked ${peeked}, bar ${bar(vs)?.x}+${bar(vs)?.w}`);
+await type(find(vs, 'OmniboxViewViews'), 'wiki');
+vs = await views();
+check('...and typing keeps it there', isFloating(vs) && omniboxText(vs) === 'wiki',
+      `${JSON.stringify(omniboxText(vs))}, bar ${bar(vs)?.x}+${bar(vs)?.w}`);
+await closeBar();
+await key(VK.S, CTRL, 's');
 
 // --- Switching away from the window keeps the new-tab bar ----------------------
 // Like Zen: Alt-Tab and back, and what was typed is still there, for a new

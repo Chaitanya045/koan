@@ -97,8 +97,8 @@ of its width, at most 750 px, larger text, a soft shadow over the page)
 with the suggestions under it. The pill is empty meanwhile. Esc, a click
 outside the card or opening a result (or running an action) closes it;
 switching to another window and back leaves it as it was. In compact mode,
-with the sidebar hidden, it floats right away; edited from a peeked sidebar,
-the sidebar stays out until you're done.
+with the sidebar hidden, it floats right away, also when you click the pill
+of the peeked sidebar.
 
 | Editing in the pill | Floating once you type | Ctrl+T |
 |---|---|---|
