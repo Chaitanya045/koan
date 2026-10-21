@@ -1,0 +1,11 @@
+diff --git a/components/omnibox/browser/BUILD.gn b/components/omnibox/browser/BUILD.gn
+--- a/components/omnibox/browser/BUILD.gn
++++ b/components/omnibox/browser/BUILD.gn
+@@ -438,6 +438,7 @@
+     "//components/variations/service",
+     "//components/vector_icons",
+     "//extensions/buildflags",
++    "//koan/browser/omnibox:hooks",
+     "//net",
+     "//services/metrics/public/cpp:metrics_cpp",
+     "//services/metrics/public/cpp:ukm_builders",

@@ -38,6 +38,10 @@
        "use WebRTC, devices or notifications. On by default in Koan.",       \
        kOsDesktop,                                                           \
        FEATURE_VALUE_TYPE(                                                   \
-           performance_manager::features::kInfiniteTabsFreezing)},
+           performance_manager::features::kInfiniteTabsFreezing)},           \
+      {"koan-command-palette", "Koan command palette",                       \
+       "Zen's actions (compact mode, Spaces, pin tab, ...) as suggestions "  \
+       "of the URL bar; \">\" or Tab in an empty URL bar lists them all.",   \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanCommandPalette)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

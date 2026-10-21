@@ -25,6 +25,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCloseOnBackWithNoHistory, true);
   registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
+  registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);
+  registry->RegisterDictionaryPref(kCommandPaletteUsage);
 }
 
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {

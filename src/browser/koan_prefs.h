@@ -74,6 +74,16 @@ inline constexpr char kCtrlTabWithinKind[] = "koan.tabs.ctrl_tab_within_kind";
 // restored; zen.tabs.ctrl-tab.ignore-pending-tabs).
 inline constexpr char kCtrlTabSkipPending[] = "koan.tabs.ctrl_tab_skip_pending";
 
+// Command palette: whether typing in the URL bar suggests matching actions
+// (Zen's zen.urlbar.suggestions.quick-actions). The ">" list works either
+// way.
+inline constexpr char kCommandPaletteSuggestions[] =
+    "koan.command_palette.suggestions";
+
+// Command palette: how often each action was run (up to 5) or passed over
+// (down to -5), by command id (Zen's zen.urlbar.suggestions-learner).
+inline constexpr char kCommandPaletteUsage[] = "koan.command_palette.usage";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

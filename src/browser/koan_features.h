@@ -25,12 +25,15 @@ BASE_DECLARE_FEATURE(kKoanGlance);
 // first shown instead of all at startup, like Zen. Read in the browser
 // process only.
 BASE_DECLARE_FEATURE(kKoanRestoreTabsOnDemand);
+// Command palette: Zen's actions as suggestions of the URL bar.
+BASE_DECLARE_FEATURE(kKoanCommandPalette);
 
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
 bool IsGlanceEnabled();
 bool IsRestoreTabsOnDemandEnabled();
+bool IsCommandPaletteEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read
