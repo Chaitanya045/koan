@@ -24,6 +24,7 @@ bool IsTabUnloaded(content::WebContents* contents);
 // device, open in DevTools, holding form input, kept by an extension or the
 // "always keep these sites active" list. Being recently visible or audible,
 // or the URL's scheme, don't count for an unload the user asked for.
+// Without Memory Saver's data for the page, true (the safe answer).
 bool IsTabInUse(content::WebContents* contents);
 
 // Discards `contents` (it reloads when shown). Not for the active tab.

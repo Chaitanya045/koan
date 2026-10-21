@@ -39,6 +39,7 @@
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_split_view.h"
+#include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/common/koan_url_constants.h"
@@ -48,16 +49,6 @@
 #include "url/gurl.h"
 
 namespace koan {
-
-namespace {
-
-// Zen's "pending" tabs: not loaded yet (discarded, or restored and not
-// shown since).
-bool IsPending(content::WebContents* contents) {
-  return contents->WasDiscarded() || contents->GetController().NeedsReload();
-}
-
-}  // namespace
 
 KoanShortcutController::KoanShortcutController(
     BrowserView* browser_view,
@@ -316,7 +307,7 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
     if (model->IsTabCollapsed(i) ||
         (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
         (within_kind && tab->IsPinned() != active_pinned) ||
-        (skip_pending && IsPending(tab->GetContents()))) {
+        (skip_pending && IsTabUnloaded(tab->GetContents()))) {
       continue;
     }
     model->ActivateTabAt(

@@ -24,16 +24,24 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc b/chro
        gfx::Rect unfocus_bounds;
        unfocus_bounds.set_x(header_bounds.x());
        unfocus_bounds.set_y(height);
-@@ -115,10 +121,13 @@
+@@ -113,12 +119,18 @@
+     header_bounds.set_width(size_bounds.width().value() - header_bounds.x());
+   }
  
-   layouts.child_layouts.emplace_back(
-       tab_group_view->group_header_.get(),
+-  layouts.child_layouts.emplace_back(
+-      tab_group_view->group_header_.get(),
 -      tab_group_view->group_header_->GetVisible(), header_bounds);
-+      tab_group_view->group_header_->GetVisible(),
-+      koan_space ? gfx::Rect() : header_bounds);
- 
+-
 -  height +=
 -      header_bounds.height() + kGroupHeaderVerticalMargin + kTabVerticalPadding;
++  // A Space's is hidden, not just empty: upstream's header is keyboard and
++  // screen reader reachable, and its editor could ungroup or close the
++  // Space. (Nothing else hides the header, so its visibility comes from
++  // here, not from the view, which this hid.)
++  layouts.child_layouts.emplace_back(tab_group_view->group_header_.get(),
++                                     !koan_space,
++                                     koan_space ? gfx::Rect() : header_bounds);
++
 +  if (!koan_space) {
 +    height += header_bounds.height() + kGroupHeaderVerticalMargin +
 +              kTabVerticalPadding;

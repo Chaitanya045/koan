@@ -26,15 +26,16 @@ bool IsTabInUse(content::WebContents* contents) {
   using performance_manager::PerformanceManager;
   using performance_manager::policies::CannotDiscardReason;
   using performance_manager::policies::DiscardEligibilityPolicy;
+  // Without Memory Saver's data, assume the page is in use (keep it).
   if (!PerformanceManager::IsAvailable()) {
-    return false;
+    return true;
   }
   base::WeakPtr<performance_manager::PageNode> page =
       PerformanceManager::GetPrimaryPageNodeForWebContents(contents);
   auto* policy =
       DiscardEligibilityPolicy::GetFromGraph(PerformanceManager::GetGraph());
   if (!page || !policy) {
-    return false;
+    return true;
   }
   std::vector<CannotDiscardReason> reasons;
   policy->CanDiscard(page.get(),

@@ -278,6 +278,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Brings back closed Spaces, puts loose (ungrouped, unpinned) tabs into a
   // Space and focuses one.
   void EnsureOneSpaceShown();
+  // Once, when the window first has tabs: puts back the Essential it opened
+  // on.
+  void KeepStartupEssential();
   void UpdateViews();
   // Remembers the order and looks of the Spaces, to restore a closed one.
   void SnapshotSpaces();
@@ -324,6 +327,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::set<tab_groups::TabGroupId> deleting_;
   // The Space shown last, for animating and as a fallback.
   std::optional<tab_groups::TabGroupId> last_space_;
+  // Whether the first update with tabs ran, and the Essential selected
+  // before it.
+  bool started_ = false;
+  tabs::TabHandle startup_essential_;
   // Each Space's last active tab (switching back restores it).
   std::map<tab_groups::TabGroupId, tabs::TabHandle> last_active_tabs_;
 

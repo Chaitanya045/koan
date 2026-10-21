@@ -114,12 +114,14 @@ bool IsEmoji(const std::u16string& grapheme) {
           grapheme.find(u'\u200D') != std::u16string::npos);
 }
 
-// Whether `tab` is one of Zen's pinned tabs that stay in their Space, at
-// its start (its "pinned run"; Essentials are Chromium's pinned tabs).
-// Koan doesn't have them yet: #59 adds koan::IsPinnedInSpace(), which
-// replaces this.
-bool IsPinnedInSpace(const tabs::TabInterface* tab) {
-  return false;
+// Whether the user sees `tab` as pinned. Today Koan's only pinned tabs are
+// the Essentials (Chromium's pinned tabs, in no Space). #59 adds tabs pinned
+// to their Space, which stay at its start, and koan::IsPinnedForUser()
+// (koan_pinned_tabs_hooks.h), which replaces this; #59 also keeps a moved
+// pinned tab at the top of its new Space, so MoveTabsToSpace()'s placement
+// loop goes with this function then.
+bool IsPinnedForUser(const tabs::TabInterface* tab) {
+  return tab->IsPinned();
 }
 
 // Seed colours for Space tints, one per tab group colour. Fixed values (not
@@ -790,12 +792,9 @@ void KoanWorkspaceController::MoveTabsToSpace(
   for (tabs::TabInterface* tab : tabs) {
     handles.push_back(tab->GetHandle());
   }
-  // Show the target Space first, so that the Space the tabs leave isn't
-  // shown (and its last tab, if it moves, doesn't make it come back as the
-  // active Space).
-  SwitchTo(space);
   std::vector<int> indices;
   for (const tabs::TabHandle& handle : handles) {
+    // Essentials belong to no Space.
     if (tabs::TabInterface* tab = handle.Get(); tab && !tab->IsPinned()) {
       indices.push_back(model->GetIndexOfTab(tab));
     }
@@ -809,7 +808,7 @@ void KoanWorkspaceController::MoveTabsToSpace(
   // pinned tabs at its start.
   for (const tabs::TabHandle& handle : handles) {
     tabs::TabInterface* tab = handle.Get();
-    if (!tab || !IsPinnedInSpace(tab) || tab->GetGroup() != space) {
+    if (!tab || !IsPinnedForUser(tab) || tab->GetGroup() != space) {
       continue;
     }
     const gfx::Range range =
@@ -817,16 +816,19 @@ void KoanWorkspaceController::MoveTabsToSpace(
     int run_end = static_cast<int>(range.start());
     while (run_end < static_cast<int>(range.end()) &&
            model->GetTabAtIndex(run_end) != tab &&
-           IsPinnedInSpace(model->GetTabAtIndex(run_end))) {
+           IsPinnedForUser(model->GetTabAtIndex(run_end))) {
       ++run_end;
     }
     model->MoveWebContentsAt(model->GetIndexOfTab(tab), run_end,
                              /*select_after_move=*/false);
   }
-  // Zen selects the last moved tab.
-  if (tabs::TabInterface* last = handles.back().Get()) {
+  // Zen shows the Space on the last moved tab. Activated first, so the
+  // Space's remembered tab never shows (and loads, if it was unloaded).
+  if (tabs::TabInterface* last = handles.back().Get();
+      last && last->GetGroup() == space) {
     model->ActivateTabAt(model->GetIndexOfTab(last));
   }
+  SwitchTo(space);
 }
 
 void KoanWorkspaceController::ShowKeptLoadedToast(int kept) {
@@ -1002,9 +1004,27 @@ void KoanWorkspaceController::Update() {
   // tabs) and come back with it.
   InstallViews();
   EnsureOneSpaceShown();
+  KeepStartupEssential();
   SnapshotSpaces();
   UpdateViews();
   spaces_changed_callbacks_.Notify();
+}
+
+void KoanWorkspaceController::KeepStartupEssential() {
+  TabStripModel* model = tab_strip_model();
+  if (started_ || model->empty()) {
+    return;
+  }
+  started_ = true;
+  // Like Zen when a window opens: an Essential that was selected stays
+  // selected, although showing a Space (session restore's, or the one
+  // above) selected one of its tabs.
+  tabs::TabInterface* essential =
+      std::exchange(startup_essential_, tabs::TabHandle()).Get();
+  if (essential && essential->IsPinned() &&
+      model->GetActiveTab() != essential) {
+    model->ActivateTabAt(model->GetIndexOfTab(essential));
+  }
 }
 
 void KoanWorkspaceController::EnsureOneSpaceShown() {
@@ -1050,7 +1070,7 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     // Same id, so whatever refers to the Space still does.
     model->AddToGroupForRestore({new_index}, closed.id);
     WriteSpace(closed.id, closed.data);
-    if (closed.was_active) {
+    if (closed.was_active && !model->GetFocusedGroup()) {
       // Zen stays on an Essential that was selected when the Space emptied.
       tabs::TabInterface* active_tab = model->GetActiveTab();
       const bool on_essential = active_tab && active_tab->IsPinned();
@@ -1232,6 +1252,11 @@ void KoanWorkspaceController::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
+  // The Essential a restored window opened on (see KeepStartupEssential()).
+  if (!started_ && selection.active_tab_changed() && selection.new_tab &&
+      selection.new_tab->IsPinned()) {
+    startup_essential_ = selection.new_tab->GetHandle();
+  }
   // Each Space remembers its last active tab: the one it had when the window
   // left it.
   if (selection.active_tab_changed() && selection.old_tab &&

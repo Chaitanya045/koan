@@ -3,17 +3,19 @@
 // through the window, so upstream's swipe controller and Koan's wheel
 // handler see them), wrapping around past the last Space, swiping past
 // unloaded Spaces without loading their other tabs, switching to a tab of
-// another Space (it stays the tab shown), and a restart: the Spaces, their
-// names, icons, theme and order come back, no extra Space appears, and
-// swiping through them loads only the tab each one lands on.
+// another Space (it stays the tab shown), a restart (the Spaces, their
+// names, icons, theme and order come back, no extra Space appears, a
+// selected Essential stays selected, and swiping through them loads only the
+// tab each one lands on), and Move To into an unloaded Space loading only
+// the moved tab.
 //
 //   scripts/e2e/run.sh spaces_switching
 import { spawn } from 'node:child_process';
 import { servePages } from '../perf/pages_server.mjs';
 import {
   CDP_PORT, CTRL, ALT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
-  key, menuMouse, onPage, openMenus, pages, readPref, sleep, viewMouse, viewTree,
-  visiblePage, waitFor,
+  key, menuMouse, onPage, openMenus, pages, readPref, SHIFT, sleep, viewEvent,
+  viewMouse, viewTree, visiblePage, waitFor,
 } from './lib/koan.mjs';
 
 const site = await servePages();
@@ -174,6 +176,15 @@ s = await sidebar();
 check('Back in the first Space, on its last active tab',
       s.name === 'Space' && await isShown('a2'), s.name);
 
+// An Essential, selected when the browser closes: e1, pinned (Ctrl+Shift+D).
+await browserCall('Target.createTarget', { url: url('e1') });
+await sleep(1500);
+await key(await find('e1'), 68, CTRL | SHIFT, 'D');
+await sleep(1000);
+check('An Essential is selected', await isShown('e1') &&
+      (await viewTree()).some(v => v.cls === 'TabView' && v.shown &&
+                                   v.path.some(p => /Pinned/.test(p))));
+
 const v = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
 const browser = await connect(v.webSocketDebuggerUrl);
 await browser.send('Browser.close');
@@ -194,15 +205,15 @@ for (let i = 0; i < 60; i++) {
 await sleep(5000);
 
 // ---- After the restart.
-before = await loads('a2');
+before = await loads('e1');
 s = await sidebar();
 check('After a restart the Spaces are back, in order, and no other',
       s.buttons.map(b => b.name).join() === 'Space,B,C',
       s.buttons.map(b => b.name).join());
 check('...with their icons', s.buttons[1]?.icon === icon,
       s.buttons.map(b => b.icon).join(' '));
-check('...in the Space that was shown, on its tab',
-      s.name === 'Space' && await isShown('a2'), s.name);
+check('...in the Space that was shown, with the Essential still selected',
+      s.name === 'Space' && await isShown('e1'), s.name);
 await wheel('right');
 s = await sidebar();
 check('Swiping after a restart lands on the Space\'s last active tab',
@@ -212,10 +223,46 @@ check('...and B keeps its colour',
       `${await readPref('koan.workspaces.tint_applied')} vs ${seed}`);
 await wheel('right');
 s = await sidebar();
-n = delta(await loads('a2'), before);
+n = delta(await loads('e1'), before);
 check('Swiping through restored Spaces loads only the tabs they land on',
-      s.name === 'C' && n.b2 === 1 && n.c2 === 1 && !n.a1 && !n.b1 && !n.c1,
+      s.name === 'C' && n.b2 === 1 && n.c2 === 1 && !n.a1 && !n.a2 && !n.b1 && !n.c1,
       `${s.name}; ${show(n)}`);
+
+// ---- Move To into an unloaded Space loads only the moved tab: in C, unload
+// the others, then move c2 to B.
+menu = await headerMenu();
+await menuMouse(menu, menu.items.at(-3));  // Unload All Other Spaces
+await sleep(2000);
+before = await loads('c2');
+const spaceTabs = (await viewTree())
+    .filter(v => v.cls === 'TabView' && v.shown && v.h > 1 &&
+                 !v.path.some(p => /Pinned/.test(p)))
+    .sort((a, b) => a.ay - b.ay);
+const moved = spaceTabs.at(-1);  // c2, the newest
+for (const type of ['mousePressed', 'mouseReleased']) {
+  viewEvent(moved, 'DOM.dispatchMouseEvent',
+            { type, x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false);
+}
+await sleep(1500);
+const tabMenu = openMenus(await viewTree())[0];
+let moveTo = null;
+// Move To's submenu lists the two other Spaces.
+for (const item of tabMenu?.items ?? []) {
+  await menuMouse(tabMenu, item, ['mouseMoved']);
+  await sleep(700);
+  moveTo = openMenus(await viewTree())
+      .find(m => m.root !== tabMenu.root && m.items.length === 2);
+  if (moveTo) break;
+}
+if (moveTo) {
+  await menuMouse(moveTo, moveTo.items[1]);  // B
+}
+await sleep(1500);
+s = await sidebar();
+n = delta(await loads('c2'), before);
+check('Move To into an unloaded Space shows it on the moved tab',
+      !!moveTo && s.name === 'B' && await isShown('c2'), s.name);
+check('...and loads none of its other tabs', !n.b1 && !n.b2 && !n.c2, show(n));
 
 relaunched.kill();
 site.close();
