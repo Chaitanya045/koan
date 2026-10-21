@@ -346,6 +346,12 @@ bool KoanCompactModeController::PrefHidesToolbar() const {
 void KoanCompactModeController::OnTabsOnRightChanged() {
   sidebar_on_right_ =
       pref_change_registrar_.prefs()->GetBoolean(prefs::kTabsOnRight);
+  // The hot zones and which window buttons hide depend on the side.
+  if (mode_ != Mode::kNone) {
+    const Mode mode = mode_;
+    Deactivate(/*keep_sidebar_hidden=*/hides_sidebar());
+    Activate(mode);
+  }
   // Everything in the window is laid out again, mirrored or not; the
   // sidebar's own views too.
   if (views::View* region = browser_view_->tab_strip_view()) {
@@ -883,6 +889,14 @@ void KoanCompactModeController::Activate(Mode mode) {
     SetToolbarRevealed(false, /*animate=*/false);
     // Zen: no strip for the window buttons; they appear at the top edge.
     caption_strip_collapsible_ = true;
+#if BUILDFLAG(IS_MAC)
+    // AppKit draws the traffic lights at the leading edge, and Koan doesn't
+    // hide them yet (that needs NSWindow's standard window buttons): where
+    // Zen hides them above the page (tabs on the right, or a hidden
+    // sidebar), keep the strip open for them. Beside the sidebar's top row
+    // (tabs on the left, as Zen places them on macOS) nothing changes.
+    caption_strip_collapsible_ = !hides_sidebar() && !sidebar_on_right_;
+#endif
     caption_strip_revealed_ = false;
   }
   if (mode == Mode::kSingleToolbar || compact_keeps_sidebar_nav_) {
