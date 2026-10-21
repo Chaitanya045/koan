@@ -4,15 +4,24 @@
 // filters) and Spaces (rename, reorder), and closing with Esc.
 //
 //   scripts/e2e/run.sh library     (opens scripts/e2e/pages/library.html)
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   ALT, CTRL, SHIFT, UI_PORT, check, connect, finish, key as keyTo,
-  pages as tabs, setChromePref, setKoanPref, sleep, visiblePage, waitFor,
+  pages as tabs, setKoanPref, sleep, visiblePage, waitFor,
 } from './lib/koan.mjs';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+// With SHOTS=<dir> (see run.sh), copies the window's latest off-screen frame
+// (the largest dump) there as <name>.png.
+async function shot(name) {
+  const SHOTS = process.env.SHOTS;
+  if (!SHOTS) return;
+  await sleep(800);
+  const dir = `${SHOTS}/frames`;
+  const frames = readdirSync(dir).filter(f => f.endsWith('.png'))
+      .map(f => `${dir}/${f}`).sort((a, b) => statSync(b).size - statSync(a).size);
+  if (frames.length) copyFileSync(frames[0], `${SHOTS}/${name}.png`);
+}
 
 // The native views of interest, with their properties, ancestry and whether
 // they are shown. Library views live in the Library's own widget.
@@ -135,6 +144,7 @@ check('...on History, listing the visited pages',
       state.section === 'KoanLibraryHistorySection' && state.rows >= 3,
       `${state.section}, ${state.rows} row(s)`);
 check('...at Zen\'s width (418px)', state.width === 418, `width ${state.width}`);
+await shot('library-history');
 
 // --- Search narrows the list. ---
 await withViews(async (nodes, ui) => {
@@ -179,6 +189,7 @@ check('Filter opens the panel with Zen\'s options',
        'By Last Visited', 'History', 'Closed tabs']
           .every(t => chips.some(c => c.text === t)),
       chips.map(c => c.text).join(', '));
+await shot('library-history-filter');
 check('...sorted by date, looking through history',
       chips.find(c => c.text === 'By Date')?.active &&
           chips.find(c => c.text === 'History')?.active);
@@ -245,14 +256,12 @@ await key(KEY_H, CTRL, 'h');
 check('Ctrl+H again closes it', !(await library()).open);
 
 // --- A download, then Ctrl+Shift+Y shows it in Downloads. ---
-const downloads = mkdtempSync(join(ROOT, '.test-profiles', 'dl-'));
-try {
-  // Into a scratch directory, never the user's Downloads.
-  const directorySet = await setChromePref('download.default_directory', downloads);
-  check('Downloads go to a scratch directory', directorySet === true, `${directorySet}`);
-  if (directorySet !== true) {
-    finish();
-  }
+// Into the test profile (scripts/e2e/prefs/library.json), never the user's
+// Downloads.
+const profile = process.env.KOAN_CHROME_ARGS.split('\n')
+    .find(a => a.startsWith('--user-data-dir=')).slice('--user-data-dir='.length);
+const downloads = join(profile, 'Downloads');
+{
   const page = (await tabs()).find(t => t.url.startsWith(pageUrl));
   const c = await connect(page.webSocketDebuggerUrl);
   const r = await c.send('Runtime.evaluate', {
@@ -281,6 +290,7 @@ try {
   check('...named after the file, with its size and source',
         download?.Title === 'koan-library-test.txt' && /B/.test(download?.Subtitle ?? ''),
         `${download?.Title} / ${download?.Subtitle}`);
+  await shot('library-downloads');
   await withViews(async (nodes, ui) => {
     await mouse(ui, find(nodes, 'KoanLibraryRow', n => n.shown)[0], 'mouseEntered', 20, 20);
   });
@@ -318,8 +328,6 @@ try {
 
   await key(KEY_Y, CTRL | SHIFT, 'Y');
   check('Ctrl+Shift+Y again closes it', !(await library()).open);
-} finally {
-  rmSync(downloads, { recursive: true, force: true });
 }
 
 // --- Spaces: two new ones, renamed and reordered in the Library. ---
@@ -345,6 +353,7 @@ const cardNames = async () => withViews(nodes =>
   find(nodes, 'SpaceCard', n => n.shown).map(n => n.p.Name));
 check('...named like the spaces', (await cardNames()).join(',') === 'Space 1,Space 2',
       (await cardNames()).join(','));
+await shot('library-spaces');
 
 // Rename the first space.
 await withViews(async (nodes, ui) => {
@@ -394,6 +403,7 @@ state = await waitFor(async () => {
 }) ?? await library();
 check('With tabs on the right the side column is on the right',
       state.open && state.sectionX === 0, `section at x ${state.sectionX}`);
+await shot('library-tabs-right');
 await key(ESC, 0, 'Escape');
 await setKoanPref('koan.tabs.on_right', false);
 
