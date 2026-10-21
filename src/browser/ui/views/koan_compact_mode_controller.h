@@ -116,7 +116,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool caption_strip_collapsed() const {
     return caption_strip_collapsible_ && !caption_strip_revealed_;
   }
-  bool sidebar_on_right() const { return sidebar_on_right_; }
+  // The "Tabs on the right" setting. Where the sidebar is, is
+  // IsSidebarOnRight() (koan_compact_mode.h), which also checks the window.
+  bool tabs_on_right() const { return tabs_on_right_; }
 
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
@@ -192,8 +194,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Zen's check for a compact variant that would strand the window buttons:
   // collapsed sidebar, buttons on its side, only the toolbar hidden.
   bool IsHideToolbarOnlyBlocked() const;
-  // In that state, a pref asking for just the toolbar becomes the sidebar.
-  void FixBlockedCompactVariant();
   void UpdateActiveSoon();
   void UpdateActive();
   void Activate(Mode mode);
@@ -268,12 +268,15 @@ class KoanCompactModeController : public views::FocusChangeListener,
   PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   base::CallbackListSubscription collapse_subscription_;
+  base::CallbackListSubscription resizing_subscription_;
+  // The sidebar was expanded when the current drag of its edge started.
+  bool resizing_from_expanded_ = false;
 
   Mode mode_ = Mode::kNone;
   // In compact mode: what it hides.
   bool hide_sidebar_ = false;
   bool hide_toolbar_ = false;
-  bool sidebar_on_right_ = false;
+  bool tabs_on_right_ = false;
   bool toolbar_revealed_ = false;
   bool url_bar_floating_ = false;
   // Whether compact mode keeps the sidebar header (single toolbar).
@@ -291,6 +294,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
       toolbar_observation_{this};
   // Compact mode hid the sidebar: whether it was collapsed before.
   std::optional<bool> collapsed_before_;
+  // The window was opened while compact mode was on, and hasn't had its
+  // sidebar back since: its collapsed state may be compact mode's.
+  bool opened_in_compact_mode_ = false;
   // A drag collapsed the sidebar into compact mode: it was expanded before.
   bool collapsed_by_drag_ = false;
   // Koan asked upstream to expand the sidebar (it animates).

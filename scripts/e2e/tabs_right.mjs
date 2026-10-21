@@ -75,6 +75,22 @@ check('Multiple toolbars: the toolbar is on the left, beside the sidebar',
       `toolbar ${top?.x}+${top?.w}, strip ${strip?.x}`);
 await press(VK.B, CTRL | ALT, 'b');
 
+// Compact mode hiding just the toolbar (multiple toolbars): the toolbar is
+// revealed above the page, left of the sidebar.
+await press(VK.B, CTRL | ALT, 'b');
+await setKoanPref('koan.compact_mode.hide', 'toolbar');
+await press(VK.S, CTRL, 's');
+vs = await views();
+strip = findShown(vs, 'VerticalTabStripRegionView');
+const revealed = find(vs, 'TopContainerView');
+check('Hide toolbar: the revealed toolbar is left of the sidebar, not over it',
+      revealed?.path.includes('TopContainerOverlayView') && revealed.x === bv.x &&
+      revealed.x + revealed.w === strip.x,
+      `toolbar ${revealed?.x}+${revealed?.w}, sidebar ${strip?.x}`);
+await press(VK.S, CTRL, 's');
+await setKoanPref('koan.compact_mode.hide', 'sidebar');
+await press(VK.B, CTRL | ALT, 'b');
+
 // A window without Koan's sidebar (horizontal tabs) isn't mirrored: the
 // setting changes nothing in it.
 const topLevel = async () => (await views())

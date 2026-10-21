@@ -1,5 +1,5 @@
-/depot_tools
-/chromium
+/depot_tools/
+/chromium/
 /logs/
 /.test-profiles/
 /.branding-pristine/

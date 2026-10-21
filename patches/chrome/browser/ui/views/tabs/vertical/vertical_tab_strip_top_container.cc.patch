@@ -1,4 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
+index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..cc804959fb319e59e322cdcea42d8287c0d3bbcd 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 @@ -25,6 +25,7 @@
@@ -9,7 +10,7 @@ diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_contai
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/base/metadata/metadata_impl_macros.h"
  #include "ui/compositor/layer.h"
-@@ -190,6 +191,8 @@
+@@ -190,6 +191,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        layout.child_layouts.emplace_back(collapse_button_.get(),
                                          collapse_button_->GetVisible(), bounds);
        host_size.SetToMax(gfx::Size(bounds.right(), 0));
@@ -18,7 +19,7 @@ diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_contai
  
        current_y += pref_size.height();
      }
-@@ -326,7 +329,10 @@
+@@ -326,7 +329,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        layout.child_layouts.emplace_back(combo_button_.get(),
                                          combo_button_->GetVisible(), bounds);
      }
@@ -29,7 +30,7 @@ diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_contai
  
    layout.host_size = host_size;
  
-@@ -516,6 +522,7 @@
+@@ -516,6 +522,7 @@ int VerticalTabStripTopContainer::GetPreferredWidth() const {
      total_width += collapse_button_->GetPreferredSize().width() + padding;
    }
  

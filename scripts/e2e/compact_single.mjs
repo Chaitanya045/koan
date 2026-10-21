@@ -2,7 +2,7 @@
 // layout): it hides just the sidebar and keeps the sidebar's header, also
 // across changes made while it is on: tabs on the right from the sidebar's
 // menu (opened twice), and the layout switched away and back with
-// Ctrl+Alt+B.
+// Ctrl+Alt+B; and in a window opened meanwhile.
 //
 //   scripts/e2e/run.sh compact_single
 import { ALT, CTRL, check, finish, key, sidebarMenu, sleep, views, visiblePage }
@@ -15,7 +15,7 @@ const press = async (code, modifiers, name) => {
   await key(await visiblePage(), code, modifiers, name);
   await sleep(900);
 };
-const VK = { S: 83, B: 66 };
+const VK = { S: 83, B: 66, N: 78 };
 // With single toolbar the menu has the compact toggle and Tabs on the right.
 const TABS_ON_RIGHT = 1;
 
@@ -66,5 +66,29 @@ vs = await views();
 check('Ctrl+S leaves compact mode, still single toolbar',
       findShown(vs, 'VerticalTabStripRegionView')?.w >= 200 &&
       findShown(vs, 'KoanSidebarNavButtons'));
+
+// A window opened while compact mode is on: Chromium starts it with the
+// sidebar collapsed (compact mode's collapse is the profile's sidebar
+// state), which mustn't count as the user's.
+const windows = vs => {
+  const roots = vs.flatMap((v, i) => (v.cls === 'BrowserRootView' ? [i] : []));
+  return roots.map((start, n) => vs.slice(start, roots[n + 1]));
+};
+await press(VK.S, CTRL, 's');
+await press(VK.N, CTRL, 'n');
+await sleep(1500);
+let all = windows(await views());
+check('Ctrl+N in compact mode opens a second window', all.length === 2, `${all.length} windows`);
+check('...which keeps single toolbar too',
+      all.length === 2 && all.every(w => find(w, 'KoanSidebarNavButtons') &&
+          find(w, 'TopContainerView')?.path.includes('TopContainerOverlayView') &&
+          find(w, 'VerticalTabStripRegionView')?.w === 0));
+await press(VK.S, CTRL, 's');
+await sleep(1000);
+all = windows(await views());
+check('Leaving compact mode gives both windows their expanded sidebar back',
+      all.length === 2 && all.every(w => findShown(w, 'VerticalTabStripRegionView')?.w >= 200 &&
+                                         findShown(w, 'KoanSidebarNavButtons')),
+      all.map(w => find(w, 'VerticalTabStripRegionView')?.w).join(', '));
 
 finish();

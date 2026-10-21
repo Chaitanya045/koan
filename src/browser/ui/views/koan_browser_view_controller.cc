@@ -162,7 +162,7 @@ bool IsSidebarOnRight(const views::View* view) {
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   // Only a normal window with Koan's sidebar (vertical tabs) has a side to
   // be on; others (horizontal tabs, popups, apps) aren't mirrored.
-  return controller && controller->compact_mode()->sidebar_on_right() &&
+  return controller && controller->compact_mode()->tabs_on_right() &&
          features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
          browser_view->ShouldDrawVerticalTabStrip();
 }

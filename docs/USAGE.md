@@ -164,7 +164,11 @@ sidebar's menu under **Compact Mode**: **Hide sidebar** (the default, as in
 Zen), **Hide toolbar** or **Hide both**. A hidden toolbar slides down when
 the pointer reaches the top edge, with the window buttons. With the sidebar
 collapsed to icons and the window buttons on its side, Zen doesn't offer
-hiding just the toolbar, and neither does Koan.
+hiding just the toolbar, and neither does Koan: the menu item is off, and
+if hiding just the toolbar is chosen (e.g. in Settings, or before the
+sidebar was collapsed), that window hides the sidebar instead. The choice
+itself is kept, for the other windows and for when the sidebar is expanded
+again.
 
 The same choices are in Settings (Ctrl+,) > Look and Feel > Show in
 compact view, with Zen's "Briefly make the toolbar popup when switching or

@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_
 
+#include <algorithm>
+
 namespace views {
 class View;
 }
@@ -42,6 +44,19 @@ void MirrorLayoutChildren(Layout& layout, int left, int right) {
   for (auto& [child, child_layout] : layout.children) {
     child_layout.bounds.set_x(left + right - child_layout.bounds.right());
     MirrorLayoutChildren(child_layout, 0, child_layout.bounds.width());
+  }
+}
+
+// Narrows the children of the top container's `layout` (as above) by
+// `inset` on the leading side, dropping what was there: beside a visible
+// sidebar (see below) its top row has the buttons of that corner.
+template <typename Layout>
+void InsetLayoutChildren(Layout& layout, int inset) {
+  for (auto& [child, child_layout] : layout.children) {
+    const int left = std::max(child_layout.bounds.x(), inset) - inset;
+    const int right = child_layout.bounds.right() - inset;
+    child_layout.bounds.set_x(left);
+    child_layout.bounds.set_width(std::max(right - left, 0));
   }
 }
 

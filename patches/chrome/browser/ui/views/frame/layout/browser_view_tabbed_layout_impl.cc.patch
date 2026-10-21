@@ -1,4 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
+index 7764d4a4728973dc075efb308daa3d67ba2e10b6..227496078a5c75f1445442d1cc2c15f9f22be32f 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 @@ -46,6 +46,7 @@
@@ -9,7 +10,7 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
  #include "ui/base/ui_base_features.h"
  #include "ui/compositor/layer.h"
  #include "ui/gfx/geometry/insets.h"
-@@ -462,6 +463,10 @@
+@@ -462,6 +463,10 @@ BrowserViewTabbedLayoutImpl::CalculateHorizontalLayout(
          VerticalTabStripCollapsedState::kCollapsed) {
        // Collapsed tab strip always gets its preferred size.
        min_vertical_tab_strip_width = preferred_vertical_tab_strip_width;
@@ -20,7 +21,7 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
  
        // Account for grab handle.
        IncreasePaddingToMinimum(params, GetMinimumGrabHandlePadding());
-@@ -989,9 +994,16 @@
+@@ -989,9 +994,16 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
                  0.0f);
    }
  
@@ -37,7 +38,7 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
      gfx::Rect corner_bounds;
      const double top_corner = layout_data_->vertical_tabs_top_corner();
      const bool top_corner_visible =
-@@ -1015,6 +1027,9 @@
+@@ -1015,6 +1027,9 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
    // Position the vertical tabstrip bottom corner.
    if (IsParentedTo(views().vertical_tab_strip_bottom_corner,
                     views().browser_view)) {
@@ -47,7 +48,7 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
      gfx::Rect corner_bounds;
      const double bottom_corner = layout_data_->vertical_tabs_bottom_corner();
      const bool bottom_corner_visible =
-@@ -1302,8 +1317,14 @@
+@@ -1302,8 +1317,14 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
        // Avoid cases where these areas are somehow misaligned (shouldn't happen,
        // but want to avoid visual artifacts if they are).
        contents_layout.bounds.Intersect(unclipped_contents_region);
@@ -63,31 +64,24 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
  
        // Set the target size of the contents.
        views().multi_contents_view->SetTargetContentBounds(
-@@ -1335,12 +1356,21 @@
-     int caption_button_width = 0;
- 
-     // If the toolbar is not in the browser, then the exclusion isn't either.
--    if (toolbar_bounds) {
-+    // Koan: unless Koan hid the toolbar beside a visible strip; the strip then
-+    // reaches the top, its top row beside the caption buttons on its side.
-+    const bool koan_strip_beside_captions =
-+        koan::IsToolbarHidden(views().browser_view) &&
-+        !koan::IsCompactModeActive(views().browser_view);
-+    if (toolbar_bounds || koan_strip_beside_captions) {
-       // Calculate the toolbar height adjacent to the tabstrip. This will be
-       // zero if the toolbar is in e.g. an immersive mode overlay, or is not
-       // aligned with the tabstrip (which can happen in collapsed mode with
-       // leading caption buttons).
--      toolbar_height = toolbar_bounds->bottom() - tabstrip_bounds->y();
-+      toolbar_height =
-+          toolbar_bounds
-+              ? toolbar_bounds->bottom() - tabstrip_bounds->y()
-+              : base::ClampCeil(
-+                    browser_params.leading_exclusion.content.height());
- 
-       caption_button_width =
+@@ -1346,6 +1367,16 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
            base::ClampCeil(browser_params.leading_exclusion.content.width()) -
-@@ -1541,6 +1571,11 @@
+           tabstrip_bounds->x();
+     }
++    // Koan: with Koan's toolbar hidden beside a visible strip, the strip
++    // reaches the top, its top row beside the caption buttons on its side.
++    if (!toolbar_bounds && koan::IsToolbarHidden(views().browser_view) &&
++        !koan::IsCompactModeActive(views().browser_view)) {
++      toolbar_height =
++          base::ClampCeil(browser_params.leading_exclusion.content.height());
++      caption_button_width =
++          base::ClampCeil(browser_params.leading_exclusion.content.width()) -
++          tabstrip_bounds->x();
++    }
+ 
+     views().vertical_tab_strip_region_view->SetToolbarHeightForLayout(
+         std::max(0, toolbar_height));
+@@ -1541,6 +1572,11 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
      }
    }
  

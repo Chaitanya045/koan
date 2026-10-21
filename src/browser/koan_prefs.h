@@ -31,6 +31,17 @@ inline constexpr char kCompactModeHideSidebar[] = "sidebar";
 inline constexpr char kCompactModeHideToolbar[] = "toolbar";
 inline constexpr char kCompactModeHideBoth[] = "both";
 
+// While compact mode hides the sidebar: whether the user had it collapsed
+// to icons before (kSidebarCollapsedBefore*). Chromium saves the collapse
+// compact mode makes as the profile's sidebar state, so a window opened
+// meanwhile needs this to tell the two apart. Internal; cleared once
+// compact mode gives the sidebar back.
+inline constexpr char kCompactModeSidebarCollapsedBefore[] =
+    "koan.compact_mode.sidebar_collapsed_before";
+inline constexpr int kSidebarCollapsedBeforeUnknown = 0;
+inline constexpr int kSidebarCollapsedBeforeNo = 1;
+inline constexpr int kSidebarCollapsedBeforeYes = 2;
+
 // Zen's "Briefly make the toolbar popup when switching or opening new tabs in
 // compact mode" (`zen.view.compact.toolbar-flash-popup`): the hidden sidebar
 // pops up for 800 ms when the active tab changes. Off by default, like Zen.
