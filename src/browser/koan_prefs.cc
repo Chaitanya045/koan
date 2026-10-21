@@ -13,6 +13,12 @@ namespace koan::prefs {
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCompactModeEnabled, false);
+  registry->RegisterStringPref(kCompactModeHide, kCompactModeHideSidebar);
+  registry->RegisterBooleanPref(kCompactModeToolbarFlashPopup, false);
+  registry->RegisterBooleanPref(kCompactModeDragCollapseHintSeen, false);
+  registry->RegisterIntegerPref(kCompactModeSidebarCollapsedBefore,
+                                kSidebarCollapsedBeforeUnknown);
+  registry->RegisterBooleanPref(kTabsOnRight, false);
   registry->RegisterBooleanPref(kSingleToolbarEnabled, true);
   registry->RegisterBooleanPref(kWorkspaceTint, true);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);

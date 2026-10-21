@@ -13,6 +13,22 @@
 
 namespace koan {
 
+namespace {
+
+// The card's insets with `sidebar_side` on the sidebar's side and the
+// margin on the others.
+gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
+                              int top,
+                              int sidebar_side) {
+  return IsSidebarOnRight(browser_view)
+             ? gfx::Insets::TLBR(top, kContentCardMargin, kContentCardMargin,
+                                 sidebar_side)
+             : gfx::Insets::TLBR(top, sidebar_side, kContentCardMargin,
+                                 kContentCardMargin);
+}
+
+}  // namespace
+
 bool UseContentCard(const BrowserView* browser_view) {
   return features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
          browser_view->ShouldDrawVerticalTabStrip() &&
@@ -30,15 +46,14 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
             ? kContentCardMargin
             : std::max(kContentCardMargin,
                        GetCaptionButtonAreaSize(browser_view).height());
-    // Compact mode also hides the sidebar: gutter on the leading side too.
-    const int leading =
+    // Compact mode may hide the sidebar: then a gutter on its side too.
+    const int sidebar_side =
         IsCompactModeActive(browser_view) ? kContentCardMargin : 0;
-    return gfx::Insets::TLBR(top, leading, kContentCardMargin,
-                             kContentCardMargin);
+    return SidebarSideInsets(browser_view, top, sidebar_side);
   }
-  // The vertical tab strip already leaves a gap on the leading side, and the
-  // toolbar sits directly above the card.
-  return gfx::Insets::TLBR(0, 0, kContentCardMargin, kContentCardMargin);
+  // The vertical tab strip already leaves a gap on its side, and the toolbar
+  // sits directly above the card.
+  return SidebarSideInsets(browser_view, 0, 0);
 }
 
 gfx::RoundedCornersF ActiveContentsRadii(

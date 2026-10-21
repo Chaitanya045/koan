@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 
 class BrowserView;
@@ -22,8 +23,12 @@ namespace koan {
 
 class KoanToastView;
 
+// How long Zen's toasts stay once in (ZenToasts.mjs).
+inline constexpr base::TimeDelta kToastDefaultTimeout = base::Seconds(2);
+
 // Zen's toast (ZenToasts.mjs, zen-popup.css) for one window: a pill at the
-// window's top right that springs in from the top, stays for 2s once in
+// window's top corner away from the sidebar (top right, or top left with
+// tabs on the right) that springs in from the top, stays for 2s once in
 // (longer while hovered), then fades out shrinking. Showing another replaces
 // it. Used for "Tabs Closed!" (sidebar tabs) and the split view limit.
 class KoanToast {
@@ -35,11 +40,13 @@ class KoanToast {
 
   // Shows `text`, or with `shortcut`, "`text` [shortcut] `after`" with the
   // shortcut in a key cap (Zen's "Tabs Closed! Use [Ctrl+Shift+T] to
-  // undo."). Screen readers get `announcement`, or the toast's text.
+  // undo."). Screen readers get `announcement`, or the toast's text. It
+  // stays `timeout` once in (Zen's default, or a caller's own).
   void Show(const std::u16string& text,
             const std::u16string& shortcut = std::u16string(),
             const std::u16string& after = std::u16string(),
-            const std::u16string& announcement = std::u16string());
+            const std::u16string& announcement = std::u16string(),
+            base::TimeDelta timeout = kToastDefaultTimeout);
 
   // Drops the toast at once (e.g. the window is going away).
   void Close();
@@ -56,6 +63,7 @@ class KoanToast {
   raw_ptr<KoanToastView> view_ = nullptr;
   // Hides the toast, then closes it once it has faded out.
   base::OneShotTimer timer_;
+  base::TimeDelta timeout_;
   bool hiding_ = false;
   base::WeakPtrFactory<KoanToast> weak_factory_{this};
 };

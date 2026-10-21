@@ -1,0 +1,3 @@
+# Right-to-left UI, and frame dumps to see which side things are on.
+--force-ui-direction=rtl
+--ozone-dump-file={dump}

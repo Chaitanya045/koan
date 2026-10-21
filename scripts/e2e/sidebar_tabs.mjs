@@ -267,16 +267,18 @@ await click(find(await views(), 'KoanClearButton'));
 check('Clear keeps the selected tab', before === 4 && (await pages()) === 2,
       `${before} -> ${await pages()}`);
 
-// Collapsed, upstream's separator is the only line.
-const collapse = (await views()).find(v => v.cls === 'TopContainerButton' && v.shown &&
-                                           v.path.includes('VerticalTabStripTopContainer'));
-await click(collapse);
+// Collapsed, upstream's separator is the only line. (Collapsing leaves
+// single toolbar, so the views are looked up again afterwards.)
+const collapse = async () => click((await views()).find(
+    v => v.cls === 'TopContainerButton' && v.shown &&
+         v.path.includes('VerticalTabStripTopContainer')));
+await collapse();
 await sleep(1000);
 vs = await views();
 clear = find(vs, 'KoanClearTabsRow');
 check('Collapsed: no Clear row (upstream draws the line)', clear && !clear.shown,
       JSON.stringify(clear && { shown: clear.shown }));
-await click(collapse);
+await collapse();
 await sleep(1000);
 check('Expanded again: the Clear row is back', find(await views(), 'KoanClearTabsRow')?.shown);
 

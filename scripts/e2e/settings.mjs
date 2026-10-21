@@ -89,6 +89,26 @@ check('The compact mode checkbox turns compact mode on',
 await evalIn(settings, `${compact}.click()`);
 check('...and off', await waitFor(async () => await hotZones() === 1));
 
+// What compact mode hides, its flash popup and tabs on the right.
+const hide = `document.querySelector('[data-pref="koan.compact_mode.hide"] select')`;
+check('The page has what compact mode hides, with Zen\'s choices',
+      JSON.stringify(await evalIn(settings, `[...${hide}.options].map(o => o.text)`)) ===
+      JSON.stringify(['Hide Tab bar', 'Hide Top bar', 'Hide Both']));
+await evalIn(settings, `(() => { const s = ${hide}; s.selectedIndex = 2;
+    s.dispatchEvent(new Event('change')); })()`);
+check('...and choosing Hide Both sets it',
+      await waitFor(async () => await readPref('koan.compact_mode.hide') === 'both'));
+await settingsCall(settings, 'setPref', 'koan.compact_mode.hide', 'sidebar');
+check('The page has the flash popup setting, off by default',
+      await evalIn(settings, `document.querySelector(
+          '[data-pref="koan.compact_mode.toolbar_flash_popup"] input')?.checked`) === false);
+const right = `document.querySelector('[data-pref="koan.tabs.on_right"] input')`;
+await evalIn(settings, `${right}.click()`);
+check('...and Tabs on the right, which sets it',
+      await waitFor(async () => await readPref('koan.tabs.on_right') === true));
+await evalIn(settings, `${right}.click()`);
+await waitFor(async () => await readPref('koan.tabs.on_right') === false);
+
 // Incognito windows use the same settings as the page and the other windows.
 const before = new Set((await pages()).map(p => p.id));
 await front(other);

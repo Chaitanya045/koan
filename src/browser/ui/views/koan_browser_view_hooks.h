@@ -17,6 +17,11 @@ void OnBrowserViewCreated(BrowserView* browser_view);
 // the Browser are still alive.
 void OnBrowserViewDestroying(BrowserView* browser_view);
 
+// Called when a drag of the vertical tab strip's resize area collapsed an
+// expanded strip. Like Zen, Koan hides the sidebar in compact mode instead,
+// with a one-time toast telling how to bring it back.
+void OnSidebarDragCollapsed(BrowserView* browser_view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_HOOKS_H_

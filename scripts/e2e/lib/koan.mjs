@@ -2,6 +2,10 @@
 // clicks, prefs) and UI DevTools (native views). Koan runs as started by
 // scripts/e2e/run.sh, with UI DevTools on UI_PORT and the DevTools protocol
 // on CDP_PORT.
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+
 export const UI_PORT = process.env.UI_PORT;
 export const CDP_PORT = process.env.CDP_PORT;
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -128,14 +132,16 @@ export async function readPref(pref) {
   return JSON.parse(text);
 }
 
-// Every native view as {cls, shown, w, h}; `shown` includes the ancestors'.
+// Every native view as {cls, shown, w, h, x, y, nodeId, path}; `shown`
+// includes the ancestors', x/y are in the view's widget, `path` lists the
+// ancestors' classes from the widget's root view.
 export async function views() {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('CSS.enable');
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const out = [];
-  const walk = async (n, depth, shown) => {
+  const walk = async (n, depth, shown, path, ox, oy) => {
     const a = n.attributes ?? [];
     const cls = a[a.indexOf('class') + 1];
     if (depth > 0 && n.nodeName === 'View' && cls) {
@@ -145,13 +151,59 @@ export async function views() {
         for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
       }
       shown = shown && p.Visible !== 'false';
-      out.push({ cls, shown, w: +p.Width, h: +p.Height });
+      const v = { cls, shown, w: +p.Width, h: +p.Height, x: ox + +p.X, y: oy + +p.Y,
+                  nodeId: n.nodeId, path };
+      out.push(v);
+      path = [...path, cls];
+      ox = v.x;
+      oy = v.y;
+    } else if (n.nodeName === 'Widget') {
+      [path, ox, oy] = [[], 0, 0];
     }
-    for (const c of n.children ?? []) await walk(c, depth + 1, shown);
+    for (const c of n.children ?? []) await walk(c, depth + 1, shown, path, ox, oy);
   };
-  await walk(doc, 0, true);
+  await walk(doc, 0, true, [], 0, 0);
   ui.close();
   return out;
+}
+
+// Just the bounds (in the parent view's coordinates) of the views of class
+// `cls`: quicker than views() for timing-sensitive checks.
+export async function boundsOf(cls) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const nodes = [];
+  const walk = n => {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'View' && a[a.indexOf('class') + 1] === cls) nodes.push(n);
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(doc);
+  const out = [];
+  for (const n of nodes) {
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+    const p = {};
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+    }
+    out.push({ x: +p.X, y: +p.Y, w: +p.Width, h: +p.Height });
+  }
+  ui.close();
+  return out;
+}
+
+// Sends a native mouse event to `view` (from views()) at `x`, `y` in its own
+// coordinates. The view gets it directly; sent to a root view, it is routed
+// like real input.
+export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('DOM.getDocument', { depth: -1 });
+  await ui.send('DOM.dispatchMouseEvent', { nodeId: view.nodeId,
+      event: { type, x, y, button, wheelDirection: 'none' } });
+  ui.close();
 }
 
 export const shownViews = (vs, cls) => vs.filter(v => v.cls === cls && v.shown);
@@ -204,4 +256,104 @@ export function check(name, ok, detail = '') {
 export function finish() {
   console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
   process.exit(failures ? 1 : 0);
+}
+
+// Sets a pref through a page opened in the background, then closes it:
+// a Koan pref with a settings row (chrome://koan-settings' handler), or one
+// of Chromium's (chrome://settings).
+async function setPrefThrough(url, expression) {
+  const targetId = (await browserCall('Target.createTarget',
+      { url, background: true })).result.targetId;
+  const page = await waitFor(async () => (await pages()).find(p => p.id === targetId));
+  const value = await waitFor(() => evalIn(page, expression));
+  await browserCall('Target.closeTarget', { targetId });
+  await sleep(500);
+  return value;
+}
+export const setKoanPref = (pref, value) => setPrefThrough('chrome://koan-settings',
+    `import('chrome://resources/js/cr.js').then(m => m.sendWithPromise(
+         'setPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
+export const setChromePref = (pref, value) => setPrefThrough('chrome://settings',
+    `new Promise(r => chrome.settingsPrivate.setPref(${JSON.stringify(pref)},
+         ${JSON.stringify(value)}, '', r))`);
+
+// Right-clicks an empty part of the sidebar (through the window's root view,
+// so the click is routed like a real one), then picks the menu items at
+// `indices` in turn, each in the newest (sub)menu. Returns what went wrong,
+// or null.
+export async function sidebarMenu(...indices) {
+  let vs = await views();
+  const strip = vs.find(v => v.cls === 'VerticalTabStripRegionView' && v.shown);
+  const root = vs.find(v => v.cls === 'BrowserRootView' && v.shown);
+  if (!strip || !root) {
+    return 'no sidebar';
+  }
+  const x = strip.x + strip.w / 2, y = strip.y + strip.h - 120;
+  await mouseOn(root, 'mousePressed', x, y, 'right');
+  await mouseOn(root, 'mouseReleased', x, y, 'right');
+  await sleep(800);
+  for (const index of indices) {
+    vs = await views();
+    // The newest menu widget's root view, and its items.
+    const menuRoot = vs.findLast(v => v.cls.endsWith('RootView') && v.cls !== 'BrowserRootView');
+    const items = vs.slice(vs.indexOf(menuRoot))
+        .filter(v => v.cls === 'MenuItemView' && v.path[0] === menuRoot?.cls);
+    const item = items[index];
+    if (!item) {
+      return `no item ${index} of ${items.length}`;
+    }
+    const at = [item.x - menuRoot.x + 10, item.y - menuRoot.y + item.h / 2];
+    await mouseOn(menuRoot, 'mouseMoved', ...at);
+    await sleep(600);
+    await mouseOn(menuRoot, 'mousePressed', ...at);
+    await mouseOn(menuRoot, 'mouseReleased', ...at);
+    await sleep(800);
+  }
+  return null;
+}
+
+// The latest frame of the browser window (the biggest dump), decoded:
+// {width, height, pixel(x, y) -> [r, g, b]}. 8-bit RGB(A) PNGs only.
+export function windowFrame() {
+  const dir = process.env.KOAN_DUMP_DIR;
+  const file = fs.readdirSync(dir).filter(f => f.endsWith('.png'))
+      .map(f => path.join(dir, f))
+      .sort((a, b) => fs.statSync(b).size - fs.statSync(a).size)[0];
+  const png = fs.readFileSync(file);
+  let pos = 8, width = 0, height = 0, channels = 0;
+  const data = [];
+  while (pos < png.length) {
+    const length = png.readUInt32BE(pos);
+    const type = png.toString('ascii', pos + 4, pos + 8);
+    const chunk = png.subarray(pos + 8, pos + 8 + length);
+    if (type === 'IHDR') {
+      width = chunk.readUInt32BE(0);
+      height = chunk.readUInt32BE(4);
+      channels = chunk[9] === 6 ? 4 : 3;
+    } else if (type === 'IDAT') {
+      data.push(chunk);
+    }
+    pos += 12 + length;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(data));
+  const stride = width * channels;
+  const out = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const v = raw[y * (stride + 1) + 1 + x];
+      const a = x >= channels ? out[y * stride + x - channels] : 0;
+      const b = y > 0 ? out[(y - 1) * stride + x] : 0;
+      const c = x >= channels && y > 0 ? out[(y - 1) * stride + x - channels] : 0;
+      const p = a + b - c;
+      const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      const paeth = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      out[y * stride + x] = (v + [0, a, b, (a + b) >> 1, paeth][filter]) & 0xff;
+    }
+  }
+  return {
+    width, height,
+    pixel: (x, y) => [...out.subarray(y * stride + x * channels,
+                                      y * stride + x * channels + 3)],
+  };
 }

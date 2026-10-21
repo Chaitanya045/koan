@@ -20,6 +20,11 @@ namespace koan {
 // button layout).
 gfx::Size GetCaptionButtonAreaSize(const BrowserView* browser_view);
 
+// Size of the caption-button area at one top corner: the leading (left in
+// LTR) or the trailing one.
+gfx::Size GetCaptionButtonAreaSize(const BrowserView* browser_view,
+                                   bool leading);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_WINDOW_CONTROLS_H_

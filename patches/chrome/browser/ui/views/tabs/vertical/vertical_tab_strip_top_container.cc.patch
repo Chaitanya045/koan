@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..177b1fa2fa8dd888c303f7dac5083ac1d45e49b2 100644
+index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..cc804959fb319e59e322cdcea42d8287c0d3bbcd 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 @@ -25,6 +25,7 @@
@@ -19,16 +19,18 @@ index e75283a34c8d53f7b25cbfa4d2d19c8a7f57f627..177b1fa2fa8dd888c303f7dac5083ac1
  
        current_y += pref_size.height();
      }
-@@ -326,6 +329,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -326,7 +329,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        layout.child_layouts.emplace_back(combo_button_.get(),
                                          combo_button_->GetVisible(), bounds);
      }
 +    koan::LayoutSidebarHeaderTrailingViews(this, layout, right_alignment,
 +                                           y_baseline);
    }
++  koan::MirrorSidebarHeaderLayout(this, layout, host_size.width());
  
    layout.host_size = host_size;
-@@ -516,6 +521,7 @@ int VerticalTabStripTopContainer::GetPreferredWidth() const {
+ 
+@@ -516,6 +522,7 @@ int VerticalTabStripTopContainer::GetPreferredWidth() const {
      total_width += collapse_button_->GetPreferredSize().width() + padding;
    }
  

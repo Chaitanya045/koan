@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index fe04b6950550f3e8f037dde1af7effbeaddc0e5f..5befc053c617c5dc31e306ca6da5b04afe879f15 100644
+index fe04b6950550f3e8f037dde1af7effbeaddc0e5f..b4153e5a16335f39b53599a32cca38f3ab9f422c 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
 @@ -566,6 +566,7 @@ source_set("vertical_tab_strip_region_view") {
@@ -18,7 +18,15 @@ index fe04b6950550f3e8f037dde1af7effbeaddc0e5f..5befc053c617c5dc31e306ca6da5b04a
      "//media/capture:capture_switches",
      "//third_party/blink/public/common:headers",
      "//ui/accessibility",
-@@ -2994,6 +2996,7 @@ source_set("browser_view_tabbed_layout_impl") {
+@@ -2935,6 +2937,7 @@ source_set("browser_view_layout_impl") {
+     "//build:buildflag_header_h",
+     "//chrome/browser/ui/immersive:immersive_mode_controller",
+     "//chrome/browser/ui/views/bookmarks",
++    "//koan/browser/ui/views",
+     "//ui/base:features",
+   ]
+ }
+@@ -2994,6 +2997,7 @@ source_set("browser_view_tabbed_layout_impl") {
      "//ui/views",
    ]
    deps = [
@@ -26,7 +34,7 @@ index fe04b6950550f3e8f037dde1af7effbeaddc0e5f..5befc053c617c5dc31e306ca6da5b04a
      ":custom_corners",
      ":custom_corners_background",
      ":custom_floating_corner",
-@@ -3211,6 +3214,7 @@ source_set("multi_contents_view_impl") {
+@@ -3211,6 +3215,7 @@ source_set("multi_contents_view_impl") {
      "//components/tabs:public",
      "//content/public/browser",
      "//content/public/common",

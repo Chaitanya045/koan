@@ -13,10 +13,9 @@
 // in the PR's screenshots.
 //
 // glance_split.flags dumps frames (KOAN_DUMP_DIR), to look at the page.
-import fs from 'node:fs';
 import http from 'node:http';
-import path from 'node:path';
-import zlib from 'node:zlib';
+
+import { windowFrame } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -169,52 +168,6 @@ async function keyTo(target, code, modifiers, key = '') {
     await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
   });
   await sleep(1500);
-}
-
-// The latest frame of the browser window (the biggest dump), decoded:
-// {width, height, pixel(x, y) -> [r, g, b]}. 8-bit RGB(A) PNGs only.
-function windowFrame() {
-  const dir = process.env.KOAN_DUMP_DIR;
-  const file = fs.readdirSync(dir).filter(f => f.endsWith('.png'))
-      .map(f => path.join(dir, f))
-      .sort((a, b) => fs.statSync(b).size - fs.statSync(a).size)[0];
-  const png = fs.readFileSync(file);
-  let pos = 8, width = 0, height = 0, channels = 0;
-  const data = [];
-  while (pos < png.length) {
-    const length = png.readUInt32BE(pos);
-    const type = png.toString('ascii', pos + 4, pos + 8);
-    const chunk = png.subarray(pos + 8, pos + 8 + length);
-    if (type === 'IHDR') {
-      width = chunk.readUInt32BE(0);
-      height = chunk.readUInt32BE(4);
-      channels = chunk[9] === 6 ? 4 : 3;
-    } else if (type === 'IDAT') {
-      data.push(chunk);
-    }
-    pos += 12 + length;
-  }
-  const raw = zlib.inflateSync(Buffer.concat(data));
-  const stride = width * channels;
-  const out = Buffer.alloc(stride * height);
-  for (let y = 0; y < height; y++) {
-    const filter = raw[y * (stride + 1)];
-    for (let x = 0; x < stride; x++) {
-      const v = raw[y * (stride + 1) + 1 + x];
-      const a = x >= channels ? out[y * stride + x - channels] : 0;
-      const b = y > 0 ? out[(y - 1) * stride + x] : 0;
-      const c = x >= channels && y > 0 ? out[(y - 1) * stride + x - channels] : 0;
-      const p = a + b - c;
-      const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
-      const paeth = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
-      out[y * stride + x] = (v + [0, a, b, (a + b) >> 1, paeth][filter]) & 0xff;
-    }
-  }
-  return {
-    width, height,
-    pixel: (x, y) => [...out.subarray(y * stride + x * channels,
-                                      y * stride + x * channels + 3)],
-  };
 }
 
 let failures = 0;

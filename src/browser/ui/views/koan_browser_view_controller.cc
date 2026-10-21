@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -23,6 +24,7 @@
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
+#include "ui/views/widget/widget.h"
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(koan::KoanBrowserViewController*)
 
@@ -147,6 +149,34 @@ bool IsCaptionStripCollapsed(const views::View* browser_view) {
   const KoanBrowserViewController* controller =
       view ? KoanBrowserViewController::From(view) : nullptr;
   return controller && controller->compact_mode()->caption_strip_collapsed();
+}
+
+bool IsSidebarOnRight(const views::View* view) {
+  // Also takes a view inside the window (e.g. in the sidebar).
+  const auto* browser_view = views::AsViewClass<BrowserView>(view);
+  if (!browser_view && view && view->GetWidget()) {
+    browser_view =
+        views::AsViewClass<BrowserView>(view->GetWidget()->client_view());
+  }
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  // Only a normal window with Koan's sidebar (vertical tabs) has a side to
+  // be on; others (horizontal tabs, popups, apps) aren't mirrored.
+  return controller && controller->compact_mode()->tabs_on_right() &&
+         features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
+         browser_view->ShouldDrawVerticalTabStrip();
+}
+
+int GetRevealedToolbarSidebarInset(const views::View* browser_view) {
+  const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  const KoanBrowserViewController* controller =
+      view ? KoanBrowserViewController::From(view) : nullptr;
+  const views::View* region = view ? view->tab_strip_view() : nullptr;
+  return controller &&
+                 controller->compact_mode()->reveals_toolbar_beside_sidebar() &&
+                 region && region->GetVisible()
+             ? region->width()
+             : 0;
 }
 
 }  // namespace koan

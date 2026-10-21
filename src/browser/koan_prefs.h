@@ -22,6 +22,42 @@ namespace koan::prefs {
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
 
+// What compact mode hides (Zen's "Compact Mode" submenu and settings,
+// `zen.view.compact.hide-tabbar` / `hide-toolbar`): one of the values below,
+// by default the sidebar, like Zen. With single toolbar there is no top
+// toolbar, so compact mode hides just the sidebar.
+inline constexpr char kCompactModeHide[] = "koan.compact_mode.hide";
+inline constexpr char kCompactModeHideSidebar[] = "sidebar";
+inline constexpr char kCompactModeHideToolbar[] = "toolbar";
+inline constexpr char kCompactModeHideBoth[] = "both";
+
+// While compact mode hides the sidebar: whether the user had it collapsed
+// to icons before (kSidebarCollapsedBefore*). Chromium saves the collapse
+// compact mode makes as the profile's sidebar state, so a window opened
+// meanwhile needs this to tell the two apart. Internal; cleared once
+// compact mode gives the sidebar back.
+inline constexpr char kCompactModeSidebarCollapsedBefore[] =
+    "koan.compact_mode.sidebar_collapsed_before";
+inline constexpr int kSidebarCollapsedBeforeUnknown = 0;
+inline constexpr int kSidebarCollapsedBeforeNo = 1;
+inline constexpr int kSidebarCollapsedBeforeYes = 2;
+
+// Zen's "Briefly make the toolbar popup when switching or opening new tabs in
+// compact mode" (`zen.view.compact.toolbar-flash-popup`): the hidden sidebar
+// pops up for 800 ms when the active tab changes. Off by default, like Zen.
+inline constexpr char kCompactModeToolbarFlashPopup[] =
+    "koan.compact_mode.toolbar_flash_popup";
+
+// Zen's "Tabs on the right" (`zen.tabs.vertical.right-side`): the sidebar is
+// on the right of the window, everything mirrored.
+inline constexpr char kTabsOnRight[] = "koan.tabs.on_right";
+
+// Whether the "Sidebar hidden!" toast was shown, after a drag of the
+// sidebar's edge hid the sidebar (`zen.view.compact.drag-collapse-hint-seen`).
+// Zen shows it once.
+inline constexpr char kCompactModeDragCollapseHintSeen[] =
+    "koan.compact_mode.drag_collapse_hint_seen";
+
 // Zen's single-toolbar layout: no top toolbar; navigation and a URL pill at
 // the top of the sidebar. On by default, like Zen.
 inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
