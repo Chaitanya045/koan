@@ -7,11 +7,13 @@
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/view.h"
+#include "ui/views/view_observer.h"
 
 class BrowserView;
 
@@ -49,7 +51,9 @@ class KoanSidebarNavButtons : public views::BoxLayoutView,
   raw_ptr<views::Button> forward_ = nullptr;
 };
 
-class KoanSidebarNavView : public views::View, public TabStripModelObserver {
+class KoanSidebarNavView : public views::View,
+                           public TabStripModelObserver,
+                           public views::ViewObserver {
   METADATA_HEADER(KoanSidebarNavView, views::View)
 
  public:
@@ -70,11 +74,18 @@ class KoanSidebarNavView : public views::View, public TabStripModelObserver {
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
 
+  // views::ViewObserver (the copy button's focus):
+  void OnViewFocused(views::View* observed_view) override;
+  void OnViewBlurred(views::View* observed_view) override;
+
  private:
   void ObserveActiveTab();
   void UpdateUrl();
   void FocusOmnibox();
   void OnPillHovered(bool hovered);
+  // Zen's copy button is there for keyboard and screen readers, and shown
+  // while the pill is hovered or the button has focus.
+  void UpdateCopyButtonOpacity();
   void ShowSitePanel();
 
   const raw_ptr<BrowserView> browser_view_;
@@ -87,6 +98,8 @@ class KoanSidebarNavView : public views::View, public TabStripModelObserver {
   // The active tab's UI changes (URL, title, favicon), from the same
   // TabUIHelper the tab strip draws from.
   base::CallbackListSubscription tab_ui_subscription_;
+  base::ScopedObservation<views::View, views::ViewObserver>
+      copy_button_observation_{this};
 };
 
 }  // namespace koan

@@ -143,10 +143,12 @@ KoanUrlBarController::~KoanUrlBarController() {
 
 void KoanUrlBarController::UpdateKeyHandler() {
   // While the bar is open, or open for a new tab in the toolbar (the
-  // multiple-toolbars layout).
+  // multiple-toolbars layout). Without the Koan URL bar, Chrome's Esc.
   LocationBarView* bar = location_bar();
   views::View* omnibox =
-      (is_open() || new_tab_) && bar ? bar->omnibox_view() : nullptr;
+      features::IsUrlBarEnabled() && (is_open() || new_tab_) && bar
+          ? bar->omnibox_view()
+          : nullptr;
   if (key_target_.view() == omnibox) {
     return;
   }
@@ -289,7 +291,7 @@ void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
   EndEditing();
   // Like Zen's single toolbar, a closed bar shows the page's address again
   // (the pill shows it; the omnibox is out of sight).
-  if (was_open && bar) {
+  if (was_open && bar && features::IsUrlBarEnabled()) {
     bar->Revert();
   }
 }
@@ -480,15 +482,18 @@ void KoanUrlBarController::HideToolbarSiblings() {
 
 void KoanUrlBarController::ApplyCardStyle() {
   const bool floating = placement_ == Placement::kFloating;
+  // Zen's look (larger font, the shadow and click-outside backdrop) comes
+  // with the Koan URL bar; without it, the plain card.
+  const bool zen_card = floating && features::IsUrlBarEnabled();
   LocationBarView* bar = location_bar();
   OmniboxViewViews* omnibox = bar ? bar->omnibox_view() : nullptr;
 
   // Zen's floating bar has a larger font than the toolbar's.
-  if (floating && !omnibox_font_ && omnibox) {
+  if (zen_card && !omnibox_font_ && omnibox) {
     omnibox_font_ = omnibox->GetFontList();
     omnibox->SetFontList(
         omnibox_font_->DeriveWithSizeDelta(kFloatingUrlBarFontDelta));
-  } else if (!floating && omnibox_font_) {
+  } else if (!zen_card && omnibox_font_) {
     if (omnibox) {
       omnibox->SetFontList(*omnibox_font_);
     }
@@ -496,7 +501,7 @@ void KoanUrlBarController::ApplyCardStyle() {
   }
 
   views::View* top_container = browser_view_->top_container();
-  if (floating && !backdrop_ && top_container->parent()) {
+  if (zen_card && !backdrop_ && top_container->parent()) {
     views::View* overlay = top_container->parent();
     backdrop_ = overlay->AddChildViewAt(
         std::make_unique<KoanUrlBarBackdrop>(base::BindRepeating(
@@ -509,7 +514,7 @@ void KoanUrlBarController::ApplyCardStyle() {
         .Once()
         .SetDuration(kFadeDuration)
         .SetOpacity(backdrop_, 1.0f, gfx::Tween::EASE_OUT);
-  } else if (!floating && backdrop_) {
+  } else if (!zen_card && backdrop_) {
     views::View* overlay = backdrop_->parent();
     overlay->RemoveChildViewT(std::exchange(backdrop_, nullptr));
   }
@@ -646,10 +651,13 @@ void KoanUrlBarController::OnViewIsDeleting(views::View* observed_view) {
 
 void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
   // Zen: Esc closes the bar (Chrome's omnibox would first close the
-  // suggestions, then revert, then give the page focus).
+  // suggestions, then revert, then give the page focus). Only a plain Esc:
+  // Shift+Esc is the task manager, and other modifiers may be bound too.
+  constexpr int kModifiers = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
+                             ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
   if (event->type() == ui::EventType::kKeyPressed &&
-      event->key_code() == ui::VKEY_ESCAPE && !event->IsShiftDown() &&
-      (is_open() || new_tab_)) {
+      event->key_code() == ui::VKEY_ESCAPE &&
+      (event->flags() & kModifiers) == 0 && (is_open() || new_tab_)) {
     event->SetHandled();
     // Not while the omnibox dispatches the key to this handler.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(

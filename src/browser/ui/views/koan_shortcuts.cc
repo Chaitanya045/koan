@@ -132,6 +132,11 @@ bool KoanShortcutController::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   for (const Binding& binding : bindings_) {
     if (binding.accelerator == accelerator) {
+      // Like Chrome's New Tab, a held key doesn't repeat: it would open and
+      // close the URL bar over and over.
+      if (binding.action == Action::kNewTab && accelerator.IsRepeat()) {
+        return true;
+      }
       return Run(binding.action);
     }
   }

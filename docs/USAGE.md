@@ -104,15 +104,17 @@ of the peeked sidebar.
 |---|---|---|
 | ![In the pill](screenshots/urlbar-in-pill.png) | ![Floating](screenshots/urlbar-floating.png) | ![Ctrl+T](screenshots/urlbar-new-tab.png) |
 
-**Ctrl+T** (⌘T; also the sidebar's **+ New Tab**, the menus' New Tab and
-the tab strip's **+**) opens the URL bar, empty, instead of a new-tab page: the tab opens only when you open something from
-it, in a new tab next to the current one. Esc, a click outside or Ctrl+T
-again closes it without creating anything; what you had typed comes back if
-you press Ctrl+T again within 45 seconds.
+**Ctrl+T** (⌘T; also the sidebar's **+ New Tab** and the menus' New Tab)
+opens the URL bar, empty, instead of a new-tab page: the tab opens only
+when you open something from it, in a new tab next to the current one.
+(With Chromium's horizontal tabs, the tab strip's **+** still opens a
+new-tab page.) Esc, a click outside or Ctrl+T again closes it without
+creating anything; what you had typed comes back if you press Ctrl+T again
+within 45 seconds.
 
-Hover the pill for the **copy** button: it copies the page's URL and says
-so ("Copied current URL!"), as do Ctrl+Shift+C and Ctrl+Shift+Alt+C
-(Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The button at the end of the pill
+Hover the pill (or Tab to it) for the **copy** button: it copies the page's
+URL and says so ("Copied current URL!"), as do Ctrl+Shift+C and
+Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The button at the end of the pill
 opens the site's panel (security, permissions, cookies and site settings).
 
 | "Normal": editing in place, widened | Copied |

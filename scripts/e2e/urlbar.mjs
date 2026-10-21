@@ -277,14 +277,18 @@ const pillLabel = vs.find(v => v.cls === 'Label' && v.path.at(-1) === 'KoanUrlPi
 check('The pill shows the site, like Zen', pillLabel?.p.Text === 'example.com',
       JSON.stringify(pillLabel?.p.Text));
 const pillButtons = () => vs.filter(v => v.path.at(-1) === 'KoanUrlPill' && v.cls === 'ImageButton');
-check('...with the site panel button, and no copy button until hovered',
-      pillButtons().length === 2 && !pillButtons()[0].shown && pillButtons()[1].shown,
-      pillButtons().map(b => `${b.p.TooltipText}:${b.shown}`).join(' '));
+// Zen's copy button is transparent until hovered, but keeps its place (Tab
+// and screen readers reach it).
+check('...with the site panel button, and the copy button transparent until hovered',
+      pillButtons().length === 2 && pillButtons()[0].shown &&
+          pillButtons()[0].p.opacity === '0' && pillButtons()[1].shown,
+      pillButtons().map(b => `${b.p.TooltipText}:${b.shown}:${b.p.opacity}`).join(' '));
 await mouse(pill, 'mouseEntered');
 await sleep(500);
 vs = await views();
 const copy = pillButtons()[0];
-check('Hovering the pill shows the copy-URL button', copy?.shown, copy?.p.TooltipText);
+check('Hovering the pill shows the copy-URL button', copy?.shown && copy.p.opacity === '1',
+      `${copy?.p.TooltipText} ${copy?.p.opacity}`);
 await click(copy);
 vs = await views();
 const toast = find(vs, 'KoanToastView');
@@ -354,6 +358,27 @@ check('Ctrl+T opens the URL bar' + (BEHAVIOR === 'normal' ? ' in the pill' : ', 
 check('...empty', omniboxText(vs) === '', JSON.stringify(omniboxText(vs)));
 check('...without creating a tab', (await pages()).length === tabsBefore);
 shot('new-tab');
+// Open items from the #58 review, reported, not checked: the caption
+// buttons under the floating bar's backdrop (a later sibling, so above them).
+if (BEHAVIOR !== 'normal') {
+  const backdrop = find(vs, 'KoanUrlBarBackdrop');
+  const caption = vs.filter(v => v.shown && v.w > 0 &&
+      (v.cls === 'FrameCaptionButton' ||
+       (v.cls === 'ImageButton' && /FrameView$/.test(v.path.at(-1) ?? ''))));
+  console.log(`INFO  caption buttons while floating: ${caption.length}, ` +
+      caption.map(c => `${c.cls}@${c.ax},${c.ay}`).join(' ') +
+      `; backdrop ${backdrop?.ax},${backdrop?.ay} ${backdrop?.w}x${backdrop?.h}`);
+}
+// Holding Ctrl+T: like Chrome's New Tab, a repeated key does nothing.
+const EF_CONTROL = 4, EF_IS_REPEAT = 1 << 17;
+await windowKey(VK.T, EF_CONTROL | EF_IS_REPEAT);
+vs = await views();
+check('A repeated Ctrl+T (key held) leaves it open', bar(vs)?.w < WINDOW_WIDTH,
+      `width ${bar(vs)?.w}`);
+// Only a plain Esc closes it.
+await windowKey(VK.ESC, EF_CONTROL);
+vs = await views();
+check('...and so does Ctrl+Esc', bar(vs)?.w < WINDOW_WIDTH, `width ${bar(vs)?.w}`);
 await key(VK.T, CTRL, 't');
 vs = await views();
 check('Ctrl+T again closes it', bar(vs)?.w === WINDOW_WIDTH &&
@@ -429,6 +454,34 @@ vs = await views();
 check('...and typing keeps it there', isFloating(vs) && omniboxText(vs) === 'wiki',
       `${JSON.stringify(omniboxText(vs))}, bar ${bar(vs)?.x}+${bar(vs)?.w}`);
 await closeBar();
+// Open item from the #58 review, reported, not checked: the site panel
+// opened from a peeked sidebar, and whether the sidebar stays under it.
+await key(VK.S, CTRL | ALT, 's');
+{
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const pillNode = (function findPill(n) {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'View' && a[a.indexOf('class') + 1] === 'KoanUrlPill') return n;
+    for (const c of n.children ?? []) { const f = findPill(c); if (f) return f; }
+    return null;
+  })(doc);
+  const buttons = (pillNode?.children ?? []).filter(c =>
+      (c.attributes ?? []).includes('ImageButton'));
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await ui.send('DOM.dispatchMouseEvent', { nodeId: buttons.at(-1)?.nodeId,
+        event: { type, x: 10, y: 10, button: 'left', wheelDirection: 'none' } });
+  }
+  ui.close();
+}
+await sleep(4500);
+vs = await views();
+console.log(`INFO  site panel from a peeked sidebar, 4.5 s later: bubble ` +
+    `${shown(vs, 'PageInfoBubbleView')}, sidebar ${find(vs, 'VerticalTabStripRegionView')?.w}`);
+const closeInfoPeeked = vs.find(v => v.path.includes('PageInfoBubbleView') && v.shown &&
+    /close/i.test(`${v.p.TooltipText ?? ''} ${v.p.AccessibleName ?? ''}`));
+if (closeInfoPeeked) await click(closeInfoPeeked);
 await key(VK.S, CTRL, 's');
 
 // --- Switching away from the window keeps the new-tab bar ----------------------

@@ -154,7 +154,11 @@ constexpr Row kRows[] = {
     {.group = "urlbar",
      .control = Control::kCheckbox,
      .pref = prefs::kUrlBarReplaceNewTab,
+#if BUILDFLAG(IS_MAC)
+     .label = "Open the URL bar instead of a new tab page (\u2318T, New Tab)",
+#else
      .label = "Open the URL bar instead of a new tab page (Ctrl+T, New Tab)",
+#endif
      .is_available = features::IsUrlBarEnabled},
     {.group = "urlbar",
      .control = Control::kCheckbox,
