@@ -5,6 +5,9 @@
 import("//components/vector_icons/vector_icons.gni")
 
 # Koan's own vector icons (koan::k...Icon), for what Chrome has no icon for.
+# light_mode.icon and automatic_appearance.icon are Chromium's (ash's
+# brightness_up_refresh.icon and unified_menu_dark_mode.icon, BSD, headers
+# kept); the templates follow chrome/app/vector_icons'.
 aggregate_vector_icons("koan_vector_icons") {
   icon_directory = "."
 

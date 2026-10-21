@@ -20,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -46,6 +47,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_commands.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -56,15 +58,18 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "url/gurl.h"
 
 namespace koan {
 
 namespace {
 
-// Zen (ZenUBActionsProvider): typed text suggests at most five actions
-// scoring above 92; ">" lists every action scoring above 30.
-constexpr size_t kMaxSuggestedActions = 5;
+// Zen (ZenUBActionsProvider): typed text suggests actions scoring above 92,
+// at most five in Zen and three here, so they don't crowd history and search
+// suggestions out of Chromium's eight rows; ">" lists every action scoring
+// above 30.
+constexpr size_t kMaxSuggestedActions = 3;
 constexpr int kMinimumScore = 92;
 constexpr int kMinimumPrefixedScore = 30;
 constexpr size_t kMinimumQueryLength = 3;
@@ -72,15 +77,27 @@ constexpr size_t kMaxQueryLength = 255;
 // Exact and prefix matches outrank any fuzzy match.
 constexpr int kExactMatchScore = 1'000'000;
 constexpr int kPrefixMatchScore = 100'000;
-// The learner's bounds (ZenUBResultsLearner).
+// With ">", Enter runs the first action once this much is typed, as in Zen.
+constexpr size_t kMinimumPrefixedQueryForDefault = 2;
+// The learner's bounds (ZenUBResultsLearner), and how many actions it
+// remembers (passed-over Spaces that are long gone, for example, fall out).
 constexpr int kMaxUsage = 5;
 constexpr int kMinUsage = -5;
+constexpr size_t kMaxUsageEntries = 64;
 
-// Above search-what-you-typed (1300) and URL inline autocompletion, so a
-// first action that may be the default match is; the others are above the
-// rest, so the result's trim keeps them.
-constexpr int kDefaultRelevance = 1600;
-constexpr int kRelevance = 1500;
+// Relevances. Typed actions stay below URL inline autocompletion and history
+// navigation (1400 and up), so typing part of a site's address never runs
+// one.
+// - With ">" there is nothing else to pick, so actions come first.
+constexpr int kActionsModeRelevance = 1600;
+// - A typed action may be the default match only for its exact label, once
+//   the user has run it from here, and then beats only
+//   search-what-you-typed (1300).
+constexpr int kTypedDefaultRelevance = 1301;
+// - Other typed actions rank with search suggestions, lower each time the
+//   user passed them over (Zen moves those down the list).
+constexpr int kTypedRelevance = 1250;
+constexpr int kPassedOverPenalty = 100;
 
 // The popup's icon size (--cr-searchbox-results-search-icon-size).
 constexpr int kIconSize = 16;
@@ -102,12 +119,64 @@ bool LooksLikeProtocol(std::u16string_view text) {
   return i > 0 && i < text.size() && text[i] == ':';
 }
 
-KoanBrowserViewController* LastActiveController() {
-  BrowserWindowInterface* browser =
-      GlobalBrowserCollection::GetInstance()->GetLastActiveBrowser();
-  BrowserView* browser_view =
-      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
-  return browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+// The window being typed in: the most recently active one of `prefs`'s
+// profile whose URL bar has focus, else the most recently active one.
+KoanBrowserViewController* ControllerFor(const PrefService* prefs) {
+  KoanBrowserViewController* focused = nullptr;
+  KoanBrowserViewController* active = nullptr;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&](BrowserWindowInterface* browser) {
+        BrowserView* browser_view =
+            BrowserView::GetBrowserViewForBrowser(browser);
+        KoanBrowserViewController* controller =
+            browser_view ? KoanBrowserViewController::From(browser_view)
+                         : nullptr;
+        if (!controller || browser_view->GetProfile()->GetPrefs() != prefs) {
+          return true;
+        }
+        if (!active) {
+          active = controller;
+        }
+        LocationBarView* location_bar = browser_view->GetLocationBarView();
+        if (location_bar && location_bar->omnibox_view() &&
+            location_bar->omnibox_view()->HasFocus()) {
+          focused = controller;
+          return false;
+        }
+        return true;
+      },
+      BrowserCollection::Order::kActivation);
+  return focused ? focused : active;
+}
+
+// What a screen reader says for the row: Chromium announces only the action's
+// accessibility hint for kPedal matches.
+std::u16string AccessibleName(const KoanCommand& command) {
+  std::u16string name = command.label;
+  if (!command.target.empty()) {
+    name += u" " + command.target;
+  }
+  if (!command.shortcut.empty()) {
+    name += u", " + command.shortcut;
+  }
+  return name;
+}
+
+// How well `query` matches `command`: by its target (a Space's name) if it
+// has one, else its label. A Space's name may start with its emoji icon,
+// which the user doesn't type.
+int Score(const KoanCommand& command, std::u16string_view query) {
+  const std::u16string text = base::i18n::ToLower(
+      command.target.empty() ? command.label : command.target);
+  int score = KoanCommandPalette::FuzzyScore(text, query);
+  const size_t space = text.find(u' ');
+  if (space != std::u16string::npos && !text.empty() &&
+      !base::IsAsciiAlphaNumeric(text[0])) {
+    score = std::max(score,
+                     KoanCommandPalette::FuzzyScore(
+                         std::u16string_view(text).substr(space + 1), query));
+  }
+  return score;
 }
 
 int GetUsage(const PrefService* prefs, const std::string& id) {
@@ -139,7 +208,7 @@ class KoanCommandAction : public OmniboxAction {
       : OmniboxAction(LabelStrings(command.label,
                                    command.label,
                                    std::u16string(),
-                                   command.label),
+                                   AccessibleName(command)),
                       GURL()),
         run_(command.run),
         controller_(std::move(controller)) {}
@@ -168,6 +237,8 @@ class KoanCommandAction : public OmniboxAction {
 // Zen's ZenUrlbarProviderGlobalActions: suggests the window's commands.
 class KoanCommandProvider : public AutocompleteProvider {
  public:
+  // There is no provider type for Koan: kBuiltin, like Chrome's chrome://
+  // page suggestions, runs where the omnibox does and shares their metrics.
   explicit KoanCommandProvider(AutocompleteProviderClient* client)
       : AutocompleteProvider(AutocompleteProvider::Type::kBuiltin),
         client_(client) {
@@ -201,8 +272,9 @@ class KoanCommandProvider : public AutocompleteProvider {
 void KoanCommandProvider::Start(const AutocompleteInput& input,
                                 bool minimal_changes) {
   matches_.clear();
+  // Not in a search engine's keyword mode: the text is for the engine.
   if (!features::IsCommandPaletteEnabled() || input.IsZeroSuggest() ||
-      input.omit_asynchronous_matches() ||
+      input.omit_asynchronous_matches() || input.in_keyword_mode() ||
       input.current_page_classification() ==
           metrics::OmniboxEventProto::NTP_REALBOX) {
     return;
@@ -222,10 +294,8 @@ void KoanCommandProvider::Start(const AutocompleteInput& input,
   if (query.empty() && !prefixed) {
     return;
   }
-  // The omnibox being typed in is in the active window.
-  KoanBrowserViewController* controller = LastActiveController();
-  if (!controller ||
-      controller->browser_view()->GetProfile()->GetPrefs() != prefs) {
+  KoanBrowserViewController* controller = ControllerFor(prefs);
+  if (!controller) {
     return;
   }
 
@@ -238,12 +308,7 @@ void KoanCommandProvider::Start(const AutocompleteInput& input,
   for (KoanCommand& command :
        controller->command_palette()->registry().GetAvailableCommands()) {
     const int score =
-        query.empty()
-            ? kMinimumPrefixedScore + 1
-            : KoanCommandPalette::FuzzyScore(
-                  base::i18n::ToLower(command.target.empty() ? command.label
-                                                             : command.target),
-                  query);
+        query.empty() ? kMinimumPrefixedScore + 1 : Score(command, query);
     if (score > (prefixed ? kMinimumPrefixedScore : kMinimumScore)) {
       const int usage = GetUsage(prefs, command.id);
       candidates.push_back({std::move(command), score, usage});
@@ -262,18 +327,29 @@ void KoanCommandProvider::Start(const AutocompleteInput& input,
 
   for (size_t i = 0; i < candidates.size(); ++i) {
     const KoanCommand& command = candidates[i].command;
-    // Enter runs the first action with ">", and an action the user ran from
-    // here before (Zen makes those the heuristic result).
-    const bool is_default = i == 0 && (prefixed || candidates[i].usage > 0) &&
-                            !input.parts().scheme.is_nonempty();
-    AutocompleteMatch match(
-        this,
-        (is_default ? kDefaultRelevance : kRelevance) - static_cast<int>(i),
-        /*deletable=*/false, omnibox::AutocompleteMatchType::kPedal);
+    const int usage = candidates[i].usage;
+    // Enter runs the first action with ">" and two characters (Zen's
+    // heuristic result), and a typed action the user ran from here before
+    // when the text is its whole label (Zen: any match).
+    const bool is_default =
+        i == 0 && !input.parts().scheme.is_nonempty() &&
+        (prefixed ? query.size() >= kMinimumPrefixedQueryForDefault
+                  : usage > 0 && candidates[i].score == kExactMatchScore &&
+                        input.type() != metrics::OmniboxInputType::URL);
+    int relevance = kActionsModeRelevance;
+    if (!prefixed) {
+      relevance = is_default ? kTypedDefaultRelevance
+                             : kTypedRelevance -
+                                   kPassedOverPenalty * std::max(0, -usage);
+    }
+    AutocompleteMatch match(this, relevance - static_cast<int>(i),
+                            /*deletable=*/false,
+                            omnibox::AutocompleteMatchType::kPedal);
     match.allowed_to_be_default_match = is_default;
     // Listed right after the default match, above search suggestions, like
-    // Zen's (which go at index 1). Chrome sorts boosted shortcuts there.
-    match.shortcut_boosted = true;
+    // Zen's (which go at index 1); Chrome sorts boosted shortcuts there. Not
+    // once the user has passed the action over.
+    match.shortcut_boosted = prefixed || usage >= 0;
     match.destination_url = GURL(kCommandUrlPrefix + command.id);
     match.transition = ui::PAGE_TRANSITION_GENERATED;
     // Selecting the action keeps what the user typed in the box.
@@ -355,6 +431,19 @@ void KoanCommandProvider::OnURLOpened(OmniboxLog* log) {
       update->Set(id, new_usage);
     }
   }
+  // Forget passed-over actions beyond the limit (ids sort alphabetically).
+  std::vector<std::string> forget;
+  for (const auto [id, usage] : *update) {
+    if (update->size() - forget.size() <= kMaxUsageEntries) {
+      break;
+    }
+    if (usage.GetIfInt().value_or(0) < 0) {
+      forget.push_back(id);
+    }
+  }
+  for (const std::string& id : forget) {
+    update->Remove(id);
+  }
 }
 
 }  // namespace
@@ -395,10 +484,17 @@ void KoanCommandPalette::OnKeyEvent(ui::KeyEvent* event) {
       !features::IsCommandPaletteEnabled()) {
     return;
   }
-  if (!omnibox_->GetText().empty()) {
+  // A second Tab leaves the Actions mode, as in Zen.
+  const std::u16string text = omnibox_->GetText();
+  const std::u16string actions_mode(1, kActionsModePrefix);
+  if (text == actions_mode) {
+    omnibox_->SetUserText(std::u16string());
+  } else if (text.empty()) {
+    omnibox_->SetUserText(actions_mode);
+    omnibox_->GetViewAccessibility().AnnouncePolitely(u"Actions");
+  } else {
     return;
   }
-  omnibox_->SetUserText(std::u16string(1, kActionsModePrefix));
   event->SetHandled();
 }
 

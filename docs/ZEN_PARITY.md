@@ -85,10 +85,10 @@ point of Koan.
 
 | Zen | Koan | Notes |
 |---|---|---|
-| Actions suggested while typing in the URL bar | Same | Zen's labels and fuzzy matching: from three characters, at most five, right below the first suggestion. A Chromium omnibox provider, so it works with any URL bar look. |
-| Shortcut shown with each action | Same | As the row's dimmed second part ("Toggle Compact Mode – Ctrl+S"), not a separate tag. It is the key in effect, so a shortcut changed in chrome://koan-settings shows; written the platform's way (⌘ on macOS, once Koan's Mac keys land in #51). |
-| Learns the actions you use | Same | Used actions come first and run on Enter; passed-over ones move down (Zen's results learner). |
-| Actions mode: Tab in an empty URL bar lists every action | Different | Koan types `>` (you can type it too) instead of showing an "Actions" chip, and lists as many actions as Chromium's popup has rows (about eight); type to filter. |
+| Actions suggested while typing in the URL bar | Different | Zen's labels and fuzzy matching from three characters, right below the first suggestion, but at most three (Zen: five), so they don't crowd history and search suggestions out of Chromium's eight rows. A Chromium omnibox provider, so it works with any URL bar look. |
+| Shortcut shown with each action | Same | In Zen's notation, as in the settings page ("Ctrl+Alt+⇧+C", "Ctrl+,"; ⌘ glyphs on macOS once Koan's Mac keys land in #51), as the row's dimmed second part rather than a tag. It is the key in effect, so a shortcut changed in chrome://koan-settings shows. |
+| Learns the actions you use | Different | Used actions come first, and passed-over ones drop below the search suggestions (Zen's results learner). Zen also runs a used action on Enter for any text matching it; Koan only when you type its whole label, so typing the start of a site's address (`pri` for a site, after using Print) still opens the site. |
+| Actions mode: Tab in an empty URL bar lists every action | Different | Koan types `>` (you can type it too; a second Tab leaves it) instead of showing an "Actions" chip, and lists as many actions as Chromium's popup has rows (about eight) above a "> – search" row; type to filter. As in Zen, Enter runs the first action once two characters are typed. |
 | "Focus on" a Space | Same | Matched by the Space's name, which is shown beside "Focus on". |
 | Add to / Remove from Essentials | Different | Koan's Essentials are its pinned tabs, so these pin and unpin, like Pin / Unpin Tab. |
 | Open Theme Picker, Open Library, New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#41, #43, #42); each feature adds its actions to the palette's registry. |

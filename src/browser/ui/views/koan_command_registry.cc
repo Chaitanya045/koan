@@ -4,6 +4,7 @@
 
 #include "koan/browser/ui/views/koan_command_registry.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace koan {
@@ -27,6 +28,7 @@ std::vector<KoanCommand> KoanCommandRegistry::GetAvailableCommands() const {
   for (const Source& source : sources_) {
     source.Run(commands);
   }
+  std::ranges::stable_sort(commands, {}, &KoanCommand::order);
   return commands;
 }
 

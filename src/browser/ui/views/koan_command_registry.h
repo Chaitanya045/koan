@@ -36,6 +36,9 @@ struct KoanCommand {
   std::string id;
   // Zen's label, e.g. "Toggle Compact Mode".
   std::u16string label;
+  // The action's position in Zen's list (ZenUBGlobalActions.sys.mjs), which
+  // orders the commands of all features as in Zen.
+  int order = 0;
   // What the command applies to, e.g. a Space's name for "Focus on". Shown
   // beside the label and matched instead of it (Zen's "prettyName").
   std::u16string target;
@@ -50,7 +53,7 @@ struct KoanCommand {
 // features add their own actions without touching the palette.
 class KoanCommandRegistry {
  public:
-  // Appends the commands that apply right now, in display order.
+  // Appends the commands that apply right now.
   using Source = base::RepeatingCallback<void(std::vector<KoanCommand>&)>;
 
   KoanCommandRegistry();
@@ -60,7 +63,7 @@ class KoanCommandRegistry {
 
   void AddSource(Source source);
 
-  // Every source's available commands, in the order the sources were added.
+  // Every source's available commands, by `order`.
   std::vector<KoanCommand> GetAvailableCommands() const;
 
  private:

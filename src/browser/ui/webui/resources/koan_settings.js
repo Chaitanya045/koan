@@ -184,7 +184,8 @@ const KEY_NAMES = {
   190: '.', 191: '/', 192: '`', 219: '[', 220: '\\', 221: ']', 222: '\'',
 };
 
-// Zen's display: Ctrl+Win+Alt+⇧+Key.
+// Zen's display: Ctrl+Win+Alt+⇧+Key (also shortcuts::DisplayText() in
+// koan_shortcut_table.cc, for the command palette).
 // TODO(#51): on macOS Zen shows ⌃ ⌥ ⇧ ⌘ separated by spaces, ⌘ for "accel",
 // and ⎋ / ↩ for Escape / Enter; record ⌘ (metaKey) as the accelerator.
 function modifiersText(modifiers) {

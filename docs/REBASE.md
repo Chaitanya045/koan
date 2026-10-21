@@ -6,9 +6,13 @@ moving to a new revision is mechanical:
 - All Koan code lives in `src/` (seen by GN as `//koan`).
 - Upstream files carry one-to-a-few-line **hook patches**, one file per
   patched upstream file in `patches/`. Each calls into `//koan`, except the
-  freezing exemptions in `components/performance_manager` (a component
-  can't depend on `//koan`), which carry their logic in the patch; see the
-  table.
+  freezing exemptions in `components/performance_manager` (a `component()`
+  shared library, which can't depend on `//koan`), which carry their logic in
+  the patch; see the table. A static library linked only into `chrome`, such
+  as `components/omnibox/browser`, may call into `//koan` through a
+  header-only hooks target; the definition lives in `//koan/browser/ui/views:impl`,
+  so a binary that links the library without `//chrome/browser` (e.g.
+  `components_unittests`) wouldn't link.
 - Bulk branding (product name strings, `BRANDING`, logos) is applied by
   `scripts/apply_branding.sh` rather than stored as patches.
 - Upstream feature defaults Koan relies on are set in one place,
@@ -43,7 +47,7 @@ assumes:
 | Sidebar header | `chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc` (`CalculateProposedLayout`, `GetPreferredWidth`) | still a hand-written layout of collapse button + combo button; `VerticalTabStripTopContainer` is still a direct child of `VerticalTabStripRegionView` |
 | Caption buttons | `chrome/browser/ui/views/frame/opaque_browser_frame_view.cc` (`HitTestCaptionButton`) | the frame's caption buttons are still direct children of the frame view (`ImageButton` in the GTK-native frame, `FrameCaptionButton` otherwise; Koan finds them by class name) and hit-testing still goes through `HitTestCaptionButton`. macOS has no such buttons (`BrowserFrameViewMac`; AppKit draws the traffic lights) |
 | Floating URL bar (no patch) | `BrowserViewLayoutImpl::Layout` (top container outside BrowserView) | the layout still sets the top container's and toolbar's bounds each pass (Koan observes them and re-centres); `LocationBarView` is still a direct child of `ToolbarView` |
-| Command palette provider | `components/omnibox/browser/autocomplete_controller.cc` (constructor) | providers are still built in the constructor into `providers_`; `AutocompleteProvider::Type::kBuiltin` still marks the omnibox-like controllers; `kPedal` matches with a `takeover_action` still run the action instead of navigating (`OmniboxEditModel::OpenMatch`), and `shortcut_boosted` still sorts a match above searches (`AutocompleteMatch::GetSortingOrder`) |
+| Command palette provider | `components/omnibox/browser/autocomplete_controller.cc` (constructor, + its `BUILD.gn`: `//koan/browser/omnibox:hooks`) | providers are still built in the constructor into `providers_`; `AutocompleteProvider::Type::kBuiltin` still marks the omnibox-like controllers; `kPedal` matches with a `takeover_action` still run the action instead of navigating (`OmniboxEditModel::OpenMatch`), and `shortcut_boosted` still sorts a match above searches (`AutocompleteMatch::GetSortingOrder`) |
 | Glance trigger | `chrome/browser/ui/browser_web_contents_delegate/...cc` (`OpenURLFromTab`) | the activation click still arrives as renderer-initiated `NEW_POPUP`; a click Glance declines is reopened through `OpenURLFromTab` with its fallback disposition (no loop: the fallback is never `NEW_POPUP`) |
 | Renderer switches | `chrome/browser/chrome_content_browser_client.cc` (`AppendExtraCommandLineSwitches`, + `chrome/browser/BUILD.gn` `core`) | the renderer branch still has the `RenderProcessHost` for `child_process_id` |
 | Glance activation | `third_party/blink/renderer/core/loader/navigation_policy.cc` | `NavigationPolicyFromEventModifiers` still maps modifier clicks to policies; the popup policy is still never produced by link clicks |

@@ -6,9 +6,12 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
+#include "base/containers/fixed_flat_map.h"
 #include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -26,6 +29,7 @@
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
@@ -53,10 +57,60 @@ ThemeService* ThemeServiceOf(const KoanBrowserViewController& controller) {
       controller.browser_view()->GetProfile());
 }
 
+// The actions' positions in Zen's list (globalActionsTemplate in
+// ZenUBGlobalActions.sys.mjs), including those Koan doesn't have yet, so that
+// a feature adding one (#41, #42, #43) can take Zen's place.
+constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
+    {"toggle-compact-mode", 0},
+    {"open-theme-picker", 1},
+    {"open-library", 2},
+    {"new-split-view", 3},
+    {"unsplit-view", 4},
+    {"new-space", 5},
+    {"new-folder", 6},
+    {"collapse-all-folders", 7},
+    {"expand-all-folders", 8},
+    {"copy-current-url", 9},
+    {"settings", 10},
+    {"open-private-window", 11},
+    {"open-new-window", 12},
+    {"pin-tab", 14},
+    {"unpin-tab", 15},
+    {"next-space", 18},
+    {"previous-space", 19},
+    {"close-tab", 20},
+    {"reopen-closed-tab", 21},
+    {"duplicate-tab", 22},
+    {"reload-tab", 24},
+    {"reload-tab-without-cache", 25},
+    {"next-tab", 26},
+    {"previous-tab", 27},
+    {"capture-screenshot", 28},
+    {"add-to-essentials", 30},
+    {"remove-from-essentials", 31},
+    {"find-in-page", 32},
+    {"manage-extensions", 33},
+    {"switch-to-automatic-appearance", 34},
+    {"switch-to-light-mode", 35},
+    {"switch-to-dark-mode", 36},
+    {"print", 37},
+    // Zen lists the per-item actions after these: "Focus on" a Space, then
+    // extensions.
+    {"focus-space", 100},
+});
+
+// Labels are Zen's palette strings (zen-command-palette.ftl), which differ
+// from its shortcut names in the shortcut table (zen-preferences.ftl), e.g.
+// "Settings" vs "Open Preferences"; the keys do come from the table.
 KoanCommand MakeCommand(std::string id,
                         std::u16string label,
                         const gfx::VectorIcon& icon) {
   KoanCommand command;
+  // "focus-space:<id>" takes the place of "focus-space".
+  const auto order =
+      kZenOrder.find(std::string_view(id).substr(0, id.find(':')));
+  CHECK(order != kZenOrder.end()) << id;
+  command.order = order->second;
   command.id = std::move(id);
   command.label = std::move(label);
   command.icon = &icon;
@@ -72,7 +126,7 @@ KoanCommand ShortcutCommand(const KoanBrowserViewController& controller,
   KoanCommand command = MakeCommand(std::move(id), std::move(label), icon);
   if (std::optional<ui::Accelerator> accelerator =
           controller.shortcuts()->GetAccelerator(action)) {
-    command.shortcut = accelerator->GetShortcutText();
+    command.shortcut = shortcuts::DisplayText(*accelerator);
   }
   command.run = base::BindRepeating(
       [](Action action, KoanBrowserViewController& controller) {
@@ -93,7 +147,7 @@ KoanCommand ChromeCommand(const KoanBrowserViewController& controller,
   // Not where Koan has given the key to one of Zen's shortcuts.
   if (controller.browser_view()->GetAccelerator(command_id, &accelerator) &&
       !controller.shortcuts()->IsBound(accelerator)) {
-    command.shortcut = accelerator.GetShortcutText();
+    command.shortcut = shortcuts::DisplayText(accelerator);
   }
   command.run = base::BindRepeating(
       [](int command_id, KoanBrowserViewController& controller) {
@@ -117,11 +171,11 @@ KoanCommand AppearanceCommand(std::string id,
   return command;
 }
 
-// In Zen's order (ZenUBGlobalActions); Zen's availability rules, with
-// "the command is enabled" where Zen checks its command element.
-void AppendGlobalCommands(KoanBrowserViewController* controller_ptr,
+// Zen's availability rules, with "the command is enabled" where Zen checks
+// its command element. `owner` owns the registry this source is in.
+void AppendGlobalCommands(const KoanBrowserViewController* owner,
                           std::vector<KoanCommand>& commands) {
-  const KoanBrowserViewController& controller = *controller_ptr;
+  const KoanBrowserViewController& controller = *owner;
   const tabs::TabInterface* tab =
       BrowserOf(controller)->GetTabStripModel()->GetActiveTab();
   const bool pinned = tab && tab->IsPinned();
@@ -151,7 +205,7 @@ void AppendGlobalCommands(KoanBrowserViewController* controller_ptr,
       IsEnabled(controller, IDC_NEW_INCOGNITO_WINDOW),
       ShortcutCommand(controller, "open-private-window", u"Open Private Window",
                       kIncognitoIcon, Action::kNewPrivateWindow));
-  add_if(true,
+  add_if(IsEnabled(controller, IDC_NEW_WINDOW),
          ShortcutCommand(controller, "open-new-window", u"Open New Window",
                          kNewWindowIcon, Action::kNewWindow));
   add_if(tab && !pinned, ShortcutCommand(controller, "pin-tab", u"Pin Tab",
@@ -215,9 +269,9 @@ void AppendGlobalCommands(KoanBrowserViewController* controller_ptr,
          ChromeCommand(controller, "print", u"Print", kPrintIcon, IDC_PRINT));
 }
 
-void AppendWorkspaceCommands(KoanBrowserViewController* controller_ptr,
+void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
                              std::vector<KoanCommand>& commands) {
-  const KoanBrowserViewController& controller = *controller_ptr;
+  const KoanBrowserViewController& controller = *owner;
   KoanWorkspaceController* workspaces = controller.workspaces();
   if (!workspaces->IsEnabled()) {
     return;
@@ -265,14 +319,18 @@ void AppendWorkspaceCommands(KoanBrowserViewController* controller_ptr,
 void AddGlobalCommands(KoanCommandRegistry& registry,
                        KoanBrowserViewController& controller) {
   // The registry belongs to `controller`.
-  registry.AddSource(base::BindRepeating(&AppendGlobalCommands,
-                                         base::Unretained(&controller)));
+  registry.AddSource(base::BindRepeating(
+      &AppendGlobalCommands,
+      base::Unretained(
+          static_cast<const KoanBrowserViewController*>(&controller))));
 }
 
 void AddWorkspaceCommands(KoanCommandRegistry& registry,
                           KoanBrowserViewController& controller) {
-  registry.AddSource(base::BindRepeating(&AppendWorkspaceCommands,
-                                         base::Unretained(&controller)));
+  registry.AddSource(base::BindRepeating(
+      &AppendWorkspaceCommands,
+      base::Unretained(
+          static_cast<const KoanBrowserViewController*>(&controller))));
 }
 
 }  // namespace koan

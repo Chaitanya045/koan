@@ -75,14 +75,16 @@ persists.
 ## Command palette
 
 As in Zen, the URL bar runs actions too. Type three or more letters of an
-action ("compact", "pin tab", "dark") and the matching actions appear right
-below the first suggestion, with their shortcut; pick one with the arrow
-keys and Enter, or click it. An action you have run comes first the next
-time, so Enter runs it straight away; actions you keep passing over move
-down.
+action ("compact", "pin tab", "dark") and up to three matching actions
+appear right below the first suggestion, with their shortcut; pick one with
+the arrow keys and Enter, or click it. An action you have run comes first
+the next time, and typing its whole name ("toggle compact mode") makes Enter
+run it; actions you keep passing over drop below the search suggestions.
+Typing the start of an address still opens the site.
 
 To see every action, press Tab in an empty URL bar (Ctrl+L, Backspace,
-Tab) or type `>`. Typing filters the list; Enter runs the first match.
+Tab) or type `>`; Tab again leaves. Typing filters the list, and once you
+have typed two letters Enter runs the first match.
 
 The actions, with Zen's names: Toggle Compact Mode, New Split View, Expand
 current view (unsplit), Copy Current URL, Settings, Open Private Window,
