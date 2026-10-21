@@ -1,5 +1,4 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-index 6fa2cecd5166050e7634f97a6ceb6dd2831d5d0e..74efc6693f0dda63d6e0340bda4d8a6a29eac3dc 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
 @@ -19,6 +19,7 @@
@@ -10,14 +9,35 @@ index 6fa2cecd5166050e7634f97a6ceb6dd2831d5d0e..74efc6693f0dda63d6e0340bda4d8a6a
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
  #include "ui/views/view.h"
-@@ -86,7 +87,9 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -85,8 +86,13 @@
+         GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding));
    }
  
++  // Koan Spaces: a Space is the focused group, and Koan's Space header
++  // replaces the group's header and the "Unfocus" pill.
++  const bool koan_space = tab_group_view->IsGroupFocused() &&
++                          koan::features::IsWorkspacesEnabled();
++
    if (tab_group_view->unfocus_header_) {
 -    if (tab_group_view->IsGroupFocused()) {
-+    // Koan workspaces: the sidebar switcher replaces the "Unfocus" pill.
-+    if (tab_group_view->IsGroupFocused() &&
-+        !koan::features::IsWorkspacesEnabled()) {
++    if (tab_group_view->IsGroupFocused() && !koan_space) {
        gfx::Rect unfocus_bounds;
        unfocus_bounds.set_x(header_bounds.x());
        unfocus_bounds.set_y(height);
+@@ -115,10 +121,13 @@
+ 
+   layouts.child_layouts.emplace_back(
+       tab_group_view->group_header_.get(),
+-      tab_group_view->group_header_->GetVisible(), header_bounds);
++      tab_group_view->group_header_->GetVisible(),
++      koan_space ? gfx::Rect() : header_bounds);
+ 
+-  height +=
+-      header_bounds.height() + kGroupHeaderVerticalMargin + kTabVerticalPadding;
++  if (!koan_space) {
++    height += header_bounds.height() + kGroupHeaderVerticalMargin +
++              kTabVerticalPadding;
++  }
+   width = std::max(width, header_bounds.width() + header_bounds.x());
+ 
+   // If the tab strip is not collapsed then the group line is below and left

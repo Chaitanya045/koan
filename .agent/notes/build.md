@@ -121,3 +121,6 @@
   event to the menu's `MenuHostRootView` at the item's position (the menu
   controller only takes events through its root view); a tab's context menu
   likewise opens from a right-click sent to the browser's root view.
+  Menu items expose no title, so find them by order (or, for a submenu, by
+  hovering items until it opens). UI DevTools can't send a double-click
+  (there is no click count).

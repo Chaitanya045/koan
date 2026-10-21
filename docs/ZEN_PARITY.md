@@ -60,23 +60,37 @@ point of Koan.
 | Briefly pop the sidebar up when switching tabs (`toolbar-flash-popup`) | Same | Off by default, 800 ms, not in split view, as in Zen. In Settings > Look and Feel, with Zen's label. |
 | Themed background for the compact sidebar/toolbar | Same | Koan's compact sidebar and toolbar always use the window's (workspace-tinted) colours. Zen 1.23 no longer has the `zen.view.compact.color-toolbar` / `color-sidebar` prefs (the setting's string is left over, unused), so there is nothing to switch off. |
 
-## Workspaces and Essentials
+## Spaces (workspaces) and Essentials
 
 | Zen | Koan | Notes |
 |---|---|---|
-| Named workspaces, one shown at a time | Same | Built on Chromium tab groups shown one at a time. |
-| Switch with Ctrl+Alt+Left/Right | Same | |
-| Switcher in the sidebar | Same | Round buttons at the bottom of the sidebar; "∞" shows all tabs. |
-| New tabs open in the active workspace | Same | |
+| Named Spaces, one shown at a time | Same | Built on Chromium tab groups shown one at a time (upstream group focus mode). |
+| The window always shows one Space | Same | Every unpinned tab is in a Space; a new window starts in "Space". |
+| An empty Space (its last tab closed) | Different | A Space is a tab group, which can't be empty, so it gets a new tab instead. |
+| Space header (icon and name) above the Space's tabs | Same | Below the Essentials, 44px, hover background and a "..." menu button like Zen's. Hidden while the sidebar is collapsed to icons (Zen shows just the icon). |
+| Rename in place (double-click the name, or Change Name...) | Same | Enter keeps, Escape cancels, leaving the field keeps. Zen's "renamed" toast isn't shown. |
+| Change Icon... / double-click the icon | Same | |
+| Space menu: Change Name..., Change Icon..., Edit Theme..., the Spaces, Unload Space, Unload All Other Spaces, Create Space, Delete Space | Same | Delete asks first and is off for the last Space, like Zen. Zen's Set Profile (containers), Manage Spaces (Library), Share Space and Space routing aren't there. |
+| Bottom bar: one button per Space, "+" with the Create menu | Same | 30px buttons, inactive ones grey and faded, shrinking to dots when they don't fit; hidden while there is one Space. No drag to reorder yet. |
+| Create menu: Create Space, Create Folder, New Split, New Tab | Same | Create Folder is shown but off until Koan has folders. |
+| Create-a-Space form in the sidebar | Same | Title, icon and name, Edit Theme..., Create Space (enabled once named) and Cancel. Zen's Profile row (containers) isn't there. Zen creates the Space before the form; Koan on Create. |
+| Emoji picker with search | Same | Koan's own set of emoji searched by keyword (Zen's list is larger); no page of SVG icons. |
+| Edit Theme... (gradient theme picker) | Different | Koan picks one colour per Space (or Default); the browser takes it while the Space is active. |
+| Switch with Ctrl+Alt+Left/Right, wrapping around | Same | |
+| Switch with a horizontal two-finger swipe or mouse wheel over the sidebar | Same | Touchpad swipes are upstream's swipe controller (one switch per swipe); Zen's strip also follows the fingers during the swipe. |
+| Slide animation between Spaces (250 ms) | Same | The old Space slides out and the new one in, the shorter way round. Zen also cross-fades the themes. |
+| Each Space remembers its last active tab | Same | For the session. |
+| "Move To" a Space from the tab context menu | Same | Lists the other Spaces; moves the selected tabs and shows the Space. Replaces Chromium's tab group items. |
+| Unload Space / Unload All Other Spaces | Same | Chromium's tab discarding; the tab on screen can't be discarded and stays loaded. |
+| New tabs open in the active Space | Same | |
+| Spaces are not Chromium's saved tab groups | Same | Zen has no list of saved groups; Koan keeps Spaces out of Chromium's (so a reopened window's Spaces also load on demand). |
 | Restored after restart | Same | Koan restores the previous session by default, like Zen. |
-| Per-workspace colour | Different | One tint colour per workspace (the group colour), not a gradient. |
-| Workspace icons (emoji) | Same | A leading emoji in the workspace name is its icon; new workspaces get one per colour. |
-| Containers per workspace | Missing | Chromium has profiles, not containers. |
-| Essentials shared by all workspaces | Same | Pinned tabs, shown as Zen's tiles (46px tall, up to four across) at the top of the sidebar. |
+| Containers per Space | Missing | Chromium has profiles, not containers. |
+| Essentials shared by all Spaces | Same | Pinned tabs, shown as Zen's tiles (46px tall, up to four across) at the top of the sidebar. |
 | Essentials tile glows with the site's icon colour when selected | Different | The selected tile is plain white at 85% (20% in dark mode), Zen's look with `zen.theme.essentials-favicon-bg` off. |
 | At most 12 Essentials | Missing | Pinning isn't capped yet (pinned tabs and Essentials are #38). |
-| Per-workspace pinned tabs separate from Essentials | Missing | In Koan, pinned tabs are the Essentials. |
-| Close all unpinned tabs (Ctrl+Shift+K, or Clear in the sidebar) | Same | Keeps the selected tab and the workspace, like Zen; Ctrl+Shift+T reopens the last closed tab, one per press. |
+| Per-Space pinned tabs separate from Essentials | Missing | In Koan, pinned tabs are the Essentials. |
+| Close all unpinned tabs (Ctrl+Shift+K, or Clear in the sidebar) | Same | Keeps the selected tab and the Space, like Zen; Ctrl+Shift+T reopens the last closed tab, one per press. |
 
 ## Glance and split view
 

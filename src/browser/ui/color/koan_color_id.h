@@ -58,6 +58,21 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
 
+  // Spaces (koan_space_*.cc): the header's text and its hover background, a
+  // bottom bar button's hover background, the dot of a Space without an
+  // icon, the Create-a-Space form's fields (and the Edit Theme button's
+  // hover), its description and the dashed box of the icon, and an emoji's
+  // hover background in the emoji picker.
+  kColorKoanSpaceForeground,
+  kColorKoanSpaceHeaderHovered,
+  kColorKoanSpaceButtonHovered,
+  kColorKoanSpaceDot,
+  kColorKoanSpaceFormField,
+  kColorKoanSpaceFormFieldHovered,
+  kColorKoanSpaceFormDescription,
+  kColorKoanSpaceIconBorder,
+  kColorKoanEmojiHovered,
+
   kKoanColorsEnd,
 };
 

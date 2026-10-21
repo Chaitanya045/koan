@@ -1,21 +1,20 @@
 diff --git a/chrome/browser/ui/tabs/tab_menu_model.cc b/chrome/browser/ui/tabs/tab_menu_model.cc
-index 20e06faa8beddb24a5c608d420226b8e10b0381e..71012693a8742690a4e48d2f670a3be7cd0d7bf6 100644
 --- a/chrome/browser/ui/tabs/tab_menu_model.cc
 +++ b/chrome/browser/ui/tabs/tab_menu_model.cc
 @@ -65,6 +65,7 @@
  #include "content/public/browser/context_menu_params.h"
  #include "content/public/browser/web_contents.h"
  #include "extensions/buildflags/buildflags.h"
-+#include "koan/browser/ui/views/koan_split_view.h"
++#include "koan/browser/ui/views/koan_tab_menu.h"
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/base/ui_base_features.h"
  #include "ui/base/window_open_disposition.h"
-@@ -401,6 +402,8 @@ void TabMenuModel::Build(int index) {
-                                        ui::kColorMenuIcon, kTabMenuIconSize));
-     SetElementIdentifierAt(GetItemCount() - 1, kArrangeSplitTabsMenuItem);
+@@ -476,6 +477,8 @@
+       break;
+     }
    }
-+  // Koan: Zen's labels and "Split Out Tab".
-+  koan::AddZenSplitTabMenuItems(this, tab_strip_, index, num_tabs);
++  // Koan: Zen's split view items and "Move To" a Space.
++  koan_submenu_ = koan::AddZenTabMenuItems(this, tab_strip_, index, num_tabs);
  
-   if (tab_strip_->SupportsTabGroups() &&
-       base::FeatureList::IsEnabled(features::kTabGroupsFocusing) &&
+   if (ExistingWindowSubMenuModel::ShouldShowSubmenu(tab_strip_->profile())) {
+     // Create submenu with existing windows

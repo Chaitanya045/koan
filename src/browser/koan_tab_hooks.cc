@@ -12,6 +12,7 @@
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 
 namespace koan {
@@ -64,6 +65,14 @@ std::optional<int> PickRecentlyUsedTab(
 bool ShouldCloseTabOnBack(content::WebContents* contents) {
   return contents && GetBoolean(contents->GetBrowserContext(),
                                 prefs::kCloseOnBackWithNoHistory);
+}
+
+bool ShowsFocusExitedToast(content::BrowserContext* context) {
+  return !features::IsWorkspacesEnabled() || context->IsOffTheRecord();
+}
+
+bool SavesTabGroups(content::BrowserContext* context) {
+  return !features::IsWorkspacesEnabled() || context->IsOffTheRecord();
 }
 
 }  // namespace koan

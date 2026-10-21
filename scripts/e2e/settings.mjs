@@ -12,8 +12,8 @@
 // With SHOTS=<dir>, also saves screenshots of the page (light and dark).
 import {
   ALT, CTRL, SHIFT, browserCall, check, countViews, evalIn, finish,
-  front, key, onPage, pages, readPref, settingsCall, sleep, visiblePage,
-  waitFor,
+  createSpace, front, key, menuMouse, onPage, openMenus, pages, readPref,
+  settingsCall, sleep, viewMouse, viewTree, visiblePage, waitFor,
 } from './lib/koan.mjs';
 
 const SHOTS = process.env.SHOTS;
@@ -281,9 +281,19 @@ const tint = `document.querySelector('[data-pref="koan.workspaces.tint"] input')
 await waitFor(() => evalIn(settings, `!!document.querySelector('#category-tabs')`));
 await evalIn(settings, `document.querySelector('#category-tabs').click()`);
 await front(other);
-await key(other, VK.N, CTRL | ALT, 'n');
+// A new Space has Zen's default theme; Edit Theme... gives it a colour.
+await createSpace(other, 'Tinted');
+const header = (await viewTree()).find(v => v.cls === 'KoanSpaceHeaderView' && v.shown);
+for (const type of ['mousePressed', 'mouseReleased']) {
+  await viewMouse(header, type, 20, 20, 'right');
+}
+await sleep(1000);
+let [menu] = openMenus(await viewTree());
+await menuMouse(menu, menu.items[2]);  // Edit Theme...
+[menu] = openMenus(await viewTree());
+await menuMouse(menu, menu.items[1]);  // Blue
 const seed = await waitFor(() => readPref('koan.workspaces.tint_applied'));
-check('A new workspace tints the browser',
+check('A Space with a colour tints the browser',
       seed && await readPref('browser.theme.user_color2') === seed, `seed ${seed}`);
 await evalIn(settings, `${tint}.click()`);
 check('Switching the tint off restores the browser\'s colour at once',

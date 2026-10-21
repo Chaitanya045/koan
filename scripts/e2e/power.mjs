@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { browserSession, connect, evaluate, key, pageTargets, sleep, traceUi, uiMouse,
          uiViews } from '../perf/cdp.mjs';
 import { servePages } from '../perf/pages_server.mjs';
+import { createSpace } from './lib/koan.mjs';
 
 const CDP_PORT = process.env.CDP_PORT;
 const UI_PORT = process.env.UI_PORT;
@@ -151,8 +152,8 @@ await sleep(1000);
 for (const id of ['r2', 'r3']) {
   await browser.send('Target.createTarget', { url: count(id), background: true });
 }
-await key(CDP_PORT, 78, CTRL | ALT, byUrl('count=r1'));  // Ctrl+Alt+N: new Space
-await sleep(1500);
+// A new Space (Ctrl+Alt+N opens Zen's Create-a-Space form).
+await createSpace((await pageTargets(CDP_PORT)).find(byUrl('count=r1')), 'S');
 await browser.send('Target.createTarget', { url: count('s') });  // joins the Space
 await sleep(2000);
 await browser.send('Target.activateTarget', { targetId: other });  // back to r1

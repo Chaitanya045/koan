@@ -38,6 +38,16 @@ std::optional<int> PickRecentlyUsedTab(
 // opener (upstream's back-to-opener, prefs::kCloseOnBackWithNoHistory).
 bool ShouldCloseTabOnBack(content::WebContents* contents);
 
+// Whether leaving tab group focus mode shows upstream's "Unfocused tab
+// group" toast. Not with Koan's Spaces (normal windows), where switching
+// Spaces leaves the old one's focus.
+bool ShowsFocusExitedToast(content::BrowserContext* context);
+
+// Whether a new tab group becomes a saved tab group (Chromium's list of
+// groups, restored from it). Not with Koan's Spaces: Zen has no such list,
+// and saved groups reopen with every tab loading.
+bool SavesTabGroups(content::BrowserContext* context);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_KOAN_TAB_HOOKS_H_

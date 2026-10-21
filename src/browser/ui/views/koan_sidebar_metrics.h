@@ -111,6 +111,52 @@ inline constexpr int kToastKeyCornerRadius = 4;
 inline constexpr int kToastKeyPaddingVertical = 5;
 inline constexpr int kToastKeyPaddingHorizontal = 7;
 
+// Spaces (zen-workspaces.css). The header above a Space's tabs: Zen's 44px
+// indicator with a 16px icon lined up with the favicons, 7px before the
+// name, the 26px "..." button, and the hover background inset 4px.
+inline constexpr int kSpaceHeaderHeight = 44;
+inline constexpr int kSpaceIconSize = 16;
+inline constexpr int kSpaceIconGap = 7;
+inline constexpr int kSpaceActionsSize = 26;
+inline constexpr int kSpaceHeaderBackgroundInset = 4;
+// The bottom bar's Space buttons: 30px (32px on macOS), 3px apart, 6px
+// corners, a 12px emoji (15px on macOS) or an 8px dot; 10px wide with a 4px
+// dot when they don't fit.
+#if BUILDFLAG(IS_MAC)
+inline constexpr int kSpaceButtonSize = 32;
+inline constexpr int kSpaceButtonEmojiSize = 15;
+#else
+inline constexpr int kSpaceButtonSize = 30;
+inline constexpr int kSpaceButtonEmojiSize = 12;
+#endif
+inline constexpr int kSpaceButtonGap = 3;
+inline constexpr int kSpaceButtonCornerRadius = 6;
+inline constexpr int kSpaceButtonCollapsedWidth = 10;
+inline constexpr int kSpaceDotSize = 8;
+inline constexpr int kSpaceCollapsedDotSize = 4;
+inline constexpr int kSpaceBarPadding = 6;
+// The Create-a-Space form: 10px padding, 8px rounded fields 10px apart,
+// the 24x22 icon box with 6px corners, buttons 8px apart.
+inline constexpr int kSpaceFormPadding = 10;
+inline constexpr int kSpaceFormFieldCornerRadius = 8;
+inline constexpr int kSpaceFormFieldGap = 10;
+inline constexpr int kSpaceFormSectionGap = 32;
+inline constexpr int kSpaceFormButtonGap = 8;
+inline constexpr int kSpaceFormIconWidth = 24;
+inline constexpr int kSpaceFormIconHeight = 22;
+inline constexpr int kSpaceFormIconCornerRadius = 6;
+// The emoji picker (#PanelUI-zen-emojis-picker): 250px wide, at most 190px
+// of emoji, 22px cells in 28px+ columns 5px apart, 14px emoji, 4px hover
+// corners.
+inline constexpr int kEmojiPickerWidth = 250;
+inline constexpr int kEmojiPickerMaxHeight = 190;
+inline constexpr int kEmojiPickerPadding = 10;
+inline constexpr int kEmojiPickerGap = 5;
+inline constexpr int kEmojiPickerMinColumnWidth = 28;
+inline constexpr int kEmojiCellSize = 22;
+inline constexpr int kEmojiSize = 14;
+inline constexpr int kEmojiCellCornerRadius = 4;
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_METRICS_H_

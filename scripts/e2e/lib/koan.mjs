@@ -247,6 +247,112 @@ export async function countViews(cls) {
   return shownViews(await views(), cls).length;
 }
 
+// Every native view as {cls, nodeId, shown, x, y, w, h, ax, ay, widget,
+// path, props}: (ax, ay) is its position in its widget's root view, `path`
+// the class names of its ancestors in that widget, `props` its UI DevTools
+// properties (Visible, Text, TooltipText, ...).
+export async function viewTree() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const out = [];
+  let widget = 0;
+  const walk = async (n, shown, path, ox, oy) => {
+    const a = n.attributes ?? [];
+    const cls = a[a.indexOf('class') + 1];
+    if (n.nodeName === 'Widget') {
+      widget++;
+      path = [];
+      ox = 0;
+      oy = 0;
+    } else if (n.nodeName === 'View' && cls) {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+      const p = {};
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+      }
+      shown = shown && p.Visible !== 'false';
+      // A widget's root view is at its origin.
+      if (path.length) {
+        ox += +p.X;
+        oy += +p.Y;
+      }
+      out.push({ cls, nodeId: n.nodeId, shown, x: +p.X, y: +p.Y, w: +p.Width,
+                 h: +p.Height, ax: ox, ay: oy, widget, path, props: p });
+      path = [...path, cls];
+    }
+    for (const c of n.children ?? []) await walk(c, shown, path, ox, oy);
+  };
+  await walk(doc, true, [], 0, 0);
+  ui.close();
+  return out;
+}
+
+// Sends a native event to a view from viewTree() (UI DevTools); `method` is
+// DOM.dispatchMouseEvent or DOM.dispatchKeyEvent. Fire-and-forget when
+// `wait` is false.
+export async function viewEvent(view, method, event, wait = true) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('DOM.getDocument', { depth: -1 });
+  const p = ui.send(method, { nodeId: view.nodeId, event });
+  if (wait) await p;
+  ui.close();
+}
+
+export const viewMouse = (view, type, x, y, button = 'left', wheelDirection = 'none') =>
+  viewEvent(view, 'DOM.dispatchMouseEvent', { type, x, y, button, wheelDirection });
+
+// Types `text` into a Textfield from viewTree() (char events), then presses
+// `keyCode` (if any) on it.
+export async function typeInto(view, text, keyCode = 0) {
+  for (const ch of text) {
+    await viewEvent(view, 'DOM.dispatchKeyEvent', { type: 'keyPressed',
+      keyCode: ch.codePointAt(0), code: 0, flags: 0, key: ch.codePointAt(0),
+      isChar: true });
+  }
+  if (keyCode) {
+    await viewEvent(view, 'DOM.dispatchKeyEvent', { type: 'keyPressed', keyCode,
+      code: 0, flags: 0, key: 0, isChar: false });
+  }
+  await sleep(1200);
+}
+
+// The open menus, one {root, items} per menu widget, items in order
+// (separators left out). Menus take input through their root view.
+export function openMenus(vs) {
+  const byWidget = new Map();
+  for (const v of vs.filter(v => v.cls === 'MenuItemView' && v.path.includes('SubmenuView'))) {
+    if (!byWidget.has(v.widget)) byWidget.set(v.widget, []);
+    byWidget.get(v.widget).push(v);
+  }
+  return [...byWidget.entries()].map(([widget, items]) => ({
+    root: vs.find(v => v.widget === widget && v.cls === 'MenuHostRootView'),
+    items,
+  }));
+}
+
+// Hovers (`types` = ['mouseMoved']) or picks a menu item, at its position
+// in the menu's root view. (Needs a sized headless screen, see
+// koan_test_env.sh: menus are clamped to the screen.)
+export async function menuMouse(menu, item,
+                                types = ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+  for (const type of types) {
+    await viewMouse(menu.root, type, item.ax + 8, item.ay + item.h / 2);
+  }
+  await sleep(1200);
+}
+
+// Creates a Space named `name` with Zen's Create-a-Space form (Ctrl+Alt+N
+// from `page`, the name, Enter).
+export async function createSpace(page, name) {
+  await key(page, 78, CTRL | ALT, 'n');
+  const field = await waitFor(async () => (await viewTree()).find(
+      v => v.cls === 'Textfield' && v.shown && v.path.includes('KoanSpaceCreationView')));
+  await typeInto(field, name, 13);
+}
+
 let failures = 0;
 export function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);

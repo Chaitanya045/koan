@@ -186,7 +186,7 @@ bool KoanShortcutController::Run(Action action) {
       workspaces->Cycle(/*forward=*/false);
       return true;
     case Action::kNewWorkspace:
-      workspaces->CreateWorkspace();
+      workspaces->ShowCreateForm();
       return true;
     case Action::kSplitGrid:
       // Chromium's split view has two panes; Zen's grid becomes side by side.
