@@ -6,7 +6,7 @@
 // Expects Koan running off-screen with UI DevTools on UI_PORT and the
 // DevTools protocol on CDP_PORT (run.sh starts it, with the profile seeded by
 // scripts/e2e/prefs/palette.json: "New Split View" was passed over five
-// times). Text is typed into the omnibox as character events; Tab, Enter,
+// times, and Ctrl+T opens a tab, not the URL bar). Text is typed into the omnibox as character events; Tab, Enter,
 // arrows and Esc go to the browser window's widget, so they take the same
 // path as real keys (pre-target handlers, focus manager, focused view). The
 // rows are read from Chromium's WebUI popup. At the end Koan is restarted on
