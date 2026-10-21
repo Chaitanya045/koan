@@ -23,6 +23,13 @@ namespace koan {
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
                                    WindowOpenDisposition* disposition);
 
+// Zen's zen.urlbar.replace-newtab for the New Tab command (IDC_NEW_TAB: ⌘T
+// on macOS, which runs as a reserved command before any accelerator, and the
+// menu bar's File > New Tab): opens the URL bar in place of a new tab, or
+// closes the one open for a new tab. Returns false if the command should open
+// a tab as usual. Called from BrowserCommandController.
+bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
+
 // The omnibox text of `location_bar` (a LocationBarView) changed;
 // `user_input_in_progress` is whether the user is typing. With Zen's
 // "floating-on-type" URL bar behaviour, the first keystroke lifts the bar

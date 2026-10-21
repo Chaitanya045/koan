@@ -43,8 +43,10 @@
 #include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/proposed_layout.h"
@@ -59,9 +61,6 @@ constexpr int kPillHeight = 36;
 constexpr int kPadding = 12;
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
-// The pill's icon buttons (Zen's urlbar page-action size).
-constexpr int kPillButtonSize = 26;
-constexpr int kPillIconSize = 16;
 
 std::u16string DisplayUrl(content::WebContents* contents) {
   if (!contents) {
@@ -184,34 +183,29 @@ void KoanSidebarNavButtons::EnabledStateChangedForCommand(int id,
 BEGIN_METADATA(KoanSidebarNavButtons)
 END_METADATA
 
-// The URL pill. Pressing it (anywhere but its buttons) edits the address;
-// hovering it (or its buttons) shows the copy button.
-class KoanUrlPill : public views::View {
-  METADATA_HEADER(KoanUrlPill, views::View)
+// The URL pill, a button: pressing it (anywhere but its buttons) edits the
+// address; hovering it (or its buttons) shows the copy button.
+class KoanUrlPill : public views::Button {
+  METADATA_HEADER(KoanUrlPill, views::Button)
 
  public:
-  KoanUrlPill(base::RepeatingClosure on_press,
+  KoanUrlPill(PressedCallback on_press,
               base::RepeatingCallback<void(bool)> on_hover)
-      : on_press_(std::move(on_press)), on_hover_(std::move(on_hover)) {
+      : views::Button(std::move(on_press)), on_hover_(std::move(on_hover)) {
     SetNotifyEnterExitOnChild(true);
-    GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
-    GetViewAccessibility().SetName(u"Search or enter address");
   }
 
-  // views::View:
+  // views::Button:
   void OnMouseEntered(const ui::MouseEvent& event) override {
+    views::Button::OnMouseEntered(event);
     on_hover_.Run(true);
   }
   void OnMouseExited(const ui::MouseEvent& event) override {
+    views::Button::OnMouseExited(event);
     on_hover_.Run(false);
-  }
-  bool OnMousePressed(const ui::MouseEvent& event) override {
-    on_press_.Run();
-    return true;
   }
 
  private:
-  base::RepeatingClosure on_press_;
   base::RepeatingCallback<void(bool)> on_hover_;
 };
 
@@ -235,17 +229,22 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
                           base::Unretained(this)));
   auto* pill_layout = pill->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal,
-      gfx::Insets::TLBR(0, 12, 0, 5), /*between_child_spacing=*/2));
+      gfx::Insets::TLBR(0, kUrlPillLeadingInset, 0, kUrlPillTrailingInset),
+      kUrlPillSpacing));
   pill_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   pill->SetPreferredSize(gfx::Size(0, kPillHeight));
   pill->SetBackground(views::CreateRoundedRectBackground(kColorKoanUrlPill,
                                                          kUrlPillCornerRadius));
+  // The focus ring follows the pill's corners.
+  views::InstallRoundRectHighlightPathGenerator(pill.get(), gfx::Insets(),
+                                                kUrlPillCornerRadius);
 #if BUILDFLAG(IS_MAC)
   pill->SetTooltipText(u"Search or enter address (\u2318L)");
 #else
   pill->SetTooltipText(u"Search or enter address (Ctrl+L)");
 #endif
+  pill->GetViewAccessibility().SetDescription(u"Search or enter address");
   url_pill_ = AddChildView(std::move(pill));
 
   url_label_ = url_pill_->AddChildView(std::make_unique<views::Label>());
@@ -260,10 +259,10 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
                                const gfx::VectorIcon& icon,
                                std::u16string name) {
     auto button = views::CreateVectorImageButtonWithNativeTheme(
-        std::move(callback), icon, kPillIconSize);
+        std::move(callback), icon, kUrlPillIconSize);
     button->SetTooltipText(name);
     button->GetViewAccessibility().SetName(name);
-    button->SetPreferredSize(gfx::Size(kPillButtonSize, kPillButtonSize));
+    button->SetPreferredSize(gfx::Size(kUrlPillButtonSize, kUrlPillButtonSize));
     return url_pill_->AddChildView(std::move(button));
   };
   // Zen's #zen-copy-url-button ("Copy URL"), confirmed with Zen's toast.
@@ -332,6 +331,9 @@ void KoanSidebarNavView::UpdateUrl() {
   url_label_->SetText(editing_       ? std::u16string()
                       : text.empty() ? u"Search..."
                                      : text);
+  // The pill reads as the site it shows (the label isn't exposed itself).
+  url_pill_->GetViewAccessibility().SetName(
+      text.empty() ? u"Search or enter address" : text);
   // Like Zen, the buttons are only there for a page (not an empty tab).
   const bool has_page = !editing_ && !text.empty();
   copy_button_->SetVisible(

@@ -74,7 +74,8 @@ constexpr Info kActions[] = {
     {Action::kToggleSingleToolbar, "toggle-single-toolbar", "zen-other",
      "Switch Single / Multiple Toolbars", features::IsCompactModeEnabled},
     {Action::kNewWindow, "new-window", "windowAndTabManagement", "New Window"},
-    {Action::kNewTab, "new-tab", "windowAndTabManagement", "New Tab"},
+    {Action::kNewTab, "new-tab", "windowAndTabManagement", "New Tab",
+     features::IsUrlBarEnabled},
     {Action::kCloseUnpinnedTabs, "close-unpinned-tabs",
      "windowAndTabManagement", "Close All Unpinned Tabs"},
     {Action::kNewPrivateWindow, "private-browsing", "navigation",
@@ -131,10 +132,11 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_8, kAccel | kShift, Action::kNewEmptySplit),
       bind(ui::VKEY_MULTIPLY, kAccel | kShift, Action::kNewEmptySplit),
       // Zen: tabs and pages. Accel+T opens the URL bar in place of a new tab
-      // (zen.urlbar.replace-newtab).
+      // (zen.urlbar.replace-newtab); on macOS ⌘T is a reserved command, which
+      // koan::MaybeOpenUrlBarForNewTab() handles before any accelerator.
       bind(ui::VKEY_T, kAccel, Action::kNewTab),
-      bind(ui::VKEY_C, kCtrl | kShift, Action::kCopyUrl),
-      bind(ui::VKEY_C, kCtrl | kShift | kAlt, Action::kCopyUrlMarkdown),
+      bind(ui::VKEY_C, kAccel | kShift, Action::kCopyUrl),
+      bind(ui::VKEY_C, kAccel | kShift | kAlt, Action::kCopyUrlMarkdown),
       bind(ui::VKEY_D, kCtrl | kShift, Action::kTogglePinTab),
       bind(ui::VKEY_K, kCtrl | kShift, Action::kCloseUnpinnedTabs),
       // Zen: Accel+O while Glance is open.

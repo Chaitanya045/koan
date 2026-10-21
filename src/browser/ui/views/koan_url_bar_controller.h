@@ -23,6 +23,7 @@
 #include "ui/views/view_tracker.h"
 
 class BrowserView;
+class ExpandOnHoverLock;
 class LocationBarView;
 
 namespace views {
@@ -123,6 +124,11 @@ class KoanUrlBarController : public views::ViewObserver,
   void Layout();
   gfx::Rect CardBounds() const;
   void HideToolbarSiblings();
+  // Handles the omnibox's keys (Esc) while the bar is open or open for a new
+  // tab.
+  void UpdateKeyHandler();
+  // Keeps the compact sidebar out while the bar edits in its pill.
+  void UpdateSidebarLock();
   void FloatOnType();
   void EndNewTabSession(bool committed);
 
@@ -160,6 +166,7 @@ class KoanUrlBarController : public views::ViewObserver,
   gfx::Size card_size_;
   // The omnibox, while this handles its keys (Esc).
   views::ViewTracker key_target_;
+  std::unique_ptr<ExpandOnHoverLock> sidebar_lock_;
 
   base::WeakPtrFactory<KoanUrlBarController> weak_factory_{this};
 };

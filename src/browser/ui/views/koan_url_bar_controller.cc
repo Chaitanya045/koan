@@ -12,7 +12,6 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_actions.h"
@@ -24,6 +23,7 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
@@ -65,28 +65,9 @@ namespace koan {
 
 namespace {
 
-// Zen's floating URL bar (ZenUIManager.mjs, zen-omnibox.css): min(window
-// width / 1.5, 750) wide, centred; the open bar is centred vertically as if
-// it were at least 333 DIP tall (with its results). Font 1.15em (1.5em on
-// macOS), fades in.
-constexpr int kFloatingMaxWidth = 750;
-constexpr int kFloatingMinHeight = 333;
-#if BUILDFLAG(IS_MAC)
-constexpr int kFloatingFontDelta = 6;
-#else
-constexpr int kFloatingFontDelta = 2;
-#endif
+// Zen fades the bar in where it opens. The sizes are in
+// koan_sidebar_metrics.h.
 constexpr base::TimeDelta kFadeDuration = base::Milliseconds(120);
-
-// Zen's floating card shadow: box-shadow 0 30px 140px -15px (its colour is
-// kColorKoanFloatingUrlBarShadow).
-constexpr int kShadowOffsetY = 30;
-constexpr int kShadowBlur = 140;
-constexpr int kShadowSpread = -15;
-
-// With "normal", the bar edits in place and widens over the page once the
-// user types (Zen's #urlbar[open] in the single toolbar: min(90%, 40rem)).
-constexpr int kInPillOpenMaxWidth = 640;
 
 // Zen's zen.urlbar.wait-to-clear.
 constexpr base::TimeDelta kKeepLastSearch = base::Seconds(45);
@@ -114,7 +95,9 @@ class KoanUrlBarBackdrop : public views::View {
 
   // views::View:
   bool OnMousePressed(const ui::MouseEvent& event) override {
-    on_press_.Run();
+    // Closing removes this view; not while it handles the event.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                             on_press_);
     return true;
   }
 
@@ -123,12 +106,12 @@ class KoanUrlBarBackdrop : public views::View {
       return;
     }
     const ui::ColorProvider* colors = GetColorProvider();
-    const gfx::ShadowValues shadows = {
-        gfx::ShadowValue(gfx::Vector2d(0, kShadowOffsetY), kShadowBlur,
-                         colors->GetColor(kColorKoanFloatingUrlBarShadow))};
+    const gfx::ShadowValues shadows = {gfx::ShadowValue(
+        gfx::Vector2d(0, kFloatingUrlBarShadowY), kFloatingUrlBarShadowBlur,
+        colors->GetColor(kColorKoanFloatingUrlBarShadow))};
     // The shape itself, in the card's colour, is hidden under the card.
     gfx::Rect shape = card_;
-    shape.Inset(-kShadowSpread);
+    shape.Inset(-kFloatingUrlBarShadowSpread);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorToolbar));
@@ -155,6 +138,40 @@ KoanUrlBarController::KoanUrlBarController(
 KoanUrlBarController::~KoanUrlBarController() {
   if (views::View* omnibox = key_target_.view()) {
     omnibox->RemovePreTargetHandler(this);
+  }
+}
+
+void KoanUrlBarController::UpdateKeyHandler() {
+  // While the bar is open, or open for a new tab in the toolbar (the
+  // multiple-toolbars layout).
+  LocationBarView* bar = location_bar();
+  views::View* omnibox =
+      (is_open() || new_tab_) && bar ? bar->omnibox_view() : nullptr;
+  if (key_target_.view() == omnibox) {
+    return;
+  }
+  if (views::View* old_omnibox = key_target_.view()) {
+    old_omnibox->RemovePreTargetHandler(this);
+  }
+  key_target_.SetView(omnibox);
+  if (omnibox) {
+    omnibox->AddPreTargetHandler(this);
+  }
+}
+
+void KoanUrlBarController::UpdateSidebarLock() {
+  // Zen keeps the compact sidebar out while its URL bar is edited; without
+  // this, a pill edit from a peeked sidebar would jump to floating once the
+  // pointer leaves the sidebar.
+  if (placement_ != Placement::kInPill || !compact_mode_->hides_sidebar()) {
+    sidebar_lock_.reset();
+    return;
+  }
+  if (!sidebar_lock_) {
+    if (TabStripRegionView* tab_strip = browser_view_->tab_strip_view()) {
+      sidebar_lock_ =
+          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    }
   }
 }
 
@@ -209,6 +226,7 @@ bool KoanUrlBarController::OpenForNewTab() {
     return true;
   }
   new_tab_ = true;
+  UpdateKeyHandler();
   std::u16string text;
   if (base::TimeTicks::Now() - last_search_time_ < kKeepLastSearch) {
     text = last_search_;
@@ -218,6 +236,7 @@ bool KoanUrlBarController::OpenForNewTab() {
                      /*clear_focus_if_failed=*/false);
   if (!bar->omnibox_view()->HasFocus()) {
     new_tab_ = false;
+    UpdateKeyHandler();
     return false;
   }
   // Already focused before (no focus change): place it for the new tab.
@@ -265,6 +284,13 @@ void KoanUrlBarController::OnModeChanged() {
 }
 
 void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
+  // The focus leaves with the window (Alt-Tab, another window) and comes
+  // back with it: keep the bar, what was typed and the new-tab session, like
+  // Zen. Views clears the focus after the widget is inactive.
+  views::Widget* widget = browser_view_->GetWidget();
+  if (!focused_now && widget && !widget->IsActive()) {
+    return;
+  }
   LocationBarView* bar = location_bar();
   if (focused_now && bar && bar->Contains(focused_now)) {
     if (!is_open()) {
@@ -324,6 +350,7 @@ void KoanUrlBarController::EndNewTabSession(bool committed) {
     return;
   }
   new_tab_ = false;
+  UpdateKeyHandler();
   LocationBarView* bar = location_bar();
   if (!committed && user_input_in_progress_ && bar && bar->omnibox_view()) {
     last_search_ = bar->omnibox_view()->GetText();
@@ -391,10 +418,6 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     top_container_observation_.Reset();
     toolbar_observation_.Reset();
     sibling_observation_.RemoveAllObservations();
-    if (views::View* omnibox = key_target_.view()) {
-      omnibox->RemovePreTargetHandler(this);
-    }
-    key_target_.SetView(nullptr);
     {
       base::AutoReset<bool> changing(&changing_toolbar_visibility_, true);
       for (const auto& [view, visible] : restore_) {
@@ -410,6 +433,8 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
       layer->SetMasksToBounds(false);
     }
     placement_ = Placement::kNone;
+    UpdateKeyHandler();
+    UpdateSidebarLock();
     ApplyCardStyle();
     browser_view_->InvalidateLayout();
     compact_mode_->OnUrlBarOpenChanged();
@@ -436,25 +461,26 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     top_container->SetCanProcessEventsWithinSubtree(true);
     top_container_observation_.Observe(top_container);
     toolbar_observation_.Observe(browser_view_->toolbar());
-    if (bar->omnibox_view()) {
-      bar->omnibox_view()->AddPreTargetHandler(this);
-      key_target_.SetView(bar->omnibox_view());
-    }
+    UpdateKeyHandler();
     ui::Layer* layer = top_container->layer();
     layer->GetAnimator()->AbortAllAnimations();
     layer->SetTransform(gfx::Transform());
     compact_mode_->OnUrlBarOpenChanged();
   }
+  UpdateSidebarLock();
   // The style first: the larger floating font can change the toolbar's
   // preferred height.
   ApplyCardStyle();
   Layout();
-  // Zen fades the bar in where it opens.
-  top_container->layer()->SetOpacity(0.0f);
-  views::AnimationBuilder()
-      .Once()
-      .SetDuration(kFadeDuration)
-      .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
+  // Zen fades the bar in where it opens; moving from the pill to floating
+  // keeps what was just typed in view.
+  if (opening) {
+    top_container->layer()->SetOpacity(0.0f);
+    views::AnimationBuilder()
+        .Once()
+        .SetDuration(kFadeDuration)
+        .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
+  }
 }
 
 void KoanUrlBarController::HideToolbarSiblings() {
@@ -476,7 +502,7 @@ void KoanUrlBarController::ApplyCardStyle() {
   if (floating && !omnibox_font_ && omnibox) {
     omnibox_font_ = omnibox->GetFontList();
     omnibox->SetFontList(
-        omnibox_font_->DeriveWithSizeDelta(kFloatingFontDelta));
+        omnibox_font_->DeriveWithSizeDelta(kFloatingUrlBarFontDelta));
   } else if (!floating && omnibox_font_) {
     if (omnibox) {
       omnibox->SetFontList(*omnibox_font_);
@@ -572,10 +598,10 @@ gfx::Rect KoanUrlBarController::CardBounds() const {
   const gfx::Rect area = views::View::ConvertRectToTarget(
       browser_view_, overlay, browser_view_->GetLocalBounds());
   if (placement_ == Placement::kFloating) {
-    const int width = std::min(area.width() * 2 / 3, kFloatingMaxWidth);
+    const int width = std::min(area.width() * 2 / 3, kFloatingUrlBarMaxWidth);
+    const int centred_height = std::max(kFloatingUrlBarMinHeight, height);
     const int top =
-        area.y() +
-        std::max(0, (area.height() - std::max(kFloatingMinHeight, height)) / 2);
+        area.y() + std::max(0, (area.height() - centred_height) / 2);
     return gfx::Rect(area.x() + (area.width() - width) / 2, top, width, height);
   }
   KoanSidebarNavView* nav = compact_mode_->sidebar_nav();
@@ -588,7 +614,7 @@ gfx::Rect KoanUrlBarController::CardBounds() const {
   int width = pill_bounds.width();
   if (user_input_in_progress_) {
     width =
-        std::max(width, std::min({area.width() * 9 / 10, kInPillOpenMaxWidth,
+        std::max(width, std::min({area.width() * 9 / 10, kUrlBarOpenMaxWidth,
                                   area.right() - pill_bounds.x()}));
   }
   // Over the pill, keeping its centre, so it reads as the pill being edited.
@@ -621,6 +647,12 @@ void KoanUrlBarController::OnViewIsDeleting(views::View* observed_view) {
   if (restore_.erase(observed_view)) {
     sibling_observation_.RemoveObservation(observed_view);
   }
+  if (top_container_observation_.IsObservingSource(observed_view)) {
+    top_container_observation_.Reset();
+  }
+  if (toolbar_observation_.IsObservingSource(observed_view)) {
+    toolbar_observation_.Reset();
+  }
 }
 
 void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
@@ -628,7 +660,7 @@ void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
   // suggestions, then revert, then give the page focus).
   if (event->type() == ui::EventType::kKeyPressed &&
       event->key_code() == ui::VKEY_ESCAPE && !event->IsShiftDown() &&
-      is_open()) {
+      (is_open() || new_tab_)) {
     event->SetHandled();
     // Not while the omnibox dispatches the key to this handler.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -678,6 +710,14 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
   if (controller && controller->url_bar()->TakeNewTabDisposition()) {
     *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   }
+}
+
+bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
+  BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller && controller->url_bar()->OpenForNewTab();
 }
 
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress) {

@@ -1,0 +1,21 @@
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -146,6 +146,7 @@
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/extension_urls.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "printing/buildflags/buildflags.h"
+ #include "third_party/omnibox_proto/chrome_aim_entry_point.pb.h"
+ #include "ui/accessibility/accessibility_features.h"
+@@ -759,6 +760,10 @@
+       CloseWindow(browser_);
+       break;
+     case IDC_NEW_TAB: {
++      // Koan: Zen's replace-newtab opens the URL bar instead.
++      if (koan::MaybeOpenUrlBarForNewTab(browser_)) {
++        break;
++      }
+       NewTab(browser_, NewTabTypes::kNewTabCommand);
+       break;
+     }

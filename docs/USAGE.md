@@ -22,7 +22,7 @@ Chrome.
 | Unsplit | Ctrl+Alt+U (⌘⌥U) | macOS: View Source (still in the View menu) |
 | New split with an empty tab | Ctrl+Shift+* (⌘⇧*) | |
 | New tab (opens the URL bar; the tab opens with what you pick) | Ctrl+T (⌘T) | New-tab page |
-| Copy the page's URL | Ctrl+Shift+C | Inspect element (now Ctrl+Shift+L) |
+| Copy the page's URL | Ctrl+Shift+C (⌘⇧C) | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
 | Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
 | Close all unpinned tabs (in the workspace; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
@@ -95,23 +95,29 @@ clicking the pill (or Ctrl+L) edits the address right in the pill; the
 first keystroke lifts it into a card centred over the window (two thirds
 of its width, at most 750 px, larger text, a soft shadow over the page)
 with the suggestions under it. The pill is empty meanwhile. Esc, a click
-outside the card or opening a result (or running an action) closes it. In compact mode, with the sidebar hidden, it floats
-right away.
+outside the card or opening a result (or running an action) closes it;
+switching to another window and back leaves it as it was. In compact mode,
+with the sidebar hidden, it floats right away; edited from a peeked sidebar,
+the sidebar stays out until you're done.
 
 | Editing in the pill | Floating once you type | Ctrl+T |
 |---|---|---|
 | ![In the pill](screenshots/urlbar-in-pill.png) | ![Floating](screenshots/urlbar-floating.png) | ![Ctrl+T](screenshots/urlbar-new-tab.png) |
 
-**Ctrl+T** (or the sidebar's **+ New Tab**) opens the URL bar, empty,
-instead of a new-tab page: the tab opens only when you open something from
+**Ctrl+T** (⌘T; also the sidebar's **+ New Tab**, the menus' New Tab and
+the tab strip's **+**) opens the URL bar, empty, instead of a new-tab page: the tab opens only when you open something from
 it, in a new tab next to the current one. Esc, a click outside or Ctrl+T
 again closes it without creating anything; what you had typed comes back if
 you press Ctrl+T again within 45 seconds.
 
 Hover the pill for the **copy** button: it copies the page's URL and says
 so ("Copied current URL!"), as do Ctrl+Shift+C and Ctrl+Shift+Alt+C
-(Markdown link). The button at the end of the pill opens the site's panel
-(security, permissions, cookies and site settings).
+(Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The button at the end of the pill
+opens the site's panel (security, permissions, cookies and site settings).
+
+| "Normal": editing in place, widened | Copied |
+|---|---|
+| ![Normal](screenshots/urlbar-normal.png) | ![Copied current URL!](screenshots/urlbar-toast.png) |
 
 Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
 (profile prefs, Zen's names in brackets):
@@ -123,7 +129,8 @@ Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
 | Show the copy URL button | `koan.urlbar.show_copy_url` (`zen.urlbar.single-toolbar-show-copy-url`) | on |
 
 In the multiple-toolbars layout the address is edited in the toolbar, as
-in Chrome; Ctrl+T still opens it instead of a new-tab page.
+in Chrome; Ctrl+T still opens it instead of a new-tab page, and Esc closes
+it in one press.
 
 ## Command palette
 

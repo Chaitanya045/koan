@@ -66,6 +66,33 @@ inline constexpr int kClearPressedOffset = 2;
 inline constexpr float kUrlPillCornerRadius = 9;
 inline constexpr float kFloatingUrlBarCornerRadius = 15;
 
+// The pill's insets before the site's name and after its buttons, the gap
+// between them, and its icon buttons (Zen's urlbar page-action size).
+inline constexpr int kUrlPillLeadingInset = 12;
+inline constexpr int kUrlPillTrailingInset = 5;
+inline constexpr int kUrlPillSpacing = 2;
+inline constexpr int kUrlPillButtonSize = 26;
+inline constexpr int kUrlPillIconSize = 16;
+
+// Zen's floating URL bar (ZenUIManager.mjs, zen-omnibox.css): min(window
+// width / 1.5, 750) wide, centred vertically as if it were at least 333 tall
+// (with its results), text 1.15em (1.5em on macOS) and a box-shadow of
+// 0 30px 140px -15px.
+inline constexpr int kFloatingUrlBarMaxWidth = 750;
+inline constexpr int kFloatingUrlBarMinHeight = 333;
+#if BUILDFLAG(IS_MAC)
+inline constexpr int kFloatingUrlBarFontDelta = 6;
+#else
+inline constexpr int kFloatingUrlBarFontDelta = 2;
+#endif
+inline constexpr int kFloatingUrlBarShadowY = 30;
+inline constexpr int kFloatingUrlBarShadowBlur = 140;
+inline constexpr int kFloatingUrlBarShadowSpread = -15;
+
+// With "normal", the bar edits in place and widens over the page once the
+// user types (Zen's #urlbar[open] in the single toolbar: min(90%, 40rem)).
+inline constexpr int kUrlBarOpenMaxWidth = 640;
+
 // Toasts, at the top right of the window: Zen's 42px with 6px padding
 // (48px and 8px on macOS), plus 4px around the text.
 #if BUILDFLAG(IS_MAC)

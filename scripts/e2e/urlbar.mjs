@@ -1,7 +1,14 @@
 // End-to-end test of Zen's URL bar against a real build: the behaviour
 // setting (edit in the pill, float on the first keystroke), Ctrl+T opening
 // the URL bar instead of a tab (replace-newtab), the pill's copy-URL button
-// and toast, and its site panel button.
+// and toast, and its site panel button. Then: the new-tab bar through a
+// window switch, a pill edit in compact mode's peeked sidebar, and the
+// multiple-toolbars layout (Esc, the tab strip's "+" button, Alt+Enter).
+//
+// TODO(#51): on macOS, ⌘T is a reserved command that runs before any
+// accelerator (koan::MaybeOpenUrlBarForNewTab() in BrowserCommandController
+// handles it); this test sends Ctrl+T through the page on Linux, so check ⌘T
+// and the menu bar's File > New Tab on a Mac.
 //
 //   scripts/e2e/run.sh urlbar
 //   PREFS='{"koan":{"urlbar":{"behavior":"float"}}}' BEHAVIOR=float \
@@ -11,6 +18,7 @@
 // profile was started with. With SHOTS=<dir> (see run.sh) it saves
 // screenshots of each state there.
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
+import { browserCall, settingsCall, visiblePage, waitFor } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -35,16 +43,17 @@ async function connect(url) {
   return { send, close: () => ws.close() };
 }
 
-// Every native view as {cls, nodeId, shown, x, y, w, h, path, p}; `shown`
-// includes the ancestors' visibility, `path` is the ancestor class names,
-// `p` the view's properties.
+// Every native view as {cls, nodeId, shown, x, y, w, h, ax, ay, root, path,
+// p}; `shown` includes the ancestors' visibility, ax/ay are relative to the
+// widget's root view (`root`), `path` is the ancestor class names, `p` the
+// view's properties.
 async function views() {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('CSS.enable');
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const out = [];
-  const walk = async (n, depth, shown, path) => {
+  const walk = async (n, depth, shown, path, parent) => {
     const a = n.attributes ?? [];
     const cls = a[a.indexOf('class') + 1];
     if (depth > 0 && n.nodeName === 'View' && cls) {
@@ -54,12 +63,19 @@ async function views() {
         for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
       }
       shown = shown && p.Visible !== 'false';
-      out.push({ cls, nodeId: n.nodeId, shown, x: +p.X, y: +p.Y, w: +p.Width, h: +p.Height, path, p });
+      const v = { cls, nodeId: n.nodeId, shown, x: +p.X, y: +p.Y, w: +p.Width, h: +p.Height,
+                  ax: parent ? parent.ax + +p.X : 0, ay: parent ? parent.ay + +p.Y : 0,
+                  path, p };
+      v.root = parent ? parent.root : v;
+      out.push(v);
       path = [...path, cls];
+      parent = v;
+    } else if (n.nodeName !== 'View') {
+      parent = null;  // A widget or window: its views start a new tree.
     }
-    for (const c of n.children ?? []) await walk(c, depth + 1, shown, path);
+    for (const c of n.children ?? []) await walk(c, depth + 1, shown, path, parent);
   };
-  await walk(doc, 0, true, []);
+  await walk(doc, 0, true, [], null);
   ui.close();
   return out;
 }
@@ -84,6 +100,18 @@ async function click(view) {
   await mouse(view, 'mousePressed');
   await mouse(view, 'mouseReleased');
   await sleep(1000);
+}
+
+// Clicks `view` through its widget's root view, so the event is hit-tested
+// like a real click (menus need that).
+async function rootClick(view) {
+  const x = Math.round(view.ax + Math.min(view.w / 2, 20));
+  const y = Math.round(view.ay + view.h / 2);
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await uiEvent(view.root, 'DOM.dispatchMouseEvent',
+                  { type, x, y, button: 'left', wheelDirection: 'none' });
+  }
+  await sleep(1200);
 }
 
 async function viewKey(view, keyCode) {
@@ -131,9 +159,12 @@ async function pages() {
       .filter(t => t.type === 'page');
 }
 
+// The tab that is showing.
+const activePage = async () => (await visiblePage()) ?? (await pages())[0];
+
 // Sends a key press to the active page. Modifiers: Alt=1 Ctrl=2 Shift=8.
 async function key(code, modifiers, keyName = '') {
-  const page = (await pages())[0];
+  const page = await activePage();
   const c = await connect(page.webSocketDebuggerUrl);
   const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
   await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
@@ -151,7 +182,7 @@ async function evalIn(page, expression) {
 
 // Reads the clipboard by pasting (Ctrl+V) into a fresh textarea on the page.
 async function clipboard() {
-  const page = (await pages())[0];
+  const page = await activePage();
   await evalIn(page, `(() => {
     const t = document.createElement('textarea');
     t.id = 'koan-paste';
@@ -178,8 +209,10 @@ function check(name, ok, detail = '') {
   if (!ok) failures++;
 }
 
-const CTRL = 2;
-const VK = { T: 84, ESC: 27, ENTER: 13 };
+const CTRL = 2, ALT = 1;
+// ui::EventFlags, for windowKey().
+const EF_ALT = 8;
+const VK = { T: 84, ESC: 27, ENTER: 13, S: 83 };
 const WINDOW_WIDTH = 1280;
 // Zen: min(window width / 1.5, 750), centred.
 const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
@@ -328,6 +361,130 @@ check('...and leaves the page it was opened from alone',
       after.some(p => p.url === firstUrl), firstUrl);
 vs = await views();
 check('...and the URL bar is closed', bar(vs)?.w === WINDOW_WIDTH, `width ${bar(vs)?.w}`);
+
+// --- Switching away from the window keeps the new-tab bar ----------------------
+// Like Zen: Alt-Tab and back, and what was typed is still there, for a new
+// tab. Minimizing deactivates the window here (headless Ozone).
+let tabsNow = (await pages()).length;
+let current = await visiblePage();
+await key(VK.T, CTRL, 't');
+await type(find(await views(), 'OmniboxViewViews'), 'example.com/?away');
+const { windowId } = (await browserCall('Browser.getWindowForTarget',
+    { targetId: current.id })).result ?? {};
+await browserCall('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+await sleep(1000);
+await browserCall('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+await browserCall('Target.activateTarget', { targetId: current.id });
+await sleep(1500);
+vs = await views();
+check('Switching away and back keeps the new-tab bar and what was typed',
+      omniboxText(vs) === 'example.com/?away' &&
+          (BEHAVIOR === 'normal' ? bar(vs)?.w < WINDOW_WIDTH : isFloating(vs)),
+      `${JSON.stringify(omniboxText(vs))}, ${bar(vs)?.w} at ${bar(vs)?.x}`);
+await viewKey(find(vs, 'OmniboxViewViews'), VK.ENTER);
+let now = await waitFor(async () => {
+  const p = await pages();
+  return p.length === tabsNow + 1 && p;
+});
+check('...and Enter still opens it in a new tab, leaving the page alone',
+      now && now.some(p => p.url.endsWith('?away')) && now.some(p => p.id === current.id &&
+                                                              p.url === current.url),
+      (now || await pages()).map(p => p.url).join(' '));
+
+// --- Compact mode: a pill edit keeps the peeked sidebar out -------------------
+// Zen keeps the compact sidebar while its URL bar is edited; the peek would
+// otherwise end once the pointer stays away (about 3 s) and take the pill.
+if (BEHAVIOR !== 'float') {
+  await key(VK.S, CTRL, 's');
+  // Find the pill first: reading the views takes long enough for the peek
+  // to end.
+  const hiddenPill = find(await views(), 'KoanUrlPill');
+  await key(VK.S, CTRL | ALT, 's');
+  await click(hiddenPill);
+  vs = await views();
+  const atClick = `at the click: sidebar ${find(vs, 'VerticalTabStripRegionView')?.w}, ` +
+      `bar ${bar(vs)?.x}+${bar(vs)?.w}`;
+  await sleep(4500);
+  vs = await views();
+  const strip = find(vs, 'VerticalTabStripRegionView');
+  const pillNow = find(vs, 'KoanUrlPill');
+  check('Compact mode: editing in a peeked sidebar\'s pill keeps the sidebar and the pill',
+        strip?.w >= 200 && pillNow?.shown && bar(vs)?.x === pillNow.x && !isFloating(vs),
+        `${atClick}; later: sidebar ${strip?.w}, bar ${bar(vs)?.x}+${bar(vs)?.w}, ` +
+            `pill ${pillNow?.x}`);
+  await closeBar();
+  await sleep(4500);
+  vs = await views();
+  check('...and the sidebar goes once the bar closes',
+        find(vs, 'VerticalTabStripRegionView')?.w === 0,
+        `sidebar ${find(vs, 'VerticalTabStripRegionView')?.w}`);
+  await key(VK.S, CTRL, 's');
+}
+
+// --- Multiple toolbars ----------------------------------------------------------
+// The omnibox stays in the toolbar; Ctrl+T and the app menu's New tab (the
+// New Tab command, or Chromium's kActionNewTab with the action-based menu)
+// still open it for a new tab.
+async function setKoanPref(name, value) {
+  const { targetId } = (await browserCall('Target.createTarget',
+      { url: 'chrome://koan-settings', background: true })).result;
+  const page = await waitFor(async () => (await pages()).find(p => p.id === targetId));
+  await waitFor(() => evalIn(page, `document.readyState === 'complete'`));
+  const ok = await settingsCall(page, 'setPref', name, value);
+  await browserCall('Target.closeTarget', { targetId });
+  await sleep(1000);
+  return ok;
+}
+check('Multiple toolbars', await setKoanPref('koan.single_toolbar', false) === true);
+tabsNow = (await pages()).length;
+current = await visiblePage();
+vs = await views();
+// The toolbar's width in this layout (the sidebar takes the rest).
+const toolbarWidth = bar(vs)?.w;
+const menuButton = vs.find(v => /AppMenuButton$/.test(v.cls) && v.shown);
+if (menuButton) await rootClick(menuButton);
+const items = (await views()).filter(v => v.cls === 'MenuItemView' && v.shown && v.h > 0)
+    .sort((a, b) => a.ay - b.ay);
+// UI DevTools can't read a menu item's label; New tab is the first item
+// unless Chrome put a notice (update, default browser) above it.
+const newTabItem = items.find(v => /^new tab$/i.test(v.p.AccessibleName ?? '')) ?? items[0];
+if (newTabItem) await rootClick(newTabItem);
+vs = await views();
+check('...the app menu\'s New tab opens the URL bar in the toolbar, empty, without a tab',
+      omniboxText(vs) === '' && bar(vs)?.w === toolbarWidth &&
+          !shown(vs, 'KoanUrlBarBackdrop') && (await pages()).length === tabsNow,
+      `menu ${!!menuButton}, ${items.length} item(s), ${JSON.stringify(omniboxText(vs))}, ` +
+          `width ${bar(vs)?.w}, ${(await pages()).length} tab(s)`);
+if (omniboxText(vs) !== '') await key(VK.T, CTRL, 't');
+vs = await views();
+await type(find(vs, 'OmniboxViewViews'), 'foo');
+await closeBar();
+vs = await views();
+check('Esc ends it in one press: the page\'s address is back, no tab',
+      omniboxText(vs).includes('example.com') && !omniboxText(vs).includes('foo') &&
+          (await pages()).length === tabsNow,
+      `${JSON.stringify(omniboxText(vs))}, ${(await pages()).length} tab(s)`);
+await key(VK.ENTER, 0, 'Enter');
+await sleep(1000);
+check('...and a later Enter opens nothing', (await pages()).length === tabsNow,
+      `${(await pages()).length} tab(s)`);
+
+await key(VK.T, CTRL, 't');
+vs = await views();
+check('Ctrl+T opens the toolbar\'s URL bar for a new tab, with the unfinished search',
+      omniboxText(vs) === 'foo', JSON.stringify(omniboxText(vs)));
+// Ctrl+A: replace it.
+await windowKey(65, 4);
+await type(find(vs, 'OmniboxViewViews'), 'example.com/?alt');
+await windowKey(VK.ENTER, EF_ALT);
+now = await waitFor(async () => {
+  const p = await pages();
+  return p.length === tabsNow + 1 && p;
+});
+check('Alt+Enter opens one new tab, leaving the page alone',
+      now && now.some(p => p.url.endsWith('?alt')) &&
+          now.some(p => p.id === current.id && p.url === current.url),
+      (now || await pages()).map(p => p.url).join(' '));
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);
