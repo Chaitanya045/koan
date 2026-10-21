@@ -6,7 +6,7 @@
 // Expects Koan running off-screen with UI DevTools on UI_PORT and the
 // DevTools protocol on CDP_PORT (run.sh starts it, with the profile seeded by
 // scripts/e2e/prefs/palette.json: "New Split View" was passed over five
-// times). Text is typed into the omnibox as character events; Tab, Enter,
+// times, and Ctrl+T opens a tab, not the URL bar). Text is typed into the omnibox as character events; Tab, Enter,
 // arrows and Esc go to the browser window's widget, so they take the same
 // path as real keys (pre-target handlers, focus manager, focused view). The
 // rows are read from Chromium's WebUI popup. At the end Koan is restarted on
@@ -149,10 +149,31 @@ async function press(keyCode, flags = 0) {
   await uiKey((await ui()).widget, { keyCode, flags });
 }
 
+// The omnibox's node in a UI DevTools document. Node ids are handed out in
+// tree order on each DOM.getDocument, and the first keystroke can move the
+// omnibox (Zen's URL bar floats on typing, adding a view before it): look it
+// up in the session that uses it.
+const omniboxNode = n => {
+  const a = n.attributes ?? [];
+  if (n.nodeName === 'View' && a[a.indexOf('class') + 1] === 'OmniboxViewViews') return n.nodeId;
+  for (const c of n.children ?? []) {
+    const id = omniboxNode(c);
+    if (id) return id;
+  }
+  return null;
+};
+
 // Types into the omnibox, and waits for the box to show it.
 async function type(text) {
-  const before = (await ui()).omnibox;
-  for (const ch of text) await uiKey(before.nodeId, { keyCode: 0, key: ch.codePointAt(0), isChar: true });
+  for (const ch of text) {
+    const c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+    await c.send('DOM.enable');
+    const doc = (await c.send('DOM.getDocument', { depth: -1 })).result.root;
+    await c.send('DOM.dispatchKeyEvent', { nodeId: omniboxNode(doc),
+        event: { type: 'keyPressed', keyCode: 0, code: 0, flags: 0,
+                 key: ch.codePointAt(0), isChar: true } });
+    c.close();
+  }
   await waitFor(ui, u => u.omnibox?.text?.endsWith(text));
 }
 

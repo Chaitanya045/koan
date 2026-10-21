@@ -18,6 +18,7 @@ BASE_FEATURE(kKoanWorkspaces, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanGlance, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanRestoreTabsOnDemand, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanCommandPalette, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanUrlBar, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kKoanSidebar);
@@ -66,6 +67,10 @@ bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta) {
 
 bool IsCommandPaletteEnabled() {
   return base::FeatureList::IsEnabled(kKoanCommandPalette);
+}
+
+bool IsUrlBarEnabled() {
+  return base::FeatureList::IsEnabled(kKoanUrlBar);
 }
 
 }  // namespace koan::features

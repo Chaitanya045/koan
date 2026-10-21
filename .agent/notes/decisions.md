@@ -70,8 +70,15 @@
   ToolbarView child except LocationBarView is hidden. Koan observes the top
   container and toolbar bounds to undo BrowserView's full-width layout. No
   second omnibox, so everything Chrome's omnibox does keeps working; the
-  popup anchors to the location bar by itself. Koan floats on focus, not on
-  the first keystroke as Zen's default does (the pill isn't a text field).
+  popup anchors to the location bar by itself. #36 moved it into
+  `KoanUrlBarController` and added Zen's behaviours: the omnibox edits over
+  the pill and floats on the first keystroke (hook in
+  `LocationBarView::OnChanged`).
+- **Ctrl+T without a tab (#36)**: no hook in `chrome::NewTab()` (its callers,
+  e.g. `CreateNewTabGroup`, use the tab it returns). Ctrl+T is a Koan
+  accelerator, the new-tab button's `kActionNewTab` callback is swapped per
+  window, and `ChromeOmniboxClient::OnAutocompleteAccept` turns CURRENT_TAB
+  into NEW_FOREGROUND_TAB while the bar is open for a new tab.
 - **Settings page = chrome://koan-settings, plain WebUI driven by a C++
   table** (#39): not a section in chrome://settings (that would mean
   patching its Polymer/TS build). The page's HTML/CSS/JS are embedded into

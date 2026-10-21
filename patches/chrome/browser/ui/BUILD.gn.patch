@@ -1,6 +1,14 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -1533,6 +1533,7 @@
+@@ -776,6 +776,7 @@
+       "//content/public/browser",
+       "//content/public/common",
+       "//extensions/buildflags",
++      "//koan/browser/ui/views",
+       "//printing/buildflags",
+       "//ui/actions",
+       "//ui/base",
+@@ -1533,6 +1534,7 @@
      "//chrome/browser/ui:ui_features",
      "//chrome/common:chrome_features",
      "//components/omnibox/common",

@@ -28,12 +28,17 @@ BASE_DECLARE_FEATURE(kKoanRestoreTabsOnDemand);
 // Command palette: Zen's actions as suggestions of the URL bar.
 BASE_DECLARE_FEATURE(kKoanCommandPalette);
 
+// Zen's URL bar: behaviour setting, replace-new-tab and the copy-URL pill
+// button.
+BASE_DECLARE_FEATURE(kKoanUrlBar);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
 bool IsGlanceEnabled();
 bool IsRestoreTabsOnDemandEnabled();
 bool IsCommandPaletteEnabled();
+bool IsUrlBarEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read

@@ -19,6 +19,11 @@
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
 # scripts/e2e/<test>.mjs, and cleans up. Nothing appears on the desktop.
+#
+# PREFS=<json> seeds Default/Preferences instead (e.g.
+# '{"koan":{"urlbar":{"behavior":"float"}}}'). SHOTS=<dir> lets the test save
+# screenshots there (the window's off-screen frames go to $SHOTS/frames).
+# KEEP_LOG=<file> keeps the browser's log there.
 set -euo pipefail
 
 source "$(dirname "$0")/../koan_test_env.sh"
@@ -37,6 +42,12 @@ fi
 chrome="$KOAN_ROOT/chromium/src/${KOAN_OUT:-out/Koan}/chrome"
 export UI_PORT=${UI_PORT:-9600} CDP_PORT=${CDP_PORT:-9601}
 prof=$(koan_new_profile)
+dump=()
+if [[ -n ${SHOTS:-} ]]; then
+  mkdir -p "$SHOTS/frames"
+  dump=(--ozone-dump-file="$SHOTS/frames")
+fi
+export SHOTS=${SHOTS:-}
 pid=
 # Every step tolerates failure: with set -e, one failing command (e.g.
 # killing a browser the test already closed) would end the cleanup early and
@@ -46,6 +57,7 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
   fi
+  if [[ -n ${KEEP_LOG:-} ]]; then cp "$prof.log" "$KEEP_LOG" || true; fi
   # A test may have restarted Koan on the same profile; let it finish
   # writing there before the profile goes.
   pkill -f -- "--user-data-dir=$prof" 2>/dev/null || true
@@ -62,6 +74,7 @@ if [[ -f $prefs ]]; then
   mkdir -p "$prof/Default"
   cp "$prefs" "$prof/Default/Preferences"
 fi
+if [[ -n ${PREFS:-} ]]; then mkdir -p "$prof/Default"; printf '%s' "$PREFS" > "$prof/Default/Preferences"; fi
 
 script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
 [[ $test_name == *.mjs ]] && script=$test_name
@@ -85,7 +98,7 @@ for flag in ${KOAN_FLAGS:-} "${file_flags[@]}"; do
 done
 args=("$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof"
   --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
-  --enable-features="$features" "${extra[@]}")
+  --enable-features="$features" "${extra[@]}" "${dump[@]}")
 KOAN_CHROME_ARGS=$(printf '%s\n' "${args[@]}")
 export KOAN_CHROME_ARGS
 "${args[@]}" "${urls[@]}" >"$prof.log" 2>&1 &

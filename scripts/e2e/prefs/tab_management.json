@@ -1,2 +1,3 @@
 {"browser": {"ctrl_tab_mru": true},
+ "koan": {"urlbar": {"replace_newtab": false}},
  "tab_groups": {"deletion": {"skip_dialog_on_close_tab": true}}}

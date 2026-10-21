@@ -1,0 +1,22 @@
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -120,6 +120,7 @@
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "services/device/public/cpp/device_features.h"
+ #include "third_party/metrics_proto/omnibox_event.pb.h"
+ #include "third_party/skia/include/core/SkColor.h"
+@@ -2055,6 +2056,11 @@
+   // user text has been entered into the omnibox, so refresh the icon on
+   // changes.
+   RefreshAiModePageAction();
++  // Koan: Zen's URL bar floats on the first keystroke.
++  if (omnibox_view_) {
++    koan::OnOmniboxChanged(
++        this, GetOmniboxController()->edit_model()->user_input_in_progress());
++  }
+ }
+ 
+ void LocationBarView::AnnounceAlert(const std::u16string& announcement) {

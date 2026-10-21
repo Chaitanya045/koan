@@ -12,8 +12,6 @@
 #include <vector>
 
 #include "base/functional/bind.h"
-#include "base/strings/strcat.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -40,9 +38,9 @@
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_split_view.h"
+#include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/common/koan_url_constants.h"
-#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/focus/focus_manager.h"
@@ -200,6 +198,8 @@ bool KoanShortcutController::Run(Action action) {
       return Unsplit();
     case Action::kNewEmptySplit:
       return Command(IDC_NEW_SPLIT_TAB);
+    case Action::kNewTab:
+      return controller_->url_bar()->OpenForNewTab();
     case Action::kCopyUrl:
       return CopyUrl(/*markdown=*/false);
     case Action::kCopyUrlMarkdown:
@@ -373,25 +373,10 @@ bool KoanShortcutController::Unsplit() {
 }
 
 bool KoanShortcutController::CopyUrl(bool markdown) {
-  BrowserWindowInterface* browser = browser_view_->browser();
-  content::WebContents* contents =
-      browser->GetTabStripModel()->GetActiveWebContents();
-  if (!contents) {
+  if (!browser_view_->browser()->GetTabStripModel()->GetActiveWebContents()) {
     return false;
   }
-  if (!markdown) {
-    // Also shows Chrome's "Link copied" toast.
-    chrome::CopyURL(browser, contents);
-    return true;
-  }
-  std::u16string title = contents->GetTitle();
-  if (title.empty()) {
-    title = base::UTF8ToUTF16(contents->GetVisibleURL().spec());
-  }
-  ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
-  writer.WriteText(base::StrCat(
-      {u"[", title, u"](", base::UTF8ToUTF16(contents->GetVisibleURL().spec()),
-       u")"}));
+  CopyCurrentUrl(browser_view_, markdown);
   return true;
 }
 

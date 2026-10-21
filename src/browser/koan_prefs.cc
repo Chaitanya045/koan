@@ -20,6 +20,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                 kSidebarCollapsedBeforeUnknown);
   registry->RegisterBooleanPref(kTabsOnRight, false);
   registry->RegisterBooleanPref(kSingleToolbarEnabled, true);
+  registry->RegisterStringPref(kUrlBarBehavior, kUrlBarBehaviorFloatingOnType);
+  registry->RegisterBooleanPref(kUrlBarReplaceNewTab, true);
+  registry->RegisterBooleanPref(kUrlBarShowCopyUrl, true);
   registry->RegisterBooleanPref(kWorkspaceTint, true);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);

@@ -22,6 +22,7 @@
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
 #include "ui/views/widget/widget.h"
@@ -44,6 +45,8 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       compact_mode_(std::make_unique<KoanCompactModeController>(browser_view)),
       toast_(std::make_unique<KoanToast>(browser_view)),
       sidebar_tabs_(std::make_unique<KoanSidebarTabsController>(browser_view)),
+      url_bar_(std::make_unique<KoanUrlBarController>(browser_view,
+                                                      compact_mode_.get())),
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(

@@ -35,6 +35,7 @@ enum class Action {
   kUnsplit,
   kNewEmptySplit,
   // Tabs and pages.
+  kNewTab,
   kCopyUrl,
   kCopyUrlMarkdown,
   kTogglePinTab,

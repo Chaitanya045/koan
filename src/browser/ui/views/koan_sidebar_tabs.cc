@@ -34,6 +34,7 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -591,6 +592,12 @@ void KoanSidebarTabsController::UpdateClearRow() {
 }
 
 void KoanSidebarTabsController::OpenNewTab() {
+  // Zen's replace-newtab: the URL bar instead of a tab.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_);
+      controller && controller->url_bar()->OpenForNewTab()) {
+    return;
+  }
   // With the New Tab row on top, Zen puts the tab at the top of the space.
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
   const std::optional<tab_groups::TabGroupId> workspace =

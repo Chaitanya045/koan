@@ -24,6 +24,7 @@ class KoanShortcutController;
 class KoanSidebarTabsController;
 class KoanTabActivationTracker;
 class KoanToast;
+class KoanUrlBarController;
 class KoanWorkspaceController;
 
 // Per-window Koan state and behaviour. Owned by its BrowserView through a
@@ -48,6 +49,7 @@ class KoanBrowserViewController : public views::ViewObserver {
     return compact_mode_.get();
   }
   KoanToast* toast() const { return toast_.get(); }
+  KoanUrlBarController* url_bar() const { return url_bar_.get(); }
   KoanWorkspaceController* workspaces() const { return workspaces_.get(); }
   KoanSidebarTabsController* sidebar_tabs() const {
     return sidebar_tabs_.get();
@@ -77,6 +79,8 @@ class KoanBrowserViewController : public views::ViewObserver {
   std::unique_ptr<KoanCompactModeController> compact_mode_;
   std::unique_ptr<KoanToast> toast_;
   std::unique_ptr<KoanSidebarTabsController> sidebar_tabs_;
+  // After compact_mode_, which it works with.
+  std::unique_ptr<KoanUrlBarController> url_bar_;
   std::unique_ptr<KoanWorkspaceController> workspaces_;
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;

@@ -1,0 +1,10 @@
+--- a/chrome/browser/ui/omnibox/BUILD.gn
++++ b/chrome/browser/ui/omnibox/BUILD.gn
+@@ -131,6 +131,7 @@
+     "//components/strings:components_strings",
+     "//components/strings:components_strings_grit",
+     "//components/vector_icons",
++    "//koan/browser/ui/views",
+     "//ui/accessibility",
+   ]
+   if (!is_android) {

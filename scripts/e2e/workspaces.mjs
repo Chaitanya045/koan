@@ -73,6 +73,33 @@ async function key(code, modifiers, keyName = '') {
   await sleep(1500);
 }
 
+// Types `text` into the (focused) omnibox and presses Enter, via UI DevTools.
+async function openFromUrlBar(text) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const findNode = n => {
+    const a = n.attributes ?? [];
+    if (a[a.indexOf('class') + 1] === 'OmniboxViewViews') return n;
+    for (const c of n.children ?? []) {
+      const f = findNode(c);
+      if (f) return f;
+    }
+    return null;
+  };
+  const nodeId = findNode(doc).nodeId;
+  const event = e => ui.send('DOM.dispatchKeyEvent',
+                             { nodeId, event: { code: 0, flags: 0, ...e } });
+  for (const ch of text) {
+    await event({ type: 'keyPressed', keyCode: 0, key: ch.codePointAt(0), isChar: true });
+  }
+  await sleep(500);
+  await event({ type: 'keyPressed', keyCode: 13, key: 0, isChar: false });
+  await event({ type: 'keyReleased', keyCode: 13, key: 0, isChar: false });
+  ui.close();
+  await sleep(1500);
+}
+
 let failures = 0;
 function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
@@ -97,7 +124,10 @@ check('The tooltip shows the name without the icon',
       first?.tooltip === 'Space 1', JSON.stringify(first?.tooltip));
 check('The new workspace shows only its tab', s.visibleTabs === 1, `${s.visibleTabs} tab(s)`);
 
+// Ctrl+T opens the URL bar (Zen's replace-newtab); the tab opens with what
+// is opened from it.
 await key(VK.T, CTRL, 't');
+await openFromUrlBar('about:blank');
 s = await sidebar();
 check('A new tab joins the active workspace', s.visibleTabs === 2, `${s.visibleTabs} tab(s)`);
 

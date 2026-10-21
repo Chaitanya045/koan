@@ -36,6 +36,11 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanEssentialsTileHovered,
   kColorKoanEssentialsTileSelected,
 
+  // The URL bar (koan_sidebar_nav_view.cc, koan_url_bar_controller.cc): the
+  // sidebar's URL pill and the floating URL bar's shadow.
+  kColorKoanUrlPill,
+  kColorKoanFloatingUrlBarShadow,
+
   // Toasts: a vertical gradient, the text, and the background of the
   // shortcut in it.
   kColorKoanToastBackgroundTop,

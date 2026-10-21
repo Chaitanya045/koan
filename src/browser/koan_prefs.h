@@ -62,6 +62,24 @@ inline constexpr char kCompactModeDragCollapseHintSeen[] =
 // the top of the sidebar. On by default, like Zen.
 inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
 
+// How the URL bar opens when the address is edited (Zen's
+// zen.urlbar.behavior): "normal" edits it in place (in the sidebar's URL
+// pill), "floating-on-type" (Zen's default) starts there too and floats over
+// the page on the first keystroke, "float" floats over the page right away.
+inline constexpr char kUrlBarBehavior[] = "koan.urlbar.behavior";
+inline constexpr char kUrlBarBehaviorNormal[] = "normal";
+inline constexpr char kUrlBarBehaviorFloatingOnType[] = "floating-on-type";
+inline constexpr char kUrlBarBehaviorFloat[] = "float";
+
+// Zen's zen.urlbar.replace-newtab: Ctrl+T and the sidebar's new-tab button
+// open the URL bar instead of a tab; a tab opens only with what the user
+// opens from it. On by default, like Zen.
+inline constexpr char kUrlBarReplaceNewTab[] = "koan.urlbar.replace_newtab";
+
+// Zen's zen.urlbar.single-toolbar-show-copy-url: a copy-URL button in the
+// sidebar's URL pill on hover. On by default, like Zen.
+inline constexpr char kUrlBarShowCopyUrl[] = "koan.urlbar.show_copy_url";
+
 // Whether the browser takes the active workspace's colour (Zen's
 // per-workspace themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
