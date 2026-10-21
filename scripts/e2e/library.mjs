@@ -4,12 +4,12 @@
 // filters) and Spaces (rename, reorder), and closing with Esc.
 //
 //   scripts/e2e/run.sh library     (opens scripts/e2e/pages/library.html)
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, finish, key as keyTo,
-  pages as tabs, setKoanPref, sleep, visiblePage, waitFor,
+  ALT, CTRL, SHIFT, UI_PORT, check, connect, finish, key as keyTo,
+  pages as tabs, setChromePref, setKoanPref, sleep, visiblePage, waitFor,
 } from './lib/koan.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -247,8 +247,12 @@ check('Ctrl+H again closes it', !(await library()).open);
 // --- A download, then Ctrl+Shift+Y shows it in Downloads. ---
 const downloads = mkdtempSync(join(ROOT, '.test-profiles', 'dl-'));
 try {
-  await browserCall('Browser.setDownloadBehavior',
-                    { behavior: 'allow', downloadPath: downloads });
+  // Into a scratch directory, never the user's Downloads.
+  const directorySet = await setChromePref('download.default_directory', downloads);
+  check('Downloads go to a scratch directory', directorySet === true, `${directorySet}`);
+  if (directorySet !== true) {
+    finish();
+  }
   const page = (await tabs()).find(t => t.url.startsWith(pageUrl));
   const c = await connect(page.webSocketDebuggerUrl);
   const r = await c.send('Runtime.evaluate', {
@@ -272,6 +276,8 @@ try {
         `${state.section}, ${state.rows} row(s)`);
   const download = await withViews(nodes =>
     find(nodes, 'KoanLibraryRow', n => n.shown)[0]?.p);
+  check('...saved in the scratch directory',
+        existsSync(join(downloads, 'koan-library-test.txt')));
   check('...named after the file, with its size and source',
         download?.Title === 'koan-library-test.txt' && /B/.test(download?.Subtitle ?? ''),
         `${download?.Title} / ${download?.Subtitle}`);
