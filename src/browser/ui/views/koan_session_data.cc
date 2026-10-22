@@ -2,8 +2,9 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#include "koan/browser/ui/views/koan_tab_session_data.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 
+#include <array>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -13,11 +14,14 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 
 namespace koan {
@@ -27,10 +31,34 @@ namespace {
 // Keys of Koan's data in a tab's session extra data.
 constexpr std::string_view kKeyPrefix = "koan.";
 
-// The features that act on a tab while it is restored.
-constexpr TabRestoreHook kRestoreHooks[] = {
+// The features that act on a tab or window while it is restored.
+constexpr TabRestoreHook kTabRestoreHooks[] = {
     {kPinnedTabSessionKey, &OnRestoringPinnedTab},
 };
+// None yet; folders (#60) will be the first.
+constexpr std::array<WindowRestoreHook, 0> kWindowRestoreHooks = {};
+
+// Koan's entries of a restored tab's or window's extra data.
+std::map<std::string, std::string> KoanEntries(
+    const std::map<std::string, std::string>& extra_data) {
+  std::map<std::string, std::string> koan_data;
+  for (const auto& [key, data] : extra_data) {
+    if (base::StartsWith(key, kKeyPrefix) && !data.empty()) {
+      koan_data[key] = data;
+    }
+  }
+  return koan_data;
+}
+
+// The window's store, or null for a window without Koan's UI.
+std::map<std::string, std::string>* WindowStore(
+    const BrowserWindowInterface* browser) {
+  BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller ? &controller->session_data() : nullptr;
+}
 
 // Writes one entry of `contents`' data to the session (empty: removes it).
 void WriteToSession(content::WebContents* contents,
@@ -132,22 +160,70 @@ void OnRestoringTab(
     bool from_session_restore,
     std::vector<std::unique_ptr<content::NavigationEntry>>& entries,
     int& selected_navigation) {
-  std::map<std::string, std::string> koan_data;
-  for (const auto& [key, data] : extra_data) {
-    if (base::StartsWith(key, kKeyPrefix) && !data.empty()) {
-      koan_data[key] = data;
-    }
-  }
+  std::map<std::string, std::string> koan_data = KoanEntries(extra_data);
   if (koan_data.empty()) {
     return;
   }
   KoanTabSessionData::CreateForWebContents(contents);
   KoanTabSessionData::FromWebContents(contents)->data() = koan_data;
-  for (const TabRestoreHook& hook : kRestoreHooks) {
+  for (const TabRestoreHook& hook : kTabRestoreHooks) {
     auto it = koan_data.find(hook.key);
     if (it != koan_data.end()) {
       hook.on_restoring(contents, it->second, from_session_restore, entries,
                         selected_navigation);
+    }
+  }
+}
+
+std::string GetWindowSessionData(const BrowserWindowInterface* browser,
+                                 std::string_view key) {
+  const std::map<std::string, std::string>* store = WindowStore(browser);
+  if (!store) {
+    return std::string();
+  }
+  auto it = store->find(std::string(key));
+  return it == store->end() ? std::string() : it->second;
+}
+
+void SetWindowSessionData(BrowserWindowInterface* browser,
+                          std::string_view key,
+                          std::string data) {
+  CHECK(base::StartsWith(key, kKeyPrefix));
+  std::map<std::string, std::string>* store = WindowStore(browser);
+  if (!store) {
+    return;
+  }
+  const std::string name(key);
+  if (data.empty()) {
+    store->erase(name);
+  } else {
+    (*store)[name] = data;
+  }
+  if (SessionService* session =
+          SessionServiceFactory::GetForProfile(browser->GetProfile())) {
+    session->AddWindowExtraData(browser->GetSessionID(), name.c_str(), data);
+  }
+}
+
+std::map<std::string, std::string> GetWindowSessionData(
+    const BrowserWindowInterface* browser) {
+  const std::map<std::string, std::string>* store = WindowStore(browser);
+  return store ? *store : std::map<std::string, std::string>();
+}
+
+void OnRestoringWindow(BrowserWindowInterface* browser,
+                       const std::map<std::string, std::string>& extra_data,
+                       bool from_session_restore) {
+  std::map<std::string, std::string> koan_data = KoanEntries(extra_data);
+  std::map<std::string, std::string>* store = WindowStore(browser);
+  if (koan_data.empty() || !store) {
+    return;
+  }
+  *store = koan_data;
+  for (const WindowRestoreHook& hook : kWindowRestoreHooks) {
+    auto it = koan_data.find(hook.key);
+    if (it != koan_data.end()) {
+      hook.on_restoring(browser, it->second, from_session_restore);
     }
   }
 }

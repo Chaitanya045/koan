@@ -245,7 +245,11 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   add_if(IsEnabled(controller, IDC_DUPLICATE_TAB),
          ChromeCommand(controller, "duplicate-tab", u"Duplicate Current Tab",
                        vector_icons::kContentCopyIcon, IDC_DUPLICATE_TAB));
-  add_if(pinned_tabs && IsAwayFromPinnedUrl(tab),
+  // Like the tab menu's: for any pinned tab (the reset doesn't ignore the
+  // fragment, so "away" isn't required).
+  const KoanTabState* state =
+      pinned_tabs && pinned ? GetTabState(tab) : nullptr;
+  add_if(state && state->pinned_url.is_valid(),
          PinnedTabCommand("reset-pinned-tab", u"Reset Pinned Tab",
                           vector_icons::kUndoIcon,
                           &KoanPinnedTabController::ResetToPinnedUrl));
@@ -269,7 +273,8 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   // With Koan's pinned tabs off, its Essentials are just pinned tabs, so
   // these pin and unpin.
   add_if(pinned_tabs ? tab && !essential &&
-                           controller.pinned_tabs()->CanAddToEssentials()
+                           controller.pinned_tabs()->CanAddToEssentials(
+                               tab->IsSplit() ? 2 : 1)
                      : tab && !pinned,
          pinned_tabs ? PinnedTabCommand(
                            "add-to-essentials", u"Add to Essentials", kStarIcon,

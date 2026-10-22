@@ -43,13 +43,13 @@ bool IsGlanceEnabled();
 bool IsRestoreTabsOnDemandEnabled();
 bool IsCommandPaletteEnabled();
 bool IsUrlBarEnabled();
+bool IsPinnedTabsEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read
 // by the blink navigation-policy hook (renderer process only, see kKoanGlance's
 // users).
 bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta);
-bool IsPinnedTabsEnabled();
 
 }  // namespace koan::features
 

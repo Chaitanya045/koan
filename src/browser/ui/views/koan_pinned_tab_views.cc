@@ -250,6 +250,8 @@ class KoanTabRow : public views::Button {
     return tab() && tab()->GetContents()->WasDiscarded();
   }
   bool GetPending() const { return IsPendingTab(tab()); }
+  bool GetEssential() const { return tab() && tab()->IsPinned(); }
+  bool GetSplit() const { return tab() && tab()->IsSplit(); }
 
   bool CanRename() const {
     return tab() && title_ && title_->GetVisible() &&
@@ -530,6 +532,8 @@ ADD_READONLY_PROPERTY_METADATA(bool, PinnedInSpace)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, Url)
 ADD_READONLY_PROPERTY_METADATA(bool, Discarded)
 ADD_READONLY_PROPERTY_METADATA(bool, Pending)
+ADD_READONLY_PROPERTY_METADATA(bool, Essential)
+ADD_READONLY_PROPERTY_METADATA(bool, Split)
 END_METADATA
 
 // Applies an emoji from the icon picker's field.

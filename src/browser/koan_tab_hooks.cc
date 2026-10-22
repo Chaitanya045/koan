@@ -13,7 +13,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
-#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
+#include "koan/browser/ui/views/koan_pinned.h"
 
 namespace koan {
 

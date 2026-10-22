@@ -1,3 +1,5 @@
+diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
+index 547bcd709db493b28661d844e2c49e9e007ea459..aa452a43ea280d0d526b94d8a47e13b3bad2a253 100644
 --- a/chrome/browser/ui/browser_commands.cc
 +++ b/chrome/browser/ui/browser_commands.cc
 @@ -206,6 +206,7 @@
@@ -8,7 +10,7 @@
  #include "pdf/buildflags.h"
  #include "printing/buildflags/buildflags.h"
  #include "rlz/buildflags/buildflags.h"
-@@ -1475,6 +1476,10 @@
+@@ -1475,6 +1476,10 @@ void CloseTab(BrowserWindowInterface* browser) {
    if (!active_tab) {
      return;
    }

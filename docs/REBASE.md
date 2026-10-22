@@ -45,25 +45,45 @@ features plug into it in `src/` rather than patching upstream again:
   3000, pinned tabs 3100, Spaces 3200, folders 3300). Items are found by
   command id, never by position. `TabMenuContext::AddSubmenu()` gives a
   submenu whose items run like the menu's.
-- **Per-tab session data**: `src/browser/ui/views/koan_tab_session_data.h`.
-  `koan::SetTabSessionData(contents, "koan.<feature>", data)` /
-  `GetTabSessionData()`: a feature's data for a tab, stored as Chromium's
-  per-tab session extra data under its own key. It comes back after a
-  restart, when a closed tab or window is reopened and when a discard
-  replaces the tab's WebContents, and follows the tab, not its index. A
-  feature that acts while a tab is restored (e.g. to replace its pages) adds
-  a `TabRestoreHook` to `kRestoreHooks` in `koan_tab_session_data.cc`. The
-  hooks: `SessionServiceBase::BuildCommandsForTab` (the session file's
-  rebuild drops per-tab extra data otherwise), `CreateRestoredTab` in
-  `browser_tabrestore.cc` and `BrowserLiveTabContext::GetExtraDataForTab`.
+- **Session data, per tab and per window**:
+  `src/browser/ui/views/koan_session_data.h`. A feature keeps its data under
+  its own key ("koan.<feature>"), as Chromium's session extra data:
+  - Per tab: `koan::SetTabSessionData(contents, key, data)` /
+    `GetTabSessionData(contents, key)`. It comes back after a restart, when
+    a closed tab or window is reopened and when a discard replaces the tab's
+    WebContents, and follows the tab, not its index (e.g. folder
+    membership).
+  - Per window: `koan::SetWindowSessionData(browser, key, data)` /
+    `GetWindowSessionData(browser, key)`, for state of the window rather
+    than a tab (e.g. folders themselves: names, collapsed, empty ones). It
+    comes back after a restart and when a closed window is reopened. Kept on
+    `KoanBrowserViewController`, so only windows with Koan's UI have it.
+
+  The store keeps a copy: call `Set...()` after every change. A feature that
+  acts while a tab or window is restored adds a `TabRestoreHook` (it may
+  replace the tab's pages) or `WindowRestoreHook` (the window exists, its
+  tabs don't yet) to `kTabRestoreHooks` / `kWindowRestoreHooks` in
+  `koan_session_data.cc`. The hooks: `SessionServiceBase::BuildCommandsForTab`
+  and `BuildCommandsForBrowser` (the session file's rebuild drops extra data
+  otherwise), `CreateRestoredTab` in `browser_tabrestore.cc`,
+  `SessionRestoreImpl::CreateRestoredBrowser` in `session_restore.cc`, and
+  `BrowserLiveTabContext::GetExtraDataForTab`, `GetExtraDataForWindow` and
+  `Create` in `browser_live_tab_context.cc`.
 - **"Is this tab pinned?"**: `koan::IsPinnedForUser(tab)` in
-  `src/browser/ui/views/koan_pinned_tabs_hooks.h`: an Essential (Chromium's
+  `src/browser/ui/views/koan_pinned.h`: an Essential (Chromium's
   pinned tab) or a tab pinned to its Space, which Chromium doesn't know as
   pinned. Upstream's Close Other Tabs, Close Tabs Below and back-to-opener,
   and Koan's Clear, ask it; any feature that leaves pinned tabs alone (moving
   tabs between Spaces or into folders) should too. The freezing and Memory
   Saver exemptions get these tabs through the page's pinned state, which
   Koan sets for them.
+
+Features that adopt these (Spaces, folders) drop their own copies of the
+same files: `koan_tab_menu.{h,cc}`, `koan_session_data.{h,cc}`, and the
+`tab_menu_model.{h,cc}`, `tab_strip_model.cc`, `sessions/BUILD.gn` and
+`session_service_base.cc` patches, adding their entries in `src/` instead.
+Their menu ids move into their `TabMenuFeatureId` range (e.g. folders' "Move
+to Folder" from 3002, inside split view's range, to 3300+).
 
 ## After every rebase, re-audit the hooks
 
@@ -121,7 +141,25 @@ assumes:
 | Tab row decoration | `chrome/browser/ui/views/tabs/common/tab_view.cc` (end of ctor) | `TabTitle` / `TabIcon` are still direct children of `TabView`, laid out by its layout manager |
 | Pinned tab close button / middle click | `.../tabs/common/tab_strip_collection_controller.cc` (`CloseTab`) | both still end up in `CloseTab` |
 | Custom tab label and icon | `chrome/browser/ui/tabs/tab_data.cc` (`TabData::FromTabInterface`) | tab views still read title and favicon from `TabData` |
-| Koan tab state in the session | `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`), `chrome/browser/ui/browser_tabrestore.cc` (`CreateRestoredTab`) (+ `sessions/BUILD.gn`, `ui/BUILD.gn`) | rebuilding the session file still drops per-tab extra data (Koan re-adds its key); restored tabs still get `extra_data` and their entries before `NavigationController::Restore` |
+| Koan tab and window data in the session | `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`, `BuildCommandsForBrowser`), `chrome/browser/sessions/session_restore.cc` (`CreateRestoredBrowser`), `chrome/browser/ui/browser_tabrestore.cc` (`CreateRestoredTab`) (+ `sessions/BUILD.gn`, `ui/BUILD.gn`) | rebuilding the session file still drops tab and window extra data (Koan re-adds its keys); restored tabs still get `extra_data` and their entries before `NavigationController::Restore`; restored windows still get the window's `extra_data` in `CreateRestoredBrowser` |
+| Reopened window keeps Koan's window data | `chrome/browser/ui/browser_live_tab_context.cc` (`GetExtraDataForWindow`, `Create`) | a closed window's extra data still comes from `GetExtraDataForWindow` and goes to `Create` |
+
+Then look for new upstream pinned checks: Zen's pinned tabs (pinned to their
+Space) aren't Chromium's pinned tabs, so every `IsPinned()` / `IsTabPinned()`
+upstream adds is a place that may close, move or freeze them. Compare the
+call sites with the previous revision's and decide for each new one whether
+it needs `koan::IsPinnedForUser()` (closing or moving tabs) or not (layout,
+Chromium's own pinned container):
+
+```sh
+cd chromium/src
+for rev in <previous-revision> HEAD; do
+  git grep -nE 'IsTabPinned\(|->IsPinned\(\)' $rev -- chrome/browser/ui \
+    chrome/browser/performance_manager components/performance_manager |
+    sed -E "s/^[^:]+:([^:]+):[0-9]+:/\1:/" | sort > /tmp/pinned-$rev.txt
+done
+diff /tmp/pinned-<previous-revision>.txt /tmp/pinned-HEAD.txt
+```
 
 Upstream unit and browser tests that expect Chromium's defaults fail with
 Koan's (they aren't run today): `background_tab_loading_policy_unittest.cc`,

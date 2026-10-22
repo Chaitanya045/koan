@@ -1,20 +1,41 @@
+diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/browser_live_tab_context.cc
+index d48ee3c659d7e03939882b28ae5c1f74be5c92dc..b79fe95fdf0a7b909d92e4574e7987b300cad98d 100644
 --- a/chrome/browser/ui/browser_live_tab_context.cc
 +++ b/chrome/browser/ui/browser_live_tab_context.cc
 @@ -59,6 +59,7 @@
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/session_storage_namespace_handle.h"
  #include "content/public/browser/web_contents.h"
-+#include "koan/browser/ui/views/koan_tab_session_data.h"
++#include "koan/browser/ui/views/koan_session_data.h"
  #include "ui/base/mojom/window_show_state.mojom.h"
  #include "ui/base/window_open_disposition.h"
  
-@@ -200,6 +201,9 @@
+@@ -200,6 +201,9 @@ std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
  
    glic::PopulateGlicExtraData(tab_strip_model_->GetTabAtIndex(index),
                                &extra_data);
-+  // Koan: its features' per-tab data (koan_tab_session_data.h).
++  // Koan: its features' per-tab data (koan_session_data.h).
 +  extra_data.merge(
 +      koan::GetTabSessionData(tab_strip_model_->GetWebContentsAt(index)));
  
    return extra_data;
+ }
+@@ -224,6 +228,8 @@ BrowserLiveTabContext::GetExtraDataForWindow() const {
+           focused_group->ToString();
+     }
+   }
++  // Koan: its features' per-window data (koan_session_data.h).
++  data.merge(koan::GetWindowSessionData(&browser_.get()));
+ 
+   return data;
+ }
+@@ -563,6 +569,9 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
+ 
+   BrowserWindowInterface* browser =
+       CreateBrowserWindow(std::move(*create_params));
++  // Koan: its features' per-window data (koan_session_data.h).
++  koan::OnRestoringWindow(browser, extra_data,
++                          /*from_session_restore=*/false);
+ 
+   return BrowserLiveTabContext::From(browser);
  }

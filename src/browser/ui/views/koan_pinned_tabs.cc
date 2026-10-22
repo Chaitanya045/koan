@@ -36,6 +36,7 @@
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon_base/favicon_types.h"
@@ -43,6 +44,7 @@
 #include "components/performance_manager/public/decorators/page_live_state_decorator.h"
 #include "components/prefs/pref_service.h"
 #include "components/split_tabs/split_tab_id.h"
+#include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_context_menu_command.h"
 #include "components/tabs/public/tab_group.h"
@@ -59,11 +61,12 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_tab_hooks.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tab_views.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
-#include "koan/browser/ui/views/koan_tab_session_data.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -101,7 +104,10 @@ DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanEditPinnedUrlSubmenu);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanEditPinnedUrlSubmenu);
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanEditPinnedUrlField);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanEditPinnedUrlField);
-// Upstream's Close Other Tabs and Close Tabs Below, tagged for the e2e test.
+// Upstream's Duplicate, Close Other Tabs and Close Tabs Below, tagged for the
+// e2e test.
+DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanDuplicateMenuItem);
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanDuplicateMenuItem);
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanCloseOtherTabsMenuItem);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanCloseOtherTabsMenuItem);
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanCloseTabsBelowMenuItem);
@@ -263,6 +269,17 @@ void ShowToast(BrowserView* browser_view, const std::u16string& text) {
           KoanBrowserViewController::From(browser_view)) {
     controller->toast()->Show(text);
   }
+}
+
+// `tab`, or both tabs of its split view, in order.
+std::vector<tabs::TabInterface*> WithSplitOf(const TabStripModel* model,
+                                             tabs::TabInterface* tab) {
+  if (std::optional<split_tabs::SplitTabId> split = tab->GetSplit()) {
+    if (split_tabs::SplitTabData* data = model->GetSplitData(*split)) {
+      return data->ListTabs();
+    }
+  }
+  return {tab};
 }
 
 // The tabs a context menu command on `tab` applies to: the selection if
@@ -476,14 +493,14 @@ int KoanPinnedTabController::EssentialsCount() const {
   return tab_strip_model()->IndexOfFirstNonPinnedTab();
 }
 
-bool KoanPinnedTabController::CanAddToEssentials() const {
-  return EssentialsCount() < kMaxEssentials;
+bool KoanPinnedTabController::CanAddToEssentials(int count) const {
+  return EssentialsCount() + count <= kMaxEssentials;
 }
 
-void KoanPinnedTabController::InitPinnedState(tabs::TabInterface* tab,
+bool KoanPinnedTabController::InitPinnedState(tabs::TabInterface* tab,
                                               KoanTabState& state) {
   if (state.pinned_url.is_valid()) {
-    return;
+    return false;
   }
   content::WebContents* contents = tab->GetContents();
   content::NavigationEntry* entry =
@@ -493,6 +510,7 @@ void KoanPinnedTabController::InitPinnedState(tabs::TabInterface* tab,
                          ? entry->GetURL()
                          : contents->GetVisibleURL();
   state.pinned_icon = TabUIHelper::From(tab)->GetFavicon();
+  return true;
 }
 
 void KoanPinnedTabController::FetchPinnedIcon(content::WebContents* contents) {
@@ -524,13 +542,7 @@ void KoanPinnedTabController::FetchPinnedIcon(content::WebContents* contents) {
 
 std::vector<tabs::TabInterface*> KoanPinnedTabController::WithSplit(
     tabs::TabInterface* tab) const {
-  if (std::optional<split_tabs::SplitTabId> split = tab->GetSplit()) {
-    if (split_tabs::SplitTabData* data =
-            tab_strip_model()->GetSplitData(*split)) {
-      return data->ListTabs();
-    }
-  }
-  return {tab};
+  return WithSplitOf(tab_strip_model(), tab);
 }
 
 int KoanPinnedTabController::SectionStart(int index) const {
@@ -562,6 +574,13 @@ int KoanPinnedTabController::LastPinnedInSection(
     }
     last = i;
   }
+  // Never between the two tabs of a split view (upstream CHECKs a move
+  // there): a split counts as pinned up to its last tab.
+  if (last != -1) {
+    for (tabs::TabInterface* each : WithSplit(model->GetTabAtIndex(last))) {
+      last = std::max(last, model->GetIndexOfTab(each));
+    }
+  }
   return last;
 }
 
@@ -590,16 +609,20 @@ bool KoanPinnedTabController::AbovePinnedTab(int index) const {
   return false;
 }
 
-void KoanPinnedTabController::MoveToPinnedSection(tabs::TabInterface* tab) {
+void KoanPinnedTabController::MoveAfterPinnedTabs(tabs::TabInterface* tab) {
   TabStripModel* model = tab_strip_model();
   const std::vector<tabs::TabInterface*> tabs = WithSplit(tab);
   const int index = model->GetIndexOfTab(tabs.front());
-  if (index == TabStripModel::kNoTab) {
+  if (index == TabStripModel::kNoTab || tab->IsPinned()) {
     return;
   }
   const int last = LastPinnedInSection(index, tabs);
-  const int target = last == -1 ? SectionStart(index) : last + 1;
-  if (target >= index) {
+  int target = last == -1 ? SectionStart(index) : last + 1;
+  // Moving down: the tabs in between move up.
+  if (target > index) {
+    target -= static_cast<int>(tabs.size());
+  }
+  if (target == index) {
     return;
   }
   // A split view moves as one, or Chromium would take it apart.
@@ -608,6 +631,46 @@ void KoanPinnedTabController::MoveToPinnedSection(tabs::TabInterface* tab) {
                        model->GetTabGroupForTab(index));
   } else {
     model->MoveWebContentsAt(index, target, /*select_after_move=*/false);
+  }
+}
+
+void KoanPinnedTabController::SetEssential(tabs::TabInterface* tab,
+                                           bool essential) {
+  TabStripModel* model = tab_strip_model();
+  std::vector<tabs::TabInterface*> tabs = WithSplit(tab);
+  std::optional<split_tabs::SplitTabVisualData> split_visuals;
+  if (std::optional<split_tabs::SplitTabId> split = tab->GetSplit()) {
+    split_visuals = *model->GetSplitData(*split)->visual_data();
+  }
+  base::AutoReset<bool> changing(&changing_pin_, true);
+  // Upstream's SetTabPinned() takes a split view apart (its split-aware
+  // pinning is private), so the split is put back together below. Unpinned
+  // tabs go first after the Essentials: the last one goes first, to keep
+  // their order.
+  if (!essential) {
+    std::ranges::reverse(tabs);
+  }
+  for (tabs::TabInterface* each : tabs) {
+    if (each->IsPinned() != essential) {
+      model->SetTabPinned(model->GetIndexOfTab(each), essential);
+    }
+  }
+  std::vector<int> indices;
+  for (tabs::TabInterface* each : tabs) {
+    indices.push_back(model->GetIndexOfTab(each));
+  }
+  std::ranges::sort(indices);
+  if (split_visuals && indices.size() == 2 && !tabs.front()->IsSplit() &&
+      indices[1] == indices[0] + 1) {
+    model->RestoreSplit(split_tabs::SplitTabId::GenerateNew(), indices,
+                        *split_visuals);
+  }
+  // Out of the Essentials: into the active Space, as in Zen.
+  if (!essential) {
+    if (std::optional<tab_groups::TabGroupId> space =
+            model->GetFocusedGroup()) {
+      model->AddToExistingGroup(indices, *space);
+    }
   }
 }
 
@@ -623,12 +686,18 @@ void KoanPinnedTabController::OnTabsAdded(std::vector<tabs::TabHandle> tabs) {
     if (IsPinnedInSpace(tab)) {
       UpdateFreezingExemption(tab);
     }
+    if (KoanTabState* state = GetTabState(tab);
+        state && std::exchange(state->unsaved, false)) {
+      // Now that the session knows the tab (an Essential that got its pinned
+      // URL when it was added, e.g. a duplicate).
+      SaveTabState(tab->GetContents());
+    }
     if (IsPinnedForUser(tab) || tab->IsSplit()) {
       continue;
     }
-    const int last = LastPinnedInSection(index, {tab});
-    if (last > index) {
-      model->MoveWebContentsAt(index, last, /*select_after_move=*/false);
+    // A new tab opened among the pinned tabs goes below them.
+    if (LastPinnedInSection(index, {tab}) > index) {
+      MoveAfterPinnedTabs(tab);
     }
   }
 }
@@ -640,47 +709,79 @@ void KoanPinnedTabController::ScheduleNormalize(tabs::TabInterface* tab) {
 }
 
 void KoanPinnedTabController::Normalize() {
+  // Not while the user still holds a dragged tab (it can pause over a place
+  // as long as it likes), nor while a session restores the tabs: checked
+  // again until it is over.
+  if (TabDragController::IsActive() ||
+      SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+    normalize_timer_.Start(FROM_HERE, kNormalizeDelay, this,
+                           &KoanPinnedTabController::Normalize);
+    return;
+  }
   TabStripModel* model = tab_strip_model();
   const std::vector<tabs::TabHandle> handles = std::move(to_normalize_);
   to_normalize_.clear();
+  std::vector<tabs::TabInterface*> done;
   for (const tabs::TabHandle& handle : handles) {
     tabs::TabInterface* tab = handle.Get();
     const int index = tab ? model->GetIndexOfTab(tab) : TabStripModel::kNoTab;
-    if (index == TabStripModel::kNoTab) {
+    if (index == TabStripModel::kNoTab || std::ranges::contains(done, tab)) {
       continue;
     }
+    // A split view is decided as one, by its first tab, so its tabs never
+    // differ.
+    const std::vector<tabs::TabInterface*> unit = WithSplit(tab);
+    done.insert(done.end(), unit.begin(), unit.end());
+    tab = unit.front();
+    const int first = model->GetIndexOfTab(tab);
+    const int last = model->GetIndexOfTab(unit.back());
     KoanTabState& state = GetOrCreateTabState(tab->GetContents());
+    bool was_essential = false;
+    bool changed_group = false;
+    for (tabs::TabInterface* each : unit) {
+      KoanTabState& each_state = GetOrCreateTabState(each->GetContents());
+      was_essential |= std::exchange(each_state.was_essential, false);
+      changed_group |= std::exchange(each_state.changed_group, false);
+    }
     if (tab->IsPinned()) {
       // Dragged into the tiles, or duplicated from one, past Zen's limit:
-      // back into the Space. (Not while a session restores what it had.)
-      if (EssentialsCount() > kMaxEssentials &&
-          !SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+      // back into the Space.
+      if (EssentialsCount() > kMaxEssentials) {
         RemoveFromEssentials(tab);
       }
       continue;
     }
-    if (std::exchange(state.was_essential, false)) {
+    if (was_essential) {
       // Zen: an Essential dropped among the pinned tabs becomes one of them,
       // keeping its pinned URL; dropped anywhere else, a normal tab.
-      if (InPinnedRun(index) && state.pinned_url.is_valid()) {
-        state.pinned_in_space = true;
-        UpdateFreezingExemption(tab);
-        SaveTabState(tab->GetContents());
-        UpdateTabView(tab);
+      if (InPinnedRun(first) && state.pinned_url.is_valid()) {
+        for (tabs::TabInterface* each : unit) {
+          KoanTabState& each_state = GetOrCreateTabState(each->GetContents());
+          InitPinnedState(each, each_state);
+          each_state.pinned_in_space = true;
+          UpdateFreezingExemption(each);
+          SaveTabState(each->GetContents());
+          UpdateTabView(each);
+        }
       } else {
-        ClearPinnedState(tab);
+        for (tabs::TabInterface* each : unit) {
+          ClearPinnedState(each);
+        }
       }
       continue;
     }
-    if (std::exchange(state.changed_group, false) && IsPinnedInSpace(tab)) {
-      // Moved to another Space: still pinned, at the top of that one.
-      MoveToPinnedSection(tab);
+    if (changed_group && IsPinnedInSpace(tab)) {
+      // Moved to another Space (or restored out of place): still pinned, at
+      // the end of that Space's pinned tabs.
+      MoveAfterPinnedTabs(tab);
       continue;
     }
     // Zen's drop rules for a drag within the Space.
-    if (IsPinnedInSpace(tab) && !InPinnedRun(index)) {
-      ClearPinnedState(tab);
-    } else if (!IsPinnedForUser(tab) && AbovePinnedTab(index)) {
+    if (IsPinnedInSpace(tab) && !InPinnedRun(first)) {
+      for (tabs::TabInterface* each : unit) {
+        ClearPinnedState(each);
+      }
+    } else if (!IsPinnedForUser(tab) && AbovePinnedTab(last)) {
       PinInSpace(tab);
     }
   }
@@ -708,23 +809,17 @@ void KoanPinnedTabController::TogglePin(tabs::TabInterface* tab) {
 }
 
 void KoanPinnedTabController::PinInSpace(tabs::TabInterface* tab) {
-  TabStripModel* model = tab_strip_model();
   if (tab->IsPinned()) {
     // An Essential moves to the pinned tabs of the active Space, keeping its
     // pinned URL (Zen's removeEssentials without unpinning).
-    base::AutoReset<bool> changing(&changing_pin_, true);
-    model->SetTabPinned(model->GetIndexOfTab(tab), false);
-    if (std::optional<tab_groups::TabGroupId> space =
-            model->GetFocusedGroup()) {
-      model->AddToExistingGroup({model->GetIndexOfTab(tab)}, *space);
-    }
+    SetEssential(tab, false);
   }
   for (tabs::TabInterface* each : WithSplit(tab)) {
     KoanTabState& state = GetOrCreateTabState(each->GetContents());
     InitPinnedState(each, state);
     state.pinned_in_space = true;
   }
-  MoveToPinnedSection(tab);
+  MoveAfterPinnedTabs(tab);
   for (tabs::TabInterface* each : WithSplit(tab)) {
     UpdateFreezingExemption(each);
     SaveTabState(each->GetContents());
@@ -736,54 +831,43 @@ void KoanPinnedTabController::UnpinFromSpace(tabs::TabInterface* tab) {
   if (!IsPinnedInSpace(tab)) {
     return;
   }
-  const std::vector<tabs::TabInterface*> tabs = WithSplit(tab);
-  for (tabs::TabInterface* each : tabs) {
+  for (tabs::TabInterface* each : WithSplit(tab)) {
     ClearPinnedState(each);
   }
   // Zen moves an unpinned tab to the top of the Space's other tabs.
-  TabStripModel* model = tab_strip_model();
-  const int index = model->GetIndexOfTab(tab);
-  const int last = LastPinnedInSection(index, tabs);
-  if (!tab->IsSplit() && last > index) {
-    model->MoveWebContentsAt(index, last, /*select_after_move=*/false);
-  }
+  MoveAfterPinnedTabs(tab);
 }
 
 void KoanPinnedTabController::AddToEssentials(tabs::TabInterface* tab) {
-  if (tab->IsPinned() || !CanAddToEssentials()) {
+  const std::vector<tabs::TabInterface*> tabs = WithSplit(tab);
+  if (tab->IsPinned() || !CanAddToEssentials(static_cast<int>(tabs.size()))) {
     return;
   }
-  KoanTabState& state = GetOrCreateTabState(tab->GetContents());
-  // A pinned tab keeps its pinned URL; any other tab is pinned on its
-  // current one.
-  state.pinned_in_space = false;
-  InitPinnedState(tab, state);
-  base::AutoReset<bool> changing(&changing_pin_, true);
-  tab_strip_model()->SetTabPinned(tab_strip_model()->GetIndexOfTab(tab), true);
-  SaveTabState(tab->GetContents());
-  UpdateTabRow(tab);
+  for (tabs::TabInterface* each : tabs) {
+    KoanTabState& state = GetOrCreateTabState(each->GetContents());
+    // A pinned tab keeps its pinned URL; any other tab is pinned on its
+    // current one.
+    state.pinned_in_space = false;
+    InitPinnedState(each, state);
+  }
+  SetEssential(tab, true);
+  for (tabs::TabInterface* each : tabs) {
+    UpdateFreezingExemption(each);
+    SaveTabState(each->GetContents());
+    UpdateTabRow(each);
+  }
 }
 
 void KoanPinnedTabController::RemoveFromEssentials(tabs::TabInterface* tab) {
   if (!tab->IsPinned()) {
     return;
   }
-  TabStripModel* model = tab_strip_model();
-  {
-    base::AutoReset<bool> changing(&changing_pin_, true);
-    model->SetTabPinned(model->GetIndexOfTab(tab), false);
-    if (std::optional<tab_groups::TabGroupId> space =
-            model->GetFocusedGroup()) {
-      model->AddToExistingGroup({model->GetIndexOfTab(tab)}, *space);
-    }
+  SetEssential(tab, false);
+  for (tabs::TabInterface* each : WithSplit(tab)) {
+    ClearPinnedState(each);
   }
-  ClearPinnedState(tab);
   // A normal tab: below the Space's pinned tabs.
-  const int index = model->GetIndexOfTab(tab);
-  const int last = LastPinnedInSection(index, {tab});
-  if (last > index) {
-    model->MoveWebContentsAt(index, last, /*select_after_move=*/false);
-  }
+  MoveAfterPinnedTabs(tab);
 }
 
 void KoanPinnedTabController::ResetToPinnedUrl(tabs::TabInterface* tab) {
@@ -800,7 +884,10 @@ void KoanPinnedTabController::ResetToPinnedUrl(tabs::TabInterface* tab) {
     UpdateTabRow(tab);
     return;
   }
-  state->reset_pending = false;
+  if (std::exchange(state->reset_pending, false)) {
+    // Done: the session mustn't reset it again on the next start.
+    SaveTabState(contents);
+  }
   content::NavigationController::LoadURLParams params(state->pinned_url);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
   // Zen keeps only the pinned entry in the tab's history.
@@ -1098,11 +1185,20 @@ void KoanPinnedTabController::OnTabStripModelChanged(
       for (const auto& inserted : change.GetInsert()->contents) {
         tabs::TabInterface* tab = inserted.tab;
         if (tab->IsPinned()) {
-          InitPinnedState(tab, GetOrCreateTabState(tab->GetContents()));
+          KoanTabState& state = GetOrCreateTabState(tab->GetContents());
+          // Saved once the session knows the tab (OnTabsAdded()).
+          state.unsaved |= InitPinnedState(tab, state);
           // A duplicated Essential may be one too many.
-          if (!CanAddToEssentials()) {
+          if (!CanAddToEssentials(0)) {
             ScheduleNormalize(tab);
           }
+        } else if (IsPinnedInSpace(tab) &&
+                   SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+          // Re-checked once the session is restored: at the end of its
+          // Space's pinned tabs if it isn't among them (e.g. quit right
+          // after a drag, before Normalize() ran).
+          GetOrCreateTabState(tab->GetContents()).changed_group = true;
+          ScheduleNormalize(tab);
         }
         added.push_back(tab->GetHandle());
         UpdateTabRow(tab);
@@ -1187,6 +1283,33 @@ void KoanPinnedTabController::OnTabPinnedStateChanged(tabs::TabInterface* tab,
   ScheduleNormalize(tab);
 }
 
+void KoanPinnedTabController::OnSplitTabChanged(const SplitTabChange& change) {
+  if (change.type != SplitTabChange::Type::kAdded &&
+      change.type != SplitTabChange::Type::kContentsChanged) {
+    return;
+  }
+  // The model can't be changed from its own notification.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KoanPinnedTabController::MatchSplitPinnedState,
+                                weak_factory_.GetWeakPtr(), change.split_id));
+}
+
+void KoanPinnedTabController::MatchSplitPinnedState(
+    split_tabs::SplitTabId split) {
+  split_tabs::SplitTabData* data = tab_strip_model()->GetSplitData(split);
+  if (!data) {
+    return;
+  }
+  const std::vector<tabs::TabInterface*> tabs = data->ListTabs();
+  // A split view made of a pinned tab and a normal one (e.g. Ctrl+Alt+V on
+  // the last pinned tab): pinned as one, like a split view Zen pins.
+  const bool any = std::ranges::any_of(tabs, &IsPinnedInSpace);
+  const bool all = std::ranges::all_of(tabs, &IsPinnedInSpace);
+  if (any && !all && !tabs.front()->IsPinned()) {
+    PinInSpace(tabs.front());
+  }
+}
+
 void KoanPinnedTabController::TabGroupedStateChanged(
     TabStripModel* tab_strip_model,
     std::optional<tab_groups::TabGroupId> old_group,
@@ -1265,7 +1388,12 @@ void AddPinnedTabMenuItems(TabMenuContext& context) {
       model->SetVisibleAt(*close_index, false);
     }
   }
-  // Upstream's (they leave pinned tabs open, see IsPinnedForUser()).
+  // Upstream's, tagged for tests (Close Other Tabs and Close Tabs Below
+  // leave pinned tabs open, see IsPinnedForUser()).
+  if (std::optional<size_t> duplicate =
+          model->GetIndexOfCommandId(TabStripModel::CommandDuplicate)) {
+    model->SetElementIdentifierAt(*duplicate, kKoanDuplicateMenuItem);
+  }
   if (std::optional<size_t> close_others =
           model->GetIndexOfCommandId(TabStripModel::CommandCloseOtherTabs)) {
     model->SetElementIdentifierAt(*close_others, kKoanCloseOtherTabsMenuItem);
@@ -1277,8 +1405,12 @@ void AddPinnedTabMenuItems(TabMenuContext& context) {
 
   // At the end, for one pinned tab: Zen's "Edit Pinned URL" submenu and
   // "Reset Pinned Tab".
-  if (pinned && (!tab_strip->IsTabSelected(index) ||
-                 tab_strip->selection_model().size() == 1)) {
+  // (A split view's tabs are selected together.)
+  const std::vector<tabs::TabInterface*> unit = WithSplitOf(tab_strip, tab);
+  if (pinned && std::ranges::all_of(TabsForCommand(tab_strip, tab),
+                                    [&](tabs::TabInterface* t) {
+                                      return std::ranges::contains(unit, t);
+                                    })) {
     model->AddSeparator(ui::NORMAL_SEPARATOR);
     ui::SimpleMenuModel* edit = context.AddSubmenu();
     InsertItem(edit, 0, kReplaceWithCurrentUrl, u"Replace with Current URL",
@@ -1305,7 +1437,8 @@ bool IsPinnedTabMenuCommandEnabled(const TabStripModel* tab_strip,
   }
   switch (command_id) {
     case kAddToEssentials:
-      return controller->CanAddToEssentials();
+      return controller->CanAddToEssentials(static_cast<int>(
+          WithSplitOf(controller->tab_strip_model(), tab).size()));
     case kUnload:
       return !IsPending(tab->GetContents());
     default:
@@ -1438,7 +1571,8 @@ void OnRestoringPinnedTab(
   const bool restore_to_pinned_url =
       from_session_restore &&
       profile->GetPrefs()->GetBoolean(prefs::kPinnedTabRestoreToPinnedUrl);
-  if (state.pinned_url.is_valid() && !at_pinned_url &&
+  // (At the pinned URL already: still only that entry, as after Zen's reset.)
+  if (state.pinned_url.is_valid() && (!at_pinned_url || entries.size() > 1) &&
       (state.reset_pending || restore_to_pinned_url)) {
     entries = PinnedUrlEntries(state.pinned_url, profile);
     selected_navigation = 0;

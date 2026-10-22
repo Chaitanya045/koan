@@ -5,7 +5,9 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_CONTROLLER_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_CONTROLLER_H_
 
+#include <map>
 #include <memory>
+#include <string>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -59,6 +61,8 @@ class KoanBrowserViewController : public views::ViewObserver {
   KoanGlanceController* glance() const { return glance_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
+  // Koan features' data for this window's session (koan_session_data.h).
+  std::map<std::string, std::string>& session_data() { return session_data_; }
 
   base::WeakPtr<KoanBrowserViewController> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -91,6 +95,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   std::unique_ptr<KoanShortcutController> shortcuts_;
   // Its commands run the shortcuts above.
   std::unique_ptr<KoanCommandPalette> command_palette_;
+  std::map<std::string, std::string> session_data_;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       observations_{this};
   base::WeakPtrFactory<KoanBrowserViewController> weak_factory_{this};

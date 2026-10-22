@@ -4,9 +4,13 @@
 // Remove from Essentials, Change Label…, Reset, Replace, Unload), pinned
 // tabs surviving Close Other Tabs, Close Tabs Below and Back with no
 // history, reopening a closed pinned tab, pinned tabs belonging to their
-// Space while Essentials show in all, and everything kept across restarts.
+// Space while Essentials show in all, split views pinned and unpinned as one
+// unit, and everything kept across restarts.
 //
 //   scripts/e2e/run.sh pinned
+//
+// The profile (prefs/pinned.json) turns off Zen's replace-newtab, so a new
+// Space (Ctrl+Alt+N) opens with a tab.
 import {
   browserCall, evalIn, settingsCall, tabMenuCommand, waitFor,
 } from './lib/koan.mjs';
@@ -84,10 +88,13 @@ async function uiSession() {
   return { ui, nodes, find, mouse, keyEvent, close: () => ui.close() };
 }
 
+// The tab rows in the order they show (top to bottom, then left to right
+// for Essentials): views of split tabs come after the others in the tree.
 async function rows() {
   const s = await uiSession();
   s.close();
-  return s.nodes.filter(n => n.cls === 'KoanTabRow');
+  return s.nodes.filter(n => n.cls === 'KoanTabRow')
+      .sort((a, b) => a.ay - b.ay || a.ax - b.ax);
 }
 
 // The tab row (KoanTabRow) whose pinned or current URL is `url`.
@@ -177,7 +184,7 @@ function check(name, ok, detail = '') {
 }
 
 const ALT = 1, CTRL = 2, SHIFT = 8;
-const VK = { D: 68, W: 87, T: 84, N: 78, LEFT: 37, ENTER: 13 };
+const VK = { D: 68, W: 87, T: 84, N: 78, V: 86, LEFT: 37, ENTER: 13 };
 
 const pageByUrl = async url => (await pages()).find(p => p.url === url);
 const isVisible = async page =>
@@ -446,6 +453,90 @@ await setBehavior('reset-unload-switch');
 await browserCall('Target.closeTarget', { targetId: settingsId });
 await sleep(1000);
 
+// --- A split view is one unit: never half pinned, kept whole by every pin
+// change (pin, unpin, Add to / Remove from Essentials). ---
+const X = n => `${PIN_URL}?x${n}`;
+// Only the pinned tabs in the Space first (the close behaviours above may
+// have opened a new tab page), so x1, once pinned, is followed by x2.
+for (const page of await pages()) {
+  if (!page.url.startsWith('https://example.com')) {
+    await browserCall('Target.closeTarget', { targetId: page.id });
+  }
+}
+for (const n of [1, 2, 3, 4, 5]) {
+  await browserCall('Target.createTarget', { url: X(n), background: true });
+}
+await sleep(2500);
+// The row of the tab showing `url`, and the tab view it decorates.
+const rowShowing = async url => (await rows()).find(r => r.p.Url === url);
+const tabShowing = async url => ({ nodeId: (await rowShowing(url))?.parent?.nodeId });
+// (One UI DevTools session at a time: it takes a single client.)
+const statesOf = async urls => {
+  const list = await rows();
+  return urls.map(url => {
+    const r = list.find(t => t.p.Url === url);
+    return r && { pinned: r.p.PinnedInSpace === 'true',
+                  essential: r.p.Essential === 'true', split: r.p.Split === 'true' };
+  });
+};
+const allAre = (states, want) => states.every(st => st &&
+    Object.entries(want).every(([k, v]) => st[k] === v));
+// The Space's tabs in order (no Essentials): whether each is pinned. Pinned
+// tabs must come first.
+const pinnedRunOk = async () => {
+  const flags = (await rows()).filter(r => r.path.includes('UnpinnedTabContainerView'))
+      .map(r => r.p.PinnedInSpace === 'true');
+  return flags.indexOf(false) === -1 || !flags.slice(flags.indexOf(false)).includes(true);
+};
+const sidebarOrder = async () => (await rows())
+    .filter(r => r.path.includes('UnpinnedTabContainerView')).map(r => r.p.Url);
+
+// Pin x1, then split it with the normal tab after it (Ctrl+Alt+V): both pinned.
+await activate(await pageByUrl(X(1)));
+await keyTo(await pageByUrl(X(1)), VK.D, CTRL | SHIFT, 'd');
+await keyTo(await pageByUrl(X(1)), VK.V, CTRL | ALT, 'v');
+await sleep(1000);
+let st = await statesOf([X(1), X(2)]);
+check('Splitting a pinned tab with a normal one pins the split view as one',
+      allAre(st, { pinned: true, split: true }), JSON.stringify(st));
+// Split x4 + x5 (normal tabs below x3) and pin them: they go right after the
+// pinned split, which stays whole (upstream CHECKs a move between its tabs).
+await activate(await pageByUrl(X(4)));
+await keyTo(await pageByUrl(X(4)), VK.V, CTRL | ALT, 'v');
+await keyTo(await pageByUrl(X(4)), VK.D, CTRL | SHIFT, 'd');
+await sleep(1000);
+st = await statesOf([X(1), X(2), X(4), X(5)]);
+let order = (await sidebarOrder()).filter(u => u.includes('?x'));
+check('Pinning a split view next to a pinned split keeps both whole, pinned in order',
+      allAre(st, { pinned: true, split: true }) &&
+      JSON.stringify(order) === JSON.stringify([X(1), X(2), X(4), X(5), X(3)]),
+      JSON.stringify({ st, order }));
+// Unpin x1's split: both leave the pinned tabs, together, below them.
+await activate(await pageByUrl(X(1)));
+await keyTo(await pageByUrl(X(1)), VK.D, CTRL | SHIFT, 'd');
+await sleep(1000);
+st = await statesOf([X(1), X(2)]);
+order = (await sidebarOrder()).filter(u => u.includes('?x'));
+check('Unpinning a split view unpins both and moves them below the pinned tabs',
+      allAre(st, { pinned: false, split: true }) && await pinnedRunOk() &&
+      JSON.stringify(order) === JSON.stringify([X(4), X(5), X(1), X(2), X(3)]),
+      JSON.stringify({ st, order }));
+// Add to Essentials / Remove from Essentials take the split along, whole.
+await tabMenuCommand(await tabShowing(X(1)), 'kKoanAddToEssentialsMenuItem');
+st = await statesOf([X(1), X(2)]);
+check('"Add to Essentials" on a split view makes both Essentials, still split',
+      allAre(st, { essential: true, split: true }), JSON.stringify(st));
+await tabMenuCommand(await tabShowing(X(1)), 'kKoanRemoveFromEssentialsMenuItem');
+st = await statesOf([X(1), X(2)]);
+check('...and "Remove from Essentials" makes both normal tabs again, still split',
+      allAre(st, { essential: false, pinned: false, split: true }) && await pinnedRunOk(),
+      JSON.stringify({ st, order: await sidebarOrder() }));
+for (const n of [1, 2, 3, 4, 5]) {
+  const page = await pageByUrl(X(n));
+  if (page) await browserCall('Target.closeTarget', { targetId: page.id });
+}
+await sleep(1500);
+
 // --- Pinned tabs belong to their Space; Essentials show in every Space. ---
 const essentialRow = async () =>
   (await rows()).find(t => t.path.includes('PinnedTabContainerView'));
@@ -497,9 +588,43 @@ async function relaunch() {
 }
 
 if (profileDir) {
+  // A reset of an unloaded tab, done once it is shown, isn't done again on
+  // the next start: unload the pinned tab away from its pinned URL, reset it
+  // from the menu (it stays unloaded), select it (it loads the pinned URL).
+  await activate(await pageByUrl(PIN_URL));
+  await navigate(await pageByUrl(PIN_URL), AWAY_URL);
+  await tabMenuCommand(await tabShowing(AWAY_URL), 'kKoanUnloadMenuItem');
+  unloaded.add(AWAY_URL);
+  await tabMenuCommand(await tabShowing(AWAY_URL), 'kKoanResetPinnedTabMenuItem');
+  pinned = await rowShowing(AWAY_URL);
+  check('"Reset Pinned Tab" on an unloaded tab leaves it unloaded',
+        pinned?.p.Discarded === 'true', JSON.stringify(pinned?.p.Discarded));
+  await activate(await pageByUrl(AWAY_URL));
+  unloaded.clear();
+  await sleep(1500);
+  check('...and selecting it goes to the pinned URL', !!await rowShowing(PIN_URL),
+        JSON.stringify((await rows()).map(t => t.p.Url)));
+
+  // An Essential's duplicate is an Essential whose pinned URL is the page it
+  // was duplicated on, kept across the restart while it is away from it.
+  const ESSENTIAL_PINNED = (await essentialRow()).p.PinnedUrl;
+  const DUP_URL = `${ESSENTIAL_PINNED}&dup`;
+  await activate(await pageByUrl(ESSENTIAL_PINNED));
+  await navigate(await pageByUrl(ESSENTIAL_PINNED), DUP_URL);
+  const pagesBefore = new Set((await pages()).map(p => p.id));
+  await tabMenuCommand(await tabShowing(DUP_URL), 'kKoanDuplicateMenuItem');
+  await sleep(1500);
+  const dup = (await pages()).find(p => !pagesBefore.has(p.id));
+  const dupRow = (await rows()).filter(r => r.p.Essential === 'true' &&
+                                            r.p.PinnedUrl === DUP_URL);
+  check('Duplicating an Essential makes an Essential pinned on that page',
+        !!dup && dupRow.length === 1, JSON.stringify((await rows()).map(r => r.p.PinnedUrl)));
+  if (dup) await navigate(dup, `${DUP_URL}&away`);
+  // The original back at its pinned URL for the checks below.
+  await navigate(await pageByUrl(DUP_URL), ESSENTIAL_PINNED);
   await navigate((await pages()).find(p => p.url === PIN_URL), AWAY_URL);
   // The Essential away from its pinned URL too.
-  const ESSENTIAL_URL = (await essentialRow()).p.PinnedUrl;
+  const ESSENTIAL_URL = ESSENTIAL_PINNED;
   await activate(await pageByUrl(ESSENTIAL_URL));
   await navigate(await pageByUrl(ESSENTIAL_URL), `${ESSENTIAL_URL}&away`);
   const before = (await rows()).map(t => `${t.p.PinnedUrl}|${t.p.Url}`).sort();
@@ -510,7 +635,9 @@ if (profileDir) {
   check('A restart brings back the same tabs, none twice',
         JSON.stringify(before) === JSON.stringify(after),
         `${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
-  const essentialAfter = await essentialRow();
+  const essentialWith = async url => (await rows()).find(
+      t => t.path.includes('PinnedTabContainerView') && t.p.PinnedUrl === url);
+  const essentialAfter = await essentialWith(ESSENTIAL_URL);
   check('...the Essential keeps its pinned URL while away from it',
         essentialAfter?.p.PinnedUrl === ESSENTIAL_URL &&
         essentialAfter.p.AwayFromPinnedUrl === 'true',
@@ -522,9 +649,16 @@ if (profileDir) {
   const restoredEssential = s.nodes.find(n => n.cls === 'KoanTabRow' &&
                                               n.path.includes('PinnedTabContainerView'));
   s.close();
-  check('After a restart the pinned tab keeps its pinned URL',
-        pinned?.p.PinnedInSpace === 'true' && pinned.p.AwayFromPinnedUrl === 'true',
-        JSON.stringify(pinned && { away: pinned.p.AwayFromPinnedUrl, inSpace: pinned.p.PinnedInSpace }));
+  check('After a restart the pinned tab keeps its pinned URL, and its page ' +
+        '(the reset done before isn\'t done again)',
+        pinned?.p.PinnedInSpace === 'true' && pinned.p.AwayFromPinnedUrl === 'true' &&
+        pinned.p.Url === AWAY_URL,
+        JSON.stringify(pinned && { away: pinned.p.AwayFromPinnedUrl, url: pinned.p.Url,
+                                   inSpace: pinned.p.PinnedInSpace }));
+  const dupAfter = (await rows()).find(r => r.p.Url === `${DUP_URL}&away`);
+  check('...and the Essential\'s duplicate keeps the pinned URL it got',
+        dupAfter?.p.Essential === 'true' && dupAfter.p.PinnedUrl === DUP_URL,
+        JSON.stringify(dupAfter && { pinned: dupAfter.p.PinnedUrl, essential: dupAfter.p.Essential }));
   check('...and its label', restoredTitle?.p.Text === 'Mail',
         JSON.stringify(restoredTitle?.p.Text));
   check('...and the Essential stays an Essential', !!restoredEssential,
@@ -543,7 +677,7 @@ if (profileDir) {
   check('With restore_to_pinned_url, it comes back at its pinned URL',
         pinned?.p.AwayFromPinnedUrl === 'false' && pinned.p.Url === PIN_URL,
         JSON.stringify(pinned && { away: pinned.p.AwayFromPinnedUrl, url: pinned.p.Url }));
-  const essentialRestored = await essentialRow();
+  const essentialRestored = await essentialWith(ESSENTIAL_URL);
   check('...and so does the Essential', essentialRestored?.p.Url === ESSENTIAL_URL,
         JSON.stringify(essentialRestored?.p.Url));
 }

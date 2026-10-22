@@ -16,7 +16,9 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/split_tabs/split_tab_id.h"
 #include "components/tabs/public/tab_interface.h"
+#include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
 #include "ui/base/models/image_model.h"
 #include "url/gurl.h"
@@ -66,7 +68,11 @@ struct KoanTabState {
   // Set while upstream or a drag moves the tab: re-checked once things
   // settle (KoanPinnedTabController::Normalize()).
   bool was_essential = false;
+  // Moved to another Space, or restored: back at the end of its Space's
+  // pinned tabs if it isn't among them.
   bool changed_group = false;
+  // Got its pinned URL when it was added, before the session knew the tab.
+  bool unsaved = false;
 
   bool empty() const;
   std::string Serialize() const;
@@ -94,7 +100,7 @@ bool ExecutePinnedTabMenuCommand(TabStripModel* tab_strip,
                                  int index,
                                  int command_id);
 
-// Pinned tabs' key in a tab's session data (koan_tab_session_data.h), and
+// Pinned tabs' key in a tab's session data (koan_session_data.h), and
 // their TabRestoreHook: a pinned tab comes back at its pinned URL after a
 // reset it didn't load for, and on startup with Zen's
 // zen.pinned-tab-manager.restore-pinned-tabs-to-pinned-url.
@@ -132,12 +138,14 @@ class KoanPinnedTabController : public TabStripModelObserver {
 
   TabStripModel* tab_strip_model() const;
   int EssentialsCount() const;
-  bool CanAddToEssentials() const;
+  // Whether `count` more Essentials fit (a split view adds two).
+  bool CanAddToEssentials(int count = 1) const;
 
   // Ctrl+Shift+D and the menu's Pin / Unpin: an Essential leaves the
   // Essentials, a pinned tab is unpinned, any other tab is pinned to its
-  // Space. A tab in a split view takes the other tab of the split along, as
-  // in Zen.
+  // Space. A split view is one unit everywhere, as in Zen: these and the
+  // Essentials' operations take the other tab of the split along, and a
+  // split's tabs are never one pinned and one not.
   void TogglePin(tabs::TabInterface* tab);
   void PinInSpace(tabs::TabInterface* tab);
   void UnpinFromSpace(tabs::TabInterface* tab);
@@ -188,6 +196,7 @@ class KoanPinnedTabController : public TabStripModelObserver {
   void OnTabChangedAt(tabs::TabInterface* tab,
                       TabChangeType change_type) override;
   void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
+  void OnSplitTabChanged(const SplitTabChange& change) override;
   void TabGroupedStateChanged(TabStripModel* tab_strip_model,
                               std::optional<tab_groups::TabGroupId> old_group,
                               std::optional<tab_groups::TabGroupId> new_group,
@@ -197,8 +206,9 @@ class KoanPinnedTabController : public TabStripModelObserver {
  private:
   class DiscardAfterReset;
 
-  // Remembers the current URL and icon as the pinned ones.
-  void InitPinnedState(tabs::TabInterface* tab, KoanTabState& state);
+  // Remembers the current URL and icon as the pinned ones, unless it has a
+  // pinned URL already. Returns whether it set them.
+  bool InitPinnedState(tabs::TabInterface* tab, KoanTabState& state);
   // Looks the pinned URL's icon up in the favicon database.
   void FetchPinnedIcon(content::WebContents* contents);
   // `tab`, or both tabs of its split view.
@@ -214,9 +224,16 @@ class KoanPinnedTabController : public TabStripModelObserver {
   // section (they are all before it), or above one of them.
   bool InPinnedRun(int index) const;
   bool AbovePinnedTab(int index) const;
-  // Moves `tab` (with its split) to the end of the pinned tabs at the top of
-  // its Space.
-  void MoveToPinnedSection(tabs::TabInterface* tab);
+  // Moves `tab` (with its split) right after the other pinned tabs at the
+  // top of its Space: to the end of them when it is pinned, to the top of
+  // the normal tabs when it isn't.
+  void MoveAfterPinnedTabs(tabs::TabInterface* tab);
+  // Makes `tab` (with its split, kept together) an Essential, or moves it
+  // out of the Essentials into the active Space. Its Koan state is the
+  // caller's.
+  void SetEssential(tabs::TabInterface* tab, bool essential);
+  // A new split view of a pinned tab and a normal one: pins both.
+  void MatchSplitPinnedState(split_tabs::SplitTabId split);
   // After tabs were added or their contents replaced: keeps pinned tabs
   // exempt from freezing, and tabs opened inside the pinned section below
   // it.

@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/sessions/session_restore.cc
+index fc663dce344551ad3fb8a3ac820f5cab8605d49a..5b82177b55fd788ce8295a5c5b7af5f7760fb4a5 100644
+--- a/chrome/browser/sessions/session_restore.cc
++++ b/chrome/browser/sessions/session_restore.cc
+@@ -115,6 +115,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/common/extension_set.h"
++#include "koan/browser/ui/views/koan_session_data.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/window_open_disposition.h"
+@@ -1399,6 +1400,9 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+     base::TimeTicks now = base::TimeTicks::Now();
+     BrowserWindowInterface* browser_window =
+         CreateBrowserWindow(std::move(params));
++    // Koan: its features' per-window data (koan_session_data.h).
++    koan::OnRestoringWindow(browser_window, extra_data,
++                            /*from_session_restore=*/true);
+     if (auto* manager =
+             InitialWebUIWindowMetricsManager::From(browser_window)) {
+       manager->SetWindowCreationInfo(
