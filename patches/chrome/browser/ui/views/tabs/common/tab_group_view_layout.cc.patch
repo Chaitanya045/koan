@@ -1,23 +1,51 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-index 6fa2cecd5166050e7634f97a6ceb6dd2831d5d0e..74efc6693f0dda63d6e0340bda4d8a6a29eac3dc 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
 @@ -19,6 +19,7 @@
  #include "chrome/browser/ui/views/tabs/common/tab_strip_layout_utils.h"
  #include "chrome/browser/ui/views/tabs/common/tab_view.h"
  #include "components/tabs/public/tab_group.h"
-+#include "koan/browser/koan_features.h"
++#include "koan/browser/ui/views/koan_spaces.h"
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
  #include "ui/views/view.h"
-@@ -86,7 +87,9 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -85,8 +86,13 @@
+         GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding));
    }
  
++  // Koan Spaces: a Space is the focused group, and Koan's Space header
++  // replaces the group's header and the "Unfocus" pill.
++  const bool koan_space = tab_group_view->IsGroupFocused() &&
++                          koan::ShowsSpaceHeader(tab_group_view);
++
    if (tab_group_view->unfocus_header_) {
 -    if (tab_group_view->IsGroupFocused()) {
-+    // Koan workspaces: the sidebar switcher replaces the "Unfocus" pill.
-+    if (tab_group_view->IsGroupFocused() &&
-+        !koan::features::IsWorkspacesEnabled()) {
++    if (tab_group_view->IsGroupFocused() && !koan_space) {
        gfx::Rect unfocus_bounds;
        unfocus_bounds.set_x(header_bounds.x());
        unfocus_bounds.set_y(height);
+@@ -113,12 +119,18 @@
+     header_bounds.set_width(size_bounds.width().value() - header_bounds.x());
+   }
+ 
+-  layouts.child_layouts.emplace_back(
+-      tab_group_view->group_header_.get(),
+-      tab_group_view->group_header_->GetVisible(), header_bounds);
+-
+-  height +=
+-      header_bounds.height() + kGroupHeaderVerticalMargin + kTabVerticalPadding;
++  // A Space's is hidden, not just empty: upstream's header is keyboard and
++  // screen reader reachable, and its editor could ungroup or close the
++  // Space. (Nothing else hides the header, so its visibility comes from
++  // here, not from the view, which this hid.)
++  layouts.child_layouts.emplace_back(tab_group_view->group_header_.get(),
++                                     !koan_space,
++                                     koan_space ? gfx::Rect() : header_bounds);
++
++  if (!koan_space) {
++    height += header_bounds.height() + kGroupHeaderVerticalMargin +
++              kTabVerticalPadding;
++  }
+   width = std::max(width, header_bounds.width() + header_bounds.x());
+ 
+   // If the tab strip is not collapsed then the group line is below and left

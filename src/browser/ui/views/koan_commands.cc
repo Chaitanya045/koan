@@ -13,19 +13,15 @@
 #include "base/check.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/functional/bind.h"
-#include "base/strings/string_number_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/tab_groups/tab_group_id.h"
-#include "components/tab_groups/tab_group_visual_data.h"
-#include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "koan/browser/koan_features.h"
@@ -278,8 +274,9 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
   }
   commands.push_back(ShortcutCommand(controller, "new-space", u"New Space",
                                      kAddIcon, Action::kNewWorkspace));
-  const std::vector<tab_groups::TabGroupId> ids = workspaces->GetWorkspaces();
-  if (ids.size() > 1) {
+  const std::vector<KoanWorkspaceController::SpaceInfo> spaces =
+      workspaces->GetSpaces();
+  if (spaces.size() > 1) {
     commands.push_back(ShortcutCommand(controller, "next-space", u"Next Space",
                                        vector_icons::kArrowForwardIcon,
                                        Action::kWorkspaceForward));
@@ -288,23 +285,15 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
         vector_icons::kArrowBackIcon, Action::kWorkspaceBackward));
   }
   // Zen: "Focus on" each other Space, matched by the Space's name.
-  const std::optional<tab_groups::TabGroupId> active =
-      workspaces->GetActiveWorkspace();
-  const TabGroupModel* groups = workspaces->tab_strip_model()->group_model();
-  int number = 0;
-  for (const tab_groups::TabGroupId& id : ids) {
-    ++number;
-    if (id == active) {
+  for (const KoanWorkspaceController::SpaceInfo& space : spaces) {
+    if (space.active) {
       continue;
     }
+    const tab_groups::TabGroupId id = space.id;
     KoanCommand command =
         MakeCommand("focus-space:" + id.ToString(), u"Focus on",
                     vector_icons::kArrowForwardIcon);
-    command.target = groups->GetTabGroup(id)->visual_data()->title();
-    if (command.target.empty()) {
-      // As in the Space switcher.
-      command.target = u"Workspace " + base::NumberToString16(number);
-    }
+    command.target = space.name;
     command.run = base::BindRepeating(
         [](tab_groups::TabGroupId id, KoanBrowserViewController& controller) {
           controller.workspaces()->SwitchTo(id);

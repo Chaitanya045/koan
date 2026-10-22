@@ -1,7 +1,7 @@
 // End-to-end test of Zen's sidebar tab list: the "+ New Tab" row above the
 // unpinned tabs (opening tabs at the top; no "+" button at the bottom), the
 // separator with Zen's Clear button that closes the unpinned tabs (keeping
-// the selected one and the workspace, undone with Ctrl+Shift+T), the "Tabs
+// the selected one and the Space, undone with Ctrl+Shift+T), the "Tabs
 // Closed!" toast, Zen's tab row and Essentials tile sizes, the collapsed
 // sidebar, and switching to horizontal tabs and back.
 //
@@ -168,12 +168,11 @@ function check(name, ok, detail = '') {
   if (!ok) failures++;
 }
 
-const ALT = 1, CTRL = 2, SHIFT = 8;
-const VK = { D: 68, N: 78, T: 84, LEFT: 37 };
+const CTRL = 2, SHIFT = 8;
+const VK = { D: 68, T: 84 };
 // The views inside the pinned (Essentials) or the unpinned tab container.
 const inContainer = (vs, cls, container) =>
   vs.filter(v => v.cls === cls && v.shown && v.path.includes(container));
-const workspaceButtons = vs => vs.filter(v => v.cls === 'KoanWorkspaceButton' && v.shown);
 
 // Two tabs with the local test page, nothing pinned.
 {
@@ -249,18 +248,17 @@ check('...and the separator sits below them',
       clear?.shown && tiles[0] && clear.y >= tiles[0].y + tiles[0].h,
       `tile bottom ${tiles[0]?.y + tiles[0]?.h}, separator ${clear?.y}`);
 
-// Clear: the selected tab is the pinned one, so both test page tabs go.
+// Clear: the selected tab is the pinned one, so both test page tabs go, and
+// the Space, like Zen's, stays: with a fresh tab.
 await click(find(vs, 'KoanClearButton'));
 const toast = await sizeOf('KoanToastView');
-check('Clear closes the unpinned tabs', (await pages()) === 1, `${await pages()} page(s)`);
+check('Clear closes the unpinned tabs, leaving the Space a fresh tab',
+      (await pages()) === 2, `${await pages()} page(s)`);
 check('...and toasts "Tabs Closed!"', toast?.visible && toast.h === 42 && toast.w > 0,
       JSON.stringify(toast));
 vs = await views();
-clear = find(vs, 'KoanClearTabsRow');
-check('No separator without unpinned tabs', clear && !clear.shown,
-      JSON.stringify(clear && { shown: clear.shown }));
 await key(VK.T, CTRL | SHIFT, 't');
-check('Ctrl+Shift+T brings a closed tab back', (await pages()) === 2,
+check('Ctrl+Shift+T brings a closed tab back', (await pages()) === 3,
       `${await pages()} page(s)`);
 
 // Two new tabs; Clear keeps the selected one, like Zen.
@@ -268,7 +266,7 @@ await click(find(await views(), 'KoanNewTabRow'));
 await click(find(await views(), 'KoanNewTabRow'));
 before = await pages();
 await click(find(await views(), 'KoanClearButton'));
-check('Clear keeps the selected tab', before === 4 && (await pages()) === 2,
+check('Clear keeps the selected tab', before === 5 && (await pages()) === 2,
       `${before} -> ${await pages()}`);
 
 // Collapsed, upstream's separator is the only line. (Collapsing leaves
@@ -300,39 +298,18 @@ check('Back to vertical tabs: the rows are back',
       find(vs, 'KoanSidebarTabRowsView')?.shown && find(vs, 'KoanNewTabRow')?.shown &&
       !find(vs, 'NewTabButton')?.shown);
 
-// In a workspace with an Essential selected, Clear empties the workspace but
-// keeps it, with a fresh tab.
-await key(VK.N, CTRL | ALT, 'n');
+// In a Space with an Essential selected, Clear empties the Space but keeps
+// it, with a fresh tab. (A window always shows one Space.)
 await click(find(await views(), 'KoanNewTabRow'));
 vs = await views();
-const spaces = workspaceButtons(vs).length;
+const space = find(vs, 'KoanSpaceHeaderView');
 await click(inContainer(vs, 'TabView', 'PinnedTabContainerView')[0]);
 await click(find(await views(), 'KoanClearButton'));
 vs = await views();
 const left = inContainer(vs, 'TabView', 'UnpinnedTabContainerView');
-check('Clear in a workspace keeps the workspace',
-      workspaceButtons(vs).length === spaces && left.length === 1,
-      `${spaces} -> ${workspaceButtons(vs).length} switcher buttons, ${left.length} tab(s) left`);
-
-// In the "all tabs" view, Clear closes the tabs in no workspace and leaves
-// the workspaces' tabs alone. With an Essential selected it closes them all.
-await key(VK.LEFT, CTRL | ALT);
-await click(find(await views(), 'KoanNewTabRow'));
-vs = await views();
-await click(inContainer(vs, 'TabView', 'PinnedTabContainerView')[0]);
-const button = find(await views(), 'KoanClearButton');
-check('In the all-tabs view, Clear shows with tabs in no workspace',
-      button?.shown === true, JSON.stringify(button && { shown: button.shown }));
-await click(button);
-const allToast = await sizeOf('KoanToastView');
-vs = await views();
-check('...closes them (the toast shows) and keeps every workspace',
-      allToast?.visible && workspaceButtons(vs).length === spaces,
-      `toast ${JSON.stringify(allToast)}, ${spaces} -> ${workspaceButtons(vs).length} switcher buttons`);
-clear = find(vs, 'KoanClearTabsRow');
-check('...and keeps the line above the workspaces\' tabs, without Clear',
-      clear?.shown && !find(vs, 'KoanClearButton')?.shown,
-      JSON.stringify({ row: clear?.shown, button: find(vs, 'KoanClearButton')?.shown }));
+check('Clear in a Space keeps the Space, with a fresh tab',
+      space?.shown && find(vs, 'KoanSpaceHeaderView')?.shown && left.length === 1,
+      `${left.length} tab(s) left`);
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);

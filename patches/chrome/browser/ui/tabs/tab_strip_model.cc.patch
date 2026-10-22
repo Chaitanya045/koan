@@ -1,17 +1,41 @@
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index bb705dccfe5d2a94be68f28a088751486b550f87..1b8c9f6849e6e5a16cbb07df65cc06097aaf6ddb 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -117,6 +117,8 @@
+@@ -117,6 +117,9 @@
  #include "content/public/browser/render_widget_host_view.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/common/url_constants.h"
 +#include "koan/browser/koan_tab_hooks.h"
++#include "koan/browser/ui/views/koan_spaces.h"
 +#include "koan/browser/ui/views/koan_split_view.h"
  #include "media/base/media_switches.h"
  #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
  #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
-@@ -2687,6 +2689,11 @@ bool TabStripModel::IsContextMenuCommandEnabled(
+@@ -2258,6 +2261,10 @@
+         (new_selection_model.active_tab() &&
+          new_selection_model.active_tab()->GetGroup() != group)) {
+       tabs::TabInterface* first_in_group = tab_group->GetFirstTab();
++      // Koan: Zen shows a Space on its last active tab.
++      if (tabs::TabInterface* last = koan::PickSpaceTab(this, group)) {
++        first_in_group = last;
++      }
+       if (first_in_group->IsSplit()) {
+         for (tabs::TabInterface* split_tab :
+              GetSplitData(first_in_group->GetSplit().value())->ListTabs()) {
+@@ -2342,6 +2349,12 @@
+   }
+ 
+   auto it = std::ranges::find(groups_in_order, *current_focused_group);
++  // Koan: Zen's Spaces wrap around past the last and first one.
++  if (it != groups_in_order.end() && koan::WrapsSpaces(this) &&
++      *it == (forward ? groups_in_order.back() : groups_in_order.front())) {
++    EnterFocusMode(forward ? groups_in_order.front() : groups_in_order.back());
++    return;
++  }
+   if (it == groups_in_order.end()) {
+     ExitFocusMode();
+     return;
+@@ -2687,6 +2700,11 @@
      return false;
    }
  
@@ -23,7 +47,7 @@ index bb705dccfe5d2a94be68f28a088751486b550f87..1b8c9f6849e6e5a16cbb07df65cc0609
    switch (command_id) {
      case CommandNewTabToRight:
      case CommandCloseTab:
-@@ -2831,6 +2838,11 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
+@@ -2831,6 +2849,11 @@
    if (!ContainsIndex(context_index)) {
      return;
    }
@@ -35,7 +59,17 @@ index bb705dccfe5d2a94be68f28a088751486b550f87..1b8c9f6849e6e5a16cbb07df65cc0609
    switch (command_id) {
      case CommandNewTabToRight: {
        base::UmaHistogramCounts1000(
-@@ -5966,6 +5978,16 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
+@@ -4352,7 +4375,8 @@
+     OnChange(TabStripModelChange(TabStripModelChange::SelectionOnly()),
+              selection);
+ 
+-    if (exited_focus) {
++    // Koan: switching Spaces leaves the old Space's focus; no toast.
++    if (exited_focus && koan::ShowsFocusExitedToast(profile())) {
+       if (ToastController* const toast_controller =
+               ToastController::From(delegate_->GetBrowserWindowInterface())) {
+         ToastParams params(ToastId::kTabGroupFocusExited);
+@@ -5966,6 +5990,16 @@
        }
      }
  

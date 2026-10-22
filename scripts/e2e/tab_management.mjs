@@ -1,18 +1,19 @@
 // End-to-end test of Zen's Tab Management settings against a real build:
 // Back in a tab with no history closes it and returns to its opener;
-// closing a tab selects the most recently used one (also in workspaces and
-// past collapsed groups); Ctrl+Tab can stay within the Essentials or the
-// other tabs, defers to Chromium's recently used order, and leaves popups
-// alone. Each with its setting on and off (set through
-// chrome://koan-settings' handler).
+// closing a tab selects the most recently used one (also in Spaces, and
+// past collapsed groups in a private window, which has tab groups instead
+// of Spaces); Ctrl+Tab can stay within the Essentials or the other tabs,
+// defers to Chromium's recently used order, and leaves popups alone. Each
+// with its setting on and off (set through chrome://koan-settings'
+// handler).
 //
 //   scripts/e2e/run.sh tab_management
 import {
-  ALT, CTRL, SHIFT, browserCall, check, click, clickView, evalIn, finish,
-  front, key, onPage, pages, settingsCall, sleep, views, waitFor,
+  ALT, CTRL, SHIFT, browserCall, check, click, createSpace, evalIn, finish,
+  front, key, onPage, pages, settingsCall, sleep, viewMouse, viewTree, waitFor,
 } from './lib/koan.mjs';
 
-const VK = { T: 84, W: 87, D: 68, N: 78, TAB: 9, LEFT: 37, PGUP: 33, PGDN: 34 };
+const VK = { T: 84, W: 87, D: 68, P: 80, X: 88, TAB: 9, LEFT: 37, PGUP: 33, PGDN: 34 };
 
 const [opener] = await pages();
 
@@ -158,15 +159,10 @@ check('A popup window passes Ctrl+PgDn and Ctrl+Tab to its page',
 await browserCall('Target.closeTarget', { targetId: popup.id });
 await setPref('koan.tabs.ctrl_tab_within_kind', false);
 
-// Tabs shown in the sidebar (collapsed and hidden ones have no height).
-const shownTabs = async () =>
-  (await views()).filter(v => v.cls === 'TabView' && v.shown && v.h > 1).length;
-const allTabsBase = await shownTabs();
-
-// Workspaces: closing picks among the workspace's tabs and the Essentials.
+// Spaces: closing picks among the Space's tabs and the Essentials.
 async function newWorkspace(name, from) {
   const before = new Set((await pages()).map(p => p.id));
-  await key(from, VK.N, CTRL | ALT, 'n');
+  await createSpace(from, name);
   const tab = await waitFor(async () => (await pages()).find(p => !before.has(p.id)));
   await onPage(tab, c => c.send('Page.navigate',
       { url: `data:text/html,${encodeURIComponent(`<title>${name}</title>`)}` }));
@@ -183,7 +179,7 @@ await front(w3);
 await key(w3, VK.W, CTRL, 'w');
 const remaining = () => [opener, b, c, w1, w2];
 now = await waitFor(() => activeOf(remaining()));
-check('In a workspace, closing selects its most recently used tab',
+check('In a Space, closing selects its most recently used tab',
       now?.id === w1.id, now ? await title(now) : 'none');
 const w4 = await newTab('W4', w1);
 await front(opener);
@@ -197,27 +193,44 @@ check('...or an Essential, if that was used last',
 const x1 = await newWorkspace('X1', opener);
 await key(x1, VK.W, CTRL, 'w');
 now = await waitFor(() => activeOf(remaining()));
-check('Closing the last tab of a workspace selects the most recently used Essential',
+check('Closing the last tab of a Space selects the most recently used Essential',
       now?.id === opener.id, now ? await title(now) : 'none');
 
-// Collapsed groups are skipped: in "All tabs", collapse workspace 1.
-// From the first workspace, Ctrl+Alt+Left shows all tabs.
-for (let i = 0; i < 2 && await shownTabs() !== allTabsBase + 2; i++) {
-  await key(opener, VK.LEFT, CTRL | ALT, 'ArrowLeft');
-  await sleep(500);
-}
-check('All tabs are shown again', await shownTabs() === allTabsBase + 2,
-      `${await shownTabs()} tabs`);
-await front(b);
-await front(w1);
-await front(c);
-await clickView('TabGroupHeaderView');
-check('Clicking the workspace\'s header collapses it',
-      await waitFor(async () => await shownTabs() === allTabsBase),
-      `${await shownTabs()} tabs`);
-await key(c, VK.W, CTRL, 'w');
-now = await waitFor(() => activeOf([opener, b, w1, w2]));
-check('Closing skips tabs in a collapsed group',
-      now?.id === b.id, now ? await title(now) : 'none');
+// A private window has no Spaces, so Chromium's tab groups: a focused group
+// keeps its header, and closing a tab skips collapsed groups.
+const opened = async action => {
+  const before = new Set((await pages()).map(p => p.id));
+  await action();
+  return waitFor(async () => (await pages()).find(p => !before.has(p.id)));
+};
+// Group headers on screen (a Space's is hidden: it has no height).
+const shownHeaders = async () => (await viewTree())
+    .filter(v => v.cls === 'TabGroupHeaderView' && v.shown && v.h > 0);
+const headers = async () => (await shownHeaders()).length;
+const p1 = await opened(() => key(opener, VK.P, CTRL | SHIFT, 'p'));
+// Chromium's Shift+Alt+P: a new tab in a new group (in a Spaces window it
+// would be a new Space).
+const g1 = await opened(() => key(p1, VK.P, SHIFT | ALT, 'p'));
+check('A private window has tab groups', !!g1 && await headers() === 1,
+      `${await headers()} group header(s)`);
+await key(g1, VK.X, SHIFT | ALT, 'x');  // focus the group
+await sleep(1000);
+check('...and a focused group keeps its header', await headers() === 1,
+      `${await headers()} group header(s)`);
+await key(g1, VK.X, SHIFT | ALT, 'x');  // past the only group: unfocus
+await sleep(1000);
+await front(p1);
+const p2 = await opened(() => key(p1, VK.T, CTRL, 't'));
+await front(p1);
+await front(g1);
+await front(p2);
+const [groupHeader] = await shownHeaders();
+await viewMouse(groupHeader, 'mousePressed', 10, 10);  // collapse
+await viewMouse(groupHeader, 'mouseReleased', 10, 10);
+await sleep(1000);
+await key(p2, VK.W, CTRL, 'w');
+now = await waitFor(() => activeOf([p1, g1]));
+check('Closing skips tabs in a collapsed group', now?.id === p1.id,
+      now?.id === g1.id ? 'the collapsed group\'s tab' : 'none');
 
 finish();

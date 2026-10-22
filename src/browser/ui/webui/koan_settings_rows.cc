@@ -169,7 +169,7 @@ constexpr Row kRows[] = {
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kWorkspaceTint,
-     .label = "Tint the browser with the active workspace's colour",
+     .label = "Tint the browser with the active Space's colour",
      .is_available = features::IsWorkspacesEnabled},
     // Zen keeps its tab behaviours in the workspaces group too.
     {.group = "workspaces",

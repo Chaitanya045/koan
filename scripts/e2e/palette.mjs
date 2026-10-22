@@ -14,6 +14,7 @@
 // check; exits non-zero on any failure.
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createSpace, visiblePage } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -361,11 +362,11 @@ await closeUrlBar();
 
 // "Focus on" another Space, found by its name, announced with it.
 const tabsShown = async () => (await ui()).views.filter(v => v.cls === 'TabView' && v.shown && v.h > 1).length;
-await pageKey(VK.N, CTRL | ALT, 'n');   // 🌊 Space 1
+await createSpace(await visiblePage(), 'Space 1');  // Zen's Create form
 await waitFor(tabsShown, n => n === 1);
 await pageKey(VK.T, CTRL, 't');         // a second tab in it
 await waitFor(tabsShown, n => n === 2);
-await pageKey(VK.N, CTRL | ALT, 'n');   // 🌿 Space 2, now active
+await createSpace(await visiblePage(), 'Space 2');  // now active
 await waitFor(tabsShown, n => n === 1);
 await openUrlBar();
 rs = await suggest('space 1', rs => rs.some(r => label(r) === 'Focus on'));

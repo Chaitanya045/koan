@@ -67,6 +67,27 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 
+  // Spaces: the header in the toolbar's text colour with the tabs' hover;
+  // the bottom bar's buttons with --zen-toolbar-element-bg (the text colour
+  // at 8%, 15% in dark mode) and a dot for no icon at 40%; the form's fields
+  // at 5% (10% hovered), the description at 40% and the icon's dashed box
+  // at 50%; the emoji picker's hover at 10%.
+  mixer[kColorKoanSpaceForeground] = {kColorToolbarText};
+  mixer[kColorKoanSpaceHeaderHovered] = {kColorKoanSidebarTabHovered};
+  mixer[kColorKoanSpaceButtonHovered] =
+      ui::SetAlpha(kColorToolbarText, Alpha(dark ? 0.15f : 0.08f));
+  mixer[kColorKoanSpaceDot] = ui::SetAlpha(kColorToolbarText, Alpha(0.4f));
+  mixer[kColorKoanSpaceFormField] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.05f));
+  mixer[kColorKoanSpaceFormFieldHovered] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.1f));
+  mixer[kColorKoanSpaceFormDescription] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.4f));
+  mixer[kColorKoanSpaceIconBorder] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.5f));
+  mixer[kColorKoanEmojiHovered] =
+      ui::SetAlpha(ui::kColorLabelForeground, Alpha(0.1f));
+
   // Toasts: the accent colour fading to 20% darker (towards Zen's #0f0f0f),
   // the text in the accent's contrast colour, the key cap that colour at 40%
   // (10% in dark mode).
