@@ -6,6 +6,7 @@
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 
 namespace koan {
@@ -34,12 +35,31 @@ bool ExecuteSplitViewCommand(TabStripModel* tab_strip,
   return true;
 }
 
+// Spaces: "Move To" a Space in place of the tab group items
+// (koan_spaces.h). Its submenu runs its items through its own delegate, so
+// Spaces have no commands of their own here.
+void AddSpacesItems(TabMenuContext& context) {
+  ReplaceTabGroupMenuItems(&*context.menu, &*context.tab_strip, context.index);
+}
+
+bool IsSpacesCommandEnabled(const TabStripModel* tab_strip,
+                            int index,
+                            int command_id) {
+  return false;
+}
+
+bool ExecuteSpacesCommand(TabStripModel* tab_strip, int index, int command_id) {
+  return false;
+}
+
 // Every feature's part of the menu, in the order they add their items.
 constexpr TabMenuFeature kFeatures[] = {
     {TabMenuFeatureId::kSplitView, &AddSplitViewItems,
      &IsSplitViewCommandEnabled, &ExecuteSplitViewCommand},
     {TabMenuFeatureId::kPinnedTabs, &AddPinnedTabMenuItems,
      &IsPinnedTabMenuCommandEnabled, &ExecutePinnedTabMenuCommand},
+    {TabMenuFeatureId::kSpaces, &AddSpacesItems, &IsSpacesCommandEnabled,
+     &ExecuteSpacesCommand},
 };
 
 // The feature whose range `command_id` is in, or null.

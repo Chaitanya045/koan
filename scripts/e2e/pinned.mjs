@@ -10,9 +10,9 @@
 //   scripts/e2e/run.sh pinned
 //
 // The profile (prefs/pinned.json) turns off Zen's replace-newtab, so a new
-// Space (Ctrl+Alt+N) opens with a tab.
+// Space (Zen's Create form, Ctrl+Alt+N) opens with a tab.
 import {
-  browserCall, evalIn, settingsCall, tabMenuCommand, waitFor,
+  browserCall, createSpace, evalIn, settingsCall, tabMenuCommand, waitFor,
 } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
@@ -564,7 +564,7 @@ await sleep(1500);
 // --- Pinned tabs belong to their Space; Essentials show in every Space. ---
 const essentialRow = async () =>
   (await rows()).find(t => t.path.includes('PinnedTabContainerView'));
-await keyTo(await pageByUrl(PIN_URL), VK.N, CTRL | ALT, 'n');  // Space 1, with a new tab.
+await createSpace(await pageByUrl(PIN_URL), 'Space 1');  // with a new tab
 let space = (await pages()).find(p => !p.url.startsWith('https://example.com'));
 await navigate(space, `${PIN_URL}?space1`);
 await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.D, CTRL | SHIFT, 'd');
@@ -574,11 +574,11 @@ const essentialShown = async () => !!(await essentialRow())?.parent?.shown;
 check('A tab pinned in a Space shows there', await tabShown(`${PIN_URL}?space1`));
 check('...tabs pinned outside it don\'t', !await tabShown(PIN_URL));
 check('...and the Essential does', await essentialShown());
-await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.N, CTRL | ALT, 'n');  // Space 2.
+await createSpace(await pageByUrl(`${PIN_URL}?space1`), 'Space 2');
 check('In another Space, the first Space\'s pinned tab is hidden',
       !await tabShown(`${PIN_URL}?space1`));
 check('...and the Essential still shows', await essentialShown());
-// Back to all tabs for the rest.
+// Back to the first Space for the rest.
 for (let i = 0; i < 2; i++) {
   await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.LEFT, CTRL | ALT);
 }

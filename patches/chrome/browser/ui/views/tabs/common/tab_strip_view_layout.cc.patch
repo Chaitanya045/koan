@@ -1,14 +1,16 @@
+diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
-@@ -16,6 +16,7 @@
+@@ -16,6 +16,8 @@
  #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/horizontal/horizontal_tab_closing_helper.h"
  #include "chrome/browser/ui/views/tabs/horizontal/tab_scroll_button_container.h"
 +#include "koan/browser/ui/views/koan_sidebar_tabs.h"
++#include "koan/browser/ui/views/koan_spaces.h"
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/controls/separator.h"
  #include "ui/views/view_utils.h"
-@@ -287,6 +288,9 @@
+@@ -287,6 +289,9 @@
        remaining_height -=
            tabs_separator->GetPreferredSize().height() + region_vertical_padding;
      }
@@ -18,10 +20,16 @@
      // Clamp the remaining height to 0 if we have less space.
      remaining_height = std::max(remaining_height, 0);
    }
-@@ -332,6 +336,8 @@
+@@ -332,6 +337,14 @@
    }
    layouts.child_layouts.emplace_back(tabs_separator, should_show_separator,
                                       separator_bounds);
++  // Koan Spaces: the Space header, below the pinned tabs (Essentials).
++  const int koan_header_height = koan::PlaceSpaceHeader(
++      tab_strip_view, is_collapsed, size_bounds.width().value(), y,
++      remaining_height, layouts);
++  y += koan_header_height;
++  remaining_height = std::max(0, remaining_height - koan_header_height);
 +  y += koan::PlaceSidebarTabRows(tab_strip_view, layouts,
 +                                 size_bounds.width().value(), y);
  

@@ -14,8 +14,9 @@ Chrome.
 | Action | Keys | Chrome had |
 |---|---|---|
 | Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
-| Show the sidebar in compact mode | Ctrl+Alt+S | |
-| Next / previous workspace | Ctrl+Alt+Right / Ctrl+Alt+Left | |
+| Show the sidebar in compact mode | Ctrl+Alt+S (⌘⌥S) | |
+| Next / previous Space | Ctrl+Alt+Right / Ctrl+Alt+Left (⌘⌥→ / ⌘⌥←) | macOS: next / previous tab (still Ctrl+Tab) |
+| Space 1 to 10 | macOS: Ctrl+1 … Ctrl+9, Ctrl+0 (no keys elsewhere, as in Zen; set them in Settings) | |
 | Split view: side by side | Ctrl+Alt+V (⌘⌥V) | |
 | Split view: stacked | Ctrl+Alt+H (⌘⌥H) | macOS: Hide Others |
 | Split view: grid (two panes in Chromium: side by side) | Ctrl+Alt+G (⌘⌥G) | |
@@ -24,9 +25,9 @@ Chrome.
 | New tab (opens the URL bar; the tab opens with what you pick) | Ctrl+T (⌘T) | New-tab page |
 | Copy the page's URL | Ctrl+Shift+C (⌘⇧C) | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
-| Pin / unpin tab (pinned to its workspace) | Ctrl+Shift+D | Bookmark all tabs |
+| Pin / unpin tab (pinned to its Space) | Ctrl+Shift+D | Bookmark all tabs |
 | Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | Ctrl+W, Ctrl+F4 (⌘W) | |
-| Close all unpinned tabs (in the workspace; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
+| Close all unpinned tabs (in the Space; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
 | Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still, otherwise) |
 | Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
 | Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
@@ -41,7 +42,7 @@ Chrome.
 | Reading mode | Ctrl+Alt+R | |
 | Edit the address | Ctrl+L, or click the URL pill | |
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
-| **Koan only:** new workspace | Ctrl+Alt+N | |
+| **Koan only:** create a Space | Ctrl+Alt+N | |
 | Koan settings (Zen's "Open Preferences") | Ctrl+, | |
 
 Change any of them in Settings > Keyboard Shortcuts (below).
@@ -163,21 +164,23 @@ Tab on a pinned tab, Next Space with two Spaces, ...).
 
 Vertical tabs are on by default, laid out like Zen's. The
 **Essentials** are square tiles at the top, up to four across, shared by
-every workspace. Below them a thin line separates the tabs; **+ New Tab**
-opens a tab at the top of the workspace's tabs, and the tabs follow. A
-tab's close button shows while you point at it.
+every Space. Below them is the Space header (the active Space's icon and
+name), then a thin line, **+ New Tab** (opens a tab at the top of the
+Space's tabs) and the tabs. A tab's close button shows while you point at
+it.
 
 While the pointer is over the sidebar, **↓ Clear** appears at the end of
-the line: it closes the workspace's unpinned tabs except the selected one
-and any playing sound (if those are all there is, it closes them too), the
-same as Ctrl+Shift+K. The workspace stays (an emptied one gets a fresh
-tab), and a toast reminds you that Ctrl+Shift+T reopens them, the last
-closed tab first, one per press. In the **∞** view Clear only closes tabs
-that are in no workspace (the line stays while workspace tabs are listed).
+the line: it closes the Space's unpinned tabs except the selected one and
+any playing sound (if those are all there is, it closes them too), the
+same as Ctrl+Shift+K. The Space stays (an emptied one gets a fresh tab),
+and a toast reminds you that Ctrl+Shift+T reopens them, the last closed
+tab first, one per press.
 
-Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). The
-workspace switcher is at the bottom of the sidebar: **∞** shows all tabs,
-one round button per workspace, **+** creates one.
+Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
+bottom is Zen's bottom bar: one button per Space (its emoji, or a dot; the
+active one in colour, the others grey) and **+**, which opens the Create
+menu: Create Space, New Split and New Tab.
+The Space buttons only show once there is more than one Space.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
 **Compact Mode** (below) and **Tabs on the right**. Dragging the sidebar's
@@ -189,9 +192,9 @@ compact mode was set to hide just the toolbar, the drag makes it hide both.
 
 As in Zen there are two kinds of pinned tab:
 
-- **Pinned tabs** belong to their workspace and stay at the top of its
+- **Pinned tabs** belong to their Space and stay at the top of its
   tabs. Pin a tab with Ctrl+Shift+D or "Pin" in its context menu.
-- **Essentials** are shared by all workspaces, up to 12 per window: "Add to
+- **Essentials** are shared by all Spaces, up to 12 per window: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
   Dragging a tab into the grid also makes it an Essential.
 
@@ -222,13 +225,46 @@ Icon…" (an emoji instead of the favicon) and "Unload" (free the tab's
 memory; it reloads when you select it). Pinned URLs, labels and icons are
 kept with the session.
 
-## Workspaces
+## Spaces
 
-A workspace is a tab group shown on its own. Its icon in the switcher is
-the emoji its name starts with (new workspaces get one, e.g. "🌊 Space 1").
-Rename or recolour a workspace from its group header's menu; renaming
-changes the icon too. New tabs open in the active workspace.
-Workspaces and the active one are restored on restart (Koan restores the
+A Space is a set of tabs shown on its own, like Zen's Spaces. The window
+always shows one: a new window starts in a Space named "Space", every tab
+belongs to a Space, and new tabs open in the active one.
+
+- **Create** a Space with **+ > Create Space** (or Ctrl+Alt+N): the sidebar
+  shows Zen's Create-a-Space form (a collapsed sidebar expands over the
+  page until you're done). Click the dashed box to pick an emoji
+  (search by keyword), type a name, Edit Theme… to pick its colour, then
+  Create Space (or Enter); Escape or Cancel goes back.
+- **Rename**: double-click the Space's name in the header (or right-click
+  the header > Change Name…) and type; Enter keeps it, Escape cancels.
+  Double-click the icon (or Change Icon…) to pick another emoji, or none.
+- From the keyboard, the header takes focus (Tab through the sidebar):
+  Enter or the menu key opens its menu, F2 renames the Space.
+- **Edit Theme…** (right-click the header) picks the Space's colour: the
+  browser takes it while the Space is active, or keeps your theme with
+  Default.
+- **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
+  on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
+  horizontally with two fingers over the sidebar, or turn the mouse wheel
+  there (horizontally, or vertically while holding Ctrl); the right-click
+  menu of the header also lists the Spaces. The old Space slides out and
+  the new one in, as in Zen, and you land on the tab you left the Space on
+  (also after a restart). Going straight to a tab of another Space (the
+  address bar's "Switch to this tab", tab search) shows that tab.
+- **Move To**: right-click a tab > Move To moves it (and the other
+  selected tabs) to another Space and shows it.
+- **Unload Space** (right-click the header or a Space button) frees the
+  Space's tabs; they reload when you select them. Unload All Other Spaces
+  frees all the others. Tabs on screen and tabs in use (playing sound, in
+  a call or sharing the screen, open in DevTools, with a half-filled form,
+  and others Memory Saver keeps) stay loaded; a toast says how many.
+- **Delete Space** (same menu) closes the Space's tabs after asking. The
+  last Space can't be deleted.
+- Closing a Space's last tab leaves the Space with a new tab, where Zen
+  shows an empty Space.
+
+Spaces and the active one are restored on restart (Koan restores the
 previous session by default; change it in Settings > On startup).
 
 ## Compact mode
@@ -316,7 +352,7 @@ from its sidebar.
 - **Look and Feel**: the browser layout (Only Sidebar / Sidebar and Top
   Toolbar), tabs on the right, compact mode, what it hides and its flash
   popup.
-- **Tab Management**: whether the active workspace tints the browser,
+- **Tab Management**: whether the active Space tints the browser,
   whether background tabs freeze (see "Memory and power"), and Zen's tab
   behaviours (Zen's defaults):
   - closing a tab switches to the **most recently used** tab rather than a

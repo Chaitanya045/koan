@@ -1,16 +1,16 @@
 diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/sessions/session_restore.cc
-index fc663dce344551ad3fb8a3ac820f5cab8605d49a..acf026a24eb49d13ba7eac571a99c3fbfc306246 100644
 --- a/chrome/browser/sessions/session_restore.cc
 +++ b/chrome/browser/sessions/session_restore.cc
-@@ -115,6 +115,7 @@
+@@ -115,6 +115,8 @@
  #include "content/public/browser/web_contents.h"
  #include "extensions/browser/extension_registry.h"
  #include "extensions/common/extension_set.h"
++#include "koan/browser/koan_tab_hooks.h"
 +#include "koan/browser/ui/views/koan_session_data.h"
  #include "ui/base/mojom/window_show_state.mojom.h"
  #include "ui/base/page_transition_types.h"
  #include "ui/base/window_open_disposition.h"
-@@ -879,6 +880,9 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -879,6 +881,9 @@
            ShouldRestoreToExistingBrowser()) {
          // The first set of tabs is added to the existing browser.
          browser = browser_;
@@ -20,7 +20,19 @@ index fc663dce344551ad3fb8a3ac820f5cab8605d49a..acf026a24eb49d13ba7eac571a99c3fb
        } else {
  #if BUILDFLAG(IS_CHROMEOS)
          ash::BootTimesRecorder::Get()->AddLoginTimeMarker(
-@@ -1399,6 +1403,9 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -1311,6 +1316,11 @@
+   void ProcessSavedGroup(Profile* profile,
+                          const tab_groups::LocalTabGroupID& local_id,
+                          std::optional<std::string> sync_id) {
++    // Koan: Spaces aren't saved tab groups (koan::SavesTabGroups()), and a
++    // saved group's tabs would be navigated to its saved URLs.
++    if (!koan::SavesTabGroups(profile)) {
++      return;
++    }
+     tab_groups::TabGroupSyncService* service =
+         tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
+     if (!service) {
+@@ -1399,6 +1409,9 @@
      base::TimeTicks now = base::TimeTicks::Now();
      BrowserWindowInterface* browser_window =
          CreateBrowserWindow(std::move(params));
