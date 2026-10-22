@@ -107,28 +107,31 @@ std::u16string FormatTime(base::TimeDelta time) {
       {base::NumberToString16(minutes), u":", two_digits(seconds)});
 }
 
+// Sets the button's icon (as colour-ID image models, so it follows the
+// theme without being reset to another icon) and its name.
+void SetButtonIcon(views::ImageButton* button,
+                   const gfx::VectorIcon& icon,
+                   const std::u16string& name) {
+  button->SetImageModel(
+      views::Button::STATE_NORMAL,
+      ui::ImageModel::FromVectorIcon(icon, ui::kColorIcon, kMediaIconSize));
+  button->SetImageModel(views::Button::STATE_DISABLED,
+                        ui::ImageModel::FromVectorIcon(
+                            icon, ui::kColorIconDisabled, kMediaIconSize));
+  button->SetTooltipText(name);
+  button->GetViewAccessibility().SetName(name);
+}
+
 std::unique_ptr<views::ImageButton> MakeButton(
     views::Button::PressedCallback callback,
     const gfx::VectorIcon& icon,
     const std::u16string& name) {
-  auto button = views::CreateVectorImageButtonWithNativeTheme(
-      std::move(callback), icon, kMediaIconSize);
+  auto button = views::CreateVectorImageButton(std::move(callback));
+  SetButtonIcon(button.get(), icon, name);
   button->SetPreferredSize(gfx::Size(kMediaButtonSize, kMediaButtonSize));
-  button->SetTooltipText(name);
-  button->GetViewAccessibility().SetName(name);
   views::InstallRoundRectHighlightPathGenerator(button.get(), gfx::Insets(),
                                                 kMediaButtonCornerRadius);
   return button;
-}
-
-void SetButtonIcon(views::ImageButton* button,
-                   const gfx::VectorIcon& icon,
-                   const std::u16string& name) {
-  views::SetImageFromVectorIconWithColor(
-      button, icon, kMediaIconSize,
-      views::IconColors(ui::kColorIcon, ui::kColorIconDisabled));
-  button->SetTooltipText(name);
-  button->GetViewAccessibility().SetName(name);
 }
 
 }  // namespace
@@ -694,6 +697,8 @@ class KoanMediaControlsView : public views::View,
 
   void Layout(PassKey) override {
     const double expansion = expand_.GetCurrentValue();
+    // The card's shadow margin reaches into the sidebar's own inset.
+    const int side = std::max(0, SidebarStripInset() - kMediaCardShadowMargin);
     int expanded_bottom = 0;
     for (size_t i = 0; i < card_views_.size(); ++i) {
       KoanMediaCardView* view = card_views_[i];
@@ -704,8 +709,11 @@ class KoanMediaControlsView : public views::View,
       // Distance from the stack's bottom edge to the card's.
       const int bottom = gfx::Tween::IntValueBetween(
           expansion, kMediaStackPeek * level, expanded_bottom);
-      const int inset = gfx::Tween::IntValueBetween(
-          expansion, static_cast<int>(width() * kPeekScaleStep * level / 2), 0);
+      // In line with the tab rows; cards behind are narrower.
+      const int inset =
+          side + gfx::Tween::IntValueBetween(
+                     expansion,
+                     static_cast<int>(width() * kPeekScaleStep * level / 2), 0);
       view->SetBounds(inset, this->height() - bottom - height,
                       width() - 2 * inset, height);
       if (!view->layer()->GetAnimator()->is_animating()) {
