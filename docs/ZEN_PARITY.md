@@ -170,13 +170,13 @@ Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (
 | "Open Library" in the command palette | Same | |
 | History: search, when / sort / source filters, grouped by day or site | Same | Default range 120 days, 100 rows at a time, like Zen. |
 | History: closed tabs as a source | Same | From Chromium's recently closed tabs (all windows, tabs only). Zen renames the tab "Archive" then; Koan keeps "History". |
-| History: open, open in background (Ctrl/middle click), forget, reopen | Same | |
-| History: Forget About This Site | Same | Removes the site's history, cookies, site data and cache after asking. |
-| History: clear by range from the tab's menu | Same | Last hour / 12 hours / today / week / month / everything, after asking. |
+| History: open, open in background (Ctrl/middle click), forget, reopen | Same | Forgetting is off where policy forbids deleting history (AllowDeletingBrowserHistory), as on Chrome's History page. |
+| History: Forget About This Site | Koan addition | Firefox's sidebar has it; Zen's Library menu has only Reopen Page and Forget This Page. Removes the site's history, cookies, site data and cache after asking. |
+| History: clear by range from the tab's menu | Same | Last hour / 12 hours / today (since midnight, as the Today filter) / week / month / everything. The confirmation names the range ("Clear history from the last hour?"). |
 | History / Downloads: drag a row out (as a link, as a file) | Missing | |
 | Downloads: search, type and date filters, newest first | Same | |
-| Downloads: progress ring, open when done, show in folder, retry, cancel | Same | |
-| Downloads: menu (open, copy file, copy link, remove, delete) | Same | "Hide from Zen" is "Remove from history". Dangerous downloads are kept or discarded in Chrome's download bubble. |
+| Downloads: progress ring, open when done, show in folder, retry, cancel | Same | A download held back by a warning (dangerous or insecure) is never set to open when done: clicking it opens Chrome's warning (the download bubble, or `chrome://downloads` without a toolbar), where it is kept or deleted. |
+| Downloads: menu (open, copy file, copy link, retry, remove, delete) | Same | Also Cancel, and "Review warning" on a held-back download. "Hide from Zen" is "Remove from history" (not offered where policy forbids deleting history). Delete File asks first. Zen's "Clear Download Preview" is missing. |
 | Downloads: picture previews instead of file icons | Same | Decoded out of process. |
 | Spaces: cards with the space's tabs, rename, icon, theme, drag to reorder, add | Same | Thin, on the workspace API: the icon picker offers 40 emoji, not Zen's full picker; the theme is the space's colour (Koan has no gradient editor yet, #41). |
 | Spaces: live copy of each space's sidebar (drag tabs between cards, folders) | Different | Cards list the space's tabs; click one to go there. Moving tabs between spaces is done in the sidebar. |

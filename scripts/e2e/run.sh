@@ -7,8 +7,9 @@
 # scripts/perf/profile_ui.mjs). Without URLs it opens
 # scripts/e2e/pages/<test>.html if that exists, else two example.com tabs.
 # scripts/e2e/prefs/<test>.json, if it exists, seeds the fresh profile's
-# Preferences; {profile} in it is the profile's directory. KOAN_FLAGS adds browser flags (e.g. --disable-features=...);
-# features in an --enable-features there are added to the ones run.sh needs.
+# Preferences ({profile} in it is the profile's directory). KOAN_FLAGS adds
+# browser flags (e.g. --disable-features=...); features in an
+# --enable-features there are added to the ones run.sh needs.
 #
 # The test gets KOAN_CHROME_ARGS, Koan's command line without the URLs (one
 # argument per line), to restart Koan with the same profile.
@@ -21,7 +22,7 @@
 # scripts/e2e/<test>.mjs, and cleans up. Nothing appears on the desktop.
 #
 # PREFS=<json> seeds Default/Preferences instead (e.g.
-# '{"koan":{"urlbar":{"behavior":"float"}}}'). SHOTS=<dir> lets the test save
+# '{"koan":{"urlbar":{"behavior":"float"}}}', {profile} as above). SHOTS=<dir> lets the test save
 # screenshots there (the window's off-screen frames go to $SHOTS/frames).
 # KEEP_LOG=<file> keeps the browser's log there.
 set -euo pipefail
@@ -69,12 +70,15 @@ cleanup() {
   koan_rm "$prof" "$prof.log" "$prof.dump" || echo "run.sh: couldn't remove $prof" >&2
 }
 trap cleanup EXIT
-prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
-if [[ -f $prefs ]]; then
+# Writes the profile's Preferences from JSON $1, with {profile} expanded (the
+# quoted replacement is literal, whatever the path holds).
+seed_prefs() {
   mkdir -p "$prof/Default"
-  sed "s#{profile}#$prof#g" "$prefs" >"$prof/Default/Preferences"
-fi
-if [[ -n ${PREFS:-} ]]; then mkdir -p "$prof/Default"; printf '%s' "$PREFS" > "$prof/Default/Preferences"; fi
+  printf '%s' "${1//'{profile}'/"$prof"}" >"$prof/Default/Preferences"
+}
+prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
+if [[ -f $prefs ]]; then seed_prefs "$(<"$prefs")"; fi
+if [[ -n ${PREFS:-} ]]; then seed_prefs "$PREFS"; fi
 
 script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
 [[ $test_name == *.mjs ]] && script=$test_name

@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -31,12 +32,15 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/download/offline_item_utils.h"
 #include "chrome/browser/icon_loader.h"
 #include "chrome/browser/icon_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/download/content/public/all_download_item_notifier.h"
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/download_source.h"
@@ -232,8 +236,10 @@ bool HasFile(const download::DownloadItem* item) {
          !item->GetFileExternallyRemoved();
 }
 
+// Held back for the user to decide on, in Chrome's download warning: a
+// dangerous or insecure download that hasn't finished.
 bool IsBlocked(const download::DownloadItem* item) {
-  return item->IsDangerous() && !item->IsDone();
+  return (item->IsDangerous() || item->IsInsecure()) && !item->IsDone();
 }
 
 // Zen's canRetry: stopped before it was done, and not for safety reasons.
@@ -271,7 +277,8 @@ std::u16string StatusText(const download::DownloadItem* item) {
   switch (item->GetState()) {
     case download::DownloadItem::IN_PROGRESS:
       if (IsBlocked(item)) {
-        return u"This file may be dangerous";
+        return item->IsInsecure() ? u"This file can't be downloaded securely"
+                                  : u"This file may be dangerous";
       }
       if (item->IsPaused()) {
         return base::StrCat({u"Paused", kDot, TransferText(item, false)});
@@ -303,11 +310,25 @@ std::u16string StatusText(const download::DownloadItem* item) {
 }
 
 std::optional<std::string> ReadPreviewFile(const base::FilePath& path) {
+  // Pictures too big to preview get their file icon, unread.
+  std::optional<int64_t> size = base::GetFileSize(path);
+  if (!size || *size > kMaxPreviewBytes) {
+    return std::nullopt;
+  }
   std::string data;
   if (!base::ReadFileToStringWithMaxSize(path, &data, kMaxPreviewBytes)) {
     return std::nullopt;
   }
   return data;
+}
+
+void OpenDownloadsPage(BrowserWindowInterface* browser) {
+  browser->OpenURL(
+      content::OpenURLParams(GURL("chrome://downloads/"), content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_AUTO_BOOKMARK,
+                             /*is_renderer_initiated=*/false),
+      /*navigation_handle_callback=*/{});
 }
 
 // A download's icon: its file's icon or a preview of the picture, or, while
@@ -433,22 +454,17 @@ class KoanLibraryDownloadsSection
   }
 
   void FillTabMenu(KoanLibraryMenu* menu) override {
-    menu->AddItem(u"Clear all downloads",
-                  base::BindRepeating(&KoanLibraryDownloadsSection::ClearAll,
-                                      weak_factory_.GetWeakPtr()));
-    menu->AddSeparator();
-    menu->AddItem(
-        u"Open the Downloads page",
-        base::BindRepeating(
-            [](BrowserWindowInterface* browser) {
-              browser->OpenURL(
-                  content::OpenURLParams(
-                      GURL("chrome://downloads/"), content::Referrer(),
-                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                      ui::PAGE_TRANSITION_AUTO_BOOKMARK, false),
-                  {});
-            },
-            library()->browser_view()->browser()));
+    // Removing downloads from the list is deleting history (policy
+    // AllowDeletingBrowserHistory), as on the downloads page.
+    if (IsDeletingHistoryAllowed(profile_)) {
+      menu->AddItem(u"Clear all downloads",
+                    base::BindRepeating(&KoanLibraryDownloadsSection::ClearAll,
+                                        weak_factory_.GetWeakPtr()));
+      menu->AddSeparator();
+    }
+    menu->AddItem(u"Open the Downloads page",
+                  base::BindRepeating(&OpenDownloadsPage,
+                                      library()->browser_view()->browser()));
   }
 
   // KoanLibrarySearchSection:
@@ -476,11 +492,21 @@ class KoanLibraryDownloadsSection
   }
 
   void OnScrolledToEnd() override {
-    if (static_cast<int>(rows_.size()) < limit_) {
+    if (static_cast<int>(rows_.size()) < limit_ || !group_) {
       return;
     }
+    // The next page, after the rows shown (newest first, so the downloads
+    // not shown yet that match come after them).
     limit_ += kPageSize;
-    ScheduleRebuild();
+    for (download::DownloadItem* item : Downloads()) {
+      if (static_cast<int>(rows_.size()) >= limit_) {
+        break;
+      }
+      if (!rows_.contains(item->GetGuid()) && Matches(item)) {
+        AddRow(group_, item);
+      }
+    }
+    InvalidateLayout();
   }
 
   // download::AllDownloadItemNotifier::Observer:
@@ -498,14 +524,20 @@ class KoanLibraryDownloadsSection
   }
   void OnDownloadUpdated(content::DownloadManager* manager,
                          download::DownloadItem* item) override {
+    // A download held back by a warning never opens by itself once the user
+    // keeps it (open-when-done may have been asked for before the verdict;
+    // Chrome's own UI never offers it on a warning).
+    if (IsBlocked(item) && item->GetOpenWhenComplete()) {
+      item->SetOpenWhenComplete(false);
+    }
     // Nothing to show while the library is closed; it catches up when it
-    // opens. A finished download changes its row's actions: rebuild then.
-    // Progress only repaints.
+    // opens. A row whose actions change (finished, file gone, can be
+    // retried) is rebuilt; progress only repaints.
     if (!library()->is_open()) {
       return;
     }
     auto it = rows_.find(item->GetGuid());
-    if (it != rows_.end() && it->second.pending != IsPending(item)) {
+    if (it != rows_.end() && it->second.actions != ActionsOf(item)) {
       ScheduleRebuild();
     } else if (!update_timer_.IsRunning()) {
       update_timer_.Start(
@@ -526,11 +558,27 @@ class KoanLibraryDownloadsSection
   }
 
  private:
+  // What decides a row's buttons.
+  struct Actions {
+    bool pending = false;
+    bool has_file = false;
+    bool can_retry = false;
+    bool blocked = false;
+
+    bool operator==(const Actions&) const = default;
+  };
+
   struct Row {
     raw_ptr<KoanLibraryRow> row;
     raw_ptr<DownloadIconView> icon;
-    bool pending = false;
+    Actions actions;
   };
+
+  static Actions ActionsOf(const download::DownloadItem* item) {
+    return {IsPending(item), HasFile(item), CanRetry(item), IsBlocked(item)};
+  }
+
+  using PreviewKey = std::pair<base::FilePath, base::Time>;
 
   using ItemAction =
       void (KoanLibraryDownloadsSection::*)(download::DownloadItem*);
@@ -587,10 +635,10 @@ class KoanLibraryDownloadsSection
                                FileGroupOf(item->GetFileNameToReportUser()))) {
       return false;
     }
-    if (std::optional<int> days = GetWhenDays()) {
+    if (std::optional<base::Time> cutoff = GetWhenCutoff()) {
       const base::Time end =
           item->IsDone() ? item->GetEndTime() : base::Time::Now();
-      if (end < base::Time::Now() - base::Days(*days)) {
+      if (end < *cutoff) {
         return false;
       }
     }
@@ -606,7 +654,8 @@ class KoanLibraryDownloadsSection
   }
 
   void ScheduleRebuild() {
-    if (!shown_ || !library()->is_open() || rebuild_pending_) {
+    // A hidden section is rebuilt when it is shown (OnShown()).
+    if (!shown_ || !library()->is_open() || !GetVisible() || rebuild_pending_) {
       return;
     }
     // Not synchronously: a rebuild destroys the rows, which may be in the
@@ -620,9 +669,10 @@ class KoanLibraryDownloadsSection
   void Rebuild() {
     rebuild_pending_ = false;
     icon_tracker_.TryCancelAll();
-    preview_weak_factory_.InvalidateWeakPtrs();
-    // Forget the rows before they are destroyed.
+    // Forget the rows before they are destroyed. (Previews still on their
+    // way go to the new rows, found by GUID.)
     rows_.clear();
+    group_ = nullptr;
     ClearList();
     std::vector<download::DownloadItem*> visible;
     for (download::DownloadItem* item : Downloads()) {
@@ -636,9 +686,9 @@ class KoanLibraryDownloadsSection
     if (visible.empty()) {
       ShowEmpty(u"No downloads found");
     } else {
-      views::View* group = AddGroup(std::u16string());
+      group_ = AddGroup(std::u16string());
       for (download::DownloadItem* item : visible) {
-        AddRow(group, item);
+        AddRow(group_, item);
       }
     }
     UpdateProgress();
@@ -688,7 +738,7 @@ class KoanLibraryDownloadsSection
                             base::Unretained(this), guid));
 
     KoanLibraryRow* added = group->AddChildView(std::move(row));
-    rows_[guid] = {added, icon_view, IsPending(item)};
+    rows_[guid] = {added, icon_view, ActionsOf(item)};
     UpdateRow(item);
     LoadIcon(item);
   }
@@ -714,7 +764,7 @@ class KoanLibraryDownloadsSection
     std::u16string status;
     if (opening) {
       status = kOpeningInFolder;
-    } else if (pending && item->GetOpenWhenComplete()) {
+    } else if (pending && item->GetOpenWhenComplete() && !IsBlocked(item)) {
       status = u"Opens when finished";
     } else {
       status = StatusText(item);
@@ -735,17 +785,22 @@ class KoanLibraryDownloadsSection
       return;
     }
     if (HasFile(item) && CanPreview(path)) {
-      auto preview = previews_.find(path);
+      // By file and when it was downloaded: a file downloaded again to the
+      // same place gets a new preview.
+      const PreviewKey key{path, item->GetEndTime()};
+      auto preview = previews_.find(key);
       if (preview != previews_.end()) {
         SetIcon(item->GetGuid(), preview->second, /*preview=*/true);
         return;
       }
-      base::ThreadPool::PostTaskAndReplyWithResult(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-          base::BindOnce(&ReadPreviewFile, path),
-          base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewRead,
-                         preview_weak_factory_.GetWeakPtr(), item->GetGuid(),
-                         path));
+      if (previews_pending_.insert(key).second) {
+        base::ThreadPool::PostTaskAndReplyWithResult(
+            FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+            base::BindOnce(&ReadPreviewFile, path),
+            base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewRead,
+                           preview_weak_factory_.GetWeakPtr(), item->GetGuid(),
+                           key));
+      }
     }
     IconManager* icons = g_browser_process->icon_manager();
     const ui::Compositor* compositor =
@@ -770,9 +825,10 @@ class KoanLibraryDownloadsSection
   }
 
   void OnPreviewRead(const std::string& guid,
-                     const base::FilePath& path,
+                     const PreviewKey& key,
                      std::optional<std::string> data) {
     if (!data || data->empty()) {
+      previews_pending_.erase(key);
       return;
     }
     // Decoded out of process, like every picture from the web.
@@ -781,12 +837,13 @@ class KoanLibraryDownloadsSection
         /*shrink_to_fit=*/true, kMaxPreviewBytes,
         gfx::Size(2 * kPreviewSize, 2 * kPreviewSize),
         base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewDecoded,
-                       preview_weak_factory_.GetWeakPtr(), guid, path));
+                       preview_weak_factory_.GetWeakPtr(), guid, key));
   }
 
   void OnPreviewDecoded(const std::string& guid,
-                        const base::FilePath& path,
+                        const PreviewKey& key,
                         const SkBitmap& bitmap) {
+    previews_pending_.erase(key);
     if (bitmap.isNull()) {
       return;
     }
@@ -796,7 +853,7 @@ class KoanLibraryDownloadsSection
     const gfx::ImageSkia square = gfx::ImageSkiaOperations::ExtractSubset(
         image, gfx::Rect((bitmap.width() - side) / 2,
                          (bitmap.height() - side) / 2, side, side));
-    previews_[path] = square;
+    previews_[key] = square;
     SetIcon(guid, square, /*preview=*/true);
   }
 
@@ -834,6 +891,10 @@ class KoanLibraryDownloadsSection
   // A click on a download still coming in opens it once it's here; on a
   // finished one, shows it in the file manager (Zen's #onRowClick).
   void OnRowPressed(download::DownloadItem* item) {
+    if (IsBlocked(item)) {
+      ShowWarning(item);
+      return;
+    }
     if (IsPending(item)) {
       item->SetOpenWhenComplete(!item->GetOpenWhenComplete());
       UpdateRow(item);
@@ -857,25 +918,42 @@ class KoanLibraryDownloadsSection
             base::Unretained(this)));
   }
 
+  // A download held back by a warning goes to Chrome's warning (Keep or
+  // Delete), never opened from here: the download bubble's, where its
+  // button is on screen, else the downloads page.
+  void ShowWarning(download::DownloadItem* item) {
+    BrowserView* browser_view = library()->browser_view();
+    DownloadToolbarUIController* toolbar =
+        DownloadToolbarUIController::From(browser_view->browser());
+    if (toolbar && browser_view->toolbar() &&
+        browser_view->toolbar()->IsDrawn()) {
+      library()->Close();
+      toolbar->OpenSecuritySubpage(
+          OfflineItemUtils::GetContentIdForDownload(item));
+      return;
+    }
+    OpenDownloadsPage(browser_view->browser());
+  }
+
   void Cancel(download::DownloadItem* item) { item->Cancel(true); }
   void ShowInFolder(download::DownloadItem* item) {
     item->ShowDownloadInShell();
   }
   void Open(download::DownloadItem* item) { item->OpenDownload(); }
-  void RemoveItem(download::DownloadItem* item) { item->Remove(); }
+  void RemoveItem(download::DownloadItem* item) {
+    if (IsDeletingHistoryAllowed(profile_)) {
+      item->Remove();
+    }
+  }
 
   void Retry(download::DownloadItem* item) {
     if (item->CanResume()) {
       item->Resume(true);
       return;
     }
-    // Downloaded afresh, like the downloads page's Retry.
-    content::WebContents* contents = library()
-                                         ->browser_view()
-                                         ->browser()
-                                         ->GetTabStripModel()
-                                         ->GetActiveWebContents();
-    if (!contents || !notifier_ || !notifier_->GetManager()) {
+    // Downloaded afresh, like the download bubble's Retry: from no page
+    // (not the active tab's), as something the user asked for.
+    if (!notifier_ || !notifier_->GetManager()) {
       return;
     }
     const net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -897,11 +975,9 @@ class KoanLibraryDownloadsSection
             "triggered by user request."
           policy_exception_justification: "Not implemented."
         })");
-    auto params = contents->GetPrimaryMainFrame()->CreateDownloadUrlParameters(
+    auto params = std::make_unique<download::DownloadUrlParameters>(
         item->GetURL(), traffic_annotation);
-    params->set_content_initiated(true);
-    params->set_initiator(item->GetRequestInitiator());
-    params->set_referrer(item->GetReferrerUrl());
+    params->set_content_initiated(false);
     params->set_download_source(download::DownloadSource::RETRY);
     notifier_->GetManager()->DownloadUrl(std::move(params));
   }
@@ -920,6 +996,16 @@ class KoanLibraryDownloadsSection
     writer.WriteText(base::UTF8ToUTF16(item->GetURL().spec()));
   }
 
+  // Deleting the file can't be undone: asks first.
+  void ConfirmDelete(download::DownloadItem* item) {
+    ShowLibraryConfirmation(
+        library(), u"Delete this file?",
+        base::StrCat(
+            {FileNameOf(item), u" will be deleted from your computer."}),
+        u"Delete",
+        BindAction(item->GetGuid(), &KoanLibraryDownloadsSection::Delete));
+  }
+
   void Delete(download::DownloadItem* item) {
     if (HasFile(item)) {
       item->DeleteFile(base::DoNothing());
@@ -929,6 +1015,9 @@ class KoanLibraryDownloadsSection
   }
 
   void ClearAll() {
+    if (!IsDeletingHistoryAllowed(profile_)) {
+      return;
+    }
     for (download::DownloadItem* item : Downloads()) {
       if (item->IsDone()) {
         item->Remove();
@@ -963,6 +1052,22 @@ class KoanLibraryDownloadsSection
     const std::u16string name = FileNameOf(item);
     const bool has_file = HasFile(item);
     auto menu = std::make_unique<KoanLibraryMenu>();
+    // Every row button is here too, for the keyboard (the buttons only show
+    // with the row).
+    if (IsBlocked(item)) {
+      menu->AddItem(
+          u"Review warning",
+          BindAction(guid, &KoanLibraryDownloadsSection::ShowWarning));
+      menu->AddSeparator();
+    }
+    if (IsPending(item)) {
+      menu->AddItem(u"Cancel",
+                    BindAction(guid, &KoanLibraryDownloadsSection::Cancel));
+    }
+    if (CanRetry(item)) {
+      menu->AddItem(u"Retry Download",
+                    BindAction(guid, &KoanLibraryDownloadsSection::Retry));
+    }
     menu->AddItem(base::StrCat({u"Open ", name}),
                   BindAction(guid, &KoanLibraryDownloadsSection::Open),
                   has_file);
@@ -976,10 +1081,12 @@ class KoanLibraryDownloadsSection
     menu->AddItem(u"Copy download link",
                   BindAction(guid, &KoanLibraryDownloadsSection::CopyLink));
     menu->AddSeparator();
-    menu->AddItem(u"Remove from history",
-                  BindAction(guid, &KoanLibraryDownloadsSection::RemoveItem));
+    if (IsDeletingHistoryAllowed(profile_)) {
+      menu->AddItem(u"Remove from history",
+                    BindAction(guid, &KoanLibraryDownloadsSection::RemoveItem));
+    }
     menu->AddItem(u"Delete File",
-                  BindAction(guid, &KoanLibraryDownloadsSection::Delete),
+                  BindAction(guid, &KoanLibraryDownloadsSection::ConfirmDelete),
                   has_file || IsPending(item));
     if (auto row = rows_.find(guid); row != rows_.end()) {
       row->second.row->SetMenuOpen(true);
@@ -1003,10 +1110,14 @@ class KoanLibraryDownloadsSection
   std::unique_ptr<download::AllDownloadItemNotifier> notifier_;
   // The rows shown, by their download's GUID.
   std::map<std::string, Row> rows_;
-  std::map<base::FilePath, gfx::ImageSkia> previews_;
+  std::map<PreviewKey, gfx::ImageSkia> previews_;
+  // Previews being read or decoded.
+  std::set<PreviewKey> previews_pending_;
   int limit_ = kPageSize;
   bool shown_ = false;
   bool rebuild_pending_ = false;
+  // The group the rows are in, to append the next page to.
+  raw_ptr<views::View> group_ = nullptr;
   // The download just shown in the file manager, for a moment.
   std::string opening_;
   base::OneShotTimer opening_timer_;

@@ -10,6 +10,7 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/i18n/rtl.h"
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
@@ -95,12 +96,12 @@ class KoanLibraryButton : public views::ImageButton {
   METADATA_HEADER(KoanLibraryButton, views::ImageButton)
 
  public:
-  KoanLibraryButton(KoanLibraryController* library,
-                    std::optional<ui::Accelerator> accelerator)
+  explicit KoanLibraryButton(KoanLibraryController* library)
       : views::ImageButton(
             base::BindRepeating(&KoanLibraryController::Toggle,
                                 base::Unretained(library),
-                                std::optional<LibrarySection>())) {
+                                std::optional<LibrarySection>())),
+        browser_view_(library->browser_view()) {
     SetImageModel(STATE_NORMAL, ui::ImageModel::FromVectorIcon(
                                     kLibraryIcon, kColorKoanLibraryForeground,
                                     library::kLibraryButtonIconSize));
@@ -110,13 +111,38 @@ class KoanLibraryButton : public views::ImageButton {
         gfx::Size(library::kLibraryButtonSize, library::kLibraryButtonSize));
     SetBackground(library::CreateStateBackground(
         std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
-    // The key the user has for it, e.g. "Library (Alt+⇧+L)".
+    GetViewAccessibility().SetName(u"Library");
+    RefreshTooltip();
+  }
+
+  // views::View: the tooltip follows the key, which can be changed in
+  // settings.
+  void OnMouseEntered(const ui::MouseEvent& event) override {
+    RefreshTooltip();
+    views::ImageButton::OnMouseEntered(event);
+  }
+  void OnFocus() override {
+    RefreshTooltip();
+    views::ImageButton::OnFocus();
+  }
+
+ private:
+  // The key the user has for it, e.g. "Library (Alt+⇧+L)".
+  void RefreshTooltip() {
+    KoanBrowserViewController* controller =
+        KoanBrowserViewController::From(browser_view_);
+    const std::optional<ui::Accelerator> accelerator =
+        controller ? controller->shortcuts()->GetAccelerator(
+                         shortcuts::Action::kLibrary)
+                   : std::nullopt;
     SetTooltipText(
         accelerator ? base::StrCat({u"Library (",
                                     shortcuts::DisplayText(*accelerator), u")"})
                     : u"Library");
-    GetViewAccessibility().SetName(u"Library");
   }
+
+  // The button's window, which outlives it.
+  const raw_ptr<BrowserView> browser_view_;
 };
 
 BEGIN_METADATA(KoanLibraryButton)
@@ -232,9 +258,14 @@ void KoanLibraryController::OnPreferredWidthChanged() {
     LayoutWidget();
     return;
   }
+  resize_.Stop();
+  if (gfx::Animation::PrefersReducedMotion()) {
+    width_ = target;
+    LayoutWidget();
+    return;
+  }
   width_from_ = width_;
   width_to_ = target;
-  resize_.Stop();
   resize_.Start();
 }
 
@@ -334,6 +365,10 @@ void KoanLibraryController::AnimateTo(double target) {
   slide_.Stop();
   from_ = progress_;
   target_ = target;
+  if (gfx::Animation::PrefersReducedMotion()) {
+    Finish();
+    return;
+  }
   slide_.Start();
 }
 
@@ -344,7 +379,7 @@ void KoanLibraryController::SetProgress(double progress) {
   }
   // It slides in from the sidebar's side of the window.
   gfx::Transform transform;
-  transform.Translate((on_right_ ? 1 : -1) * (1 - progress) * width_, 0);
+  transform.Translate((on_screen_right_ ? 1 : -1) * (1 - progress) * width_, 0);
   view_->layer()->SetTransform(transform);
 }
 
@@ -352,10 +387,31 @@ void KoanLibraryController::Finish() {
   SetProgress(target_);
   if (target_ == 0 && widget_) {
     widget_->Hide();
-    cleanup_timer_.Start(FROM_HERE, kCleanupDelay,
-                         base::BindOnce(&KoanLibraryController::DestroyWidget,
-                                        weak_factory_.GetWeakPtr()));
+    ScheduleCleanup();
   }
+}
+
+base::ScopedClosureRunner KoanLibraryController::KeepAlive() {
+  ++keep_alive_count_;
+  cleanup_timer_.Stop();
+  return base::ScopedClosureRunner(base::BindOnce(
+      &KoanLibraryController::ReleaseKeepAlive, weak_factory_.GetWeakPtr()));
+}
+
+void KoanLibraryController::ReleaseKeepAlive() {
+  --keep_alive_count_;
+  if (!open_ && widget_) {
+    ScheduleCleanup();
+  }
+}
+
+void KoanLibraryController::ScheduleCleanup() {
+  if (keep_alive_count_ > 0) {
+    return;
+  }
+  cleanup_timer_.Start(FROM_HERE, kCleanupDelay,
+                       base::BindOnce(&KoanLibraryController::DestroyWidget,
+                                      weak_factory_.GetWeakPtr()));
 }
 
 gfx::Rect KoanLibraryController::GetArea() const {
@@ -384,10 +440,13 @@ void KoanLibraryController::LayoutWidget() {
   if (!widget_) {
     return;
   }
-  on_right_ = IsSidebarOnRight(browser_view_);
-  view_->SetOnRight(on_right_);
+  // The side is logical: in a right-to-left UI the sidebar is on the
+  // screen's right unless it is "on the right" (like KoanToast).
+  const bool on_right = IsSidebarOnRight(browser_view_);
+  on_screen_right_ = on_right != base::i18n::IsRTL();
+  view_->SetSide(on_right, on_screen_right_);
   gfx::Rect bounds = GetArea();
-  if (on_right_) {
+  if (on_screen_right_) {
     bounds.set_x(bounds.right() - width_);
   }
   bounds.set_width(width_);
@@ -415,9 +474,7 @@ std::unique_ptr<views::View> CreateLibraryButton(BrowserView* browser_view) {
   if (!controller || !controller->library()->IsAvailable()) {
     return nullptr;
   }
-  return std::make_unique<KoanLibraryButton>(
-      controller->library(),
-      controller->shortcuts()->GetAccelerator(shortcuts::Action::kLibrary));
+  return std::make_unique<KoanLibraryButton>(controller->library());
 }
 
 }  // namespace koan

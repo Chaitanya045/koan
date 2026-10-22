@@ -539,7 +539,9 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
   TabStripModel* model() const { return workspaces_->tab_strip_model(); }
 
   void ScheduleRebuild() {
-    if (!shown_ || !library()->is_open() || rebuild_timer_.IsRunning()) {
+    // A hidden section is rebuilt when it is shown (OnShown()).
+    if (!shown_ || !library()->is_open() || !GetVisible() ||
+        rebuild_timer_.IsRunning()) {
       return;
     }
     rebuild_timer_.Start(FROM_HERE, kRebuildDelay,
@@ -918,9 +920,11 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     menu->AddItem(u"Create Space",
                   base::BindRepeating(&KoanLibrarySpacesSection::CreateSpace,
                                       weak_factory_.GetWeakPtr()));
+    // There is always a space: deleting the last would close the window.
     menu->AddItem(u"Delete Space",
                   base::BindRepeating(&KoanLibrarySpacesSection::DeleteSpace,
-                                      weak_factory_.GetWeakPtr(), id));
+                                      weak_factory_.GetWeakPtr(), id),
+                  workspaces_->GetWorkspaces().size() > 1);
     RunMenu(std::move(menu), source, source->GetBoundsInScreen(),
             views::MenuAnchorPosition::kTopRight,
             ui::mojom::MenuSourceType::kMouse);
@@ -935,12 +939,13 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
 
   void DeleteSpace(const tab_groups::TabGroupId& id) {
     ShowLibraryConfirmation(
-        library()->browser_view(), u"Delete Space?",
+        library(), u"Delete Space?",
         u"The space and all its tabs will be closed.", u"Delete Space",
         base::BindOnce(
             [](base::WeakPtr<KoanLibrarySpacesSection> section,
                tab_groups::TabGroupId id) {
-              if (section && GroupOf(section->model(), id)) {
+              if (section && GroupOf(section->model(), id) &&
+                  section->workspaces_->GetWorkspaces().size() > 1) {
                 section->model()->CloseAllTabsInGroup(id);
               }
             },

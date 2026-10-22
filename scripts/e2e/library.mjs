@@ -1,14 +1,15 @@
 // End-to-end test of the Library against a real build: its shortcuts
 // (Alt+Shift+L, Ctrl+H, Ctrl+Shift+Y) and sidebar button, History (search,
 // filters, forget, open), Downloads (a real download, its actions and type
-// filters) and Spaces (rename, reorder), and closing with Esc.
+// filters, a dangerous one) and Spaces (rename, reorder), and closing with
+// Esc. What History deletes is checked in library_history.mjs.
 //
 //   scripts/e2e/run.sh library     (opens scripts/e2e/pages/library.html)
 import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  ALT, CTRL, SHIFT, UI_PORT, check, connect, finish, key as keyTo,
-  pages as tabs, setKoanPref, sleep, visiblePage, waitFor,
+  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish,
+  key as keyTo, pages as tabs, setKoanPref, sleep, visiblePage, waitFor,
 } from './lib/koan.mjs';
 
 // With SHOTS=<dir> (see run.sh), copies the window's latest off-screen frame
@@ -328,6 +329,54 @@ const downloads = join(profile, 'Downloads');
 
   await key(KEY_Y, CTRL | SHIFT, 'Y');
   check('Ctrl+Shift+Y again closes it', !(await library()).open);
+}
+
+// --- A download held back as dangerous (a script saved without a user
+// gesture, from a tab of its own): the row says so, and clicking it goes to
+// Chrome's warning instead of making it open once it's kept. ---
+{
+  const targetId = (await browserCall('Target.createTarget',
+      { url: `${pageUrl}?danger` })).result.targetId;
+  await sleep(1500);
+  const page = (await tabs()).find(t => t.id === targetId);
+  await evalIn(page, `(() => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['print(1)'], { type: 'text/x-python' }));
+    link.download = 'koan-dangerous.py';
+    link.click();
+  })()`);
+  await sleep(2000);
+  const dangerous = async () => withViews(nodes =>
+    find(nodes, 'KoanLibraryRow', n => n.shown && n.p.Title === 'koan-dangerous.py')[0]?.p);
+  await key(KEY_Y, CTRL | SHIFT, 'Y');
+  // Safe Browsing's verdict (library.flags) comes once the file is in.
+  let row = await waitFor(async () => {
+    const r = await dangerous();
+    return /dangerous/.test(r?.Subtitle ?? '') ? r : null;
+  }, 15000) ?? await dangerous() ?? {};
+  check('A dangerous download is listed with its warning',
+        /dangerous/.test(row.Subtitle ?? ''), `${row.Title} / ${row.Subtitle}`);
+  await withViews(async (nodes, ui) => {
+    const target = find(nodes, 'KoanLibraryRow',
+                        n => n.shown && n.p.Title === 'koan-dangerous.py')[0];
+    if (target) await click(ui, target, { x: 20, y: 20 });
+  });
+  await sleep(1500);
+  const tabsNow = await tabs();
+  // The warning: the download bubble's, or the downloads page.
+  check('...clicking it goes to Chrome\'s warning and closes the Library',
+        !(await library()).open, tabsNow.map(t => t.url).join(', '));
+  if (!(await library()).open) await key(KEY_Y, CTRL | SHIFT, 'Y');
+  row = await waitFor(dangerous) ?? {};
+  check('...and doesn\'t make it open when it\'s done', /dangerous/.test(row.Subtitle ?? ''),
+        `${row.Title} / ${row.Subtitle}`);
+  await key(KEY_Y, CTRL | SHIFT, 'Y');
+  for (const t of await tabs()) {
+    if (t.id === targetId || t.url.startsWith('chrome://downloads')) {
+      await browserCall('Target.closeTarget', { targetId: t.id });
+    }
+  }
+  await sleep(1000);
 }
 
 // --- Spaces: two new ones, renamed and reordered in the Library. ---

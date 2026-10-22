@@ -6,9 +6,11 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -81,11 +83,17 @@ constexpr base::TimeDelta kRefreshDelay = base::Milliseconds(300);
 // Zen's CLEAR_RANGES.
 struct ClearRange {
   const char16_t* label;
+  // What the confirmation asks.
+  const char16_t* title;
   int hours;  // 0: since midnight; -1: everything.
 };
 constexpr ClearRange kClearRanges[] = {
-    {u"Last hour", 1},      {u"Last 12 hours", 12},   {u"Today", 0},
-    {u"Last week", 24 * 7}, {u"Last month", 24 * 30}, {u"Everything", -1},
+    {u"Last hour", u"Clear history from the last hour?", 1},
+    {u"Last 12 hours", u"Clear history from the last 12 hours?", 12},
+    {u"Today", u"Clear today's history?", 0},
+    {u"Last week", u"Clear history from the last week?", 24 * 7},
+    {u"Last month", u"Clear history from the last month?", 24 * 30},
+    {u"Everything", u"Clear all history?", -1},
 };
 
 // "https://www.example.com/a/" -> "example.com/a" (Zen's #formatUrl).
@@ -191,8 +199,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
 
   void FillTabMenu(KoanLibraryMenu* menu) override {
-    const bool may_delete =
-        profile_->GetPrefs()->GetBoolean(::prefs::kAllowDeletingBrowserHistory);
+    const bool may_delete = IsDeletingHistoryAllowed(profile_);
     KoanLibraryMenu* clear = menu->AddSubMenu(u"Clear history");
     for (const ClearRange& range : kClearRanges) {
       if (range.hours < 0) {
@@ -201,7 +208,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       clear->AddItem(
           range.label,
           base::BindRepeating(&KoanLibraryHistorySection::ConfirmClearHistory,
-                              weak_factory_.GetWeakPtr(), range.hours),
+                              weak_factory_.GetWeakPtr(), range),
           may_delete);
     }
     menu->AddSeparator();
@@ -244,13 +251,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     ResetAndFetch();
   }
 
-  void OnScrolledToEnd() override {
-    if (exhausted_ || fetching_) {
-      return;
-    }
-    limit_ += kPageSize;
-    Fetch();
-  }
+  void OnScrolledToEnd() override { FetchMore(); }
 
   // history::HistoryServiceObserver:
   void OnURLVisited(history::HistoryService* history_service,
@@ -306,7 +307,14 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
 
   base::Time Cutoff() const {
-    return base::Time::Now() - base::Days(GetWhenDays().value_or(kHistoryDays));
+    return GetWhenCutoff().value_or(base::Time::Now() -
+                                    base::Days(kHistoryDays));
+  }
+
+  // Whether rows are pages of history the user may delete (policy
+  // AllowDeletingBrowserHistory); closed tabs can always be forgotten.
+  bool MayForget(const Entry& entry) const {
+    return entry.closed_id || IsDeletingHistoryAllowed(profile_);
   }
 
   void OnDataChanged(bool closed_tabs) {
@@ -317,19 +325,22 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       dirty_ = true;
       return;
     }
-    refresh_timer_.Start(FROM_HERE, kRefreshDelay,
-                         base::BindOnce(&KoanLibraryHistorySection::Fetch,
-                                        base::Unretained(this)));
+    // Fetched again as far as the list went.
+    refresh_timer_.Start(
+        FROM_HERE, kRefreshDelay,
+        base::BindOnce(&KoanLibraryHistorySection::Fetch,
+                       base::Unretained(this),
+                       std::max(kPageSize, static_cast<int>(entries_.size()))));
   }
 
-  void ResetAndFetch() {
-    limit_ = kPageSize;
-    exhausted_ = false;
-    Fetch();
-  }
+  void ResetAndFetch() { Fetch(kPageSize); }
 
-  void Fetch() {
+  // A fresh list, of `count` rows if there are that many.
+  void Fetch(int count) {
     dirty_ = false;
+    fetching_ = false;
+    exhausted_ = false;
+    pool_.clear();
     task_tracker_.TryCancelAll();
     if (ShowingClosed()) {
       FetchClosedTabs();
@@ -339,44 +350,78 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       Show({});
       return;
     }
+    // Most visited sorts the recent pages by their visit counts, and pages
+    // through them without asking again.
+    Query(base::Time(),
+          ActiveSort() == "mostvisited" ? kMostVisitedPool : count, count,
+          /*append=*/false);
+  }
+
+  // The next page, older than the rows shown.
+  void FetchMore() {
+    if (exhausted_ || fetching_) {
+      return;
+    }
+    if (ActiveSort() == "mostvisited") {
+      const size_t count = std::min(pool_.size(), size_t{kPageSize});
+      std::vector<Entry> next(std::make_move_iterator(pool_.begin()),
+                              std::make_move_iterator(pool_.begin() + count));
+      pool_.erase(pool_.begin(), pool_.begin() + count);
+      exhausted_ = pool_.empty();
+      Append(std::move(next));
+      return;
+    }
+    Query(oldest_, kPageSize, kPageSize, /*append=*/true);
+  }
+
+  // History from Cutoff() to `end` (now if null), newest first.
+  void Query(base::Time end, int max_count, int show_count, bool append) {
     history::QueryOptions options;
     options.begin_time = Cutoff();
+    options.end_time = end;
+    options.max_count = max_count;
     options.policy_for_404_visits = history::VisitQuery404sPolicy::kExclude404s;
-    const std::string sort = ActiveSort();
-    if (sort == "mostvisited" && query().empty()) {
-      options.max_count = kMostVisitedPool;
-    } else {
-      options.max_count = limit_;
-    }
     options.duplicate_policy =
-        sort == "date" && query().empty()
-            ? history::QueryOptions::REMOVE_DUPLICATES_PER_DAY
-            : history::QueryOptions::REMOVE_ALL_DUPLICATES;
+        PerDay() ? history::QueryOptions::REMOVE_DUPLICATES_PER_DAY
+                 : history::QueryOptions::REMOVE_ALL_DUPLICATES;
     fetching_ = true;
     history_->QueryHistory(
         query(), options,
         base::BindOnce(&KoanLibraryHistorySection::OnHistoryResults,
-                       base::Unretained(this)),
+                       base::Unretained(this), max_count, show_count, append),
         &task_tracker_);
   }
 
-  void OnHistoryResults(history::QueryResults results) {
+  void OnHistoryResults(int max_count,
+                        int show_count,
+                        bool append,
+                        history::QueryResults results) {
     fetching_ = false;
     std::vector<Entry> entries;
     for (const history::URLResult& result : results) {
       entries.push_back({result.url(), result.title(), result.visit_time(),
                          result.visit_count(), std::nullopt});
     }
-    if (ActiveSort() == "mostvisited" && query().empty()) {
-      std::ranges::stable_sort(entries, std::greater<>(), &Entry::visit_count);
-      exhausted_ = static_cast<int>(entries.size()) <= limit_;
-      if (!exhausted_) {
-        entries.resize(limit_);
-      }
-    } else {
-      exhausted_ = static_cast<int>(entries.size()) < limit_;
+    if (!entries.empty()) {
+      oldest_ = entries.back().time;
     }
-    Show(std::move(entries));
+    exhausted_ = results.reached_beginning() ||
+                 static_cast<int>(entries.size()) < max_count;
+    if (ActiveSort() == "mostvisited") {
+      std::ranges::stable_sort(entries, std::greater<>(), &Entry::visit_count);
+      pool_.clear();
+      if (static_cast<int>(entries.size()) > show_count) {
+        pool_.assign(std::make_move_iterator(entries.begin() + show_count),
+                     std::make_move_iterator(entries.end()));
+        entries.resize(show_count);
+      }
+      exhausted_ = pool_.empty();
+    }
+    if (append) {
+      Append(std::move(entries));
+    } else {
+      Show(std::move(entries));
+    }
   }
 
   void FetchClosedTabs() {
@@ -386,7 +431,10 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       return;
     }
     if (!tab_restore_->IsLoaded()) {
-      // TabRestoreServiceLoaded() fetches again.
+      // TabRestoreServiceLoaded() fetches again. Nothing from the other
+      // source meanwhile.
+      ResetList();
+      ShowEmpty(u"Loading closed tabs…");
       tab_restore_->LoadTabsFromLastSession();
       return;
     }
@@ -422,65 +470,85 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     Show(std::move(entries));
   }
 
-  // Lists `entries` (newest first) the way the sort order groups them.
-  void Show(std::vector<Entry> entries) {
+  // Whether a page is listed once a day (By Date) rather than once.
+  bool PerDay() const { return ActiveSort() == "date" && query().empty(); }
+
+  void ResetList() {
     favicon_tracker_.TryCancelAll();
-    // Forget the rows before they are destroyed; callbacks that still come
-    // for them find a newer generation.
+    // Forget the rows and groups before they are destroyed; callbacks that
+    // still come for them find a newer generation.
     rows_.clear();
     ++generation_;
+    flat_group_ = nullptr;
+    day_group_ = nullptr;
+    site_groups_.clear();
     ClearList();
-    entries_ = std::move(entries);
-    if (entries_.empty()) {
+    entries_.clear();
+    shown_keys_.clear();
+  }
+
+  // Lists `entries` (newest first) afresh.
+  void Show(std::vector<Entry> entries) {
+    ResetList();
+    if (entries.empty()) {
       ShowEmpty(ShowingClosed() ? u"No closed tabs" : u"No history found");
       InvalidateLayout();
       return;
     }
-    const std::string sort = ActiveSort();
-    if (!query().empty() || sort == "mostvisited" || sort == "lastvisited") {
-      if (sort == "lastvisited") {
-        std::ranges::stable_sort(entries_, std::greater<>(), &Entry::time);
+    Append(std::move(entries));
+  }
+
+  // Adds `entries` (older than those shown) to the list, in the groups of
+  // the sort order. Pages a page before already showed are skipped.
+  void Append(std::vector<Entry> entries) {
+    const bool per_day = PerDay();
+    for (Entry& entry : entries) {
+      if (!entry.closed_id &&
+          !shown_keys_
+               .insert({entry.url,
+                        per_day ? entry.time.LocalMidnight() : base::Time()})
+               .second) {
+        continue;
       }
-      views::View* group = AddGroup(std::u16string());
-      for (const Entry& entry : entries_) {
-        AddRow(group, entry);
-      }
-    } else if (sort == "site") {
-      // By name, with what isn't on a site last ("Other").
-      std::map<std::u16string, std::vector<const Entry*>> sites;
-      for (const Entry& entry : entries_) {
-        sites[SiteOf(entry.url)].push_back(&entry);
-      }
-      const auto add_site = [&](const std::u16string& site) {
-        auto it = sites.find(site);
-        if (it == sites.end()) {
-          return;
-        }
-        views::View* group = AddGroup(site.empty() ? u"Other" : site);
-        for (const Entry* entry : it->second) {
-          AddRow(group, *entry);
-        }
-      };
-      for (const auto& [site, unused] : sites) {
-        if (!site.empty()) {
-          add_site(site);
-        }
-      }
-      add_site(std::u16string());
-    } else {
-      const base::Time today = base::Time::Now().LocalMidnight();
-      base::Time day;
-      views::View* group = nullptr;
-      for (const Entry& entry : entries_) {
-        const base::Time entry_day = entry.time.LocalMidnight();
-        if (!group || entry_day != day) {
-          day = entry_day;
-          group = AddGroup(FormatDay(day, today));
-        }
-        AddRow(group, entry);
-      }
+      AddRow(GroupFor(entry), entry);
+      entries_.push_back(std::move(entry));
     }
     InvalidateLayout();
+  }
+
+  // The group `entry` goes in: its day (By Date), its site (By Site, sites
+  // by name and "Other" last), or one list.
+  views::View* GroupFor(const Entry& entry) {
+    const std::string sort = ActiveSort();
+    if (!query().empty() || sort == "mostvisited" || sort == "lastvisited") {
+      if (!flat_group_) {
+        flat_group_ = AddGroup(std::u16string());
+      }
+      return flat_group_;
+    }
+    if (sort == "site") {
+      const std::u16string site = SiteOf(entry.url);
+      auto it = site_groups_.find(site);
+      if (it != site_groups_.end()) {
+        return it->second;
+      }
+      size_t index = site_groups_.size();
+      if (!site.empty()) {
+        index = static_cast<size_t>(
+            std::ranges::count_if(site_groups_, [&](const auto& other) {
+              return !other.first.empty() && other.first < site;
+            }));
+      }
+      views::View* group = AddGroup(site.empty() ? u"Other" : site, index);
+      site_groups_[site] = group;
+      return group;
+    }
+    const base::Time day = entry.time.LocalMidnight();
+    if (!day_group_ || day != day_) {
+      day_ = day;
+      day_group_ = AddGroup(FormatDay(day, base::Time::Now().LocalMidnight()));
+    }
+    return day_group_;
   }
 
   void AddRow(views::View* group, const Entry& entry) {
@@ -493,11 +561,13 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     row->SetIcon(ui::ImageModel::FromVectorIcon(
                      vector_icons::kGlobeIcon, kColorKoanLibraryForeground, 16),
                  16);
-    row->AddAction(library::CreateIconButton(
-        base::BindRepeating(&KoanLibraryHistorySection::ForgetEntry,
-                            base::Unretained(this), entry),
-        kDeleteIcon, u"Remove from history", library::kRowButtonIconSize,
-        library::kRowButtonPadding, library::kPillRadius));
+    if (MayForget(entry)) {
+      row->AddAction(library::CreateIconButton(
+          base::BindRepeating(&KoanLibraryHistorySection::ForgetEntry,
+                              base::Unretained(this), entry),
+          kDeleteIcon, u"Remove from history", library::kRowButtonIconSize,
+          library::kRowButtonPadding, library::kPillRadius));
+    }
     row->AddAction(library::CreateIconButton(
         base::BindRepeating(&KoanLibraryHistorySection::OpenEntry,
                             base::Unretained(this), entry),
@@ -590,6 +660,9 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
 
   void ForgetEntry(const Entry& entry) {
+    if (!MayForget(entry)) {
+      return;
+    }
     if (entry.closed_id) {
       if (tab_restore_) {
         tab_restore_->RemoveEntryById(*entry.closed_id);
@@ -599,10 +672,12 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     }
     // Drop the row now, like Zen; the services' notifications follow. Not
     // from inside the row's own button, which the rebuild destroys.
-    std::erase_if(entries_, [&](const Entry& other) {
+    const auto same = [&](const Entry& other) {
       return other.closed_id ? other.closed_id == entry.closed_id
                              : !entry.closed_id && other.url == entry.url;
-    });
+    };
+    std::erase_if(entries_, same);
+    std::erase_if(pool_, same);
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(
                        [](base::WeakPtr<KoanLibraryHistorySection> section) {
@@ -616,6 +691,9 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   // Firefox's "Forget About This Site": the site's history, cookies, site
   // data and cache.
   void ForgetSite(const Entry& entry) {
+    if (!IsDeletingHistoryAllowed(profile_)) {
+      return;
+    }
     std::string site = net::registry_controlled_domains::GetDomainAndRegistry(
         entry.url,
         net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
@@ -626,7 +704,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       return;
     }
     ShowLibraryConfirmation(
-        library()->browser_view(), u"Forget About This Site",
+        library(), u"Forget About This Site",
         base::StrCat({u"This will remove all data related to ",
                       base::UTF8ToUTF16(site),
                       u", including history, cookies, cache and site data. "
@@ -637,7 +715,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
 
   void DoForgetSite(const std::string& site) {
-    if (history_) {
+    if (history_ && IsDeletingHistoryAllowed(profile_)) {
       history::QueryOptions options;
       options.hostname_suffix = site;
       history_->QueryHistory(
@@ -679,10 +757,12 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                                       weak_factory_.GetWeakPtr(), entry,
                                       /*background=*/false));
     menu->AddSeparator();
-    menu->AddItem(u"Forget This Page",
-                  base::BindRepeating(&KoanLibraryHistorySection::ForgetEntry,
-                                      weak_factory_.GetWeakPtr(), entry));
-    if (!entry.closed_id) {
+    if (MayForget(entry)) {
+      menu->AddItem(u"Forget This Page",
+                    base::BindRepeating(&KoanLibraryHistorySection::ForgetEntry,
+                                        weak_factory_.GetWeakPtr(), entry));
+    }
+    if (!entry.closed_id && IsDeletingHistoryAllowed(profile_)) {
       menu->AddItem(u"Forget About This Site",
                     base::BindRepeating(&KoanLibraryHistorySection::ForgetSite,
                                         weak_factory_.GetWeakPtr(), entry),
@@ -706,17 +786,22 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                 weak_factory_.GetWeakPtr(), generation_, index));
   }
 
-  void ConfirmClearHistory(int hours) {
+  // Zen's confirmation, naming the range ("Clear history from the last
+  // hour?").
+  void ConfirmClearHistory(const ClearRange& range) {
     ShowLibraryConfirmation(
-        library()->browser_view(), u"Clear history?",
+        library(), range.title,
         u"The pages you visited in this time frame will be forgotten. This "
         u"cannot be undone.",
         u"Clear history",
         base::BindOnce(&KoanLibraryHistorySection::ClearHistory,
-                       weak_factory_.GetWeakPtr(), hours));
+                       weak_factory_.GetWeakPtr(), range.hours));
   }
 
   void ClearHistory(int hours) {
+    if (!IsDeletingHistoryAllowed(profile_)) {
+      return;
+    }
     const base::Time now = base::Time::Now();
     base::Time begin;
     if (hours == 0) {
@@ -739,8 +824,18 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   base::ScopedObservation<sessions::TabRestoreService,
                           sessions::TabRestoreServiceObserver>
       restore_observation_{this};
+  // What the rows show, and (by most visited) what's still to show.
   std::vector<Entry> entries_;
-  int limit_ = kPageSize;
+  std::vector<Entry> pool_;
+  // Pages listed, with their day when listed once a day.
+  std::set<std::pair<GURL, base::Time>> shown_keys_;
+  // The oldest visit listed: the next page is older.
+  base::Time oldest_;
+  // The groups rows are added to.
+  raw_ptr<views::View> flat_group_ = nullptr;
+  raw_ptr<views::View> day_group_ = nullptr;
+  base::Time day_;
+  std::map<std::u16string, raw_ptr<views::View>> site_groups_;
   // The rows shown, and which list they are (Show() starts a new one).
   std::vector<raw_ptr<KoanLibraryRow>> rows_;
   int generation_ = 0;

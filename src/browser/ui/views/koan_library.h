@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
@@ -69,6 +70,11 @@ class KoanLibraryController : public TabStripModelObserver,
   // tab closing the library (a page opened in the background).
   void KeepOpenWhile(base::OnceClosure open_tab);
 
+  // Keeps the panel and its sections from being freed after it closes for
+  // as long as the returned runner lives: a confirmation the user can still
+  // accept after the library closed behind it.
+  base::ScopedClosureRunner KeepAlive();
+
   // A section changed the width it wants (Spaces grows with its cards).
   void OnPreferredWidthChanged();
 
@@ -100,6 +106,8 @@ class KoanLibraryController : public TabStripModelObserver,
   void AnimateTo(double target);
   void SetProgress(double progress);
   void Finish();
+  void ReleaseKeepAlive();
+  void ScheduleCleanup();
   // The space the library covers: the window below any toolbar row, from
   // the sidebar's edge.
   gfx::Rect GetArea() const;
@@ -124,12 +132,13 @@ class KoanLibraryController : public TabStripModelObserver,
   // `transition: width 0.3s`.
   gfx::LinearAnimation resize_{this};
   int width_ = 0;
-  // Whether the sidebar, and so the library, is on the right.
-  bool on_right_ = false;
+  // Whether the sidebar, and so the library, is on the screen's right.
+  bool on_screen_right_ = false;
   int width_from_ = 0;
   int width_to_ = 0;
 
   base::OneShotTimer cleanup_timer_;
+  int keep_alive_count_ = 0;
   raw_ptr<views::FocusManager> escape_focus_manager_ = nullptr;
 
   base::WeakPtrFactory<KoanLibraryController> weak_factory_{this};

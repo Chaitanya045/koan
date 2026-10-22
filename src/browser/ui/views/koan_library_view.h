@@ -17,6 +17,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "koan/browser/ui/views/koan_library_ui.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -31,6 +32,7 @@
 #include "ui/views/view.h"
 
 class BrowserView;
+class Profile;
 
 namespace views {
 class ImageView;
@@ -46,12 +48,17 @@ class KoanLibrarySection;
 class KoanLibraryTab;
 
 // Asks before something that can't be undone, in a browser-modal dialog;
-// `on_accept` runs if the user agrees.
-void ShowLibraryConfirmation(BrowserView* browser_view,
+// `on_accept` runs if the user agrees. The library's sections stay while it
+// asks, even if the library closes behind the dialog.
+void ShowLibraryConfirmation(KoanLibraryController* library,
                              std::u16string title,
                              std::u16string message,
                              std::u16string accept,
                              base::OnceClosure on_accept);
+
+// Whether `profile` may delete history (policy AllowDeletingBrowserHistory):
+// forgetting pages and removing downloads from the list are deleting it.
+bool IsDeletingHistoryAllowed(Profile* profile);
 
 // A menu built from closures, for the library's context menus.
 class KoanLibraryMenu : public ui::SimpleMenuModel::Delegate {
@@ -145,6 +152,8 @@ class KoanLibraryRow : public views::Button,
   // views::Button:
   void StateChanged(ButtonState old_state) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
+  void OnFocus() override;
+  void OnBlur() override;
 
   // views::ContextMenuController:
   void ShowContextMenuForViewImpl(
@@ -242,8 +251,9 @@ class KoanLibrarySearchSection : public KoanLibrarySection,
   void SetFilterActive(const std::string& group,
                        const std::string& option,
                        bool active);
-  // Days covered by the "when" filter (Today, This Week, This Month).
-  std::optional<int> GetWhenDays() const;
+  // Since when the "when" filter shows things (Today: since midnight, This
+  // Week / This Month: the last 7 / 30 days); unset without one.
+  std::optional<base::Time> GetWhenCutoff() const;
   const std::u16string& query() const { return query_; }
 
   views::Textfield* search_field() { return search_field_; }
@@ -271,7 +281,9 @@ class KoanLibrarySearchSection : public KoanLibrarySection,
   // The list's content: rows grouped under optional headers.
   views::View* list() { return list_; }
   void ClearList();
-  views::View* AddGroup(const std::u16string& header);
+  // A group of rows under `header` (none if empty), last or at `index`.
+  views::View* AddGroup(const std::u16string& header,
+                        std::optional<size_t> index = std::nullopt);
   void ShowEmpty(std::u16string text);
   // Rebuilds the chips, e.g. when an option became (un)available.
   void UpdateFilterPanel();
@@ -318,8 +330,10 @@ class KoanLibraryView : public views::View {
   // nothing downloads.
   void SetDownloadProgress(float progress);
 
-  // Mirrors the panel for a sidebar on the right.
-  void SetOnRight(bool on_right);
+  // Mirrors the panel for a sidebar on the right: `on_right` is the logical
+  // side (Views mirror the layout in a right-to-left UI by themselves),
+  // `on_screen_right` the side of the screen.
+  void SetSide(bool on_right, bool on_screen_right);
 
   // Shows what a right click on a section's tab offers.
   void ShowTabMenu(LibrarySection section, const gfx::Point& screen_point);
@@ -336,6 +350,7 @@ class KoanLibraryView : public views::View {
   std::array<raw_ptr<KoanLibrarySection>, 3> sections_{};
   std::optional<LibrarySection> shown_;
   bool on_right_ = false;
+  bool on_screen_right_ = false;
   std::unique_ptr<KoanLibraryMenu> tab_menu_;
 };
 

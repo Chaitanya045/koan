@@ -248,8 +248,9 @@ bool KoanShortcutController::Run(Action action) {
     case Action::kSavePage:
       return Command(IDC_SAVE_PAGE);
     case Action::kLibrary:
+      // No Library (flag off, or a private window): the key goes on.
       if (!library->IsAvailable()) {
-        return Command(IDC_SHOW_HISTORY);
+        return false;
       }
       library->Toggle();
       return true;

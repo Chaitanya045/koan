@@ -411,31 +411,39 @@ with three sections down its side, and opens on the one you used last:
 - **Downloads** (Ctrl+Shift+Y): every download, newest first, with its size,
   site and date (hover a row for where it came from). Search, or filter by
   file type (images, video, audio, documents, archives, apps) and date.
-  Hover a row for cancel / retry / show in folder and **⋯** (open, copy the
-  file or its link, remove from the list, delete the file). Click a
-  download in progress to open it when it's done, a finished one to show it
-  in the file manager. While anything downloads, the Downloads tab shows a
+  Hover or focus a row for cancel / retry / show in folder and **⋯** (open,
+  cancel, retry, copy the file or its link, remove from the list, delete
+  the file after asking); right-click or the menu key opens the same menu.
+  Click a download in progress to open it when it's done, a finished one to
+  show it in the file manager. A download Chrome warns about (dangerous or
+  insecure) is never opened from here: clicking it shows Chrome's warning,
+  where you keep or delete it. While anything downloads, the Downloads tab shows a
   progress ring. Right-click the Downloads tab to clear the list or open
   `chrome://downloads`.
 - **Spaces**: a card per workspace with its tabs. Click the name to rename
   it, the icon to pick an emoji, the brush to change its colour; drag the
   arrows at the bottom to reorder the spaces; **⋯** has the same plus
-  "Create Space" and "Delete Space". **+** after the last card adds a
-  space. Click a tab to go there. The Library widens to fit the cards.
+  "Create Space" and "Delete Space" (not for the only space). **+** after
+  the last card adds a space. Click a tab to go there. The Library widens to fit the cards.
 - **History** (Ctrl+H): the last 120 days by day. Search, or **Filter**:
-  when (today, this week, this month), sort (by date, site, most visited,
+  when (today since midnight, this week, this month), sort (by date, site, most visited,
   last visited) and what to look through (history or the tabs closed
   recently). Click a page to open it in a new tab; Ctrl+click or
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data
   and cache). Right-click the History tab to clear history from the last
-  hour, 12 hours, today, week, month or everything, or to open
-  `chrome://history`.
+  hour, 12 hours, today, week, month or everything (it asks first, naming
+  the range), or to open `chrome://history`. Where policy forbids deleting
+  history (AllowDeletingBrowserHistory) nothing here offers to, as on
+  Chrome's History page.
 
 Esc, the back arrow at the bottom of the side column, the same shortcut
 again or opening a tab closes the Library. Incognito windows have no
-Library (the shortcuts open Chrome's pages there).
+Library: there Ctrl+H shows Chrome's notice that history isn't saved, as
+in Chrome, and the Downloads key opens `chrome://downloads`.
+With "Reduce motion" set in the system, it opens and closes without
+sliding.
 
 ## Turning things off
 

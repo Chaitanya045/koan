@@ -17,14 +17,18 @@
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "components/history/core/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "components/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_icons.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/dialog_model.h"
 #include "ui/base/models/menu_separator_types.h"
@@ -153,13 +157,16 @@ class KoanLibraryTab : public views::Button,
     label_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
     label_->SetCanProcessEventsWithinSubtree(false);
     SetTooltipText(SectionLabel(section));
+    GetViewAccessibility().SetRole(ax::mojom::Role::kTab);
     GetViewAccessibility().SetName(SectionLabel(section));
+    GetViewAccessibility().SetIsSelected(false);
     set_context_menu_controller(this);
   }
 
   void SetActive(bool active) {
     if (active_ != active) {
       active_ = active;
+      GetViewAccessibility().SetIsSelected(active);
       SchedulePaint();
     }
   }
@@ -240,7 +247,7 @@ ADD_READONLY_PROPERTY_METADATA(bool, Active)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, Label)
 END_METADATA
 
-void ShowLibraryConfirmation(BrowserView* browser_view,
+void ShowLibraryConfirmation(KoanLibraryController* library,
                              std::u16string title,
                              std::u16string message,
                              std::u16string accept,
@@ -253,8 +260,14 @@ void ShowLibraryConfirmation(BrowserView* browser_view,
               std::move(on_accept),
               ui::DialogModel::Button::Params().SetLabel(std::move(accept)))
           .AddCancelButton(base::DoNothing())
+          .SetDialogDestroyingCallback(base::BindOnce(
+              [](base::ScopedClosureRunner) {}, library->KeepAlive()))
           .Build(),
-      browser_view->GetNativeWindow());
+      library->browser_view()->GetNativeWindow());
+}
+
+bool IsDeletingHistoryAllowed(Profile* profile) {
+  return profile->GetPrefs()->GetBoolean(::prefs::kAllowDeletingBrowserHistory);
 }
 
 // KoanLibraryMenu -----------------------------------------------------------
@@ -422,6 +435,8 @@ void KoanLibraryRow::SetSubtitle(std::u16string normal,
                                  std::u16string hovered) {
   subtitle_normal_ = std::move(normal);
   subtitle_hovered_ = std::move(hovered);
+  // Screen readers get the status ("Failed", "Opens when finished", ...).
+  GetViewAccessibility().SetDescription(subtitle_normal_);
   UpdateHover();
 }
 
@@ -430,6 +445,9 @@ std::u16string KoanLibraryRow::GetSubtitle() const {
 }
 
 views::View* KoanLibraryRow::AddAction(std::unique_ptr<views::View> action) {
+  // Out of the tab order: the row's menu (menu key, Shift+F10) has every
+  // action, and a button that only shows with its row would lose focus.
+  action->SetFocusBehavior(FocusBehavior::NEVER);
   return actions_->AddChildView(std::move(action));
 }
 
@@ -483,9 +501,21 @@ void KoanLibraryRow::ShowContextMenuForViewImpl(
   }
 }
 
+void KoanLibraryRow::OnFocus() {
+  views::Button::OnFocus();
+  UpdateHover();
+}
+
+void KoanLibraryRow::OnBlur() {
+  views::Button::OnBlur();
+  UpdateHover();
+}
+
 void KoanLibraryRow::UpdateHover() {
   const ButtonState state = GetState();
-  hovered_ = menu_open_ || state == STATE_HOVERED || state == STATE_PRESSED;
+  // A focused row shows its actions too, as a hovered one does.
+  hovered_ = menu_open_ || state == STATE_HOVERED || state == STATE_PRESSED ||
+             HasFocus();
   actions_->SetVisible(hovered_ && !actions_->children().empty());
   const std::u16string& subtitle = hovered_ && !subtitle_hovered_.empty()
                                        ? subtitle_hovered_
@@ -704,15 +734,17 @@ void KoanLibrarySearchSection::SetFilterActive(const std::string& group,
   }
 }
 
-std::optional<int> KoanLibrarySearchSection::GetWhenDays() const {
+std::optional<base::Time> KoanLibrarySearchSection::GetWhenCutoff() const {
+  const base::Time now = base::Time::Now();
+  // "Today" is since midnight, like Clear history's "Today".
   if (IsFilterActive("when", "today")) {
-    return 1;
+    return now.LocalMidnight();
   }
   if (IsFilterActive("when", "week")) {
-    return 7;
+    return now - base::Days(7);
   }
   if (IsFilterActive("when", "month")) {
-    return 30;
+    return now - base::Days(30);
   }
   return std::nullopt;
 }
@@ -773,8 +805,10 @@ void KoanLibrarySearchSection::ClearList() {
   list_->RemoveAllChildViews();
 }
 
-views::View* KoanLibrarySearchSection::AddGroup(const std::u16string& header) {
-  auto* group = list_->AddChildView(std::make_unique<views::BoxLayoutView>());
+views::View* KoanLibrarySearchSection::AddGroup(const std::u16string& header,
+                                                std::optional<size_t> index) {
+  auto* group = list_->AddChildViewAt(std::make_unique<views::BoxLayoutView>(),
+                                      index.value_or(list_->children().size()));
   group->SetOrientation(views::BoxLayout::Orientation::kVertical);
   group->SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kStretch);
   if (!header.empty()) {
@@ -813,7 +847,11 @@ KoanLibraryView::KoanLibraryView(KoanLibraryController* library)
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
+  GetViewAccessibility().SetRole(ax::mojom::Role::kPane);
+  GetViewAccessibility().SetName(u"Library");
   side_ = AddChildView(std::make_unique<views::View>());
+  side_->GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
+  side_->GetViewAccessibility().SetName(u"Library sections");
   for (LibrarySection section :
        {LibrarySection::kDownloads, LibrarySection::kSpaces,
         LibrarySection::kHistory}) {
@@ -922,18 +960,20 @@ void KoanLibraryView::ShowTabMenu(LibrarySection section,
                  ui::mojom::MenuSourceType::kMouse, base::DoNothing());
 }
 
-void KoanLibraryView::SetOnRight(bool on_right) {
-  if (on_right_ == on_right) {
+void KoanLibraryView::SetSide(bool on_right, bool on_screen_right) {
+  if (on_right_ == on_right && on_screen_right_ == on_screen_right) {
     return;
   }
   on_right_ = on_right;
-  // Zen turns the back arrow round with the panel.
+  on_screen_right_ = on_screen_right;
+  // Zen turns the back arrow round with the panel: it points to the edge
+  // the panel slides back to.
   footer_->SetImageModel(
       views::Button::STATE_NORMAL,
-      ui::ImageModel::FromVectorIcon(on_right ? vector_icons::kArrowForwardIcon
-                                              : vector_icons::kArrowBackIcon,
-                                     kColorKoanLibraryForeground,
-                                     library::kSmallButtonIconSize));
+      ui::ImageModel::FromVectorIcon(
+          on_screen_right ? vector_icons::kArrowForwardIcon
+                          : vector_icons::kArrowBackIcon,
+          kColorKoanLibraryForeground, library::kSmallButtonIconSize));
   InvalidateLayout();
   SchedulePaint();
 }
@@ -992,11 +1032,11 @@ void KoanLibraryView::OnPaintBackground(gfx::Canvas* canvas) {
   // The library sits on the window's own surface, like the sidebar.
   canvas->DrawColor(provider->GetColor(kColorKoanLibraryBackground));
   // The side column lightens towards the content (Zen: a gradient from
-  // transparent at the window's edge).
-  const gfx::Rect side = side_->bounds();
+  // transparent at the window's edge). Painted on screen, so mirrored.
+  const gfx::Rect side = side_->GetMirroredBounds();
   const SkPoint points[] = {
-      {static_cast<float>(on_right_ ? side.right() : side.x()), 0},
-      {static_cast<float>(on_right_ ? side.x() : side.right()), 0}};
+      {static_cast<float>(on_screen_right_ ? side.right() : side.x()), 0},
+      {static_cast<float>(on_screen_right_ ? side.x() : side.right()), 0}};
   const SkColor4f colors[] = {
       SkColors::kTransparent,
       SkColor4f::FromColor(provider->GetColor(kColorKoanLibrarySideHighlight))};
