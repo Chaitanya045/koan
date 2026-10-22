@@ -242,6 +242,116 @@ export async function clickView(cls) {
   await sleep(500);
 }
 
+// A view's properties (UI DevTools), within `ui`'s session.
+async function viewProps(ui, nodeId) {
+  const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId });
+  const p = {};
+  for (const rule of r.result?.matchedCSSRules ?? []) {
+    for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+  }
+  return p;
+}
+
+// Where the view with element id `id` is: its node and position in the root
+// view of its widget, or null.
+async function findInMenu(ui, id) {
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const search = (await ui.send('DOM.performSearch', { query: `id:${id}` })).result;
+  const [itemId] = search?.resultCount ? (await ui.send('DOM.getSearchResults',
+      { searchId: search.searchId, fromIndex: 0, toIndex: 1 })).result.nodeIds : [];
+  // The views from the widget's root view down to the item.
+  const chain = [];
+  const findChain = n => {
+    if (n.nodeId === itemId) {
+      chain.push(n);
+      return true;
+    }
+    for (const c of n.children ?? []) {
+      if (findChain(c)) {
+        chain.unshift(n);
+        return true;
+      }
+    }
+    return false;
+  };
+  if (!itemId || !findChain(doc)) return null;
+  // Below the widget: the views of other widgets above don't count.
+  const widgetAt = chain.findLastIndex(n => n.nodeName !== 'View');
+  const views = chain.slice(widgetAt + 1);
+  let x = 20, y = 0;
+  for (const n of views.slice(1)) {
+    const p = await viewProps(ui, n.nodeId);
+    x += +p.X;
+    y += +p.Y;
+    if (n.nodeId === itemId) y += Math.floor(+p.Height / 2);
+  }
+  return { root: views[0], x, y };
+}
+
+// Runs an item of a tab's context menu: right-clicks the tab view (`tab`:
+// {nodeId} of a TabView, or {title} of the tab) and clicks the menu item
+// with element id `item`, e.g. 'kKoanAddToEssentialsMenuItem' (Koan's items
+// in koan_pinned_tabs.cc), first opening the submenu item `via` if given.
+// Returns false if the tab or an item isn't there.
+export async function tabMenuCommand(tab, item, { via } = {}) {
+  let ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  let doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  let tabId = tab.nodeId;
+  const findTitled = async (n, parent) => {
+    const a = n.attributes ?? [];
+    if (a[a.indexOf('class') + 1] === 'TabTitle' &&
+        (await viewProps(ui, n.nodeId)).Text === tab.title) {
+      return parent.nodeId;
+    }
+    for (const c of n.children ?? []) {
+      const found = await findTitled(c, n.nodeName === 'View' ? n : parent);
+      if (found) return found;
+    }
+    return null;
+  };
+  tabId ??= await findTitled(doc, null);
+  if (!tabId) {
+    ui.close();
+    return false;
+  }
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await ui.send('DOM.dispatchMouseEvent', { nodeId: tabId,
+        event: { type, x: 20, y: 10, button: 'right', wheelDirection: 'none' } });
+  }
+  ui.close();
+  await sleep(1500);
+
+  ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  if (via) {
+    // Pointing at a submenu item opens it.
+    const parent = await findInMenu(ui, via);
+    if (!parent) {
+      ui.close();
+      return false;
+    }
+    await ui.send('DOM.dispatchMouseEvent', { nodeId: parent.root.nodeId,
+        event: { type: 'mouseMoved', x: parent.x, y: parent.y, button: 'none',
+                 wheelDirection: 'none' } });
+    await sleep(1500);
+  }
+  const found = await findInMenu(ui, item);
+  if (!found) {
+    ui.close();
+    return false;
+  }
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await ui.send('DOM.dispatchMouseEvent', { nodeId: found.root.nodeId,
+        event: { type, x: found.x, y: found.y, button: 'left', wheelDirection: 'none' } });
+  }
+  ui.close();
+  await sleep(1500);
+  return true;
+}
+
 // Number of shown views of class `cls`.
 export async function countViews(cls) {
   return shownViews(await views(), cls).length;

@@ -1,0 +1,23 @@
+--- a/chrome/browser/sessions/session_service_base.cc
++++ b/chrome/browser/sessions/session_service_base.cc
+@@ -59,6 +59,7 @@
+ #include "content/public/browser/navigation_details.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/session_storage_namespace_handle.h"
++#include "koan/browser/ui/views/koan_tab_session_data.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ 
+ #if BUILDFLAG(IS_MAC)
+@@ -675,6 +676,12 @@
+         sessions::CreatePinnedStateCommand(session_id, true));
+   }
+ 
++  // Koan: its features' per-tab data (koan_tab_session_data.h).
++  for (const auto& [key, data] : koan::GetTabSessionData(tab)) {
++    command_storage_manager()->AppendRebuildCommand(
++        sessions::CreateAddTabExtraDataCommand(session_id, key, data));
++  }
++
+   // Record the association between the sessionStorage namespace and the tab.
+   content::SessionStorageNamespaceHandle* session_storage_namespace =
+       tab->GetController().GetDefaultSessionStorageNamespace();

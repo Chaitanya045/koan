@@ -1,8 +1,6 @@
-diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
-index 1c4df06838acdd54323be28c7275ca53bdc7d9bc..00df2656c8b9d80645ea59f3bbe499ba1c36b551 100644
 --- a/chrome/browser/ui/tabs/BUILD.gn
 +++ b/chrome/browser/ui/tabs/BUILD.gn
-@@ -197,6 +197,7 @@ if (!is_android) {
+@@ -197,6 +197,7 @@
        "//components/contextual_tasks/public",
        "//components/contextual_tasks/public:feature_list",
        "//components/feed:feature_list",
@@ -10,7 +8,7 @@ index 1c4df06838acdd54323be28c7275ca53bdc7d9bc..00df2656c8b9d80645ea59f3bbe499ba
      ]
    }
  
-@@ -428,6 +429,10 @@ if (!is_android) {
+@@ -428,6 +429,10 @@
        "//components/tab_groups",
        "//components/web_modal",
        "//components/webapps/common",
@@ -21,3 +19,11 @@ index 1c4df06838acdd54323be28c7275ca53bdc7d9bc..00df2656c8b9d80645ea59f3bbe499ba
      ]
    }
  
+@@ -746,6 +751,7 @@
+       "//components/webapps/browser",
+       "//components/zoom",
+       "//net",
++      "//koan/browser/ui/views",
+       "//printing/buildflags",
+       "//ui/base/unowned_user_data",
+       "//ui/webui",

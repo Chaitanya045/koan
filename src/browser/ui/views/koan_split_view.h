@@ -14,9 +14,9 @@ class SimpleMenuModel;
 
 namespace koan {
 
-// Zen's split view item of the tab context menu (tab-zen-split-tabs), called
-// by the hook in TabMenuModel::Build() after upstream's split view items for
-// the tab at `index` (`num_tabs` tabs selected for the command): upstream's
+// Zen's split view item of the tab context menu (tab-zen-split-tabs), for
+// the tab at `index` (`num_tabs` tabs selected for the command); split view's
+// TabMenuFeature (koan_tab_menu.h): upstream's
 // "Add tab to new split view" / "New split view with current tab" become
 // "Add Split View..." (one tab) or "Join N Tabs" (a selection), and a tab in
 // a split gets "Split Out Tab" ahead of upstream's "Arrange split view".
@@ -25,14 +25,8 @@ void AddZenSplitTabMenuItems(ui::SimpleMenuModel* menu,
                              int index,
                              int num_tabs);
 
-// Command id of "Split Out Tab", clear of the tab context menu's commands
-// (tabs::TabContextMenuCommand) and its submenus' ranges (1001-2100, see
-// ExistingBaseSubMenuModel). Handled by the hooks in TabStripModel's
-// IsContextMenuCommandEnabled() and ExecuteContextMenuCommand().
-// TabContextMenuController casts every command id to
-// tabs::TabContextMenuCommand (an unscoped enum of 0-30) before the hooks
-// see it; casting 3001 is formally unspecified but harmless (no
-// -fstrict-enums), and keeps the hooks out of the views controller.
+// Command id of "Split Out Tab", in split view's range of tab menu commands
+// (TabMenuFeatureId::kSplitView in koan_tab_menu.h).
 inline constexpr int kSplitOutTabCommandId = 3001;
 
 inline bool IsSplitOutTabCommand(int command_id) {

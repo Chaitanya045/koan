@@ -30,6 +30,41 @@ scripts/build.sh                            # most of the tree rebuilds
 `chromium/src`, then `scripts/apply_patches.sh export` and continue with
 `scripts/apply_branding.sh`.
 
+## Shared hooks for Koan features
+
+Several features need the same upstream places. Each is one hook, and
+features plug into it in `src/` rather than patching upstream again:
+
+- **Tab context menu**: `src/browser/ui/views/koan_tab_menu.h`. One hook at
+  the end of `TabMenuModel::Build()` (`koan::AddKoanTabMenuItems`, with a
+  `koan_submenus_` member in `TabMenuModel` that owns features' submenus) and
+  one in each of `TabStripModel::IsContextMenuCommandEnabled()` /
+  `ExecuteContextMenuCommand()`. A feature adds a `TabMenuFeature` (add its
+  items, enabled state, run a command) to `kFeatures` in `koan_tab_menu.cc`
+  and gets its own range of 100 command ids (`TabMenuFeatureId`: split view
+  3000, pinned tabs 3100, Spaces 3200, folders 3300). Items are found by
+  command id, never by position. `TabMenuContext::AddSubmenu()` gives a
+  submenu whose items run like the menu's.
+- **Per-tab session data**: `src/browser/ui/views/koan_tab_session_data.h`.
+  `koan::SetTabSessionData(contents, "koan.<feature>", data)` /
+  `GetTabSessionData()`: a feature's data for a tab, stored as Chromium's
+  per-tab session extra data under its own key. It comes back after a
+  restart, when a closed tab or window is reopened and when a discard
+  replaces the tab's WebContents, and follows the tab, not its index. A
+  feature that acts while a tab is restored (e.g. to replace its pages) adds
+  a `TabRestoreHook` to `kRestoreHooks` in `koan_tab_session_data.cc`. The
+  hooks: `SessionServiceBase::BuildCommandsForTab` (the session file's
+  rebuild drops per-tab extra data otherwise), `CreateRestoredTab` in
+  `browser_tabrestore.cc` and `BrowserLiveTabContext::GetExtraDataForTab`.
+- **"Is this tab pinned?"**: `koan::IsPinnedForUser(tab)` in
+  `src/browser/ui/views/koan_pinned_tabs_hooks.h`: an Essential (Chromium's
+  pinned tab) or a tab pinned to its Space, which Chromium doesn't know as
+  pinned. Upstream's Close Other Tabs, Close Tabs Below and back-to-opener,
+  and Koan's Clear, ask it; any feature that leaves pinned tabs alone (moving
+  tabs between Spaces or into folders) should too. The freezing and Memory
+  Saver exemptions get these tabs through the page's pinned state, which
+  Koan sets for them.
+
 ## After every rebase, re-audit the hooks
 
 `update_chromium.sh` prints every `koan::` call site in `chromium/src`.
@@ -59,7 +94,7 @@ assumes:
 | Renderer switches | `chrome/browser/chrome_content_browser_client.cc` (`AppendExtraCommandLineSwitches`, + `chrome/browser/BUILD.gn` `core`) | the renderer branch still has the `RenderProcessHost` for `child_process_id` |
 | Glance activation | `third_party/blink/renderer/core/loader/navigation_policy.cc` | `NavigationPolicyFromEventModifiers` still maps modifier clicks to policies; the popup policy is still never produced by link clicks |
 | Link context menu | `chrome/browser/renderer_context_menu/render_view_context_menu.cc` (+ its `BUILD.gn`) | `AppendLinkItems()`'s split-view block unchanged; `ExecuteCommand` still records metrics for every id first (Koan's id 55000 runs before); id 55000 still unused in `chrome_command_ids.h` |
-| Tab context menu | `chrome/browser/ui/tabs/tab_menu_model.cc`, `tab_strip_model.cc` (+ `ui/tabs/BUILD.gn`) | split items still `CommandAddToSplit` / `CommandArrangeSplit`; unknown commands still reach `TabStripModel::IsContextMenuCommandEnabled` / `ExecuteContextMenuCommand` (Koan's "Split Out Tab" is 3001) |
+| Tab context menu (see "Shared hooks" above) | `chrome/browser/ui/tabs/tab_menu_model.cc` (one hook, `koan::AddKoanTabMenuItems`, at the end of `Build`), `tab_menu_model.h` (`koan_submenus_`), `tab_strip_model.cc` (`IsContextMenuCommandEnabled`, `ExecuteContextMenuCommand`) (+ `ui/tabs/BUILD.gn`) | the menu still has `CommandAddToSplit`, `CommandArrangeSplit`, `CommandTogglePinned`, `CommandCloseTab`, `CommandCloseOtherTabs` and `CommandCloseTabsToRight` items, which Koan relabels, tags or inserts around; the views controller still hands every command id to `TabStripModel` (Koan's ids are 3000-3399, see `koan_tab_menu.h`); `CommandTogglePinned` still reaches `ExecuteContextMenuCommand` |
 | Sidebar tab rows | `chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc` (`CalculateVerticalLayout`), `tab_strip_view.cc` (`IsPositionInWindowCaption`) | the vertical layout still places pinned container, separator, unpinned container top to bottom with a running `y`; Koan's rows view is a direct `TabStripView` child |
 | Tab and tile sizes | `chrome/browser/ui/layout_constants.cc` | the `kVerticalTab*` constants still size vertical tab rows, pinned tiles and their radius |
 | Close button on hover, favicon gap | `.../tabs/common/tab_view_vertical_layout.cc` (`IsChildVisible`, `OnInstalled`) | the close button's last branch still decides "active or hovered"; the icon's `padding` in `tab_children_configs_` is still the gap after the favicon (applied after the icon), so `koan::SidebarTabIconGap` sets the favicon-to-title gap |
@@ -80,6 +115,13 @@ assumes:
 | Close tab on Back | `chrome/browser/ui/tabs/back_to_opener/back_to_opener_controller.cc` (`HasValidOpener`, which `CanGoBackToOpener` now calls) | upstream's back-to-opener (`tabs::kBackToOpener`, enabled in `koan_feature_overrides.cc`) still closes the tab and activates its opener; `CanGoBack` / `ShouldEnableBackButton` still ask `CanGoBackToOpener` and the back button's menu (`BackForwardMenuModel`) still asks `HasValidOpener` |
 | Ctrl+Tab options (no patch) | `IsReservedCommandOrKey` in `BrowserView::PreHandleKeyboardEvent` | reserved keys still go through `FocusManager::ProcessAccelerator`, so Koan's targets see Ctrl+Tab first; `chrome::IsCtrlTabMruEnabled` still reports Chromium's recently-used Ctrl+Tab (Koan defers to it) |
 | Settings page: shortcut capture (no patch) | `BrowserView::PreHandleKeyboardEvent` | still returns early while the FocusManager's shortcut handling is suspended (the editor suspends it while recording a key) |
+| Pinned tabs in upstream's "leave pinned tabs" checks | `chrome/browser/ui/tabs/tab_strip_model.cc` (`HasIndicesClosedByCommand`, `GetTabsClosedByCommand`), `src/browser/koan_tab_hooks.cc` (`ShouldCloseTabOnBack`, no patch) | Close Other Tabs and Close Tabs Below still skip `IsPinned()` tabs there, and back-to-opener still asks `ShouldCloseTabOnBack`; each also asks `koan::IsPinnedForUser()`, which counts tabs pinned to their workspace. Other upstream pinned checks (freezing, Memory Saver) read the page's pinned state, which Koan sets for those tabs |
+| Reopened tab keeps its pinned state | `chrome/browser/ui/browser_live_tab_context.cc` (`GetExtraDataForTab`) (+ `ui/BUILD.gn`) | the tab restore service still takes a closed tab's extra data from there and hands it to `CreateRestoredTab` |
+| Close Tab command on a pinned tab | `chrome/browser/ui/browser_commands.cc` (`chrome::CloseTab`) (+ `ui/BUILD.gn`) | Ctrl+W, Ctrl+F4 and, on macOS, Cmd+W and the menu bar's Close Tab still run `IDC_CLOSE_TAB` through `chrome::CloseTab` |
+| Tab row decoration | `chrome/browser/ui/views/tabs/common/tab_view.cc` (end of ctor) | `TabTitle` / `TabIcon` are still direct children of `TabView`, laid out by its layout manager |
+| Pinned tab close button / middle click | `.../tabs/common/tab_strip_collection_controller.cc` (`CloseTab`) | both still end up in `CloseTab` |
+| Custom tab label and icon | `chrome/browser/ui/tabs/tab_data.cc` (`TabData::FromTabInterface`) | tab views still read title and favicon from `TabData` |
+| Koan tab state in the session | `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`), `chrome/browser/ui/browser_tabrestore.cc` (`CreateRestoredTab`) (+ `sessions/BUILD.gn`, `ui/BUILD.gn`) | rebuilding the session file still drops per-tab extra data (Koan re-adds its key); restored tabs still get `extra_data` and their entries before `NavigationController::Restore` |
 
 Upstream unit and browser tests that expect Chromium's defaults fail with
 Koan's (they aren't run today): `background_tab_loading_policy_unittest.cc`,

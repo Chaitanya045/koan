@@ -18,6 +18,7 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
@@ -48,6 +49,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       url_bar_(std::make_unique<KoanUrlBarController>(browser_view,
                                                       compact_mode_.get())),
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
+      pinned_tabs_(std::make_unique<KoanPinnedTabController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(
           browser_view->browser()->GetTabStripModel())),
@@ -82,6 +84,7 @@ void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
     controller->compact_mode_->OnBrowserViewDestroying();
     controller->sidebar_tabs_->OnBrowserViewDestroying();
     controller->workspaces_->OnBrowserViewDestroying();
+    controller->pinned_tabs_->OnBrowserViewDestroying();
     controller->glance_->OnBrowserViewDestroying();
     controller->toast_->Close();
   }

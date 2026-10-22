@@ -1,0 +1,20 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
+@@ -46,6 +46,7 @@
+ #include "components/tabs/public/tab_context_menu_command.h"
+ #include "components/tabs/public/tab_group.h"
+ #include "components/tabs/public/tab_interface.h"
++#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+ #include "ui/views/view_utils.h"
+@@ -298,6 +299,9 @@
+ void TabStripCollectionController::CloseTab(
+     const tabs::TabInterface* tab_interface,
+     CloseTabSource source) {
++  if (koan::HandleTabCloseRequest(tab_interface)) {
++    return;
++  }
+   base::OnceCallback<void(CloseTabSource)> on_approved =
+       tab_closing_helper_
+           ? base::BindOnce(

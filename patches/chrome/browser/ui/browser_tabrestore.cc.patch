@@ -1,0 +1,19 @@
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -36,6 +36,7 @@
+ #include "content/public/browser/restore_type.h"
+ #include "content/public/browser/session_storage_namespace_handle.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/ui/views/koan_tab_session_data.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/gfx/range/range.h"
+@@ -89,6 +90,8 @@
+   std::vector<std::unique_ptr<NavigationEntry>> entries =
+       ContentSerializedNavigationBuilder::ToNavigationEntries(
+           navigations, browser->GetProfile());
++  koan::OnRestoringTab(web_contents.get(), extra_data, from_session_restore,
++                       entries, selected_navigation);
+ 
+   blink::UserAgentOverride ua_override;
+   ua_override.ua_string_override = user_agent_override.ua_string_override;

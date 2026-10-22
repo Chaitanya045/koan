@@ -74,9 +74,20 @@ point of Koan.
 | Containers per workspace | Missing | Chromium has profiles, not containers. |
 | Essentials shared by all workspaces | Same | Pinned tabs, shown as Zen's tiles (46px tall, up to four across) at the top of the sidebar. |
 | Essentials tile glows with the site's icon colour when selected | Different | The selected tile is plain white at 85% (20% in dark mode), Zen's look with `zen.theme.essentials-favicon-bg` off. |
-| At most 12 Essentials | Missing | Pinning isn't capped yet (pinned tabs and Essentials are #38). |
-| Per-workspace pinned tabs separate from Essentials | Missing | In Koan, pinned tabs are the Essentials. |
-| Close all unpinned tabs (Ctrl+Shift+K, or Clear in the sidebar) | Same | Keeps the selected tab and the workspace, like Zen; Ctrl+Shift+T reopens the last closed tab, one per press. |
+| Pinned URL, "Back to pinned url" reset button | Same | Hover the slash after the icon; Ctrl+click separates the page into a new tab. Essentials show no label, as in Zen. |
+| Reset Pinned Tab, Replace with Current URL, Edit Pinned URL… | Same | Always offered for a pinned tab, as in Zen; a reset ignores no part of the URL (a hash-routed app's `#inbox` is reset too), while the reset button only shows once the page itself changed. Replace and Edit… are in an "Edit Pinned URL" ("Edit Essential URL") submenu, as in Zen. Zen's "Reset Pinned Tab to Pinned URL" shortcut is in the shortcut editor, without a key, as in Zen. |
+| Closing a pinned tab: reset, unload and switch | Same | Ctrl+W, Ctrl+F4 (Cmd+W and the menu bar on macOS), the close button and middle click; Zen's six behaviours in Settings > Tab Management > Pinned Tabs. |
+| Restore pinned tabs to their pinned URL on startup | Same | Settings > Tab Management > Pinned Tabs, off by default like Zen.  Pinned URLs, labels and icons come back with the session (Koan continues where you left off by default); with Settings > On startup set to open a new tab page, Chromium reopens Essentials from its own list and their current URL becomes the pinned URL. |
+| Change Label… / Change Icon… | Same | Inline rename; the icon picker is a grid of emoji plus a field for any other, smaller than Zen's searchable picker. |
+| Unload a tab | Same | Chromium's tab discarding. Resetting a tab that isn't loaded keeps it unloaded until it is shown, like Zen. Reset, unload and switch on a loaded tab away from its pinned URL loads the pinned page once before unloading it (Zen rewrites the unloaded tab's state instead; Chromium can't change an unloaded tab's page without loading it). |
+| Toasts: pinned URL replaced / updated / invalid, tab renamed | Same | Zen's texts, in Koan's toast. |
+| Unload all tabs of a folder | Missing | Koan has no folders yet (#42); folders can use the same unload. |
+| At most 12 Essentials | Same | "Add to Essentials" shows how many are used ("3 / 12") and is off at 12. A 13th dragged into the tiles or duplicated from one goes back to the workspace as a normal tab (Zen refuses the drop). |
+| Dragging pinned tabs | Same | Dragged out of the workspace's pinned tabs, a pinned tab is unpinned; a tab dropped among them is pinned; an Essential dropped among them keeps its pinned URL as a pinned tab. Applied once the tabs stop moving, since Chromium moves them along the drag. Moved to another workspace, a pinned tab stays pinned, at the top. |
+| Pinned tabs in a split view | Same | Pinning or unpinning a tab of a split view takes the other tab along, as in Zen. |
+| Close Other Tabs, Close Tabs Below, Back with no history | Same | Leave pinned tabs and Essentials alone. |
+| Pinned tabs that belong to their workspace | Different | Ctrl+Shift+D or "Pin": the tab stays at the top of its workspace, survives Clear and has a pinned URL. Zen lists them above the workspace's separator; in Koan they are the first tabs below it, because Chromium's tab strip puts its separator between its pinned tiles (the Essentials) and the workspace's tab group, which holds both kinds. |
+| Close all unpinned tabs (Ctrl+Shift+K, or Clear in the sidebar) | Same | Keeps the selected tab and the workspace, like Zen; Ctrl+Shift+T reopens the last closed tab, one per press. Pinned tabs and Essentials stay. |
 
 ## Glance and split view
 
@@ -109,9 +120,9 @@ point of Koan.
 | Learns the actions you use | Different | Used actions come first, and passed-over ones drop below the search suggestions (Zen's results learner). Zen also runs a used action on Enter for any text matching it; Koan only when you type its whole label, so typing the start of a site's address (`pri` for a site, after using Print) still opens the site. |
 | Actions mode: Tab in an empty URL bar lists every action | Different | Koan types `>` (you can type it too; a second Tab leaves it) instead of showing an "Actions" chip, and lists as many actions as Chromium's popup has rows (about eight) above a "> – search" row; type to filter. As in Zen, Enter runs the first action once two characters are typed. |
 | "Focus on" a Space | Same | Matched by the Space's name, which is shown beside "Focus on". |
-| Add to / Remove from Essentials | Different | Koan's Essentials are its pinned tabs, so these pin and unpin, like Pin / Unpin Tab. |
+| Add to / Remove from Essentials | Same | As in the tab's context menu; Pin / Unpin Tab pin the tab to its workspace. |
 | Open Theme Picker, Open Library, New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#41, #43, #42); each feature adds its actions to the palette's registry. |
-| Reset Pinned Tab | Missing | Koan's pinned tabs don't keep their pinned URL yet (#38). |
+| Reset Pinned Tab | Same | Offered while the tab is away from its pinned URL, as in Zen. |
 | Toggle Tabs on right | Missing | Chromium's vertical tabs can't be on the right (see "Sidebar on the right"). |
 | New Blank Window | Missing | Koan doesn't sync windows, so it would be the same as Open New Window. |
 | Open Space Routing, New Boost | Missing | Koan has no Space routing or Boosts. |
@@ -132,7 +143,8 @@ Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (
 | Settings: compact mode variants and flash popup, tabs on the right | Same | Look and Feel. |
 | Settings: Collapsed Sidebar layout card, dark theme styles, window dragging | Missing | Added to the settings page as each feature lands (#41, #44). The collapsed layout is the sidebar's collapsed state (Chromium's, not a pref), so the layout picker doesn't offer it yet; the sidebar toggle does. Glance's are there (#37). |
 | Settings: Vertical Tabs group (new tab button on the tab list / at the top, how to expand tabs) | Missing | The group is declared; no Koan setting yet. |
-| Settings: pinned tab close behaviour, restore pinned tabs to their URL, container-specific Essentials | Missing | Pinned tabs / Essentials (#38); Chromium has no containers. |
+| Settings: pinned tab close behaviour, restore pinned tabs to their URL | Same | Tab Management > Pinned Tabs. |
+| Settings: container-specific Essentials | Missing | Chromium has no containers. |
 | Switch to the most recently used tab on close | Same | Tab Management, on by default like Zen. A tab's opener still comes first, as in Zen (Firefox's owner rule). Only tabs you have looked at count: one opened in the background and never shown doesn't. In a workspace it picks among the workspace's tabs and the Essentials; collapsed groups are skipped. |
 | Close tab and switch to its owner on Back with no history | Same | Tab Management, on by default. Upstream Chromium's back-to-opener: only for tabs opened from a link in another tab (Zen: tabs with an owner), never pinned ones. |
 | Ctrl+Tab within Essentials or workspace tabs; ignore pending tabs | Same | Tab Management, off by default. In tab order (Chromium's default), Ctrl+Tab stays in the active workspace plus the Essentials, as upstream's group focus does, and these settings narrow it further. |

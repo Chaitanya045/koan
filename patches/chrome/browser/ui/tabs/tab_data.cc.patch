@@ -1,0 +1,18 @@
+--- a/chrome/browser/ui/tabs/tab_data.cc
++++ b/chrome/browser/ui/tabs/tab_data.cc
+@@ -24,6 +24,7 @@
+ #include "components/tabs/public/tab_alert.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
+ 
+ namespace tabs {
+ 
+@@ -71,6 +72,7 @@
+   tab_data.collaboration_messaging =
+       collaboration_messaging ? collaboration_messaging->GetWeakPtr() : nullptr;
+ 
++  koan::AdjustTabData(tab_interface, tab_data);
+   return tab_data;
+ }
+ 

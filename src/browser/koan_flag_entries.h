@@ -46,6 +46,10 @@
       {"koan-url-bar", "Koan URL bar",                                       \
        "Zen's URL bar: a behaviour setting, Ctrl+T opens it instead of a "   \
        "new tab, and a copy-URL button in the pill.",                        \
-       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanUrlBar)},
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanUrlBar)},         \
+      {"koan-pinned-tabs", "Koan pinned tabs and Essentials",                \
+       "Zen's pinned tabs and Essentials: a pinned URL with reset, pinned "  \
+       "tabs that stay in their Space, Zen's close behaviour and labels.",   \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanPinnedTabs)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

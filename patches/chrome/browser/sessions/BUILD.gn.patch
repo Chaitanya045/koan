@@ -1,0 +1,10 @@
+--- a/chrome/browser/sessions/BUILD.gn
++++ b/chrome/browser/sessions/BUILD.gn
+@@ -171,6 +171,7 @@
+       "//components/media_device_salt",
+       "//components/pref_registry",
+       "//components/tab_groups",
++      "//koan/browser/ui/views:views",
+     ]
+ 
+     if (is_mac) {

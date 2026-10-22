@@ -35,6 +35,29 @@ inline constexpr int kSidebarMaxWidth = 500;
 // --tab-icon-end-margin).
 inline constexpr int kSidebarTabIconGap = 10;
 
+// A pinned tab away from its pinned URL (zen-tabs/vertical-tabs.css): the
+// reset button over its favicon (from the row's edge to past the icon, inset
+// from the top and bottom), the slash at the button's end, 8px before the
+// label, and the sublabel ("Back to pinned url", Zen's x-small) under the
+// label, which moves up to make room.
+inline constexpr int kPinnedResetButtonHalfWidth = 14;
+inline constexpr int kPinnedResetButtonInset = 4;
+inline constexpr int kPinnedResetLabelGap = 8;
+inline constexpr float kPinnedSlashWidth = 2.5f;
+inline constexpr float kPinnedSlashHeight = 16.f;
+inline constexpr float kPinnedSlashRadius = 2.f;
+inline constexpr float kPinnedSlashAngle = 15.f;
+inline constexpr int kPinnedIconSize = 16;
+inline constexpr int kPinnedSublabelFontSize = 10;
+inline constexpr int kPinnedSublabelHeight = 12;
+inline constexpr int kPinnedSublabelRise = 5;
+// A tab's own icon (Change Icon…): an emoji drawn at this size in a favicon.
+inline constexpr int kCustomIconFontSize = 13;
+// The icon picker: rows of emoji buttons below a field.
+inline constexpr int kIconPickerColumns = 8;
+inline constexpr int kIconPickerButtonSize = 32;
+inline constexpr int kIconPickerSpacing = 8;
+
 // Narrower than this a row is in the collapsed sidebar: icons only.
 inline constexpr int kMinExpandedRowWidth = 100;
 

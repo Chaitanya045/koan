@@ -27,6 +27,10 @@ BASE_DECLARE_FEATURE(kKoanGlance);
 BASE_DECLARE_FEATURE(kKoanRestoreTabsOnDemand);
 // Command palette: Zen's actions as suggestions of the URL bar.
 BASE_DECLARE_FEATURE(kKoanCommandPalette);
+// Zen's pinned tabs and Essentials: pinned URL with reset, edit and replace,
+// pinned tabs that stay in their Space, Zen's close behaviour, unloading,
+// custom labels and icons.
+BASE_DECLARE_FEATURE(kKoanPinnedTabs);
 
 // Zen's URL bar: behaviour setting, replace-new-tab and the copy-URL pill
 // button.
@@ -45,6 +49,7 @@ bool IsUrlBarEnabled();
 // by the blink navigation-policy hook (renderer process only, see kKoanGlance's
 // users).
 bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta);
+bool IsPinnedTabsEnabled();
 
 }  // namespace koan::features
 

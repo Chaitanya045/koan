@@ -9,10 +9,11 @@
 //   scripts/e2e/run.sh tab_management
 import {
   ALT, CTRL, SHIFT, browserCall, check, click, clickView, evalIn, finish,
-  front, key, onPage, pages, settingsCall, sleep, views, waitFor,
+  front, key, onPage, pages, settingsCall, sleep, tabMenuCommand, views,
+  waitFor,
 } from './lib/koan.mjs';
 
-const VK = { T: 84, W: 87, D: 68, N: 78, TAB: 9, LEFT: 37, PGUP: 33, PGDN: 34 };
+const VK = { T: 84, W: 87, N: 78, TAB: 9, LEFT: 37, PGUP: 33, PGDN: 34 };
 
 const [opener] = await pages();
 
@@ -104,7 +105,8 @@ await setPref('koan.tabs.select_recently_used_on_close', true);
 // off). Ctrl+Tab follows Chromium's recently used order here: the profile
 // is seeded with it on (scripts/e2e/prefs/tab_management.json).
 await front(opener);
-await key(opener, VK.D, CTRL | SHIFT, 'd');  // Pin: an Essential.
+// An Essential (Ctrl+Shift+D would pin it to its workspace instead).
+await tabMenuCommand({ title: await title(opener) }, 'kKoanAddToEssentialsMenuItem');
 await front(c);
 await key(c, VK.PGDN, CTRL, 'PageDown');
 now = await waitFor(() => activeOf([opener, b, c]));

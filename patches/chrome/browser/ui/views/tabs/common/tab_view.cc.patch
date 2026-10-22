@@ -1,0 +1,18 @@
+--- a/chrome/browser/ui/views/tabs/common/tab_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
+@@ -65,6 +65,7 @@
+ #include "components/tabs/public/tab_collection_types.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/navigation_controller.h"
++#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkPathBuilder.h"
+ #include "third_party/skia/include/core/SkRRect.h"
+@@ -417,6 +418,7 @@
+             &TabView::OnCollapseStateChanged, base::Unretained(this)));
+   }
+   close_button_observation_.Observe(close_button_);
++  koan::OnTabViewCreated(this);
+ }
+ 
+ TabView::~TabView() = default;

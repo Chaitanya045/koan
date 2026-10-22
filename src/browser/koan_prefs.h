@@ -138,6 +138,20 @@ inline constexpr char kCommandPaletteSuggestions[] =
 // (down to -5), by command id (Zen's zen.urlbar.suggestions-learner).
 inline constexpr char kCommandPaletteUsage[] = "koan.command_palette.usage";
 
+// What closing a pinned tab or an Essential does (Ctrl+W, its close button,
+// a middle click), Zen's zen.pinned-tab-manager.close-shortcut-behavior:
+// "close", "reset", "switch", "reset-switch", "unload-switch" or, the
+// default, "reset-unload-switch" (back to the pinned URL, unload the tab and
+// switch to the next one).
+inline constexpr char kPinnedTabCloseShortcutBehavior[] =
+    "koan.pinned_tabs.close_shortcut_behavior";
+
+// Whether pinned tabs and Essentials come back at their pinned URL on
+// startup, Zen's zen.pinned-tab-manager.restore-pinned-tabs-to-pinned-url
+// (off by default).
+inline constexpr char kPinnedTabRestoreToPinnedUrl[] =
+    "koan.pinned_tabs.restore_to_pinned_url";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

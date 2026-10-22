@@ -20,6 +20,7 @@ namespace koan {
 class KoanCommandPalette;
 class KoanCompactModeController;
 class KoanGlanceController;
+class KoanPinnedTabController;
 class KoanShortcutController;
 class KoanSidebarTabsController;
 class KoanTabActivationTracker;
@@ -54,6 +55,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   KoanSidebarTabsController* sidebar_tabs() const {
     return sidebar_tabs_.get();
   }
+  KoanPinnedTabController* pinned_tabs() const { return pinned_tabs_.get(); }
   KoanGlanceController* glance() const { return glance_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
@@ -82,6 +84,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   // After compact_mode_, which it works with.
   std::unique_ptr<KoanUrlBarController> url_bar_;
   std::unique_ptr<KoanWorkspaceController> workspaces_;
+  std::unique_ptr<KoanPinnedTabController> pinned_tabs_;
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
   // Last: it calls into the controllers above.

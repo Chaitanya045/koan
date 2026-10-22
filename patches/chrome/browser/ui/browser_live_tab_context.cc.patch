@@ -1,0 +1,20 @@
+--- a/chrome/browser/ui/browser_live_tab_context.cc
++++ b/chrome/browser/ui/browser_live_tab_context.cc
+@@ -59,6 +59,7 @@
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/session_storage_namespace_handle.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/ui/views/koan_tab_session_data.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ #include "ui/base/window_open_disposition.h"
+ 
+@@ -200,6 +201,9 @@
+ 
+   glic::PopulateGlicExtraData(tab_strip_model_->GetTabAtIndex(index),
+                               &extra_data);
++  // Koan: its features' per-tab data (koan_tab_session_data.h).
++  extra_data.merge(
++      koan::GetTabSessionData(tab_strip_model_->GetWebContentsAt(index)));
+ 
+   return extra_data;
+ }

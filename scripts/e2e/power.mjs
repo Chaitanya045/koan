@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { browserSession, connect, evaluate, key, pageTargets, sleep, traceUi, uiMouse,
          uiViews } from '../perf/cdp.mjs';
 import { servePages } from '../perf/pages_server.mjs';
+import { tabMenuCommand } from './lib/koan.mjs';
 
 const CDP_PORT = process.env.CDP_PORT;
 const UI_PORT = process.env.UI_PORT;
@@ -205,9 +206,10 @@ await sleep(1000);
 
 // --- Freezing ---------------------------------------------------------------
 
-// Pin a busy tab first (Ctrl+Shift+D), then open 8 more busy tabs in the
+// Pin two busy tabs first, one to its workspace (Ctrl+Shift+D) and one as an
+// Essential ("Add to Essentials"), then open 8 more busy tabs in the
 // background. Up to 5 most recently used tabs stay unfrozen, so at least 3
-// of the 8 must freeze; the pinned tab, the least recently used, must not.
+// of the 8 must freeze; the pinned tabs, the least recently used, must not.
 const home = (await pageTargets(CDP_PORT)).find(byUrl('count=r1')) ??
     (await pageTargets(CDP_PORT))[0];
 const pinned = (await browser.send('Target.createTarget',
@@ -216,6 +218,14 @@ const pinned = (await browser.send('Target.createTarget',
 await sleep(2000);
 await key(CDP_PORT, 68, CTRL | SHIFT, byId(pinned));
 await sleep(1000);
+const essential = (await browser.send('Target.createTarget',
+                                      { url: `${pages.origin}/power.html?busy&essential` }))
+    .result.targetId;
+await sleep(2000);
+await evaluate(CDP_PORT, byId(essential), 'document.title = "Koan Essential"');
+await sleep(1000);
+check('A busy tab can be made an Essential',
+      await tabMenuCommand({ title: 'Koan Essential' }, 'kKoanAddToEssentialsMenuItem'));
 await browser.send('Target.activateTarget', { targetId: home.id });
 for (let i = 0; i < 8; i++) {
   await browser.send('Target.createTarget',
@@ -225,12 +235,15 @@ await sleep(15000);
 let frozen = 0;
 const gaps = [];
 let pinnedGap;
+let essentialGap;
 for (const t of (await pageTargets(CDP_PORT)).filter(t => t.url.includes('busy'))) {
   await browser.send('Target.activateTarget', { targetId: t.id });
   await sleep(500);
   const gap = Math.round(await evaluate(CDP_PORT, byId(t.id), 'maxGap') ?? -1);
   if (t.id === pinned) {
     pinnedGap = gap;
+  } else if (t.id === essential) {
+    essentialGap = gap;
   } else {
     gaps.push(gap);
     if (gap > 3000) frozen++;
@@ -239,8 +252,10 @@ for (const t of (await pageTargets(CDP_PORT)).filter(t => t.url.includes('busy')
 }
 check('Busy background tabs beyond the 5 most recent are frozen', frozen >= 3,
       `${frozen} of 8 paused > 3 s; longest pauses (ms): ${gaps.join(', ')}`);
-check('A pinned tab is never frozen', pinnedGap >= 0 && pinnedGap < 3000,
+check('A tab pinned to its workspace is never frozen', pinnedGap >= 0 && pinnedGap < 3000,
       `longest pause ${pinnedGap} ms`);
+check('An Essential is never frozen', essentialGap >= 0 && essentialGap < 3000,
+      `longest pause ${essentialGap} ms`);
 
 // --- Energy saver's freezing ------------------------------------------------
 

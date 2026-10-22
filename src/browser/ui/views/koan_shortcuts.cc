@@ -36,6 +36,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
@@ -211,6 +212,15 @@ bool KoanShortcutController::Run(Action action) {
       return CopyUrl(/*markdown=*/true);
     case Action::kTogglePinTab:
       return TogglePinTab();
+    case Action::kResetPinnedTab: {
+      tabs::TabInterface* tab =
+          browser_view_->browser()->GetTabStripModel()->GetActiveTab();
+      if (!features::IsPinnedTabsEnabled() || !IsPinnedForUser(tab)) {
+        return false;
+      }
+      controller_->pinned_tabs()->ResetToPinnedUrl(tab);
+      return true;
+    }
     case Action::kCloseUnpinnedTabs:
       return CloseUnpinnedTabs();
     case Action::kGlanceExpand:
@@ -391,6 +401,11 @@ bool KoanShortcutController::TogglePinTab() {
   if (active == TabStripModel::kNoTab) {
     return false;
   }
+  if (features::IsPinnedTabsEnabled()) {
+    // Zen: pins the tab to its Space (an Essential leaves the Essentials).
+    controller_->pinned_tabs()->TogglePin(model->GetTabAtIndex(active));
+    return true;
+  }
   model->SetTabPinned(active, !model->IsTabPinned(active));
   return true;
 }
@@ -451,7 +466,9 @@ std::vector<int> KoanShortcutController::UnpinnedTabsForClear(
       model->GetFocusedGroup();
   std::vector<int> indices;
   for (int i = 0; i < model->count(); ++i) {
-    if (!model->IsTabPinned(i) && model->GetTabGroupForTab(i) == workspace) {
+    // Pinned tabs (Essentials, and those pinned to the workspace) stay.
+    if (!IsPinnedForUser(model->GetTabAtIndex(i)) &&
+        model->GetTabGroupForTab(i) == workspace) {
       indices.push_back(i);
     }
   }
