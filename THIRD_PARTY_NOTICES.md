@@ -33,6 +33,13 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values), `zen-workspaces.css` (Space colours) |
 | `src/browser/ui/views/koan_space_menu.cc` | `ZenSpaceManager.mjs` (the Space and Create menus), `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_space_creation.cc` | `ZenSpaceCreation.mjs`, `zen-workspaces.ftl` (strings) |
+| `src/browser/ui/views/koan_library.h`, `koan_library_controller.cc` | `ZenLibrary.mjs` (open/close spring, toggle, unmounting) |
+| `src/browser/ui/views/koan_library_view.{h,cc}` | `ZenLibrary.mjs`, `ZenLibrarySearchSection.mjs`, `zen-library.css` (layout), `zen-library.ftl` (strings) |
+| `src/browser/ui/views/koan_library_ui.h` | `zen-library.css` (sizes, radii) |
+| `src/browser/ui/views/koan_library_history.cc` | `ZenLibraryHistorySection.mjs`, `zen-library.ftl` (strings) |
+| `src/browser/ui/views/koan_library_downloads.cc` | `ZenLibraryDownloadsSection.mjs`, `zen-library.ftl` (strings) |
+| `src/browser/ui/views/koan_library_spaces.cc` | `ZenLibrarySpacesSection.mjs`, `zen-library.css` (cards), `zen-library.ftl` (strings) |
+| `src/browser/ui/views/koan_library_icons.cc` | `zen-icons/library/library-{downloads,history,spaces}-sprite.svg` (section icons) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).
