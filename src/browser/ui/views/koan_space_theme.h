@@ -1,6 +1,13 @@
-// Copyright 2026 The Koan Authors
-// Use of this source code is governed by the MIT license that can be
-// found in the LICENSE file.
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   ZenGradientGenerator.mjs
+//   browser.xhtml (preset swatches)
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
 
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_THEME_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_THEME_H_

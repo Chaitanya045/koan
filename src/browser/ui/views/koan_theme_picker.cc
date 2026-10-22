@@ -1,6 +1,13 @@
-// Copyright 2026 The Koan Authors
-// Use of this source code is governed by the MIT license that can be
-// found in the LICENSE file.
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   zen-gradient-generator.css (panel sizes)
+//   zen-workspaces.ftl (strings)
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
 
 #include "koan/browser/ui/views/koan_theme_picker.h"
 
@@ -257,9 +264,22 @@ class KoanThemePickerButton : public views::Button {
     SchedulePaint();
   }
 
+  // A choice among buttons (the scheme buttons): a radio button for
+  // assistive tech, checked when selected.
+  void SetIsChoice() {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+    GetViewAccessibility().SetCheckedState(ax::mojom::CheckedState::kFalse);
+  }
+
   void SetSelected(bool selected) {
     if (selected_ != selected) {
       selected_ = selected;
+      if (GetViewAccessibility().GetCachedRole() ==
+          ax::mojom::Role::kRadioButton) {
+        GetViewAccessibility().SetCheckedState(
+            selected ? ax::mojom::CheckedState::kTrue
+                     : ax::mojom::CheckedState::kFalse);
+      }
       SchedulePaint();
     }
   }
@@ -396,6 +416,7 @@ class KoanThemeGradientField : public views::View,
               base::BindRepeating(&KoanThemeGradientField::OnSchemePressed,
                                   base::Unretained(this), scheme),
               icon, kButtonSize, kButtonIconSize, 0.5f, label)));
+      scheme_buttons_.back()->SetIsChoice();
     };
     add_scheme(kKoanThemeSparklesIcon, u"Automatic",
                KoanThemeController::Scheme::kAutomatic);
@@ -1040,6 +1061,9 @@ class KoanThemeOpacitySlider : public views::View {
   void Update() {
     const bool enabled = picker_->color_count() > 0;
     GetViewAccessibility().SetIsEnabled(enabled);
+    // No tab stop without colours (the default theme has no opacity).
+    SetFocusBehavior(enabled ? views::PlatformStyle::kDefaultFocusBehavior
+                             : FocusBehavior::NEVER);
     GetViewAccessibility().SetValueForRange(
         static_cast<float>(picker_->model().opacity()));
     GetViewAccessibility().SetValue(Percent(picker_->model().opacity()));

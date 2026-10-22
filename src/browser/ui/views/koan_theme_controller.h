@@ -124,6 +124,9 @@ class KoanThemeController : public TabStripModelObserver,
   void SaveTheme(Space space, const theme::SpaceTheme& theme);
   theme::SpaceTheme GetTheme(Space space) const;
 
+  // Whether the window shows a Space theme now (IsEnabled() as of the last
+  // update, without its pref and service lookups, for every paint).
+  bool paints_background() const { return current_.has_value(); }
   // Whether the active Space's theme sets the window's light/dark mode.
   bool sets_color_mode() const { return current_ && current_->dark; }
 

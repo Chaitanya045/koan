@@ -31,6 +31,10 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_pinned_tabs.cc` | `ZenPinnedTabManager.mjs`, `zen-general.ftl` (strings) |
 | `src/browser/ui/views/koan_sidebar_metrics.h` | Zen's sidebar, toolbar and URL bar stylesheets (sizes, shadows) |
 | `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values) |
+| `src/browser/ui/views/koan_space_theme.h`, `koan_space_theme.cc` | `ZenGradientGenerator.mjs` (colour maths, harmonies, preset swatches, opacity wave), `browser.xhtml` (preset swatch data) |
+| `src/browser/ui/views/koan_theme_picker.cc` | `zen-gradient-generator.css` (panel sizes), `zen-workspaces.ftl` (strings) |
+| `src/browser/ui/views/resources/grain-bg.png` | `zen-images/grain-bg.png` (unmodified) |
+| `src/browser/ui/vector_icons/koan_theme_*.icon` | `zen-icons/*.svg` (converted with `scripts/svg_to_icon.py`) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).
@@ -49,15 +53,3 @@ adapted from Chromium and stay under Chromium's BSD-style license.
 Koan is not affiliated with Google, the Chromium project, or the Zen browser
 project. "Zen" is referenced only to describe the user experience Koan aims
 for.
-
-## Zen browser assets
-
-Two kinds of files are taken from the Zen browser (https://zen-browser.app,
-https://github.com/zen-browser/desktop), which is under the Mozilla Public
-License 2.0 (https://mozilla.org/MPL/2.0/); they remain under the MPL-2.0:
-
-- `src/browser/ui/views/resources/grain-bg.png`: Zen's grain texture,
-  unmodified.
-- `src/browser/ui/vector_icons/koan_theme_*.icon`: Zen's icons
-  (`zen-icons/*.svg`), converted to Chromium's vector icon format with
-  `scripts/svg_to_icon.py`.

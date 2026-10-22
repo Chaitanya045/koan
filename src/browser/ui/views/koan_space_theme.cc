@@ -1,6 +1,13 @@
-// Copyright 2026 The Koan Authors
-// Use of this source code is governed by the MIT license that can be
-// found in the LICENSE file.
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   ZenGradientGenerator.mjs
+//   browser.xhtml (preset swatches)
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
 
 #include "koan/browser/ui/views/koan_space_theme.h"
 
@@ -584,8 +591,12 @@ WindowTokens GetZenTokens(const Environment& env, const SpaceTheme& theme) {
 // static
 SpaceTheme SpaceTheme::FromStored(const base::DictValue& stored) {
   const std::string* family = stored.FindString("family");
-  return !family || *family == kZenGradientFamily ? FromDict(stored)
-                                                  : SpaceTheme();
+  // A theme written by a newer Koan (a later version of the family) shows
+  // as the default theme rather than being misread.
+  const int version = stored.FindInt("version").value_or(kThemeVersion);
+  return (!family || *family == kZenGradientFamily) && version <= kThemeVersion
+             ? FromDict(stored)
+             : SpaceTheme();
 }
 
 WindowTokens GetTokens(const Environment& env, const base::DictValue& stored) {

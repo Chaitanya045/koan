@@ -491,7 +491,7 @@ void KoanThemeController::ShowSpaceMenu(Space space,
                                         views::View* source,
                                         const gfx::Point& point,
                                         ui::mojom::MenuSourceType source_type) {
-  if (!IsEnabled() || !source->GetWidget()) {
+  if (!source->GetWidget()) {
     return;
   }
   menu_space_ = space;
@@ -555,8 +555,10 @@ bool KoanThemeController::IsCommandIdChecked(int command_id) const {
 }
 
 bool KoanThemeController::IsCommandIdEnabled(int command_id) const {
-  // "Websites will use:" is a caption, like Zen's.
-  return command_id != kWebsitesWillUse;
+  // "Websites will use:" is a caption, like Zen's. The website appearance
+  // stays available when Space themes are off.
+  return command_id != kWebsitesWillUse &&
+         (command_id != kEditTheme || IsEnabled());
 }
 
 void KoanThemeController::OnTabGroupFocusChanged(
@@ -633,7 +635,7 @@ bool PaintWindowBackground(gfx::Canvas* canvas,
                            const BrowserView* browser_view) {
   const KoanBrowserViewController* controller =
       KoanBrowserViewController::From(browser_view);
-  if (!controller || !controller->theme()->IsEnabled()) {
+  if (!controller || !controller->theme()->paints_background()) {
     return false;
   }
   controller->theme()->PaintBackground(canvas, view);
@@ -643,7 +645,7 @@ bool PaintWindowBackground(gfx::Canvas* canvas,
 bool PaintsWindowBackground(const BrowserView* browser_view) {
   const KoanBrowserViewController* controller =
       KoanBrowserViewController::From(browser_view);
-  return controller && controller->theme()->IsEnabled();
+  return controller && controller->theme()->paints_background();
 }
 
 std::optional<bool> PrefersDarkWebColorScheme(
@@ -652,21 +654,29 @@ std::optional<bool> PrefersDarkWebColorScheme(
   if (is_web_ui) {
     return std::nullopt;
   }
+  const ThemeService* theme_service = ThemeServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+  if (!theme_service) {
+    return std::nullopt;
+  }
   // The tab's window (also for a tab that isn't showing).
   const tabs::TabInterface* tab =
       tabs::TabInterface::MaybeGetFromContents(web_contents);
-  const BrowserView* browser_view = tab ? BrowserView::GetBrowserViewForBrowser(
-                                              tab->GetBrowserWindowInterface())
-                                        : nullptr;
+  if (!tab) {
+    return std::nullopt;
+  }
+  const BrowserWindowInterface* window = tab->GetBrowserWindowInterface();
+  if (!window) {
+    // A tab between windows (dragged out, moved): the appearance setting,
+    // which is what websites get under a Space theme anyway.
+    return theme_service->BrowserUsesDarkColors();
+  }
+  const BrowserView* browser_view =
+      BrowserView::GetBrowserViewForBrowser(window);
   const KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   // Only where a Space theme sets the window's light/dark mode.
   if (!controller || !controller->theme()->sets_color_mode()) {
-    return std::nullopt;
-  }
-  const ThemeService* theme_service = ThemeServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents->GetBrowserContext()));
-  if (!theme_service) {
     return std::nullopt;
   }
   return theme_service->BrowserUsesDarkColors();
