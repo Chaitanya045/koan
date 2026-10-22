@@ -184,7 +184,7 @@ function check(name, ok, detail = '') {
 }
 
 const ALT = 1, CTRL = 2, SHIFT = 8;
-const VK = { D: 68, W: 87, T: 84, N: 78, V: 86, LEFT: 37, ENTER: 13 };
+const VK = { D: 68, W: 87, T: 84, N: 78, V: 86, LEFT: 37, ENTER: 13, PAGE_UP: 33 };
 
 const pageByUrl = async url => (await pages()).find(p => p.url === url);
 const isVisible = async page =>
@@ -537,6 +537,30 @@ for (const n of [1, 2, 3, 4, 5]) {
 }
 await sleep(1500);
 
+// --- A tab moved among the pinned tabs is pinned where it is, as Zen pins in
+// place (Ctrl+Shift+PageUp moves it up past the last pinned tab). ---
+const Y = n => `${PIN_URL}?y${n}`;
+for (const n of [1, 2]) {
+  await browserCall('Target.createTarget', { url: Y(n), background: true });
+}
+await sleep(2500);
+await activate(await pageByUrl(Y(1)));
+await keyTo(await pageByUrl(Y(1)), VK.D, CTRL | SHIFT, 'd');
+await activate(await pageByUrl(Y(2)));
+await keyTo(await pageByUrl(Y(2)), VK.PAGE_UP, CTRL | SHIFT, 'PageUp');
+await sleep(1500);
+st = await statesOf([Y(2), Y(1)]);
+order = (await sidebarOrder()).filter(u => u.includes('?y'));
+check('A tab moved among the pinned tabs is pinned in place',
+      allAre(st, { pinned: true }) &&
+      JSON.stringify(order) === JSON.stringify([Y(2), Y(1)]),
+      JSON.stringify({ st, order }));
+for (const n of [1, 2]) {
+  const page = await pageByUrl(Y(n));
+  if (page) await browserCall('Target.closeTarget', { targetId: page.id });
+}
+await sleep(1500);
+
 // --- Pinned tabs belong to their Space; Essentials show in every Space. ---
 const essentialRow = async () =>
   (await rows()).find(t => t.path.includes('PinnedTabContainerView'));
@@ -627,6 +651,11 @@ if (profileDir) {
   const ESSENTIAL_URL = ESSENTIAL_PINNED;
   await activate(await pageByUrl(ESSENTIAL_URL));
   await navigate(await pageByUrl(ESSENTIAL_URL), `${ESSENTIAL_URL}&away`);
+  // The window's own session data (koan_session_data.h): a random value the
+  // test switch (pinned.flags) gave it, which only a restore brings back.
+  const windowData = async () => (await rowsWith(PIN_URL))[0]?.p.WindowTestData;
+  const WINDOW_DATA = await windowData();
+  check('A window has its own session data', !!WINDOW_DATA, JSON.stringify(WINDOW_DATA));
   const before = (await rows()).map(t => `${t.p.PinnedUrl}|${t.p.Url}`).sort();
   await sleep(3000);  // The session is saved on a timer.
   await quit();
@@ -663,6 +692,8 @@ if (profileDir) {
         JSON.stringify(restoredTitle?.p.Text));
   check('...and the Essential stays an Essential', !!restoredEssential,
         JSON.stringify(restoredEssential?.p.PinnedUrl));
+  check('...and the window its session data', await windowData() === WINDOW_DATA,
+        JSON.stringify([await windowData(), WINDOW_DATA]));
 
   // With restore-to-pinned-URL on, the pinned tab comes back at its pinned URL.
   await quit();
@@ -680,6 +711,43 @@ if (profileDir) {
   const essentialRestored = await essentialWith(ESSENTIAL_URL);
   check('...and so does the Essential', essentialRestored?.p.Url === ESSENTIAL_URL,
         JSON.stringify(essentialRestored?.p.Url));
+  check('After a second restart the window still has its session data',
+        await windowData() === WINDOW_DATA, JSON.stringify([await windowData(), WINDOW_DATA]));
+
+  // A closed window reopened with Ctrl+Shift+T gets its data back, and keeps
+  // it across a restart. (Two tabs: a closed one-tab window comes back as a
+  // tab.)
+  const W_URL = n => `${PIN_URL}?window${n}`;
+  const w1 = (await browserCall('Target.createTarget',
+                                { url: W_URL(1), newWindow: true })).result.targetId;
+  await sleep(2500);
+  const wPage = (await pages()).find(p => p.id === w1);
+  await evalIn(wPage, `window.open(${JSON.stringify(W_URL(2))}); 1`, true);
+  await sleep(2500);
+  const dataOf = async url => (await rows()).find(t => t.p.Url === url)?.p.WindowTestData;
+  const OTHER_DATA = await dataOf(W_URL(1));
+  check('A new window has session data of its own',
+        !!OTHER_DATA && OTHER_DATA !== WINDOW_DATA && await dataOf(W_URL(2)) === OTHER_DATA,
+        JSON.stringify([OTHER_DATA, await dataOf(W_URL(2)), WINDOW_DATA]));
+  await keyTo(await pageByUrl(W_URL(2)), VK.W, CTRL | SHIFT, 'w');  // Close Window
+  await sleep(2000);
+  check('...it closes', !await pageByUrl(W_URL(1)) && !await pageByUrl(W_URL(2)),
+        JSON.stringify((await pages()).map(p => p.url)));
+  // From a loaded tab of the main window (a key to a tab that isn't loaded
+  // yet goes nowhere).
+  await activate(await pageByUrl(PIN_URL));
+  await keyTo(await pageByUrl(PIN_URL), VK.T, CTRL | SHIFT, 't');
+  await sleep(2500);
+  check('...and Ctrl+Shift+T reopens it with its session data',
+        await dataOf(W_URL(1)) === OTHER_DATA,
+        JSON.stringify([await dataOf(W_URL(1)), OTHER_DATA,
+                        (await pages()).map(p => p.url)]));
+  await sleep(3000);  // The session is saved on a timer.
+  await quit();
+  await relaunch();
+  check('...which it keeps across a restart', await dataOf(W_URL(1)) === OTHER_DATA &&
+        await windowData() === WINDOW_DATA,
+        JSON.stringify([await dataOf(W_URL(1)), OTHER_DATA, await windowData()]));
 }
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');

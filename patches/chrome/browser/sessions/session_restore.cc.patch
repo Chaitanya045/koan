@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/sessions/session_restore.cc
-index fc663dce344551ad3fb8a3ac820f5cab8605d49a..5b82177b55fd788ce8295a5c5b7af5f7760fb4a5 100644
+index fc663dce344551ad3fb8a3ac820f5cab8605d49a..acf026a24eb49d13ba7eac571a99c3fbfc306246 100644
 --- a/chrome/browser/sessions/session_restore.cc
 +++ b/chrome/browser/sessions/session_restore.cc
 @@ -115,6 +115,7 @@
@@ -10,7 +10,17 @@ index fc663dce344551ad3fb8a3ac820f5cab8605d49a..5b82177b55fd788ce8295a5c5b7af5f7
  #include "ui/base/mojom/window_show_state.mojom.h"
  #include "ui/base/page_transition_types.h"
  #include "ui/base/window_open_disposition.h"
-@@ -1399,6 +1400,9 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+@@ -879,6 +880,9 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
+           ShouldRestoreToExistingBrowser()) {
+         // The first set of tabs is added to the existing browser.
+         browser = browser_;
++        // Koan: its features' per-window data (koan_session_data.h).
++        koan::OnRestoringWindow(browser, window->extra_data,
++                                /*from_session_restore=*/true);
+       } else {
+ #if BUILDFLAG(IS_CHROMEOS)
+         ash::BootTimesRecorder::Get()->AddLoginTimeMarker(
+@@ -1399,6 +1403,9 @@ class SessionRestoreImpl : public BrowserCollectionObserver {
      base::TimeTicks now = base::TimeTicks::Now();
      BrowserWindowInterface* browser_window =
          CreateBrowserWindow(std::move(params));

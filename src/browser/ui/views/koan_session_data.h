@@ -13,6 +13,10 @@
 
 class BrowserWindowInterface;
 
+namespace koan {
+class KoanBrowserViewController;
+}  // namespace koan
+
 namespace content {
 class NavigationEntry;
 class WebContents;
@@ -78,14 +82,24 @@ void SetWindowSessionData(BrowserWindowInterface* browser,
 
 // A feature's say when a window with its data is restored: called once the
 // window exists, before its tabs are added (the data is already readable
-// with GetWindowSessionData()). `from_session_restore` is false when a
-// closed window is reopened.
+// with GetWindowSessionData()). The window may be one that was open already
+// (a session restored into it), with data of its own. `from_session_restore` is
+// false when a closed window is reopened.
 struct WindowRestoreHook {
   const char* key;
   void (*on_restoring)(BrowserWindowInterface* browser,
                        const std::string& data,
                        bool from_session_restore);
 };
+
+// --- For tests ---
+
+// The key of the e2e tests' window data (switches::kTestWindowData).
+inline constexpr char kTestWindowDataKey[] = "koan.test";
+
+// With switches::kTestWindowData, gives `controller`'s window a random value
+// under kTestWindowDataKey once it is set up, unless it came back with one.
+void SetUpTestWindowData(KoanBrowserViewController* controller);
 
 // --- Hooks, called from upstream ---
 
@@ -113,10 +127,12 @@ void OnRestoringTab(
 std::map<std::string, std::string> GetWindowSessionData(
     const BrowserWindowInterface* browser);
 
-// Takes Koan's entries of a restored window's `extra_data` and runs the
-// features' WindowRestoreHooks. Called right after the window is created by
-// SessionRestore (CreateRestoredBrowser) and by BrowserLiveTabContext::Create
-// (a reopened window), before its tabs are restored.
+// Takes Koan's entries of a restored window's `extra_data` into the window's
+// data (and its new session entry) and runs the features'
+// WindowRestoreHooks. Called by SessionRestore right after it creates the
+// window (CreateRestoredBrowser) or picks the open one to restore into, and
+// by BrowserLiveTabContext::Create (a reopened window), before the tabs are
+// restored.
 void OnRestoringWindow(BrowserWindowInterface* browser,
                        const std::map<std::string, std::string>& extra_data,
                        bool from_session_restore);

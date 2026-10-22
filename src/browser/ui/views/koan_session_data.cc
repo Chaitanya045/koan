@@ -7,10 +7,12 @@
 #include <array>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/unguessable_token.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_factory.h"
@@ -21,6 +23,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "koan/browser/koan_switches.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 
@@ -175,6 +178,28 @@ void OnRestoringTab(
   }
 }
 
+void SetUpTestWindowData(KoanBrowserViewController* controller) {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kTestWindowData)) {
+    return;
+  }
+  // After the window is set up: a restored or reopened window gets its data
+  // right after it is created.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<KoanBrowserViewController> controller) {
+            BrowserWindowInterface* browser =
+                controller ? controller->browser_view()->browser() : nullptr;
+            if (browser &&
+                GetWindowSessionData(browser, kTestWindowDataKey).empty()) {
+              SetWindowSessionData(browser, kTestWindowDataKey,
+                                   base::UnguessableToken::Create().ToString());
+            }
+          },
+          controller->GetWeakPtr()));
+}
+
 std::string GetWindowSessionData(const BrowserWindowInterface* browser,
                                  std::string_view key) {
   const std::map<std::string, std::string>* store = WindowStore(browser);
@@ -219,7 +244,19 @@ void OnRestoringWindow(BrowserWindowInterface* browser,
   if (koan_data.empty() || !store) {
     return;
   }
-  *store = koan_data;
+  // Merged: a session can be restored into a window that is already open
+  // (e.g. "Restore" after a crash), and its own data stays. The restored
+  // window has a new id, and the session file is only rebuilt now and then,
+  // so its data is written again under that id (what SessionService does for
+  // a restored tab's data, see BuildCommandsForTab()).
+  SessionService* session =
+      SessionServiceFactory::GetForProfile(browser->GetProfile());
+  for (const auto& [key, data] : koan_data) {
+    (*store)[key] = data;
+    if (session) {
+      session->AddWindowExtraData(browser->GetSessionID(), key.c_str(), data);
+    }
+  }
   for (const WindowRestoreHook& hook : kWindowRestoreHooks) {
     auto it = koan_data.find(hook.key);
     if (it != koan_data.end()) {

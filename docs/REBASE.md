@@ -66,7 +66,8 @@ features plug into it in `src/` rather than patching upstream again:
   `koan_session_data.cc`. The hooks: `SessionServiceBase::BuildCommandsForTab`
   and `BuildCommandsForBrowser` (the session file's rebuild drops extra data
   otherwise), `CreateRestoredTab` in `browser_tabrestore.cc`,
-  `SessionRestoreImpl::CreateRestoredBrowser` in `session_restore.cc`, and
+  `SessionRestoreImpl` in `session_restore.cc` (`CreateRestoredBrowser`, and
+  where the first window is restored into the open browser), and
   `BrowserLiveTabContext::GetExtraDataForTab`, `GetExtraDataForWindow` and
   `Create` in `browser_live_tab_context.cc`.
 - **"Is this tab pinned?"**: `koan::IsPinnedForUser(tab)` in
@@ -141,7 +142,7 @@ assumes:
 | Tab row decoration | `chrome/browser/ui/views/tabs/common/tab_view.cc` (end of ctor) | `TabTitle` / `TabIcon` are still direct children of `TabView`, laid out by its layout manager |
 | Pinned tab close button / middle click | `.../tabs/common/tab_strip_collection_controller.cc` (`CloseTab`) | both still end up in `CloseTab` |
 | Custom tab label and icon | `chrome/browser/ui/tabs/tab_data.cc` (`TabData::FromTabInterface`) | tab views still read title and favicon from `TabData` |
-| Koan tab and window data in the session | `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`, `BuildCommandsForBrowser`), `chrome/browser/sessions/session_restore.cc` (`CreateRestoredBrowser`), `chrome/browser/ui/browser_tabrestore.cc` (`CreateRestoredTab`) (+ `sessions/BUILD.gn`, `ui/BUILD.gn`) | rebuilding the session file still drops tab and window extra data (Koan re-adds its keys); restored tabs still get `extra_data` and their entries before `NavigationController::Restore`; restored windows still get the window's `extra_data` in `CreateRestoredBrowser` |
+| Koan tab and window data in the session | `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`, `BuildCommandsForBrowser`), `chrome/browser/sessions/session_restore.cc` (`CreateRestoredBrowser`), `chrome/browser/ui/browser_tabrestore.cc` (`CreateRestoredTab`) (+ `sessions/BUILD.gn`, `ui/BUILD.gn`) | rebuilding the session file still drops tab and window extra data (Koan re-adds its keys); restored tabs still get `extra_data` and their entries before `NavigationController::Restore`; restored windows still get the window's `extra_data` in `CreateRestoredBrowser`, or are the open browser (`browser = browser_`, e.g. Restore after a crash) |
 | Reopened window keeps Koan's window data | `chrome/browser/ui/browser_live_tab_context.cc` (`GetExtraDataForWindow`, `Create`) | a closed window's extra data still comes from `GetExtraDataForWindow` and goes to `Create` |
 
 Then look for new upstream pinned checks: Zen's pinned tabs (pinned to their

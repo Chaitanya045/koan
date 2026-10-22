@@ -510,7 +510,7 @@ bool KoanPinnedTabController::InitPinnedState(tabs::TabInterface* tab,
                          ? entry->GetURL()
                          : contents->GetVisibleURL();
   state.pinned_icon = TabUIHelper::From(tab)->GetFavicon();
-  return true;
+  return state.pinned_url.is_valid();
 }
 
 void KoanPinnedTabController::FetchPinnedIcon(content::WebContents* contents) {
@@ -634,6 +634,15 @@ void KoanPinnedTabController::MoveAfterPinnedTabs(tabs::TabInterface* tab) {
   }
 }
 
+void KoanPinnedTabController::MoveIntoPinnedTabs(tabs::TabInterface* tab) {
+  const int first = tab_strip_model()->GetIndexOfTab(WithSplit(tab).front());
+  // Among them already: stays where it is, as Zen pins in place.
+  if (first == TabStripModel::kNoTab || InPinnedRun(first)) {
+    return;
+  }
+  MoveAfterPinnedTabs(tab);
+}
+
 void KoanPinnedTabController::SetEssential(tabs::TabInterface* tab,
                                            bool essential) {
   TabStripModel* model = tab_strip_model();
@@ -709,9 +718,9 @@ void KoanPinnedTabController::ScheduleNormalize(tabs::TabInterface* tab) {
 }
 
 void KoanPinnedTabController::Normalize() {
-  // Not while the user still holds a dragged tab (it can pause over a place
-  // as long as it likes), nor while a session restores the tabs: checked
-  // again until it is over.
+  // Not during a tab drag (in any window: TabDragController is one per
+  // process; the user may pause over a place as long as they like), nor while
+  // a session restores the tabs: checked again until it is over.
   if (TabDragController::IsActive() ||
       SessionRestore::IsRestoring(browser_view_->GetProfile())) {
     normalize_timer_.Start(FROM_HERE, kNormalizeDelay, this,
@@ -771,9 +780,9 @@ void KoanPinnedTabController::Normalize() {
       continue;
     }
     if (changed_group && IsPinnedInSpace(tab)) {
-      // Moved to another Space (or restored out of place): still pinned, at
-      // the end of that Space's pinned tabs.
-      MoveAfterPinnedTabs(tab);
+      // Moved to another Space, or restored: still pinned, and at the end of
+      // that Space's pinned tabs if it isn't among them.
+      MoveIntoPinnedTabs(tab);
       continue;
     }
     // Zen's drop rules for a drag within the Space.
@@ -819,7 +828,7 @@ void KoanPinnedTabController::PinInSpace(tabs::TabInterface* tab) {
     InitPinnedState(each, state);
     state.pinned_in_space = true;
   }
-  MoveAfterPinnedTabs(tab);
+  MoveIntoPinnedTabs(tab);
   for (tabs::TabInterface* each : WithSplit(tab)) {
     UpdateFreezingExemption(each);
     SaveTabState(each->GetContents());
@@ -1296,11 +1305,12 @@ void KoanPinnedTabController::OnSplitTabChanged(const SplitTabChange& change) {
 
 void KoanPinnedTabController::MatchSplitPinnedState(
     split_tabs::SplitTabId split) {
-  split_tabs::SplitTabData* data = tab_strip_model()->GetSplitData(split);
-  if (!data) {
+  // Gone since (GetSplitData() CHECKs it exists).
+  if (!tab_strip_model()->ContainsSplit(split)) {
     return;
   }
-  const std::vector<tabs::TabInterface*> tabs = data->ListTabs();
+  const std::vector<tabs::TabInterface*> tabs =
+      tab_strip_model()->GetSplitData(split)->ListTabs();
   // A split view made of a pinned tab and a normal one (e.g. Ctrl+Alt+V on
   // the last pinned tab): pinned as one, like a split view Zen pins.
   const bool any = std::ranges::any_of(tabs, &IsPinnedInSpace);

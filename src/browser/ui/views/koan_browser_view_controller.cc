@@ -19,6 +19,7 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
@@ -61,6 +62,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
     observations_.AddObservation(contents);
   }
   VLOG(1) << "Koan: window created (" << g_live_count << " open)";
+  SetUpTestWindowData(this);
 }
 
 KoanBrowserViewController::~KoanBrowserViewController() {

@@ -207,7 +207,7 @@ class KoanPinnedTabController : public TabStripModelObserver {
   class DiscardAfterReset;
 
   // Remembers the current URL and icon as the pinned ones, unless it has a
-  // pinned URL already. Returns whether it set them.
+  // pinned URL already. Returns whether it set a pinned URL.
   bool InitPinnedState(tabs::TabInterface* tab, KoanTabState& state);
   // Looks the pinned URL's icon up in the favicon database.
   void FetchPinnedIcon(content::WebContents* contents);
@@ -225,9 +225,12 @@ class KoanPinnedTabController : public TabStripModelObserver {
   bool InPinnedRun(int index) const;
   bool AbovePinnedTab(int index) const;
   // Moves `tab` (with its split) right after the other pinned tabs at the
-  // top of its Space: to the end of them when it is pinned, to the top of
-  // the normal tabs when it isn't.
+  // top of its Space, up or down: to the top of the normal tabs (unpinned
+  // tabs and new tabs opened among the pinned ones).
   void MoveAfterPinnedTabs(tabs::TabInterface* tab);
+  // A pinned `tab` (with its split) that isn't among its Space's pinned tabs
+  // moves up to the end of them; one among them stays where it is.
+  void MoveIntoPinnedTabs(tabs::TabInterface* tab);
   // Makes `tab` (with its split, kept together) an Essential, or moves it
   // out of the Essentials into the active Space. Its Koan state is the
   // caller's.

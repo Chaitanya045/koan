@@ -29,6 +29,7 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -252,6 +253,12 @@ class KoanTabRow : public views::Button {
   bool GetPending() const { return IsPendingTab(tab()); }
   bool GetEssential() const { return tab() && tab()->IsPinned(); }
   bool GetSplit() const { return tab() && tab()->IsSplit(); }
+  // The window's test data (koan_session_data.h, for e2e tests).
+  std::u16string GetWindowTestData() const {
+    return tab() ? base::UTF8ToUTF16(GetWindowSessionData(
+                       tab()->GetBrowserWindowInterface(), kTestWindowDataKey))
+                 : std::u16string();
+  }
 
   bool CanRename() const {
     return tab() && title_ && title_->GetVisible() &&
@@ -534,6 +541,7 @@ ADD_READONLY_PROPERTY_METADATA(bool, Discarded)
 ADD_READONLY_PROPERTY_METADATA(bool, Pending)
 ADD_READONLY_PROPERTY_METADATA(bool, Essential)
 ADD_READONLY_PROPERTY_METADATA(bool, Split)
+ADD_READONLY_PROPERTY_METADATA(std::u16string, WindowTestData)
 END_METADATA
 
 // Applies an emoji from the icon picker's field.
