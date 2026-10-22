@@ -80,15 +80,27 @@ inline constexpr char kUrlBarReplaceNewTab[] = "koan.urlbar.replace_newtab";
 // sidebar's URL pill on hover. On by default, like Zen.
 inline constexpr char kUrlBarShowCopyUrl[] = "koan.urlbar.show_copy_url";
 
-// Whether the browser takes the active workspace's colour (Zen's
-// per-workspace themes).
+// Whether windows show their active Space's theme (Zen's per-Space
+// gradient themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
 
-// The workspace tint Koan last applied as the browser's user colour (0:
-// none), and the user's own colour from before it, so "All tabs" can restore
-// it. Restoring only happens while Koan's tint is still the current colour,
-// so a colour the user picks meanwhile is never overwritten.
-// kWorkspaceTintSavedColor is 0 for "no user colour".
+// Each Space's theme (Zen's gradient themes), keyed by the Space's saved tab
+// group GUID ("default" for "All tabs"). See koan_space_theme.h.
+inline constexpr char kSpaceThemes[] = "koan.spaces.themes";
+
+// Zen's dark theme styles: 0 default, 1 night (AMOLED), 2 colorful.
+inline constexpr char kDarkThemeStyle[] = "koan.theme.dark_style";
+
+// Whether the theme picker shows the custom colour list
+// (zen.theme.gradient.show-custom-colors, off by default like Zen's).
+inline constexpr char kShowCustomColors[] =
+    "koan.theme.gradient.show_custom_colors";
+
+// Earlier Koan versions tinted the whole profile with the active
+// workspace's colour: the tint last applied as the browser's user colour
+// (0: none) and the user's own colour from before it. Read once to put the
+// user's colour back, then cleared. kWorkspaceTintSavedColor is 0 for "no
+// user colour".
 inline constexpr char kWorkspaceTintApplied[] = "koan.workspaces.tint_applied";
 inline constexpr char kWorkspaceTintSavedColor[] =
     "koan.workspaces.tint_saved_color";

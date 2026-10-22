@@ -49,3 +49,15 @@ adapted from Chromium and stay under Chromium's BSD-style license.
 Koan is not affiliated with Google, the Chromium project, or the Zen browser
 project. "Zen" is referenced only to describe the user experience Koan aims
 for.
+
+## Zen browser assets
+
+Two kinds of files are taken from the Zen browser (https://zen-browser.app,
+https://github.com/zen-browser/desktop), which is under the Mozilla Public
+License 2.0 (https://mozilla.org/MPL/2.0/); they remain under the MPL-2.0:
+
+- `src/browser/ui/views/resources/grain-bg.png`: Zen's grain texture,
+  unmodified.
+- `src/browser/ui/vector_icons/koan_theme_*.icon`: Zen's icons
+  (`zen-icons/*.svg`), converted to Chromium's vector icon format with
+  `scripts/svg_to_icon.py`.

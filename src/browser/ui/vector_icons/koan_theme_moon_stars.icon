@@ -1,0 +1,18 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Zen's zen-icons/moon-stars.svg, converted by scripts/svg_to_icon.py.
+
+CANVAS_DIMENSIONS, 18,
+FILL_RULE_NONZERO,
+MOVE_TO, 16.705, 10.223,
+ARC_TO, 0.75, 0.75, 0, 0, 0, 15.867, 10.186,
+ARC_TO, 5.5, 5.5, 0, 0, 1, 13, 11,
+ARC_TO, 5.506, 5.506, 0, 0, 1, 7.5, 5.5,
+CUBIC_TO, 7.5, 4.354, 7.854, 3.253, 8.523, 2.314,
+ARC_TO, 0.75, 0.75, 0, 0, 0, 7.774, 1.141,
+ARC_TO, 8, 8, 0, 0, 0, 1.25, 9,
+CUBIC_TO, 1.25, 13.411, 4.839, 17, 9.25, 17,
+ARC_TO, 7.995, 7.995, 0, 0, 0, 16.985, 11.014,
+ARC_TO, 0.75, 0.75, 0, 0, 0, 16.705, 10.224,

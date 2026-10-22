@@ -29,7 +29,15 @@ point of Koan.
 | Sidebar width 163–500 px, drag to resize | Same | Upstream resize handle with Zen's limits (Chromium's 126–400 px with the Koan sidebar off; a saved width is clamped to whichever applies). |
 | Theme follows the system light/dark mode | Same | |
 | Thin overlay scrollbars, shown while scrolling | Same | Chromium's overlay scrollbars, on by default on Linux in Koan. Zen follows GTK's overlay-scrolling setting ("Always Show Scrollbars" in GNOME's accessibility settings); Koan always overlays for now (#30). For classic scrollbars, start Koan with `--disable-features=OverlayScrollbar`. Comparison: `screenshots/scrollbars-zen-vs-koan.png` (Zen left, Koan right, while scrolling). |
-| Gradient theme picker | Different | Workspaces tint the browser with one colour (Chromium's Material colour system), no gradient editor. |
+| Gradient theme picker | Same | Zen's panel (`ZenGradientGenerator.mjs`) re-implemented in Views with Zen's formulas and constants: colour field with up to 3 dots, harmonies (Complementary, Split, Analogous, Triadic, Floating), the 5 preset pages, wave opacity slider (0.25-0.8), 16-step grain dial with Zen's `grain-bg.png`, scheme buttons. Opens from a Space's menu ("Edit Theme…") or the command palette ("Open Theme Picker"). On macOS the dial is 6rem and 2rem from the slider, as in Zen's macOS CSS (13px rem: 78px, 26px); compared with Zen on Linux only so far. Screenshot (Linux): `screenshots/theme-picker-zen-vs-koan.png`. |
+| Theme picker from the keyboard and screen readers | Different | Koan addition (Zen's panel is mouse-first): Tab reaches the colour field (Enter adds a colour, the arrows move the big dot, Shift for bigger steps, Delete removes it), the preset swatches (one tab stop, the arrows move between them), the opacity slider and the grain dial (sliders for assistive tech; arrows, Home, End). |
+| Space themes and Chrome themes | Different | Zen has no Chrome Web Store themes. In Koan a store theme keeps deciding the window's look: Space themes are off while one is installed. |
+| Gradient behind sidebar, toolbar and page margin | Same | Zen's `getGradient()` layers, painted with Skia (premultiplied CSS interpolation) over the whole window. Zen gives the top toolbar (multiple-toolbars layout) its own gradient, which differs only for two-colour themes; Koan paints one gradient across the window. |
+| Theme decides light/dark and accent of the window | Same on Linux, different on macOS | Zen's `shouldBeDarkMode()` and `getAccentColorForUI()` set the window's colour mode and accent, and Chromium's and Koan's colour IDs follow. Text and icons take the colour IDs' values for that mode and accent rather than Zen's `getToolbarColor()` (white or black at 90% with 5% of the accent): a colour mixer only sees the mode and accent, so it can't tell a Space theme from the user's own Chrome colour. Zen's formulas for an opaque window: on macOS Zen's window is translucent (vibrancy), so Zen blends differently there and uses `zen.theme.dark-mode-bias`; Koan's window is opaque on every platform, so it uses Zen's opaque-window maths (as Zen on Linux) and has no bias setting: on macOS, mid-luminance themes can decide light/dark, and tint, differently from Zen there. The system accent (custom colours, Colorful) is the OS one: `NSColor.controlAccentColor` on macOS, GTK's or Windows' elsewhere. |
+| URL bar under a Space theme | Different | The URL pill and the floating URL bar take their colour IDs, which follow the Space's mode and accent, so the floating bar is tinted with the accent; Zen's floating bar stays neutral (`light-dark(white, rgb(24 24 24))`). |
+| Website appearance menu (Automatic / Light / Dark) | Different | Zen has it in the menu bar's View menu; Koan has it in the Space menu, the picker's scheme buttons and the palette (the macOS menu bar is Chromium's, not changed yet); it is Chromium's browser colour scheme, which websites follow. A Space theme never changes what websites get, as in Zen. chrome:// pages (the new-tab page, settings) are coloured like the window, so they follow the Space theme's light/dark. |
+| Dark theme styles: Default / Night / Colorful | Different | Koan addition, where Zen has the setting: Settings > Look and Feel > Dark Theme Styles. Zen 1.23 ships only the strings; Koan's Night makes dark windows black, Colorful mixes 15% of the theme's accent (the system accent without a theme) into dark surfaces. |
+| Custom colours in the picker | Same | Hex input with opacity, list with remove; hidden by default like Zen (`koan.theme.gradient.show_custom_colors`). Zen uses a colour input; Chromium Views has none, so it is a hex text field. |
 | Zen Mods (community CSS themes) | Missing | Koan's UI is native Views, not CSS, so mods can't apply. Chrome themes from the Chrome Web Store work. |
 
 ## URL bar
@@ -69,7 +77,7 @@ point of Koan.
 | Switcher in the sidebar | Same | Round buttons at the bottom of the sidebar; "∞" shows all tabs. |
 | New tabs open in the active workspace | Same | |
 | Restored after restart | Same | Koan restores the previous session by default, like Zen. |
-| Per-workspace colour | Different | One tint colour per workspace (the group colour), not a gradient. |
+| Per-workspace gradient theme | Same | Saved per Space (keyed by the saved tab group's GUID, so it survives restarts); switching Spaces cross-fades the gradients over 250ms like Zen's spring. |
 | Workspace icons (emoji) | Same | A leading emoji in the workspace name is its icon; new workspaces get one per colour. |
 | Containers per workspace | Missing | Chromium has profiles, not containers. |
 | Essentials shared by all workspaces | Same | Pinned tabs, shown as Zen's tiles (46px tall, up to four across) at the top of the sidebar. |
@@ -121,7 +129,8 @@ point of Koan.
 | Actions mode: Tab in an empty URL bar lists every action | Different | Koan types `>` (you can type it too; a second Tab leaves it) instead of showing an "Actions" chip, and lists as many actions as Chromium's popup has rows (about eight) above a "> – search" row; type to filter. As in Zen, Enter runs the first action once two characters are typed. |
 | "Focus on" a Space | Same | Matched by the Space's name, which is shown beside "Focus on". |
 | Add to / Remove from Essentials | Same | As in the tab's context menu; Pin / Unpin Tab pin the tab to its workspace. |
-| Open Theme Picker, Open Library, New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#41, #43, #42); each feature adds its actions to the palette's registry. |
+| Open Theme Picker | Same | Opens the theme picker for the active Space. |
+| Open Library, New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#43, #42); each feature adds its actions to the palette's registry. |
 | Reset Pinned Tab | Same | Offered while the tab is away from its pinned URL, as in Zen. |
 | Toggle Tabs on right | Missing | Chromium's vertical tabs can't be on the right (see "Sidebar on the right"). |
 | New Blank Window | Missing | Koan doesn't sync windows, so it would be the same as Open New Window. |
@@ -140,8 +149,8 @@ Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (
 | Zen settings pages | Partial | `chrome://koan-settings` (Ctrl+,): Look and Feel, Tab Management, Keyboard Shortcuts, with Zen's labels; Chromium's own settings are linked from its sidebar. Only the settings Koan has are shown (see below): 13 today, against Zen's few dozen. Comparison: `screenshots/settings-zen-vs-koan.png` (Zen left, Koan right). |
 | Settings: Only Sidebar / Sidebar and Top Toolbar | Same | Look and Feel > Browser Layout. |
 | Settings: URL bar behaviour, replace new tab, copy URL button | Same | Look and Feel > URL Bar. |
-| Settings: compact mode variants and flash popup, tabs on the right | Same | Look and Feel. |
-| Settings: Collapsed Sidebar layout card, dark theme styles, window dragging | Missing | Added to the settings page as each feature lands (#41, #44). The collapsed layout is the sidebar's collapsed state (Chromium's, not a pref), so the layout picker doesn't offer it yet; the sidebar toggle does. Glance's are there (#37). |
+| Settings: compact mode variants and flash popup, tabs on the right, dark theme styles | Same | Look and Feel. |
+| Settings: Collapsed Sidebar layout card, window dragging | Missing | Added to the settings page as each feature lands (#44). The collapsed layout is the sidebar's collapsed state (Chromium's, not a pref), so the layout picker doesn't offer it yet; the sidebar toggle does. Glance's are there (#37). |
 | Settings: Vertical Tabs group (new tab button on the tab list / at the top, how to expand tabs) | Missing | The group is declared; no Koan setting yet. |
 | Settings: pinned tab close behaviour, restore pinned tabs to their URL | Same | Tab Management > Pinned Tabs. |
 | Settings: container-specific Essentials | Missing | Chromium has no containers. |

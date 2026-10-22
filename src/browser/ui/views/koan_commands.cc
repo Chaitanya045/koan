@@ -42,6 +42,7 @@
 #include "koan/browser/ui/views/koan_command_registry.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/accelerator.h"
 
@@ -319,6 +320,15 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
                            kDarkModeIcon, ColorScheme::kDark));
   add_if(IsEnabled(controller, IDC_PRINT),
          ChromeCommand(controller, "print", u"Print", kPrintIcon, IDC_PRINT));
+  // Zen's theme picker, for the active Space.
+  if (controller.theme()->IsEnabled()) {
+    KoanCommand command = MakeCommand("open-theme-picker", u"Open Theme Picker",
+                                      kKoanThemePaintbrushFillIcon);
+    command.run = base::BindRepeating([](KoanBrowserViewController& owner) {
+      owner.theme()->ShowThemePickerForActiveSpace();
+    });
+    commands.push_back(std::move(command));
+  }
 }
 
 void AppendWorkspaceCommands(const KoanBrowserViewController* owner,

@@ -22,12 +22,41 @@ source_set("views") {
     "koan_sidebar_tabs.h",
     "koan_split_view.h",
     "koan_url_bar.h",
+    "koan_window_background.h",
   ]
   public_deps = [
     "//base",
     "//ui/base",
     "//ui/gfx/geometry",
     "//ui/menus",
+  ]
+}
+
+# Zen's Space theme model and colour maths; no views, so the colour mixer
+# can use it too.
+source_set("space_theme") {
+  sources = [
+    "koan_space_theme.cc",
+    "koan_space_theme.h",
+  ]
+  public_deps = [
+    "//base",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# Zen's grain texture (grain-bg.png, MPL-2.0; see THIRD_PARTY_NOTICES.md),
+# compiled in as a byte array.
+action("grain_png") {
+  script = "resources/embed_file.py"
+  inputs = [ "resources/grain-bg.png" ]
+  outputs = [ "$target_gen_dir/koan_grain_png.h" ]
+  args = [
+    rebase_path("resources/grain-bg.png", root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+    "kGrainPng",
+    "KOAN_BROWSER_UI_VIEWS_KOAN_GRAIN_PNG_H_",
   ]
 }
 
@@ -70,10 +99,22 @@ source_set("impl") {
     "koan_tab_activation.h",
     "koan_toast.cc",
     "koan_toast.h",
+    "koan_space_background.cc",
+    "koan_space_background.h",
+    "koan_space_theme_store.cc",
+    "koan_space_theme_store.h",
+    "koan_system_accent.h",
+    "koan_theme_controller.cc",
+    "koan_theme_controller.h",
+    "koan_theme_picker.cc",
+    "koan_theme_picker.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
   ]
+  sources += get_target_outputs(":grain_png")
+  public_deps = [ ":space_theme" ]
   deps = [
+    ":grain_png",
     ":views",
     "//base:i18n",
     "//cc/paint",
@@ -114,6 +155,7 @@ source_set("impl") {
     "//url",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/tabs",
+    "//chrome/browser/tab_group_sync:factories",
     "//chrome/browser/ui/views/frame",
     "//chrome/browser/ui/views/frame:browser_frame_view",
     "//chrome/browser/ui/views/frame:browser_view_header",
@@ -144,6 +186,7 @@ source_set("impl") {
     "//components/performance_manager",
     "//components/sessions",
     "//components/prefs",
+    "//components/saved_tab_groups/public",
     "//koan/browser:features",
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
@@ -167,8 +210,15 @@ source_set("impl") {
     "//ui/gfx",
     "//ui/gfx/geometry:geometry_skia",
     "//ui/menus",
+    "//ui/native_theme",
     "//ui/views",
   ]
+  if (is_mac) {
+    sources += [ "koan_system_accent_mac.mm" ]
+    frameworks = [ "AppKit.framework" ]
+  } else {
+    sources += [ "koan_system_accent.cc" ]
+  }
   if (use_aura) {
     # Glance animates the page's native window (an aura::Window). macOS
     # uses NSViews instead and has no Aura.

@@ -109,6 +109,57 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanGlanceButtonIcon] = {ui::kColorSysInversePrimary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};
+
+  // Space themes: Zen's --zen-themed-toolbar-bg-transparent, its background
+  // without a theme (getGradient()) and getToolbarModifiedBaseRaw().
+  mixer[kColorKoanThemeWindow] = {dark ? SkColorSetRGB(0x17, 0x17, 0x17)
+                                       : SkColorSetRGB(0xe2, 0xe2, 0xe2)};
+  mixer[kColorKoanThemeDefaultBackground] = {
+      dark ? SkColorSetRGB(0x13, 0x13, 0x13) : SkColorSetRGB(0xe9, 0xe9, 0xe9)};
+  mixer[kColorKoanThemeTintBase] = {dark ? SkColorSetRGB(23, 23, 26)
+                                         : SkColorSetRGB(240, 240, 244)};
+
+  // The theme picker, with zen-gradient-generator.css's light-dark() values;
+  // the panel is Firefox's --arrowpanel-background.
+  const auto light_dark = [dark](SkColor light, SkColor dark_color) {
+    return ui::ColorTransform(dark ? dark_color : light);
+  };
+  mixer[kColorKoanThemePickerBackground] =
+      light_dark(SkColorSetRGB(244, 244, 244), SkColorSetRGB(31, 31, 31));
+  mixer[kColorKoanThemePickerForeground] =
+      light_dark(SkColorSetRGB(50, 50, 55), SK_ColorWHITE);
+  mixer[kColorKoanThemePickerField] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.05f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.03f)));
+  mixer[kColorKoanThemePickerFieldGrid] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.05f)));
+  mixer[kColorKoanThemePickerIcon] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.7f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.9f)));
+  mixer[kColorKoanThemePickerButtonHovered] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.1f)));
+  mixer[kColorKoanThemePickerDotBorder] = {SK_ColorWHITE};
+  mixer[kColorKoanThemePickerWave] =
+      light_dark(SkColorSetRGB(90, 90, 90), SkColorSetRGB(161, 161, 161));
+  mixer[kColorKoanThemePickerWaveDim] =
+      light_dark(SkColorSetARGB(Alpha(0.5f), 77, 77, 77),
+                 SkColorSetARGB(Alpha(0.5f), 161, 161, 161));
+  mixer[kColorKoanThemePickerTrack] = {kColorKoanThemePickerButtonHovered};
+  mixer[kColorKoanThemePickerThumb] = light_dark(SK_ColorBLACK, SK_ColorWHITE);
+  mixer[kColorKoanThemePickerDialDot] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.3f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.3f)));
+  mixer[kColorKoanThemePickerDialHandle] = light_dark(
+      SkColorSetRGB(0x75, 0x75, 0x75), SkColorSetRGB(0xd1, 0xd1, 0xd1));
+  // Zen's --zen-colors-border at 50%.
+  mixer[kColorKoanThemePickerDialBorder] =
+      light_dark(SkColorSetARGB(Alpha(0.25f), 128, 128, 128),
+                 SkColorSetARGB(Alpha(0.5f), 79, 79, 79));
+  mixer[kColorKoanThemePickerDialShine] = {kColorKoanThemePickerButtonHovered};
+  mixer[kColorKoanThemePickerSwatchShadow] = {
+      SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
 }
 
 }  // namespace

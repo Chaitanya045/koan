@@ -1,0 +1,17 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Zen's zen-icons/arrow-right.svg, converted by scripts/svg_to_icon.py.
+
+CANVAS_DIMENSIONS, 18,
+FILL_RULE_NONZERO,
+MOVE_TO, 5.97, 2.22,
+ARC_TO, 0.75, 0.75, 0, 0, 1, 7.03, 2.22,
+LINE_TO, 13.28, 8.47,
+ARC_TO, 0.75, 0.75, 0, 0, 1, 13.28, 9.53,
+LINE_TO, 7.03, 15.78,
+ARC_TO, 0.75, 0.75, 0, 1, 1, 5.97, 14.72,
+LINE_TO, 11.69, 9,
+LINE_TO, 5.97, 3.28,
+ARC_TO, 0.75, 0.75, 0, 0, 1, 5.97, 2.22,

@@ -1,0 +1,26 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Zen's zen-icons/algorithm.svg, converted by scripts/svg_to_icon.py.
+
+CANVAS_DIMENSIONS, 18,
+FILL_RULE_NONZERO,
+MOVE_TO, 4.75, 10,
+ARC_TO, 3, 3, 0, 1, 1, 4.75, 16,
+ARC_TO, 3, 3, 0, 0, 1, 4.75, 10,
+MOVE_TO, 4.75, 11.5,
+ARC_TO, 1.5, 1.5, 0, 1, 0, 4.75, 14.5,
+ARC_TO, 1.5, 1.5, 0, 0, 0, 4.75, 11.5,
+MOVE_TO, 13.25, 10,
+ARC_TO, 3, 3, 0, 1, 1, 13.25, 16,
+ARC_TO, 3, 3, 0, 0, 1, 13.25, 10,
+MOVE_TO, 13.25, 11.5,
+ARC_TO, 1.5, 1.5, 0, 1, 0, 13.25, 14.5,
+ARC_TO, 1.5, 1.5, 0, 0, 0, 13.25, 11.5,
+MOVE_TO, 9, 2,
+ARC_TO, 3, 3, 0, 1, 1, 9, 8,
+ARC_TO, 3, 3, 0, 0, 1, 9, 2,
+MOVE_TO, 9, 3.5,
+ARC_TO, 1.5, 1.5, 0, 1, 0, 9, 6.5,
+ARC_TO, 1.5, 1.5, 0, 0, 0, 9, 3.5,

@@ -1,0 +1,34 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Zen's zen-icons/sparkles.svg, converted by scripts/svg_to_icon.py.
+
+CANVAS_DIMENSIONS, 18,
+FILL_RULE_NONZERO,
+MOVE_TO, 3.025, 5.623,
+ARC_TO, 0.501, 0.501, 0, 0, 0, 3.975, 5.623,
+LINE_TO, 4.396, 4.36,
+LINE_TO, 5.659, 3.939,
+ARC_TO, 0.5, 0.5, 0, 0, 0, 5.659, 2.991,
+LINE_TO, 4.396, 2.57,
+LINE_TO, 3.975, 1.307,
+CUBIC_TO, 3.838, 0.899, 3.163, 0.899, 3.026, 1.307,
+LINE_TO, 2.605, 2.57,
+LINE_TO, 1.342, 2.991,
+ARC_TO, 0.5, 0.5, 0, 0, 0, 1.342, 3.939,
+LINE_TO, 2.605, 4.36,
+CLOSE,
+MOVE_TO, 16.525, 8.803,
+LINE_TO, 11.99, 7.01,
+LINE_TO, 10.197, 2.475,
+CUBIC_TO, 9.97, 1.903, 9.029, 1.903, 8.802, 2.475,
+LINE_TO, 7.009, 7.01,
+LINE_TO, 2.474, 8.803,
+ARC_TO, 0.75, 0.75, 0, 0, 0, 2.474, 10.197,
+LINE_TO, 7.009, 11.99,
+LINE_TO, 8.802, 16.525,
+ARC_TO, 0.75, 0.75, 0, 0, 0, 10.196, 16.525,
+LINE_TO, 11.989, 11.99,
+LINE_TO, 16.524, 10.197,
+ARC_TO, 0.751, 0.751, 0, 0, 0, 16.525, 8.803,

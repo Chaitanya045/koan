@@ -66,6 +66,36 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
 
+  // Space themes (koan_theme_controller.cc, zen-theme.css): the window behind
+  // a theme's gradient, the window without a theme, and the surface a theme's
+  // colours are blended into. A theme family can supply its own.
+  kColorKoanThemeWindow,
+  kColorKoanThemeDefaultBackground,
+  kColorKoanThemeTintBase,
+
+  // Zen's theme picker (koan_theme_picker.cc, zen-gradient-generator.css), in
+  // the window's light or dark scheme: the panel and its text, the colour
+  // field and its dot grid, the icon buttons (icon, hover), the colour dots'
+  // border, the opacity slider's wave (up to the thumb and after it), track
+  // and thumb, the grain dial's step dots, handle, knob border and shine, and
+  // the preset swatches' shadow.
+  kColorKoanThemePickerBackground,
+  kColorKoanThemePickerForeground,
+  kColorKoanThemePickerField,
+  kColorKoanThemePickerFieldGrid,
+  kColorKoanThemePickerIcon,
+  kColorKoanThemePickerButtonHovered,
+  kColorKoanThemePickerDotBorder,
+  kColorKoanThemePickerWave,
+  kColorKoanThemePickerWaveDim,
+  kColorKoanThemePickerTrack,
+  kColorKoanThemePickerThumb,
+  kColorKoanThemePickerDialDot,
+  kColorKoanThemePickerDialHandle,
+  kColorKoanThemePickerDialBorder,
+  kColorKoanThemePickerDialShine,
+  kColorKoanThemePickerSwatchShadow,
+
   kKoanColorsEnd,
 };
 

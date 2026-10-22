@@ -11,8 +11,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
-#include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_id.h"
+#include "ui/views/context_menu_controller.h"
 
 class BrowserView;
 class TabStripModel;
@@ -29,7 +29,8 @@ class KoanWorkspaceSwitcherView;
 //
 // Owns the switcher at the bottom of the sidebar and keeps new tabs in the
 // active workspace. Keyboard shortcuts live in KoanShortcutController.
-class KoanWorkspaceController : public TabStripModelObserver {
+class KoanWorkspaceController : public TabStripModelObserver,
+                                public views::ContextMenuController {
  public:
   explicit KoanWorkspaceController(BrowserView* browser_view);
   KoanWorkspaceController(const KoanWorkspaceController&) = delete;
@@ -63,6 +64,12 @@ class KoanWorkspaceController : public TabStripModelObserver {
       std::optional<tab_groups::TabGroupId> new_focused_group_id,
       std::optional<tab_groups::TabGroupId> old_focused_group_id) override;
 
+  // views::ContextMenuController (the Space buttons):
+  void ShowContextMenuForViewImpl(
+      views::View* source,
+      const gfx::Point& point,
+      ui::mojom::MenuSourceType source_type) override;
+
  private:
   void InstallSwitcher();
   // Rebuilds the switcher soon (coalesced). Never synchronously: model
@@ -71,16 +78,11 @@ class KoanWorkspaceController : public TabStripModelObserver {
   void UpdateSwitcher();
   void RebuildSwitcher();
   void AdoptUngroupedTabs();
-  // Tints the browser with the active workspace's colour, or restores the
-  // user's colour when no workspace is active.
-  void UpdateTint();
-  void OnTintPrefChanged();
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<KoanWorkspaceSwitcherView> switcher_ = nullptr;
   bool adopt_pending_ = false;
   bool rebuild_pending_ = false;
-  PrefChangeRegistrar pref_change_registrar_;
 
   base::WeakPtrFactory<KoanWorkspaceController> weak_factory_{this};
 };

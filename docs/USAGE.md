@@ -227,9 +227,52 @@ kept with the session.
 A workspace is a tab group shown on its own. Its icon in the switcher is
 the emoji its name starts with (new workspaces get one, e.g. "🌊 Space 1").
 Rename or recolour a workspace from its group header's menu; renaming
-changes the icon too. New tabs open in the active workspace.
+changes the icon too (the colour is the switcher button's; the window's
+look comes from the Space theme below). New tabs open in the active workspace.
 Workspaces and the active one are restored on restart (Koan restores the
 previous session by default; change it in Settings > On startup).
+
+## Space themes
+
+Every workspace (Space) has its own gradient theme, as in Zen. Right-click a
+Space in the switcher (or **∞** for "All tabs") and choose **Edit Theme…**,
+or run **Open Theme Picker** from the command palette (for the active
+Space), to open Zen's theme picker beside the sidebar:
+
+- **Colour field**: click to place a colour, drag the big dot to change it,
+  right-click it to remove it. Up to three colours.
+- **+ / − / harmony**: add or remove a colour; the third button cycles the
+  colour harmony (Complementary, Split, Analogous, Triadic, Floating) that
+  places the other dots around the big one.
+- **Presets**: five pages of Zen's preset swatches (arrows to page).
+- **Opacity**: the wave slider; a flatter wave is a lighter tint.
+- **Grain**: drag the handle around the dial for Zen's grain texture.
+- **Automatic / Light / Dark** (top of the field): the window scheme, which
+  websites follow too.
+
+From the keyboard: Tab to the field, Enter adds a colour, the arrow keys
+move the big dot (Shift for bigger steps), Delete removes it; the swatches
+are one Tab stop (arrows move between them, Space applies one); the opacity
+slider and the grain dial take the arrow keys, Home and End.
+
+Changes show on the window at once and are saved when the panel closes.
+The window's sidebar, toolbar and the margin around the page show the
+gradient; switching Spaces cross-fades to the next Space's gradient. A
+theme also decides whether the window's own colours are light or dark and
+sets their accent, like Zen; websites keep following the appearance setting.
+
+The Space menu also has **Appearance** (what websites use: Automatic, Light
+or Dark; the palette's "Switch to ... Appearance / Mode" do the same).
+**Settings > Look and Feel > Dark Theme Styles** picks Default, Night (a
+black window) or Colorful (dark surfaces tinted with the accent); Night and
+Colorful are Koan's own (Zen has only the setting's name so far).
+**Settings > Tab Management > Workspaces** turns Space themes off. The
+custom colour list of Zen's picker is off by default, as in Zen; turn it on
+with the pref `koan.theme.gradient.show_custom_colors`.
+
+With a Chrome Web Store theme installed, the theme keeps the window's look
+and Space themes are off until you remove it (Settings > Appearance >
+Reset to default).
 
 ## Compact mode
 
