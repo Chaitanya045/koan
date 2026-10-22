@@ -32,6 +32,8 @@ BASE_DECLARE_FEATURE(kKoanCommandPalette);
 // button.
 BASE_DECLARE_FEATURE(kKoanUrlBar);
 
+BASE_DECLARE_FEATURE(kKoanLibrary);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
@@ -39,6 +41,7 @@ bool IsGlanceEnabled();
 bool IsRestoreTabsOnDemandEnabled();
 bool IsCommandPaletteEnabled();
 bool IsUrlBarEnabled();
+bool IsLibraryEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read

@@ -367,7 +367,7 @@ Library (the shortcuts open Chrome's pages there).
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
-freeze background tabs, command palette.
+freeze background tabs, command palette, Library.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -140,7 +141,7 @@ KoanLibraryController::~KoanLibraryController() = default;
 bool KoanLibraryController::IsAvailable() const {
   // Normal windows of a regular profile: an incognito window has no history
   // or downloads of its own to show.
-  return browser_view_->GetIsNormalType() &&
+  return features::IsLibraryEnabled() && browser_view_->GetIsNormalType() &&
          !browser_view_->GetProfile()->IsOffTheRecord();
 }
 
