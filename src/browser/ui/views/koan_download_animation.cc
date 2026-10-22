@@ -5,7 +5,6 @@
 #include "koan/browser/ui/views/koan_download_animation.h"
 
 #include <algorithm>
-#include <cmath>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -30,6 +29,7 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_zen_download_animation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
@@ -49,19 +49,10 @@ namespace koan {
 
 namespace {
 
-// ZenDownloadAnimation.mjs (sizes in koan_sidebar_metrics.h): 60 keyframes
-// over zen.downloads.download-animation-duration (1000 ms), the arc twice as
-// high as the distance (at most 1200, at most 80% of the room on that
-// side), the icon shrinking to 45% at the end. The tile leaves the arc's
-// duration + 200 ms after it is in.
+// The arc and its timing are Zen's (koan_zen_download_animation.h), the
+// sizes in koan_sidebar_metrics.h.
 constexpr int kArcViewSize = kDownloadArcSize + 2 * kDownloadShadowMargin;
-constexpr int kArcSteps = 60;
-constexpr base::TimeDelta kArcDuration = base::Milliseconds(1000);
-constexpr float kArcHeightRatio = 2;
-constexpr float kMaxArcHeight = 1200;
-constexpr float kArcEndScale = 0.45f;
 constexpr int kTileViewSize = kDownloadTileSize + 2 * kDownloadShadowMargin;
-constexpr base::TimeDelta kTileHold = kArcDuration + base::Milliseconds(200);
 
 // Scales `size` about its centre after moving it by (dx, dy).
 gfx::Transform MoveAndScale(float dx, float dy, float scale, int size) {
@@ -70,10 +61,6 @@ gfx::Transform MoveAndScale(float dx, float dy, float scale, int size) {
   transform.Scale(scale, scale);
   transform.Translate(-size / 2.0f, -size / 2.0f);
   return transform;
-}
-
-float EaseInOutQuad(float t) {
-  return t < 0.5f ? 2 * t * t : -1 + (4 - 2 * t) * t;
 }
 
 // The flying icon: a ring around a filled circle with the download arrow.
@@ -294,36 +281,13 @@ void KoanDownloadAnimation::PlayArc(const gfx::Point& start,
   // Arc towards the side with more room. Layer transforms aren't mirrored
   // in a right-to-left UI, the views' positions are.
   const float dx = (end.x() - start.x()) * (base::i18n::IsRTL() ? -1.0f : 1.0f);
-  const float dy = end.y() - start.y();
-  const float room_above = std::min(start.y(), end.y());
-  const float room_below = overlay->height() - std::max(start.y(), end.y());
-  const bool downward = room_below > room_above;
-  const float arc_height =
-      std::min({std::hypot(dx, dy) * kArcHeightRatio, kMaxArcHeight,
-                (downward ? room_below : room_above) * 0.8f});
-  const auto keyframe = [&](float progress, gfx::Transform* transform,
-                            float* opacity) {
-    const float eased = EaseInOutQuad(progress);
-    const float x = dx * eased;
-    const float y = dy * eased + (downward ? 1 : -1) * arc_height *
-                                     (1 - std::pow(2 * eased - 1, 2.0f));
-    const float scale = progress < 0.5f ? 0.5f + progress / 0.5f * 1.3f
-                                        : 1.8f - (progress - 0.5f) / 0.5f *
-                                                     (1.8f - kArcEndScale);
-    *transform = MoveAndScale(x, y, scale, kArcViewSize);
-    if (progress < 0.3f) {
-      *opacity = 0.3f + progress / 0.3f * 0.6f;
-    } else if (progress < 0.98f) {
-      *opacity = std::min(1.0f, 0.9f + (progress - 0.3f) / 0.6f * 0.1f);
-    } else {
-      *opacity = std::max(0.0f, 1 - (progress - 0.9f) / 0.1f);
-    }
-  };
-  gfx::Transform transform;
-  float opacity = 0;
-  keyframe(0, &transform, &opacity);
-  icon->layer()->SetTransform(transform);
-  icon->layer()->SetOpacity(opacity);
+  const DownloadArc arc =
+      ComputeDownloadArc(dx, end.y() - start.y(), std::min(start.y(), end.y()),
+                         overlay->height() - std::max(start.y(), end.y()));
+  DownloadArcFrame frame = GetDownloadArcFrame(arc, 0);
+  icon->layer()->SetTransform(
+      MoveAndScale(frame.x, frame.y, frame.scale, kArcViewSize));
+  icon->layer()->SetOpacity(frame.opacity);
 
   ++running_;
   views::AnimationBuilder builder;
@@ -333,17 +297,19 @@ void KoanDownloadAnimation::PlayArc(const gfx::Point& start,
       .OnAborted(base::BindOnce(&KoanDownloadAnimation::OnAnimationDone,
                                 weak_factory_.GetWeakPtr()));
   views::AnimationSequenceBlock* block = &builder.Once();
-  for (int step = 1; step <= kArcSteps; ++step) {
-    // Zen eases the whole flight with cubic-bezier(0.37, 0, 0.63, 1), a sine.
-    keyframe(gfx::Tween::CalculateValue(gfx::Tween::SMOOTH_IN_OUT,
-                                        static_cast<double>(step) / kArcSteps),
-             &transform, &opacity);
+  for (int step = 1; step <= kDownloadArcSteps; ++step) {
+    // The whole flight eases with cubic-bezier(0.37, 0, 0.63, 1), a sine.
+    frame = GetDownloadArcFrame(
+        arc, static_cast<float>(gfx::Tween::CalculateValue(
+                 gfx::Tween::SMOOTH_IN_OUT,
+                 static_cast<double>(step) / kDownloadArcSteps)));
     if (step > 1) {
       block = &block->Then();
     }
-    block->SetDuration(kArcDuration / kArcSteps)
-        .SetTransform(icon, transform)
-        .SetOpacity(icon, opacity);
+    block->SetDuration(kDownloadArcDuration / kDownloadArcSteps)
+        .SetTransform(icon,
+                      MoveAndScale(frame.x, frame.y, frame.scale, kArcViewSize))
+        .SetOpacity(icon, frame.opacity);
   }
 }
 
@@ -362,15 +328,16 @@ void KoanDownloadAnimation::ShowTile() {
   tile_->SetBoundsRect(bounds);
   tile_->SetPaintToLayer();
   tile_->layer()->SetFillsBoundsOpaquely(false);
-  tile_->layer()->SetTransform(
-      MoveAndScale(TileOffset(kDownloadTileOutside), 0, 0.8f, kTileViewSize));
+  tile_->layer()->SetTransform(MoveAndScale(TileOffset(kDownloadTileOutside), 0,
+                                            kDownloadTileOutsideScale,
+                                            kTileViewSize));
 
   ++running_;
   views::AnimationBuilder()
       .OnEnded(base::BindOnce(
           [](base::WeakPtr<KoanDownloadAnimation> self) {
             if (self) {
-              self->tile_timer_.Start(FROM_HERE, kTileHold, self.get(),
+              self->tile_timer_.Start(FROM_HERE, kDownloadTileHold, self.get(),
                                       &KoanDownloadAnimation::HideTile);
             }
           },
@@ -378,13 +345,13 @@ void KoanDownloadAnimation::ShowTile() {
       .OnAborted(base::BindOnce(&KoanDownloadAnimation::OnAnimationDone,
                                 weak_factory_.GetWeakPtr()))
       .Once()
-      .SetDuration(base::Milliseconds(350))
+      .SetDuration(kDownloadTileIn)
       .SetTransform(tile_.get(),
-                    MoveAndScale(TileOffset(kDownloadTileOvershoot), 0, 1.1f,
-                                 kTileViewSize),
+                    MoveAndScale(TileOffset(kDownloadTileOvershoot), 0,
+                                 kDownloadTileOvershootScale, kTileViewSize),
                     gfx::Tween::EASE_OUT)
       .Then()
-      .SetDuration(base::Milliseconds(200))
+      .SetDuration(kDownloadTileSettle)
       .SetTransform(tile_.get(), MoveAndScale(0, 0, 1, kTileViewSize),
                     gfx::Tween::EASE_IN_OUT);
 }
@@ -399,14 +366,15 @@ void KoanDownloadAnimation::HideTile() {
       .OnAborted(base::BindOnce(&KoanDownloadAnimation::OnAnimationDone,
                                 weak_factory_.GetWeakPtr()))
       .Once()
-      .SetDuration(base::Milliseconds(150))
-      .SetTransform(tile_.get(), MoveAndScale(0, 0, 0.9f, kTileViewSize),
+      .SetDuration(kDownloadTilePress)
+      .SetTransform(tile_.get(),
+                    MoveAndScale(0, 0, kDownloadTilePressScale, kTileViewSize),
                     gfx::Tween::EASE_IN)
       .Then()
-      .SetDuration(base::Milliseconds(300))
+      .SetDuration(kDownloadTileOut)
       .SetTransform(tile_.get(),
-                    MoveAndScale(TileOffset(kDownloadTileOutside), 0, 0.8f,
-                                 kTileViewSize),
+                    MoveAndScale(TileOffset(kDownloadTileOutside), 0,
+                                 kDownloadTileOutsideScale, kTileViewSize),
                     gfx::Tween::EASE_IN_2)
       .SetOpacity(tile_.get(), 0.0f, gfx::Tween::EASE_IN_2);
 }

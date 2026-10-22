@@ -10,9 +10,6 @@
 
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/strings/strcat.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,6 +24,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
@@ -44,72 +42,6 @@
 #endif
 
 namespace koan {
-
-namespace {
-
-// zen.view.drag-window-from-content.height-percentage: the drag region is
-// the top 5% of the page.
-constexpr float kDragRegionFraction = 0.05f;
-// Movement below this is a click, not a drag. Un-snapping a maximized
-// window takes a firmer gesture, as with a title bar (ZenWindowDragChild).
-constexpr float kDragThreshold = 4;
-constexpr float kMaximizedDragThreshold = 50;
-
-// A function of (x, y) in CSS pixels: whether the page has nothing
-// interactive there:
-// no link, form control, media, frame, editable or focusable element, ARIA
-// widget, selectable text or interactive cursor, and not the scrollbar. The
-// same checks as Zen's ZenWindowDragChild.
-constexpr char kIsEmptySpaceScript[] = R"((x, y) => {
-  if (document.fullscreenElement || document.pointerLockElement) {
-    return false;
-  }
-  const root = document.scrollingElement || document.documentElement;
-  if (root && root.scrollHeight > innerHeight && x > innerWidth - 16) {
-    return false;
-  }
-  const element = document.elementFromPoint(x, y);
-  if (!element) {
-    return true;
-  }
-  const caret = document.caretRangeFromPoint(x, y);
-  const text = caret && caret.startContainer;
-  if (text && text.nodeType === Node.TEXT_NODE && text.parentElement &&
-      getComputedStyle(text.parentElement).userSelect !== 'none') {
-    const range = document.createRange();
-    range.selectNodeContents(text);
-    for (const r of range.getClientRects()) {
-      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-        return false;
-      }
-    }
-  }
-  const interactive = 'a[href], area, button, input, select, textarea, ' +
-      'label, summary, details, video, audio, canvas, iframe, frame, ' +
-      'embed, object, [draggable="true"]';
-  const roles = new Set(['button', 'checkbox', 'combobox', 'grid', 'link',
-      'listbox', 'menu', 'menubar', 'menuitem', 'option', 'radio',
-      'scrollbar', 'searchbox', 'slider', 'spinbutton', 'switch', 'tab',
-      'textbox', 'toolbar', 'tree', 'treegrid']);
-  for (let node = element; node;
-       node = node.parentElement || node.getRootNode().host) {
-    if (node === document.body || node === document.documentElement) {
-      continue;
-    }
-    if (node.matches(interactive) || node.isContentEditable ||
-        node.tabIndex >= 0) {
-      return false;
-    }
-    const role = node.getAttribute('role');
-    if (role && roles.has(role.toLowerCase())) {
-      return false;
-    }
-  }
-  const cursor = getComputedStyle(element).cursor;
-  return cursor === 'auto' || cursor === 'default';
-})";
-
-}  // namespace
 
 KoanWindowDragController::KoanWindowDragController(
     BrowserView* browser_view,
@@ -204,7 +136,8 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
         return false;
       }
       const gfx::PointF point = event.PositionInWidget();
-      if (point.y() > view->GetViewBounds().height() * kDragRegionFraction) {
+      if (point.y() >
+          view->GetViewBounds().height() * kWindowDragRegionFraction) {
         return false;
       }
       state_ = State::kPending;
@@ -213,10 +146,7 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
       const double zoom = blink::ZoomLevelToZoomFactor(
           content::HostZoomMap::GetZoomLevel(web_contents()));
       web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptInIsolatedWorld(
-          base::UTF8ToUTF16(
-              base::StrCat({"(", kIsEmptySpaceScript, ")(",
-                            base::NumberToString(point.x() / zoom), ", ",
-                            base::NumberToString(point.y() / zoom), ")"})),
+          IsEmptySpaceScript(point.x() / zoom, point.y() / zoom),
           base::BindOnce(&KoanWindowDragController::OnPressedPointChecked,
                          weak_factory_.GetWeakPtr(), ++gesture_),
           ISOLATED_WORLD_ID_CHROME_INTERNAL);
@@ -239,10 +169,15 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
       if (state_ != State::kArmed) {
         return false;
       }
+#if BUILDFLAG(IS_MAC)
+      // A zoomed macOS window just moves, like from its title bar.
+      const float threshold = kWindowDragThreshold;
+#else
       const views::Widget* widget = browser_view_->GetWidget();
       const float threshold = widget && widget->IsMaximized()
-                                  ? kMaximizedDragThreshold
-                                  : kDragThreshold;
+                                  ? kWindowDragSnappedThreshold
+                                  : kWindowDragThreshold;
+#endif
       const gfx::Vector2dF moved = event.PositionInScreen() - press_in_screen_;
       if (std::hypot(moved.x(), moved.y()) < threshold) {
         return false;

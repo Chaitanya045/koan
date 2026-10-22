@@ -39,6 +39,7 @@
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
+#include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom-shared.h"
@@ -494,7 +495,7 @@ void KoanCompactModeController::MaybeShowBackgroundTabToast(
       return;
     }
     controller->toast()->ShowWithAction(
-        u"New background tab opened!", kTabIcon, u"Switch to tab",
+        kBackgroundTabOpenedToast, kTabIcon, u"Switch to tab",
         base::BindOnce(
             [](base::WeakPtr<tabs::TabInterface> tab,
                TabStripModel* tab_strip) {

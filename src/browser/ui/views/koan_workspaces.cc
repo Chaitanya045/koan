@@ -58,6 +58,7 @@
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/mojom/themes.mojom.h"
 #include "ui/compositor/layer.h"
@@ -652,11 +653,10 @@ void KoanWorkspaceController::RenameSpace(const tab_groups::TabGroupId& space,
   }
   data->name = trimmed;
   WriteSpace(space, *data);
-  // Zen's toast when a rename in the header finishes (zen-general.ftl
-  // zen-workspace-renamed-toast).
+  // Zen's toast when a rename in the header finishes.
   if (KoanBrowserViewController* controller =
           KoanBrowserViewController::From(browser_view_)) {
-    controller->toast()->Show(u"Workspace has been successfully renamed!");
+    controller->toast()->Show(kWorkspaceRenamedToast);
   }
 }
 

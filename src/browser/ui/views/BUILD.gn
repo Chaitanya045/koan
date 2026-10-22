@@ -106,6 +106,14 @@ source_set("impl") {
     "koan_toast.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
+    "koan_zen_download_animation.cc",
+    "koan_zen_download_animation.h",
+    "koan_zen_media.cc",
+    "koan_zen_media.h",
+    "koan_zen_toasts.h",
+    "koan_zen_welcome.h",
+    "koan_zen_window_drag.cc",
+    "koan_zen_window_drag.h",
   ]
   deps = [
     ":views",

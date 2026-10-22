@@ -5,7 +5,6 @@
 #include "koan/browser/ui/views/koan_media_controller.h"
 
 #include <algorithm>
-#include <cmath>
 #include <optional>
 #include <string>
 #include <utility>
@@ -14,8 +13,6 @@
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/i18n/time_formatting.h"
-#include "base/strings/strcat.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -37,6 +34,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
+#include "koan/browser/ui/views/koan_zen_media.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/media_session/public/cpp/media_metadata.h"
 #include "services/media_session/public/cpp/media_position.h"
@@ -70,42 +68,11 @@ namespace {
 
 using Action = media_session::mojom::MediaSessionAction;
 
-// ZenMediaController.mjs / zen-media-controls.css (sizes in
-// koan_sidebar_metrics.h). At most three cards stack; two peek out above the
-// front one, each a little narrower and fainter. Expanded (on hover) they
-// sit in a column; each card's shadow margin makes Zen's 6px gap.
-constexpr size_t kMaxStackedCards = 3;
-constexpr int kMaxPeekLevels = 2;
-constexpr float kPeekScaleStep = 0.04f;
-constexpr float kPeekOpacityStep = 0.3f;
+// The stack and its timing are Zen's (koan_zen_media.h), the sizes in
+// koan_sidebar_metrics.h. Expanded, each card's shadow margin makes Zen's
+// 6px gap between the cards.
 constexpr auto kCardPadding =
     gfx::Insets::VH(kMediaCardPaddingVertical, kMediaCardPaddingHorizontal);
-
-constexpr base::TimeDelta kExpandDuration = base::Milliseconds(300);
-constexpr base::TimeDelta kFadeInDuration = base::Milliseconds(300);
-constexpr base::TimeDelta kStillPlayingDelay = base::Seconds(1);
-constexpr base::TimeDelta kTabSwitchDelay = base::Milliseconds(500);
-constexpr base::TimeDelta kPositionInterval = base::Seconds(1);
-// Media this long is a live stream: no progress (Zen's 900000 s).
-constexpr base::TimeDelta kLiveDuration = base::Seconds(900000);
-
-// Zen's formatSecondsToTime: m:ss, or h:mm:ss.
-std::u16string FormatTime(base::TimeDelta time) {
-  const int64_t total =
-      std::max<int64_t>(0, static_cast<int64_t>(std::ceil(time.InSecondsF())));
-  const int64_t hours = total / 3600;
-  const int64_t minutes = total % 3600 / 60;
-  const int64_t seconds = total % 60;
-  const auto two_digits = [](int64_t value) {
-    return (value < 10 ? u"0" : u"") + base::NumberToString16(value);
-  };
-  if (hours > 0) {
-    return base::StrCat({base::NumberToString16(hours), u":",
-                         two_digits(minutes), u":", two_digits(seconds)});
-  }
-  return base::StrCat(
-      {base::NumberToString16(minutes), u":", two_digits(seconds)});
-}
 
 // Sets the button's icon (as colour-ID image models, so it follows the
 // theme without being reset to another icon) and its name.
@@ -159,7 +126,7 @@ class KoanMediaCard : public media_session::mojom::MediaSessionObserver {
   bool Supports(Action action) const { return actions_.contains(action); }
   bool HasProgress() const {
     return position_ && position_->duration().is_positive() &&
-           position_->duration() < kLiveDuration;
+           position_->duration() < kMediaLiveDuration;
   }
 
   // In the stack.
@@ -486,7 +453,7 @@ class KoanMediaCardView : public views::View {
     // The time only shows while the stack is expanded: no timer otherwise.
     if (expanded_ && progress && card_->playing()) {
       if (!position_timer_.IsRunning()) {
-        position_timer_.Start(FROM_HERE, kPositionInterval, this,
+        position_timer_.Start(FROM_HERE, kMediaPositionInterval, this,
                               &KoanMediaCardView::UpdatePosition);
       }
     } else {
@@ -595,8 +562,8 @@ class KoanMediaCardView : public views::View {
     const base::TimeDelta duration = card_->position()->duration();
     const base::TimeDelta position = std::clamp(
         card_->position()->GetPosition(), base::TimeDelta(), duration);
-    current_time_->SetText(FormatTime(position));
-    duration_->SetText(FormatTime(duration));
+    current_time_->SetText(FormatMediaTime(position));
+    duration_->SetText(FormatMediaTime(duration));
     progress_->SetValue(position / duration);
   }
 
@@ -605,7 +572,7 @@ class KoanMediaCardView : public views::View {
       return;
     }
     current_time_->SetText(
-        FormatTime(card_->position()->duration() * fraction));
+        FormatMediaTime(card_->position()->duration() * fraction));
     if (done) {
       card_->SeekTo(fraction);
     }
@@ -642,7 +609,7 @@ class KoanMediaControlsView : public views::View,
   explicit KoanMediaControlsView(KoanMediaController* controller)
       : controller_(controller) {
     SetNotifyEnterExitOnChild(true);
-    expand_.SetSlideDuration(kExpandDuration);
+    expand_.SetSlideDuration(kMediaExpandDuration);
     expand_.SetTweenType(gfx::Tween::EASE_OUT_3);
   }
 
@@ -667,7 +634,7 @@ class KoanMediaControlsView : public views::View,
         view->layer()->SetOpacity(0);
         views::AnimationBuilder()
             .Once()
-            .SetDuration(kFadeInDuration)
+            .SetDuration(kMediaFadeInDuration)
             .SetOpacity(view, 1, gfx::Tween::EASE_OUT);
       } else {
         view->Refresh();
@@ -702,7 +669,7 @@ class KoanMediaControlsView : public views::View,
     int expanded_bottom = 0;
     for (size_t i = 0; i < card_views_.size(); ++i) {
       KoanMediaCardView* view = card_views_[i];
-      const int level = std::min<int>(i, kMaxPeekLevels);
+      const int level = std::min<int>(i, kMediaMaxPeekLevels);
       const int collapsed_height = card_views_.front()->CollapsedHeight();
       const int height = gfx::Tween::IntValueBetween(
           expansion, collapsed_height, view->ExpandedHeight());
@@ -711,14 +678,15 @@ class KoanMediaControlsView : public views::View,
           expansion, kMediaStackPeek * level, expanded_bottom);
       // In line with the tab rows; cards behind are narrower.
       const int inset =
-          side + gfx::Tween::IntValueBetween(
-                     expansion,
-                     static_cast<int>(width() * kPeekScaleStep * level / 2), 0);
+          side +
+          gfx::Tween::IntValueBetween(
+              expansion,
+              static_cast<int>(width() * kMediaPeekScaleStep * level / 2), 0);
       view->SetBounds(inset, this->height() - bottom - height,
                       width() - 2 * inset, height);
       if (!view->layer()->GetAnimator()->is_animating()) {
         view->layer()->SetOpacity(gfx::Tween::FloatValueBetween(
-            expansion, 1 - kPeekOpacityStep * level, 1));
+            expansion, 1 - kMediaPeekOpacityStep * level, 1));
       }
       expanded_bottom += view->ExpandedHeight();
     }
@@ -755,7 +723,8 @@ class KoanMediaControlsView : public views::View,
     }
     const int collapsed =
         card_views_.front()->CollapsedHeight() +
-        kMediaStackPeek * std::min<int>(card_views_.size() - 1, kMaxPeekLevels);
+        kMediaStackPeek *
+            std::min<int>(card_views_.size() - 1, kMediaMaxPeekLevels);
     int expanded = 0;
     for (const KoanMediaCardView* view : card_views_) {
       expanded += view->ExpandedHeight();
@@ -920,7 +889,7 @@ void KoanMediaController::OnAudibleChanged(content::WebContents* contents,
       FROM_HERE,
       base::BindOnce(&KoanMediaController::CheckStillPlaying,
                      weak_factory_.GetWeakPtr(), contents),
-      kStillPlayingDelay);
+      kMediaStillPlayingDelay);
 }
 
 void KoanMediaController::CheckStillPlaying(content::WebContents* contents) {
@@ -954,7 +923,7 @@ void KoanMediaController::OnActiveTabChanged() {
     }
   }
   if (reveal) {
-    tab_switch_timer_.Start(FROM_HERE, kTabSwitchDelay, this,
+    tab_switch_timer_.Start(FROM_HERE, kMediaTabSwitchDelay, this,
                             &KoanMediaController::RevealAfterTabSwitch);
   }
 }
@@ -1036,7 +1005,7 @@ KoanMediaCard* KoanMediaController::CardFor(
 std::vector<KoanMediaCard*> KoanMediaController::GetShownCards() const {
   std::vector<KoanMediaCard*> shown;
   for (const auto& card : base::Reversed(cards_)) {
-    if (card->shown() && shown.size() < kMaxStackedCards) {
+    if (card->shown() && shown.size() < kMediaMaxStackedCards) {
       shown.push_back(card.get());
     }
   }

@@ -37,6 +37,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_zen_welcome.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -68,70 +69,6 @@
 namespace koan {
 
 namespace {
-
-// zen-welcome.ftl.
-constexpr char16_t kTitleLine1[] = u"Welcome to";
-constexpr char16_t kTitleLine2[] = u"a calmer internet";
-constexpr char16_t kBack[] = u"Back";
-constexpr char16_t kNext[] = u"Next";
-constexpr char16_t kSkip[] = u"Skip for now";
-constexpr char16_t kYes[] = u"YES";
-constexpr char16_t kNo[] = u"NO";
-
-struct PageText {
-  const char16_t* title;
-  const char16_t* description;
-};
-
-enum Page {
-  kImport,
-  kColors,
-  kSearch,
-  kEssentials,
-  kDefaultBrowser,
-  kFinish,
-  kPageCount,
-};
-
-// ZenWelcome.mjs's pages, in its order (without the ad blocker).
-constexpr std::array<PageText, kPageCount> kPageText = {{
-    {u"Bring your stuff along.",
-     u"Import your bookmarks, history and passwords from another browser and "
-     u"pick up right where you left off."},
-    {u"Your space, your colors.",
-     u"Personalize your browser by giving each space its own unique color "
-     u"identity."},
-    {u"Pick your search engine.",
-     u"Choose your default search engine. You can always change it later!"},
-    {u"Choose the apps you use most.",
-     u"Select your favorite apps to keep them handy in your sidebar."},
-    {u"Make Koan your default?",
-     u"Links from other apps will open in Koan. You can always change this "
-     u"later."},
-    {u"All set? Let\u2019s get rolling!",
-     u"You\u2019re all set up and ready to go. Click the button below to start "
-     u"browsing with Koan."},
-}};
-
-// ZenWelcome.mjs's Essentials. Koan shows each app's initial and name
-// rather than its logo.
-struct EssentialApp {
-  const char* url;
-  const char16_t* name;
-  SkColor color;
-};
-constexpr auto kEssentialApps = std::to_array<EssentialApp>({
-    {"https://obsidian.md", u"Obsidian", SkColorSetRGB(0x7c, 0x3a, 0xed)},
-    {"https://discord.com", u"Discord", SkColorSetRGB(0x58, 0x65, 0xf2)},
-    {"https://trello.com", u"Trello", SkColorSetRGB(0x00, 0x52, 0xcc)},
-    {"https://slack.com", u"Slack", SkColorSetRGB(0xe0, 0x1e, 0x5a)},
-    {"https://github.com", u"GitHub", SkColorSetRGB(0x57, 0x60, 0x6a)},
-    {"https://app.tuta.com/", u"Tuta", SkColorSetRGB(0xc0, 0x00, 0x02)},
-    {"https://notion.com", u"Notion", SkColorSetRGB(0x37, 0x35, 0x2f)},
-    {"https://calendar.google.com", u"Calendar",
-     SkColorSetRGB(0x42, 0x85, 0xf4)},
-    {"https://figma.com", u"Figma", SkColorSetRGB(0xf2, 0x4e, 0x1e)},
-});
 
 // The colours offered for the browser (Koan tints with one colour where Zen
 // has a gradient picker).
@@ -314,14 +251,14 @@ class KoanWelcomeBackButton : public views::Button {
  public:
   explicit KoanWelcomeBackButton(PressedCallback callback)
       : views::Button(std::move(callback)) {
-    GetViewAccessibility().SetName(kBack);
+    GetViewAccessibility().SetName(kWelcomeBack);
   }
 
   // views::Button:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
     return gfx::Size(kWelcomeBackIconSize + kWelcomeBackIconGap +
-                         gfx::GetStringWidth(kBack, GetFont()),
+                         gfx::GetStringWidth(kWelcomeBack, GetFont()),
                      kWelcomeBackHeight);
   }
   void PaintButtonContents(gfx::Canvas* canvas) override {
@@ -332,7 +269,7 @@ class KoanWelcomeBackButton : public views::Button {
     gfx::Rect text = GetLocalBounds();
     text.Inset(
         gfx::Insets::TLBR(0, kWelcomeBackIconSize + kWelcomeBackIconGap, 0, 0));
-    canvas->DrawStringRect(kBack, GetFont(), accent, text);
+    canvas->DrawStringRect(kWelcomeBack, GetFont(), accent, text);
   }
 
  private:
@@ -627,7 +564,8 @@ class KoanWelcomeEssentialTile : public views::Button {
   METADATA_HEADER(KoanWelcomeEssentialTile, views::Button)
 
  public:
-  KoanWelcomeEssentialTile(PressedCallback callback, const EssentialApp& app)
+  KoanWelcomeEssentialTile(PressedCallback callback,
+                           const WelcomeEssentialApp& app)
       : views::Button(std::move(callback)), app_(app) {
     GetViewAccessibility().SetName(app.name);
     SetTooltipText(app.name);
@@ -677,7 +615,7 @@ class KoanWelcomeEssentialTile : public views::Button {
   }
 
  private:
-  const raw_ref<const EssentialApp> app_;
+  const raw_ref<const WelcomeEssentialApp> app_;
   bool selected_ = false;
 };
 
@@ -691,9 +629,9 @@ class KoanWelcomeMockBrowserView : public views::View {
 
  public:
   explicit KoanWelcomeMockBrowserView(std::set<size_t>* selected) {
-    for (size_t i = 0; i < std::size(kEssentialApps); ++i) {
+    for (size_t i = 0; i < std::size(kWelcomeEssentialApps); ++i) {
       auto* tile = AddChildView(std::make_unique<KoanWelcomeEssentialTile>(
-          views::Button::PressedCallback(), kEssentialApps[i]));
+          views::Button::PressedCallback(), kWelcomeEssentialApps[i]));
       tile->SetCallback(base::BindRepeating(
           [](KoanWelcomeEssentialTile* tile, std::set<size_t>* selected,
              size_t index) {
@@ -914,7 +852,7 @@ class KoanWelcomePagesView : public views::View {
     if (page < 0) {
       return;
     }
-    if (page >= kPageCount) {
+    if (page >= kWelcomePageCount) {
       welcome_->Finish(choices_);
       return;
     }
@@ -923,14 +861,14 @@ class KoanWelcomePagesView : public views::View {
 
   // Leaving the current page with Next.
   void Commit() {
-    if (page_ == kDefaultBrowser && default_browser_) {
+    if (page_ == kWelcomePageDefaultBrowser && default_browser_) {
       base::MakeRefCounted<shell_integration::DefaultBrowserWorker>()
           ->StartSetAsDefault(base::DoNothing());
     }
-    if (page_ == kEssentials) {
+    if (page_ == kWelcomePageEssentials) {
       choices_.essentials.clear();
       for (size_t index : essentials_) {
-        choices_.essentials.emplace_back(kEssentialApps[index].url);
+        choices_.essentials.emplace_back(kWelcomeEssentialApps[index].url);
       }
     }
   }
@@ -948,7 +886,7 @@ class KoanWelcomePagesView : public views::View {
     buttons_->RemoveAllChildViews();
 
     back_->SetVisible(page > 0);
-    const PageText& text = kPageText[page];
+    const WelcomePageText& text = kWelcomePageText[page];
     for (const char16_t* string : {text.title, text.description}) {
       const bool heading = string == text.title;
       auto* label = AddChildView(std::make_unique<views::Label>(string));
@@ -967,14 +905,14 @@ class KoanWelcomePagesView : public views::View {
     }
     UpdateTextColors();
 
-    if (page == kFinish) {
-      AddButton(u"Dive in!", /*primary=*/true, 1);
+    if (page == kWelcomePageFinish) {
+      AddButton(kWelcomeDiveIn, /*primary=*/true, 1);
     } else {
-      AddButton(kNext, /*primary=*/true, 1);
+      AddButton(kWelcomeNext, /*primary=*/true, 1);
     }
-    if (page == kEssentials) {
+    if (page == kWelcomePageEssentials) {
       // Zen's skip clears the selection, then goes on.
-      AddButton(kSkip, /*primary=*/false, 1)
+      AddButton(kWelcomeSkip, /*primary=*/false, 1)
           ->SetCallback(base::BindRepeating(
               [](KoanWelcomePagesView* view) {
                 view->essentials_.clear();
@@ -1002,36 +940,37 @@ class KoanWelcomePagesView : public views::View {
 
   std::unique_ptr<views::View> CreateContent(int page) {
     switch (page) {
-      case kImport: {
+      case kWelcomePageImport: {
         auto options =
             std::make_unique<KoanWelcomeOptionsView>(kWelcomeOptionGap);
-        options->AddOption(kYes, u"import from another browser.",
-                           choices_.import, false,
+        options->AddOption(kWelcomeYes, kWelcomeImportYes, choices_.import,
+                           false,
                            base::BindRepeating(&KoanWelcomePagesView::SetImport,
                                                base::Unretained(this), true));
-        options->AddOption(kNo, u"start fresh.", !choices_.import, false,
+        options->AddOption(kWelcomeNo, kWelcomeImportNo, !choices_.import,
+                           false,
                            base::BindRepeating(&KoanWelcomePagesView::SetImport,
                                                base::Unretained(this), false));
         return options;
       }
-      case kColors:
+      case kWelcomePageColors:
         return std::make_unique<KoanWelcomeColorsView>(
             base::BindRepeating(&KoanWelcomePagesView::SetColor,
                                 base::Unretained(this)),
             color_);
-      case kSearch:
+      case kWelcomePageSearch:
         return CreateSearchContent();
-      case kEssentials:
+      case kWelcomePageEssentials:
         return std::make_unique<KoanWelcomeMockBrowserView>(&essentials_);
-      case kDefaultBrowser: {
+      case kWelcomePageDefaultBrowser: {
         auto options =
             std::make_unique<KoanWelcomeOptionsView>(kWelcomeOptionGap);
         options->AddOption(
-            kYes, u"make Koan default.", default_browser_, false,
+            kWelcomeYes, kWelcomeDefaultBrowserYes, default_browser_, false,
             base::BindRepeating(&KoanWelcomePagesView::SetDefaultBrowser,
                                 base::Unretained(this), true));
         options->AddOption(
-            kNo, u"still exploring my options.", !default_browser_, false,
+            kWelcomeNo, kWelcomeDefaultBrowserNo, !default_browser_, false,
             base::BindRepeating(&KoanWelcomePagesView::SetDefaultBrowser,
                                 base::Unretained(this), false));
         return options;
@@ -1051,11 +990,13 @@ class KoanWelcomePagesView : public views::View {
     const TemplateURL* default_engine = service->GetDefaultSearchProvider();
     size_t count = 0;
     for (const TemplateURL* engine : service->GetTemplateURLs()) {
-      // Zen leaves out Wikipedia and eBay.
       const std::u16string name = base::ToLowerASCII(engine->short_name());
       if (engine->prepopulate_id() <= 0 ||
-          name.find(u"wikipedia") != std::u16string::npos ||
-          name.find(u"ebay") != std::u16string::npos ||
+          std::ranges::any_of(kWelcomeExcludedEngines,
+                              [&name](const char16_t* excluded) {
+                                return name.find(excluded) !=
+                                       std::u16string::npos;
+                              }) ||
           count++ >= kMaxEngines) {
         continue;
       }
@@ -1110,7 +1051,7 @@ class KoanWelcomeView : public views::View {
   explicit KoanWelcomeView(KoanWelcome* welcome) {
     GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
     GetViewAccessibility().SetName(u"Welcome to Koan");
-    for (const char16_t* line : {kTitleLine1, kTitleLine2}) {
+    for (const char16_t* line : {kWelcomeTitleLine1, kWelcomeTitleLine2}) {
       std::vector<views::Label*> chars;
       for (char16_t c : std::u16string(line)) {
         auto* label =
