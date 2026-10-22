@@ -65,6 +65,9 @@ class KoanBrowserViewController : public views::ViewObserver {
   KoanGlanceController* glance() const { return glance_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
   KoanMediaController* media() const { return media_.get(); }
+  KoanDownloadAnimation* download_animation() const {
+    return download_animation_.get();
+  }
   KoanWelcome* welcome() const { return welcome_.get(); }
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
   // Koan features' data for this window's session (koan_session_data.h).

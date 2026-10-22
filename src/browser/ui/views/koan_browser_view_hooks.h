@@ -22,6 +22,11 @@ void OnBrowserViewDestroying(BrowserView* browser_view);
 // with a one-time toast telling how to bring it back.
 void OnSidebarDragCollapsed(BrowserView* browser_view);
 
+// Whether Koan plays Zen's download animation in this window; Chrome's own
+// "download started" animation is skipped then (it would fly from the
+// toolbar's downloads button, which the single toolbar hides).
+bool ShowsDownloadAnimation(BrowserView* browser_view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_HOOKS_H_

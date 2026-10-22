@@ -147,6 +147,12 @@ KoanDownloadAnimation::KoanDownloadAnimation(BrowserView* browser_view)
 
 KoanDownloadAnimation::~KoanDownloadAnimation() = default;
 
+bool KoanDownloadAnimation::IsEnabled() const {
+  return features::IsDownloadAnimationEnabled() &&
+         browser_view_->GetProfile()->GetPrefs()->GetBoolean(
+             prefs::kDownloadAnimation);
+}
+
 void KoanDownloadAnimation::OnAddedToWidget() {
   // Presses on the browser's own views; the page reports its own
   // (OnPagePressed).
@@ -173,10 +179,7 @@ void KoanDownloadAnimation::OnBrowserViewDestroying() {
 void KoanDownloadAnimation::OnDownloadCreated(content::DownloadManager* manager,
                                               download::DownloadItem* item) {
   // Downloads loaded from history arrive here too.
-  if (item->GetState() != download::DownloadItem::IN_PROGRESS ||
-      !features::IsDownloadAnimationEnabled() ||
-      !browser_view_->GetProfile()->GetPrefs()->GetBoolean(
-          prefs::kDownloadAnimation) ||
+  if (item->GetState() != download::DownloadItem::IN_PROGRESS || !IsEnabled() ||
       !IsForThisWindow(item)) {
     return;
   }

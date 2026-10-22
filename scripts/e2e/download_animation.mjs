@@ -25,6 +25,8 @@ let vs = await views();
 const arc = shownViews(vs, 'KoanDownloadArcView')[0];
 const tile = shownViews(vs, 'KoanDownloadTileView')[0];
 check('A download sends the icon flying', !!arc);
+check('...instead of Chrome\'s own download animation',
+      !vs.some(v => /DownloadStartedAnimation/.test(v.cls)));
 check('...to the downloads tile at the bottom left (no downloads button)',
       tile && tile.x < 100 && tile.y > 600, tile && `${tile.x},${tile.y}`);
 await sleep(500);

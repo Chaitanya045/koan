@@ -222,6 +222,7 @@ inline constexpr int kWelcomeBackIconGap = 8;
 inline constexpr int kWelcomeBackHeight = 24;
 inline constexpr int kWelcomeBackGap = 35;
 inline constexpr int kWelcomeHeadingSize = 48;
+inline constexpr int kWelcomeHeadingMinSize = 32;
 inline constexpr int kWelcomeHeadingGap = 38;
 inline constexpr int kWelcomeDescriptionSize = 20;
 inline constexpr float kWelcomeDescriptionLineHeight = 1.6f;

@@ -43,6 +43,9 @@ class KoanDownloadAnimation : public content::DownloadManager::Observer,
   KoanDownloadAnimation& operator=(const KoanDownloadAnimation&) = delete;
   ~KoanDownloadAnimation() override;
 
+  // Whether downloads animate (Koan's feature and Zen's pref).
+  bool IsEnabled() const;
+
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
   void OnBrowserViewLayout();

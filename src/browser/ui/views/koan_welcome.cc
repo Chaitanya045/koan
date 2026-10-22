@@ -833,6 +833,15 @@ class KoanWelcomePagesView : public views::View {
     }
 
     y = back_->bounds().bottom() + kWelcomeBackGap;
+    // Zen's title is 3rem; a long one gets smaller so that the text stays
+    // clear of the buttons.
+    const int room = buttons_->y() - kWelcomeButtonGap - y;
+    for (int size = kWelcomeHeadingSize; !text_.empty(); size -= 4) {
+      text_[0]->SetFontList(Font(size, gfx::Font::Weight::BOLD));
+      if (size <= kWelcomeHeadingMinSize || TextHeight(inner.width()) <= room) {
+        break;
+      }
+    }
     for (size_t i = 0; i < text_.size(); ++i) {
       const int height = text_[i]->GetHeightForWidth(inner.width());
       text_[i]->SetBounds(inner.x(), y, inner.width(), height);
@@ -866,6 +875,17 @@ class KoanWelcomePagesView : public views::View {
   gfx::Rect SidebarBounds() const {
     return gfx::Rect(0, 0, static_cast<int>(width() * kWelcomeSidebarWidth),
                      height());
+  }
+
+  // The title and description's height at `width`, with the gaps after
+  // them.
+  int TextHeight(int width) const {
+    int height = 0;
+    for (size_t i = 0; i < text_.size(); ++i) {
+      height += text_[i]->GetHeightForWidth(width) +
+                (i == 0 ? kWelcomeHeadingGap : 0);
+    }
+    return height;
   }
 
   void UpdateTextColors() {
