@@ -378,6 +378,34 @@ await waitFor(rows, rs => rs[focus]?.selected);
 await press(VK.ENTER);
 check('...and Enter switches to it', await waitFor(tabsShown, n => n === 2) === 2);
 
+// Folder actions (#42): "New Folder" makes one in the active Space; then
+// only "Collapse All Folders" is offered, and after it only "Expand All".
+const folderRows = async () =>
+  (await ui()).views.filter(v => v.cls === 'KoanFolderRowView' && v.shown && v.h > 1).length;
+await openUrlBar();
+rs = await suggest('>new folder', rs => label(rs[0]) === 'New Folder');
+check('"New Folder" is offered', label(rs[0]) === 'New Folder', rowsText(rs));
+await press(VK.ENTER);
+check('...and Enter makes a folder', await waitFor(folderRows, n => n === 1) === 1);
+await press(VK.ESC);  // Keeps the name it starts renaming.
+await sleep(500);
+await openUrlBar();
+rs = await suggest('>folders', rs => indexOf(rs, 'Collapse All Folders') >= 0);
+check('...then "Collapse All Folders", not "Expand"',
+      indexOf(rs, 'Collapse All Folders') >= 0 && indexOf(rs, 'Expand All Folders') < 0,
+      rowsText(rs));
+await closeUrlBar();
+await openUrlBar();
+rs = await suggest('>collapse all folders', rs => label(rs[0]) === 'Collapse All Folders');
+await press(VK.ENTER);
+await sleep(800);
+await openUrlBar();
+rs = await suggest('>folders', rs => indexOf(rs, 'Expand All Folders') >= 0);
+check('...which leaves "Expand All Folders"',
+      indexOf(rs, 'Expand All Folders') >= 0 && indexOf(rs, 'Collapse All Folders') < 0,
+      rowsText(rs));
+await closeUrlBar();
+
 // Opt-outs, after a restart on the same profile: the pref stops the typed
 // suggestions but not the ">" list; the flag stops both.
 const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean);

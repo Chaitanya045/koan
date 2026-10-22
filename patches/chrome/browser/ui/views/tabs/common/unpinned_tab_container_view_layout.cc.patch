@@ -1,0 +1,49 @@
+diff --git a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+index 359bf5aad24eb01c28b0423ea8de5399f15d7f5a..2b175e2e1eb52e9ba4fd33e80321ab3202ab50ab 100644
+--- a/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc
+@@ -19,6 +19,7 @@
+ #include "components/tab_groups/tab_group_id.h"
+ #include "components/tabs/public/tab_group.h"
+ #include "content/public/browser/navigation_controller.h"
++#include "koan/browser/ui/views/koan_folders.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/layout/proposed_layout.h"
+ #include "ui/views/view.h"
+@@ -237,6 +238,9 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+ 
+   const int horizontal_padding =
+       GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
++  // Koan folders of ungrouped tabs: a row before each folder's tabs; the
++  // tabs are indented, and hidden while the folder is collapsed.
++  koan::FolderRows folder_rows(*tab_container_view);
+ 
+   for (auto* child : children) {
+     int x =
+@@ -265,11 +269,14 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+     auto drag_data = tab_container_view->GetVisualDataForDraggedView(*child);
+     bool should_show_child =
+         IsChildVisibleInContainer(tab_container_view, focused_group_id, child);
++    const koan::FolderRows::Slot folder =
++        folder_rows.Place(*child, x, size_bounds, height, layouts);
++    bounds.Offset(folder.indent, 0);
+ 
+-    if (!should_show_child) {
++    if (!should_show_child || folder.hidden) {
+       layouts.child_layouts.emplace_back(
+-          child, false,
+-          gfx::Rect(x, drag_data ? drag_data->offset.y() : height,
++          child, folder_rows.IsVisible(folder, should_show_child),
++          gfx::Rect(bounds.x(), drag_data ? drag_data->offset.y() : height,
+                     bounds.width(), 0));
+       continue;
+     }
+@@ -285,6 +292,8 @@ views::ProposedLayout UnpinnedTabContainerViewLayout::CalculateVerticalLayout(
+     width = std::max(width, bounds.width() + bounds.x());
+   }
+ 
++  folder_rows.Finish(horizontal_padding, size_bounds, height, layouts);
++
+   if (height > 0) {
+     height -= kTabVerticalPadding;
+   }

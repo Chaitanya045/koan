@@ -21,6 +21,10 @@ void AddGlobalCommands(KoanCommandRegistry& registry,
 void AddWorkspaceCommands(KoanCommandRegistry& registry,
                           KoanBrowserViewController& controller);
 
+// The folder actions: New Folder, Collapse / Expand All Folders.
+void AddFolderCommands(KoanCommandRegistry& registry,
+                       KoanBrowserViewController& controller);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_COMMANDS_H_

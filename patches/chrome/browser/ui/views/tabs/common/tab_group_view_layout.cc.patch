@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-index 6fa2cecd5166050e7634f97a6ceb6dd2831d5d0e..74efc6693f0dda63d6e0340bda4d8a6a29eac3dc 100644
+index 6fa2cecd5166050e7634f97a6ceb6dd2831d5d0e..590f1f9969429aeae35803a4b676086c5816eef9 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc
-@@ -19,6 +19,7 @@
+@@ -19,6 +19,8 @@
  #include "chrome/browser/ui/views/tabs/common/tab_strip_layout_utils.h"
  #include "chrome/browser/ui/views/tabs/common/tab_view.h"
  #include "components/tabs/public/tab_group.h"
 +#include "koan/browser/koan_features.h"
++#include "koan/browser/ui/views/koan_folders.h"
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
  #include "ui/views/view.h"
-@@ -86,7 +87,9 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+@@ -86,7 +88,9 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
    }
  
    if (tab_group_view->unfocus_header_) {
@@ -21,3 +22,54 @@ index 6fa2cecd5166050e7634f97a6ceb6dd2831d5d0e..74efc6693f0dda63d6e0340bda4d8a6a
        gfx::Rect unfocus_bounds;
        unfocus_bounds.set_x(header_bounds.x());
        unfocus_bounds.set_y(height);
+@@ -136,6 +140,9 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+           : TabCollectionNode::ChildViews();
+ 
+   const bool is_focused = tab_group_view->IsGroupFocused();
++  // Koan folders: a row before each folder's tabs; the tabs are indented,
++  // and hidden while the folder is collapsed.
++  koan::FolderRows folder_rows(*tab_group_view);
+ 
+   // Layout children in order. Children will have their preferred height and
+   // fill available width.
+@@ -144,7 +151,6 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+ 
+     auto drag_data = tab_group_view->GetVisualDataForDraggedView(*child);
+     CHECK(!drag_data || !drag_data->should_hide);
+-    bounds.set_y(drag_data ? drag_data->offset.y() : height);
+ 
+     // If the tab strip is not collapsed and not focused then the groups tabs
+     // should be inset.
+@@ -156,16 +162,29 @@ views::ProposedLayout TabGroupViewLayout::CalculateVerticalLayout(
+     } else if (!is_focused) {
+       child_x = TabGroupView::kTabLeadingPadding;
+     }
+-    bounds.set_x(child_x);
++    const koan::FolderRows::Slot folder =
++        folder_rows.Place(*child, child_x, size_bounds, height, layouts);
++    bounds.set_y(drag_data ? drag_data->offset.y() : height);
++    bounds.set_x(child_x + folder.indent);
++    if (folder.hidden) {
++      bounds.set_height(0);
++    }
+     // If width is bounded, child views should respect the width constraints
+     // and take up the available width excluding trailing horizontal padding.
+     if (size_bounds.width().is_bounded()) {
+       bounds.set_width(size_bounds.width().value() - bounds.x());
+     }
+-    layouts.child_layouts.emplace_back(child, child->GetVisible(), bounds);
+-    height += bounds.height() + kTabVerticalPadding;
++    layouts.child_layouts.emplace_back(
++        child,
++        folder_rows.IsVisible(folder, !tab_group_view->is_collapsed()),
++        bounds);
++    if (!folder.hidden) {
++      height += bounds.height() + kTabVerticalPadding;
++    }
+     width = std::max(width, bounds.width() + bounds.x());
+   }
++  folder_rows.Finish(is_focused ? 0 : TabGroupView::kTabLeadingPadding,
++                     size_bounds, height, layouts);
+   // Remove excess padding.
+   height -= kTabVerticalPadding;
+ 

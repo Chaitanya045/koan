@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WORKSPACES_H_
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -16,6 +17,10 @@
 
 class BrowserView;
 class TabStripModel;
+
+namespace views {
+class View;
+}  // namespace views
 
 namespace koan {
 
@@ -50,6 +55,13 @@ class KoanWorkspaceController : public TabStripModelObserver {
   void ShowAllTabs();
   void Cycle(bool forward);
   void CreateWorkspace();
+  // Makes a new workspace of the tabs at `indices` (sorted), named `name`
+  // (with an icon added unless it starts with one), and switches to it.
+  tab_groups::TabGroupId CreateWorkspaceFromTabs(
+      const std::vector<int>& indices,
+      const std::u16string& name);
+  // The switcher's "+": Zen's "Create New" menu when folders are on.
+  void OnNewButtonPressed(views::View* button);
 
   TabStripModel* tab_strip_model() const;
 

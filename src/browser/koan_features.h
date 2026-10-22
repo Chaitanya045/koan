@@ -36,6 +36,9 @@ BASE_DECLARE_FEATURE(kKoanPinnedTabs);
 // button.
 BASE_DECLARE_FEATURE(kKoanUrlBar);
 
+// Zen's tab folders at the top of each Space in the sidebar.
+BASE_DECLARE_FEATURE(kKoanFolders);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
@@ -44,6 +47,7 @@ bool IsRestoreTabsOnDemandEnabled();
 bool IsCommandPaletteEnabled();
 bool IsUrlBarEnabled();
 bool IsPinnedTabsEnabled();
+bool IsFoldersEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read
