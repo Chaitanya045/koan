@@ -7,13 +7,25 @@ import("//components/vector_icons/vector_icons.gni")
 # Koan's own vector icons (koan::k...Icon), for what Chrome has no icon for.
 # light_mode.icon and automatic_appearance.icon are Chromium's (ash's
 # brightness_up_refresh.icon and unified_menu_dark_mode.icon, BSD, headers
-# kept); the templates follow chrome/app/vector_icons'.
+# kept); the templates follow chrome/app/vector_icons'. koan_theme_*.icon
+# are Zen's zen-icons (MPL-2.0, see THIRD_PARTY_NOTICES.md), converted by
+# scripts/svg_to_icon.py.
 aggregate_vector_icons("koan_vector_icons") {
   icon_directory = "."
 
   sources = [
     "automatic_appearance.icon",
     "dark_mode.icon",
+    "koan_theme_algorithm.icon",
+    "koan_theme_arrow_left.icon",
+    "koan_theme_arrow_right.icon",
+    "koan_theme_edit_theme.icon",
+    "koan_theme_face_sun.icon",
+    "koan_theme_moon_stars.icon",
+    "koan_theme_paintbrush_fill.icon",
+    "koan_theme_plus.icon",
+    "koan_theme_sparkles.icon",
+    "koan_theme_unpin.icon",
     "light_mode.icon",
   ]
 }

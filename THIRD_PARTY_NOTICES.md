@@ -31,6 +31,10 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_pinned_tabs.cc` | `ZenPinnedTabManager.mjs`, `zen-general.ftl` (strings) |
 | `src/browser/ui/views/koan_sidebar_metrics.h` | Zen's sidebar, toolbar and URL bar stylesheets (sizes, shadows) |
 | `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values) |
+| `src/browser/ui/views/koan_space_theme.h`, `koan_space_theme.cc` | `ZenGradientGenerator.mjs` (colour maths, harmonies, preset swatches, opacity wave), `browser.xhtml` (preset swatch data) |
+| `src/browser/ui/views/koan_theme_picker.cc` | `zen-gradient-generator.css` (panel sizes), `zen-workspaces.ftl` (strings) |
+| `src/browser/ui/views/resources/grain-bg.png` | `zen-images/grain-bg.png` (unmodified) |
+| `src/browser/ui/vector_icons/koan_theme_*.icon` | `zen-icons/*.svg` (converted with `scripts/svg_to_icon.py`) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).

@@ -1,6 +1,6 @@
 // End-to-end test of chrome://koan-settings against a real build: the page
 // lists Koan's settings like Zen's preferences, changes apply live (layout,
-// compact mode, workspace tint), incognito windows and the page agree, the
+// compact mode, Space themes), incognito windows and the page agree, the
 // page follows changes made elsewhere, the handler refuses what the page
 // can't set, and the shortcut editor rebinds, refuses conflicts, clears and
 // resets keys, each checked by what the keys then do.
@@ -278,21 +278,24 @@ check('Ctrl+, with the page open on another pane switches to it, no second tab',
       (await settingsPages()).length === 1 && (await visiblePage())?.id === settings.id,
       `${(await settingsPages()).length} settings tab(s)`);
 
-// Workspace tint, live: off restores the user's colour, on tints again.
+// Space themes (the "tint" row): per window, so a new Space leaves the
+// profile's colour alone; the switch applies live (scripts/e2e/theme.mjs
+// checks the themes themselves).
 const tint = `document.querySelector('[data-pref="koan.workspaces.tint"] input')`;
 await waitFor(() => evalIn(settings, `!!document.querySelector('#category-tabs')`));
 await evalIn(settings, `document.querySelector('#category-tabs').click()`);
+const userColor = await readPref('browser.theme.user_color2');
 await front(other);
 await key(other, VK.N, CTRL | ALT, 'n');
-const seed = await waitFor(() => readPref('koan.workspaces.tint_applied'));
-check('A new workspace tints the browser',
-      seed && await readPref('browser.theme.user_color2') === seed, `seed ${seed}`);
+await sleep(1000);
+check("A new Space leaves the browser's colour alone",
+      await readPref('browser.theme.user_color2') === userColor &&
+      await readPref('koan.workspaces.tint_applied') === 0);
 await evalIn(settings, `${tint}.click()`);
-check('Switching the tint off restores the browser\'s colour at once',
-      await waitFor(async () => !await readPref('koan.workspaces.tint_applied')) &&
-      await readPref('browser.theme.user_color2') !== seed);
+check('Switching Space themes off sets the pref',
+      await waitFor(async () => await readPref('koan.workspaces.tint') === false));
 await evalIn(settings, `${tint}.click()`);
-check('...and switching it on tints it again',
-      await waitFor(async () => await readPref('browser.theme.user_color2') === seed));
+check('...and on again',
+      await waitFor(async () => await readPref('koan.workspaces.tint') === true));
 
 finish();

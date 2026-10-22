@@ -18,12 +18,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_group_theme.h"
@@ -31,17 +27,16 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
-#include "components/prefs/pref_service.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
-#include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/base/mojom/themes.mojom.h"
 #include "ui/color/color_provider.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -108,34 +103,6 @@ std::pair<std::u16string, std::u16string> SplitIcon(std::u16string name) {
   return {std::move(first), rest.empty() ? first : std::move(rest)};
 }
 
-// Seed colours for workspace tints, one per tab group colour. Fixed values
-// (not looked up from the current theme, which the tint itself changes).
-SkColor TintSeed(tab_groups::TabGroupColorId color) {
-  switch (color) {
-    case tab_groups::TabGroupColorId::kGrey:
-      return SkColorSetRGB(0x5F, 0x63, 0x68);
-    case tab_groups::TabGroupColorId::kBlue:
-      return SkColorSetRGB(0x1A, 0x73, 0xE8);
-    case tab_groups::TabGroupColorId::kRed:
-      return SkColorSetRGB(0xD9, 0x30, 0x25);
-    case tab_groups::TabGroupColorId::kYellow:
-      return SkColorSetRGB(0xF9, 0xAB, 0x00);
-    case tab_groups::TabGroupColorId::kGreen:
-      return SkColorSetRGB(0x1E, 0x8E, 0x3E);
-    case tab_groups::TabGroupColorId::kPink:
-      return SkColorSetRGB(0xD0, 0x18, 0x84);
-    case tab_groups::TabGroupColorId::kPurple:
-      return SkColorSetRGB(0x93, 0x34, 0xE6);
-    case tab_groups::TabGroupColorId::kCyan:
-      return SkColorSetRGB(0x12, 0xB5, 0xCB);
-    case tab_groups::TabGroupColorId::kOrange:
-      return SkColorSetRGB(0xFA, 0x90, 0x3E);
-    case tab_groups::TabGroupColorId::kNumEntries:
-      break;
-  }
-  return SkColorSetRGB(0x1A, 0x73, 0xE8);
-}
-
 }  // namespace
 
 // A round workspace button: a filled circle in the workspace's colour with
@@ -148,12 +115,14 @@ class KoanWorkspaceButton : public views::Button {
                       std::u16string label,
                       std::optional<tab_groups::TabGroupColorId> color,
                       bool active,
-                      std::u16string tooltip)
+                      std::u16string tooltip,
+                      std::optional<tab_groups::TabGroupId> space)
       : views::Button(std::move(callback)),
         label_(std::move(label)),
         emoji_(StartsWithEmoji(label_)),
         color_(color),
-        active_(active) {
+        active_(active),
+        space_(space) {
     SetTooltipText(tooltip);
     GetViewAccessibility().SetName(tooltip);
   }
@@ -165,6 +134,8 @@ class KoanWorkspaceButton : public views::Button {
   }
 
   const std::u16string& GetLabel() const { return label_; }
+  // The Space (nullopt: "All tabs").
+  std::optional<tab_groups::TabGroupId> space() const { return space_; }
 
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
@@ -204,6 +175,7 @@ class KoanWorkspaceButton : public views::Button {
   const bool emoji_;
   const std::optional<tab_groups::TabGroupColorId> color_;
   const bool active_;
+  const std::optional<tab_groups::TabGroupId> space_;
 };
 
 BEGIN_METADATA(KoanWorkspaceButton)
@@ -234,9 +206,11 @@ class KoanWorkspaceSwitcherView : public views::BoxLayoutView {
     TabStripModel* model = controller_->tab_strip_model();
 
     AddChildView(std::make_unique<KoanWorkspaceButton>(
-        base::BindRepeating(&KoanWorkspaceController::ShowAllTabs,
-                            base::Unretained(controller_)),
-        u"∞", std::nullopt, !active.has_value(), u"All tabs"));
+                     base::BindRepeating(&KoanWorkspaceController::ShowAllTabs,
+                                         base::Unretained(controller_)),
+                     u"∞", std::nullopt, !active.has_value(), u"All tabs",
+                     std::nullopt))
+        ->set_context_menu_controller(controller_);
 
     int number = 1;
     for (const tab_groups::TabGroupId& id : controller_->GetWorkspaces()) {
@@ -248,16 +222,19 @@ class KoanWorkspaceSwitcherView : public views::BoxLayoutView {
         title = u"Workspace " + base::NumberToString16(number);
       }
       AddChildView(std::make_unique<KoanWorkspaceButton>(
-          base::BindRepeating(&KoanWorkspaceController::SwitchTo,
-                              base::Unretained(controller_), id),
-          std::move(label), visuals->color(), active == id, std::move(title)));
+                       base::BindRepeating(&KoanWorkspaceController::SwitchTo,
+                                           base::Unretained(controller_), id),
+                       std::move(label), visuals->color(), active == id,
+                       std::move(title), id))
+          ->set_context_menu_controller(controller_);
       ++number;
     }
 
     AddChildView(std::make_unique<KoanWorkspaceButton>(
         base::BindRepeating(&KoanWorkspaceController::CreateWorkspace,
                             base::Unretained(controller_)),
-        u"+", std::nullopt, /*active=*/false, u"New workspace (Ctrl+Alt+N)"));
+        u"+", std::nullopt, /*active=*/false, u"New workspace (Ctrl+Alt+N)",
+        std::nullopt));
   }
 
  private:
@@ -295,30 +272,9 @@ void KoanWorkspaceController::OnAddedToWidget() {
     return;
   }
   InstallSwitcher();
-  // The tint can be switched in chrome://koan-settings.
-  pref_change_registrar_.Init(
-      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
-  pref_change_registrar_.Add(
-      prefs::kWorkspaceTint,
-      base::BindRepeating(&KoanWorkspaceController::OnTintPrefChanged,
-                          base::Unretained(this)));
-}
-
-void KoanWorkspaceController::OnTintPrefChanged() {
-  // The tint is the profile's colour, so when it is switched on, the window
-  // the user was last in decides it. Switching it off restores the user's
-  // colour, which any window can do.
-  const BrowserWindowInterface* last_active =
-      GetLastActiveBrowserWindowInterfaceWithAnyProfile();
-  if (pref_change_registrar_.prefs()->GetBoolean(prefs::kWorkspaceTint) &&
-      last_active && last_active != browser_view_->browser()) {
-    return;
-  }
-  UpdateTint();
 }
 
 void KoanWorkspaceController::OnBrowserViewDestroying() {
-  pref_change_registrar_.RemoveAll();
   if (switcher_) {
     switcher_->parent()->RemoveChildViewT(std::exchange(switcher_, nullptr));
   }
@@ -466,72 +422,23 @@ void KoanWorkspaceController::AdoptUngroupedTabs() {
 
 void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
   UpdateSwitcher();
-  if (change.type == TabGroupChange::kVisualsChanged &&
-      change.group == GetActiveWorkspace()) {
-    UpdateTint();
-  }
 }
 
 void KoanWorkspaceController::OnTabGroupFocusChanged(
     std::optional<tab_groups::TabGroupId> new_focused_group_id,
     std::optional<tab_groups::TabGroupId> old_focused_group_id) {
   UpdateSwitcher();
-  UpdateTint();
 }
 
-void KoanWorkspaceController::UpdateTint() {
-  Profile* profile = browser_view_->GetProfile();
-  if (profile->IsOffTheRecord()) {
-    return;
-  }
-  PrefService* prefs = profile->GetPrefs();
-  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
-  if (!theme || theme->UsingExtensionTheme()) {
-    return;
-  }
-  // With the tint switched off, behave as in "All tabs": the user's colour.
-  const std::optional<tab_groups::TabGroupId> active =
-      prefs->GetBoolean(prefs::kWorkspaceTint) ? GetActiveWorkspace()
-                                               : std::nullopt;
-  const std::optional<SkColor> current = theme->GetUserColor();
-  const SkColor applied =
-      static_cast<SkColor>(prefs->GetInteger(prefs::kWorkspaceTintApplied));
-  // Whether the browser still shows the tint Koan applied (as opposed to the
-  // user's own colour, including one picked while a workspace was active).
-  const bool showing_tint = applied && current == applied;
-  if (active) {
-    if (!showing_tint) {
-      prefs->SetInteger(prefs::kWorkspaceTintSavedColor,
-                        current ? static_cast<int>(*current) : 0);
-      prefs->SetInteger(prefs::kWorkspaceTintSavedVariant,
-                        static_cast<int>(theme->GetBrowserColorVariant()));
-    }
-    const SkColor seed = TintSeed(tab_strip_model()
-                                      ->group_model()
-                                      ->GetTabGroup(*active)
-                                      ->visual_data()
-                                      ->color());
-    prefs->SetInteger(prefs::kWorkspaceTintApplied, static_cast<int>(seed));
-    if (current != seed) {
-      theme->SetUserColorAndBrowserColorVariant(
-          seed, ui::mojom::BrowserColorVariant::kTonalSpot);
-    }
-    return;
-  }
-  // All tabs: put the user's colour back, unless they changed it since.
-  prefs->SetInteger(prefs::kWorkspaceTintApplied, 0);
-  if (!showing_tint) {
-    return;
-  }
-  const SkColor saved =
-      static_cast<SkColor>(prefs->GetInteger(prefs::kWorkspaceTintSavedColor));
-  const auto variant = static_cast<ui::mojom::BrowserColorVariant>(
-      prefs->GetInteger(prefs::kWorkspaceTintSavedVariant));
-  if (saved) {
-    theme->SetUserColorAndBrowserColorVariant(saved, variant);
-  } else {
-    theme->SetUserColor(std::nullopt);
-    theme->SetBrowserColorVariant(variant);
+void KoanWorkspaceController::ShowContextMenuForViewImpl(
+    views::View* source,
+    const gfx::Point& point,
+    ui::mojom::MenuSourceType source_type) {
+  // The Space menu, with Zen's "Edit Theme…".
+  if (auto* button = views::AsViewClass<KoanWorkspaceButton>(source)) {
+    KoanBrowserViewController::From(browser_view_)
+        ->theme()
+        ->ShowSpaceMenu(button->space(), source, point, source_type);
   }
 }
 

@@ -1,0 +1,28 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Zen's zen-icons/paintbrush-fill.svg, converted by scripts/svg_to_icon.py.
+
+CANVAS_DIMENSIONS, 18,
+FILL_RULE_NONZERO,
+MOVE_TO, 8.97, 9.291,
+CUBIC_TO, 8.301, 8.62, 7.416, 8.25, 6.476, 8.25,
+H_LINE_TO, 6.47,
+CUBIC_TO, 5.534, 8.252, 4.653, 8.622, 3.99, 9.293,
+CUBIC_TO, 3.038, 10.255, 2.871, 11.226, 2.738, 12.005,
+CUBIC_TO, 2.589, 12.874, 2.491, 13.447, 1.391, 14.048,
+CUBIC_TO, 1.125, 14.193, 0.973, 14.483, 1.004, 14.784,
+CUBIC_TO, 1.036, 15.085, 1.245, 15.338, 1.534, 15.425,
+CUBIC_TO, 2.592, 15.743, 3.719, 16.005, 4.84, 16.005,
+CUBIC_TO, 6.278, 16.005, 7.707, 15.575, 8.97, 14.281,
+CUBIC_TO, 10.341, 12.906, 10.341, 10.667, 8.97, 9.292,
+CLOSE,
+MOVE_TO, 16.318, 1.931,
+CUBIC_TO, 15.528, 1.142, 14.152, 1.141, 13.361, 1.931,
+LINE_TO, 8.216, 7.076,
+CUBIC_TO, 8.889, 7.326, 9.51, 7.707, 10.033, 8.232,
+CUBIC_TO, 10.558, 8.759, 10.93, 9.377, 11.173, 10.034,
+LINE_TO, 16.319, 4.888,
+CUBIC_TO, 17.134, 4.073, 17.134, 2.746, 16.319, 1.93,
+CLOSE,

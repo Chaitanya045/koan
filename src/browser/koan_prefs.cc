@@ -24,6 +24,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kUrlBarReplaceNewTab, true);
   registry->RegisterBooleanPref(kUrlBarShowCopyUrl, true);
   registry->RegisterBooleanPref(kWorkspaceTint, true);
+  registry->RegisterDictionaryPref(kSpaceThemes);
+  registry->RegisterIntegerPref(kDarkThemeStyle, 0);
+  registry->RegisterBooleanPref(kShowCustomColors, false);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
