@@ -17,10 +17,19 @@ jobs:
   patches:
     name: Patches apply to pinned Chromium
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # The pinned Chromium files the patches touch. A new key each run so
+      # files of newly patched paths are saved too; runs restore the latest.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/koan-chromium-files
+          key: chromium-files-${{ hashFiles('CHROMIUM_VERSION') }}-${{ github.run_id }}
+          restore-keys: chromium-files-${{ hashFiles('CHROMIUM_VERSION') }}-
       - name: Check every hook patch against CHROMIUM_VERSION
+        env:
+          KOAN_CHROMIUM_FILE_CACHE: ${{ runner.temp }}/koan-chromium-files
         run: scripts/ci/check_patches.sh
 
   tests:
