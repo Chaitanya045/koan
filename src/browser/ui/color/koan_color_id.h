@@ -55,6 +55,9 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanToastBackgroundBottom,
   kColorKoanToastForeground,
   kColorKoanToastKeyBackground,
+  // The toast's icon button and its icon.
+  kColorKoanToastButton,
+  kColorKoanToastButtonIcon,
 
   // Glance (koan_glance_controller.cc): the window background laid over the
   // page behind the card, the card's shadow, and the buttons beside it
@@ -65,6 +68,48 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceButtonIcon,
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
+
+  // Media cards in the sidebar (koan_media_controller.cc): the card, its
+  // shadow and outline, and the progress bar's track and played part.
+  kColorKoanMediaCard,
+  kColorKoanMediaCardShadow,
+  kColorKoanMediaCardOutline,
+  kColorKoanMediaProgressTrack,
+  kColorKoanMediaProgress,
+
+  // The download animation (koan_download_animation.cc): the flying icon's
+  // ring, circle, arrow and shadow; the downloads tile, its icon and shadow.
+  kColorKoanDownloadArcRing,
+  kColorKoanDownloadArcCircle,
+  kColorKoanDownloadArcIcon,
+  kColorKoanDownloadArcShadow,
+  kColorKoanDownloadTile,
+  kColorKoanDownloadTileIcon,
+  kColorKoanDownloadTileShadow,
+
+  // The welcome screen (koan_welcome.cc): the backdrop's gradient, the
+  // title and the start button; the pages' card (sidebar, content, the
+  // surfaces of options and panels, tiles, the mock window), borders,
+  // shadows, text, radio circles and the accent buttons.
+  kColorKoanWelcomeBackdropTop,
+  kColorKoanWelcomeBackdropBottom,
+  kColorKoanWelcomeTitle,
+  kColorKoanWelcomeStartButton,
+  kColorKoanWelcomeStartButtonHovered,
+  kColorKoanWelcomeStartButtonIcon,
+  kColorKoanWelcomeSidebar,
+  kColorKoanWelcomeContent,
+  kColorKoanWelcomeSurface,
+  kColorKoanWelcomeTile,
+  kColorKoanWelcomeMockWindow,
+  kColorKoanWelcomeBorder,
+  kColorKoanWelcomeShadow,
+  kColorKoanWelcomeText,
+  kColorKoanWelcomeTextSecondary,
+  kColorKoanWelcomeRadio,
+  kColorKoanWelcomeAccent,
+  kColorKoanWelcomeAccentHovered,
+  kColorKoanWelcomeOnAccent,
 
   kKoanColorsEnd,
 };

@@ -91,3 +91,15 @@
   editor suspends the window's FocusManager shortcuts while recording a
   key (as chrome://extensions/shortcuts does), because Chromium pre-handles
   non-Chrome accelerators (Koan's) before the page sees them.
+- **Window dragging from the page watches the page's mouse events, not a
+  hit test** (#44): `KoanWindowDragController` adds a
+  `RenderWidgetHost::AddMouseEventCallback` to the active tab's page. A
+  press in the top 5% asks the page, in an isolated world, whether the point
+  is empty space (Zen's ZenWindowDragChild checks), so nothing is decided
+  synchronously in a hit test; moving past the threshold swallows the rest
+  of the gesture, releases the button for the page and starts the move:
+  `Widget::RunMoveLoop` on macOS, `WmMoveResizeHandler` on Linux. Synthetic
+  CDP mouse events go through the same callback, so the e2e test can check
+  what the page sees even though headless has no window manager. The same
+  callback tells the download animation where the page was clicked (the
+  page is a native view on macOS, so Views' event handlers never see it).

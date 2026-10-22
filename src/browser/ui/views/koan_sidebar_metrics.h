@@ -8,9 +8,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/layout_constants.h"
 
-// Sizes of Koan's sidebar tab list, URL bar and toasts, in one place (Zen's
-// today: zen-tabs/vertical-tabs.css, zen-omnibox.css, zen-popup.css). Colours
-// are in koan/browser/ui/color/koan_color_id.h.
+// Sizes of Koan's sidebar tab list, URL bar, toasts, media cards, download
+// animation and welcome screen, in one place (Zen's today:
+// zen-tabs/vertical-tabs.css, zen-omnibox.css, zen-popup.css,
+// zen-media-controls.css, zen-download-*-animation.css, zen-welcome.css).
+// Colours are in koan/browser/ui/color/koan_color_id.h.
 namespace koan {
 
 // Shared with Chromium's tab rows and tiles (Koan sets them in the
@@ -133,6 +135,148 @@ inline constexpr int kToastKeyFontSize = 12;
 inline constexpr int kToastKeyCornerRadius = 4;
 inline constexpr int kToastKeyPaddingVertical = 5;
 inline constexpr int kToastKeyPaddingHorizontal = 7;
+// The toast's icon button: 28px high with 10px corners, a 14px icon and 8px
+// on either side of it.
+inline constexpr int kToastButtonHeight = 28;
+inline constexpr int kToastButtonCornerRadius = 10;
+inline constexpr int kToastButtonIconSize = 14;
+inline constexpr int kToastButtonPadding = 8;
+
+// Media cards at the bottom of the sidebar (zen-media-controls.css): 14px
+// corners (--border-radius-medium in the sidebar; 2px less on macOS) with
+// 4px 6px padding and room for a 6px shadow, 26px buttons with 16px icons
+// and 5px corners; the playback buttons spread over at most 10em; rows for
+// the title (20px) and artist (16px) and for the progress (a 4px bar
+// between the times). Behind the front card, two more peek out 8px each.
+#if BUILDFLAG(IS_MAC)
+inline constexpr int kMediaCardCornerRadius = 12;
+#else
+inline constexpr int kMediaCardCornerRadius = 14;
+#endif
+inline constexpr int kMediaCardShadowMargin = 3;
+inline constexpr int kMediaCardShadowBlur = 6;
+inline constexpr int kMediaCardPaddingVertical = 4;
+inline constexpr int kMediaCardPaddingHorizontal = 6;
+inline constexpr int kMediaButtonSize = 26;
+inline constexpr int kMediaIconSize = 16;
+inline constexpr int kMediaButtonCornerRadius = 5;
+inline constexpr int kMediaControlsGap = 11;
+inline constexpr int kMediaPlaybackMaxWidth = 160;
+inline constexpr int kMediaTitleHeight = 20;
+inline constexpr int kMediaArtistHeight = 16;
+inline constexpr int kMediaInfoGap = 4;
+inline constexpr int kMediaProgressRowHeight = 28;
+inline constexpr int kMediaProgressBarHeight = 4;
+inline constexpr int kMediaProgressMargin = 8;
+inline constexpr int kMediaStackPeek = 8;
+// Narrower than this the sidebar shows icons only: no media cards.
+inline constexpr int kMediaMinSidebarWidth = 150;
+
+// The download animation: a 30px circle with a 2px ring and Zen's big
+// shadow (0 3px 8px), the arrow at 70% of the inner circle; the downloads
+// tile is 42px with 12px corners and a 24px icon, 24px from the window's
+// bottom and sidebar edges (34px at the end of its slide in, 50px outside
+// the window before).
+inline constexpr int kDownloadArcSize = 30;
+inline constexpr int kDownloadArcRing = 2;
+inline constexpr int kDownloadArcShadowY = 3;
+inline constexpr int kDownloadArcShadowBlur = 8;
+inline constexpr int kDownloadTileSize = 42;
+inline constexpr int kDownloadTileCornerRadius = 12;
+inline constexpr int kDownloadTileIconSize = 24;
+inline constexpr int kDownloadTileShadowBlur = 6;
+inline constexpr int kDownloadTileEdge = 24;
+inline constexpr int kDownloadTileOvershoot = 34;
+inline constexpr int kDownloadTileOutside = -50;
+// Room around both for their shadows.
+inline constexpr int kDownloadShadowMargin = 10;
+
+// The welcome screen (zen-welcome.css, 1rem = 16px).
+// The title: 5.2rem bold at most, lines 1.05 high, letters -0.03em closer;
+// the start button below it.
+inline constexpr int kWelcomeTitleMaxSize = 83;
+inline constexpr int kWelcomeTitleMinSize = 40;
+inline constexpr float kWelcomeTitleLineHeight = 1.05f;
+inline constexpr float kWelcomeTitleLetterSpacing = -0.03f;
+inline constexpr int kWelcomeStartButtonWidth = 100;
+inline constexpr int kWelcomeStartButtonHeight = 48;
+inline constexpr int kWelcomeStartButtonIconSize = 18;
+inline constexpr int kWelcomeStartButtonGap = 28;
+// The pages: a card 86% x 82% of the window (all of it below 1000px) with
+// 1.4rem corners; its sidebar 38% wide, padded 4rem 3.8rem 3.6rem, with the
+// back button, the title (3rem bold), the description (1.25rem, 1.6 high)
+// and the big accent buttons (1.2rem semibold, 12px corners) at the bottom.
+inline constexpr float kWelcomeCardWidth = 0.86f;
+inline constexpr float kWelcomeCardHeight = 0.82f;
+inline constexpr int kWelcomeCardFullWindowBelow = 1000;
+inline constexpr int kWelcomeCardCornerRadius = 22;
+inline constexpr float kWelcomeSidebarWidth = 0.38f;
+inline constexpr int kWelcomeSidebarPaddingTop = 64;
+inline constexpr int kWelcomeSidebarPaddingSide = 61;
+inline constexpr int kWelcomeSidebarPaddingBottom = 58;
+inline constexpr int kWelcomeSidebarShadowX = 4;
+inline constexpr int kWelcomeSidebarShadowBlur = 24;
+inline constexpr int kWelcomeBackFontSize = 18;
+inline constexpr int kWelcomeBackIconSize = 16;
+inline constexpr int kWelcomeBackIconGap = 8;
+inline constexpr int kWelcomeBackHeight = 24;
+inline constexpr int kWelcomeBackGap = 35;
+inline constexpr int kWelcomeHeadingSize = 48;
+inline constexpr int kWelcomeHeadingGap = 38;
+inline constexpr int kWelcomeDescriptionSize = 20;
+inline constexpr float kWelcomeDescriptionLineHeight = 1.6f;
+inline constexpr int kWelcomeDescriptionGap = 19;
+inline constexpr int kWelcomeButtonHeight = 62;
+inline constexpr int kWelcomeButtonCornerRadius = 12;
+inline constexpr int kWelcomeButtonFontSize = 19;
+inline constexpr int kWelcomeButtonGap = 16;
+// The choices: cards at most 30rem wide with 20px corners, padded 1.9rem,
+// text 1.3rem, a 22px radio circle (its dot inset 3px), 2.5rem apart and
+// 4rem from the content's sides; search engines at most 24rem wide, with a
+// tile on the trailing third.
+inline constexpr int kWelcomeOptionMaxWidth = 480;
+inline constexpr int kWelcomeOptionHeight = 86;
+inline constexpr int kWelcomeOptionCornerRadius = 20;
+inline constexpr int kWelcomeOptionPadding = 30;
+inline constexpr int kWelcomeOptionFontSize = 21;
+inline constexpr int kWelcomeOptionGap = 40;
+inline constexpr int kWelcomeOptionSideMargin = 64;
+inline constexpr int kWelcomeOptionTextGap = 16;
+inline constexpr int kWelcomeOptionShadowY = 2;
+inline constexpr int kWelcomeOptionShadowBlur = 10;
+inline constexpr int kWelcomeRadioSize = 22;
+inline constexpr int kWelcomeRadioDotInset = 3;
+inline constexpr int kWelcomeEngineMaxWidth = 384;
+inline constexpr int kWelcomeEngineHeight = 76;
+inline constexpr int kWelcomeEngineGap = 16;
+inline constexpr float kWelcomeEngineTileWidth = 0.34f;
+inline constexpr int kWelcomeEngineTileFontSize = 26;
+// The colours: a panel of 56px swatches 20px apart, padded 28px.
+inline constexpr int kWelcomeSwatchSize = 56;
+inline constexpr int kWelcomeSwatchGap = 20;
+inline constexpr int kWelcomePanelPadding = 28;
+// The Essentials: a mock window (2.4rem top-left corner) 92% as wide as the
+// page after its 3rem top and 6rem left padding; its sidebar 80% wide,
+// padded 2.6rem 2.4rem, with three 22px dots, the 3-column grid of 2rem
+// rounded tiles 1.5rem apart (a 3px border when chosen) and two 4.5rem mock
+// tabs with 1.6rem corners, 1.6rem apart.
+inline constexpr int kWelcomeMockCornerRadius = 38;
+inline constexpr int kWelcomeMockPaddingTop = 48;
+inline constexpr int kWelcomeMockPaddingLeft = 96;
+inline constexpr float kWelcomeMockWidth = 0.92f;
+inline constexpr float kWelcomeMockSidebarWidth = 0.8f;
+inline constexpr int kWelcomeMockSidebarPaddingVertical = 42;
+inline constexpr int kWelcomeMockSidebarPaddingHorizontal = 38;
+inline constexpr int kWelcomeMockDotSize = 22;
+inline constexpr int kWelcomeMockDotGap = 16;
+inline constexpr int kWelcomeMockDotsMargin = 10;
+inline constexpr int kWelcomeMockGap = 26;
+inline constexpr int kWelcomeMockGridGap = 24;
+inline constexpr int kWelcomeMockTabHeight = 72;
+inline constexpr int kWelcomeMockTabCornerRadius = 26;
+inline constexpr int kWelcomeTileCornerRadius = 32;
+inline constexpr int kWelcomeTileBorder = 3;
+inline constexpr int kWelcomeTileNameFontSize = 12;
 
 }  // namespace koan
 

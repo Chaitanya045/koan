@@ -36,6 +36,14 @@ BASE_DECLARE_FEATURE(kKoanPinnedTabs);
 // button.
 BASE_DECLARE_FEATURE(kKoanUrlBar);
 
+// Zen's smaller pieces: the media controller in the sidebar, the download
+// animation, dragging the window from the top of the page, and the welcome
+// screen on first run.
+BASE_DECLARE_FEATURE(kKoanMediaControls);
+BASE_DECLARE_FEATURE(kKoanDownloadAnimation);
+BASE_DECLARE_FEATURE(kKoanWindowDrag);
+BASE_DECLARE_FEATURE(kKoanWelcome);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
@@ -44,6 +52,10 @@ bool IsRestoreTabsOnDemandEnabled();
 bool IsCommandPaletteEnabled();
 bool IsUrlBarEnabled();
 bool IsPinnedTabsEnabled();
+bool IsMediaControlsEnabled();
+bool IsDownloadAnimationEnabled();
+bool IsWindowDragEnabled();
+bool IsWelcomeEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read

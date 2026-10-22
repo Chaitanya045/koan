@@ -20,6 +20,10 @@ BASE_FEATURE(kKoanRestoreTabsOnDemand, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanCommandPalette, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanUrlBar, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanPinnedTabs, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanMediaControls, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanDownloadAnimation, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanWindowDrag, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanWelcome, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kKoanSidebar);
@@ -39,6 +43,22 @@ bool IsGlanceEnabled() {
 
 bool IsRestoreTabsOnDemandEnabled() {
   return base::FeatureList::IsEnabled(kKoanRestoreTabsOnDemand);
+}
+
+bool IsMediaControlsEnabled() {
+  return base::FeatureList::IsEnabled(kKoanMediaControls);
+}
+
+bool IsDownloadAnimationEnabled() {
+  return base::FeatureList::IsEnabled(kKoanDownloadAnimation);
+}
+
+bool IsWindowDragEnabled() {
+  return base::FeatureList::IsEnabled(kKoanWindowDrag);
+}
+
+bool IsWelcomeEnabled() {
+  return base::FeatureList::IsEnabled(kKoanWelcome);
 }
 
 bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta) {

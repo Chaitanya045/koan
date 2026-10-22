@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "base/functional/bind.h"
+
 #include "base/logging.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -17,14 +19,18 @@
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
+#include "koan/browser/ui/views/koan_download_animation.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
+#include "koan/browser/ui/views/koan_media_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_welcome.h"
+#include "koan/browser/ui/views/koan_window_drag.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
 #include "ui/views/widget/widget.h"
@@ -54,6 +60,16 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(
           browser_view->browser()->GetTabStripModel())),
+      media_(std::make_unique<KoanMediaController>(browser_view)),
+      download_animation_(
+          std::make_unique<KoanDownloadAnimation>(browser_view)),
+      // Page presses are where downloads fly from. Unretained: the
+      // animation outlives the drag controller (declared before it).
+      window_drag_(std::make_unique<KoanWindowDragController>(
+          browser_view,
+          base::BindRepeating(&KoanDownloadAnimation::OnPagePressed,
+                              base::Unretained(download_animation_.get())))),
+      welcome_(std::make_unique<KoanWelcome>(browser_view)),
       shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)),
       command_palette_(std::make_unique<KoanCommandPalette>(this)) {
   ++g_live_count;
@@ -89,6 +105,10 @@ void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
     controller->pinned_tabs_->OnBrowserViewDestroying();
     controller->glance_->OnBrowserViewDestroying();
     controller->toast_->Close();
+    controller->media_->OnBrowserViewDestroying();
+    controller->download_animation_->OnBrowserViewDestroying();
+    controller->window_drag_->OnBrowserViewDestroying();
+    controller->welcome_->OnBrowserViewDestroying();
   }
   browser_view->ClearProperty(kKoanBrowserViewControllerKey);
 }
@@ -113,6 +133,10 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     workspaces_->OnAddedToWidget();
     shortcuts_->OnAddedToWidget();
     command_palette_->OnAddedToWidget();
+    // After the workspace switcher: the media cards go above it.
+    media_->OnAddedToWidget();
+    download_animation_->OnAddedToWidget();
+    welcome_->OnAddedToWidget();
   }
 }
 
@@ -124,6 +148,9 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   compact_mode_->OnBrowserViewLayout();
   glance_->OnBrowserViewLayout();
   toast_->OnBrowserViewLayout();
+  media_->OnBrowserViewLayout();
+  download_animation_->OnBrowserViewLayout();
+  welcome_->OnBrowserViewLayout();
 }
 
 void KoanBrowserViewController::UpdateContentCard() {

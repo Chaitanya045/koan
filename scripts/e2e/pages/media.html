@@ -1,0 +1,30 @@
+<!doctype html>
+<title>Media e2e</title>
+<body style="font: 20px sans-serif; margin: 40px">
+<p>A song for the media controller.</p>
+<audio id="song" loop></audio>
+<script>
+  // 30 s of a quiet tone as a WAV (media under 5 s doesn't get a media
+  // session in Chromium).
+  function tone(seconds, rate = 8000) {
+    const samples = seconds * rate;
+    const view = new DataView(new ArrayBuffer(44 + samples * 2));
+    const text = (offset, s) => [...s].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+    text(0, 'RIFF'); view.setUint32(4, 36 + samples * 2, true); text(8, 'WAVEfmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    text(36, 'data'); view.setUint32(40, samples * 2, true);
+    for (let i = 0; i < samples; i++) {
+      view.setInt16(44 + i * 2, Math.sin(i * 2 * Math.PI * 440 / rate) * 3000, true);
+    }
+    return URL.createObjectURL(new Blob([view], { type: 'audio/wav' }));
+  }
+  const song = document.getElementById('song');
+  song.src = tone(30);
+  window.tracks = [];
+  navigator.mediaSession.metadata =
+      new MediaMetadata({ title: 'Koan test song', artist: 'The Koans' });
+  navigator.mediaSession.setActionHandler('nexttrack', () => tracks.push('next'));
+  navigator.mediaSession.setActionHandler('previoustrack', () => tracks.push('previous'));
+</script>

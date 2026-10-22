@@ -365,11 +365,58 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
 
+## Media
+
+When a tab in the background plays music or video, a card appears at the
+bottom of the sidebar, as in Zen (macOS Now Playing and the media keys
+control the same media): the site's icon, previous / play-pause /
+next and mute. Hover it for the title and artist, the progress (click or
+drag to seek), picture-in-picture and close. Click the card (or the icon)
+to go to its tab; the card hides while that tab is selected. Up to three
+cards stack, the newest in front. Close pauses the media and dismisses its
+card.
+
+## Downloads
+
+Starting a download sends a small download icon flying from where you
+clicked to the downloads button, or, while the toolbar is hidden (single
+toolbar, the default), to a downloads tile that slides in at the bottom
+corner on the sidebar's side for a moment.
+
+## Moving the window
+
+Drag empty space at the very top of a page (the top 5%) to move the window,
+like a title bar, as in Zen. Text, links, buttons, videos and anything else
+on the page that you can click or select keep working as usual; a click
+there is still a click. Turn it off in Settings > Look and Feel > Window
+dragging.
+
+## Welcome
+
+The first time Koan starts with a new profile it shows Zen's welcome
+screen: "Welcome to a calmer internet", then a few pages to import from
+another browser, pick a colour, choose the search engine and your
+Essentials, and make Koan the default browser. Every page can be skipped
+with Next. It shows once (start Koan with `--force-first-run` to see it
+again in a new profile).
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
-freeze background tabs, command palette, pinned tabs and Essentials.
+freeze background tabs, command palette, pinned tabs and Essentials,
+media controls, download animation, window dragging from pages, welcome
+screen.
+
+The media controller and the download animation are on by default; like
+Zen's (which keeps them in about:config), they have no setting yet, only
+the prefs `koan.media_controls.enabled` and
+`koan.downloads.download_animation`.
+
+In compact mode with the sidebar hidden, a tab a page opens in the
+background shows Zen's "New background tab opened!" toast; its button
+switches to the tab. Renaming a workspace shows "Workspace has been
+successfully renamed!".
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

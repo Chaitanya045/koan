@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -23,8 +24,10 @@
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
+#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
 #include "components/prefs/pref_service.h"
+#include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -462,6 +465,47 @@ void KoanCompactModeController::OnTabStripModelChanged(
       GetPrefs()->GetBoolean(prefs::kCompactModeToolbarFlashPopup) &&
       !(contents && contents->IsInSplitView())) {
     FlashSidebar();
+  }
+  if (change.type() == TabStripModelChange::kInserted) {
+    MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
+  }
+}
+
+void KoanCompactModeController::MaybeShowBackgroundTabToast(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange::Insert& insert) {
+  // Zen (ZenCompactMode.mjs _onTabOpen, zen-general.ftl): a tab a page opens
+  // in the background while the sidebar is hidden gets a toast, with a
+  // button that switches to it.
+  const views::View* region = browser_view_->tab_strip_view();
+  const auto* strip = views::AsViewClass<VerticalTabStripRegionView>(region);
+  if (!hides_sidebar() || (strip && strip->is_expanded_on_hover())) {
+    return;
+  }
+  for (const TabStripModelChange::ContentsWithIndex& inserted :
+       insert.contents) {
+    if (inserted.index == tab_strip_model->active_index() ||
+        !tab_strip_model->GetOpenerOfTabAt(inserted.index)) {
+      continue;
+    }
+    KoanBrowserViewController* controller =
+        KoanBrowserViewController::From(browser_view_);
+    if (!controller) {
+      return;
+    }
+    controller->toast()->ShowWithAction(
+        u"New background tab opened!", kTabIcon, u"Switch to tab",
+        base::BindOnce(
+            [](base::WeakPtr<tabs::TabInterface> tab,
+               TabStripModel* tab_strip) {
+              const int index = tab ? tab_strip->GetIndexOfTab(tab.get())
+                                    : TabStripModel::kNoTab;
+              if (index != TabStripModel::kNoTab) {
+                tab_strip->ActivateTabAt(index);
+              }
+            },
+            inserted.tab->GetWeakPtr(), base::Unretained(tab_strip_model)));
+    return;
   }
 }
 

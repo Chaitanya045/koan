@@ -8,12 +8,17 @@
 #include <memory>
 #include <string>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 
 class BrowserView;
+
+namespace gfx {
+struct VectorIcon;
+}
 
 namespace views {
 class Widget;
@@ -30,7 +35,8 @@ inline constexpr base::TimeDelta kToastDefaultTimeout = base::Seconds(2);
 // window's top corner away from the sidebar (top right, or top left with
 // tabs on the right) that springs in from the top, stays for 2s once in
 // (longer while hovered), then fades out shrinking. Showing another replaces
-// it. Used for "Tabs Closed!" (sidebar tabs) and the split view limit.
+// it. Used for "Tabs Closed!" (sidebar tabs), the split view limit, "New
+// background tab opened!" and "Workspace has been successfully renamed!".
 class KoanToast {
  public:
   explicit KoanToast(BrowserView* browser_view);
@@ -48,6 +54,15 @@ class KoanToast {
             const std::u16string& announcement = std::u16string(),
             base::TimeDelta timeout = kToastDefaultTimeout);
 
+  // Shows `text` with Zen's small icon button after it (e.g. "New background
+  // tab opened!" with a tab icon that switches to the tab). `action_name`
+  // is the button's tooltip and accessible name; pressing it runs `action`
+  // and hides the toast.
+  void ShowWithAction(const std::u16string& text,
+                      const gfx::VectorIcon& action_icon,
+                      const std::u16string& action_name,
+                      base::OnceClosure action);
+
   // Drops the toast at once (e.g. the window is going away).
   void Close();
 
@@ -55,7 +70,12 @@ class KoanToast {
   void OnBrowserViewLayout();
 
  private:
+  // Shows `view`, saying `announcement` to screen readers.
+  void ShowView(std::unique_ptr<KoanToastView> view,
+                const std::u16string& announcement,
+                base::TimeDelta timeout);
   void OnHovered(bool hovered);
+  void RunAction();
   void Hide();
 
   const raw_ptr<BrowserView> browser_view_;
@@ -65,6 +85,7 @@ class KoanToast {
   base::OneShotTimer timer_;
   base::TimeDelta timeout_;
   bool hiding_ = false;
+  base::OnceClosure action_;
   base::WeakPtrFactory<KoanToast> weak_factory_{this};
 };
 
