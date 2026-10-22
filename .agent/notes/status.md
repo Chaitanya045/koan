@@ -1,21 +1,31 @@
 # Status
 
-_Last updated: 2026-10-20_
+_Last updated: 2026-10-22_
 
 ## Now
 
 - **Zen parity push:** issues #33–#45, one Claude Opus 5.5 (high) T3 thread
-  each, at most 4 active for memory (see [parallel-agents.md](parallel-agents.md)).
-  - In review: PR #46 (settings page, #39) and PR #47 (performance and
-    power, #45); reviews are in [reviews/](reviews/).
-  - Active: #33 sidebar tabs, #37 Glance/split, #39, #45.
-  - Paused, to resume in this order: #36 URL bar, #34 Spaces, #40 command
-    palette, #35 compact mode, #38 pinned tabs, #42 folders, #41 theme
-    picker, #48, #43 Library, #44 media/toasts.
+  each. Active threads are capped by free memory, at most 6 (see
+  [parallel-agents.md](parallel-agents.md)).
+  - Merged: #33 sidebar tabs (PR #50, #53), #35 compact mode (#56), #36 URL
+    bar (#58, #61), #37 Glance/split (#54), #38 pinned tabs/Essentials
+    (#59), #39 settings (#46), #40 command palette (#55), #45 performance
+    and power (#47; Mac measurements remain, under #51).
+  - In progress: #34 Spaces (PR #57), #42 folders (PR #60), #41 theme
+    picker (PR #62), #43 Library (PR #64), #44 media/toasts/welcome.
+    Merge order: #57, then #60 and #62 (per-Space themes go on #57's Space
+    field), then #64. Reviews are in [reviews/](reviews/).
+  - #59 owns the shared hooks the others build on: the tab-menu feature
+    table, the per-tab and per-window session stores and
+    `koan::IsPinnedForUser` (docs/REBASE.md, "Shared hooks").
 - **#48: shadcn/ui is Koan's default look**, with Zen's look as an
   optional style (decided 2026-10-20). Behaviour, layout and shortcuts stay
   Zen's. It starts after #41, and all new UI must take its colours and
   radii from tokens.
+- **#51: macOS is the primary platform** (decided 2026-10-21). This Linux
+  machine stays the agents' build and test bench. The first `Koan.app`
+  build runs on the maintainer's M4 MacBook Air in `~/work/koan-mac`, and
+  only with the owner's go-ahead each time.
 - **Release:** draft PRs #13 (packaging) and #14 (benchmarks) wait for the
   release build (`out/Release`, paused at about 19.3k objects) once
   `develop` is stable.
@@ -125,6 +135,11 @@ _Last updated: 2026-10-20_
   Linux, mode overlay; Zen = GTK overlay). Found while shooting the README:
   #27/#28 Glance page stuck at 94% (NativeViewHost sized with the card's
   start transform) and buttons under the caption strip. #29 README shots.
+
+- 2026-10-22: CI's patch check fetches the patched files from
+  chromium.googlesource.com and caches them per pinned commit. The
+  chromium/chromium GitHub mirror began rate-limiting every request (429),
+  even authenticated ones, which failed the check on every PR.
 
 ## Known issues / design notes
 - In compact mode the revealed toolbar floats across the full width, over
