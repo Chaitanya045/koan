@@ -68,6 +68,9 @@ constexpr Info kActions[] = {
     {Action::kCopyUrlMarkdown, "copy-url-markdown", "zen-other",
      "Copy current URL as Markdown"},
     {Action::kTogglePinTab, "toggle-pin-tab", "zen-other", "Toggle Pin Tab"},
+    // Zen's, without a key by default.
+    {Action::kResetPinnedTab, "reset-pinned-tab", "zen-other",
+     "Reset Pinned Tab to Pinned URL", features::IsPinnedTabsEnabled},
     {Action::kGlanceExpand, "glance-expand", "zen-other", "Expand Glance",
      features::IsGlanceEnabled},
     {Action::kLibrary, "library", "zen-other", "Toggle Library"},

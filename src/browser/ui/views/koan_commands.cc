@@ -33,6 +33,7 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -81,6 +82,7 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"close-tab", 20},
     {"reopen-closed-tab", 21},
     {"duplicate-tab", 22},
+    {"reset-pinned-tab", 23},
     {"reload-tab", 24},
     {"reload-tab-without-cache", 25},
     {"next-tab", 26},
@@ -157,6 +159,25 @@ KoanCommand ChromeCommand(const KoanBrowserViewController& controller,
   return command;
 }
 
+// One of Zen's pinned tab actions on the active tab (koan_pinned_tabs.h).
+KoanCommand PinnedTabCommand(
+    std::string id,
+    std::u16string label,
+    const gfx::VectorIcon& icon,
+    void (KoanPinnedTabController::*action)(tabs::TabInterface*)) {
+  KoanCommand command = MakeCommand(std::move(id), std::move(label), icon);
+  command.run = base::BindRepeating(
+      [](void (KoanPinnedTabController::*action)(tabs::TabInterface*),
+         KoanBrowserViewController& controller) {
+        if (tabs::TabInterface* tab =
+                BrowserOf(controller)->GetTabStripModel()->GetActiveTab()) {
+          (controller.pinned_tabs()->*action)(tab);
+        }
+      },
+      action);
+  return command;
+}
+
 // Zen's "Switch to ... Appearance / Mode": the browser's colour scheme.
 KoanCommand AppearanceCommand(std::string id,
                               std::u16string label,
@@ -178,7 +199,10 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   const KoanBrowserViewController& controller = *owner;
   const tabs::TabInterface* tab =
       BrowserOf(controller)->GetTabStripModel()->GetActiveTab();
-  const bool pinned = tab && tab->IsPinned();
+  // Pinned the Zen way: an Essential, or pinned in its workspace.
+  const bool pinned = IsPinnedForUser(tab);
+  const bool essential = tab && tab->IsPinned();
+  const bool pinned_tabs = features::IsPinnedTabsEnabled();
   const auto add_if = [&](bool available, KoanCommand command) {
     if (available) {
       commands.push_back(std::move(command));
@@ -221,6 +245,14 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   add_if(IsEnabled(controller, IDC_DUPLICATE_TAB),
          ChromeCommand(controller, "duplicate-tab", u"Duplicate Current Tab",
                        vector_icons::kContentCopyIcon, IDC_DUPLICATE_TAB));
+  // Like the tab menu's: for any pinned tab (the reset doesn't ignore the
+  // fragment, so "away" isn't required).
+  const KoanTabState* state =
+      pinned_tabs && pinned ? GetTabState(tab) : nullptr;
+  add_if(state && state->pinned_url.is_valid(),
+         PinnedTabCommand("reset-pinned-tab", u"Reset Pinned Tab",
+                          vector_icons::kUndoIcon,
+                          &KoanPinnedTabController::ResetToPinnedUrl));
   add_if(IsEnabled(controller, IDC_RELOAD),
          ChromeCommand(controller, "reload-tab", u"Reload Tab",
                        vector_icons::kReloadChromeRefreshOldIcon, IDC_RELOAD));
@@ -238,14 +270,27 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   add_if(IsEnabled(controller, IDC_SHARING_HUB_SCREENSHOT),
          ChromeCommand(controller, "capture-screenshot", u"Capture Screenshot",
                        kScreenshotRegionIcon, IDC_SHARING_HUB_SCREENSHOT));
-  // Koan's Essentials are its pinned tabs, so these pin and unpin too.
-  add_if(tab && !pinned,
-         ShortcutCommand(controller, "add-to-essentials", u"Add to Essentials",
-                         kStarIcon, Action::kTogglePinTab));
-  add_if(pinned,
-         ShortcutCommand(controller, "remove-from-essentials",
-                         u"Remove from Essentials",
-                         vector_icons::kStarFilledIcon, Action::kTogglePinTab));
+  // With Koan's pinned tabs off, its Essentials are just pinned tabs, so
+  // these pin and unpin.
+  add_if(pinned_tabs ? tab && !essential &&
+                           controller.pinned_tabs()->CanAddToEssentials(
+                               tab->IsSplit() ? 2 : 1)
+                     : tab && !pinned,
+         pinned_tabs ? PinnedTabCommand(
+                           "add-to-essentials", u"Add to Essentials", kStarIcon,
+                           &KoanPinnedTabController::AddToEssentials)
+                     : ShortcutCommand(controller, "add-to-essentials",
+                                       u"Add to Essentials", kStarIcon,
+                                       Action::kTogglePinTab));
+  add_if(pinned_tabs ? essential : pinned,
+         pinned_tabs ? PinnedTabCommand(
+                           "remove-from-essentials", u"Remove from Essentials",
+                           vector_icons::kStarFilledIcon,
+                           &KoanPinnedTabController::RemoveFromEssentials)
+                     : ShortcutCommand(controller, "remove-from-essentials",
+                                       u"Remove from Essentials",
+                                       vector_icons::kStarFilledIcon,
+                                       Action::kTogglePinTab));
   add_if(IsEnabled(controller, IDC_FIND),
          ChromeCommand(controller, "find-in-page", u"Find in Page",
                        kFindInPageIcon, IDC_FIND));

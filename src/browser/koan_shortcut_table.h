@@ -39,6 +39,7 @@ enum class Action {
   kCopyUrl,
   kCopyUrlMarkdown,
   kTogglePinTab,
+  kResetPinnedTab,
   kCloseUnpinnedTabs,
   kGlanceExpand,
   kSavePage,

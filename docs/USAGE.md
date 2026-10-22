@@ -24,7 +24,8 @@ Chrome.
 | New tab (opens the URL bar; the tab opens with what you pick) | Ctrl+T (⌘T) | New-tab page |
 | Copy the page's URL | Ctrl+Shift+C (⌘⇧C) | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
-| Pin / unpin tab | Ctrl+Shift+D | Bookmark all tabs |
+| Pin / unpin tab (pinned to its workspace) | Ctrl+Shift+D | Bookmark all tabs |
+| Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | Ctrl+W, Ctrl+F4 (⌘W) | |
 | Close all unpinned tabs (in the workspace; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
 | Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still, otherwise) |
 | Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
@@ -160,8 +161,8 @@ Tab on a pinned tab, Next Space with two Spaces, ...).
 
 ## Sidebar
 
-Vertical tabs are on by default, laid out like Zen's. Pinned tabs are
-Koan's Essentials: square tiles at the top, up to four across, shared by
+Vertical tabs are on by default, laid out like Zen's. The
+**Essentials** are square tiles at the top, up to four across, shared by
 every workspace. Below them a thin line separates the tabs; **+ New Tab**
 opens a tab at the top of the workspace's tabs, and the tabs follow. A
 tab's close button shows while you point at it.
@@ -183,6 +184,43 @@ Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
 edge resizes it; dragging it closed hides it in compact mode, as in Zen
 ("Sidebar hidden! Use Ctrl+S to bring the sidebar back", shown once). If
 compact mode was set to hide just the toolbar, the drag makes it hide both.
+
+## Pinned tabs and Essentials
+
+As in Zen there are two kinds of pinned tab:
+
+- **Pinned tabs** belong to their workspace and stay at the top of its
+  tabs. Pin a tab with Ctrl+Shift+D or "Pin" in its context menu.
+- **Essentials** are shared by all workspaces, up to 12 per window: "Add to
+  Essentials" in the tab's context menu shows how many are used ("3 / 12").
+  Dragging a tab into the grid also makes it an Essential.
+
+Both remember the URL they were pinned on, the **pinned URL**. When a pinned
+tab goes elsewhere, a slash appears after its icon: hover it to see the
+pinned page's icon and "Back to pinned url", click to go back (Ctrl+click
+first moves the current page to a new tab). The context menu also has
+"Reset Pinned Tab", "Replace with Current URL" and "Edit Pinned URL…"
+("…Essential…" for Essentials).
+
+![A pinned tab away from its pinned URL, and its reset button hovered](screenshots/pinned-tab-reset.png)
+
+Closing a pinned tab or an Essential (Ctrl+W, its close button, a middle
+click) doesn't close it: like Zen, it goes back to its pinned URL, is
+unloaded to free memory and the next tab is selected. A pinned tab that is
+already unloaded closes from its close button. Settings > Tab Management >
+Pinned Tabs has Zen's choices for what closing does, and "Restore pinned
+tabs to their originally pinned URL on startup" (off by default, as in
+Zen). Pinned tabs, like Essentials, are never frozen in the background,
+and Close Other Tabs, Close Tabs Below and Back in a tab with no history
+leave them open. Drag a pinned tab below the other tabs to unpin it, or a
+tab among the pinned ones to pin it. With several pinned tabs selected,
+Ctrl+W does the same to each of them and closes none of the others.
+
+Any tab's context menu has "Change Label…" (edit the name in place; Enter
+keeps it, Esc cancels, an empty name goes back to the page title), "Change
+Icon…" (an emoji instead of the favicon) and "Unload" (free the tab's
+memory; it reloads when you select it). Pinned URLs, labels and icons are
+kept with the session.
 
 ## Workspaces
 
@@ -331,7 +369,7 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
-freeze background tabs, command palette.
+freeze background tabs, command palette, pinned tabs and Essentials.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

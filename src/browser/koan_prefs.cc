@@ -36,6 +36,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
   registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);
   registry->RegisterDictionaryPref(kCommandPaletteUsage);
+  registry->RegisterStringPref(kPinnedTabCloseShortcutBehavior,
+                               "reset-unload-switch");
+  registry->RegisterBooleanPref(kPinnedTabRestoreToPinnedUrl, false);
 }
 
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {

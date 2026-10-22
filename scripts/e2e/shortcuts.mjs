@@ -55,7 +55,8 @@ async function views() {
       for (const rule of r.result?.matchedCSSRules ?? []) {
         for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
       }
-      out.push({ cls, visible: p.Visible !== 'false', w: +p.Width, h: +p.Height });
+      out.push({ cls, visible: p.Visible !== 'false', w: +p.Width, h: +p.Height,
+                 pinnedInSpace: p.PinnedInSpace === 'true' });
     }
     for (const c of n.children ?? []) await walk(c, depth + 1);
   };
@@ -148,10 +149,11 @@ clip = await clipboard();
 check('Ctrl+Shift+Alt+C copies a Markdown link',
       clip === '[Example Domain](https://example.com/)', JSON.stringify(clip));
 
-// Pin / unpin.
+// Pin / unpin: like Zen, the tab is pinned in its workspace (not an
+// Essential; see pinned.mjs).
 await key(VK.D, CTRL | SHIFT, 'd');
 vs = await views();
-const pinnedAfter = vs.some(v => v.cls === 'PinnedTabContainerView' && v.h > 0 && v.visible);
+const pinnedAfter = vs.some(v => v.cls === 'KoanTabRow' && v.pinnedInSpace);
 check('Ctrl+Shift+D pins the tab', pinnedAfter);
 await key(VK.D, CTRL | SHIFT, 'd');
 

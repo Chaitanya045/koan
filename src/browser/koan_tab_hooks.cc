@@ -13,6 +13,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_pinned.h"
 
 namespace koan {
 
@@ -62,8 +63,11 @@ std::optional<int> PickRecentlyUsedTab(
 }
 
 bool ShouldCloseTabOnBack(content::WebContents* contents) {
-  return contents && GetBoolean(contents->GetBrowserContext(),
-                                prefs::kCloseOnBackWithNoHistory);
+  // Never a pinned tab: upstream only knows Essentials as pinned.
+  return contents &&
+         GetBoolean(contents->GetBrowserContext(),
+                    prefs::kCloseOnBackWithNoHistory) &&
+         !IsPinnedForUser(contents);
 }
 
 }  // namespace koan

@@ -1,6 +1,24 @@
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index 0d14966a1bd7fb1bad5c5137403d683efce0231d..a978c02f0ddf9faa072e1d7a82fd3ccd8cc929f2 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -776,6 +776,7 @@
+@@ -517,6 +517,7 @@ if (!is_android) {
+       "//components/tab_groups",
+       "//components/tabs:public",
+       "//content/public/browser",
++      "//koan/browser/ui/views",
+       "//third_party/blink/public/common:headers",
+       "//ui/gfx/geometry",
+       "//ui/gfx/range",
+@@ -582,6 +583,7 @@ if (!is_android) {
+       "//components/tab_groups",
+       "//components/tabs:public",
+       "//content/public/browser",
++      "//koan/browser/ui/views",
+       "//ui/base",
+       "//ui/base/mojom:ui_base_types",
+     ]
+@@ -776,6 +778,7 @@ if (!is_android) {
        "//content/public/browser",
        "//content/public/common",
        "//extensions/buildflags",
@@ -8,7 +26,15 @@
        "//printing/buildflags",
        "//ui/actions",
        "//ui/base",
-@@ -1533,6 +1534,7 @@
+@@ -975,6 +978,7 @@ if (!is_android) {
+       "//content/public/browser",
+       "//content/public/common",
+       "//extensions/buildflags",
++      "//koan/browser/ui/views",
+       "//pdf:features",
+       "//printing/buildflags",
+       "//ui/actions",
+@@ -1533,6 +1537,7 @@ source_set("layout_constants") {
      "//chrome/browser/ui:ui_features",
      "//chrome/common:chrome_features",
      "//components/omnibox/common",

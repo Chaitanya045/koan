@@ -31,6 +31,14 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanSidebarClearForeground,
   kColorKoanSidebarClearForegroundHovered,
 
+  // A pinned tab away from its pinned URL (koan_pinned_tab_views.cc): the
+  // slash after its icon, the reset button's background while hovered and
+  // pressed, and the "Back to pinned url" sublabel.
+  kColorKoanPinnedTabSlash,
+  kColorKoanPinnedTabResetHovered,
+  kColorKoanPinnedTabResetPressed,
+  kColorKoanPinnedTabSublabel,
+
   // Essentials tiles (koan_essentials.cc).
   kColorKoanEssentialsTile,
   kColorKoanEssentialsTileHovered,

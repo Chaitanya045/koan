@@ -1,0 +1,39 @@
+diff --git a/chrome/browser/sessions/session_service_base.cc b/chrome/browser/sessions/session_service_base.cc
+index ee887add6afbd32bbb227cb26b586afa9a7eb3f2..9f329b33660cb3c2c92614186428d47def688262 100644
+--- a/chrome/browser/sessions/session_service_base.cc
++++ b/chrome/browser/sessions/session_service_base.cc
+@@ -59,6 +59,7 @@
+ #include "content/public/browser/navigation_details.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/session_storage_namespace_handle.h"
++#include "koan/browser/ui/views/koan_session_data.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ 
+ #if BUILDFLAG(IS_MAC)
+@@ -675,6 +676,12 @@ void SessionServiceBase::BuildCommandsForTab(
+         sessions::CreatePinnedStateCommand(session_id, true));
+   }
+ 
++  // Koan: its features' per-tab data (koan_session_data.h).
++  for (const auto& [key, data] : koan::GetTabSessionData(tab)) {
++    command_storage_manager()->AppendRebuildCommand(
++        sessions::CreateAddTabExtraDataCommand(session_id, key, data));
++  }
++
+   // Record the association between the sessionStorage namespace and the tab.
+   content::SessionStorageNamespaceHandle* session_storage_namespace =
+       tab->GetController().GetDefaultSessionStorageNamespace();
+@@ -790,6 +797,13 @@ void SessionServiceBase::BuildCommandsForBrowser(
+             base::NumberToString(controller->GetUncollapsedWidth())));
+   }
+ 
++  // Koan: its features' per-window data (koan_session_data.h).
++  for (const auto& [key, data] : koan::GetWindowSessionData(browser)) {
++    command_storage_manager()->AppendRebuildCommand(
++        sessions::CreateAddWindowExtraDataCommand(browser->GetSessionID(), key,
++                                                  data));
++  }
++
+   int index = 0;
+   for (const tabs::TabInterface* tab_interface : *tab_strip) {
+     WebContents* tab = tab_interface->GetContents();

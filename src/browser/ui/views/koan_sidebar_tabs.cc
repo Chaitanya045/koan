@@ -30,6 +30,7 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_essentials.h"
+#include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
@@ -577,7 +578,7 @@ void KoanSidebarTabsController::UpdateClearRow() {
       model->GetFocusedGroup();
   bool listed = false;
   for (int i = 0; i < model->count() && !listed; ++i) {
-    listed = !model->IsTabPinned(i) &&
+    listed = !IsPinnedForUser(model->GetTabAtIndex(i)) &&
              (!workspace || model->GetTabGroupForTab(i) == workspace);
   }
   const auto* state =

@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/ui/tabs/tab_data.cc b/chrome/browser/ui/tabs/tab_data.cc
+index fd524a958c728fa760e8d5aa291f7b6cef07fc73..a139acff2b5e4ccd5fe988707a034598820513e4 100644
+--- a/chrome/browser/ui/tabs/tab_data.cc
++++ b/chrome/browser/ui/tabs/tab_data.cc
+@@ -24,6 +24,7 @@
+ #include "components/tabs/public/tab_alert.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
+ 
+ namespace tabs {
+ 
+@@ -71,6 +72,7 @@ TabData TabData::FromTabInterface(tabs::TabInterface* tab_interface) {
+   tab_data.collaboration_messaging =
+       collaboration_messaging ? collaboration_messaging->GetWeakPtr() : nullptr;
+ 
++  koan::AdjustTabData(tab_interface, tab_data);
+   return tab_data;
+ }
+ 

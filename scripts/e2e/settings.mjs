@@ -130,8 +130,10 @@ await waitFor(async () => await hotZones() === 1);
 await evalIn(settings, `document.querySelector('#category-tabs').click()`);
 const rowLabels = await evalIn(settings,
     `[...document.querySelectorAll('#pane .row')].map(r => r.textContent)`);
-check('Tab Management has the tint, Zen\'s tab settings and the freeze switch',
-      rowLabels?.length === 6 &&
+check('Tab Management has the tint, Zen\'s tab and pinned tab settings and the ' +
+      'freeze switch',
+      rowLabels?.length === 8 &&
+      rowLabels.some(l => l.startsWith('Close Tab Shortcut Behavior')) &&
       rowLabels.some(l => l.startsWith('When closing a tab, switch to the most recently used')) &&
       rowLabels.some(l => l.startsWith('Freeze background tabs')),
       JSON.stringify(rowLabels));

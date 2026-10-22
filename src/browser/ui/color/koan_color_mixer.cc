@@ -50,6 +50,19 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
       ui::SetAlpha(kColorToolbarText, Alpha(0.5f));
   mixer[kColorKoanSidebarClearForegroundHovered] = {kColorToolbarText};
 
+  // A pinned tab's reset button: the slash in Zen's light-dark(rgba(66, 61,
+  // 61, 0.3), rgba(255, 255, 255, 0.3)), the button's background the text
+  // colour at 10% (20% pressed), the sublabel the text at 60%.
+  mixer[kColorKoanPinnedTabSlash] = {
+      dark ? SkColorSetA(SK_ColorWHITE, Alpha(0.3f))
+           : SkColorSetARGB(Alpha(0.3f), 66, 61, 61)};
+  mixer[kColorKoanPinnedTabResetHovered] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.1f));
+  mixer[kColorKoanPinnedTabResetPressed] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.2f));
+  mixer[kColorKoanPinnedTabSublabel] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.6f));
+
   // Essentials tiles: the text colour at 8% (15% in dark mode), on hover
   // black at 10% (the selected colour in dark mode), selected white at 85%
   // (20% in dark mode).

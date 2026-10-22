@@ -69,6 +69,7 @@ source_set("tab_hooks") {
     "//components/prefs",
     "//components/user_prefs",
     "//content/public/browser",
+    "//koan/browser/ui/views",
   ]
 }
 

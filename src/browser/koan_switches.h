@@ -16,6 +16,11 @@ inline constexpr char kGlanceActivationMethod[] =
     "koan-glance-activation-method";
 inline constexpr char kGlanceOff[] = "off";
 
+// For e2e tests of the per-window session data (koan_session_data.h): each
+// window without test data gets a random value of its own under
+// koan::kTestWindowDataKey, which a restored or reopened window keeps.
+inline constexpr char kTestWindowData[] = "koan-test-window-data";
+
 }  // namespace koan::switches
 
 #endif  // KOAN_BROWSER_KOAN_SWITCHES_H_

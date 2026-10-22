@@ -10,6 +10,7 @@
 // The profile (prefs/sidebar_tabs.json) turns off Zen's replace-newtab, so
 // the New Tab row and Ctrl+T open tabs right away; urlbar.mjs tests them
 // with it on.
+import { tabMenuCommand } from './lib/koan.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -169,7 +170,7 @@ function check(name, ok, detail = '') {
 }
 
 const ALT = 1, CTRL = 2, SHIFT = 8;
-const VK = { D: 68, N: 78, T: 84, LEFT: 37 };
+const VK = { N: 78, T: 84, LEFT: 37 };
 // The views inside the pinned (Essentials) or the unpinned tab container.
 const inContainer = (vs, cls, container) =>
   vs.filter(v => v.cls === cls && v.shown && v.path.includes(container));
@@ -238,8 +239,11 @@ check('The New Tab row opens a tab at the top, like Zen',
       titles[0] !== 'Sidebar tabs' && titles.slice(1).every(t => t === 'Sidebar tabs'),
       `${before} -> ${await pages()} page(s), titles ${JSON.stringify(titles)}`);
 
-// Pin the new tab (Ctrl+Shift+D, Zen's shortcut): an Essentials tile.
-await key(VK.D, CTRL | SHIFT, 'd');
+// Make the new tab an Essential ("Add to Essentials"; Ctrl+Shift+D pins a
+// tab to its workspace): a tile.
+await tabMenuCommand(vs.filter(v => v.cls === 'TabView' && v.shown &&
+                                    v.path.includes('UnpinnedTabContainerView'))
+                         .sort((a, b) => a.y - b.y)[0], 'kKoanAddToEssentialsMenuItem');
 vs = await views();
 const tiles = inContainer(vs, 'TabView', 'PinnedTabContainerView');
 check('Pinned tabs are 46px Essentials tiles', tiles.length === 1 && tiles[0].h === 46,

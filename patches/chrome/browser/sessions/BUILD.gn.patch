@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/sessions/BUILD.gn b/chrome/browser/sessions/BUILD.gn
+index f69c5d5cebce4a21b90acf4d76e609e50ede9046..5e1315aaf47050898ae293207193816c729af293 100644
+--- a/chrome/browser/sessions/BUILD.gn
++++ b/chrome/browser/sessions/BUILD.gn
+@@ -171,6 +171,7 @@ source_set("impl") {
+       "//components/media_device_salt",
+       "//components/pref_registry",
+       "//components/tab_groups",
++      "//koan/browser/ui/views:views",
+     ]
+ 
+     if (is_mac) {

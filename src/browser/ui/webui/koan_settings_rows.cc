@@ -93,6 +93,16 @@ constexpr Option kUrlBarBehaviors[] = {
     {prefs::kUrlBarBehaviorFloat, "Always floating"},
 };
 
+// Zen's close-shortcut behaviours for pinned tabs, in Zen's order.
+constexpr Option kPinnedTabCloseBehaviors[] = {
+    {"reset-unload-switch", "Reset URL, unload and switch to next tab"},
+    {"unload-switch", "Unload and switch to next tab"},
+    {"reset-switch", "Reset URL and switch to next tab"},
+    {"switch", "Switch to next tab"},
+    {"reset", "Reset URL"},
+    {"close", "Close tab"},
+};
+
 constexpr Row kRows[] = {
     // Look and Feel.
     {.group = "layout",
@@ -194,6 +204,17 @@ constexpr Row kRows[] = {
      .pref = prefs::kSelectRecentlyUsedOnClose,
      .label = "When closing a tab, switch to the most recently used tab "
               "instead of the next tab"},
+    {.group = "pinned-tabs",
+     .control = Control::kCheckbox,
+     .pref = prefs::kPinnedTabRestoreToPinnedUrl,
+     .label = "Restore pinned tabs to their originally pinned URL on startup",
+     .is_available = features::IsPinnedTabsEnabled},
+    {.group = "pinned-tabs",
+     .control = Control::kMenu,
+     .pref = prefs::kPinnedTabCloseShortcutBehavior,
+     .label = "Close Tab Shortcut Behavior",
+     .options = kPinnedTabCloseBehaviors,
+     .is_available = features::IsPinnedTabsEnabled},
     {.group = "background-tabs",
      .control = Control::kCheckbox,
      .pref = performance_manager::user_tuning::prefs::kTabFreezingEnabled,

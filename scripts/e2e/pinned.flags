@@ -1,0 +1,3 @@
+# Each window gets random test data in its session data (koan_session_data.h),
+# to check it comes back after restarts and with a reopened window.
+--koan-test-window-data

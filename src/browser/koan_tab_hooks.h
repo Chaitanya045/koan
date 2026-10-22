@@ -36,6 +36,8 @@ std::optional<int> PickRecentlyUsedTab(
 
 // Whether Back in a tab with no history may close it and return to its
 // opener (upstream's back-to-opener, prefs::kCloseOnBackWithNoHistory).
+// Never for a pinned tab, Essentials and tabs pinned to their workspace
+// alike.
 bool ShouldCloseTabOnBack(content::WebContents* contents);
 
 }  // namespace koan
