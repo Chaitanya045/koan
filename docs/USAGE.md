@@ -156,7 +156,8 @@ Tab, Reopen Closed Tab, Duplicate Current Tab, Reload Tab, Reload Tab
 Without Cache, Next / Previous Tab, Capture Screenshot, Find in Page, Manage
 Extensions, Switch to Automatic Appearance / Light Mode / Dark Mode, Print;
 with workspaces also New Space, Next / Previous Space and "Focus on" each
-other Space (type its name). Only the actions that apply are offered (Unpin
+other Space (type its name); with folders New Folder and Collapse / Expand
+All Folders. Only the actions that apply are offered (Unpin
 Tab on a pinned tab, Next Space with two Spaces, ...).
 
 ## Sidebar
@@ -177,7 +178,8 @@ that are in no workspace (the line stays while workspace tabs are listed).
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). The
 workspace switcher is at the bottom of the sidebar: **∞** shows all tabs,
-one round button per workspace, **+** creates one.
+one round button per workspace, **+** opens Zen's Create New menu
+(Create Space, Create Folder, New Split, New Tab).
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
 **Compact Mode** (below) and **Tabs on the right**. Dragging the sidebar's
@@ -230,6 +232,44 @@ Rename or recolour a workspace from its group header's menu; renaming
 changes the icon too. New tabs open in the active workspace.
 Workspaces and the active one are restored on restart (Koan restores the
 previous session by default; change it in Settings > On startup).
+
+## Folders
+
+As in Zen, a Space can hold folders at the top of its tab list, after its
+pinned tabs and above its other tabs. A tab moved into a folder stops being
+pinned. A folder has a row with a folder icon and its name; its tabs
+sit under it, indented, and subfolders nest inside it (five levels at
+most).
+
+- **Create a folder:** click **+** at the bottom of the sidebar and choose
+  **Create Folder**, or right-click a tab and choose **Move to Folder >
+  New Folder** (the folder takes the selected tabs). Type its name and
+  press Enter.
+- **Add tabs:** right-click a tab, **Move to Folder** and pick the folder,
+  or drag the tab just under the folder's row or among its tabs. Drag a
+  tab out among the other tabs, or use **Move to Folder > Remove from
+  Folder**, to take it out.
+- **Collapse / expand:** click the folder's row. A collapsed folder shows
+  its tab count, and still shows its tab if that's the active one (the
+  icon gets three dots).
+- **Search a folder:** hover a collapsed folder for half a second; type to
+  filter its tabs by title or site, use the arrow keys and Enter, or click
+  one.
+- **Folder menu** (right-click the row): Rename Folder (or double-click the
+  name), Unload All Tabs (frees their memory and collapses the folder),
+  New Subfolder, Change Space, Convert folder to Space, Unpack Folder (its
+  tabs and subfolders move up a level), Delete Folder (closes its tabs;
+  Ctrl+Shift+T / ⌘⇧T reopens them as loose tabs; a folder tab closed on its
+  own reopens in its folder). A Space that a folder empties (Delete,
+  Change Space, Convert to Space) stays, with a new tab.
+
+![Folders](screenshots/folders-open.png)
+
+Without Spaces (the **∞** view), folders sit above the ungrouped tabs.
+Folders are saved with the session and come back after a restart, and with
+a reopened window. They
+show with vertical tabs only; with horizontal tabs they're kept for when
+you switch back.
 
 ## Compact mode
 
@@ -369,7 +409,8 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
-freeze background tabs, command palette, pinned tabs and Essentials.
+freeze background tabs, command palette, pinned tabs and Essentials,
+folders.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

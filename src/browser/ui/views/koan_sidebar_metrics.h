@@ -116,6 +116,23 @@ inline constexpr int kFloatingUrlBarShadowSpread = -15;
 // user types (Zen's #urlbar[open] in the single toolbar: min(90%, 40rem)).
 inline constexpr int kUrlBarOpenMaxWidth = 640;
 
+// Folders (zen-folders.css): Zen's 28px folder icon near the row's start,
+// the name after it, 14px of indent per level (--zen-folder-indent), and
+// the folder search popup: 250px wide, 40px rows (6px radius) in at most
+// 263px.
+inline constexpr int kFolderIconSize = 28;
+inline constexpr int kFolderIconX = 4;
+inline constexpr int kFolderLabelX = 36;
+inline constexpr int kFolderTrailingPadding = 10;
+inline constexpr int kFolderCountGap = 8;
+inline constexpr int kFolderIndent = 14;
+inline constexpr int kFolderSearchWidth = 250;
+inline constexpr int kFolderSearchItemHeight = 40;
+inline constexpr int kFolderSearchItemCornerRadius = 6;
+inline constexpr int kFolderSearchListMaxHeight = 263;
+inline constexpr int kFolderSearchIconSize = 16;
+inline constexpr int kFolderSearchIconGap = 8;
+
 // Toasts, at the top right of the window: Zen's 42px with 6px padding
 // (48px and 8px on macOS), plus 4px around the text.
 #if BUILDFLAG(IS_MAC)

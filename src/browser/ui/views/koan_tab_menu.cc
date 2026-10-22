@@ -5,6 +5,7 @@
 #include "koan/browser/ui/views/koan_tab_menu.h"
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 
@@ -40,6 +41,8 @@ constexpr TabMenuFeature kFeatures[] = {
      &IsSplitViewCommandEnabled, &ExecuteSplitViewCommand},
     {TabMenuFeatureId::kPinnedTabs, &AddPinnedTabMenuItems,
      &IsPinnedTabMenuCommandEnabled, &ExecutePinnedTabMenuCommand},
+    {TabMenuFeatureId::kFolders, &AddFolderTabMenuItems,
+     &IsFolderTabMenuCommandEnabled, &ExecuteFolderTabMenuCommand},
 };
 
 // The feature whose range `command_id` is in, or null.

@@ -35,6 +35,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
@@ -466,9 +467,11 @@ std::vector<int> KoanShortcutController::UnpinnedTabsForClear(
       model->GetFocusedGroup();
   std::vector<int> indices;
   for (int i = 0; i < model->count(); ++i) {
-    // Pinned tabs (Essentials, and those pinned to the workspace) stay.
+    // Pinned tabs (Essentials, and those pinned to the workspace) stay, and
+    // so do folder tabs, like Zen's (they are pinned there).
     if (!IsPinnedForUser(model->GetTabAtIndex(i)) &&
-        model->GetTabGroupForTab(i) == workspace) {
+        model->GetTabGroupForTab(i) == workspace &&
+        !KoanFolderController::IsInFolder(model->GetTabAtIndex(i))) {
       indices.push_back(i);
     }
   }

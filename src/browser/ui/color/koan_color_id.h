@@ -66,6 +66,15 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
 
+  // Folders (koan_folder_views.cc): Zen's folder icon (the folder behind,
+  // its cover, their outline and dots), a collapsed folder's tab count, and
+  // the highlighted tab in a folder's search popup.
+  kColorKoanFolderIconBack,
+  kColorKoanFolderIconFront,
+  kColorKoanFolderIconStroke,
+  kColorKoanFolderCount,
+  kColorKoanFolderSearchItemSelected,
+
   kKoanColorsEnd,
 };
 

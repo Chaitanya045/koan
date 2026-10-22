@@ -38,6 +38,8 @@
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -254,10 +256,14 @@ class KoanWorkspaceSwitcherView : public views::BoxLayoutView {
       ++number;
     }
 
-    AddChildView(std::make_unique<KoanWorkspaceButton>(
-        base::BindRepeating(&KoanWorkspaceController::CreateWorkspace,
-                            base::Unretained(controller_)),
-        u"+", std::nullopt, /*active=*/false, u"New workspace (Ctrl+Alt+N)"));
+    auto* add = AddChildView(std::make_unique<KoanWorkspaceButton>(
+        views::Button::PressedCallback(), u"+", std::nullopt,
+        /*active=*/false,
+        features::IsFoldersEnabled() ? u"Create New"
+                                     : u"New workspace (Ctrl+Alt+N)"));
+    add->SetCallback(base::BindRepeating(
+        &KoanWorkspaceController::OnNewButtonPressed,
+        base::Unretained(controller_), base::Unretained(add)));
   }
 
  private:
@@ -404,18 +410,37 @@ void KoanWorkspaceController::Cycle(bool forward) {
 
 void KoanWorkspaceController::CreateWorkspace() {
   TabStripModel* model = tab_strip_model();
-  const size_t existing = GetWorkspaces().size();
-  const auto& style = kWorkspaceStyles[existing % std::size(kWorkspaceStyles)];
   chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
                    /*foreground=*/true);
-  const tab_groups::TabGroupId group =
-      model->AddToNewGroup({model->count() - 1});
+  CreateWorkspaceFromTabs({model->count() - 1}, std::u16string());
+}
+
+tab_groups::TabGroupId KoanWorkspaceController::CreateWorkspaceFromTabs(
+    const std::vector<int>& indices,
+    const std::u16string& name) {
+  TabStripModel* model = tab_strip_model();
+  const size_t existing = GetWorkspaces().size();
+  const auto& style = kWorkspaceStyles[existing % std::size(kWorkspaceStyles)];
+  const tab_groups::TabGroupId group = model->AddToNewGroup(indices);
+  std::u16string title =
+      name.empty() ? base::StrCat({style.icon, u" Space ",
+                                   base::NumberToString16(existing + 1)})
+      : StartsWithEmoji(name) ? name
+                              : base::StrCat({style.icon, u" ", name});
   model->ChangeTabGroupVisuals(
-      group, tab_groups::TabGroupVisualData(
-                 base::StrCat({style.icon, u" Space ",
-                               base::NumberToString16(existing + 1)}),
-                 style.color));
+      group, tab_groups::TabGroupVisualData(std::move(title), style.color));
   model->EnterFocusMode(group);
+  return group;
+}
+
+void KoanWorkspaceController::OnNewButtonPressed(views::View* button) {
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  if (controller && controller->folders()->IsEnabled()) {
+    controller->folders()->ShowCreateMenu(button);
+  } else {
+    CreateWorkspace();
+  }
 }
 
 void KoanWorkspaceController::OnTabStripModelChanged(

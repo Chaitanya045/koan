@@ -91,3 +91,17 @@
   editor suspends the window's FocusManager shortcuts while recording a
   key (as chrome://extensions/shortcuts does), because Chromium pre-handles
   non-Chrome accelerators (Koan's) before the page sees them.
+- **Folders are Koan's own model, drawn by upstream's tab strip** (#42):
+  Zen's folders are nested Firefox tab groups in a Space's pinned section.
+  Chromium's tab groups can't nest (`TabGroupTabCollection` allows only
+  splits) or be pinned, and Koan's Spaces already are tab groups, so a
+  folder is a Koan object (name, collapsed, parent folder, Space, tab
+  handles), per window. Its tabs stay ordinary tabs of the Space; Koan
+  moves each folder's tabs to the top of the Space in folder order, and
+  the vertical layouts of a group and of the ungrouped tabs call
+  `koan::FolderRows` to put a `KoanFolderRowView` (a child of that
+  container) before each folder's tabs, indent them 14px per level, and
+  give tabs of collapsed folders zero height (kept visible during
+  upstream's 200 ms layout animation so they shrink away). So drag,
+  close, hover cards and context menus of the tabs stay upstream's.
+  Persisted as window extra data (tab indices) through two session hooks.
