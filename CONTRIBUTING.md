@@ -197,6 +197,24 @@ version stays cheap.
   // found in the LICENSE file.
   ```
 
+  A file that **ports Zen Browser's code, data tables, SVG paths, strings or
+  style values** (more than matching a behaviour or a few numbers) is
+  covered by Zen's MPL-2.0 instead. Give it this header, list it in
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and keep the ported
+  material in as few files as practical:
+
+  ```cpp
+  // This Source Code Form is subject to the terms of the Mozilla Public
+  // License, v. 2.0. If a copy of the MPL was not distributed with this
+  // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+  //
+  // Contains material ported from Zen Browser, Copyright the Zen Browser
+  // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+  //   ZenSomething.mjs
+  // Koan's changes, Copyright 2026 The Koan Authors, are under the same
+  // licence.
+  ```
+
 - **UI colours and shapes come from tokens.** Use Chromium or Koan colour
   IDs, mapped in a colour mixer, and shared radius and inset constants. Never
   hard-code `SkColor`s or radii, so themes can restyle the whole UI.
@@ -286,6 +304,8 @@ passing. For UI changes, compare your screenshots with Zen's.
 ## Licensing
 
 By contributing, you agree that your contributions are licensed under the
-[MIT License](LICENSE). Changes to upstream Chromium files in `patches/`
-remain under Chromium's BSD-style license; see
+[MIT License](LICENSE), except in files that carry the MPL-2.0 header
+because they port Zen Browser material: your changes there are under the
+MPL-2.0. Changes to upstream Chromium files in `patches/` remain under
+Chromium's BSD-style license; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
