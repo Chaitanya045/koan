@@ -1,0 +1,10 @@
+--- a/chrome/browser/ui/views/download/BUILD.gn
++++ b/chrome/browser/ui/views/download/BUILD.gn
+@@ -33,6 +33,7 @@
+     "//chrome/browser/ui/views/accessibility",
+     "//chrome/browser/ui/views/frame:browser_view_header",
+     "//components/constrained_window",
++    "//koan/browser/ui/views",
+     "//components/safe_browsing/core/common:features",
+     "//components/safe_browsing/core/common:safe_browsing_prefs",
+     "//ui/strings:ui_strings_grit",

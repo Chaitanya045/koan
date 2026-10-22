@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -75,12 +76,16 @@ class KoanWorkspaceController : public TabStripModelObserver {
   // user's colour when no workspace is active.
   void UpdateTint();
   void OnTintPrefChanged();
+  // Zen's "Workspace has been successfully renamed!" toast.
+  void ShowRenamedToast();
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<KoanWorkspaceSwitcherView> switcher_ = nullptr;
   bool adopt_pending_ = false;
   bool rebuild_pending_ = false;
   PrefChangeRegistrar pref_change_registrar_;
+  // The group editor renames as the user types: toast once they stop.
+  base::OneShotTimer renamed_toast_timer_;
 
   base::WeakPtrFactory<KoanWorkspaceController> weak_factory_{this};
 };

@@ -46,7 +46,11 @@ source_set("impl") {
     "koan_compact_mode_controller.h",
     "koan_content_card.cc",
     "koan_essentials.cc",
+    "koan_download_animation.cc",
+    "koan_download_animation.h",
     "koan_glance_controller.cc",
+    "koan_media_controller.cc",
+    "koan_media_controller.h",
     "koan_sidebar_nav_view.cc",
     "koan_sidebar_nav_view.h",
     "koan_sidebar_metrics.h",
@@ -54,8 +58,12 @@ source_set("impl") {
     "koan_sidebar_tabs_controller.h",
     "koan_url_bar_controller.cc",
     "koan_url_bar_controller.h",
+    "koan_welcome.cc",
+    "koan_welcome.h",
     "koan_window_controls.cc",
     "koan_window_controls.h",
+    "koan_window_drag.cc",
+    "koan_window_drag.h",
     "koan_glance_controller.h",
     "koan_pinned_tab_views.cc",
     "koan_pinned_tab_views.h",
@@ -143,6 +151,17 @@ source_set("impl") {
     "//components/keyed_service/core",
     "//components/performance_manager",
     "//components/sessions",
+    "//chrome/browser:shell_integration",
+    "//chrome/browser/first_run",
+    "//chrome/browser/search_engines",
+    "//chrome/browser/ui/tabs:utils",
+    "//chrome/browser/ui/views/frame:toolbar_button_provider",
+    "//chrome/browser/ui/views/toolbar",
+    "//components/download/public/common:public",
+    "//components/search_engines",
+    "//mojo/public/cpp/bindings",
+    "//services/media_session/public/cpp",
+    "//services/media_session/public/mojom",
     "//components/prefs",
     "//koan/browser:features",
     "//koan/browser:prefs",
@@ -173,5 +192,13 @@ source_set("impl") {
     # Glance animates the page's native window (an aura::Window). macOS
     # uses NSViews instead and has no Aura.
     deps += [ "//ui/aura" ]
+  }
+  if (is_linux) {
+    # Dragging the window from the page asks the window manager to move it
+    # (koan_window_drag.cc); macOS runs a move loop instead.
+    deps += [
+      "//ui/platform_window",
+      "//ui/platform_window/wm",
+    ]
   }
 }

@@ -1,0 +1,20 @@
+--- a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
++++ b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
+@@ -63,6 +63,7 @@
+ #include "ui/views/controls/image_view.h"
+ #include "ui/views/event_monitor.h"
+ #include "ui/views/widget/widget.h"
++#include "koan/browser/ui/views/koan_browser_view_hooks.h"
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/ui/fullscreen_util_mac.h"
+@@ -503,6 +504,9 @@
+   }
+   CHECK(show_download_started_animation_);
+   has_pending_download_started_animation_ = false;
++  if (koan::ShowsDownloadAnimation(browser_view_)) {
++    return;
++  }
+   if (!gfx::Animation::ShouldRenderRichAnimation()) {
+     return;
+   }

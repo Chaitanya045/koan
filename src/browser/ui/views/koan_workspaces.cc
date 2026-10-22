@@ -38,6 +38,8 @@
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_toast.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -319,6 +321,7 @@ void KoanWorkspaceController::OnTintPrefChanged() {
 
 void KoanWorkspaceController::OnBrowserViewDestroying() {
   pref_change_registrar_.RemoveAll();
+  renamed_toast_timer_.Stop();
   if (switcher_) {
     switcher_->parent()->RemoveChildViewT(std::exchange(switcher_, nullptr));
   }
@@ -466,9 +469,29 @@ void KoanWorkspaceController::AdoptUngroupedTabs() {
 
 void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
   UpdateSwitcher();
-  if (change.type == TabGroupChange::kVisualsChanged &&
-      change.group == GetActiveWorkspace()) {
+  if (change.type != TabGroupChange::kVisualsChanged) {
+    return;
+  }
+  if (change.group == GetActiveWorkspace()) {
     UpdateTint();
+  }
+  // A workspace that had a name got a new one (not a new workspace).
+  const TabGroupChange::VisualsChange* visuals = change.GetVisualsChange();
+  if (IsEnabled() && visuals && visuals->old_visuals && visuals->new_visuals &&
+      !visuals->old_visuals->title().empty() &&
+      visuals->old_visuals->title() != visuals->new_visuals->title()) {
+    renamed_toast_timer_.Start(
+        FROM_HERE, base::Seconds(1),
+        base::BindOnce(&KoanWorkspaceController::ShowRenamedToast,
+                       weak_factory_.GetWeakPtr()));
+  }
+}
+
+void KoanWorkspaceController::ShowRenamedToast() {
+  // zen-general.ftl zen-workspace-renamed-toast.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->toast()->Show(u"Workspace has been successfully renamed!");
   }
 }
 

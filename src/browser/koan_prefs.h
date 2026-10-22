@@ -152,6 +152,21 @@ inline constexpr char kPinnedTabCloseShortcutBehavior[] =
 inline constexpr char kPinnedTabRestoreToPinnedUrl[] =
     "koan.pinned_tabs.restore_to_pinned_url";
 
+// Zen's media controller in the sidebar (zen.mediacontrols.enabled).
+inline constexpr char kMediaControlsEnabled[] = "koan.media_controls.enabled";
+
+// Zen's download animation (zen.downloads.download-animation).
+inline constexpr char kDownloadAnimation[] =
+    "koan.downloads.download_animation";
+
+// Dragging the window from empty space at the top of the page
+// (zen.view.drag-window-from-content).
+inline constexpr char kDragWindowFromContent[] =
+    "koan.view.drag_window_from_content";
+
+// Whether the welcome screen was shown (zen.welcome-screen.seen).
+inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

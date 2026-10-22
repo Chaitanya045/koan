@@ -39,6 +39,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kPinnedTabCloseShortcutBehavior,
                                "reset-unload-switch");
   registry->RegisterBooleanPref(kPinnedTabRestoreToPinnedUrl, false);
+  registry->RegisterBooleanPref(kMediaControlsEnabled, true);
+  registry->RegisterBooleanPref(kDownloadAnimation, true);
+  registry->RegisterBooleanPref(kDragWindowFromContent, true);
+  registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
 }
 
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {

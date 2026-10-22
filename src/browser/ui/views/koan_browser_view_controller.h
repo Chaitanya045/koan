@@ -21,13 +21,17 @@ namespace koan {
 
 class KoanCommandPalette;
 class KoanCompactModeController;
+class KoanDownloadAnimation;
 class KoanGlanceController;
 class KoanPinnedTabController;
+class KoanMediaController;
 class KoanShortcutController;
 class KoanSidebarTabsController;
 class KoanTabActivationTracker;
 class KoanToast;
 class KoanUrlBarController;
+class KoanWelcome;
+class KoanWindowDragController;
 class KoanWorkspaceController;
 
 // Per-window Koan state and behaviour. Owned by its BrowserView through a
@@ -60,6 +64,11 @@ class KoanBrowserViewController : public views::ViewObserver {
   KoanPinnedTabController* pinned_tabs() const { return pinned_tabs_.get(); }
   KoanGlanceController* glance() const { return glance_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
+  KoanMediaController* media() const { return media_.get(); }
+  KoanDownloadAnimation* download_animation() const {
+    return download_animation_.get();
+  }
+  KoanWelcome* welcome() const { return welcome_.get(); }
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
   // Koan features' data for this window's session (koan_session_data.h).
   std::map<std::string, std::string>& session_data() { return session_data_; }
@@ -91,6 +100,10 @@ class KoanBrowserViewController : public views::ViewObserver {
   std::unique_ptr<KoanPinnedTabController> pinned_tabs_;
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
+  std::unique_ptr<KoanMediaController> media_;
+  std::unique_ptr<KoanDownloadAnimation> download_animation_;
+  std::unique_ptr<KoanWindowDragController> window_drag_;
+  std::unique_ptr<KoanWelcome> welcome_;
   // Last: it calls into the controllers above.
   std::unique_ptr<KoanShortcutController> shortcuts_;
   // Its commands run the shortcuts above.

@@ -132,9 +132,10 @@ export async function readPref(pref) {
   return JSON.parse(text);
 }
 
-// Every native view as {cls, shown, w, h, x, y, nodeId, path}; `shown`
-// includes the ancestors', x/y are in the view's widget, `path` lists the
-// ancestors' classes from the widget's root view.
+// Every native view as {cls, shown, w, h, x, y, nodeId, path, props};
+// `shown` includes the ancestors', x/y are in the view's widget, `path` lists
+// the ancestors' classes from the widget's root view, `props` has the view's
+// properties (e.g. a label's Text, a button's TooltipText).
 export async function views() {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
@@ -152,7 +153,7 @@ export async function views() {
       }
       shown = shown && p.Visible !== 'false';
       const v = { cls, shown, w: +p.Width, h: +p.Height, x: ox + +p.X, y: oy + +p.Y,
-                  nodeId: n.nodeId, path };
+                  nodeId: n.nodeId, path, props: p };
       out.push(v);
       path = [...path, cls];
       ox = v.x;
@@ -420,6 +421,22 @@ export async function sidebarMenu(...indices) {
     await sleep(800);
   }
   return null;
+}
+
+// With SHOTS=<dir>, run.sh dumps each window's latest frame into
+// <dir>/frames; this copies the browser window's (the biggest) to
+// <dir>/<name>.png.
+export function saveShot(name) {
+  if (!process.env.SHOTS) {
+    return;
+  }
+  const dir = path.join(process.env.SHOTS, 'frames');
+  const file = fs.readdirSync(dir).filter(f => f.endsWith('.png'))
+      .map(f => path.join(dir, f))
+      .sort((a, b) => fs.statSync(b).size - fs.statSync(a).size)[0];
+  if (file) {
+    fs.copyFileSync(file, path.join(process.env.SHOTS, `${name}.png`));
+  }
 }
 
 // The latest frame of the browser window (the biggest dump), decoded:
