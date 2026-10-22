@@ -7,7 +7,7 @@
 # scripts/perf/profile_ui.mjs). Without URLs it opens
 # scripts/e2e/pages/<test>.html if that exists, else two example.com tabs.
 # scripts/e2e/prefs/<test>.json, if it exists, seeds the fresh profile's
-# Preferences. KOAN_FLAGS adds browser flags (e.g. --disable-features=...);
+# Preferences; {profile} in it is the profile's directory. KOAN_FLAGS adds browser flags (e.g. --disable-features=...);
 # features in an --enable-features there are added to the ones run.sh needs.
 #
 # The test gets KOAN_CHROME_ARGS, Koan's command line without the URLs (one
@@ -72,7 +72,7 @@ trap cleanup EXIT
 prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
 if [[ -f $prefs ]]; then
   mkdir -p "$prof/Default"
-  cp "$prefs" "$prof/Default/Preferences"
+  sed "s#{profile}#$prof#g" "$prefs" >"$prof/Default/Preferences"
 fi
 if [[ -n ${PREFS:-} ]]; then mkdir -p "$prof/Default"; printf '%s' "$PREFS" > "$prof/Default/Preferences"; fi
 

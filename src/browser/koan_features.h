@@ -36,6 +36,8 @@ BASE_DECLARE_FEATURE(kKoanPinnedTabs);
 // button.
 BASE_DECLARE_FEATURE(kKoanUrlBar);
 
+BASE_DECLARE_FEATURE(kKoanLibrary);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsWorkspacesEnabled();
@@ -44,6 +46,7 @@ bool IsRestoreTabsOnDemandEnabled();
 bool IsCommandPaletteEnabled();
 bool IsUrlBarEnabled();
 bool IsPinnedTabsEnabled();
+bool IsLibraryEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read

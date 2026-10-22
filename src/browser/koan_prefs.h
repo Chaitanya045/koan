@@ -151,6 +151,13 @@ inline constexpr char kPinnedTabCloseShortcutBehavior[] =
 // (off by default).
 inline constexpr char kPinnedTabRestoreToPinnedUrl[] =
     "koan.pinned_tabs.restore_to_pinned_url";
+// The Library section shown last, opened next ("downloads", "spaces",
+// "history"; Zen's zen.library.last-tab).
+inline constexpr char kLibraryLastSection[] = "koan.library.last_section";
+// Whether the Library's History lists closed tabs instead of history (Zen's
+// zen.library.history.closed-tabs).
+inline constexpr char kLibraryHistoryClosedTabs[] =
+    "koan.library.history_closed_tabs";
 
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.

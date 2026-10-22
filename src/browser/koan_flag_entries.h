@@ -50,6 +50,10 @@
       {"koan-pinned-tabs", "Koan pinned tabs and Essentials",                \
        "Zen's pinned tabs and Essentials: a pinned URL with reset, pinned "  \
        "tabs that stay in their Space, Zen's close behaviour and labels.",   \
-       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanPinnedTabs)},
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanPinnedTabs)},     \
+      {"koan-library", "Koan Library",                                       \
+       "Zen's Library: History, Downloads and Spaces in a panel over the "   \
+       "sidebar (Alt+Shift+L; Ctrl+H, Ctrl+Shift+Y open its sections).",     \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanLibrary)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_
