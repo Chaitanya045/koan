@@ -6,3 +6,4 @@
 /branding/out/
 /.cache/
 __pycache__/
+/dist/
