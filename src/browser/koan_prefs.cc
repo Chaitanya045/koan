@@ -36,6 +36,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
   registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);
   registry->RegisterDictionaryPref(kCommandPaletteUsage);
+  registry->RegisterStringPref(kLibraryLastSection, "history");
+  registry->RegisterBooleanPref(kLibraryHistoryClosedTabs, false);
 }
 
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {

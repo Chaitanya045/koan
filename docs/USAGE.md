@@ -30,13 +30,14 @@ Chrome.
 | Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
 | Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
 | Save page | Ctrl+Alt+Shift+S | |
-| Library (history) | Alt+Shift+L | |
+| Open / close the Library | Alt+Shift+L (⌥⇧L) | |
+| Library: History | Ctrl+H or Ctrl+Shift+H (⌘⇧H or ⌘Y) | History page (Ctrl+H; macOS ⌘Y) |
 | Inspect element | Ctrl+Shift+L | |
 | New window | Ctrl+Shift+N | New incognito window |
 | New private window | Ctrl+Shift+P | Print using system dialog |
 | Mute site | Ctrl+M | |
 | Bookmarks | Ctrl+B | |
-| Downloads | Ctrl+Shift+Y | |
+| Library: Downloads | Ctrl+Shift+Y (⌘⇧J) | macOS: Downloads page (⌘⇧J) |
 | Reading mode | Ctrl+Alt+R | |
 | Edit the address | Ctrl+L, or click the URL pill | |
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
@@ -327,11 +328,46 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
 
+## Library
+
+Zen's Library: press Alt+Shift+L or click the Library button (the box with
+sparkles, first at the bottom of the sidebar). It slides in over the sidebar
+with three sections down its side, and opens on the one you used last:
+
+- **Downloads** (Ctrl+Shift+Y): every download, newest first, with its size,
+  site and date (hover a row for where it came from). Search, or filter by
+  file type (images, video, audio, documents, archives, apps) and date.
+  Hover a row for cancel / retry / show in folder and **⋯** (open, copy the
+  file or its link, remove from the list, delete the file). Click a
+  download in progress to open it when it's done, a finished one to show it
+  in the file manager. While anything downloads, the Downloads tab shows a
+  progress ring. Right-click the Downloads tab to clear the list or open
+  `chrome://downloads`.
+- **Spaces**: a card per workspace with its tabs. Click the name to rename
+  it, the icon to pick an emoji, the brush to change its colour; drag the
+  arrows at the bottom to reorder the spaces; **⋯** has the same plus
+  "Create Space" and "Delete Space". **+** after the last card adds a
+  space. Click a tab to go there. The Library widens to fit the cards.
+- **History** (Ctrl+H): the last 120 days by day. Search, or **Filter**:
+  when (today, this week, this month), sort (by date, site, most visited,
+  last visited) and what to look through (history or the tabs closed
+  recently). Click a page to open it in a new tab; Ctrl+click or
+  middle-click opens it in the background and keeps the Library open.
+  Hover a row for its visit time and the forget / reopen buttons;
+  right-click for "Forget About This Site" (its history, cookies, site data
+  and cache). Right-click the History tab to clear history from the last
+  hour, 12 hours, today, week, month or everything, or to open
+  `chrome://history`.
+
+Esc, the back arrow at the bottom of the side column, the same shortcut
+again or opening a tab closes the Library. Incognito windows have no
+Library (the shortcuts open Chrome's pages there).
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
-freeze background tabs, command palette.
+freeze background tabs, command palette, Library.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

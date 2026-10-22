@@ -33,6 +33,7 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
+#include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -189,6 +190,9 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
       features::IsCompactModeEnabled(),
       ShortcutCommand(controller, "toggle-compact-mode", u"Toggle Compact Mode",
                       kDockToLeftIcon, Action::kToggleCompactMode));
+  add_if(controller.library()->IsAvailable(),
+         ShortcutCommand(controller, "open-library", u"Open Library",
+                         kLibraryIcon, Action::kLibrary));
   add_if(IsEnabled(controller, IDC_NEW_SPLIT_TAB),
          ShortcutCommand(controller, "new-split-view", u"New Split View",
                          kSplitSceneIcon, Action::kNewEmptySplit));

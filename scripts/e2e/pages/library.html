@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Library page</title>
+<style>
+  body { font: 16px sans-serif; margin: 40px; }
+  a { display: inline-block; padding: 12px; }
+</style>
+<script>
+  // Each copy of the page (?two, ?three) gets its own title in history.
+  document.title = 'Library page ' + (location.search.slice(1) || 'one');
+</script>
+<h1>Library test page</h1>
+<a id="download" href="#">Download a file</a>
+<script>
+  document.getElementById('download').addEventListener('click', event => {
+    event.preventDefault();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['Koan Library test'], { type: 'text/plain' }));
+    link.download = 'koan-library-test.txt';
+    link.click();
+  });
+</script>

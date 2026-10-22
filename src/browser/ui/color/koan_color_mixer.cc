@@ -90,6 +90,49 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanGlanceButtonIcon] = {ui::kColorSysInversePrimary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};
+
+  // The Library (zen-library.css): on the window's surface, the side column
+  // lightening to white at 8%; everything else shades of the text colour
+  // (Zen's color-mix(currentColor N%)): subtitles 60%, the search icon 50%,
+  // pills 7% (12% hovered, 20% for an active chip), hovered rows 10%, side
+  // tabs 5% hovered and 10% selected, a progress track 12%. Section icons in
+  // the accent colour, the selected one filled with it washed 60% towards
+  // white (black in dark mode). Space cards on the surface, outlined at 8%;
+  // the add button the accent at 50% (70% hovered) over the surface.
+  mixer[kColorKoanLibraryBackground] = {kColorToolbar};
+  mixer[kColorKoanLibrarySideHighlight] = {
+      SkColorSetA(SK_ColorWHITE, Alpha(0.08f))};
+  mixer[kColorKoanLibraryForeground] = {kColorToolbarText};
+  mixer[kColorKoanLibraryForegroundSecondary] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.6f));
+  mixer[kColorKoanLibraryForegroundDim] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.5f));
+  mixer[kColorKoanLibraryPill] = ui::SetAlpha(kColorToolbarText, Alpha(0.07f));
+  mixer[kColorKoanLibraryPillHovered] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.12f));
+  mixer[kColorKoanLibraryChipActive] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.2f));
+  mixer[kColorKoanLibraryRowHovered] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.1f));
+  mixer[kColorKoanLibraryTabHovered] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.05f));
+  mixer[kColorKoanLibraryTabSelected] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.1f));
+  mixer[kColorKoanLibraryIcon] = {ui::kColorSysPrimary};
+  mixer[kColorKoanLibraryIconFill] = ui::AlphaBlend(
+      dark ? SK_ColorBLACK : SK_ColorWHITE, kColorKoanLibraryIcon, Alpha(0.6f));
+  mixer[kColorKoanLibraryProgressTrack] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.12f));
+  mixer[kColorKoanLibrarySpaceCard] = {kColorToolbar};
+  mixer[kColorKoanLibrarySpaceCardBorder] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.08f));
+  mixer[kColorKoanLibrarySpaceIconEmpty] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.08f));
+  mixer[kColorKoanLibraryAddSpace] =
+      ui::AlphaBlend(ui::kColorSysPrimary, kColorToolbar, Alpha(0.5f));
+  mixer[kColorKoanLibraryAddSpaceHovered] =
+      ui::AlphaBlend(ui::kColorSysPrimary, kColorToolbar, Alpha(0.7f));
+  mixer[kColorKoanLibraryAddSpaceForeground] = {SK_ColorWHITE};
 }
 
 }  // namespace

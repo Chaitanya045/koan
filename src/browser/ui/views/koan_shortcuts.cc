@@ -36,6 +36,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
@@ -155,6 +156,7 @@ bool KoanShortcutController::CanHandleAccelerators() const {
 bool KoanShortcutController::Run(Action action) {
   KoanCompactModeController* compact = controller_->compact_mode();
   KoanWorkspaceController* workspaces = controller_->workspaces();
+  KoanLibraryController* library = controller_->library();
   // Shortcuts for a Koan feature switched off in chrome://flags do nothing
   // (and let the key through), like the feature itself.
   switch (action) {
@@ -225,7 +227,17 @@ bool KoanShortcutController::Run(Action action) {
     case Action::kSavePage:
       return Command(IDC_SAVE_PAGE);
     case Action::kLibrary:
-      return Command(IDC_SHOW_HISTORY);
+      if (!library->IsAvailable()) {
+        return Command(IDC_SHOW_HISTORY);
+      }
+      library->Toggle();
+      return true;
+    case Action::kLibraryHistory:
+      if (!library->IsAvailable()) {
+        return Command(IDC_SHOW_HISTORY);
+      }
+      library->Toggle(LibrarySection::kHistory);
+      return true;
     case Action::kInspect:
       return Command(IDC_DEV_TOOLS_INSPECT);
     case Action::kNewWindow:
@@ -237,7 +249,11 @@ bool KoanShortcutController::Run(Action action) {
     case Action::kBookmarks:
       return Command(IDC_SHOW_BOOKMARK_SIDE_PANEL);
     case Action::kDownloads:
-      return Command(IDC_SHOW_DOWNLOADS);
+      if (!library->IsAvailable()) {
+        return Command(IDC_SHOW_DOWNLOADS);
+      }
+      library->Toggle(LibrarySection::kDownloads);
+      return true;
     case Action::kReaderMode:
       return Command(IDC_SHOW_READING_MODE);
     case Action::kOpenSettings:

@@ -1,0 +1,30 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+
+CANVAS_DIMENSIONS, 24,
+// The box, with a slot cut into its front.
+ROUND_RECT, 3.2, 8.5, 17.6, 8.2, 2.2,
+ROUND_RECT, 6.6, 9.7, 6.8, 1.65, 0.83,
+NEW_PATH,
+// A star rising out of it.
+CLIP, 0, 0, 24, 7.6,
+MOVE_TO, 6, 3.5,
+LINE_TO, 6.73, 5.39,
+LINE_TO, 8.76, 5.5,
+LINE_TO, 7.19, 6.79,
+LINE_TO, 7.7, 8.75,
+LINE_TO, 6, 7.65,
+LINE_TO, 4.3, 8.75,
+LINE_TO, 4.81, 6.79,
+LINE_TO, 3.24, 5.5,
+LINE_TO, 5.27, 5.39,
+CLOSE,
+NEW_PATH,
+// A dot and a play triangle.
+CIRCLE, 10, 2.2, 1,
+NEW_PATH,
+MOVE_TO, 11.9, 3.4,
+LINE_TO, 15.4, 5.2,
+LINE_TO, 11.9, 7,
+CLOSE

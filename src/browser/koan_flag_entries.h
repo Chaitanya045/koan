@@ -46,6 +46,10 @@
       {"koan-url-bar", "Koan URL bar",                                       \
        "Zen's URL bar: a behaviour setting, Ctrl+T opens it instead of a "   \
        "new tab, and a copy-URL button in the pill.",                        \
-       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanUrlBar)},
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanUrlBar)},         \
+      {"koan-library", "Koan Library",                                       \
+       "Zen's Library: History, Downloads and Spaces in a panel over the "   \
+       "sidebar (Alt+Shift+L; Ctrl+H, Ctrl+Shift+Y open its sections).",     \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanLibrary)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

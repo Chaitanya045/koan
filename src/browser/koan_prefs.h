@@ -138,6 +138,14 @@ inline constexpr char kCommandPaletteSuggestions[] =
 // (down to -5), by command id (Zen's zen.urlbar.suggestions-learner).
 inline constexpr char kCommandPaletteUsage[] = "koan.command_palette.usage";
 
+// The Library section shown last, opened next ("downloads", "spaces",
+// "history"; Zen's zen.library.last-tab).
+inline constexpr char kLibraryLastSection[] = "koan.library.last_section";
+// Whether the Library's History lists closed tabs instead of history (Zen's
+// zen.library.history.closed-tabs).
+inline constexpr char kLibraryHistoryClosedTabs[] =
+    "koan.library.history_closed_tabs";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
