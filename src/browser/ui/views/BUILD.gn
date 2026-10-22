@@ -71,7 +71,6 @@ source_set("impl") {
     "koan_shortcuts.cc",
     "koan_shortcuts.h",
     "koan_split_view.cc",
-    "koan_tab_menu.cc",
     "koan_tab_activation.cc",
     "koan_tab_activation.h",
     "koan_toast.cc",

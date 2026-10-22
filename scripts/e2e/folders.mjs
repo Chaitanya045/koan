@@ -3,9 +3,10 @@
 // renaming, collapsing (a collapsed folder still shows its active tab),
 // subfolders, unpacking, search, unloading, converting to a Space, changing
 // Space, deleting (a Space emptied that way survives), Clear keeping folder
-// tabs, Remove from Folder (dragging: folders_drag.mjs); then that folders come
-// back after restarting (session restore, and once more from the rebuilt
-// session file), and closing a window mid-rename.
+// tabs, Remove from Folder (dragging: folders_drag.mjs), the order of pinned
+// tabs and folders, a closed folder tab reopening in its folder; then that
+// folders come back after restarting (session restore, and once more from
+// the rebuilt session file), and closing a window mid-rename.
 //
 //   scripts/e2e/run.sh folders
 //
@@ -16,8 +17,8 @@ import { spawn } from 'node:child_process';
 import { CDP_PORT, check, evalIn, finish, pages, sleep } from './lib/koan.mjs';
 import {
   activate, browserCdp, click, clickMenuItem, cls, findAll, folderMenu, loosest,
-  moveToFolder, pageKey, pagesInCollapsedFolders, pressKey, props, rowNamed, rows,
-  shown, switcher, switcherLabels, typeInto, visibleTabs, withView,
+  moveToFolder, origin, pageKey, pagesInCollapsedFolders, pressKey, props, rowNamed,
+  rows, shown, shownTabs, switcher, switcherLabels, typeInto, visibleTabs, withView,
 } from './lib/folders.mjs';
 
 const names = rs => rs.map(r => `${r.name}${r.collapsed ? '[c]' : ''}:${r.count}`).join(' ');
@@ -312,6 +313,45 @@ await moveToFolder(ts => ts.find(t => t.x > Math.min(...ts.map(u => u.x))),
                    'kKoanTabRemoveFromFolderItem');
 r = await rows();
 check('Tab menu: Remove from Folder', r.find(x => x.name === 'Keep')?.count === 0, names(r));
+
+// A Space's pinned tabs come first, then its folders, then the other tabs,
+// like Zen's createFolder: pinning c1 (Ctrl+Shift+D) puts it above "Keep".
+// (One UI DevTools connection at a time: rows and tabs from one snapshot.)
+const order = () => withView(/^TabView$/, 0, async (s) => {
+  const ts = await shownTabs(s);
+  let row;
+  for (const n of findAll(s, /^KoanFolderRowView$/)) {
+    if ((await props(s, n)).FolderName === 'Keep' && await shown(s, n)) {
+      row = (await origin(s, n)).y;
+    }
+  }
+  return { ts: ts.map(t => t.ay), row };
+});
+await activate(c1);
+await pageKey(c1, 68, 2 | 8, 'D');
+await sleep(1500);
+let o = await order();
+check('A pinned tab goes above the folders, loose tabs below',
+      o.ts.length === 2 && o.ts[0] < o.row && o.row < o.ts[1], JSON.stringify(o));
+// Moved into a folder, it isn't pinned any more and goes under the row.
+await moveToFolder(ts => ts[0], 'kKoanTabFolderItem', 0);
+r = await rows();
+o = await order();
+check('...and moved into a folder, it\'s unpinned and under the row',
+      r.find(x => x.name === 'Keep')?.count === 1 && o.row < o.ts[0], JSON.stringify(o));
+// A folder tab closed on its own reopens in its folder (Ctrl+Shift+T).
+const c1Now = (await pages()).find(p => p.url.endsWith('?c1'));
+await browserCdp('Target.closeTarget', { targetId: c1Now?.id });
+await sleep(1000);
+r = await rows();
+const closedOk = r.find(x => x.name === 'Keep')?.count === 0;
+await pageKey((await pages()).find(p => p.url.endsWith('?c2')), 84, 2 | 8, 'T');
+await sleep(1500);
+r = await rows();
+check('A folder tab closed and reopened comes back in its folder',
+      closedOk && r.find(x => x.name === 'Keep')?.count === 1, names(r));
+await moveToFolder(ts => ts.find(t => t.x > Math.min(...ts.map(u => u.x))),
+                   'kKoanTabRemoveFromFolderItem');
 
 // Folders come back after a restart: Koan restarted on the same profile
 // (KOAN_CHROME_ARGS, see run.sh) restores the session; the second restart

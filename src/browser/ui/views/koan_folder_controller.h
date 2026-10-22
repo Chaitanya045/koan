@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_FOLDER_CONTROLLER_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_FOLDER_CONTROLLER_H_
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -38,6 +39,7 @@ class View;
 namespace koan {
 
 class KoanFolderSearch;
+struct TabMenuContext;
 
 // The folder menus' items, by name for UI DevTools (scripts/e2e/folders.mjs).
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanFolderRenameItem);
@@ -66,6 +68,9 @@ struct KoanFolder {
   ~KoanFolder();
 
   int id = 0;
+  // Names the folder in the session data, where its tabs refer to it.
+  // Unique, so a tab moved to another window doesn't join a folder there.
+  std::string token;
   std::u16string name;
   bool collapsed = false;
   // The folder this one is a subfolder of; 0 at the top level.
@@ -91,10 +96,6 @@ class KoanFolderController : public TabStripModelObserver,
  public:
   // zen.folders.max-subfolders: folders nest at most this deep.
   static constexpr int kMaxDepth = 5;
-  // The tab menu's "Move to Folder" (koan_tab_menu_hooks.h), next to
-  // kSplitOutTabCommandId.
-  static constexpr int kMoveToFolderCommandId = 3002;
-
   struct Entry {
     int id;
     int depth;
@@ -173,8 +174,10 @@ class KoanFolderController : public TabStripModelObserver,
                       ui::mojom::MenuSourceType source_type);
   // Zen's "Create New" menu of the sidebar's "+" button.
   void ShowCreateMenu(views::View* anchor);
-  // "Move to Folder" in the tab context menu.
-  void AddTabMenuItems(ui::SimpleMenuModel& menu, int tab_index);
+  // "Move to Folder" in the tab context menu (koan_folders.h), and its
+  // commands.
+  void AddTabMenuItems(TabMenuContext& context);
+  void ExecuteTabMenuCommand(int command_id);
   // Zen's folder search: the tabs of a collapsed folder, filtered as you
   // type. Opens on hovering the folder.
   void ShowSearch(int id, views::View* anchor);
@@ -186,9 +189,11 @@ class KoanFolderController : public TabStripModelObserver,
   // Adds rows for new folders, removes stale ones and relayouts, soon.
   void ScheduleSync();
 
-  // Session data: folders by tab index, as JSON.
+  // The window's folders as session data (JSON), and bringing them back
+  // before the window's tabs are restored: each tab joins its folder by its
+  // own session data as it comes back.
   std::string Serialize() const;
-  void Restore(int first_tab_index, const std::string& data);
+  void Restore(const std::string& data);
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -201,6 +206,8 @@ class KoanFolderController : public TabStripModelObserver,
                               tabs::TabInterface* tab,
                               int index) override;
   void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
   void OnTabGroupChanged(const TabGroupChange& change) override;
   void OnTabGroupFocusChanged(
       std::optional<tab_groups::TabGroupId> new_focused_group_id,
@@ -217,10 +224,14 @@ class KoanFolderController : public TabStripModelObserver,
  private:
   KoanFolder* GetMutableFolder(int id);
   std::vector<int> GetSubfolders(int id) const;
-  // Adds `tab_list` to `id`, taking them out of other folders, the Essentials
-  // and other Spaces.
+  // The tabs the open tab menu is for.
+  std::vector<tabs::TabInterface*> GetMenuTabs() const;
+  // Adds `tab_list` to `id`, taking them out of other folders, the Essentials,
+  // the pinned tabs and other Spaces.
   void AddTabs(int id, const std::vector<tabs::TabInterface*>& tab_list);
   void RemoveFolder(int id);
+  // Puts `id` and its subfolders in `space`.
+  void SetSpace(int id, const std::optional<tab_groups::TabGroupId>& space);
   // Before `leaving` (a folder's tabs) are closed or moved out of `space`:
   // if they are all its tabs, adds a fresh tab to it first, so the Space (a
   // tab group, which goes away with its last tab) survives, like Zen's and
@@ -232,11 +243,17 @@ class KoanFolderController : public TabStripModelObserver,
   // Applies Zen's drag rule after a user move: a tab dropped before a
   // folder's tab joins that folder; a tab dropped among loose tabs leaves.
   void OnTabMoved(tabs::TabInterface* tab, int to_index);
+  // Added tabs whose session data names a folder of this window join it (a
+  // restored tab, or a reopened one whose folder is still there).
+  void OnTabsAdded(const std::vector<tabs::TabInterface*>& added);
+  // Once the restored tabs are in: the restored folders' Spaces.
+  void FinishRestore();
   // Drops closed and pinned tabs, tabs that left the folder's Space and
   // folders whose Space is gone.
   void Prune();
-  // Moves each Space's folder tabs, in folder order, to the top of the
-  // Space in the tab strip model. Waits while a tab is being dragged.
+  // Moves each Space's folder tabs, in folder order, right after the Space's
+  // pinned tabs in the tab strip model, like Zen. Waits while a tab is being
+  // dragged.
   void Normalize();
   void SyncRows();
   void Changed();
@@ -250,7 +267,12 @@ class KoanFolderController : public TabStripModelObserver,
   base::TimeTicks animate_until_;
   bool normalizing_ = false;
   bool sync_pending_ = false;
-  bool restored_ = false;
+  // While a session restores the window's tabs: the restored folders'
+  // Spaces, by their place among the window's Spaces (-1: none), counted
+  // after the `spaces_before_restore_` it had already.
+  bool restoring_ = false;
+  std::map<int, int> restored_spaces_;
+  int spaces_before_restore_ = 0;
   bool normalize_pending_ = false;
   std::string saved_;
   base::OneShotTimer animation_end_timer_;
@@ -264,7 +286,6 @@ class KoanFolderController : public TabStripModelObserver,
   std::unique_ptr<ui::SimpleMenuModel> menu_model_;
   std::unique_ptr<ui::SimpleMenuModel> submenu_model_;
   std::unique_ptr<views::MenuRunner> menu_runner_;
-  std::unique_ptr<ui::SimpleMenuModel> tab_submenu_model_;
   std::unique_ptr<KoanFolderSearch> search_;
   base::CallbackListSubscription mode_subscription_;
   // Counts popups, so a closed one's cleanup leaves a newer one alone.

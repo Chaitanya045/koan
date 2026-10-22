@@ -235,8 +235,9 @@ previous session by default; change it in Settings > On startup).
 
 ## Folders
 
-As in Zen, a Space can hold folders at the top of its tab list, above its
-other tabs. A folder has a row with a folder icon and its name; its tabs
+As in Zen, a Space can hold folders at the top of its tab list, after its
+pinned tabs and above its other tabs. A tab moved into a folder stops being
+pinned. A folder has a row with a folder icon and its name; its tabs
 sit under it, indented, and subfolders nest inside it (five levels at
 most).
 
@@ -258,13 +259,15 @@ most).
   name), Unload All Tabs (frees their memory and collapses the folder),
   New Subfolder, Change Space, Convert folder to Space, Unpack Folder (its
   tabs and subfolders move up a level), Delete Folder (closes its tabs;
-  Ctrl+Shift+T / ⌘⇧T reopens them as loose tabs). A Space that a folder
-  empties (Delete, Change Space, Convert to Space) stays, with a new tab.
+  Ctrl+Shift+T / ⌘⇧T reopens them as loose tabs; a folder tab closed on its
+  own reopens in its folder). A Space that a folder empties (Delete,
+  Change Space, Convert to Space) stays, with a new tab.
 
 ![Folders](screenshots/folders-open.png)
 
 Without Spaces (the **∞** view), folders sit above the ungrouped tabs.
-Folders are saved with the session and come back after a restart. They
+Folders are saved with the session and come back after a restart, and with
+a reopened window. They
 show with vertical tabs only; with horizontal tabs they're kept for when
 you switch back.
 

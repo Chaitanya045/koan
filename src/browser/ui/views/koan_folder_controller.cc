@@ -17,11 +17,9 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
-#include "chrome/browser/sessions/session_service.h"
-#include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -42,7 +40,11 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_views.h"
 #include "koan/browser/ui/views/koan_folders.h"
+#include "koan/browser/ui/views/koan_pinned.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/gfx/geometry/rect.h"
@@ -77,9 +79,6 @@ DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanTabRemoveFromFolderItem);
 
 namespace {
 
-// Window extra data key of the session file.
-constexpr char kSessionKey[] = "koan.folders";
-
 // Gap between rows in the vertical tab strip (kTabVerticalPadding).
 constexpr int kRowSpacing = 2;
 
@@ -87,8 +86,7 @@ constexpr int kRowSpacing = 2;
 // layout animation takes 200 ms).
 constexpr base::TimeDelta kCollapseAnimation = base::Milliseconds(250);
 
-// Menu commands of Koan's own (sub)menus. The tab menu's "Move to Folder"
-// is KoanFolderController::kMoveToFolderCommandId.
+// Menu commands of the folder menu and the "+" menu.
 enum Command : int {
   kFolderRename = 19400,
   kFolderUnloadAll,
@@ -101,14 +99,20 @@ enum Command : int {
   kCreateFolder,
   kCreateSplit,
   kCreateTab,
-  kTabNewFolder,
-  kTabRemoveFromFolder,
   // + index in menu_spaces_.
   kSpaceBase = 19500,
-  // + index in menu_targets_.
-  kTargetBase = 19600,
-  kCommandEnd = 19700,
+  kCommandEnd = 19600,
 };
+
+// The tab menu's commands, in folders' range (koan_tab_menu.h): "Move to
+// Folder" and its items, the folders from kTabFolderFirst on (+ index in
+// menu_targets_).
+constexpr int kTabMoveToFolder =
+    FirstTabMenuCommand(TabMenuFeatureId::kFolders);
+constexpr int kTabNewFolder = kTabMoveToFolder + 1;
+constexpr int kTabRemoveFromFolder = kTabMoveToFolder + 2;
+constexpr int kTabFolderFirst = kTabMoveToFolder + 10;
+constexpr int kTabCommandsEnd = kTabMoveToFolder + kTabMenuCommandsPerFeature;
 
 void AddItem(ui::SimpleMenuModel& model,
              int command_id,
@@ -145,6 +149,19 @@ bool ShowsActiveTab(const views::View& child, const TabStripModel* model) {
   const tabs::TabInterface* active = model->GetActiveTab();
   return tab == active || (active && tab->GetSplit().has_value() &&
                            tab->GetSplit() == active->GetSplit());
+}
+
+// The window's Spaces (tab groups) in tab strip order.
+std::vector<tab_groups::TabGroupId> SpacesInOrder(const TabStripModel* model) {
+  std::vector<tab_groups::TabGroupId> spaces;
+  for (int i = 0; i < model->count(); ++i) {
+    const std::optional<tab_groups::TabGroupId> group =
+        model->GetTabGroupForTab(i);
+    if (group && !std::ranges::contains(spaces, *group)) {
+      spaces.push_back(*group);
+    }
+  }
+  return spaces;
 }
 
 std::vector<int> SortedIndices(
@@ -377,6 +394,7 @@ int KoanFolderController::CreateFolder(
   }
   KoanFolder folder;
   folder.id = next_id_++;
+  folder.token = base::Uuid::GenerateRandomV4().AsLowercaseString();
   folder.name = std::move(name);
   folder.parent = parent;
   folder.space = parent ? GetFolder(parent)->space : space;
@@ -420,20 +438,21 @@ void KoanFolderController::AddTabs(
       all.push_back(tab);
     }
   }
-  // Like Zen, a tab moved into a folder stops being an Essential. Joining a
-  // Space's group below unpins it (keeping splits and the Space's focus);
-  // ungrouped folders unpin it here.
-  if (!folder->space) {
-    for (tabs::TabInterface* tab : all) {
-      if (tab->IsPinned()) {
-        model->SetTabPinned(model->GetIndexOfTab(tab), false);
-      }
+  // Like Zen, a tab moved into a folder stops being an Essential or one of
+  // the Space's pinned tabs (folders come after those)...
+  KoanPinnedTabController* pinned =
+      KoanBrowserViewController::From(browser_view_)->pinned_tabs();
+  for (tabs::TabInterface* tab : all) {
+    if (tab->IsPinned()) {
+      pinned->RemoveFromEssentials(tab);
+    } else if (IsPinnedForUser(tab)) {
+      pinned->UnpinFromSpace(tab);
     }
   }
-  // And joins the folder's Space.
+  // ...and joins the folder's Space.
   std::vector<tabs::TabInterface*> regroup;
   for (tabs::TabInterface* tab : all) {
-    if (tab->GetGroup() != folder->space || tab->IsPinned()) {
+    if (tab->GetGroup() != folder->space) {
       regroup.push_back(tab);
     }
   }
@@ -462,6 +481,15 @@ void KoanFolderController::RemoveFolder(int id) {
   }
   std::erase_if(folders_,
                 [id](const KoanFolder& folder) { return folder.id == id; });
+}
+
+void KoanFolderController::SetSpace(
+    int id,
+    const std::optional<tab_groups::TabGroupId>& space) {
+  GetMutableFolder(id)->space = space;
+  for (int child : GetSubfolders(id)) {
+    SetSpace(child, space);
+  }
 }
 
 void KoanFolderController::Rename(int id, std::u16string name) {
@@ -603,15 +631,8 @@ void KoanFolderController::ChangeSpace(int id,
   }
   const std::vector<tabs::TabInterface*> tab_list = GetTabs(id, true);
   KeepSpace(folder->space, tab_list, /*closing=*/false);
-  folder = GetMutableFolder(id);
-  folder->parent = 0;
-  const auto set_space = [&](const auto& self, int folder_id) -> void {
-    GetMutableFolder(folder_id)->space = space;
-    for (int child : GetSubfolders(folder_id)) {
-      self(self, child);
-    }
-  };
-  set_space(set_space, id);
+  GetMutableFolder(id)->parent = 0;
+  SetSpace(id, space);
   if (!tab_list.empty()) {
     base::AutoReset<bool> busy(&normalizing_, true);
     model->AddToExistingGroup(SortedIndices(model, tab_list), space);
@@ -660,14 +681,8 @@ void KoanFolderController::ConvertToSpace(int id) {
     return workspaces->CreateWorkspaceFromTabs(SortedIndices(model, tab_list),
                                                name);
   }();
-  const auto set_space = [&](const auto& self, int folder_id) -> void {
-    GetMutableFolder(folder_id)->space = space;
-    for (int child : GetSubfolders(folder_id)) {
-      self(self, child);
-    }
-  };
   for (int child : subfolders) {
-    set_space(set_space, child);
+    SetSpace(child, space);
   }
   Changed();
 }
@@ -697,16 +712,11 @@ void KoanFolderController::UnloadAllTabs(int id) {
       ActivateTab(next);
     }
   }
-  for (tabs::TabInterface* tab : tab_list) {
-    if (tab->IsActivated()) {
-      continue;
-    }
-    if (auto* unit =
-            resource_coordinator::TabLifecycleUnitExternal::FromWebContents(
-                tab->GetContents())) {
-      unit->DiscardTab(mojom::LifecycleUnitDiscardReason::EXTERNAL);
-    }
-  }
+  // Koan's unload, as for pinned tabs (it switches away itself if no other
+  // tab shows).
+  KoanBrowserViewController::From(browser_view_)
+      ->pinned_tabs()
+      ->UnloadTabs(tab_list);
   SetCollapsed(id, true);
 }
 
@@ -818,12 +828,11 @@ void KoanFolderController::ShowCreateMenu(views::View* anchor) {
                           ui::mojom::MenuSourceType::kNone);
 }
 
-void KoanFolderController::AddTabMenuItems(ui::SimpleMenuModel& menu,
-                                           int tab_index) {
+void KoanFolderController::AddTabMenuItems(TabMenuContext& context) {
   TabStripModel* model = tab_strip_model();
-  tabs::TabInterface* tab = model->GetTabAtIndex(tab_index);
+  tabs::TabInterface* tab = model->GetTabAtIndex(context.index);
   std::vector<tabs::TabInterface*> tab_list;
-  if (model->IsTabSelected(tab_index)) {
+  if (model->IsTabSelected(context.index)) {
     for (size_t index :
          model->selection_model().GetListSelectionModel().selected_indices()) {
       tab_list.push_back(model->GetTabAtIndex(static_cast<int>(index)));
@@ -838,7 +847,7 @@ void KoanFolderController::AddTabMenuItems(ui::SimpleMenuModel& menu,
 
   // Zen lists the folders of the tab's Space that don't hold one of the
   // tabs already, then "New Folder".
-  tab_submenu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
+  ui::SimpleMenuModel* submenu = context.AddSubmenu();
   menu_targets_.clear();
   const std::optional<tab_groups::TabGroupId> space =
       tab->IsPinned() ? GetActiveSpace() : tab->GetGroup();
@@ -847,28 +856,32 @@ void KoanFolderController::AddTabMenuItems(ui::SimpleMenuModel& menu,
     in_folder |= GetFolderOf(selected) != 0;
   }
   for (const Entry& entry : GetFolders(space)) {
+    const int command_id =
+        kTabFolderFirst + static_cast<int>(menu_targets_.size());
+    if (command_id == kTabCommandsEnd) {
+      break;
+    }
     if (std::ranges::any_of(tab_list, [&](tabs::TabInterface* selected) {
           return GetFolderOf(selected) == entry.id;
         })) {
       continue;
     }
-    AddItem(*tab_submenu_model_,
-            kTargetBase + static_cast<int>(menu_targets_.size()),
+    AddItem(*submenu, command_id,
             std::u16string(2 * entry.depth, u' ') + GetFolder(entry.id)->name,
             kKoanTabFolderItem);
     menu_targets_.push_back(entry.id);
   }
   if (!menu_targets_.empty()) {
-    tab_submenu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+    submenu->AddSeparator(ui::NORMAL_SEPARATOR);
   }
-  AddItem(*tab_submenu_model_, kTabNewFolder, u"New Folder",
-          kKoanTabNewFolderItem);
+  AddItem(*submenu, kTabNewFolder, u"New Folder", kKoanTabNewFolderItem);
   if (in_folder) {
-    AddItem(*tab_submenu_model_, kTabRemoveFromFolder, u"Remove from Folder",
+    AddItem(*submenu, kTabRemoveFromFolder, u"Remove from Folder",
             kKoanTabRemoveFromFolderItem);
   }
 
   // Right before Chromium's "Add tab to group", like Zen.
+  ui::SimpleMenuModel& menu = *context.menu;
   std::optional<size_t> index;
   for (const int command : {TabStripModel::CommandAddToExistingGroup,
                             TabStripModel::CommandAddToNewGroup,
@@ -879,9 +892,39 @@ void KoanFolderController::AddTabMenuItems(ui::SimpleMenuModel& menu,
     }
   }
   const size_t position = index.value_or(menu.GetItemCount());
-  menu.InsertSubMenuAt(position, KoanFolderController::kMoveToFolderCommandId,
-                       u"Move to Folder", tab_submenu_model_.get());
+  menu.InsertSubMenuAt(position, kTabMoveToFolder, u"Move to Folder", submenu);
   menu.SetElementIdentifierAt(position, kKoanMoveToFolderItem);
+}
+
+void KoanFolderController::ExecuteTabMenuCommand(int command_id) {
+  const std::vector<tabs::TabInterface*> tab_list = GetMenuTabs();
+  if (tab_list.empty()) {
+    return;
+  }
+  if (command_id == kTabNewFolder) {
+    // Zen creates the folder where the tab is: inside the tab's folder.
+    CreateFolder(tab_list, GetFolderOf(tab_list.front()),
+                 tab_list.front()->IsPinned() ? GetActiveSpace()
+                                              : tab_list.front()->GetGroup(),
+                 u"New Folder", /*rename=*/true);
+  } else if (command_id == kTabRemoveFromFolder) {
+    RemoveTabsFromFolder(tab_list);
+  } else if (const size_t i = command_id - kTabFolderFirst;
+             command_id >= kTabFolderFirst && i < menu_targets_.size() &&
+             GetFolder(menu_targets_[i])) {
+    MoveTabsToFolder(tab_list, menu_targets_[i]);
+  }
+}
+
+std::vector<tabs::TabInterface*> KoanFolderController::GetMenuTabs() const {
+  std::vector<tabs::TabInterface*> tab_list;
+  for (const tabs::TabHandle& handle : menu_tabs_) {
+    if (tabs::TabInterface* tab = handle.Get();
+        tab && tab_strip_model()->GetIndexOfTab(tab) != TabStripModel::kNoTab) {
+      tab_list.push_back(tab);
+    }
+  }
+  return tab_list;
 }
 
 void KoanFolderController::ShowSearch(int id, views::View* anchor) {
@@ -916,7 +959,7 @@ bool KoanFolderController::IsCommandIdEnabled(int command_id) const {
   if (command_id == kFolderNewSubfolder) {
     return GetDepth(menu_folder_) + 1 < kMaxDepth;
   }
-  if (command_id >= kSpaceBase && command_id < kTargetBase) {
+  if (command_id >= kSpaceBase && command_id < kCommandEnd) {
     const KoanFolder* folder = GetFolder(menu_folder_);
     const size_t i = command_id - kSpaceBase;
     return folder && i < menu_spaces_.size() &&
@@ -926,13 +969,6 @@ bool KoanFolderController::IsCommandIdEnabled(int command_id) const {
 }
 
 void KoanFolderController::ExecuteCommand(int command_id, int event_flags) {
-  std::vector<tabs::TabInterface*> tab_list;
-  for (const tabs::TabHandle& handle : menu_tabs_) {
-    if (tabs::TabInterface* tab = handle.Get();
-        tab && tab_strip_model()->GetIndexOfTab(tab) != TabStripModel::kNoTab) {
-      tab_list.push_back(tab);
-    }
-  }
   BrowserWindowInterface* browser = browser_view_->browser();
   switch (command_id) {
     case kFolderRename:
@@ -964,30 +1000,10 @@ void KoanFolderController::ExecuteCommand(int command_id, int event_flags) {
     case kCreateTab:
       chrome::ExecuteCommand(browser, IDC_NEW_TAB);
       return;
-    case kTabNewFolder: {
-      if (tab_list.empty()) {
-        return;
-      }
-      // Zen creates the folder where the tab is: inside the tab's folder.
-      CreateFolder(tab_list, GetFolderOf(tab_list.front()),
-                   tab_list.front()->IsPinned() ? GetActiveSpace()
-                                                : tab_list.front()->GetGroup(),
-                   u"New Folder", /*rename=*/true);
-      return;
-    }
-    case kTabRemoveFromFolder:
-      return RemoveTabsFromFolder(tab_list);
   }
-  if (command_id >= kSpaceBase && command_id < kTargetBase) {
-    const size_t i = command_id - kSpaceBase;
-    if (i < menu_spaces_.size()) {
-      ChangeSpace(menu_folder_, menu_spaces_[i]);
-    }
-  } else if (command_id >= kTargetBase && command_id < kCommandEnd) {
-    const size_t i = command_id - kTargetBase;
-    if (i < menu_targets_.size() && GetFolder(menu_targets_[i])) {
-      MoveTabsToFolder(tab_list, menu_targets_[i]);
-    }
+  if (const size_t i = command_id - kSpaceBase;
+      command_id >= kSpaceBase && i < menu_spaces_.size()) {
+    ChangeSpace(menu_folder_, menu_spaces_[i]);
   }
 }
 
@@ -1005,6 +1021,13 @@ void KoanFolderController::OnTabStripModelChanged(
     const TabStripSelectionChange& selection) {
   if (folders_.empty()) {
     return;
+  }
+  if (change.type() == TabStripModelChange::kInserted) {
+    std::vector<tabs::TabInterface*> added;
+    for (const auto& inserted : change.GetInsert()->contents) {
+      added.push_back(inserted.tab);
+    }
+    OnTabsAdded(added);
   }
   if (change.type() == TabStripModelChange::kMoved && !normalizing_ &&
       IsEnabled()) {
@@ -1039,6 +1062,15 @@ void KoanFolderController::OnTabPinnedStateChanged(tabs::TabInterface* tab,
   }
 }
 
+void KoanFolderController::OnTabChangedAt(tabs::TabInterface* tab,
+                                          TabChangeType change_type) {
+  // Pinned (Koan's pinned tabs refresh the tab when they pin it in place): it
+  // leaves its folder.
+  if (GetFolderOf(tab) && IsPinnedForUser(tab)) {
+    Changed();
+  }
+}
+
 void KoanFolderController::OnTabGroupChanged(const TabGroupChange& change) {
   if (!folders_.empty()) {
     // A Space closed or changed: its folders go or follow.
@@ -1058,7 +1090,7 @@ void KoanFolderController::OnTabMoved(tabs::TabInterface* tab, int to_index) {
   TabStripModel* model = tab_strip_model();
   // Only drags: other moves (unpinning, a Space moved as a whole) aren't
   // the user placing a tab.
-  if (!tab || tab->IsPinned() || browser_view_->IsTabStripEditable()) {
+  if (!tab || IsPinnedForUser(tab) || browser_view_->IsTabStripEditable()) {
     return;
   }
   const std::optional<tab_groups::TabGroupId> space = tab->GetGroup();
@@ -1070,7 +1102,7 @@ void KoanFolderController::OnTabMoved(tabs::TabInterface* tab, int to_index) {
     // (The other tab of a split moves along; it isn't a neighbour.)
     const bool same_split =
         tab->GetSplit().has_value() && other->GetSplit() == tab->GetSplit();
-    return !other->IsPinned() && other->GetGroup() == space && !same_split
+    return !IsPinnedForUser(other) && other->GetGroup() == space && !same_split
                ? other
                : nullptr;
   };
@@ -1108,13 +1140,58 @@ void KoanFolderController::OnTabMoved(tabs::TabInterface* tab, int to_index) {
   }
 }
 
+void KoanFolderController::OnTabsAdded(
+    const std::vector<tabs::TabInterface*>& added) {
+  for (tabs::TabInterface* tab : added) {
+    const std::string token =
+        GetTabSessionData(tab->GetContents(), kFolderSessionKey);
+    const auto folder = std::ranges::find(folders_, token, &KoanFolder::token);
+    if (!token.empty() && folder != folders_.end() &&
+        GetFolderOf(tab) != folder->id) {
+      folder->tabs.push_back(tab->GetHandle());
+    }
+  }
+}
+
+void KoanFolderController::FinishRestore() {
+  restoring_ = false;
+  const std::vector<tab_groups::TabGroupId> spaces =
+      SpacesInOrder(tab_strip_model());
+  for (const auto& [id, place] : restored_spaces_) {
+    const KoanFolder* folder = GetFolder(id);
+    if (!folder) {
+      continue;
+    }
+    // A subfolder is in its parent's Space.
+    if (const KoanFolder* parent = GetFolder(folder->parent)) {
+      if (!restored_spaces_.contains(parent->id)) {
+        SetSpace(id, parent->space);
+      }
+      continue;
+    }
+    // The Space its tabs came back in; for folders without tabs, the one in
+    // the same place among the window's Spaces.
+    const std::vector<tabs::TabInterface*> tab_list = GetTabs(id, true);
+    std::optional<tab_groups::TabGroupId> space;
+    if (!tab_list.empty()) {
+      space = tab_list.front()->GetGroup();
+    } else if (const size_t i = spaces_before_restore_ + place;
+               place >= 0 && i < spaces.size()) {
+      space = spaces[i];
+    }
+    SetSpace(id, space);
+  }
+  restored_spaces_.clear();
+  Changed();
+}
+
 void KoanFolderController::Prune() {
   TabStripModel* model = tab_strip_model();
   for (KoanFolder& folder : folders_) {
     std::erase_if(folder.tabs, [&](const tabs::TabHandle& handle) {
       tabs::TabInterface* tab = handle.Get();
       return !tab || model->GetIndexOfTab(tab) == TabStripModel::kNoTab ||
-             tab->IsPinned() || tab->GetGroup() != folder.space;
+             IsPinnedForUser(tab) || tab->GetGroup() != folder.space;
     });
   }
   std::vector<int> gone;
@@ -1131,7 +1208,6 @@ void KoanFolderController::Prune() {
 }
 
 void KoanFolderController::Normalize() {
-  normalize_pending_ = false;
   if (!browser_view_->IsTabStripEditable()) {
     // Not while a tab is being dragged; try again after the drop.
     drag_retry_timer_.Start(FROM_HERE, base::Milliseconds(200),
@@ -1173,6 +1249,12 @@ void KoanFolderController::Normalize() {
             ? static_cast<int>(
                   model->group_model()->GetTabGroup(*space)->ListTabs().start())
             : model->IndexOfFirstNonPinnedTab();
+    // After the Space's pinned tabs, like Zen (createFolder).
+    while (model->ContainsIndex(position) &&
+           model->GetTabGroupForTab(position) == space &&
+           IsPinnedForUser(model->GetTabAtIndex(position))) {
+      ++position;
+    }
     // Each unit moves back to the next free slot, so every move lands on a
     // unit boundary and never splits a group or a split.
     for (const std::vector<tabs::TabInterface*>& unit : units) {
@@ -1200,6 +1282,11 @@ void KoanFolderController::Changed() {
       FROM_HERE, base::BindOnce(
                      [](base::WeakPtr<KoanFolderController> self) {
                        if (!self) {
+                         return;
+                       }
+                       self->normalize_pending_ = false;
+                       // Once the restored tabs are in (FinishRestore()).
+                       if (self->restoring_) {
                          return;
                        }
                        self->Prune();
@@ -1301,110 +1388,88 @@ void KoanFolderController::StartAnimation() {
 }
 
 void KoanFolderController::Save() {
-  SessionService* service = SessionServiceFactory::GetForProfileIfExisting(
-      browser_view_->GetProfile());
-  if (!service) {
-    return;
+  BrowserWindowInterface* browser = browser_view_->browser();
+  if (std::string data = Serialize(); data != saved_) {
+    SetWindowSessionData(browser, kFolderSessionKey, data);
+    saved_ = std::move(data);
   }
-  std::string data = Serialize();
-  if (data == saved_) {
-    return;
+  // Each tab names its folder, if it's in one.
+  for (tabs::TabInterface* tab : *tab_strip_model()) {
+    const KoanFolder* folder = GetFolder(GetFolderOf(tab));
+    const std::string token = folder ? folder->token : std::string();
+    if (GetTabSessionData(tab->GetContents(), kFolderSessionKey) != token) {
+      SetTabSessionData(tab->GetContents(), kFolderSessionKey, token);
+    }
   }
-  service->AddWindowExtraData(browser_view_->browser()->GetSessionID(),
-                              kSessionKey, data);
-  saved_ = std::move(data);
 }
 
 std::string KoanFolderController::Serialize() const {
   if (folders_.empty()) {
     return std::string();
   }
-  TabStripModel* model = tab_strip_model();
-  std::map<int, int> position;
-  for (size_t i = 0; i < folders_.size(); ++i) {
-    position[folders_[i].id] = static_cast<int>(i);
-  }
+  // A Space by its place among the window's Spaces: group ids change on
+  // restore. Only folders without tabs need it; the others go where their
+  // tabs come back.
+  const std::vector<tab_groups::TabGroupId> spaces =
+      SpacesInOrder(tab_strip_model());
   base::ListValue list;
   for (const KoanFolder& folder : folders_) {
     base::DictValue dict;
+    dict.Set("token", folder.token);
     dict.Set("name", folder.name);
     dict.Set("collapsed", folder.collapsed);
-    dict.Set("parent", folder.parent ? position[folder.parent] : -1);
-    // A Space by the index of its first tab: group ids change on restore.
-    dict.Set("space",
-             folder.space && model->group_model() &&
-                     model->group_model()->ContainsTabGroup(*folder.space)
-                 ? static_cast<int>(model->group_model()
-                                        ->GetTabGroup(*folder.space)
-                                        ->ListTabs()
-                                        .start())
-                 : -1);
-    base::ListValue tab_list;
-    for (tabs::TabInterface* tab : GetTabs(folder.id, false)) {
-      tab_list.Append(model->GetIndexOfTab(tab));
+    if (const KoanFolder* parent = GetFolder(folder.parent)) {
+      dict.Set("parent", parent->token);
     }
-    dict.Set("tabs", std::move(tab_list));
+    const auto it =
+        folder.space ? std::ranges::find(spaces, *folder.space) : spaces.end();
+    dict.Set("space",
+             it == spaces.end() ? -1 : static_cast<int>(it - spaces.begin()));
     list.Append(std::move(dict));
   }
   return base::WriteJson(list).value_or(std::string());
 }
 
-void KoanFolderController::Restore(int first_tab_index,
-                                   const std::string& data) {
-  // Once per window.
-  if (restored_) {
-    return;
-  }
-  restored_ = true;
+void KoanFolderController::Restore(const std::string& data) {
   std::optional<base::ListValue> list =
       base::JSONReader::ReadList(data, base::JSON_PARSE_RFC);
   if (!list) {
     return;
   }
-  TabStripModel* model = tab_strip_model();
-  const auto tab_at = [&](std::optional<int> index) -> tabs::TabInterface* {
-    if (!index || *index < 0 ||
-        !model->ContainsIndex(first_tab_index + *index)) {
-      return nullptr;
-    }
-    return model->GetTabAtIndex(first_tab_index + *index);
-  };
-  // Folder ids by entry; a parent is always an earlier entry (Serialize
-  // writes folders in the order they were made), anything else is ignored.
-  std::vector<int> ids;
+  if (!restoring_) {
+    restoring_ = true;
+    spaces_before_restore_ =
+        static_cast<int>(SpacesInOrder(tab_strip_model()).size());
+    // Session restore adds the window's tabs right after this, in the same
+    // task.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanFolderController::FinishRestore,
+                                  weak_factory_.GetWeakPtr()));
+  }
   for (const base::Value& value : *list) {
-    ids.push_back(0);
     const base::DictValue* dict = value.GetIfDict();
-    if (!dict) {
+    const std::string* token = dict ? dict->FindString("token") : nullptr;
+    // Each folder once, even restored into a window that has it already.
+    if (!token || token->empty() ||
+        std::ranges::contains(folders_, *token, &KoanFolder::token)) {
       continue;
     }
     KoanFolder folder;
     folder.id = next_id_++;
-    ids.back() = folder.id;
+    folder.token = *token;
     if (const std::string* name = dict->FindString("name")) {
       folder.name = base::UTF8ToUTF16(*name);
     }
     folder.collapsed = dict->FindBool("collapsed").value_or(false);
-    if (tabs::TabInterface* tab = tab_at(dict->FindInt("space"))) {
-      folder.space = tab->GetGroup();
+    // A parent is an earlier entry (Serialize() writes folders in the order
+    // they were made); anything else is ignored.
+    if (const std::string* parent = dict->FindString("parent")) {
+      const auto it = std::ranges::find(folders_, *parent, &KoanFolder::token);
+      folder.parent = it == folders_.end() ? 0 : it->id;
     }
-    if (const base::ListValue* tab_list = dict->FindList("tabs")) {
-      for (const base::Value& index : *tab_list) {
-        if (tabs::TabInterface* tab = tab_at(index.GetIfInt())) {
-          folder.tabs.push_back(tab->GetHandle());
-        }
-      }
-    }
-    const int parent = dict->FindInt("parent").value_or(-1);
-    if (parent >= 0 && parent < static_cast<int>(ids.size()) - 1 &&
-        ids[parent]) {
-      folder.parent = ids[parent];
-      // A subfolder is in its parent's Space.
-      folder.space = GetFolder(folder.parent)->space;
-    }
+    restored_spaces_[folder.id] = dict->FindInt("space").value_or(-1);
     folders_.push_back(std::move(folder));
   }
-  Changed();
 }
 
 // FolderRows ------------------------------------------------------------------
@@ -1454,6 +1519,10 @@ class FolderRows::Impl {
       return {};
     }
     const tabs::TabInterface* tab = GetFirstTab(child);
+    if (IsPinnedForUser(tab)) {
+      // The Space's pinned tabs come before its folders.
+      return {};
+    }
     int folder = controller_->GetFolderOf(tab);
     if (folder && controller_->GetFolder(folder)->space != space_) {
       folder = 0;
@@ -1567,26 +1636,53 @@ bool FolderRows::IsVisible(const Slot& slot, bool upstream_visible) const {
 
 // Hooks -----------------------------------------------------------------------
 
-std::vector<std::pair<std::string, std::string>> GetFolderSessionData(
-    BrowserWindowInterface* browser) {
-  KoanFolderController* controller = KoanFolderController::FromBrowser(browser);
-  if (!controller) {
-    return {};
-  }
-  return {{kSessionKey, controller->Serialize()}};
+namespace {
+
+// The folders of the window the tab at `index` is in, if they apply.
+KoanFolderController* ControllerForTab(const TabStripModel* tab_strip,
+                                       int index) {
+  return tab_strip->ContainsIndex(index)
+             ? KoanFolderController::FromBrowser(
+                   tab_strip->GetTabAtIndex(index)->GetBrowserWindowInterface())
+             : nullptr;
 }
 
-void RestoreFolderSessionData(
-    BrowserWindowInterface* browser,
-    int first_tab_index,
-    const std::map<std::string, std::string>& extra_data) {
-  const auto it = extra_data.find(kSessionKey);
-  if (it == extra_data.end() || it->second.empty()) {
-    return;
-  }
+}  // namespace
+
+void AddFolderTabMenuItems(TabMenuContext& context) {
   if (KoanFolderController* controller =
-          KoanFolderController::FromBrowser(browser)) {
-    controller->Restore(first_tab_index, it->second);
+          ControllerForTab(&*context.tab_strip, context.index)) {
+    controller->AddTabMenuItems(context);
+  }
+}
+
+bool IsFolderTabMenuCommandEnabled(const TabStripModel* tab_strip,
+                                   int index,
+                                   int command_id) {
+  return ControllerForTab(tab_strip, index) != nullptr;
+}
+
+bool ExecuteFolderTabMenuCommand(TabStripModel* tab_strip,
+                                 int index,
+                                 int command_id) {
+  if (command_id < kTabMoveToFolder || command_id >= kTabCommandsEnd) {
+    return false;
+  }
+  if (KoanFolderController* controller = ControllerForTab(tab_strip, index)) {
+    controller->ExecuteTabMenuCommand(command_id);
+  }
+  return true;
+}
+
+void OnRestoringFolders(BrowserWindowInterface* browser,
+                        const std::string& data,
+                        bool from_session_restore) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  // Also with horizontal tabs: folders are kept then, just not shown.
+  if (controller && features::IsFoldersEnabled()) {
+    controller->folders()->Restore(data);
   }
 }
 

@@ -5,13 +5,11 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_FOLDERS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_FOLDERS_H_
 
-#include <map>
 #include <memory>
 #include <string>
-#include <utility>
-#include <vector>
 
 class BrowserWindowInterface;
+class TabStripModel;
 
 namespace views {
 class SizeBounds;
@@ -21,7 +19,7 @@ struct ProposedLayout;
 
 namespace koan {
 
-class KoanFolderController;
+struct TabMenuContext;
 
 // Hooks for Zen-style tab folders (see koan_folder_controller.h). Folders are
 // Koan's own model; upstream draws the tabs, Koan adds a row per folder.
@@ -65,15 +63,24 @@ class FolderRows {
   std::unique_ptr<Impl> impl_;
 };
 
-// Session hooks: the folders of `browser` as window extra data, written when
-// the session file is rebuilt; and restoring them once session restore added
-// the window's tabs (from `first_tab_index` on).
-std::vector<std::pair<std::string, std::string>> GetFolderSessionData(
-    BrowserWindowInterface* browser);
-void RestoreFolderSessionData(
-    BrowserWindowInterface* browser,
-    int first_tab_index,
-    const std::map<std::string, std::string>& extra_data);
+// The tab context menu's "Move to Folder" (a TabMenuFeature, see
+// koan_tab_menu.h).
+void AddFolderTabMenuItems(TabMenuContext& context);
+bool IsFolderTabMenuCommandEnabled(const TabStripModel* tab_strip,
+                                   int index,
+                                   int command_id);
+bool ExecuteFolderTabMenuCommand(TabStripModel* tab_strip,
+                                 int index,
+                                 int command_id);
+
+// Folders' key in the session data (koan_session_data.h): per window, the
+// folders (names, collapsed, nesting, Space); per tab, its folder. And their
+// WindowRestoreHook, which brings the window's folders back before its tabs
+// come back and join them.
+inline constexpr char kFolderSessionKey[] = "koan.folders";
+void OnRestoringFolders(BrowserWindowInterface* browser,
+                        const std::string& data,
+                        bool from_session_restore);
 
 }  // namespace koan
 

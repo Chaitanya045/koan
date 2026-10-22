@@ -79,12 +79,14 @@ features plug into it in `src/` rather than patching upstream again:
   Saver exemptions get these tabs through the page's pinned state, which
   Koan sets for them.
 
-Features that adopt these (Spaces, folders) drop their own copies of the
-same files: `koan_tab_menu.{h,cc}`, `koan_session_data.{h,cc}`, and the
-`tab_menu_model.{h,cc}`, `tab_strip_model.cc`, `sessions/BUILD.gn` and
-`session_service_base.cc` patches, adding their entries in `src/` instead.
-Their menu ids move into their `TabMenuFeatureId` range (e.g. folders' "Move
-to Folder" from 3002, inside split view's range, to 3300+).
+Folders use them: "Move to Folder" is in folders' range (3300+), and the
+window's folders and each tab's folder are session data under
+"koan.folders", with a `WindowRestoreHook`. Features that adopt them later
+(Spaces) drop their own copies of the same files: `koan_tab_menu.{h,cc}`,
+`koan_session_data.{h,cc}`, and the `tab_menu_model.{h,cc}`,
+`tab_strip_model.cc`, `sessions/BUILD.gn` and `session_service_base.cc`
+patches, adding their entries in `src/` instead. Their menu ids move into
+their `TabMenuFeatureId` range.
 
 ## After every rebase, re-audit the hooks
 
@@ -123,7 +125,6 @@ assumes:
 | Sidebar width limits | `chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc` (ctor, `GetMinimumSize`, the resize handler) | the saved width is still read through the state controller in the ctor (Koan clamps it to the active limits); the min/max and collapse snap width are applied in `GetMinimumSize` and the resize handler. Upstream also reads the `vertical_tab_strip_state.h` constants, unhooked, in `browser_view_tabbed_layout_impl.cc` (window minimum width), `tab_view.cc` (`UncollapsedMinWidth`), `vertical_tab_strip_top_container.cc` (combo button switch), `tab_view_vertical_layout.cc` (fallback width) and, on macOS, `browser_native_widget_mac.mm` (`GetGlassFrameWidth` caps the glass frame at 400px, so with Chromium's GlassFrame feature on a Koan sidebar wider than 400px outgrows it; the feature is off in Koan). Recheck that none of these starts depending on the limits |
 | Sidebar rows lookup (no patch) | `VerticalTabStripRegionView`, `BrowserView::OnVerticalTabStripModeChanged` | the region outlives its `TabStripView` (rebuilt on a vertical/horizontal switch, after which Koan re-adds the rows); the region's content area still holds a `FrameSeparator` (hidden by Koan) and a `VerticalTabStripBottomContainer` with a `NewTabButton` (hidden), found by class name |
 | Folder rows | `.../tabs/common/tab_group_view_layout.cc`, `.../tabs/common/unpinned_tab_container_view_layout.cc` (`CalculateVerticalLayout`) | still a single loop over the container's children that stacks them vertically and accumulates `height`; children still `TabView` (`GetTabInterface()`) / `SplitTabView` (`collection_node()`), which Koan reads; both containers' layout manager still `TabCollectionAnimatingLayoutManager` (Koan casts to it and removes rows through `AnimateAndDestroyChildView`). The group patch also replaces `child->GetVisible()` with `!is_collapsed()` (equivalent: `is_collapsed_` flips when upstream sets the children's visibility) and sets a child's `y` after `FolderRows::Place()` |
-| Folder session data | `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForBrowser`), `session_restore.cc` (right after `RestoreTabsToBrowser`) (+ `sessions/BUILD.gn`) | window extra data still written on rebuild and passed to restore; restored tabs still start at `initial_tab_count` |
 | Colour mixer | `chrome/browser/ui/color/chrome_color_mixers.cc` | Koan mixer still runs after Chrome's, before custom themes |
 | Feature defaults | `chrome/browser/chrome_browser_field_trials.cc` | `RegisterFeatureOverrides` still exists; `kTabGroupsFocusing` still the focus-mode switch; `kInfiniteTabsFreezing` still exists (Koan turns it on; an upstream launch or removal needs `docs/PERFORMANCE.md` updated) |
 | Power defaults | `chrome/browser/prefs/browser_prefs.cc` (`RegisterLocalState`) | Koan's call still comes after `performance_manager::user_tuning::prefs::RegisterLocalStatePrefs` (it changes defaults of prefs registered there) |
