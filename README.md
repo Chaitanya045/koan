@@ -163,5 +163,6 @@ Chromium project or the Zen browser project.
 
 Koan's own code is licensed under the [MIT License](LICENSE). Koan is built
 on Chromium, whose code, including the upstream files changed by
-`patches/`, remains under Chromium's BSD-style license. See
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+`patches/`, remains under Chromium's BSD-style license. Files that port Zen
+Browser's code, strings or styles are under Zen's MPL-2.0, as their headers
+say. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
