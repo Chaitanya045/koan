@@ -376,12 +376,16 @@ to go to its tab; the card hides while that tab is selected. Up to three
 cards stack, the newest in front. Close pauses the media and dismisses its
 card.
 
+![Media card, collapsed and on hover](screenshots/media-cards.png)
+
 ## Downloads
 
 Starting a download sends a small download icon flying from where you
 clicked to the downloads button, or, while the toolbar is hidden (single
 toolbar, the default), to a downloads tile that slides in at the bottom
 corner on the sidebar's side for a moment.
+
+![Download animation](screenshots/download-animation.png)
 
 ## Moving the window
 
@@ -399,6 +403,10 @@ another browser, pick a colour, choose the search engine and your
 Essentials, and make Koan the default browser. Every page can be skipped
 with Next. It shows once (start Koan with `--force-first-run` to see it
 again in a new profile).
+
+| | |
+|---|---|
+| ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
 ## Turning things off
 
