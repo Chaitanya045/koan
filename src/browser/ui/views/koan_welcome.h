@@ -38,9 +38,12 @@ struct KoanWelcomeChoices {
 // colour, pick the search engine, choose Essentials and make Koan the
 // default browser. Zen's ad blocker page is left out (see ZEN_PARITY.md).
 //
-// The screen is a child widget covering the window. It shows once per
-// profile (pref koan.welcome_screen.seen) and only on Chromium's first run,
-// so --no-first-run skips it and --force-first-run brings it back.
+// The screen is a child widget over the window, below the window's controls
+// (so the window still moves and closes), and takes the keyboard: Tab moves
+// between its buttons, arrows between choices, Esc skips it. It shows once
+// (pref koan.welcome_screen.seen) and only on Chromium's first run, i.e. of
+// a new user data directory (not for each profile in it), so --no-first-run
+// skips it and --force-first-run brings it back.
 class KoanWelcome {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
@@ -58,6 +61,10 @@ class KoanWelcome {
   // Called by the screen when the user is done: closes it (with a fade) and
   // applies `choices`.
   void Finish(const KoanWelcomeChoices& choices);
+
+  // Called when the user leaves the screen with Esc: closes it, applying
+  // nothing more.
+  void Skip();
 
   BrowserView* browser_view() const { return browser_view_; }
 

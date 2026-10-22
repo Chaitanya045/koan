@@ -13,6 +13,7 @@
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/i18n/time_formatting.h"
+#include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -39,6 +40,7 @@
 #include "services/media_session/public/cpp/media_metadata.h"
 #include "services/media_session/public/cpp/media_position.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -46,6 +48,8 @@
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
@@ -58,8 +62,10 @@
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 
 namespace koan {
@@ -73,6 +79,9 @@ using Action = media_session::mojom::MediaSessionAction;
 // 6px gap between the cards.
 constexpr auto kCardPadding =
     gfx::Insets::VH(kMediaCardPaddingVertical, kMediaCardPaddingHorizontal);
+
+// The progress bar's arrow keys seek by 5 seconds.
+constexpr base::TimeDelta kMediaSeekStep = base::Seconds(5);
 
 // Sets the button's icon (as colour-ID image models, so it follows the
 // theme without being reset to another icon) and its name.
@@ -250,15 +259,29 @@ class KoanMediaProgressBar : public views::View {
   using SeekCallback = base::RepeatingCallback<void(double, bool)>;
 
   explicit KoanMediaProgressBar(SeekCallback on_seek)
-      : on_seek_(std::move(on_seek)) {}
+      : on_seek_(std::move(on_seek)) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kSlider);
+    GetViewAccessibility().SetName(u"Seek");
+    views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
+                                                  kMediaButtonCornerRadius);
+    views::FocusRing::Install(this);
+  }
 
-  void SetValue(double value) {
+  // `value` is the played fraction, `text` says it (e.g. "0:07 of 0:30").
+  void SetValue(double value, const std::u16string& text) {
+    GetViewAccessibility().SetValue(text);
     if (!dragging_ && value != value_) {
       value_ = std::clamp(value, 0.0, 1.0);
       SchedulePaint();
     }
   }
-  void set_seekable(bool seekable) { seekable_ = seekable; }
+  // Seekable media takes the keyboard: Left/Right (and Down/Up) seek by
+  // `key_step` (a fraction), Home and End to the ends.
+  void SetSeekable(bool seekable, double key_step) {
+    seekable_ = seekable;
+    key_step_ = key_step;
+    SetFocusBehavior(seekable ? FocusBehavior::ALWAYS : FocusBehavior::NEVER);
+  }
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -301,6 +324,34 @@ class KoanMediaProgressBar : public views::View {
     }
   }
   void OnMouseCaptureLost() override { dragging_ = false; }
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    double value = value_;
+    switch (event.key_code()) {
+      case ui::VKEY_LEFT:
+      case ui::VKEY_DOWN:
+        value -= key_step_;
+        break;
+      case ui::VKEY_RIGHT:
+      case ui::VKEY_UP:
+        value += key_step_;
+        break;
+      case ui::VKEY_HOME:
+        value = 0;
+        break;
+      case ui::VKEY_END:
+        value = 1;
+        break;
+      default:
+        return false;
+    }
+    if (!seekable_) {
+      return false;
+    }
+    value_ = std::clamp(value, 0.0, 1.0);
+    SchedulePaint();
+    on_seek_.Run(value_, /*done=*/true);
+    return true;
+  }
   void OnMouseEntered(const ui::MouseEvent& event) override { SchedulePaint(); }
   void OnMouseExited(const ui::MouseEvent& event) override { SchedulePaint(); }
 
@@ -316,6 +367,7 @@ class KoanMediaProgressBar : public views::View {
   const SeekCallback on_seek_;
   double value_ = 0;
   bool seekable_ = false;
+  double key_step_ = 0;
   bool dragging_ = false;
 };
 
@@ -333,6 +385,7 @@ class KoanMediaCardView : public views::View {
 
  public:
   explicit KoanMediaCardView(KoanMediaCard* card) : card_(card) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
     favicon_ = AddChildView(std::make_unique<views::ImageButton>(
         base::BindRepeating(&KoanMediaCard::Focus, base::Unretained(card))));
     favicon_->SetPreferredSize(gfx::Size(kMediaButtonSize, kMediaButtonSize));
@@ -423,11 +476,18 @@ class KoanMediaCardView : public views::View {
                                             ui::kColorIcon, gfx::kFaviconSize);
     }
     favicon_->SetImageModel(views::Button::STATE_NORMAL, icon);
+    const std::u16string go_to = u"Go to " + contents->GetTitle();
+    favicon_->SetTooltipText(go_to);
+    favicon_->GetViewAccessibility().SetName(go_to);
 
-    title_->SetText(card_->title().empty() ? contents->GetTitle()
-                                           : card_->title());
+    const std::u16string& title =
+        card_->title().empty() ? contents->GetTitle() : card_->title();
+    title_->SetText(title);
     artist_->SetText(card_->artist());
-    artist_->SetVisible(!card_->artist().empty());
+    GetViewAccessibility().SetName(
+        card_->artist().empty()
+            ? title
+            : base::StrCat({title, u", ", card_->artist()}));
 
     SetButtonIcon(play_pause_,
                   card_->playing() ? vector_icons::kPauseIcon
@@ -440,15 +500,23 @@ class KoanMediaCardView : public views::View {
         mute_,
         muted ? vector_icons::kVolumeOffIcon : vector_icons::kVolumeUpIcon,
         muted ? u"Unmute" : u"Mute");
-    pip_->SetVisible(card_->Supports(Action::kEnterPictureInPicture));
 
+    // The rows above the buttons only exist while the stack is expanded, so
+    // that the keyboard and screen readers don't find hidden controls.
+    title_->SetVisible(expanded_);
+    artist_->SetVisible(expanded_ && !card_->artist().empty());
+    close_->SetVisible(expanded_);
+    pip_->SetVisible(expanded_ &&
+                     card_->Supports(Action::kEnterPictureInPicture));
     const bool progress = card_->HasProgress();
     for (views::View* view : {static_cast<views::View*>(current_time_.get()),
                               static_cast<views::View*>(duration_.get()),
                               static_cast<views::View*>(progress_.get())}) {
-      view->SetVisible(progress);
+      view->SetVisible(expanded_ && progress);
     }
-    progress_->set_seekable(card_->Supports(Action::kSeekTo));
+    progress_->SetSeekable(
+        card_->Supports(Action::kSeekTo),
+        progress ? kMediaSeekStep / card_->position()->duration() : 0);
     UpdatePosition();
     // The time only shows while the stack is expanded: no timer otherwise.
     if (expanded_ && progress && card_->playing()) {
@@ -487,7 +555,7 @@ class KoanMediaCardView : public views::View {
                      kMediaButtonSize);
 
     // Above it, the progress: current time, the bar, the duration.
-    if (progress_->GetVisible()) {
+    if (card_->HasProgress()) {
       y -= kMediaProgressRowHeight;
       const gfx::Size current = current_time_->GetPreferredSize();
       const gfx::Size duration = duration_->GetPreferredSize();
@@ -564,7 +632,9 @@ class KoanMediaCardView : public views::View {
         card_->position()->GetPosition(), base::TimeDelta(), duration);
     current_time_->SetText(FormatMediaTime(position));
     duration_->SetText(FormatMediaTime(duration));
-    progress_->SetValue(position / duration);
+    progress_->SetValue(position / duration,
+                        base::StrCat({FormatMediaTime(position), u" of ",
+                                      FormatMediaTime(duration)}));
   }
 
   void OnSeek(double fraction, bool done) {
@@ -602,6 +672,7 @@ END_METADATA
 // card is in front and up to two more peek out above it; on hover the stack
 // expands into a column of full cards, growing upwards.
 class KoanMediaControlsView : public views::View,
+                              public views::FocusChangeListener,
                               public gfx::AnimationDelegate {
   METADATA_HEADER(KoanMediaControlsView, views::View)
 
@@ -612,6 +683,7 @@ class KoanMediaControlsView : public views::View,
     expand_.SetSlideDuration(kMediaExpandDuration);
     expand_.SetTweenType(gfx::Tween::EASE_OUT_3);
   }
+  ~KoanMediaControlsView() override { StopWatchingFocus(); }
 
   // Matches the card views to the cards to show.
   void Update() {
@@ -630,12 +702,14 @@ class KoanMediaControlsView : public views::View,
         view->SetExpanded(expanded_);
         view->SetPaintToLayer();
         view->layer()->SetFillsBoundsOpaquely(false);
-        // Zen's cards fade in (@starting-style).
-        view->layer()->SetOpacity(0);
-        views::AnimationBuilder()
-            .Once()
-            .SetDuration(kMediaFadeInDuration)
-            .SetOpacity(view, 1, gfx::Tween::EASE_OUT);
+        // Zen's cards fade in (@starting-style), unless motion is reduced.
+        if (gfx::Animation::ShouldRenderRichAnimation()) {
+          view->layer()->SetOpacity(0);
+          views::AnimationBuilder()
+              .Once()
+              .SetDuration(kMediaFadeInDuration)
+              .SetOpacity(view, 1, gfx::Tween::EASE_OUT);
+        }
       } else {
         view->Refresh();
       }
@@ -693,10 +767,28 @@ class KoanMediaControlsView : public views::View,
   }
 
   void OnMouseEntered(const ui::MouseEvent& event) override {
-    SetExpanded(true);
+    hovered_ = true;
+    UpdateExpanded();
   }
   void OnMouseExited(const ui::MouseEvent& event) override {
-    SetExpanded(false);
+    hovered_ = false;
+    UpdateExpanded();
+  }
+  void AddedToWidget() override {
+    StopWatchingFocus();
+    focus_manager_ = GetFocusManager();
+    if (focus_manager_) {
+      focus_manager_->AddFocusChangeListener(this);
+    }
+  }
+  void RemovedFromWidget() override { StopWatchingFocus(); }
+
+  // views::FocusChangeListener:
+  void OnDidChangeFocus(views::View* focused_before,
+                        views::View* focused_now) override {
+    // The keyboard expands the stack too, while it is in a card.
+    focused_within_ = focused_now && Contains(focused_now);
+    UpdateExpanded();
   }
 
   // gfx::AnimationDelegate:
@@ -735,19 +827,36 @@ class KoanMediaControlsView : public views::View,
   const raw_ptr<KoanMediaController> controller_;
   // Newest (front) first.
   std::vector<KoanMediaCardView*> card_views_;
-  void SetExpanded(bool expanded) {
+  void StopWatchingFocus() {
+    if (focus_manager_) {
+      std::exchange(focus_manager_, nullptr)->RemoveFocusChangeListener(this);
+    }
+  }
+
+  // Expanded while hovered or while a card has focus.
+  void UpdateExpanded() {
+    const bool expanded = hovered_ || focused_within_;
+    if (expanded == expanded_) {
+      return;
+    }
     expanded_ = expanded;
     for (KoanMediaCardView* view : card_views_) {
       view->SetExpanded(expanded);
     }
-    if (expanded) {
+    if (!gfx::Animation::ShouldRenderRichAnimation()) {
+      expand_.Reset(expanded ? 1 : 0);
+      PreferredSizeChanged();
+    } else if (expanded) {
       expand_.Show();
     } else {
       expand_.Hide();
     }
   }
 
+  bool hovered_ = false;
+  bool focused_within_ = false;
   bool expanded_ = false;
+  raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   gfx::SlideAnimation expand_{this};
 };
 

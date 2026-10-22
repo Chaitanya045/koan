@@ -79,6 +79,7 @@ class KoanDownloadAnimation : public content::DownloadManager::Observer,
   void PlayArc(const gfx::Point& start, const gfx::Point& end);
   // The downloads tile at the bottom of the sidebar side.
   void ShowTile();
+  void AnimateTileIn();
   void HideTile();
   void OnAnimationDone();
 
@@ -92,6 +93,7 @@ class KoanDownloadAnimation : public content::DownloadManager::Observer,
 
   std::unique_ptr<views::Widget> overlay_;
   raw_ptr<views::View> tile_ = nullptr;
+  bool tile_leaving_ = false;
   base::OneShotTimer tile_timer_;
   int running_ = 0;
 

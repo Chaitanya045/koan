@@ -14,7 +14,6 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "components/download/public/common/download_item.h"
@@ -35,6 +34,7 @@
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/transform.h"
@@ -166,8 +166,9 @@ void KoanDownloadAnimation::OnBrowserViewDestroying() {
 void KoanDownloadAnimation::OnDownloadCreated(content::DownloadManager* manager,
                                               download::DownloadItem* item) {
   // Downloads loaded from history arrive here too.
+  // Not with reduced motion (Chrome's own animation doesn't run then either).
   if (item->GetState() != download::DownloadItem::IN_PROGRESS || !IsEnabled() ||
-      !IsForThisWindow(item)) {
+      !gfx::Animation::ShouldRenderRichAnimation() || !IsForThisWindow(item)) {
     return;
   }
   Play();
@@ -215,13 +216,12 @@ void KoanDownloadAnimation::Play() {
       browser_view_->GetLocalBounds().IsEmpty()) {
     return;
   }
-  // Without a press yet (e.g. a keyboard shortcut), start over the page.
-  gfx::Point start = browser_view_->GetLocalBounds().CenterPoint();
-  if (last_press_) {
-    start = *last_press_;
-  } else if (const views::View* page = browser_view_->multi_contents_view()) {
-    start = page->bounds().CenterPoint();
+  // Like Zen, nothing to fly from without a press (e.g. a keyboard
+  // shortcut).
+  if (!last_press_) {
+    return;
   }
+  const gfx::Point start = *last_press_;
 
   // The downloads button if it shows, else the tile.
   const KoanBrowserViewController* controller =
@@ -314,11 +314,20 @@ void KoanDownloadAnimation::PlayArc(const gfx::Point& start,
 }
 
 void KoanDownloadAnimation::ShowTile() {
-  if (tile_) {
+  if (tile_ && !tile_leaving_) {
     // Already there: stay a while longer.
     if (tile_timer_.IsRunning()) {
       tile_timer_.Reset();
     }
+    return;
+  }
+  if (tile_) {
+    // On its way out: come back from where it is. Its exit, aborted, is
+    // counted out by OnAnimationDone().
+    tile_leaving_ = false;
+    tile_->layer()->GetAnimator()->AbortAllAnimations();
+    ++running_;
+    AnimateTileIn();
     return;
   }
   views::View* overlay = EnsureOverlay();
@@ -333,6 +342,10 @@ void KoanDownloadAnimation::ShowTile() {
                                             kTileViewSize));
 
   ++running_;
+  AnimateTileIn();
+}
+
+void KoanDownloadAnimation::AnimateTileIn() {
   views::AnimationBuilder()
       .OnEnded(base::BindOnce(
           [](base::WeakPtr<KoanDownloadAnimation> self) {
@@ -350,6 +363,7 @@ void KoanDownloadAnimation::ShowTile() {
                     MoveAndScale(TileOffset(kDownloadTileOvershoot), 0,
                                  kDownloadTileOvershootScale, kTileViewSize),
                     gfx::Tween::EASE_OUT)
+      .SetOpacity(tile_.get(), 1, gfx::Tween::EASE_OUT)
       .Then()
       .SetDuration(kDownloadTileSettle)
       .SetTransform(tile_.get(), MoveAndScale(0, 0, 1, kTileViewSize),
@@ -360,6 +374,7 @@ void KoanDownloadAnimation::HideTile() {
   if (!tile_) {
     return;
   }
+  tile_leaving_ = true;
   views::AnimationBuilder()
       .OnEnded(base::BindOnce(&KoanDownloadAnimation::OnAnimationDone,
                               weak_factory_.GetWeakPtr()))
@@ -407,6 +422,7 @@ void KoanDownloadAnimation::OnAnimationDone() {
                          self->running_ = 0;
                          self->tile_timer_.Stop();
                          self->tile_ = nullptr;
+                         self->tile_leaving_ = false;
                          self->overlay_.reset();
                        }
                      },

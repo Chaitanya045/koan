@@ -15,8 +15,10 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_shader.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -29,6 +31,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -36,17 +39,21 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_zen_welcome.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/themes.mojom.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
@@ -62,6 +69,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -71,17 +79,21 @@ namespace koan {
 namespace {
 
 // The colours offered for the browser (Koan tints with one colour where Zen
-// has a gradient picker).
-constexpr auto kSpaceColors = std::to_array<SkColor>({
-    SkColorSetRGB(0xd9, 0x6c, 0x4f),
-    SkColorSetRGB(0xe0, 0xa1, 0x3a),
-    SkColorSetRGB(0x6f, 0xa8, 0x55),
-    SkColorSetRGB(0x3e, 0x9d, 0x92),
-    SkColorSetRGB(0x4f, 0x86, 0xd9),
-    SkColorSetRGB(0x7a, 0x6c, 0xe0),
-    SkColorSetRGB(0xb4, 0x5f, 0xc9),
-    SkColorSetRGB(0xd9, 0x5f, 0x93),
-    SkColorSetRGB(0x8a, 0x8f, 0x98),
+// has a gradient picker), with their names for screen readers.
+struct SpaceColor {
+  SkColor color;
+  const char16_t* name;
+};
+constexpr auto kSpaceColors = std::to_array<SpaceColor>({
+    {SkColorSetRGB(0xd9, 0x6c, 0x4f), u"Coral"},
+    {SkColorSetRGB(0xe0, 0xa1, 0x3a), u"Amber"},
+    {SkColorSetRGB(0x6f, 0xa8, 0x55), u"Green"},
+    {SkColorSetRGB(0x3e, 0x9d, 0x92), u"Teal"},
+    {SkColorSetRGB(0x4f, 0x86, 0xd9), u"Blue"},
+    {SkColorSetRGB(0x7a, 0x6c, 0xe0), u"Violet"},
+    {SkColorSetRGB(0xb4, 0x5f, 0xc9), u"Purple"},
+    {SkColorSetRGB(0xd9, 0x5f, 0x93), u"Pink"},
+    {SkColorSetRGB(0x8a, 0x8f, 0x98), u"Grey"},
 });
 
 // zen-welcome.css; the sizes are in koan_sidebar_metrics.h.
@@ -145,8 +157,22 @@ Palette GetPalette(const views::View* view) {
   };
 }
 
+// Whether to animate (not with the system's reduced motion setting).
+bool ShouldAnimate() {
+  return gfx::Animation::ShouldRenderRichAnimation();
+}
+
+// Lets the keyboard reach `button` (also on macOS, where buttons otherwise
+// only take focus with Full Keyboard Access), with a focus ring of its
+// shape.
+void MakeFocusable(views::Button* button, int corner_radius) {
+  button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  views::InstallRoundRectHighlightPathGenerator(button, gfx::Insets(),
+                                                corner_radius);
+}
+
 // Plays `view` in: from `offset` and transparent to where it is, after
-// `delay`.
+// `delay`; at once with reduced motion.
 void AnimateIn(views::View* view,
                const gfx::Vector2dF& offset,
                base::TimeDelta delay,
@@ -154,6 +180,11 @@ void AnimateIn(views::View* view,
   if (!view->layer()) {
     view->SetPaintToLayer();
     view->layer()->SetFillsBoundsOpaquely(false);
+  }
+  if (!ShouldAnimate()) {
+    view->layer()->SetTransform(gfx::Transform());
+    view->layer()->SetOpacity(1);
+    return;
   }
   gfx::Transform start;
   start.Translate(offset);
@@ -177,6 +208,7 @@ class KoanWelcomeButton : public views::Button {
         text_(std::move(text)),
         primary_(primary) {
     GetViewAccessibility().SetName(text_);
+    MakeFocusable(this, kWelcomeButtonCornerRadius);
   }
 
   // views::Button:
@@ -217,6 +249,7 @@ class KoanWelcomeStartButton : public views::Button {
   explicit KoanWelcomeStartButton(PressedCallback callback)
       : views::Button(std::move(callback)) {
     GetViewAccessibility().SetName(u"Start");
+    MakeFocusable(this, kWelcomeButtonCornerRadius);
   }
 
   // views::Button:
@@ -252,6 +285,7 @@ class KoanWelcomeBackButton : public views::Button {
   explicit KoanWelcomeBackButton(PressedCallback callback)
       : views::Button(std::move(callback)) {
     GetViewAccessibility().SetName(kWelcomeBack);
+    MakeFocusable(this, kWelcomeBackCornerRadius);
   }
 
   // views::Button:
@@ -298,6 +332,7 @@ class KoanWelcomeOption : public views::Button {
     GetViewAccessibility().SetName(strong_.empty() ? text_
                                                    : strong_ + u" " + text_);
     GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+    MakeFocusable(this, kWelcomeOptionCornerRadius);
   }
 
   bool selected() const { return selected_; }
@@ -309,7 +344,26 @@ class KoanWelcomeOption : public views::Button {
     SchedulePaint();
   }
 
+  // Up/Left and Down/Right move the choice, as in a radio group.
+  void set_on_arrow(base::RepeatingCallback<void(int)> on_arrow) {
+    on_arrow_ = std::move(on_arrow);
+  }
+
   // views::Button:
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    switch (event.key_code()) {
+      case ui::VKEY_UP:
+      case ui::VKEY_LEFT:
+        on_arrow_.Run(-1);
+        return true;
+      case ui::VKEY_DOWN:
+      case ui::VKEY_RIGHT:
+        on_arrow_.Run(1);
+        return true;
+      default:
+        return views::Button::OnKeyPressed(event);
+    }
+  }
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
     return engine_ ? gfx::Size(kWelcomeEngineMaxWidth, kWelcomeEngineHeight)
@@ -392,17 +446,21 @@ class KoanWelcomeOption : public views::Button {
   const std::u16string text_;
   const bool engine_;
   bool selected_ = false;
+  base::RepeatingCallback<void(int)> on_arrow_;
 };
 
 BEGIN_METADATA(KoanWelcomeOption)
 END_METADATA
 
-// A column of options, centred; pressing one selects it.
+// A column of options, centred: a radio group named after the page.
 class KoanWelcomeOptionsView : public views::View {
   METADATA_HEADER(KoanWelcomeOptionsView, views::View)
 
  public:
-  explicit KoanWelcomeOptionsView(int gap) : gap_(gap) {}
+  KoanWelcomeOptionsView(int gap, const std::u16string& name) : gap_(gap) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kRadioGroup);
+    GetViewAccessibility().SetName(name);
+  }
 
   // Adds an option; `on_select` runs when it gets selected.
   void AddOption(std::u16string strong,
@@ -413,10 +471,29 @@ class KoanWelcomeOptionsView : public views::View {
     auto* option = AddChildView(std::make_unique<KoanWelcomeOption>(
         views::Button::PressedCallback(), std::move(strong), std::move(text),
         engine));
+    on_selects_.push_back(on_select);
     option->SetCallback(base::BindRepeating(
         &KoanWelcomeOptionsView::Select, base::Unretained(this),
         base::Unretained(option), std::move(on_select)));
+    option->set_on_arrow(base::BindRepeating(&KoanWelcomeOptionsView::Move,
+                                             base::Unretained(this),
+                                             base::Unretained(option)));
     option->SetSelected(selected);
+    const int count = static_cast<int>(children().size());
+    for (int i = 0; i < count; ++i) {
+      children()[i]->GetViewAccessibility().SetPosInSet(i + 1);
+      children()[i]->GetViewAccessibility().SetSetSize(count);
+    }
+  }
+
+  // The selected option, or the first: where focus goes on this page.
+  views::View* GetSelectedOption() {
+    for (views::View* child : children()) {
+      if (static_cast<KoanWelcomeOption*>(child)->selected()) {
+        return child;
+      }
+    }
+    return children().empty() ? nullptr : children().front().get();
   }
 
   // views::View:
@@ -444,7 +521,22 @@ class KoanWelcomeOptionsView : public views::View {
     on_select.Run();
   }
 
+  // Selects and focuses the option `delta` away from `from`.
+  void Move(KoanWelcomeOption* from, int delta) {
+    const std::optional<size_t> index = GetIndexOf(from);
+    if (!index) {
+      return;
+    }
+    const size_t next = static_cast<size_t>(
+        std::clamp<int>(static_cast<int>(*index) + delta, 0,
+                        static_cast<int>(children().size()) - 1));
+    auto* option = static_cast<KoanWelcomeOption*>(children()[next].get());
+    option->RequestFocus();
+    Select(option, on_selects_[next]);
+  }
+
   const int gap_;
+  std::vector<base::RepeatingClosure> on_selects_;
 };
 
 BEGIN_METADATA(KoanWelcomeOptionsView)
@@ -455,13 +547,19 @@ class KoanWelcomeSwatch : public views::Button {
   METADATA_HEADER(KoanWelcomeSwatch, views::Button)
 
  public:
-  KoanWelcomeSwatch(PressedCallback callback, SkColor color)
-      : views::Button(std::move(callback)), color_(color) {
-    GetViewAccessibility().SetName(u"Color");
+  KoanWelcomeSwatch(PressedCallback callback, const SpaceColor& color)
+      : views::Button(std::move(callback)), color_(color.color) {
+    GetViewAccessibility().SetName(color.name);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+    SetFocusBehavior(FocusBehavior::ALWAYS);
+    views::InstallCircleHighlightPathGenerator(this);
   }
 
   void SetSelected(bool selected) {
     selected_ = selected;
+    GetViewAccessibility().SetCheckedState(
+        selected ? ax::mojom::CheckedState::kTrue
+                 : ax::mojom::CheckedState::kFalse);
     SchedulePaint();
   }
 
@@ -500,13 +598,19 @@ class KoanWelcomeColorsView : public views::View {
  public:
   explicit KoanWelcomeColorsView(base::RepeatingCallback<void(SkColor)> pick,
                                  std::optional<SkColor> selected) {
-    for (SkColor color : kSpaceColors) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kRadioGroup);
+    GetViewAccessibility().SetName(u"Colors");
+    int position = 0;
+    for (const SpaceColor& color : kSpaceColors) {
       auto* swatch = AddChildView(std::make_unique<KoanWelcomeSwatch>(
           views::Button::PressedCallback(), color));
       swatch->SetCallback(base::BindRepeating(
           &KoanWelcomeColorsView::Pick, base::Unretained(this),
-          base::Unretained(swatch), color, pick));
-      swatch->SetSelected(selected == color);
+          base::Unretained(swatch), color.color, pick));
+      swatch->SetSelected(selected == color.color);
+      swatch->GetViewAccessibility().SetPosInSet(++position);
+      swatch->GetViewAccessibility().SetSetSize(
+          static_cast<int>(kSpaceColors.size()));
     }
   }
 
@@ -570,6 +674,7 @@ class KoanWelcomeEssentialTile : public views::Button {
     GetViewAccessibility().SetName(app.name);
     SetTooltipText(app.name);
     GetViewAccessibility().SetRole(ax::mojom::Role::kToggleButton);
+    MakeFocusable(this, kWelcomeTileCornerRadius);
   }
 
   bool selected() const { return selected_; }
@@ -885,7 +990,6 @@ class KoanWelcomePagesView : public views::View {
     }
     buttons_->RemoveAllChildViews();
 
-    back_->SetVisible(page > 0);
     const WelcomePageText& text = kWelcomePageText[page];
     for (const char16_t* string : {text.title, text.description}) {
       const bool heading = string == text.title;
@@ -929,6 +1033,14 @@ class KoanWelcomePagesView : public views::View {
                 kTextDuration);
     }
     AnimateIn(content_, gfx::Vector2dF(), base::TimeDelta(), kFadeDuration);
+
+    // The keyboard stays on the screen: on the page's primary button, with
+    // the new page read out. Back hides only after that: hiding it while
+    // focused would pass the focus on, out of the screen into the page.
+    buttons_->children().front()->RequestFocus();
+    back_->SetVisible(page > 0);
+    GetViewAccessibility().AnnouncePolitely(
+        base::StrCat({text.title, u" ", text.description}));
   }
 
   KoanWelcomeButton* AddButton(std::u16string text, bool primary, int delta) {
@@ -941,8 +1053,8 @@ class KoanWelcomePagesView : public views::View {
   std::unique_ptr<views::View> CreateContent(int page) {
     switch (page) {
       case kWelcomePageImport: {
-        auto options =
-            std::make_unique<KoanWelcomeOptionsView>(kWelcomeOptionGap);
+        auto options = std::make_unique<KoanWelcomeOptionsView>(
+            kWelcomeOptionGap, kWelcomePageText[page].title);
         options->AddOption(kWelcomeYes, kWelcomeImportYes, choices_.import,
                            false,
                            base::BindRepeating(&KoanWelcomePagesView::SetImport,
@@ -963,8 +1075,8 @@ class KoanWelcomePagesView : public views::View {
       case kWelcomePageEssentials:
         return std::make_unique<KoanWelcomeMockBrowserView>(&essentials_);
       case kWelcomePageDefaultBrowser: {
-        auto options =
-            std::make_unique<KoanWelcomeOptionsView>(kWelcomeOptionGap);
+        auto options = std::make_unique<KoanWelcomeOptionsView>(
+            kWelcomeOptionGap, kWelcomePageText[page].title);
         options->AddOption(
             kWelcomeYes, kWelcomeDefaultBrowserYes, default_browser_, false,
             base::BindRepeating(&KoanWelcomePagesView::SetDefaultBrowser,
@@ -981,7 +1093,8 @@ class KoanWelcomePagesView : public views::View {
   }
 
   std::unique_ptr<views::View> CreateSearchContent() {
-    auto options = std::make_unique<KoanWelcomeOptionsView>(kWelcomeEngineGap);
+    auto options = std::make_unique<KoanWelcomeOptionsView>(
+        kWelcomeEngineGap, kWelcomePageText[kWelcomePageSearch].title);
     TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
         welcome_->browser_view()->GetProfile());
     if (!service) {
@@ -1048,9 +1161,13 @@ class KoanWelcomeView : public views::View {
   METADATA_HEADER(KoanWelcomeView, views::View)
 
  public:
-  explicit KoanWelcomeView(KoanWelcome* welcome) {
+  explicit KoanWelcomeView(KoanWelcome* welcome) : welcome_(welcome) {
     GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
-    GetViewAccessibility().SetName(u"Welcome to Koan");
+    GetViewAccessibility().SetName(
+        base::StrCat({kWelcomeTitleLine1, u" ", kWelcomeTitleLine2}));
+    GetViewAccessibility().SetIsModal(true);
+    // Esc skips the rest of the welcome.
+    AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
     for (const char16_t* line : {kWelcomeTitleLine1, kWelcomeTitleLine2}) {
       std::vector<views::Label*> chars;
       for (char16_t c : std::u16string(line)) {
@@ -1073,12 +1190,24 @@ class KoanWelcomeView : public views::View {
     start_->SetPaintToLayer();
     start_->layer()->SetFillsBoundsOpaquely(false);
     start_->layer()->SetOpacity(0);
-    start_->SetEnabled(false);
     pages_ = AddChildView(std::make_unique<KoanWelcomePagesView>(welcome));
     pages_->SetVisible(false);
   }
 
+  // Takes the keyboard: the start button (it works before it shows, to skip
+  // the intro).
+  void FocusStart() { start_->RequestFocus(); }
+
   void PlayIntro() {
+    if (!ShouldAnimate()) {
+      for (const auto& line : lines_) {
+        for (views::Label* label : line) {
+          label->layer()->SetOpacity(1);
+        }
+      }
+      start_->layer()->SetOpacity(1);
+      return;
+    }
     // Characters rise in one after another; then the button.
     views::AnimationBuilder builder;
     builder.OnEnded(base::BindOnce(&KoanWelcomeView::ShowStartButton,
@@ -1158,14 +1287,27 @@ class KoanWelcomeView : public views::View {
   }
 
  private:
+  // views::View:
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
+    welcome_->Skip();
+    return true;
+  }
+
   void ShowStartButton() {
-    start_->SetEnabled(true);
     AnimateIn(start_, gfx::Vector2dF(0, 20), base::Milliseconds(100),
               base::Milliseconds(400));
   }
 
   void OnStart() {
-    start_->SetEnabled(false);
+    // Not by disabling the button: a focused view that is disabled or hidden
+    // passes the focus on, out of the screen and into the page.
+    if (std::exchange(started_, true)) {
+      return;
+    }
+    if (!ShouldAnimate()) {
+      ShowPagesSoon();
+      return;
+    }
     // Everything rises out, one after another; then the pages.
     views::AnimationBuilder builder;
     builder.OnEnded(base::BindOnce(&KoanWelcomeView::ShowPagesSoon,
@@ -1195,24 +1337,27 @@ class KoanWelcomeView : public views::View {
   }
 
   void ShowPages() {
-    for (const auto& line : lines_) {
-      for (views::Label* label : line) {
-        label->SetVisible(false);
-      }
-    }
-    start_->SetVisible(false);
     pages_->SetVisible(true);
     pages_->SetPaintToLayer();
     pages_->layer()->SetFillsBoundsOpaquely(false);
     pages_->layer()->SetIsFastRoundedCorner(true);
     InvalidateLayout();
     AnimateIn(pages_, gfx::Vector2dF(), base::TimeDelta(), kPagesFadeDuration);
+    // The pages take the keyboard before the start button hides.
     pages_->Start();
+    for (const auto& line : lines_) {
+      for (views::Label* label : line) {
+        label->SetVisible(false);
+      }
+    }
+    start_->SetVisible(false);
   }
 
+  const raw_ptr<KoanWelcome> welcome_;
   std::vector<std::vector<views::Label*>> lines_;
   raw_ptr<KoanWelcomeStartButton> start_;
   raw_ptr<KoanWelcomePagesView> pages_;
+  bool started_ = false;
 
   base::WeakPtrFactory<KoanWelcomeView> weak_factory_{this};
 };
@@ -1280,11 +1425,26 @@ void KoanWelcome::Show() {
   LayoutWidget();
   widget_->Show();
   widget_->LayoutRootViewIfNecessary();
+  view->FocusStart();
   view->PlayIntro();
 }
 
 void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {
   if (!widget_) {
+    return;
+  }
+  const auto close_and_apply = [](base::WeakPtr<KoanWelcome> welcome,
+                                  KoanWelcomeChoices choices) {
+    if (welcome) {
+      welcome->Close();
+      welcome->Apply(choices);
+    }
+  };
+  if (!ShouldAnimate()) {
+    // After the click that finished it: the button goes with the widget.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(close_and_apply, weak_factory_.GetWeakPtr(), choices));
     return;
   }
   views::View* view = widget_->GetContentsView();
@@ -1293,23 +1453,24 @@ void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {
   }
   views::AnimationBuilder()
       .OnEnded(base::BindOnce(
-          [](base::WeakPtr<KoanWelcome> welcome, KoanWelcomeChoices choices) {
+          [](decltype(close_and_apply) then, base::WeakPtr<KoanWelcome> welcome,
+             KoanWelcomeChoices choices) {
             // Not from inside the widget's own animation.
             base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-                FROM_HERE, base::BindOnce(
-                               [](base::WeakPtr<KoanWelcome> welcome,
-                                  KoanWelcomeChoices choices) {
-                                 if (welcome) {
-                                   welcome->Close();
-                                   welcome->Apply(choices);
-                                 }
-                               },
-                               welcome, std::move(choices)));
+                FROM_HERE,
+                base::BindOnce(then, std::move(welcome), std::move(choices)));
           },
-          weak_factory_.GetWeakPtr(), choices))
+          close_and_apply, weak_factory_.GetWeakPtr(), choices))
       .Once()
       .SetDuration(kFinishFadeDuration)
       .SetOpacity(view, 0, gfx::Tween::EASE_IN);
+}
+
+void KoanWelcome::Skip() {
+  // From the screen's own key handling: close once it has returned.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&KoanWelcome::Close, weak_factory_.GetWeakPtr()));
 }
 
 void KoanWelcome::Close() {
@@ -1320,10 +1481,25 @@ void KoanWelcome::Close() {
 }
 
 void KoanWelcome::LayoutWidget() {
-  if (widget_) {
-    widget_->SetBounds(
-        browser_view_->ConvertRectToWidget(browser_view_->GetLocalBounds()));
+  if (!widget_) {
+    return;
   }
+  // Everything but the window's controls: the strip above the page (where
+  // Koan reveals the window buttons, and which grows into their row while
+  // they show), a toolbar above the page (multiple toolbars), and on macOS
+  // the title bar row with the traffic lights. The window drags and closes
+  // from there as usual.
+  int top = ContentCardInsets(browser_view_).top();
+  const views::View* top_container = browser_view_->top_container();
+  if (top_container->parent() == browser_view_ && top_container->GetVisible()) {
+    top = std::max(top, top_container->bounds().bottom());
+  }
+#if BUILDFLAG(IS_MAC)
+  top = std::max(top, kWelcomeMacTitleBarHeight);
+#endif
+  gfx::Rect bounds = browser_view_->GetLocalBounds();
+  bounds.Inset(gfx::Insets::TLBR(top, 0, 0, 0));
+  widget_->SetBounds(browser_view_->ConvertRectToWidget(bounds));
 }
 
 void KoanWelcome::Apply(const KoanWelcomeChoices& choices) {

@@ -40,6 +40,8 @@ check('...with the title and artist',
 let buttons = await cardButtons();
 check('...and its buttons', buttons.length === 7, `${buttons.length} buttons`);
 check('...collapsed: just the controls row', card?.h > 0 && card.h < 50, `height ${card?.h}`);
+check('...with nothing hidden in it for the keyboard (close, progress)',
+      !buttons[6].shown && !vs.some(v => v.cls === 'KoanMediaProgressBar' && v.shown));
 saveShot('media-card');
 
 // Hovering expands it to show the title and progress.
@@ -47,6 +49,10 @@ await mouseOn(controls, 'mouseEntered');
 await sleep(800);
 card = (await cards())[0];
 check('Hovering expands the card', card?.h > 70, `height ${card?.h}`);
+vs = await views();
+check('...showing close and the progress',
+      (await cardButtons())[6]?.shown &&
+      vs.some(v => v.cls === 'KoanMediaProgressBar' && v.shown));
 saveShot('media-card-expanded');
 await mouseOn(controls, 'mouseExited');
 await sleep(800);

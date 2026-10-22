@@ -459,11 +459,15 @@ mute. Hover it for the title and artist, the progress (click or drag to
 seek), picture-in-picture and close. Click the card (or the icon) to go to
 its tab, in its Space; the card hides while that tab is selected. Up to
 three cards stack, the newest in front. Close pauses the media and
-dismisses its card.
+dismisses its card. From the keyboard, Tab into a card to expand it; on the
+progress bar Left/Right seek by 5 seconds, Home/End jump to the ends.
 
 ![Media card, collapsed and on hover](screenshots/media-cards.png)
 
 ## Downloads
+
+With the system's reduced motion setting on, Koan skips its animations
+(the download animation, the welcome screen's, the media cards' fades).
 
 Starting a download sends a small download icon flying from where you
 clicked to the downloads button, or, while the toolbar is hidden (single
@@ -486,8 +490,10 @@ The first time Koan starts with a new profile it shows Zen's welcome
 screen: "Welcome to a calmer internet", then a few pages to import from
 another browser, pick a colour, choose the search engine and your
 Essentials, and make Koan the default browser. Every page can be skipped
-with Next. It shows once (start Koan with `--force-first-run` to see it
-again in a new profile).
+with Next. It shows once (start Koan with `--force-first-run` and a new user data
+directory to see it again). Tab moves between its buttons, the arrow keys
+between choices, Enter or Space picks, and Esc skips the rest. The window's
+own buttons stay usable above it.
 
 | | |
 |---|---|

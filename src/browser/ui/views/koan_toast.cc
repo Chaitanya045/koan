@@ -9,6 +9,7 @@
 
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
@@ -206,21 +207,25 @@ void KoanToast::ShowWithAction(const std::u16string& text,
   view->AddActionButton(
       action_icon, action_name,
       base::BindRepeating(&KoanToast::RunAction, weak_factory_.GetWeakPtr()));
-  ShowView(std::move(view), text, kToastDefaultTimeout);
+  // Screen readers hear about the button too.
+  ShowView(std::move(view), base::StrCat({text, u" ", action_name}),
+           kToastDefaultTimeout);
   action_ = std::move(action);
 }
 
 void KoanToast::RunAction() {
-  // Closing the toast destroys the button: after its click.
+  // Closing the toast destroys the button: after its click. The toast goes
+  // first, so that a toast the action shows stays.
   base::OnceClosure action = std::move(action_);
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
                      [](base::WeakPtr<KoanToast> toast, base::OnceClosure run) {
+                       if (!toast) {
+                         return;
+                       }
+                       toast->Hide();
                        if (run) {
                          std::move(run).Run();
-                       }
-                       if (toast) {
-                         toast->Hide();
                        }
                      },
                      weak_factory_.GetWeakPtr(), std::move(action)));

@@ -38,6 +38,7 @@
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -817,7 +818,8 @@ void KoanCompactModeController::UpdateActive() {
 
 void KoanCompactModeController::OnContentCardChanged() {
   // The contents area may keep its bounds while the card inside it moves, so
-  // lay it out explicitly; Glance sits over the card.
+  // lay it out explicitly; Glance sits over the card, the welcome screen
+  // below the window buttons' strip.
   if (MultiContentsView* contents = browser_view_->multi_contents_view()) {
     contents->InvalidateLayout();
   }
@@ -825,6 +827,7 @@ void KoanCompactModeController::OnContentCardChanged() {
   LayoutHotZones();
   if (auto* controller = KoanBrowserViewController::From(browser_view_)) {
     controller->glance()->OnBrowserViewLayout();
+    controller->welcome()->OnBrowserViewLayout();
   }
 }
 

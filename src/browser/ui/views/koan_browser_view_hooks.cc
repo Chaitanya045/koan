@@ -7,6 +7,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_download_animation.h"
+#include "ui/gfx/animation/animation.h"
 
 namespace koan {
 
@@ -27,7 +28,9 @@ void OnSidebarDragCollapsed(BrowserView* browser_view) {
 bool ShowsDownloadAnimation(BrowserView* browser_view) {
   const KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
-  return controller && controller->download_animation()->IsEnabled();
+  // With reduced motion neither animation runs.
+  return controller && controller->download_animation()->IsEnabled() &&
+         gfx::Animation::ShouldRenderRichAnimation();
 }
 
 }  // namespace koan

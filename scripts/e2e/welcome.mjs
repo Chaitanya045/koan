@@ -4,7 +4,7 @@
 // Essentials end up pinned.
 //
 //   scripts/e2e/run.sh welcome
-import { check, finish, mouseOn, pages, saveShot, shownViews, sleep,
+import { check, evalIn, finish, mouseOn, pages, saveShot, shownViews, sleep,
          views } from './lib/koan.mjs';
 
 const press = async (view, wait = 1000) => {
@@ -16,6 +16,10 @@ const press = async (view, wait = 1000) => {
 let vs = await views();
 check('A first run shows the welcome screen over the window',
       shownViews(vs, 'KoanWelcomeView').length === 1);
+const screen = shownViews(vs, 'KoanWelcomeView')[0];
+const frame = vs.find(v => v.cls === 'BrowserView');
+check('...but not over the strip with the window buttons at the top',
+      screen && frame && screen.h < frame.h, `${screen?.h} of ${frame?.h}`);
 const title = vs.filter(v => v.cls === 'Label' && v.path.at(-1) === 'KoanWelcomeView')
     .map(v => v.props.Text).join('');
 check('..."Welcome to a calmer internet"', title === 'Welcome toa calmer internet', title);
@@ -30,6 +34,11 @@ check('Start shows the pages', shownViews(vs, 'KoanWelcomePagesView').length ===
 const heading = () => vs.filter(v => v.cls === 'Label' &&
                                      v.path.at(-1) === 'KoanWelcomePagesView')[0]?.props.Text;
 check('...first, importing', heading() === 'Bring your stuff along.', heading());
+// The keyboard moved from Start to the page's Next without passing through
+// the web page (which would focus its link).
+const [page] = await pages();
+const active = await evalIn(page, 'document.activeElement?.tagName');
+check('...and the keyboard stays on the screen, not in the page', active !== 'A', active);
 check('...with YES / NO', shownViews(vs, 'KoanWelcomeOption').length === 2);
 saveShot('welcome-import');
 
@@ -60,6 +69,8 @@ await sleep(1000);
 vs = await views();
 check('"Dive in!" closes the welcome screen', !vs.some(v => v.cls === 'KoanWelcomeView'));
 const urls = (await pages()).map(p => p.url).join(' ');
-check('...and pins the chosen Essentials',
+check('...and opens the chosen Essentials',
       urls.includes('obsidian.md') && urls.includes('github.com'), urls);
+const pinned = vs.filter(v => v.cls === 'TabView' && v.path.includes('PinnedTabContainerView'));
+check('...pinned', pinned.length === 2, `${pinned.length} pinned tabs`);
 finish();
