@@ -231,6 +231,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void CheckSidebarPeek();
   // Zen's flash popup: the hidden sidebar pops up for a moment.
   void FlashSidebar();
+  void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
+                                   const TabStripModelChange::Insert& insert);
   void EndFlash();
 
   // The caption-button strip.

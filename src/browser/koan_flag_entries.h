@@ -54,6 +54,20 @@
       {"koan-library", "Koan Library",                                       \
        "Zen's Library: History, Downloads and Spaces in a panel over the "   \
        "sidebar (Alt+Shift+L; Ctrl+H, Ctrl+Shift+Y open its sections).",     \
-       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanLibrary)},
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanLibrary)},        \
+      {"koan-media-controls", "Koan media controls",                         \
+       "A card at the bottom of the sidebar for media playing in another "   \
+       "tab, like Zen's media controller.",                                  \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanMediaControls)},  \
+      {"koan-download-animation", "Koan download animation",                 \
+       "Zen's download animation: an icon flies to the downloads button.",   \
+       kOsDesktop,                                                           \
+       FEATURE_VALUE_TYPE(koan::features::kKoanDownloadAnimation)},          \
+      {"koan-window-drag", "Koan window dragging from pages",                \
+       "Drag the window from empty space at the top of a page, like Zen.",   \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanWindowDrag)},     \
+      {"koan-welcome", "Koan welcome screen",                                \
+       "Zen's welcome screen on the first run of a profile.", kOsDesktop,    \
+       FEATURE_VALUE_TYPE(koan::features::kKoanWelcome)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

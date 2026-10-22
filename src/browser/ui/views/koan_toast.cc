@@ -9,6 +9,7 @@
 
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
@@ -21,6 +22,7 @@
 #include "third_party/skia/include/core/SkTileMode.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -35,9 +37,12 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/geometry/transform_util.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view.h"
@@ -70,7 +75,7 @@ class KoanToastView : public views::View {
                 const std::u16string& after,
                 base::RepeatingCallback<void(bool)> on_hover)
       : on_hover_(std::move(on_hover)) {
-    // The labels are event targets too: hovering them counts.
+    // The labels and the button are event targets too: hovering them counts.
     SetNotifyEnterExitOnChild(true);
     auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kHorizontal,
@@ -99,6 +104,29 @@ class KoanToastView : public views::View {
       label->SetAutoColorReadabilityEnabled(false);
       label->SetBackgroundColor(SK_ColorTRANSPARENT);
     }
+  }
+
+  // Zen's toast button (zen-popup.css .zen-toast button): just an icon, on
+  // a translucent rounded rect after the text.
+  void AddActionButton(const gfx::VectorIcon& icon,
+                       const std::u16string& name,
+                       base::RepeatingClosure on_press) {
+    auto* button =
+        AddChildView(std::make_unique<views::ImageButton>(std::move(on_press)));
+    button->SetImageModel(
+        views::Button::STATE_NORMAL,
+        ui::ImageModel::FromVectorIcon(icon, kColorKoanToastButtonIcon,
+                                       kToastButtonIconSize));
+    button->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
+    button->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
+    button->SetPreferredSize(gfx::Size(
+        kToastButtonIconSize + 2 * kToastButtonPadding, kToastButtonHeight));
+    button->SetBackground(views::CreateRoundedRectBackground(
+        kColorKoanToastButton, kToastButtonCornerRadius));
+    views::InstallRoundRectHighlightPathGenerator(button, gfx::Insets(),
+                                                  kToastButtonCornerRadius);
+    button->SetTooltipText(name);
+    button->GetViewAccessibility().SetName(name);
   }
 
   // views::View:
@@ -152,6 +180,55 @@ void KoanToast::Show(const std::u16string& text,
                      const std::u16string& after,
                      const std::u16string& announcement,
                      base::TimeDelta timeout) {
+  std::u16string spoken = announcement;
+  if (spoken.empty()) {
+    spoken = text;
+    for (const std::u16string* part : {&shortcut, &after}) {
+      if (!part->empty()) {
+        spoken += u" " + *part;
+      }
+    }
+  }
+  ShowView(std::make_unique<KoanToastView>(
+               text, shortcut, after,
+               base::BindRepeating(&KoanToast::OnHovered,
+                                   weak_factory_.GetWeakPtr())),
+           spoken, timeout);
+}
+
+void KoanToast::ShowWithAction(const std::u16string& text,
+                               const gfx::VectorIcon& action_icon,
+                               const std::u16string& action_name,
+                               base::OnceClosure action) {
+  auto view = std::make_unique<KoanToastView>(
+      text, std::u16string(), std::u16string(),
+      base::BindRepeating(&KoanToast::OnHovered, weak_factory_.GetWeakPtr()));
+  view->AddActionButton(
+      action_icon, action_name,
+      base::BindRepeating(&KoanToast::RunAction, weak_factory_.GetWeakPtr()));
+  ShowView(std::move(view), text, kToastDefaultTimeout);
+  action_ = std::move(action);
+}
+
+void KoanToast::RunAction() {
+  // Closing the toast destroys the button: after its click.
+  base::OnceClosure action = std::move(action_);
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<KoanToast> toast, base::OnceClosure run) {
+                       if (run) {
+                         std::move(run).Run();
+                       }
+                       if (toast) {
+                         toast->Hide();
+                       }
+                     },
+                     weak_factory_.GetWeakPtr(), std::move(action)));
+}
+
+void KoanToast::ShowView(std::unique_ptr<KoanToastView> view,
+                         const std::u16string& announcement,
+                         base::TimeDelta timeout) {
   Close();
   timeout_ = timeout;
   views::Widget* browser_widget = browser_view_->GetWidget();
@@ -168,9 +245,7 @@ void KoanToast::Show(const std::u16string& text,
   params.name = "KoanToast";
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
-  view_ = widget_->SetContentsView(std::make_unique<KoanToastView>(
-      text, shortcut, after,
-      base::BindRepeating(&KoanToast::OnHovered, weak_factory_.GetWeakPtr())));
+  view_ = widget_->SetContentsView(std::move(view));
   view_->SetPaintToLayer();
   view_->layer()->SetFillsBoundsOpaquely(false);
 
@@ -178,16 +253,7 @@ void KoanToast::Show(const std::u16string& text,
   OnBrowserViewLayout();
   widget_->Show();
   widget_->LayoutRootViewIfNecessary();
-  std::u16string spoken = announcement;
-  if (spoken.empty()) {
-    spoken = text;
-    for (const std::u16string* part : {&shortcut, &after}) {
-      if (!part->empty()) {
-        spoken += u" " + *part;
-      }
-    }
-  }
-  view_->GetViewAccessibility().AnnounceAlert(spoken);
+  view_->GetViewAccessibility().AnnounceAlert(announcement);
 
   // Grow from the top centre.
   ui::Layer* layer = view_->layer();
@@ -256,6 +322,7 @@ void KoanToast::Hide() {
 
 void KoanToast::Close() {
   timer_.Stop();
+  action_.Reset();
   hiding_ = false;
   view_ = nullptr;
   if (widget_) {

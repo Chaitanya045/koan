@@ -647,11 +647,17 @@ void KoanWorkspaceController::RenameSpace(const tab_groups::TabGroupId& space,
   std::u16string trimmed;
   base::TrimWhitespace(name, base::TRIM_ALL, &trimmed);
   // Zen ignores an empty name.
-  if (!data || trimmed.empty()) {
+  if (!data || trimmed.empty() || trimmed == data->name) {
     return;
   }
   data->name = trimmed;
   WriteSpace(space, *data);
+  // Zen's toast when a rename in the header finishes (zen-general.ftl
+  // zen-workspace-renamed-toast).
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->toast()->Show(u"Workspace has been successfully renamed!");
+  }
 }
 
 void KoanWorkspaceController::SetSpaceIcon(const tab_groups::TabGroupId& space,

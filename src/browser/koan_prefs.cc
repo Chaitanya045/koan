@@ -41,6 +41,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kPinnedTabRestoreToPinnedUrl, false);
   registry->RegisterStringPref(kLibraryLastSection, "history");
   registry->RegisterBooleanPref(kLibraryHistoryClosedTabs, false);
+  registry->RegisterBooleanPref(kMediaControlsEnabled, true);
+  registry->RegisterBooleanPref(kDownloadAnimation, true);
+  registry->RegisterBooleanPref(kDragWindowFromContent, true);
+  registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
 }
 
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
