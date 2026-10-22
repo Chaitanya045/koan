@@ -5,18 +5,17 @@
 // away.
 //
 //   scripts/e2e/run.sh download_animation
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { browserCall, check, click, finish, pages, saveShot, shownViews, sleep,
+import { rmSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { check, click, evalIn, finish, pages, saveShot, shownViews, sleep,
          views } from './lib/koan.mjs';
 
 const [page] = await pages();
-// Downloads go to a scratch folder beside the test profiles.
-const profiles = join(dirname(fileURLToPath(import.meta.url)), '../../.test-profiles');
-mkdirSync(profiles, { recursive: true });
-const dir = mkdtempSync(join(profiles, 'downloads-'));
-await browserCall('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir });
+// The download lands in the default folder: give it a name of its own, to
+// remove afterwards.
+const name = `koan-e2e-${process.pid}-${Date.now()}.txt`;
+await evalIn(page, `document.querySelector('#download').download = ${JSON.stringify(name)}`);
 
 await click(page, '#download');
 await sleep(100);
@@ -36,5 +35,6 @@ vs = await views();
 check('Both are gone afterwards',
       !shownViews(vs, 'KoanDownloadArcView').length &&
       !shownViews(vs, 'KoanDownloadTileView').length);
-rmSync(dir, { recursive: true, force: true });
+await sleep(500);
+rmSync(join(homedir(), 'Downloads', name), { force: true });
 finish();
