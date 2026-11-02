@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Branding rules
+      - name: Branding rules and the Chromium release watcher
         run: python -I -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
   lint:
@@ -67,4 +67,4 @@ jobs:
       - name: Node scripts parse
         run: for f in scripts/*.mjs scripts/e2e/*.mjs; do node --check "$f"; done
       - name: Python compiles
-        run: python -m py_compile scripts/*.py scripts/tests/*.py
+        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/tests/*.py

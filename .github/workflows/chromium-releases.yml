@@ -1,0 +1,59 @@
+# Watches Chromium's Mac releases for Koan, which follows the release branch
+# of one milestone (CHROMIUM_VERSION; docs/REBASE.md, "Following Chromium
+# releases"). Every 6 hours it asks chromiumdash for the Beta and Stable
+# releases, and when
+#
+#   - our milestone has a newer point release (Beta or Stable), or
+#   - a newer milestone has reached Stable,
+#
+# it runs scripts/ci/check_patches.sh against that version (no Chromium
+# checkout: it fetches the patched files from googlesource) and opens or
+# updates ONE issue, labelled chromium-update, with the version and the
+# result. The issue closes itself once the pin has caught up. Nothing is
+# posted while the versions and the patches are the same as last time.
+#
+# Cheap: one ubuntu job of a minute or two, most of it a couple of HTTP
+# requests; the patch check only runs when something changed.
+name: Chromium releases
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print the issue instead of opening or editing it
+        type: boolean
+        default: false
+
+# Nothing by default; the one job asks for what it needs.
+permissions: {}
+
+# A run that is still going when the next starts would race on the issue.
+concurrency:
+  group: chromium-releases
+  cancel-in-progress: false
+
+jobs:
+  releases:
+    name: New Chromium releases
+    # Not on forks: they have no issue to maintain.
+    if: github.repository == 'Chaitanya045/koan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout
+      issues: write # the tracking issue and its label
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare the pin with chromiumdash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        # DRY_RUN is empty or a fixed flag, never user text.
+        # shellcheck disable=SC2086
+        run: python3 -I scripts/ci/chromium_releases.py $DRY_RUN
