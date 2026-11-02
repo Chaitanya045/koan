@@ -224,19 +224,27 @@ const KEY_NAMES = {
   190: '.', 191: '/', 192: '`', 219: '[', 220: '\\', 221: ']', 222: '\'',
 };
 
-// Zen's display: Ctrl+Win+Alt+⇧+Key (also shortcuts::DisplayText() in
-// koan_shortcut_table.cc, for the command palette).
-// TODO(#51): on macOS Zen shows ⌃ ⌥ ⇧ ⌘ separated by spaces, ⌘ for "accel",
-// and ⎋ / ↩ for Escape / Enter; record ⌘ (metaKey) as the accelerator.
+// Zen's display: Ctrl+Win+Alt+⇧+Key, and on macOS "⌃ ⌘ ⌥ ⇧ Key" (also
+// shortcuts::DisplayText() in koan_shortcut_table.cc, for the command
+// palette). ⌘ is the key Zen calls "accel" there.
 function modifiersText(modifiers) {
   const m = settings.shortcuts.modifiers;
-  return [[m.ctrl, 'Ctrl'], [m.meta, 'Win'], [m.alt, 'Alt'], [m.shift, '⇧']]
-      .filter(([flag]) => modifiers & flag)
-      .map(([, name]) => `${name}+`)
+  const mac = settings.shortcuts.mac;
+  return [
+    [m.ctrl, '⌃', 'Ctrl'], [m.meta, '⌘', 'Win'], [m.alt, '⌥', 'Alt'],
+    [m.shift, '⇧', '⇧'],
+  ].filter(([flag]) => modifiers & flag)
+      .map(([, glyph, name]) => mac ? `${glyph} ` : `${name}+`)
       .join('');
 }
 
 function keyName(code) {
+  if (settings.shortcuts.mac) {
+    const glyph = {13: '↩', 27: '⎋', 32: '␣'}[code];
+    if (glyph) {
+      return glyph;
+    }
+  }
   if ((code >= 48 && code <= 57) || (code >= 65 && code <= 90)) {
     return String.fromCharCode(code);
   }
@@ -257,7 +265,7 @@ function sameKey(a, b) {
   return a.key === b.key && a.modifiers === b.modifiers;
 }
 
-// Like the browser's shortcut_table: a key with Ctrl, Alt or Win, or a
+// Like the browser's shortcut_table: a key with Ctrl, Alt or Win (⌘), or a
 // function key.
 function isValidKey(key) {
   const m = settings.shortcuts.modifiers;
@@ -346,9 +354,13 @@ async function onShortcutKeyDown(event, input, action) {
         problem =
             `Conflicts with ${groupTitle(conflict.group)} -> ${conflict.label}`;
       } else if (isTabCycling(key)) {
-        problem = 'Ctrl+Tab and Ctrl+Page Up/Down switch tabs';
+        problem = settings.shortcuts.mac ?
+            '⌃ Tab and ⌃ Page Up/Down switch tabs' :
+            'Ctrl+Tab and Ctrl+Page Up/Down switch tabs';
       } else if (!isValidKey(key)) {
-        problem = 'Use Ctrl, Alt or Win with the key, or a function key';
+        problem = settings.shortcuts.mac ?
+            'Use ⌃, ⌥ or ⌘ with the key, or a function key' :
+            'Use Ctrl, Alt or Win with the key, or a function key';
       }
       if (problem) {
         input.classList.add('invalid');

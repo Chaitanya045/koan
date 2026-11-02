@@ -98,15 +98,24 @@ base::span<const Info> Actions();
 // Returns null for an unknown id.
 const Info* FindAction(std::string_view id);
 
-// Zen's defaults (ZenKeyboardShortcuts.mjs, shortcuts version 21, Linux) plus
+// Zen's defaults (ZenKeyboardShortcuts.mjs, shortcuts version 21) plus
 // Koan's own, in docs/USAGE.md order. An action may have several keys.
-// Zen writes its defaults with "accel" (Cmd on macOS, Ctrl elsewhere): the
-// Space, compact mode sidebar and split view keys follow it here
-// (ui::EF_PLATFORM_ACCELERATOR), and Zen's Mac-only Ctrl+1..0 (switch to
-// Space N) are bound on macOS.
-// TODO(#51): the rest of Zen's Mac table, and Cmd in
-// IsValidCustomAccelerator().
+// Zen writes its defaults with "accel" (Cmd on macOS, Ctrl elsewhere), which
+// they follow here (ui::EF_PLATFORM_ACCELERATOR); macOS also gets Zen's
+// Ctrl+1..0 (switch to Space N) and Firefox's macOS keys for Inspect and
+// Downloads.
 std::vector<Binding> DefaultBindings();
+
+// Whether Chrome on macOS runs `accelerator` as a reserved command (Close
+// Tab, New Window, Cmd+Option+arrows ...) before the menu and any normal
+// priority accelerator. Koan's shortcuts on these keys are registered high
+// priority. Not platform specific so it can be checked anywhere.
+bool IsReservedOnMac(const ui::Accelerator& accelerator);
+
+// Whether `accelerator` is a key macOS handles itself (Cmd+Q, Cmd+Space,
+// Cmd+Tab, Control+arrows ...) or the app can't do without. No custom
+// shortcut may use it on macOS.
+bool IsSystemShortcutOnMac(const ui::Accelerator& accelerator);
 
 // The bindings in effect: the defaults, with each action the user rebound in
 // `overrides` (prefs::kShortcuts) replaced by its one custom key, or by none
@@ -126,14 +135,17 @@ struct CycleKey {
 base::span<const CycleKey> CycleKeys();
 
 // Whether `accelerator` may be used for a custom shortcut: a key with Ctrl,
-// Alt or Meta (Shift alone would take a key away from typing), or a function
-// key; not a tab cycling key.
+// Alt or Meta (Cmd on macOS; Shift alone would take a key away from typing),
+// or a function key; not a tab cycling key, and on macOS not a system key
+// (IsSystemShortcutOnMac()).
 bool IsValidCustomAccelerator(const ui::Accelerator& accelerator);
 
 // How Zen shows `accelerator` (its settings page and command palette):
-// Ctrl+Win+Alt+⇧+Key, e.g. "Ctrl+Alt+⇧+C", "Ctrl+,". On macOS the platform's
-// glyphs (⌃⌥⇧⌘), which Chromium's accelerator text uses too. The settings
-// page's koan_settings.js has the same table.
+// Ctrl+Win+Alt+⇧+Key, e.g. "Ctrl+Alt+⇧+C", "Ctrl+,". On macOS, as Zen does,
+// the glyphs ⌃ ⌘ ⌥ ⇧ separated by spaces, then the key ("⌘ ⇧ C", "⌃ ␣"), with
+// ⎋ ↩ ␣ for Escape, Enter and Space. The settings page's koan_settings.js has
+// the same table. `macos` is for tests; the other overload uses the platform.
+std::u16string DisplayText(const ui::Accelerator& accelerator, bool macos);
 std::u16string DisplayText(const ui::Accelerator& accelerator);
 
 // Action::kSwitchWorkspace1..10: the Space number (1..10), or 0.

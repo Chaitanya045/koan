@@ -164,6 +164,24 @@ check('...showing Zen\'s keys', await value('compact-mode-toggle') === 'Ctrl+S' 
       await value('copy-url-markdown') === 'Ctrl+Alt+⇧+C' &&
       await value('open-settings') === 'Ctrl+,',
       `${await value('compact-mode-toggle')}, ${await value('copy-url-markdown')}`);
+// The macOS display can't be reached on Linux's browser, so flip the page's
+// platform flag: Zen's "⌘ ⇧ C" instead of "Ctrl+⇧+C", ⎋ for Escape.
+const macText = await evalIn(settings, `(() => {
+  const m = settings.shortcuts.modifiers;
+  const was = settings.shortcuts.mac;
+  settings.shortcuts.mac = true;
+  const text = [
+    shortcutText({key: 67, modifiers: m.meta | m.shift}),
+    shortcutText({key: 27, modifiers: m.ctrl | m.alt | m.meta}),
+    shortcutText({key: 32, modifiers: m.ctrl}),
+  ];
+  settings.shortcuts.mac = was;
+  return [was, ...text];
+})()`);
+check('The page shows Zen\'s macOS notation on a Mac (⌘ ⇧ C, ⌃ ⌘ ⌥ ⎋)',
+      macText?.[0] === false && macText?.[1] === '⌘ ⇧ C' &&
+      macText?.[2] === '⌃ ⌘ ⌥ ⎋' && macText?.[3] === '⌃ ␣',
+      JSON.stringify(macText));
 check('A custom key wins over a default with the same key (seeded)',
       await value('downloads') === 'Ctrl+Alt+R' && await value('reader-mode') === 'Not set',
       `${await value('downloads')}, ${await value('reader-mode')}`);

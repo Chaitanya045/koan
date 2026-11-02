@@ -141,12 +141,15 @@ std::vector<Binding> DefaultBindings() {
   const auto bind = [](ui::KeyboardCode key, int modifiers, Action action) {
     return Binding{ui::Accelerator(key, modifiers), action};
   };
+  // Zen writes its defaults with "accel" (Cmd on macOS, Ctrl elsewhere), and
+  // kAccel is the same here, except for the few it gives other keys on macOS
+  // (marked below).
   std::vector<Binding> bindings = {
       // Zen: compact mode.
-      bind(ui::VKEY_S, kCtrl, Action::kToggleCompactMode),
+      bind(ui::VKEY_S, kAccel, Action::kToggleCompactMode),
       bind(ui::VKEY_S, kAccel | kAlt, Action::kCompactModeShowSidebar),
-      // Zen moves Save Page off Ctrl+S.
-      bind(ui::VKEY_S, kCtrl | kAlt | kShift, Action::kSavePage),
+      // Zen moves Save Page off Accel+S.
+      bind(ui::VKEY_S, kAccel | kAlt | kShift, Action::kSavePage),
       // Zen: workspaces (Accel+Alt; on macOS Cmd+Option+arrows, which
       // Chrome uses to switch tabs: Koan's keys come first there).
       bind(ui::VKEY_RIGHT, kAccel | kAlt, Action::kWorkspaceForward),
@@ -156,7 +159,7 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_V, kAccel | kAlt, Action::kSplitVertical),
       bind(ui::VKEY_H, kAccel | kAlt, Action::kSplitHorizontal),
       bind(ui::VKEY_U, kAccel | kAlt, Action::kUnsplit),
-      // Ctrl+Shift+* : "*" is Shift+8 on most layouts, or the keypad key.
+      // Accel+Shift+* : "*" is Shift+8 on most layouts, or the keypad key.
       bind(ui::VKEY_8, kAccel | kShift, Action::kNewEmptySplit),
       bind(ui::VKEY_MULTIPLY, kAccel | kShift, Action::kNewEmptySplit),
       // Zen: tabs and pages. Accel+T opens the URL bar in place of a new tab
@@ -165,8 +168,8 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_T, kAccel, Action::kNewTab),
       bind(ui::VKEY_C, kAccel | kShift, Action::kCopyUrl),
       bind(ui::VKEY_C, kAccel | kShift | kAlt, Action::kCopyUrlMarkdown),
-      bind(ui::VKEY_D, kCtrl | kShift, Action::kTogglePinTab),
-      bind(ui::VKEY_K, kCtrl | kShift, Action::kCloseUnpinnedTabs),
+      bind(ui::VKEY_D, kAccel | kShift, Action::kTogglePinTab),
+      bind(ui::VKEY_K, kAccel | kShift, Action::kCloseUnpinnedTabs),
       // Zen: Accel+O while Glance is open.
       bind(ui::VKEY_O, kAccel, Action::kGlanceExpand),
       bind(ui::VKEY_L, kAlt | kShift, Action::kLibrary),
@@ -187,29 +190,34 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_H, kAccel, Action::kLibraryHistory),
       bind(ui::VKEY_H, kAccel | kShift, Action::kLibraryHistory),
 #endif
-      // Zen moves the inspector off Ctrl+Shift+C.
-      bind(ui::VKEY_L, kCtrl | kShift, Action::kInspect),
-      // Zen (Firefox) windows: Ctrl+Shift+N new window, Ctrl+Shift+P private.
-      bind(ui::VKEY_N, kCtrl | kShift, Action::kNewWindow),
-      bind(ui::VKEY_P, kCtrl | kShift, Action::kNewPrivateWindow),
-      // Zen inherits these from Firefox; Chrome leaves the keys free.
+      // Zen (Firefox) windows: Accel+Shift+N new (blank) window,
+      // Accel+Shift+P private. On macOS the first takes Chrome's reserved
+      // Cmd+Shift+N (a private window there) and Zen's Cmd+N stays Chrome's.
+      bind(ui::VKEY_N, kAccel | kShift, Action::kNewWindow),
+      bind(ui::VKEY_P, kAccel | kShift, Action::kNewPrivateWindow),
+      // Zen inherits these from Firefox; Chrome leaves the keys free. Mute is
+      // Control+M on macOS too (Firefox's "control" modifier, not "accel").
       bind(ui::VKEY_M, kCtrl, Action::kMuteSite),
-      bind(ui::VKEY_B, kCtrl, Action::kBookmarks),
-  // Firefox's Downloads key, which Zen sends to the Library's
-  // Downloads: Ctrl+Shift+Y, on macOS Cmd+Shift+J.
+      bind(ui::VKEY_B, kAccel, Action::kBookmarks),
+      // Firefox's Downloads key, which Zen sends to the Library's
+      // Downloads: Ctrl+Shift+Y, on macOS Cmd+Shift+J (also Chrome's).
 #if BUILDFLAG(IS_MAC)
       bind(ui::VKEY_J, kAccel | kShift, Action::kDownloads),
 #else
       bind(ui::VKEY_Y, kCtrl | kShift, Action::kDownloads),
 #endif
-      bind(ui::VKEY_R, kCtrl | kAlt, Action::kReaderMode),
-      // Koan-only.
+      bind(ui::VKEY_R, kAccel | kAlt, Action::kReaderMode),
+      // Koan-only. Control+Option on macOS: Chrome's Cmd+Option+B (Bookmark
+      // Manager) and Cmd+Option+N (split tab) are taken.
       bind(ui::VKEY_B, kCtrl | kAlt, Action::kToggleSingleToolbar),
       bind(ui::VKEY_N, kCtrl | kAlt, Action::kNewWorkspace),
-      // Ctrl+, : Zen's "Open Preferences" (Cmd+, on macOS).
-      bind(ui::VKEY_OEM_COMMA, kCtrl, Action::kOpenSettings),
+      // Accel+, : Zen's "Open Preferences" (Cmd+, on macOS).
+      bind(ui::VKEY_OEM_COMMA, kAccel, Action::kOpenSettings),
   };
 #if BUILDFLAG(IS_MAC)
+  // Zen moves the inspector from "I" to "L" and keeps Firefox's modifiers:
+  // Cmd+Option on macOS (it replaces Chrome's Cmd+Option+L, Downloads).
+  bindings.push_back(bind(ui::VKEY_L, kAccel | kAlt, Action::kInspect));
   // Zen on macOS: Ctrl+1..9 and Ctrl+0 switch to Space 1..10.
   for (int number = 1; number <= 10; ++number) {
     bindings.push_back(
@@ -217,8 +225,76 @@ std::vector<Binding> DefaultBindings() {
              static_cast<Action>(static_cast<int>(Action::kSwitchWorkspace1) +
                                  number - 1)));
   }
+#else
+  // Zen moves the inspector off Ctrl+Shift+C.
+  bindings.push_back(bind(ui::VKEY_L, kCtrl | kShift, Action::kInspect));
 #endif
   return bindings;
+}
+
+bool IsReservedOnMac(const ui::Accelerator& accelerator) {
+  // BrowserCommandController's reserved commands, which Chrome runs before
+  // the menu and the page (accelerator_table.cc, accelerators_cocoa.mm and
+  // global_keyboard_shortcuts_mac.mm have their keys). A Koan shortcut on one
+  // of these keys must be high priority to run first.
+  struct Key {
+    ui::KeyboardCode key;
+    int modifiers;
+  };
+  static constexpr Key kReserved[] = {
+      {ui::VKEY_W, ui::EF_COMMAND_DOWN},                        // Close Tab
+      {ui::VKEY_W, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},    // Close Window
+      {ui::VKEY_N, ui::EF_COMMAND_DOWN},                        // New Window
+      {ui::VKEY_N, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},    // Incognito
+      {ui::VKEY_T, ui::EF_COMMAND_DOWN},                        // New Tab
+      {ui::VKEY_T, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},    // Reopen Tab
+      {ui::VKEY_Q, ui::EF_COMMAND_DOWN},                        // Quit
+      {ui::VKEY_TAB, ui::EF_CONTROL_DOWN},                      // Next Tab
+      {ui::VKEY_TAB, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN},  // Previous Tab
+      {ui::VKEY_NEXT, ui::EF_CONTROL_DOWN},                     // Next Tab
+      {ui::VKEY_PRIOR, ui::EF_CONTROL_DOWN},                    // Previous Tab
+      {ui::VKEY_OEM_6, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},  // Next Tab
+      {ui::VKEY_OEM_4, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},  // Previous
+      {ui::VKEY_RIGHT, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},    // Next Tab
+      {ui::VKEY_LEFT, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},     // Previous
+  };
+  return std::ranges::any_of(kReserved, [&](const Key& reserved) {
+    return accelerator == ui::Accelerator(reserved.key, reserved.modifiers);
+  });
+}
+
+bool IsSystemShortcutOnMac(const ui::Accelerator& accelerator) {
+  // Keys macOS or Chrome's menu keep for themselves: the system takes them
+  // before any app sees them, or an app can't work without them.
+  struct Key {
+    ui::KeyboardCode key;
+    int modifiers;
+  };
+  static constexpr Key kSystem[] = {
+      {ui::VKEY_Q, ui::EF_COMMAND_DOWN},                        // Quit
+      {ui::VKEY_H, ui::EF_COMMAND_DOWN},                        // Hide
+      {ui::VKEY_M, ui::EF_COMMAND_DOWN},                        // Minimize
+      {ui::VKEY_SPACE, ui::EF_COMMAND_DOWN},                    // Spotlight
+      {ui::VKEY_SPACE, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},  // Finder
+      {ui::VKEY_SPACE, ui::EF_CONTROL_DOWN},                    // Input source
+      {ui::VKEY_SPACE, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN},  // Emoji
+      {ui::VKEY_TAB, ui::EF_COMMAND_DOWN},  // App switcher
+      {ui::VKEY_TAB, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
+      {ui::VKEY_OEM_3, ui::EF_COMMAND_DOWN},  // Window cycle
+      {ui::VKEY_OEM_3, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
+      {ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},  // Force Quit
+      {ui::VKEY_Q, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN},   // Lock Screen
+      {ui::VKEY_3, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},     // Screenshots
+      {ui::VKEY_4, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
+      {ui::VKEY_5, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
+      {ui::VKEY_LEFT, ui::EF_CONTROL_DOWN},  // Spaces
+      {ui::VKEY_RIGHT, ui::EF_CONTROL_DOWN},
+      {ui::VKEY_UP, ui::EF_CONTROL_DOWN},  // Mission Ctl
+      {ui::VKEY_DOWN, ui::EF_CONTROL_DOWN},
+  };
+  return std::ranges::any_of(kSystem, [&](const Key& system) {
+    return accelerator == ui::Accelerator(system.key, system.modifiers);
+  });
 }
 
 int SwitchWorkspaceNumber(Action action) {
@@ -281,6 +357,11 @@ bool IsValidCustomAccelerator(const ui::Accelerator& accelerator) {
       return false;
     }
   }
+#if BUILDFLAG(IS_MAC)
+  if (IsSystemShortcutOnMac(accelerator)) {
+    return false;
+  }
+#endif
   switch (key) {
     case ui::VKEY_SHIFT:
     case ui::VKEY_CONTROL:
@@ -297,23 +378,21 @@ bool IsValidCustomAccelerator(const ui::Accelerator& accelerator) {
   return (accelerator.modifiers() & (kCtrl | kAlt | ui::EF_COMMAND_DOWN)) != 0;
 }
 
-std::u16string DisplayText(const ui::Accelerator& accelerator) {
-#if BUILDFLAG(IS_MAC)
-  return accelerator.GetShortcutText();
-#else
+std::u16string DisplayText(const ui::Accelerator& accelerator, bool macos) {
+  // Zen's KeyShortcut.toDisplayString(): on macOS "⌃ ⌘ ⌥ ⇧ " before the key,
+  // elsewhere "Ctrl+Win+Alt+⇧+".
   std::u16string text;
-  if (accelerator.IsCtrlDown()) {
-    text += u"Ctrl+";
-  }
-  if (accelerator.IsCmdDown()) {
-    text += u"Win+";
-  }
-  if (accelerator.IsAltDown()) {
-    text += u"Alt+";
-  }
-  if (accelerator.IsShiftDown()) {
-    text += u"⇧+";
-  }
+  const auto add = [&](bool down, std::u16string_view mac,
+                       std::u16string_view other) {
+    if (down) {
+      text += macos ? mac : other;
+      text += macos ? u" " : u"+";
+    }
+  };
+  add(accelerator.IsCtrlDown(), u"⌃", u"Ctrl");
+  add(accelerator.IsCmdDown(), u"⌘", u"Win");
+  add(accelerator.IsAltDown(), u"⌥", u"Alt");
+  add(accelerator.IsShiftDown(), u"⇧", u"⇧");
   const ui::KeyboardCode key = accelerator.key_code();
   if ((key >= ui::VKEY_0 && key <= ui::VKEY_9) ||
       (key >= ui::VKEY_A && key <= ui::VKEY_Z)) {
@@ -331,11 +410,11 @@ std::u16string DisplayText(const ui::Accelerator& accelerator) {
     case ui::VKEY_TAB:
       return text + u"Tab";
     case ui::VKEY_RETURN:
-      return text + u"Enter";
+      return text + (macos ? u"↩" : u"Enter");
     case ui::VKEY_ESCAPE:
-      return text + u"Esc";
+      return text + (macos ? u"⎋" : u"Esc");
     case ui::VKEY_SPACE:
-      return text + u"Space";
+      return text + (macos ? u"␣" : u"Space");
     case ui::VKEY_PRIOR:
       return text + u"PageUp";
     case ui::VKEY_NEXT:
@@ -387,7 +466,10 @@ std::u16string DisplayText(const ui::Accelerator& accelerator) {
     default:
       return text + u"#" + base::NumberToString16(static_cast<int>(key));
   }
-#endif
+}
+
+std::u16string DisplayText(const ui::Accelerator& accelerator) {
+  return DisplayText(accelerator, BUILDFLAG(IS_MAC));
 }
 
 base::DictValue ToPrefValue(const ui::Accelerator& accelerator) {

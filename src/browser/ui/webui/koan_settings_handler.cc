@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/accelerator_table.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -22,6 +23,10 @@
 #include "koan/browser/ui/webui/koan_settings_rows.h"
 #include "ui/events/event_constants.h"
 #include "ui/views/focus/focus_manager.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "koan/browser/ui/cocoa/koan_main_menu.h"
+#endif
 
 namespace koan {
 
@@ -359,6 +364,13 @@ base::DictValue KoanSettingsHandler::Shortcuts() const {
     chromium.Append(shortcuts::ToPrefValue(
         ui::Accelerator(mapping.keycode, mapping.modifiers)));
   }
+#if BUILDFLAG(IS_MAC)
+  // On macOS the list above has only a few keys: the rest are the main
+  // menu's and a table of keys that aren't in it.
+  for (const ui::Accelerator& accelerator : ChromiumMacAccelerators()) {
+    chromium.Append(shortcuts::ToPrefValue(accelerator));
+  }
+#endif
   // Keys no shortcut can take.
   base::ListValue tab_cycling;
   for (const shortcuts::CycleKey& key : shortcuts::CycleKeys()) {
@@ -366,6 +378,7 @@ base::DictValue KoanSettingsHandler::Shortcuts() const {
         shortcuts::ToPrefValue(ui::Accelerator(key.key, key.modifiers)));
   }
   return base::DictValue()
+      .Set("mac", !!BUILDFLAG(IS_MAC))
       .Set("groups", std::move(groups))
       .Set("actions", std::move(actions))
       .Set("chromium", std::move(chromium))
