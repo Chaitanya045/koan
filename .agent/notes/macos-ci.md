@@ -99,4 +99,29 @@ reusable workflow instead of 20 copies of the job.
 
 ## Measurements
 
-(Filled in from the first runs; see below.)
+**Runner** (`xcode-27`, run 41402833326): 3 × "Apple M1 (Virtual)", 7 GB,
+a 150 GB disk with 36 GB free; `mac_runner_setup.sh` frees it to
+**101 GB** in ~2 min (two extra Xcodes, Android SDK, .NET, tool cache,
+browsers). The "14 GB" in GitHub's docs is only the guaranteed minimum.
+
+**Fetch job** (run 41404564286), 22.5 min:
+
+| Step | Time | Result |
+|---|---|---|
+| Runner setup | 1.8 min | 101 GB free |
+| `gclient sync --no-history` (mac, small) | 9.8 min | |
+| `gclient runhooks` | 0.6 min | `chromium/src` 29 GB |
+| Prune (lite tarball lists) | 3.3 min | 21 GB |
+| Patches + branding | 0.2 min | |
+| Delete `.git` (src's is 1.4 GB) | 0.2 min | 18 GB |
+| `gn gen` | 0.2 min | |
+| Pack (gtar posix + zstd -3, 3 threads) | 4.5 min | **8.1 GB** archive |
+| Upload | 1.3 min | ~105 MB/s |
+
+Packed: `chromium/src` 18 GB, `depot_tools` 0.85 GB, `.cache/mac` 2.9 GB
+(vpython and CIPD caches).
+
+A first run failed at `gn gen`: the pruning had removed
+`third_party/blink/tools/*.pydeps`, which `//infra/orchestrator` reads.
+The lite tarball keeps every `*.gn`, `*.gni`, `*.grd(p)`, `*.isolate` and
+`*.pydeps` in the directories it drops; the script now does the same.
