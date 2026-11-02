@@ -28,10 +28,11 @@ namespace koan {
 
 // Zen's download animation (ZenDownloadAnimation.mjs) for one window: when
 // a download starts, a round download icon flies along an arc from where
-// the pointer was last pressed to the downloads button. When that button
-// isn't showing (single toolbar, the default, or a hidden toolbar) a
-// downloads tile slides in at the bottom of the sidebar side instead, and
-// the icon lands on it.
+// the pointer was last pressed to the Library button at the bottom of the
+// sidebar, or, without it, to the downloads button. When neither shows
+// (compact mode hiding the sidebar, with the toolbar hidden too) a tile
+// with the Library icon slides in at the bottom of the sidebar side
+// instead, and the icon lands on it.
 //
 // Both draw in a short-lived child widget over the window that takes no
 // input. The tile is on the sidebar's side (right with tabs on the right).

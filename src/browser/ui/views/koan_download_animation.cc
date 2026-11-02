@@ -23,6 +23,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -53,6 +54,24 @@ namespace {
 // sizes in koan_sidebar_metrics.h.
 constexpr int kArcViewSize = kDownloadArcSize + 2 * kDownloadShadowMargin;
 constexpr int kTileViewSize = kDownloadTileSize + 2 * kDownloadShadowMargin;
+
+// The Library button at the bottom of the sidebar (KoanLibraryButton, #64),
+// if it is on screen: not while compact mode hides the sidebar.
+views::View* FindLibraryButton(views::View* view) {
+  if (!view->GetVisible()) {
+    return nullptr;
+  }
+  if (view->GetClassName() == "KoanLibraryButton") {
+    return view->IsDrawn() && !view->GetVisibleBounds().IsEmpty() ? view
+                                                                  : nullptr;
+  }
+  for (views::View* child : view->children()) {
+    if (views::View* button = FindLibraryButton(child)) {
+      return button;
+    }
+  }
+  return nullptr;
+}
 
 // Scales `size` about its centre after moving it by (dx, dy).
 gfx::Transform MoveAndScale(float dx, float dy, float scale, int size) {
@@ -111,11 +130,12 @@ class KoanDownloadTileView : public views::View {
         {gfx::ShadowValue(gfx::Vector2d(), kDownloadTileShadowBlur,
                           colors->GetColor(kColorKoanDownloadTileShadow))}));
     canvas->DrawRoundRect(tile, kDownloadTileCornerRadius, flags);
-    canvas->DrawImageInt(gfx::CreateVectorIcon(
-                             vector_icons::kDownloadIcon, kDownloadTileIconSize,
-                             colors->GetColor(kColorKoanDownloadTileIcon)),
-                         (width() - kDownloadTileIconSize) / 2,
-                         (height() - kDownloadTileIconSize) / 2);
+    // Zen's box shows the Library icon: the downloads live there.
+    canvas->DrawImageInt(
+        gfx::CreateVectorIcon(kLibraryIcon, kDownloadTileIconSize,
+                              colors->GetColor(kColorKoanDownloadTileIcon)),
+        (width() - kDownloadTileIconSize) / 2,
+        (height() - kDownloadTileIconSize) / 2);
   }
 };
 
@@ -223,16 +243,22 @@ void KoanDownloadAnimation::Play() {
   }
   const gfx::Point start = *last_press_;
 
-  // The downloads button if it shows, else the tile.
+  // Zen's targets, in order: the Library button, the downloads button, else
+  // the tile.
   const KoanBrowserViewController* controller =
       KoanBrowserViewController::From(browser_view_);
-  const bool toolbar_shown = !controller ||
-                             !controller->compact_mode()->hides_toolbar() ||
-                             controller->compact_mode()->is_toolbar_revealed();
-  ToolbarButtonProvider* provider = browser_view_->toolbar_button_provider();
-  views::View* button = provider ? provider->GetDownloadButton() : nullptr;
+  views::View* sidebar = browser_view_->tab_strip_view();
+  views::View* button = sidebar ? FindLibraryButton(sidebar) : nullptr;
+  if (!button) {
+    const bool toolbar_shown =
+        !controller || !controller->compact_mode()->hides_toolbar() ||
+        controller->compact_mode()->is_toolbar_revealed();
+    ToolbarButtonProvider* provider = browser_view_->toolbar_button_provider();
+    button =
+        provider && toolbar_shown ? provider->GetDownloadButton() : nullptr;
+  }
   gfx::Point end;
-  if (toolbar_shown && button && button->IsDrawn()) {
+  if (button && button->IsDrawn()) {
     end = button->GetLocalBounds().CenterPoint();
     views::View::ConvertPointToTarget(button, browser_view_, &end);
   } else {

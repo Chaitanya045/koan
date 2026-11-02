@@ -470,9 +470,10 @@ With the system's reduced motion setting on, Koan skips its animations
 (the download animation, the welcome screen's, the media cards' fades).
 
 Starting a download sends a small download icon flying from where you
-clicked to the downloads button, or, while the toolbar is hidden (single
-toolbar, the default), to a downloads tile that slides in at the bottom
-corner on the sidebar's side for a moment.
+clicked to the Library button at the bottom of the sidebar (or the
+downloads button, with the toolbar showing and no Library button). While
+compact mode hides the sidebar, it lands on a tile with the Library icon
+that slides in at the bottom corner on the sidebar's side for a moment.
 
 ![Download animation](screenshots/download-animation.png)
 
