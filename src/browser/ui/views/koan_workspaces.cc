@@ -58,6 +58,7 @@
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/mojom/themes.mojom.h"
 #include "ui/compositor/layer.h"
@@ -647,11 +648,16 @@ void KoanWorkspaceController::RenameSpace(const tab_groups::TabGroupId& space,
   std::u16string trimmed;
   base::TrimWhitespace(name, base::TRIM_ALL, &trimmed);
   // Zen ignores an empty name.
-  if (!data || trimmed.empty()) {
+  if (!data || trimmed.empty() || trimmed == data->name) {
     return;
   }
   data->name = trimmed;
   WriteSpace(space, *data);
+  // Zen's toast when a rename in the header finishes.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->toast()->Show(kWorkspaceRenamedToast);
+  }
 }
 
 void KoanWorkspaceController::SetSpaceIcon(const tab_groups::TabGroupId& space,

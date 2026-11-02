@@ -193,6 +193,10 @@ if (rename) {
 }
 s = await sidebar();
 check('...and Enter renames the Space', s.header?.name === 'Home', s.header?.name);
+const renamedToast = s.vs.filter(v => v.path.includes('KoanToastView') && v.cls === 'Label')
+    .map(v => v.props.Text).join(' ');
+check('...with Zen\'s toast', renamedToast === 'Workspace has been successfully renamed!',
+      renamedToast);
 
 // Change Icon...: Zen's picker, applied right away.
 menu = await headerMenu();

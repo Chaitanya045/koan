@@ -84,6 +84,19 @@
 - Ubuntu's `install-build-deps.sh` doesn't apply (host is CachyOS/Arch); the
   Debian sysroot (`use_sysroot = true`) covers the target libs.
 
+- **Compile-check without the build lock:** the impl target's flags are in
+  `out/Koan/obj/koan/browser/ui/views/impl.ninja` (`defines`,
+  `include_dirs`, `cflags`, `cflags_cc`). Running the toolchain's
+  `clang++` with them through `sh -c` (so ninja's quoting works), minus the
+  `-fmodule*` flags, plus `-fsyntax-only` and an earlier `-I` to a
+  directory whose `koan` symlink points at your worktree's `src`, catches
+  compile errors and plugin warnings in a few seconds. The unsafe-buffers
+  plugin only checks files under its paths file's root, so point
+  `-plugin-arg-unsafe-buffers` at a copy whose `$` root is that include
+  directory (Koan's code is held to `-Wunsafe-buffer-usage`: use
+  `std::array`, not C arrays). It doesn't touch the out dir or the lock, but
+  only checks the Linux branches.
+
 ## Desktop screenshots (X11 via Xwayland)
 - `import -window <id>` can return a stale frame for a window that isn't
   focused (GNOME/Xwayland): content updates (late images, a just-opened

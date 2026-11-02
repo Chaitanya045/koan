@@ -1,0 +1,15 @@
+<!doctype html>
+<title>Window drag e2e</title>
+<body style="margin: 0; font: 16px sans-serif; height: 2000px">
+<div style="position: absolute; top: 4px; left: 600px">Some text at the top</div>
+<a href="#" style="position: absolute; top: 4px; left: 900px">a link</a>
+<p style="position: absolute; top: 400px; left: 40px">Further down.</p>
+<script>
+  // What the page saw of the mouse, e.g. "down move up".
+  window.seen = [];
+  for (const type of ['mousedown', 'mousemove', 'mouseup']) {
+    addEventListener(type, e => {
+      if (type !== 'mousemove' || e.buttons) seen.push(type.slice(5));
+    }, true);
+  }
+</script>

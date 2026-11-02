@@ -40,6 +40,11 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_library_downloads.cc` | `ZenLibraryDownloadsSection.mjs`, `zen-library.ftl` (strings) |
 | `src/browser/ui/views/koan_library_spaces.cc` | `ZenLibrarySpacesSection.mjs`, `zen-library.css` (cards), `zen-library.ftl` (strings) |
 | `src/browser/ui/views/koan_library_icons.cc` | `zen-icons/library/library-{downloads,history,spaces}-sprite.svg` (section icons) |
+| `src/browser/ui/views/koan_zen_welcome.h` | `ZenWelcome.mjs`, `zen-welcome.ftl` (the welcome screen's strings, pages and Essentials) |
+| `src/browser/ui/views/koan_zen_window_drag.{h,cc}` | `ZenWindowDragChild.sys.mjs`, `zen-default-prefs.js` (where a press may drag the window, the thresholds) |
+| `src/browser/ui/views/koan_zen_download_animation.{h,cc}` | `ZenDownloadAnimation.mjs` (the download arc, the tile's timing) |
+| `src/browser/ui/views/koan_zen_media.{h,cc}` | `ZenMediaController.mjs`, `zen-media-controls.css` (the media cards' stack, timing and time format) |
+| `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).
