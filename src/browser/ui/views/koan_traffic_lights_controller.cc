@@ -18,9 +18,8 @@ namespace koan {
 
 KoanTrafficLightsController::KoanTrafficLightsController(
     BrowserView* browser_view,
-    base::RepeatingClosure on_sidebar_shown_changed)
-    : browser_view_(browser_view),
-      on_sidebar_shown_changed_(std::move(on_sidebar_shown_changed)) {}
+    base::RepeatingClosure on_changed)
+    : browser_view_(browser_view), on_changed_(std::move(on_changed)) {}
 
 KoanTrafficLightsController::~KoanTrafficLightsController() = default;
 
@@ -82,7 +81,7 @@ void KoanTrafficLightsController::ObserveSidebar() {
 void KoanTrafficLightsController::NotifyIfSidebarChanged() {
   const bool shown = IsSidebarShown();
   if (shown != std::exchange(sidebar_shown_, shown)) {
-    on_sidebar_shown_changed_.Run();
+    on_changed_.Run();
   }
 }
 
@@ -91,9 +90,11 @@ void KoanTrafficLightsController::LayOutTrafficLights() {
   BrowserWidget* widget = browser_view_->browser_widget();
   if (BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
       frame && !browser_view_->IsFullscreen()) {
-    // BrowserFrameViewMac makes AppKit lay the title bar out again.
+    // BrowserFrameViewMac makes AppKit lay the title bar out again, toggling
+    // the window's style mask, which may bring the traffic lights back.
     frame->OnTabStripStateChanged();
   }
+  on_changed_.Run();
 }
 
 }  // namespace koan

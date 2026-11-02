@@ -50,6 +50,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_zen_download_animation.{h,cc}` | `ZenDownloadAnimation.mjs` (the download arc, the tile's timing) |
 | `src/browser/ui/views/koan_zen_media.{h,cc}` | `ZenMediaController.mjs`, `zen-media-controls.css` (the media cards' stack, timing and time format) |
 | `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |
+| `src/browser/ui/views/koan_space_swipe.{h,cc}` | `ZenSpacesSwipe.mjs` (success threshold, velocity weight, resistance) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).
