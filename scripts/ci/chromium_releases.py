@@ -31,6 +31,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -39,6 +41,12 @@ RELEASES_URL = ('https://chromiumdash.appspot.com/fetch_releases'
 LABEL = 'chromium-update'
 MARKER_RE = re.compile(r'<!-- koan-chromium-update: (\{.*?\}) -->')
 VERSION_RE = re.compile(r'^\d+\.\d+\.\d+\.\d+$')
+
+# The marker's fields that say what the issue is about; the rest is the
+# outcome of the check.
+IDENTITY = ('pin', 'point', 'milestone', 'patches')
+FETCH_ATTEMPTS = 4
+CHECK_ATTEMPTS = 3
 
 # How long the policy gives us (docs/REBASE.md).
 POINT_RELEASE_DAYS = 3
@@ -172,6 +180,11 @@ def render_body(pin, targets, checks, state, run_url=''):
     lines.append('Updated by [this run](%s). This issue is maintained by '
                  'the workflow; it closes itself once the pin has caught up.' %
                  run_url)
+  if not state.get('complete'):
+    lines.append('A check could not be completed (the tag is not on '
+                 'googlesource yet, or it could not be reached); the next '
+                 'run tries again.')
+    lines.append('')
   lines.append('<!-- koan-chromium-update: %s -->' % json.dumps(state, sort_keys=True))
   return '\n'.join(lines)
 
@@ -190,6 +203,34 @@ def state_of(pin, targets, patches_tree):
   }
 
 
+def check_complete(result):
+  """Is a patch-check result a real answer? Not if the tag wasn't there yet,
+  or googlesource failed (no patches counted, or a fetch failed)."""
+  if result is None:
+    return False
+  total, bad = result
+  return total > 0 and all(status != 'FETCH FAILED' for status, _ in bad)
+
+
+def marker_of(state, checks):
+  """The issue's hidden state: what it is about, and what the checks said
+  (so a later run knows whether to check again)."""
+  marker = dict(state)
+  marker['checks'] = {
+      v: None if c is None else {'total': c[0], 'bad': [list(b) for b in c[1]]}
+      for v, c in sorted(checks.items())
+  }
+  marker['complete'] = bool(checks) and all(
+      check_complete(c) for c in checks.values())
+  return marker
+
+
+def same_issue(old, state):
+  """Is `old` (a marker) a finished answer about `state`?"""
+  return bool(old) and old.get('complete') is True and all(
+      old.get(k) == state[k] for k in IDENTITY)
+
+
 def marker_state(body):
   match = MARKER_RE.search(body or '')
   if not match:
@@ -200,25 +241,47 @@ def marker_state(body):
     return None
 
 
+def fetch_channel(channel):
+  """The Mac releases of a channel; retried with a growing pause."""
+  request = urllib.request.Request(
+      RELEASES_URL % (channel, 40), headers={'User-Agent': 'koan-ci'})
+  for attempt in range(FETCH_ATTEMPTS):
+    try:
+      with urllib.request.urlopen(request, timeout=60) as response:
+        return parse_releases(channel, json.load(response))
+    except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+      if attempt == FETCH_ATTEMPTS - 1:
+        raise
+      print('chromiumdash %s: %s; trying again' % (channel, e), file=sys.stderr)
+      time.sleep(5 * 4**attempt)
+
+
 def fetch_releases():
-  releases = []
-  for channel in ('Beta', 'Stable'):
-    request = urllib.request.Request(
-        RELEASES_URL % (channel, 40), headers={'User-Agent': 'koan-ci'})
-    with urllib.request.urlopen(request, timeout=60) as response:
-      releases += parse_releases(channel, json.load(response))
-  return releases
+  return fetch_channel('Beta') + fetch_channel('Stable')
 
 
 def run_check(version):
-  """(total, bad) from check_patches.sh, or None if the tag doesn't exist."""
+  """(total, bad) from check_patches.sh; None if the tag doesn't exist (yet);
+  (0, []) if googlesource couldn't be reached."""
   with tempfile.TemporaryDirectory() as cache:
     env = dict(os.environ, KOAN_CHROMIUM_FILE_CACHE=cache)
     proc = subprocess.run([str(ROOT / 'scripts/ci/check_patches.sh'), version],
                           capture_output=True, text=True, env=env, check=False)
-  if proc.returncode == 2:  # Couldn't resolve the version to a commit.
+  if proc.returncode == 2:  # No such revision.
     return None
   return parse_check(proc.stdout)
+
+
+def check_with_retries(version):
+  """run_check, again after a pause while the answer is not a real one: the
+  tag can show up on googlesource a little after chromiumdash lists it, and
+  googlesource throttles (429)."""
+  for attempt in range(CHECK_ATTEMPTS):
+    result = run_check(version)
+    if check_complete(result) or attempt == CHECK_ATTEMPTS - 1:
+      return result
+    print('%s: no complete answer; trying again' % version, file=sys.stderr)
+    time.sleep(60 * 2**attempt)
 
 
 def git_output(*args):
@@ -254,7 +317,14 @@ def main(argv=None):
   args = parser.parse_args(argv)
 
   pin = args.pin or (ROOT / 'CHROMIUM_VERSION').read_text().splitlines()[0]
-  targets = pick_targets(pin, fetch_releases())
+  releases = fetch_releases()
+  # chromiumdash answering with nothing of our milestone is a fault on its
+  # side (or a pin that fell out of both channels): say so, and leave the
+  # issue alone rather than close it.
+  if not any(r.milestone == milestone(pin) for r in releases):
+    sys.exit('chromiumdash lists no M%d release in Beta or Stable; not '
+             'touching the tracking issue' % milestone(pin))
+  targets = pick_targets(pin, releases)
   issue = find_issue(args.dry_run)
   print('pin %s; point release: %s; new milestone: %s' %
         (pin, targets['point'].version if 'point' in targets else '-',
@@ -269,11 +339,12 @@ def main(argv=None):
 
   state = state_of(pin, targets, git_output('rev-parse', 'HEAD:patches'))
   old = marker_state(issue['body']) if issue else None
-  if old == state:
+  if same_issue(old, state):
     print('Same as the last run; nothing to do.')
     return 0
 
-  checks = {r.version: run_check(r.version) for r in targets.values()}
+  checks = {r.version: check_with_retries(r.version) for r in targets.values()}
+  state = marker_of(state, checks)
   server = os.environ.get('GITHUB_SERVER_URL', 'https://github.com')
   repo = os.environ.get('GITHUB_REPOSITORY', '')
   run_id = os.environ.get('GITHUB_RUN_ID', '')

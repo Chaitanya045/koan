@@ -9,8 +9,9 @@
 #   scripts/ci/check_patches.sh refs/branch-heads/8127   # any ref
 #
 # One line per patch: ok, CONFLICT (with git's reason), MISSING (the upstream
-# file doesn't exist at that revision) or FETCH FAILED. Exits non-zero unless
-# every patch is ok.
+# file doesn't exist at that revision) or FETCH FAILED. Exits 0 if every
+# patch is ok, 1 if not, 2 if the revision doesn't exist (no such tag, maybe
+# not yet), 3 if googlesource couldn't be reached (try again).
 #
 # Files at a commit never change, so with KOAN_CHROMIUM_FILE_CACHE set they
 # are kept there (CI caches it) and only new ones are fetched, with backoff on
@@ -28,10 +29,22 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 TARGET="${1:-$(koan_pin_commit)}"
-COMMIT="$(koan_resolve_commit "$TARGET" || true)"
-if ! koan_is_commit "$COMMIT"; then
-  echo "cannot resolve '$TARGET' to a Chromium commit" >&2
+rc=0
+COMMIT="$(koan_resolve_commit "$TARGET")" || rc=$?
+if [[ $rc == 1 ]]; then
+  echo "no Chromium revision '$TARGET'" >&2
   exit 2
+elif [[ $rc != 0 ]] || ! koan_is_commit "$COMMIT"; then
+  echo "cannot reach chromium.googlesource.com to resolve '$TARGET'" >&2
+  exit 3
+fi
+if [[ -z ${1:-} ]]; then
+  # CHROMIUM_VERSION's two lines must agree: tag -> commit.
+  tagged="$(koan_resolve_commit "$(koan_pin_version)")" || tagged=
+  if [[ -n $tagged && $tagged != "$COMMIT" ]]; then
+    echo "CHROMIUM_VERSION: tag $(koan_pin_version) is $tagged, not $COMMIT" >&2
+    exit 2
+  fi
 fi
 echo "Checking patches against Chromium $TARGET ($COMMIT)"
 
@@ -53,9 +66,11 @@ fetch() {
   base64 -d <"$1.b64" >"$1" || return 2
   rm -f "$1.b64"
   if [[ -n $CACHE ]]; then
+    # Via a temporary name: a killed run must not leave a truncated file.
     mkdir -p "$(dirname "$CACHE/$1")"
-    cp "$1" "$CACHE/$1"
+    cp "$1" "$CACHE/$1.tmp.$$" && mv "$CACHE/$1.tmp.$$" "$CACHE/$1" || true
   fi
+  return 0
 }
 
 cd "$WORK"

@@ -149,9 +149,28 @@ Decisions behind it:
   compile errors in `src/` and the patches. The script exits non-zero with
   the first 150 lines of errors; fix them on the PR branch and carry on with
   `agent-build.sh` as usual (it builds incrementally from where this stopped).
-- **Rollback:** `~/work/koan/.cache/rollback-chromium.sh` (written by the
-  script when it swaps; hold the lock, nothing building) puts
-  `chromium-8111/` and `depot_tools-8111/` back.
+- **Rollback:** `~/work/koan/.cache/rollback-chromium.sh` (written before the
+  first move, so an interrupted swap has it; hold the lock, nothing
+  building). It puts `chromium-8111/` and `depot_tools-8111/` back, moves
+  the 8127 `.branding-pristine` aside (`chromium-new/branding-pristine-8127`;
+  a plain move would nest the old backups inside it and the next
+  `apply_branding.sh --revert` would write 8127 files into the 8111 tree),
+  and restores `last-built-src`, `last-built-dirty` and `applied-patches`
+  as they were (saved in `chromium-8111/cache-state/`), so the old
+  `out/Koan` stays consistent with the incremental-build bookkeeping.
+  **Rollback stops being possible when #89 is merged and the worktrees have
+  rebased**: develop's patches then target 8127 and don't apply to 8111. The
+  old trees are then dead weight: delete `chromium-8111/` and
+  `depot_tools-8111/` (~100 GB) once the first M158 builds are good.
+- **Links:** every worktree needs `chromium` and `depot_tools` links that
+  resolve (`e2e/run.sh` runs `<worktree>/chromium/src/out/Koan/chrome`).
+  `--preflight` lists the ones that are missing or dangling (the PR's own
+  worktree had none); `--go` repairs them wherever git ignores them, before
+  the build and again before the e2e stage, and stops if one still doesn't
+  resolve.
+- **Guards:** `--go` is required (no accidental lock for 15 hours); the
+  preflight is repeated right after the lock is taken (the wait may be
+  hours); it also checks that clang and rustc from the hooks exist.
 - The in-place alternative (kept for a point release, which changes few
   files): `scripts/update_chromium.sh <tag>` fetches the tag by name and
   syncs; `--with_branch_heads` is not needed (it would fetch all 8,329
@@ -190,5 +209,6 @@ In docs/REBASE.md: "Following Chromium releases". In short:
 - The workflow `.github/workflows/chromium-releases.yml` opens and keeps up
   to date one `chromium-update` issue with the version, the due date and the
   patch check; it closes it when the pin has caught up.
-- The Mac CI (#69, PR #70, `macos.yml`) builds whatever `CHROMIUM_VERSION`
+- The Mac CI (#69; PR #70 is still open, so `macos.yml` isn't on develop
+  yet) will build whatever `CHROMIUM_VERSION`
   pins through `scripts/bootstrap.sh`, so it follows the pin by itself.

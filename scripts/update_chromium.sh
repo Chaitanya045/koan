@@ -51,10 +51,15 @@ if ! koan_is_release_version "$version"; then
   echo "Koan is pinned to release tags, not to commits or branches." >&2
   exit 2
 fi
-commit="$(koan_resolve_commit "$version")" || {
+rc=0
+commit="$(koan_resolve_commit "$version")" || rc=$?
+if [[ $rc == 1 ]]; then
   echo "Chromium has no tag $version" >&2
   exit 2
-}
+elif [[ $rc != 0 ]]; then
+  echo "cannot reach chromium.googlesource.com; try again" >&2
+  exit 3
+fi
 
 old="$(koan_pin_version)"
 if [[ ${old%%.*} != "${version%%.*}" ]]; then
@@ -72,9 +77,28 @@ echo "==> Chromium $old -> $version ($commit)"
 }
 
 "$ROOT/scripts/apply_branding.sh" --revert
-"$ROOT/scripts/apply_patches.sh" reverse
+# Un-patch. What is applied in the checkout may be an older patch set than
+# this branch's patches/ (the usual case on a rebase: the hooks were just
+# ported), and `apply_patches.sh reverse` only reverses patches that match
+# exactly. So put back every modified file that any known patch set owns:
+# this branch's, and the ones recorded by agent-build.sh in
+# $KOAN_PATCHED_FILES (default .cache/patched-files: every file any build
+# ever patched). Anything else modified is not Koan's: stop.
+patched_files="${KOAN_PATCHED_FILES:-$ROOT/.cache/patched-files}"
+owned="$({ (cd "$ROOT/patches" && find . -name '*.patch' | sed -E 's#^\./##; s#\.patch$##')
+           [[ ! -f $patched_files ]] || cat "$patched_files"; } | sort -u)"
+modified="$(cd "$SRC" && git -c core.quotePath=false diff --name-only HEAD | sort -u)"
+unowned="$(grep -vxF -f <(echo "$owned") <<<"$modified" || true)"
+if [[ -n $unowned ]]; then
+  echo "chromium/src has changes that are not Koan's patches or branding:" >&2
+  echo "$unowned" | sed 's/^/  /' >&2
+  exit 1
+fi
+if [[ -n $modified ]]; then
+  (cd "$SRC" && git checkout -q -- .)
+fi
 if [[ -n "$(cd "$SRC" && git status --porcelain --untracked-files=no)" ]]; then
-  echo "chromium/src still has local changes after reversing Koan's; aborting" >&2
+  echo "chromium/src still has local changes after un-patching; aborting" >&2
   exit 1
 fi
 
@@ -85,10 +109,14 @@ if [[ "$(git -C "$SRC" rev-parse HEAD)" != "$commit" ]]; then
   echo "chromium/src is not at $commit after the checkout; aborting" >&2
   exit 1
 fi
-# --revision: a .gclient that doesn't say "managed": False (the shared Linux
-# checkout's doesn't) lets gclient move src to the tip of main without it.
+# --revision: a managed .gclient (no "managed": False; the one gclient config
+# writes) lets gclient move src to the tip of main without it.
 (cd "$ROOT/chromium" && gclient sync --nohooks --no-history -D \
   --revision "src@$commit" && gclient runhooks)
+if [[ "$(git -C "$SRC" rev-parse HEAD)" != "$commit" ]]; then
+  echo "chromium/src is not at $commit after gclient sync; aborting" >&2
+  exit 1
+fi
 
 # Pin the new revision for CI (scripts/ci/check_patches.sh), the Mac build
 # (scripts/bootstrap.sh) and reviewers.

@@ -37,10 +37,14 @@ concurrency:
 jobs:
   releases:
     name: New Chromium releases
-    # Not on forks: they have no issue to maintain.
-    if: github.repository == 'Chaitanya045/koan'
+    # Not on forks (no issue to maintain), and the real run only from develop:
+    # a dispatch from a feature branch would edit the real tracking issue
+    # from that branch's patches and pin. Dry runs can be from anywhere.
+    if: >-
+      github.repository == 'Chaitanya045/koan' &&
+      (github.ref == 'refs/heads/develop' || inputs.dry_run)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read # checkout
       issues: write # the tracking issue and its label
@@ -53,7 +57,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
-        # DRY_RUN is empty or a fixed flag, never user text.
-        # shellcheck disable=SC2086
-        run: python3 -I scripts/ci/chromium_releases.py $DRY_RUN
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [[ $DRY_RUN == true ]]; then args+=(--dry-run); fi
+          python3 -I scripts/ci/chromium_releases.py "${args[@]}"

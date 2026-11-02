@@ -135,8 +135,44 @@ class IssueTest(unittest.TestCase):
                      'Chromium update available: 158.0.8127.9, 159.0.8200.1')
 
 
+class MarkerTest(unittest.TestCase):
+
+  def test_complete_only_with_real_answers(self):
+    ok = (3, [])
+    self.assertTrue(cr.check_complete(ok))
+    self.assertTrue(cr.check_complete((3, [('CONFLICT', 'a.cc')])))
+    self.assertFalse(cr.check_complete(None))
+    self.assertFalse(cr.check_complete((0, [])))
+    self.assertFalse(cr.check_complete((3, [('FETCH FAILED', 'a.cc')])))
+
+  def test_the_marker_keeps_the_check_results(self):
+    state = cr.state_of('158.0.8127.2', {'point': rel('158.0.8127.9')}, 'abc')
+    marker = cr.marker_of(state, {'158.0.8127.9': (3, [('CONFLICT', 'a.cc')])})
+    self.assertTrue(marker['complete'])
+    self.assertEqual(marker['checks']['158.0.8127.9'],
+                     {'total': 3, 'bad': [['CONFLICT', 'a.cc']]})
+    self.assertTrue(cr.same_issue(marker, state))
+    self.assertFalse(cr.same_issue(marker, dict(state, patches='other')))
+
+  def test_an_unfinished_check_is_not_final(self):
+    state = cr.state_of('158.0.8127.2', {'point': rel('158.0.8127.9')}, 'abc')
+    marker = cr.marker_of(state, {'158.0.8127.9': None})
+    self.assertFalse(marker['complete'])
+    self.assertFalse(cr.same_issue(marker, state))
+    self.assertIn('tries again', cr.render_body(
+        '158.0.8127.2', {'point': rel('158.0.8127.9')}, {'158.0.8127.9': None},
+        marker))
+
+
 class MainTest(unittest.TestCase):
   """main() with chromiumdash, git, the patch check and gh replaced."""
+
+  def issue_for(self, releases, checks=None, patches='tree1', pin='158.0.8127.2'):
+    targets = cr.pick_targets(pin, releases)
+    if checks is None:
+      checks = {r.version: (2, []) for r in targets.values()}
+    marker = cr.marker_of(cr.state_of(pin, targets, patches), checks)
+    return {'number': 7, 'body': cr.render_body(pin, targets, checks, marker)}
 
   def run_main(self, releases, issue=None, check=(2, []), pin='158.0.8127.2'):
     calls = []
@@ -149,6 +185,7 @@ class MainTest(unittest.TestCase):
         mock.patch.object(cr, 'find_issue', return_value=issue), \
         mock.patch.object(cr, 'git_output', return_value='tree1'), \
         mock.patch.object(cr, 'run_check', return_value=check), \
+        mock.patch.object(cr.time, 'sleep'), \
         mock.patch.object(cr, 'gh', side_effect=fake_gh):
       cr.main(['--pin', pin])
     return calls
@@ -163,25 +200,41 @@ class MainTest(unittest.TestCase):
 
   def test_does_nothing_when_nothing_changed(self):
     releases = [rel('158.0.8127.9', 'Beta')]
-    state = cr.state_of('158.0.8127.2', cr.pick_targets('158.0.8127.2', releases),
-                        'tree1')
-    issue = {'number': 7, 'body': cr.render_body('158.0.8127.2', {}, {}, state)}
-    self.assertEqual(self.run_main(releases, issue), [])
+    self.assertEqual(self.run_main(releases, self.issue_for(releases)), [])
 
   def test_edits_quietly_when_only_the_patches_changed(self):
     releases = [rel('158.0.8127.9', 'Beta')]
-    state = cr.state_of('158.0.8127.2', cr.pick_targets('158.0.8127.2', releases),
-                        'older-tree')
-    issue = {'number': 7, 'body': cr.render_body('158.0.8127.2', {}, {}, state)}
+    issue = self.issue_for(releases, patches='older-tree')
     verbs = [args[:2] for args, _ in self.run_main(releases, issue)]
     self.assertEqual(verbs, [('issue', 'edit')])
 
   def test_comments_when_a_newer_version_appears(self):
-    old = cr.state_of('158.0.8127.2', {'point': rel('158.0.8127.9')}, 'tree1')
-    issue = {'number': 7, 'body': cr.render_body('158.0.8127.2', {}, {}, old)}
+    issue = self.issue_for([rel('158.0.8127.9', 'Beta')])
     calls = self.run_main([rel('158.0.8127.10', 'Beta')], issue)
     self.assertEqual([args[:2] for args, _ in calls],
                      [('issue', 'edit'), ('issue', 'comment')])
+
+  def test_checks_again_when_the_last_check_was_unfinished(self):
+    releases = [rel('158.0.8127.9', 'Beta')]
+    issue = self.issue_for(releases, checks={'158.0.8127.9': None})
+    calls = self.run_main(releases, issue, check=(2, [('CONFLICT', 'a.cc')]))
+    self.assertEqual([args[:2] for args, _ in calls], [('issue', 'edit')])
+    self.assertIn('1 of 2 patches fail', calls[0][1])
+
+  def test_retries_a_check_that_has_no_answer_yet(self):
+    releases = [rel('158.0.8127.9', 'Beta')]
+    answers = [None, (0, []), (2, [])]
+    with mock.patch.object(cr, 'run_check', side_effect=answers) as run, \
+        mock.patch.object(cr.time, 'sleep') as sleep:
+      self.assertEqual(cr.check_with_retries('158.0.8127.9'), (2, []))
+    self.assertEqual(run.call_count, 3)
+    self.assertEqual(sleep.call_count, 2)
+
+  def test_gives_up_retrying_and_reports_what_it_has(self):
+    with mock.patch.object(cr, 'run_check', return_value=None) as run, \
+        mock.patch.object(cr.time, 'sleep'):
+      self.assertIsNone(cr.check_with_retries('158.0.8127.9'))
+    self.assertEqual(run.call_count, cr.CHECK_ATTEMPTS)
 
   def test_closes_the_issue_once_the_pin_has_caught_up(self):
     issue = {'number': 7, 'body': 'old'}
@@ -190,6 +243,24 @@ class MainTest(unittest.TestCase):
 
   def test_no_issue_and_nothing_newer_posts_nothing(self):
     self.assertEqual(self.run_main([rel('158.0.8127.2', 'Beta')]), [])
+
+  def test_an_empty_answer_from_chromiumdash_leaves_the_issue_alone(self):
+    issue = {'number': 7, 'body': 'old'}
+    with self.assertRaises(SystemExit):
+      self.run_main([], issue)
+    with self.assertRaises(SystemExit):  # nothing of our milestone
+      self.run_main([rel('156.0.8078.80')], issue)
+
+
+class FetchTest(unittest.TestCase):
+
+  def test_retries_chromiumdash_then_gives_up(self):
+    err = cr.urllib.error.URLError('down')
+    with mock.patch.object(cr.urllib.request, 'urlopen', side_effect=err) as op, \
+        mock.patch.object(cr.time, 'sleep'):
+      with self.assertRaises(cr.urllib.error.URLError):
+        cr.fetch_channel('Beta')
+    self.assertEqual(op.call_count, cr.FETCH_ATTEMPTS)
 
 
 if __name__ == '__main__':

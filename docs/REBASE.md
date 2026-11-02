@@ -78,7 +78,9 @@ scripts/ci/check_patches.sh 158.0.8140.5     # no checkout needed; what the issu
 3. Switch the checkout you build in: `scripts/update_chromium.sh 158.0.8140.5`.
    A point release changes few files, but a toolchain roll (`CLANG_REVISION` in
    `tools/clang/scripts/update.py`) rebuilds everything: look first. On
-   macOS the nightly CI (`macos.yml`) follows the pin on its own.
+   macOS, the nightly build CI (#69, `macos.yml`, once PR #70 is merged)
+   builds whatever `CHROMIUM_VERSION` pins, so it follows on its own; a local
+   Mac build runs `scripts/update_chromium.sh` too.
 
 ### New milestone
 
@@ -107,7 +109,10 @@ scripts/build.sh                            # most of the tree rebuilds
 ```
 
 `update_chromium.sh` takes a release tag (not a commit or branch), checks the
-patches against it before changing anything, and stops if one conflicts.
+patches against it before changing anything, and stops if one conflicts. It un-patches by putting back every file any
+Koan patch set touched (this branch's, which may be newer than what is applied,
+and the list in `$KOAN_PATCHED_FILES`, default `.cache/patched-files`), and
+stops if anything else is modified.
 Port that hook on a branch first: get the new file
 (`curl -s 'https://chromium.googlesource.com/chromium/src/+/<tag>/<path>?format=TEXT' | base64 -d`
 for a checkout-less port, or the file in `chromium/src` after the checkout),
