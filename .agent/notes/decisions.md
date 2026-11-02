@@ -18,7 +18,8 @@
   release branches** (#86). Pin a release tag of the milestone, never a main
   commit. Take every Beta/Stable point release, and rebase onto each new
   milestone within about 2 weeks of it reaching Stable. A daily-driver
-  browser needs Chrome's weekly security fixes.
+  browser needs Chrome's weekly security fixes. The M158 move, the routine and
+  the checkout switch: [chromium-releases.md](chromium-releases.md).
 - **macOS only, no official releases** (2026-11-02). Koan is built for
   Apple Silicon Macs for the user's own use. The app comes from the macOS CI
   `.dmg` (#69) or a local Mac build. Linux is only the agents' build and test

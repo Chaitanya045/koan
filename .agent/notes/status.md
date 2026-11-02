@@ -41,7 +41,10 @@ _Last updated: 2026-11-02_
 
 ## Done
 - Project scaffold, scripts, GN args (`build/koan.gn`).
-- Chromium checkout: 158.0.8111.0, main @ 67e29b8, 29 GB, hooks run.
+- Chromium checkout: 158.0.8111.0, main @ 67e29b8, 29 GB, hooks run. The pin
+  (`CHROMIUM_VERSION`) moves to the M158 release branch, 158.0.8127.2, with
+  #86; the shared checkout follows at the coordinated switch
+  ([chromium-releases.md](chromium-releases.md)).
 - Upstream research → `.agent/notes/research-upstream-chromium.md` (key claims spot-checked
   against source and confirmed).
 - Phase 1 design → `.agent/notes/design-phase1-sidebar-compact.md` (written by the lead agent from the

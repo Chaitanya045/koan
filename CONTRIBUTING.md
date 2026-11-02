@@ -298,8 +298,11 @@ passing. For UI changes, compare your screenshots with Zen's.
 - `develop` is the default branch and is always kept releasable. Releases
   are tagged from it as `vX.Y.Z`.
 - Moving to a new Chromium version is a dedicated pull request that updates
-  `CHROMIUM_VERSION`, refreshes every patch, and re-audits the hooks, as
-  [docs/REBASE.md](docs/REBASE.md) describes.
+  `CHROMIUM_VERSION` (always a release tag), refreshes every patch, and
+  re-audits the hooks, as [docs/REBASE.md](docs/REBASE.md) describes.
+  Point releases of our milestone are taken within days, a new milestone
+  within about two weeks of reaching Stable; the `chromium-update` issue says
+  when one is due.
 
 ## Licensing
 
