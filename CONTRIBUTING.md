@@ -81,6 +81,8 @@ edges. You need:
 
 - An Apple Silicon Mac with the full **Xcode** (not only the Command Line
   Tools). The scripts use `DEVELOPER_DIR`, not `xcode-select`.
+  Install its Metal toolchain too (a separate download since Xcode 26,
+  needed for ANGLE's shaders): `xcodebuild -downloadComponent MetalToolchain`.
 - About **60 GB** of free disk: roughly 30 GB for the checkout and the rest
   for `out/Koan`. `build/koan-mac.gn` builds without debug symbols to keep
   it small.

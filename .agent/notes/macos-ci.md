@@ -158,5 +158,11 @@ which the lite recipe purges (distributions supply their own Go). Koan
 keeps it. `third_party/rust-src` can go: Chromium's Rust `std` builds from
 `third_party/rust-toolchain/lib/rustlib/src`.
 
+The next attempt failed after 1m52s (679/90,009 steps) at ANGLE's
+`angle_metal_internal_shaders_to_air`: "cannot execute tool 'metal' due to
+missing Metal Toolchain". Xcode 26+ ships it as a separate component;
+`mac_runner_setup.sh` now runs `xcodebuild -downloadComponent
+MetalToolchain` when `xcrun metal` is missing.
+
 **Build size:** 91,259 steps for `chrome` with `build/koan-mac.gn` (siso's
 count at the start of build 1).

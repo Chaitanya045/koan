@@ -18,7 +18,12 @@ are allowed over SSH: `ls`, `cat`, `grep`, `sw_vers`, `which`,
   (~220 GB free when this was written).
 - macOS 27.0. Xcode 27.1 at `/Applications/Xcode.app` (SDK
   `MacOSX27.0.sdk`, which is Chromium 158's `mac_sdk_official_version`;
-  `actool` 27.1). The system-wide `xcode-select -p` is the Command Line
+  `actool` 27.1). Since Xcode 26 the **Metal toolchain** is a separate
+  download that ANGLE's Metal shaders need (`xcrun metal`); without it the
+  build stops at `angle_metal_internal_shaders_to_air` with "missing Metal
+  Toolchain". Install it once with `xcodebuild -downloadComponent
+  MetalToolchain` (the CI does this on every runner); not yet checked on
+  this Mac. The system-wide `xcode-select -p` is the Command Line
   Tools, so builds must set `DEVELOPER_DIR`; the scripts default it to
   Xcode.app.
 - Tools: `/bin/bash` is 3.2; Homebrew bash 5.3 is at `/opt/homebrew/bin/bash`

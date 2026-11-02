@@ -8,7 +8,8 @@
 #   far more than the 14 GB GitHub guarantees).
 # - Turns Spotlight indexing off, so it doesn't index the build tree.
 # - Checks that the Xcode the build uses (KOAN_CI_XCODE, see mac_env.sh)
-#   is there.
+#   is there, and installs its Metal toolchain: since Xcode 26 it is a
+#   separate download, and ANGLE compiles Metal shaders.
 # - Prints the machine: CPUs, memory, disk.
 #
 # Only for CI runners: it deletes system-wide software.
@@ -48,9 +49,15 @@ for x in /Applications/Xcode*.app; do
 done
 # Dangling version aliases of the removed Xcodes.
 for x in /Applications/Xcode*.app; do
-  [[ -L $x && ! -e $x ]] && sudo rm -f "$x"
+  if [[ -L $x && ! -e $x ]]; then sudo rm -f "$x"; fi
 done
 sudo xcode-select --switch "$XCODE/Contents/Developer"
+export DEVELOPER_DIR="$XCODE/Contents/Developer"
+if ! xcrun metal --version >/dev/null 2>&1; then
+  echo "==> Installing the Metal toolchain"
+  xcodebuild -downloadComponent MetalToolchain
+fi
+xcrun metal --version
 xcrun simctl delete all >/dev/null 2>&1 || true
 xcrun simctl runtime delete all >/dev/null 2>&1 || true
 for d in \
