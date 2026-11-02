@@ -226,6 +226,14 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // one Space per notch, at most every 200 ms. Touchpad swipes are
   // upstream's VerticalTabStripFocusSwipeController.
   void OnSpaceWheel(bool forward);
+  // Zen's two-finger swipe (koan_space_swipe.h): the Space follows the
+  // fingers by `offset` pixels (positive: to the right) from where it rests,
+  // then EndSwipe() when they lift, at `velocity` pixels per second, switches
+  // to the next or previous Space, or lets the Space spring back. Both do
+  // nothing where the sidebar shows no Space to swipe (one Space, the Create
+  // form open).
+  void UpdateSwipe(float offset);
+  void EndSwipe(float velocity);
   // Keeps the tab context menu's "Move To" submenu alive while the menu is
   // open (until the next tab menu: there is one at a time).
   void KeepTabMenuSubmenu(std::unique_ptr<ui::SimpleMenuModel> submenu);
@@ -298,6 +306,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Zen's switch animation: the old Space slides out, the new one in.
   void PlaySwitchAnimation(const tab_groups::TabGroupId& from,
                            const tab_groups::TabGroupId& to);
+  // The views that slide when the Space changes: the header and the tabs.
+  // Gives each a layer for it (dropped by DropSwitchLayers()).
+  std::vector<views::View*> GetSlidingViews();
+  bool CanSwipe() const;
   void OnSlideOutDone(SlideOutLayers* slide_out);
   // Drops the layers the animation gave the header and the tabs.
   void DropSwitchLayers();
@@ -338,6 +350,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::map<tab_groups::TabGroupId, tabs::TabHandle> last_active_tabs_;
 
   base::TimeTicks last_wheel_switch_;
+
+  // A swipe is following the fingers, `swipe_offset_` pixels from rest; and
+  // how far the Space was dragged when it switched, for the slide to start
+  // from (PlaySwitchAnimation()).
+  bool swiping_ = false;
+  float swipe_offset_ = 0;
+  std::optional<float> swipe_start_offset_;
 
   // The old Spaces sliding out, and the views the animation gave a layer.
   std::vector<std::unique_ptr<SlideOutLayers>> slide_outs_;

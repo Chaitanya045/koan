@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -55,6 +56,7 @@
 #include "koan/browser/ui/views/koan_space_creation.h"
 #include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_space_menu.h"
+#include "koan/browser/ui/views/koan_space_swipe.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_toast.h"
@@ -63,6 +65,7 @@
 #include "ui/base/mojom/themes.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/compositor/layer_owner.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -75,6 +78,7 @@
 #include "ui/gfx/geometry/transform.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
@@ -89,6 +93,15 @@ constexpr base::TimeDelta kSwitchAnimationDuration = base::Milliseconds(250);
 
 // zen.workspaces wheel switching: one switch per 200 ms.
 constexpr base::TimeDelta kWheelSwitchCooldown = base::Milliseconds(200);
+
+// A swipe switches Space when it goes a quarter of the sidebar's width, the
+// fingers' speed counting for the next kSwipeMomentum (Zen's
+// ZenSpacesSwipe.SUCCESS_THRESHOLD and SUCCESS_VELOCITY_CONTRIBUTION).
+constexpr float kSwipeSuccessFraction = 0.25f;
+constexpr float kSwipeMomentumSeconds = 0.08f;
+// The Space drags harder the further it is pulled (Zen's force multiplier,
+// 1 - |translate| / (4.5 * width), never below half).
+constexpr float kSwipeResistanceWidths = 4.5f;
 
 // The name Zen gives a Space it creates by itself.
 constexpr char16_t kDefaultSpaceName[] = u"Space";
@@ -180,24 +193,34 @@ void SetSpaceRowsVisible(TabStripView* tab_strip, bool visible) {
 
 // Zen's mouse wheel over the sidebar (ZenSpaceManager's toolbox "wheel"
 // listener): a horizontal wheel, or a vertical one with Ctrl
-// (zen.workspaces.scroll-modifier-key), switches Space. Runs before
-// upstream's swipe controller on the same view.
+// (zen.workspaces.scroll-modifier-key), switches Space; on macOS also Zen's
+// two-finger swipe. Runs before upstream's swipe controller on the same view.
 class SpaceWheelHandler : public ui::EventHandler {
  public:
   explicit SpaceWheelHandler(KoanWorkspaceController* controller)
-      : controller_(controller) {}
+      : controller_(controller)
+#if BUILDFLAG(IS_MAC)
+        ,
+        swipe_(controller)
+#endif
+  {
+  }
 
   // ui::EventHandler:
 #if BUILDFLAG(IS_MAC)
   // macOS sends the mouse wheel as scroll events, like touchpad scrolling;
-  // only a wheel has ticks. (Upstream's controller takes the touchpad's
-  // horizontal swipes and leaves the wheel alone.)
+  // only a wheel has ticks. The touchpad's horizontal swipes are
+  // KoanSpaceSwipe's.
   void OnScrollEvent(ui::ScrollEvent* event) override {
-    if (event->type() != ui::EventType::kScroll || !event->HasNativeEvent() ||
-        ui::GetMouseWheelTick120ths(event->native_event()).IsZero()) {
+    if (event->type() == ui::EventType::kScroll && event->HasNativeEvent() &&
+        !ui::GetMouseWheelTick120ths(event->native_event()).IsZero()) {
+      Handle(event->x_offset(), event->y_offset(), event);
       return;
     }
-    Handle(event->x_offset(), event->y_offset(), event);
+    if (swipe_.OnScrollEvent(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
   }
 #endif
 
@@ -236,6 +259,9 @@ class SpaceWheelHandler : public ui::EventHandler {
   }
 
   const raw_ptr<KoanWorkspaceController> controller_;
+#if BUILDFLAG(IS_MAC)
+  KoanSpaceSwipe swipe_;
+#endif
 };
 
 }  // namespace
@@ -1171,7 +1197,6 @@ void KoanWorkspaceController::PlaySwitchAnimation(
     return;
   }
   auto* tab_strip = views::AsViewClass<TabStripView>(header_->parent());
-  views::View* tabs = tab_strip->unpinned_tabs_scroll_view();
   if (!tab_strip->GetWidget() || tab_strip->width() == 0) {
     return;
   }
@@ -1192,17 +1217,15 @@ void KoanWorkspaceController::PlaySwitchAnimation(
   // Moving forward, the new Space comes in from the right (in LTR).
   const float distance = static_cast<float>(tab_strip->width()) *
                          ((diff > 0) != base::i18n::IsRTL() ? 1.f : -1.f);
+  // A swipe that was dragging the Space: both slide on from where it is.
+  const float dragged =
+      swipe_start_offset_.value_or(swiping_ ? swipe_offset_ : 0);
+  swipe_start_offset_.reset();
+  swiping_ = false;
 
   // TabStripView clips its layer to its bounds, so the Spaces slide
   // within the sidebar.
-  for (views::View* view : {static_cast<views::View*>(header_.get()), tabs}) {
-    if (!view->layer()) {
-      view->SetPaintToLayer();
-      view->layer()->SetFillsBoundsOpaquely(false);
-      // Only for the animation (DropSwitchLayers()).
-      switch_layered_views_.push_back(
-          std::make_unique<views::ViewTracker>(view));
-    }
+  for (views::View* view : GetSlidingViews()) {
     // Switching again mid-slide: the old Space slides on from where it is.
     view->layer()->GetAnimator()->AbortAllAnimations();
     // The old layers keep showing the old Space while it slides out.
@@ -1227,7 +1250,7 @@ void KoanWorkspaceController::PlaySwitchAnimation(
     slide_outs_.push_back(std::move(slide_out));
     ui::Layer* layer = view->layer();
     gfx::Transform in;
-    in.Translate(distance, 0);
+    in.Translate(distance + dragged, 0);
     layer->SetTransform(in);
     ui::ScopedLayerAnimationSettings settings(layer->GetAnimator());
     settings.SetTransitionDuration(kSwitchAnimationDuration);
@@ -1248,8 +1271,89 @@ void KoanWorkspaceController::OnSlideOutDone(SlideOutLayers* slide_out) {
   }
 }
 
+std::vector<views::View*> KoanWorkspaceController::GetSlidingViews() {
+  auto* tab_strip = views::AsViewClass<TabStripView>(header_->parent());
+  const std::vector<views::View*> views = {
+      header_.get(), tab_strip->unpinned_tabs_scroll_view()};
+  for (views::View* view : views) {
+    if (!view->layer()) {
+      view->SetPaintToLayer();
+      view->layer()->SetFillsBoundsOpaquely(false);
+      // Only for the animation (DropSwitchLayers()).
+      switch_layered_views_.push_back(
+          std::make_unique<views::ViewTracker>(view));
+    }
+  }
+  return views;
+}
+
+bool KoanWorkspaceController::CanSwipe() const {
+  return header_ && header_->GetVisible() && header_->has_space() &&
+         !creation_form_ && slide_outs_.empty() && GetSpaces().size() >= 2 &&
+         header_->parent() && header_->parent()->width() > 0;
+}
+
+void KoanWorkspaceController::UpdateSwipe(float offset) {
+  if (!CanSwipe()) {
+    return;
+  }
+  const float width = static_cast<float>(header_->parent()->width());
+  const float resistance =
+      std::max(0.5f, 1.f - std::abs(offset) / (width * kSwipeResistanceWidths));
+  swipe_offset_ = std::clamp(offset * resistance, -width, width);
+  swiping_ = true;
+  if (!gfx::Animation::ShouldRenderRichAnimation()) {
+    return;
+  }
+  gfx::Transform drag;
+  drag.Translate(swipe_offset_, 0);
+  for (views::View* view : GetSlidingViews()) {
+    view->layer()->GetAnimator()->AbortAllAnimations();
+    view->layer()->SetTransform(drag);
+  }
+}
+
+void KoanWorkspaceController::EndSwipe(float velocity) {
+  if (!swiping_) {
+    return;
+  }
+  swiping_ = false;
+  if (!header_ || !header_->parent()) {
+    return;
+  }
+  const float width = static_cast<float>(header_->parent()->width());
+  const float projected = swipe_offset_ + velocity * kSwipeMomentumSeconds;
+  if (std::abs(projected) >= width * kSwipeSuccessFraction) {
+    // Fingers moving left bring the next Space in from the right, as the
+    // slide does.
+    swipe_start_offset_ = swipe_offset_;
+    Cycle((projected < 0) != base::i18n::IsRTL());
+    // The slide uses the offset; without one (no animation) it is left.
+    if (std::exchange(swipe_start_offset_, std::nullopt)) {
+      DropSwitchLayers();
+    }
+    return;
+  }
+  if (switch_layered_views_.empty()) {
+    return;
+  }
+  // Back to rest.
+  views::AnimationBuilder builder;
+  builder.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  builder.OnEnded(base::BindOnce(&KoanWorkspaceController::DropSwitchLayers,
+                                 weak_factory_.GetWeakPtr()));
+  auto& rest = builder.Once().SetDuration(kSwitchAnimationDuration);
+  for (const std::unique_ptr<views::ViewTracker>& tracker :
+       switch_layered_views_) {
+    if (views::View* view = tracker->view(); view && view->layer()) {
+      rest.SetTransform(view, gfx::Transform(), gfx::Tween::EASE_OUT);
+    }
+  }
+}
+
 void KoanWorkspaceController::DropSwitchLayers() {
-  if (!slide_outs_.empty()) {
+  if (!slide_outs_.empty() || swiping_) {
     return;
   }
   for (const std::unique_ptr<views::ViewTracker>& tracker :

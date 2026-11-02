@@ -65,6 +65,14 @@ void InsetLayoutChildren(Layout& layout, int inset) {
 // only); otherwise 0. Called when the top container is laid out on its own.
 int GetRevealedToolbarSidebarInset(const views::View* browser_view);
 
+// The height of the sidebar's top row where Koan's toolbar is hidden and the
+// strip reaches the top of the window, given `caption_buttons_height`, the
+// height of the frame's caption buttons beside it. On macOS the row holds
+// the traffic lights and has Zen's toolbar height, whatever the buttons'
+// own (koan_traffic_lights.h centres them in it); elsewhere it is just the
+// buttons' height.
+int GetHiddenToolbarRowHeight(int caption_buttons_height);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_

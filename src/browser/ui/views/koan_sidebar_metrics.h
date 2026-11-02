@@ -400,6 +400,14 @@ inline int EmojiCellCornerRadius() {
   return look::ScaleRadius(4);
 }
 
+#if BUILDFLAG(IS_MAC)
+// The sidebar's top row (the traffic lights, the sidebar toggle and the
+// navigation buttons) in single toolbar mode: Zen's --zen-toolbar-height
+// with a single toolbar on macOS (zen-tabs/vertical-tabs.css, 36px
+// elsewhere).
+inline constexpr int kMacSidebarTopRowHeight = 38;
+#endif
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_METRICS_H_

@@ -4,11 +4,13 @@
 
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "base/functional/bind.h"
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -26,6 +28,7 @@
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_toast.h"
@@ -204,6 +207,14 @@ bool IsSidebarOnRight(const views::View* view) {
   return controller && controller->compact_mode()->tabs_on_right() &&
          features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
          browser_view->ShouldDrawVerticalTabStrip();
+}
+
+int GetHiddenToolbarRowHeight(int caption_buttons_height) {
+#if BUILDFLAG(IS_MAC)
+  return std::max(caption_buttons_height, kMacSidebarTopRowHeight);
+#else
+  return caption_buttons_height;
+#endif
 }
 
 int GetRevealedToolbarSidebarInset(const views::View* browser_view) {
