@@ -14,7 +14,11 @@
 #    drops (test data, web tests, other platforms), so the source archive
 #    every build job downloads stays small.
 # 3. scripts/apply_patches.sh and scripts/apply_branding.sh.
-# 4. scripts/build.sh --gen: gn gen, so a broken build file fails here and
+# 4. Deletes Chromium's .git directories (several GB), as the tarballs do:
+#    the build doesn't need them once the hooks (LASTCHANGE) have run. This
+#    comes before gn gen, because some build files check for .git at gen
+#    time (ANGLE's commit id) and would otherwise expect it in every job.
+# 5. scripts/build.sh --gen: gn gen, so a broken build file fails here and
 #    not hours into the build.
 #
 # Runs with scripts/ci/mac_env.sh sourced. Prints disk use as it goes.
@@ -52,6 +56,10 @@ du -sh chromium/src
 step "Applying patches and branding"
 scripts/apply_patches.sh
 scripts/apply_branding.sh
+
+step "Deleting Chromium's .git directories"
+du -sh chromium/src/.git
+find chromium -name .git -prune -exec rm -rf {} +
 
 step "gn gen"
 JOBS=1 scripts/build.sh --gen
