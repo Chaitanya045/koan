@@ -185,8 +185,22 @@ toolchain installed (`xcodebuild -showComponent MetalToolchain`: build
 27A266a); `mac_runner_setup.sh` compiles a test shader and installs the
 component only if that fails.
 
-Memory: 70% free and no swap throughout the first 27 min at `JOBS=3`
-(~5 steps/s early on, mostly small C++ files).
+**Build job 1** (run 41420273033), 4 h 56 min in all:
+
+| Step | Time |
+|---|---|
+| Runner setup (cleanup, Metal check) | 2.4 min |
+| Download source (5.8 GB, without the CIPD cache) | 8.0 min (~12 MB/s) |
+| Unpack | 2.6 min |
+| Build (`JOBS=3`) | 4 h 42 min: 27,940 steps, 1.65 steps/s |
+| Pack out/Koan (0.5 GB) + upload | 1.2 min |
+
+Siso stopped on SIGINT at the deadline with "0 failed, interrupt by
+signal". Memory stayed at 62–74% free; at most 127 MB of swap, briefly.
+`JOBS=3` is safe; 4 might be worth a try. Rate: ~5 steps/s in the first
+half hour (small C++ files), ~1.2 steps/s later. The total siso reported
+shrank from 91k to 79.3k as it learned which steps were no-ops
+(`skip:17340`).
 
 **Build size:** 91,259 steps for `chrome` with `build/koan-mac.gn` (siso's
 count at the start of build 1).
