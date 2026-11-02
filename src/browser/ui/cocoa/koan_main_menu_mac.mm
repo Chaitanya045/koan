@@ -393,8 +393,11 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   }
   std::vector<MenuKey> koan_keys;
   for (const Binding& binding : bindings) {
-    // Glance's Cmd+O only applies while it is open.
-    if (binding.action != Action::kGlanceExpand) {
+    // Glance's Cmd+O only applies while it is open, and the Library's
+    // History keys (Cmd+Y ...) only with a Library: elsewhere Chrome's items
+    // (Show Full History, Home) keep their keys and run.
+    if (binding.action != Action::kGlanceExpand &&
+        binding.action != Action::kLibraryHistory) {
       if (std::optional<MenuKey> key = MenuKeyFor(binding.accelerator)) {
         koan_keys.push_back(*key);
       }

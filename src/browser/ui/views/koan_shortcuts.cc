@@ -224,7 +224,7 @@ bool KoanShortcutController::CanRun(Action action) const {
     case Action::kSavePage:
       return chrome::IsCommandEnabled(browser, IDC_SAVE_PAGE);
     case Action::kLibrary:
-      return chrome::IsCommandEnabled(browser, IDC_SHOW_HISTORY);
+      return controller_->library()->IsAvailable();
     case Action::kInspect:
       return chrome::IsCommandEnabled(browser, IDC_DEV_TOOLS_INSPECT);
     case Action::kNewWindow:

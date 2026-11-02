@@ -199,8 +199,8 @@ std::vector<Binding> DefaultBindings() {
       // Control+M on macOS too (Firefox's "control" modifier, not "accel").
       bind(ui::VKEY_M, kCtrl, Action::kMuteSite),
       bind(ui::VKEY_B, kAccel, Action::kBookmarks),
-      // Firefox's Downloads key, which Zen sends to the Library's
-      // Downloads: Ctrl+Shift+Y, on macOS Cmd+Shift+J (also Chrome's).
+  // Firefox's Downloads key, which Zen sends to the Library's
+  // Downloads: Ctrl+Shift+Y, on macOS Cmd+Shift+J (also Chrome's).
 #if BUILDFLAG(IS_MAC)
       bind(ui::VKEY_J, kAccel | kShift, Action::kDownloads),
 #else
