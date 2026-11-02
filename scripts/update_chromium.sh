@@ -86,7 +86,7 @@ if [[ "$(git -C "$SRC" rev-parse HEAD)" != "$commit" ]]; then
   exit 1
 fi
 # --revision: a .gclient that doesn't say "managed": False (the shared Linux
-# checkout's doesn't) would otherwise move src to the tip of main.
+# checkout's doesn't) lets gclient move src to the tip of main without it.
 (cd "$ROOT/chromium" && gclient sync --nohooks --no-history -D \
   --revision "src@$commit" && gclient runhooks)
 

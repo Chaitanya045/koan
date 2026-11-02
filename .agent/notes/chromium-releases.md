@@ -128,7 +128,8 @@ Notes on those lines:
 
 - The shared `.gclient` is **managed** (the default), unlike the one
   `bootstrap.sh` writes (`"managed": False`). `gclient sync` with a managed
-  `src` and no `--revision` moves `src` to the tip of main: always give
+  `src` and no `--revision` is expected to move `src` to the tip of main
+  (not tested, and not worth testing on the shared checkout): always give
   `--revision src@<tag>` here. The checkout is already at the tag, so it
   fetches nothing for `src`.
 - `--with_branch_heads` is not needed for a tag: the tag is fetched by name.
