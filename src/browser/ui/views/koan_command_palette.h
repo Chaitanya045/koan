@@ -5,8 +5,6 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_COMMAND_PALETTE_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_COMMAND_PALETTE_H_
 
-#include <string_view>
-
 #include "base/memory/raw_ptr.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
 #include "ui/events/event_handler.h"
@@ -46,11 +44,6 @@ class KoanCommandPalette : public ui::EventHandler {
 
   // ui::EventHandler (the omnibox's pre-target handler):
   void OnKeyEvent(ui::KeyEvent* event) override;
-
-  // Zen's fuzzy score of `query` against `target`, both lower case: exact
-  // and prefix matches win, then matches at word starts and in runs. 0 for
-  // no match.
-  static int FuzzyScore(std::u16string_view target, std::u16string_view query);
 
  private:
   const raw_ptr<KoanBrowserViewController> controller_;

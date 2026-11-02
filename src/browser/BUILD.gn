@@ -101,6 +101,29 @@ group("agent_unit_tests") {
 group("agent_service_unittests") {
   testonly = true
   deps = [ "//koan/browser/containers:koan_agent_service_unittests" ]
+  ]
+}
+
+# Zen's fuzzy score for the command palette. Pure logic, //base only.
+source_set("fuzzy_score") {
+  sources = [
+    "koan_fuzzy_score.cc",
+    "koan_fuzzy_score.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# A Space's icon and name in its tab group title. Pure logic.
+source_set("space_title") {
+  sources = [
+    "koan_space_title.cc",
+    "koan_space_title.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    "//base:i18n",
+    "//third_party/icu",
+  ]
 }
 
 # Zen's tab behaviours, called from upstream tab code (tab_strip_model.cc,
@@ -174,4 +197,14 @@ source_set("feature_overrides") {
   if (is_mac) {
     deps += [ "//components/os_crypt/common:switches" ]
   }
+}
+
+# Koan's tests, so `gn gen` generates them: build //koan/test:koan_unittests
+# and //koan/test:koan_browsertests (scripts/test_unit.sh, test_browser.sh).
+group("tests") {
+  testonly = true
+  deps = [
+    "//koan/test:koan_browsertests",
+    "//koan/test:koan_unittests",
+  ]
 }
