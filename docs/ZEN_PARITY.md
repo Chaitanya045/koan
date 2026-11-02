@@ -17,7 +17,7 @@ point of Koan.
 | Sidebar and toolbar on one surface | Same | |
 | Single-toolbar layout (address in the sidebar), the default | Same | Sidebar top row: toggle, back / forward / reload (plus Chromium's tab groups / tab search); URL pill below: the site's name, the copy-URL button on hover, the site panel button. |
 | Window buttons hidden until the pointer reaches the top edge (single toolbar) | Same | The page starts 8px below the window top; the strip with the frame's buttons opens on hover and pushes the page down, like Zen's. Buttons on the sidebar's side stay in its top row, as Zen places them (`ZenVerticalTabsManager._updateEvent`). Where compact mode hides the toolbar, the buttons come with the revealed toolbar. |
-| Window buttons (traffic lights) on macOS | Different | Zen hides them with the toolbars and shows them at the top edge (or in the sidebar's top row, tabs on the left). Koan can't hide AppKit's buttons yet (needs NSWindow's standard window buttons, #51): they stay at the top left, over the page's corner when the sidebar is hidden or on the right; in the sidebar's top row with tabs on the left, as in Zen. |
+| Window buttons (traffic lights) on macOS | Different | Zen hides them with the toolbars and shows them at the top edge (or in the sidebar's top row, tabs on the left). Koan can't hide AppKit's buttons yet (needs NSWindow's standard window buttons, #72): they stay at the top left, over the page's corner when the sidebar is hidden or on the right; in the sidebar's top row with tabs on the left, as in Zen. |
 | Multiple-toolbars layout | Same | Ctrl+Alt+B (Zen sets this in Settings). |
 | Collapsed-sidebar layout (icons only, expands on hover) | Same | The sidebar toggle collapses it (Chromium's collapsed vertical tabs); the toolbar is then above the page. Like Zen, single toolbar needs the full sidebar: collapsing leaves it, expanding comes back to it. |
 | Tabs on the right (`zen.tabs.vertical.right-side`) | Same | Sidebar context menu, and Settings > Look and Feel > Vertical Tabs. The whole window is mirrored, including the sidebar's top row, its resize edge and the compact-mode reveal edge. Tabs themselves keep their left-to-right layout, as in Zen. Windows without Koan's sidebar (horizontal tabs, popups, apps) aren't mirrored. The setting is logical, like the rest of the UI: in a right-to-left UI it puts the sidebar on the left. |
@@ -29,8 +29,11 @@ point of Koan.
 | Sidebar width 163–500 px, drag to resize | Same | Upstream resize handle with Zen's limits (Chromium's 126–400 px with the Koan sidebar off; a saved width is clamped to whichever applies). |
 | Theme follows the system light/dark mode | Same | |
 | Thin overlay scrollbars, shown while scrolling | Same | Chromium's overlay scrollbars, on by default on Linux in Koan. Zen follows GTK's overlay-scrolling setting ("Always Show Scrollbars" in GNOME's accessibility settings); Koan always overlays for now (#30). For classic scrollbars, start Koan with `--disable-features=OverlayScrollbar`. Comparison: `screenshots/scrollbars-zen-vs-koan.png` (Zen left, Koan right, while scrolling). |
-| Gradient theme picker | Different | Workspaces tint the browser with one colour (Chromium's Material colour system), no gradient editor. |
-| Zen Mods (community CSS themes) | Missing | Koan's UI is native Views, not CSS, so mods can't apply. Chrome themes from the Chrome Web Store work. |
+| Gradient theme picker | Different | Workspaces tint the browser with one colour (Chromium's Material colour system), no gradient editor (#41, PR #62). |
+| Translucent window on macOS (the theme's opacity shows the desktop through the sidebar; `zen.theme.acrylic-sidebar` / `acrylic-urlbar`) | Missing | Koan's frame is opaque (#79). |
+| Haptic feedback on macOS, Zen's Mac metrics (42px toolbar, 32px Space buttons, window-radius corners), greyed-out inactive windows | Missing | #80. |
+| Zen Mods (community CSS themes) | Missing | Impossible: Koan's UI is native Views, not CSS, so mods can't apply. Chrome themes from the Chrome Web Store work. |
+| Boosts (per-site colour, text, zap, custom CSS) | Missing | Possible on Chromium, since they restyle web pages (#83). |
 
 ## URL bar
 
@@ -44,8 +47,9 @@ point of Koan.
 | Pill and card details | Different | The site panel button is always shown (Zen shows it on hover), the pill has no hover background, and the floating card has no 0.5px outline or medium-weight text. |
 | Ctrl+T / New Tab opens the URL bar instead of a tab (`zen.urlbar.replace-newtab`) | Same | `koan.urlbar.replace_newtab`. Esc, a click outside or Ctrl+T again create nothing; an unfinished search comes back within 45 s (`zen.urlbar.wait-to-clear`; Zen also drops it on a tab switch, Koan doesn't). The sidebar's "+ New Tab" row, the tab strip's "+", the menus' New Tab and ⌘T on macOS (Chromium's New Tab command) do the same. With horizontal tabs (Chromium's own setting; Zen has none), the tab strip's "+" still opens a new-tab page. What you open goes next to the current tab (Chrome's placement for a new foreground tab); with replace-newtab off, the New Tab row opens its tab at the top of the space, like Zen. Zen also unhighlights the current tab meanwhile; Koan doesn't. |
 | Copy-URL button in the pill on hover (`zen.urlbar.single-toolbar-show-copy-url`) | Same | `koan.urlbar.show_copy_url`. |
-| "Copied current URL!" toast | Partial | The same toast as "Tabs Closed!" (one `KoanToast` per window); the copy button, Ctrl+Shift+C and Ctrl+Shift+Alt+C (⌘⇧C, ⌘⇧⌥C on macOS; "Copied current URL as Markdown!") show it. Zen's toast on macOS also has a Share button; Koan's doesn't. Zen copies the URL without tracking parameters (its stripped URI); Koan copies it as is. |
-| Site panel (security, permissions, extensions; share, reader mode, screenshot, bookmark) | Different | The pill's site button opens Chromium's page info bubble (security, permissions, cookies, site settings). Extensions and the action row aren't in it yet. |
+| "Copied current URL!" toast | Partial | The same toast as "Tabs Closed!" (one `KoanToast` per window); the copy button, Ctrl+Shift+C and Ctrl+Shift+Alt+C (⌘⇧C, ⌘⇧⌥C on macOS; "Copied current URL as Markdown!") show it. Zen's toast on macOS also has a Share button (the system share sheet); Koan's doesn't. Zen copies the URL without tracking parameters (its stripped URI); Koan copies it as is (#78). |
+| Site panel (security, permissions, extensions; share, reader mode, screenshot, bookmark) | Different | The pill's site button opens Chromium's page info bubble (security, permissions, cookies, site settings). The action row (#78) and the Extensions section (#73) aren't in it yet. |
+| Extension buttons in the sidebar's top row (`zen.view.overflow-webext-toolbar`) | Missing | The single-toolbar layout hides the toolbar that holds them, so extension popups can't be reached with the mouse (#73). |
 | URL bar commands (command palette) | Partial | See Command palette below (#40). |
 
 ## Compact mode
@@ -71,8 +75,11 @@ point of Koan.
 | Rename in place (double-click the name, or Change Name...) | Same | Enter keeps, Escape cancels, leaving the field (or switching Space) keeps. Zen's "renamed" toast isn't shown. |
 | Change Icon... / double-click the icon | Same | |
 | Space menu: Change Name..., Change Icon..., Edit Theme..., the Spaces, Unload Space, Unload All Other Spaces, Create Space, Delete Space | Same | Delete asks first and is off for the last Space, like Zen. Zen's Set Profile (containers), Manage Spaces (Library), Share Space and Space routing aren't there. |
-| Bottom bar: one button per Space, "+" with the Create menu | Same | 30px buttons, inactive ones grey and faded, shrinking to dots when they don't fit; hidden while there is one Space; stacked above "+" in the icons-only sidebar. Screen readers get them as a group of choices with the active one checked. No drag to reorder yet. |
-| Drop a tab on a Space button, or hover one while dragging, to move it there | Missing | Zen's `zen.tabs.dnd-switch-space-delay`; use Move To. |
+| Bottom bar: one button per Space, "+" with the Create menu | Same | 30px buttons, inactive ones grey and faded, shrinking to dots when they don't fit; hidden while there is one Space; stacked above "+" in the icons-only sidebar. Screen readers get them as a group of choices with the active one checked. No drag to reorder yet (#76). |
+| Dragging a tab over a Space button, or holding it at the sidebar's left / right edge, switches Space so the tab can be dropped there | Missing | Zen's `handle_spaceIconDragOver()` (at once) and `zen.tabs.dnd-switch-space-delay` / `zen.workspaces.dnd-switch-padding` (edge, 500 ms); use Move To (#76). |
+| Reorder Spaces by dragging their bottom-bar buttons | Missing | #76; the Library's Spaces list (#43) also reorders. |
+| Windows share Essentials, pinned tabs and Spaces (`zen.window-sync.*`), New Blank Window | Missing | Each Koan window has its own Essentials and Spaces (#75). |
+| Space routing: sites and external links open in a chosen Space | Missing | Possible; Zen's container option isn't (#81). |
 | Create menu: Create Space, Create Folder, New Split, New Tab | Same | Features add their entries (`KoanWorkspaceController::AddCreateMenuEntry()`); Create Folder comes with folders (#60). |
 | Create-a-Space form in the sidebar | Same | Title, icon and name, Edit Theme..., Create Space (enabled once named) and Cancel. Zen's Profile row (containers) isn't there. Zen creates the Space before the form; Koan on Create. From a collapsed sidebar, the sidebar expands over the page while the form is open. |
 | Emoji picker with search | Same | Koan's own set of emoji searched by keyword (Zen's list is larger); no page of SVG icons. |
@@ -99,7 +106,9 @@ point of Koan.
 | Change Label… / Change Icon… | Same | Inline rename; the icon picker is a grid of emoji plus a field for any other, smaller than Zen's searchable picker. |
 | Unload a tab | Same | Chromium's tab discarding. Resetting a tab that isn't loaded keeps it unloaded until it is shown, like Zen. Reset, unload and switch on a loaded tab away from its pinned URL loads the pinned page once before unloading it (Zen rewrites the unloaded tab's state instead; Chromium can't change an unloaded tab's page without loading it). |
 | Toasts: pinned URL replaced / updated / invalid, tab renamed | Same | Zen's texts, in Koan's toast. |
-| Unload all tabs of a folder | Missing | Koan has no folders yet (#42); folders can use the same unload. |
+| Unload all tabs of a folder | Missing | Koan has no folders yet (#42, PR #60); folders can use the same unload. |
+| Live Folders (RSS feeds, GitHub pull requests as a self-refreshing folder) | Missing | Needs folders first (#42); noted there as a follow-up. |
+| A pinned tab stays on its site: a URL from the URL bar on another domain opens a new tab (`zen.tabs.open-pinned-in-new-tab`); a new tab it opens on another domain opens in Glance (`zen.glance.open-essential-external-links`) | Missing | Koan navigates the pinned tab away (#74). |
 | At most 12 Essentials | Different | "Add to Essentials" shows how many are used ("3 / 12") and is off when the tab (a split view counts two) doesn't fit. Zen refuses a 13th dropped on the tiles; Koan accepts the drop, then moves the tab back to the Space as a normal tab once the drag is over. The same for one duplicated from an Essential. |
 | Dragging pinned tabs | Same | Dragged out of the Space's pinned tabs, a pinned tab is unpinned; a tab dropped among them is pinned; an Essential dropped among them keeps its pinned URL as a pinned tab. Applied once the tabs stop moving, since Chromium moves them along the drag. Moved to another Space, a pinned tab stays pinned, at the top. |
 | Pinned tabs in a split view | Same | A split view is one unit, as in Zen: pinning, unpinning, Add to / Remove from Essentials and dragging take both tabs along and keep them split. Splitting a pinned tab with a normal one pins both. |
@@ -117,6 +126,7 @@ point of Koan.
 | "Open Link in Glance" in the link context menu | Same | |
 | Card grows from the clicked link, shrinks back on close | Similar | Zen's 350 ms, similar easing (no overshoot), card size (80% × full height) and fade timings. Zen grows a snapshot of the link's own rect along a small arc; Koan grows a small card straight out of the click (the browser doesn't know the link's rect). |
 | Page behind fades to 30% and shrinks to 97% | Similar | Same fade (the window background laid over the page at 70%); no shrink, which would show the page's square container behind its rounded corners. |
+| "Search for ..." on selected text opens in Glance (`zen.glance.enable-contextmenu-search`) | Missing | #74. |
 | Glance on a link in the Glance page | Different | Zen 1.23 ignores it; Koan shows the link in the card (as #37 asks). |
 | Close with Esc or a click outside | Same | beforeunload can keep the page; while typing, the first Esc turns the close button red and a second closes (Zen asks whenever anything in the page has focus, and labels the button "Confirm"). macOS: no grow/shrink (the page is an NSView); not verified on a Mac. |
 | Expand to a tab (Ctrl+O), split Glance | Same | Zen's button column: 34 px round buttons, 12 px apart, beside the card. No expand animation. |
@@ -134,17 +144,17 @@ point of Koan.
 | Zen | Koan | Notes |
 |---|---|---|
 | Actions suggested while typing in the URL bar | Different | Zen's labels and fuzzy matching from three characters, right below the first suggestion, but at most three (Zen: five), so they don't crowd history and search suggestions out of Chromium's eight rows. A Chromium omnibox provider, so it works with any URL bar look. |
-| Shortcut shown with each action | Same | In Zen's notation, as in the settings page ("Ctrl+Alt+⇧+C", "Ctrl+,"; ⌘ glyphs on macOS once Koan's Mac keys land in #51), as the row's dimmed second part rather than a tag. It is the key in effect, so a shortcut changed in chrome://koan-settings shows. |
+| Shortcut shown with each action | Same | In Zen's notation, as in the settings page ("Ctrl+Alt+⇧+C", "Ctrl+,"; ⌘ glyphs on macOS once Koan's Mac keys land in #71), as the row's dimmed second part rather than a tag. It is the key in effect, so a shortcut changed in chrome://koan-settings shows. |
 | Learns the actions you use | Different | Used actions come first, and passed-over ones drop below the search suggestions (Zen's results learner). Zen also runs a used action on Enter for any text matching it; Koan only when you type its whole label, so typing the start of a site's address (`pri` for a site, after using Print) still opens the site. |
 | Actions mode: Tab in an empty URL bar lists every action | Different | Koan types `>` (you can type it too; a second Tab leaves it) instead of showing an "Actions" chip, and lists as many actions as Chromium's popup has rows (about eight) above a "> – search" row; type to filter. As in Zen, Enter runs the first action once two characters are typed. |
 | "Focus on" a Space | Same | Matched by the Space's name, which is shown beside "Focus on". |
 | Add to / Remove from Essentials | Same | As in the tab's context menu; Pin / Unpin Tab pin the tab to its Space. |
 | Open Theme Picker, Open Library, New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#41, #43, #42); each feature adds its actions to the palette's registry. |
 | Reset Pinned Tab | Same | Offered while the tab is away from its pinned URL, as in Zen. |
-| Toggle Tabs on right | Missing | Chromium's vertical tabs can't be on the right (see "Sidebar on the right"). |
-| New Blank Window | Missing | Koan doesn't sync windows, so it would be the same as Open New Window. |
-| Open Space Routing, New Boost | Missing | Koan has no Space routing or Boosts. |
-| Extension actions ("Extension" + name) | Missing | An extension's popup opens from its toolbar button, which the single-toolbar layout hides. |
+| Toggle Tabs on right | Missing | The setting exists (Look and Feel, sidebar context menu); the palette action isn't there yet (#77). |
+| New Blank Window | Missing | Koan doesn't sync windows, so it would be the same as Open New Window; it comes with window sync (#75). |
+| Open Space Routing, New Boost | Missing | Koan has no Space routing (#81) or Boosts (#83). |
+| Extension actions ("Extension" + name) | Missing | An extension's popup opens from its toolbar button, which the single-toolbar layout hides (#73). |
 
 Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (typing) and `screenshots/palette-zen-vs-koan-actions.png` (Tab in an empty URL bar).
 
@@ -160,7 +170,9 @@ Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (
 | Settings: URL bar behaviour, replace new tab, copy URL button | Same | Look and Feel > URL Bar. |
 | Settings: compact mode variants and flash popup, tabs on the right | Same | Look and Feel. |
 | Settings: Collapsed Sidebar layout card, dark theme styles, window dragging | Missing | Added to the settings page as each feature lands (#41, #44). The collapsed layout is the sidebar's collapsed state (Chromium's, not a pref), so the layout picker doesn't offer it yet; the sidebar toggle does. Glance's are there (#37). |
-| Settings: Vertical Tabs group (new tab button on the tab list / at the top, how to expand tabs) | Missing | The group is declared; no Koan setting yet. |
+| Settings: Vertical Tabs group (new tab button on the tab list / at the top, how to expand tabs), Spaces group (scroll modifier, natural scroll, new tab when the last unpinned tab closes, animation duration) | Missing | The Vertical Tabs group is declared; no Koan setting yet (#77). |
+| Rename any tab (double-click its label, "Change Label…"; `zen.tabs.rename-tabs`) | Partial | Koan has Change Label… for pinned tabs only (#82). |
+| Page-load progress bar (`zen.view.enable-loading-indicator`) | Missing | #82. |
 | Settings: pinned tab close behaviour, restore pinned tabs to their URL | Same | Tab Management > Pinned Tabs. |
 | Settings: container-specific Essentials | Missing | Chromium has no containers. |
 | Switch to the most recently used tab on close | Same | Tab Management, on by default like Zen. A tab's opener still comes first, as in Zen (Firefox's owner rule). Only tabs you have looked at count: one opened in the background and never shown doesn't. In a Space it picks among the Space's tabs and the Essentials; collapsed groups are skipped. |
@@ -187,5 +199,6 @@ Details, measurements and the reasoning for each default: `PERFORMANCE.md`.
 | Engine | Different | Chromium (Blink, V8) instead of Firefox (Gecko). |
 | Extensions | Different | Chrome extensions (Chrome Web Store), not Firefox add-ons. |
 | Sync | Missing | Koan ships without Google API keys, so Google sync isn't available. |
-| Automatic updates | Missing | Install new releases from GitHub. |
+| Automatic updates, "Update Complete!" sidebar notice | Missing | Install new releases from GitHub (#84). |
+| Zen Share (share a Space or folder as a link) | Missing | Needs Zen's own server (`share.zen-browser.app`); there is no Koan service, so none is planned. |
 | DRM video (Widevine) | Missing | Not bundled. |
