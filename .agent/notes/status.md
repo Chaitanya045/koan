@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-10-22_
+_Last updated: 2026-11-02_
 
 ## Now
 
@@ -22,6 +22,15 @@ _Last updated: 2026-10-22_
   optional style (decided 2026-10-20). Behaviour, layout and shortcuts stay
   Zen's. It starts after #41, and all new UI must take its colours and
   radii from tokens.
+- **Architecture review (2026-11-02):** keep the architecture. Follow-ups:
+  #86 (move to Chromium release branches and follow Stable), #69/PR #70
+  (macOS CI build making a runnable `.dmg`), #87 (unit and browser tests).
+  Scope: **macOS only, no official releases.** See
+  [architecture-review.md](architecture-review.md).
+- **Outage 2026-10-22 → 11-02:** threads auto-settled when their runs
+  finished, then nothing ran for 11 days. The machine crashed and was
+  rebooted on 11-02, and all threads were resumed. #57 (Spaces) merged on
+  11-02.
 - **#51: macOS is the primary platform** (decided 2026-10-21). This Linux
   machine stays the agents' build and test bench. The first `Koan.app`
   build runs on the maintainer's M4 MacBook Air in `~/work/koan-mac`, and

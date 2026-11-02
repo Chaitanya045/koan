@@ -12,6 +12,8 @@ documentation lives in [`docs/`](../../docs) and
 - [status.md](status.md): where things stand, what's in flight, next steps
 - [plan.md](plan.md): the original plan and phases
 - [decisions.md](decisions.md): architecture decisions and why
+- [architecture-review.md](architecture-review.md): the 2026-11-02 review
+  (keep Views; fix the Chromium base, the Mac loop and the tests)
 
 ## How to work on Koan
 
