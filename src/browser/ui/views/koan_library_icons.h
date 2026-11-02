@@ -6,8 +6,6 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_LIBRARY_ICONS_H_
 
 #include "koan/browser/ui/views/koan_library_ui.h"
-#include "ui/base/models/image_model.h"
-#include "ui/color/color_id.h"
 
 namespace gfx {
 class Canvas;
@@ -30,9 +28,6 @@ void PaintSectionIcon(gfx::Canvas* canvas,
                       const ui::ColorProvider* provider,
                       bool filled,
                       float progress = -1.f);
-
-// A round swatch of `color`, for colour menus.
-ui::ImageModel ColorSwatch(ui::ColorId color, int size);
 
 }  // namespace koan::library
 

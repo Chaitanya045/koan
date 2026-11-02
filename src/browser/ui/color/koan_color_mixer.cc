@@ -174,6 +174,24 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanLibraryAddSpaceHovered] =
       ui::AlphaBlend(ui::kColorSysPrimary, kColorToolbar, Alpha(0.7f));
   mixer[kColorKoanLibraryAddSpaceForeground] = {SK_ColorWHITE};
+  // Space themes are tab group colours (until #41's per-Space themes).
+  mixer[kColorKoanLibrarySpaceTintGrey] = {
+      kColorTabGroupTabStripFrameActiveGrey};
+  mixer[kColorKoanLibrarySpaceTintBlue] = {
+      kColorTabGroupTabStripFrameActiveBlue};
+  mixer[kColorKoanLibrarySpaceTintRed] = {kColorTabGroupTabStripFrameActiveRed};
+  mixer[kColorKoanLibrarySpaceTintYellow] = {
+      kColorTabGroupTabStripFrameActiveYellow};
+  mixer[kColorKoanLibrarySpaceTintGreen] = {
+      kColorTabGroupTabStripFrameActiveGreen};
+  mixer[kColorKoanLibrarySpaceTintPink] = {
+      kColorTabGroupTabStripFrameActivePink};
+  mixer[kColorKoanLibrarySpaceTintPurple] = {
+      kColorTabGroupTabStripFrameActivePurple};
+  mixer[kColorKoanLibrarySpaceTintCyan] = {
+      kColorTabGroupTabStripFrameActiveCyan};
+  mixer[kColorKoanLibrarySpaceTintOrange] = {
+      kColorTabGroupTabStripFrameActiveOrange};
 }
 
 }  // namespace

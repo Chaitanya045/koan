@@ -107,6 +107,17 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanLibraryAddSpace,
   kColorKoanLibraryAddSpaceHovered,
   kColorKoanLibraryAddSpaceForeground,
+  // A Space theme's colour, as its card in the Library is tinted with (one
+  // per tab group colour, the colours a Space's theme can take).
+  kColorKoanLibrarySpaceTintGrey,
+  kColorKoanLibrarySpaceTintBlue,
+  kColorKoanLibrarySpaceTintRed,
+  kColorKoanLibrarySpaceTintYellow,
+  kColorKoanLibrarySpaceTintGreen,
+  kColorKoanLibrarySpaceTintPink,
+  kColorKoanLibrarySpaceTintPurple,
+  kColorKoanLibrarySpaceTintCyan,
+  kColorKoanLibrarySpaceTintOrange,
 
   kKoanColorsEnd,
 };

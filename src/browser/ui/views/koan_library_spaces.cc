@@ -18,10 +18,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -34,13 +34,11 @@
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
-#include "chrome/browser/ui/tabs/tab_group_theme.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
-#include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
@@ -48,14 +46,12 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
-#include "koan/browser/ui/views/koan_library_icons.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "koan/browser/ui/views/koan_library_view.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -69,7 +65,6 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
-#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/scroll_view.h"
@@ -80,7 +75,6 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_utils.h"
-#include "ui/views/widget/widget.h"
 
 namespace koan {
 
@@ -104,17 +98,30 @@ constexpr base::TimeDelta kRebuildDelay = base::Milliseconds(150);
 // Cards slide aside while one is dragged (translate 0.2s ease).
 constexpr base::TimeDelta kShiftDuration = base::Milliseconds(200);
 
-// Emoji offered for a space's icon (Zen has a full emoji picker).
-constexpr auto kIcons = std::to_array<const char16_t*>({
-    u"\U0001F30A", u"\U0001F33F", u"\U0001F52E", u"\U0001F34A", u"\U0001F338",
-    u"\U0001F4A7", u"\U0001F525", u"⭐",         u"\U0001F4BC", u"\U0001F3E0",
-    u"\U0001F3AE", u"\U0001F3B5", u"\U0001F4DA", u"\U0001F3A8", u"✈",
-    u"\U0001F6D2", u"\U0001F4A1", u"\U0001F9EA", u"\U0001F4F7", u"\U0001F3AC",
-    u"\U0001F355", u"☕",         u"\U0001F3C0", u"⚽",         u"\U0001F319",
-    u"☀",          u"\U0001F308", u"❄",          u"\U0001F340", u"\U0001F33B",
-    u"\U0001F431", u"\U0001F436", u"\U0001F680", u"\U0001F4BB", u"\U0001F4DD",
-    u"\U0001F4C5", u"\U0001F4B0", u"❤",          u"\U0001F3AF", u"\U0001F512",
-});
+// The colour a card is tinted with for a Space theme's colour.
+ui::ColorId TintColorId(tab_groups::TabGroupColorId color) {
+  switch (color) {
+    case tab_groups::TabGroupColorId::kGrey:
+      return kColorKoanLibrarySpaceTintGrey;
+    case tab_groups::TabGroupColorId::kBlue:
+      return kColorKoanLibrarySpaceTintBlue;
+    case tab_groups::TabGroupColorId::kRed:
+      return kColorKoanLibrarySpaceTintRed;
+    case tab_groups::TabGroupColorId::kYellow:
+      return kColorKoanLibrarySpaceTintYellow;
+    case tab_groups::TabGroupColorId::kGreen:
+      return kColorKoanLibrarySpaceTintGreen;
+    case tab_groups::TabGroupColorId::kPink:
+      return kColorKoanLibrarySpaceTintPink;
+    case tab_groups::TabGroupColorId::kPurple:
+      return kColorKoanLibrarySpaceTintPurple;
+    case tab_groups::TabGroupColorId::kCyan:
+      return kColorKoanLibrarySpaceTintCyan;
+    case tab_groups::TabGroupColorId::kOrange:
+    case tab_groups::TabGroupColorId::kNumEntries:
+      return kColorKoanLibrarySpaceTintOrange;
+  }
+}
 
 const TabGroup* GroupOf(TabStripModel* model,
                         const tab_groups::TabGroupId& id) {
@@ -317,7 +324,8 @@ class SpaceCard : public views::View {
   METADATA_HEADER(SpaceCard, views::View)
 
  public:
-  explicit SpaceCard(tab_groups::TabGroupColorId color) : color_(color) {
+  // `tint`: the Space theme's colour, none for the default theme.
+  explicit SpaceCard(std::optional<ui::ColorId> tint) : tint_(tint) {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
   }
@@ -330,13 +338,14 @@ class SpaceCard : public views::View {
     const ui::ColorProvider* provider = GetColorProvider();
     // The card tinted with the space's colour, standing in for Zen's
     // per-space gradient (the theme is Koan's tint colour until #41).
-    const SkColor tint =
-        provider->GetColor(GetTabGroupTabStripColorId(color_, true));
-    const SkColor base = provider->GetColor(kColorKoanLibrarySpaceCard);
+    SkColor color = provider->GetColor(kColorKoanLibrarySpaceCard);
+    if (tint_) {
+      color = color_utils::AlphaBlend(provider->GetColor(*tint_), color,
+                                      library::kSpaceCardTint);
+    }
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(
-        color_utils::AlphaBlend(tint, base, library::kSpaceCardTint));
+    flags.setColor(color);
     const gfx::RectF bounds(GetLocalBounds());
     canvas->DrawRoundRect(bounds, library::kSpaceCardRadius, flags);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
@@ -348,7 +357,7 @@ class SpaceCard : public views::View {
   }
 
  private:
-  const tab_groups::TabGroupColorId color_;
+  const std::optional<ui::ColorId> tint_;
   std::u16string name_;
 };
 
@@ -410,6 +419,8 @@ END_METADATA
 // Zen's Spaces section (ZenLibrarySpacesSection.mjs): every space as a card
 // to rename, give an icon and a theme, reorder by dragging, open a tab of,
 // or delete; and a button to add one. The library grows to fit the cards.
+// What a card changes goes through the Spaces' API (KoanWorkspaceController);
+// the tab strip is only read, for the tabs a card lists.
 class KoanLibrarySpacesSection : public KoanLibrarySection,
                                  public TabStripModelObserver {
   METADATA_HEADER(KoanLibrarySpacesSection, KoanLibrarySection)
@@ -421,6 +432,8 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
         workspaces_(workspaces) {
     SetLayoutManager(std::make_unique<views::FillLayout>());
     strip_ = AddChildView(std::make_unique<SpacesStrip>());
+    spaces_changed_ = workspaces_->AddSpacesChangedCallback(base::BindRepeating(
+        &KoanLibrarySpacesSection::ScheduleRebuild, base::Unretained(this)));
     model()->AddObserver(this);
   }
   ~KoanLibrarySpacesSection() override { model()->RemoveObserver(this); }
@@ -459,9 +472,9 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     drag_start_x_ = point_in_strip.x();
     gfx::Transform lift;
     lift.Scale(1.03f, 1.03f);
-    cards_[index]->layer()->SetTransform(lift);
+    cards_[index].card->layer()->SetTransform(lift);
     // Over the cards it passes.
-    strip_->layer()->StackAtTop(cards_[index]->layer());
+    strip_->layer()->StackAtTop(cards_[index].card->layer());
   }
 
   void Drag(const gfx::Point& point_in_strip) {
@@ -469,7 +482,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
       return;
     }
     const int travel = point_in_strip.x() - drag_start_x_;
-    SpaceCard* dragged = cards_[drag_index_];
+    SpaceCard* dragged = cards_[drag_index_].card;
     gfx::Transform transform;
     transform.Translate(travel, 0);
     transform.Scale(1.03f, 1.03f);
@@ -478,7 +491,8 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     const int center = dragged->bounds().CenterPoint().x() + travel;
     int drop = 0;
     for (int i = 0; i < static_cast<int>(cards_.size()); ++i) {
-      if (i != drag_index_ && center > cards_[i]->bounds().CenterPoint().x()) {
+      if (i != drag_index_ &&
+          center > cards_[i].card->bounds().CenterPoint().x()) {
         ++drop;
       }
     }
@@ -498,11 +512,11 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
         shift = kCardWidth + kCardGap;
       }
       ui::ScopedLayerAnimationSettings settings(
-          cards_[i]->layer()->GetAnimator());
+          cards_[i].card->layer()->GetAnimator());
       settings.SetTransitionDuration(kShiftDuration);
       gfx::Transform step;
       step.Translate(shift, 0);
-      cards_[i]->layer()->SetTransform(step);
+      cards_[i].card->layer()->SetTransform(step);
     }
   }
 
@@ -512,30 +526,23 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     }
     const int from = std::exchange(drag_index_, -1);
     const int to = std::exchange(drop_index_, -1);
-    for (SpaceCard* card : cards_) {
-      card->layer()->SetTransform(gfx::Transform());
+    for (const Card& card : cards_) {
+      card.card->layer()->SetTransform(gfx::Transform());
     }
     if (commit && from != to) {
-      MoveSpace(from, to);
+      workspaces_->MoveSpace(cards_[from].id, to);
     }
     ScheduleRebuild();
   }
 
   views::View* strip() { return strip_; }
 
-  // TabStripModelObserver:
+  // TabStripModelObserver (the tabs the cards list; the Spaces themselves
+  // come through AddSpacesChangedCallback()):
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override {
-    ScheduleRebuild();
-  }
-  void OnTabGroupChanged(const TabGroupChange& change) override {
-    ScheduleRebuild();
-  }
-  void OnTabGroupFocusChanged(
-      std::optional<tab_groups::TabGroupId> new_focused_group_id,
-      std::optional<tab_groups::TabGroupId> old_focused_group_id) override {
     ScheduleRebuild();
   }
   void OnTabChangedAt(tabs::TabInterface* tab,
@@ -544,7 +551,20 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
   }
 
  private:
+  // A card, and the buttons that menus and pickers open from.
+  struct Card {
+    tab_groups::TabGroupId id;
+    raw_ptr<SpaceCard> card;
+    raw_ptr<views::View> icon;
+    raw_ptr<views::View> theme;
+  };
+
   TabStripModel* model() const { return workspaces_->tab_strip_model(); }
+
+  const Card* FindCard(const tab_groups::TabGroupId& id) const {
+    auto it = std::ranges::find(cards_, id, &Card::id);
+    return it != cards_.end() ? &*it : nullptr;
+  }
 
   void ScheduleRebuild() {
     // A hidden section is rebuilt when it is shown (OnShown()).
@@ -566,8 +586,8 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     rename_field_ = nullptr;
     cards_.clear();
     strip_->RemoveAllChildViews();
-    const std::vector<tab_groups::TabGroupId> spaces =
-        workspaces_->GetWorkspaces();
+    const std::vector<KoanWorkspaceController::SpaceInfo> spaces =
+        workspaces_->GetSpaces();
     for (size_t i = 0; i < spaces.size(); ++i) {
       AddCard(spaces[i], static_cast<int>(i));
     }
@@ -577,19 +597,21 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     library()->OnPreferredWidthChanged();
   }
 
-  void AddCard(const tab_groups::TabGroupId& id, int index) {
-    const TabGroup* group = GroupOf(model(), id);
+  void AddCard(const KoanWorkspaceController::SpaceInfo& space, int index) {
+    const TabGroup* group = GroupOf(model(), space.id);
     if (!group) {
       return;
     }
-    const tab_groups::TabGroupVisualData* visuals = group->visual_data();
-    auto [icon, name] = SplitWorkspaceTitle(visuals->title());
-    const bool has_icon = WorkspaceTitleHasIcon(visuals->title());
+    const tab_groups::TabGroupId id = space.id;
+    std::u16string name = space.name;
     if (name.empty()) {
       name = u"Space " + base::NumberToString16(index + 1);
     }
 
-    auto card_view = std::make_unique<SpaceCard>(visuals->color());
+    auto card_view = std::make_unique<SpaceCard>(
+        space.theme.color
+            ? std::optional<ui::ColorId>(TintColorId(*space.theme.color))
+            : std::nullopt);
     SpaceCard* card = card_view.get();
     card->set_name(name);
     card->SetPreferredSize(gfx::Size(kCardWidth, 0));
@@ -606,10 +628,11 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
         views::BoxLayout::CrossAxisAlignment::kCenter);
     header->SetMinimumCrossAxisSize(28);
 
+    const bool has_icon = !space.icon.empty();
     auto icon_button = std::make_unique<SpaceTextButton>(
         base::BindRepeating(&KoanLibrarySpacesSection::ShowIconPicker,
                             base::Unretained(this), id),
-        has_icon ? icon : std::u16string(), Font(15));
+        space.icon, Font(15));
     icon_button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
     icon_button->SetEnabledTextColors(kColorKoanLibraryForeground);
     icon_button->SetBorder(views::NullBorder());
@@ -625,9 +648,9 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
             : CreateStateBackground(kColorKoanLibrarySpaceIconEmpty,
                                     kColorKoanLibraryPillHovered,
                                     library::kSmallRadius));
-    header->AddChildView(std::move(icon_button));
+    views::View* icon = header->AddChildView(std::move(icon_button));
 
-    if (renaming_group_ == id) {
+    if (renaming_space_ == id) {
       auto field = std::make_unique<RenameField>(
           name, base::BindOnce(&KoanLibrarySpacesSection::OnRenamed,
                                weak_factory_.GetWeakPtr(), id));
@@ -646,13 +669,10 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
       header->SetFlexForView(added, 1);
     }
 
-    auto theme = library::CreateIconButton(views::Button::PressedCallback(),
-                                           kBrushFilledIcon, u"Change theme");
-    views::Button* theme_button = theme.get();
-    theme->SetCallback(base::BindRepeating(
-        &KoanLibrarySpacesSection::ShowThemeMenu, base::Unretained(this), id,
-        base::Unretained(theme_button)));
-    header->AddChildView(std::move(theme));
+    views::View* theme = header->AddChildView(library::CreateIconButton(
+        base::BindRepeating(&KoanLibrarySpacesSection::EditTheme,
+                            base::Unretained(this), id),
+        kBrushFilledIcon, u"Change theme"));
 
     // Body: the space's tabs.
     auto* scroll = card->AddChildView(std::make_unique<views::ScrollView>(
@@ -700,45 +720,14 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
         library::CreateIconButton(views::Button::PressedCallback(),
                                   views::kMoreHorizIcon, u"More options");
     views::Button* more_button = more.get();
+    // (The button owns this callback, so it never outlives the button.)
     more->SetCallback(base::BindRepeating(
         &KoanLibrarySpacesSection::ShowSpaceMenu, base::Unretained(this), id,
         base::Unretained(more_button)));
     footer->AddChildView(std::move(more));
 
-    cards_.push_back(strip_->AddChildView(std::move(card_view)));
-  }
-
-  // Moves the space at `from` to sit at `to` among the others.
-  void MoveSpace(int from, int to) {
-    const std::vector<tab_groups::TabGroupId> spaces =
-        workspaces_->GetWorkspaces();
-    if (from >= static_cast<int>(spaces.size())) {
-      return;
-    }
-    const tab_groups::TabGroupId moved = spaces[from];
-    const TabGroup* group = GroupOf(model(), moved);
-    if (!group) {
-      return;
-    }
-    const gfx::Range range = group->ListTabs();
-    std::vector<tab_groups::TabGroupId> others = spaces;
-    others.erase(others.begin() + from);
-    // TabStripModel::MoveGroupTo takes where the group's first tab ends up,
-    // counted without the group's own tabs.
-    const auto without_group = [&](int index) {
-      return index > static_cast<int>(range.start())
-                 ? index - static_cast<int>(range.length())
-                 : index;
-    };
-    int to_index;
-    if (to < static_cast<int>(others.size())) {
-      to_index =
-          without_group(GroupOf(model(), others[to])->ListTabs().start());
-    } else {
-      to_index =
-          without_group(GroupOf(model(), others.back())->ListTabs().end());
-    }
-    model()->MoveGroupTo(moved, to_index);
+    cards_.push_back(
+        {id, strip_->AddChildView(std::move(card_view)), icon, theme});
   }
 
   void StartRename(const tab_groups::TabGroupId& id) {
@@ -752,7 +741,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     if (renaming_) {
       return;
     }
-    renaming_group_ = id;
+    renaming_space_ = id;
     Rebuild();
     renaming_ = true;
     if (rename_field_) {
@@ -764,200 +753,74 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
   void OnRenamed(const tab_groups::TabGroupId& id,
                  std::optional<std::u16string> name) {
     renaming_ = false;
-    renaming_group_.reset();
+    renaming_space_.reset();
     rename_field_ = nullptr;
-    const TabGroup* group = GroupOf(model(), id);
-    if (name && group) {
-      const tab_groups::TabGroupVisualData* visuals = group->visual_data();
-      const std::u16string title =
-          WorkspaceTitleHasIcon(visuals->title())
-              ? base::StrCat(
-                    {SplitWorkspaceTitle(visuals->title()).first, u" ", *name})
-              : *name;
-      SetVisuals(id, title, visuals->color());
+    if (name && workspaces_->GetSpace(id)) {
+      workspaces_->RenameSpace(id, *name);
     }
     Rebuild();
   }
 
-  void SetIcon(const tab_groups::TabGroupId& id, std::u16string icon) {
-    const TabGroup* group = GroupOf(model(), id);
-    if (!group) {
-      return;
-    }
-    const tab_groups::TabGroupVisualData* visuals = group->visual_data();
-    std::u16string name = SplitWorkspaceTitle(visuals->title()).second;
-    if (!WorkspaceTitleHasIcon(visuals->title())) {
-      name = visuals->title();
-    }
-    SetVisuals(id, icon.empty() ? name : base::StrCat({icon, u" ", name}),
-               visuals->color());
-  }
-
-  void SetColor(const tab_groups::TabGroupId& id,
-                tab_groups::TabGroupColorId color) {
-    if (const TabGroup* group = GroupOf(model(), id)) {
-      SetVisuals(id, group->visual_data()->title(), color);
-    }
-  }
-
-  void SetVisuals(const tab_groups::TabGroupId& id,
-                  const std::u16string& title,
-                  tab_groups::TabGroupColorId color) {
-    const TabGroup* group = GroupOf(model(), id);
-    if (!group) {
-      return;
-    }
-    model()->ChangeTabGroupVisuals(
-        id, tab_groups::TabGroupVisualData(
-                title, color, group->visual_data()->is_collapsed()));
-  }
-
-  // Zen's emoji picker, cut down to a grid of icons.
+  // Zen's emoji picker (the Spaces' own), at the card's icon.
   void ShowIconPicker(const tab_groups::TabGroupId& id) {
-    views::View* anchor = nullptr;
-    for (size_t i = 0; i < cards_.size(); ++i) {
-      if (workspaces_->GetWorkspaces().size() > i &&
-          workspaces_->GetWorkspaces()[i] == id) {
-        anchor = cards_[i];
-      }
-    }
-    if (!anchor) {
-      return;
-    }
-    auto delegate = std::make_unique<views::BubbleDialogDelegate>(
-        anchor, views::BubbleBorder::TOP_LEFT);
-    delegate->SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
-    delegate->SetShowCloseButton(false);
-    delegate->SetTitle(u"Change icon");
-    delegate->SetShowTitle(false);
-    auto grid = std::make_unique<views::BoxLayoutView>();
-    grid->SetOrientation(views::BoxLayout::Orientation::kVertical);
-    grid->SetBetweenChildSpacing(2);
-    constexpr size_t kColumns = 8;
-    views::BoxLayoutView* row = nullptr;
-    views::BubbleDialogDelegate* bubble = delegate.get();
-    const auto pick = [](base::WeakPtr<KoanLibrarySpacesSection> section,
-                         views::BubbleDialogDelegate* bubble,
-                         tab_groups::TabGroupId id, std::u16string icon) {
-      if (section) {
-        section->SetIcon(id, icon);
-      }
-      bubble->GetWidget()->Close();
-    };
-    size_t column = 0;
-    for (const char16_t* icon : kIcons) {
-      if (column++ % kColumns == 0) {
-        row = grid->AddChildView(std::make_unique<views::BoxLayoutView>());
-        row->SetBetweenChildSpacing(2);
-      }
-      auto button = std::make_unique<SpaceTextButton>(
-          base::BindRepeating(pick, weak_factory_.GetWeakPtr(),
-                              base::Unretained(bubble), id,
-                              std::u16string(icon)),
-          icon, Font(18));
-      button->SetHorizontalAlignment(gfx::ALIGN_CENTER);
-      button->SetPreferredSize(gfx::Size(32, 32));
-      button->SetBorder(views::NullBorder());
-      button->SetBackground(CreateStateBackground(
-          std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
-      row->AddChildView(std::move(button));
-    }
-    auto none = std::make_unique<SpaceTextButton>(
-        base::BindRepeating(pick, weak_factory_.GetWeakPtr(),
-                            base::Unretained(bubble), id, std::u16string()),
-        u"No icon", Font(13));
-    none->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(6, 8)));
-    grid->AddChildView(std::move(none));
-    delegate->SetContentsView(std::move(grid));
-    // The section owns the bubble; a new one replaces any still open.
-    icon_bubble_.reset();
-    icon_bubble_delegate_ = std::move(delegate);
-    icon_bubble_ = views::BubbleDialogDelegate::CreateBubble(
-        icon_bubble_delegate_.get(),
-        base::BindOnce(&KoanLibrarySpacesSection::OnIconBubbleClosed,
-                       weak_factory_.GetWeakPtr(),
-                       base::Unretained(icon_bubble_delegate_.get())));
-    icon_bubble_->Show();
-  }
-
-  void OnIconBubbleClosed(views::BubbleDialogDelegate* delegate,
-                          views::Widget::ClosedReason reason) {
-    // Freed once the closing widget is done with itself, unless a newer
-    // picker has replaced it by then.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            [](base::WeakPtr<KoanLibrarySpacesSection> section,
-               views::BubbleDialogDelegate* delegate) {
-              if (section && section->icon_bubble_delegate_.get() == delegate) {
-                section->icon_bubble_.reset();
-                section->icon_bubble_delegate_.reset();
-              }
-            },
-            weak_factory_.GetWeakPtr(), base::Unretained(delegate)));
-  }
-
-  void FillThemeMenu(KoanLibraryMenu* menu, const tab_groups::TabGroupId& id) {
-    for (const auto& [color, label] : tab_groups::GetTabGroupColorLabelMap()) {
-      menu->AddItemWithIcon(
-          label, library::ColorSwatch(GetTabGroupContextMenuColorId(color), 16),
-          base::BindRepeating(&KoanLibrarySpacesSection::SetColor,
-                              weak_factory_.GetWeakPtr(), id, color));
+    if (const Card* card = FindCard(id)) {
+      workspaces_->ShowIconPicker(id, card->icon);
     }
   }
 
-  void ShowThemeMenu(const tab_groups::TabGroupId& id, views::Button* source) {
-    auto menu = std::make_unique<KoanLibraryMenu>();
-    FillThemeMenu(menu.get(), id);
-    RunMenu(std::move(menu), source, source->GetBoundsInScreen(),
-            views::MenuAnchorPosition::kTopLeft,
-            ui::mojom::MenuSourceType::kMouse);
+  // Edit Theme... (the Spaces' own theme menu), at the card's brush.
+  void EditTheme(const tab_groups::TabGroupId& id) {
+    if (const Card* card = FindCard(id)) {
+      workspaces_->EditSpaceTheme(id, card->theme);
+    }
   }
 
-  // Zen's space menu (zenWorkspaceMoreActions), for what Koan's spaces do.
+  // Zen's space menu (zenWorkspaceMoreActions), for what Koan's spaces do;
+  // the name is changed on the card itself. Its items look the card up
+  // when chosen, in case the cards were rebuilt meanwhile.
   void ShowSpaceMenu(const tab_groups::TabGroupId& id, views::Button* source) {
     auto menu = std::make_unique<KoanLibraryMenu>();
-    menu->AddItem(u"Change Name…",
-                  base::BindRepeating(&KoanLibrarySpacesSection::StartRename,
-                                      weak_factory_.GetWeakPtr(), id));
+    const auto bind = [&](void (KoanLibrarySpacesSection::*action)(
+                          const tab_groups::TabGroupId&)) {
+      return base::BindRepeating(action, weak_factory_.GetWeakPtr(), id);
+    };
     menu->AddItem(u"Change Icon…",
-                  base::BindRepeating(&KoanLibrarySpacesSection::ShowIconPicker,
-                                      weak_factory_.GetWeakPtr(), id));
-    FillThemeMenu(menu->AddSubMenu(u"Edit Theme…"), id);
+                  bind(&KoanLibrarySpacesSection::ShowIconPicker));
+    menu->AddItem(u"Edit Theme…", bind(&KoanLibrarySpacesSection::EditTheme));
+    menu->AddSeparator();
+    menu->AddItem(u"Unload Space", bind(&KoanLibrarySpacesSection::Unload));
+    menu->AddItem(u"Unload All Other Spaces",
+                  bind(&KoanLibrarySpacesSection::UnloadOthers));
     menu->AddSeparator();
     menu->AddItem(u"Create Space",
                   base::BindRepeating(&KoanLibrarySpacesSection::CreateSpace,
                                       weak_factory_.GetWeakPtr()));
-    // There is always a space: deleting the last would close the window.
-    menu->AddItem(u"Delete Space",
-                  base::BindRepeating(&KoanLibrarySpacesSection::DeleteSpace,
-                                      weak_factory_.GetWeakPtr(), id),
-                  workspaces_->GetWorkspaces().size() > 1);
+    // Zen keeps at least one Space.
+    menu->AddItem(u"Delete Space", bind(&KoanLibrarySpacesSection::Delete),
+                  workspaces_->CanDeleteSpace());
     RunMenu(std::move(menu), source, source->GetBoundsInScreen(),
             views::MenuAnchorPosition::kTopRight,
             ui::mojom::MenuSourceType::kMouse);
   }
 
-  void CreateSpace() {
-    // The new space's first tab mustn't close the library.
-    library()->KeepOpenWhile(
-        base::BindOnce(&KoanWorkspaceController::CreateWorkspace,
-                       base::Unretained(workspaces_.get())));
+  void Unload(const tab_groups::TabGroupId& id) {
+    workspaces_->UnloadSpace(id);
+  }
+  void UnloadOthers(const tab_groups::TabGroupId& id) {
+    workspaces_->UnloadAllOtherSpaces(id);
+  }
+  // Asks first (the Spaces' own confirmation), and never the last Space.
+  void Delete(const tab_groups::TabGroupId& id) {
+    if (workspaces_->CanDeleteSpace()) {
+      workspaces_->DeleteSpace(id);
+    }
   }
 
-  void DeleteSpace(const tab_groups::TabGroupId& id) {
-    ShowLibraryConfirmation(
-        library(), u"Delete Space?",
-        u"The space and all its tabs will be closed.", u"Delete Space",
-        base::BindOnce(
-            [](base::WeakPtr<KoanLibrarySpacesSection> section,
-               tab_groups::TabGroupId id) {
-              if (section && GroupOf(section->model(), id) &&
-                  section->workspaces_->GetWorkspaces().size() > 1) {
-                section->model()->CloseAllTabsInGroup(id);
-              }
-            },
-            weak_factory_.GetWeakPtr(), id));
+  // Zen's Create-a-Space form, in the sidebar the Library covers: closes the
+  // Library first.
+  void CreateSpace() {
+    library()->Close();
+    workspaces_->ShowCreateForm();
   }
 
   // Opens a tab of a space: switches to the space, selects the tab and
@@ -976,19 +839,17 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
   }
 
   const raw_ptr<KoanWorkspaceController> workspaces_;
+  base::CallbackListSubscription spaces_changed_;
   raw_ptr<SpacesStrip> strip_ = nullptr;
-  std::vector<raw_ptr<SpaceCard>> cards_;
+  std::vector<Card> cards_;
   raw_ptr<RenameField> rename_field_ = nullptr;
-  std::optional<tab_groups::TabGroupId> renaming_group_;
+  std::optional<tab_groups::TabGroupId> renaming_space_;
   bool renaming_ = false;
   bool shown_ = false;
   int drag_index_ = -1;
   int drop_index_ = -1;
   int drag_start_x_ = 0;
   base::OneShotTimer rebuild_timer_;
-  // The icon picker; the delegate outlives its widget.
-  std::unique_ptr<views::BubbleDialogDelegate> icon_bubble_delegate_;
-  std::unique_ptr<views::Widget> icon_bubble_;
   base::WeakPtrFactory<KoanLibrarySpacesSection> weak_factory_{this};
 };
 

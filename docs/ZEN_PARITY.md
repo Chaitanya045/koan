@@ -165,7 +165,7 @@ Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (
 |---|---|---|
 | Library panel sliding in over the sidebar, sections down its side | Same | Downloads, Spaces, History, in Zen's order, with Zen's sizes (418px, 110px side column) and opening spring. With tabs on the right it slides in from the right. Zen also slides the page aside; Koan's panel slides over it (Chromium draws the page in its own native window, which view transforms don't move). |
 | Alt+Shift+L, and History / Downloads keys open their section | Same | Zen's Firefox keys: Ctrl+H, Ctrl+Shift+H (⌘⇧H, ⌘Y on macOS) open History, Ctrl+Shift+Y (⌘⇧J) Downloads; pressed again they close it. Chrome's app menu still opens `chrome://history` and `chrome://downloads`. |
-| Library button in the sidebar's footer | Same | First in the row with the workspace switcher (shown with workspaces on). Zen's hover stack of recent downloads on that button is missing. |
+| Library button in the sidebar's footer | Same | At the start of the Spaces' bottom bar (shown with Spaces on), in the room Zen keeps there for its sidebar button. Zen's hover stack of recent downloads on that button is missing. |
 | Opens on the last section used | Same | |
 | "Open Library" in the command palette | Same | |
 | History: search, when / sort / source filters, grouped by day or site | Same | Default range 120 days, 100 rows at a time, like Zen. |
@@ -178,7 +178,7 @@ Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (
 | Downloads: progress ring, open when done, show in folder, retry, cancel | Same | A download held back by a warning (dangerous or insecure) is never set to open when done: clicking it opens Chrome's warning (the download bubble, or `chrome://downloads` without a toolbar), where it is kept or deleted. |
 | Downloads: menu (open, copy file, copy link, retry, remove, delete) | Same | Also Cancel, and "Review warning" on a held-back download. "Hide from Zen" is "Remove from history" (not offered where policy forbids deleting history). Delete File asks first. Zen's "Clear Download Preview" is missing. |
 | Downloads: picture previews instead of file icons | Same | Decoded out of process. |
-| Spaces: cards with the space's tabs, rename, icon, theme, drag to reorder, add | Same | Thin, on the workspace API: the icon picker offers 40 emoji, not Zen's full picker; the theme is the space's colour (Koan has no gradient editor yet, #41). |
+| Spaces: cards with the space's tabs, rename, icon, theme, drag to reorder, add | Same | On the Spaces' API (#57): their emoji picker, Edit Theme, Unload, Create form and Delete (which asks and keeps one Space). The theme is the Space's colour (Koan has no gradient editor yet, #41). |
 | Spaces: live copy of each space's sidebar (drag tabs between cards, folders) | Different | Cards list the space's tabs; click one to go there. Moving tabs between spaces is done in the sidebar. |
 | Media and Boosts sections | Missing | Zen-specific features Koan doesn't have. |
 | Opening the Library with a swipe | Missing | |

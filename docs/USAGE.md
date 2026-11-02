@@ -405,7 +405,8 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 ## Library
 
 Zen's Library: press Alt+Shift+L or click the Library button (the box with
-sparkles, first at the bottom of the sidebar). It slides in over the sidebar
+sparkles, at the start of the sidebar's bottom bar, before the Space
+buttons). It slides in over the sidebar
 with three sections down its side, and opens on the one you used last:
 
 - **Downloads** (Ctrl+Shift+Y): every download, newest first, with its size,
@@ -420,11 +421,14 @@ with three sections down its side, and opens on the one you used last:
   where you keep or delete it. While anything downloads, the Downloads tab shows a
   progress ring. Right-click the Downloads tab to clear the list or open
   `chrome://downloads`.
-- **Spaces**: a card per workspace with its tabs. Click the name to rename
-  it, the icon to pick an emoji, the brush to change its colour; drag the
-  arrows at the bottom to reorder the spaces; **⋯** has the same plus
-  "Create Space" and "Delete Space" (not for the only space). **+** after
-  the last card adds a space. Click a tab to go there. The Library widens to fit the cards.
+- **Spaces**: a card per Space with its tabs, tinted with its theme. Click
+  the name to rename it, the icon for the Spaces' emoji picker, the brush
+  for Edit Theme; drag the arrows at the bottom to reorder the Spaces (the
+  bottom bar follows). **⋯** has Change Icon, Edit Theme, Unload Space,
+  Unload All Other Spaces, Create Space and Delete Space (it asks, and not
+  for the only Space). **+** after the last card, like Create Space, closes
+  the Library and opens the Create-a-Space form. Click a tab to go there.
+  The Library widens to fit the cards.
 - **History** (Ctrl+H): the last 120 days by day. Search, or **Filter**:
   when (today since midnight, this week, this month), sort (by date, site, most visited,
   last visited) and what to look through (history or the tabs closed

@@ -12,9 +12,7 @@
 #include "koan/browser/ui/views/koan_library_icons.h"
 
 #include <algorithm>
-#include <memory>
 
-#include "base/functional/bind.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -22,8 +20,6 @@
 #include "ui/color/color_provider.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/image/canvas_image_source.h"
-#include "ui/gfx/image/image_skia.h"
 
 namespace koan::library {
 
@@ -148,38 +144,6 @@ void PaintSectionIcon(gfx::Canvas* canvas,
       break;
   }
   sk_canvas->restore();
-}
-
-namespace {
-
-// A filled circle, drawn at each scale the image is shown at.
-class SwatchSource : public gfx::CanvasImageSource {
- public:
-  SwatchSource(SkColor color, int size)
-      : gfx::CanvasImageSource(gfx::Size(size, size)), color_(color) {}
-
-  // gfx::CanvasImageSource:
-  void Draw(gfx::Canvas* canvas) override {
-    const float radius = size().width() / 2.f;
-    canvas->DrawCircle(gfx::PointF(radius, radius), radius, FillFlags(color_));
-  }
-
- private:
-  const SkColor color_;
-};
-
-}  // namespace
-
-ui::ImageModel ColorSwatch(ui::ColorId color, int size) {
-  return ui::ImageModel::FromImageGenerator(
-      base::BindRepeating(
-          [](ui::ColorId color, int size, const ui::ColorProvider* provider) {
-            return gfx::ImageSkia(
-                std::make_unique<SwatchSource>(provider->GetColor(color), size),
-                gfx::Size(size, size));
-          },
-          color, size),
-      gfx::Size(size, size));
 }
 
 }  // namespace koan::library

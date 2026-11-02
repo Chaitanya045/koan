@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_BAR_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_BAR_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -22,9 +23,10 @@ class KoanSpaceButton;
 
 // Zen's sidebar bottom bar: one button per Space (its emoji, or a dot),
 // the active one in colour and the others greyed out, and "+" with Zen's
-// Create menu. Like Zen, the Space buttons are hidden while there is only
-// one Space, and inactive ones shrink to dots when they don't fit. In a
-// sidebar too narrow for a row (icons only), they stack above "+".
+// Create menu, with an optional leading button before them (the Library's).
+// Like Zen, the Space buttons are hidden while there is only one Space, and
+// inactive ones shrink to dots when they don't fit. In a sidebar too narrow
+// for a row (icons only), they stack above "+".
 class KoanSpaceBarView : public views::View {
   METADATA_HEADER(KoanSpaceBarView, views::View)
 
@@ -33,6 +35,9 @@ class KoanSpaceBarView : public views::View {
   KoanSpaceBarView(const KoanSpaceBarView&) = delete;
   KoanSpaceBarView& operator=(const KoanSpaceBarView&) = delete;
   ~KoanSpaceBarView() override;
+
+  // A button before the Space buttons (the Library's), or none.
+  void SetLeadingButton(std::unique_ptr<views::View> button);
 
   // Shows `spaces`, reusing the buttons of Spaces it already shows.
   void Update(const std::vector<KoanWorkspaceController::SpaceInfo>& spaces);
@@ -52,6 +57,7 @@ class KoanSpaceBarView : public views::View {
   const raw_ptr<KoanWorkspaceController> controller_;
   std::vector<raw_ptr<KoanSpaceButton>> buttons_;
   raw_ptr<views::Button> create_button_ = nullptr;
+  raw_ptr<views::View> leading_ = nullptr;
   bool overflows_ = false;
 };
 

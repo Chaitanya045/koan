@@ -8,7 +8,7 @@
 import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish,
+  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
   key as keyTo, pages as tabs, setKoanPref, sleep, visiblePage, waitFor,
 } from './lib/koan.mjs';
 
@@ -26,7 +26,7 @@ async function shot(name) {
 
 // The native views of interest, with their properties, ancestry and whether
 // they are shown. Library views live in the Library's own widget.
-const INTEREST = /^(KoanLibrary\w*|Space\w+|MoveHandle|RenameField|Textfield|LabelButton|ImageButton|KoanWorkspaceButton)$/;
+const INTEREST = /^(KoanLibrary\w*|Space\w+|MoveHandle|RenameField|Textfield|LabelButton|ImageButton|KoanSpaceButton)$/;
 async function views() {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
@@ -38,7 +38,7 @@ async function views() {
     const cls = n.nodeName === 'View' ? a[a.indexOf('class') + 1] : null;
     const inLibrary = path.includes('KoanLibraryView');
     if (cls && INTEREST.test(cls) &&
-        (inLibrary || /^Koan(Library|Workspace)/.test(cls))) {
+        (inLibrary || /^Koan(Library|Space)/.test(cls))) {
       const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
       const p = {};
       for (const rule of r.result?.matchedCSSRules ?? []) {
@@ -106,7 +106,7 @@ async function key(code, modifiers, keyName = '') {
   await sleep(900);
 }
 
-const KEY_L = 76, KEY_H = 72, KEY_Y = 89, KEY_N = 78, ESC = 27;
+const KEY_L = 76, KEY_H = 72, KEY_Y = 89, ESC = 27;
 
 const library = async () => withViews(nodes => {
   const view = find(nodes, 'KoanLibraryView')[0];
@@ -379,10 +379,15 @@ const downloads = join(profile, 'Downloads');
   await sleep(1000);
 }
 
-// --- Spaces: two new ones, renamed and reordered in the Library. ---
-await key(KEY_N, CTRL | ALT, 'n');
-await key(KEY_N, CTRL | ALT, 'n');
-// The sidebar's Library button opens it (on Downloads, the last section).
+// --- Spaces: the window's Space and a new one (Zen's Create form),
+// renamed and reordered in the Library. ---
+await createSpace(await visiblePage(), 'Second');
+await sleep(1000);
+// The Library button, at the start of the Spaces' bottom bar, opens it (on
+// Downloads, the last section).
+const button = await withViews(nodes => find(nodes, 'KoanLibraryButton')[0]);
+check('The Library button is in the sidebar\'s bottom bar',
+      button?.path.includes('KoanSpaceBarView'), button?.path.join(' > '));
 await withViews(async (nodes, ui) => {
   await click(ui, find(nodes, 'KoanLibraryButton')[0]);
 });
@@ -400,7 +405,7 @@ check('The Spaces tab shows a card per space',
 check('...and the Library grows to fit them', state.width > 418, `width ${state.width}`);
 const cardNames = async () => withViews(nodes =>
   find(nodes, 'SpaceCard', n => n.shown).map(n => n.p.Name));
-check('...named like the spaces', (await cardNames()).join(',') === 'Space 1,Space 2',
+check('...named like the spaces', (await cardNames()).join(',') === 'Space,Second',
       (await cardNames()).join(','));
 await shot('library-spaces');
 
@@ -420,9 +425,9 @@ await withViews(async (nodes, ui) => {
 await sleep(1000);
 check('Renaming a space in its card renames it', (await cardNames())[0] === 'Work',
       (await cardNames()).join(','));
-const switcher = await withViews(nodes =>
-  find(nodes, 'KoanWorkspaceButton').map(n => n.p.TooltipText ?? n.p.Tooltip));
-check('...in the sidebar too', switcher.includes('Work'), switcher.join(', '));
+const bar = await withViews(nodes =>
+  find(nodes, 'KoanSpaceButton').map(n => n.p.TooltipText ?? n.p.Tooltip));
+check('...in the sidebar\'s bottom bar too', bar.includes('Work'), bar.join(', '));
 
 // Drag the first card past the second by its handle.
 await withViews(async (nodes, ui) => {
@@ -434,7 +439,10 @@ await withViews(async (nodes, ui) => {
 });
 await sleep(1000);
 check('Dragging a card by its handle reorders the spaces',
-      (await cardNames()).join(',') === 'Space 2,Work', (await cardNames()).join(','));
+      (await cardNames()).join(',') === 'Second,Work', (await cardNames()).join(','));
+const barOrder = await withViews(nodes =>
+  find(nodes, 'KoanSpaceButton').map(n => n.p.TooltipText ?? n.p.Tooltip));
+check('...in the bottom bar too', barOrder.join(',') === 'Second,Work', barOrder.join(','));
 
 check('...with the side column on the left', state.sectionX === 110,
       `section at x ${state.sectionX}`);
