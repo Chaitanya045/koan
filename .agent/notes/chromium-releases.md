@@ -109,8 +109,15 @@ into place and the old one is kept, so rollback is two renames:
 
 ```sh
 ~/work/koan/.cache/agent-switch-chromium.sh <this worktree> --preflight  # no lock, any time
-~/work/koan/.cache/agent-switch-chromium.sh <this worktree>              # at "go", takes the queue and lock
+# at "go": preflight, then the switch detached (setsid + nohup; the harness
+# kills background commands after 2 h, and this runs 10-15 h):
+~/work/koan/.cache/agent-switch-chromium-detached.sh <this worktree> ~/work/koan/.cache/switch-chromium.log
+until grep -q '^AGENT-BUILD-EXIT' ~/work/koan/.cache/switch-chromium.log; do sleep 60; done   # poll; ends "AGENT-BUILD-EXIT <code>"
 ```
+
+The log has the steps; the compile output is in
+`.cache/agent-switch-chromium.log`. Builds after it use
+`agent-build-detached.sh`.
 
 The script does, in order (one filesystem: the moves are instant):
 
