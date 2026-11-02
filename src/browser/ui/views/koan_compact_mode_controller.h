@@ -42,6 +42,7 @@ class KoanHotZone;
 class KoanSidebarContextMenuController;
 class KoanSidebarNavButtons;
 class KoanSidebarNavView;
+class KoanTrafficLightsController;
 
 // Zen's compact mode and layouts for one window.
 //
@@ -285,6 +286,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> caption_hot_zone_ = nullptr;
   // Lets the pointer through the revealed toolbar to the caption buttons.
   std::unique_ptr<KoanCaptionButtonsTargeter> caption_buttons_targeter_;
+  // macOS: the traffic lights, which the window buttons below stand for.
+  std::unique_ptr<KoanTrafficLightsController> traffic_lights_;
   bool caption_strip_collapsible_ = false;
   bool caption_strip_revealed_ = false;
   base::OneShotTimer caption_hide_timer_;

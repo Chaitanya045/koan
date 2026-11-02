@@ -131,8 +131,15 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
 - Immersive fullscreen keeps the toolbar in `BrowserView::overlay_widget()`;
   compact mode leaves it there when it deactivates, but resets its own
   hidden-toolbar transform and pointer blocking on it.
-- Shortcuts are still Ctrl-based. ⌘ shortcuts, traffic lights in the
-  sidebar and trackpad swipes are later parts of #51.
+- Traffic lights (#72): AppKit's. Koan sets the title bar height they are
+  centred in (hook in `browser_native_widget_mac.mm`), hides and shows them
+  with `standardWindowButton:` like the other platforms' caption buttons
+  (`koan_traffic_lights*`), and the compact mode controller treats them as
+  caption buttons on the page side when the sidebar is hidden or on the
+  right. Trackpad swipes between Spaces: `KoanSpaceSwipe`. Neither could be
+  run on a Mac by the agent that wrote them: see the PR for what the macOS CI
+  compiled.
+- Shortcuts are still Ctrl-based. ⌘ shortcuts are #71.
 
 ## Sidebar animations (#94)
 

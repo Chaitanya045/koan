@@ -45,7 +45,8 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
         IsCaptionStripCollapsed(browser_view)
             ? kContentCardMargin
             : std::max(kContentCardMargin,
-                       GetCaptionButtonAreaSize(browser_view).height());
+                       GetHiddenToolbarRowHeight(
+                           GetCaptionButtonAreaSize(browser_view).height()));
     // Compact mode may hide the sidebar: then a gutter on its side too.
     const int sidebar_side =
         IsCompactModeActive(browser_view) ? kContentCardMargin : 0;
