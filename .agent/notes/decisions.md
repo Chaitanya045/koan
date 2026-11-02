@@ -14,8 +14,21 @@
   fullscreen and ChromeOS/macOS frame code. Koan uses its own controller,
   reusing vertical-tab expand-on-hover with collapsed width 0, plus a
   layer-transform slide for the toolbar.
-- **Track Chromium main for now** (158.0.8111.0); pin a milestone before the
-  first release, and re-audit hook points on each rebase.
+- ~~Track Chromium main for now~~ (superseded 2026-11-02): **follow Chromium
+  release branches** (#86). Pin a release tag of the milestone, never a main
+  commit. Take every Beta/Stable point release, and rebase onto each new
+  milestone within about 2 weeks of it reaching Stable. A daily-driver
+  browser needs Chrome's weekly security fixes.
+- **macOS only, no official releases** (2026-11-02). Koan is built for
+  Apple Silicon Macs for the user's own use. The app comes from the macOS CI
+  `.dmg` (#69) or a local Mac build. Linux is only the agents' build and test
+  bench. There's no Linux or Windows packaging (PR #13 closed, #5 not
+  planned).
+- **Keep the native Views architecture** (architecture review, 2026-11-02,
+  [architecture-review.md](architecture-review.md)). Use C++ Views for
+  anything always visible, animated, or used per click or keystroke. WebUI
+  is fine for occasional, form- or list-heavy pages. Customisation comes
+  through tokens and themes (#48), not CSS.
 - Name: **Koan** (not "Zen"/"Chrome" — trademarks).
 - **Koan feature names must be globally unique and `kKoan`-prefixed.**
   `BASE_DECLARE_FEATURE` is `extern "C"` (`base/feature.h:48`), so the C++
