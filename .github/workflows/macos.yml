@@ -1,0 +1,310 @@
+# Nightly macOS (Apple Silicon) build: Koan.app in an unsigned disk image,
+# Koan-<version>-<sha>-arm64.dmg, kept as an artifact of the run and, for
+# develop, as the rolling "nightly" pre-release.
+#
+# A first Chromium build takes far longer than GitHub's 6 h job limit on the
+# free macOS runners (3 M1 cores, 7 GB RAM), so the build is chained: the
+# fetch job checks out the pinned Chromium, applies Koan and uploads the
+# tree; then up to 16 build jobs (macos-build.yml) each build for ~5 h and
+# hand out/Koan on to the next as an artifact; the job that finishes makes
+# the .dmg; the release job publishes it. See .agent/notes/macos-ci.md.
+#
+# Run it by hand from the Actions tab or with
+#   gh workflow run macos.yml [-f ref=<branch, tag, commit or refs/pull/N/head>]
+name: macOS nightly
+
+on:
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build (empty for the branch you run it on)
+        required: false
+        default: ""
+  # Changes to this build itself are tested on their pull request.
+  pull_request:
+    paths:
+      - .github/workflows/macos.yml
+      - .github/workflows/macos-build.yml
+      - scripts/ci/mac_*
+      - scripts/ci/prune_chromium_source.py
+
+permissions: {}
+
+# One build of a ref at a time. A run takes a day or more, so a nightly or
+# manual run is never cancelled; at most one more waits (a newer one
+# replaces it). Pushes to a pull request cancel its older run.
+concurrency:
+  group: macos-${{ github.event_name == 'pull_request' && github.head_ref || inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fetch:
+    name: Fetch Chromium and apply Koan
+    runs-on: xcode-27
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Resolve the commit
+        id: ref
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Building Koan $sha on Chromium $(paste -sd' ' CHROMIUM_VERSION)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare the runner
+        run: scripts/ci/mac_runner_setup.sh
+
+      - name: Fetch Chromium, apply patches and branding, gn gen
+        run: scripts/ci/mac_fetch.sh
+
+      - name: Pack the source
+        run: |
+          scripts/ci/mac_archive.sh pack-source "$RUNNER_TEMP/koan-mac-source.tar.zst"
+          df -h /
+
+      - name: Upload the source
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/koan-mac-source.tar.zst
+          archive: false
+          overwrite: true
+          retention-days: 5
+          if-no-files-found: error
+
+  build-01:
+    needs: [fetch]
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 1
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-02:
+    needs: [fetch, build-01]
+    if: needs.build-01.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 2
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-03:
+    needs: [fetch, build-02]
+    if: needs.build-02.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 3
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-04:
+    needs: [fetch, build-03]
+    if: needs.build-03.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 4
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-05:
+    needs: [fetch, build-04]
+    if: needs.build-04.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 5
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-06:
+    needs: [fetch, build-05]
+    if: needs.build-05.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 6
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-07:
+    needs: [fetch, build-06]
+    if: needs.build-06.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 7
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-08:
+    needs: [fetch, build-07]
+    if: needs.build-07.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 8
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-09:
+    needs: [fetch, build-08]
+    if: needs.build-08.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 9
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-10:
+    needs: [fetch, build-09]
+    if: needs.build-09.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 10
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-11:
+    needs: [fetch, build-10]
+    if: needs.build-10.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 11
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-12:
+    needs: [fetch, build-11]
+    if: needs.build-11.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 12
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-13:
+    needs: [fetch, build-12]
+    if: needs.build-12.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 13
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-14:
+    needs: [fetch, build-13]
+    if: needs.build-13.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 14
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-15:
+    needs: [fetch, build-14]
+    if: needs.build-14.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 15
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-16:
+    needs: [fetch, build-15]
+    if: needs.build-15.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 16
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  # Fails the run when the last build job ran out of time unfinished.
+  check:
+    name: Build finished
+    needs: [fetch, build-01, build-02, build-03, build-04, build-05, build-06, build-07, build-08, build-09, build-10, build-11, build-12, build-13, build-14, build-15, build-16]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          FINISHED: ${{ contains(needs.*.outputs.status, 'finished') }}
+        run: |
+          if [[ $FAILED == true ]]; then
+            echo "a build job failed; re-run the failed jobs to carry on" >&2
+            exit 1
+          fi
+          if [[ $FINISHED != true ]]; then
+            echo "not finished after 16 build jobs; add jobs to macos.yml" >&2
+            exit 1
+          fi
+
+  release:
+    name: Update the nightly pre-release
+    needs: [check, fetch, build-01, build-02, build-03, build-04, build-05, build-06, build-07, build-08, build-09, build-10, build-11, build-12, build-13, build-14, build-15, build-16]
+    # develop only: nightly runs, and manual runs on develop.
+    if: >-
+      ${{ !cancelled() && needs.check.result == 'success' &&
+      github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' &&
+      (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ needs.fetch.outputs.sha }}
+      DMG: ${{ join(needs.*.outputs.dmg, '') }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Download the disk image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.DMG }}
+          path: dist
+
+      - name: Publish
+        run: |
+          cd dist
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+          cat > notes.md <<EOF
+          Koan for macOS on Apple Silicon, built from develop at $SHA by
+          [this run]($RUN_URL). Replaced by every nightly build.
+
+          The app is not signed with a Developer ID or notarised, so macOS
+          blocks it the first time: see
+          [Installing the macOS build](https://github.com/$GH_REPO/blob/develop/docs/USAGE.md#installing-the-macos-build).
+
+          SHA-256: \`$(cut -d' ' -f1 "$DMG.sha256")\`
+          EOF
+          # A new tag each time: delete the old release and its tag, then
+          # make them again at this commit.
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly "$DMG" "$DMG.sha256" \
+            --target "$SHA" --prerelease --latest=false \
+            --title "Nightly ($(date -u +%Y-%m-%d), ${SHA:0:7})" --notes-file notes.md

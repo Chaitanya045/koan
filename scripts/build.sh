@@ -15,6 +15,9 @@
 #   (KOAN_MAC; see .agent/notes/mac.md). Needs a full Xcode: DEVELOPER_DIR
 #   (default /Applications/Xcode.app/Contents/Developer), not xcode-select.
 #
+# scripts/build.sh --gen runs only gn gen (CI uses it to check the build
+# files before the long build).
+#
 # JOBS (parallel compile jobs) defaults to 2, 4 or 6 depending on the memory
 # available right now, so a build fits next to other apps in 16 GB of RAM.
 set -euo pipefail
@@ -48,6 +51,10 @@ cd "$ROOT/chromium/src"
 mkdir -p "$OUT"
 cp "$ARGS" "$OUT/args.gn"
 gn gen "$OUT"
+if [[ $TARGET == --gen ]]; then
+  echo "generated $PWD/$OUT"
+  exit 0
+fi
 autoninja -C "$OUT" -j "$JOBS" "$TARGET"
 
 if [[ $TARGET == chrome ]]; then
