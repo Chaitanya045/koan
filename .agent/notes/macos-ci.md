@@ -66,9 +66,16 @@ reusable workflow instead of 20 copies of the job.
   `ff682ad`, a branch commit ("Create chrome_branch_deps.json for branch
   8111") whose parent is ~100 main commits after the pinned `67e29b8`.
   Using it would mean building a different Chromium than the Linux bench.
-  If `CHROMIUM_VERSION` ever pins a release tag instead, the lite tarball
-  (+ CIPD/GCS deps and hooks, which the tarball doesn't have) becomes an
-  option.
+  #86 moves the pin to release tags (the M158 branch, then every Stable
+  point release); then `chromium-<version>-lite.tar.xz` matches the pin
+  and becomes an option (~2.1 GB download), but it has no CIPD/GCS deps
+  and no hook output (clang, Rust, node, Xcode checks), so gclient would
+  still be needed for those. Not worth it while the gclient fetch takes
+  ~10 min.
+- **Nothing in the CI names a Chromium version or commit:** bootstrap.sh
+  reads `CHROMIUM_VERSION` (line 1 version, line 2 commit), and the .dmg
+  name falls back to line 1. Moving the pin is a one-line change; the
+  next run fetches the new tree (a full rebuild, as on any machine).
 - **What CI does:** `scripts/bootstrap.sh` unchanged (`gclient sync
   --nohooks --no-history --revision src@<rev>`, then `gclient runhooks`)
   with a `.gclient` for `target_os = ["mac"]` and
@@ -85,6 +92,25 @@ reusable workflow instead of 20 copies of the job.
   the fetch job checks that the Mac build files still load.
 - Hermetic Xcode isn't used (that needs Google-internal access); the
   runner's Xcode is selected with `DEVELOPER_DIR` (`scripts/ci/mac_env.sh`).
+
+## Build configuration
+
+`build/koan-mac.gn` from #52, unchanged: arm64, `is_debug = false`, no
+component build, `symbol_level = 0`, `dcheck_always_on = false`, no
+`is_official_build` (so no ThinLTO and no PGO). Official builds were left
+out because they don't fit the chain:
+
+- A ThinLTO link of the Chromium framework is one step that needs well
+  over the runner's 7 GB of RAM and takes hours on 3 cores. A step can't
+  be split across jobs: siso stops at the deadline and the link starts
+  over in the next job, so a link longer than one ~5 h slice never
+  finishes.
+- ungoogled-chromium's official build (ThinLTO + PGO) "took ~3 days and
+  did not finish" on these runners before they moved to Depot.
+
+PGO without LTO (`is_official_build` with `use_thin_lto = false`) might
+fit; worth measuring once the plain build's time per job is known. It
+would change the maintainer's Mac build too, since CI uses the same file.
 
 ## Runner
 
