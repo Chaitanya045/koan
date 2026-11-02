@@ -41,8 +41,9 @@ case "$MODE" in
     for e in * .[!.]*; do
       if [[ -e $e && $e != .git ]]; then entries+=("$e"); fi
     done
+    # The CIPD cache only holds packages that are already installed.
     pack --anchored --exclude=./chromium/src/out --exclude=./.cache/mac/tmp \
-      "${entries[@]/#/./}"
+      --exclude=./.cache/mac/home/.cipd-cache "${entries[@]/#/./}"
     ;;
   pack-out)
     [[ -d chromium/src/out/Koan ]] || { echo "no chromium/src/out/Koan" >&2; exit 1; }

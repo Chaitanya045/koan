@@ -74,12 +74,14 @@ REMOVE = (
     'third_party/swiftshader/tests/regres',
     'third_party/test_fonts/test_fonts',
     'tools/perf/testdata',
-    # publish_tarball.py: purge_directories, without the toolchains.
+    # publish_tarball.py: purge_directories, without the toolchains
+    # (llvm-build, rust-toolchain, node) and Dawn's Go
+    # (third_party/dawn/tools/golang, which runs Tint's source generator):
+    # distributions bring their own of these.
     'buildtools/reclient',
     'third_party/angle/third_party/VK-GL-CTS',
     'third_party/catapult/third_party/vinn/third_party/v8',
     'third_party/dawn/third_party/khronos/OpenGL-Registry/specs',
-    'third_party/dawn/tools/golang',
     'third_party/jetstream',
     'third_party/llvm-build-tools',
     'third_party/rust-src',

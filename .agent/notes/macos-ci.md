@@ -125,3 +125,12 @@ A first run failed at `gn gen`: the pruning had removed
 `third_party/blink/tools/*.pydeps`, which `//infra/orchestrator` reads.
 The lite tarball keeps every `*.gn`, `*.gni`, `*.grd(p)`, `*.isolate` and
 `*.pydeps` in the directories it drops; the script now does the same.
+
+The first build job then failed after 11 s: Dawn's
+`tint:generate_sources` runs `third_party/dawn/tools/golang/mac-arm64/bin/go`,
+which the lite recipe purges (distributions supply their own Go). Koan
+keeps it. `third_party/rust-src` can go: Chromium's Rust `std` builds from
+`third_party/rust-toolchain/lib/rustlib/src`.
+
+**Build size:** 91,259 steps for `chrome` with `build/koan-mac.gn` (siso's
+count at the start of build 1).
