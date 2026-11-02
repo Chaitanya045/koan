@@ -1,0 +1,156 @@
+# One build job of the macOS chain in macos.yml: unpacks the source archive
+# and the previous job's out/Koan, builds until about an hour before
+# GitHub's 6 h job limit, then packs out/Koan for the next job. The job
+# that finishes the build makes the .dmg instead.
+#
+# Every job reads only artifacts that earlier jobs left, under fixed names,
+# so a failed job can be re-run ("Re-run failed jobs") and carries on from
+# the same point. See .agent/notes/macos-ci.md.
+name: macOS build slice
+
+on:
+  workflow_call:
+    inputs:
+      slice:
+        description: This job's number in the chain, from 1
+        required: true
+        type: number
+      sha:
+        description: The Koan commit being built
+        required: true
+        type: string
+    outputs:
+      status:
+        description: finished, or running when the next job must go on
+        value: ${{ jobs.build.outputs.status }}
+      dmg:
+        description: The disk image's artifact name, from the job that finished
+        value: ${{ jobs.build.outputs.dmg }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.slice }}
+    runs-on: xcode-27
+    timeout-minutes: 360
+    outputs:
+      status: ${{ steps.build.outputs.status }}
+      dmg: ${{ steps.package.outputs.file_name }}
+    env:
+      KOAN_SHA: ${{ inputs.sha }}
+      SLICE: ${{ inputs.slice }}
+      # The 3-core, 7 GB runner: one compile job per core.
+      JOBS: "3"
+    steps:
+      - name: Plan the job
+        id: plan
+        run: |
+          now=$(date +%s)
+          {
+            echo "KOAN_CI_START=$now"
+            # Stop building 65 min before the 6 h limit: packing and
+            # uploading out/Koan takes up to ~30 min.
+            echo "KOAN_CI_DEADLINE=$((now + (360 - 65) * 60))"
+            echo "ARTIFACTS=$RUNNER_TEMP/koan-artifacts"
+            echo "LOGS=$RUNNER_TEMP/koan-logs"
+          } >> "$GITHUB_ENV"
+          echo "previous=$((SLICE - 1))" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Prepare the runner
+        run: scripts/ci/mac_runner_setup.sh
+
+      - name: Download the source
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: koan-mac-source.tar.zst
+          path: ${{ env.ARTIFACTS }}
+
+      - name: Unpack the source
+        run: |
+          scripts/ci/mac_archive.sh unpack "$ARTIFACTS/koan-mac-source.tar.zst"
+          df -h /
+
+      - name: Download the previous job's build
+        if: inputs.slice > 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: koan-mac-out-${{ steps.plan.outputs.previous }}.tar.zst
+          path: ${{ env.ARTIFACTS }}
+
+      - name: Unpack the previous job's build
+        if: inputs.slice > 1
+        env:
+          PREVIOUS: ${{ steps.plan.outputs.previous }}
+        run: |
+          scripts/ci/mac_archive.sh unpack "$ARTIFACTS/koan-mac-out-$PREVIOUS.tar.zst"
+          df -h /
+
+      - name: Build
+        id: build
+        run: scripts/ci/mac_build_slice.sh "$LOGS"
+
+      - name: Pack the build for the next job
+        if: steps.build.outputs.status == 'running'
+        run: |
+          scripts/ci/mac_archive.sh pack-out "$ARTIFACTS/koan-mac-out-$SLICE.tar.zst"
+          df -h /
+
+      - name: Upload the build for the next job
+        if: steps.build.outputs.status == 'running'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.ARTIFACTS }}/koan-mac-out-${{ inputs.slice }}.tar.zst
+          archive: false
+          overwrite: true
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: Make the disk image
+        id: package
+        if: steps.build.outputs.status == 'finished'
+        run: scripts/ci/mac_package.sh "$ARTIFACTS/dmg"
+
+      - name: Upload the disk image
+        if: steps.build.outputs.status == 'finished'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.ARTIFACTS }}/dmg/${{ steps.package.outputs.file_name }}
+          archive: false
+          overwrite: true
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        if: always()
+        env:
+          STATUS: ${{ steps.build.outputs.status || 'failed' }}
+          PROGRESS: ${{ steps.build.outputs.progress || 'unknown' }}
+          DMG: ${{ steps.package.outputs.file_name }}
+        run: |
+          {
+            echo "### Build job $SLICE: $STATUS"
+            echo
+            echo "- Job time so far: $(( ($(date +%s) - KOAN_CI_START) / 60 )) min"
+            echo "- Build steps done: $PROGRESS"
+            if [[ -n $DMG ]]; then
+              echo "- Disk image: \`$DMG\`, $(du -h "$ARTIFACTS/dmg/$DMG" | cut -f1)"
+              echo "- SHA-256: \`$(cut -d' ' -f1 "$ARTIFACTS/dmg/$DMG.sha256")\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: koan-mac-logs-${{ inputs.slice }}
+          path: ${{ env.LOGS }}
+          overwrite: true
+          retention-days: 14
+          if-no-files-found: ignore
