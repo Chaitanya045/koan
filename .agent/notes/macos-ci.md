@@ -159,10 +159,21 @@ keeps it. `third_party/rust-src` can go: Chromium's Rust `std` builds from
 `third_party/rust-toolchain/lib/rustlib/src`.
 
 The next attempt failed after 1m52s (679/90,009 steps) at ANGLE's
-`angle_metal_internal_shaders_to_air`: "cannot execute tool 'metal' due to
-missing Metal Toolchain". Xcode 26+ ships it as a separate component;
-`mac_runner_setup.sh` now runs `xcodebuild -downloadComponent
-MetalToolchain` when `xcrun metal` is missing.
+`angle_metal_internal_shaders_to_air` (`xcrun metal`, through
+`metal_wrapper.py`): "cannot execute tool 'metal' due to missing Metal
+Toolchain", after running for 96 s. Since Xcode 26 the Metal toolchain is
+a separate component, but the runner image has it installed
+(`xcodebuild -showComponent MetalToolchain`: build 27A266a, mounted as a
+cryptex under `/private/var/run/com.apple.security.cryptexd/mnt/`).
+Probe jobs on a scratch branch compiled a shader fine with plain env, with
+the one-folder `HOME`/`TMPDIR`/`CFFIXED_USER_HOME`, with `env -i`, after
+deleting the other Xcodes, after the simulator cleanup and after
+`-downloadComponent`. The difference: the failed job's first `xcrun metal`
+came from inside the loaded build. `mac_runner_setup.sh` now compiles a
+test shader before the build (installing the component only if that
+fails), and the next build got past ANGLE. If it ever comes back, ANGLE's
+GN arg `angle_metal_toolchain_dir` runs the toolchain's `metal` directly,
+without xcrun.
 
 **Build size:** 91,259 steps for `chrome` with `build/koan-mac.gn` (siso's
 count at the start of build 1).

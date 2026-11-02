@@ -8,8 +8,9 @@
 #   far more than the 14 GB GitHub guarantees).
 # - Turns Spotlight indexing off, so it doesn't index the build tree.
 # - Checks that the Xcode the build uses (KOAN_CI_XCODE, see mac_env.sh)
-#   is there, and installs its Metal toolchain: since Xcode 26 it is a
-#   separate download, and ANGLE compiles Metal shaders.
+#   is there, and that its Metal toolchain works (installing it if not):
+#   since Xcode 26 it is a separate download, and ANGLE compiles Metal
+#   shaders.
 # - Prints the machine: CPUs, memory, disk.
 #
 # Only for CI runners: it deletes system-wide software.
@@ -53,11 +54,24 @@ for x in /Applications/Xcode*.app; do
 done
 sudo xcode-select --switch "$XCODE/Contents/Developer"
 export DEVELOPER_DIR="$XCODE/Contents/Developer"
-if ! xcrun metal --version >/dev/null 2>&1; then
+# Compile a shader once now: the first `xcrun metal` mounts the toolchain
+# (a cryptex), and when that first call came from inside the build, under
+# load, it failed with "missing Metal Toolchain" after 96 s.
+metal_check() {
+  local d
+  d="$(mktemp -d)"
+  printf 'kernel void k(device float *a [[buffer(0)]]) { a[0] = 1; }\n' > "$d/k.metal"
+  xcrun metal -c "$d/k.metal" -o "$d/k.air"
+  local status=$?
+  rm -rf "$d"
+  return "$status"
+}
+if ! metal_check; then
   echo "==> Installing the Metal toolchain"
   xcodebuild -downloadComponent MetalToolchain
+  metal_check
 fi
-xcrun metal --version
+xcodebuild -showComponent MetalToolchain
 xcrun simctl delete all >/dev/null 2>&1 || true
 xcrun simctl runtime delete all >/dev/null 2>&1 || true
 for d in \
