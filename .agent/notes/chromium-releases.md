@@ -220,23 +220,34 @@ In docs/REBASE.md: "Following Chromium releases". In short:
   yet) will build whatever `CHROMIUM_VERSION`
   pins through `scripts/bootstrap.sh`, so it follows the pin by itself.
 
-## Lesson: start long jobs with `setsid`, outside the agent's run
+## Lesson: a job that must outlive the agent's run needs its own systemd unit
 
-The first switch attempt (2026-11-02) was started from the agent's shell with
-`agent-switch-chromium-detached.sh` and died while still waiting for the
-lock, at about 18:16 UTC when the agent run ended, with no error in the log
-(`chromium-switch/switch-attempt1.log` stops at "waiting for the build
-lock"). It was most likely killed with the run's process group, so it was
-not really detached; the cause isn't proven. The restart that survived was
-started by the maintainer as its own session:
+Two switch attempts died while still waiting for the lock, with no error in
+the log: the first (`switch-attempt1.log`, started with
+`agent-switch-chromium-detached.sh`, setsid + nohup) when the agent run ended
+at ~18:16 UTC, the second (`switch-attempt2.log`, started by the maintainer
+with `setsid nohup bash -c`) at ~19:27 UTC. `setsid` is not enough. Each
+agent run lives in its own systemd scope
+(`.../app-t3code-agents-*.slice/t3code-claude-<id>.scope`); a `setsid`
+process is re-parented to `systemd --user` but stays in that scope's cgroup,
+and the scope's processes are all killed when the run ends. Detached builds
+started with `agent-build-detached.sh` survive only while the run that
+started them is still alive (the ones in other runs' scopes did).
+
+What works: a transient unit of the user manager, which has its own cgroup:
 
 ```sh
-setsid nohup bash -c '<script> <worktree> --go; echo SWITCH-EXIT $?' >LOG 2>&1 </dev/null &
+systemd-run --user --collect --unit=koan-chromium-switch \
+  --setenv=PATH="$PATH" --setenv=HOME="$HOME" \
+  -p StandardOutput=append:LOG -p StandardError=append:LOG \
+  bash -c '<script> <worktree> --go; c=$?; echo "AGENT-BUILD-EXIT $c"'
 ```
 
-(session leader, parent init). So: start any job that outlives the run
-(switch, full builds, e2e batches) with `setsid nohup ... </dev/null &`
-directly, check that it is its own session (`ps -o pid,ppid,sid,pgid -p
-<pid>`: `sid` = its own pid), and watch the process as well as the log: a
-log that stops at a message proves nothing. Never start a second copy while
-one may be alive (they would queue twice).
+Check: `cat /proc/$(systemctl --user show -p MainPID --value UNIT)/cgroup` ends
+in `app.slice/UNIT.service` (not in a `t3code-claude-*.scope`);
+`systemctl --user is-active UNIT` says `active`; stop with
+`systemctl --user stop UNIT`. The switch (third attempt) runs this way as
+`koan-chromium-switch.service`, log `chromium-switch/switch.log`. Watch the
+process (`systemctl --user is-active`) as well as the log: a log that stops
+at a message proves nothing. Never start a second copy while one may be
+alive.
