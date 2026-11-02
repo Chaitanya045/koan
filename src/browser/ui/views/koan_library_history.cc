@@ -631,8 +631,8 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   void Open(const Entry& entry, bool background) {
     BrowserWindowInterface* browser = library()->browser_view()->browser();
     const WindowOpenDisposition disposition =
-        background ? WindowOpenDisposition::NEW_BACKGROUND_TAB
-                   : WindowOpenDisposition::NEW_FOREGROUND_TAB;
+        background ? WindowOpenDisposition::kNewBackgroundTab
+                   : WindowOpenDisposition::kNewForegroundTab;
     base::OnceClosure open_tab;
     if (entry.closed_id) {
       open_tab = base::BindOnce(

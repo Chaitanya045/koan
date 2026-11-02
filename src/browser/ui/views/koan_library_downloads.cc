@@ -332,7 +332,7 @@ std::optional<std::string> ReadPreviewFile(const base::FilePath& path) {
 void OpenDownloadsPage(BrowserWindowInterface* browser) {
   browser->OpenURL(
       content::OpenURLParams(GURL("chrome://downloads/"), content::Referrer(),
-                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             WindowOpenDisposition::kNewForegroundTab,
                              ui::PAGE_TRANSITION_AUTO_BOOKMARK,
                              /*is_renderer_initiated=*/false),
       /*navigation_handle_callback=*/{});
