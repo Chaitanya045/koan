@@ -52,6 +52,25 @@
 
 namespace koan {
 
+namespace {
+
+// Actions that open a window, a tab or a form, which a held key must not
+// repeat.
+bool CreatesSomething(shortcuts::Action action) {
+  switch (action) {
+    case shortcuts::Action::kNewTab:
+    case shortcuts::Action::kNewWindow:
+    case shortcuts::Action::kNewPrivateWindow:
+    case shortcuts::Action::kNewWorkspace:
+    case shortcuts::Action::kNewEmptySplit:
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
+
 KoanShortcutController::KoanShortcutController(
     BrowserView* browser_view,
     KoanBrowserViewController* controller)
@@ -140,9 +159,11 @@ bool KoanShortcutController::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   for (const Binding& binding : bindings_) {
     if (binding.accelerator == accelerator) {
-      // Like Chrome's New Tab, a held key doesn't repeat: it would open and
-      // close the URL bar over and over.
-      if (binding.action == Action::kNewTab && accelerator.IsRepeat()) {
+      // Like Chrome's New Tab and New Window, a held key doesn't repeat: it
+      // would open and close the URL bar, or open window after window. (On
+      // macOS Chrome drops those repeats after the high priority
+      // accelerators, which these come before.)
+      if (accelerator.IsRepeat() && CreatesSomething(binding.action)) {
         return true;
       }
       return Run(binding.action);

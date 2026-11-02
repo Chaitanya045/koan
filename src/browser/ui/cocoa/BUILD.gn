@@ -26,7 +26,7 @@ source_set("impl") {
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/cocoa",
     "//chrome/browser/ui/tabs:tab_strip",
-    "//chrome/browser/ui/views/frame",
+    "//chrome/browser/ui/views/frame:browser_view_header",
     "//components/tabs:public",
     "//koan/browser:shortcut_table",
     "//koan/browser/ui/views:impl",

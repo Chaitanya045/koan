@@ -5,7 +5,6 @@
 // Contains material ported from Zen Browser, Copyright the Zen Browser
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
 //   ZenMenubar.mjs
-//   zen-menubar.ftl
 //   zen-workspaces.ftl
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
@@ -464,6 +463,8 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   }
 
   // View: compact mode, and the panels with a key of Zen's and no menu item.
+  // Not the History menu: HistoryMenuBridge hits a NOTREACHED() for any item
+  // it doesn't know (ShouldMenuItemBeVisible).
   if (NSMenu* view = [main_menu itemWithTag:IDC_VIEW_MENU].submenu) {
     InsertAfter(view, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE, @[
       [NSMenuItem separatorItem],
@@ -473,6 +474,7 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
       [NSMenuItem separatorItem],
       ActionItem(Action::kBookmarks, target),
       ActionItem(Action::kReaderMode, target),
+      ActionItem(Action::kLibrary, target),
     ]);
   }
 
@@ -494,12 +496,6 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   [main_menu
       insertItem:spaces_item
          atIndex:view_index == -1 ? main_menu.numberOfItems : view_index + 1];
-
-  // History: Zen's Library.
-  if (NSMenu* history = [main_menu itemWithTag:IDC_HISTORY_MENU].submenu) {
-    InsertAfter(history, IDC_SHOW_HISTORY,
-                @[ ActionItem(Action::kLibrary, target) ]);
-  }
 
   // Tab: split view, pinned tabs and the page's URL.
   if (NSMenu* tab = [main_menu itemWithTag:IDC_TAB_MENU].submenu) {

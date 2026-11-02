@@ -5,6 +5,7 @@
 // Contains material ported from Zen Browser, Copyright the Zen Browser
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
 //   zen-preferences.ftl (strings)
+//   ZenKeyboardShortcuts.mjs (macOS key notation)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 

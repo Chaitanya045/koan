@@ -284,6 +284,7 @@ bool IsSystemShortcutOnMac(const ui::Accelerator& accelerator) {
       {ui::VKEY_OEM_3, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
       {ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},  // Force Quit
       {ui::VKEY_Q, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN},   // Lock Screen
+      {ui::VKEY_Q, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},     // Log Out
       {ui::VKEY_3, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},     // Screenshots
       {ui::VKEY_4, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
       {ui::VKEY_5, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},

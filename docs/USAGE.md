@@ -90,11 +90,11 @@ shortcuts and any you changed):
 
 - **Koan** (app menu): Koan Settings… (⌘,).
 - **View:** Toggle Compact Mode, Toggle Floating Sidebar, Switch Single /
-  Multiple Toolbars, Show Bookmarks Sidebar, Toggle Reader Mode.
+  Multiple Toolbars, Show Bookmarks Sidebar, Toggle Reader Mode, Toggle
+  Library.
 - **Spaces** (after View, as in Zen): Create Space, Next Space, Previous
   Space, then your Spaces (✓ on the active one, ⌃1… as set) and Move To (the
   selected tabs to another Space).
-- **History:** Toggle Library.
 - **Tab:** Split View (side by side, stacked, grid, close, new empty),
   Expand Glance (no key shown: ⌘O is Open File's, and only expands while
   Glance is open), Toggle Pin Tab, Close All Unpinned Tabs, Copy Current URL
