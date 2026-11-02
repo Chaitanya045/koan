@@ -23,9 +23,11 @@ are allowed over SSH: `ls`, `cat`, `grep`, `sw_vers`, `which`,
   build stops at `angle_metal_internal_shaders_to_air` with "missing Metal
   Toolchain". Check with `xcodebuild -showComponent MetalToolchain`
   (read-only) and install it once with `xcodebuild -downloadComponent
-  MetalToolchain`; not yet checked on this Mac. On CI the same error came
-  from the first `xcrun metal` running inside the build, so the CI
-  compiles a test shader before building (.agent/notes/macos-ci.md). The system-wide `xcode-select -p` is the Command Line
+  MetalToolchain`; not yet checked on this Mac. xcrun can't find the toolchain under the
+  `CFFIXED_USER_HOME` that the scripts set (`xcodebuild -find metallib`
+  fails), so `build.sh` points ANGLE at it directly
+  (`angle_metal_toolchain_dir`, through `out/Koan/metal-toolchain`; see
+  .agent/notes/macos-ci.md). The system-wide `xcode-select -p` is the Command Line
   Tools, so builds must set `DEVELOPER_DIR`; the scripts default it to
   Xcode.app.
 - Tools: `/bin/bash` is 3.2; Homebrew bash 5.3 is at `/opt/homebrew/bin/bash`
