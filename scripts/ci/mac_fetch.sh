@@ -6,10 +6,9 @@
 # 1. scripts/bootstrap.sh with a .gclient for target_os mac and
 #    checkout_configuration "small" (no benchmark or GPU test data): a
 #    shallow (--no-history) checkout of the pinned revision
-#    (CHROMIUM_VERSION, line 2) and its hooks (clang, Rust, node, ...).
-#    There is no source tarball of that revision: Chromium publishes
-#    tarballs of version tags, and the 158.0.8111.0 tag (ff682ad) is a
-#    branch commit ~100 commits past the pinned main revision.
+#    (CHROMIUM_VERSION, line 2, whatever it is: a main commit or a release
+#    tag's commit) and its hooks (clang, Rust, node, ...). Nothing here
+#    names a Chromium version; changing CHROMIUM_VERSION is enough.
 # 2. scripts/ci/prune_chromium_source.py: drops what the "lite" tarball
 #    drops (test data, web tests, other platforms), so the source archive
 #    every build job downloads stays small.
