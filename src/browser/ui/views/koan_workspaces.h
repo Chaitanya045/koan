@@ -192,6 +192,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   bool CanDeleteSpace() const;
   // Asks, then closes the Space's tabs and shows another Space.
   void DeleteSpace(const tab_groups::TabGroupId& space);
+  // Puts `space` at position `to` among the Spaces (dragging a card in the
+  // Library's Spaces, like Zen's).
+  void MoveSpace(const tab_groups::TabGroupId& space, int to);
   // Moves the tabs to `space` and shows it on the last of them (Zen's "Move
   // To" in the tab context menu).
   void MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,

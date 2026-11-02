@@ -32,13 +32,14 @@ Chrome.
 | Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
 | Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
 | Save page | Ctrl+Alt+Shift+S | |
-| Library (history) | Alt+Shift+L | |
+| Open / close the Library | Alt+Shift+L (⌥⇧L) | |
+| Library: History | Ctrl+H or Ctrl+Shift+H (⌘⇧H or ⌘Y) | History page (Ctrl+H; macOS ⌘Y) |
 | Inspect element | Ctrl+Shift+L | |
 | New window | Ctrl+Shift+N | New incognito window |
 | New private window | Ctrl+Shift+P | Print using system dialog |
 | Mute site | Ctrl+M | |
 | Bookmarks | Ctrl+B | |
-| Downloads | Ctrl+Shift+Y | |
+| Library: Downloads | Ctrl+Shift+Y (⌘⇧J) | macOS: Downloads page (⌘⇧J) |
 | Reading mode | Ctrl+Alt+R | |
 | Edit the address | Ctrl+L, or click the URL pill | |
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
@@ -401,11 +402,59 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
 
+## Library
+
+Zen's Library: press Alt+Shift+L or click the Library button (the box with
+sparkles, at the start of the sidebar's bottom bar, before the Space
+buttons). It slides in over the sidebar
+with three sections down its side, and opens on the one you used last:
+
+- **Downloads** (Ctrl+Shift+Y): every download, newest first, with its size,
+  site and date (hover a row for where it came from). Search, or filter by
+  file type (images, video, audio, documents, archives, apps) and date.
+  Hover or focus a row for cancel / retry / show in folder and **⋯** (open,
+  cancel, retry, copy the file or its link, remove from the list, delete
+  the file after asking); right-click or the menu key opens the same menu.
+  Click a finished download to show it in the file manager, or open it from
+  **⋯** (a download in progress isn't set to open when done: a file only
+  opens when you open it). A download Chrome warns about (dangerous or
+  insecure) is never opened from here: clicking it shows Chrome's warning,
+  where you keep or delete it. While anything downloads, the Downloads tab
+  shows a progress ring. Right-click the Downloads tab to clear the list or open
+  `chrome://downloads`.
+- **Spaces**: a card per Space with its tabs, tinted with its theme. Click
+  the name to rename it, the icon for the Spaces' emoji picker, the brush
+  for Edit Theme; drag the arrows at the bottom to reorder the Spaces (the
+  bottom bar follows). **⋯** has Change Icon, Edit Theme, Unload Space,
+  Unload All Other Spaces, Create Space and Delete Space (it asks, and not
+  for the only Space). **+** after the last card, like Create Space, closes
+  the Library and opens the Create-a-Space form. Click a tab to go there.
+  The Library widens to fit the cards.
+- **History** (Ctrl+H): the last 120 days by day. Search, or **Filter**:
+  when (today since midnight, this week, this month), sort (by date, site, most visited,
+  last visited) and what to look through (history or the tabs closed
+  recently). Click a page to open it in a new tab; Ctrl+click or
+  middle-click opens it in the background and keeps the Library open.
+  Hover a row for its visit time and the forget / reopen buttons;
+  right-click for "Forget About This Site" (its history, cookies, site data
+  and cache). Right-click the History tab to clear history from the last
+  hour, 12 hours, today, week, month or everything (it asks first, naming
+  the range), or to open `chrome://history`. Where policy forbids deleting
+  history (AllowDeletingBrowserHistory) nothing here offers to, as on
+  Chrome's History page.
+
+Esc, the back arrow at the bottom of the side column, the same shortcut
+again or opening a tab closes the Library. Incognito windows have no
+Library: there Ctrl+H shows Chrome's notice that history isn't saved, as
+in Chrome, and the Downloads key opens `chrome://downloads`.
+With "Reduce motion" set in the system, it opens and closes without
+sliding.
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"):
 Koan sidebar, compact mode, workspaces, Glance, restore tabs on demand,
-freeze background tabs, command palette, pinned tabs and Essentials.
+freeze background tabs, command palette, pinned tabs and Essentials, Library.
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with

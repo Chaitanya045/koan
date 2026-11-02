@@ -49,6 +49,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
+#include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
@@ -418,6 +419,9 @@ void KoanWorkspaceController::InstallViews() {
   for (views::View* child : region->children()) {
     if (child->GetClassName() == "FlexLayoutView") {
       bar_ = child->AddChildView(std::make_unique<KoanSpaceBarView>(this));
+      // The Library's button, in the room Zen keeps on the bar's leading
+      // side.
+      bar_->SetLeadingButton(CreateLibraryButton(browser_view_));
       view_observations_.AddObservation(bar_);
       return;
     }
@@ -769,6 +773,36 @@ void KoanWorkspaceController::OnDeleteConfirmed(
       model->CloseWebContentsAt(i, TabCloseTypes::CLOSE_USER_GESTURE);
     }
   }
+}
+
+void KoanWorkspaceController::MoveSpace(const tab_groups::TabGroupId& space,
+                                        int to) {
+  TabStripModel* model = tab_strip_model();
+  std::vector<tab_groups::TabGroupId> others;
+  for (const SpaceInfo& info : GetSpaces()) {
+    if (info.id != space) {
+      others.push_back(info.id);
+    }
+  }
+  if (!GetSpace(space) || others.empty() || to < 0) {
+    return;
+  }
+  const auto range_of = [model](const tab_groups::TabGroupId& id) {
+    return model->group_model()->GetTabGroup(id)->ListTabs();
+  };
+  const gfx::Range moved = range_of(space);
+  // TabStripModel::MoveGroupTo() takes where the group's first tab ends up,
+  // counted without the group's own tabs.
+  const auto without_moved = [&moved](int index) {
+    return index > static_cast<int>(moved.start())
+               ? index - static_cast<int>(moved.length())
+               : index;
+  };
+  const int index =
+      to < static_cast<int>(others.size())
+          ? without_moved(static_cast<int>(range_of(others[to]).start()))
+          : without_moved(static_cast<int>(range_of(others.back()).end()));
+  model->MoveGroupTo(space, index);
 }
 
 void KoanWorkspaceController::MoveTabsToSpace(

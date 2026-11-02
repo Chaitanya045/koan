@@ -55,6 +55,7 @@ enum class Action {
   kGlanceExpand,
   kSavePage,
   kLibrary,
+  kLibraryHistory,
   kInspect,
   kNewWindow,
   kNewPrivateWindow,

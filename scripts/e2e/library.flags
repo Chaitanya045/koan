@@ -1,0 +1,3 @@
+# The dangerous-download check: Safe Browsing gives the test script's
+# content (print(1)) a DANGEROUS verdict, without asking a server.
+--safebrowsing-manual-download-blacklist=d287bb7f9d15abdc5b6e98536263815744b6ef21c8f3c839fc434ca70d8efe99

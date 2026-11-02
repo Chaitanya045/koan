@@ -14,7 +14,9 @@ aggregate_vector_icons("koan_vector_icons") {
   sources = [
     "automatic_appearance.icon",
     "dark_mode.icon",
+    "library.icon",
     "light_mode.icon",
+    "move.icon",
   ]
 }
 

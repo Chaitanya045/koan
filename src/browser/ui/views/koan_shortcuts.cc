@@ -37,6 +37,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_split_view.h"
@@ -94,11 +95,15 @@ void KoanShortcutController::RegisterAccelerators() {
 #if BUILDFLAG(IS_MAC)
     // On macOS Chrome runs its menu shortcuts before normal priority
     // accelerators (ChromeCommandDispatcherDelegate's
-    // prePerformKeyEquivalent), and Zen's Space keys are Chrome's
-    // Cmd+Option+arrow tab switching there: those come first. (The other
-    // keys stay behind text fields and pages.)
+    // prePerformKeyEquivalent). Zen's Space keys are Chrome's
+    // Cmd+Option+arrow tab switching there, and the Library's History and
+    // Downloads keys (Cmd+Y, Cmd+Shift+H, Cmd+Shift+J) Chrome's History,
+    // Home and Downloads: those come first. (The other keys stay behind text
+    // fields and pages.)
     if (binding.action == Action::kWorkspaceForward ||
-        binding.action == Action::kWorkspaceBackward) {
+        binding.action == Action::kWorkspaceBackward ||
+        binding.action == Action::kLibraryHistory ||
+        binding.action == Action::kDownloads) {
       priority = ui::AcceleratorManager::kHighPriority;
     }
 #endif
@@ -159,6 +164,7 @@ bool KoanShortcutController::CanHandleAccelerators() const {
 bool KoanShortcutController::Run(Action action) {
   KoanCompactModeController* compact = controller_->compact_mode();
   KoanWorkspaceController* workspaces = controller_->workspaces();
+  KoanLibraryController* library = controller_->library();
   // Shortcuts for a Koan feature switched off in chrome://flags do nothing
   // (and let the key through), like the feature itself.
   switch (action) {
@@ -246,7 +252,24 @@ bool KoanShortcutController::Run(Action action) {
     case Action::kSavePage:
       return Command(IDC_SAVE_PAGE);
     case Action::kLibrary:
-      return Command(IDC_SHOW_HISTORY);
+      // No Library (flag off, or a private window): the key goes on.
+      if (!library->IsAvailable()) {
+        return false;
+      }
+      library->Toggle();
+      return true;
+    case Action::kLibraryHistory:
+      if (!library->IsAvailable()) {
+#if BUILDFLAG(IS_MAC)
+        // The key goes on to Chrome's menu (History, or Home for
+        // Cmd+Shift+H).
+        return false;
+#else
+        return Command(IDC_SHOW_HISTORY);
+#endif
+      }
+      library->Toggle(LibrarySection::kHistory);
+      return true;
     case Action::kInspect:
       return Command(IDC_DEV_TOOLS_INSPECT);
     case Action::kNewWindow:
@@ -258,7 +281,16 @@ bool KoanShortcutController::Run(Action action) {
     case Action::kBookmarks:
       return Command(IDC_SHOW_BOOKMARK_SIDE_PANEL);
     case Action::kDownloads:
-      return Command(IDC_SHOW_DOWNLOADS);
+      if (!library->IsAvailable()) {
+#if BUILDFLAG(IS_MAC)
+        // The key goes on to Chrome's menu (Downloads).
+        return false;
+#else
+        return Command(IDC_SHOW_DOWNLOADS);
+#endif
+      }
+      library->Toggle(LibrarySection::kDownloads);
+      return true;
     case Action::kReaderMode:
       return Command(IDC_SHOW_READING_MODE);
     case Action::kSwitchWorkspace1:

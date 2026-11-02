@@ -196,6 +196,16 @@ KoanSpaceBarView::KoanSpaceBarView(KoanWorkspaceController* controller)
 
 KoanSpaceBarView::~KoanSpaceBarView() = default;
 
+void KoanSpaceBarView::SetLeadingButton(std::unique_ptr<views::View> button) {
+  if (leading_) {
+    RemoveChildViewT(std::exchange(leading_, nullptr).get());
+  }
+  if (button) {
+    leading_ = AddChildViewAt(std::move(button), 0);
+  }
+  PreferredSizeChanged();
+}
+
 void KoanSpaceBarView::Update(
     const std::vector<KoanWorkspaceController::SpaceInfo>& spaces) {
   std::vector<raw_ptr<KoanSpaceButton>> buttons;
@@ -210,8 +220,9 @@ void KoanSpaceBarView::Update(
           std::make_unique<KoanSpaceButton>(controller_, this, space.id));
     }
     button->Set(space);
-    // In the Spaces' order, for focus and accessibility too.
-    ReorderChildView(button, buttons.size());
+    // In the Spaces' order (after the leading button), for focus and
+    // accessibility too.
+    ReorderChildView(button, buttons.size() + (leading_ ? 1 : 0));
     buttons.push_back(button);
   }
   // The buttons left over are for Spaces that are gone.
@@ -248,6 +259,9 @@ gfx::Size KoanSpaceBarView::CalculatePreferredSize(
     rows += static_cast<int>(std::ranges::count_if(
         buttons_,
         [](const KoanSpaceButton* button) { return button->GetVisible(); }));
+    if (leading_) {
+      ++rows;
+    }
   }
   return gfx::Size(0, rows * kSpaceButtonSize + (rows - 1) * kSpaceButtonGap +
                           2 * kSpaceBarPadding);
@@ -260,10 +274,14 @@ void KoanSpaceBarView::Layout(PassKey) {
     view->SetBoundsRect(GetMirroredRect(rect));
   };
   if (IsNarrow(area.width())) {
-    // A column, centred, with "+" at the bottom.
+    // A column, centred: the leading button, the Spaces, "+".
     overflows_ = false;
     const int x = (area.width() - kSpaceButtonSize) / 2;
     int y = kSpaceBarPadding;
+    if (leading_) {
+      place(leading_, gfx::Rect(x, y, kSpaceButtonSize, kSpaceButtonSize));
+      y += kSpaceButtonSize + kSpaceButtonGap;
+    }
     for (KoanSpaceButton* button : buttons_) {
       if (button->GetVisible()) {
         place(button, gfx::Rect(x, y, kSpaceButtonSize, kSpaceButtonSize));
@@ -277,8 +295,13 @@ void KoanSpaceBarView::Layout(PassKey) {
   place(create_button_,
         gfx::Rect(area.right() - SidebarStripInset() - kSpaceButtonSize, y,
                   kSpaceButtonSize, kSpaceButtonSize));
+  if (leading_) {
+    place(leading_, gfx::Rect(SidebarStripInset(), y, kSpaceButtonSize,
+                              kSpaceButtonSize));
+  }
   // The Space buttons are centred in the room left of "+", keeping as much
-  // room on the other side (where Zen has its sidebar button).
+  // room on the other side (where Zen has its sidebar button, and Koan the
+  // Library's).
   const int side = SidebarStripInset() + kSpaceButtonSize + kSpaceButtonGap;
   const int room = std::max(0, area.width() - 2 * side);
   const int count = static_cast<int>(buttons_.size());

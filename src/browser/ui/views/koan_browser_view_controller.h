@@ -23,6 +23,7 @@ class KoanCommandPalette;
 class KoanCompactModeController;
 class KoanGlanceController;
 class KoanPinnedTabController;
+class KoanLibraryController;
 class KoanShortcutController;
 class KoanSidebarTabsController;
 class KoanTabActivationTracker;
@@ -59,6 +60,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   }
   KoanPinnedTabController* pinned_tabs() const { return pinned_tabs_.get(); }
   KoanGlanceController* glance() const { return glance_.get(); }
+  KoanLibraryController* library() const { return library_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
   // Koan features' data for this window's session (koan_session_data.h).
@@ -90,6 +92,7 @@ class KoanBrowserViewController : public views::ViewObserver {
   std::unique_ptr<KoanWorkspaceController> workspaces_;
   std::unique_ptr<KoanPinnedTabController> pinned_tabs_;
   std::unique_ptr<KoanGlanceController> glance_;
+  std::unique_ptr<KoanLibraryController> library_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
   // Last: it calls into the controllers above.
   std::unique_ptr<KoanShortcutController> shortcuts_;
