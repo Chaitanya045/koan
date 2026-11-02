@@ -203,26 +203,26 @@ WindowOpenDisposition FallbackDisposition(const PrefService* pref_service) {
   const std::string& method =
       pref_service->GetString(prefs::kGlanceActivationMethod);
   if (method == "shift") {
-    return WindowOpenDisposition::NEW_WINDOW;
+    return WindowOpenDisposition::kNewWindow;
   }
 #if BUILDFLAG(IS_MAC)
   if (method == "meta") {
-    return WindowOpenDisposition::NEW_BACKGROUND_TAB;
+    return WindowOpenDisposition::kNewBackgroundTab;
   }
 #else
   if (method == "ctrl") {
-    return WindowOpenDisposition::NEW_BACKGROUND_TAB;
+    return WindowOpenDisposition::kNewBackgroundTab;
   }
 #endif
-  return WindowOpenDisposition::CURRENT_TAB;
+  return WindowOpenDisposition::kCurrentTab;
 }
 
 // The shape of an activation click (see koan_glance.h): renderer-initiated
-// NEW_POPUP from a trusted user gesture. window.open() popups take the
+// kNewPopup from a trusted user gesture. window.open() popups take the
 // CreateNewWindow path, not OpenURLFromTab, and context-menu actions are
 // browser-initiated, so neither looks like this.
 bool IsActivationClick(const content::OpenURLParams& params) {
-  return params.disposition == WindowOpenDisposition::NEW_POPUP &&
+  return params.disposition == WindowOpenDisposition::kNewPopup &&
          params.is_renderer_initiated && params.user_gesture &&
          params.triggering_event_info ==
              blink::mojom::TriggeringEventInfo::kFromTrustedEvent;
@@ -577,7 +577,7 @@ void OpenLinkInGlance(content::WebContents* source,
       content::Referrer::SanitizeForRequest(
           params.link_url, content::Referrer(params.frame_url.GetAsReferrer(),
                                              params.referrer_policy)),
-      WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_LINK,
+      WindowOpenDisposition::kCurrentTab, ui::PAGE_TRANSITION_LINK,
       /*is_renderer_initiated=*/false);
   open_params.initiator_origin = params.frame_origin;
   glance->Open(open_params, source);
@@ -914,7 +914,7 @@ content::WebContents* KoanGlanceController::OpenURLFromTab(
     return OpenURLFromTab(source, fallback,
                           std::move(navigation_handle_callback));
   }
-  if (params.disposition == WindowOpenDisposition::CURRENT_TAB) {
+  if (params.disposition == WindowOpenDisposition::kCurrentTab) {
     source->GetController().LoadURLWithParams(
         content::NavigationController::LoadURLParams(params));
     return source;

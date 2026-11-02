@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc
+index 8b3b821..a0201cd 100644
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc
+@@ -12,6 +12,7 @@
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
++#include "koan/browser/ui/views/koan_essentials.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/views/layout/proposed_layout.h"
+@@ -99,6 +100,8 @@ PinnedTabContainerViewVerticalLayout::CalculateProposedLayout(
+                                       (child_width +
+                                        PinnedTabContainerView::kTabPadding)) +
+                            1));
++    // Koan (Zen): Essentials are at most four across.
++    children_on_row = koan::ClampEssentialsColumns(children_on_row);
+ 
+     // Allocate extra space to the tabs.
+     available_width -=

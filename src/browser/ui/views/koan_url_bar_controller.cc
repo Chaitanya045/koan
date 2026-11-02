@@ -698,14 +698,14 @@ void CopyCurrentUrl(BrowserView* browser_view, bool markdown) {
 
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
                                    WindowOpenDisposition* disposition) {
-  if (!browser || *disposition != WindowOpenDisposition::CURRENT_TAB) {
+  if (!browser || *disposition != WindowOpenDisposition::kCurrentTab) {
     return;
   }
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   if (controller && controller->url_bar()->TakeNewTabDisposition()) {
-    *disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    *disposition = WindowOpenDisposition::kNewForegroundTab;
   }
 }
 

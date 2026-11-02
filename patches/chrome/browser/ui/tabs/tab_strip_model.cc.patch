@@ -1,7 +1,8 @@
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
+index 9206fd4..c175428 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -117,6 +117,10 @@
+@@ -121,6 +121,10 @@
  #include "content/public/browser/render_widget_host_view.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/common/url_constants.h"
@@ -12,7 +13,7 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
  #include "media/base/media_switches.h"
  #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
  #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
-@@ -2258,6 +2262,10 @@
+@@ -2252,6 +2256,10 @@ void TabStripModel::EnterFocusMode(const tab_groups::TabGroupId& group) {
          (new_selection_model.active_tab() &&
           new_selection_model.active_tab()->GetGroup() != group)) {
        tabs::TabInterface* first_in_group = tab_group->GetFirstTab();
@@ -23,7 +24,18 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
        if (first_in_group->IsSplit()) {
          for (tabs::TabInterface* split_tab :
               GetSplitData(first_in_group->GetSplit().value())->ListTabs()) {
-@@ -2342,6 +2350,12 @@
+@@ -2298,7 +2306,9 @@ void TabStripModel::ExitFocusMode(
+   NotifyTabGroupFocusChanged(old_focused_group);
+ 
+   const bool is_ephemeral = IsEphemeralTabGroup(old_focused_group.value());
+-  if (reason == TabGroupFocusExitReason::kTabOutsideGroupActivated) {
++  // Koan: switching Spaces leaves the old Space's focus; no toast.
++  if (reason == TabGroupFocusExitReason::kTabOutsideGroupActivated &&
++      koan::ShowsFocusExitedToast(profile())) {
+     if (ToastController* const toast_controller =
+             ToastController::From(delegate_->GetBrowserWindowInterface())) {
+       ToastParams params(ToastId::kTabGroupFocusExited);
+@@ -2350,6 +2360,12 @@ void TabStripModel::RotateFocusedGroup(bool forward) {
    }
  
    auto it = std::ranges::find(groups_in_order, *current_focused_group);
@@ -36,9 +48,9 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
    if (it == groups_in_order.end()) {
      ExitFocusMode();
      return;
-@@ -2687,6 +2701,11 @@
-     return false;
+@@ -2696,6 +2712,11 @@ bool TabStripModel::IsContextMenuCommandEnabled(
    }
+   tabs::TabHandle context_tab = GetTabAtIndex(context_index)->GetHandle();
  
 +  // Koan: its features' items (koan/browser/ui/views/koan_tab_menu.h).
 +  if (koan::IsKoanTabMenuCommand(command_id)) {
@@ -48,10 +60,10 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
    switch (command_id) {
      case CommandNewTabToRight:
      case CommandCloseTab:
-@@ -2831,6 +2850,11 @@
-   if (!ContainsIndex(context_index)) {
+@@ -2861,6 +2882,11 @@ void TabStripModel::ExecuteContextMenuCommand(int context_index,
      return;
    }
+   tabs::TabHandle context_tab = GetTabAtIndex(context_index)->GetHandle();
 +  // Koan: its features' items, and its own way of upstream's (Pin / Unpin)
 +  // (koan/browser/ui/views/koan_tab_menu.h).
 +  if (koan::ExecuteKoanTabMenuCommand(this, context_index, command_id)) {
@@ -60,17 +72,7 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
    switch (command_id) {
      case CommandNewTabToRight: {
        base::UmaHistogramCounts1000(
-@@ -3836,7 +3860,9 @@
-     if (focused_group.has_value() && GetTabGroupForTab(i) != focused_group) {
-       continue;
-     }
-+    // Koan: tabs pinned to their workspace stay open too.
-     if (!indices_to_exclude.Contains(gfx::Range(i, i + 1)) && !IsTabPinned(i) &&
-+        !koan::IsPinnedForUser(GetTabAtIndex(i)) &&
-         (!is_selected || !IsTabSelected(i))) {
-       return true;
-     }
-@@ -3874,7 +3900,8 @@
+@@ -3922,7 +3948,8 @@ std::vector<tabs::TabHandle> TabStripModel::GetTabsClosedByCommand(
        continue;
      }
  
@@ -80,17 +82,7 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
        continue;
      }
  
-@@ -4352,7 +4379,8 @@
-     OnChange(TabStripModelChange(TabStripModelChange::SelectionOnly()),
-              selection);
- 
--    if (exited_focus) {
-+    // Koan: switching Spaces leaves the old Space's focus; no toast.
-+    if (exited_focus && koan::ShowsFocusExitedToast(profile())) {
-       if (ToastController* const toast_controller =
-               ToastController::From(delegate_->GetBrowserWindowInterface())) {
-         ToastParams params(ToastId::kTabGroupFocusExited);
-@@ -5966,6 +5994,16 @@
+@@ -5993,6 +6020,16 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
        }
      }
  
