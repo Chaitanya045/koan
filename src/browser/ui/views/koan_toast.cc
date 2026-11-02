@@ -28,6 +28,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/events/event.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font.h"
@@ -260,6 +261,12 @@ void KoanToast::ShowView(std::unique_ptr<KoanToastView> view,
   widget_->LayoutRootViewIfNecessary();
   view_->GetViewAccessibility().AnnounceAlert(announcement);
 
+  if (!gfx::Animation::ShouldRenderRichAnimation()) {
+    // Reduced motion: the toast just appears.
+    timer_.Start(FROM_HERE, timeout_,
+                 base::BindOnce(&KoanToast::Hide, weak_factory_.GetWeakPtr()));
+    return;
+  }
   // Grow from the top centre.
   ui::Layer* layer = view_->layer();
   const gfx::PointF pivot(size.width() / 2.f, 0);
@@ -313,6 +320,12 @@ void KoanToast::Hide() {
     return;
   }
   hiding_ = true;
+  if (!gfx::Animation::ShouldRenderRichAnimation()) {
+    // Reduced motion: the toast just goes. (Never called from inside the
+    // toast's own event handling: the timer, or a posted task.)
+    Close();
+    return;
+  }
   ui::Layer* layer = view_->layer();
   const gfx::PointF pivot(view_->width() / 2.f, 0);
   gfx::Transform end;

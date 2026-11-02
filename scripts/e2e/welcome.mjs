@@ -64,13 +64,20 @@ await next();
 check('Next: default browser', heading() === 'Make Koan your default?', heading());
 await next();
 check('Next: done', heading() === 'All set? Let’s get rolling!', heading());
-await next();
-await sleep(1000);
+// "Dive in!" double-clicked: the button stays during the fade, but the
+// choices apply once.
+const diveIn = shownViews(vs, 'KoanWelcomeButton')[0];
+for (let i = 0; i < 2; ++i) {
+  await mouseOn(diveIn, 'mousePressed');
+  await mouseOn(diveIn, 'mouseReleased');
+}
+await sleep(2000);
 vs = await views();
 check('"Dive in!" closes the welcome screen', !vs.some(v => v.cls === 'KoanWelcomeView'));
-const urls = (await pages()).map(p => p.url).join(' ');
-check('...and opens the chosen Essentials',
-      urls.includes('obsidian.md') && urls.includes('github.com'), urls);
+const urls = (await pages()).map(p => p.url);
+const opened = site => urls.filter(url => url.includes(site)).length;
+check('...and opens each chosen Essential once, even after a double-click',
+      opened('obsidian.md') === 1 && opened('github.com') === 1, urls.join(' '));
 const pinned = vs.filter(v => v.cls === 'TabView' && v.path.includes('PinnedTabContainerView'));
 check('...pinned', pinned.length === 2, `${pinned.length} pinned tabs`);
 finish();

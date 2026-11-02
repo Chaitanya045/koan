@@ -67,7 +67,7 @@
        "Drag the window from empty space at the top of a page, like Zen.",   \
        kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanWindowDrag)},     \
       {"koan-welcome", "Koan welcome screen",                                \
-       "Zen's welcome screen on the first run of a profile.", kOsDesktop,    \
+       "Zen's welcome screen on Chromium's first run.", kOsDesktop,          \
        FEATURE_VALUE_TYPE(koan::features::kKoanWelcome)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

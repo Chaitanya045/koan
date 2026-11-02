@@ -1408,7 +1408,6 @@ void KoanWelcome::MaybeShow() {
     return;
   }
   g_shown_this_session = true;
-  prefs->SetBoolean(prefs::kWelcomeScreenSeen, true);
   Show();
 }
 
@@ -1427,10 +1426,17 @@ void KoanWelcome::Show() {
   widget_->LayoutRootViewIfNecessary();
   view->FocusStart();
   view->PlayIntro();
+  // Seen once it is actually on screen (not merely decided on).
+  if (widget_->IsVisible()) {
+    browser_view_->GetProfile()->GetPrefs()->SetBoolean(
+        prefs::kWelcomeScreenSeen, true);
+  }
 }
 
 void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {
-  if (!widget_) {
+  // "Dive in!" stays until the fade ends: a double-click or a held Enter
+  // would otherwise apply the choices twice (pin every Essential twice).
+  if (!widget_ || std::exchange(finishing_, true)) {
     return;
   }
   const auto close_and_apply = [](base::WeakPtr<KoanWelcome> welcome,
