@@ -12,8 +12,9 @@
 # killed (a step that was cut short reruns next time).
 #
 # Writes status=finished|running to $GITHUB_OUTPUT (when set) and exits 0
-# for both; a build error exits non-zero. Logs the build and the memory
-# use (every 5 min) to <log dir>.
+# for both; a build error exits non-zero and prints the failed steps. The
+# whole build output goes to <log dir>/build.log; progress, memory and swap
+# are printed every 5 min (and kept in <log dir>/memory.log).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -34,13 +35,18 @@ if ((budget < 600)); then
 fi
 echo "build budget: $((budget / 60)) min, JOBS=${JOBS:-default}"
 
-# Memory and swap over time, to tune JOBS on the 7 GB runners.
+# Progress, memory and swap every 5 minutes: siso's own output (every step
+# it starts and ends) is too much for the job log, so it goes to build.log.
 (
   while sleep 300; do
-    echo "== $(date -u +%H:%M:%S) $(sysctl -n vm.swapusage)"
-    memory_pressure -Q 2>/dev/null || true
+    line="$(tail -c 100000 "$LOGS/build.log" | grep -Eo '^\[[0-9]+/[0-9]+\]' |
+      tail -n 1 || true)"
+    swap="$(sysctl -n vm.swapusage | sed 's/  */ /g')"
+    free="$(memory_pressure -Q 2>/dev/null | sed -n 's/.*percentage: //p')"
+    echo "$(date -u +%H:%M:%S) ${line:-[?]} memory free ${free:-?}, swap$swap" |
+      tee -a "$LOGS/memory.log"
   done
-) > "$LOGS/memory.log" 2>&1 &
+) &
 monitor=$!
 
 # Job control gives the build its own process group, so SIGINT reaches
@@ -61,15 +67,13 @@ rm -f "$timer"
   kill -KILL -- "-$build" 2>/dev/null || true
 ) > /dev/null 2>&1 &
 watcher=$!
-tail -f "$LOGS/build.log" &
-tailer=$!
 
 status=0
 wait "$build" || status=$?
 # The helpers' sleeps first, so nothing outlives the step.
 pkill -P "$watcher" 2>/dev/null || true
 pkill -P "$monitor" 2>/dev/null || true
-kill "$watcher" "$monitor" "$tailer" 2>/dev/null || true
+kill "$watcher" "$monitor" 2>/dev/null || true
 wait 2>/dev/null || true
 
 # The last progress line ([done/total]), for the job summary.
@@ -83,7 +87,7 @@ if [[ -f $timer ]]; then
 elif ((status == 0)); then
   output status finished
 else
-  echo "build failed (exit $status); last lines:" >&2
-  tail -n 60 "$LOGS/build.log" >&2
+  echo "build failed (exit $status):" >&2
+  grep -A 40 '^FAILED:' "$LOGS/build.log" >&2 || tail -n 60 "$LOGS/build.log" >&2
   exit "$status"
 fi

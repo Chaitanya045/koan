@@ -67,6 +67,20 @@ jobs:
       - name: Fetch Chromium, apply patches and branding, gn gen
         run: scripts/ci/mac_fetch.sh
 
+      # Packaging only runs at the end of a run, a day or more later: check
+      # codesign and hdiutil on a dummy app now.
+      - name: Check the packaging
+        run: |
+          app="$RUNNER_TEMP/dummy/Koan.app"
+          mkdir -p "$app/Contents/MacOS"
+          cp /usr/bin/true "$app/Contents/MacOS/Koan"
+          plutil -create xml1 "$app/Contents/Info.plist"
+          plutil -insert CFBundleExecutable -string Koan "$app/Contents/Info.plist"
+          plutil -insert CFBundleIdentifier -string dev.koan.Koan.ci-check "$app/Contents/Info.plist"
+          plutil -insert CFBundlePackageType -string APPL "$app/Contents/Info.plist"
+          KOAN_CI_APP="$app" scripts/ci/mac_package.sh "$RUNNER_TEMP/dummy/dmg"
+          rm -rf "$RUNNER_TEMP/dummy"
+
       - name: Pack the source
         run: |
           scripts/ci/mac_archive.sh pack-source "$RUNNER_TEMP/koan-mac-source.tar.zst"

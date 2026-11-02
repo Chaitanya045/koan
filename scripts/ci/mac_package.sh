@@ -11,7 +11,8 @@
 # The app is signed ad hoc (codesign -s -): Apple Silicon only runs signed
 # code, but nothing here has a Developer ID, so Gatekeeper still blocks it
 # until the user allows it (docs/USAGE.md). Prints file_name=<dmg> to
-# $GITHUB_OUTPUT when set.
+# $GITHUB_OUTPUT when set. KOAN_CI_APP packs another bundle instead (the
+# fetch job checks the packaging on a dummy app that way).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -27,7 +28,7 @@ else
 fi
 sha="${KOAN_SHA:-$(git rev-parse HEAD)}"
 name="$(sed -n 's/^PRODUCT_FULLNAME=//p' chromium/src/chrome/app/theme/chromium/BRANDING)"
-app="chromium/src/out/Koan/$name.app"
+app="${KOAN_CI_APP:-chromium/src/out/Koan/$name.app}"
 [[ -d $app ]] || { echo "no $app" >&2; exit 1; }
 dmg="$name-$version-${sha:0:7}-arm64.dmg"
 
