@@ -1,12 +1,20 @@
-// Copyright 2026 The Koan Authors
-// Use of this source code is governed by the MIT license that can be
-// found in the LICENSE file.
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   ZenSpacesSwipe.mjs (the success threshold, the velocity weight and the
+//   resistance of the Space dragged by a swipe)
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
 
 #include "koan/browser/ui/views/koan_space_swipe.h"
 
 #include <algorithm>
 #include <cmath>
 
+#include "base/time/time.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/events/event_constants.h"
 
@@ -14,85 +22,124 @@ namespace koan {
 
 namespace {
 
+// A swipe switches Space when it goes a quarter of the sidebar's width
+// (ZenSpacesSwipe.SUCCESS_THRESHOLD).
+constexpr float kSuccessFraction = 0.25f;
+
+// How long the fingers' speed carries a swipe on, when judging it. Zen
+// weighs the speed by SUCCESS_VELOCITY_CONTRIBUTION (0.5), in Firefox's
+// swipe tracker's units, which these events don't have; this is Koan's own,
+// chosen so that a quick flick of the fingers (a few hundred pixels a
+// second) switches Space from a short way along.
+constexpr float kMomentumSeconds = 0.08f;
+
+// Zen's force multiplier is 1 - |x| / (4.5 * width) (4.5 rather than 4 "to add
+// a bit of a buffer"), applied while it stays above half.
+constexpr float kResistanceWidths = 4.5f;
+constexpr float kMinForce = 0.5f;
+
 // How far a gesture goes before it counts as horizontal or not. Under
 // upstream's own swipe controller's 15px, so that it never sees a swipe of
 // ours.
 constexpr float kAxisLockDistance = 10.f;
 
-// A scroll stream with no event for this long is over.
-constexpr base::TimeDelta kGestureTimeout = base::Milliseconds(300);
+// Fingers that rested this long before lifting aren't moving, whatever their
+// speed was when they stopped (macOS sends nothing while they rest).
+constexpr double kRestSeconds = 0.1;
 
 // How much of the previous speed a new event keeps.
 constexpr float kVelocitySmoothing = 0.5f;
 
 }  // namespace
 
-KoanSpaceSwipe::KoanSpaceSwipe(KoanWorkspaceController* controller)
-    : controller_(controller) {}
+float ResistedSwipeOffset(float offset, float width) {
+  const float force =
+      std::min(1.f, 1.f - std::abs(offset) / (width * kResistanceWidths));
+  // Past the point where Zen stops moving the Space the offset is more than
+  // the sidebar's width anyway.
+  return std::clamp(force > kMinForce ? offset * force : offset, -width, width);
+}
 
-KoanSpaceSwipe::~KoanSpaceSwipe() = default;
+float ProjectedSwipeOffset(float offset, float velocity) {
+  return offset + velocity * kMomentumSeconds;
+}
 
-void KoanSpaceSwipe::Reset() {
+bool SwipeSucceeds(float projected, float width) {
+  return std::abs(projected) >= width * kSuccessFraction;
+}
+
+KoanSwipeTracker::KoanSwipeTracker(Delegate* delegate) : delegate_(delegate) {}
+
+KoanSwipeTracker::~KoanSwipeTracker() = default;
+
+void KoanSwipeTracker::Reset() {
   state_ = State::kIdle;
   total_x_ = 0;
   total_y_ = 0;
   velocity_x_ = 0;
-  last_event_time_ = base::TimeTicks();
+  last_move_seconds_ = 0;
+  has_moved_ = false;
+  in_momentum_ = false;
 }
 
-bool KoanSpaceSwipe::OnScrollEvent(const ui::ScrollEvent& event) {
-  const base::TimeTicks now = event.time_stamp();
-  const bool lifted =
-      event.type() == ui::EventType::kScrollFlingStart ||
-      event.type() == ui::EventType::kScrollFlingCancel ||
-      event.scroll_event_phase() == ui::ScrollEventPhase::kEnd ||
-      event.momentum_phase() != ui::EventMomentumPhase::NONE;
-  // A new gesture: its first event, or one after a pause.
-  if (event.scroll_event_phase() == ui::ScrollEventPhase::kBegan ||
-      (!last_event_time_.is_null() &&
-       now - last_event_time_ > kGestureTimeout)) {
-    // (One whose end was missed is over: let go of the Space.)
-    if (state_ == State::kSwiping) {
-      controller_->EndSwipe(0);
-    }
-    Reset();
-  }
-
-  if (lifted) {
-    // Fingers up: the swipe ends, with the speed they had. What follows is
-    // the system's momentum for it, which the swipe takes until it is over.
-    const bool ours = state_ == State::kSwiping || state_ == State::kEnded;
-    if (state_ == State::kSwiping) {
-      controller_->EndSwipe(velocity_x_);
-      state_ = State::kEnded;
-    }
-    if (event.type() == ui::EventType::kScrollFlingCancel ||
-        event.momentum_phase() == ui::EventMomentumPhase::END) {
+bool KoanSwipeTracker::OnScroll(float dx,
+                                float dy,
+                                SwipePhase phase,
+                                double seconds) {
+  switch (phase) {
+    case SwipePhase::kBegin:
+      // (A swipe whose end was missed is over: let go of the Space.)
+      if (state_ == State::kSwiping) {
+        delegate_->EndSwipe(0);
+      }
       Reset();
-    } else {
-      last_event_time_ = now;
+      state_ = State::kUndecided;
+      return Move(dx, dy, seconds);
+
+    case SwipePhase::kUpdate:
+      // Fingers moving without a beginning (or after an end): a new gesture.
+      if (state_ == State::kIdle || state_ == State::kEnded) {
+        Reset();
+        state_ = State::kUndecided;
+      }
+      return Move(dx, dy, seconds);
+
+    case SwipePhase::kMomentum:
+      in_momentum_ = true;
+      return state_ == State::kEnded;
+
+    case SwipePhase::kEnd: {
+      // The fingers lifting, and, after the momentum, its end.
+      const bool lifted = state_ == State::kSwiping;
+      if (lifted) {
+        const bool rested = seconds - last_move_seconds_ > kRestSeconds;
+        delegate_->EndSwipe(rested ? 0.f : velocity_x_);
+        state_ = State::kEnded;
+      }
+      const bool ours = lifted || state_ == State::kEnded;
+      if (in_momentum_) {
+        Reset();
+      }
+      return ours;
     }
-    return ours;
   }
+  return false;
+}
 
-  if (state_ == State::kEnded || state_ == State::kPassthrough) {
-    last_event_time_ = now;
-    return state_ == State::kEnded;
+bool KoanSwipeTracker::Move(float dx, float dy, double seconds) {
+  if (state_ == State::kPassthrough) {
+    return false;
   }
-
-  if (!last_event_time_.is_null()) {
-    const float seconds =
-        std::max((now - last_event_time_).InSecondsF(), 0.001);
+  if (has_moved_) {
+    const double elapsed = std::max(seconds - last_move_seconds_, 0.001);
     velocity_x_ = kVelocitySmoothing * velocity_x_ +
-                  (1 - kVelocitySmoothing) * event.x_offset() / seconds;
+                  (1 - kVelocitySmoothing) * static_cast<float>(dx / elapsed);
   }
-  last_event_time_ = now;
-  total_x_ += event.x_offset();
-  total_y_ += event.y_offset();
+  has_moved_ = true;
+  last_move_seconds_ = seconds;
+  total_x_ += dx;
+  total_y_ += dy;
 
-  if (state_ == State::kIdle) {
-    state_ = State::kUndecided;
-  }
   if (state_ == State::kUndecided) {
     const float x = std::abs(total_x_);
     const float y = std::abs(total_y_);
@@ -105,8 +152,44 @@ bool KoanSpaceSwipe::OnScrollEvent(const ui::ScrollEvent& event) {
     }
     state_ = State::kSwiping;
   }
-  controller_->UpdateSwipe(total_x_);
+  delegate_->UpdateSwipe(total_x_);
   return true;
+}
+
+KoanSpaceSwipe::KoanSpaceSwipe(KoanWorkspaceController* controller)
+    : controller_(controller) {}
+
+KoanSpaceSwipe::~KoanSpaceSwipe() = default;
+
+bool KoanSpaceSwipe::OnScrollEvent(const ui::ScrollEvent& event) {
+  SwipePhase phase = SwipePhase::kUpdate;
+  switch (event.momentum_phase()) {
+    case ui::EventMomentumPhase::BEGAN:
+    case ui::EventMomentumPhase::MAY_BEGIN:
+      phase = SwipePhase::kBegin;
+      break;
+    case ui::EventMomentumPhase::INERTIAL_UPDATE:
+      phase = SwipePhase::kMomentum;
+      break;
+    case ui::EventMomentumPhase::END:
+    case ui::EventMomentumPhase::BLOCKED:
+      phase = SwipePhase::kEnd;
+      break;
+    case ui::EventMomentumPhase::NONE:
+      phase = SwipePhase::kUpdate;
+      break;
+  }
+  return tracker_.OnScroll(
+      event.x_offset(), event.y_offset(), phase,
+      (event.time_stamp() - base::TimeTicks()).InSecondsF());
+}
+
+void KoanSpaceSwipe::UpdateSwipe(float offset) {
+  controller_->UpdateSwipe(offset);
+}
+
+void KoanSpaceSwipe::EndSwipe(float velocity) {
+  controller_->EndSwipe(velocity);
 }
 
 }  // namespace koan

@@ -94,15 +94,6 @@ constexpr base::TimeDelta kSwitchAnimationDuration = base::Milliseconds(250);
 // zen.workspaces wheel switching: one switch per 200 ms.
 constexpr base::TimeDelta kWheelSwitchCooldown = base::Milliseconds(200);
 
-// A swipe switches Space when it goes a quarter of the sidebar's width, the
-// fingers' speed counting for the next kSwipeMomentum (Zen's
-// ZenSpacesSwipe.SUCCESS_THRESHOLD and SUCCESS_VELOCITY_CONTRIBUTION).
-constexpr float kSwipeSuccessFraction = 0.25f;
-constexpr float kSwipeMomentumSeconds = 0.08f;
-// The Space drags harder the further it is pulled (Zen's force multiplier,
-// 1 - |translate| / (4.5 * width), never below half).
-constexpr float kSwipeResistanceWidths = 4.5f;
-
 // The name Zen gives a Space it creates by itself.
 constexpr char16_t kDefaultSpaceName[] = u"Space";
 
@@ -1298,9 +1289,7 @@ void KoanWorkspaceController::UpdateSwipe(float offset) {
     return;
   }
   const float width = static_cast<float>(header_->parent()->width());
-  const float resistance =
-      std::max(0.5f, 1.f - std::abs(offset) / (width * kSwipeResistanceWidths));
-  swipe_offset_ = std::clamp(offset * resistance, -width, width);
+  swipe_offset_ = ResistedSwipeOffset(offset, width);
   swiping_ = true;
   if (!gfx::Animation::ShouldRenderRichAnimation()) {
     return;
@@ -1322,8 +1311,8 @@ void KoanWorkspaceController::EndSwipe(float velocity) {
     return;
   }
   const float width = static_cast<float>(header_->parent()->width());
-  const float projected = swipe_offset_ + velocity * kSwipeMomentumSeconds;
-  if (std::abs(projected) >= width * kSwipeSuccessFraction) {
+  const float projected = ProjectedSwipeOffset(swipe_offset_, velocity);
+  if (SwipeSucceeds(projected, width)) {
     // Fingers moving left bring the next Space in from the right, as the
     // slide does.
     swipe_start_offset_ = swipe_offset_;

@@ -21,12 +21,14 @@ namespace koan {
 // has AppKit lay them out again when the height they are centred in changes
 // (compact mode, single toolbar), since AppKit asks for it only when the title
 // bar is laid out; and tells when the sidebar appears or goes, since the
-// lights belong to it.
+// lights belong to it, and when the lights were laid out again (AppKit may
+// show them then).
 class KoanTrafficLightsController : public views::ViewObserver {
  public:
-  // `on_sidebar_shown_changed` runs when the sidebar gets or loses its width.
+  // `on_changed` runs when the sidebar gets or loses its width, and after the
+  // lights were laid out again: the caller then shows or hides them.
   KoanTrafficLightsController(BrowserView* browser_view,
-                              base::RepeatingClosure on_sidebar_shown_changed);
+                              base::RepeatingClosure on_changed);
   KoanTrafficLightsController(const KoanTrafficLightsController&) = delete;
   KoanTrafficLightsController& operator=(const KoanTrafficLightsController&) =
       delete;
@@ -51,7 +53,7 @@ class KoanTrafficLightsController : public views::ViewObserver {
   void LayOutTrafficLights();
 
   const raw_ptr<BrowserView> browser_view_;
-  const base::RepeatingClosure on_sidebar_shown_changed_;
+  const base::RepeatingClosure on_changed_;
   base::ScopedObservation<views::View, views::ViewObserver>
       sidebar_observation_{this};
   bool sidebar_shown_ = false;

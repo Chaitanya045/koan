@@ -44,7 +44,9 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view) {
     return false;
   }
   // The lights are in the corner their exclusion covers: it reaches from the
-  // window's edge to the lights' far edge (and their vertical padding).
+  // window's edge to the lights' far edge and down to the row's bottom (the
+  // vertical padding is the room Chromium keeps below them). Another
+  // application's window over the corner still counts.
   const BrowserLayoutParams params = frame->GetBrowserLayoutParams();
   const BrowserLayoutExclusionArea& exclusion =
       frame->CaptionButtonsOnLeadingEdge() ? params.leading_exclusion
@@ -55,7 +57,8 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view) {
   gfx::Point pointer = display::Screen::Get()->GetCursorScreenPoint();
   views::View::ConvertPointFromScreen(frame, &pointer);
   const gfx::Rect corner(static_cast<int>(exclusion.content.width()),
-                         static_cast<int>(exclusion.content.height()));
+                         static_cast<int>(exclusion.content.height() +
+                                          exclusion.vertical_padding));
   return (frame->CaptionButtonsOnLeadingEdge()
               ? corner
               : gfx::Rect(frame->width() - corner.width(), 0, corner.width(),
