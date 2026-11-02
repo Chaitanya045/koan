@@ -54,9 +54,8 @@ for x in /Applications/Xcode*.app; do
 done
 sudo xcode-select --switch "$XCODE/Contents/Developer"
 export DEVELOPER_DIR="$XCODE/Contents/Developer"
-# Compile a shader once now: the first `xcrun metal` mounts the toolchain
-# (a cryptex), and when that first call came from inside the build, under
-# load, it failed with "missing Metal Toolchain" after 96 s.
+# Check that the Metal toolchain works (scripts/build.sh points ANGLE at
+# it), and install it if it doesn't.
 metal_check() {
   local d
   d="$(mktemp -d)"

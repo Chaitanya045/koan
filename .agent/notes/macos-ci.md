@@ -165,15 +165,28 @@ Toolchain", after running for 96 s. Since Xcode 26 the Metal toolchain is
 a separate component, but the runner image has it installed
 (`xcodebuild -showComponent MetalToolchain`: build 27A266a, mounted as a
 cryptex under `/private/var/run/com.apple.security.cryptexd/mnt/`).
-Probe jobs on a scratch branch compiled a shader fine with plain env, with
-the one-folder `HOME`/`TMPDIR`/`CFFIXED_USER_HOME`, with `env -i`, after
-deleting the other Xcodes, after the simulator cleanup and after
-`-downloadComponent`. The difference: the failed job's first `xcrun metal`
-came from inside the loaded build. `mac_runner_setup.sh` now compiles a
-test shader before the build (installing the component only if that
-fails), and the next build got past ANGLE. If it ever comes back, ANGLE's
-GN arg `angle_metal_toolchain_dir` runs the toolchain's `metal` directly,
-without xcrun.
+The next run got past that step but failed at `xcrun metallib` 27 min
+in (step 8,418): "xcrun: error: sh -c 'xcodebuild -sdk .../MacOSX.sdk
+-find metallib' failed with exit code 17664" (exit 69). Probe jobs on a
+scratch branch found the cause: **under `CFFIXED_USER_HOME`, `xcodebuild
+-find metallib` fails** ("'metallib' not found", exit 69); with plain env,
+`HOME` or `TMPDIR` alone it works. xcrun only asks xcodebuild when its
+own cache misses, which is why the failure moved between the `metal` and
+`metallib` steps. The one-folder rule (`koan_require_mac_env`, #52) sets
+`CFFIXED_USER_HOME`, so the maintainer's Mac would hit this too.
+
+Fix, in `scripts/build.sh` for every macOS build: resolve the toolchain
+once with `env -u CFFIXED_USER_HOME xcrun -f metal` (it lives in a cryptex,
+`/private/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v<ver>.<random>/Metal.xctoolchain/usr/bin`,
+whose name changes on every boot), link it as `out/Koan/metal-toolchain`,
+and set ANGLE's GN arg `angle_metal_toolchain_dir` to the link, so ANGLE
+runs `metal`/`metallib` without xcrun. The runner image already has the
+toolchain installed (`xcodebuild -showComponent MetalToolchain`: build
+27A266a); `mac_runner_setup.sh` compiles a test shader and installs the
+component only if that fails.
+
+Memory: 70% free and no swap throughout the first 27 min at `JOBS=3`
+(~5 steps/s early on, mostly small C++ files).
 
 **Build size:** 91,259 steps for `chrome` with `build/koan-mac.gn` (siso's
 count at the start of build 1).
