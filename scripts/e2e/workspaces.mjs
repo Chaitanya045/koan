@@ -1,6 +1,7 @@
-// End-to-end test of workspaces against a real build: creating them
-// (Ctrl+Alt+N), their icons in the switcher, cycling (Ctrl+Alt+Left/Right)
-// and new tabs landing in the active workspace.
+// End-to-end test of workspaces (Zen's Spaces) against a real build: one
+// Space from the start, creating them (Ctrl+Alt+N), cycling with wrap-around
+// (Ctrl+Alt+Left/Right) and new tabs landing in the active Space. The rest
+// of Spaces is in spaces.mjs.
 //
 //   scripts/e2e/run.sh workspaces
 const UI_PORT = process.env.UI_PORT;
@@ -24,7 +25,8 @@ async function connect(url) {
   return { send, close: () => ws.close() };
 }
 
-// Switcher buttons as {label, tooltip} in order, plus visible tab views.
+// Bottom bar Space buttons as {label, name, active} in order, the visible
+// tabs, the Space header's name and the Create-a-Space form's name field.
 async function sidebar() {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
@@ -32,6 +34,8 @@ async function sidebar() {
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const buttons = [];
   let visibleTabs = 0;
+  let header = null;
+  let nameField = null;
   const props = async node => {
     const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: node.nodeId });
     const p = {};
@@ -40,26 +44,47 @@ async function sidebar() {
     }
     return p;
   };
-  // A view is shown only if it and all its ancestors are visible (tabs of a
-  // hidden workspace keep Visible=true inside their hidden group view).
-  const walk = async (n, shown) => {
+  // A view is shown only if it and all its ancestors are visible.
+  const walk = async (n, shown, inForm) => {
     const a = n.attributes ?? [];
     const cls = a[a.indexOf('class') + 1];
-    let p = null;
-    if (['KoanWorkspaceButton', 'TabView', 'TabGroupView'].includes(cls)) {
-      p = await props(n);
+    if (n.nodeName === 'View' && cls) {
+      const p = await props(n);
       shown = shown && p.Visible !== 'false';
+      if (!shown) return;
+      if (cls === 'KoanSpaceButton') {
+        buttons.push({ label: p.Label ?? '', name: p.TooltipText ?? '',
+                       active: p.Active === 'true' });
+      } else if (cls === 'TabView' && +p.Height > 1) {
+        visibleTabs++;
+      } else if (cls === 'KoanSpaceHeaderView' && +p.Height > 0) {
+        header = p.Name;
+      } else if (cls === 'Textfield' && inForm) {
+        nameField = n.nodeId;
+      }
+      inForm = inForm || cls === 'KoanSpaceCreationView';
     }
-    if (cls === 'KoanWorkspaceButton') {
-      buttons.push({ label: p.Label, tooltip: p.TooltipText ?? p.Tooltip });
-    } else if (cls === 'TabView' && shown && +p.Height > 1) {
-      visibleTabs++;
-    }
-    for (const c of n.children ?? []) await walk(c, shown);
+    for (const c of n.children ?? []) await walk(c, shown, inForm);
   };
-  await walk(doc, true);
+  await walk(doc, true, false);
   ui.close();
-  return { buttons, visibleTabs };
+  return { buttons, visibleTabs, header, nameField };
+}
+
+// Types `text` into the view and presses Enter (UI DevTools).
+async function typeAndEnter(nodeId, text) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('DOM.getDocument', { depth: -1 });
+  for (const ch of text) {
+    await ui.send('DOM.dispatchKeyEvent', { nodeId, event: {
+      type: 'keyPressed', keyCode: ch.codePointAt(0), code: 0, flags: 0,
+      key: ch.codePointAt(0), isChar: true } });
+  }
+  await ui.send('DOM.dispatchKeyEvent', { nodeId, event: {
+    type: 'keyPressed', keyCode: 13, code: 0, flags: 0, key: 0, isChar: false } });
+  ui.close();
+  await new Promise(r => setTimeout(r, 1500));
 }
 
 async function key(code, modifiers, keyName = '') {
@@ -107,43 +132,46 @@ function check(name, ok, detail = '') {
 }
 
 const CTRL = 2, ALT = 1;
-const VK = { N: 78, T: 84, LEFT: 37, RIGHT: 39 };
+const VK = { N: 78, T: 84, LEFT: 37, RIGHT: 39, RETURN: 13 };
 
 let s = await sidebar();
-check('Switcher shows All and New', s.buttons.length === 2 &&
-      s.buttons[0].label === '∞' && s.buttons[1].label === '+',
-      s.buttons.map(b => b.label).join(' '));
+check('The window starts in one Space', s.header === 'Space' &&
+      s.buttons.length === 0 && s.visibleTabs === 2,
+      JSON.stringify({ header: s.header, buttons: s.buttons.length, tabs: s.visibleTabs }));
 
+// Ctrl+Alt+N opens Zen's Create-a-Space form; Enter creates the Space.
 await key(VK.N, CTRL | ALT, 'n');
 s = await sidebar();
-const first = s.buttons[1];
-check('Ctrl+Alt+N creates a workspace with an emoji icon',
-      s.buttons.length === 3 && first?.label === '\u{1F30A}',
-      JSON.stringify(first));
-check('The tooltip shows the name without the icon',
-      first?.tooltip === 'Space 1', JSON.stringify(first?.tooltip));
-check('The new workspace shows only its tab', s.visibleTabs === 1, `${s.visibleTabs} tab(s)`);
+check('Ctrl+Alt+N opens the Create-a-Space form', s.nameField !== null);
+await typeAndEnter(s.nameField, 'Work');
+s = await sidebar();
+check('Creating a Space shows it, with its tab only',
+      s.header === 'Work' && s.visibleTabs === 1 && s.buttons.length === 2 &&
+      s.buttons[1].active, JSON.stringify(s));
 
 // Ctrl+T opens the URL bar (Zen's replace-newtab); the tab opens with what
 // is opened from it.
 await key(VK.T, CTRL, 't');
 await openFromUrlBar('about:blank');
 s = await sidebar();
-check('A new tab joins the active workspace', s.visibleTabs === 2, `${s.visibleTabs} tab(s)`);
+check('A new tab joins the active Space', s.visibleTabs === 2, `${s.visibleTabs} tab(s)`);
 
 await key(VK.N, CTRL | ALT, 'n');
+await typeAndEnter((await sidebar()).nameField, 'Play');
 s = await sidebar();
-check('A second workspace gets the next icon', s.buttons[2]?.label === '\u{1F33F}',
-      s.buttons.map(b => b.label).join(' '));
+check('A third Space goes after the active one',
+      s.buttons.map(b => b.name).join() === 'Space,Work,Play' && s.buttons[2].active,
+      s.buttons.map(b => b.name).join());
 
 await key(VK.LEFT, CTRL | ALT);
 s = await sidebar();
-check('Ctrl+Alt+Left goes back to the first workspace', s.visibleTabs === 2,
-      `${s.visibleTabs} tab(s)`);
-await key(VK.LEFT, CTRL | ALT);
+check('Ctrl+Alt+Left goes to the previous Space',
+      s.header === 'Work' && s.visibleTabs === 2, JSON.stringify(s.header));
+await key(VK.RIGHT, CTRL | ALT);
+await key(VK.RIGHT, CTRL | ALT);
 s = await sidebar();
-check('Ctrl+Alt+Left past the first shows all tabs', s.visibleTabs === 5,
-      `${s.visibleTabs} tab(s)`);
+check('Ctrl+Alt+Right past the last Space wraps around to the first',
+      s.header === 'Space' && s.visibleTabs === 2, JSON.stringify(s.header));
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);

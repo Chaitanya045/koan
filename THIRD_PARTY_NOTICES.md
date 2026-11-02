@@ -29,8 +29,10 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/webui/koan_settings_rows.cc` | `zen-preferences.ftl` |
 | `src/browser/ui/webui/resources/koan_settings.js` | `zen-preferences.ftl` (strings) |
 | `src/browser/ui/views/koan_pinned_tabs.cc` | `ZenPinnedTabManager.mjs`, `zen-general.ftl` (strings) |
-| `src/browser/ui/views/koan_sidebar_metrics.h` | Zen's sidebar, toolbar and URL bar stylesheets (sizes, shadows) |
-| `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values) |
+| `src/browser/ui/views/koan_sidebar_metrics.h` | Zen's sidebar, toolbar and URL bar stylesheets (sizes, shadows), `zen-workspaces.css` (Space sizes) |
+| `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values), `zen-workspaces.css` (Space colours) |
+| `src/browser/ui/views/koan_space_menu.cc` | `ZenSpaceManager.mjs` (the Space and Create menus), `zen-workspaces.ftl` (strings) |
+| `src/browser/ui/views/koan_space_creation.cc` | `ZenSpaceCreation.mjs`, `zen-workspaces.ftl` (strings) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).

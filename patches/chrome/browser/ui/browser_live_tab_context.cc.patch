@@ -1,16 +1,16 @@
 diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/browser_live_tab_context.cc
-index d48ee3c659d7e03939882b28ae5c1f74be5c92dc..b79fe95fdf0a7b909d92e4574e7987b300cad98d 100644
 --- a/chrome/browser/ui/browser_live_tab_context.cc
 +++ b/chrome/browser/ui/browser_live_tab_context.cc
-@@ -59,6 +59,7 @@
+@@ -59,6 +59,8 @@
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/session_storage_namespace_handle.h"
  #include "content/public/browser/web_contents.h"
++#include "koan/browser/koan_tab_hooks.h"
 +#include "koan/browser/ui/views/koan_session_data.h"
  #include "ui/base/mojom/window_show_state.mojom.h"
  #include "ui/base/window_open_disposition.h"
  
-@@ -200,6 +201,9 @@ std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
+@@ -200,6 +202,9 @@
  
    glic::PopulateGlicExtraData(tab_strip_model_->GetTabAtIndex(index),
                                &extra_data);
@@ -20,7 +20,7 @@ index d48ee3c659d7e03939882b28ae5c1f74be5c92dc..b79fe95fdf0a7b909d92e4574e7987b3
  
    return extra_data;
  }
-@@ -224,6 +228,8 @@ BrowserLiveTabContext::GetExtraDataForWindow() const {
+@@ -224,6 +229,8 @@
            focused_group->ToString();
      }
    }
@@ -29,7 +29,23 @@ index d48ee3c659d7e03939882b28ae5c1f74be5c92dc..b79fe95fdf0a7b909d92e4574e7987b3
  
    return data;
  }
-@@ -563,6 +569,9 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
+@@ -389,9 +396,12 @@
+       // the visual metadata and save it manually.
+       BrowserLiveTabContext::From(browser)->SetVisualDataForGroup(
+           group_id.value(), tab.group_visual_data.value());
+-      tab_group_service->SaveGroup(
+-          tab_groups::SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(
+-              tab.group.value()));
++      // Koan: Spaces aren't saved tab groups (koan::SavesTabGroups()).
++      if (koan::SavesTabGroups(browser->GetProfile())) {
++        tab_group_service->SaveGroup(
++            tab_groups::SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(
++                tab.group.value()));
++      }
+     }
+   } else {
+     std::optional<tab_groups::SavedTabGroup> saved_group =
+@@ -563,6 +573,9 @@
  
    BrowserWindowInterface* browser =
        CreateBrowserWindow(std::move(*create_params));

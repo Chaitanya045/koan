@@ -65,6 +65,7 @@ source_set("tab_hooks") {
   ]
   public_deps = [ "//base" ]
   deps = [
+    ":features",
     ":prefs",
     "//components/prefs",
     "//components/user_prefs",
