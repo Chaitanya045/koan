@@ -1,6 +1,7 @@
 // End-to-end test of Zen's compact mode flash popup
 // (zen.view.compact.toolbar-flash-popup; seeded on with compact mode by
-// prefs/compact_flash.json): selecting a tab briefly pops up the hidden
+// prefs/compact_flash.json, with Ctrl+T opening a tab rather than the URL bar):
+// selecting a tab briefly pops up the hidden
 // sidebar, which slides away again on its own.
 //
 //   scripts/e2e/run.sh compact_flash
