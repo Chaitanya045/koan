@@ -35,6 +35,13 @@ _Last updated: 2026-11-02_
   machine stays the agents' build and test bench. The first `Koan.app`
   build runs on the maintainer's M4 MacBook Air in `~/work/koan-mac`, and
   only with the owner's go-ahead each time.
+- **#69: nightly macOS build on GitHub Actions** (PR #70, draft until a
+  run makes a .dmg). `.github/workflows/macos.yml`: fetch job, then up to
+  16 chained ~5 h build jobs on the free `xcode-27` runners, handing
+  `out/Koan` on as artifacts; an ad-hoc-signed
+  `Koan-<version>-<sha>-arm64.dmg`, and the rolling `nightly`
+  pre-release from develop. Details and measurements in
+  [macos-ci.md](macos-ci.md).
 - **Release:** draft PRs #13 (packaging) and #14 (benchmarks) wait for the
   release build (`out/Release`, paused at about 19.3k objects) once
   `develop` is stable.
