@@ -521,6 +521,43 @@ Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with
 `--disable-features=OverlayScrollbar`.
 
+## Installing the macOS build
+
+A test build for Apple Silicon Macs (macOS 13 or later) is made every night
+from `develop`:
+
+- **Nightly pre-release:** the `nightly` release on the
+  [Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly),
+  `Koan-<version>-<commit>-arm64.dmg` and its `.sha256`. Each new nightly
+  replaces it.
+- **Any run:** the
+  [macOS nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/macos.yml)'s
+  runs, under "Artifacts" (signed-in GitHub users only), or
+  `gh run download <run id> -R Chaitanya045/koan -p 'Koan-*.dmg'`.
+
+Open the .dmg and drag Koan to Applications.
+
+The app isn't signed with an Apple Developer ID or notarised (it is only
+signed ad hoc, which Apple Silicon needs to run it). So the first time,
+macOS says it "can't be opened" or "can't verify that it's free of
+malware". Allow it once, in either of these ways:
+
+- In Finder, **right-click (or Control-click) Koan in Applications → Open**,
+  then **Open** in the dialog. On macOS 15 and later that dialog may only
+  offer "Done": then open **System Settings → Privacy & Security**, scroll
+  to the message about Koan and click **Open Anyway**.
+- Or, in Terminal, remove the quarantine flag that the download added:
+
+  ```sh
+  xattr -d com.apple.quarantine /Applications/Koan.app
+  ```
+
+After that it opens like any other app. Every new build has a new ad-hoc
+signature, so macOS asks again for access to the "Koan Safe Storage"
+keychain item (where saved passwords and cookies are encrypted) after you
+install a new nightly. Click **Always Allow**. The profile is in
+`~/Library/Application Support/Koan`.
+
 ## Install in the app menu
 
 ```sh

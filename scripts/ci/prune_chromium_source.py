@@ -24,7 +24,8 @@ import re
 import shutil
 import sys
 
-# export_tarball.py: nonessential_dirs and TEST_DIRS.
+# export_tarball.py: nonessential_dirs and TEST_DIRS. Like the tarball,
+# their GN, GRIT and .pydeps files stay, so gn gen still loads.
 REMOVE = (
     'buildtools/reclient_cfgs/reproxy.cfg',
     'third_party/blink/tools',
@@ -95,8 +96,8 @@ KEEP = (
     'v8/test/torque/test-torque.tq',
 )
 
-# publish_tarball.py: prune_directories. Only GN, GRIT and license files
-# are kept in these, so the build files that refer to them still load.
+# publish_tarball.py: prune_directories. These also keep their license
+# files.
 PRUNE = (
     'android_webview',
     'chrome/android',
@@ -107,42 +108,34 @@ PRUNE = (
     'third_party/instrumented_libs',
     'third_party/libphonenumber/dist/resources/metadata',
 )
-PRUNE_KEEP = re.compile(r'.*\.(gn|gni|grd|grdp|isolate|pydeps)(\.[^ /]+)?$')
+BUILD_FILE = re.compile(r'\.(gn|gni|grd|grdp|isolate|pydeps)(\.\S+)?$')
 LICENSE = re.compile(r'.*(copying|copyright|license)[^/]*$', re.I)
 NOT_LICENSE = re.compile(
     r'.*\.(cc|cfg|cpp|h|java|js|json|m|patch|pl|py|rs|sh|sha1|stderr|ts|'
     r'ya?ml)$', re.I)
 
 
-def remove_tree(src, rel, keep):
+def keep_build_file(full):
+    """GN, GRIT and .pydeps files, which gn gen reads even for targets that
+    aren't built (crbug.com/1362021)."""
+    return BUILD_FILE.search(os.path.basename(full)) is not None
+
+
+def remove_tree(src, rel, licenses):
+    """Deletes rel's files except build files (and, with licenses, the
+    license texts) and the KEEP files. Returns whether rel existed."""
     path = os.path.join(src, rel)
     if not os.path.lexists(path):
         return 0
-    kept = [k for k in keep if k.startswith(rel + '/')]
-    if not kept:
-        if os.path.isdir(path) and not os.path.islink(path):
-            shutil.rmtree(path)
-        else:
-            os.remove(path)
+    if os.path.isfile(path) or os.path.islink(path):
+        os.remove(path)
         return 1
     for dirpath, dirnames, filenames in os.walk(path):
         for name in filenames:
             full = os.path.join(dirpath, name)
-            if os.path.relpath(full, src) not in kept:
-                os.remove(full)
-    return 1
-
-
-def prune_tree(src, rel):
-    path = os.path.join(src, rel)
-    if not os.path.isdir(path):
-        return 0
-    for dirpath, dirnames, filenames in os.walk(path):
-        for name in filenames:
-            full = os.path.join(dirpath, name)
-            if PRUNE_KEEP.match(full):
+            if keep_build_file(full) or os.path.relpath(full, src) in KEEP:
                 continue
-            if LICENSE.match(full) and not NOT_LICENSE.match(full):
+            if licenses and LICENSE.match(full) and not NOT_LICENSE.match(full):
                 continue
             os.remove(full)
         # Symlinks to directories are listed as directories; remove them
@@ -169,8 +162,8 @@ def main(argv):
         sys.stderr.write('usage: prune_chromium_source.py <chromium/src>\n')
         return 2
     src = os.path.abspath(argv[1])
-    removed = sum(remove_tree(src, rel, KEEP) for rel in REMOVE)
-    pruned = sum(prune_tree(src, rel) for rel in PRUNE)
+    removed = sum(remove_tree(src, rel, False) for rel in REMOVE)
+    pruned = sum(remove_tree(src, rel, True) for rel in PRUNE)
     for rel in REMOVE + PRUNE:
         remove_empty_dirs(src, rel)
     print('removed %d paths, pruned %d directories' % (removed, pruned))

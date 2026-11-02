@@ -142,6 +142,35 @@ signature, so macOS asks again for access to the keychain item.
 `shot_ui.sh`, ...) use Linux's headless Ozone platform, so test behaviour on
 Linux.
 
+### macOS nightly build
+
+[`.github/workflows/macos.yml`](.github/workflows/macos.yml) builds
+`Koan.app` on GitHub's free macOS runners every night from `develop`, and
+publishes `Koan-<version>-<sha>-arm64.dmg` as a run artifact and as the
+rolling `nightly` pre-release (see
+[Installing the macOS build](docs/USAGE.md#installing-the-macos-build)).
+It is the only place the Mac code is compiled without the maintainer's
+Mac, so it catches Mac-only build errors.
+
+- It uses the same scripts as above (`bootstrap.sh`, `apply_patches.sh`,
+  `apply_branding.sh`, `build.sh` with `build/koan-mac.gn`), with
+  `scripts/ci/mac_env.sh` as the runner's `env.sh`.
+- A first build takes much longer than GitHub's 6-hour job limit, so it
+  runs as a chain: a fetch job, then build jobs that each build for about
+  5 hours and hand `out/Koan` on to the next as an artifact, then a
+  packaging step and the release. A whole run takes a day or more.
+- **To build a branch or pull request** with Mac-specific code:
+  `gh workflow run macos.yml -f ref=<branch>` (or `-f ref=refs/pull/<n>/head`),
+  or "Run workflow" on the Actions tab. Pull requests that change the Mac
+  build itself (`.github/workflows/macos*.yml`, `scripts/ci/mac_*`) run it
+  automatically.
+- **If a job fails** for a reason outside the code (a network error, a
+  runner problem), use "Re-run failed jobs": the run carries on from the
+  last job that finished, with the same commit (the build artifacts are
+  kept for 5 days). A fix in the code needs a new run.
+
+How it works and what was measured: [.agent/notes/macos-ci.md](.agent/notes/macos-ci.md).
+
 ### Repository layout
 
 | Path | Contents |
@@ -238,6 +267,9 @@ scripts/ci/check_patches.sh
 python3 -m unittest discover -s scripts/tests
 git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file --dry-run --Werror
 ```
+
+The macOS build runs separately, every night and on demand
+([macOS nightly build](#macos-nightly-build)).
 
 Browser behaviour is tested against a real build, off-screen, so nothing
 opens on your desktop:

@@ -23,6 +23,8 @@ documentation lives in [`docs/`](../../docs) and
   layout, and consent before anything runs there
 - [chromium-releases.md](chromium-releases.md): following Chromium's releases
   (#86): the M158 move, the checkout switch plan, the routine
+- [macos-ci.md](macos-ci.md): the nightly macOS build on GitHub Actions:
+  the job chain, how the source is fetched, measurements
 - [agent-brief.md](agent-brief.md): the brief every implementation agent gets
 - [parallel-agents.md](parallel-agents.md): one thread per issue, the
   shared build lock, memory limits and recovery
