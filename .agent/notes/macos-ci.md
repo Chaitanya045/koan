@@ -197,7 +197,13 @@ component only if that fails.
 
 Siso stopped on SIGINT at the deadline with "0 failed, interrupt by
 signal". Memory stayed at 62–74% free; at most 127 MB of swap, briefly.
-`JOBS=3` is safe; 4 might be worth a try. Rate: ~5 steps/s in the first
+`JOBS=3` is safe; 4 might be worth a try.
+
+**Build job 2** resumed where job 1 stopped: its first progress line was
+`[796/48012]` (48k left, not 79k), so unpacking source and out with their
+mtimes works. Overhead 11 min (out-1: 25 s download, 23 s unpack). Build
+4 h 44 min: 9,883 steps at **0.58 steps/s** (Blink, V8, big C++ files),
+0 failed, 34,890 left; memory 60–76% free, ≤ 70 MB swap. out-2 0.7 GB. Rate: ~5 steps/s in the first
 half hour (small C++ files), ~1.2 steps/s later. The total siso reported
 shrank from 91k to 79.3k as it learned which steps were no-ops
 (`skip:17340`).
