@@ -72,8 +72,8 @@ versions), `feat/zen-glance-split` touches `tab_strip_model.cc` and
 
 ### `src/` and the compile
 
-`src/` is not checked here: a compile needs the new toolchain and the whole
-tree. Known: the `WindowOpenDisposition` renames in `koan_url_bar_controller.cc`
+`src/` is not compile-checked (see Rehearsal): that needs the new toolchain and
+most of the generated code. Known: the `WindowOpenDisposition` renames in `koan_url_bar_controller.cc`
 and `koan_glance_controller.cc` (this PR changes them). The rest shows up in
 the first build after the switch (step 4), where the build is kept going
 (`autoninja -k 0`) so one pass lists all the errors.
@@ -98,54 +98,87 @@ at a time the maintainer picks, and announced to the agent threads.
 - Point releases within a milestone usually rebuild far less (they change
   tens of files, not the compiler), unless the toolchain rolls.
 
-### Commands (under the lock)
+### Plan: swap in the prepared checkout (recommended), 17:30 UTC
 
-`agent-build.sh` can't do it: it applies the worktree's patches to the
-checkout's current HEAD first. So the switch uses a small script that takes
-the same queue and lock (`~/work/koan/.cache/agent-switch-chromium.sh`, not
-run yet), which does, in `~/work/koan/chromium/src`:
+Re-syncing the shared checkout in place means fetching the tag and ~30 GB of
+dependencies again, with the old tree destroyed meanwhile. Instead
+`~/work/koan/.cache/bootstrap-test` is a complete checkout of the tag made by
+`scripts/bootstrap.sh` (deps synced, hooks run; 28 min, 30 GB; its
+`gn gen` and the 76 patches checked). Under the build lock it is renamed
+into place and the old one is kept, so rollback is two renames:
 
 ```sh
-# 0. Look first: only Koan's patches and branding may be modified.
-git status --porcelain            # everything ' M', no untracked source
-# 1. Back to pristine upstream.
-~/work/koan/scripts/apply_branding.sh --revert
-git checkout -q -- .              # the last build's patches (applied-patches)
-# 2. The tag, shallow (the checkout is shallow and only has origin/main).
-git fetch --depth=1 origin refs/tags/158.0.8127.2:refs/tags/158.0.8127.2
-git checkout --detach 158.0.8127.2
-test "$(git rev-parse HEAD)" = 681cd621e82e606d7536eae8ea2576afb3c7d65c
-# 3. Dependencies of this revision, and the hooks (new clang, rust, ...).
-cd ~/work/koan/chromium
-gclient sync -D --nohooks --revision src@158.0.8127.2
-gclient runhooks
-# 4. Koan: the merged develop's patches, branding, //koan link, then build.
-cd ~/work/koan && git pull   # develop with this PR
-AGENT_CMD=... agent-build.sh   # build, then the full e2e set
+~/work/koan/.cache/agent-switch-chromium.sh <this worktree> --preflight  # no lock, any time
+~/work/koan/.cache/agent-switch-chromium.sh <this worktree>              # at "go", takes the queue and lock
 ```
 
-Notes on those lines:
+The script does, in order (one filesystem: the moves are instant):
 
-- The shared `.gclient` is **managed** (the default), unlike the one
-  `bootstrap.sh` writes (`"managed": False`). `gclient sync` with a managed
-  `src` and no `--revision` is expected to move `src` to the tip of main
-  (not tested, and not worth testing on the shared checkout): always give
-  `--revision src@<tag>` here. The checkout is already at the tag, so it
-  fetches nothing for `src`.
-- `--with_branch_heads` is not needed for a tag: the tag is fetched by name.
-  It makes gclient fetch every `refs/branch-heads/*` (8,329 refs on
-  googlesource today), which in a shallow clone is a lot of objects for
-  nothing.
-- After the switch, every agent worktree has to rebase on develop (the new
-  patch names, `CHROMIUM_VERSION`, and `src/` renames); until then their
-  `agent-build.sh` stops at "patch does not apply".
-- The PR must not be merged before the switch: develop's patches would not
-  apply to the old checkout and every build would stop. Merge, switch,
-  rebase, in that order, in one quiet window.
+```sh
+# before the lock (--preflight): new tree at the pin, pristine, not in use,
+# out/ and the //koan link removed, depot_tools works with it
+# under the lock:
+cd ~/work/koan
+mv chromium chromium-8111                      # keeps out/Koan, out/Release, branding, patches
+mv .branding-pristine chromium-8111/branding-pristine   # the backups belong to that tree
+mv depot_tools depot_tools-8111
+mv .cache/bootstrap-test/chromium chromium
+mv .cache/bootstrap-test/depot_tools depot_tools
+scripts/apply_branding.sh                      # new tree; strings/icons
+# this worktree's patches (git apply), ln -sfn <worktree>/src chromium/src/koan
+# gn gen out/Koan (build/koan.gn); autoninja -C out/Koan -j 2-6 -k 0 chrome   # 10-15 h
+# every scripts/e2e/*.mjs (23), 10 min each at most
+```
+
+Decisions behind it:
+
+- **`.gclient`: use the scratch one** (what `bootstrap.sh` writes,
+  `"managed": False`), not the shared tree's managed one: a managed `src`
+  with no `--revision` is expected to move to the tip of main on the next
+  `gclient sync`.
+- **`depot_tools`: swap too.** The shared one is from 2026-10-17, the
+  scratch one (cloned by `bootstrap.sh`) from 2026-11-01, which the hooks
+  of this revision ran with.
+- **`out/`: not carried.** `gen/` files hold absolute paths of the scratch
+  location (e.g. `gen/third_party/devtools-frontend/.../com.chrome.devtools.json`),
+  and the compiler changed anyway. Starting clean costs the ~7k steps the
+  scratch compile had done (about an hour) and removes any doubt. The old
+  `out/Koan` stays in `chromium-8111/`, so the old tree builds again after
+  a rollback.
+- **`-k 0`** (keep going) for this first build, so one pass lists all
+  compile errors in `src/` and the patches. The script exits non-zero with
+  the first 150 lines of errors; fix them on the PR branch and carry on with
+  `agent-build.sh` as usual (it builds incrementally from where this stopped).
+- **Rollback:** `~/work/koan/.cache/rollback-chromium.sh` (written by the
+  script when it swaps; hold the lock, nothing building) puts
+  `chromium-8111/` and `depot_tools-8111/` back.
+- The in-place alternative (kept for a point release, which changes few
+  files): `scripts/update_chromium.sh <tag>` fetches the tag by name and
+  syncs; `--with_branch_heads` is not needed (it would fetch all 8,329
+  `refs/branch-heads/*`).
+- After the switch the maintainer merges #89 and every agent worktree
+  rebases on develop (new patch names, `CHROMIUM_VERSION`, `src/` renames);
+  until then their `agent-build.sh` stops at "patch does not apply". #89
+  must not merge before the switch.
 
 ## Rehearsal (scratch checkout, not the shared one)
 
-REHEARSAL_PLACEHOLDER
+Done in `~/work/koan/.cache/bootstrap-test` (a second checkout, never the
+shared one), on 2026-11-02:
+
+- `scripts/bootstrap.sh` at the pin: 28 min wall under load, ~30 GB; `src`
+  ended at 681cd621 (gclient fetches a release-branch commit by hash).
+- `scripts/apply_patches.sh check`: 76 applicable; `apply`: all applied.
+- `gn gen out/Koan` with `build/koan.gn`: 37,238 targets, no warnings (so
+  the patched `BUILD.gn` files and `//koan` deps resolve).
+- A compile of the 88 objects of `src/` and the patched files (`autoninja
+  -j 2 -k 0` on their object paths, from `compile_commands.json`): it needs
+  ~24.6k generated-code steps first. It got 7.1k done in 47 min and then
+  stopped on an infrastructure error (`spawn helper: EOF` in
+  `web_idl_database`, when the step was interrupted), with no compile error
+  seen. **So there is no compile verdict yet**; tonight's `-k 0` build is it.
+- Not run: `update_chromium.sh` end to end (it would reverse the patches
+  under that compile), the e2e suite, anything on the Mac.
 
 ## The routine
 
