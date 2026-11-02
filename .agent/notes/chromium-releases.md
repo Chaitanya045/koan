@@ -219,3 +219,24 @@ In docs/REBASE.md: "Following Chromium releases". In short:
 - The Mac CI (#69; PR #70 is still open, so `macos.yml` isn't on develop
   yet) will build whatever `CHROMIUM_VERSION`
   pins through `scripts/bootstrap.sh`, so it follows the pin by itself.
+
+## Lesson: start long jobs with `setsid`, outside the agent's run
+
+The first switch attempt (2026-11-02) was started from the agent's shell with
+`agent-switch-chromium-detached.sh` and died while still waiting for the
+lock, at about 18:16 UTC when the agent run ended, with no error in the log
+(`chromium-switch/switch-attempt1.log` stops at "waiting for the build
+lock"). It was most likely killed with the run's process group, so it was
+not really detached; the cause isn't proven. The restart that survived was
+started by the maintainer as its own session:
+
+```sh
+setsid nohup bash -c '<script> <worktree> --go; echo SWITCH-EXIT $?' >LOG 2>&1 </dev/null &
+```
+
+(session leader, parent init). So: start any job that outlives the run
+(switch, full builds, e2e batches) with `setsid nohup ... </dev/null &`
+directly, check that it is its own session (`ps -o pid,ppid,sid,pgid -p
+<pid>`: `sid` = its own pid), and watch the process as well as the log: a
+log that stops at a message proves nothing. Never start a second copy while
+one may be alive (they would queue twice).
