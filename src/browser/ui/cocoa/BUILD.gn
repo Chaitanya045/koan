@@ -1,0 +1,38 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+assert(is_mac)
+
+# Hook declarations called from upstream's macOS menu code. Header-only and
+# dependency-light so upstream targets can depend on it without cycles; the
+# definitions live in :impl, linked through //chrome/browser:browser.
+source_set("hooks") {
+  sources = [ "koan_main_menu.h" ]
+  public_deps = [
+    "//base",
+    "//ui/base",
+  ]
+}
+
+# Koan's items in the menu bar and the Dock menu.
+source_set("impl") {
+  sources = [ "koan_main_menu_mac.mm" ]
+  deps = [
+    ":hooks",
+    "//base",
+    "//chrome/app:command_ids",
+    "//chrome/browser:global_keyboard_shortcuts_mac",
+    "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/cocoa",
+    "//chrome/browser/ui/tabs:tab_strip",
+    "//chrome/browser/ui/views/frame",
+    "//components/tabs:public",
+    "//koan/browser:shortcut_table",
+    "//koan/browser/ui/views:impl",
+    "//ui/base",
+    "//ui/events",
+    "//ui/events:events_base",
+  ]
+  frameworks = [ "Cocoa.framework" ]
+}

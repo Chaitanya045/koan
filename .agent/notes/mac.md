@@ -139,7 +139,17 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   right. Trackpad swipes between Spaces: `KoanSpaceSwipe`. Neither could be
   run on a Mac by the agent that wrote them: see the PR for what the macOS CI
   compiled.
-- Shortcuts are still Ctrl-based. ⌘ shortcuts are #71.
+- Shortcuts follow Zen's macOS table (#71): `kAccel` is ⌘, the table is in
+  `src/browser/koan_shortcut_table.cc`, and the menu bar and Dock menu in
+  `src/browser/ui/cocoa/koan_main_menu_mac.mm` (hooks in
+  `main_menu_builder.mm` and `app_controller_mac.mm`). Key path on a Mac:
+  `ChromeCommandDispatcherDelegate` runs high-priority views accelerators
+  and Chrome's reserved commands first (`prePerformKeyEquivalent`), then the
+  page, then normal-priority accelerators (`postPerformKeyEquivalent`,
+  before the main menu). Koan registers shortcuts on reserved keys
+  (`shortcuts::IsReservedOnMac()`) at high priority, and keeps the menu bar's
+  keys in line with Koan's (items give up or take a key at "menu open").
+  Tried on a Mac by the Mac loop, not by the agent.
 
 ## Sidebar animations (#94)
 

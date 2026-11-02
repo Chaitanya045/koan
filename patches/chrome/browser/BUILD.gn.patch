@@ -1,8 +1,6 @@
-diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 57276203758798e46dde192a11816f902d247200..333a487aa35b14587529c16bf1305d8af7526842 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1430,6 +1430,10 @@ source_set("core") {
+@@ -1430,6 +1430,10 @@
      "//components/webui/chrome_urls",
      "//device/base",
      "//device/gamepad/public/cpp:switches",
@@ -13,7 +11,23 @@ index 57276203758798e46dde192a11816f902d247200..333a487aa35b14587529c16bf1305d8a
      "//media/capture:capture_switches",
      "//media/midi",
      "//media/webrtc",
-@@ -4647,6 +4651,7 @@ source_set("browser") {
+@@ -1780,6 +1784,7 @@
+       "//components/remote_cocoa/app_shim",
+       "//components/remote_cocoa/app_shim:features",
+       "//components/remote_cocoa/browser",
++      "//koan/browser/ui/cocoa:hooks",
+       "//sandbox/mac:seatbelt",
+       "//sandbox/policy",
+       "//services/video_capture/public/mojom:constants",
+@@ -4067,6 +4072,7 @@
+       "//components/remote_cocoa/app_shim",
+       "//components/remote_cocoa/app_shim:features",
+       "//components/remote_cocoa/browser",
++      "//koan/browser/ui/cocoa:impl",
+     ]
+     frameworks = [
+       "Carbon.framework",
+@@ -4647,6 +4653,7 @@
        "//components/services/app_service",
        "//components/ui_devtools/views",
        "//components/user_education/views",

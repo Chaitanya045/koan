@@ -1,0 +1,588 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   ZenMenubar.mjs
+//   zen-menubar.ftl
+//   zen-workspaces.ftl
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
+
+#include "koan/browser/ui/cocoa/koan_main_menu.h"
+
+#import <Cocoa/Cocoa.h>
+
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "base/strings/strcat.h"
+#include "base/strings/sys_string_conversions.h"
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/global_keyboard_shortcuts_mac.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/tabs/public/tab_interface.h"
+#include "koan/browser/koan_shortcut_table.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
+#include "ui/base/accelerators/platform_accelerator_cocoa.h"
+#include "ui/base/base_window.h"
+#include "ui/base/models/list_selection_model.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_code_conversion_mac.h"
+
+namespace {
+
+using Action = koan::shortcuts::Action;
+using Binding = koan::shortcuts::Binding;
+
+// The window whose Spaces and shortcuts the menus act on: the one that was
+// active last. Null without a window that has Koan's UI (e.g. a popup).
+koan::KoanBrowserViewController* ActiveController() {
+  BrowserWindowInterface* browser =
+      GetLastActiveBrowserWindowInterfaceWithAnyProfile();
+  BrowserView* view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  if (!view || !view->GetIsNormalType()) {
+    return nullptr;
+  }
+  return koan::KoanBrowserViewController::From(view);
+}
+
+const koan::shortcuts::Info* FindInfo(Action action) {
+  for (const koan::shortcuts::Info& info : koan::shortcuts::Actions()) {
+    if (info.action == action) {
+      return &info;
+    }
+  }
+  return nullptr;
+}
+
+// The key an NSMenuItem needs for `accelerator`, or nothing if AppKit can't
+// show it (ui::GetKeyEquivalentAndModifierMaskFromAccelerator() would fail).
+struct MenuKey {
+  NSString* key_equivalent;
+  NSUInteger modifier_mask;
+};
+std::optional<MenuKey> MenuKeyFor(const ui::Accelerator& accelerator) {
+  unichar shifted = 0;
+  unichar unshifted = 0;
+  if (accelerator.key_code() == ui::VKEY_UNKNOWN ||
+      ui::MacKeyCodeForWindowsKeyCode(accelerator.key_code(), 0, &shifted,
+                                      &unshifted) == -1) {
+    return std::nullopt;
+  }
+  KeyEquivalentAndModifierMask* equivalent =
+      ui::GetKeyEquivalentAndModifierMaskFromAccelerator(accelerator);
+  return MenuKey{equivalent.keyEquivalent, equivalent.modifierMask};
+}
+
+// Shows `accelerator` (or no key) on `item`.
+void SetKey(NSMenuItem* item,
+            const std::optional<ui::Accelerator>& accelerator) {
+  std::optional<MenuKey> key;
+  if (accelerator) {
+    key = MenuKeyFor(*accelerator);
+  }
+  item.keyEquivalent = key ? key->key_equivalent : @"";
+  item.keyEquivalentModifierMask = key ? key->modifier_mask : 0;
+}
+
+// Collects `menu`'s items and its submenus'.
+void CollectItems(NSMenu* menu, NSMutableArray<NSMenuItem*>* items) {
+  for (NSMenuItem* item in menu.itemArray) {
+    [items addObject:item];
+    if (item.submenu) {
+      CollectItems(item.submenu, items);
+    }
+  }
+}
+
+// Chrome's menu items whose key is Koan's. First, those that do what a Koan
+// shortcut does and take its key; Zen rebinds them, e.g. Save Page.
+struct Relocated {
+  Action action;
+  int command;
+};
+constexpr Relocated kRelocated[] = {
+    {Action::kSavePage, IDC_SAVE_PAGE},
+    {Action::kNewPrivateWindow, IDC_NEW_INCOGNITO_WINDOW},
+    {Action::kInspect, IDC_DEV_TOOLS_INSPECT},
+    {Action::kMuteSite, IDC_WINDOW_MUTE_SITE},
+    {Action::kDownloads, IDC_SHOW_DOWNLOADS},
+};
+
+// What Chrome's items had before Koan changed their keys (an NSArray of the
+// key equivalent and the mask), so that a shortcut the user moves or clears
+// gives the key back.
+NSMapTable<NSMenuItem*, NSArray*>* ChangedItems() {
+  static NSMapTable<NSMenuItem*, NSArray*>* table =
+      [NSMapTable weakToStrongObjectsMapTable];
+  return table;
+}
+
+void RememberKey(NSMenuItem* item) {
+  if (![ChangedItems() objectForKey:item]) {
+    [ChangedItems()
+        setObject:@[ item.keyEquivalent, @(item.keyEquivalentModifierMask) ]
+           forKey:item];
+  }
+}
+
+bool IsChromeCommand(NSMenuItem* item, int command) {
+  return item.tag == command && item.action == @selector(commandDispatch:);
+}
+
+NSMenuItem* ActionItem(Action action, id target, NSString* title = nil) {
+  const koan::shortcuts::Info* info = FindInfo(action);
+  NSMenuItem* item = [[NSMenuItem alloc]
+      initWithTitle:title ?: base::SysUTF8ToNSString(info->label)
+             action:@selector(perform:)
+      keyEquivalent:@""];
+  item.target = target;
+  item.tag = static_cast<NSInteger>(action);
+  return item;
+}
+
+// Inserts `items` after the item with `tag` (at the end without one).
+void InsertAfter(NSMenu* menu, NSInteger tag, NSArray<NSMenuItem*>* items) {
+  NSInteger index = [menu indexOfItemWithTag:tag];
+  index = index == -1 ? menu.numberOfItems : index + 1;
+  for (NSMenuItem* item in items) {
+    [menu insertItem:item atIndex:index++];
+  }
+}
+
+}  // namespace
+
+// The target and validator of Koan's menu items, and the delegate of the
+// Spaces menu, whose items follow the window's Spaces.
+@interface KoanMenuTarget : NSObject <NSMenuDelegate, NSMenuItemValidation>
++ (KoanMenuTarget*)shared;
+// Runs the Koan shortcut in the item's tag.
+- (void)perform:(NSMenuItem*)item;
+// Switches the active window to the Space at the item's tag (an index).
+- (void)switchSpace:(NSMenuItem*)item;
+// The same from the Dock, which first brings the window forward.
+- (void)dockSwitchSpace:(NSMenuItem*)item;
+// Moves the active window's selected tabs to the Space at the item's tag.
+- (void)moveToSpace:(NSMenuItem*)item;
+// Sets the Spaces menu, which is rebuilt each time it opens after its first
+// `count` items.
+- (void)setSpacesMenu:(NSMenu*)menu staticItemCount:(NSInteger)count;
+// Shows the keys of the active window's shortcuts in `mainMenu` (see the
+// definition).
+- (void)refreshKeysIn:(NSMenu*)mainMenu;
+// Refreshes the keys whenever the menu bar opens.
+- (void)observeMenuBar:(NSMenu*)mainMenu;
+@end
+
+namespace {
+
+// The label of a Space in the menus: "<icon>  <name>", like Move To.
+NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
+  return base::SysUTF16ToNSString(
+      space.icon.empty() ? space.name
+                         : base::StrCat({space.icon, u"  ", space.name}));
+}
+
+}  // namespace
+
+@implementation KoanMenuTarget {
+  NSMenu* _spacesMenu;
+  NSInteger _staticItemCount;
+  id _trackingObserver;
+}
+
++ (KoanMenuTarget*)shared {
+  static KoanMenuTarget* shared = [[KoanMenuTarget alloc] init];
+  return shared;
+}
+
+- (void)perform:(NSMenuItem*)item {
+  if (koan::KoanBrowserViewController* controller = ActiveController()) {
+    controller->shortcuts()->Run(static_cast<Action>(item.tag));
+  }
+}
+
+- (void)switchSpace:(NSMenuItem*)item {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  if (!controller) {
+    return;
+  }
+  const auto spaces = controller->workspaces()->GetSpaces();
+  if (item.tag >= 0 && item.tag < static_cast<NSInteger>(spaces.size())) {
+    controller->workspaces()->SwitchTo(spaces[item.tag].id);
+  }
+}
+
+- (void)dockSwitchSpace:(NSMenuItem*)item {
+  if (koan::KoanBrowserViewController* controller = ActiveController()) {
+    [NSApp activateIgnoringOtherApps:YES];
+    controller->browser_view()->browser()->GetWindow()->Activate();
+  }
+  [self switchSpace:item];
+}
+
+- (void)moveToSpace:(NSMenuItem*)item {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  if (!controller) {
+    return;
+  }
+  const auto spaces = controller->workspaces()->GetSpaces();
+  if (item.tag < 0 || item.tag >= static_cast<NSInteger>(spaces.size())) {
+    return;
+  }
+  // The selected tabs, like Move To in the tab context menu.
+  TabStripModel* model =
+      controller->browser_view()->browser()->GetTabStripModel();
+  std::vector<tabs::TabInterface*> tabs;
+  for (size_t index :
+       model->selection_model().GetListSelectionModel().selected_indices()) {
+    tabs.push_back(model->GetTabAtIndex(static_cast<int>(index)));
+  }
+  if (!tabs.empty()) {
+    controller->workspaces()->MoveTabsToSpace(tabs, spaces[item.tag].id);
+  }
+}
+
+// NSMenuItemValidation:
+- (BOOL)validateMenuItem:(NSMenuItem*)item {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  if (!controller) {
+    return NO;
+  }
+  if (item.action == @selector(perform:)) {
+    return controller->shortcuts()->CanRun(static_cast<Action>(item.tag));
+  }
+  return controller->workspaces()->IsEnabled();
+}
+
+- (void)setSpacesMenu:(NSMenu*)menu staticItemCount:(NSInteger)count {
+  _spacesMenu = menu;
+  _staticItemCount = count;
+  menu.delegate = self;
+  // The items' states are set in -menuNeedsUpdate:, with the Spaces.
+  menu.autoenablesItems = NO;
+}
+
+// NSMenuDelegate: the Spaces menu lists the Spaces of the active window, and
+// the other Spaces to move the tabs to.
+- (void)menuNeedsUpdate:(NSMenu*)menu {
+  if (menu != _spacesMenu) {
+    return;
+  }
+  while (menu.numberOfItems > _staticItemCount) {
+    [menu removeItemAtIndex:menu.numberOfItems - 1];
+  }
+  koan::KoanBrowserViewController* controller = ActiveController();
+  for (NSMenuItem* item in menu.itemArray) {
+    if (item.action == @selector(perform:)) {
+      item.enabled = controller && controller->shortcuts()->CanRun(
+                                       static_cast<Action>(item.tag));
+    }
+  }
+  if (!controller || !controller->workspaces()->IsEnabled()) {
+    return;
+  }
+  const auto spaces = controller->workspaces()->GetSpaces();
+  if (spaces.empty()) {
+    return;
+  }
+  [menu addItem:[NSMenuItem separatorItem]];
+  NSMenu* move_menu = [[NSMenu alloc] initWithTitle:@""];
+  for (size_t i = 0; i < spaces.size(); ++i) {
+    NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:SpaceTitle(spaces[i])
+                                                  action:@selector(switchSpace:)
+                                           keyEquivalent:@""];
+    item.target = self;
+    item.tag = static_cast<NSInteger>(i);
+    item.state =
+        spaces[i].active ? NSControlStateValueOn : NSControlStateValueOff;
+    // Zen's Ctrl+1..0 (macOS only).
+    if (i < 10) {
+      SetKey(item, controller->shortcuts()->GetAccelerator(static_cast<Action>(
+                       static_cast<int>(Action::kSwitchWorkspace1) +
+                       static_cast<int>(i))));
+    }
+    [menu addItem:item];
+    if (!spaces[i].active) {
+      NSMenuItem* move_item =
+          [[NSMenuItem alloc] initWithTitle:SpaceTitle(spaces[i])
+                                     action:@selector(moveToSpace:)
+                              keyEquivalent:@""];
+      move_item.target = self;
+      move_item.tag = static_cast<NSInteger>(i);
+      [move_menu addItem:move_item];
+    }
+  }
+  [menu addItem:[NSMenuItem separatorItem]];
+  NSMenuItem* move = [[NSMenuItem alloc] initWithTitle:@"Move To"
+                                                action:nil
+                                         keyEquivalent:@""];
+  move.submenu = move_menu;
+  move.enabled =
+      move_menu.numberOfItems > 0 && controller->browser_view()
+                                             ->browser()
+                                             ->GetTabStripModel()
+                                             ->GetActiveTab() != nullptr;
+  [menu addItem:move];
+}
+
+// Gives each Koan item the key of its shortcut as the active window has it,
+// and Chrome's items the key they are left with: the Koan key for those that
+// do what a Koan shortcut does (Save Page ...), and none for those that
+// share a key with another Koan shortcut (Hide Others, Bookmark All Tabs).
+// Koan's key wins over Chrome's menu in the window (the FocusManager runs
+// first), so this only keeps the menus telling the truth.
+- (void)refreshKeysIn:(NSMenu*)mainMenu {
+  // Give back what an earlier refresh took.
+  NSMapTable<NSMenuItem*, NSArray*>* changed = ChangedItems();
+  for (NSMenuItem* item in changed.keyEnumerator.allObjects) {
+    NSArray* original = [changed objectForKey:item];
+    item.keyEquivalent = original[0];
+    item.keyEquivalentModifierMask = [original[1] unsignedIntegerValue];
+  }
+  [changed removeAllObjects];
+
+  koan::KoanBrowserViewController* controller = ActiveController();
+  const std::vector<Binding> bindings =
+      controller ? controller->shortcuts()->bindings()
+                 : koan::shortcuts::DefaultBindings();
+  const auto key_of = [&](Action action) -> std::optional<ui::Accelerator> {
+    for (const Binding& binding : bindings) {
+      if (binding.action == action) {
+        return binding.accelerator;
+      }
+    }
+    return std::nullopt;
+  };
+
+  NSMutableArray<NSMenuItem*>* items = [NSMutableArray array];
+  CollectItems(mainMenu, items);
+  NSMutableSet<NSMenuItem*>* claimed = [NSMutableSet set];
+  for (NSMenuItem* item in items) {
+    if (item.target == self && item.action == @selector(perform:)) {
+      // Expanding Glance shares Cmd+O with Open File, which keeps the key.
+      if (static_cast<Action>(item.tag) != Action::kGlanceExpand) {
+        SetKey(item, key_of(static_cast<Action>(item.tag)));
+      }
+      [claimed addObject:item];
+    }
+  }
+  // Without a window with Koan's UI its shortcuts do nothing, and Chrome's
+  // items keep their keys.
+  if (!controller) {
+    return;
+  }
+  for (NSMenuItem* item in items) {
+    for (const Relocated& relocated : kRelocated) {
+      if (IsChromeCommand(item, relocated.command)) {
+        RememberKey(item);
+        SetKey(item, key_of(relocated.action));
+        [claimed addObject:item];
+      }
+    }
+  }
+  std::vector<MenuKey> koan_keys;
+  for (const Binding& binding : bindings) {
+    // Glance's Cmd+O only applies while it is open.
+    if (binding.action != Action::kGlanceExpand) {
+      if (std::optional<MenuKey> key = MenuKeyFor(binding.accelerator)) {
+        koan_keys.push_back(*key);
+      }
+    }
+  }
+  for (NSMenuItem* item in items) {
+    if ([claimed containsObject:item] || item.keyEquivalent.length == 0) {
+      continue;
+    }
+    for (const MenuKey& key : koan_keys) {
+      if ([item.keyEquivalent isEqualToString:key.key_equivalent] &&
+          item.keyEquivalentModifierMask == key.modifier_mask) {
+        RememberKey(item);
+        item.keyEquivalent = @"";
+        item.keyEquivalentModifierMask = 0;
+        break;
+      }
+    }
+  }
+}
+
+- (void)observeMenuBar:(NSMenu*)mainMenu {
+  if (_trackingObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:_trackingObserver];
+  }
+  __weak KoanMenuTarget* weak_self = self;
+  _trackingObserver = [[NSNotificationCenter defaultCenter]
+      addObserverForName:NSMenuDidBeginTrackingNotification
+                  object:nil
+                   queue:nil
+              usingBlock:^(NSNotification* notification) {
+                // Only for the menu bar, whichever of its menus is tracked.
+                NSMenu* root = notification.object;
+                while (root.supermenu) {
+                  root = root.supermenu;
+                }
+                if (root == mainMenu) {
+                  [weak_self refreshKeysIn:mainMenu];
+                }
+              }];
+}
+
+@end
+
+namespace koan {
+
+void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
+  if (is_pwa) {
+    return;
+  }
+  KoanMenuTarget* target = [KoanMenuTarget shared];
+
+  // App menu: Zen's Open Preferences (Cmd+,) opens Koan's settings, so the
+  // key moves from Chrome's Preferences, which opens chrome://settings.
+  if (NSMenu* app = [main_menu itemWithTag:IDC_CHROME_MENU].submenu) {
+    InsertAfter(app, IDC_OPTIONS, @[ ActionItem(Action::kOpenSettings, target,
+                                                @"Koan Settings…") ]);
+  }
+
+  // File: Zen's wording.
+  for (NSMenuItem* item in [main_menu itemWithTag:IDC_FILE_MENU]
+           .submenu.itemArray) {
+    if (IsChromeCommand(item, IDC_NEW_INCOGNITO_WINDOW)) {
+      item.title = @"New Private Window";
+    }
+  }
+
+  // View: compact mode, and the panels with a key of Zen's and no menu item.
+  if (NSMenu* view = [main_menu itemWithTag:IDC_VIEW_MENU].submenu) {
+    InsertAfter(view, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE, @[
+      [NSMenuItem separatorItem],
+      ActionItem(Action::kToggleCompactMode, target),
+      ActionItem(Action::kCompactModeShowSidebar, target),
+      ActionItem(Action::kToggleSingleToolbar, target),
+      [NSMenuItem separatorItem],
+      ActionItem(Action::kBookmarks, target),
+      ActionItem(Action::kReaderMode, target),
+    ]);
+  }
+
+  // Spaces, after View as in Zen (ZenMenubar.mjs #initSpacesMenu). Zen's
+  // Edit Theme, Change Name and Change Icon open from the Space's header or
+  // bottom bar here.
+  NSMenu* spaces = [[NSMenu alloc] initWithTitle:@"Spaces"];
+  [spaces addItem:ActionItem(Action::kNewWorkspace, target, @"Create Space")];
+  [spaces addItem:[NSMenuItem separatorItem]];
+  [spaces addItem:ActionItem(Action::kWorkspaceForward, target, @"Next Space")];
+  [spaces addItem:ActionItem(Action::kWorkspaceBackward, target,
+                             @"Previous Space")];
+  [target setSpacesMenu:spaces staticItemCount:spaces.numberOfItems];
+  NSMenuItem* spaces_item = [[NSMenuItem alloc] initWithTitle:@"Spaces"
+                                                       action:nil
+                                                keyEquivalent:@""];
+  spaces_item.submenu = spaces;
+  const NSInteger view_index = [main_menu indexOfItemWithTag:IDC_VIEW_MENU];
+  [main_menu
+      insertItem:spaces_item
+         atIndex:view_index == -1 ? main_menu.numberOfItems : view_index + 1];
+
+  // History: Zen's Library.
+  if (NSMenu* history = [main_menu itemWithTag:IDC_HISTORY_MENU].submenu) {
+    InsertAfter(history, IDC_SHOW_HISTORY,
+                @[ ActionItem(Action::kLibrary, target) ]);
+  }
+
+  // Tab: split view, pinned tabs and the page's URL.
+  if (NSMenu* tab = [main_menu itemWithTag:IDC_TAB_MENU].submenu) {
+    NSMenu* split = [[NSMenu alloc] initWithTitle:@"Split View"];
+    for (Action action :
+         {Action::kSplitVertical, Action::kSplitHorizontal, Action::kSplitGrid,
+          Action::kUnsplit, Action::kNewEmptySplit}) {
+      [split addItem:ActionItem(action, target)];
+    }
+    NSMenuItem* split_item = [[NSMenuItem alloc] initWithTitle:@"Split View"
+                                                        action:nil
+                                                 keyEquivalent:@""];
+    split_item.submenu = split;
+    InsertAfter(tab, IDC_NEW_SPLIT_TAB, @[
+      split_item,
+      ActionItem(Action::kGlanceExpand, target),
+      [NSMenuItem separatorItem],
+      ActionItem(Action::kTogglePinTab, target),
+      ActionItem(Action::kCloseUnpinnedTabs, target),
+      ActionItem(Action::kCopyUrl, target),
+      ActionItem(Action::kCopyUrlMarkdown, target),
+    ]);
+  }
+
+  [target refreshKeysIn:main_menu];
+  [target observeMenuBar:main_menu];
+}
+
+void ExtendDockMenu(NSMenu* dock_menu) {
+  for (NSMenuItem* item in dock_menu.itemArray) {
+    if (item.tag == IDC_NEW_INCOGNITO_WINDOW) {
+      item.title = @"New Private Window";
+    }
+  }
+  // The Spaces of the window that was active last, to switch to; the Dock
+  // menu has no window to act on otherwise.
+  KoanBrowserViewController* controller = ActiveController();
+  if (!controller || !controller->workspaces()->IsEnabled()) {
+    return;
+  }
+  const auto spaces = controller->workspaces()->GetSpaces();
+  if (spaces.empty()) {
+    return;
+  }
+  [dock_menu addItem:[NSMenuItem separatorItem]];
+  for (size_t i = 0; i < spaces.size(); ++i) {
+    NSMenuItem* item =
+        [[NSMenuItem alloc] initWithTitle:SpaceTitle(spaces[i])
+                                   action:@selector(dockSwitchSpace:)
+                            keyEquivalent:@""];
+    item.target = [KoanMenuTarget shared];
+    item.tag = static_cast<NSInteger>(i);
+    item.state =
+        spaces[i].active ? NSControlStateValueOn : NSControlStateValueOff;
+    [dock_menu addItem:item];
+  }
+}
+
+std::vector<ui::Accelerator> ChromiumMacAccelerators() {
+  std::vector<ui::Accelerator> accelerators;
+  AcceleratorsCocoa* menu_keys = AcceleratorsCocoa::GetInstance();
+  for (auto it = menu_keys->begin(); it != menu_keys->end(); ++it) {
+    accelerators.push_back(it->second);
+  }
+  for (const KeyboardShortcutData& shortcut :
+       GetShortcutsNotPresentInMainMenu()) {
+    int modifiers = 0;
+    if (shortcut.command_key) {
+      modifiers |= ui::EF_COMMAND_DOWN;
+    }
+    if (shortcut.shift_key) {
+      modifiers |= ui::EF_SHIFT_DOWN;
+    }
+    if (shortcut.cntrl_key) {
+      modifiers |= ui::EF_CONTROL_DOWN;
+    }
+    if (shortcut.opt_key) {
+      modifiers |= ui::EF_ALT_DOWN;
+    }
+    accelerators.emplace_back(ui::KeyboardCodeFromKeyCode(shortcut.vkey_code),
+                              modifiers);
+  }
+  return accelerators;
+}
+
+}  // namespace koan
