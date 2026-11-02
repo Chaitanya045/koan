@@ -95,11 +95,15 @@ void KoanShortcutController::RegisterAccelerators() {
 #if BUILDFLAG(IS_MAC)
     // On macOS Chrome runs its menu shortcuts before normal priority
     // accelerators (ChromeCommandDispatcherDelegate's
-    // prePerformKeyEquivalent), and Zen's Space keys are Chrome's
-    // Cmd+Option+arrow tab switching there: those come first. (The other
-    // keys stay behind text fields and pages.)
+    // prePerformKeyEquivalent). Zen's Space keys are Chrome's
+    // Cmd+Option+arrow tab switching there, and the Library's History and
+    // Downloads keys (Cmd+Y, Cmd+Shift+H, Cmd+Shift+J) Chrome's History,
+    // Home and Downloads: those come first. (The other keys stay behind text
+    // fields and pages.)
     if (binding.action == Action::kWorkspaceForward ||
-        binding.action == Action::kWorkspaceBackward) {
+        binding.action == Action::kWorkspaceBackward ||
+        binding.action == Action::kLibraryHistory ||
+        binding.action == Action::kDownloads) {
       priority = ui::AcceleratorManager::kHighPriority;
     }
 #endif
@@ -256,7 +260,13 @@ bool KoanShortcutController::Run(Action action) {
       return true;
     case Action::kLibraryHistory:
       if (!library->IsAvailable()) {
+#if BUILDFLAG(IS_MAC)
+        // The key goes on to Chrome's menu (History, or Home for
+        // Cmd+Shift+H).
+        return false;
+#else
         return Command(IDC_SHOW_HISTORY);
+#endif
       }
       library->Toggle(LibrarySection::kHistory);
       return true;
@@ -272,7 +282,12 @@ bool KoanShortcutController::Run(Action action) {
       return Command(IDC_SHOW_BOOKMARK_SIDE_PANEL);
     case Action::kDownloads:
       if (!library->IsAvailable()) {
+#if BUILDFLAG(IS_MAC)
+        // The key goes on to Chrome's menu (Downloads).
+        return false;
+#else
         return Command(IDC_SHOW_DOWNLOADS);
+#endif
       }
       library->Toggle(LibrarySection::kDownloads);
       return true;

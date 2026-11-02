@@ -531,12 +531,6 @@ class KoanLibraryDownloadsSection
   }
   void OnDownloadUpdated(content::DownloadManager* manager,
                          download::DownloadItem* item) override {
-    // A download held back by a warning never opens by itself once the user
-    // keeps it (open-when-done may have been asked for before the verdict;
-    // Chrome's own UI never offers it on a warning).
-    if (IsBlocked(item) && item->GetOpenWhenComplete()) {
-      item->SetOpenWhenComplete(false);
-    }
     // Nothing to show while the library is closed; it catches up when it
     // opens. A row whose actions change (finished, file gone, can be
     // retried) is rebuilt; progress only repaints.
@@ -771,8 +765,6 @@ class KoanLibraryDownloadsSection
     std::u16string status;
     if (opening) {
       status = kOpeningInFolder;
-    } else if (pending && item->GetOpenWhenComplete() && !IsBlocked(item)) {
-      status = u"Opens when finished";
     } else {
       status = StatusText(item);
     }
@@ -895,16 +887,18 @@ class KoanLibraryDownloadsSection
     }
   }
 
-  // A click on a download still coming in opens it once it's here; on a
-  // finished one, shows it in the file manager (Zen's #onRowClick).
+  // A click on a finished download shows it in the file manager (Zen's
+  // #onRowClick); on one held back by a warning, opens Chrome's warning.
+  // Unlike Zen, a click on a download still coming in does nothing: the
+  // Library never sets it to open when done, since a verdict that comes
+  // later (with the Library long gone) would leave a dangerous file to open
+  // by itself once kept. A file opens only when the user opens it.
   void OnRowPressed(download::DownloadItem* item) {
     if (IsBlocked(item)) {
       ShowWarning(item);
       return;
     }
     if (IsPending(item)) {
-      item->SetOpenWhenComplete(!item->GetOpenWhenComplete());
-      UpdateRow(item);
       return;
     }
     if (!HasFile(item)) {

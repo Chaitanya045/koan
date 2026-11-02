@@ -22,8 +22,9 @@
 # scripts/e2e/<test>.mjs, and cleans up. Nothing appears on the desktop.
 #
 # PREFS=<json> seeds Default/Preferences instead (e.g.
-# '{"koan":{"urlbar":{"behavior":"float"}}}', {profile} as above). SHOTS=<dir> lets the test save
-# screenshots there (the window's off-screen frames go to $SHOTS/frames).
+# '{"koan":{"urlbar":{"behavior":"float"}}}', {profile} as above).
+# SHOTS=<dir> lets the test save screenshots there (the window's off-screen
+# frames go to $SHOTS/frames).
 # KEEP_LOG=<file> keeps the browser's log there.
 set -euo pipefail
 

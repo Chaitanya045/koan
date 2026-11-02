@@ -415,11 +415,12 @@ with three sections down its side, and opens on the one you used last:
   Hover or focus a row for cancel / retry / show in folder and **⋯** (open,
   cancel, retry, copy the file or its link, remove from the list, delete
   the file after asking); right-click or the menu key opens the same menu.
-  Click a download in progress to open it when it's done, a finished one to
-  show it in the file manager. A download Chrome warns about (dangerous or
+  Click a finished download to show it in the file manager, or open it from
+  **⋯** (a download in progress isn't set to open when done: a file only
+  opens when you open it). A download Chrome warns about (dangerous or
   insecure) is never opened from here: clicking it shows Chrome's warning,
-  where you keep or delete it. While anything downloads, the Downloads tab shows a
-  progress ring. Right-click the Downloads tab to clear the list or open
+  where you keep or delete it. While anything downloads, the Downloads tab
+  shows a progress ring. Right-click the Downloads tab to clear the list or open
   `chrome://downloads`.
 - **Spaces**: a card per Space with its tabs, tinted with its theme. Click
   the name to rename it, the icon for the Spaces' emoji picker, the brush

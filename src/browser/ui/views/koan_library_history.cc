@@ -425,7 +425,12 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       exhausted_ = pool_.empty();
     }
     if (append) {
-      Append(std::move(entries));
+      // A page of nothing but pages already listed (older visits to them)
+      // changes nothing on screen, so no scroll would ask for the next one:
+      // ask now.
+      if (Append(std::move(entries)) == 0 && !exhausted_) {
+        FetchMore();
+      }
     } else {
       Show(std::move(entries));
     }
@@ -506,8 +511,10 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
 
   // Adds `entries` (older than those shown) to the list, in the groups of
-  // the sort order. Pages a page before already showed are skipped.
-  void Append(std::vector<Entry> entries) {
+  // the sort order. Pages a page before already showed are skipped. Returns
+  // how many rows it added.
+  size_t Append(std::vector<Entry> entries) {
+    const size_t before = entries_.size();
     const bool per_day = PerDay();
     for (Entry& entry : entries) {
       if (!entry.closed_id &&
@@ -521,6 +528,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       entries_.push_back(std::move(entry));
     }
     InvalidateLayout();
+    return entries_.size() - before;
   }
 
   // The group `entry` goes in: its day (By Date), its site (By Site, sites

@@ -743,11 +743,15 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     }
     renaming_space_ = id;
     Rebuild();
-    renaming_ = true;
-    if (rename_field_) {
-      rename_field_->SelectAll(false);
-      rename_field_->RequestFocus();
+    // No field if the Space has gone meanwhile: then nothing is being
+    // renamed (Rebuild() and Esc would otherwise wait for it for good).
+    if (!rename_field_) {
+      renaming_space_.reset();
+      return;
     }
+    renaming_ = true;
+    rename_field_->SelectAll(false);
+    rename_field_->RequestFocus();
   }
 
   void OnRenamed(const tab_groups::TabGroupId& id,
@@ -873,6 +877,8 @@ MoveHandle::MoveHandle(KoanLibrarySpacesSection* section, int index)
       std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
   SetTooltipText(u"Drag to reorder");
   GetViewAccessibility().SetName(u"Drag to reorder");
+  // A mouse handle: out of the tab order, since a key on it does nothing.
+  SetFocusBehavior(FocusBehavior::NEVER);
 }
 
 bool MoveHandle::OnMousePressed(const ui::MouseEvent& event) {

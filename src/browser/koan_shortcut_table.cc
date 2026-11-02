@@ -172,12 +172,14 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_L, kAlt | kShift, Action::kLibrary),
   // Firefox's history keys, which Zen sends to the Library's History:
   // Ctrl+H and Ctrl+Shift+H, on macOS Cmd+Shift+H and Cmd+Y (Cmd+H hides
-  // the app there). Without the Library they open Chrome's History.
-  // TODO(#51): check on a Mac by hand. Cmd+Y, Cmd+Shift+H and Cmd+Shift+J
-  // are also Chrome menu key equivalents, and Cocoa's pre-dispatch offers
-  // the FocusManager only high-priority accelerators: check each key opens
-  // and closes the Library from a page, from the Library's own search field
-  // and from the omnibox, and that the menu items don't run as well.
+  // the app there). Without the Library they do what Chrome does.
+  // Cmd+Y, Cmd+Shift+H and Cmd+Shift+J are also Chrome menu key equivalents,
+  // so KoanShortcutController registers these actions at high priority on
+  // macOS (see RegisterAccelerators()).
+  // TODO(#51): check on a Mac by hand that each key opens and closes the
+  // Library from a page, from the Library's own search field and from the
+  // omnibox, that the menu items don't run as well, and that without a
+  // Library (private window) the menu's History, Home and Downloads run.
 #if BUILDFLAG(IS_MAC)
       bind(ui::VKEY_H, kAccel | kShift, Action::kLibraryHistory),
       bind(ui::VKEY_Y, kAccel, Action::kLibraryHistory),

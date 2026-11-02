@@ -6,6 +6,7 @@
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
 //   Zen's theme stylesheets (colour values)
 //   zen-workspaces.css (the Spaces' colour values)
+//   zen-library.css (the Library's colour values)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 

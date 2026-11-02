@@ -30,7 +30,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/webui/resources/koan_settings.js` | `zen-preferences.ftl` (strings) |
 | `src/browser/ui/views/koan_pinned_tabs.cc` | `ZenPinnedTabManager.mjs`, `zen-general.ftl` (strings) |
 | `src/browser/ui/views/koan_sidebar_metrics.h` | Zen's sidebar, toolbar and URL bar stylesheets (sizes, shadows), `zen-workspaces.css` (Space sizes) |
-| `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values), `zen-workspaces.css` (Space colours) |
+| `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values), `zen-workspaces.css` (Space colours), `zen-library.css` (Library colours) |
 | `src/browser/ui/views/koan_space_menu.cc` | `ZenSpaceManager.mjs` (the Space and Create menus), `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_space_creation.cc` | `ZenSpaceCreation.mjs`, `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_library.h`, `koan_library_controller.cc` | `ZenLibrary.mjs` (open/close spring, toggle, unmounting) |
