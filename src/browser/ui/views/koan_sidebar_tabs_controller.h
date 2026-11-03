@@ -53,6 +53,10 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // button and Ctrl+Shift+K both go through it). Only with Koan's sidebar on.
   void ShowTabsClosedToast();
 
+  // Draws the "+ New Tab" row as selected while the URL bar is open instead
+  // of a new tab, as Zen does.
+  void SetNewTabSelected(bool selected);
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,

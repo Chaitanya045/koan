@@ -204,6 +204,15 @@ class KoanNewTabRow : public views::Button {
                                                   SidebarRowCornerRadius());
   }
 
+  // Whether the row is drawn as the selected one, like Zen's while its URL
+  // bar is open instead of a new tab.
+  void SetSelected(bool selected) {
+    if (selected_ != selected) {
+      selected_ = selected;
+      SchedulePaint();
+    }
+  }
+
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
@@ -212,7 +221,12 @@ class KoanNewTabRow : public views::Button {
 
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
+    if (selected_) {
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setColor(provider->GetColor(kColorKoanSidebarTabSelected));
+      canvas->DrawRoundRect(GetLocalBounds(), SidebarRowCornerRadius(), flags);
+    } else if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
       flags.setColor(provider->GetColor(GetState() == STATE_PRESSED
@@ -238,6 +252,9 @@ class KoanNewTabRow : public views::Button {
           LeadingTextAlignment());
     }
   }
+
+ private:
+  bool selected_ = false;
 };
 
 BEGIN_METADATA(KoanNewTabRow)
@@ -406,10 +423,12 @@ class KoanSidebarTabRowsView : public views::View {
                          base::RepeatingCallback<std::u16string()> tooltip) {
     clear_row_ = AddChildView(std::make_unique<KoanClearTabsRow>(
         std::move(clear), std::move(tooltip)));
-    AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
+    new_tab_row_ =
+        AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
   }
 
   KoanClearTabsRow* clear_row() { return clear_row_; }
+  KoanNewTabRow* new_tab_row() { return new_tab_row_; }
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -445,6 +464,7 @@ class KoanSidebarTabRowsView : public views::View {
 
  private:
   raw_ptr<KoanClearTabsRow> clear_row_ = nullptr;
+  raw_ptr<KoanNewTabRow> new_tab_row_ = nullptr;
 };
 
 BEGIN_METADATA(KoanSidebarTabRowsView)
@@ -782,6 +802,12 @@ void KoanSidebarTabsController::UpdateClearRow() {
   // closed or because none can (then it closes them all).
   rows_->clear_row()->button()->SetShowIcon(closable == unpinned.size() ||
                                             closable == 0);
+}
+
+void KoanSidebarTabsController::SetNewTabSelected(bool selected) {
+  if (rows_) {
+    rows_->new_tab_row()->SetSelected(selected);
+  }
 }
 
 void KoanSidebarTabsController::OpenNewTab() {
