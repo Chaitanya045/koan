@@ -5,7 +5,6 @@
 #include "koan/browser/ui/webui/koan_welcome_handler.h"
 
 #include <algorithm>
-#include <array>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,38 +22,21 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/tabs/tab_group_theme.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/tab_groups/tab_group_color.h"
 #include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
-#include "third_party/skia/include/core/SkColor.h"
-#include "ui/base/mojom/themes.mojom.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/color_utils.h"
 #include "url/gurl.h"
 
 namespace koan {
 
 namespace {
-
-// The colours page's choices (the native screen's): Koan tints with one
-// colour where Zen has a gradient picker.
-struct SpaceColor {
-  SkColor color;
-  const char* name;
-};
-constexpr auto kSpaceColors = std::to_array<SpaceColor>({
-    {SkColorSetRGB(0xd9, 0x6c, 0x4f), "Coral"},
-    {SkColorSetRGB(0xe0, 0xa1, 0x3a), "Amber"},
-    {SkColorSetRGB(0x6f, 0xa8, 0x55), "Green"},
-    {SkColorSetRGB(0x3e, 0x9d, 0x92), "Teal"},
-    {SkColorSetRGB(0x4f, 0x86, 0xd9), "Blue"},
-    {SkColorSetRGB(0x7a, 0x6c, 0xe0), "Violet"},
-    {SkColorSetRGB(0xb4, 0x5f, 0xc9), "Purple"},
-    {SkColorSetRGB(0xd9, 0x5f, 0x93), "Pink"},
-    {SkColorSetRGB(0x8a, 0x8f, 0x98), "Grey"},
-});
 
 // Zen's search page leaves out Wikipedia and eBay (ZenWelcome.mjs).
 bool IsExcludedEngine(const std::u16string& name) {
@@ -81,10 +63,12 @@ void KoanWelcomeHandler::RegisterMessages() {
   add("getWelcomeData", &KoanWelcomeHandler::HandleGetWelcomeData);
   add("import", &KoanWelcomeHandler::HandleImport);
   add("setColor", &KoanWelcomeHandler::HandleSetColor);
+  add("setColorScheme", &KoanWelcomeHandler::HandleSetColorScheme);
   add("setSearchEngine", &KoanWelcomeHandler::HandleSetSearchEngine);
   add("setDefaultBrowser", &KoanWelcomeHandler::HandleSetDefaultBrowser);
   add("finish", &KoanWelcomeHandler::HandleFinish);
   add("skip", &KoanWelcomeHandler::HandleSkip);
+  add("startWindowDrag", &KoanWelcomeHandler::HandleStartWindowDrag);
 }
 
 void KoanWelcomeHandler::HandleGetWelcomeData(const base::ListValue& args) {
@@ -122,12 +106,18 @@ void KoanWelcomeHandler::OnImportSourcesLoaded(base::Value callback_id) {
                        .Set("profiles", std::move(profiles)));
   }
 
+  // The colours page: a Space's colours (Koan's Spaces take one of the tab
+  // group colours, until #41's gradients), in the window's shades of them.
   base::ListValue colors;
-  for (const SpaceColor& color : kSpaceColors) {
-    colors.Append(base::DictValue()
-                      .Set("name", color.name)
-                      .Set("value", color_utils::SkColorToRgbaString(
-                                        SkColorSetA(color.color, 0xff))));
+  const ui::ColorProvider& provider =
+      web_ui()->GetWebContents()->GetColorProvider();
+  for (const auto& [id, label] : tab_groups::GetTabGroupColorLabelMap()) {
+    colors.Append(
+        base::DictValue()
+            .Set("id", static_cast<int>(id))
+            .Set("name", label)
+            .Set("value", color_utils::SkColorToRgbaString(provider.GetColor(
+                              GetTabGroupTabStripColorId(id, true)))));
   }
 
   int default_engine = 0;
@@ -182,20 +172,29 @@ void KoanWelcomeHandler::HandleImport(const base::ListValue& args) {
 }
 
 void KoanWelcomeHandler::HandleSetColor(const base::ListValue& args) {
+  if (args.empty() || !args[0].is_int()) {
+    return;
+  }
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().space_color) {
+    host->callbacks().space_color.Run(args[0].GetInt());
+  }
+}
+
+void KoanWelcomeHandler::HandleSetColorScheme(const base::ListValue& args) {
+  // The picker's auto / light / dark buttons.
   if (args.empty() || !args[0].is_string()) {
     return;
   }
-  const std::string& value = args[0].GetString();
-  for (const SpaceColor& color : kSpaceColors) {
-    if (color_utils::SkColorToRgbaString(SkColorSetA(color.color, 0xff)) ==
-        value) {
-      if (ThemeService* theme = ThemeServiceFactory::GetForProfile(profile_)) {
-        theme->SetUserColorAndBrowserColorVariant(
-            color.color, ui::mojom::BrowserColorVariant::kTonalSpot);
-      }
-      return;
-    }
+  const std::string& scheme = args[0].GetString();
+  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile_);
+  if (!theme) {
+    return;
   }
+  theme->SetBrowserColorScheme(
+      scheme == "light"  ? ThemeService::BrowserColorScheme::kLight
+      : scheme == "dark" ? ThemeService::BrowserColorScheme::kDark
+                         : ThemeService::BrowserColorScheme::kSystem);
 }
 
 void KoanWelcomeHandler::HandleSetSearchEngine(const base::ListValue& args) {
@@ -229,6 +228,13 @@ void KoanWelcomeHandler::HandleFinish(const base::ListValue& args) {
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().finish) {
     host->callbacks().finish.Run(std::move(essentials));
+  }
+}
+
+void KoanWelcomeHandler::HandleStartWindowDrag(const base::ListValue& args) {
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().window_drag) {
+    host->callbacks().window_drag.Run();
   }
 }
 

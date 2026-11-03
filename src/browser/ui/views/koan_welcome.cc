@@ -38,14 +38,18 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/tab_groups/tab_group_color.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_welcome_icons_data.h"
+#include "koan/browser/ui/views/koan_welcome_mac.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_welcome.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
 #include "koan/common/koan_url_constants.h"
@@ -59,6 +63,7 @@
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/screen.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
@@ -2330,40 +2335,64 @@ void KoanWelcome::MaybeShow() {
 }
 
 void KoanWelcome::Show() {
+  web_ui_ = features::IsWelcomeWebUIEnabled();
+  views::Widget* window = browser_view_->GetWidget();
+  if (web_ui_) {
+    // Zen's first window: min(1200, available) x min(720, available),
+    // centred, and it stays that size after the welcome (zen-mac-spec 1.2).
+    const gfx::Rect work_area =
+        display::Screen::Get()
+            ->GetDisplayNearestWindow(window->GetNativeWindow())
+            .work_area();
+    gfx::Rect bounds(work_area);
+    bounds.ClampToCenteredSize(
+        gfx::Size(std::min(kWelcomeWindowWidth, work_area.width()),
+                  std::min(kWelcomeWindowHeight, work_area.height())));
+    if (window->IsMaximized() || window->IsFullscreen()) {
+      window->Restore();
+    }
+    window->SetBounds(bounds);
+    // No window buttons while it shows, as in Zen.
+    SetWindowButtonsHidden(window, true);
+  }
 #if BUILDFLAG(IS_MAC)
-  // The first window opens filling the screen, for the welcome and after.
-  if (!browser_view_->GetWidget()->IsMaximized()) {
-    browser_view_->GetWidget()->Maximize();
+  // The native screen: the first window opens filling the screen.
+  if (!web_ui_ && !window->IsMaximized()) {
+    window->Maximize();
   }
 #endif
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_CONTROL);
-  params.parent = browser_view_->GetWidget()->GetNativeView();
+  params.parent = window->GetNativeView();
   // The card's rounded corners and shadow show the scrim behind them.
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.name = "KoanWelcome";
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
 #if BUILDFLAG(IS_MAC)
-  views::Widget::InitParams title_bar_params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
-      views::Widget::InitParams::TYPE_CONTROL);
-  title_bar_params.parent = browser_view_->GetWidget()->GetNativeView();
-  title_bar_params.opacity =
-      views::Widget::InitParams::WindowOpacity::kTranslucent;
-  title_bar_params.activatable = views::Widget::InitParams::Activatable::kNo;
-  title_bar_params.name = "KoanWelcomeTitleBar";
-  title_bar_widget_ = std::make_unique<views::Widget>();
-  title_bar_widget_->Init(std::move(title_bar_params));
-  title_bar_widget_->SetContentsView(
-      std::make_unique<KoanWelcomeTitleBarArea>(browser_view_));
-  title_bar_corner_ = browser_view_->AddChildView(
-      std::make_unique<KoanWelcomeTitleBarArea>(browser_view_));
-  title_bar_corner_->SetPaintToLayer();
-  title_bar_corner_->layer()->SetFillsBoundsOpaquely(false);
+  // The native screen also covers the title bar row around the traffic
+  // lights (the WebUI one hides them and covers it all).
+  if (!web_ui_) {
+    views::Widget::InitParams title_bar_params(
+        views::Widget::InitParams::CLIENT_OWNS_WIDGET,
+        views::Widget::InitParams::TYPE_CONTROL);
+    title_bar_params.parent = window->GetNativeView();
+    title_bar_params.opacity =
+        views::Widget::InitParams::WindowOpacity::kTranslucent;
+    title_bar_params.activatable = views::Widget::InitParams::Activatable::kNo;
+    title_bar_params.name = "KoanWelcomeTitleBar";
+    title_bar_widget_ = std::make_unique<views::Widget>();
+    title_bar_widget_->Init(std::move(title_bar_params));
+    title_bar_widget_->SetContentsView(
+        std::make_unique<KoanWelcomeTitleBarArea>(browser_view_));
+    title_bar_corner_ = browser_view_->AddChildView(
+        std::make_unique<KoanWelcomeTitleBarArea>(browser_view_));
+    title_bar_corner_->SetPaintToLayer();
+    title_bar_corner_->layer()->SetFillsBoundsOpaquely(false);
+  }
 #endif
-  if (features::IsWelcomeWebUIEnabled()) {
+  if (web_ui_) {
     ShowWebUI();
   } else {
     auto* view =
@@ -2420,16 +2449,43 @@ void KoanWelcome::ShowWebUI() {
       weak_factory_.GetWeakPtr());
   callbacks.skip =
       base::BindRepeating(&KoanWelcome::Skip, weak_factory_.GetWeakPtr());
+  callbacks.window_drag = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome) {
+        // Zen's surface outside the card drags the window: the page saw the
+        // press; the window follows the pointer until the button goes up.
+        views::Widget* window =
+            welcome ? welcome->browser_view_->GetWidget() : nullptr;
+        if (!window || !window->IsMoveLoopSupported()) {
+          return;
+        }
+        const gfx::Vector2d offset =
+            display::Screen::Get()->GetCursorScreenPoint() -
+            window->GetWindowBoundsInScreen().origin();
+        window->RunMoveLoop(offset, views::Widget::MoveLoopSource::kMouse,
+                            views::Widget::MoveLoopEscapeBehavior::kDontHide);
+      },
+      weak_factory_.GetWeakPtr());
+  callbacks.space_color = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome, int color_id) {
+        KoanBrowserViewController* controller =
+            welcome ? KoanBrowserViewController::From(welcome->browser_view_)
+                    : nullptr;
+        KoanWorkspaceController* spaces =
+            controller ? controller->workspaces() : nullptr;
+        const auto color = static_cast<tab_groups::TabGroupColorId>(color_id);
+        if (!spaces || !spaces->IsEnabled() ||
+            !tab_groups::GetTabGroupColorLabelMap().contains(color)) {
+          return;
+        }
+        // Zen's picker edits the active Space live (the window behind).
+        if (const std::optional<tab_groups::TabGroupId> space =
+                spaces->GetActiveSpace()) {
+          spaces->SetSpaceTheme(
+              *space, KoanWorkspaceController::SpaceTheme{.color = color});
+        }
+      },
+      weak_factory_.GetWeakPtr());
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
-  // The title bar row (macOS) above the page's video takes its top edge.
-  for (views::View* part :
-       {title_bar_widget_ ? title_bar_widget_->GetContentsView() : nullptr,
-        title_bar_corner_.get()}) {
-    if (part) {
-      static_cast<KoanWelcomeTitleBarArea*>(part)->SetColor(
-          kWelcomeVideoTopColor);
-    }
-  }
   web_view->LoadInitialURL(GURL(kWelcomeURL));
   views::WebView* view = widget_->SetContentsView(std::move(web_view));
   LayoutWidget();
@@ -2525,6 +2581,9 @@ void KoanWelcome::Close() {
   if (widget_ && !widget_->IsClosed()) {
     widget_->CloseNow();
   }
+  if (widget_ && web_ui_) {
+    SetWindowButtonsHidden(browser_view_->GetWidget(), false);
+  }
   widget_.reset();
   if (title_bar_widget_ && !title_bar_widget_->IsClosed()) {
     title_bar_widget_->CloseNow();
@@ -2540,6 +2599,11 @@ void KoanWelcome::LayoutWidget() {
     return;
   }
   gfx::Rect bounds = browser_view_->GetLocalBounds();
+  if (web_ui_) {
+    // All of it: the traffic lights are hidden while it shows.
+    widget_->SetBounds(browser_view_->ConvertRectToWidget(bounds));
+    return;
+  }
 #if BUILDFLAG(IS_MAC)
   // All of the window, the title bar row included, but the traffic lights,
   // which stay above the screen and usable: the screen below the row, the

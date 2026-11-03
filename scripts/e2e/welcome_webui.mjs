@@ -42,6 +42,10 @@ check('...over the whole window', overlay && frame && overlay.w === frame.w && o
       `${overlay?.w}x${overlay?.h} of ${frame?.w}x${frame?.h}`);
 check('...with Zen\'s title', (await js(`document.getElementById('zen-welcome-title').textContent`))
       === 'Welcome toa calmer internet');
+check('The window is Zen\'s first-run size, 1200 wide (the screen is 1280x800)',
+      frame?.w === 1200, `${frame?.w}x${frame?.h}`);
+check('Zen\'s 11px root, which its rem sizes are of',
+      await js(`getComputedStyle(document.documentElement).fontSize`) === '11px');
 await sleep(3500);
 saveShot('webui-start');
 check('The start button has the keyboard',
@@ -50,13 +54,23 @@ await click('#zen-welcome-start-button');
 await sleep(600);
 
 check('Start shows the import page', await heading() === 'Bring your stuff along.', await heading());
+const card = await js(`(() => { const r = document.getElementById('zen-welcome-pages')
+    .getBoundingClientRect(); return [r.width / innerWidth, r.height / innerHeight]; })()`);
+check('...in Zen\'s 86% x 82% card', Math.abs(card[0] - 0.86) < 0.01 &&
+      Math.abs(card[1] - 0.82) < 0.01, card.join(' x '));
+check('...titled at Zen\'s 33px / 700', await js(
+    `(s => s.fontSize + ' ' + s.fontWeight)(getComputedStyle(` +
+    `document.querySelector('.zen-welcome-text h1')))`) === '33px 700');
 check('...with "NO, start fresh." chosen first', (await checkedName())?.startsWith('NO'),
       await checkedName());
 saveShot('webui-import');
 await next();
 
 check('Next: colours', await heading() === 'Your space, your colors.', await heading());
-check('...nine of them', await js(`document.querySelectorAll('.zen-welcome-color').length`) === 9);
+check('...the theme picker\'s panel with nine colours', await js(
+    `document.querySelectorAll('.zen-welcome-theme-picker .zen-welcome-color').length`) === 9);
+check('...and its auto / light / dark buttons', await js(
+    `document.querySelectorAll('.zen-theme-picker-scheme input').length`) === 3);
 await click('.zen-welcome-color:nth-child(5) input');
 check('...a click picks one', await js(
     `document.querySelector('input[name=zen-welcome-color]:checked')?.value`) !== undefined);

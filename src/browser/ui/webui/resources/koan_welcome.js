@@ -89,86 +89,27 @@ const gChoices = {
   essentials: new Set(),
 };
 
-// ---- Motion: Zen's motion.animate() on the Web Animations API.
+// ---- Motion: Zen's motion library (zen-vendor/motion.min.mjs, a UMD
+// bundle loaded before this module), so the springs are Zen's own. With
+// reduced motion everything lands at once.
 
 const kReducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const {animate: motionAnimate, stagger} = globalThis.Motion;
 
-// Zen's springs, as an ease with a little overshoot; its "easeIn" and
-// "easeOut".
-const kEasings = {
-  spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-  easeIn: 'cubic-bezier(0.42, 0, 1, 1)',
-  easeOut: 'cubic-bezier(0, 0, 0.58, 1)',
-};
-
-function stagger(step, {startDelay = 0} = {}) {
-  return index => startDelay + step * index;
+function animate(targets, keyframes, options = {}) {
+  return motionAnimate(
+      targets, keyframes, kReducedMotion.matches ? {duration: 0} : options);
 }
 
-// animate(targets, {opacity: [from, to], x: [...], y: [...], filter: [...]},
-// {duration | visualDuration (seconds), delay (seconds or stagger), type,
-// ease}) returns a promise that settles when every target is done.
-function animate(targets, values, options = {}) {
-  const elements = typeof targets === 'string' ?
-      [...document.querySelectorAll(targets)] :
-      targets instanceof Element ? [targets] : [...targets];
-  const seconds = options.visualDuration ?? options.duration ?? 0.3;
-  const easing = options.type === 'spring' ?
-      kEasings.spring :
-      kEasings[options.ease] ?? kEasings.easeOut;
-  const frames = [{}, {}];
-  for (const [property, range] of Object.entries(values)) {
-    const [from, to] = Array.isArray(range) ? range : [undefined, range];
-    if (property === 'x' || property === 'y') {
-      const axis = property === 'x' ? 'X' : 'Y';
-      if (from !== undefined) {
-        frames[0].translate = `${axis === 'X' ? from : 0}px ${axis === 'Y' ? from : 0}px`;
-      }
-      frames[1].translate = `${axis === 'X' ? to : 0}px ${axis === 'Y' ? to : 0}px`;
-    } else {
-      if (from !== undefined) {
-        frames[0][property] = from;
-      }
-      frames[1][property] = to;
-    }
-  }
-  if (!Object.keys(frames[0]).length) {
-    frames.shift();
-  }
-  return Promise.all(elements.map((element, index) => {
-    const delay = typeof options.delay === 'function' ?
-        options.delay(index) :
-        options.delay ?? 0;
-    const animation = element.animate(frames, {
-      duration: kReducedMotion.matches ? 0 : seconds * 1000,
-      delay: kReducedMotion.matches ? 0 : delay * 1000,
-      easing,
-      fill: 'forwards',
-    });
-    return animation.finished.catch(() => {});
-  }));
-}
-
-// Zen's background video. A WebUI data source serves no byte ranges, which
-// looping needs: the page plays it from a blob.
-async function playVideoBackground() {
-  const video = document.getElementById('zen-welcome-video');
-  try {
-    const response = await fetch('/welcome-background.mp4');
-    video.src = URL.createObjectURL(await response.blob());
-    await video.play();
-  } catch {}
-}
-
+// Zen's background video (drawn by koan_welcome.css), faded out when the
+// colours page shows, as Zen does.
 function removeVideoBackground() {
   const video = document.getElementById('zen-welcome-video');
   if (!video) {
     return;
   }
-  animate(video, {opacity: 0}, {duration: 0.6, ease: 'easeOut'}).then(() => {
-    video.pause();
-    video.remove();
-  });
+  animate(video, {opacity: 0}, {duration: 0.6, ease: 'easeOut'})
+      .then(() => video.remove());
 }
 
 const kSpring = {type: 'spring', bounce: 0.35, visualDuration: 0.35};
@@ -295,6 +236,16 @@ function jumpToLetter(items, from, key) {
   }
   return null;
 }
+
+// Zen's surface drags the window (-moz-window-dragging: drag) but its card
+// (no-drag): a press outside the card and its controls moves the window.
+document.addEventListener('mousedown', event => {
+  if (event.button !== 0 ||
+      event.target.closest('#zen-welcome-pages, button, input, label, a')) {
+    return;
+  }
+  chrome.send('startWindowDrag');
+});
 
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
@@ -497,10 +448,79 @@ class KoanWelcomePages {
     ++this.#buttonsToken;
     this.buttonsContainer.replaceChildren();
     this.backButton.toggleAttribute('disabled', true);
-    await animate('#zen-welcome', {opacity: [1, 0]}, {duration: 0.3});
+    await animate('#zen-welcome', {opacity: [1, 0]});
     // Koan closes the screen and pins the Essentials (KoanWelcome).
     chrome.send('finish', [[...gChoices.essentials]]);
   }
+}
+
+// The colours page's panel, where Zen opens its theme picker
+// (ZenGradientGenerator.mjs; #41 brings it to Koan): the dot pad with its
+// "Click to add a color" and the auto / light / dark buttons, and a row of
+// colours. Koan's Spaces have one colour each (a tab group colour) until
+// #41's gradients: picking one sets the active Space's, live.
+const kSchemeIcons = {
+  auto: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.5"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/>',
+  light: '<circle cx="8" cy="8" r="3" fill="currentColor"/><path ' +
+      'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
+      'd="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1' +
+      'M12 4l1-1"/>',
+  dark: '<path fill="currentColor" d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 ' +
+      '7z"/>',
+};
+
+function createThemePicker(colors) {
+  const panel = document.createElement('div');
+  panel.className = 'zen-welcome-theme-picker';
+  const pad = document.createElement('div');
+  pad.className = 'zen-theme-picker-gradient';
+  const hint = document.createElement('span');
+  hint.className = 'zen-theme-picker-click-to-add';
+  hint.textContent = 'Click to add a color';
+  const schemes = document.createElement('div');
+  schemes.className = 'zen-theme-picker-scheme';
+  schemes.setAttribute('role', 'radiogroup');
+  schemes.setAttribute('aria-label', 'Appearance');
+  for (const scheme of ['auto', 'light', 'dark']) {
+    const label = document.createElement('label');
+    label.title = scheme[0].toUpperCase() + scheme.slice(1);
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'zen-theme-picker-scheme';
+    input.value = scheme;
+    input.checked = scheme === 'auto';
+    input.setAttribute('aria-label', label.title);
+    input.addEventListener('change', () => chrome.send('setColorScheme', [scheme]));
+    label.innerHTML =
+        `<svg viewBox="0 0 16 16" aria-hidden="true">${kSchemeIcons[scheme]}</svg>`;
+    label.prepend(input);
+    schemes.appendChild(label);
+  }
+  pad.append(hint, schemes);
+  const row = document.createElement('div');
+  row.className = 'zen-theme-picker-colors';
+  row.setAttribute('role', 'radiogroup');
+  row.setAttribute('aria-label', 'Colors');
+  for (const color of colors) {
+    const label = document.createElement('label');
+    label.className = 'zen-welcome-color';
+    label.title = color.name;
+    label.style.setProperty('--zen-welcome-swatch', color.value);
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'zen-welcome-color';
+    input.value = color.id;
+    input.setAttribute('aria-label', color.name);
+    const name = document.createElement('span');
+    name.className = 'zen-welcome-color-name';
+    name.textContent = color.name;
+    label.append(input, name);
+    input.addEventListener('change', () => chrome.send('setColor', [color.id]));
+    row.appendChild(label);
+  }
+  panel.append(pad, row);
+  return panel;
 }
 
 // ---- Zen's pages, without the ad blocker page: Zen skips it when it can't
@@ -557,29 +577,7 @@ function getWelcomePages(data) {
       // a panel of its colours in the picker's place.
       render(content) {
         removeVideoBackground();
-        const panel = document.createElement('div');
-        panel.className = 'zen-welcome-colors-panel';
-        panel.setAttribute('role', 'radiogroup');
-        panel.setAttribute('aria-label', 'Colors');
-        for (const color of data.colors) {
-          const label = document.createElement('label');
-          label.className = 'zen-welcome-color';
-          label.title = color.name;
-          label.style.setProperty('--zen-welcome-swatch', color.value);
-          const input = document.createElement('input');
-          input.type = 'radio';
-          input.name = 'zen-welcome-color';
-          input.value = color.value;
-          input.setAttribute('aria-label', color.name);
-          const name = document.createElement('span');
-          name.className = 'zen-welcome-color-name';
-          name.textContent = color.name;
-          label.append(input, name);
-          input.addEventListener(
-              'change', () => chrome.send('setColor', [color.value]));
-          panel.appendChild(label);
-        }
-        content.appendChild(panel);
+        content.appendChild(createThemePicker(data.colors));
       },
     },
     {
@@ -738,12 +736,11 @@ async function animateInitialStage(data) {
   });
   await animate(
       button, {opacity: [0, 1], y: [20, 0], filter: ['blur(2px)', 'blur(0px)']},
-      {delay: 0.1, type: 'spring', visualDuration: 0.5});
+      {delay: 0.1, type: 'spring', stiffness: 300, damping: 20, mass: 1.8});
 }
 
 async function start() {
   setText(document.getElementById('zen-welcome-back'), 'zen-welcome-back');
-  playVideoBackground();
   const data = await sendWithPromise('getWelcomeData');
   animateInitialStage(data);
 }

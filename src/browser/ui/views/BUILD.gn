@@ -131,6 +131,7 @@ source_set("impl") {
     "koan_space_menu.cc",
     "koan_space_menu.h",
     "koan_welcome.cc",
+    "koan_welcome_mac.h",
     "koan_welcome.h",
     "koan_window_controls.cc",
     "koan_window_controls.h",
@@ -325,5 +326,10 @@ source_set("impl") {
       "//ui/platform_window",
       "//ui/platform_window/wm",
     ]
+  }
+  if (is_mac) {
+    # The welcome screen hides the traffic lights, as Zen's does.
+    sources += [ "koan_welcome_mac.mm" ]
+    frameworks = [ "AppKit.framework" ]
   }
 }

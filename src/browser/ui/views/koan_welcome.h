@@ -96,6 +96,8 @@ class KoanWelcome {
   raw_ptr<views::View> title_bar_corner_ = nullptr;
   // Finish() ran: the screen is fading out, its choices about to apply.
   bool finishing_ = false;
+  // The screen is chrome://koan-welcome (koan-welcome-webui).
+  bool web_ui_ = false;
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

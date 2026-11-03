@@ -268,6 +268,10 @@ inline constexpr int kWelcomeStartButtonGap = 28;
 // GetCaptionButtonBounds(): 10px + 18px + 10px since macOS 26, 11 + 16 + 11
 // before).
 inline constexpr int kWelcomeMacTitleBarHeight = 38;
+// Zen's first-run window (ZenWelcome.mjs centerWindowOnScreen): 1200 x 720
+// at most, centred; the WebUI welcome opens it so.
+inline constexpr int kWelcomeWindowWidth = 1200;
+inline constexpr int kWelcomeWindowHeight = 720;
 // The pages: a card 86% x 82% of the window (all of it below 1000px) with
 // 1.4rem corners; its sidebar 38% wide, padded 4rem 3.8rem 3.6rem, with the
 // back button, the title (3rem bold), the description (1.25rem, 1.6 high)

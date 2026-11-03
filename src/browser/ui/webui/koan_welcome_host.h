@@ -27,8 +27,12 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
 
     // Import from another browser (Chromium's import dialog), now.
     base::RepeatingClosure import;
+    // The colours page: the active Space's colour (a tab group colour).
+    base::RepeatingCallback<void(int color_id)> space_color;
     // "Dive in!": pin `essentials` and close the screen.
     base::RepeatingCallback<void(std::vector<GURL> essentials)> finish;
+    // A press outside the card: the window follows the pointer.
+    base::RepeatingClosure window_drag;
     // Esc: close the screen, applying nothing more.
     base::RepeatingClosure skip;
   };

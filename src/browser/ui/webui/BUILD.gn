@@ -32,7 +32,9 @@ source_set("webui") {
     "//chrome/browser/importer",
     "//chrome/browser/search_engines",
     "//chrome/browser/themes",
+    "//chrome/browser/ui/tabs",
     "//components/search_engines",
+    "//components/tab_groups",
     "//components/user_data_importer/common",
     "//services/network/public/mojom",
     "//url",
@@ -83,6 +85,7 @@ action("welcome_resources") {
     "resources/koan_welcome.js",
     "resources/welcome_media/back.svg",
     "resources/welcome_media/forward.svg",
+    "resources/welcome_media/motion.min.js",
     "resources/welcome_favicons/calendar.svg",
     "resources/welcome_favicons/discord.svg",
     "resources/welcome_favicons/figma.svg",
@@ -106,6 +109,8 @@ action("welcome_resources") {
         rebase_path("resources/welcome_media/back.svg", root_build_dir),
     "kKoanWelcomeForwardSvg=" +
         rebase_path("resources/welcome_media/forward.svg", root_build_dir),
+    "kKoanWelcomeMotionJs=" +
+        rebase_path("resources/welcome_media/motion.min.js", root_build_dir),
     "kKoanWelcomeFaviconCalendar=" +
         rebase_path("resources/welcome_favicons/calendar.svg", root_build_dir),
     "kKoanWelcomeFaviconDiscord=" +
@@ -127,13 +132,11 @@ action("welcome_resources") {
   ]
 }
 
-# Zen's welcome video (re-encoded: the same footage at 2% of the size) and
-# grain, as byte arrays (koan_welcome_media.h).
+# Zen's film grain, as bytes (koan_welcome_media.h).
 action("welcome_media") {
   script = "//koan/browser/ui/fonts/embed_binary.py"
   sources = [
     "resources/welcome_media/grain-bg.png",
-    "resources/welcome_media/welcome-background.mp4",
   ]
   outputs = [ "$target_gen_dir/koan_welcome_media.h" ]
   args = [
@@ -141,7 +144,5 @@ action("welcome_media") {
     rebase_path(outputs[0], root_build_dir),
     "kGrainBg=" +
         rebase_path("resources/welcome_media/grain-bg.png", root_build_dir),
-    "kVideo=" + rebase_path("resources/welcome_media/welcome-background.mp4",
-                            root_build_dir),
   ]
 }

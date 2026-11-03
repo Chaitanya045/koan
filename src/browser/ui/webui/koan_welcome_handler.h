@@ -37,10 +37,12 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
   void OnImportSourcesLoaded(base::Value callback_id);
   void HandleImport(const base::ListValue& args);
   void HandleSetColor(const base::ListValue& args);
+  void HandleSetColorScheme(const base::ListValue& args);
   void HandleSetSearchEngine(const base::ListValue& args);
   void HandleSetDefaultBrowser(const base::ListValue& args);
   void HandleFinish(const base::ListValue& args);
   void HandleSkip(const base::ListValue& args);
+  void HandleStartWindowDrag(const base::ListValue& args);
 
   base::ListValue SearchEngines() const;
 

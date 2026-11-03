@@ -67,8 +67,8 @@ void ServeResource(const std::string& path,
     data = kKoanWelcomeForwardSvg;
   } else if (path == "grain-bg.png") {
     data = std::string(base::as_string_view(welcome_media::kGrainBg));
-  } else if (path == "welcome-background.mp4") {
-    data = std::string(base::as_string_view(welcome_media::kVideo));
+  } else if (path == "motion.min.js") {
+    data = kKoanWelcomeMotionJs;
   } else if (path.starts_with("favicons/") && IsSvg(path)) {
     data = std::string(Favicon(std::string_view(path).substr(
         9, path.size() - 9 - std::string_view(".svg").size())));
@@ -92,13 +92,10 @@ KoanWelcomeUI::KoanWelcomeUI(content::WebUI* web_ui)
   source->SetRequestFilter(
       base::BindRepeating([](const std::string&) { return true; }),
       base::BindRepeating(&ServeResource));
-  // The engines' logos where a build bundles them (chrome://theme); Zen's
-  // video, played from a blob.
+  // The engines' logos where a build bundles them (chrome://theme).
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ImgSrc,
       "img-src chrome://theme 'self' data:;");
-  source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::MediaSrc, "media-src 'self' blob:;");
   web_ui->AddMessageHandler(std::make_unique<KoanWelcomeHandler>(profile));
 }
 
