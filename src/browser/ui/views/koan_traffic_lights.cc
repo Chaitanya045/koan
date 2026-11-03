@@ -43,11 +43,13 @@ std::optional<int> GetTrafficLightsTitlebarHeight(
   // strip for them is open, above the page (tabs on the right; see
   // ContentCardInsets()). Elsewhere the toolbar is the row they share with the
   // sidebar's, which is what Chromium centres them in. In compact mode with
-  // the sidebar hidden they come with the toolbar; in fullscreen Chromium
-  // slides them in with the menu bar.
+  // the sidebar hidden they come with the toolbar, or, with single toolbar,
+  // stay in the sidebar's header, which compact mode keeps; in fullscreen
+  // Chromium slides them in with the menu bar.
   if (!view || !features::IsSidebarEnabled() || !view->GetIsNormalType() ||
       !view->ShouldDrawVerticalTabStrip() || view->IsFullscreen() ||
-      IsCompactModeActive(view) || !IsToolbarHidden(view)) {
+      (IsCompactModeActive(view) && !KeepsSidebarNav(view)) ||
+      !IsToolbarHidden(view)) {
     return std::nullopt;
   }
   return GetHiddenToolbarRowHeight(GetCaptionButtonAreaSize(view).height());

@@ -100,6 +100,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
     return mode_ == Mode::kCompact && hide_sidebar_;
   }
   // Compact mode or single toolbar: the top toolbar takes no layout space.
+  // Compact mode with single toolbar: the sidebar is hidden but its header
+  // (toggle, navigation buttons) stays, in the window's top row.
+  bool keeps_sidebar_nav() const { return compact_keeps_sidebar_nav_; }
   bool hides_toolbar() const {
     return mode_ == Mode::kSingleToolbar ||
            (mode_ == Mode::kCompact && hide_toolbar_);
