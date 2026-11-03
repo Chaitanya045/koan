@@ -777,6 +777,19 @@ opens at the **top of the window overlapping the sidebar's right edge**;
 | Opacity slider | a **sine-wave** track 250 wide whose wave is cut off at the value, pill thumb (hover scale 1.1 over 0.5 s), 0.30 - 0.80, default 0.5 |
 | Texture knob | **66 x 66** round dial at the right of the slider (grain 0..1) |
 
+**Where the panel opens (measured, `picker-position.json`):** all three entry
+points (the Space's more-actions menu "Theme...", the sidebar context menu
+"Theme picker", the Spaces menu "Theme...") run `cmd_zenOpenZenThemePicker`
+-> `openThemePicker`, which anchors the panel to **`#TabsToolbar`** (the
+sidebar's tab area, x 6 to sidebar-6, y 81 to window bottom-6), not to the
+toolbox or the URL bar, with position `topright topleft`, x -10, y 0 (y -160
+only from the Create-Space form's Edit Theme button). In window coordinates the
+panel's **left edge is sidebar width + 7** (sidebar 262 -> x 269, 230 -> 237)
+and it is **vertically centred on `#TabsToolbar`** (top = 81 + (tab-area height
+- 514) / 2: 141 in a 720 pt high window, 242 in a 923 pt one); there is no
+popover tail (`hidepopovertail=true`). So it opens beside the sidebar over the
+page card's left edge, not below the URL bar.
+
 **Colour harmonies** (the shuffle button / adding dots): `complementary`
 [180], `singleAnalogous` [310], `splitComplementary` [150, 210], `analogous`
 [50, 310], `triadic` [120, 240], `floating` [] (dots move independently).

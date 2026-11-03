@@ -183,5 +183,34 @@
       "--input-background-color": "#ffffff @ 0.2",
       "--zen-branding-bg / bg-reverse": "#e2e2e2 / #101010"
     }
+  },
+  "inactive_window_flat": {
+    "css": "#zen-main-app-wrapper:-moz-window-inactive { background: InactiveCaption } (zen.view.grey-out-inactive-windows = true), native vibrancy goes flat when the window is not active",
+    "measured_with": "window INACTIVE (another app active), zen.widget.macos.window-vibrancy = true (glass on), default theme",
+    "dark": {
+      "frame / sidebar / ring": "#181717 = rgb(24, 23, 23) (spread 0)",
+      "url_pill": "#303031",
+      "essentials_tile": "#2d2d2e (favicon variance)",
+      "example.com page card": "#242424 (the page, not Zen)",
+      "traffic_lights": "grey (zen.widget.mac.mono-window-controls)"
+    },
+    "light": {
+      "frame / sidebar / ring": "#e5e5e5 = rgb(229, 229, 229) (spread 0; ring edges #e3e3e3 .. #dcdcdc near the window edge)",
+      "url_pill": "#d5d7d9",
+      "essentials_tile": "#d7d9da",
+      "example.com page card": "#ededed (the page)",
+      "traffic_lights": "grey"
+    },
+    "note": "These are the SYSTEM colours Gecko resolves for InactiveCaption in each appearance, not --zen-main-browser-background (#1b1b1b / #ebebeb); the theme colour layer is not visible while inactive (verified with the default theme only)."
+  },
+  "theme_panel_placement": {
+    "anchor": "#TabsToolbar (the sidebar tab area: x 6 .. sidebarWidth-6, y 81 .. windowHeight-6), NOT the toolbox or the URL bar",
+    "position": "topright topleft, x -10, y 0 (y -160 only when opened from the Create-Space form Edit Theme button)",
+    "panel_size": [
+      380,
+      514
+    ],
+    "measured_window_coords": "left edge x = sidebarWidth + 7 (262 -> 269, 230 -> 237); vertical centre = centre of #TabsToolbar, i.e. top y = 81 + (TabsToolbarHeight - 514)/2 (720 high window -> 141, 923 high -> 242); no popover tail (hidepopovertail=true)",
+    "entry_points_all_same_command": "cmd_zenOpenZenThemePicker: Space \"more actions\" > Theme... (context_zenChangeWorkspaceTheme), sidebar context menu > Theme picker (zenToolbarThemePicker), Spaces menu > Theme..."
   }
 }
