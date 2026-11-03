@@ -160,8 +160,10 @@ Mac, so it catches Mac-only build errors.
 - A first build takes much longer than GitHub's 6-hour job limit, so it
   runs as a chain: a fetch job, then build jobs that each build for about
   5 hours and hand `out/Koan` on to the next as an artifact, then a
-  packaging step and the release. A whole run takes a day or more.
-- **To build a branch or pull request** with Mac-specific code:
+  packaging step and the release. A whole run takes about 16 hours
+  (4 build jobs).
+- **To build a branch or pull request** with Mac-specific code (a full
+  build, so a compile check plus a .dmg to try):
   `gh workflow run macos.yml -f ref=<branch>` (or `-f ref=refs/pull/<n>/head`),
   or "Run workflow" on the Actions tab. Pull requests that change the Mac
   build itself (`.github/workflows/macos*.yml`, `scripts/ci/mac_*`) run it

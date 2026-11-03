@@ -125,6 +125,23 @@ would change the maintainer's Mac build too, since CI uses the same file.
 
 ## Measurements
 
+**First green run: 41420273033** (2026-11-02 09:23 → 11-03 01:28 UTC,
+**16 h 05 min**), Koan d5c85c0 on Chromium 158.0.8111.0:
+
+| Job | Wall time | Build | Steps done | Rate |
+|---|---|---|---|---|
+| fetch | 28 min | | | |
+| build-01 | 4 h 56 min | 4 h 42 min | 27,940 | 1.65/s |
+| build-02 | 4 h 57 min | 4 h 44 min | 9,883 | 0.58/s |
+| build-03 | 4 h 57 min | 4 h 48 min | 17,485 | 1.01/s |
+| build-04 | 46 min | 38 min | 2,779 (incl. links) | 1.22/s |
+
+4 chained build jobs (of 16 available), ~58k steps run (siso skipped the
+rest as no-ops). Artifacts: source 5.8 GB; out-1/2/3 0.56/0.73/1.05 GB;
+**`Koan-158.0.8111.0-d5c85c0-arm64.dmg` 183 MB**, `Koan.app` 554 MB
+(arm64, `codesign --verify --deep --strict` OK, `hdiutil verify` OK).
+Memory never below ~44% free at `JOBS=3`; swap ≤ 130 MB.
+
 **Runner** (`xcode-27`, run 41402833326): 3 × "Apple M1 (Virtual)", 7 GB,
 a 150 GB disk with 36 GB free; `mac_runner_setup.sh` frees it to
 **101 GB** in ~2 min (two extra Xcodes, Android SDK, .NET, tool cache,
