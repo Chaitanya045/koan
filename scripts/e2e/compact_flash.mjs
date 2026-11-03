@@ -4,14 +4,15 @@
 // sidebar, which slides away again on its own.
 //
 //   scripts/e2e/run.sh compact_flash
-import { CTRL, boundsOf, check, finish, key, sleep, visiblePage } from './lib/koan.mjs';
+import { boundsOf, browserCall, check, finish, sleep } from './lib/koan.mjs';
 
 const width = async () => (await boundsOf('VerticalTabStripRegionView'))[0]?.w;
 
 check('Compact mode hides the sidebar', (await width()) === 0);
 
-// Ctrl+T opens and selects a new tab (key() waits 300 ms).
-await key(await visiblePage(), 84, CTRL, 't');
+// A new, selected tab. Not Ctrl+T: Zen's URL bar takes that over (the tab
+// only opens once an address is entered), and no tab is selected meanwhile.
+await browserCall('Target.createTarget', { url: 'about:blank' });
 await sleep(150);
 const shown = await width();
 check('Opening a tab pops the sidebar up', shown > 100, `width ${shown}`);
