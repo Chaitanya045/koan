@@ -261,6 +261,11 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanWelcomeAccentHovered] =
       ui::AlphaBlend(SK_ColorWHITE, kColorKoanWelcomeAccent, Alpha(0.1f));
   mixer[kColorKoanWelcomeOnAccent] = {ui::kColorSysOnPrimary};
+  // Zen's welcome is opaque: its title bar row takes the gradient's top.
+  mixer[kColorKoanWelcomeScrim] = {kColorKoanWelcomeBackdropTop};
+  mixer[kColorKoanWelcomeOptionFill] = {kColorKoanWelcomeSurface};
+  mixer[kColorKoanWelcomeHover] =
+      ui::SetAlpha(kColorKoanWelcomeText, Alpha(0.06f));
 }
 
 // Space themes are tab group colours (until #41's per-Space themes): the

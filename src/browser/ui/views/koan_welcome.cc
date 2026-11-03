@@ -30,7 +30,10 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/browser_widget.h"
+#include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
@@ -39,6 +42,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_zen_welcome.h"
@@ -60,6 +64,7 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -162,6 +167,123 @@ bool ShouldAnimate() {
   return gfx::Animation::ShouldRenderRichAnimation();
 }
 
+// The screen's sizes, shapes and motion in the current look: Zen's
+// (zen-welcome.css), or shadcn's components with koan::look's radii. The
+// pages and their flow are the same in both.
+struct Metrics {
+  bool shadcn = false;
+  gfx::Insets sidebar_padding;
+  int heading_size;
+  int heading_min_size;
+  gfx::Font::Weight heading_weight;
+  int description_size;
+  int description_min_size;
+  float description_line_height;
+  int button_height;
+  int button_font_size;
+  gfx::Font::Weight button_weight;
+  int button_gap;
+  int button_radius;
+  int back_font_size;
+  int back_height;
+  int back_radius;
+  int option_height;
+  int engine_height;
+  int option_font_size;
+  int option_padding;
+  int option_gap;
+  int engine_gap;
+  int option_radius;
+  int radio_size;
+  int radio_dot_inset;
+  int card_radius;
+  int tile_radius;
+  int mock_radius;
+  // Motion: how far things rise and slide in, and the fades.
+  int rise;
+  int slide;
+  base::TimeDelta fade;
+};
+
+Metrics GetMetrics() {
+  using look::Step;
+  Metrics m;
+  m.shadcn = look::IsShadcnStyle();
+  m.button_radius = look::StyleRadius(kWelcomeButtonCornerRadius, Step::kMd);
+  m.back_radius = look::StyleRadius(kWelcomeBackCornerRadius, Step::kMd);
+  m.option_radius = look::StyleRadius(kWelcomeOptionCornerRadius, Step::kLg);
+  m.card_radius = look::StyleRadius(kWelcomeCardCornerRadius, Step::kXl);
+  m.tile_radius = look::StyleRadius(kWelcomeTileCornerRadius, Step::kLg);
+  m.mock_radius = look::StyleRadius(kWelcomeMockCornerRadius, Step::kXl);
+  if (m.shadcn) {
+    m.sidebar_padding = gfx::Insets(kWelcomeShadcnSidebarPadding);
+    m.heading_size = kWelcomeShadcnHeadingSize;
+    m.heading_min_size = kWelcomeShadcnHeadingMinSize;
+    m.heading_weight = gfx::Font::Weight::SEMIBOLD;
+    m.description_size = kWelcomeShadcnDescriptionSize;
+    m.description_min_size = kWelcomeShadcnDescriptionMinSize;
+    m.description_line_height = kWelcomeShadcnDescriptionLineHeight;
+    m.button_height = kWelcomeShadcnButtonHeight;
+    m.button_font_size = kWelcomeShadcnButtonFontSize;
+    m.button_weight = gfx::Font::Weight::MEDIUM;
+    m.button_gap = kWelcomeShadcnButtonGap;
+    m.back_font_size = kWelcomeShadcnBackFontSize;
+    m.back_height = kWelcomeShadcnBackHeight;
+    m.option_height = kWelcomeShadcnOptionHeight;
+    m.engine_height = kWelcomeShadcnEngineHeight;
+    m.option_font_size = kWelcomeShadcnOptionFontSize;
+    m.option_padding = kWelcomeShadcnOptionPadding;
+    m.option_gap = kWelcomeShadcnOptionGap;
+    m.engine_gap = kWelcomeShadcnOptionGap;
+    m.radio_size = kWelcomeShadcnRadioSize;
+    m.radio_dot_inset = kWelcomeShadcnRadioDotInset;
+    m.rise = kWelcomeShadcnRise;
+    m.slide = kWelcomeShadcnSlide;
+    m.fade = base::Milliseconds(kWelcomeShadcnFadeMs);
+    return m;
+  }
+  m.sidebar_padding = kSidebarPadding;
+  m.heading_size = kWelcomeHeadingSize;
+  m.heading_min_size = kWelcomeHeadingMinSize;
+  m.heading_weight = gfx::Font::Weight::BOLD;
+  m.description_size = kWelcomeDescriptionSize;
+  m.description_min_size = kWelcomeDescriptionSize;
+  m.description_line_height = kWelcomeDescriptionLineHeight;
+  m.button_height = kWelcomeButtonHeight;
+  m.button_font_size = kWelcomeButtonFontSize;
+  m.button_weight = gfx::Font::Weight::SEMIBOLD;
+  m.button_gap = kWelcomeButtonGap;
+  m.back_font_size = kWelcomeBackFontSize;
+  m.back_height = kWelcomeBackHeight;
+  m.option_height = kWelcomeOptionHeight;
+  m.engine_height = kWelcomeEngineHeight;
+  m.option_font_size = kWelcomeOptionFontSize;
+  m.option_padding = kWelcomeOptionPadding;
+  m.option_gap = kWelcomeOptionGap;
+  m.engine_gap = kWelcomeEngineGap;
+  m.radio_size = kWelcomeRadioSize;
+  m.radio_dot_inset = kWelcomeRadioDotInset;
+  m.rise = 50;
+  m.slide = 120;
+  m.fade = kFadeDuration;
+  return m;
+}
+
+// A 1px outline just inside `rect`.
+void StrokeRoundRect(gfx::Canvas* canvas,
+                     gfx::RectF rect,
+                     float radius,
+                     SkColor color,
+                     float width = 1) {
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(width);
+  flags.setColor(color);
+  rect.Inset(width / 2);
+  canvas->DrawRoundRect(rect, std::max(0.0f, radius - width / 2), flags);
+}
+
 // Lets the keyboard reach `button` (also on macOS, where buttons otherwise
 // only take focus with Full Keyboard Access), with a focus ring of its
 // shape.
@@ -198,7 +320,10 @@ void AnimateIn(views::View* view,
       .SetOpacity(view, 1, gfx::Tween::EASE_OUT);
 }
 
-// Zen's big accent button: filled for the primary action, text otherwise.
+// A page's button. The primary action is filled: Zen's accent button, or
+// shadcn's default button (`primary` with `primary-foreground` text). The
+// other is Zen's accent text, or shadcn's outline button. A disabled button
+// is drawn at half opacity (shadcn's `disabled:opacity-50`).
 class KoanWelcomeButton : public views::Button {
   METADATA_HEADER(KoanWelcomeButton, views::Button)
 
@@ -208,29 +333,46 @@ class KoanWelcomeButton : public views::Button {
         text_(std::move(text)),
         primary_(primary) {
     GetViewAccessibility().SetName(text_);
-    MakeFocusable(this, kWelcomeButtonCornerRadius);
+    MakeFocusable(this, GetMetrics().button_radius);
   }
 
   // views::Button:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
-    return gfx::Size(0, kWelcomeButtonHeight);
+    return gfx::Size(0, GetMetrics().button_height);
+  }
+  void OnEnabledChanged() override {
+    views::Button::OnEnabledChanged();
+    SchedulePaint();
   }
   void PaintButtonContents(gfx::Canvas* canvas) override {
+    const Metrics metrics = GetMetrics();
     const Palette palette = GetPalette(this);
-    SkColor text = palette.accent;
+    const bool hovered = GetState() == STATE_HOVERED;
+    const gfx::RectF bounds(GetLocalBounds());
+    if (!GetEnabled()) {
+      canvas->SaveLayerAlpha(0x80);
+    }
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    SkColor text = metrics.shadcn ? palette.text : palette.accent;
     if (primary_) {
-      cc::PaintFlags flags;
-      flags.setAntiAlias(true);
-      flags.setColor(GetState() == STATE_HOVERED ? palette.accent_hovered
-                                                 : palette.accent);
-      canvas->DrawRoundRect(GetLocalBounds(), kWelcomeButtonCornerRadius,
-                            flags);
+      flags.setColor(hovered ? palette.accent_hovered : palette.accent);
+      canvas->DrawRoundRect(bounds, metrics.button_radius, flags);
       text = palette.on_accent;
+    } else if (metrics.shadcn) {
+      flags.setColor(
+          hovered ? GetColorProvider()->GetColor(kColorKoanWelcomeHover)
+                  : GetColorProvider()->GetColor(kColorKoanWelcomeOptionFill));
+      canvas->DrawRoundRect(bounds, metrics.button_radius, flags);
+      StrokeRoundRect(canvas, bounds, metrics.button_radius, palette.border);
     }
     canvas->DrawStringRectWithFlags(
-        text_, Font(kWelcomeButtonFontSize, gfx::Font::Weight::SEMIBOLD), text,
+        text_, Font(metrics.button_font_size, metrics.button_weight), text,
         GetLocalBounds(), gfx::Canvas::TEXT_ALIGN_CENTER);
+    if (!GetEnabled()) {
+      canvas->Restore();
+    }
   }
 
  private:
@@ -249,7 +391,7 @@ class KoanWelcomeStartButton : public views::Button {
   explicit KoanWelcomeStartButton(PressedCallback callback)
       : views::Button(std::move(callback)) {
     GetViewAccessibility().SetName(u"Start");
-    MakeFocusable(this, kWelcomeButtonCornerRadius);
+    MakeFocusable(this, GetMetrics().button_radius);
   }
 
   // views::Button:
@@ -264,7 +406,7 @@ class KoanWelcomeStartButton : public views::Button {
     flags.setColor(colors->GetColor(GetState() == STATE_HOVERED
                                         ? kColorKoanWelcomeStartButtonHovered
                                         : kColorKoanWelcomeStartButton));
-    canvas->DrawRoundRect(GetLocalBounds(), kWelcomeButtonCornerRadius, flags);
+    canvas->DrawRoundRect(GetLocalBounds(), GetMetrics().button_radius, flags);
     canvas->DrawImageInt(
         gfx::CreateVectorIcon(
             vector_icons::kArrowForwardIcon, kWelcomeStartButtonIconSize,
@@ -277,7 +419,8 @@ class KoanWelcomeStartButton : public views::Button {
 BEGIN_METADATA(KoanWelcomeStartButton)
 END_METADATA
 
-// "< Back" at the top of the pages' sidebar.
+// "< Back" at the top of the pages' sidebar: Zen's accent text, or shadcn's
+// ghost button (muted text, `accent` behind it on hover).
 class KoanWelcomeBackButton : public views::Button {
   METADATA_HEADER(KoanWelcomeBackButton, views::Button)
 
@@ -285,30 +428,51 @@ class KoanWelcomeBackButton : public views::Button {
   explicit KoanWelcomeBackButton(PressedCallback callback)
       : views::Button(std::move(callback)) {
     GetViewAccessibility().SetName(kWelcomeBack);
-    MakeFocusable(this, kWelcomeBackCornerRadius);
+    MakeFocusable(this, GetMetrics().back_radius);
   }
 
   // views::Button:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
-    return gfx::Size(kWelcomeBackIconSize + kWelcomeBackIconGap +
+    return gfx::Size(2 * Padding() + kWelcomeBackIconSize +
+                         kWelcomeBackIconGap +
                          gfx::GetStringWidth(kWelcomeBack, GetFont()),
-                     kWelcomeBackHeight);
+                     GetMetrics().back_height);
   }
   void PaintButtonContents(gfx::Canvas* canvas) override {
-    const SkColor accent = GetPalette(this).accent;
+    const Metrics metrics = GetMetrics();
+    const Palette palette = GetPalette(this);
+    const bool hovered = GetState() == STATE_HOVERED;
+    SkColor color = palette.accent;
+    if (metrics.shadcn) {
+      color = hovered ? palette.text : palette.text_secondary;
+      if (hovered) {
+        cc::PaintFlags flags;
+        flags.setAntiAlias(true);
+        flags.setColor(GetColorProvider()->GetColor(kColorKoanWelcomeHover));
+        canvas->DrawRoundRect(GetLocalBounds(), metrics.back_radius, flags);
+      }
+    }
     canvas->DrawImageInt(gfx::CreateVectorIcon(vector_icons::kArrowBackIcon,
-                                               kWelcomeBackIconSize, accent),
-                         0, (height() - kWelcomeBackIconSize) / 2);
+                                               kWelcomeBackIconSize, color),
+                         Padding(), (height() - kWelcomeBackIconSize) / 2);
     gfx::Rect text = GetLocalBounds();
-    text.Inset(
-        gfx::Insets::TLBR(0, kWelcomeBackIconSize + kWelcomeBackIconGap, 0, 0));
-    canvas->DrawStringRect(kWelcomeBack, GetFont(), accent, text);
+    text.Inset(gfx::Insets::TLBR(
+        0, Padding() + kWelcomeBackIconSize + kWelcomeBackIconGap, 0, 0));
+    canvas->DrawStringRect(kWelcomeBack, GetFont(), color, text);
+  }
+
+  // Where the icon starts: the ghost button pads its text.
+  static int Padding() {
+    return GetMetrics().shadcn ? kWelcomeShadcnBackPadding : 0;
   }
 
  private:
   static gfx::FontList GetFont() {
-    return Font(kWelcomeBackFontSize, gfx::Font::Weight::SEMIBOLD);
+    const Metrics metrics = GetMetrics();
+    return Font(metrics.back_font_size, metrics.shadcn
+                                            ? gfx::Font::Weight::MEDIUM
+                                            : gfx::Font::Weight::SEMIBOLD);
   }
 };
 
@@ -332,7 +496,7 @@ class KoanWelcomeOption : public views::Button {
     GetViewAccessibility().SetName(strong_.empty() ? text_
                                                    : strong_ + u" " + text_);
     GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
-    MakeFocusable(this, kWelcomeOptionCornerRadius);
+    MakeFocusable(this, GetMetrics().option_radius);
   }
 
   bool selected() const { return selected_; }
@@ -366,31 +530,39 @@ class KoanWelcomeOption : public views::Button {
   }
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
-    return engine_ ? gfx::Size(kWelcomeEngineMaxWidth, kWelcomeEngineHeight)
-                   : gfx::Size(kWelcomeOptionMaxWidth, kWelcomeOptionHeight);
+    const Metrics metrics = GetMetrics();
+    return engine_ ? gfx::Size(kWelcomeEngineMaxWidth, metrics.engine_height)
+                   : gfx::Size(kWelcomeOptionMaxWidth, metrics.option_height);
   }
   void PaintButtonContents(gfx::Canvas* canvas) override {
+    const Metrics metrics = GetMetrics();
     const Palette palette = GetPalette(this);
+    const ui::ColorProvider* colors = GetColorProvider();
+    const float radius = metrics.option_radius;
     const gfx::RectF bounds(GetLocalBounds());
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(palette.surface);
-    flags.setLooper(gfx::CreateShadowDrawLooper(
-        {gfx::ShadowValue(gfx::Vector2d(0, kWelcomeOptionShadowY),
-                          kWelcomeOptionShadowBlur, palette.shadow)}));
     gfx::RectF card = bounds;
     card.Inset(1);
-    canvas->DrawRoundRect(card, kWelcomeOptionCornerRadius, flags);
+    if (metrics.shadcn) {
+      // shadcn's radio card: an input's fill, `accent` on hover.
+      flags.setColor(colors->GetColor(GetState() == STATE_HOVERED
+                                          ? kColorKoanWelcomeHover
+                                          : kColorKoanWelcomeOptionFill));
+    } else {
+      flags.setColor(palette.surface);
+      flags.setLooper(gfx::CreateShadowDrawLooper(
+          {gfx::ShadowValue(gfx::Vector2d(0, kWelcomeOptionShadowY),
+                            kWelcomeOptionShadowBlur, palette.shadow)}));
+    }
+    canvas->DrawRoundRect(card, radius, flags);
     flags.setLooper(nullptr);
 
     // An engine's tile on the trailing side, clipped by the card.
     if (engine_) {
       canvas->Save();
       canvas->sk_canvas()->clipRRect(
-          SkRRect::MakeRectXY(gfx::RectFToSkRect(card),
-                              kWelcomeOptionCornerRadius,
-                              kWelcomeOptionCornerRadius),
-          true);
+          SkRRect::MakeRectXY(gfx::RectFToSkRect(card), radius, radius), true);
       const float tile_width = card.width() * kWelcomeEngineTileWidth;
       const gfx::RectF tile(card.right() - tile_width, card.y(), tile_width,
                             card.height());
@@ -398,44 +570,57 @@ class KoanWelcomeOption : public views::Button {
       canvas->DrawRect(tile, flags);
       canvas->DrawStringRectWithFlags(
           text_.substr(0, 1),
-          Font(kWelcomeEngineTileFontSize, gfx::Font::Weight::BOLD),
+          Font(metrics.shadcn ? metrics.option_font_size + 4
+                              : kWelcomeEngineTileFontSize,
+               gfx::Font::Weight::BOLD),
           palette.text_secondary, gfx::ToEnclosingRect(tile),
           gfx::Canvas::TEXT_ALIGN_CENTER);
       canvas->Restore();
     }
 
-    const SkColor color = selected_ ? palette.accent : palette.text;
+    // The outline: the accent (shadcn's `primary`) when chosen.
+    StrokeRoundRect(canvas, card, radius,
+                    selected_ ? palette.accent : palette.border);
+
+    // The radio circle, filled with a dot when chosen.
+    const gfx::PointF radio(metrics.option_padding + metrics.radio_size / 2.0f,
+                            height() / 2.0f);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(1);
-    flags.setColor(selected_ ? palette.accent : palette.border);
-    card.Inset(0.5f);
-    canvas->DrawRoundRect(card, kWelcomeOptionCornerRadius, flags);
-
-    const gfx::PointF radio(kWelcomeOptionPadding + kWelcomeRadioSize / 2.0f,
-                            height() / 2.0f);
     flags.setColor(selected_ ? palette.accent : palette.radio);
-    canvas->DrawCircle(radio, kWelcomeRadioSize / 2.0f - 0.5f, flags);
+    canvas->DrawCircle(radio, metrics.radio_size / 2.0f - 0.5f, flags);
     if (selected_) {
       flags.setStyle(cc::PaintFlags::kFill_Style);
       canvas->DrawCircle(
-          radio, kWelcomeRadioSize / 2.0f - kWelcomeRadioDotInset, flags);
+          radio, metrics.radio_size / 2.0f - metrics.radio_dot_inset, flags);
     }
 
-    int x = kWelcomeOptionPadding + kWelcomeRadioSize + kWelcomeOptionTextGap;
-    const gfx::FontList regular =
-        Font(kWelcomeOptionFontSize,
-             engine_ ? gfx::Font::Weight::SEMIBOLD : gfx::Font::Weight::NORMAL);
+    // The text. Zen sets "YES," and "NO," in bold; shadcn sets the whole
+    // label in one weight.
+    const SkColor color =
+        selected_ && !metrics.shadcn ? palette.accent : palette.text;
+    int x =
+        metrics.option_padding + metrics.radio_size +
+        (metrics.shadcn ? metrics.option_padding / 2 : kWelcomeOptionTextGap);
+    const gfx::Font::Weight weight =
+        metrics.shadcn ? gfx::Font::Weight::MEDIUM
+                       : (engine_ ? gfx::Font::Weight::SEMIBOLD
+                                  : gfx::Font::Weight::NORMAL);
+    const gfx::FontList regular = Font(metrics.option_font_size, weight);
     if (!strong_.empty()) {
-      const gfx::FontList bold =
-          Font(kWelcomeOptionFontSize, gfx::Font::Weight::BOLD);
+      const gfx::FontList strong_font =
+          metrics.shadcn
+              ? regular
+              : Font(metrics.option_font_size, gfx::Font::Weight::BOLD);
       const std::u16string strong = strong_ + u", ";
-      canvas->DrawStringRect(strong, bold, color,
-                             gfx::Rect(x, 0, width() - x, height()));
-      x += gfx::GetStringWidth(strong, bold);
+      canvas->DrawStringRectWithFlags(strong, strong_font, color,
+                                      gfx::Rect(x, 0, width() - x, height()),
+                                      gfx::Canvas::NO_SUBPIXEL_RENDERING);
+      x += gfx::GetStringWidth(strong, strong_font);
     }
     const int right =
         engine_ ? static_cast<int>(width() * (1 - kWelcomeEngineTileWidth))
-                : width() - kWelcomeOptionPadding;
+                : width() - metrics.option_padding;
     canvas->DrawStringRectWithFlags(text_, regular, color,
                                     gfx::Rect(x, 0, right - x, height()),
                                     gfx::Canvas::NO_SUBPIXEL_RENDERING);
@@ -575,10 +760,17 @@ class KoanWelcomeSwatch : public views::Button {
     flags.setColor(color_);
     canvas->DrawCircle(center, kWelcomeSwatchSize / 2.0f - 6, flags);
     if (selected_ || GetState() == STATE_HOVERED) {
+      // Zen: a ring in the colour, white when chosen. shadcn: a 2px ring in
+      // `foreground` 2px off the colour when chosen, `border` on hover.
+      const Palette palette = GetPalette(this);
+      const bool shadcn = GetMetrics().shadcn;
       flags.setStyle(cc::PaintFlags::kStroke_Style);
-      flags.setStrokeWidth(2.5f);
-      flags.setColor(selected_ ? GetPalette(this).text
-                               : SkColorSetA(color_, 0x80));
+      flags.setStrokeWidth(shadcn ? 2.0f : 2.5f);
+      if (shadcn) {
+        flags.setColor(selected_ ? palette.text : palette.border);
+      } else {
+        flags.setColor(selected_ ? palette.text : SkColorSetA(color_, 0x80));
+      }
       canvas->DrawCircle(center, kWelcomeSwatchSize / 2.0f - 1.5f, flags);
     }
   }
@@ -627,20 +819,18 @@ class KoanWelcomeColorsView : public views::View {
     }
   }
   void OnPaint(gfx::Canvas* canvas) override {
+    const Metrics metrics = GetMetrics();
     const Palette palette = GetPalette(this);
-    gfx::RectF panel(PanelBounds());
+    const gfx::RectF panel(PanelBounds());
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
+    // A card: Zen's raised surface, or shadcn's `card` with its border.
     flags.setColor(palette.surface);
     flags.setLooper(gfx::CreateShadowDrawLooper(
         {gfx::ShadowValue(gfx::Vector2d(0, kWelcomeOptionShadowY),
                           kWelcomeOptionShadowBlur, palette.shadow)}));
-    canvas->DrawRoundRect(panel, kWelcomeOptionCornerRadius, flags);
-    flags.setLooper(nullptr);
-    flags.setStyle(cc::PaintFlags::kStroke_Style);
-    flags.setColor(palette.border);
-    panel.Inset(0.5f);
-    canvas->DrawRoundRect(panel, kWelcomeOptionCornerRadius, flags);
+    canvas->DrawRoundRect(panel, metrics.option_radius, flags);
+    StrokeRoundRect(canvas, panel, metrics.option_radius, palette.border);
   }
 
  private:
@@ -674,7 +864,7 @@ class KoanWelcomeEssentialTile : public views::Button {
     GetViewAccessibility().SetName(app.name);
     SetTooltipText(app.name);
     GetViewAccessibility().SetRole(ax::mojom::Role::kToggleButton);
-    MakeFocusable(this, kWelcomeTileCornerRadius);
+    MakeFocusable(this, GetMetrics().tile_radius);
   }
 
   bool selected() const { return selected_; }
@@ -688,21 +878,30 @@ class KoanWelcomeEssentialTile : public views::Button {
 
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override {
+    const Metrics metrics = GetMetrics();
     const Palette palette = GetPalette(this);
-    gfx::RectF tile(GetLocalBounds());
-    const float radius = std::min(kWelcomeTileCornerRadius, width() / 3);
+    const gfx::RectF tile(GetLocalBounds());
+    const float radius = std::min(metrics.tile_radius, width() / 3);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(
-        selected_ ? color_utils::AlphaBlend(app_->color, palette.surface, 0.22f)
-                  : palette.tile);
-    canvas->DrawRoundRect(tile, radius, flags);
-    if (selected_) {
-      flags.setStyle(cc::PaintFlags::kStroke_Style);
-      flags.setStrokeWidth(kWelcomeTileBorder);
-      flags.setColor(SkColorSetA(app_->color, 0x99));
-      tile.Inset(1.5f);
-      canvas->DrawRoundRect(tile, radius - 1.5f, flags);
+    if (metrics.shadcn) {
+      // shadcn's toggle card: `muted`, outlined; `primary` outline when on.
+      flags.setColor(GetState() == STATE_HOVERED
+                         ? GetColorProvider()->GetColor(kColorKoanWelcomeHover)
+                         : palette.tile);
+      canvas->DrawRoundRect(tile, radius, flags);
+      StrokeRoundRect(canvas, tile, radius,
+                      selected_ ? palette.accent : palette.border,
+                      selected_ ? 2 : 1);
+    } else {
+      flags.setColor(selected_ ? color_utils::AlphaBlend(app_->color,
+                                                         palette.surface, 0.22f)
+                               : palette.tile);
+      canvas->DrawRoundRect(tile, radius, flags);
+      if (selected_) {
+        StrokeRoundRect(canvas, tile, radius, SkColorSetA(app_->color, 0x99),
+                        kWelcomeTileBorder);
+      }
     }
     // The app's initial in its colour, its name below.
     const int initial_size = std::max(16, width() * 30 / 100);
@@ -716,7 +915,8 @@ class KoanWelcomeEssentialTile : public views::Button {
     name.Inset(gfx::Insets::TLBR(height() * 3 / 5, 4, 0, 4));
     canvas->DrawStringRectWithFlags(
         app_->name, Font(kWelcomeTileNameFontSize, gfx::Font::Weight::MEDIUM),
-        palette.text_secondary, name, gfx::Canvas::TEXT_ALIGN_CENTER);
+        selected_ && metrics.shadcn ? palette.text : palette.text_secondary,
+        name, gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
  private:
@@ -774,11 +974,8 @@ class KoanWelcomeMockBrowserView : public views::View {
     flags.setAntiAlias(true);
     // The window, rounded at the top left only.
     const SkRect window = gfx::RectToSkRect(MockBounds());
-    const SkVector radii[4] = {
-        {kWelcomeMockCornerRadius, kWelcomeMockCornerRadius},
-        {0, 0},
-        {0, 0},
-        {0, 0}};
+    const float corner = GetMetrics().mock_radius;
+    const SkVector radii[4] = {{corner, corner}, {0, 0}, {0, 0}, {0, 0}};
     SkRRect rounded;
     rounded.setRectRadii(window, radii);
     canvas->sk_canvas()->save();
@@ -809,6 +1006,17 @@ class KoanWelcomeMockBrowserView : public views::View {
       y += kWelcomeMockTabHeight + kWelcomeMockGap;
     }
     canvas->sk_canvas()->restore();
+    if (GetMetrics().shadcn) {
+      // shadcn's card outline, along the window's top and left edges.
+      cc::PaintFlags line;
+      line.setAntiAlias(true);
+      line.setStyle(cc::PaintFlags::kStroke_Style);
+      line.setStrokeWidth(1);
+      line.setColor(palette.border);
+      SkRRect outline = rounded;
+      outline.inset(0.5f, 0.5f);
+      canvas->sk_canvas()->drawRRect(outline, line);
+    }
   }
 
  private:
@@ -835,6 +1043,82 @@ class KoanWelcomeMockBrowserView : public views::View {
 BEGIN_METADATA(KoanWelcomeMockBrowserView)
 END_METADATA
 
+// The last page's content: what the user chose on the pages before, as rows
+// in a card (Zen shows nothing there).
+class KoanWelcomeSummaryView : public views::View {
+  METADATA_HEADER(KoanWelcomeSummaryView, views::View)
+
+ public:
+  using Rows = std::vector<std::pair<std::u16string, std::u16string>>;
+
+  explicit KoanWelcomeSummaryView(Rows rows) : rows_(std::move(rows)) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
+    std::u16string description;
+    for (const auto& [label, value] : rows_) {
+      description += label + u": " + value + u". ";
+    }
+    GetViewAccessibility().SetName(u"Your choices");
+    GetViewAccessibility().SetDescription(description);
+  }
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override {
+    const Metrics metrics = GetMetrics();
+    const Palette palette = GetPalette(this);
+    const gfx::RectF card(CardBounds());
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setColor(palette.surface);
+    flags.setLooper(gfx::CreateShadowDrawLooper(
+        {gfx::ShadowValue(gfx::Vector2d(0, kWelcomeOptionShadowY),
+                          kWelcomeOptionShadowBlur, palette.shadow)}));
+    canvas->DrawRoundRect(card, metrics.option_radius, flags);
+    flags.setLooper(nullptr);
+    StrokeRoundRect(canvas, card, metrics.option_radius, palette.border);
+
+    const gfx::FontList label_font =
+        Font(kWelcomeSummaryFontSize, gfx::Font::Weight::NORMAL);
+    const gfx::FontList value_font =
+        Font(kWelcomeSummaryFontSize, gfx::Font::Weight::MEDIUM);
+    gfx::Rect row = gfx::ToEnclosingRect(card);
+    row.Inset(gfx::Insets::VH(0, kWelcomeSummaryPadding));
+    row.set_height(kWelcomeSummaryRowHeight);
+    for (size_t i = 0; i < rows_.size(); ++i) {
+      if (i > 0) {
+        flags.setColor(palette.border);
+        canvas->DrawRect(gfx::RectF(row.x(), row.y() - 0.5f, row.width(), 1),
+                         flags);
+      }
+      const int label_width = row.width() * 2 / 5;
+      canvas->DrawStringRectWithFlags(
+          rows_[i].first, label_font, palette.text_secondary,
+          gfx::Rect(row.x(), row.y(), label_width, row.height()),
+          gfx::Canvas::NO_SUBPIXEL_RENDERING);
+      canvas->DrawStringRectWithFlags(
+          rows_[i].second, value_font, palette.text,
+          gfx::Rect(row.x() + label_width, row.y(), row.width() - label_width,
+                    row.height()),
+          gfx::Canvas::TEXT_ALIGN_RIGHT | gfx::Canvas::NO_SUBPIXEL_RENDERING);
+      row.Offset(0, kWelcomeSummaryRowHeight);
+    }
+  }
+
+ private:
+  gfx::Rect CardBounds() const {
+    const int card_width =
+        std::min(kWelcomeSummaryMaxWidth, width() - kWelcomeOptionSideMargin);
+    const int card_height =
+        static_cast<int>(rows_.size()) * kWelcomeSummaryRowHeight;
+    return gfx::Rect((width() - card_width) / 2, (height() - card_height) / 2,
+                     card_width, card_height);
+  }
+
+  const Rows rows_;
+};
+
+BEGIN_METADATA(KoanWelcomeSummaryView)
+END_METADATA
+
 // The pages: a rounded card with a sidebar (back, the page's title and
 // description, its buttons) and the page's content beside it.
 class KoanWelcomePagesView : public views::View {
@@ -857,56 +1141,102 @@ class KoanWelcomePagesView : public views::View {
 
   // views::View:
   void Layout(PassKey) override {
+    const Metrics metrics = GetMetrics();
     const gfx::Rect sidebar = SidebarBounds();
     gfx::Rect inner = sidebar;
-    inner.Inset(kSidebarPadding);
-    back_->SetBoundsRect(gfx::Rect(inner.origin(), back_->GetPreferredSize()));
+    inner.Inset(metrics.sidebar_padding);
+    // The ghost back button's text lines up with the title.
+    back_->SetBoundsRect(gfx::Rect(
+        gfx::Point(inner.x() - KoanWelcomeBackButton::Padding(), inner.y()),
+        back_->GetPreferredSize()));
 
     int buttons_height = 0;
     for (const views::View* button : buttons_->children()) {
-      buttons_height += button->GetPreferredSize().height() + kWelcomeButtonGap;
+      buttons_height +=
+          button->GetPreferredSize().height() + metrics.button_gap;
     }
-    buttons_height = std::max(0, buttons_height - kWelcomeButtonGap);
+    buttons_height = std::max(0, buttons_height - metrics.button_gap);
     buttons_->SetBounds(inner.x(), inner.bottom() - buttons_height,
                         inner.width(), buttons_height);
     int y = 0;
     for (views::View* button : buttons_->children()) {
-      button->SetBounds(0, y, inner.width(), kWelcomeButtonHeight);
-      y += kWelcomeButtonHeight + kWelcomeButtonGap;
+      button->SetBounds(0, y, inner.width(), metrics.button_height);
+      y += metrics.button_height + metrics.button_gap;
     }
 
-    y = back_->bounds().bottom() + kWelcomeBackGap;
-    // Zen's title is 3rem; a long one gets smaller so that the text stays
-    // clear of the buttons.
-    const int room = buttons_->y() - kWelcomeButtonGap - y;
-    for (int size = kWelcomeHeadingSize; !text_.empty(); size -= 4) {
-      text_[0]->SetFontList(Font(size, gfx::Font::Weight::BOLD));
-      if (size <= kWelcomeHeadingMinSize || TextHeight(inner.width()) <= room) {
-        break;
+    // The title (Zen's 3rem, shadcn's text-4xl) and then the description get
+    // smaller in a small window, so that the text stays clear of the
+    // buttons.
+    y = back_->bounds().bottom() + HeadingGap(metrics);
+    const int room = buttons_->y() - metrics.button_gap - y;
+    if (!text_.empty()) {
+      int heading = metrics.heading_size;
+      int description = metrics.description_size;
+      while (true) {
+        SetTextSizes(metrics, heading, description);
+        if (TextHeight(inner.width()) <= room) {
+          break;
+        }
+        if (heading > metrics.heading_min_size) {
+          heading = std::max(metrics.heading_min_size, heading - 2);
+        } else if (description > metrics.description_min_size) {
+          --description;
+        } else {
+          break;
+        }
       }
     }
     for (size_t i = 0; i < text_.size(); ++i) {
       const int height = text_[i]->GetHeightForWidth(inner.width());
       text_[i]->SetBounds(inner.x(), y, inner.width(), height);
-      y += height + (i == 0 ? kWelcomeHeadingGap : kWelcomeDescriptionGap);
+      y += height + (i == 0 ? DescriptionGap(metrics) : kWelcomeDescriptionGap);
     }
 
     if (content_) {
-      content_->SetBounds(sidebar.right(), 0, width() - sidebar.right(),
-                          height());
+      content_->SetBoundsRect(ContentBounds());
     }
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
+    const Metrics metrics = GetMetrics();
     const Palette palette = GetPalette(this);
-    canvas->DrawColor(palette.content);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(palette.sidebar);
-    flags.setLooper(gfx::CreateShadowDrawLooper(
-        {gfx::ShadowValue(gfx::Vector2d(kWelcomeSidebarShadowX, 0),
-                          kWelcomeSidebarShadowBlur, palette.shadow)}));
-    canvas->DrawRect(SidebarBounds(), flags);
+    if (!metrics.shadcn) {
+      // Zen: the content's colour, the sidebar raised on it.
+      canvas->DrawColor(palette.content);
+      flags.setColor(palette.sidebar);
+      flags.setLooper(gfx::CreateShadowDrawLooper(
+          {gfx::ShadowValue(gfx::Vector2d(kWelcomeSidebarShadowX, 0),
+                            kWelcomeSidebarShadowBlur, palette.shadow)}));
+      canvas->DrawRect(SidebarBounds(), flags);
+      return;
+    }
+    // shadcn: one `card` with its border; the page's content in a preview
+    // pane on `background`, dotted so that a page with little in it isn't a
+    // flat panel.
+    const gfx::RectF card(GetLocalBounds());
+    canvas->DrawColor(palette.surface);
+    const gfx::RectF pane(ContentBounds());
+    const float pane_radius =
+        std::max(0, metrics.card_radius - kWelcomeShadcnPreviewInset);
+    flags.setColor(palette.content);
+    canvas->DrawRoundRect(pane, pane_radius, flags);
+    canvas->Save();
+    canvas->sk_canvas()->clipRRect(
+        SkRRect::MakeRectXY(gfx::RectFToSkRect(pane), pane_radius, pane_radius),
+        true);
+    flags.setColor(palette.border);
+    for (float dot_y = pane.y() + kWelcomeShadcnPreviewDotSpacing / 2.0f;
+         dot_y < pane.bottom(); dot_y += kWelcomeShadcnPreviewDotSpacing) {
+      for (float dot_x = pane.x() + kWelcomeShadcnPreviewDotSpacing / 2.0f;
+           dot_x < pane.right(); dot_x += kWelcomeShadcnPreviewDotSpacing) {
+        canvas->DrawCircle(gfx::PointF(dot_x, dot_y), 1.0f, flags);
+      }
+    }
+    canvas->Restore();
+    StrokeRoundRect(canvas, pane, pane_radius, palette.border);
+    StrokeRoundRect(canvas, card, metrics.card_radius, palette.border);
   }
 
   void OnThemeChanged() override {
@@ -920,13 +1250,42 @@ class KoanWelcomePagesView : public views::View {
                      height());
   }
 
-  // The title and description's height at `width`, with the gaps after
+  // Where the page's content goes: the rest of the card, or (shadcn) the
+  // preview pane inset in it.
+  gfx::Rect ContentBounds() const {
+    gfx::Rect content(SidebarBounds().right(), 0,
+                      width() - SidebarBounds().right(), height());
+    if (GetMetrics().shadcn) {
+      content.Inset(gfx::Insets::TLBR(kWelcomeShadcnPreviewInset, 0,
+                                      kWelcomeShadcnPreviewInset,
+                                      kWelcomeShadcnPreviewInset));
+    }
+    return content;
+  }
+
+  static int HeadingGap(const Metrics& metrics) {
+    return metrics.shadcn ? 2 * kWelcomeShadcnButtonGap : kWelcomeBackGap;
+  }
+  static int DescriptionGap(const Metrics& metrics) {
+    return metrics.shadcn ? kWelcomeShadcnButtonGap : kWelcomeHeadingGap;
+  }
+
+  void SetTextSizes(const Metrics& metrics, int heading, int description) {
+    text_[0]->SetFontList(Font(heading, metrics.heading_weight));
+    if (text_.size() > 1) {
+      text_[1]->SetFontList(Font(description, gfx::Font::Weight::NORMAL));
+      text_[1]->SetLineHeight(
+          static_cast<int>(description * metrics.description_line_height));
+    }
+  }
+
+  // The title and description's height at `width`, with the gap between
   // them.
   int TextHeight(int width) const {
     int height = 0;
     for (size_t i = 0; i < text_.size(); ++i) {
       height += text_[i]->GetHeightForWidth(width) +
-                (i == 0 ? kWelcomeHeadingGap : 0);
+                (i == 0 ? DescriptionGap(GetMetrics()) : 0);
     }
     return height;
   }
@@ -992,21 +1351,15 @@ class KoanWelcomePagesView : public views::View {
 
     const WelcomePageText& text = kWelcomePageText[page];
     for (const char16_t* string : {text.title, text.description}) {
-      const bool heading = string == text.title;
       auto* label = AddChildView(std::make_unique<views::Label>(string));
       label->SetMultiLine(true);
       label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       label->SetAutoColorReadabilityEnabled(false);
       label->SetSubpixelRenderingEnabled(false);
-      label->SetFontList(
-          heading ? Font(kWelcomeHeadingSize, gfx::Font::Weight::BOLD)
-                  : Font(kWelcomeDescriptionSize, gfx::Font::Weight::NORMAL));
-      if (!heading) {
-        label->SetLineHeight(static_cast<int>(kWelcomeDescriptionSize *
-                                              kWelcomeDescriptionLineHeight));
-      }
       text_.push_back(label);
     }
+    const Metrics metrics = GetMetrics();
+    SetTextSizes(metrics, metrics.heading_size, metrics.description_size);
     UpdateTextColors();
 
     if (page == kWelcomePageFinish) {
@@ -1029,10 +1382,13 @@ class KoanWelcomePagesView : public views::View {
     InvalidateLayout();
 
     for (size_t i = 0; i < text_.size(); ++i) {
-      AnimateIn(text_[i], gfx::Vector2dF(120 * direction, 0), kTextStagger * i,
-                kTextDuration);
+      AnimateIn(text_[i], gfx::Vector2dF(metrics.slide * direction, 0),
+                kTextStagger * i,
+                metrics.shadcn ? metrics.fade : kTextDuration);
     }
-    AnimateIn(content_, gfx::Vector2dF(), base::TimeDelta(), kFadeDuration);
+    AnimateIn(content_,
+              gfx::Vector2dF(0, metrics.shadcn ? metrics.rise / 2 : 0),
+              base::TimeDelta(), metrics.fade);
 
     // The keyboard stays on the screen: on the page's primary button, with
     // the new page read out. Back hides only after that: hiding it while
@@ -1054,7 +1410,7 @@ class KoanWelcomePagesView : public views::View {
     switch (page) {
       case kWelcomePageImport: {
         auto options = std::make_unique<KoanWelcomeOptionsView>(
-            kWelcomeOptionGap, kWelcomePageText[page].title);
+            GetMetrics().option_gap, kWelcomePageText[page].title);
         options->AddOption(kWelcomeYes, kWelcomeImportYes, choices_.import,
                            false,
                            base::BindRepeating(&KoanWelcomePagesView::SetImport,
@@ -1076,7 +1432,7 @@ class KoanWelcomePagesView : public views::View {
         return std::make_unique<KoanWelcomeMockBrowserView>(&essentials_);
       case kWelcomePageDefaultBrowser: {
         auto options = std::make_unique<KoanWelcomeOptionsView>(
-            kWelcomeOptionGap, kWelcomePageText[page].title);
+            GetMetrics().option_gap, kWelcomePageText[page].title);
         options->AddOption(
             kWelcomeYes, kWelcomeDefaultBrowserYes, default_browser_, false,
             base::BindRepeating(&KoanWelcomePagesView::SetDefaultBrowser,
@@ -1087,14 +1443,46 @@ class KoanWelcomePagesView : public views::View {
                                 base::Unretained(this), false));
         return options;
       }
+      case kWelcomePageFinish:
+        return std::make_unique<KoanWelcomeSummaryView>(SummaryRows());
       default:
         return std::make_unique<views::View>();
     }
   }
 
+  // What the user chose, for the last page.
+  KoanWelcomeSummaryView::Rows SummaryRows() const {
+    KoanWelcomeSummaryView::Rows rows;
+    rows.emplace_back(
+        u"Import", choices_.import ? u"From another browser" : u"Fresh start");
+    std::u16string color = u"Your theme";
+    for (const SpaceColor& space_color : kSpaceColors) {
+      if (color_ == space_color.color) {
+        color = space_color.name;
+      }
+    }
+    rows.emplace_back(u"Color", color);
+    if (const TemplateURLService* service =
+            TemplateURLServiceFactory::GetForProfile(
+                welcome_->browser_view()->GetProfile())) {
+      if (const TemplateURL* engine = service->GetDefaultSearchProvider()) {
+        rows.emplace_back(u"Search engine", engine->short_name());
+      }
+    }
+    std::u16string essentials;
+    for (size_t index : essentials_) {
+      essentials += (essentials.empty() ? u"" : u", ") +
+                    std::u16string(kWelcomeEssentialApps[index].name);
+    }
+    rows.emplace_back(u"Essentials", essentials.empty() ? u"None" : essentials);
+    rows.emplace_back(u"Default browser",
+                      default_browser_ ? u"Koan" : u"Not now");
+    return rows;
+  }
+
   std::unique_ptr<views::View> CreateSearchContent() {
     auto options = std::make_unique<KoanWelcomeOptionsView>(
-        kWelcomeEngineGap, kWelcomePageText[kWelcomePageSearch].title);
+        GetMetrics().engine_gap, kWelcomePageText[kWelcomePageSearch].title);
     TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
         welcome_->browser_view()->GetProfile());
     if (!service) {
@@ -1168,11 +1556,21 @@ class KoanWelcomeView : public views::View {
     GetViewAccessibility().SetIsModal(true);
     // Esc skips the rest of the welcome.
     AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
+    // Zen spells the title out character by character. shadcn's title is
+    // set whole, so that Geist keeps its kerning, and each line fades up.
+    const bool whole_lines = GetMetrics().shadcn;
     for (const char16_t* line : {kWelcomeTitleLine1, kWelcomeTitleLine2}) {
       std::vector<views::Label*> chars;
-      for (char16_t c : std::u16string(line)) {
-        auto* label =
-            AddChildView(std::make_unique<views::Label>(std::u16string(1, c)));
+      std::vector<std::u16string> parts;
+      if (whole_lines) {
+        parts.emplace_back(line);
+      } else {
+        for (char16_t c : std::u16string(line)) {
+          parts.emplace_back(1, c);
+        }
+      }
+      for (const std::u16string& part : parts) {
+        auto* label = AddChildView(std::make_unique<views::Label>(part));
         label->SetAutoColorReadabilityEnabled(false);
         label->SetSubpixelRenderingEnabled(false);
         label->SetEnabledColor(kColorKoanWelcomeTitle);
@@ -1208,7 +1606,15 @@ class KoanWelcomeView : public views::View {
       start_->layer()->SetOpacity(1);
       return;
     }
-    // Characters rise in one after another; then the button.
+    // Characters (shadcn: lines) rise in one after another; then the
+    // button.
+    const Metrics metrics = GetMetrics();
+    const base::TimeDelta start =
+        metrics.shadcn ? base::Milliseconds(150) : kCharStartDelay;
+    const base::TimeDelta stagger =
+        metrics.shadcn ? base::Milliseconds(90) : kCharStagger;
+    const base::TimeDelta duration =
+        metrics.shadcn ? 2 * metrics.fade : kCharDuration;
     views::AnimationBuilder builder;
     builder.OnEnded(base::BindOnce(&KoanWelcomeView::ShowStartButton,
                                    weak_factory_.GetWeakPtr()));
@@ -1217,10 +1623,10 @@ class KoanWelcomeView : public views::View {
     for (const auto& line : lines_) {
       for (views::Label* label : line) {
         gfx::Transform below;
-        below.Translate(0, 50);
+        below.Translate(0, metrics.rise);
         label->layer()->SetTransform(below);
-        block = &block->At(kCharStartDelay + kCharStagger * index++);
-        block->SetDuration(kCharDuration)
+        block = &block->At(start + stagger * index++);
+        block->SetDuration(duration)
             .SetOpacity(label, 1, gfx::Tween::EASE_OUT)
             .SetTransform(label, gfx::Transform(), gfx::Tween::EASE_OUT_3);
       }
@@ -1229,11 +1635,13 @@ class KoanWelcomeView : public views::View {
 
   // views::View:
   void Layout(PassKey) override {
+    const Metrics metrics = GetMetrics();
     const int size =
         std::clamp(width() / 12, kWelcomeTitleMinSize, kWelcomeTitleMaxSize);
     const gfx::FontList font = Font(size, gfx::Font::Weight::BOLD);
     const int line_height = size * kWelcomeTitleLineHeight;
-    const int spacing = size * kWelcomeTitleLetterSpacing;
+    // Zen's letter spacing between characters; whole lines have their own.
+    const int spacing = metrics.shadcn ? 0 : size * kWelcomeTitleLetterSpacing;
     const int block = line_height * static_cast<int>(lines_.size()) +
                       kWelcomeStartButtonGap + kWelcomeStartButtonHeight;
     // Centred, raised a little (translateY(-5%)).
@@ -1265,17 +1673,31 @@ class KoanWelcomeView : public views::View {
     }
     pages_->SetBoundsRect(card);
     if (pages_->layer()) {
-      pages_->layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(
-          width() >= kWelcomeCardFullWindowBelow ? kWelcomeCardCornerRadius
-                                                 : 0));
+      pages_->layer()->SetRoundedCornerRadius(
+          gfx::RoundedCornersF(CardRadius()));
     }
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
+    const ui::ColorProvider* provider = GetColorProvider();
+    if (GetMetrics().shadcn) {
+      // shadcn: the window dimmed behind a near-black scrim (its dialog
+      // overlay), the card lifted off it by a small shadow.
+      canvas->DrawColor(provider->GetColor(kColorKoanWelcomeScrim));
+      if (pages_->GetVisible() && CardRadius() > 0) {
+        cc::PaintFlags flags;
+        flags.setAntiAlias(true);
+        flags.setColor(provider->GetColor(kColorKoanWelcomeSurface));
+        flags.setLooper(gfx::CreateShadowDrawLooper({gfx::ShadowValue(
+            gfx::Vector2d(0, kWelcomeOptionShadowY), kWelcomeOptionShadowBlur,
+            provider->GetColor(kColorKoanWelcomeShadow))}));
+        canvas->DrawRoundRect(pages_->bounds(), CardRadius(), flags);
+      }
+      return;
+    }
     // Zen plays a calm video here; Koan paints a calm gradient.
     const SkPoint points[2] = {SkPoint::Make(0, 0),
                                SkPoint::Make(width(), height())};
-    const ui::ColorProvider* provider = GetColorProvider();
     const SkColor4f colors[2] = {
         SkColor4f::FromColor(provider->GetColor(kColorKoanWelcomeBackdropTop)),
         SkColor4f::FromColor(
@@ -1287,6 +1709,12 @@ class KoanWelcomeView : public views::View {
   }
 
  private:
+  // The card's corners: none when it fills a small window.
+  int CardRadius() const {
+    return width() >= kWelcomeCardFullWindowBelow ? GetMetrics().card_radius
+                                                  : 0;
+  }
+
   // views::View:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
     welcome_->Skip();
@@ -1294,8 +1722,10 @@ class KoanWelcomeView : public views::View {
   }
 
   void ShowStartButton() {
-    AnimateIn(start_, gfx::Vector2dF(0, 20), base::Milliseconds(100),
-              base::Milliseconds(400));
+    const Metrics metrics = GetMetrics();
+    AnimateIn(start_, gfx::Vector2dF(0, metrics.shadcn ? metrics.rise : 20),
+              base::Milliseconds(100),
+              metrics.shadcn ? 2 * metrics.fade : base::Milliseconds(400));
   }
 
   void OnStart() {
@@ -1314,7 +1744,7 @@ class KoanWelcomeView : public views::View {
                                    weak_factory_.GetWeakPtr()));
     views::AnimationSequenceBlock* block = &builder.Once();
     gfx::Transform above;
-    above.Translate(0, -14);
+    above.Translate(0, GetMetrics().shadcn ? -GetMetrics().rise / 2 : -14);
     int index = 0;
     for (const auto& line : lines_) {
       for (views::Label* label : line) {
@@ -1342,7 +1772,10 @@ class KoanWelcomeView : public views::View {
     pages_->layer()->SetFillsBoundsOpaquely(false);
     pages_->layer()->SetIsFastRoundedCorner(true);
     InvalidateLayout();
-    AnimateIn(pages_, gfx::Vector2dF(), base::TimeDelta(), kPagesFadeDuration);
+    const Metrics metrics = GetMetrics();
+    AnimateIn(pages_, gfx::Vector2dF(0, metrics.shadcn ? metrics.rise : 0),
+              base::TimeDelta(),
+              metrics.shadcn ? 2 * metrics.fade : kPagesFadeDuration);
     // The pages take the keyboard before the start button hides.
     pages_->Start();
     for (const auto& line : lines_) {
@@ -1363,6 +1796,68 @@ class KoanWelcomeView : public views::View {
 };
 
 BEGIN_METADATA(KoanWelcomeView)
+END_METADATA
+
+// The title bar row on macOS, which the screen covers too, except for the
+// traffic lights: it shows the scrim, and dragging it moves the window, as
+// the title bar it covers would.
+class KoanWelcomeTitleBarArea : public views::View {
+  METADATA_HEADER(KoanWelcomeTitleBarArea, views::View)
+
+ public:
+  explicit KoanWelcomeTitleBarArea(BrowserView* browser_view)
+      : browser_view_(browser_view) {
+    GetViewAccessibility().SetIsIgnored(true);
+  }
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override {
+    canvas->DrawColor(GetColorProvider()->GetColor(kColorKoanWelcomeScrim));
+  }
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    press_in_screen_ = event.location();
+    views::View::ConvertPointToScreen(this, &*press_in_screen_);
+    return true;
+  }
+  bool OnMouseDragged(const ui::MouseEvent& event) override {
+    gfx::Point point = event.location();
+    views::View::ConvertPointToScreen(this, &point);
+    views::Widget* window = browser_view_->GetWidget();
+    if (!press_in_screen_ || !window || !window->IsMoveLoopSupported() ||
+        (point - *press_in_screen_).Length() < kMoveThreshold) {
+      return true;
+    }
+    const gfx::Vector2d offset =
+        *press_in_screen_ - window->GetWindowBoundsInScreen().origin();
+    press_in_screen_.reset();
+    // After this event, as for a page dragged from its top (koan_window_
+    // drag.cc).
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::WeakPtr<views::Widget> window, gfx::Vector2d offset) {
+              if (window) {
+                window->RunMoveLoop(
+                    offset, views::Widget::MoveLoopSource::kMouse,
+                    views::Widget::MoveLoopEscapeBehavior::kDontHide);
+              }
+            },
+            window->GetWeakPtr(), offset));
+    return true;
+  }
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    press_in_screen_.reset();
+  }
+
+ private:
+  // How far the pointer moves before the window does.
+  static constexpr int kMoveThreshold = 4;
+
+  const raw_ptr<BrowserView> browser_view_;
+  std::optional<gfx::Point> press_in_screen_;
+};
+
+BEGIN_METADATA(KoanWelcomeTitleBarArea)
 END_METADATA
 
 // Shown at most once per browser session, in the first window.
@@ -1416,9 +1911,29 @@ void KoanWelcome::Show() {
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_CONTROL);
   params.parent = browser_view_->GetWidget()->GetNativeView();
+  // shadcn's scrim lets the window show through, dimmed.
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.name = "KoanWelcome";
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
+#if BUILDFLAG(IS_MAC)
+  views::Widget::InitParams title_bar_params(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_CONTROL);
+  title_bar_params.parent = browser_view_->GetWidget()->GetNativeView();
+  title_bar_params.opacity =
+      views::Widget::InitParams::WindowOpacity::kTranslucent;
+  title_bar_params.activatable = views::Widget::InitParams::Activatable::kNo;
+  title_bar_params.name = "KoanWelcomeTitleBar";
+  title_bar_widget_ = std::make_unique<views::Widget>();
+  title_bar_widget_->Init(std::move(title_bar_params));
+  title_bar_widget_->SetContentsView(
+      std::make_unique<KoanWelcomeTitleBarArea>(browser_view_));
+  title_bar_corner_ = browser_view_->AddChildView(
+      std::make_unique<KoanWelcomeTitleBarArea>(browser_view_));
+  title_bar_corner_->SetPaintToLayer();
+  title_bar_corner_->layer()->SetFillsBoundsOpaquely(false);
+#endif
   auto* view =
       widget_->SetContentsView(std::make_unique<KoanWelcomeView>(this));
   LayoutWidget();
@@ -1457,6 +1972,22 @@ void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {
   if (!view->layer()) {
     view->SetPaintToLayer();
   }
+  // The title bar row fades with it.
+  for (views::View* part :
+       {title_bar_widget_ ? title_bar_widget_->GetContentsView() : nullptr,
+        title_bar_corner_.get()}) {
+    if (!part) {
+      continue;
+    }
+    if (!part->layer()) {
+      part->SetPaintToLayer();
+      part->layer()->SetFillsBoundsOpaquely(false);
+    }
+    views::AnimationBuilder()
+        .Once()
+        .SetDuration(kFinishFadeDuration)
+        .SetOpacity(part, 0, gfx::Tween::EASE_IN);
+  }
   views::AnimationBuilder()
       .OnEnded(base::BindOnce(
           [](decltype(close_and_apply) then, base::WeakPtr<KoanWelcome> welcome,
@@ -1484,28 +2015,75 @@ void KoanWelcome::Close() {
     widget_->CloseNow();
   }
   widget_.reset();
+  if (title_bar_widget_ && !title_bar_widget_->IsClosed()) {
+    title_bar_widget_->CloseNow();
+  }
+  title_bar_widget_.reset();
+  if (title_bar_corner_) {
+    browser_view_->RemoveChildViewT(std::exchange(title_bar_corner_, nullptr));
+  }
 }
 
 void KoanWelcome::LayoutWidget() {
   if (!widget_) {
     return;
   }
+  gfx::Rect bounds = browser_view_->GetLocalBounds();
+#if BUILDFLAG(IS_MAC)
+  // All of the window, the title bar row included, but the traffic lights,
+  // which stay above the screen and usable: the screen below the row, the
+  // title bar parts in the row around the lights.
+  const gfx::Rect lights = TrafficLightsBounds();
+  const int row = lights.IsEmpty()
+                      ? 0
+                      : std::max(lights.bottom(), kWelcomeMacTitleBarHeight);
+  bounds.Inset(gfx::Insets::TLBR(row, 0, 0, 0));
+  if (title_bar_widget_) {
+    const gfx::Rect beside(lights.right(), 0,
+                           browser_view_->width() - lights.right(), row);
+    title_bar_widget_->SetBounds(browser_view_->ConvertRectToWidget(beside));
+    if (beside.IsEmpty()) {
+      title_bar_widget_->Hide();
+    } else if (!title_bar_widget_->IsVisible()) {
+      title_bar_widget_->ShowInactive();
+    }
+  }
+  if (title_bar_corner_) {
+    title_bar_corner_->SetBoundsRect(gfx::Rect(0, 0, lights.right(), row));
+  }
+#else
   // Everything but the window's controls: the strip above the page (where
   // Koan reveals the window buttons, and which grows into their row while
-  // they show), a toolbar above the page (multiple toolbars), and on macOS
-  // the title bar row with the traffic lights. The window drags and closes
-  // from there as usual.
+  // they show) and a toolbar above the page (multiple toolbars). The window
+  // drags and closes from there as usual.
   int top = ContentCardInsets(browser_view_).top();
   const views::View* top_container = browser_view_->top_container();
   if (top_container->parent() == browser_view_ && top_container->GetVisible()) {
     top = std::max(top, top_container->bounds().bottom());
   }
-#if BUILDFLAG(IS_MAC)
-  top = std::max(top, kWelcomeMacTitleBarHeight);
-#endif
-  gfx::Rect bounds = browser_view_->GetLocalBounds();
   bounds.Inset(gfx::Insets::TLBR(top, 0, 0, 0));
+#endif
   widget_->SetBounds(browser_view_->ConvertRectToWidget(bounds));
+}
+
+gfx::Rect KoanWelcome::TrafficLightsBounds() const {
+  const BrowserFrameView* frame =
+      browser_view_->browser_widget()
+          ? browser_view_->browser_widget()->GetFrameView()
+          : nullptr;
+  if (!frame) {
+    return gfx::Rect();
+  }
+  // The frame's leading exclusion: where the traffic lights are, with the
+  // room it keeps around them (at the lower x, also right-to-left).
+  const BrowserLayoutParams params = frame->GetBrowserLayoutParams();
+  if (params.leading_exclusion.IsEmpty()) {
+    return gfx::Rect();
+  }
+  gfx::Point origin = params.visual_client_area.origin();
+  views::View::ConvertPointFromWidget(browser_view_, &origin);
+  return gfx::Rect(
+      origin, gfx::ToCeiledSize(params.leading_exclusion.ContentWithPadding()));
 }
 
 void KoanWelcome::Apply(const KoanWelcomeChoices& choices) {

@@ -10,13 +10,15 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 
 class BrowserView;
 
 namespace views {
+class View;
 class Widget;
-}
+}  // namespace views
 
 namespace koan {
 
@@ -75,10 +77,19 @@ class KoanWelcome {
   void Show();
   void Close();
   void LayoutWidget();
+  // macOS: the traffic lights' area in BrowserView coordinates (empty when
+  // the frame shows none, e.g. in fullscreen).
+  gfx::Rect TrafficLightsBounds() const;
   void Apply(const KoanWelcomeChoices& choices);
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
+  // macOS: the title bar row is covered too, in two parts around the
+  // traffic lights, which stay above it and usable. Beside them, over the
+  // page, a child widget; behind them, a view in BrowserView, which AppKit's
+  // buttons draw over.
+  std::unique_ptr<views::Widget> title_bar_widget_;
+  raw_ptr<views::View> title_bar_corner_ = nullptr;
   // Finish() ran: the screen is fading out, its choices about to apply.
   bool finishing_ = false;
 

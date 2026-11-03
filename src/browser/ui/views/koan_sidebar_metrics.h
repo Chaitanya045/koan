@@ -346,6 +346,43 @@ inline constexpr int kWelcomeTileCornerRadius = 32;
 inline constexpr int kWelcomeTileBorder = 3;
 inline constexpr int kWelcomeTileNameFontSize = 12;
 
+// The welcome screen in the shadcn style: the same pages, sized like shadcn's
+// components. The sidebar padded 2.5rem; the title 2.25rem semibold
+// (text-4xl), the description 1rem muted (text-base, 1.5 high), shrinking to
+// 0.875rem in a small window; buttons size "lg" (h-10, text-sm medium);
+// options 4rem high with 1rem medium text and a 1rem radio; the preview pane
+// inset 0.5rem in the card, dotted every 1.5rem. Motion: elements rise 12px,
+// text slides 16px, fades take 200ms.
+inline constexpr int kWelcomeShadcnSidebarPadding = 40;
+inline constexpr int kWelcomeShadcnHeadingSize = 36;
+inline constexpr int kWelcomeShadcnHeadingMinSize = 26;
+inline constexpr int kWelcomeShadcnDescriptionSize = 16;
+inline constexpr int kWelcomeShadcnDescriptionMinSize = 14;
+inline constexpr float kWelcomeShadcnDescriptionLineHeight = 1.5f;
+inline constexpr int kWelcomeShadcnButtonHeight = 40;
+inline constexpr int kWelcomeShadcnButtonFontSize = 14;
+inline constexpr int kWelcomeShadcnButtonGap = 12;
+inline constexpr int kWelcomeShadcnBackFontSize = 14;
+inline constexpr int kWelcomeShadcnBackHeight = 32;
+inline constexpr int kWelcomeShadcnBackPadding = 10;
+inline constexpr int kWelcomeShadcnOptionHeight = 64;
+inline constexpr int kWelcomeShadcnEngineHeight = 56;
+inline constexpr int kWelcomeShadcnOptionFontSize = 16;
+inline constexpr int kWelcomeShadcnOptionPadding = 20;
+inline constexpr int kWelcomeShadcnOptionGap = 12;
+inline constexpr int kWelcomeShadcnRadioSize = 16;
+inline constexpr int kWelcomeShadcnRadioDotInset = 4;
+inline constexpr int kWelcomeShadcnPreviewInset = 8;
+inline constexpr int kWelcomeShadcnPreviewDotSpacing = 24;
+inline constexpr int kWelcomeShadcnRise = 12;
+inline constexpr int kWelcomeShadcnSlide = 16;
+inline constexpr int kWelcomeShadcnFadeMs = 200;
+// The summary on the last page: rows 2.75rem high, padded 1.25rem.
+inline constexpr int kWelcomeSummaryRowHeight = 44;
+inline constexpr int kWelcomeSummaryPadding = 20;
+inline constexpr int kWelcomeSummaryMaxWidth = 420;
+inline constexpr int kWelcomeSummaryFontSize = 14;
+
 // Spaces (zen-workspaces.css). The header above a Space's tabs: Zen's 44px
 // indicator with a 16px icon lined up with the favicons, 7px before the
 // name, the 26px "..." button, and the hover background inset 4px.

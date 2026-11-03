@@ -183,6 +183,11 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanWelcomeAccent,
   kColorKoanWelcomeAccentHovered,
   kColorKoanWelcomeOnAccent,
+  // The scrim over the window behind the screen, the fill of an option and
+  // the hover of a ghost or outline button.
+  kColorKoanWelcomeScrim,
+  kColorKoanWelcomeOptionFill,
+  kColorKoanWelcomeHover,
 
   kKoanColorsEnd,
 };
