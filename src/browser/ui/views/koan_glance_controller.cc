@@ -23,7 +23,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
-#include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/javascript_dialogs/app_modal_dialog_manager.h"
 #include "components/prefs/pref_service.h"
@@ -658,8 +657,6 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   contents_ = content::WebContents::Create(create_params);
   contents_->SetDelegate(this);
   contents_->SetUserData(kGlancePageKey, std::make_unique<GlancePage>(this));
-  // Popups without a user gesture are blocked, as in a tab.
-  blocked_content::PopupBlockerTabHelper::CreateForWebContents(contents_.get());
   contents_->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
   glance_input_ = std::make_unique<InputTracker>(contents_.get());
@@ -776,10 +773,6 @@ std::unique_ptr<content::WebContents> KoanGlanceController::TakeContents() {
   DestroyWidget();
   ReleaseContents();
   contents_->RemoveUserData(kGlancePageKey);
-  // The tab gets its own (TabFeatures takes an existing one as a sign the
-  // contents were a tab before).
-  contents_->RemoveUserData(
-      blocked_content::PopupBlockerTabHelper::UserDataKey());
   glance_input_.reset();
   source_ = nullptr;
   awaiting_beforeunload_ = false;
