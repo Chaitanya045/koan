@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -205,6 +205,7 @@
+     "//chrome/browser/ui/views/location_bar",
+     "//components/omnibox/browser",
+     "//components/omnibox/common",
++    "//koan/browser/ui/color:tokens",
+   ]
+ }
+ 

@@ -1,0 +1,71 @@
+diff --git a/chrome/browser/ui/views/chrome_layout_provider.cc b/chrome/browser/ui/views/chrome_layout_provider.cc
+--- a/chrome/browser/ui/views/chrome_layout_provider.cc
++++ b/chrome/browser/ui/views/chrome_layout_provider.cc
+@@ -5,12 +5,14 @@
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ 
+ #include <algorithm>
++#include <optional>
+ 
+ #include "base/containers/fixed_flat_map.h"
+ #include "base/feature_list.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/chrome_typography.h"
+ #include "components/omnibox/common/omnibox_features.h"
++#include "koan/browser/ui/color/koan_look.h"
+ #include "ui/base/pointer/touch_ui_controller.h"
+ #include "ui/gfx/shadow_value.h"
+ #include "ui/views/layout/layout_provider.h"
+@@ -324,6 +326,39 @@
+   return false;
+ }
+ 
++// shadcn's shape for what Chromium rounds: buttons, textfields, comboboxes and
++// menus are `rounded-md`, dialogs and popovers `rounded-lg`, cards and the
++// side panel `rounded-xl`.
++std::optional<koan::look::Step> GetKoanShapeStep(views::ShapeContextToken id) {
++  using Step = koan::look::Step;
++  switch (id) {
++    case views::kBadgeRadius:
++    case kExtensionsMenuButtonRadius:
++      return Step::kSm;
++    case views::kButtonRadius:
++    case views::kComboboxRadius:
++    case views::kMenuRadius:
++    case views::kMenuAuxRadius:
++    case views::kMenuTouchRadius:
++    case views::kTextfieldRadius:
++    case views::kContentSeparatorRadius:
++    case kActionAppMenuFooterButtonCornerRadius:
++      return Step::kMd;
++    case views::kDialogRadius:
++    case kFindBarViewRadius:
++    case kRecentActivityContainerRadius:
++    case kFeatureFirstRunInfoBoxRoundedBorderRadius:
++    case kActionAppMenuContainerCornerRadius:
++    case kActionAppMenuBlockEntryCornerRadius:
++      return Step::kLg;
++    case kSidePanelContentRadius:
++    case kOmniboxExpandedRadius:
++      return Step::kXl;
++    default:
++      return std::nullopt;
++  }
++}
++
+ views::ShapeSysTokens GetShapeSysToken(views::ShapeContextToken id) {
+   static constexpr auto shape_token_map =
+       base::MakeFixedFlatMap<views::ShapeContextToken, views::ShapeSysTokens>({
+@@ -351,6 +386,12 @@
+   CHECK_GE(token, views::kShapeContextTokenStart, base::NotFatalUntil::M162);
+   CHECK_LT(token, kChromeShapeContextTokenEnd, base::NotFatalUntil::M162);
+ 
++  if (koan::look::IsShadcnStyle()) {
++    if (const std::optional<koan::look::Step> step = GetKoanShapeStep(token)) {
++      return koan::look::Radius(*step);
++    }
++  }
++
+   if (token < views::ShapeContextTokens::kShapeContextTokenEnd) {
+     return LayoutProvider::GetCornerRadiusMetric(token, size);
+   }
