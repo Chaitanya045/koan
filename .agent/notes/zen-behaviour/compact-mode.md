@@ -24,7 +24,7 @@ Zen 1.24b. Source: `src/zen/compact-mode/ZenCompactMode.mjs` (1075 lines),
 
 | Input | Result |
 |---|---|
-| **Cmd+S** (`cmd_zenCompactModeToggle`), the sidebar context menu "Enable compact mode" / "Compact Mode >", `Ctrl+click`... | `gZenCompactModeManager.toggle()`; ignored while a toggle animation runs or while the Library is slightly open (`ZenLibrary.isLibrarySlightlyOpen`); never in popup windows (`shouldBeCompact`) |
+| **Cmd+S** (`cmd_zenCompactModeToggle`), the sidebar context menu "Enable compact mode" (single toolbar) / "Compact Mode >" submenu (other layouts) | `gZenCompactModeManager.toggle()`; ignored while a toggle animation runs or while the Library is slightly open (`ZenLibrary.isLibrarySlightlyOpen`); never in popup windows (`shouldBeCompact`) |
 | **Cmd+Opt+S** (`cmd_zenCompactModeShowSidebar`) | `toggleSidebar()`: toggles `zen-user-show` on the toolbox: pins the sidebar visible/floating until toggled again (works only in compact mode) |
 | `cmd_toggleCompactModeIgnoreHover` | toggle with `_ignoreNextHover`: the sidebar does not pop open because the pointer happens to be over it |
 | Dragging the sidebar splitter closed | enters compact mode with the sidebar hidden and shows the toast "Sidebar hidden! Use Cmd+S to bring the sidebar back" (`zen-sidebar-drag-collapsed-toast`) |
