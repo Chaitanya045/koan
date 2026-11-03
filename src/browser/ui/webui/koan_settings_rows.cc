@@ -64,6 +64,10 @@ constexpr Group kGroups[] = {
      "Get a quick overview of your links without opening them in a new tab"},
     {"urlbar", "looks", "URL Bar", "General settings for the URL bar",
      "Customize the URL bar to your liking"},
+    // Koan's own: Zen's extracted source has no setting for this (Firefox's
+    // about:preferences#home has one).
+    {"newtab", "looks", "New Tab Page", "New tabs",
+     "Choose what a new tab page shows"},
     {"workspaces", "tabs", "Workspaces", "General settings for workspaces",
      "With workspaces, you can have multiple browsing sessions at once!"},
     {"pinned-tabs", "tabs", "Pinned Tabs", "General settings for pinned tabs",
@@ -137,6 +141,16 @@ constexpr Option kUrlBarBehaviors[] = {
     {prefs::kUrlBarBehaviorFloatingOnType, "Floating only when typing"},
     {prefs::kUrlBarBehaviorFloat, "Always floating"},
 };
+
+// Like Firefox's "New tabs" choices: a blank page, which is what Zen shows,
+// or the browser's own page (here Chromium's).
+constexpr Option kNewTabPages[] = {
+    {prefs::kNewTabPageKoan, "Blank page"},
+    {prefs::kNewTabPageChromium, "Chromium's new tab page"},
+};
+constexpr char kNewTabPageNote[] =
+    "A new tab page set by your administrator or by an extension is shown "
+    "instead.";
 
 // Zen's close-shortcut behaviours for pinned tabs, in Zen's order.
 constexpr Option kPinnedTabCloseBehaviors[] = {
@@ -352,6 +366,13 @@ constexpr Row kRows[] = {
      .local_state = true,
      .note = "Off while macOS's Reduce Transparency is on, and in a window "
              "that isn't active"},
+    {.group = "newtab",
+     .control = Control::kMenu,
+     .pref = prefs::kNewTabPage,
+     .label = "New tab page",
+     .options = kNewTabPages,
+     .is_available = features::IsNewTabEnabled,
+     .note = kNewTabPageNote},
     // Tab Management.
     {.group = "workspaces",
      .control = Control::kCheckbox,

@@ -2,10 +2,12 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
-# chrome://koan-settings. Linked through //chrome/browser/ui/webui:configs,
-# which registers it.
+# chrome://koan-settings and chrome://koan-newtab. Linked through
+# //chrome/browser/ui/webui:configs, which registers them.
 source_set("webui") {
   sources = [
+    "koan_new_tab_ui.cc",
+    "koan_new_tab_ui.h",
     "koan_settings_handler.cc",
     "koan_settings_handler.h",
     "koan_settings_rows.cc",
@@ -23,6 +25,7 @@ source_set("webui") {
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui:accelerator_table",
+    "//chrome/browser/ui/color:color_headers",
     "//chrome/common:constants",
     "//components/performance_manager",
     "//components/prefs",
@@ -34,8 +37,11 @@ source_set("webui") {
     "//koan/browser/ui/fonts",
     "//koan/browser/ui/views",
     "//koan/common:url_constants",
+    "//services/network/public/mojom",
     "//ui/base",
+    "//ui/color",
     "//ui/events:event_constants",
+    "//ui/gfx:color_utils",
   ]
   if (is_mac) {
     deps += [ "//koan/browser/ui/cocoa:hooks" ]

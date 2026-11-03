@@ -211,6 +211,13 @@ inline constexpr char kDragWindowFromContent[] =
 // this pref by name: keep the name in
 // patches/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc.patch.
 inline constexpr char kBookmarksBarShow[] = "koan.bookmarks_bar.show";
+// What a new tab page shows: "koan" (the default) is Koan's blank page in the
+// theme's colours, like Zen's new tab; "chromium" is Chromium's own new tab
+// page. Koan's own setting. A new tab page set by policy or by an extension
+// wins over both.
+inline constexpr char kNewTabPage[] = "koan.newtab.page";
+inline constexpr char kNewTabPageKoan[] = "koan";
+inline constexpr char kNewTabPageChromium[] = "chromium";
 
 // Whether the welcome screen was shown (zen.welcome-screen.seen).
 inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
