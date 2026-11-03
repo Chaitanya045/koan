@@ -116,7 +116,7 @@ class KoanLibraryButton : public views::ImageButton {
     SetPreferredSize(
         gfx::Size(library::kLibraryButtonSize, library::kLibraryButtonSize));
     SetBackground(library::CreateStateBackground(
-        std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
+        std::nullopt, kColorKoanLibraryPillHovered, library::SmallRadius()));
     GetViewAccessibility().SetName(u"Library");
     RefreshTooltip();
   }

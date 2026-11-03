@@ -36,11 +36,21 @@ bool IsShadcnStyle();
 // The current look's tokens for light or dark, cached until the look changes.
 const TokenSet& CurrentTokens(bool dark);
 
-// Shortcuts for views that need a shape: the current radius scale.
-int CurrentRadiusSm();
-int CurrentRadiusMd();
-int CurrentRadiusLg();
-int CurrentRadiusXl();
+// shadcn's radius scale, Tailwind's rounded-sm … rounded-2xl derived from
+// `--radius`: radius - 4, - 2, +0, + 4, + 8.
+enum class Step { kSm, kMd, kLg, kXl, k2xl };
+
+// The shape of Koan's views and of the Chromium surfaces that follow the
+// look. Every corner radius comes from here, never a literal.
+//
+// Radius(): `step` of the current radius, in pixels.
+int Radius(Step step);
+// StyleRadius(): `zen_px` in the Zen style (Zen's own size), `step` in the
+// shadcn style.
+int StyleRadius(int zen_px, Step step);
+// ScaleRadius(): `zen_px` in the Zen style; in the shadcn style the step of
+// the same size class: up to 5px sm, 9px md, 13px lg, 24px xl, above 2xl.
+int ScaleRadius(int zen_px);
 
 void AddObserver(Observer* observer);
 void RemoveObserver(Observer* observer);

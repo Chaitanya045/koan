@@ -60,7 +60,7 @@ gfx::RoundedCornersF ActiveContentsRadii(
     const BrowserView* browser_view,
     const gfx::RoundedCornersF& default_radii) {
   return UseContentCard(browser_view)
-             ? gfx::RoundedCornersF(kContentCardCornerRadius)
+             ? gfx::RoundedCornersF(ContentCardCornerRadius())
              : default_radii;
 }
 

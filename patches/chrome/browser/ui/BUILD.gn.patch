@@ -1,7 +1,7 @@
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -517,6 +517,7 @@
+@@ -516,6 +516,7 @@
        "//components/tab_groups",
        "//components/tabs:public",
        "//content/public/browser",
@@ -34,11 +34,12 @@ diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
        "//pdf:features",
        "//printing/buildflags",
        "//ui/actions",
-@@ -1533,6 +1538,7 @@
+@@ -1518,6 +1523,8 @@
      "//chrome/browser/ui:ui_features",
      "//chrome/common:chrome_features",
      "//components/omnibox/common",
 +    "//koan/browser:features",
++    "//koan/browser/ui/color:tokens",
      "//ui/base",
      "//ui/base:features",
    ]

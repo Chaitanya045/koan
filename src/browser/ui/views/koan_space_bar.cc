@@ -99,7 +99,7 @@ class KoanSpaceButton : public views::Button,
     flags.setAntiAlias(true);
     if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
       flags.setColor(provider->GetColor(kColorKoanSpaceButtonHovered));
-      canvas->DrawRoundRect(bounds, kSpaceButtonCornerRadius, flags);
+      canvas->DrawRoundRect(bounds, SpaceButtonCornerRadius(), flags);
     }
     if (IsCollapsed() || icon_.empty()) {
       flags.setColor(provider->GetColor(kColorKoanSpaceDot));

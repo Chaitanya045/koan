@@ -347,13 +347,13 @@ class SpaceCard : public views::View {
     flags.setAntiAlias(true);
     flags.setColor(color);
     const gfx::RectF bounds(GetLocalBounds());
-    canvas->DrawRoundRect(bounds, library::kSpaceCardRadius, flags);
+    canvas->DrawRoundRect(bounds, library::SpaceCardRadius(), flags);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(1);
     flags.setColor(provider->GetColor(kColorKoanLibrarySpaceCardBorder));
     gfx::RectF outline = bounds;
     outline.Inset(0.5f);
-    canvas->DrawRoundRect(outline, library::kSpaceCardRadius, flags);
+    canvas->DrawRoundRect(outline, library::SpaceCardRadius(), flags);
   }
 
  private:
@@ -644,10 +644,10 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     icon_button->SetBackground(
         has_icon
             ? CreateStateBackground(std::nullopt, kColorKoanLibraryPillHovered,
-                                    library::kSmallRadius)
+                                    library::SmallRadius())
             : CreateStateBackground(kColorKoanLibrarySpaceIconEmpty,
                                     kColorKoanLibraryPillHovered,
-                                    library::kSmallRadius));
+                                    library::SmallRadius()));
     views::View* icon = header->AddChildView(std::move(icon_button));
 
     if (renaming_space_ == id) {
@@ -874,7 +874,7 @@ MoveHandle::MoveHandle(KoanLibrarySpacesSection* section, int index)
       library::kSmallButtonIconSize + 2 * library::kSmallButtonPadding;
   SetPreferredSize(gfx::Size(kSize, kSize));
   SetBackground(CreateStateBackground(
-      std::nullopt, kColorKoanLibraryPillHovered, library::kSmallRadius));
+      std::nullopt, kColorKoanLibraryPillHovered, library::SmallRadius()));
   SetTooltipText(u"Drag to reorder");
   GetViewAccessibility().SetName(u"Drag to reorder");
   // A mouse handle: out of the tab order, since a key on it does nothing.

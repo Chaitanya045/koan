@@ -95,7 +95,7 @@ class KoanToastView : public views::View {
       key->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(
           kToastKeyPaddingVertical, kToastKeyPaddingHorizontal)));
       key->SetBackground(views::CreateRoundedRectBackground(
-          kColorKoanToastKeyBackground, kToastKeyCornerRadius));
+          kColorKoanToastKeyBackground, ToastKeyCornerRadius()));
     }
     if (!after.empty()) {
       AddChildView(std::make_unique<views::Label>(after))->SetFontList(font);
@@ -124,9 +124,9 @@ class KoanToastView : public views::View {
     button->SetPreferredSize(gfx::Size(
         kToastButtonIconSize + 2 * kToastButtonPadding, kToastButtonHeight));
     button->SetBackground(views::CreateRoundedRectBackground(
-        kColorKoanToastButton, kToastButtonCornerRadius));
+        kColorKoanToastButton, ToastButtonCornerRadius()));
     views::InstallRoundRectHighlightPathGenerator(button, gfx::Insets(),
-                                                  kToastButtonCornerRadius);
+                                                  ToastButtonCornerRadius());
     button->SetTooltipText(name);
     button->GetViewAccessibility().SetName(name);
   }
@@ -153,7 +153,7 @@ class KoanToastView : public views::View {
     flags.setAntiAlias(true);
     flags.setShader(cc::PaintShader::MakeLinearGradient(points, colors, nullptr,
                                                         2, SkTileMode::kClamp));
-    canvas->DrawRoundRect(GetLocalBounds(), kToastCornerRadius, flags);
+    canvas->DrawRoundRect(GetLocalBounds(), ToastCornerRadius(), flags);
   }
 
   void OnMouseEntered(const ui::MouseEvent& event) override {

@@ -91,7 +91,7 @@ class KoanSpaceIconField : public views::Button {
     flags.setColor(provider->GetColor(kColorKoanSpaceIconBorder));
     constexpr float kDash[] = {3.f, 2.f};
     flags.setPathEffect(cc::PathEffect::MakeDash(kDash, 2, 0));
-    canvas->DrawRoundRect(bounds, kSpaceFormIconCornerRadius, flags);
+    canvas->DrawRoundRect(bounds, SpaceFormIconCornerRadius(), flags);
     if (!icon_.empty()) {
       canvas->DrawStringRectWithFlags(
           icon_,
@@ -136,7 +136,7 @@ class KoanSpaceFormButton : public views::LabelButton {
         GetState() == STATE_HOVERED || GetState() == STATE_PRESSED
             ? kColorKoanSpaceFormFieldHovered
             : kColorKoanSpaceFormField,
-        kSpaceFormFieldCornerRadius));
+        SpaceFormFieldCornerRadius()));
   }
 };
 
@@ -175,7 +175,7 @@ KoanSpaceCreationView::KoanSpaceCreationView(
   row->SetBetweenChildSpacing(8);
   row->SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kCenter);
   row->SetBackground(views::CreateRoundedRectBackground(
-      kColorKoanSpaceFormField, kSpaceFormFieldCornerRadius));
+      kColorKoanSpaceFormField, SpaceFormFieldCornerRadius()));
   row->SetProperty(views::kMarginsKey,
                    gfx::Insets::TLBR(0, 0, kSpaceFormFieldGap, 0));
   icon_ = row->AddChildView(

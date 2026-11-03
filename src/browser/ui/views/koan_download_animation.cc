@@ -129,7 +129,7 @@ class KoanDownloadTileView : public views::View {
     flags.setLooper(gfx::CreateShadowDrawLooper(
         {gfx::ShadowValue(gfx::Vector2d(), kDownloadTileShadowBlur,
                           colors->GetColor(kColorKoanDownloadTileShadow))}));
-    canvas->DrawRoundRect(tile, kDownloadTileCornerRadius, flags);
+    canvas->DrawRoundRect(tile, DownloadTileCornerRadius(), flags);
     // Zen's box shows the Library icon: the downloads live there.
     canvas->DrawImageInt(
         gfx::CreateVectorIcon(kLibraryIcon, kDownloadTileIconSize,

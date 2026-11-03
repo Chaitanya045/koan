@@ -116,7 +116,7 @@ class KoanUrlBarBackdrop : public views::View {
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorToolbar));
     flags.setLooper(gfx::CreateShadowDrawLooper(shadows));
-    canvas->DrawRoundRect(gfx::RectF(shape), kFloatingUrlBarCornerRadius,
+    canvas->DrawRoundRect(gfx::RectF(shape), FloatingUrlBarCornerRadius(),
                           flags);
   }
 
@@ -524,7 +524,7 @@ void KoanUrlBarController::ApplyCardStyle() {
   }
   ui::Layer* layer = top_container->layer();
   layer->SetRoundedCornerRadius(gfx::RoundedCornersF(
-      floating ? kFloatingUrlBarCornerRadius : kUrlPillCornerRadius));
+      floating ? FloatingUrlBarCornerRadius() : UrlPillCornerRadius()));
   layer->SetIsFastRoundedCorner(true);
   layer->SetMasksToBounds(true);
 }
