@@ -344,15 +344,54 @@ Besides the shortcuts above:
   third panel (Split Glance over a split, a split shortcut with more tabs
   selected) shows Zen's "Can't add more panels to the split view!" toast.
 
+## Look
+
+Koan's default look is **shadcn/ui's design system**, dark: the window's
+frame, the sidebar, tabs, Essentials, Spaces bar, URL bar and its
+suggestions, menus, bubbles, dialogs, the find bar, infobars, toasts,
+Glance, the Library, Settings and Chromium's own pages (new tab page,
+history, downloads) all take their colours from shadcn's tokens
+(`background`, `foreground`, `card`, `popover`, `primary`, `secondary`,
+`muted`, `accent`, `destructive`, `border`, `input`, `ring`, the `sidebar-*`
+set) and their corner radii from `--radius` (10px: sm 6, md 8, lg 10, xl 14).
+The font is Geist (bundled, SIL OFL), from the next start. Zen's own look is
+one setting away.
+
+**Settings > Look and Feel > Appearance** (browser-wide, applies at once to
+every window):
+
+- **Look**: shadcn/ui (default) or Zen. Zen keeps its gradient themes and
+  the theme picker's per-Space colours.
+- **Mode**: Dark (default), Light, or Automatic (follow the system). The
+  mode is the window's colour mode, so on macOS the title bar, scrollbars and
+  native menus follow it. Websites keep their own colour scheme
+  (Chromium's Appearance setting), as in Zen. Private windows are always
+  dark.
+- **Base colour**: Neutral (default), Zinc, Slate, Stone or Gray.
+- **Accent colour**: none (the base's own primary colour), Blue, Green,
+  Orange, Red, Rose, Violet or Yellow.
+- **Paste a theme**: the CSS that ui.shadcn.com/themes or tweakcn.com makes
+  (`:root { --background: oklch(...); ... } .dark { ... }`, in oklch, hsl,
+  rgb or hex, and `--radius`). Unknown variables are ignored and missing
+  ones keep the base colour's; text without any token is refused. Remove
+  it to go back to the base colour.
+
+The colours are shadcn's own OKLCH values, converted to sRGB exactly, and
+generated from its registry (`scripts/gen_shadcn_palettes.py`).
+
+Limits: menus macOS draws itself (page context menus, the menu bar) are
+dark or light with the mode but not coloured by the tokens; the font is
+loaded at start.
+
 ## Settings
 
 `chrome://koan-settings` (or Ctrl+,) has Koan's settings, laid out like
 Zen's preferences; everything else is in Chromium's own settings, linked
 from its sidebar.
 
-- **Look and Feel**: the browser layout (Only Sidebar / Sidebar and Top
-  Toolbar), tabs on the right, compact mode, what it hides and its flash
-  popup.
+- **Look and Feel**: the look (see "Look" above), the browser layout (Only
+  Sidebar / Sidebar and Top Toolbar), tabs on the right, compact mode, what
+  it hides and its flash popup.
 - **Tab Management**: whether the active Space tints the browser,
   whether background tabs freeze (see "Memory and power"), and Zen's tab
   behaviours (Zen's defaults):
