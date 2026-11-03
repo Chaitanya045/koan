@@ -1,5 +1,5 @@
 // End-to-end test of the new tab page against a real build: chrome://newtab
-// shows Koan's page, an empty page in the theme's colour that loads nothing
+// shows Koan's page, an empty page in shadcn's near-black background that loads nothing
 // else and runs no script (like Zen's), chrome://koan-settings lets the user
 // choose Chromium's own page instead. (Ctrl+T opening the floating URL bar
 // rather than a tab is urlbar's; newtab_custom checks that a new tab page set
@@ -42,15 +42,15 @@ const facts = await evalIn(tab.page, `({
     links: document.querySelectorAll('link, iframe, object, embed').length,
     resources: performance.getEntriesByType('resource').length,
     background: getComputedStyle(document.documentElement).backgroundColor,
-    scheme: document.querySelector('meta[name=color-scheme]')?.content,
+    scheme: getComputedStyle(document.documentElement).colorScheme,
   })`);
 check('The page is empty: no content, script or extra requests',
       facts && facts.children === 0 && facts.text === '' && facts.scripts === 0 &&
       facts.images === 0 && facts.links === 0 && facts.resources === 0,
       JSON.stringify(facts));
-check('...in the theme\'s colour',
-      /^rgb\(\d+, \d+, \d+\)$/.test(facts?.background), facts?.background);
-check('...following the light and dark mode', facts?.scheme === 'light dark');
+check('...in shadcn\'s near-black background (#09090b)',
+      facts?.background === 'rgb(9, 9, 11)', facts?.background);
+check('...in dark mode', facts?.scheme === 'dark', facts?.scheme);
 if (process.env.SHOTS) {
   const r = await onPage(tab.page, c => c.send('Page.captureScreenshot', { format: 'png' }));
   fs.writeFileSync(`${process.env.SHOTS}/newtab.png`, Buffer.from(r.result.data, 'base64'));
