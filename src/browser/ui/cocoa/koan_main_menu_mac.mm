@@ -544,6 +544,13 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   if (NSMenu* view = [main_menu itemWithTag:IDC_VIEW_MENU].submenu) {
     // Zen's View starts with Appearance > Automatic / Light / Dark.
     NSMenu* appearance = [[NSMenu alloc] initWithTitle:@"Appearance"];
+    // Zen's first, disabled item (zen-menubar-appearance-description).
+    NSMenuItem* websites =
+        [[NSMenuItem alloc] initWithTitle:@"Websites will use:"
+                                   action:nil
+                            keyEquivalent:@""];
+    websites.enabled = NO;
+    [appearance addItem:websites];
     const struct {
       NSString* title;
       ColorScheme scheme;
