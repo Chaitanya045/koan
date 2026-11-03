@@ -40,6 +40,24 @@ source_set("prefs") {
   ]
 }
 
+# Which page chrome://newtab shows, called from chrome/browser/search/search.cc.
+source_set("new_tab_page") {
+  sources = [
+    "koan_new_tab_page.cc",
+    "koan_new_tab_page.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+  deps = [
+    ":features",
+    ":prefs",
+    "//components/prefs",
+    "//koan/common:url_constants",
+  ]
+}
+
 # Koan's keyboard shortcuts as data, for the shortcut controller and the
 # settings page.
 source_set("shortcut_table") {

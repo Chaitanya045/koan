@@ -221,6 +221,22 @@ In the multiple-toolbars layout the address is edited in the toolbar, as
 in Chrome; Ctrl+T still opens it instead of a new-tab page, and Esc closes
 it in one press.
 
+## New tab page
+
+A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
+horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
+above off) is an empty page in the theme's background colour, like Zen's:
+no Google logo, search box or shortcut tiles, and nothing to load, so it
+shows at once. It is `chrome://koan-newtab`, a page with no content and no
+script. Ctrl+T (⌘T) still opens the URL bar instead of a tab.
+
+Koan's settings (Ctrl+,), Look and Feel > New tab page > New tabs, choose
+between **Blank page** (Koan's, the default; pref `koan.newtab.page`) and
+**Chromium's new tab page**. A new tab page set by your administrator
+(Chromium's `NewTabPageLocation` policy) or by an extension is shown
+instead of either, as in Chromium. Private windows keep Chromium's private
+browsing page. `chrome://flags/#koan-new-tab` turns Koan's page off.
+
 ## Command palette
 
 As in Zen, the URL bar runs actions too. Type three or more letters of an

@@ -44,6 +44,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kDownloadAnimation, true);
   registry->RegisterBooleanPref(kDragWindowFromContent, true);
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
+  registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
 }
 
