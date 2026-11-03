@@ -377,17 +377,18 @@ search-mode switch, `scale 1 -> .98 -> 1` over 0.25 s, and a one-second
 | Input | **empty**, placeholder "Search..." | the current URL, **fully selected** (`https://www.debian.org/`, 0-23) |
 | Sidebar | the **"+ New Tab" row is highlighted** (`in-urlbar` on every new-tab button); the **current tab loses its selected pill** (`_visuallySelected = false`); the URL pill is blank | the current tab stays selected; the pill is blank; "+ New Tab" is not highlighted |
 | Results | open tabs + top sites (a fresh-tab list) | the same default list while the text is selected; typing filters it |
-| Enter on a result | opens it in a **new tab** (tab count +1, the new tab is selected); a "Switch to Tab" result switches to the existing tab instead | navigates the **current tab** |
+| Enter on a result | opens it in a **new tab** (tab count +1, the new tab is selected); a "Switch to Tab" result is meant to switch to the existing tab (not tested; the Enter I sent opened google.com in a new tab, tab count 20 -> 21) | navigates the **current tab** |
 | Esc | closes the panel in **one press, even after typing; no tab is created** (tab count unchanged, the previous tab's pill returns) | closes the panel and **reverts** the pill to the URL |
-| Clicking outside | closes it (and the click is also delivered to what was clicked) | same |
-| Pressed again | **Cmd+T while the panel is open closes it** (toggle, no tab) | Cmd+L again keeps it open / reselects the text |
+| Clicking outside | closes it; per `docs/ZEN_PARITY.md` the click also reaches what was clicked (**not re-tested here**) | same (not re-tested) |
+| Pressed again | **Cmd+T while the panel is open closes it** (toggle, no tab; verified, tab count unchanged) | not tested |
 | Memory | the typed text is kept for **45 s** (`zen.urlbar.wait-to-clear` = 45000): Cmd+T within 45 s reopens with the same text and results; afterwards it is empty | no memory (always the current URL) |
 | Pref | `zen.urlbar.replace-newtab` = true (default): with it off, Cmd+T makes a real blank tab | `zen.urlbar.behavior` = `floating-on-type`: the bar floats only while editing (others: always-floating, normal) |
 | New window | `zen.urlbar.open-on-startup` = true: a window opens with the panel up | |
 
-Clicking the sidebar **pill** also opens the same floating panel. Other
-ways to get a tab: the "+ New Tab" row (opens the same Cmd+T session), the
-"+" at the bottom right (creates a Space), middle-click or "Open in new tab".
+Clicking the sidebar **pill** opens the same floating panel (as in the
+source and `docs/ZEN_PARITY.md`; I focused the URL bar through the API rather than
+by clicking). The "+ New Tab" row is highlighted while the panel is in
+New Tab mode, i.e. it opens that same session.
 
 ### 4.5 Koan now vs Zen
 
