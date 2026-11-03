@@ -530,10 +530,18 @@ from `develop`:
   [Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly),
   `Koan-<version>-<commit>-arm64.dmg` and its `.sha256`. Each new nightly
   replaces it.
-- **Any run:** the
-  [macOS nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/macos.yml)'s
-  runs, under "Artifacts" (signed-in GitHub users only), or
-  `gh run download <run id> -R Chaitanya045/koan -p 'Koan-*.dmg'`.
+- **Any run** (also of a branch): open a run of the
+  [macOS nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/macos.yml)
+  and click the `Koan-….dmg` under "Artifacts" (you need to be signed in to
+  GitHub). The file is the .dmg itself, not a zip. From a terminal
+  (`gh run download` can't fetch it, because it expects a zip):
+
+  ```sh
+  run=<run id>
+  id=$(gh api repos/Chaitanya045/koan/actions/runs/$run/artifacts \
+    --jq '.artifacts[] | select(.name | endswith(".dmg")) | .id')
+  gh api repos/Chaitanya045/koan/actions/artifacts/$id/zip > Koan.dmg
+  ```
 
 Open the .dmg and drag Koan to Applications.
 
