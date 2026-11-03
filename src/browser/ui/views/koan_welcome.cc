@@ -1492,16 +1492,17 @@ void KoanWelcome::LayoutWidget() {
   }
   // Everything but the window's controls: the strip above the page (where
   // Koan reveals the window buttons, and which grows into their row while
-  // they show), a toolbar above the page (multiple toolbars), and on macOS
-  // the title bar row with the traffic lights. The window drags and closes
-  // from there as usual.
-  int top = ContentCardInsets(browser_view_).top();
+  // they show), a toolbar above the page (multiple toolbars). The window
+  // drags and closes from there as usual. On macOS the controls are AppKit's
+  // and draw above this screen, so it covers the whole window: leaving the
+  // title bar row uncovered showed the sidebar and the page behind it.
+  int top = 0;
+#if !BUILDFLAG(IS_MAC)
+  top = ContentCardInsets(browser_view_).top();
   const views::View* top_container = browser_view_->top_container();
   if (top_container->parent() == browser_view_ && top_container->GetVisible()) {
     top = std::max(top, top_container->bounds().bottom());
   }
-#if BUILDFLAG(IS_MAC)
-  top = std::max(top, kWelcomeMacTitleBarHeight);
 #endif
   gfx::Rect bounds = browser_view_->GetLocalBounds();
   bounds.Inset(gfx::Insets::TLBR(top, 0, 0, 0));
