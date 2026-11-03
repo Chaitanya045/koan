@@ -13,6 +13,7 @@
 // Koan's mixers can read, so scripts/e2e/colors.mjs checks the cycles that go
 // through those in the real browser.
 
+#include <array>
 #include <string>
 #include <tuple>
 
@@ -160,11 +161,11 @@ TEST_P(KoanLookProvidersTest, SidebarOffBuildsToo) {
 }
 
 std::string ParamName(const testing::TestParamInfo<Params>& info) {
-  static const char* const kVariants[] = {"Default", "PastedTheme",
-                                          "SpaceAccent", "HighContrast"};
+  static constexpr std::array<const char*, 4> kVariants = {
+      "Default", "PastedTheme", "SpaceAccent", "HighContrast"};
   return std::string(look::StyleToString(std::get<0>(info.param))) + "_" +
          (std::get<1>(info.param) ? "Dark" : "Light") + "_" +
-         kVariants[static_cast<int>(std::get<2>(info.param))];
+         kVariants.at(static_cast<size_t>(std::get<2>(info.param)));
 }
 
 INSTANTIATE_TEST_SUITE_P(
