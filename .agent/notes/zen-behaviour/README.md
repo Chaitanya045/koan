@@ -18,3 +18,6 @@ Each file ends with a **test script** the Mac loop can run in both Zen and Koan.
 | [close-last-tab-and-empty-tab.md](close-last-tab-and-empty-tab.md) | closing the last tab, the empty tab |
 | [cmd-t-cmd-l-session.md](cmd-t-cmd-l-session.md) | the floating URL bar: Cmd+T / Cmd+L sessions |
 | [compact-mode.md](compact-mode.md) | compact mode: toggle, hover reveal, popups, fullscreen |
+| [spaces.md](spaces.md) | Spaces: switching, animation, swipe, create/rename/delete, Clear |
+| [essentials-and-pinned.md](essentials-and-pinned.md) | Essentials grid, pinned tabs, reset button, close behaviours |
+| [folders.md](folders.md) | folders: create, expand/collapse, active tab, reset, search popup, menu, drag/drop |
