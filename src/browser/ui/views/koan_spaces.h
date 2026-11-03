@@ -57,11 +57,13 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
 bool IsInSpaceForm(const views::View* tab_strip_view,
                    const views::View* region,
                    const gfx::Point& point);
-// Zen's empty tab: a Space whose only tab shows an empty page (a new tab
-// page or about:blank) is an empty Space, drawn with no tab row in the
-// sidebar. Zen hides one blank tab per window and selects it when the last
-// tab closes; here the Space's only tab, which a Space needs to exist, is
-// that tab. Not for Essentials or when Spaces are off.
+// Zen's empty tab: the blank page a window shows when its last tab closes. It
+// is never listed (no sidebar row), never navigates (what the URL bar opens
+// from it opens in a new tab) and Cmd+W on it closes the window. Zen keeps
+// one per window; here each Space with nothing else has one, since a Space
+// (a tab group) needs a tab to exist. Marked by Koan when it makes one (kept
+// with the session), and an empty page still. Not for Essentials or when
+// Spaces are off.
 bool IsEmptyTab(const tabs::TabInterface* tab);
 
 // TabGroupViewVerticalLayout: whether `view` is a tab row to hide (see

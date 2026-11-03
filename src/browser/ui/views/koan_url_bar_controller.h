@@ -54,9 +54,11 @@ class KoanUrlBarCardFill;
 //   the page). Clicking outside closes it.
 //
 // Where it opens follows koan.urlbar.behavior (Zen's zen.urlbar.behavior):
-// "normal" edits in the pill, "floating-on-type" (the default) edits in the
-// pill and floats on the first keystroke, "float" floats right away. Without
-// a pill to edit in (compact mode with the sidebar hidden) it floats.
+// "normal" edits in the pill; "floating-on-type" (the default) floats when
+// the bar is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill
+// after a click on it; "float" floats right away
+// (UrlbarInputBase-mjs.patch, #openPopover). Without a pill to edit in
+// (compact mode with the sidebar hidden) it floats.
 //
 // With koan.urlbar.replace_newtab (Zen's zen.urlbar.replace-newtab), Ctrl+T
 // and the sidebar's new-tab button open the bar empty instead of a tab;

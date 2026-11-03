@@ -1,7 +1,8 @@
 // End-to-end test of Zen's empty tab against a real build. Closing the last
 // tab keeps the window and leaves the Space with an empty tab: no tab row in
-// the sidebar and no second new tab. The next page opened from the URL bar
-// replaces it, so exactly one tab is left.
+// the sidebar and no second new tab. A page opened from the URL bar opens in
+// a new tab (the empty tab never navigates), and Cmd+W on the empty tab closes
+// the window.
 //
 //   scripts/e2e/run.sh empty_tab
 import {
@@ -32,17 +33,33 @@ check('...with no tab row in the sidebar', await tabRows() === 0,
 check('...and the "+ New Tab" row still there',
       shownViews(await views(), 'KoanNewTabRow').length === 1);
 
-// The URL bar opens in place of a new tab; what it opens replaces the empty tab.
+// Cmd+T opens the URL bar in place of a new tab; what it opens goes into a
+// NEW tab: the empty tab never navigates (Zen's UrlbarChildController).
 const [page] = await pages();
 await front(page);
 await key(page, VK.T, CTRL, 't');
 const omnibox = await waitFor(async () => (await viewTree()).find(
     v => v.cls === 'OmniboxViewViews' && v.shown));
-await typeInto(omnibox, 'example.com/?replaced', VK.RETURN);
+await typeInto(omnibox, 'example.com/?opened', VK.RETURN);
 await sleep(1500);
 const after = await pages();
-check('Opening a page from the empty state leaves exactly one tab',
-      after.length === 1 && after[0].url.includes('?replaced'),
+check('Opening a page from the empty state opens it in a new tab',
+      after.some(p => p.url.includes('?opened')) &&
+          after.some(p => p.url.startsWith('chrome://')),
       after.map(p => p.url).join(' '));
-check('...now with one tab row', await tabRows() === 1, String(await tabRows()));
+check('...and the sidebar lists just that one (the empty tab has no row)',
+      await tabRows() === 1, String(await tabRows()));
+
+// Cmd+W on the page that was opened: back to the empty state, then Cmd+W on
+// it closes the window.
+await key(after.find(p => p.url.includes('?opened')), 87, CTRL, 'w');
+await sleep(1000);
+check('Closing it shows the empty state again, with no row',
+      await tabRows() === 0, String(await tabRows()));
+const windowsBefore = (await pages()).length;
+await key((await pages())[0], 87, CTRL, 'w');
+await sleep(1500);
+check('Cmd+W on the empty tab closes the window',
+      (await pages()).length < windowsBefore || (await pages()).length === 0,
+      String((await pages()).length));
 finish();

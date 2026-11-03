@@ -75,6 +75,7 @@
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
@@ -118,6 +119,13 @@ namespace {
 bool IsEmptyPageUrl(const GURL& url) {
   return url.is_empty() || url.IsAboutBlank() ||
          url == GURL(chrome::kChromeUINewTabURL);
+}
+
+// Marks the tab as Zen's empty tab (kept with the session, so it is one again
+// after a restart): see IsEmptyTab().
+constexpr char kEmptyTabKey[] = "koan.empty_tab";
+void MarkEmptyTab(content::WebContents* contents) {
+  SetTabSessionData(contents, kEmptyTabKey, "1");
 }
 
 // zen.workspaces.switch-animation-duration.
@@ -1418,10 +1426,18 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
       }
       indices = {new_index};
     }
+    MarkEmptyTab(model->GetWebContentsAt(new_index));
     // Same id, so whatever refers to the Space still does.
     model->AddToGroupForRestore(indices, closed.id);
     WriteSpace(closed.id, closed.data);
-    if (closed.was_active && !model->GetFocusedGroup()) {
+    // Zen shows the empty tab only when nothing else is left to show: with
+    // Essentials the window keeps what it shows (zen.workspaces.open-new-tab-
+    // if-last-unpinned-tab-is-closed is off by default).
+    bool has_essentials = false;
+    for (int i = 0; i < model->count() && !has_essentials; ++i) {
+      has_essentials = model->IsTabPinned(i);
+    }
+    if (closed.was_active && !model->GetFocusedGroup() && !has_essentials) {
       // Zen stays on an Essential that was selected when the Space emptied.
       tabs::TabInterface* active_tab = model->GetActiveTab();
       const bool on_essential = active_tab && active_tab->IsPinned();
@@ -1445,6 +1461,7 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     // Only Essentials: the window still has a Space, with a new tab.
     chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
                      /*foreground=*/false);
+    MarkEmptyTab(model->GetWebContentsAt(model->count() - 1));
     loose.push_back(model->count() - 1);
   }
   // A window that opened with no Spaces (none restored) while the profile has
@@ -2391,15 +2408,11 @@ bool IsEmptyTab(const tabs::TabInterface* tab) {
   if (!features::IsWorkspacesEnabled() || !tab || tab->IsPinned()) {
     return false;
   }
-  const std::optional<tab_groups::TabGroupId> group = tab->GetGroup();
   content::WebContents* contents = tab->GetContents();
-  if (!group || !contents || !IsEmptyPageUrl(contents->GetVisibleURL())) {
-    return false;
-  }
-  const TabStripModel* model =
-      tab->GetBrowserWindowInterface()->GetTabStripModel();
-  return model && model->group_model()->ContainsTabGroup(*group) &&
-         model->group_model()->GetTabGroup(*group)->ListTabs().length() == 1;
+  // Marked when Koan made it, and an empty page still: it never navigates
+  // (what is opened from it opens in a new tab).
+  return contents && IsEmptyPageUrl(contents->GetVisibleURL()) &&
+         !GetTabSessionData(contents, kEmptyTabKey).empty();
 }
 
 bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {

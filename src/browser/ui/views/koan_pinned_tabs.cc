@@ -75,8 +75,10 @@
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "ui/base/base_window.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/dialog_model.h"
@@ -1567,6 +1569,12 @@ bool ExecutePinnedTabMenuCommand(TabStripModel* tab_strip,
 // --- Tab views and data ---
 
 bool HandleCloseTabCommand(tabs::TabInterface* tab) {
+  // Zen (zen.tabs.close-window-with-empty, on): Cmd+W on the empty tab closes
+  // the window. (Nothing in a split view, which Koan's split view isn't.)
+  if (IsEmptyTab(tab)) {
+    tab->GetBrowserWindowInterface()->GetWindow()->Close();
+    return true;
+  }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
   return controller && controller->HandleCloseShortcut(tab);
 }

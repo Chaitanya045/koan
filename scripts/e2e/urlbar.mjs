@@ -363,12 +363,14 @@ if (BEHAVIOR === 'float') {
 }
 await type(find(vs, 'OmniboxViewViews'), 'wiki');
 vs = await views();
-if (BEHAVIOR === 'normal') {
-  check('Typing keeps the bar in place ("normal"), widened over the page',
-        bar(vs)?.x === pillNow.x && bar(vs)?.w > pillNow.w && !isFloating(vs),
+if (BEHAVIOR === 'float') {
+  check('Typing keeps the floating URL bar, centred and Zen-sized', isFloating(vs),
         `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
 } else {
-  check('Typing floats the URL bar, centred and Zen-sized', isFloating(vs),
+  // Zen's test_Click_Shoudnt_FLoat_Urlbar: a mouse press never floats the
+  // bar, not even once you type.
+  check('Typing keeps the bar in place, widened over the page (a click never floats it)',
+        bar(vs)?.x === pillNow.x && bar(vs)?.w > pillNow.w && !isFloating(vs),
         `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
 }
 shot('typing');
