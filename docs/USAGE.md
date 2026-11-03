@@ -557,9 +557,11 @@ screen: "Welcome to a calmer internet", then a few pages to import from
 another browser, pick a colour, choose the search engine and your
 Essentials, and make Koan the default browser. Every page can be skipped
 with Next. It shows once (start Koan with `--force-first-run` and a new user data
-directory to see it again). Tab moves between its buttons, the arrow keys
-between choices, Enter or Space picks, and Esc skips the rest. The window's
-own buttons stay usable above it.
+directory to see it again). Each list of choices is one Tab stop: the
+arrow keys move in it, Enter or Space picks, and typing a letter jumps to
+the choice starting with it (G for Google, Y for YES). Esc skips the rest.
+On macOS the window opens maximized, and its traffic lights stay usable
+above the welcome screen.
 
 | | |
 |---|---|
