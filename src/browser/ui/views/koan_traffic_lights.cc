@@ -4,18 +4,23 @@
 
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 
+#include <algorithm>
+
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
 #include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/view.h"
 #include "ui/views/view_utils.h"
+#include "ui/views/widget/widget.h"
 
 namespace koan {
 
@@ -64,6 +69,50 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view) {
               : gfx::Rect(frame->width() - corner.width(), 0, corner.width(),
                           corner.height()))
       .Contains(pointer);
+}
+
+gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds) {
+  // (Compiled everywhere, so that the Linux build checks it; only macOS has
+  // traffic lights.)
+  if constexpr (!BUILDFLAG(IS_MAC)) {
+    return bounds;
+  }
+  const views::Widget* widget = host->GetWidget();
+  const auto* browser_view =
+      widget ? views::AsViewClass<BrowserView>(widget->client_view()) : nullptr;
+  const BrowserWidget* browser_widget =
+      browser_view ? browser_view->browser_widget() : nullptr;
+  const BrowserFrameView* frame =
+      browser_widget ? browser_widget->GetFrameView() : nullptr;
+  // The lights are over the sidebar only on its leading side (not with tabs
+  // on the right) and out of fullscreen, where macOS shows them by itself.
+  if (!frame || browser_view->IsFullscreen() ||
+      IsSidebarOnRight(browser_view) || !frame->CaptionButtonsOnLeadingEdge()) {
+    return bounds;
+  }
+  const BrowserLayoutParams params = frame->GetBrowserLayoutParams();
+  const BrowserLayoutExclusionArea& exclusion = params.leading_exclusion;
+  if (exclusion.content.IsEmpty()) {
+    return bounds;
+  }
+  const gfx::Rect lights(
+      params.visual_client_area.origin(),
+      gfx::Size(static_cast<int>(exclusion.content.width()),
+                static_cast<int>(exclusion.content.height() +
+                                 exclusion.vertical_padding)));
+  const gfx::Rect on_window = host->ConvertRectToWidget(bounds);
+  if (!on_window.Intersects(lights)) {
+    return bounds;
+  }
+  const gfx::Point origin = host->ConvertRectToWidget(gfx::Rect()).origin();
+  gfx::Rect moved = bounds;
+  const int right_of_lights = lights.right() - origin.x();
+  if (host->width() >= right_of_lights + bounds.width()) {
+    moved.set_x(std::max(bounds.x(), right_of_lights));
+  } else {
+    moved.set_y(std::max(bounds.y(), lights.bottom() - origin.y()));
+  }
+  return moved;
 }
 
 }  // namespace koan
