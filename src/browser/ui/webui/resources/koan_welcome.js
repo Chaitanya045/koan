@@ -551,16 +551,50 @@ class KoanWelcomePages {
 // "Click to add a color" and the auto / light / dark buttons, and a row of
 // colours. Koan's Spaces have one colour each (a tab group colour) until
 // #41's gradients: picking one sets the active Space's, live.
+// (As elements, not markup: a WebUI page only takes Trusted Types HTML.)
 const kSchemeIcons = {
-  auto: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" ' +
-      'stroke-width="1.5"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/>',
-  light: '<circle cx="8" cy="8" r="3" fill="currentColor"/><path ' +
-      'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
-      'd="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1' +
-      'M12 4l1-1"/>',
-  dark: '<path fill="currentColor" d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 ' +
-      '7z"/>',
+  auto: [
+    ['circle', {cx: 8, cy: 8, r: 6, fill: 'none', stroke: 'currentColor',
+                'stroke-width': 1.5}],
+    ['path', {d: 'M8 2a6 6 0 0 1 0 12z', fill: 'currentColor'}],
+  ],
+  light: [
+    ['circle', {cx: 8, cy: 8, r: 3, fill: 'currentColor'}],
+    ['path', {stroke: 'currentColor', 'stroke-width': 1.5,
+              'stroke-linecap': 'round',
+              d: 'M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1' +
+                  'M3 13l1-1M12 4l1-1'}],
+  ],
+  dark: [
+    ['path', {fill: 'currentColor',
+              d: 'M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z'}],
+  ],
 };
+
+function createSchemeIcon(scheme) {
+  const kSvg = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(kSvg, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const [tag, attributes] of kSchemeIcons[scheme]) {
+    const shape = document.createElementNS(kSvg, tag);
+    for (const [name, value] of Object.entries(attributes)) {
+      shape.setAttribute(name, String(value));
+    }
+    svg.appendChild(shape);
+  }
+  return svg;
+}
+
+// Creates a <div> with `className` and `children`.
+function div(className, ...children) {
+  const element = document.createElement('div');
+  if (className) {
+    element.className = className;
+  }
+  element.append(...children);
+  return element;
+}
 
 function createThemePicker(colors) {
   const panel = document.createElement('div');
@@ -584,9 +618,7 @@ function createThemePicker(colors) {
     input.checked = scheme === 'auto';
     input.setAttribute('aria-label', label.title);
     input.addEventListener('change', () => chrome.send('setColorScheme', [scheme]));
-    label.innerHTML =
-        `<svg viewBox="0 0 16 16" aria-hidden="true">${kSchemeIcons[scheme]}</svg>`;
-    label.prepend(input);
+    label.append(input, createSchemeIcon(scheme));
     schemes.appendChild(label);
   }
   pad.append(hint, schemes);
@@ -738,20 +770,17 @@ function getWelcomePages(data) {
         },
       ],
       render(content) {
-        content.innerHTML = `
-          <div class="zen-welcome-mock-browser">
-            <div class="zen-welcome-mock-browser-sidebar">
-              <div class="zen-welcome-mock-browser-dots">
-                <div class="no-squircles"></div>
-                <div class="no-squircles"></div>
-                <div class="no-squircles"></div>
-              </div>
-              <div id="zen-welcome-essentials"></div>
-              <div class="zen-welcome-mock-tab"></div>
-              <div class="zen-welcome-mock-tab"></div>
-            </div>
-          </div>`;
-        const grid = content.querySelector('#zen-welcome-essentials');
+        // Zen's mock browser: its traffic light dots, the Essentials grid
+        // and two tabs.
+        const grid = div('');
+        grid.id = 'zen-welcome-essentials';
+        content.appendChild(div(
+            'zen-welcome-mock-browser',
+            div('zen-welcome-mock-browser-sidebar',
+                div('zen-welcome-mock-browser-dots', div('no-squircles'),
+                    div('no-squircles'), div('no-squircles')),
+                grid, div('zen-welcome-mock-tab'),
+                div('zen-welcome-mock-tab'))));
         kEssentialApps.forEach((app, index) => {
           const button = document.createElement('button');
           button.className = 'zen-welcome-essential';

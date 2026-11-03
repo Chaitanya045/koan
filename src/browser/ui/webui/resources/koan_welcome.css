@@ -45,6 +45,9 @@ body {
   font-family: -apple-system, system-ui, sans-serif;
   font-size: 11px;
   font-weight: 400;
+  /* Firefox's text colour, which Zen's chrome inherits (the design tokens'
+   * --text-color: gray-100 / gray-05). */
+  color: light-dark(#15141a, #fbfbfe);
   -webkit-font-smoothing: antialiased;
 }
 
