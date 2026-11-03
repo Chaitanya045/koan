@@ -258,6 +258,16 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   mixer[ui::kColorTooltipBackground] = {t[Token::kPrimary]};
   mixer[ui::kColorTooltipForeground] = {t[Token::kPrimaryForeground]};
 
+  // The omnibox suggestions and the find bar float: popovers (not the
+  // sidebar's colour, which differs from `popover` in light mode), with
+  // shadcn's `accent` for the hovered or selected row.
+  mixer[kColorOmniboxResultsBackground] = {t[Token::kPopover]};
+  mixer[kColorOmniboxResultsBackgroundHovered] = {t[Token::kAccent]};
+  mixer[kColorOmniboxResultsBackgroundSelected] = {t[Token::kAccent]};
+  mixer[kColorFindBarBackground] = {t[Token::kPopover]};
+  // The URL pill and omnibox have Input's `border-input`.
+  mixer[kColorLocationBarBorder] = {t.Opaque(Token::kInput, Token::kSidebar)};
+
   // Focus borders use the ring.
   mixer[ui::kColorFocusableBorderFocused] = {t[Token::kRing]};
 }
