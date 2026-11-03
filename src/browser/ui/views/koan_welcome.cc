@@ -942,7 +942,8 @@ class KoanWelcomeColorsView : public views::View {
 
  public:
   explicit KoanWelcomeColorsView(base::RepeatingCallback<void(SkColor)> pick,
-                                 std::optional<SkColor> selected) {
+                                 std::optional<SkColor> selected)
+      : selected_(selected) {
     GetViewAccessibility().SetRole(ax::mojom::Role::kRadioGroup);
     GetViewAccessibility().SetName(u"Colors");
     int position = 0;
@@ -989,13 +990,39 @@ class KoanWelcomeColorsView : public views::View {
                           kWelcomeOptionShadowBlur, palette.shadow)}));
     canvas->DrawRoundRect(panel, metrics.option_radius, flags);
     StrokeRoundRect(canvas, panel, metrics.option_radius, palette.border);
+
+    // A live preview of the chosen colour, above the panel.
+    const gfx::RectF preview(PreviewBounds());
+    flags.setColor(selected_.value_or(palette.tile));
+    canvas->DrawRoundRect(preview, metrics.option_radius, flags);
+    if (!selected_) {
+      StrokeRoundRect(canvas, preview, metrics.option_radius, palette.border);
+    }
+    canvas->DrawStringRectWithFlags(
+        u"Your space", Font(kWelcomeSummaryFontSize, gfx::Font::Weight::MEDIUM),
+        selected_ ? color_utils::GetColorWithMaxContrast(*selected_)
+                  : palette.text_secondary,
+        gfx::ToEnclosingRect(preview), gfx::Canvas::TEXT_ALIGN_CENTER);
   }
 
  private:
+  // The panel of swatches, below the preview.
   gfx::Rect PanelBounds() const {
     const int size = 2 * kWelcomePanelPadding + 3 * kWelcomeSwatchSize +
                      2 * kWelcomeSwatchGap;
-    return gfx::Rect((width() - size) / 2, (height() - size) / 2, size, size);
+    const int total =
+        kWelcomeColorPreviewHeight + kWelcomeColorPreviewGap + size;
+    return gfx::Rect((width() - size) / 2,
+                     (height() - total) / 2 + kWelcomeColorPreviewHeight +
+                         kWelcomeColorPreviewGap,
+                     size, size);
+  }
+  gfx::Rect PreviewBounds() const {
+    const gfx::Rect panel = PanelBounds();
+    return gfx::Rect(
+        panel.x(),
+        panel.y() - kWelcomeColorPreviewGap - kWelcomeColorPreviewHeight,
+        panel.width(), kWelcomeColorPreviewHeight);
   }
 
   void Pick(KoanWelcomeSwatch* picked,
@@ -1004,6 +1031,8 @@ class KoanWelcomeColorsView : public views::View {
     for (views::View* child : children()) {
       static_cast<KoanWelcomeSwatch*>(child)->SetSelected(child == picked);
     }
+    selected_ = color;
+    SchedulePaint();
     pick.Run(color);
   }
 
@@ -1057,6 +1086,7 @@ class KoanWelcomeColorsView : public views::View {
   }
 
   static constexpr int kColumns = 3;
+  std::optional<SkColor> selected_;
   std::vector<base::RepeatingClosure> picks_;
 };
 

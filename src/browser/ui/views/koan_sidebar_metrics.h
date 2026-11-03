@@ -323,6 +323,9 @@ inline constexpr int kWelcomeEngineTileFontSize = 26;
 inline constexpr int kWelcomeSwatchSize = 56;
 inline constexpr int kWelcomeSwatchGap = 20;
 inline constexpr int kWelcomePanelPadding = 28;
+// The live preview of the chosen colour above the swatches.
+inline constexpr int kWelcomeColorPreviewHeight = 40;
+inline constexpr int kWelcomeColorPreviewGap = 16;
 // The Essentials: a mock window (2.4rem top-left corner) 92% as wide as the
 // page after its 3rem top and 6rem left padding; its sidebar 80% wide,
 // padded 2.6rem 2.4rem, with three 22px dots, the 3-column grid of 2rem
