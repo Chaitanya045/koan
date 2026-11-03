@@ -91,8 +91,7 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   // of white or rgb(20, 20, 20) with a 40px blur, and a 0.5px outline,
   // rgba(0, 0, 0, 0.2) or rgb(75, 75, 75). Its urls and the title separator
   // (.urlbarView-url) are #4f4f4f or #aaa.
-  mixer[kColorKoanFloatingUrlBarBackground] = {dark ? SkColorSetRGB(24, 24, 24)
-                                                    : SK_ColorWHITE};
+  mixer[kColorKoanFloatingUrlBarBackground] = {FloatingUrlBarCardColor(key)};
   mixer[kColorKoanFloatingUrlBarGlass] = {
       dark ? SkColorSetARGB(Alpha(0.92f), 20, 20, 20)
            : SkColorSetA(SK_ColorWHITE, Alpha(0.93f))};
@@ -102,14 +101,7 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorOmniboxResultsUrl] = {dark ? SkColorSetRGB(0xaa, 0xaa, 0xaa)
                                          : SkColorSetRGB(0x4f, 0x4f, 0x4f)};
   mixer[kColorOmniboxResultsUrlSelected] = {kColorOmniboxResultsUrl};
-  // The selected (and hovered) suggestion is the accent at 60% over the card.
-  mixer[kColorOmniboxResultsBackgroundSelected] = ui::AlphaBlend(
-      ui::kColorSysPrimary, kColorKoanFloatingUrlBarBackground, Alpha(0.6f));
-  mixer[kColorOmniboxResultsBackgroundHovered] = {
-      kColorOmniboxResultsBackgroundSelected};
-  mixer[kColorOmniboxResultsTextSelected] = {SK_ColorWHITE};
-  mixer[kColorKoanOmniboxRowTitle] =
-      ui::SetAlpha(kColorOmniboxText, Alpha(0.7f));
+  AddZenSuggestionColors(mixer, key);
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 

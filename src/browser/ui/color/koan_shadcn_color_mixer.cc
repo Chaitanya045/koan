@@ -263,6 +263,28 @@ void AddKoanCoreColorMixer(ui::ColorProvider* provider,
   mixer[ui::kColorSysStatePressed] = {t.Alpha(Token::kForeground, 0.12f)};
 }
 
+SkColor FloatingUrlBarCardColor(const ui::ColorProviderKey& key) {
+  const Tokens t(key);
+  if (look::IsShadcnStyle()) {
+    return t[Token::kPopover];
+  }
+  // zen-omnibox.css: rgb(24, 24, 24), or white.
+  return t.dark() ? SkColorSetRGB(24, 24, 24) : SK_ColorWHITE;
+}
+
+void AddZenSuggestionColors(ui::ColorMixer& mixer,
+                            const ui::ColorProviderKey& key) {
+  const Tokens t(key);
+  // The selected (and hovered) suggestion is the accent at 60% over the card,
+  // its text white, and a title is white at 70%.
+  const SkColor selected =
+      Tokens::Over(t[Token::kPrimary], FloatingUrlBarCardColor(key), 0.6f);
+  mixer[kColorOmniboxResultsBackgroundSelected] = {selected};
+  mixer[kColorOmniboxResultsBackgroundHovered] = {selected};
+  mixer[kColorOmniboxResultsTextSelected] = {SK_ColorWHITE};
+  mixer[kColorKoanOmniboxRowTitle] = {t.Alpha(Token::kForeground, 0.7f)};
+}
+
 // The leaves macOS's native mixers (which run after the early mixer) take
 // from the system, and the shadcn-specific shapes of a few Chromium
 // surfaces.
@@ -315,7 +337,8 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   // sidebar's colour, which differs from `popover` in light mode), with
   // shadcn's `accent` for the hovered or selected row.
   // The suggestions are part of the floating card.
-  mixer[kColorOmniboxResultsBackground] = {kColorKoanFloatingUrlBarBackground};
+  const SkColor card = FloatingUrlBarCardColor(key);
+  mixer[kColorOmniboxResultsBackground] = {card};
   mixer[kColorOmniboxResultsBackgroundHovered] = {t[Token::kAccent]};
   mixer[kColorOmniboxResultsBackgroundSelected] = {t[Token::kAccent]};
   // A suggestion reads "title — url": the url is the muted colour, not the
@@ -327,9 +350,8 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   // The new tab page is the page's own surface.
   mixer[kColorNewTabPageBackground] = {t[Token::kBackground]};
   // The URL bar's card: Koan's floating-card colour, hovered or not.
-  mixer[kColorLocationBarBackground] = {kColorKoanFloatingUrlBarBackground};
-  mixer[kColorLocationBarBackgroundHovered] = {
-      kColorKoanFloatingUrlBarBackground};
+  mixer[kColorLocationBarBackground] = {card};
+  mixer[kColorLocationBarBackgroundHovered] = {card};
   // The URL pill and omnibox have Input's `border-input`.
   mixer[kColorLocationBarBorder] = {t.Opaque(Token::kInput, Token::kSidebar)};
 
@@ -371,8 +393,8 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.
   mixer[kColorKoanUrlPill] = {t.InputFill(Token::kSidebar)};
-  mixer[kColorKoanFloatingUrlBarBackground] = {t[Token::kPopover]};
-  mixer[kColorKoanOmniboxRowTitle] = {kColorOmniboxText};
+  mixer[kColorKoanFloatingUrlBarBackground] = {FloatingUrlBarCardColor(key)};
+  mixer[kColorKoanOmniboxRowTitle] = {t[Token::kForeground]};
   mixer[kColorKoanFloatingUrlBarGlass] = {t.Alpha(Token::kPopover, 0.9f)};
   mixer[kColorKoanFloatingUrlBarBorder] = {
       t.Opaque(Token::kBorder, Token::kPopover)};
