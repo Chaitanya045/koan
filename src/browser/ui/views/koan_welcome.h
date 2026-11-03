@@ -76,6 +76,8 @@ class KoanWelcome {
   void MaybeShow();
   void Show();
   void Close();
+  // After the screen closes: the window active, the keyboard on its page.
+  void FocusBrowser();
   void LayoutWidget();
   // macOS: the traffic lights' area in BrowserView coordinates (empty when
   // the frame shows none, e.g. in fullscreen).

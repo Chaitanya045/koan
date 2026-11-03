@@ -116,7 +116,10 @@ check('...and removes it again', chosen(vs, 'KoanWelcomeEssentialTile') === 'Obs
 saveShot('welcome-essentials');
 await next();
 check('Next: default browser', heading() === 'Make Koan your default?', heading());
-await next();
+// Return presses the focused button (Views leaves that out on macOS).
+await viewKey(shownViews(vs, 'KoanWelcomeButton')[0], 13);
+await sleep(800);
+vs = await views();
 check('Next: done', heading() === 'All set? Let’s get rolling!', heading());
 // "Dive in!" double-clicked: the button stays during the fade, but the
 // choices apply once.

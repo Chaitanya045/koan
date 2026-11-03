@@ -30,6 +30,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
@@ -38,6 +39,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -363,6 +365,14 @@ void MakeFocusable(views::Button* button, int corner_radius) {
                                                 corner_radius);
 }
 
+// Return presses the screen's buttons on every platform. Views leaves that
+// out on macOS (PlatformStyle::kReturnClicksFocusedControl), where "Next"
+// and "Dive in!", which hold the focus, would otherwise ignore it.
+bool IsReturn(const ui::KeyEvent& event) {
+  return event.key_code() == ui::VKEY_RETURN && !event.IsControlDown() &&
+         !event.IsAltDown() && !event.IsCommandDown();
+}
+
 // Plays `view` in: from `offset` and transparent to where it is, after
 // `delay`; at once with reduced motion.
 void AnimateIn(views::View* view,
@@ -415,6 +425,13 @@ class KoanWelcomeButton : public views::Button {
     views::Button::OnEnabledChanged();
     SchedulePaint();
   }
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (IsReturn(event) && GetEnabled()) {
+      NotifyClick(event);
+      return true;
+    }
+    return views::Button::OnKeyPressed(event);
+  }
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const Metrics metrics = GetMetrics();
     const Palette palette = GetPalette(this);
@@ -460,6 +477,15 @@ class KoanWelcomeStartButton : public views::Button {
       : views::Button(std::move(callback)) {
     GetViewAccessibility().SetName(u"Start");
     MakeFocusable(this, GetMetrics().button_radius);
+  }
+
+  // views::Button:
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (IsReturn(event)) {
+      NotifyClick(event);
+      return true;
+    }
+    return views::Button::OnKeyPressed(event);
   }
 
   // views::Button:
@@ -2349,6 +2375,7 @@ void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {
     if (welcome) {
       welcome->Close();
       welcome->Apply(choices);
+      welcome->FocusBrowser();
     }
   };
   if (!ShouldAnimate()) {
@@ -2394,8 +2421,28 @@ void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {
 void KoanWelcome::Skip() {
   // From the screen's own key handling: close once it has returned.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&KoanWelcome::Close, weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<KoanWelcome> welcome) {
+                       if (welcome) {
+                         welcome->Close();
+                         welcome->FocusBrowser();
+                       }
+                     },
+                     weak_factory_.GetWeakPtr()));
+}
+
+void KoanWelcome::FocusBrowser() {
+  // The keyboard goes back to the window: to its page, as after a start.
+  views::Widget* window = browser_view_->GetWidget();
+  if (!window) {
+    return;
+  }
+  window->Activate();
+  if (content::WebContents* contents = browser_view_->browser()
+                                           ->GetTabStripModel()
+                                           ->GetActiveWebContents()) {
+    contents->Focus();
+  }
 }
 
 void KoanWelcome::Close() {
