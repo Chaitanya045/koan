@@ -64,6 +64,7 @@
 #include "koan/browser/ui/views/koan_pinned_site.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
@@ -489,6 +490,7 @@ bool KoanUrlBarController::OpenForNewTab() {
   // The keyboard: floating, even if the pill was being edited.
   edit_in_pill_ = false;
   UpdateKeyHandler();
+  SetNewTabRowSelected(true);
   std::u16string text;
   if (base::TimeTicks::Now() - last_search_time_ < kKeepLastSearch) {
     text = last_search_;
@@ -502,6 +504,7 @@ bool KoanUrlBarController::OpenForNewTab() {
     DLOG(WARNING) << "Koan: Cmd+T could not focus the URL bar; opening a tab";
     new_tab_ = false;
     UpdateKeyHandler();
+    SetNewTabRowSelected(false);
     return false;
   }
   // Already focused before (no focus change): place it for the new tab.
@@ -751,6 +754,14 @@ bool KoanUrlBarController::TakeNewTabDisposition() {
   return true;
 }
 
+void KoanUrlBarController::SetNewTabRowSelected(bool selected) {
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_);
+      controller && controller->sidebar_tabs()) {
+    controller->sidebar_tabs()->SetNewTabSelected(selected);
+  }
+}
+
 void KoanUrlBarController::EndNewTabSession(bool committed) {
   if (!new_tab_) {
     return;
@@ -758,6 +769,7 @@ void KoanUrlBarController::EndNewTabSession(bool committed) {
   new_tab_ = false;
   text_was_empty_ = false;
   UpdateKeyHandler();
+  SetNewTabRowSelected(false);
   LocationBarView* bar = location_bar();
   if (!committed && user_input_in_progress_ && bar && bar->omnibox_view()) {
     last_search_ = bar->omnibox_view()->GetText();

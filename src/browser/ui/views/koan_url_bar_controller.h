@@ -195,6 +195,8 @@ class KoanUrlBarController : public views::ViewObserver,
   void RetryEmptyList(int retries_left);
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
+  // Zen draws the "+ New Tab" row as selected during a new-tab session.
+  void SetNewTabRowSelected(bool selected);
 
   const raw_ptr<BrowserView> browser_view_;
   const raw_ptr<KoanCompactModeController> compact_mode_;
