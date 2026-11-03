@@ -236,7 +236,7 @@ it in one press.
 
 A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
 horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
-above off) is an empty page in the theme's background colour, like Zen's:
+above off) is an empty page in the look's background colour, like Zen's (near black, #09090b, in the default shadcn look):
 no Google logo, search box or shortcut tiles, and nothing to load, so it
 shows at once. It is `chrome://koan-newtab`, a page with no content and no
 script. Ctrl+T (⌘T) still opens the URL bar instead of a tab.
