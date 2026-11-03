@@ -86,6 +86,7 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   // The URL pill on the tab colour; the floating URL bar's long shadow
   // (box-shadow 0 30px 140px -15px) black at 80% (60% in dark mode).
   mixer[kColorKoanUrlPill] = {kColorTabBackgroundActiveFrameActive};
+  mixer[kColorKoanFloatingUrlBarBorder] = {SK_ColorTRANSPARENT};
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 

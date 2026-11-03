@@ -259,8 +259,9 @@ const CTRL = 2, ALT = 1;
 const EF_ALT = 8;
 const VK = { T: 84, ESC: 27, ENTER: 13, S: 83 };
 const WINDOW_WIDTH = 1280;
-// Zen: min(window width / 1.5, 750), centred.
-const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
+// The shadcn look (the default): 55% of the window, centred. (Zen's:
+// min(window width / 1.5, 750).)
+const FLOAT_WIDTH = Math.floor(WINDOW_WIDTH * 55 / 100);
 
 const bar = vs => find(vs, 'TopContainerView');
 const isFloating = vs => bar(vs)?.w === FLOAT_WIDTH &&

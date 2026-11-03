@@ -57,7 +57,7 @@ constexpr std::array<std::string_view, kTokenCount> kTokenNames = {
 };
 
 std::span<const OklchColor, kTokenCount> BasePalette(BaseColor base,
-                                                      bool dark) {
+                                                     bool dark) {
   switch (base) {
     case BaseColor::kBlack:
       return dark ? kBlackDark : kBlackLight;

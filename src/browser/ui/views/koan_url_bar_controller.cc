@@ -107,17 +107,26 @@ class KoanUrlBarBackdrop : public views::View {
     }
     const ui::ColorProvider* colors = GetColorProvider();
     const gfx::ShadowValues shadows = {gfx::ShadowValue(
-        gfx::Vector2d(0, kFloatingUrlBarShadowY), kFloatingUrlBarShadowBlur,
+        gfx::Vector2d(0, FloatingUrlBarShadowY()), FloatingUrlBarShadowBlur(),
         colors->GetColor(kColorKoanFloatingUrlBarShadow))};
     // The shape itself, in the card's colour, is hidden under the card.
     gfx::Rect shape = card_;
-    shape.Inset(-kFloatingUrlBarShadowSpread);
+    shape.Inset(-FloatingUrlBarShadowSpread());
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorToolbar));
     flags.setLooper(gfx::CreateShadowDrawLooper(shadows));
     canvas->DrawRoundRect(gfx::RectF(shape), FloatingUrlBarCornerRadius(),
                           flags);
+    // shadcn's 1px `border` around the card, just outside it.
+    cc::PaintFlags border;
+    border.setAntiAlias(true);
+    border.setStyle(cc::PaintFlags::kStroke_Style);
+    border.setStrokeWidth(1);
+    border.setColor(colors->GetColor(kColorKoanFloatingUrlBarBorder));
+    gfx::RectF ring(card_);
+    ring.Outset(0.5f);
+    canvas->DrawRoundRect(ring, FloatingUrlBarCornerRadius() + 0.5f, border);
   }
 
  private:
@@ -492,7 +501,7 @@ void KoanUrlBarController::ApplyCardStyle() {
   if (zen_card && !omnibox_font_ && omnibox) {
     omnibox_font_ = omnibox->GetFontList();
     omnibox->SetFontList(
-        omnibox_font_->DeriveWithSizeDelta(kFloatingUrlBarFontDelta));
+        omnibox_font_->DeriveWithSizeDelta(FloatingUrlBarFontDelta()));
   } else if (!zen_card && omnibox_font_) {
     if (omnibox) {
       omnibox->SetFontList(*omnibox_font_);
@@ -587,6 +596,13 @@ gfx::Rect KoanUrlBarController::CardBounds() const {
   }
   const gfx::Rect area = views::View::ConvertRectToTarget(
       browser_view_, overlay, browser_view_->GetLocalBounds());
+  if (placement_ == Placement::kFloating && look::IsShadcnStyle()) {
+    // shadcn's command dialog: about 55% of the content width, a little above
+    // the middle.
+    const int width = area.width() * 55 / 100;
+    return gfx::Rect(area.x() + (area.width() - width) / 2,
+                     area.y() + area.height() * 3 / 10, width, height);
+  }
   if (placement_ == Placement::kFloating) {
     const int width = std::min(area.width() * 2 / 3, kFloatingUrlBarMaxWidth);
     const int centred_height = std::max(kFloatingUrlBarMinHeight, height);

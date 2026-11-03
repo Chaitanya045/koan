@@ -383,6 +383,13 @@ every window):
 The colours are shadcn's own OKLCH values, converted to sRGB exactly, and
 generated from its registry (`scripts/gen_shadcn_palettes.py`).
 
+In the shadcn style the floating URL bar (typing in the URL bar, or ⌘T / ⌘L)
+is a command-dialog card: 55% of the window wide, a little above the middle,
+on `popover` (#18181b) with a 1px `border` outline, shadcn's soft shadow and a
+`rounded-xl` corner, in Geist. Suggestions below it are `popover` too, with
+`accent` for the selected row. Not yet: the background blur, a "Search…"
+placeholder with a magnifier, and a divider between the field and the rows.
+
 Limits: menus macOS draws itself (page context menus, the menu bar) are
 dark or light with the mode but not coloured by the tokens; the font is
 loaded at start.

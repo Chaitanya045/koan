@@ -78,8 +78,12 @@ std::string LookStylesheet() {
   return css;
 }
 
-void ServeResource(const std::string& path,
+void ServeResource(const std::string& request_path,
                    content::WebUIDataSource::GotDataCallback callback) {
+  // The path includes the query: the page asks for the tokens again with
+  // "?<time>" when the look changes, to get past the cache.
+  const std::string path =
+      request_path.substr(0, request_path.find_first_of("?#"));
   std::string data;
   if (path == "koan_settings.css") {
     data = kKoanSettingsCss;

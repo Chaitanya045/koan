@@ -125,6 +125,20 @@ inline constexpr int kFloatingUrlBarFontDelta = 2;
 inline constexpr int kFloatingUrlBarShadowY = 30;
 inline constexpr int kFloatingUrlBarShadowBlur = 140;
 inline constexpr int kFloatingUrlBarShadowSpread = -15;
+// shadcn's softer shadow (shadow-lg: 0 10px 15px -3px) and text size
+// (text-base: 16px).
+inline int FloatingUrlBarShadowY() {
+  return look::IsShadcnStyle() ? 10 : kFloatingUrlBarShadowY;
+}
+inline int FloatingUrlBarShadowBlur() {
+  return look::IsShadcnStyle() ? 15 : kFloatingUrlBarShadowBlur;
+}
+inline int FloatingUrlBarShadowSpread() {
+  return look::IsShadcnStyle() ? -3 : kFloatingUrlBarShadowSpread;
+}
+inline int FloatingUrlBarFontDelta() {
+  return look::IsShadcnStyle() ? 3 : kFloatingUrlBarFontDelta;
+}
 
 // With "normal", the bar edits in place and widens over the page once the
 // user types (Zen's #urlbar[open] in the single toolbar: min(90%, 40rem)).

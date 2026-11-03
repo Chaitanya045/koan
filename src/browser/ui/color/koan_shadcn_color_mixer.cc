@@ -290,6 +290,9 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   mixer[kColorFindBarBackground] = {t[Token::kPopover]};
   // The new tab page is the page's own surface.
   mixer[kColorNewTabPageBackground] = {t[Token::kBackground]};
+  // The URL bar's card is a command dialog: a popover, hovered or not.
+  mixer[kColorLocationBarBackground] = {t[Token::kPopover]};
+  mixer[kColorLocationBarBackgroundHovered] = {t[Token::kPopover]};
   // The URL pill and omnibox have Input's `border-input`.
   mixer[kColorLocationBarBorder] = {t.Opaque(Token::kInput, Token::kSidebar)};
 
@@ -331,6 +334,8 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.
   mixer[kColorKoanUrlPill] = {t.InputFill(Token::kSidebar)};
+  mixer[kColorKoanFloatingUrlBarBorder] = {
+      t.Opaque(Token::kBorder, Token::kPopover)};
   mixer[kColorKoanFloatingUrlBarShadow] = ui::SetAlpha(
       ui::kColorShadowBase, static_cast<SkAlpha>(t.dark() ? 0x80 : 0x40));
 

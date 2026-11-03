@@ -49,6 +49,8 @@ enum KoanColorIds : ui::ColorId {
   // sidebar's URL pill and the floating URL bar's shadow.
   kColorKoanUrlPill,
   kColorKoanFloatingUrlBarShadow,
+  // The 1px outline of the floating card (shadcn's `border`; none in Zen).
+  kColorKoanFloatingUrlBarBorder,
 
   // Toasts: a vertical gradient, the text, and the background of the
   // shortcut in it.
