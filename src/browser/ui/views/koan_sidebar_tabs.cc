@@ -535,6 +535,11 @@ int PlaceSpaceTabRows(const views::View* tab_group_view,
   return after_pinned ? height + tab_padding : height;
 }
 
+bool IsEmptyTabView(const views::View* view) {
+  const TabView* tab_view = views::AsViewClass<TabView>(view);
+  return tab_view && IsEmptyTab(tab_view->GetTabInterface());
+}
+
 bool IsSidebarTabRowsView(const views::View* view) {
   return views::IsViewClass<KoanSidebarTabRowsView>(view);
 }
@@ -809,6 +814,7 @@ void KoanSidebarTabsController::UpdateClearRow() {
   bool listed = false;
   for (int i = 0; i < model->count() && !listed; ++i) {
     listed = !IsPinnedForUser(model->GetTabAtIndex(i)) &&
+             !IsEmptyTab(model->GetTabAtIndex(i)) &&
              (!workspace || model->GetTabGroupForTab(i) == workspace);
   }
   const auto* state =
@@ -921,6 +927,17 @@ void KoanSidebarTabsController::OnTabChangedAt(tabs::TabInterface* tab,
     // So does pinning a tab in place, and it moves the rows in the focus
     // order.
     ScheduleUpdateRowsHost();
+    // A Space's only tab showing a page, or an empty one, shows or hides its
+    // row (IsEmptyTab()); the layouts are not told by the tab's URL.
+    if (region_) {
+      const auto relayout = [](auto& self, views::View* view) -> void {
+        view->InvalidateLayout();
+        for (views::View* child : view->children()) {
+          self(self, child);
+        }
+      };
+      relayout(relayout, region_);
+    }
   }
 }
 

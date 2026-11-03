@@ -159,6 +159,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // private).
   bool IsEnabled() const;
 
+  // The window's last tab closed and an empty tab is on its way (see
+  // KeepWindowOnLastTabClosed()): keep the closed Space's data meanwhile.
+  void ExpectEmptyTab() { expect_empty_tab_ = true; }
+
   // The Spaces in sidebar order, and the active one.
   std::vector<SpaceInfo> GetSpaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveSpace() const;
@@ -465,6 +469,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Whether the first update with tabs ran, and the Essential selected
   // before it.
   bool started_ = false;
+  bool expect_empty_tab_ = false;
   tabs::TabHandle startup_essential_;
   // Each Space's last active tab (switching back restores it).
   std::map<tab_groups::TabGroupId, tabs::TabHandle> last_active_tabs_;

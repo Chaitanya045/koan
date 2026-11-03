@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
+index 4e9be10d04e981ab98120a4ede977df090ec59c8..f016bd4c6a343dae08c6e9bb9b14ff5d803c6f12 100644
+--- a/chrome/browser/ui/browser.cc
++++ b/chrome/browser/ui/browser.cc
+@@ -163,6 +163,7 @@
+ #include "content/public/common/profiling.h"
+ #include "content/public/common/url_constants.h"
+ #include "content/public/common/webplugininfo.h"
++#include "koan/browser/ui/views/koan_spaces.h"
+ #include "net/base/filename_util.h"
+ #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
+ #include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
+@@ -613,6 +614,12 @@ void Browser::OnTabStripModelChanged(TabStripModel* tab_strip_model,
+ }
+ 
+ void Browser::TabStripEmpty() {
++  // Koan: Zen keeps the window when its last tab closes (an empty tab
++  // follows; see koan/browser/ui/views/koan_spaces.h).
++  if (koan::KeepWindowOnLastTabClosed(this)) {
++    return;
++  }
++
+   // A touch tab drag session may still be delivering OS touch events to this
+   // window's native widget. Destroying it mid-gesture would strand the drag, so
+   // let TabDragController take ownership of closing this browser once the drag

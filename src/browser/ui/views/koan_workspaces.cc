@@ -113,6 +113,12 @@ namespace koan {
 
 namespace {
 
+// A page with nothing on it: a new tab page or about:blank.
+bool IsEmptyPageUrl(const GURL& url) {
+  return url.is_empty() || url.IsAboutBlank() ||
+         url == GURL(chrome::kChromeUINewTabURL);
+}
+
 // zen.workspaces.switch-animation-duration.
 constexpr base::TimeDelta kSwitchAnimationDuration = base::Milliseconds(250);
 
@@ -1326,12 +1332,19 @@ void KoanWorkspaceController::DropStartupSpaceAfterRestore() {
 
 void KoanWorkspaceController::EnsureOneSpaceShown() {
   TabStripModel* model = tab_strip_model();
+  // The last tab closed and the window stays: the empty tab arrives soon, in
+  // the Space that closed with it.
+  if (model->empty() && expect_empty_tab_ && !model->closing_all()) {
+    return;
+  }
   if (model->empty() || model->closing_all() ||
       browser_view_->browser()->IsDeleteScheduled()) {
+    expect_empty_tab_ = false;
     closed_spaces_.clear();
     ungrouped_from_.clear();
     return;
   }
+  expect_empty_tab_ = false;
   // A Space whose tabs didn't all close (a page's "Leave site?" was
   // cancelled, which clears its close gesture) stays a normal Space.
   std::erase_if(deleting_, [model](const tab_groups::TabGroupId& id) {
@@ -1362,14 +1375,35 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
           model->group_model()->GetTabGroup(*closed.next)->ListTabs().start());
     }
     // Its last tabs were only taken out of it (chrome.tabs.ungroup()): they
-    // bring it back, as no new tab is needed. Else a new tab.
+    // bring it back, as no new tab is needed. Else Zen's empty tab: an empty
+    // page already there (the window's fallback tab, which upstream adds when
+    // a Space with every tab closes, or the one added when the window's last
+    // tab closed) becomes the Space's tab, not a second one; else a new tab.
     std::vector<int> indices = ReclaimUngroupedTabs(closed.id);
     if (indices.empty()) {
-      content::WebContents* contents = chrome::AddAndReturnTabAt(
-          browser_view_->browser(), GURL(), index, /*foreground=*/false);
-      const int new_index = model->GetIndexOfWebContents(contents);
-      if (new_index == TabStripModel::kNoTab) {
-        continue;
+      int new_index = TabStripModel::kNoTab;
+      for (int i = 0; i < model->count(); ++i) {
+        if (!model->IsTabPinned(i) && !model->GetTabGroupForTab(i) &&
+            IsEmptyPageUrl(model->GetWebContentsAt(i)->GetVisibleURL())) {
+          new_index = i;
+          break;
+        }
+      }
+      if (new_index != TabStripModel::kNoTab) {
+        const int target = std::min(index > new_index ? index - 1 : index,
+                                    model->count() - 1);
+        if (target != new_index) {
+          model->MoveWebContentsAt(new_index, target,
+                                   /*select_after_move=*/false);
+          new_index = target;
+        }
+      } else {
+        content::WebContents* contents = chrome::AddAndReturnTabAt(
+            browser_view_->browser(), GURL(), index, /*foreground=*/false);
+        new_index = model->GetIndexOfWebContents(contents);
+        if (new_index == TabStripModel::kNoTab) {
+          continue;
+        }
       }
       indices = {new_index};
     }
@@ -2316,6 +2350,48 @@ tabs::TabInterface* PickSpaceTab(TabStripModel* tab_strip,
 
 bool WrapsSpaces(TabStripModel* tab_strip) {
   return KoanWorkspaceController::FromTabStrip(tab_strip) != nullptr;
+}
+
+bool IsEmptyTab(const tabs::TabInterface* tab) {
+  if (!features::IsWorkspacesEnabled() || !tab || tab->IsPinned()) {
+    return false;
+  }
+  const std::optional<tab_groups::TabGroupId> group = tab->GetGroup();
+  const content::WebContents* contents = tab->GetContents();
+  if (!group || !contents || !IsEmptyPageUrl(contents->GetVisibleURL())) {
+    return false;
+  }
+  const TabStripModel* model =
+      tab->GetBrowserWindowInterface()->GetTabStripModel();
+  return model && model->group_model()->ContainsTabGroup(*group) &&
+         model->group_model()->GetTabGroup(*group)->ListTabs().length() == 1;
+}
+
+bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
+  if (!features::IsWorkspacesEnabled() ||
+      browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
+      browser->GetProfile()->IsOffTheRecord() || browser->IsDeleteScheduled() ||
+      browser->GetTabStripModel()->closing_all()) {
+    return false;
+  }
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  if (!controller || !controller->workspaces()->IsEnabled()) {
+    return false;
+  }
+  controller->workspaces()->ExpectEmptyTab();
+  // Not from inside the tab strip's close: it can't be modified there.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<BrowserWindowInterface> window) {
+                       if (window && window->GetTabStripModel()->empty()) {
+                         chrome::AddTabAt(window.get(), GURL(), -1,
+                                          /*foreground=*/true);
+                       }
+                     },
+                     browser->GetWeakPtr()));
+  return true;
 }
 
 bool ShowsSpaceHeader(const views::View* tab_group_view) {
