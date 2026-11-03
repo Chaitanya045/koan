@@ -23,7 +23,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
-#include "components/blocked_content/popup_blocker_tab_helper.h"
+#include "components/blocked_content/popup_blocker.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/javascript_dialogs/app_modal_dialog_manager.h"
 #include "components/prefs/pref_service.h"
@@ -203,26 +203,26 @@ WindowOpenDisposition FallbackDisposition(const PrefService* pref_service) {
   const std::string& method =
       pref_service->GetString(prefs::kGlanceActivationMethod);
   if (method == "shift") {
-    return WindowOpenDisposition::NEW_WINDOW;
+    return WindowOpenDisposition::kNewWindow;
   }
 #if BUILDFLAG(IS_MAC)
   if (method == "meta") {
-    return WindowOpenDisposition::NEW_BACKGROUND_TAB;
+    return WindowOpenDisposition::kNewBackgroundTab;
   }
 #else
   if (method == "ctrl") {
-    return WindowOpenDisposition::NEW_BACKGROUND_TAB;
+    return WindowOpenDisposition::kNewBackgroundTab;
   }
 #endif
-  return WindowOpenDisposition::CURRENT_TAB;
+  return WindowOpenDisposition::kCurrentTab;
 }
 
 // The shape of an activation click (see koan_glance.h): renderer-initiated
-// NEW_POPUP from a trusted user gesture. window.open() popups take the
+// kNewPopup from a trusted user gesture. window.open() popups take the
 // CreateNewWindow path, not OpenURLFromTab, and context-menu actions are
 // browser-initiated, so neither looks like this.
 bool IsActivationClick(const content::OpenURLParams& params) {
-  return params.disposition == WindowOpenDisposition::NEW_POPUP &&
+  return params.disposition == WindowOpenDisposition::kNewPopup &&
          params.is_renderer_initiated && params.user_gesture &&
          params.triggering_event_info ==
              blink::mojom::TriggeringEventInfo::kFromTrustedEvent;
@@ -577,7 +577,7 @@ void OpenLinkInGlance(content::WebContents* source,
       content::Referrer::SanitizeForRequest(
           params.link_url, content::Referrer(params.frame_url.GetAsReferrer(),
                                              params.referrer_policy)),
-      WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_LINK,
+      WindowOpenDisposition::kCurrentTab, ui::PAGE_TRANSITION_LINK,
       /*is_renderer_initiated=*/false);
   open_params.initiator_origin = params.frame_origin;
   glance->Open(open_params, source);
@@ -658,8 +658,6 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   contents_ = content::WebContents::Create(create_params);
   contents_->SetDelegate(this);
   contents_->SetUserData(kGlancePageKey, std::make_unique<GlancePage>(this));
-  // Popups without a user gesture are blocked, as in a tab.
-  blocked_content::PopupBlockerTabHelper::CreateForWebContents(contents_.get());
   contents_->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
   glance_input_ = std::make_unique<InputTracker>(contents_.get());
@@ -776,10 +774,6 @@ std::unique_ptr<content::WebContents> KoanGlanceController::TakeContents() {
   DestroyWidget();
   ReleaseContents();
   contents_->RemoveUserData(kGlancePageKey);
-  // The tab gets its own (TabFeatures takes an existing one as a sign the
-  // contents were a tab before).
-  contents_->RemoveUserData(
-      blocked_content::PopupBlockerTabHelper::UserDataKey());
   glance_input_.reset();
   source_ = nullptr;
   awaiting_beforeunload_ = false;
@@ -914,7 +908,7 @@ content::WebContents* KoanGlanceController::OpenURLFromTab(
     return OpenURLFromTab(source, fallback,
                           std::move(navigation_handle_callback));
   }
-  if (params.disposition == WindowOpenDisposition::CURRENT_TAB) {
+  if (params.disposition == WindowOpenDisposition::kCurrentTab) {
     source->GetController().LoadURLWithParams(
         content::NavigationController::LoadURLParams(params));
     return source;
@@ -936,6 +930,15 @@ content::WebContents* KoanGlanceController::AddNewContents(
     const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
+  // Popups without a user gesture are blocked, as in a tab. (Chromium's
+  // popup blocker is a per-tab helper since 158 and the Glance page has no
+  // tab, so ChromeContentBrowserClient::CanCreateWindow can't block them.)
+  if (!user_gesture && blocked_content::ConsiderForPopupBlocking(disposition)) {
+    if (was_blocked) {
+      *was_blocked = true;
+    }
+    return nullptr;
+  }
   if (source_ && source_->GetDelegate()) {
     return source_->GetDelegate()->AddNewContents(
         source_, std::move(new_contents), target_url, disposition,

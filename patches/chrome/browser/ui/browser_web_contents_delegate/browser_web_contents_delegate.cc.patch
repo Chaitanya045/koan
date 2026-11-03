@@ -17,7 +17,7 @@ index 2ea589165ccac66b5d4043e60130e4bb26eaa359..194e78f08af8ca1c11fe9169df011a2c
 +  // Koan Glance: an activation click (Alt+click by default) opens the link
 +  // in a floating card; one Glance declines gets its modifier's usual
 +  // disposition (koan/browser/ui/views/koan_glance.h).
-+  WindowOpenDisposition koan_fallback = WindowOpenDisposition::CURRENT_TAB;
++  WindowOpenDisposition koan_fallback = WindowOpenDisposition::kCurrentTab;
 +  switch (koan::MaybeOpenGlance(&*browser_, source, params, &koan_fallback)) {
 +    case koan::GlanceClick::kOpened:
 +      return source;

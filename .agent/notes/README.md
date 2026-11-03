@@ -21,6 +21,8 @@ documentation lives in [`docs/`](../../docs) and
   off-screen testing tricks
 - [mac.md](mac.md): the macOS build: the Mac's setup, the one-folder
   layout, and consent before anything runs there
+- [chromium-releases.md](chromium-releases.md): following Chromium's releases
+  (#86): the M158 move, the checkout switch plan, the routine
 - [agent-brief.md](agent-brief.md): the brief every implementation agent gets
 - [parallel-agents.md](parallel-agents.md): one thread per issue, the
   shared build lock, memory limits and recovery

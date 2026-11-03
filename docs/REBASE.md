@@ -18,17 +18,107 @@ moving to a new revision is mechanical:
 - Upstream feature defaults Koan relies on are set in one place,
   `src/browser/koan_feature_overrides.cc`.
 
+## Following Chromium releases
+
+Koan is a daily-driver browser, so it takes Chrome's security fixes, which
+ship in Stable point releases about weekly. A trunk snapshot gets none of
+them. So the pin is always a **release tag of the milestone we're on**,
+never a main commit:
+
+- `CHROMIUM_VERSION` line 1 is the tag (`158.0.8127.2`), line 2 the commit
+  it points to. `scripts/bootstrap.sh` (Linux, the Mac CI and a local Mac
+  alike) checks out exactly that commit; `scripts/ci/check_patches.sh`
+  checks the patches against it.
+- A milestone's tags are on its **release branch**, `refs/branch-heads/<BUILD>`
+  (158.0.8127.x is `branch-heads/8127`), not on main. Fetch a tag by name:
+  `git fetch --depth=1 origin refs/tags/158.0.8127.2`. A branch-head moves
+  past its last tag (it collects fixes before they are tagged); don't pin it.
+- Where Chromium is: [chromiumdash](https://chromiumdash.appspot.com/releases?platform=Mac)
+  lists the Mac channels; the API behind it,
+  `https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=5`
+  (also `Beta`), is what the watcher below reads.
+
+| What happens | Do | Within |
+|---|---|---|
+| Our milestone gets a **point release** (`158.0.8127.x` -> `158.0.81xx.y`), Beta or Stable | bump the pin ("Point release" below) | a few days |
+| A **newer milestone reaches Stable** | rebase onto it ("New milestone" below) | about 2 weeks of it reaching Stable |
+| A newer milestone is only Beta or Dev | nothing | |
+
+Until we take a new milestone we stay on our milestone's latest Stable point
+release. A Beta of our own milestone is fine as the pin until the milestone
+is promoted: its tags are the Stable ones.
+
+### The watcher
+
+`.github/workflows/chromium-releases.yml` (ubuntu, every 6 hours, `contents:
+read` and `issues: write` only) polls chromiumdash for Mac Beta and Stable
+(`scripts/ci/chromium_releases.py`). When our milestone has a newer point
+release, or a newer milestone is at Stable, it runs
+`scripts/ci/check_patches.sh` against that version and opens or updates the
+one issue labelled `chromium-update`: versions, release dates, the date each
+is due, and which patches fail. It closes the issue when the pin has caught
+up, and says nothing while nothing changed. Run it by hand from the Actions
+tab ("Run workflow", with *dry run* to only print), or locally with
+`python3 scripts/ci/chromium_releases.py --dry-run`.
+
+### Point release
+
+Rarely touches the hooks.
+
+```sh
+scripts/ci/check_patches.sh 158.0.8140.5     # no checkout needed; what the issue shows
+```
+
+1. If every patch is `ok`: change `CHROMIUM_VERSION` to the new tag and its
+   commit (`scripts/update_chromium.sh` writes it; or
+   `git ls-remote https://chromium.googlesource.com/chromium/src refs/tags/158.0.8140.5`)
+   and open a PR. CI checks the patches against it.
+2. A `CONFLICT` or `MISSING` (upstream moved or renamed the file): port the
+   hook on the PR's branch, as for a new milestone below.
+3. Switch the checkout you build in: `scripts/update_chromium.sh 158.0.8140.5`.
+   A point release changes few files, but a toolchain roll (`CLANG_REVISION` in
+   `tools/clang/scripts/update.py`) rebuilds everything: look first. On
+   macOS, the nightly build CI (#69, `macos.yml`, once PR #70 is merged)
+   builds whatever `CHROMIUM_VERSION` pins, so it follows on its own; a local
+   Mac build runs `scripts/update_chromium.sh` too.
+
+### New milestone
+
+As above, and a milestone rebases more:
+
+1. `scripts/ci/check_patches.sh <tag>`, then port every conflict on a branch
+   (below). Open PRs that touch hook patches need the same port: list them
+   with `gh pr diff <n> --name-only | grep ^patches/` and check those patch
+   files against the tag.
+2. Upstream renames code and enums between milestones (M158 split the tab
+   layouts into `*_vertical_layout.cc` files and renamed
+   `WindowOpenDisposition::NEW_FOREGROUND_TAB` to `kNewForegroundTab`):
+   patches that apply can still fail to compile. `grep` `src/` and the `+`
+   lines of the patches for what the build breaks on.
+3. `scripts/update_chromium.sh <tag>`, build, and the audit and smoke tests
+   below.
+4. Update the tables and prose here that name moved files.
+
 ## Procedure
 
 ```sh
-scripts/update_chromium.sh --check          # will today's patches apply?
-scripts/update_chromium.sh 159.0.8150.0     # un-brand, un-patch, sync, re-apply
+scripts/ci/check_patches.sh 159.0.8150.0    # will today's patches apply? (no checkout)
+scripts/update_chromium.sh --check          # ... to the checkout's HEAD
+scripts/update_chromium.sh 159.0.8150.0     # un-brand, un-patch, fetch the tag, sync, re-apply
 scripts/build.sh                            # most of the tree rebuilds
 ```
 
-`update_chromium.sh` stops if a patch conflicts. Port that hook by hand in
-`chromium/src`, then `scripts/apply_patches.sh export` and continue with
-`scripts/apply_branding.sh`.
+`update_chromium.sh` takes a release tag (not a commit or branch), checks the
+patches against it before changing anything, and stops if one conflicts. It un-patches by putting back every file any
+Koan patch set touched (this branch's, which may be newer than what is applied,
+and the list in `$KOAN_PATCHED_FILES`, default `.cache/patched-files`), and
+stops if anything else is modified.
+Port that hook on a branch first: get the new file
+(`curl -s 'https://chromium.googlesource.com/chromium/src/+/<tag>/<path>?format=TEXT' | base64 -d`
+for a checkout-less port, or the file in `chromium/src` after the checkout),
+make the same small change, and write `patches/<path>.patch`
+(`scripts/apply_patches.sh export` from a checkout); renamed upstream files
+get a renamed patch. Then `scripts/apply_branding.sh`.
 
 ## Shared hooks for Koan features
 
@@ -104,7 +194,7 @@ assumes:
 | Overlay view lookup (no patch) | `TopContainerOverlayView` class name in `browser_view.cc` | still a NonClientView child with that metadata name |
 | Spaces bottom bar mount (no patch) | `VerticalTabStripRegionView` ctor | content area is still a `FlexLayoutView` child |
 | Space header | `chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc` (`CalculateVerticalLayout`, + `tabs/common` `impl` dep) | the pinned container is still placed before the unpinned one, and `TabStripView` still accepts extra children (Koan adds the header there) |
-| Focused group header | `chrome/browser/ui/views/tabs/common/tab_group_view_layout.cc` (`CalculateVerticalLayout`) | a focused group still lays out its header and the Unfocus pill above its tabs (Koan's Space header replaces both, in windows with Spaces: `koan::ShowsSpaceHeader()` finds the window through the view's widget). Koan hides a Space's group header (visible false, not only empty bounds, so screen readers and the keyboard don't reach upstream's group editor); nothing else sets the header's visibility, so recheck that upstream still doesn't |
+| Focused group header | `chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc` (`CalculateProposedLayout`) | a focused group still lays out its header and the Unfocus pill above its tabs (Koan's Space header replaces both, in windows with Spaces: `koan::ShowsSpaceHeader()` finds the window through the view's widget). Koan hides a Space's group header (visible false, not only empty bounds, so screen readers and the keyboard don't reach upstream's group editor); nothing else sets the header's visibility, so recheck that upstream still doesn't |
 | A Space opens on its last tab | `chrome/browser/ui/tabs/tab_strip_model.cc` (`EnterFocusMode`) | `EnterFocusMode` still activates a tab of the group only when the active tab isn't in it, chosen in one place (Koan's `PickSpaceTab()` replaces the first tab); every Space switch (Koan's, upstream's swipe and Shift+Alt+X) still goes through it |
 | Spaces wrap around | `chrome/browser/ui/tabs/tab_strip_model.cc` (`RotateFocusedGroup`) | still what upstream's swipe controller calls; past the last or first group it still leaves focus mode (Koan wraps instead, `koan::WrapsSpaces()`) |
 | Space swipes and the wheel (no patch) | `chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_focus_swipe_controller.cc` | still a default-priority pre-target handler on `VerticalTabStripRegionView` (Koan's wheel handler is `kSystem`, so it runs first); Windows/Linux still treat wheel events as swipes in `OnMouseEvent`, macOS `ScrollEvent`s in `OnScrollEvent`, a Mac mouse wheel's included: upstream would take a notched wheel as a swipe too, and it doesn't only because Koan's handler (`SpaceWheelHandler`, finding wheels by `ui::GetMouseWheelTick120ths`) runs first and stops the event. Recheck that order if either handler's priority or Koan's `Handle()` changes; `Widget::OnScrollEvent` still turns unhandled scroll events into wheel events |
@@ -124,14 +214,14 @@ assumes:
 | Caption buttons | `chrome/browser/ui/views/frame/opaque_browser_frame_view.cc` (`HitTestCaptionButton`) | the frame's caption buttons are still direct children of the frame view (`ImageButton` in the GTK-native frame, `FrameCaptionButton` otherwise; Koan finds them by class name) and hit-testing still goes through `HitTestCaptionButton`. macOS has no such buttons (`BrowserFrameViewMac`; AppKit draws the traffic lights) |
 | URL bar placement (no patch) | `BrowserViewLayoutImpl::Layout` (top container outside BrowserView) | the layout still sets the top container's and toolbar's bounds each pass (Koan observes them and moves the card over the pill or centres it); `LocationBarView` is still a direct child of `ToolbarView`. The layout still clips the top container and toolbar to their size at the end of each pass (crbug.com/390669712): Koan invalidates BrowserView's layout when it resizes the card outside a pass |
 | URL bar: float on typing | `chrome/browser/ui/views/location_bar/location_bar_view.cc` (`OnChanged`, + its `BUILD.gn`: `//koan/browser/ui/views`) | still called on every omnibox text change, with `user_input_in_progress()` telling typing from reverts |
-| URL bar: new tab from the bar | `chrome/browser/ui/omnibox/chrome_omnibox_client.cc` (`OnAutocompleteAccept`, + its `BUILD.gn`: `//koan/browser/ui/views`) | still the one place an omnibox match's disposition is used to navigate (`set_navigation_params` + `chrome::OpenCurrentURL`); `OmniboxEditModel::OpenMatch` still reverts the omnibox (`RevertAll`) before calling it, except for `NEW_BACKGROUND_TAB` |
+| URL bar: new tab from the bar | `chrome/browser/ui/omnibox/chrome_omnibox_client.cc` (`OnAutocompleteAccept`, + its `BUILD.gn`: `//koan/browser/ui/views`) | still the one place an omnibox match's disposition is used to navigate (`set_navigation_params` + `chrome::OpenCurrentURL`); `OmniboxEditModel::OpenMatch` still reverts the omnibox (`RevertAll`) before calling it, except for `kNewBackgroundTab` |
 | URL bar: New Tab command | `chrome/browser/ui/browser_command_controller.cc` (`IDC_NEW_TAB` in `ExecuteCommandWithDisposition`, + `chrome/browser/ui/BUILD.gn` `browser_command_controller_impl`: `//koan/browser/ui/views`) | ⌘T on macOS, the menus' New Tab, and `AppController`'s File > New Tab when no window is key (`executeCommand:withProfile:`), still run `IDC_NEW_TAB` through here. On macOS ⌘T is a reserved command that runs before any views accelerator (`CommandDispatcher` → `BrowserNativeWidgetMac::ExecuteCommand`), so only this hook sees it there. Callers of `chrome::NewTab()` itself (e.g. `CreateNewTabGroup`) are not affected |
 | New-tab button (no patch) | `BrowserActions` `kActionNewTab` | the tab strips' new-tab button still invokes `kActionNewTab`, whose callback calls `chrome::NewTab` directly; Koan swaps the callback per window. On Linux and Windows Ctrl+T is also a Koan accelerator: a reserved key there still reaches the FocusManager (`BrowserView::PreHandleKeyboardEvent`) before the command runs |
 | Command palette provider | `components/omnibox/browser/autocomplete_controller.cc` (constructor, + its `BUILD.gn`: `//koan/browser/omnibox:hooks`) | providers are still built in the constructor into `providers_`; `AutocompleteProvider::Type::kBuiltin` still marks the omnibox-like controllers; `kPedal` matches with a `takeover_action` still run the action instead of navigating (`OmniboxEditModel::OpenMatch`), and `shortcut_boosted` still sorts a match above searches (`AutocompleteMatch::GetSortingOrder`) |
 | Download started animation | `chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc` (`ShowPendingDownloadStartedAnimation`, + `chrome/browser/ui/views/download/BUILD.gn`: `//koan/browser/ui/views`) | still the one place Chrome's "download started" animation starts for a window; Koan skips it while its own (Zen's) plays |
 | Media cards mount (no patch) | `VerticalTabStripRegionView` ctor | as for the Spaces bottom bar: the content area is a `FlexLayoutView` child; the cards go just above `KoanSpaceBarView` |
 | Window drag from the page (no patch) | `RenderWidgetHost::AddMouseEventCallback`; `Widget::RunMoveLoop` (macOS), `ui::WmMoveResizeHandler` (Linux) | callbacks still see every mouse event forwarded to the page and can swallow it; on macOS `NativeWidgetMac::RunMoveLoop` still moves the window with the pointer until the button goes up; on Linux `DispatchHostWindowDragMovement(HTCAPTION, ...)` still starts a native move, as `WindowEventFilterLinux` does for the title bar |
-| Glance trigger | `chrome/browser/ui/browser_web_contents_delegate/...cc` (`OpenURLFromTab`) | the activation click still arrives as renderer-initiated `NEW_POPUP`; a click Glance declines is reopened through `OpenURLFromTab` with its fallback disposition (no loop: the fallback is never `NEW_POPUP`) |
+| Glance trigger | `chrome/browser/ui/browser_web_contents_delegate/...cc` (`OpenURLFromTab`) | the activation click still arrives as renderer-initiated `kNewPopup` (the `WindowOpenDisposition` values were `NEW_POPUP` etc. before M158); a click Glance declines is reopened through `OpenURLFromTab` with its fallback disposition (no loop: the fallback is never `kNewPopup`) |
 | Renderer switches | `chrome/browser/chrome_content_browser_client.cc` (`AppendExtraCommandLineSwitches`, + `chrome/browser/BUILD.gn` `core`) | the renderer branch still has the `RenderProcessHost` for `child_process_id` |
 | Glance activation | `third_party/blink/renderer/core/loader/navigation_policy.cc` | `NavigationPolicyFromEventModifiers` still maps modifier clicks to policies; the popup policy is still never produced by link clicks |
 | Link context menu | `chrome/browser/renderer_context_menu/render_view_context_menu.cc` (+ its `BUILD.gn`) | `AppendLinkItems()`'s split-view block unchanged; `ExecuteCommand` still records metrics for every id first (Koan's id 55000 runs before); id 55000 still unused in `chrome_command_ids.h` |
@@ -139,7 +229,7 @@ assumes:
 | Sidebar tab rows | `chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc` (`CalculateVerticalLayout`), `tab_strip_view.cc` (`IsPositionInWindowCaption`) | the vertical layout still places pinned container, separator, unpinned container top to bottom with a running `y`; Koan's rows view is a direct `TabStripView` child |
 | Tab and tile sizes | `chrome/browser/ui/layout_constants.cc` | the `kVerticalTab*` constants still size vertical tab rows, pinned tiles and their radius |
 | Close button on hover, favicon gap | `.../tabs/common/tab_view_vertical_layout.cc` (`IsChildVisible`, `OnInstalled`) | the close button's last branch still decides "active or hovered"; the icon's `padding` in `tab_children_configs_` is still the gap after the favicon (applied after the icon), so `koan::SidebarTabIconGap` sets the favicon-to-title gap |
-| Tab rows and Essentials tiles | `.../tabs/common/vertical_tab_style_views.cc` (`PaintTab`), `pinned_tab_container_view.cc` (`CalculateProposedLayout`) | vertical tabs still paint their background through `PaintTab`; the pinned grid still computes `children_on_row` |
+| Tab rows and Essentials tiles | `.../tabs/common/vertical_tab_style_views.cc` (`PaintTab`), `pinned_tab_container_view_vertical_layout.cc` (`CalculateProposedLayout`) | vertical tabs still paint their background through `PaintTab`; the pinned grid still computes `children_on_row` |
 | Sidebar width limits | `chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc` (ctor, `GetMinimumSize`, the resize handler) | the saved width is still read through the state controller in the ctor (Koan clamps it to the active limits); the min/max and collapse snap width are applied in `GetMinimumSize` and the resize handler. Upstream also reads the `vertical_tab_strip_state.h` constants, unhooked, in `browser_view_tabbed_layout_impl.cc` (window minimum width), `tab_view.cc` (`UncollapsedMinWidth`), `vertical_tab_strip_top_container.cc` (combo button switch), `tab_view_vertical_layout.cc` (fallback width) and, on macOS, `browser_native_widget_mac.mm` (`GetGlassFrameWidth` caps the glass frame at 400px, so with Chromium's GlassFrame feature on a Koan sidebar wider than 400px outgrows it; the feature is off in Koan). Recheck that none of these starts depending on the limits |
 | Sidebar rows lookup (no patch) | `VerticalTabStripRegionView`, `BrowserView::OnVerticalTabStripModeChanged` | the region outlives its `TabStripView` (rebuilt on a vertical/horizontal switch, after which Koan re-adds the rows); the region's content area still holds a `FrameSeparator` (hidden by Koan) and a `VerticalTabStripBottomContainer` with a `NewTabButton` (hidden), found by class name |
 | Colour mixer | `chrome/browser/ui/color/chrome_color_mixers.cc` | Koan mixer still runs after Chrome's, before custom themes |
@@ -153,12 +243,12 @@ assumes:
 | macOS keychain item | `components/os_crypt/common/keychain_password_mac.mm` | `kDefaultServiceName`/`kDefaultAccountName` still name the Safe Storage item, and nothing else hard-codes "Chromium Safe Storage" on macOS. Never rename it once profiles exist |
 | Settings page | `chrome/browser/ui/webui/chrome_web_ui_configs.cc` | `RegisterChromeWebUIConfigs` still adds `WebUIConfig`s to the `WebUIConfigMap`; `WebUIDataSource::SetRequestFilter` still serves any path (the page's files are embedded, no .pak) |
 | Tab selection on close | `chrome/browser/ui/tabs/tab_strip_model.cc` (`DetermineNewSelectedIndex`) | the opener preferences still come first and `is_eligible` still covers collapsed and focus-mode tabs; Koan's most-recently-used pick goes right after them |
-| No "Unfocused tab group" toast | `chrome/browser/ui/tabs/tab_strip_model.cc` (`SetSelection`) | the toast is still shown when a selection change leaves focus mode (Koan's Space switches do) |
+| No "Unfocused tab group" toast | `chrome/browser/ui/tabs/tab_strip_model.cc` (`ExitFocusMode`) | the toast is still shown when `SetSelection` leaves focus mode (`TabGroupFocusExitReason::kTabOutsideGroupActivated`; Koan's Space switches do) |
 | Spaces aren't saved groups | `chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.cc` (`OnTabGroupAdded`, + `saved_tab_groups` `impl` dep), `chrome/browser/sessions/session_restore.cc` (`ProcessSavedGroup`, + `sessions` `impl` dep), `chrome/browser/ui/browser_live_tab_context.cc` (`AddRestoredTab`'s `SaveGroup`, + `browser_live_tab_context_impl` dep) | a local group still becomes a saved group only in these three places: a new group, a restored group (session restore saves an unsaved one, or connects a saved one, whose tabs the sync service then navigates to its saved URLs, which would undo #59's restore to the pinned URL), a reopened tab of an unsaved group. Tab restore still restores unsaved groups' tabs through `chrome::AddRestoredTab` (on demand) |
 | Close tab on Back | `chrome/browser/ui/tabs/back_to_opener/back_to_opener_controller.cc` (`HasValidOpener`, which `CanGoBackToOpener` now calls) | upstream's back-to-opener (`tabs::kBackToOpener`, enabled in `koan_feature_overrides.cc`) still closes the tab and activates its opener; `CanGoBack` / `ShouldEnableBackButton` still ask `CanGoBackToOpener` and the back button's menu (`BackForwardMenuModel`) still asks `HasValidOpener` |
 | Ctrl+Tab options (no patch) | `IsReservedCommandOrKey` in `BrowserView::PreHandleKeyboardEvent` | reserved keys still go through `FocusManager::ProcessAccelerator`, so Koan's targets see Ctrl+Tab first; `chrome::IsCtrlTabMruEnabled` still reports Chromium's recently-used Ctrl+Tab (Koan defers to it) |
 | Settings page: shortcut capture (no patch) | `BrowserView::PreHandleKeyboardEvent` | still returns early while the FocusManager's shortcut handling is suspended (the editor suspends it while recording a key) |
-| Pinned tabs in upstream's "leave pinned tabs" checks | `chrome/browser/ui/tabs/tab_strip_model.cc` (`HasIndicesClosedByCommand`, `GetTabsClosedByCommand`), `src/browser/koan_tab_hooks.cc` (`ShouldCloseTabOnBack`, no patch) | Close Other Tabs and Close Tabs Below still skip `IsPinned()` tabs there, and back-to-opener still asks `ShouldCloseTabOnBack`; each also asks `koan::IsPinnedForUser()`, which counts tabs pinned to their workspace. Other upstream pinned checks (freezing, Memory Saver) read the page's pinned state, which Koan sets for those tabs |
+| Pinned tabs in upstream's "leave pinned tabs" checks | `chrome/browser/ui/tabs/tab_strip_model.cc` (`GetTabsClosedByCommand`, which `HasTabsClosedByCommand` uses), `src/browser/koan_tab_hooks.cc` (`ShouldCloseTabOnBack`, no patch) | Close Other Tabs and Close Tabs Below still skip `IsPinned()` tabs there, and back-to-opener still asks `ShouldCloseTabOnBack`; each also asks `koan::IsPinnedForUser()`, which counts tabs pinned to their workspace. Other upstream pinned checks (freezing, Memory Saver) read the page's pinned state, which Koan sets for those tabs |
 | Reopened tab keeps its pinned state | `chrome/browser/ui/browser_live_tab_context.cc` (`GetExtraDataForTab`) (+ `ui/BUILD.gn`) | the tab restore service still takes a closed tab's extra data from there and hands it to `CreateRestoredTab` |
 | Close Tab command on a pinned tab | `chrome/browser/ui/browser_commands.cc` (`chrome::CloseTab`) (+ `ui/BUILD.gn`) | Ctrl+W, Ctrl+F4 and, on macOS, Cmd+W and the menu bar's Close Tab still run `IDC_CLOSE_TAB` through `chrome::CloseTab` |
 | Tab row decoration | `chrome/browser/ui/views/tabs/common/tab_view.cc` (end of ctor) | `TabTitle` / `TabIcon` are still direct children of `TabView`, laid out by its layout manager |

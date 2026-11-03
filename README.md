@@ -101,8 +101,9 @@ On a Mac with Apple Silicon and Xcode, the same scripts build
 [CONTRIBUTING.md](CONTRIBUTING.md#macos) for what you need.
 
 The Chromium version Koan is pinned to is in
-[`CHROMIUM_VERSION`](CHROMIUM_VERSION). Moving to a new version is described
-in [docs/REBASE.md](docs/REBASE.md).
+[`CHROMIUM_VERSION`](CHROMIUM_VERSION): a release tag of the milestone it
+follows, updated with Chrome's point releases. How is described in
+[docs/REBASE.md](docs/REBASE.md#following-chromium-releases).
 
 ## How it works
 

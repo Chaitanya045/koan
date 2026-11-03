@@ -1,0 +1,50 @@
+diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
+index e720d5d..6fb2663 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
+@@ -12,6 +12,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_group_line_view.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_unfocus_button.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
++#include "koan/browser/ui/views/koan_spaces.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/geometry/size.h"
+ #include "ui/views/layout/proposed_layout.h"
+@@ -55,8 +56,13 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+         GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding));
+   }
+ 
++  // Koan Spaces: a Space is the focused group, and Koan's Space header
++  // replaces the group's header and the "Unfocus" pill.
++  const bool koan_space = TabGroupView().IsGroupFocused() &&
++                          koan::ShowsSpaceHeader(&TabGroupView());
++
+   if (TabGroupView().unfocus_header_) {
+-    if (TabGroupView().IsGroupFocused()) {
++    if (TabGroupView().IsGroupFocused() && !koan_space) {
+       gfx::Rect unfocus_bounds;
+       unfocus_bounds.set_x(header_bounds.x());
+       unfocus_bounds.set_y(height);
+@@ -83,12 +89,18 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+     header_bounds.set_width(size_bounds.width().value() - header_bounds.x());
+   }
+ 
++  // A Space's is hidden, not just empty: upstream's header is keyboard and
++  // screen reader reachable, and its editor could ungroup or close the
++  // Space. (Nothing else hides the header, so its visibility comes from
++  // here, not from the view, which this hid.)
+   layouts.child_layouts.emplace_back(TabGroupView().group_header_.get(),
+-                                     TabGroupView().group_header_->GetVisible(),
+-                                     header_bounds);
++                                     !koan_space,
++                                     koan_space ? gfx::Rect() : header_bounds);
+ 
+-  height +=
+-      header_bounds.height() + kGroupHeaderVerticalMargin + kTabVerticalPadding;
++  if (!koan_space) {
++    height += header_bounds.height() + kGroupHeaderVerticalMargin +
++              kTabVerticalPadding;
++  }
+   width = std::max(width, header_bounds.width() + header_bounds.x());
+ 
+   // If the tab strip is not collapsed then the group line is below and left

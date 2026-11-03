@@ -1,7 +1,8 @@
 diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/browser_live_tab_context.cc
+index cc8786f..19bbef3 100644
 --- a/chrome/browser/ui/browser_live_tab_context.cc
 +++ b/chrome/browser/ui/browser_live_tab_context.cc
-@@ -59,6 +59,8 @@
+@@ -61,6 +61,8 @@
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/session_storage_namespace_handle.h"
  #include "content/public/browser/web_contents.h"
@@ -10,17 +11,17 @@ diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/b
  #include "ui/base/mojom/window_show_state.mojom.h"
  #include "ui/base/window_open_disposition.h"
  
-@@ -200,6 +202,9 @@
- 
-   glic::PopulateGlicExtraData(tab_strip_model_->GetTabAtIndex(index),
-                               &extra_data);
+@@ -207,6 +209,9 @@ std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
+               &browser_.get())) {
+     extra_data.merge(contextual_tasks_controller->GetTabRestoreData(tab));
+   }
 +  // Koan: its features' per-tab data (koan_session_data.h).
 +  extra_data.merge(
 +      koan::GetTabSessionData(tab_strip_model_->GetWebContentsAt(index)));
  
    return extra_data;
  }
-@@ -224,6 +229,8 @@
+@@ -232,6 +237,8 @@ BrowserLiveTabContext::GetExtraDataForWindow() const {
            focused_group->ToString();
      }
    }
@@ -29,7 +30,7 @@ diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/b
  
    return data;
  }
-@@ -389,9 +396,12 @@
+@@ -407,9 +414,12 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
        // the visual metadata and save it manually.
        BrowserLiveTabContext::From(browser)->SetVisualDataForGroup(
            group_id.value(), tab.group_visual_data.value());
@@ -45,7 +46,7 @@ diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/b
      }
    } else {
      std::optional<tab_groups::SavedTabGroup> saved_group =
-@@ -563,6 +573,9 @@
+@@ -581,6 +591,9 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
  
    BrowserWindowInterface* browser =
        CreateBrowserWindow(std::move(*create_params));

@@ -45,7 +45,7 @@ enum class GlanceClick {
 // (Ctrl, Cmd on macOS) or a new window (Shift) inside the renderer. With
 // Koan Glance on, blink's NavigationPolicyFromEventModifiers() maps the
 // activation click to a popup policy instead, which a link click never
-// produces otherwise; it arrives here as a renderer-initiated NEW_POPUP from
+// produces otherwise; it arrives here as a renderer-initiated kNewPopup from
 // a trusted gesture.
 GlanceClick MaybeOpenGlance(BrowserWindowInterface* browser,
                             content::WebContents* source,

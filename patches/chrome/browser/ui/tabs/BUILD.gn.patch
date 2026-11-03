@@ -1,16 +1,16 @@
 diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
-index 1c4df06838acdd54323be28c7275ca53bdc7d9bc..4432c91ba1fc3029753665f5c9eb139090b8483e 100644
+index d747eb7..b4a99ee 100644
 --- a/chrome/browser/ui/tabs/BUILD.gn
 +++ b/chrome/browser/ui/tabs/BUILD.gn
-@@ -197,6 +197,7 @@ if (!is_android) {
+@@ -198,6 +198,7 @@ if (!is_android) {
        "//components/contextual_tasks/public",
        "//components/contextual_tasks/public:feature_list",
        "//components/feed:feature_list",
 +      "//koan/browser/ui/views",
+       "//third_party/omnibox_proto",
      ]
    }
- 
-@@ -428,6 +429,10 @@ if (!is_android) {
+@@ -432,6 +433,10 @@ if (!is_android) {
        "//components/tab_groups",
        "//components/web_modal",
        "//components/webapps/common",
@@ -21,7 +21,7 @@ index 1c4df06838acdd54323be28c7275ca53bdc7d9bc..4432c91ba1fc3029753665f5c9eb1390
      ]
    }
  
-@@ -746,6 +751,7 @@ if (!is_android) {
+@@ -755,6 +760,7 @@ if (!is_android) {
        "//components/webapps/browser",
        "//components/zoom",
        "//net",

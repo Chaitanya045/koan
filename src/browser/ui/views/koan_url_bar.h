@@ -17,8 +17,8 @@ namespace koan {
 
 // While the URL bar is open in place of a new tab (Ctrl+T or the sidebar's
 // new-tab button with Zen's zen.urlbar.replace-newtab), whatever the user
-// opens from it goes to a new foreground tab: turns the CURRENT_TAB
-// disposition into NEW_FOREGROUND_TAB. Called from
+// opens from it goes to a new foreground tab: turns the kCurrentTab
+// disposition into kNewForegroundTab. Called from
 // ChromeOmniboxClient::OnAutocompleteAccept().
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
                                    WindowOpenDisposition* disposition);
