@@ -7,6 +7,7 @@
 //   Zen's theme stylesheets (colour values)
 //   zen-workspaces.css (the Spaces' colour values)
 //   zen-library.css (the Library's colour values)
+//   zen-omnibox.css, zen-popup.css (the floating URL bar card's colours)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
@@ -15,6 +16,7 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/color/koan_look.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_mixer.h"
@@ -31,25 +33,15 @@ constexpr SkAlpha Alpha(float opacity) {
   return static_cast<SkAlpha>(opacity * SK_AlphaOPAQUE);
 }
 
-// Koan's own colours (koan_color_id.h), Zen's for now: shades of the toolbar
+// Koan's own colours (koan_color_id.h) in the Zen style: shades of the toolbar
 // text on the sidebar (zen-tabs/vertical-tabs.css, zen-theme.css), the URL
 // bar's (zen-omnibox.css) and the accent colour for toasts (zen-popup.css).
-void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
+void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   const bool dark = key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
 
-  // Tab rows (Zen's --tab-background-color-selected, Firefox's
-  // --tab-hover-background-color): selected white at 80% (18% in dark mode),
-  // hovered the text colour at 11%.
-  mixer[kColorKoanSidebarTabSelected] = {
-      SkColorSetA(SK_ColorWHITE, Alpha(dark ? 0.18f : 0.8f))};
-  mixer[kColorKoanSidebarTabHovered] =
-      ui::SetAlpha(kColorToolbarText, Alpha(0.11f));
-
-  // Zen's toolbar button hover and press backgrounds, New Tab at 70%.
-  mixer[kColorKoanSidebarRowHovered] =
-      ui::SetAlpha(kColorToolbarText, Alpha(0.07f));
-  mixer[kColorKoanSidebarRowPressed] =
-      ui::SetAlpha(kColorToolbarText, Alpha(0.1f));
+  // Tab rows, the toolbar text and the hover and press backgrounds derive
+  // from the primary colour (koan_shadcn_color_mixer.cc); New Tab is at 70%.
+  AddZenTabColors(mixer, key);
   mixer[kColorKoanSidebarNewTabForeground] =
       ui::SetAlpha(kColorToolbarText, Alpha(0.7f));
   mixer[kColorKoanSidebarSeparator] =
@@ -85,6 +77,30 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   // The URL pill on the tab colour; the floating URL bar's long shadow
   // (box-shadow 0 30px 140px -15px) black at 80% (60% in dark mode).
   mixer[kColorKoanUrlPill] = {kColorTabBackgroundActiveFrameActive};
+  // The floating URL bar (zen-omnibox.css, #urlbar[breakout-extend]): white
+  // or rgb(24, 24, 24), a glass pane (zen.theme.acrylic-urlbar) at 93% / 92%
+  // of white or rgb(20, 20, 20) with a 40px blur, and a 0.5px outline,
+  // rgba(0, 0, 0, 0.2) or rgb(75, 75, 75). Its urls and the title separator
+  // (.urlbarView-url) are #4f4f4f or #aaa.
+  mixer[kColorKoanFloatingUrlBarBackground] = {FloatingUrlBarCardColor(key)};
+  mixer[kColorKoanFloatingUrlBarGlass] = {
+      dark ? SkColorSetARGB(Alpha(0.92f), 20, 20, 20)
+           : SkColorSetA(SK_ColorWHITE, Alpha(0.93f))};
+  mixer[kColorKoanFloatingUrlBarBorder] = {
+      dark ? SkColorSetRGB(75, 75, 75)
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.2f))};
+  // The input row (zen-omnibox.css): no focus ring, a thin divider (10%), the
+  // placeholder at 54% of the text colour.
+  mixer[kColorKoanFloatingUrlBarFocusRing] = {SK_ColorTRANSPARENT};
+  mixer[kColorKoanFloatingUrlBarDivider] = {
+      SkColorSetA(dark ? SK_ColorWHITE : SK_ColorBLACK, Alpha(0.1f))};
+  mixer[kColorKoanFloatingUrlBarPlaceholder] = {
+      dark ? SkColorSetA(SkColorSetRGB(0xfb, 0xfb, 0xfe), Alpha(0.54f))
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.54f))};
+  mixer[kColorOmniboxResultsUrl] = {dark ? SkColorSetRGB(0xaa, 0xaa, 0xaa)
+                                         : SkColorSetRGB(0x4f, 0x4f, 0x4f)};
+  mixer[kColorOmniboxResultsUrlSelected] = {kColorOmniboxResultsUrl};
+  AddZenSuggestionColors(mixer, key);
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 
@@ -180,24 +196,6 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanLibraryAddSpaceHovered] =
       ui::AlphaBlend(ui::kColorSysPrimary, kColorToolbar, Alpha(0.7f));
   mixer[kColorKoanLibraryAddSpaceForeground] = {SK_ColorWHITE};
-  // Space themes are tab group colours (until #41's per-Space themes).
-  mixer[kColorKoanLibrarySpaceTintGrey] = {
-      kColorTabGroupTabStripFrameActiveGrey};
-  mixer[kColorKoanLibrarySpaceTintBlue] = {
-      kColorTabGroupTabStripFrameActiveBlue};
-  mixer[kColorKoanLibrarySpaceTintRed] = {kColorTabGroupTabStripFrameActiveRed};
-  mixer[kColorKoanLibrarySpaceTintYellow] = {
-      kColorTabGroupTabStripFrameActiveYellow};
-  mixer[kColorKoanLibrarySpaceTintGreen] = {
-      kColorTabGroupTabStripFrameActiveGreen};
-  mixer[kColorKoanLibrarySpaceTintPink] = {
-      kColorTabGroupTabStripFrameActivePink};
-  mixer[kColorKoanLibrarySpaceTintPurple] = {
-      kColorTabGroupTabStripFrameActivePurple};
-  mixer[kColorKoanLibrarySpaceTintCyan] = {
-      kColorTabGroupTabStripFrameActiveCyan};
-  mixer[kColorKoanLibrarySpaceTintOrange] = {
-      kColorTabGroupTabStripFrameActiveOrange};
 
   // Media cards (zen-theme.css --zen-sidebar-notification-*): the accent at
   // 5% on white (black in dark mode), a 6px shadow black at 10% (30%), an
@@ -265,12 +263,42 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanWelcomeOnAccent] = {ui::kColorSysOnPrimary};
 }
 
+// Space themes are tab group colours (until #41's per-Space themes): the
+// Library's Space cards, in either look.
+void AddSpaceTintColors(ui::ColorMixer& mixer) {
+  mixer[kColorKoanLibrarySpaceTintGrey] = {
+      kColorTabGroupTabStripFrameActiveGrey};
+  mixer[kColorKoanLibrarySpaceTintBlue] = {
+      kColorTabGroupTabStripFrameActiveBlue};
+  mixer[kColorKoanLibrarySpaceTintRed] = {kColorTabGroupTabStripFrameActiveRed};
+  mixer[kColorKoanLibrarySpaceTintYellow] = {
+      kColorTabGroupTabStripFrameActiveYellow};
+  mixer[kColorKoanLibrarySpaceTintGreen] = {
+      kColorTabGroupTabStripFrameActiveGreen};
+  mixer[kColorKoanLibrarySpaceTintPink] = {
+      kColorTabGroupTabStripFrameActivePink};
+  mixer[kColorKoanLibrarySpaceTintPurple] = {
+      kColorTabGroupTabStripFrameActivePurple};
+  mixer[kColorKoanLibrarySpaceTintCyan] = {
+      kColorTabGroupTabStripFrameActiveCyan};
+  mixer[kColorKoanLibrarySpaceTintOrange] = {
+      kColorTabGroupTabStripFrameActiveOrange};
+}
+
 }  // namespace
 
 void AddKoanColorMixer(ui::ColorProvider* provider,
                        const ui::ColorProviderKey& key) {
   ui::ColorMixer& mixer = provider->AddMixer();
-  AddKoanColors(mixer, key);
+  // Chromium's leaves and the URL bar's card follow the active token set;
+  // Koan's own views have their values per look.
+  AddShadcnChromiumColors(mixer, key);
+  AddSpaceTintColors(mixer);
+  if (look::IsShadcnStyle()) {
+    AddShadcnKoanColors(mixer, key);
+  } else {
+    AddZenColors(mixer, key);
+  }
 
   if (!features::IsSidebarEnabled()) {
     return;

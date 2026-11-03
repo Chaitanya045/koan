@@ -403,8 +403,9 @@ class DownloadIconView : public views::View {
                            std::lround(center.y() - size / 2.f), size, size);
     canvas->Save();
     if (preview_) {
-      SkPath clip = SkPath::RRect(gfx::RectToSkRect(target),
-                                  library::kSmallRadius, library::kSmallRadius);
+      SkPath clip =
+          SkPath::RRect(gfx::RectToSkRect(target), library::SmallRadius(),
+                        library::SmallRadius());
       canvas->ClipPath(clip, /*do_anti_alias=*/true);
     }
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(), target.x(),
@@ -711,7 +712,7 @@ class KoanLibraryDownloadsSection
       row->AddAction(library::CreateIconButton(
           BindAction(guid, action), button_icon, std::move(tooltip),
           library::kRowButtonIconSize, library::kRowButtonPadding,
-          library::kPillRadius));
+          library::PillRadius()));
     };
     if (IsPending(item)) {
       add_button(&KoanLibraryDownloadsSection::Cancel, vector_icons::kCloseIcon,
@@ -728,7 +729,7 @@ class KoanLibraryDownloadsSection
     auto more = library::CreateIconButton(
         views::Button::PressedCallback(), views::kMoreHorizIcon,
         u"More options", library::kRowButtonIconSize,
-        library::kRowButtonPadding, library::kPillRadius);
+        library::kRowButtonPadding, library::PillRadius());
     views::Button* more_button = more.get();
     more->SetCallback(base::BindRepeating(
         &KoanLibraryDownloadsSection::ShowMenuBelow, base::Unretained(this),

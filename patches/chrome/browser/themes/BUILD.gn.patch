@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/themes/BUILD.gn b/chrome/browser/themes/BUILD.gn
+--- a/chrome/browser/themes/BUILD.gn
++++ b/chrome/browser/themes/BUILD.gn
+@@ -47,6 +47,7 @@
+     "//components/themes/cross_device",
+     "//components/version_info",
+     "//content/public/browser",
++    "//koan/browser/ui/views",
+     "//third_party/abseil-cpp:absl",
+     "//ui/color",
+     "//ui/color/dynamic_color",

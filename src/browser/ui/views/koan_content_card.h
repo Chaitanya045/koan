@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_CONTENT_CARD_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_CONTENT_CARD_H_
 
+#include "koan/browser/ui/color/koan_look.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 
@@ -13,7 +14,9 @@ class BrowserView;
 namespace koan {
 
 // Corner radius of the Zen-style content card.
-inline constexpr float kContentCardCornerRadius = 8;
+inline float ContentCardCornerRadius() {
+  return static_cast<float>(look::StyleRadius(8, look::Step::kXl));
+}
 
 // Gap between the content card and the window edges.
 inline constexpr int kContentCardMargin = 8;

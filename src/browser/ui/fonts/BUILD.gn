@@ -1,0 +1,47 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Geist Sans and Mono (SIL OFL 1.1; geist/OFL.txt), as byte arrays.
+action("fonts_data") {
+  script = "embed_binary.py"
+  sources = [
+    "geist/Geist-Bold.ttf",
+    "geist/Geist-Medium.ttf",
+    "geist/Geist-Regular.ttf",
+    "geist/Geist-SemiBold.ttf",
+    "geist/GeistMono-Regular.ttf",
+    "geist/GeistMono-Regular.woff2",
+    "geist/Geist-Variable.woff2",
+  ]
+  outputs = [ "$target_gen_dir/koan_fonts_data.h" ]
+  args = [
+    rebase_path(outputs[0], root_build_dir),
+    "kGeistRegular=" + rebase_path("geist/Geist-Regular.ttf", root_build_dir),
+    "kGeistMedium=" + rebase_path("geist/Geist-Medium.ttf", root_build_dir),
+    "kGeistSemiBold=" + rebase_path("geist/Geist-SemiBold.ttf", root_build_dir),
+    "kGeistBold=" + rebase_path("geist/Geist-Bold.ttf", root_build_dir),
+    "kGeistMonoRegular=" +
+        rebase_path("geist/GeistMono-Regular.ttf", root_build_dir),
+    "kGeistVariableWoff2=" +
+        rebase_path("geist/Geist-Variable.woff2", root_build_dir),
+    "kGeistMonoWoff2=" +
+        rebase_path("geist/GeistMono-Regular.woff2", root_build_dir),
+  ]
+}
+
+source_set("fonts") {
+  sources = [
+    "koan_fonts.cc",
+    "koan_fonts.h",
+  ]
+  if (is_mac) {
+    sources += [ "koan_fonts_mac.mm" ]
+  } else {
+    sources += [ "koan_fonts_other.cc" ]
+  }
+  deps = [
+    ":fonts_data",
+    "//base",
+  ]
+}

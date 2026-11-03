@@ -261,15 +261,15 @@ class KoanGlanceBackdrop : public views::View {
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorKoanGlanceBackdrop));
     canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()),
-                          kContentCardCornerRadius, flags);
+                          ContentCardCornerRadius(), flags);
 
     if (!show_shadow_) {
       return;
     }
     // Only around the card: a drop shadow also fills the shape itself.
-    const SkRRect card =
-        SkRRect::MakeRectXY(gfx::RectToSkRect(card_bounds_),
-                            kContentCardCornerRadius, kContentCardCornerRadius);
+    const SkRRect card = SkRRect::MakeRectXY(gfx::RectToSkRect(card_bounds_),
+                                             ContentCardCornerRadius(),
+                                             ContentCardCornerRadius());
     gfx::ScopedCanvas scoped(canvas);
     canvas->sk_canvas()->clipRRect(card, SkClipOp::kDifference, true);
     cc::PaintFlags shadow;
@@ -451,7 +451,7 @@ class KoanGlanceView : public views::View {
     buttons_->SetBounds(card.right() + kButtonGap, card.y() + kButtonsTop,
                         buttons_size.width(), buttons_size.height());
     web_view_->holder()->SetNativeViewCornerRadii(
-        gfx::RoundedCornersF(kContentCardCornerRadius));
+        gfx::RoundedCornersF(ContentCardCornerRadius()));
   }
 
   bool OnMousePressed(const ui::MouseEvent& event) override {

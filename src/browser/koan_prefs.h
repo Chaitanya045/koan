@@ -18,6 +18,25 @@ class PrefRegistrySyncable;
 // chrome://koan-settings.
 namespace koan::prefs {
 
+// Koan's look (issue #48), local-state prefs because colours are mixed
+// per colour-provider key, which knows no profile. The style is shadcn/ui's
+// design system ("shadcn") or Zen's ("zen", the default); the mode, base
+// colour, accent and pasted theme apply to the shadcn style only (the Zen
+// style follows the system's light or dark mode). Names are
+// koan::look::StyleToString() & co.
+// - kLookMode: "auto" (the system), "light" or "dark" (the default).
+// - kLookBase: black (default: Koan's near-black Zinc), or shadcn's base
+//   colours neutral, zinc, slate, stone, gray.
+// - kLookAccent: none (default), blue, green, orange, red, rose, violet,
+//   yellow.
+// - kLookCustomCss: a theme pasted from ui.shadcn.com/themes or tweakcn.com,
+//   applied over the base colour and accent; empty for none.
+inline constexpr char kLookStyle[] = "koan.look.style";
+inline constexpr char kLookMode[] = "koan.look.mode";
+inline constexpr char kLookBase[] = "koan.look.base";
+inline constexpr char kLookAccent[] = "koan.look.accent";
+inline constexpr char kLookCustomCss[] = "koan.look.custom_css";
+
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
@@ -178,9 +197,10 @@ inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-// Changes the defaults of upstream local-state prefs for Koan's memory
-// behaviour (see docs/PERFORMANCE.md); a value the user sets in Settings >
-// Performance still wins. Called from
+// Registers Koan's local-state prefs (the look), and changes the defaults of
+// upstream local-state prefs for Koan's memory behaviour (see
+// docs/PERFORMANCE.md); a value the user sets in Settings > Performance
+// still wins. Called from
 // chrome/browser/prefs/browser_prefs.cc after upstream registered them.
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry);
 

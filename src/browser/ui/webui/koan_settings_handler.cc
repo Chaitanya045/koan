@@ -18,6 +18,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_shortcut_table.h"
+#include "koan/browser/ui/color/koan_tokens.h"
 #include "koan/browser/ui/webui/koan_settings_rows.h"
 #include "ui/events/event_constants.h"
 #include "ui/views/focus/focus_manager.h"
@@ -37,6 +38,8 @@ const char* ControlName(Control control) {
       return "menu";
     case Control::kLayoutPicker:
       return "layout";
+    case Control::kTextArea:
+      return "textarea";
   }
   NOTREACHED();
 }
@@ -179,6 +182,11 @@ void KoanSettingsHandler::HandleSetPref(const base::ListValue& args) {
         ok = true;
       }
     }
+  }
+  if (ok && row->control == Control::kTextArea) {
+    // A pasted theme: nothing, or CSS that sets at least one token.
+    const std::string& css = args[2].GetString();
+    ok = css.empty() || look::ParseThemeCss(css).has_value();
   }
   if (ok) {
     PrefsFor(row->pref).Set(row->pref, args[2]);

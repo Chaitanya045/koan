@@ -14,6 +14,7 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "koan/browser/ui/color/koan_look.h"
 
 // Sizes of Koan's sidebar tab list, URL bar, toasts, media cards, download
 // animation and welcome screen, in one place (Zen's today:
@@ -95,8 +96,12 @@ inline constexpr int kClearPressedOffset = 2;
 
 // The sidebar's URL pill (and the URL bar while it edits over the pill), and
 // the floating URL bar (#urlbar[breakout-extend]).
-inline constexpr float kUrlPillCornerRadius = 9;
-inline constexpr float kFloatingUrlBarCornerRadius = 15;
+inline float UrlPillCornerRadius() {
+  return static_cast<float>(look::StyleRadius(9, look::Step::kMd));
+}
+inline float FloatingUrlBarCornerRadius() {
+  return static_cast<float>(look::ScaleRadius(15));
+}
 
 // The pill's insets before the site's name and after its buttons, the gap
 // between them, and its icon buttons (Zen's urlbar page-action size).
@@ -112,14 +117,49 @@ inline constexpr int kUrlPillIconSize = 16;
 // 0 30px 140px -15px.
 inline constexpr int kFloatingUrlBarMaxWidth = 750;
 inline constexpr int kFloatingUrlBarMinHeight = 333;
-#if BUILDFLAG(IS_MAC)
-inline constexpr int kFloatingUrlBarFontDelta = 6;
-#else
+// The text beyond macOS is 1.15em: two more than the omnibox's.
 inline constexpr int kFloatingUrlBarFontDelta = 2;
-#endif
 inline constexpr int kFloatingUrlBarShadowY = 30;
 inline constexpr int kFloatingUrlBarShadowBlur = 140;
 inline constexpr int kFloatingUrlBarShadowSpread = -15;
+// shadcn's softer shadow (shadow-lg: 0 10px 15px -3px) and text size
+// (text-base: 16px).
+// The shadcn card's magnifier (lucide's search, 16px).
+inline constexpr int kFloatingUrlBarMagnifierSize = 16;
+// The divider under the input stops short of the card's edges (Zen's input row
+// padding).
+inline constexpr int kFloatingUrlBarDividerInset = 20;
+// The glass card's background blur (zen-omnibox.css: blur(40px)) and its
+// outline's width (0.5px; shadcn's border is 1px).
+inline constexpr float kFloatingUrlBarBlurRadius = 40;
+inline float FloatingUrlBarBorderWidth() {
+  return look::IsShadcnStyle() ? 1.f : 0.5f;
+}
+inline int FloatingUrlBarShadowY() {
+  return look::IsShadcnStyle() ? 10 : kFloatingUrlBarShadowY;
+}
+inline int FloatingUrlBarShadowBlur() {
+  return look::IsShadcnStyle() ? 15 : kFloatingUrlBarShadowBlur;
+}
+inline int FloatingUrlBarShadowSpread() {
+  return look::IsShadcnStyle() ? -3 : kFloatingUrlBarShadowSpread;
+}
+// Zen's suggestion rows (zen-omnibox.css, measured on Zen 1.24b): 49pt high,
+// the selected one rounded by 8, the text 14pt.
+inline constexpr int kOmniboxRowHeight = 49;
+inline constexpr float kOmniboxRowCornerRadius = 8;
+inline constexpr int kOmniboxRowFontSize = 14;
+// Zen's input row (--urlbar-container-height) is 62pt.
+inline constexpr int kFloatingUrlBarInputHeight = 62;
+// The floating bar's text size given the omnibox's own: shadcn's 16, Zen's
+// 1.5em of 11pt (16.5pt, so 17) on macOS, two more elsewhere.
+inline int FloatingUrlBarFontSize(int base_size) {
+#if BUILDFLAG(IS_MAC)
+  return look::IsShadcnStyle() ? 16 : 17;
+#else
+  return look::IsShadcnStyle() ? 16 : base_size + kFloatingUrlBarFontDelta;
+#endif
+}
 
 // With "normal", the bar edits in place and widens over the page once the
 // user types (Zen's #urlbar[open] in the single toolbar: min(90%, 40rem)).
@@ -135,17 +175,23 @@ inline constexpr int kToastHeight = 42;
 inline constexpr int kToastPadding = 10;
 #endif
 inline constexpr int kToastGap = 4;
-inline constexpr int kToastCornerRadius = 14;
+inline int ToastCornerRadius() {
+  return look::ScaleRadius(14);
+}
 inline constexpr int kToastMargin = 8;
 inline constexpr int kToastFontSize = 14;
 inline constexpr int kToastKeyFontSize = 12;
-inline constexpr int kToastKeyCornerRadius = 4;
+inline int ToastKeyCornerRadius() {
+  return look::ScaleRadius(4);
+}
 inline constexpr int kToastKeyPaddingVertical = 5;
 inline constexpr int kToastKeyPaddingHorizontal = 7;
 // The toast's icon button: 28px high with 10px corners, a 14px icon and 8px
 // on either side of it.
 inline constexpr int kToastButtonHeight = 28;
-inline constexpr int kToastButtonCornerRadius = 10;
+inline int ToastButtonCornerRadius() {
+  return look::ScaleRadius(10);
+}
 inline constexpr int kToastButtonIconSize = 14;
 inline constexpr int kToastButtonPadding = 8;
 
@@ -156,9 +202,13 @@ inline constexpr int kToastButtonPadding = 8;
 // the title (20px) and artist (16px) and for the progress (a 4px bar
 // between the times). Behind the front card, two more peek out 8px each.
 #if BUILDFLAG(IS_MAC)
-inline constexpr int kMediaCardCornerRadius = 12;
+inline int MediaCardCornerRadius() {
+  return look::ScaleRadius(12);
+}
 #else
-inline constexpr int kMediaCardCornerRadius = 14;
+inline int MediaCardCornerRadius() {
+  return look::ScaleRadius(14);
+}
 #endif
 inline constexpr int kMediaCardShadowMargin = 3;
 inline constexpr int kMediaCardShadowBlur = 6;
@@ -166,7 +216,9 @@ inline constexpr int kMediaCardPaddingVertical = 4;
 inline constexpr int kMediaCardPaddingHorizontal = 6;
 inline constexpr int kMediaButtonSize = 26;
 inline constexpr int kMediaIconSize = 16;
-inline constexpr int kMediaButtonCornerRadius = 5;
+inline int MediaButtonCornerRadius() {
+  return look::ScaleRadius(5);
+}
 inline constexpr int kMediaControlsGap = 11;
 inline constexpr int kMediaPlaybackMaxWidth = 160;
 inline constexpr int kMediaTitleHeight = 20;
@@ -189,7 +241,9 @@ inline constexpr int kDownloadArcRing = 2;
 inline constexpr int kDownloadArcShadowY = 3;
 inline constexpr int kDownloadArcShadowBlur = 8;
 inline constexpr int kDownloadTileSize = 42;
-inline constexpr int kDownloadTileCornerRadius = 12;
+inline int DownloadTileCornerRadius() {
+  return look::ScaleRadius(12);
+}
 inline constexpr int kDownloadTileIconSize = 24;
 inline constexpr int kDownloadTileShadowBlur = 6;
 inline constexpr int kDownloadTileEdge = 24;
@@ -311,7 +365,9 @@ inline constexpr int kSpaceButtonSize = 30;
 inline constexpr int kSpaceButtonEmojiSize = 12;
 #endif
 inline constexpr int kSpaceButtonGap = 3;
-inline constexpr int kSpaceButtonCornerRadius = 6;
+inline int SpaceButtonCornerRadius() {
+  return look::ScaleRadius(6);
+}
 inline constexpr int kSpaceButtonCollapsedWidth = 10;
 inline constexpr int kSpaceDotSize = 8;
 inline constexpr int kSpaceCollapsedDotSize = 4;
@@ -319,13 +375,17 @@ inline constexpr int kSpaceBarPadding = 6;
 // The Create-a-Space form: 10px padding, 8px rounded fields 10px apart,
 // the 24x22 icon box with 6px corners, buttons 8px apart.
 inline constexpr int kSpaceFormPadding = 10;
-inline constexpr int kSpaceFormFieldCornerRadius = 8;
+inline int SpaceFormFieldCornerRadius() {
+  return look::StyleRadius(8, look::Step::kMd);
+}
 inline constexpr int kSpaceFormFieldGap = 10;
 inline constexpr int kSpaceFormSectionGap = 32;
 inline constexpr int kSpaceFormButtonGap = 8;
 inline constexpr int kSpaceFormIconWidth = 24;
 inline constexpr int kSpaceFormIconHeight = 22;
-inline constexpr int kSpaceFormIconCornerRadius = 6;
+inline int SpaceFormIconCornerRadius() {
+  return look::ScaleRadius(6);
+}
 // The emoji picker (#PanelUI-zen-emojis-picker): 250px wide, at most 190px
 // of emoji, 22px cells in 28px+ columns 5px apart, 14px emoji, 4px hover
 // corners.
@@ -336,7 +396,9 @@ inline constexpr int kEmojiPickerGap = 5;
 inline constexpr int kEmojiPickerMinColumnWidth = 28;
 inline constexpr int kEmojiCellSize = 22;
 inline constexpr int kEmojiSize = 14;
-inline constexpr int kEmojiCellCornerRadius = 4;
+inline int EmojiCellCornerRadius() {
+  return look::ScaleRadius(4);
+}
 
 }  // namespace koan
 

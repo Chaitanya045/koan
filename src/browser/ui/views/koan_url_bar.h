@@ -5,7 +5,10 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_URL_BAR_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_URL_BAR_H_
 
+#include <string>
+
 #include "ui/base/window_open_disposition.h"
+#include "ui/color/color_id.h"
 
 class BrowserWindowInterface;
 
@@ -36,6 +39,29 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 // from the sidebar's URL pill to the floating card. Called from
 // LocationBarView::OnChanged().
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
+
+// The omnibox of `location_bar` (a LocationBarView) is installing its
+// placeholder text: in the floating shadcn card it is "Search...". Called
+// from OmniboxViewViews::InstallPlaceholderText().
+void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text);
+
+// Whether the floating command card is open for `location_bar`: its input
+// shows the "Search..." placeholder even while focused (Chromium hides it
+// then), in a muted colour, and its focus ring and background pill are flat.
+// Called from OmniboxViewViews::ShouldShowPlaceholderText().
+bool ShowsCardPlaceholder(views::View* location_bar);
+
+// The colour id of the omnibox's placeholder text: the card's own while the
+// floating card is open for `location_bar`. Called from
+// OmniboxViewViews::UpdatePlaceholderTextColor().
+ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
+                                            ui::ColorId id);
+
+// Whether `view` (the location bar, or a row of its omnibox popup) is in a
+// window whose floating URL bar is Zen's card: only then do the suggestion
+// rows take Zen's styling (koan_omnibox_rows.h). False for any other omnibox
+// popup, in either look.
+bool ShowsZenCardRows(const views::View* view);
 
 }  // namespace koan
 

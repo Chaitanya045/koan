@@ -1,0 +1,19 @@
+diff --git a/chrome/browser/themes/theme_service.cc b/chrome/browser/themes/theme_service.cc
+--- a/chrome/browser/themes/theme_service.cc
++++ b/chrome/browser/themes/theme_service.cc
+@@ -61,6 +61,7 @@
+ #include "components/tabs/public/tab_interface.h"
+ #include "components/themes/pref_names.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/ui/views/koan_look_hooks.h"
+ #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/mojom/themes.mojom.h"
+@@ -785,6 +786,7 @@
+     key.custom_theme = GetThemeSupplier();
+   }
+ 
++  koan::AdjustColorProviderKey(profile, key);
+   return key;
+ }
+ 

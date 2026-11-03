@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/views/omnibox/BUILD.gn b/chrome/browser/ui/views/omnibox/BUILD.gn
+--- a/chrome/browser/ui/views/omnibox/BUILD.gn
++++ b/chrome/browser/ui/views/omnibox/BUILD.gn
+@@ -175,6 +175,7 @@
+     "//components/vector_icons",
+     "//content/public/browser",
+     "//extensions/common:common_constants",
++    "//koan/browser/ui/views",
+     "//ui/base:data_exchange",
+     "//ui/content_accelerators",
+     "//ui/strings:ui_strings_grit",

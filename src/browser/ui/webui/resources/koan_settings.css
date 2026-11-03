@@ -23,6 +23,12 @@
   --field-border: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.15));
   --destructive: light-dark(#d7264c, #ff9aa2);
   --success: light-dark(#017a40, #6ae7a8);
+  /* Corner radii: Zen's here; the shadcn style derives them from --radius
+   * (koan_tokens.css). */
+  --r-item: 4px;
+  --r-field: 8px;
+  --r-button: 5px;
+  --r-card: 10px;
   accent-color: var(--primary);
 }
 
@@ -73,7 +79,7 @@ body {
   margin-block: 2.8px;
   padding: 0 12px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-item);
   background: none;
   color: inherit;
   font: inherit;
@@ -175,7 +181,7 @@ main {
   height: 32px;
   padding: 0 12px 0 34px;
   border: 1px solid var(--input);
-  border-radius: 8px;
+  border-radius: var(--r-field);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -254,7 +260,7 @@ button.reset-button {
   min-height: 32px;
   padding: 0 16px;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-button);
   background: var(--secondary);
   color: inherit;
   font: inherit;
@@ -303,7 +309,7 @@ button.reset-button {
   height: 180px;
   overflow: hidden;
   border: 3px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--r-card);
   background:
       linear-gradient(160deg, #f6c177 0%, #eb6f92 55%, #9ccfd8 100%)
       padding-box;
@@ -409,7 +415,7 @@ button.reset-button {
   width: 40%;
   padding: 5px;
   border: 1px solid var(--field-border);
-  border-radius: 5px;
+  border-radius: var(--r-button);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -453,5 +459,60 @@ button.reset-button {
 
 .shortcut-note.conflict,
 .shortcut-note.unsaved {
+  color: var(--destructive);
+}
+
+/* Look: pasting a theme ------------------------------------------------------ */
+
+.row.theme-paste {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.theme-paste textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 140px;
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-field);
+  background: transparent;
+  color: inherit;
+  font: 12px/1.5 ui-monospace, 'Geist Mono', monospace;
+  resize: vertical;
+}
+
+.theme-paste textarea:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ring) 50%, transparent);
+  border-color: var(--ring);
+}
+
+.theme-paste .theme-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-paste button {
+  padding: 6px 14px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-button);
+  background: var(--secondary);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.theme-paste button:hover {
+  background: var(--secondary-hover);
+}
+
+.theme-paste .theme-status {
+  color: var(--muted-foreground);
+}
+
+.theme-paste .theme-status.error {
   color: var(--destructive);
 }

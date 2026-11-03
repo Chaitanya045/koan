@@ -581,13 +581,13 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
           base::BindRepeating(&KoanLibraryHistorySection::ForgetEntry,
                               base::Unretained(this), entry),
           kDeleteIcon, u"Remove from history", library::kRowButtonIconSize,
-          library::kRowButtonPadding, library::kPillRadius));
+          library::kRowButtonPadding, library::PillRadius()));
     }
     row->AddAction(library::CreateIconButton(
         base::BindRepeating(&KoanLibraryHistorySection::OpenEntry,
                             base::Unretained(this), entry),
         vector_icons::kUndoIcon, u"Reopen page", library::kRowButtonIconSize,
-        library::kRowButtonPadding, library::kPillRadius));
+        library::kRowButtonPadding, library::PillRadius()));
     row->SetMenuCallback(
         base::BindRepeating(&KoanLibraryHistorySection::ShowRowMenu,
                             base::Unretained(this), entry));

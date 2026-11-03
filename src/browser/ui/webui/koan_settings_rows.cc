@@ -29,6 +29,14 @@ constexpr Pane kPanes[] = {
 
 // Zen's groups (zen-preferences.ftl), in Zen's order.
 constexpr Group kGroups[] = {
+    // Koan's own (Zen has no such setting): the shadcn look (#48).
+    {"look", "looks", "Appearance", "Style",
+     "Koan's default look is Zen's. shadcn/ui's design system (dark, with "
+     "Geist) is available too. Changes apply at once; the font changes "
+     "after a restart."},
+    {"look-colors", "looks", "Appearance", "shadcn colours",
+     "For the shadcn style: light or dark, a base colour, an accent colour, "
+     "or a theme of your own from ui.shadcn.com/themes or tweakcn.com."},
     {"layout", "looks", "Sidebar and tabs layout", "Browser Layout",
      "Choose the layout that suits you best"},
     {"vertical-tabs", "looks", "Sidebar and tabs layout", "Vertical Tabs",
@@ -109,8 +117,64 @@ constexpr Option kPinnedTabCloseBehaviors[] = {
     {"close", "Close tab"},
 };
 
+// The shadcn look (koan::look names).
+constexpr Option kLookStyles[] = {
+    {"zen", "Zen (default)"},
+    {"shadcn", "shadcn/ui"},
+};
+constexpr Option kLookModes[] = {
+    {"dark", "Dark"},
+    {"light", "Light"},
+    {"auto", "Automatic (follow the system)"},
+};
+constexpr Option kLookBases[] = {
+    {"black", "Black (default)"}, {"neutral", "Neutral"}, {"zinc", "Zinc"},
+    {"slate", "Slate"},           {"stone", "Stone"},     {"gray", "Gray"},
+};
+constexpr Option kLookAccents[] = {
+    {"none", "None (the base colour's own)"},
+    {"blue", "Blue"},
+    {"green", "Green"},
+    {"orange", "Orange"},
+    {"red", "Red"},
+    {"rose", "Rose"},
+    {"violet", "Violet"},
+    {"yellow", "Yellow"},
+};
+
 constexpr Row kRows[] = {
     // Look and Feel.
+    {.group = "look",
+     .control = Control::kMenu,
+     .pref = prefs::kLookStyle,
+     .label = "Look",
+     .options = kLookStyles,
+     .local_state = true},
+    {.group = "look-colors",
+     .control = Control::kMenu,
+     .pref = prefs::kLookMode,
+     .label = "Mode",
+     .options = kLookModes,
+     .local_state = true},
+    {.group = "look-colors",
+     .control = Control::kMenu,
+     .pref = prefs::kLookBase,
+     .label = "Base colour",
+     .options = kLookBases,
+     .local_state = true},
+    {.group = "look-colors",
+     .control = Control::kMenu,
+     .pref = prefs::kLookAccent,
+     .label = "Accent colour",
+     .options = kLookAccents,
+     .local_state = true},
+    {.group = "look-colors",
+     .control = Control::kTextArea,
+     .pref = prefs::kLookCustomCss,
+     .label =
+         "Paste a theme (:root and .dark variables, as ui.shadcn.com/themes "
+         "or tweakcn.com make them)",
+     .local_state = true},
     {.group = "layout",
      .control = Control::kLayoutPicker,
      .pref = prefs::kSingleToolbarEnabled,

@@ -12,6 +12,8 @@ source_set("views") {
     "koan_browser_view_hooks.h",
     "koan_compact_mode.h",
     "koan_glance.h",
+    "koan_look_hooks.h",
+    "koan_omnibox_rows.h",
     "koan_content_card.h",
     "koan_essentials.h",
     "koan_pinned.h",
@@ -26,7 +28,10 @@ source_set("views") {
   ]
   public_deps = [
     "//base",
+    "//koan/browser/ui/color:tokens",
     "//ui/base",
+    "//ui/color",
+    "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/menus",
   ]
@@ -50,6 +55,8 @@ source_set("impl") {
     "koan_emoji_picker.cc",
     "koan_emoji_picker.h",
     "koan_glance_controller.cc",
+    "koan_look_controller.cc",
+    "koan_omnibox_rows.cc",
     "koan_move_to_space.cc",
     "koan_download_animation.cc",
     "koan_download_animation.h",
@@ -104,6 +111,8 @@ source_set("impl") {
     "koan_tab_activation.h",
     "koan_toast.cc",
     "koan_toast.h",
+    "koan_system_accent.h",
+    "koan_system_accent_observer.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
     "koan_zen_download_animation.cc",
@@ -216,6 +225,7 @@ source_set("impl") {
     "//koan/browser:tab_hooks",
     "//koan/common:url_constants",
     "//koan/browser/ui/color",
+    "//koan/browser/ui/fonts",
     "//components/blocked_content",
     "//components/javascript_dialogs",
     "//components/user_prefs",
@@ -233,8 +243,21 @@ source_set("impl") {
     "//ui/gfx",
     "//ui/gfx/geometry:geometry_skia",
     "//ui/menus",
+    "//ui/native_theme",
     "//ui/views",
   ]
+  if (is_mac) {
+    sources += [
+      "koan_system_accent_mac.mm",
+      "koan_system_accent_observer_mac.mm",
+    ]
+    frameworks = [ "AppKit.framework" ]
+  } else {
+    sources += [
+      "koan_system_accent.cc",
+      "koan_system_accent_observer.cc",
+    ]
+  }
   if (use_aura) {
     # Glance animates the page's native window (an aura::Window). macOS
     # uses NSViews instead and has no Aura.

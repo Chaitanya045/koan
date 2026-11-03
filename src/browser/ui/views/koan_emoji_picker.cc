@@ -294,7 +294,7 @@ class KoanEmojiCell : public views::Button {
       flags.setAntiAlias(true);
       flags.setColor(provider->GetColor(kColorKoanEmojiHovered));
       canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()),
-                            kEmojiCellCornerRadius, flags);
+                            EmojiCellCornerRadius(), flags);
     }
     canvas->DrawStringRectWithFlags(
         emoji_,

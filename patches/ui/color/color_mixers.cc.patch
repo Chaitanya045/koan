@@ -1,0 +1,28 @@
+diff --git a/ui/color/color_mixers.cc b/ui/color/color_mixers.cc
+--- a/ui/color/color_mixers.cc
++++ b/ui/color/color_mixers.cc
+@@ -21,6 +21,14 @@
+ 
+ namespace ui {
+ 
++namespace {
++CoreColorMixerOverride g_core_color_mixer_override = nullptr;
++}  // namespace
++
++void SetCoreColorMixerOverride(CoreColorMixerOverride override_fn) {
++  g_core_color_mixer_override = override_fn;
++}
++
+ void AddColorMixers(ColorProvider* provider, const ColorProviderKey& key) {
+   AddRefColorMixer(provider, key);
+   // TODO(tluk): Determine the correct place to insert the sys color mixer.
+@@ -30,6 +38,9 @@
+ #endif
+   AddCoreDefaultColorMixer(provider, key);
+   AddNativeCoreColorMixer(provider, key);
++  if (g_core_color_mixer_override) {
++    g_core_color_mixer_override(provider, key);
++  }
+   AddUiColorMixer(provider, key);
+   AddMaterialUiColorMixer(provider, key);
+   if (IsFluentScrollbarEnabled()) {

@@ -10,9 +10,10 @@
 
 namespace koan {
 
-// Colours of Koan's own views, after Chrome's. Defined in koan_color_mixer.cc
-// (mostly from Chrome's colours, Zen's values today), so a restyle changes
-// them in one place.
+// Colours of Koan's own views, after Chrome's. Defined per look: in the shadcn
+// style from shadcn's tokens, in koan_shadcn_color_mixer.cc; in the Zen style
+// (the default) with Zen's values, in koan_color_mixer.cc. A view only
+// names the id, so a restyle changes it in one place.
 enum KoanColorIds : ui::ColorId {
   kKoanColorsStart = kChromeColorsEnd,
 
@@ -20,6 +21,10 @@ enum KoanColorIds : ui::ColorId {
   // and a hovered tab's.
   kColorKoanSidebarTabSelected = kKoanColorsStart,
   kColorKoanSidebarTabHovered,
+  // The toolbar and tab text (Zen's --toolbox-textcolor, derived from the
+  // theme's primary colour): the text of the sidebar's rows. kColorToolbarText
+  // is the same colour in the Zen look.
+  kColorKoanToolboxText,
   // The New Tab row's background
   // while hovered and pressed, and its icon and label.
   kColorKoanSidebarRowHovered,
@@ -48,6 +53,21 @@ enum KoanColorIds : ui::ColorId {
   // sidebar's URL pill and the floating URL bar's shadow.
   kColorKoanUrlPill,
   kColorKoanFloatingUrlBarShadow,
+  // The floating URL bar's card (and the location bar's fill): opaque for now;
+  // a glass pane makes its alpha < 1 and blurs behind it. Its 1px outline and
+  // the divider under the field.
+  kColorKoanFloatingUrlBarBackground,
+  // The same as a glass pane: Zen's acrylic (zen.theme.acrylic-urlbar) fill,
+  // to use with a background blur (kFloatingUrlBarBlurRadius).
+  kColorKoanFloatingUrlBarGlass,
+  kColorKoanFloatingUrlBarBorder,
+  // The card's input row: the location bar's focus ring (none in Zen), the
+  // divider under it and the "Search..." placeholder.
+  kColorKoanFloatingUrlBarFocusRing,
+  kColorKoanFloatingUrlBarDivider,
+  kColorKoanFloatingUrlBarPlaceholder,
+  // The title of a suggestion row (Zen: white at 70%).
+  kColorKoanOmniboxRowTitle,
 
   // Toasts: a vertical gradient, the text, and the background of the
   // shortcut in it.

@@ -222,7 +222,7 @@ class KoanLibraryTab : public views::Button,
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
       flags.setColor(provider->GetColor(*background));
-      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), library::kTabRadius,
+      canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), library::TabRadius(),
                             flags);
     }
     const gfx::RectF icon((width() - kTabIconSize) / 2.f, kTabPadding,
@@ -361,7 +361,7 @@ void KoanLibraryPill::SetActive(bool active) {
   SetBackground(CreateStateBackground(
       active ? kColorKoanLibraryChipActive : kColorKoanLibraryPill,
       active ? kColorKoanLibraryChipActive : kColorKoanLibraryPillHovered,
-      library::kPillRadius));
+      library::PillRadius()));
   SchedulePaint();
 }
 
@@ -496,7 +496,7 @@ void KoanLibraryRow::OnPaintBackground(gfx::Canvas* canvas) {
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
   flags.setColor(GetColorProvider()->GetColor(kColorKoanLibraryRowHovered));
-  canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), library::kRowRadius,
+  canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), library::RowRadius(),
                         flags);
 }
 
@@ -620,7 +620,7 @@ KoanLibrarySearchSection::KoanLibrarySearchSection(
   box->SetBetweenChildSpacing(8);
   box->SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kCenter);
   box->SetBackground(CreateStateBackground(
-      kColorKoanLibraryPill, kColorKoanLibraryPill, library::kPillRadius));
+      kColorKoanLibraryPill, kColorKoanLibraryPill, library::PillRadius()));
   box->SetPreferredSize(gfx::Size(0, 36));
   header->SetFlexForView(box, 1);
   box->AddChildView(
@@ -890,7 +890,7 @@ KoanLibraryView::KoanLibraryView(KoanLibraryController* library)
       base::BindRepeating(&KoanLibraryController::Close,
                           base::Unretained(library_)),
       vector_icons::kArrowBackIcon, u"Close library",
-      library::kSmallButtonIconSize, kFooterPadding, library::kSmallRadius));
+      library::kSmallButtonIconSize, kFooterPadding, library::SmallRadius()));
 }
 
 KoanLibraryView::~KoanLibraryView() = default;

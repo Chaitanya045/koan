@@ -106,7 +106,7 @@ std::unique_ptr<views::ImageButton> MakeButton(
   SetButtonIcon(button.get(), icon, name);
   button->SetPreferredSize(gfx::Size(kMediaButtonSize, kMediaButtonSize));
   views::InstallRoundRectHighlightPathGenerator(button.get(), gfx::Insets(),
-                                                kMediaButtonCornerRadius);
+                                                MediaButtonCornerRadius());
   return button;
 }
 
@@ -263,7 +263,7 @@ class KoanMediaProgressBar : public views::View {
     GetViewAccessibility().SetRole(ax::mojom::Role::kSlider);
     GetViewAccessibility().SetName(u"Seek");
     views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                  kMediaButtonCornerRadius);
+                                                  MediaButtonCornerRadius());
     views::FocusRing::Install(this);
   }
 
@@ -598,13 +598,13 @@ class KoanMediaCardView : public views::View {
     flags.setLooper(gfx::CreateShadowDrawLooper(
         {gfx::ShadowValue(gfx::Vector2d(), kMediaCardShadowBlur,
                           colors->GetColor(kColorKoanMediaCardShadow))}));
-    canvas->DrawRoundRect(card, kMediaCardCornerRadius, flags);
+    canvas->DrawRoundRect(card, MediaCardCornerRadius(), flags);
     flags.setLooper(nullptr);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(1);
     flags.setColor(colors->GetColor(kColorKoanMediaCardOutline));
     card.Inset(0.5f);
-    canvas->DrawRoundRect(card, kMediaCardCornerRadius - 0.5f, flags);
+    canvas->DrawRoundRect(card, MediaCardCornerRadius() - 0.5f, flags);
   }
 
   bool OnMousePressed(const ui::MouseEvent& event) override {

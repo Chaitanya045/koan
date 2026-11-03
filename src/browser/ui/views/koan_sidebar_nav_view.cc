@@ -235,11 +235,11 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   pill_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   pill->SetPreferredSize(gfx::Size(0, kPillHeight));
-  pill->SetBackground(views::CreateRoundedRectBackground(kColorKoanUrlPill,
-                                                         kUrlPillCornerRadius));
+  pill->SetBackground(views::CreateRoundedRectBackground(
+      kColorKoanUrlPill, UrlPillCornerRadius()));
   // The focus ring follows the pill's corners.
   views::InstallRoundRectHighlightPathGenerator(pill.get(), gfx::Insets(),
-                                                kUrlPillCornerRadius);
+                                                UrlPillCornerRadius());
 #if BUILDFLAG(IS_MAC)
   pill->SetTooltipText(u"Search or enter address (\u2318L)");
 #else

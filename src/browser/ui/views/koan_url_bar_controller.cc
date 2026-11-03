@@ -1,6 +1,14 @@
-// Copyright 2026 The Koan Authors
-// Use of this source code is governed by the MIT license that can be
-// found in the LICENSE file.
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   zen-omnibox.css, ZenUIManager.mjs (the floating URL bar card: size,
+//   position, input, divider) and the zen.urlbar preferences (when the bar
+//   floats)
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
 
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 
@@ -25,13 +33,16 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/prefs/pref_service.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -52,13 +63,16 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 namespace koan {
@@ -107,17 +121,29 @@ class KoanUrlBarBackdrop : public views::View {
     }
     const ui::ColorProvider* colors = GetColorProvider();
     const gfx::ShadowValues shadows = {gfx::ShadowValue(
-        gfx::Vector2d(0, kFloatingUrlBarShadowY), kFloatingUrlBarShadowBlur,
+        gfx::Vector2d(0, FloatingUrlBarShadowY()), FloatingUrlBarShadowBlur(),
         colors->GetColor(kColorKoanFloatingUrlBarShadow))};
     // The shape itself, in the card's colour, is hidden under the card.
     gfx::Rect shape = card_;
-    shape.Inset(-kFloatingUrlBarShadowSpread);
+    shape.Inset(-FloatingUrlBarShadowSpread());
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorToolbar));
     flags.setLooper(gfx::CreateShadowDrawLooper(shadows));
-    canvas->DrawRoundRect(gfx::RectF(shape), kFloatingUrlBarCornerRadius,
+    canvas->DrawRoundRect(gfx::RectF(shape), FloatingUrlBarCornerRadius(),
                           flags);
+    // shadcn's 1px `border` around the card, just outside it.
+    cc::PaintFlags border;
+    border.setAntiAlias(true);
+    border.setStyle(cc::PaintFlags::kStroke_Style);
+    border.setStrokeWidth(FloatingUrlBarBorderWidth());
+    border.setColor(colors->GetColor(kColorKoanFloatingUrlBarBorder));
+    // Just outside the card, as Zen's outline is.
+    gfx::RectF ring(card_);
+    ring.Outset(FloatingUrlBarBorderWidth() / 2);
+    canvas->DrawRoundRect(
+        ring, FloatingUrlBarCornerRadius() + FloatingUrlBarBorderWidth() / 2,
+        border);
   }
 
  private:
@@ -126,6 +152,81 @@ class KoanUrlBarBackdrop : public views::View {
 };
 
 BEGIN_METADATA(KoanUrlBarBackdrop)
+END_METADATA
+
+// The card's flat surface: behind the location bar (inside the toolbar), so
+// the whole input row, including what the bar's rounded background leaves
+// uncovered, is the card's colour.
+class KoanUrlBarCardFill : public views::View {
+  METADATA_HEADER(KoanUrlBarCardFill, views::View)
+
+ public:
+  KoanUrlBarCardFill() {
+    SetProperty(views::kViewIgnoredByLayoutKey, true);
+    SetCanProcessEventsWithinSubtree(false);
+    GetViewAccessibility().SetIsIgnored(true);
+  }
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override {
+    canvas->FillRect(GetLocalBounds(), GetColorProvider()->GetColor(
+                                           kColorKoanFloatingUrlBarBackground));
+  }
+};
+
+BEGIN_METADATA(KoanUrlBarCardFill)
+END_METADATA
+
+// Over the floating card, in a layer of its own so that it is above the
+// location bar's own layers (its icon's ink drop): the magnifier in place of
+// the location icon, and the divider under the input that separates it from
+// the suggestions.
+class KoanUrlBarCardDecoration : public views::View {
+  METADATA_HEADER(KoanUrlBarCardDecoration, views::View)
+
+ public:
+  KoanUrlBarCardDecoration() {
+    // Paints over the toolbar but never takes an event.
+    SetCanProcessEventsWithinSubtree(false);
+    GetViewAccessibility().SetIsIgnored(true);
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+  }
+
+  // `icon` is the location icon's bounds in this view.
+  void SetIconBounds(const gfx::Rect& icon) {
+    if (icon_ != icon) {
+      icon_ = icon;
+      SchedulePaint();
+    }
+  }
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override {
+    const ui::ColorProvider* colors = GetColorProvider();
+    if (!icon_.IsEmpty()) {
+      // A plain, muted magnifier: nothing of the icon's own chip shows.
+      canvas->FillRect(icon_,
+                       colors->GetColor(kColorKoanFloatingUrlBarBackground));
+      const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
+          vector_icons::kSearchIcon, kFloatingUrlBarMagnifierSize,
+          colors->GetColor(ui::kColorIcon));
+      canvas->DrawImageInt(
+          magnifier, icon_.x() + (icon_.width() - magnifier.width()) / 2,
+          icon_.y() + (icon_.height() - magnifier.height()) / 2);
+    }
+    // A thin line inset from the card's edges (Zen's input row padding).
+    canvas->FillRect(
+        gfx::Rect(kFloatingUrlBarDividerInset, height() - 1,
+                  std::max(0, width() - 2 * kFloatingUrlBarDividerInset), 1),
+        colors->GetColor(kColorKoanFloatingUrlBarDivider));
+  }
+
+ private:
+  gfx::Rect icon_;
+};
+
+BEGIN_METADATA(KoanUrlBarCardDecoration)
 END_METADATA
 
 KoanUrlBarController::KoanUrlBarController(
@@ -491,8 +592,15 @@ void KoanUrlBarController::ApplyCardStyle() {
   // Zen's floating bar has a larger font than the toolbar's.
   if (zen_card && !omnibox_font_ && omnibox) {
     omnibox_font_ = omnibox->GetFontList();
+    // Zen: 1.5em of 11pt, weight 500.
     omnibox->SetFontList(
-        omnibox_font_->DeriveWithSizeDelta(kFloatingUrlBarFontDelta));
+        omnibox_font_
+            ->DeriveWithSizeDelta(
+                FloatingUrlBarFontSize(omnibox_font_->GetFontSize()) -
+                omnibox_font_->GetFontSize())
+            .DeriveWithWeight(look::IsShadcnStyle()
+                                  ? gfx::Font::Weight::NORMAL
+                                  : gfx::Font::Weight::MEDIUM));
   } else if (!zen_card && omnibox_font_) {
     if (omnibox) {
       omnibox->SetFontList(*omnibox_font_);
@@ -519,14 +627,49 @@ void KoanUrlBarController::ApplyCardStyle() {
     overlay->RemoveChildViewT(std::exchange(backdrop_, nullptr));
   }
 
+  ToolbarView* toolbar = browser_view_->toolbar();
+  if (IsCommandCard() && !decoration_) {
+    // The fill goes first in the toolbar, so it is under the location bar.
+    fill_ = toolbar->AddChildViewAt(std::make_unique<KoanUrlBarCardFill>(), 0);
+    decoration_ = top_container->AddChildView(
+        std::make_unique<KoanUrlBarCardDecoration>());
+  } else if (!IsCommandCard() && decoration_) {
+    top_container->RemoveChildViewT(std::exchange(decoration_, nullptr));
+    toolbar->RemoveChildViewT(std::exchange(fill_, nullptr));
+  }
+  if (bar) {
+    // Zen's card has no focus ring around the input.
+    if (views::FocusRing* ring = views::FocusRing::Get(bar)) {
+      ring->SetColorId(IsCommandCard() ? std::optional<ui::ColorId>(
+                                             kColorKoanFloatingUrlBarFocusRing)
+                                       : std::nullopt);
+    }
+  }
+  if (omnibox) {
+    // "Search..." in the card, Chromium's text elsewhere.
+    omnibox->InstallPlaceholderText();
+  }
+
   if (!is_open()) {
     return;
   }
   ui::Layer* layer = top_container->layer();
   layer->SetRoundedCornerRadius(gfx::RoundedCornersF(
-      floating ? kFloatingUrlBarCornerRadius : kUrlPillCornerRadius));
+      floating ? FloatingUrlBarCornerRadius() : UrlPillCornerRadius()));
   layer->SetIsFastRoundedCorner(true);
   layer->SetMasksToBounds(true);
+}
+
+bool KoanUrlBarController::IsFloatingZenCard() const {
+  return IsCommandCard() && !look::IsShadcnStyle();
+}
+
+bool KoanUrlBarController::IsCommandCard() const {
+  return placement_ == Placement::kFloating && features::IsUrlBarEnabled();
+}
+
+ui::Layer* KoanUrlBarController::card_layer() const {
+  return IsCommandCard() ? browser_view_->top_container()->layer() : nullptr;
 }
 
 void KoanUrlBarController::Layout() {
@@ -557,13 +700,18 @@ void KoanUrlBarController::Layout() {
   const gfx::Rect field =
       views::View::ConvertRectToTarget(bar->parent(), toolbar, bar->bounds());
   const int right_padding = toolbar->width() - field.right();
-  const gfx::Rect bar_card(card.x(),
-                           card.CenterPoint().y() - field.height() / 2,
-                           card.width(), field.height());
+  // Zen's input row is 62pt tall (--urlbar-container-height); the field sits
+  // in the middle of it, the rest filled with the card's colour (the
+  // decoration).
+  const int card_height =
+      IsFloatingZenCard() ? std::max(field.height(), kFloatingUrlBarInputHeight)
+                          : field.height();
+  const gfx::Rect bar_card(card.x(), card.CenterPoint().y() - card_height / 2,
+                           card.width(), card_height);
   top_container->SetBoundsRect(bar_card);
-  toolbar->SetBoundsRect(gfx::Rect(-field.x(), -field.y(),
-                                   card.width() + field.x() + right_padding,
-                                   card.height()));
+  toolbar->SetBoundsRect(
+      gfx::Rect(-field.x(), -field.y() + (card_height - field.height()) / 2,
+                card.width() + field.x() + right_padding, card.height()));
   toolbar->DeprecatedLayoutImmediately();
   if (card_size_ != bar_card.size()) {
     card_size_ = bar_card.size();
@@ -577,6 +725,18 @@ void KoanUrlBarController::Layout() {
     backdrop_->SetBoundsRect(top_container->parent()->GetLocalBounds());
     backdrop_->SetCard(bar_card);
   }
+  if (fill_) {
+    fill_->SetBoundsRect(toolbar->GetLocalBounds());
+  }
+  if (decoration_) {
+    decoration_->SetBoundsRect(top_container->GetLocalBounds());
+    LocationIconView* icon = bar->location_icon_view();
+    decoration_->SetIconBounds(
+        icon && icon->GetVisible()
+            ? views::View::ConvertRectToTarget(icon->parent(), top_container,
+                                               icon->bounds())
+            : gfx::Rect());
+  }
 }
 
 gfx::Rect KoanUrlBarController::CardBounds() const {
@@ -587,6 +747,13 @@ gfx::Rect KoanUrlBarController::CardBounds() const {
   }
   const gfx::Rect area = views::View::ConvertRectToTarget(
       browser_view_, overlay, browser_view_->GetLocalBounds());
+  if (placement_ == Placement::kFloating && look::IsShadcnStyle()) {
+    // shadcn's command dialog: about 55% of the content width, a little above
+    // the middle.
+    const int width = area.width() * 55 / 100;
+    return gfx::Rect(area.x() + (area.width() - width) / 2,
+                     area.y() + area.height() * 3 / 10, width, height);
+  }
   if (placement_ == Placement::kFloating) {
     const int width = std::min(area.width() * 2 / 3, kFloatingUrlBarMaxWidth);
     const int centred_height = std::max(kFloatingUrlBarMinHeight, height);
@@ -717,17 +884,55 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
   return controller && controller->url_bar()->OpenForNewTab();
 }
 
-void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress) {
-  views::Widget* widget = location_bar->GetWidget();
-  BrowserView* browser_view = widget
+// The URL bar controller of the window `view` belongs to, if any: `view` is
+// the location bar or a row of the omnibox popup, whose widget is a child of
+// the browser window's. Null for no view (upstream's location_bar_view_ is
+// null in some tests and popups) and for windows that aren't Koan's.
+KoanUrlBarController* UrlBarOf(const views::View* view) {
+  if (!view) {
+    return nullptr;
+  }
+  const views::Widget* widget = view->GetWidget();
+  const views::Widget* top_level =
+      widget ? widget->GetTopLevelWidget() : nullptr;
+  BrowserView* browser_view = top_level
                                   ? BrowserView::GetBrowserViewForNativeWindow(
-                                        widget->GetNativeWindow())
+                                        top_level->GetNativeWindow())
                                   : nullptr;
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
-  if (controller) {
-    controller->url_bar()->OnOmniboxChanged(user_input_in_progress);
+  return controller ? controller->url_bar() : nullptr;
+}
+
+void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress) {
+  if (KoanUrlBarController* url_bar = UrlBarOf(location_bar)) {
+    url_bar->OnOmniboxChanged(user_input_in_progress);
   }
+}
+
+bool ShowsCardPlaceholder(views::View* location_bar) {
+  KoanUrlBarController* url_bar = UrlBarOf(location_bar);
+  return url_bar && url_bar->IsCommandCard();
+}
+
+ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
+                                            ui::ColorId id) {
+  KoanUrlBarController* url_bar = UrlBarOf(location_bar);
+  return url_bar && url_bar->IsCommandCard()
+             ? ui::ColorId(kColorKoanFloatingUrlBarPlaceholder)
+             : id;
+}
+
+void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
+  KoanUrlBarController* url_bar = UrlBarOf(location_bar);
+  if (url_bar && url_bar->IsCommandCard()) {
+    text = u"Search...";
+  }
+}
+
+bool ShowsZenCardRows(const views::View* view) {
+  const KoanUrlBarController* url_bar = UrlBarOf(view);
+  return url_bar && url_bar->IsFloatingZenCard();
 }
 
 }  // namespace koan

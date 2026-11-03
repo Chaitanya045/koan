@@ -16,6 +16,7 @@
 #include <string>
 
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/color/koan_look.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/font.h"
@@ -50,11 +51,21 @@ inline constexpr int kMinWidth = kSideWidth + kSectionWidth;
 // Corner radii: pills (search box, Filter, chips and the row buttons;
 // --zen-library-radius), rows, side tabs, Space cards and the small things
 // (header and footer buttons, a Space's icon, picture previews).
-inline constexpr int kPillRadius = 12;
-inline constexpr int kRowRadius = 16;
-inline constexpr int kTabRadius = 10;
-inline constexpr int kSpaceCardRadius = 14;
-inline constexpr int kSmallRadius = 6;
+inline int PillRadius() {
+  return look::ScaleRadius(12);
+}
+inline int RowRadius() {
+  return look::ScaleRadius(16);
+}
+inline int TabRadius() {
+  return look::ScaleRadius(10);
+}
+inline int SpaceCardRadius() {
+  return look::ScaleRadius(14);
+}
+inline int SmallRadius() {
+  return look::ScaleRadius(6);
+}
 
 // Row action buttons: an 18px icon with 8px around it.
 inline constexpr int kRowButtonIconSize = 18;
@@ -104,7 +115,7 @@ std::unique_ptr<views::ImageButton> CreateIconButton(
     std::u16string tooltip,
     int icon_size = kSmallButtonIconSize,
     int padding = kSmallButtonPadding,
-    int radius = kSmallRadius);
+    int radius = SmallRadius());
 
 }  // namespace koan::library
 

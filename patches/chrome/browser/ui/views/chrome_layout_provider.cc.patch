@@ -1,0 +1,29 @@
+diff --git a/chrome/browser/ui/views/chrome_layout_provider.cc b/chrome/browser/ui/views/chrome_layout_provider.cc
+--- a/chrome/browser/ui/views/chrome_layout_provider.cc
++++ b/chrome/browser/ui/views/chrome_layout_provider.cc
+@@ -5,12 +5,14 @@
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ 
+ #include <algorithm>
++#include <optional>
+ 
+ #include "base/containers/fixed_flat_map.h"
+ #include "base/feature_list.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/chrome_typography.h"
+ #include "components/omnibox/common/omnibox_features.h"
++#include "koan/browser/ui/views/koan_look_hooks.h"
+ #include "ui/base/pointer/touch_ui_controller.h"
+ #include "ui/gfx/shadow_value.h"
+ #include "ui/views/layout/layout_provider.h"
+@@ -351,6 +353,10 @@
+   CHECK_GE(token, views::kShapeContextTokenStart, base::NotFatalUntil::M162);
+   CHECK_LT(token, kChromeShapeContextTokenEnd, base::NotFatalUntil::M162);
+ 
++  if (const std::optional<int> radius = koan::GetLookCornerRadius(token)) {
++    return *radius;
++  }
++
+   if (token < views::ShapeContextTokens::kShapeContextTokenEnd) {
+     return LayoutProvider::GetCornerRadiusMetric(token, size);
+   }

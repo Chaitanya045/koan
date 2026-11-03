@@ -43,6 +43,9 @@ enum class Control {
   kCheckbox,
   // A labelled drop-down of `options`; boolean, integer or string pref.
   kMenu,
+  // A text area with Apply and Remove buttons; a string pref the browser
+  // validates (a pasted theme).
+  kTextArea,
   // Zen's browser layout cards: one card per option, with a preview.
   kLayoutPicker,
 };

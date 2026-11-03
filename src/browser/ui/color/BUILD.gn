@@ -2,17 +2,70 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//testing/test.gni")
+
+# shadcn/ui's design tokens and the current look. Depends on //base and Skia
+# only, so views, the settings page and unit tests can use it.
+source_set("tokens") {
+  sources = [
+    "koan_look.cc",
+    "koan_look.h",
+    "koan_oklch.cc",
+    "koan_oklch.h",
+    "koan_shadcn_palettes.inc",
+    "koan_tokens.cc",
+    "koan_tokens.h",
+  ]
+  public_deps = [
+    "//base",
+    "//skia",
+  ]
+}
+
 # Koan colour overrides, registered from
-# chrome/browser/ui/color/chrome_color_mixers.cc.
+# chrome/browser/ui/color/chrome_color_mixers.cc (and, for the system and core
+# colours, from ui/color/color_mixers.cc).
 source_set("color") {
   sources = [
     "koan_color_id.h",
     "koan_color_mixer.cc",
     "koan_color_mixer.h",
+    "koan_shadcn_color_mixer.cc",
   ]
+  public_deps = [ ":tokens" ]
   deps = [
     "//chrome/browser/ui/color:color_headers",
     "//koan/browser:features",
     "//ui/color",
+    "//ui/gfx",
   ]
+}
+
+# The look's tests: the token layer (OKLCH, pasted themes, Zen's colour
+# derivations) and a ColorProvider built for every look, light and dark, that
+# fails on a colour recipe cycle. Pure logic over //base, Skia and //ui/color,
+# no browser. Build and run:
+#   autoninja -C out/Koan koan/browser/ui/color:koan_look_unittests
+#   out/Koan/koan_look_unittests
+test("koan_look_unittests") {
+  sources = [
+    "koan_look_providers_unittest.cc",
+    "koan_tokens_unittest.cc",
+  ]
+  deps = [
+    ":color",
+    ":tokens",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//chrome/browser/ui/color:color_headers",
+    "//components/color:color_headers",
+    "//koan/browser:features",
+    "//skia",
+    "//testing/gtest",
+    "//ui/color",
+    "//ui/color:mixers",
+    "//ui/gfx",
+  ]
+  data_deps = [ "//third_party/icu:icudata" ]
 }

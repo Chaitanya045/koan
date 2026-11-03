@@ -259,7 +259,8 @@ const CTRL = 2, ALT = 1;
 const EF_ALT = 8;
 const VK = { T: 84, ESC: 27, ENTER: 13, S: 83 };
 const WINDOW_WIDTH = 1280;
-// Zen: min(window width / 1.5, 750), centred.
+// Zen's look (the default; ZenUIManager.mjs updateTabsToolbar):
+// min(window width / 1.5, 750), centred. (shadcn's: 55% of the window.)
 const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
 
 const bar = vs => find(vs, 'TopContainerView');
@@ -357,6 +358,14 @@ check('Ctrl+T opens the URL bar' + (BEHAVIOR === 'normal' ? ' in the pill' : ', 
       newTabPlaced, `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
 check('...empty', omniboxText(vs) === '', JSON.stringify(omniboxText(vs)));
 check('...without creating a tab', (await pages()).length === tabsBefore);
+// The card (Zen's look) shows "Search..." in the empty input even while it is
+// focused, a flat surface without the location bar's focus ring (a native
+// view property, not checked here).
+if (BEHAVIOR !== 'normal') {
+  check('...with the "Search..." placeholder',
+        find(vs, 'OmniboxViewViews')?.p.PlaceholderText === 'Search...',
+        JSON.stringify(find(vs, 'OmniboxViewViews')?.p.PlaceholderText));
+}
 shot('new-tab');
 // Open items from the #58 review, reported, not checked: the caption
 // buttons under the floating bar's backdrop (a later sibling, so above them).
