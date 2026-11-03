@@ -77,7 +77,8 @@ class LookController : public look::Observer {
     // that keeps the colour mode (shadcn <-> Zen).
     ui::NativeTheme::GetInstanceForNativeUi()->NotifyOnNativeThemeUpdated();
     // Browser windows get their colours from the profile's ThemeService.
-    if (g_browser_process->profile_manager()) {
+    // (None at shutdown, when a pref change can still arrive.)
+    if (g_browser_process && g_browser_process->profile_manager()) {
       for (Profile* profile :
            g_browser_process->profile_manager()->GetLoadedProfiles()) {
         ThemeService* service = ThemeServiceFactory::GetForProfile(profile);

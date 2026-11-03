@@ -405,7 +405,9 @@ while focused), a thin divider under the field and "title — url" suggestions.
 
 Limits: menus macOS draws itself (page context menus, the menu bar) are
 dark or light with the mode but not coloured by the tokens; the font is
-loaded at start.
+loaded at start. The system's high-contrast setting is not
+followed by the colours the look sets itself (the system and core colours);
+only Chromium's own high-contrast paths still apply.
 
 ## Settings
 

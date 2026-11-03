@@ -271,12 +271,13 @@ void AddKoanCoreColorMixer(ui::ColorProvider* provider,
 }
 
 SkColor FloatingUrlBarCardColor(const ui::ColorProviderKey& key) {
-  const Tokens t(key);
   if (look::IsShadcnStyle()) {
-    return t[Token::kPopover];
+    return Tokens(key)[Token::kPopover];
   }
   // zen-omnibox.css: rgb(24, 24, 24), or white.
-  return t.dark() ? SkColorSetRGB(24, 24, 24) : SK_ColorWHITE;
+  return key.color_mode == ui::ColorProviderKey::ColorMode::kDark
+             ? SkColorSetRGB(24, 24, 24)
+             : SK_ColorWHITE;
 }
 
 void AddZenTabColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
