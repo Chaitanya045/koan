@@ -32,8 +32,8 @@ Zen 1.24b. Source: `src/zen/split-view/ZenViewSplitter.mjs` (2659 lines), `zen-s
 ### 2.1 Browser area
 
 - Panes are absolutely positioned inside the content area (`.browserSidebarContainer[is-zen-split]`); gap between panes
-  = `--zen-element-separation` (value is set elsewhere, Glance uses 6; forced to 8 when `zen-no-padding` and split), the
-  row gap is that, the column gap is that +1 px. Panes keep the
+  = `--zen-element-separation`: **8 pt measured live** (spec section 7: two panes 612.5 x 907, 8 pt gap, 7 pt radius); forced
+  to 8 when `zen-no-padding`; Glance overrides it to 6. Row gap = that, column gap = that +1 px. Panes keep the
   rounded content radius (`--zen-native-inner-radius`).
 - **Active pane**: `outline: 2px solid --zen-active-split-outline-color`, colour = accent darkened 20 lightness points
   (light) / the primary button border colour (dark). The outline is hidden in DOM fullscreen and on Glance overlays.
