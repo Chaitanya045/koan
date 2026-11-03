@@ -606,9 +606,13 @@ now = await waitFor(async () => {
   const p = await pages();
   return p.length === tabsNow + 1 && p;
 });
+// Chromium upgrades a typed http:// address to https:// (HTTPS Upgrades), so
+// the page's URL is compared without its scheme.
+const noScheme = url => url.replace(/^https?:/, '');
 check('Alt+Enter opens one new tab, leaving the page alone',
       now && now.some(p => p.url.endsWith('?alt')) &&
-          now.some(p => p.id === current.id && p.url === current.url),
+          now.some(p => p.id === current.id &&
+                        noScheme(p.url) === noScheme(current.url)),
       (now || await pages()).map(p => p.url).join(' '));
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
