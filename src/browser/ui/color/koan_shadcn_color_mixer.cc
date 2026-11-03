@@ -24,13 +24,38 @@ namespace {
 
 using look::Token;
 
+// The look's tokens for `key`'s mode. In Zen's look, a window whose key
+// carries an accent (a Space theme's primary colour, which
+// KoanThemeController gives the window; or the user's own Chrome colour)
+// takes it as `primary`, as Zen's --zen-primary-color follows the Space.
+look::TokenSet TokensFor(const ui::ColorProviderKey& key) {
+  look::TokenSet tokens = look::CurrentTokens(
+      key.color_mode == ui::ColorProviderKey::ColorMode::kDark);
+  if (look::IsShadcnStyle() || !key.user_color ||
+      key.user_color_source != ui::ColorProviderKey::UserColorSource::kAccent) {
+    return tokens;
+  }
+  const SkColor accent = *key.user_color;
+  const SkColor on_accent = color_utils::GetColorWithMaxContrast(accent);
+  for (const Token token :
+       {Token::kPrimary, Token::kRing, Token::kSidebarPrimary}) {
+    tokens.colors[static_cast<int>(token)] = accent;
+  }
+  for (const Token token :
+       {Token::kPrimaryForeground, Token::kSidebarPrimaryForeground}) {
+    tokens.colors[static_cast<int>(token)] = on_accent;
+  }
+  return tokens;
+}
+
 // The tokens of one mode, with the few operations the mapping needs. A
 // colour here is a token, or a token laid over another (shadcn writes those
 // as `bg-accent/50`), so every surface traces back to a design token.
 class Tokens {
  public:
-  explicit Tokens(bool dark)
-      : tokens_(look::CurrentTokens(dark)), dark_(dark) {}
+  explicit Tokens(const ui::ColorProviderKey& key)
+      : tokens_(TokensFor(key)),
+        dark_(key.color_mode == ui::ColorProviderKey::ColorMode::kDark) {}
 
   bool dark() const { return dark_; }
   SkColor operator[](Token token) const { return tokens_[token]; }
@@ -86,7 +111,7 @@ class Tokens {
 // derived from them. See koan_color_mixer.h.
 void AddKoanCoreColorMixer(ui::ColorProvider* provider,
                            const ui::ColorProviderKey& key) {
-  const Tokens t(key.color_mode == ui::ColorProviderKey::ColorMode::kDark);
+  const Tokens t(key);
   ui::ColorMixer& mixer = provider->AddMixer();
 
   // --- Core colours (core_default_color_mixer.cc) ---
@@ -243,7 +268,7 @@ void AddKoanCoreColorMixer(ui::ColorProvider* provider,
 // surfaces.
 void AddShadcnChromiumColors(ui::ColorMixer& mixer,
                              const ui::ColorProviderKey& key) {
-  const Tokens t(key.color_mode == ui::ColorProviderKey::ColorMode::kDark);
+  const Tokens t(key);
 
   // Selection and focus: shadcn's (`selection:bg-primary`), not the system
   // accent colour.
@@ -314,7 +339,7 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
 // Koan's own views (koan_color_id.h) from the tokens.
 void AddShadcnKoanColors(ui::ColorMixer& mixer,
                          const ui::ColorProviderKey& key) {
-  const Tokens t(key.color_mode == ui::ColorProviderKey::ColorMode::kDark);
+  const Tokens t(key);
 
   // The sidebar is shadcn's Sidebar: tab rows are `sidebar-accent` items.
   mixer[kColorKoanSidebarTabSelected] = {t[Token::kSidebarAccent]};
