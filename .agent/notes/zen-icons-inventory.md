@@ -30,27 +30,43 @@ icons to elements, `zen-icons/icons.css`. Pt = CSS px on this Mac (2x).
   31 x 29 with the icon `<image>` 29 x 29 and 6 pt padding, so the glyph is
   **17 x 17**. Other sizes are listed per surface.
 
-### Licence (read this before copying anything)
+### Licence (settled from Zen's own repo, tag 1.24b)
 
-| Group | Files | Where it comes from | Licence |
+Source: `github.com/zen-browser/desktop` at 1.24b, cloned at
+`~/work/koan/.cache/zen-desktop-1.24b/`, folder
+`src/browser/themes/shared/zen-icons/`. Its `jar.inc.mn` builds the shipped
+`zen-icons/` from two source folders on every platform:
+
+| Source folder | Icons | What Zen says | Licence |
 |---|---|---|---|
-| `library/*-sprite.svg` (7 of the 9 library files) | `library-{boosts,downloads,history,media,space-routing,spaces}-sprite.svg`, `library-sprite.svg` | Zen's own | **MPL-2.0** (each carries the MPL header) |
-| `icons.css` | | Zen | **MPL-2.0** (header) |
-| Top-level `zen-icons/*.svg` (160) | back, reload, close, plus, ... | Zen's `jar.inc.mn` maps **`shared/zen-icons/nucleo/`** for macOS, Windows and Linux (the repo also has `fluent/` and `sf/` folders that this build does not use); the glyph style (18 x 18 grid, 0.75 pt-style paths) matches **Nucleo** | **No licence header in the files. Almost certainly Nucleo's commercial icon licence (nucleoapp.com), NOT MPL-2.0.** Unverified: I could not find a LICENSE / NOTICE for the folder (GitHub shows none). Nucleo's published standard terms (per its site) allow icons in an open-source project's public source with its copyright notice, up to a limit of 100 icons; Zen ships 160 + 87 here, so Zen presumably has a different arrangement. **Do not assume Koan may redistribute these.** |
-| `selectable/*.svg` (87) | the Space-icon picker set: airplane, pizza, rocket, logo-github, ... | 512 x 512 viewBox, the names match **Ionicons** (`american-football`, `ice-cream`, `nuclear`, `tada`, `logo-github`...) | Probably **MIT (Ionicons)**; no header; unverified |
-| `blank.svg`, `library/library.svg`, `library-tile.svg` | | Zen | unknown (no header), probably Zen's |
-| Settings category icons | `preferences/category-*.svg`, `customize.svg`, `window.svg`, `quickactions.svg` | **Firefox's own** | **MPL-2.0** (Mozilla) |
-| `chrome://global/skin/icons/*.svg` (toolkit set) | search-glass, defaultFavicon, settings, ... | Firefox's own | **MPL-2.0** |
-| `zen-images/favicons/*.svg` (onboarding Essentials: Obsidian, Discord, ...) | | third-party brand marks | trademarks of their owners; not Zen's to license |
+| `nucleo/` | **158** SVGs: every UI icon (back, reload, close, plus, sidebar, menu, window, history, downloads, settings, ...) | `nucleo/nucleo-copyright-notice.html`: *"The Nucleo icons are copyrighted. **Redistribution is not permitted.** Use in source and binary forms, with or without modification, is permitted only if you possess a Nucleo license."* (https://nucleoapp.com/license, version 1.2, 23 Nov 2023) | **Nucleo commercial licence. Koan must NOT copy these files or ship them without its own Nucleo licence.** |
+| `common/` (98 SVGs) | `blank.svg`, `urlbar-arrow.svg`, `library/` (9: `library-*-sprite.svg` with MPL headers, `library.svg`, `library-tile.svg`), `selectable/` (87) | `common/selectable/CREDITS.md`: *"Credit to Ionicons by Ionic Framework, used under the MIT License."* | `selectable/`: **MIT (Ionicons)**, with that credit; the rest is Zen's own, **MPL-2.0** (the repo's LICENSE; the sprite files carry the MPL header) |
+| `fluent/`, `sf/` | **empty** (only a `NOTE.md` each) | *"Windows icons are using Nucleo icons. This until we figure out how sizing works with Fluent icons."* / *"MacOS icons are using Nucleo icons. This until we figure out how sizing works with SF Pro icons."* | n/a: there is no Fluent or SF Symbols set to reuse |
 
-**Recommendation:** ask the maintainer / check Zen's repo (`docs/`, LICENSE, a
-THIRD_PARTY file) for how Zen licenses the Nucleo set before copying any of the
-160 top-level icons into Koan. Safe options: (a) the MPL-headed library sprites
-and Firefox's own icons (MPL-2.0, with THIRD_PARTY_NOTICES entries per
-CONTRIBUTING.md); (b) draw Koan's own icons to the same 18 x 18 grid and weights,
-or use an open set of the same style (the glyph shapes in this inventory tell
-you which icon is meant, e.g. `reload`, `sidebar`); (c) buy/own a Nucleo licence.
-Either way keep the **names, sizes, colours and opacities below**.
+So of the 160 top-level icons in the app, **158 are Nucleo** (copyrighted) and 2
+(`blank.svg`, `urlbar-arrow.svg`) are Zen's. The built app's SVGs are the
+repo's sources run through `svgo` (`update-resources.sh`), so no file in the app
+or the repo is byte-identical; `icons.css` (the selector map) is identical and
+MPL-2.0.
+
+| Other icon groups | Licence |
+|---|---|
+| Settings category icons (`preferences/category-*.svg`, `customize.svg`, `window.svg`, `quickactions.svg`) and the toolkit set `chrome://global/skin/icons/*.svg` | Firefox's own: **MPL-2.0** (Mozilla) |
+| `zen-images/favicons/*.svg` (onboarding Essentials: Obsidian, Discord, ...) | third-party brand marks (trademarks of their owners) |
+
+**What Koan can do:**
+1. **Take freely** (MPL-2.0 header + a THIRD_PARTY_NOTICES row, see
+   CONTRIBUTING.md): `icons.css` as the map, the 7 library sprites, `library.svg`,
+   `library-tile.svg`, `blank.svg`, `urlbar-arrow.svg`; the Firefox preference and
+   toolkit icons where needed.
+2. **Take with credit** (MIT): the 87 `selectable/` Space icons (Ionicons), keeping
+   Zen's credit line.
+3. **Do not take**: the 158 Nucleo icons. Options: buy a Nucleo licence for Koan
+   (then use the files directly), or draw an **equivalent set** to the same 18 x 18
+   grid and weights, or use an open set of the same style (MIT/ISC/Apache icon
+   sets with a matching outline weight). The inventory below gives, for every
+   surface, the icon's **name** (the file name tells the glyph), size, colour and
+   opacity, so any set can be matched icon for icon.
 
 ## 1. Surfaces
 
@@ -233,8 +249,8 @@ PiP `global/media/picture-in-picture-open.svg`. Permission popups: `geo`,
    "+" 20, Library 18 (x1.08) in a 32 button, Clear 10, Glance buttons 32.
 3. Opacities: disabled back/forward .5, "+ New Tab" glyph `.63` alpha colour,
    "Clear" .5 on hover, search/filter in Library .5/.8, library selected tinted.
-4. Resolve the **licence** (section 0) before shipping Zen's SVG files; the names
-   and metrics here are enough to build an equivalent set.
+4. **Do not copy the 158 Nucleo SVGs** (section 0): get a Nucleo licence or build an
+   equivalent set; the names and metrics here are enough to match icon for icon.
 5. Raw data: `~/work/koan/.cache/zen-ref/raw/icons-scan-*.json`,
    `~/work/koan/.cache/zen-src-1.24b/chrome/browser/skin/classic/browser/zen-icons/`.
 
@@ -247,8 +263,8 @@ PiP `global/media/picture-in-picture-open.svg`. Permission popups: `geo`,
   and media icons, Boosts, page-action icons in the pill, Space reorder, Glance and
   split pane icons (the 32 x 32 Glance buttons are measured; their inner glyph size
   is assumed ~16-17), audio overlays, `essential-add/remove`.
-- **Inferred**: the Ionicons origin of `selectable/`, the Nucleo origin of the
-  top-level set, and light-mode colours (taken from the matching tokens, not
-  sampled per icon).
+- **Inferred**: light-mode colours (taken from the matching tokens, not sampled
+  per icon). (The icon provenance and licences are NOT inferred any more: they
+  are from Zen's repo, see section 0.)
 - **Not found in `zen-icons`**: Settings category icons (Firefox's own set),
   favicons and brand marks.
