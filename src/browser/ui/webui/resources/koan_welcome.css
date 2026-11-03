@@ -17,8 +17,10 @@
 
 :root {
   color-scheme: light dark;
-  /* zen-theme.css: the system's accent colour. */
-  --zen-primary-color: rgb(0, 122, 255);
+  /* zen-theme.css takes the system's AccentColor (zen.theme.accent-color);
+   * on the user's Mac Zen's buttons came out oklch(0.55 0.089 254.6) and
+   * its accent text oklch(0.7 0.089 254.6), which this gives. */
+  --zen-primary-color: oklch(0.6 0.0888 254.6);
   --zen-main-browser-background: light-dark(rgb(235, 235, 235), #1b1b1b);
   /* zen-buttons.css */
   --zen-accent-button-color: light-dark(
@@ -31,12 +33,6 @@
   );
 }
 
-@supports (color: AccentColor) {
-  :root {
-    --zen-primary-color: AccentColor;
-  }
-}
-
 html,
 body {
   margin: 0;
@@ -45,10 +41,16 @@ body {
   overflow: hidden;
   /* Zen's window behind the page once the video has gone. */
   background: var(--zen-main-browser-background);
-  font: menu;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 15px;
+  /* Firefox's chrome: the system font at 11px, which Zen's rem sizes are
+   * of (measured on the Mac: the title 5.2rem = 57.2px). */
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
   -webkit-font-smoothing: antialiased;
+}
+
+html {
+  font-size: 11px;
 }
 
 button {
@@ -240,8 +242,11 @@ button {
   color: light-dark(#111111, #ffffff);
   border-radius: 1.4rem;
   position: relative;
-  width: 86%;
-  height: 82%;
+  /* Zen locks its window at 1200x720 while it shows (ZenWelcome.mjs
+   * lockWindowSize), so its card is 1032x590.4; Koan covers the window
+   * instead and keeps the card that size in a bigger one. */
+  width: min(86%, 1032px);
+  height: min(82%, 590.4px);
   box-shadow: 0 3px 8px rgba(0,0,0,.05);
   overflow: hidden;
 
