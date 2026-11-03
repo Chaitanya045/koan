@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_FONTS_KOAN_FONTS_H_
 #define KOAN_BROWSER_UI_FONTS_KOAN_FONTS_H_
 
+#include <span>
 #include <string_view>
 
 namespace koan::fonts {
@@ -22,8 +23,7 @@ struct Face {
 };
 
 // The faces, in the order Geist Regular, Medium, SemiBold, Bold, Mono.
-const Face* Faces();
-int FaceCount();
+std::span<const Face> Faces();
 
 // The WebUI pages' @font-face sources: Geist as one variable font (weights
 // 100-900) and Geist Mono Regular, as WOFF2. (WebUI data sources give

@@ -19,7 +19,7 @@ std::string_view AsChars(const unsigned char* data, size_t size) {
 
 }  // namespace
 
-const Face* Faces() {
+std::span<const Face> Faces() {
   // Not constexpr: the bytes are viewed as chars.
   static const Face faces[] = {
       {kSansFamily, 400, AsChars(kGeistRegular, kGeistRegularSize)},
@@ -29,10 +29,6 @@ const Face* Faces() {
       {kMonoFamily, 400, AsChars(kGeistMonoRegular, kGeistMonoRegularSize)},
   };
   return faces;
-}
-
-int FaceCount() {
-  return 5;
 }
 
 std::string_view SansWoff2() {

@@ -14,8 +14,7 @@ namespace koan::fonts {
 bool RegisterBundledFonts() {
   static const bool registered = [] {
     bool all = true;
-    for (int i = 0; i < FaceCount(); ++i) {
-      const Face& face = Faces()[i];
+    for (const Face& face : Faces()) {
       // The provider copies nothing: the bytes live in the binary for good.
       base::apple::ScopedCFTypeRef<CGDataProviderRef> provider(
           CGDataProviderCreateWithData(nullptr, face.data.data(),
@@ -23,8 +22,7 @@ bool RegisterBundledFonts() {
       base::apple::ScopedCFTypeRef<CGFontRef> font(
           CGFontCreateWithDataProvider(provider.get()));
       // Registered for this process only, nothing is installed.
-      all &= font &&
-             CTFontManagerRegisterGraphicsFont(font.get(), nullptr);
+      all &= font && CTFontManagerRegisterGraphicsFont(font.get(), nullptr);
     }
     return all;
   }();
