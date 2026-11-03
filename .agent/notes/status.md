@@ -40,8 +40,13 @@ _Last updated: 2026-11-02_
   build jobs on the free `xcode-27` runners handing `out/Koan` on as
   artifacts, then an ad-hoc-signed `Koan-<version>-<sha>-arm64.dmg` as a
   run artifact (and the rolling `nightly` pre-release from develop).
-  First green run 2026-11-03 (run 41420273033): 16 h end to end, 4 build
-  jobs, 183 MB .dmg (554 MB app). Launch on a Mac not verified yet.
+  Green runs: 41420273033 (2026-11-03, 16 h, 4 build jobs) and
+  41577942839 (develop with Spaces/Library/media, 15 h 42 min, 3 build
+  jobs); 183 MB .dmg (555 MB app). The user tried the first .dmg on macOS 27
+  and hit Gatekeeper ("could not verify … free of malware"); the docs now
+  say `xattr -dr com.apple.quarantine`. That it launches is not confirmed
+  yet. Runs only
+  nightly, on dispatch, or with the `macos-build` PR label.
   Branches: `gh workflow run macos.yml -f ref=<branch>` once merged.
   Details and measurements in [macos-ci.md](macos-ci.md).
 - **Release:** draft PRs #13 (packaging) and #14 (benchmarks) wait for the

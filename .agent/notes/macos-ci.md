@@ -168,6 +168,16 @@ rest as no-ops). Artifacts: source 5.8 GB; out-1/2/3 0.56/0.73/1.05 GB;
 (arm64, `codesign --verify --deep --strict` OK, `hdiutil verify` OK).
 Memory never below ~44% free at `JOBS=3`; swap ≤ 130 MB.
 
+**Second green run: 41577942839** (2026-11-03 04:24 → 20:07 UTC,
+**15 h 42 min**), Koan 764f834 = develop with Spaces (#57), Library (#64)
+and media/toasts (#66), the first Mac compile of those: no Mac-only errors.
+Fetch 65 min (googlesource slow: sync 44 min, one HTTP 500 retried, one
+lost dependency taken from the tarball); build-01 28,537 steps (4 h 47 min
+build), build-02 10,804 (4 h 44 min), build-03 the last 18,760 and the
+.dmg (4 h 33 min build): **3 build jobs**. .dmg 183 MB, app 555 MB; the app
+in the mounted .dmg verifies. The cleanup job deleted source and out-1/2
+at the end, leaving the .dmg and logs.
+
 Run 41560986331's fetch failed on a transient googlesource HTTP 500
 ("RPC failed; HTTP 500 ... expected 'packfile'") while gclient cloned
 `third_party/clang-format/script`. `bootstrap.sh` now retries `gclient
