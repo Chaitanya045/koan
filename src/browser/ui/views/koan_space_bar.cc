@@ -12,6 +12,7 @@
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -102,7 +103,11 @@ class KoanSpaceButton : public views::Button,
       canvas->DrawRoundRect(bounds, SpaceButtonCornerRadius(), flags);
     }
     if (IsCollapsed() || icon_.empty()) {
-      flags.setColor(provider->GetColor(kColorKoanSpaceDot));
+      // A dot: `muted-foreground`, `foreground` when lit, in the shadcn style
+      // (Zen's is one faint colour that the button's opacity dims).
+      flags.setColor(provider->GetColor(look::IsShadcnStyle() && IsLit()
+                                            ? kColorKoanSpaceForeground
+                                            : kColorKoanSpaceDot));
       canvas->DrawCircle(
           bounds.CenterPoint(),
           (IsCollapsed() ? kSpaceCollapsedDotSize : kSpaceDotSize) / 2.f,
@@ -153,9 +158,17 @@ class KoanSpaceButton : public views::Button,
   }
 
  private:
+  bool IsLit() const {
+    return active_ || GetState() == STATE_HOVERED ||
+           GetState() == STATE_PRESSED;
+  }
+
   void UpdateLook(bool animate) {
-    const bool lit =
-        active_ || GetState() == STATE_HOVERED || GetState() == STATE_PRESSED;
+    const bool lit = IsLit();
+    // A shadcn dot is already the muted colour: dimming it again makes it
+    // vanish on a near-black sidebar.
+    const bool dimmed =
+        !lit && !(look::IsShadcnStyle() && (IsCollapsed() || icon_.empty()));
     std::unique_ptr<ui::ScopedLayerAnimationSettings> settings;
     if (animate) {
       settings = std::make_unique<ui::ScopedLayerAnimationSettings>(
@@ -163,7 +176,7 @@ class KoanSpaceButton : public views::Button,
       settings->SetTransitionDuration(kTransitionDuration);
     }
     layer()->SetLayerGrayscale(lit ? 0.f : 1.f);
-    layer()->SetOpacity(lit ? 1.f : kInactiveOpacity);
+    layer()->SetOpacity(dimmed ? kInactiveOpacity : 1.f);
   }
 
   const raw_ptr<KoanWorkspaceController> controller_;
@@ -180,8 +193,13 @@ END_METADATA
 
 KoanSpaceBarView::KoanSpaceBarView(KoanWorkspaceController* controller)
     : controller_(controller) {
+  // In the shadcn style the + is `muted-foreground`, `foreground` on hover.
+  const bool shadcn = look::IsShadcnStyle();
   auto create = views::CreateVectorImageButtonWithNativeTheme(
-      views::Button::PressedCallback(), kAddIcon, /*dip_size=*/16);
+      views::Button::PressedCallback(), kAddIcon, /*dip_size=*/16,
+      shadcn ? ui::ColorId(kColorKoanSpaceDot) : ui::kColorIcon,
+      ui::kColorIconDisabled,
+      shadcn ? ui::ColorId(kColorKoanSpaceForeground) : ui::kColorIconHovered);
   create->SetCallback(base::BindRepeating(
       [](KoanWorkspaceController* controller, views::Button* button) {
         controller->ShowCreateMenu(button);
