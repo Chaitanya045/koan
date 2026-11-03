@@ -25,3 +25,4 @@ Each file ends with a **test script** the Mac loop can run in both Zen and Koan.
 | [glance.md](glance.md) | Glance: Option-click activation, 350 ms arc animation, side buttons, expand, split, close/confirm |
 | [fullscreen-and-notch.md](fullscreen-and-notch.md) | native macOS fullscreen (notch strip, borderless compact) and DOM fullscreen |
 | [theme-picker.md](theme-picker.md) | theme picker: wheel, dots and harmonies, presets, opacity, grain, scheme, saving |
+| [library.md](library.md) | Library: slide-over shell, rail and customize, History, Downloads (+ button stack), Spaces cards |
