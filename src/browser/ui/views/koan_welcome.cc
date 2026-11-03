@@ -2349,18 +2349,16 @@ void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {
         .SetOpacity(part, 0, gfx::Tween::EASE_IN);
   }
   views::AnimationBuilder()
-      .OnEnded(base::BindOnce(
-          [](decltype(close_and_apply) then, base::WeakPtr<KoanWelcome> welcome,
-             KoanWelcomeChoices choices) {
-            // Not from inside the widget's own animation.
-            base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-                FROM_HERE,
-                base::BindOnce(then, std::move(welcome), std::move(choices)));
-          },
-          close_and_apply, weak_factory_.GetWeakPtr(), choices))
       .Once()
       .SetDuration(kFinishFadeDuration)
       .SetOpacity(view, 0, gfx::Tween::EASE_IN);
+  // Closes once the fade has had its time, whether or not the animation ran
+  // to its end (an animation that is preempted or aborted never reports its
+  // end, and the screen must go regardless).
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(close_and_apply, weak_factory_.GetWeakPtr(), choices),
+      kFinishFadeDuration);
 }
 
 void KoanWelcome::Skip() {
