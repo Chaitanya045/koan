@@ -27,6 +27,12 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
   // The sidebar's region is rebuilt on a switch between vertical and
   // horizontal tabs.
   ObserveSidebar();
+#if BUILDFLAG(IS_MAC)
+  if (!titlebar_cleared_ && browser_view_->GetWidget()) {
+    titlebar_cleared_ = true;
+    ClearTitlebar(browser_view_);
+  }
+#endif
   // Fullscreen changes the title bar itself; AppKit lays the lights out
   // when it ends.
   if (browser_view_->IsFullscreen() || update_pending_) {
@@ -93,6 +99,9 @@ void KoanTrafficLightsController::LayOutTrafficLights() {
     // BrowserFrameViewMac makes AppKit lay the title bar out again, toggling
     // the window's style mask, which may bring the traffic lights back.
     frame->OnTabStripStateChanged();
+#if BUILDFLAG(IS_MAC)
+    ClearTitlebar(browser_view_);
+#endif
   }
   on_changed_.Run();
 }
