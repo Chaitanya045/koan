@@ -80,9 +80,8 @@ started directly so it keeps the folder's `HOME`/`CFFIXED_USER_HOME`.
 The test instance does not touch the real-home preferences plist
 (`~/Library/Preferences/dev.koan.Koan.plist`): that file belongs to the
 daily-driver app opened from Finder. Because `CFFIXED_USER_HOME` points into
-the folder, CFPreferences writes the test instance's defaults there. (An
-earlier version of this note said the opposite; the maintainer checked and
-the plist is harmless either way.)
+the folder, a test instance's defaults go there, not into the real home. The
+plist in the real home is harmless and is left alone.
 
 ## Build
 
