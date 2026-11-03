@@ -4,6 +4,8 @@
 
 #include "koan/browser/ui/color/koan_color_mixer.h"
 
+#include <initializer_list>
+
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
@@ -245,9 +247,27 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   // Selection and focus: shadcn's (`selection:bg-primary`), not the system
   // accent colour.
   mixer[ui::kColorTextSelectionBackground] = {t[Token::kPrimary]};
+  mixer[ui::kColorTextSelectionForeground] = {t[Token::kPrimaryForeground]};
+  // The Material mixer derives these from its own tonal selection colour.
+  for (ui::ColorId id : std::initializer_list<ui::ColorId>{
+           ui::kColorTextfieldSelectionBackground,
+           ui::kColorLabelSelectionBackground,
+           kColorOmniboxSelectionBackground}) {
+    mixer[id] = {t[Token::kPrimary]};
+  }
+  for (ui::ColorId id : std::initializer_list<ui::ColorId>{
+           ui::kColorTextfieldSelectionForeground,
+           ui::kColorLabelSelectionForeground,
+           kColorOmniboxSelectionForeground}) {
+    mixer[id] = {t[Token::kPrimaryForeground]};
+  }
   mixer[ui::kColorSysStateFocusRing] = {t[Token::kRing]};
   mixer[ui::kColorSysStateTextHighlight] = {t[Token::kPrimary]};
   mixer[ui::kColorSysStateOnTextHighlight] = {t[Token::kPrimaryForeground]};
+
+  // Dialogs are `bg-background` with a border (menus and dropdowns, which
+  // the early mixer already made popovers, are `bg-popover`).
+  mixer[ui::kColorDialogBackground] = {t[Token::kBackground]};
 
   // Menus: a popover with a `border` outline.
   mixer[ui::kColorMenuBorder] = {t.Opaque(Token::kBorder, Token::kPopover)};
