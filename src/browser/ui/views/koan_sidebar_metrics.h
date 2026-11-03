@@ -401,11 +401,13 @@ inline int EmojiCellCornerRadius() {
 }
 
 #if BUILDFLAG(IS_MAC)
-// The sidebar's top row (the traffic lights, the sidebar toggle and the
-// navigation buttons) in single toolbar mode: Zen's --zen-toolbar-height
-// with a single toolbar on macOS (zen-tabs/vertical-tabs.css, 36px
-// elsewhere).
-inline constexpr int kMacSidebarTopRowHeight = 38;
+// The sidebar's top row on macOS (the traffic lights, the sidebar toggle and
+// the navigation buttons) in single toolbar mode: Zen's
+// #zen-sidebar-top-buttons is 38 high (--zen-toolbar-height with a single
+// toolbar, zen-tabs/vertical-tabs.css) with a 3 margin above and below it,
+// and the traffic lights, which AppKit centres in the title bar, are 22 from
+// the top (measured, zen-mac-spec.md 2.3): a title bar of 44.
+inline constexpr int kMacSidebarTopRowHeight = 44;
 #endif
 
 }  // namespace koan
