@@ -1,8 +1,8 @@
 # macOS
 
 Facts and rules for Koan's Mac build (issue #51). The Mac is the
-maintainer's daily laptop; Linux stays where agents develop and run the e2e
-tests.
+maintainer's daily laptop. No Linux builds or e2e (2026-11-03); Linux is only
+for editing and `clang -fsyntax-only`.
 
 ## Consent first
 
@@ -202,7 +202,9 @@ signing identity would stop the prompts (not set up).
 ## Bench lessons (2026-11-03, the Mac test-bench loop)
 
 What the first day of running other threads' branches on the Mac taught us.
-The bench scripts live in `~/work/koan-mac` on the Mac, not in the repo.
+The bench scripts live in `~/work/koan-mac` on the Mac, not in the repo. This
+section is the Mac build loop's own procedure: other agents never ssh to the
+Mac, build there or run Koan there.
 
 ### Building
 
@@ -215,8 +217,12 @@ The bench scripts live in `~/work/koan-mac` on the Mac, not in the repo.
   starting `AGENT-BUILD-EXIT <rc>`; do not keep an ssh session open for a build
   (the harness limit is 2 hours). An incremental rebuild (a few objects and the
   link) takes 40-50 s at `-j 3`.
-- **Stacking branches.** Other threads' branches are merged in a scratch
-  worktree on Linux, shipped as a `git bundle`, and checked out on the Mac by
+- **Branches: one PR at a time.** The Mac loop builds `develop` alone first,
+  then adds one PR head at a time in dependency order, rebuilds incrementally and
+  runs the regression script after each. The first PR after which a crash appears
+  is the culprit. No stacked preview is given to the user. Mechanics: the head is
+  merged onto the current branch in a scratch worktree (Linux is only for
+  editing), shipped as a `git bundle`, and checked out on the Mac by
   `switch-branch.sh OLD NEW bundle` (reverse the old branch's changed patch
   files, `git checkout NEW`, `scripts/apply_patches.sh apply`, `gn gen`). Nothing
   is pushed. Conflicts are mostly additive (BUILD.gn lists, feature flag
@@ -237,7 +243,7 @@ The bench scripts live in `~/work/koan-mac` on the Mac, not in the repo.
   `--force-first-run` to show it (`--enable-features=KoanWelcomeWebUI` for the
   WebUI version). Do not seed `Default/Preferences` by hand: Koan then says
   "Your preferences file is corrupt" and hangs.
-- **Driving it from Linux:** an `ssh -L` tunnel to 9340 (UI DevTools: the Views
+- **Driving it (Mac loop only):** an `ssh -L` tunnel to 9340 (UI DevTools: the Views
   tree, synthetic mouse and key events) and 9341 (CDP). UI DevTools can stop
   answering after the Library is opened and closed; CDP keeps working.
 - **Input.** Posted key chords (`CGEventPostToPid`, ⌘T, ⌘L, ⌘S, ⌃⌘F, Esc)
