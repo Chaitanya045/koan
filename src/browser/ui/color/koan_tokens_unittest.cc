@@ -46,7 +46,8 @@ TEST(KoanOklchTest, GreysAndExtremes) {
 TEST(KoanOklchTest, OutOfGamutIsMappedNotClipped) {
   // shadcn's destructive colour, oklch(0.577 0.245 27.325), is outside sRGB;
   // browsers map it to Tailwind's red-600, #e7000b.
-  ExpectNear(Rgb(0xe7, 0x00, 0x0b), OklchToSkColor({0.577f, 0.245f, 27.325f, 1}));
+  ExpectNear(Rgb(0xe7, 0x00, 0x0b),
+             OklchToSkColor({0.577f, 0.245f, 27.325f, 1}));
 }
 
 TEST(KoanOklchTest, Alpha) {
@@ -56,9 +57,10 @@ TEST(KoanOklchTest, Alpha) {
 }
 
 TEST(KoanOklchTest, RoundTripsSrgb) {
-  for (SkColor color : {Rgb(2, 41, 84), Rgb(22, 131, 255), Rgb(0x18, 0x17, 0x17),
-                        Rgb(0xe5, 0xe5, 0xe5), Rgb(255, 0, 0), Rgb(0, 255, 0),
-                        Rgb(0x27, 0x27, 0x2a), Rgb(0xfb, 0xfb, 0xfe)}) {
+  for (SkColor color :
+       {Rgb(2, 41, 84), Rgb(22, 131, 255), Rgb(0x18, 0x17, 0x17),
+        Rgb(0xe5, 0xe5, 0xe5), Rgb(255, 0, 0), Rgb(0, 255, 0),
+        Rgb(0x27, 0x27, 0x2a), Rgb(0xfb, 0xfb, 0xfe)}) {
     SCOPED_TRACE(color);
     ExpectNear(color, OklchToSkColor(SkColorToOklch(color)));
   }
@@ -98,7 +100,9 @@ TEST(KoanParseThemeCssTest, ShadcnV4Theme) {
     }
   )css");
   ASSERT_TRUE(theme.has_value());
-  auto light = [&](Token token) { return theme->light[static_cast<int>(token)]; };
+  auto light = [&](Token token) {
+    return theme->light[static_cast<int>(token)];
+  };
   auto dark = [&](Token token) { return theme->dark[static_cast<int>(token)]; };
 
   ASSERT_TRUE(light(Token::kBackground));
@@ -134,7 +138,9 @@ TEST(KoanParseThemeCssTest, HexFormsAndAlpha) {
       ":root { --background: #abc; --foreground: #112233; --border: "
       "#11223380; --input: oklch(1 0 0 / 15%); }");
   ASSERT_TRUE(theme.has_value());
-  auto light = [&](Token token) { return theme->light[static_cast<int>(token)]; };
+  auto light = [&](Token token) {
+    return theme->light[static_cast<int>(token)];
+  };
   EXPECT_EQ(Rgb(0xaa, 0xbb, 0xcc), light(Token::kBackground));
   EXPECT_EQ(Rgb(0x11, 0x22, 0x33), light(Token::kForeground));
   ASSERT_TRUE(light(Token::kBorder));
@@ -166,8 +172,8 @@ TEST(KoanParseThemeCssTest, RefusesWhatIsNotATheme) {
   // var() and unreadable values are ignored; with nothing else, no theme.
   EXPECT_FALSE(
       ParseThemeCss(":root { --background: var(--other); }").has_value());
-  EXPECT_FALSE(ParseThemeCss(":root { --background: not-a-colour; }")
-                   .has_value());
+  EXPECT_FALSE(
+      ParseThemeCss(":root { --background: not-a-colour; }").has_value());
   // Declarations outside a block are not tokens.
   EXPECT_FALSE(ParseThemeCss("--background: #fff;").has_value());
 }
@@ -205,7 +211,8 @@ TEST(KoanZenTest, PrimaryFromTheSystemAccent) {
   EXPECT_EQ(Rgb(2, 41, 84), ZenDefaultPrimary(blue, /*dark=*/true));
   EXPECT_EQ(Rgb(22, 131, 255), ZenDefaultPrimary(blue, /*dark=*/false));
   // Without an accent, the same default blue.
-  EXPECT_EQ(ZenDefaultPrimary(blue, true), ZenDefaultPrimary(std::nullopt, true));
+  EXPECT_EQ(ZenDefaultPrimary(blue, true),
+            ZenDefaultPrimary(std::nullopt, true));
   EXPECT_EQ(ZenDefaultPrimary(blue, false),
             ZenDefaultPrimary(std::nullopt, false));
   // Another accent gives another primary colour.
@@ -232,7 +239,8 @@ TEST(KoanZenTest, AccentClampsOklchLightness) {
 
   // The button's lightness is clamped to 0.55-0.7 in dark mode and its text's
   // to 0.7-0.85, so the text is never darker than the button.
-  EXPECT_GE(SkColorToOklch(dark.text).l, SkColorToOklch(dark.button_background).l);
+  EXPECT_GE(SkColorToOklch(dark.text).l,
+            SkColorToOklch(dark.button_background).l);
   EXPECT_GE(SkColorToOklch(dark.button_background).l, 0.55f - 0.01f);
   EXPECT_GE(SkColorToOklch(dark.text).l, 0.7f - 0.01f);
 }
@@ -331,8 +339,7 @@ TEST(KoanShadcnTest, EveryBaseResolvesOpaqueSurfacesInBothModes) {
       SCOPED_TRACE(BaseColorToString(base));
       for (Token token : {Token::kBackground, Token::kForeground, Token::kCard,
                           Token::kPopover, Token::kPrimary, Token::kSidebar}) {
-        EXPECT_EQ(255u, SkColorGetA(tokens[token]))
-            << TokenCssName(token);
+        EXPECT_EQ(255u, SkColorGetA(tokens[token])) << TokenCssName(token);
       }
     }
   }
@@ -430,7 +437,8 @@ TEST(KoanTokensTest, CssNamesAreUniqueAndKebabCase) {
     const std::string name(TokenCssName(static_cast<Token>(i)));
     EXPECT_FALSE(name.empty());
     EXPECT_TRUE(names.insert(name).second) << name;
-    EXPECT_EQ(std::string::npos, name.find_first_not_of("abcdefghijklmnopqrstuvwxyz-"))
+    EXPECT_EQ(std::string::npos,
+              name.find_first_not_of("abcdefghijklmnopqrstuvwxyz-"))
         << name;
   }
 }

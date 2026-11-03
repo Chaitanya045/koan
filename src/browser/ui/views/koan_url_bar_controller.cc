@@ -893,11 +893,12 @@ KoanUrlBarController* UrlBarOf(const views::View* view) {
     return nullptr;
   }
   const views::Widget* widget = view->GetWidget();
-  const views::Widget* top_level = widget ? widget->GetTopLevelWidget() : nullptr;
-  BrowserView* browser_view =
-      top_level ? BrowserView::GetBrowserViewForNativeWindow(
-                      top_level->GetNativeWindow())
-                : nullptr;
+  const views::Widget* top_level =
+      widget ? widget->GetTopLevelWidget() : nullptr;
+  BrowserView* browser_view = top_level
+                                  ? BrowserView::GetBrowserViewForNativeWindow(
+                                        top_level->GetNativeWindow())
+                                  : nullptr;
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   return controller ? controller->url_bar() : nullptr;
