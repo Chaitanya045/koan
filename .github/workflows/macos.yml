@@ -370,7 +370,10 @@ jobs:
           nightly build.
 
           The app is not signed with a Developer ID or notarised, so macOS
-          blocks it the first time: see
+          blocks it the first time ("Apple could not verify 'Koan' is free
+          of malware"). After copying it to Applications, run
+          \`xattr -dr com.apple.quarantine /Applications/Koan.app\`, or
+          use System Settings → Privacy & Security → Open Anyway. See
           [Installing the macOS build](https://github.com/$GH_REPO/blob/develop/docs/USAGE.md#installing-the-macos-build).
 
           SHA-256: \`$(cut -d' ' -f1 "$DMG.sha256")\`
