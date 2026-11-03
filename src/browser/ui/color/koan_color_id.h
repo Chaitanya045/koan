@@ -61,6 +61,11 @@ enum KoanColorIds : ui::ColorId {
   // to use with a background blur (kFloatingUrlBarBlurRadius).
   kColorKoanFloatingUrlBarGlass,
   kColorKoanFloatingUrlBarBorder,
+  // The card's input row: the location bar's focus ring (none in Zen), the
+  // divider under it and the "Search..." placeholder.
+  kColorKoanFloatingUrlBarFocusRing,
+  kColorKoanFloatingUrlBarDivider,
+  kColorKoanFloatingUrlBarPlaceholder,
   // The title of a suggestion row (Zen: white at 70%).
   kColorKoanOmniboxRowTitle,
 

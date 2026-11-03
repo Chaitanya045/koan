@@ -17,3 +17,28 @@ diff --git a/chrome/browser/ui/views/omnibox/omnibox_view_views.cc b/chrome/brow
    SetPlaceholderText(placeholder_text);
    const std::u16string a11y_text =
        maybe_a11y_placeholder_text.value_or(placeholder_text);
+@@ -2105,6 +2107,10 @@
+     return false;
+   }
+ 
++  if (koan::ShowsCardPlaceholder(location_bar_view_)) {
++    return true;
++  }
++
+   return omnibox::ShouldShowPlaceholderText(
+       location_bar_view_,
+       /*in_popup_state_transition=*/location_bar_view_ &&
+@@ -2649,10 +2655,11 @@
+ }
+ 
+ void OmniboxViewViews::UpdatePlaceholderTextColor() {
+-  SetPlaceholderTextColorId(
++  SetPlaceholderTextColorId(koan::AdjustOmniboxPlaceholderColorId(
++      location_bar_view_,
+       omnibox::ShouldUseDimPlaceholderColor(location_bar_view_)
+           ? kColorOmniboxForegroundDisabled
+-          : kColorOmniboxText);
++          : kColorOmniboxText));
+ }
+ 
+ BEGIN_METADATA(OmniboxViewViews)

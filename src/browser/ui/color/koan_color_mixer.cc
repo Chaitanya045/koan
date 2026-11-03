@@ -88,6 +88,14 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanFloatingUrlBarBorder] = {
       dark ? SkColorSetRGB(75, 75, 75)
            : SkColorSetA(SK_ColorBLACK, Alpha(0.2f))};
+  // The input row (zen-omnibox.css): no focus ring, a thin divider (10%), the
+  // placeholder at 54% of the text colour.
+  mixer[kColorKoanFloatingUrlBarFocusRing] = {SK_ColorTRANSPARENT};
+  mixer[kColorKoanFloatingUrlBarDivider] = {
+      SkColorSetA(dark ? SK_ColorWHITE : SK_ColorBLACK, Alpha(0.1f))};
+  mixer[kColorKoanFloatingUrlBarPlaceholder] = {
+      dark ? SkColorSetA(SkColorSetRGB(0xfb, 0xfb, 0xfe), Alpha(0.54f))
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.54f))};
   mixer[kColorOmniboxResultsUrl] = {dark ? SkColorSetRGB(0xaa, 0xaa, 0xaa)
                                          : SkColorSetRGB(0x4f, 0x4f, 0x4f)};
   mixer[kColorOmniboxResultsUrlSelected] = {kColorOmniboxResultsUrl};

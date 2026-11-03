@@ -413,6 +413,10 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanUrlPill] = {t.InputFill(Token::kSidebar)};
   mixer[kColorKoanFloatingUrlBarBackground] = {FloatingUrlBarCardColor(key)};
   mixer[kColorKoanOmniboxRowTitle] = {t[Token::kForeground]};
+  mixer[kColorKoanFloatingUrlBarFocusRing] = {t[Token::kRing]};
+  mixer[kColorKoanFloatingUrlBarDivider] = {
+      t.Opaque(Token::kBorder, Token::kPopover)};
+  mixer[kColorKoanFloatingUrlBarPlaceholder] = {t[Token::kMutedForeground]};
   mixer[kColorKoanFloatingUrlBarGlass] = {t.Alpha(Token::kPopover, 0.9f)};
   mixer[kColorKoanFloatingUrlBarBorder] = {
       t.Opaque(Token::kBorder, Token::kPopover)};

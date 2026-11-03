@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ui/base/window_open_disposition.h"
+#include "ui/color/color_id.h"
 
 class BrowserWindowInterface;
 
@@ -43,6 +44,18 @@ void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
 // placeholder text: in the floating shadcn card it is "Search...". Called
 // from OmniboxViewViews::InstallPlaceholderText().
 void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text);
+
+// Whether the floating command card is open for `location_bar`: its input
+// shows the "Search..." placeholder even while focused (Chromium hides it
+// then), in a muted colour, and its focus ring and background pill are flat.
+// Called from OmniboxViewViews::ShouldShowPlaceholderText().
+bool ShowsCardPlaceholder(views::View* location_bar);
+
+// The colour id of the omnibox's placeholder text: the card's own while the
+// floating card is open for `location_bar`. Called from
+// OmniboxViewViews::UpdatePlaceholderTextColor().
+ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
+                                            ui::ColorId id);
 
 }  // namespace koan
 

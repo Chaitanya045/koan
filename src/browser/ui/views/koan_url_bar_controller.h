@@ -38,6 +38,7 @@ namespace koan {
 class KoanCompactModeController;
 class KoanUrlBarBackdrop;
 class KoanUrlBarCardDecoration;
+class KoanUrlBarCardFill;
 
 // Zen's URL bar for one window. In single toolbar / compact mode the
 // omnibox (the real one, lifted out of the hidden toolbar) opens in one of
@@ -177,6 +178,8 @@ class KoanUrlBarController : public views::ViewObserver,
   raw_ptr<KoanUrlBarBackdrop> backdrop_ = nullptr;
   // The shadcn card's magnifier and divider, over the toolbar.
   raw_ptr<KoanUrlBarCardDecoration> decoration_ = nullptr;
+  // The card colour behind the location bar, in the toolbar.
+  raw_ptr<KoanUrlBarCardFill> fill_ = nullptr;
   // The card's size at the last layout (empty while closed).
   gfx::Size card_size_;
   // The omnibox, while this handles its keys (Esc).
