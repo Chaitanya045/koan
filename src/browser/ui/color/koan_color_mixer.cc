@@ -102,6 +102,12 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorOmniboxResultsUrl] = {dark ? SkColorSetRGB(0xaa, 0xaa, 0xaa)
                                          : SkColorSetRGB(0x4f, 0x4f, 0x4f)};
   mixer[kColorOmniboxResultsUrlSelected] = {kColorOmniboxResultsUrl};
+  // The selected (and hovered) suggestion is the accent at 60% over the card.
+  mixer[kColorOmniboxResultsBackgroundSelected] = ui::AlphaBlend(
+      ui::kColorSysPrimary, kColorKoanFloatingUrlBarBackground, Alpha(0.6f));
+  mixer[kColorOmniboxResultsBackgroundHovered] = {
+      kColorOmniboxResultsBackgroundSelected};
+  mixer[kColorOmniboxResultsTextSelected] = {SK_ColorWHITE};
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 

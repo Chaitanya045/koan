@@ -156,6 +156,15 @@ class KoanUrlBarCardDecoration : public views::View {
     GetViewAccessibility().SetIsIgnored(true);
   }
 
+  // `field` is the location bar's bounds in this view: above and below it
+  // (Zen's 62pt row is taller than the field) the card's colour fills in.
+  void SetFieldBounds(const gfx::Rect& field) {
+    if (field_ != field) {
+      field_ = field;
+      SchedulePaint();
+    }
+  }
+
   // `icon` is the location icon's bounds in this view.
   void SetIconBounds(const gfx::Rect& icon) {
     if (icon_ != icon) {
@@ -167,6 +176,13 @@ class KoanUrlBarCardDecoration : public views::View {
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();
+    if (field_.y() > 0 || field_.bottom() < height()) {
+      const SkColor card = colors->GetColor(kColorKoanFloatingUrlBarBackground);
+      canvas->FillRect(gfx::Rect(0, 0, width(), field_.y()), card);
+      canvas->FillRect(
+          gfx::Rect(0, field_.bottom(), width(), height() - field_.bottom()),
+          card);
+    }
     if (!icon_.IsEmpty()) {
       canvas->FillRect(icon_, colors->GetColor(kColorLocationBarBackground));
       const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
@@ -181,6 +197,7 @@ class KoanUrlBarCardDecoration : public views::View {
   }
 
  private:
+  gfx::Rect field_;
   gfx::Rect icon_;
 };
 
@@ -550,8 +567,15 @@ void KoanUrlBarController::ApplyCardStyle() {
   // Zen's floating bar has a larger font than the toolbar's.
   if (zen_card && !omnibox_font_ && omnibox) {
     omnibox_font_ = omnibox->GetFontList();
+    // Zen: 1.5em of 11pt, weight 500.
     omnibox->SetFontList(
-        omnibox_font_->DeriveWithSizeDelta(FloatingUrlBarFontDelta()));
+        omnibox_font_
+            ->DeriveWithSizeDelta(
+                FloatingUrlBarFontSize(omnibox_font_->GetFontSize()) -
+                omnibox_font_->GetFontSize())
+            .DeriveWithWeight(look::IsShadcnStyle()
+                                  ? gfx::Font::Weight::NORMAL
+                                  : gfx::Font::Weight::MEDIUM));
   } else if (!zen_card && omnibox_font_) {
     if (omnibox) {
       omnibox->SetFontList(*omnibox_font_);
@@ -599,6 +623,10 @@ void KoanUrlBarController::ApplyCardStyle() {
   layer->SetMasksToBounds(true);
 }
 
+bool KoanUrlBarController::IsFloatingZenCard() const {
+  return IsCommandCard() && !look::IsShadcnStyle();
+}
+
 bool KoanUrlBarController::IsCommandCard() const {
   return placement_ == Placement::kFloating && features::IsUrlBarEnabled();
 }
@@ -635,13 +663,18 @@ void KoanUrlBarController::Layout() {
   const gfx::Rect field =
       views::View::ConvertRectToTarget(bar->parent(), toolbar, bar->bounds());
   const int right_padding = toolbar->width() - field.right();
-  const gfx::Rect bar_card(card.x(),
-                           card.CenterPoint().y() - field.height() / 2,
-                           card.width(), field.height());
+  // Zen's input row is 62pt tall (--urlbar-container-height); the field sits
+  // in the middle of it, the rest filled with the card's colour (the
+  // decoration).
+  const int card_height =
+      IsFloatingZenCard() ? std::max(field.height(), kFloatingUrlBarInputHeight)
+                          : field.height();
+  const gfx::Rect bar_card(card.x(), card.CenterPoint().y() - card_height / 2,
+                           card.width(), card_height);
   top_container->SetBoundsRect(bar_card);
-  toolbar->SetBoundsRect(gfx::Rect(-field.x(), -field.y(),
-                                   card.width() + field.x() + right_padding,
-                                   card.height()));
+  toolbar->SetBoundsRect(
+      gfx::Rect(-field.x(), -field.y() + (card_height - field.height()) / 2,
+                card.width() + field.x() + right_padding, card.height()));
   toolbar->DeprecatedLayoutImmediately();
   if (card_size_ != bar_card.size()) {
     card_size_ = bar_card.size();
@@ -658,6 +691,8 @@ void KoanUrlBarController::Layout() {
   if (decoration_) {
     decoration_->SetBoundsRect(top_container->GetLocalBounds());
     LocationIconView* icon = bar->location_icon_view();
+    decoration_->SetFieldBounds(views::View::ConvertRectToTarget(
+        bar->parent(), top_container, bar->bounds()));
     decoration_->SetIconBounds(
         icon && icon->GetVisible()
             ? views::View::ConvertRectToTarget(icon->parent(), top_container,

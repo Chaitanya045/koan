@@ -314,7 +314,8 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   // The omnibox suggestions and the find bar float: popovers (not the
   // sidebar's colour, which differs from `popover` in light mode), with
   // shadcn's `accent` for the hovered or selected row.
-  mixer[kColorOmniboxResultsBackground] = {t[Token::kPopover]};
+  // The suggestions are part of the floating card.
+  mixer[kColorOmniboxResultsBackground] = {kColorKoanFloatingUrlBarBackground};
   mixer[kColorOmniboxResultsBackgroundHovered] = {t[Token::kAccent]};
   mixer[kColorOmniboxResultsBackgroundSelected] = {t[Token::kAccent]};
   // A suggestion reads "title — url": the url is the muted colour, not the

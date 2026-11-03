@@ -102,6 +102,8 @@ class KoanUrlBarController : public views::ViewObserver,
   // Whether the floating bar is the command-dialog card (in either look): it
   // has a magnifier, a "Search..." placeholder and a divider.
   bool IsCommandCard() const;
+  // Whether it is Zen's (not shadcn's) card: 62pt tall.
+  bool IsFloatingZenCard() const;
   // The card's layer while it is open, null otherwise: the one a glass look
   // blurs behind (Layer::SetBackgroundBlur), with the translucent
   // kColorKoanFloatingUrlBarBackground. It is clipped to the card's rounded

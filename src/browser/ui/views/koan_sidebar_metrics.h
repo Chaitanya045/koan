@@ -117,11 +117,8 @@ inline constexpr int kUrlPillIconSize = 16;
 // 0 30px 140px -15px.
 inline constexpr int kFloatingUrlBarMaxWidth = 750;
 inline constexpr int kFloatingUrlBarMinHeight = 333;
-#if BUILDFLAG(IS_MAC)
-inline constexpr int kFloatingUrlBarFontDelta = 6;
-#else
+// The text beyond macOS is 1.15em: two more than the omnibox's.
 inline constexpr int kFloatingUrlBarFontDelta = 2;
-#endif
 inline constexpr int kFloatingUrlBarShadowY = 30;
 inline constexpr int kFloatingUrlBarShadowBlur = 140;
 inline constexpr int kFloatingUrlBarShadowSpread = -15;
@@ -144,8 +141,16 @@ inline int FloatingUrlBarShadowBlur() {
 inline int FloatingUrlBarShadowSpread() {
   return look::IsShadcnStyle() ? -3 : kFloatingUrlBarShadowSpread;
 }
-inline int FloatingUrlBarFontDelta() {
-  return look::IsShadcnStyle() ? 3 : kFloatingUrlBarFontDelta;
+// Zen's input row (--urlbar-container-height) is 62pt.
+inline constexpr int kFloatingUrlBarInputHeight = 62;
+// The floating bar's text size given the omnibox's own: shadcn's 16, Zen's
+// 1.5em of 11pt (16.5pt, so 17) on macOS, two more elsewhere.
+inline int FloatingUrlBarFontSize(int base_size) {
+#if BUILDFLAG(IS_MAC)
+  return look::IsShadcnStyle() ? 16 : 17;
+#else
+  return look::IsShadcnStyle() ? 16 : base_size + kFloatingUrlBarFontDelta;
+#endif
 }
 
 // With "normal", the bar edits in place and widens over the page once the
