@@ -59,6 +59,7 @@
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/common/referrer.h"
+#include "koan/browser/koan_library_logic.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
@@ -103,23 +104,8 @@ constexpr ClearRange kClearRanges[] = {
     {u"Everything", u"Clear all history?", -1},
 };
 
-// "https://www.example.com/a/" -> "example.com/a" (Zen's #formatUrl).
-std::u16string FormatUrl(const GURL& url) {
-  std::string text = url.spec();
-  for (const char* prefix : {"https://", "http://"}) {
-    if (base::StartsWith(text, prefix)) {
-      text.erase(0, strlen(prefix));
-      if (base::StartsWith(text, "www.")) {
-        text.erase(0, 4);
-      }
-      break;
-    }
-  }
-  if (base::EndsWith(text, "/")) {
-    text.pop_back();
-  }
-  return base::UTF8ToUTF16(text);
-}
+using library::FormatUrl;
+using library::SiteOf;
 
 // "Oct 12, 2026, 3:45 PM" (Intl dateStyle medium + timeStyle short).
 std::u16string FormatVisit(base::Time time) {
@@ -142,19 +128,6 @@ std::u16string FormatDay(base::Time day, base::Time today) {
                                   base::Days(days_ago));
   }
   return base::TimeFormatShortDate(day);
-}
-
-// The site a page belongs to, as Zen groups "By Site": its host without
-// "www.", or nothing for pages that aren't on the web.
-std::u16string SiteOf(const GURL& url) {
-  if (!url.SchemeIsHTTPOrHTTPS()) {
-    return std::u16string();
-  }
-  std::string host(url.host());
-  if (base::StartsWith(host, "www.")) {
-    host.erase(0, 4);
-  }
-  return base::UTF8ToUTF16(host);
 }
 
 }  // namespace
