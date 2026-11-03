@@ -2357,7 +2357,7 @@ bool IsEmptyTab(const tabs::TabInterface* tab) {
     return false;
   }
   const std::optional<tab_groups::TabGroupId> group = tab->GetGroup();
-  const content::WebContents* contents = tab->GetContents();
+  content::WebContents* contents = tab->GetContents();
   if (!group || !contents || !IsEmptyPageUrl(contents->GetVisibleURL())) {
     return false;
   }
