@@ -750,18 +750,28 @@ Open the .dmg and drag Koan to Applications.
 
 The app isn't signed with an Apple Developer ID or notarised (it is only
 signed ad hoc, which Apple Silicon needs to run it). So the first time,
-macOS says it "can't be opened" or "can't verify that it's free of
-malware". Allow it once, in either of these ways:
+macOS says "'Koan' Not Opened: Apple could not verify 'Koan' is free of
+malware", with only **Done** and **Move to Bin**. On current macOS,
+right-click → Open no longer gets past this. Allow it once:
 
-- In Finder, **right-click (or Control-click) Koan in Applications → Open**,
-  then **Open** in the dialog. On macOS 15 and later that dialog may only
-  offer "Done": then open **System Settings → Privacy & Security**, scroll
-  to the message about Koan and click **Open Anyway**.
-- Or, in Terminal, remove the quarantine flag that the download added:
+1. **In Terminal**, remove the quarantine flag that the download added
+   (simplest):
 
-  ```sh
-  xattr -d com.apple.quarantine /Applications/Koan.app
-  ```
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Koan.app
+   ```
+
+2. Or click **Done**, then open **System Settings → Privacy & Security**,
+   scroll down to the message about Koan and click **Open Anyway** (and
+   confirm with your password).
+
+If macOS instead says Koan **"is damaged and can't be opened"**, sign it
+again on your Mac (ad hoc, with the `codesign` tool that comes with
+macOS), then open it:
+
+```sh
+codesign --force --deep -s - /Applications/Koan.app
+```
 
 After that it opens like any other app. Every new build has a new ad-hoc
 signature, so macOS asks again for access to the "Koan Safe Storage"

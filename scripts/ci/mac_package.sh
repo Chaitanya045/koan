@@ -32,6 +32,9 @@ app="${KOAN_CI_APP:-chromium/src/out/Koan/$name.app}"
 [[ -d $app ]] || { echo "no $app" >&2; exit 1; }
 dmg="$name-$version-${sha:0:7}-arm64.dmg"
 
+# Last, after everything that changes the bundle: --deep signs the nested
+# frameworks, helper apps and libraries too, and --verify --deep --strict
+# fails if any nested code is unsigned or its seal doesn't match.
 echo "==> Signing $app (ad hoc)"
 codesign --force --deep --sign - --timestamp=none "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
@@ -54,6 +57,12 @@ for attempt in 1 2 3; do
 done
 rm -rf "$stage"
 hdiutil verify "$DEST/$dmg"
+# And the copy users get: mount the image and check the app in it.
+mnt="$(mktemp -d)"
+hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$DEST/$dmg" > /dev/null
+codesign --verify --deep --strict --verbose=2 "$mnt/$name.app"
+hdiutil detach "$mnt" > /dev/null
+rmdir "$mnt"
 (cd "$DEST" && shasum -a 256 "$dmg" > "$dmg.sha256" && cat "$dmg.sha256")
 du -sh "$app" "$DEST/$dmg" | sed 's/^/size: /'
 
