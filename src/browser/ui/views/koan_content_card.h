@@ -12,8 +12,9 @@ class BrowserView;
 
 namespace koan {
 
-// Corner radius of the Zen-style content card.
-inline constexpr float kContentCardCornerRadius = 8;
+// Corner radius of the Zen-style content card (Zen 1.24b, measured on a Mac:
+// 7pt, zen-mac-spec.md 2.2).
+inline constexpr float kContentCardCornerRadius = 7;
 
 // Gap between the content card and the window edges.
 inline constexpr int kContentCardMargin = 8;
