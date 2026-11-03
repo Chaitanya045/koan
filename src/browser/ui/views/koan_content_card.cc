@@ -9,7 +9,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
@@ -38,13 +37,11 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
 // the card in fullscreen at all (see UseContentCard()).
 bool IsBorderlessFullscreen(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
-  const MultiContentsView* contents = browser_view->multi_contents_view();
-  return browser_view->IsFullscreen() &&
+  return browser_view->IsFullscreen() && !browser_view->IsInSplitView() &&
          browser_view->GetProfile()
              ->GetOriginalProfile()
              ->GetPrefs()
-             ->GetBoolean(prefs::kCompactModeEnabled) &&
-         !(contents && contents->IsInSplitView());
+             ->GetBoolean(prefs::kCompactModeEnabled);
 #else
   return false;
 #endif
