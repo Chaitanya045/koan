@@ -982,11 +982,23 @@ void KoanUrlBarController::OnViewIsDeleting(views::View* observed_view) {
 }
 
 void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
-  // Zen: Esc closes the bar (Chrome's omnibox would first close the
-  // suggestions, then revert, then give the page focus). Only a plain Esc:
-  // Shift+Esc is the task manager, and other modifiers may be bound too.
+  // Only plain keys: Shift+Esc is the task manager, and other modifiers may
+  // be bound too.
   constexpr int kModifiers = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
                              ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
+  // Zen: Tab on an empty input enters commands mode, the command palette
+  // (its ">" mode here).
+  LocationBarView* bar = location_bar();
+  if (event->type() == ui::EventType::kKeyPressed &&
+      event->key_code() == ui::VKEY_TAB && (event->flags() & kModifiers) == 0 &&
+      (is_open() || new_tab_) && bar && bar->omnibox_view() &&
+      bar->omnibox_view()->GetText().empty()) {
+    event->SetHandled();
+    bar->omnibox_view()->SetUserText(u">", /*update_popup=*/true);
+    return;
+  }
+  // Zen: Esc closes the bar (Chrome's omnibox would first close the
+  // suggestions, then revert, then give the page focus).
   if (event->type() == ui::EventType::kKeyPressed &&
       event->key_code() == ui::VKEY_ESCAPE &&
       (event->flags() & kModifiers) == 0 && (is_open() || new_tab_)) {

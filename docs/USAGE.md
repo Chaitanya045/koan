@@ -174,11 +174,13 @@ toolbar is hidden) don't change that.
 
 ## URL bar
 
-Like Zen's, the URL bar opens where you are and floats once you type:
-clicking the pill (or Ctrl+L) edits the address right in the pill; the
-first keystroke lifts it into a card centred over the window (two thirds
-of its width, at most 750 px, larger text, a soft shadow over the page)
-with the suggestions under it. The pill is empty meanwhile. Esc, a click
+Like Zen's, the URL bar is a card centred over the window (two thirds of
+its width, at most 750 px, larger text, a soft shadow over the page) with
+the suggestions under it. **Ctrl+L and Ctrl+T (⌘L, ⌘T)** open it at once,
+with no animation; **clicking the pill** edits the address in the pill, which
+grows over the page as you type, and never floats (Zen's behaviour; Behavior
+"Normal" does that for the keyboard too). On an empty box, **Tab** enters the
+command palette (the ">" mode). The pill is empty meanwhile. Esc, a click
 outside the card or opening a result (or running an action) closes it;
 switching to another window and back leaves it as it was. In compact mode,
 with the sidebar hidden, it floats right away, also when you click the pill
@@ -220,6 +222,17 @@ Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
 In the multiple-toolbars layout the address is edited in the toolbar, as
 in Chrome; Ctrl+T still opens it instead of a new-tab page, and Esc closes
 it in one press.
+
+## Closing the last tab
+
+Like Zen (`browser.tabs.closeWindowWithLastTab` is off there), closing a
+window's last tab keeps the window. It shows the **empty tab**: a blank page
+that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
+empty), is skipped by Ctrl+Tab and never navigates. Open something from the URL bar
+(⌘T, ⌘L) and it opens in a **new** tab; close that tab and the empty tab is
+back. **⌘W on the empty tab closes the window.** With Essentials, closing the
+last unpinned tab leaves the Essential selected, not the empty tab. In compact
+mode the sidebar stays shown while the empty tab is selected.
 
 ## New tab page
 

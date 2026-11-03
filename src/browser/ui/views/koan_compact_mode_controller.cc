@@ -43,6 +43,7 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "koan/browser/ui/views/koan_traffic_lights_controller.h"
@@ -509,6 +510,22 @@ void KoanCompactModeController::OnTabStripModelChanged(
   }
   if (change.type() == TabStripModelChange::kInserted) {
     MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
+  }
+  // Zen: the sidebar cannot hide while the empty tab is selected
+  // (zen-has-empty-tab), so there is always a way to open a page.
+  if (selection.active_tab_changed() ||
+      change.type() != TabStripModelChange::kSelectionOnly) {
+    const bool wanted =
+        hides_sidebar() &&
+        IsEmptyTab(browser_view_->browser()->GetActiveTabInterface());
+    if (wanted && !empty_tab_lock_) {
+      if (auto* tab_strip = browser_view_->tab_strip_view()) {
+        empty_tab_lock_ = tab_strip->GetExpandOnHoverLock(
+            ExpandOnHoverLockType::kKeepExpanded);
+      }
+    } else if (!wanted) {
+      ReleaseLock(empty_tab_lock_);
+    }
   }
 }
 
@@ -1349,6 +1366,7 @@ void KoanCompactModeController::Deactivate() {
   hover_release_timer_.Stop();
   ReleaseLock(hover_lock_);
   ReleaseLock(peek_lock_);
+  ReleaseLock(empty_tab_lock_);
   pointer_monitor_.reset();
   edge_sidebar_hovered_ = false;
   bubble_widgets_.RemoveAllObservations();

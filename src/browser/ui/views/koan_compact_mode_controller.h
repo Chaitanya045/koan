@@ -365,6 +365,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   std::unique_ptr<ExpandOnHoverLock> hover_lock_;
   std::unique_ptr<ExpandOnHoverLock> peek_lock_;
   std::unique_ptr<ExpandOnHoverLock> flash_lock_;
+  // Held while the empty tab is selected (the sidebar can't hide).
+  std::unique_ptr<ExpandOnHoverLock> empty_tab_lock_;
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;
