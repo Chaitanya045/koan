@@ -274,6 +274,7 @@ Ctrl+S hides the sidebar; the page fills the window with a thin margin.
 Move the pointer to the left edge (or press Ctrl+Alt+S) to slide the
 sidebar out, with its navigation buttons and URL pill. Ctrl+L and Ctrl+T
 open the floating URL bar. The setting applies to all windows and persists.
+The sidebar slides in over the page; the page doesn't move or reflow.
 
 In the multiple-toolbars layout you choose what compact mode hides, in the
 sidebar's menu under **Compact Mode**: **Hide sidebar** (the default, as in
