@@ -38,8 +38,8 @@ void AddZenTabColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key);
 void AddZenSuggestionColors(ui::ColorMixer& mixer,
                             const ui::ColorProviderKey& key);
 
-// Sets Chromium's system (`kColorSys*`) and core colours from shadcn's
-// tokens when the look is shadcn, and does nothing for Zen's. It must run
+// Sets Chromium's system (`kColorSys*`) and core colours from the look's
+// tokens (shadcn's, or Zen's in the Zen look: ResolveTokens()). It must run
 // after the native core mixer and before ui_color_mixer.cc, so that every
 // colour derived from them (menus, bubbles, dialogs, buttons, textfields, the
 // omnibox, tab strip, toolbar, WebUI pages …) follows without being listed.
@@ -47,9 +47,12 @@ void AddZenSuggestionColors(ui::ColorMixer& mixer,
 void AddKoanCoreColorMixer(ui::ColorProvider* provider,
                            const ui::ColorProviderKey& key);
 
-// The shadcn look's parts of AddKoanColorMixer (koan_shadcn_color_mixer.cc):
-// Chromium leaves that macOS's native mixers set after the early mixer, and
-// the Koan colour ids.
+// Parts of AddKoanColorMixer that follow the look's tokens
+// (koan_shadcn_color_mixer.cc). AddShadcnChromiumColors runs in both looks:
+// the Chromium leaves that macOS's native mixers set after the early mixer
+// (menus, tooltips, the omnibox popup and location bar, the find bar …).
+// AddShadcnKoanColors is the shadcn look's Koan colour ids; the Zen look's are
+// AddZenColors' (koan_color_mixer.cc).
 void AddShadcnChromiumColors(ui::ColorMixer& mixer,
                              const ui::ColorProviderKey& key);
 void AddShadcnKoanColors(ui::ColorMixer& mixer,

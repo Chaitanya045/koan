@@ -347,7 +347,7 @@ Besides the shortcuts above:
 ## Look
 
 Koan's default look is **Zen's**: its colours (Zen 1.24b's zen-theme.css:
-browser background `#1b1b1b` / `#ebebeb`, dialogs, panels, text, borders,
+window frame `#181717` / `#e5e5e5`, content `#101010` / `#fafbff`, dialogs, panels, text, borders,
 the system accent colour), per-Space gradient themes and, on macOS, glass.
 Everything Koan or Chromium draws (the frame, sidebar, tabs, Essentials,
 Spaces bar, URL bar, menus, bubbles, dialogs, find bar, settings, the new tab
@@ -366,7 +366,7 @@ every window):
 
 - **Look**: Zen (default) or shadcn/ui. Zen has its gradient themes and the
   theme picker's per-Space colours; the choices below are shadcn's.
-- **Mode**: Dark (default), Light, or Automatic (follow the system). The
+- **Mode** (shadcn only; Zen follows the system): Dark (default), Light, or Automatic (follow the system). The
   mode is the window's colour mode, so on macOS the title bar, scrollbars and
   native menus follow it. Websites keep their own colour scheme
   (Chromium's Appearance setting), as in Zen. Private windows are always
@@ -387,14 +387,21 @@ The colours are shadcn's own OKLCH values, converted to sRGB exactly, and
 generated from its registry (`scripts/gen_shadcn_palettes.py`).
 
 In both looks the floating URL bar (typing in the URL bar, or ⌘T / ⌘L) is a
-command-dialog card with a magnifier, a "Search..." placeholder, a divider and
-"title — url" suggestions. In the shadcn style it is 55% of the window wide, a little above the middle,
-on `popover` (#18181b) with a 1px `border` outline, shadcn's soft shadow and a
-`rounded-xl` corner, in Geist. Suggestions below it are `popover` too, with
-`accent` for the selected row. The field has a magnifier and a "Search..."
-placeholder, a thin `border` divider under it, and suggestions read
-"title — url" with the url in `muted-foreground`. Not yet: the background
-blur and the card's 0.9 alpha.
+command-dialog card with a magnifier, a "Search..." placeholder (muted, also
+while focused), a thin divider under the field and "title — url" suggestions.
+
+- **Zen look**: the card is two thirds of the window wide (at most 750 px),
+  centred as Zen centres it, on a flat `#181818` (white in light mode) fill
+  with a 0.5 px outline, radius 15 and Zen's long soft shadow. The input row
+  is 62 pt high with 17 pt medium text and no focus ring; the divider is
+  inset from the card's edges. Suggestion rows are 49 pt high, radius 8, in
+  14 pt medium text, the selected row in the accent colour. These row
+  styles apply only to this card: any other omnibox popup keeps Chromium's.
+- **shadcn look**: the card is 55% of the window wide, a little above the
+  middle, on `popover` (#18181b) with a 1px `border` outline, shadcn's soft
+  shadow and a `rounded-xl` corner, in Geist. Suggestions below it are
+  `popover` too, with `accent` for the selected row, and the url in
+  `muted-foreground`. Not yet: the background blur and the card's 0.9 alpha.
 
 Limits: menus macOS draws itself (page context menus, the menu bar) are
 dark or light with the mode but not coloured by the tokens; the font is

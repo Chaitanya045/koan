@@ -23,7 +23,7 @@ class Observer {
 // browser-wide, because colours are mixed per colour-provider key, which
 // knows no profile. The user's choice lives in local-state prefs
 // (koan_prefs.h) and is loaded by koan_look_controller.h; until that has
-// run, this is the default: shadcn, dark, Neutral.
+// run, this is the default: Zen, dark.
 //
 // UI thread only.
 const Look& CurrentLook();

@@ -1,5 +1,11 @@
 # shadcn look: plan (issue #48, 2026-11-03)
 
+> Historical: the plan as of 2026-11-03, when shadcn was to be the default
+> look. Zen's look is the default now and shadcn the second look; the token
+> layer, the two seams and the hook patches below are what was built, and
+> docs/REBASE.md lists the hooks as they are. The paragraph on how recipes
+> resolve was wrong (corrected below).
+
 The maintainer ran Koan on a Mac for the first time and found it "typical
 Chrome": Chromium's grey frame, a title bar strip, stock colours. Cause: the
 only colours Koan changed were its own views and a few chrome ids (toolbar,
@@ -15,10 +21,14 @@ core defaults (`kColorPrimaryBackground`, …), native core, `ui_color_mixer`
 colours; then Chrome's mixers (`AddChromeColorMixers`: toolbar, tabs,
 omnibox, side panel, find bar …), then `koan::AddKoanColorMixer`.
 
-A recipe in a mixer reads other colours **as they were at that mixer**
-(`ColorMixer::GetResultColor` evaluates against `input_mixer_getter_`). So a
-mixer that runs last cannot restyle what earlier recipes already derived: it
-would have to list every derived colour. Hence two seams:
+A recipe's input colours (the ids it names) are resolved against the
+provider's **last** mixer (`ColorMixer::GetResultColor` evaluates its
+transform against `input_mixer_getter_`), and only the id's own previous
+value comes from the mixer before. (This note first said the opposite:
+that a recipe sees only the mixers before it.) So a late mixer's value is
+what every recipe reads, and two mixers whose recipes name each other's ids
+form a cycle that overflows the stack (the Mac launch crash fixed in
+15565a45); Koan's colours that follow others are computed values. Two seams:
 
 1. **Early mixer** (`AddKoanCoreColorMixer`): runs after the native core mixer
    and before `ui_color_mixer`. It sets the Sys tokens and the ~20 core
