@@ -13,7 +13,7 @@ diff --git a/chrome/browser/ui/views/omnibox/omnibox_text_view.cc b/chrome/brows
        id = selected ? kColorOmniboxResultsTextDimmedSelected
                      : kColorOmniboxResultsTextDimmed;
      }
-+    id = koan::AdjustOmniboxRowTextColorId(id);
++    id = koan::AdjustOmniboxRowTextColorId(this, id);
      render_text_->ApplyColor(GetColorProvider()->GetColor(id), current_range);
    }
  
@@ -22,7 +22,7 @@ diff --git a/chrome/browser/ui/views/omnibox/omnibox_text_view.cc b/chrome/brows
    const gfx::FontList& font = views::TypographyProvider::Get().GetFont(
        CONTEXT_OMNIBOX_POPUP, kTextStyle);
 -  render_text->SetFontList(font);
-+  render_text->SetFontList(koan::AdjustOmniboxRowFont(font));
++  render_text->SetFontList(koan::AdjustOmniboxRowFont(this, font));
    render_text->SetText(text);
    // Increase space between lines for multiline texts.
    render_text->SetMinLineHeight(19);

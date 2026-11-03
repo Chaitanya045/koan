@@ -57,6 +57,12 @@ bool ShowsCardPlaceholder(views::View* location_bar);
 ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
                                             ui::ColorId id);
 
+// Whether `view` (the location bar, or a row of its omnibox popup) is in a
+// window whose floating URL bar is Zen's card: only then do the suggestion
+// rows take Zen's styling (koan_omnibox_rows.h). False for any other omnibox
+// popup, in either look.
+bool ShowsZenCardRows(const views::View* view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_URL_BAR_H_

@@ -195,24 +195,6 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanLibraryAddSpaceHovered] =
       ui::AlphaBlend(ui::kColorSysPrimary, kColorToolbar, Alpha(0.7f));
   mixer[kColorKoanLibraryAddSpaceForeground] = {SK_ColorWHITE};
-  // Space themes are tab group colours (until #41's per-Space themes).
-  mixer[kColorKoanLibrarySpaceTintGrey] = {
-      kColorTabGroupTabStripFrameActiveGrey};
-  mixer[kColorKoanLibrarySpaceTintBlue] = {
-      kColorTabGroupTabStripFrameActiveBlue};
-  mixer[kColorKoanLibrarySpaceTintRed] = {kColorTabGroupTabStripFrameActiveRed};
-  mixer[kColorKoanLibrarySpaceTintYellow] = {
-      kColorTabGroupTabStripFrameActiveYellow};
-  mixer[kColorKoanLibrarySpaceTintGreen] = {
-      kColorTabGroupTabStripFrameActiveGreen};
-  mixer[kColorKoanLibrarySpaceTintPink] = {
-      kColorTabGroupTabStripFrameActivePink};
-  mixer[kColorKoanLibrarySpaceTintPurple] = {
-      kColorTabGroupTabStripFrameActivePurple};
-  mixer[kColorKoanLibrarySpaceTintCyan] = {
-      kColorTabGroupTabStripFrameActiveCyan};
-  mixer[kColorKoanLibrarySpaceTintOrange] = {
-      kColorTabGroupTabStripFrameActiveOrange};
 
   // Media cards (zen-theme.css --zen-sidebar-notification-*): the accent at
   // 5% on white (black in dark mode), a 6px shadow black at 10% (30%), an
@@ -280,6 +262,28 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanWelcomeOnAccent] = {ui::kColorSysOnPrimary};
 }
 
+// Space themes are tab group colours (until #41's per-Space themes): the
+// Library's Space cards, in either look.
+void AddSpaceTintColors(ui::ColorMixer& mixer) {
+  mixer[kColorKoanLibrarySpaceTintGrey] = {
+      kColorTabGroupTabStripFrameActiveGrey};
+  mixer[kColorKoanLibrarySpaceTintBlue] = {
+      kColorTabGroupTabStripFrameActiveBlue};
+  mixer[kColorKoanLibrarySpaceTintRed] = {kColorTabGroupTabStripFrameActiveRed};
+  mixer[kColorKoanLibrarySpaceTintYellow] = {
+      kColorTabGroupTabStripFrameActiveYellow};
+  mixer[kColorKoanLibrarySpaceTintGreen] = {
+      kColorTabGroupTabStripFrameActiveGreen};
+  mixer[kColorKoanLibrarySpaceTintPink] = {
+      kColorTabGroupTabStripFrameActivePink};
+  mixer[kColorKoanLibrarySpaceTintPurple] = {
+      kColorTabGroupTabStripFrameActivePurple};
+  mixer[kColorKoanLibrarySpaceTintCyan] = {
+      kColorTabGroupTabStripFrameActiveCyan};
+  mixer[kColorKoanLibrarySpaceTintOrange] = {
+      kColorTabGroupTabStripFrameActiveOrange};
+}
+
 }  // namespace
 
 void AddKoanColorMixer(ui::ColorProvider* provider,
@@ -288,6 +292,7 @@ void AddKoanColorMixer(ui::ColorProvider* provider,
   // Chromium's leaves and the URL bar's card follow the active token set;
   // Koan's own views have their values per look.
   AddShadcnChromiumColors(mixer, key);
+  AddSpaceTintColors(mixer);
   if (look::IsShadcnStyle()) {
     AddShadcnKoanColors(mixer, key);
   } else {

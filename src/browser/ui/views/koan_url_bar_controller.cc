@@ -876,13 +876,20 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
   return controller && controller->url_bar()->OpenForNewTab();
 }
 
-// The URL bar controller of the window `location_bar` belongs to, if any.
-KoanUrlBarController* UrlBarOf(views::View* location_bar) {
-  views::Widget* widget = location_bar->GetWidget();
-  BrowserView* browser_view = widget
-                                  ? BrowserView::GetBrowserViewForNativeWindow(
-                                        widget->GetNativeWindow())
-                                  : nullptr;
+// The URL bar controller of the window `view` belongs to, if any: `view` is
+// the location bar or a row of the omnibox popup, whose widget is a child of
+// the browser window's. Null for no view (upstream's location_bar_view_ is
+// null in some tests and popups) and for windows that aren't Koan's.
+KoanUrlBarController* UrlBarOf(const views::View* view) {
+  if (!view) {
+    return nullptr;
+  }
+  const views::Widget* widget = view->GetWidget();
+  const views::Widget* top_level = widget ? widget->GetTopLevelWidget() : nullptr;
+  BrowserView* browser_view =
+      top_level ? BrowserView::GetBrowserViewForNativeWindow(
+                      top_level->GetNativeWindow())
+                : nullptr;
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   return controller ? controller->url_bar() : nullptr;
@@ -912,6 +919,11 @@ void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
   if (url_bar && url_bar->IsCommandCard()) {
     text = u"Search...";
   }
+}
+
+bool ShowsZenCardRows(const views::View* view) {
+  const KoanUrlBarController* url_bar = UrlBarOf(view);
+  return url_bar && url_bar->IsFloatingZenCard();
 }
 
 }  // namespace koan

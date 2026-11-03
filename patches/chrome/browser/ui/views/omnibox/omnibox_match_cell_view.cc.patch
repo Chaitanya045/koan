@@ -14,7 +14,7 @@ diff --git a/chrome/browser/ui/views/omnibox/omnibox_match_cell_view.cc b/chrome
    } else {
      // The height for traditional 1-line matches.
 -    height = kRowHeight;
-+    height = koan::OmniboxRowHeight(kRowHeight);
++    height = koan::OmniboxRowHeight(this, kRowHeight);
    }
  
    return gfx::Size(width, height);
