@@ -74,6 +74,9 @@ constexpr base::TimeDelta kToolbarRevealDuration = base::Milliseconds(160);
 constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
 // How long the pointer must be away before the toolbar hides again.
 constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
+// Zen's zen.view.compact.sidebar-keep-hover.duration: how long the sidebar
+// stays out after the pointer leaves it.
+constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
 // How long a keyboard-opened sidebar stays before hover decides.
 constexpr base::TimeDelta kSidebarPeekGrace = base::Seconds(3);
 
@@ -1002,6 +1005,7 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   toolbar_unwanted_since_.reset();
   sidebar_peek_timer_.Stop();
   EndFlash();
+  hover_release_timer_.Stop();
   hover_lock_.reset();
   peek_lock_.reset();
   pointer_monitor_.reset();
@@ -1235,6 +1239,7 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
     return;
   }
   if (hovered) {
+    hover_release_timer_.Stop();
     if (!hover_lock_) {
       if (auto* tab_strip = browser_view_->tab_strip_view()) {
         hover_lock_ = tab_strip->GetExpandOnHoverLock(
@@ -1244,8 +1249,14 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
     return;
   }
   // Once the strip has slid over the hot zone the pointer is inside the
-  // strip, and upstream's hover tracking keeps it open until it leaves.
-  hover_lock_.reset();
+  // strip, and upstream's hover tracking keeps it open until it leaves; the
+  // lock is kept for Zen's keep-hover time, so the hand-over between the two
+  // doesn't close it for a moment.
+  hover_release_timer_.Start(
+      FROM_HERE, kSidebarKeepHover,
+      base::BindOnce(
+          [](KoanCompactModeController* self) { self->hover_lock_.reset(); },
+          base::Unretained(this)));
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {

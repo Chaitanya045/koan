@@ -302,6 +302,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer sidebar_peek_timer_;
   base::OneShotTimer flash_timer_;
+  // Keeps the sidebar out for a moment after the pointer leaves its hot zone.
+  base::OneShotTimer hover_release_timer_;
   std::optional<base::TimeTicks> sidebar_unhovered_since_;
   base::TimeTicks sidebar_peek_started_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
