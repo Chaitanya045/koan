@@ -1213,6 +1213,7 @@ void KoanWorkspaceController::PlaySwitchAnimation(
       swipe_start_offset_.value_or(swiping_ ? swipe_offset_ : 0);
   swipe_start_offset_.reset();
   swiping_ = false;
+  swipe_last_delta_ = 0;
 
   // TabStripView clips its layer to its bounds, so the Spaces slide
   // within the sidebar.
@@ -1284,12 +1285,15 @@ bool KoanWorkspaceController::CanSwipe() const {
          header_->parent() && header_->parent()->width() > 0;
 }
 
-void KoanWorkspaceController::UpdateSwipe(float offset) {
+void KoanWorkspaceController::UpdateSwipe(float amount) {
   if (!CanSwipe()) {
     return;
   }
   const float width = static_cast<float>(header_->parent()->width());
-  swipe_offset_ = ResistedSwipeOffset(offset, width);
+  SwipeTranslateState state{swipe_last_delta_};
+  const float translate = SwipeTranslate(amount, width, state);
+  swipe_last_delta_ = state.last_delta;
+  swipe_offset_ = SwipeOffsetPixels(translate, width);
   swiping_ = true;
   if (!gfx::Animation::ShouldRenderRichAnimation()) {
     return;
@@ -1302,21 +1306,20 @@ void KoanWorkspaceController::UpdateSwipe(float offset) {
   }
 }
 
-void KoanWorkspaceController::EndSwipe(float velocity) {
+void KoanWorkspaceController::EndSwipe(float amount, float velocity) {
   if (!swiping_) {
     return;
   }
   swiping_ = false;
+  swipe_last_delta_ = 0;
   if (!header_ || !header_->parent()) {
     return;
   }
-  const float width = static_cast<float>(header_->parent()->width());
-  const float projected = ProjectedSwipeOffset(swipe_offset_, velocity);
-  if (SwipeSucceeds(projected, width)) {
-    // Fingers moving left bring the next Space in from the right, as the
-    // slide does.
+  if (SwipeSucceeds(amount, velocity)) {
+    // Fingers moving right (a negative amount) go to the next Space, the
+    // strip moving left, as Zen's does (ZenSpacesSwipe #handleSwipeEnd()).
     swipe_start_offset_ = swipe_offset_;
-    Cycle((projected < 0) != base::i18n::IsRTL());
+    Cycle((amount < 0) != base::i18n::IsRTL());
     // The slide uses the offset; without one (no animation) it is left.
     if (std::exchange(swipe_start_offset_, std::nullopt)) {
       DropSwitchLayers();

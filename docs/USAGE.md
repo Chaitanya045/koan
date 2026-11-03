@@ -249,9 +249,9 @@ belongs to a Space, and new tabs open in the active one.
   Default.
 - **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
   on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
-  horizontally with two fingers over the sidebar (on a Mac the Space follows the scroll
-  direction (your fingers, with natural scrolling), and goes if you take
-  them off past a quarter of the sidebar's width), or turn the mouse wheel
+  horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
+  fingers: moving them right goes to the next Space, and lifting them
+  after enough travel, or a quick flick, switches Space), or turn the mouse wheel
   there (horizontally, or vertically while holding Ctrl); the right-click
   menu of the header also lists the Spaces. The old Space slides out and
   the new one in, as in Zen, and you land on the tab you left the Space on
