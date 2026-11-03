@@ -1,0 +1,16 @@
+diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_ui_prefs.cc
+index d2264ce903105d12d76e111befbc55e8ce4428c9..dcf5434bddc5c9dce7719db10ab0321777dcacd5 100644
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -183,8 +183,10 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
+   // us from having to hard-code pref registration in the several unit tests
+   // that use this preference.
+   registry->RegisterBooleanPref(prefs::kShowUpdatePromotionInfoBar, true);
++  // Koan: like Zen, the toolbar is hidden in fullscreen until the pointer
++  // reaches the top edge.
+   registry->RegisterBooleanPref(
+-      prefs::kShowFullscreenToolbar, true,
++      prefs::kShowFullscreenToolbar, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+   registry->RegisterBooleanPref(
+       prefs::kAllowJavascriptAppleEvents, false,
