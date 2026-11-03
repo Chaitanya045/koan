@@ -142,6 +142,13 @@ rest as no-ops). Artifacts: source 5.8 GB; out-1/2/3 0.56/0.73/1.05 GB;
 (arm64, `codesign --verify --deep --strict` OK, `hdiutil verify` OK).
 Memory never below ~44% free at `JOBS=3`; swap ≤ 130 MB.
 
+Run 41560986331's fetch failed on a transient googlesource HTTP 500
+("RPC failed; HTTP 500 ... expected 'packfile'") while gclient cloned
+`third_party/clang-format/script`. `bootstrap.sh` now retries `gclient
+sync` up to 3 times (a re-run of bootstrap.sh wouldn't do: src is already
+at the pinned revision then, so it skips the sync). "Re-run failed jobs"
+also works for this.
+
 The .dmg is uploaded with `archive: false`, so the browser download is the
 .dmg itself. `gh run download` (2.96) can't fetch such artifacts ("zip:
 not a valid zip file"); `gh api .../actions/artifacts/<id>/zip` returns
