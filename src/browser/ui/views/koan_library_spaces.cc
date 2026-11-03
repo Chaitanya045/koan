@@ -42,6 +42,7 @@
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
+#include "koan/browser/koan_library_logic.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -489,13 +490,11 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     dragged->layer()->SetTransform(transform);
     // The slot the card's centre is over.
     const int center = dragged->bounds().CenterPoint().x() + travel;
-    int drop = 0;
-    for (int i = 0; i < static_cast<int>(cards_.size()); ++i) {
-      if (i != drag_index_ &&
-          center > cards_[i].card->bounds().CenterPoint().x()) {
-        ++drop;
-      }
+    std::vector<int> centers;
+    for (const Card& card : cards_) {
+      centers.push_back(card.card->bounds().CenterPoint().x());
     }
+    const int drop = library::DropSlot(centers, drag_index_, center);
     if (drop == drop_index_) {
       return;
     }
@@ -505,12 +504,8 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
       if (i == drag_index_) {
         continue;
       }
-      int shift = 0;
-      if (drag_index_ < i && i <= drop_index_) {
-        shift = -(kCardWidth + kCardGap);
-      } else if (drop_index_ <= i && i < drag_index_) {
-        shift = kCardWidth + kCardGap;
-      }
+      const int shift = library::CardShift(i, drag_index_, drop_index_,
+                                           kCardWidth + kCardGap);
       ui::ScopedLayerAnimationSettings settings(
           cards_[i].card->layer()->GetAnimator());
       settings.SetTransitionDuration(kShiftDuration);

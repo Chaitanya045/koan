@@ -65,6 +65,16 @@ source_set("fuzzy_score") {
   public_deps = [ "//base" ]
 }
 
+# The Library's pure logic: URL and site formatting, Space card drag maths.
+source_set("library_logic") {
+  sources = [
+    "koan_library_logic.cc",
+    "koan_library_logic.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [ "//url" ]
+}
+
 # A Space's icon and name in its tab group title. Pure logic.
 source_set("space_title") {
   sources = [

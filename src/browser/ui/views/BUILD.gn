@@ -212,6 +212,7 @@ source_set("impl") {
     "//components/prefs",
     "//koan/browser:features",
     "//koan/browser:fuzzy_score",
+    "//koan/browser:library_logic",
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
     "//koan/browser:space_title",

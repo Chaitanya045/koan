@@ -11,6 +11,7 @@ import("//testing/test.gni")
 test("koan_unittests") {
   sources = [
     "//koan/browser/koan_fuzzy_score_unittest.cc",
+    "//koan/browser/koan_library_logic_unittest.cc",
     "//koan/browser/koan_prefs_unittest.cc",
     "//koan/browser/koan_shortcut_table_unittest.cc",
     "//koan/browser/koan_space_title_unittest.cc",
@@ -27,6 +28,7 @@ test("koan_unittests") {
     "//components/sync_preferences:test_support",
     "//koan/browser:features",
     "//koan/browser:fuzzy_score",
+    "//koan/browser:library_logic",
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
     "//koan/browser:space_title",
@@ -37,6 +39,7 @@ test("koan_unittests") {
     "//ui/base",
     "//ui/color",
     "//ui/events:events_base",
+    "//url",
   ]
   data_deps = [ "//third_party/icu:icudata" ]
 }
