@@ -33,6 +33,7 @@ namespace koan {
 
 class KoanCompactModeController;
 class KoanUrlBarBackdrop;
+class KoanUrlBarCardDecoration;
 
 // Zen's URL bar for one window. In single toolbar / compact mode the
 // omnibox (the real one, lifted out of the hidden toolbar) opens in one of
@@ -93,6 +94,10 @@ class KoanUrlBarController : public views::ViewObserver,
 
   // koan_url_bar.h hooks.
   void OnOmniboxChanged(bool user_input_in_progress);
+
+  // Whether the floating bar is shadcn's command-dialog card: it has a
+  // magnifier and a "Search..." placeholder.
+  bool IsCommandCard() const;
   // Whether what the user opens now should go to a new tab; ends the new-tab
   // session if so.
   bool TakeNewTabDisposition();
@@ -159,6 +164,8 @@ class KoanUrlBarController : public views::ViewObserver,
   // Behind the floating card: catches clicks outside it and paints Zen's
   // shadow. A child of the top container's parent (the overlay).
   raw_ptr<KoanUrlBarBackdrop> backdrop_ = nullptr;
+  // The shadcn card's magnifier and divider, over the toolbar.
+  raw_ptr<KoanUrlBarCardDecoration> decoration_ = nullptr;
   // The card's size at the last layout (empty while closed).
   gfx::Size card_size_;
   // The omnibox, while this handles its keys (Esc).

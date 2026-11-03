@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_URL_BAR_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_URL_BAR_H_
 
+#include <string>
+
 #include "ui/base/window_open_disposition.h"
 
 class BrowserWindowInterface;
@@ -36,6 +38,11 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 // from the sidebar's URL pill to the floating card. Called from
 // LocationBarView::OnChanged().
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
+
+// The omnibox of `location_bar` (a LocationBarView) is installing its
+// placeholder text: in the floating shadcn card it is "Search...". Called
+// from OmniboxViewViews::InstallPlaceholderText().
+void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text);
 
 }  // namespace koan
 

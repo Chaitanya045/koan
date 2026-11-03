@@ -1,0 +1,19 @@
+diff --git a/chrome/browser/ui/views/omnibox/omnibox_view_views.cc b/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
+--- a/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
+@@ -99,6 +99,7 @@
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/common/constants.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+ #include "net/base/url_util.h"
+ #include "third_party/metrics_proto/omnibox_event.pb.h"
+@@ -397,6 +398,7 @@
+   std::optional<std::u16string> maybe_a11y_placeholder_text;
+   omnibox::ComputePlaceholderText(location_bar_view_, placeholder_text,
+                                   maybe_a11y_placeholder_text);
++  koan::AdjustOmniboxPlaceholder(location_bar_view_, placeholder_text);
+   SetPlaceholderText(placeholder_text);
+   const std::u16string a11y_text =
+       maybe_a11y_placeholder_text.value_or(placeholder_text);

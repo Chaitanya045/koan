@@ -387,8 +387,10 @@ In the shadcn style the floating URL bar (typing in the URL bar, or ⌘T / ⌘L)
 is a command-dialog card: 55% of the window wide, a little above the middle,
 on `popover` (#18181b) with a 1px `border` outline, shadcn's soft shadow and a
 `rounded-xl` corner, in Geist. Suggestions below it are `popover` too, with
-`accent` for the selected row. Not yet: the background blur, a "Search…"
-placeholder with a magnifier, and a divider between the field and the rows.
+`accent` for the selected row. The field has a magnifier and a "Search..."
+placeholder, a thin `border` divider under it, and suggestions read
+"title — url" with the url in `muted-foreground`. Not yet: the background
+blur and the card's 0.9 alpha.
 
 Limits: menus macOS draws itself (page context menus, the menu bar) are
 dark or light with the mode but not coloured by the tokens; the font is

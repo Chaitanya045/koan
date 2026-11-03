@@ -287,6 +287,11 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   mixer[kColorOmniboxResultsBackground] = {t[Token::kPopover]};
   mixer[kColorOmniboxResultsBackgroundHovered] = {t[Token::kAccent]};
   mixer[kColorOmniboxResultsBackgroundSelected] = {t[Token::kAccent]};
+  // A suggestion reads "title — url": the url is the muted colour, not the
+  // accent Chromium makes links.
+  mixer[kColorOmniboxResultsUrl] = {t[Token::kMutedForeground]};
+  mixer[kColorOmniboxResultsUrlSelected] = {t[Token::kMutedForeground]};
+  mixer[kColorOmniboxResultsTextSelected] = {t[Token::kForeground]};
   mixer[kColorFindBarBackground] = {t[Token::kPopover]};
   // The new tab page is the page's own surface.
   mixer[kColorNewTabPageBackground] = {t[Token::kBackground]};

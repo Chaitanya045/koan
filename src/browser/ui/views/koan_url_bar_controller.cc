@@ -25,13 +25,16 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/prefs/pref_service.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -52,6 +55,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -135,6 +139,49 @@ class KoanUrlBarBackdrop : public views::View {
 };
 
 BEGIN_METADATA(KoanUrlBarBackdrop)
+END_METADATA
+
+// Over the floating shadcn card: the magnifier in place of the location icon,
+// and the divider under the input that separates it from the suggestions.
+class KoanUrlBarCardDecoration : public views::View {
+  METADATA_HEADER(KoanUrlBarCardDecoration, views::View)
+
+ public:
+  KoanUrlBarCardDecoration() {
+    // Paints over the toolbar but never takes an event.
+    SetCanProcessEventsWithinSubtree(false);
+    GetViewAccessibility().SetIsIgnored(true);
+  }
+
+  // `icon` is the location icon's bounds in this view.
+  void SetIconBounds(const gfx::Rect& icon) {
+    if (icon_ != icon) {
+      icon_ = icon;
+      SchedulePaint();
+    }
+  }
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override {
+    const ui::ColorProvider* colors = GetColorProvider();
+    if (!icon_.IsEmpty()) {
+      canvas->FillRect(icon_, colors->GetColor(kColorLocationBarBackground));
+      const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
+          vector_icons::kSearchIcon, kFloatingUrlBarMagnifierSize,
+          colors->GetColor(ui::kColorIcon));
+      canvas->DrawImageInt(
+          magnifier, icon_.x() + (icon_.width() - magnifier.width()) / 2,
+          icon_.y() + (icon_.height() - magnifier.height()) / 2);
+    }
+    canvas->FillRect(gfx::Rect(0, height() - 1, width(), 1),
+                     colors->GetColor(kColorKoanFloatingUrlBarBorder));
+  }
+
+ private:
+  gfx::Rect icon_;
+};
+
+BEGIN_METADATA(KoanUrlBarCardDecoration)
 END_METADATA
 
 KoanUrlBarController::KoanUrlBarController(
@@ -528,6 +575,17 @@ void KoanUrlBarController::ApplyCardStyle() {
     overlay->RemoveChildViewT(std::exchange(backdrop_, nullptr));
   }
 
+  if (IsCommandCard() && !decoration_) {
+    decoration_ = top_container->AddChildView(
+        std::make_unique<KoanUrlBarCardDecoration>());
+  } else if (!IsCommandCard() && decoration_) {
+    top_container->RemoveChildViewT(std::exchange(decoration_, nullptr));
+  }
+  if (omnibox) {
+    // "Search..." in the card, Chromium's text elsewhere.
+    omnibox->InstallPlaceholderText();
+  }
+
   if (!is_open()) {
     return;
   }
@@ -536,6 +594,11 @@ void KoanUrlBarController::ApplyCardStyle() {
       floating ? FloatingUrlBarCornerRadius() : UrlPillCornerRadius()));
   layer->SetIsFastRoundedCorner(true);
   layer->SetMasksToBounds(true);
+}
+
+bool KoanUrlBarController::IsCommandCard() const {
+  return placement_ == Placement::kFloating && features::IsUrlBarEnabled() &&
+         look::IsShadcnStyle();
 }
 
 void KoanUrlBarController::Layout() {
@@ -585,6 +648,15 @@ void KoanUrlBarController::Layout() {
   if (backdrop_) {
     backdrop_->SetBoundsRect(top_container->parent()->GetLocalBounds());
     backdrop_->SetCard(bar_card);
+  }
+  if (decoration_) {
+    decoration_->SetBoundsRect(top_container->GetLocalBounds());
+    LocationIconView* icon = bar->location_icon_view();
+    decoration_->SetIconBounds(
+        icon && icon->GetVisible()
+            ? views::View::ConvertRectToTarget(icon->parent(), top_container,
+                                               icon->bounds())
+            : gfx::Rect());
   }
 }
 
@@ -743,6 +815,19 @@ void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress) {
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   if (controller) {
     controller->url_bar()->OnOmniboxChanged(user_input_in_progress);
+  }
+}
+
+void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
+  views::Widget* widget = location_bar->GetWidget();
+  BrowserView* browser_view = widget
+                                  ? BrowserView::GetBrowserViewForNativeWindow(
+                                        widget->GetNativeWindow())
+                                  : nullptr;
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  if (controller && controller->url_bar()->IsCommandCard()) {
+    text = u"Search...";
   }
 }
 

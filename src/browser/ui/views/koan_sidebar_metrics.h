@@ -127,6 +127,8 @@ inline constexpr int kFloatingUrlBarShadowBlur = 140;
 inline constexpr int kFloatingUrlBarShadowSpread = -15;
 // shadcn's softer shadow (shadow-lg: 0 10px 15px -3px) and text size
 // (text-base: 16px).
+// The shadcn card's magnifier (lucide's search, 16px).
+inline constexpr int kFloatingUrlBarMagnifierSize = 16;
 inline int FloatingUrlBarShadowY() {
   return look::IsShadcnStyle() ? 10 : kFloatingUrlBarShadowY;
 }
