@@ -7,7 +7,7 @@ import("//testing/test.gni")
 
 # Koan's unit tests: pure logic that links without the browser (//base,
 # //ui/base and the small Koan source sets, no //chrome/browser). Run on
-# every build; see "Tests" in CONTRIBUTING.md for what belongs here.
+# every build; see "Which test to write" in CONTRIBUTING.md for what belongs here.
 test("koan_unittests") {
   sources = [
     "//koan/browser/koan_fuzzy_score_unittest.cc",
@@ -47,7 +47,7 @@ test("koan_unittests") {
 # Koan's browser tests (InProcessBrowserTest): Spaces, pinned tabs and what
 # Koan keeps in the session, against a real browser window. They need a
 # display (Xvfb, or --ozone-platform=headless) and run on request, with
-# scripts/test_browser.sh; see "Tests" in CONTRIBUTING.md.
+# scripts/test_browser.sh; see "Which test to write" in CONTRIBUTING.md.
 source_set("browsertests_impl") {
   testonly = true
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
@@ -64,6 +64,7 @@ source_set("browsertests_impl") {
     "//chrome/browser",
     "//chrome/browser/prefs",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/sessions:test_support",
     "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui/tabs:tab_strip",
     "//chrome/browser/ui/views/frame:browser_widget",

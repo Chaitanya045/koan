@@ -241,6 +241,7 @@ Run the same checks locally before pushing:
 scripts/ci/check_patches.sh
 python3 -m unittest discover -s scripts/tests
 git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file --dry-run --Werror
+shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
 ```
 
 Browser behaviour is tested against a real build, off-screen, so nothing
@@ -260,7 +261,7 @@ passing. For UI changes, compare your screenshots with Zen's.
 
 ### Which test to write
 
-Koan has three kinds of C++ and browser tests. Pick the cheapest one that
+Koan has three kinds of tests. Pick the cheapest one that
 can fail for the reason you care about.
 
 | Test | Use it for | Run it |

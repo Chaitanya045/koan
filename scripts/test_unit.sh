@@ -11,4 +11,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 "$ROOT/scripts/build.sh" koan_unittests
 cd "$ROOT/chromium/src"
-exec out/Koan/koan_unittests "$@"
+out=out/Koan
+[[ ${KOAN_CONFIG:-} == release ]] && out=out/Release
+exec "$out/koan_unittests" "$@"

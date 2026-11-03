@@ -72,8 +72,8 @@ TEST(KoanPrefsTest, ProfilePrefsAreInKoanNamespace) {
   sync_preferences::TestingPrefServiceSyncable prefs;
   prefs::RegisterProfilePrefs(prefs.registry());
 
-  // A Koan pref never shadows an upstream one: all names start with "koan.",
-  // so the tree of values has "koan" as its only root.
+  // Koan's prefs are all named "koan.<...>", so the tree of values has
+  // "koan" as its only root.
   const base::DictValue values =
       prefs.GetPreferenceValues(PrefService::INCLUDE_DEFAULTS);
   EXPECT_EQ(1u, values.size());

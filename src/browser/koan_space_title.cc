@@ -28,8 +28,8 @@ bool IsEmoji(const std::u16string& grapheme) {
     return true;
   }
   return u_hasBinaryProperty(first, UCHAR_EXTENDED_PICTOGRAPHIC) &&
-         (grapheme.find(u'️') != std::u16string::npos ||
-          grapheme.find(u'‍') != std::u16string::npos);
+         (grapheme.find(u'\uFE0F') != std::u16string::npos ||
+          grapheme.find(u'\u200D') != std::u16string::npos);
 }
 
 }  // namespace

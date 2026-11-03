@@ -38,8 +38,9 @@ TEST(KoanSpaceTitleTest, IconOnly) {
 
 TEST(KoanSpaceTitleTest, TextSymbolsAreNotIcons) {
   // (c) is text by default: only the emoji variation selector makes it one.
-  EXPECT_THAT(SplitSpaceTitle(u"© Legal"), Pair(u"", u"© Legal"));
-  EXPECT_THAT(SplitSpaceTitle(u"©️ Legal"), Pair(u"©️", u"Legal"));
+  EXPECT_THAT(SplitSpaceTitle(u"\u00A9 Legal"), Pair(u"", u"\u00A9 Legal"));
+  EXPECT_THAT(SplitSpaceTitle(u"\u00A9\uFE0F Legal"),
+              Pair(u"\u00A9\uFE0F", u"Legal"));
 }
 
 TEST(KoanSpaceTitleTest, ClustersStayWhole) {
@@ -47,7 +48,7 @@ TEST(KoanSpaceTitleTest, ClustersStayWhole) {
   EXPECT_THAT(SplitSpaceTitle(u"\U0001F1EF\U0001F1F5 Japan"),
               Pair(u"\U0001F1EF\U0001F1F5", u"Japan"));
   // A ZWJ sequence: man, woman, girl.
-  const std::u16string family = u"\U0001F468‍\U0001F469‍\U0001F467";
+  const std::u16string family = u"\U0001F468\u200D\U0001F469\u200D\U0001F467";
   EXPECT_THAT(SplitSpaceTitle(family + u" Family"), Pair(family, u"Family"));
 }
 

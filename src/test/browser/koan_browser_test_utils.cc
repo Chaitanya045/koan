@@ -5,6 +5,7 @@
 #include "koan/test/browser/koan_browser_test_utils.h"
 
 #include "base/test/run_until.h"
+#include "chrome/browser/sessions/session_service_test_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -50,6 +51,10 @@ std::vector<std::u16string> SpaceNames(Browser* browser) {
     }
   }
   return names;
+}
+
+void FlushSession(Browser* browser) {
+  SessionServiceTestHelper(browser->profile()).SaveNow();
 }
 
 std::vector<int> TabsOfSpace(TabStripModel* tab_strip,
