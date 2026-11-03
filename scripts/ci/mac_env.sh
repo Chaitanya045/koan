@@ -18,6 +18,8 @@ export XDG_CONFIG_HOME="$KOAN_MAC/home/.config"
 export VPYTHON_VIRTUALENV_ROOT="$KOAN_MAC/home/.vpython-root"
 export CIPD_CACHE_DIR="$KOAN_MAC/home/.cipd-cache"
 export DEPOT_TOOLS_METRICS=0
+# The depot_tools in the source archive stays as the fetch job left it.
+export DEPOT_TOOLS_UPDATE=0
 export DEVELOPER_DIR="${KOAN_CI_XCODE:-/Applications/Xcode_27.1.app}/Contents/Developer"
 export PATH="$ROOT/depot_tools:$PATH"
 mkdir -p "$HOME" "$TMPDIR"

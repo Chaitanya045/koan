@@ -162,13 +162,17 @@ Mac, so it catches Mac-only build errors.
   5 hours and hand `out/Koan` on to the next as an artifact, then a
   packaging step and the release. A whole run takes about 16 hours
   (4 build jobs).
-- **To build a branch or pull request** with Mac-specific code (a full
-  build, so a compile check plus a .dmg to try):
-  `gh workflow run macos.yml -f ref=<branch>` (or `-f ref=refs/pull/<n>/head`),
-  or "Run workflow" on the Actions tab. Pull requests from this repository
-  that change the Mac build itself (`.github/workflows/macos*.yml`,
-  `scripts/ci/mac_*`) run it automatically; pull requests from forks don't
-  (a maintainer can build them by hand after review).
+- **It never runs on pushes.** A run is a full build of about 16 hours,
+  so it runs only nightly or when asked for. To build a branch or pull
+  request with Mac-specific code (a compile check plus a .dmg to try):
+  - add the **`macos-build` label** to the pull request (builds its head
+    once; remove and add the label again for another run), or
+  - `gh workflow run macos.yml -f ref=<branch>` (or
+    `-f ref=refs/pull/<n>/head`), or "Run workflow" on the Actions tab.
+
+  Pull requests from forks are never built automatically. On every pull
+  request, `ci.yml` lints the workflows (actionlint) and scripts
+  (shellcheck), which is the cheap check for changes to the Mac build.
 - The nightly is skipped when nothing that goes into the app (`src/`,
   `patches/`, `branding/`, `build/`, `scripts/`, `CHROMIUM_VERSION`, the
   macOS workflows) changed since the commit the `nightly` release was built

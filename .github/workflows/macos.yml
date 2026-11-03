@@ -9,12 +9,16 @@
 # hand out/Koan on to the next as an artifact; the job that finishes makes
 # the .dmg; the release job publishes it. See .agent/notes/macos-ci.md.
 #
-# The plan job skips the whole chain for pull requests from forks, and for
+# The plan job skips the whole chain for other labels, for forks, and for
 # a nightly when nothing that goes into the app changed since the commit
 # the "nightly" release was built from. Manual runs always build.
 #
-# Run it by hand from the Actions tab or with
+# Runs only when asked for: nightly, by hand from the Actions tab or with
 #   gh workflow run macos.yml [-f ref=<branch, tag, commit or refs/pull/N/head>]
+# or by adding the "macos-build" label to a pull request from this
+# repository (a PR's head; workflow_dispatch only works once a workflow is
+# on the default branch). Never on pushes: pull requests get only the cheap
+# lint in ci.yml (actionlint, shellcheck).
 name: macOS nightly
 
 on:
@@ -26,23 +30,23 @@ on:
         description: Branch, tag or commit to build (empty for the branch you run it on)
         required: false
         default: ""
-  # Changes to this build itself are tested on their pull request.
+  # The "macos-build" label on a pull request builds its head once.
   pull_request:
-    paths:
-      - .github/workflows/macos.yml
-      - .github/workflows/macos-build.yml
-      - scripts/ci/mac_*
-      - scripts/ci/prune_chromium_source.py
+    types: [labeled]
 
 permissions: {}
 
 # One build of a ref at a time: the nightly and a manual run of develop
-# share macos-develop. A run takes most of a day, so a nightly or manual run
-# is never cancelled; at most one more waits (a newer one replaces it).
-# Pushes to a pull request cancel its older run (one group per PR number).
+# share macos-develop, a pull request's label runs share macos-pr-<number>.
+# A run takes most of a day and is never cancelled; at most one more waits
+# (a newer one replaces it). Other labels get a group of their own, so they
+# never hold up or replace a build.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('macos-pr-{0}', github.event.pull_request.number) || format('macos-{0}', inputs.ref || github.ref_name) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ${{ github.event_name != 'pull_request' && format('macos-{0}', inputs.ref || github.ref_name) ||
+    github.event.label.name == 'macos-build' && format('macos-pr-{0}', github.event.pull_request.number) ||
+    format('macos-label-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 jobs:
   plan:
@@ -61,10 +65,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          LABEL: ${{ github.event.label.name }}
           SHA: ${{ github.sha }}
         run: |
           build=true
-          if [[ $EVENT == pull_request && $HEAD_REPO != "$GH_REPO" ]]; then
+          if [[ $EVENT == pull_request && $LABEL != macos-build ]]; then
+            build=false
+          elif [[ $EVENT == pull_request && $HEAD_REPO != "$GH_REPO" ]]; then
             # A fork's PR would run its own scripts on 16 x 6 h of macOS
             # runners. A maintainer can build it by hand after review.
             echo "Pull request from $HEAD_REPO: not building." >> "$GITHUB_STEP_SUMMARY"
@@ -102,7 +109,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          # A labelled pull request builds its head, not the merge commit.
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
       - name: Resolve the commit
@@ -329,6 +337,31 @@ jobs:
             echo "not finished after 16 build jobs; add jobs to macos.yml" >&2
             exit 1
           fi
+
+  # A run that finished doesn't need its source and out/Koan archives any
+  # more (a failed one keeps them, for "Re-run failed jobs", until they
+  # expire: source 3 days, out 2). The .dmg and the logs stay.
+  cleanup:
+    name: Delete build archives
+    needs: [check]
+    if: ${{ !cancelled() && needs.check.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN: ${{ github.run_id }}
+    steps:
+      - name: Delete
+        run: |
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN/artifacts" \
+            --jq '.artifacts[] | select(.name | test("^koan-mac-(source|out-)")) | "\(.id) \(.name)"' |
+            while read -r id name; do
+              echo "deleting $name"
+              gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+            done
 
   release:
     name: Update the nightly pre-release
