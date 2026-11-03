@@ -24,6 +24,17 @@
 
 namespace koan {
 
+namespace {
+
+// Not a constant expression, so that the compiler doesn't count the code
+// after a check of it as unreachable (and warn) on the platforms without
+// traffic lights.
+bool HasTrafficLights() {
+  return BUILDFLAG(IS_MAC);
+}
+
+}  // namespace
+
 std::optional<int> GetTrafficLightsTitlebarHeight(
     const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
@@ -74,7 +85,7 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view) {
 gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds) {
   // (Compiled everywhere, so that the Linux build checks it; only macOS has
   // traffic lights.)
-  if constexpr (!BUILDFLAG(IS_MAC)) {
+  if (!HasTrafficLights()) {
     return bounds;
   }
   const views::Widget* widget = host->GetWidget();
