@@ -78,8 +78,9 @@ Essentials have `padding: 0`.
 | Reset URL | reset in place, stay |
 | Close tab | really close it |
 
-Details: an **Essential is never closed** (the `close` behaviour is downgraded to unload-switch for
-Essentials: `noClose`); a pinned tab inside an **active folder** plays the folder's unload animation first
+Details: **Essentials follow the same setting** (they are pinned tabs); `noClose` / `alwaysUnload` exist only for the folder header's
+"unload all" action (`ZenFolder.mjs`), not for Essentials. The "close it if already unloaded" middle-click rule **never applies to
+Essentials** (the check requires `!zen-essential`). A pinned tab inside an **active folder** plays the folder's unload animation first
 (`gZenFolders.animateUnload`); a **Glance** child closes through the Glance (waits for `GlanceClose`, max 3 s);
 a **split-view group** unloads/resets all its tabs; **middle-click** on an already-unloaded **pinned (non-Essential)** tab
 **closes it for real** (`zen.pinned-tab-manager.wheel-close-if-pending` true) while the first middle-click
