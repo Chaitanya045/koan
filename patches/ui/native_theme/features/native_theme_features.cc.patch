@@ -1,0 +1,33 @@
+diff --git a/ui/native_theme/features/native_theme_features.cc b/ui/native_theme/features/native_theme_features.cc
+index 13c7661b42149b73c1e0ce900a5c9f728c1b9149..8d45bc08a314034721dc2488fe92201528887d8b 100644
+--- a/ui/native_theme/features/native_theme_features.cc
++++ b/ui/native_theme/features/native_theme_features.cc
+@@ -16,8 +16,10 @@ constexpr base::FeatureParam<ScrollbarMode>::Option kScrollbarModeOptions[] = {
+     {ScrollbarMode::kClassic, "classic"},
+ };
+ 
++// Koan: thin overlay scrollbars on Linux too, like Zen.
+ #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || \
+-    BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_MAC)
++    BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_MAC) || \
++    BUILDFLAG(IS_LINUX)
+ constexpr base::FeatureState kOverlayScrollbarFeatureState =
+     base::FEATURE_ENABLED_BY_DEFAULT;
+ #else
+@@ -40,7 +42,15 @@ constexpr base::FeatureState kOverlayScrollbarFeatureState =
+ //   other platforms
+ BASE_FEATURE(kOverlayScrollbar, kOverlayScrollbarFeatureState);
+ constinit const base::FeatureParam<ScrollbarMode> kScrollbarMode{
+-    &kOverlayScrollbar, "mode", ScrollbarMode::kDevice, &kScrollbarModeOptions};
++    &kOverlayScrollbar, "mode",
++#if BUILDFLAG(IS_LINUX)
++    // Koan: always overlay, as Zen (Firefox's GTK default) is, also where
++    // no GTK settings are available (Qt, headless).
++    ScrollbarMode::kOverlay,
++#else
++    ScrollbarMode::kDevice,
++#endif
++    &kScrollbarModeOptions};
+ 
+ // Disable to keep scrollbars visible forever once shown, and immediately
+ // update scrollbar states instead of animating. This is used to ensure
