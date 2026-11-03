@@ -12,6 +12,15 @@ fetch ──► build-01 ──► build-02 ──► … ──► build-16 ─
  (src)     (out-1)      (out-2)            (.dmg)                (develop)
 ```
 
+- **plan** (ubuntu): decides whether to build. Not for PRs from forks
+  (their scripts would run on 16 × 6 h of macOS runners), and not for a
+  nightly when no build input (`src/ patches/ branding/ build/ scripts/
+  CHROMIUM_VERSION VERSION .github/workflows/macos*`) changed between the
+  `nightly` tag's commit and develop (GitHub's compare API; ≥ 300 changed
+  files, a rewritten history or no tag mean build). The Chromium pin is in
+  `CHROMIUM_VERSION`, so a new pin always builds. Manual runs always build.
+  `check` and `release` are skipped with the chain, so a skipped nightly
+  isn't a failure.
 - **fetch** (`scripts/ci/mac_fetch.sh`): bootstrap, prune, patches,
   branding, `build.sh --gen`; uploads `koan-mac-source.tar.zst`.
 - **build-NN** (`macos-build.yml`, a reusable workflow called 16 times):
@@ -27,8 +36,17 @@ fetch ──► build-01 ──► build-02 ──► … ──► build-16 ─
 
 Re-running: every job reads only artifacts earlier jobs left under fixed
 names and uploads with `overwrite: true`, so "Re-run failed jobs" on a run
-carries on from the last good job. Intermediate artifacts live 5 days, the
-.dmg 30 days, logs (build log, memory log) 14 days.
+carries on from the last good job. Retention (after the #70 review): source
+3 days, out slices 2 days, logs 7 days, .dmg 7 days (the `nightly` release
+keeps the latest). So a failed job can be re-run for 2 days.
+
+Concurrency: one group per ref for nightly and manual runs
+(`macos-<ref name>`; the nightly and a manual run of develop share
+`macos-develop`, so they never race on the release), never cancelled, at
+most one waiting. Pull requests: `macos-pr-<number>`, cancelled by the next
+push. The release job also has its own `macos-nightly-release` group.
+
+Review of PR #70: [reviews/pr70-review.md](reviews/pr70-review.md).
 
 ## How ungoogled-chromium-macos does it (checked 2026-11-02)
 

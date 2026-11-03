@@ -109,7 +109,7 @@ jobs:
           path: ${{ env.ARTIFACTS }}/koan-mac-out-${{ inputs.slice }}.tar.zst
           archive: false
           overwrite: true
-          retention-days: 5
+          retention-days: 2
           if-no-files-found: error
 
       - name: Make the disk image
@@ -124,7 +124,7 @@ jobs:
           path: ${{ env.ARTIFACTS }}/dmg/${{ steps.package.outputs.file_name }}
           archive: false
           overwrite: true
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: error
 
       - name: Summary
@@ -152,5 +152,5 @@ jobs:
           name: koan-mac-logs-${{ inputs.slice }}
           path: ${{ env.LOGS }}
           overwrite: true
-          retention-days: 14
+          retention-days: 7
           if-no-files-found: ignore

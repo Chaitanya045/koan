@@ -9,6 +9,10 @@
 # hand out/Koan on to the next as an artifact; the job that finishes makes
 # the .dmg; the release job publishes it. See .agent/notes/macos-ci.md.
 #
+# The plan job skips the whole chain for pull requests from forks, and for
+# a nightly when nothing that goes into the app changed since the commit
+# the "nightly" release was built from. Manual runs always build.
+#
 # Run it by hand from the Actions tab or with
 #   gh workflow run macos.yml [-f ref=<branch, tag, commit or refs/pull/N/head>]
 name: macOS nightly
@@ -32,22 +36,69 @@ on:
 
 permissions: {}
 
-# One build of a ref at a time. A run takes a day or more, so a nightly or
-# manual run is never cancelled; at most one more waits (a newer one
-# replaces it). Pushes to a pull request cancel its older run.
+# One build of a ref at a time: the nightly and a manual run of develop
+# share macos-develop. A run takes most of a day, so a nightly or manual run
+# is never cancelled; at most one more waits (a newer one replaces it).
+# Pushes to a pull request cancel its older run (one group per PR number).
 concurrency:
-  group: macos-${{ github.event_name == 'pull_request' && github.head_ref || inputs.ref || github.ref }}
+  group: ${{ github.event_name == 'pull_request' && format('macos-pr-{0}', github.event.pull_request.number) || format('macos-{0}', inputs.ref || github.ref_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  plan:
+    name: Decide whether to build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+    steps:
+      - name: Decide
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          build=true
+          if [[ $EVENT == pull_request && $HEAD_REPO != "$GH_REPO" ]]; then
+            # A fork's PR would run its own scripts on 16 x 6 h of macOS
+            # runners. A maintainer can build it by hand after review.
+            echo "Pull request from $HEAD_REPO: not building." >> "$GITHUB_STEP_SUMMARY"
+            build=false
+          elif [[ $EVENT == schedule ]]; then
+            # Skip when no file that goes into the app changed since the
+            # commit the nightly release was built from. CHROMIUM_VERSION
+            # is one of them, so a new Chromium pin always builds.
+            old=$(gh api "repos/$GH_REPO/git/ref/tags/nightly" --jq .object.sha 2>/dev/null || true)
+            if [[ -n $old ]] && cmp=$(gh api "repos/$GH_REPO/compare/$old...$SHA" \
+                --jq '[.status, (.files | length)] | @tsv'); then
+              read -r status count <<< "$cmp"
+              changed=$(gh api "repos/$GH_REPO/compare/$old...$SHA" --jq '.files[].filename' |
+                grep -E '^(src/|patches/|branding/|build/|scripts/|CHROMIUM_VERSION$|VERSION$|\.github/workflows/macos)' || true)
+              # The compare API lists at most 300 files: build then.
+              if [[ ($status == identical || $status == ahead) && $count -lt 300 && -z $changed ]]; then
+                echo "Nothing that goes into the app changed since the nightly (${old:0:7}): not building." >> "$GITHUB_STEP_SUMMARY"
+                build=false
+              fi
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
   fetch:
     name: Fetch Chromium and apply Koan
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
     runs-on: xcode-27
     timeout-minutes: 300
     permissions:
       contents: read
     outputs:
       sha: ${{ steps.ref.outputs.sha }}
+      chromium: ${{ steps.ref.outputs.chromium }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,6 +110,7 @@ jobs:
         run: |
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "chromium=$(sed -n 1p CHROMIUM_VERSION)" >> "$GITHUB_OUTPUT"
           echo "Building Koan $sha on Chromium $(paste -sd' ' CHROMIUM_VERSION)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare the runner
@@ -92,7 +144,7 @@ jobs:
           path: ${{ runner.temp }}/koan-mac-source.tar.zst
           archive: false
           overwrite: true
-          retention-days: 5
+          retention-days: 3
           if-no-files-found: error
 
   build-01:
@@ -254,11 +306,12 @@ jobs:
       slice: 16
       sha: ${{ needs.fetch.outputs.sha }}
 
-  # Fails the run when the last build job ran out of time unfinished.
+  # Fails the run when a build job failed or the last one ran out of time
+  # unfinished. Skipped with the chain (fork PRs, unchanged nightlies).
   check:
     name: Build finished
     needs: [fetch, build-01, build-02, build-03, build-04, build-05, build-06, build-07, build-08, build-09, build-10, build-11, build-12, build-13, build-14, build-15, build-16]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.fetch.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -287,12 +340,17 @@ jobs:
       (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Belt and braces: never two release updates at once.
+    concurrency:
+      group: macos-nightly-release
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       SHA: ${{ needs.fetch.outputs.sha }}
+      CHROMIUM: ${{ needs.fetch.outputs.chromium }}
       DMG: ${{ join(needs.*.outputs.dmg, '') }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -307,8 +365,9 @@ jobs:
           cd dist
           shasum -a 256 "$DMG" > "$DMG.sha256"
           cat > notes.md <<EOF
-          Koan for macOS on Apple Silicon, built from develop at $SHA by
-          [this run]($RUN_URL). Replaced by every nightly build.
+          Koan for macOS on Apple Silicon, built from develop at $SHA
+          (Chromium $CHROMIUM) by [this run]($RUN_URL). Replaced by every
+          nightly build.
 
           The app is not signed with a Developer ID or notarised, so macOS
           blocks it the first time: see
