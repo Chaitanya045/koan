@@ -49,7 +49,6 @@ class KoanTrafficLightsController : public views::ViewObserver {
 
  private:
   void ObserveSidebar();
-  void HideStrayOverlays();
   void NotifyIfSidebarChanged();
   void LayOutTrafficLights();
 

@@ -8,13 +8,11 @@
 
 #include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
-#include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "ui/views/view.h"
-#include "ui/views/widget/widget.h"
 
 namespace koan {
 
@@ -29,7 +27,6 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
   // The sidebar's region is rebuilt on a switch between vertical and
   // horizontal tabs.
   ObserveSidebar();
-  HideStrayOverlays();
   // Fullscreen changes the title bar itself; AppKit lays the lights out
   // when it ends.
   if (browser_view_->IsFullscreen() || update_pending_) {
@@ -86,25 +83,6 @@ void KoanTrafficLightsController::NotifyIfSidebarChanged() {
   if (shown != std::exchange(sidebar_shown_, shown)) {
     on_changed_.Run();
   }
-}
-
-void KoanTrafficLightsController::HideStrayOverlays() {
-#if BUILDFLAG(IS_MAC)
-  // Chromium hosts the toolbar and the tab strip in two overlay windows over
-  // the window's top, but only for fullscreen (ImmersiveModeControllerMac
-  // shows them then and hides them again). One left showing in a window out
-  // of fullscreen is a strip across the top, beside the traffic lights,
-  // that nothing of Koan's is in: take it away.
-  if (browser_view_->IsFullscreen()) {
-    return;
-  }
-  for (views::Widget* overlay :
-       {browser_view_->overlay_widget(), browser_view_->tab_overlay_widget()}) {
-    if (overlay && overlay->IsVisible()) {
-      overlay->Hide();
-    }
-  }
-#endif
 }
 
 void KoanTrafficLightsController::LayOutTrafficLights() {
