@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "components/blocked_content/popup_blocker.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "components/javascript_dialogs/app_modal_dialog_manager.h"
 #include "components/prefs/pref_service.h"
@@ -929,6 +930,15 @@ content::WebContents* KoanGlanceController::AddNewContents(
     const blink::mojom::WindowFeatures& window_features,
     bool user_gesture,
     bool* was_blocked) {
+  // Popups without a user gesture are blocked, as in a tab. (Chromium's
+  // popup blocker is a per-tab helper since 158 and the Glance page has no
+  // tab, so ChromeContentBrowserClient::CanCreateWindow can't block them.)
+  if (!user_gesture && blocked_content::ConsiderForPopupBlocking(disposition)) {
+    if (was_blocked) {
+      *was_blocked = true;
+    }
+    return nullptr;
+  }
   if (source_ && source_->GetDelegate()) {
     return source_->GetDelegate()->AddNewContents(
         source_, std::move(new_contents), target_url, disposition,

@@ -216,6 +216,7 @@ source_set("impl") {
     "//koan/browser:tab_hooks",
     "//koan/common:url_constants",
     "//koan/browser/ui/color",
+    "//components/blocked_content",
     "//components/javascript_dialogs",
     "//components/user_prefs",
     "//ui/accessibility",
