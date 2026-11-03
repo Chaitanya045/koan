@@ -385,10 +385,12 @@ search-mode switch, `scale 1 -> .98 -> 1` over 0.25 s, and a one-second
 | Pref | `zen.urlbar.replace-newtab` = true (default): with it off, Cmd+T makes a real blank tab | `zen.urlbar.behavior` = `floating-on-type`: the bar floats only while editing (others: always-floating, normal) |
 | New window | `zen.urlbar.open-on-startup` = true: a window opens with the panel up | |
 
-Clicking the sidebar **pill** opens the same floating panel (as in the
-source and `docs/ZEN_PARITY.md`; I focused the URL bar through the API rather than
-by clicking). The "+ New Tab" row is highlighted while the panel is in
-New Tab mode, i.e. it opens that same session.
+Clicking the sidebar **pill with the mouse does NOT float the bar**: Zen's own test
+`test_Click_Shoudnt_FLoat_Urlbar` (`src/zen/tests/urlbar/browser_floating_urlbar.js`) asserts
+`zen-floating-urlbar` is absent after a click; only keyboard focus (Cmd+L, Cmd+T)
+floats in the default `floating-on-type` mode (corrected from the earlier text;
+see `zen-behaviour/cmd-t-cmd-l-session.md`). The "+ New Tab" row is highlighted
+while a New Tab session is open.
 
 ### 4.5 Koan now vs Zen
 
