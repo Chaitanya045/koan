@@ -15,6 +15,11 @@ BASE_DECLARE_FEATURE(kKoanSidebar);
 // Compact mode (auto-hiding sidebar and toolbar) is available.
 BASE_DECLARE_FEATURE(kKoanCompactMode);
 
+// Expanding and collapsing the sidebar lays the page out once and clips it
+// on every platform, not just where upstream does (Linux, Windows): macOS
+// resizes the page on every animation frame, which flickers.
+BASE_DECLARE_FEATURE(kKoanSidebarSingleReflow);
+
 // Workspaces (tab groups shown one at a time) with a switcher in the sidebar.
 BASE_DECLARE_FEATURE(kKoanWorkspaces);
 
@@ -48,6 +53,7 @@ BASE_DECLARE_FEATURE(kKoanWelcome);
 
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
+bool IsSidebarSingleReflowEnabled();
 bool IsWorkspacesEnabled();
 bool IsGlanceEnabled();
 bool IsRestoreTabsOnDemandEnabled();

@@ -1,27 +1,62 @@
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
-index 7764d4a4728973dc075efb308daa3d67ba2e10b6..227496078a5c75f1445442d1cc2c15f9f22be32f 100644
+index b1ea4a69f42333b238abbf67b0278467ea41bb28..d41e0035c5d70a49dbdefe671d2b04e54c088128 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
-@@ -46,6 +46,7 @@
+@@ -47,6 +47,8 @@
  #include "chrome/browser/ui/views/tabs/organizer/layout_constants.h"
  #include "chrome/browser/ui/views/tabs/organizer/organizer_panel_host.h"
  #include "chrome/browser/ui/views/tabs/organizer/organizer_tray_view.h"
 +#include "koan/browser/ui/views/koan_compact_mode.h"
++#include "koan/browser/ui/views/koan_sidebar_animation.h"
  #include "ui/base/ui_base_features.h"
  #include "ui/compositor/layer.h"
  #include "ui/gfx/geometry/insets.h"
-@@ -462,6 +463,10 @@ BrowserViewTabbedLayoutImpl::CalculateHorizontalLayout(
-         VerticalTabStripCollapsedState::kCollapsed) {
-       // Collapsed tab strip always gets its preferred size.
-       min_vertical_tab_strip_width = preferred_vertical_tab_strip_width;
-+      // Koan compact mode: no space at all; it only appears on hover.
-+      if (koan::IsCompactModeActive(views().browser_view)) {
-+        min_vertical_tab_strip_width = preferred_vertical_tab_strip_width = 0;
-+      }
+@@ -509,6 +511,16 @@ BrowserViewTabbedLayoutImpl::CalculateHorizontalLayout(
+           std::max(min_vertical_tab_strip_width,
+                    std::min(remainder, preferred_vertical_tab_strip_width));
+     }
++    // Koan compact mode: no space at all, from the moment the sidebar starts
++    // collapsing, so the page doesn't jump when that ends; the sidebar only
++    // appears on hover.
++    if (koan::IsCompactModeActive(views().browser_view) &&
++        (layout.vertical_tab_strip_collapsed_state ==
++             VerticalTabStripCollapsedState::kCollapsed ||
++         layout.vertical_tab_strip_collapsed_state ==
++             VerticalTabStripCollapsedState::kCollapsing)) {
++      min_vertical_tab_strip_width = preferred_vertical_tab_strip_width = 0;
++    }
+   }
  
-       // Account for grab handle.
-       IncreasePaddingToMinimum(params, GetMinimumGrabHandlePadding());
-@@ -989,9 +994,16 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+   // Get information about the toolbar-height side panel, if present.
+@@ -684,9 +696,10 @@ BrowserViewTabbedLayoutImpl::CalculateVerticalTabStripAnimation() {
+       leading_exclusion_height *
+       *controller->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
+                                    TabStripAnimations::kTabStripTop));
+-  animation.expand_on_hover_width =
++  animation.expand_on_hover_width = koan::LayoutSidebarReveal(
++      views().browser_view,
+       *controller->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
+-                                   TabStripAnimations::kTabStripHoverWidth);
++                                   TabStripAnimations::kTabStripHoverWidth));
+   animation.expand_on_hover_opacity =
+       *controller->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
+                                    TabStripAnimations::kTabStripHoverOpacity);
+@@ -977,8 +990,12 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+       if (vertical_tab_strip_animation.current_motion) {
+         clip_content_for_animation =
+             vertical_tab_strip_animation.is_expanding_or_collapsing();
+-        unclipped_contents_region.Inset(
+-            gfx::Insets::TLBR(0, tabs::kVerticalTabStripCollapsedWidth, 0, 0));
++        unclipped_contents_region.Inset(gfx::Insets::TLBR(
++            0,
++            koan::IsCompactModeActive(views().browser_view)
++                ? 0
++                : tabs::kVerticalTabStripCollapsedWidth,
++            0, 0));
+       } else {
+         unclipped_contents_region.Inset(gfx::Insets::TLBR(
+             0, horizontal_layout.vertical_tab_strip_width, 0, 0));
+@@ -999,9 +1016,16 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
                  0.0f);
    }
  
@@ -38,7 +73,7 @@ index 7764d4a4728973dc075efb308daa3d67ba2e10b6..227496078a5c75f1445442d1cc2c15f9
      gfx::Rect corner_bounds;
      const double top_corner = layout_data_->vertical_tabs_top_corner();
      const bool top_corner_visible =
-@@ -1015,6 +1027,9 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -1025,6 +1049,9 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
    // Position the vertical tabstrip bottom corner.
    if (IsParentedTo(views().vertical_tab_strip_bottom_corner,
                     views().browser_view)) {
@@ -48,7 +83,19 @@ index 7764d4a4728973dc075efb308daa3d67ba2e10b6..227496078a5c75f1445442d1cc2c15f9
      gfx::Rect corner_bounds;
      const double bottom_corner = layout_data_->vertical_tabs_bottom_corner();
      const bool bottom_corner_visible =
-@@ -1302,8 +1317,14 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -1293,8 +1320,9 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+                                 params.visual_client_area.height()));
+ 
+   // Maybe expand and clip the web contents to avoid issues during animation.
+-  if (browser_animations::GetPanelAnimationType() ==
+-      browser_animations::PanelAnimationType::kClipAndSingleReflow) {
++  if (koan::UseSingleReflowSidebarAnimation() ||
++      browser_animations::GetPanelAnimationType() ==
++          browser_animations::PanelAnimationType::kClipAndSingleReflow) {
+     if (clip_content_for_animation) {
+       // Vertical span is whatever it is, minus any shadow overlay insets.
+       unclipped_contents_region.set_y(contents_layout.bounds.y());
+@@ -1315,8 +1343,14 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
        // Avoid cases where these areas are somehow misaligned (shouldn't happen,
        // but want to avoid visual artifacts if they are).
        contents_layout.bounds.Intersect(unclipped_contents_region);
@@ -64,7 +111,7 @@ index 7764d4a4728973dc075efb308daa3d67ba2e10b6..227496078a5c75f1445442d1cc2c15f9
  
        // Set the target size of the contents.
        views().multi_contents_view->SetTargetContentBounds(
-@@ -1346,6 +1367,16 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -1359,6 +1393,16 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
            base::ClampCeil(browser_params.leading_exclusion.content.width()) -
            tabstrip_bounds->x();
      }
@@ -81,7 +128,7 @@ index 7764d4a4728973dc075efb308daa3d67ba2e10b6..227496078a5c75f1445442d1cc2c15f9
  
      views().vertical_tab_strip_region_view->SetToolbarHeightForLayout(
          std::max(0, toolbar_height));
-@@ -1541,6 +1572,11 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
+@@ -1551,6 +1595,11 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
      }
    }
  

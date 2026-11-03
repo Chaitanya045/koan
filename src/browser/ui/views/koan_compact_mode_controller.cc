@@ -789,6 +789,19 @@ void KoanCompactModeController::UpdateActiveSoon() {
 
 void KoanCompactModeController::UpdateActive() {
   const Mode desired = DesiredMode();
+  if (desired == Mode::kNone &&
+      GetPrefs()->GetBoolean(prefs::kCompactModeEnabled)) {
+    // Compact mode is on but this window can't apply it: say why (a Mac
+    // window in native fullscreen, for one, isn't a card window).
+    VLOG(1) << "Koan: compact mode is on but not applied: feature "
+            << features::IsCompactModeEnabled() << ", overlay "
+            << !!GetTopContainerOverlayView(browser_view_) << ", card window "
+            << UseContentCard(browser_view_) << " (sidebar "
+            << features::IsSidebarEnabled() << ", normal "
+            << browser_view_->GetIsNormalType() << ", vertical tabs "
+            << browser_view_->ShouldDrawVerticalTabStrip() << ", fullscreen "
+            << browser_view_->IsFullscreen() << ")";
+  }
   if (desired == mode_ &&
       (mode_ != Mode::kCompact ||
        (DesiredSingleToolbar() == compact_keeps_sidebar_nav_ &&

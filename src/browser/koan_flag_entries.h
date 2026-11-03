@@ -19,6 +19,12 @@
       {"koan-compact-mode", "Koan compact mode",                             \
        "Auto-hiding sidebar and toolbar, toggled with Ctrl+Alt+C.",          \
        kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanCompactMode)},    \
+      {"koan-sidebar-single-reflow", "Koan sidebar single reflow",           \
+       "Expanding and collapsing the sidebar lays the page out once and "    \
+       "clips it, as Chromium does on Linux and Windows, instead of "        \
+       "resizing it on every frame (macOS).",                                \
+       kOsDesktop,                                                           \
+       FEATURE_VALUE_TYPE(koan::features::kKoanSidebarSingleReflow)},        \
       {"koan-workspaces", "Koan workspaces",                                 \
        "Tab groups shown one at a time, switched from the sidebar or with "  \
        "Ctrl+Alt+Left/Right.",                                               \
