@@ -56,7 +56,8 @@ constexpr std::array<std::string_view, kTokenCount> kTokenNames = {
     "sidebar-ring",
 };
 
-const OklchColor* BasePalette(BaseColor base, bool dark) {
+std::span<const OklchColor, kTokenCount> BasePalette(BaseColor base,
+                                                      bool dark) {
   switch (base) {
     case BaseColor::kBlack:
       return dark ? kBlackDark : kBlackLight;
@@ -229,7 +230,7 @@ std::optional<SkColor> ParseRgb(std::string_view text) {
   if (arguments.values.size() != 3) {
     return std::nullopt;
   }
-  uint8_t channels[3];
+  std::array<uint8_t, 3> channels;
   for (int i = 0; i < 3; ++i) {
     const auto n = ParseNumber(arguments.values[i]);
     if (!n) {
@@ -430,7 +431,8 @@ std::optional<CustomTheme> ParseThemeCss(std::string_view css) {
 
 TokenSet ResolveTokens(const Look& look, bool dark) {
   TokenSet tokens;
-  const OklchColor* palette = BasePalette(look.base, dark);
+  const std::span<const OklchColor, kTokenCount> palette =
+      BasePalette(look.base, dark);
   for (int i = 0; i < kTokenCount; ++i) {
     tokens.colors[i] = OklchToSkColor(palette[i]);
   }
