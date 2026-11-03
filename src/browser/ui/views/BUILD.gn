@@ -328,8 +328,23 @@ source_set("impl") {
     ]
   }
   if (is_mac) {
-    # The welcome screen hides the traffic lights, as Zen's does.
-    sources += [ "koan_welcome_mac.mm" ]
+    deps += [ ":welcome_mac" ]
+  }
+}
+
+if (is_mac) {
+  # The welcome screen hides the traffic lights, as Zen's does. A target of
+  # its own, so that its frameworks don't meet the other macOS files'.
+  source_set("welcome_mac") {
+    sources = [
+      "koan_welcome_mac.h",
+      "koan_welcome_mac.mm",
+    ]
+    deps = [
+      "//base",
+      "//ui/gfx",
+      "//ui/views",
+    ]
     frameworks = [ "AppKit.framework" ]
   }
 }

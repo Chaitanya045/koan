@@ -2288,6 +2288,21 @@ class KoanWelcomeTitleBarArea : public views::View {
 BEGIN_METADATA(KoanWelcomeTitleBarArea)
 END_METADATA
 
+// The colours page's swatches: `space` takes `color`. #41's theme picker
+// stores Zen's theme in a Space instead of one colour, and replaces these
+// swatches with the picker itself; with it, this does nothing.
+template <typename Controller>
+void SetSpaceColor(Controller* spaces,
+                   const tab_groups::TabGroupId& space,
+                   tab_groups::TabGroupColorId color) {
+  using Theme = typename Controller::SpaceTheme;
+  if constexpr (requires(Theme theme) { theme.color = color; }) {
+    Theme theme;
+    theme.color = color;
+    spaces->SetSpaceTheme(space, theme);
+  }
+}
+
 // Shown at most once per browser session, in the first window.
 bool g_shown_this_session = false;
 
@@ -2480,8 +2495,7 @@ void KoanWelcome::ShowWebUI() {
         // Zen's picker edits the active Space live (the window behind).
         if (const std::optional<tab_groups::TabGroupId> space =
                 spaces->GetActiveSpace()) {
-          spaces->SetSpaceTheme(
-              *space, KoanWorkspaceController::SpaceTheme{.color = color});
+          SetSpaceColor(spaces, *space, color);
         }
       },
       weak_factory_.GetWeakPtr());
