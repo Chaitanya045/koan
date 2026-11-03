@@ -322,29 +322,83 @@ divider, "New Tab" row above one tab, no Essentials shown, bottom controls
 tiny; the URL pill has no site icon/placeholder. Re-check against current
 builds before filing.
 
-## 4. URL bar
+## 4. URL bar and New Tab (the floating panel)
 
-Screenshots: `main-02` (pill), `main-03-urlbar-focused-floating.png`,
-`main-04-cmd-t-floating-urlbar.png`.
+Screenshots: `main-02` (the pill at rest), `main-21-cmd-t-panel.png` (Cmd+T),
+`main-22-cmd-l-panel.png` (Cmd+L), `main-23-cmd-t-panel-native-crop.png`
+(native pixels), `main-03` / `main-04` (earlier takes). The robot glyph in the
+panel's first row is Marionette's remote-control indicator; in a normal
+window it is the site/identity icon. Measured in the running app (DOM
+geometry and computed styles, `~/work/koan/.cache/zen-ref/raw/urlbar-*.json`),
+a 60 fps window recording, and real key events (`postToPid`), in a 1470 x 923
+window. Source: `zen-omnibox.css`, `ZenUrlbarController.mjs`, `ZenUIManager.mjs`.
 
-- At rest it is the **pill in the sidebar** (216 x 38, radius 4) showing the
-  site's domain only (`zen.urlbar.show-domain-only-in-sidebar`), 13.75 / 500,
-  with a copy-URL button on hover (`single-toolbar-show-copy-url`). The
-  site's favicon sits at its left.
-- `zen.urlbar.behavior = "floating-on-type"` (default): clicking the pill,
-  **Cmd+L** or **Cmd+T** opens a **floating** card in the middle of the
-  window: **750 pt wide**, x = 360 (centred), top y = **295** (about 1/3
-  down), 15 pt radius, 16.5 pt text; the first row is the input with the
-  search glyph; below it suggestions (Wikipedia, YouTube, Reddit, Add-ons for
-  Firefox as defaults) with site icons, ~218 pt of results. Esc / click
-  outside closes it. Cmd+T does **not** open a tab: the new-tab page is the
-  URL bar (`zen.urlbar.replace-newtab`).
-- `zen.urlbar.open-on-startup` true: the bar is open on a fresh window.
+### 4.1 The pill at rest (sidebar)
 
-Koan now: Cmd+T / URL typing opens a similar floating bar (preview-A `13`),
-but the card is ~450 pt wide on a 1470 pt window in the capture, the
-suggestions use Google rows, and the new-tab page leaks Google's NTP
-(`bugs.md` #96).
+246 x 36 at (8, 44.5) in a 262 sidebar (sidebar width - 16 wide), radius **14**, the
+13.5% tint fill; text 13.75 pt / 500, the host only
+(`zen.urlbar.show-domain-only-in-sidebar`), favicon at the left, copy-URL
+button on hover (`single-toolbar-show-copy-url`). While the floating panel is
+open the pill is **blank** (`pageproxystate=invalid`; no text, no icon).
+
+### 4.2 The floating panel (same for Cmd+T and Cmd+L)
+
+| Property | Value |
+|---|---|
+| Position | **centred in the window** (not in the page card): x = (window width - width) / 2 = 360, **top = window height / 2 - 333/2 = 295**: Zen centres it as if it were always 333 pt tall (`FLOATING_URLBAR_MIN_HEIGHT`), so its top stays fixed whatever the result count |
+| Width | `min(window width / 1.5, 750)` = **750** here (`FLOATING_URLBAR_MAX_WIDTH`); min-width `min(90%, 62rem)` |
+| Height | **62** input row + results: 279.6 with 4 results (the list is capped at **244** pt: `#urlbar-results { max-height: 244px }`); hugs its content |
+| Radius | **15** (both the container and its background) |
+| Fill | dark: `rgb(24,24,24)`; light: white. **Opaque, no blur** by default (`backdrop-filter: none`); only with `zen.theme.acrylic-urlbar` on does it become 92% / 93% alpha with `blur(40px)` |
+| Edge | `0.5 pt` outline `rgb(75,75,75)` (dark) / `rgba(0,0,0,.2)` (light) |
+| Shadow | `0 30px 140px -15px` at **60%** black (dark) / **80%** (light): a long soft shadow, mostly below the panel |
+| z-order | above the page, the sidebar and the splitter (z-index 1000) |
+| Input row | 62 pt high, padding 12 / 14, a 38-high input box starting at x +81 (identity icon + search glyph before it), text **16.5 pt / 500** (`1.5em` of the 11 pt root on macOS), `rgb(251,251,254)`, placeholder **"Search..."** |
+| Results box | x +12 (726 wide), top +62 (the first row starts 11 pt below the input row, 10.6 pt of padding), side padding 1.4 |
+| Row (`.urlbarView-row`) | **49 pt high** (45 min + 2 + 2 border), 728.8 wide, radius **8**, text colour white at 70%; hover = 5% tint; **selected** = fill `color-mix(accent-button-bg, transparent 40%)` with white text |
+| Row content | favicon **24 x 24** (radius 4, padding 4, i.e. a 16 pt icon in a tile) at x +8; title **14 pt / 500**; then " — " and the URL in **14 pt / 500 `rgb(170,170,170)`** (e.g. "YouTube - youtube.com"); open tabs end with a **"Switch to Tab"** label: 14 pt / **600**, in a pill 100 x 23, radius 8, padding 4 / 8, opacity .7, followed by a keycap showing the Tab key |
+| Default results (empty input) | the open-tab match(es) first (as `switchtab` rows), then top sites: here Wikipedia (switch to tab), YouTube, Reddit, Add-ons for Firefox; as you type they become matching open tabs, history, bookmarks and search suggestions |
+
+### 4.3 Open and close animation
+
+**None.** In a 60 fps window recording the panel region changes from the page to
+the finished panel **in one frame** (<= 17 ms) on both Cmd+T and Cmd+L, and
+disappears in one frame on Esc. There is no fade, scale or slide, and no
+sidebar animation. (Source agrees: the only urlbar animations are the
+search-mode switch, `scale 1 -> .98 -> 1` over 0.25 s, and a one-second
+`zen-urlbar-searchmode` gradient sweep when a search engine chip is chosen.)
+
+### 4.4 Cmd+T (New Tab) versus Cmd+L
+
+| | **Cmd+T** | **Cmd+L** |
+|---|---|---|
+| Panel | identical size, position and look | identical |
+| What it is | a **New Tab session** (`zen-newtab`): nothing is created yet | edits the current tab's address |
+| Input | **empty**, placeholder "Search..." | the current URL, **fully selected** (`https://www.debian.org/`, 0-23) |
+| Sidebar | the **"+ New Tab" row is highlighted** (`in-urlbar` on every new-tab button); the **current tab loses its selected pill** (`_visuallySelected = false`); the URL pill is blank | the current tab stays selected; the pill is blank; "+ New Tab" is not highlighted |
+| Results | open tabs + top sites (a fresh-tab list) | the same default list while the text is selected; typing filters it |
+| Enter on a result | opens it in a **new tab** (tab count +1, the new tab is selected); a "Switch to Tab" result switches to the existing tab instead | navigates the **current tab** |
+| Esc | closes the panel in **one press, even after typing; no tab is created** (tab count unchanged, the previous tab's pill returns) | closes the panel and **reverts** the pill to the URL |
+| Clicking outside | closes it (and the click is also delivered to what was clicked) | same |
+| Pressed again | **Cmd+T while the panel is open closes it** (toggle, no tab) | Cmd+L again keeps it open / reselects the text |
+| Memory | the typed text is kept for **45 s** (`zen.urlbar.wait-to-clear` = 45000): Cmd+T within 45 s reopens with the same text and results; afterwards it is empty | no memory (always the current URL) |
+| Pref | `zen.urlbar.replace-newtab` = true (default): with it off, Cmd+T makes a real blank tab | `zen.urlbar.behavior` = `floating-on-type`: the bar floats only while editing (others: always-floating, normal) |
+| New window | `zen.urlbar.open-on-startup` = true: a window opens with the panel up | |
+
+Clicking the sidebar **pill** also opens the same floating panel. Other
+ways to get a tab: the "+ New Tab" row (opens the same Cmd+T session), the
+"+" at the bottom right (creates a Space), middle-click or "Open in new tab".
+
+### 4.5 Koan now vs Zen
+
+Koan (preview-A `13`): a floating bar that is ~450 pt wide on a 1470 pt window
+(Zen 750), suggestion rows with Google search first, "AI Mode" chip, and the
+new-tab page leaking Google's NTP (`bugs.md` #96). For #95: build exactly
+4.2 (750 / 295 / radius 15 / opaque dark #181818 / the long shadow / 0.5 pt
+outline / 49-pt rows / "Switch to Tab" pill), no animation, and 4.4's
+Cmd+T-versus-Cmd+L rules (empty input and highlighted "+ New Tab" row,
+Enter = new tab, one Esc closes with no tab created, 45 s text memory,
+Cmd+T toggles).
 
 ## 5. Compact mode
 
