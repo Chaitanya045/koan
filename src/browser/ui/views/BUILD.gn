@@ -178,6 +178,7 @@ source_set("impl") {
     "koan_zen_window_drag.h",
   ]
   deps = [
+    "//koan/browser/ui/webui",
     ":welcome_icons_data",
     ":views",
     "//base:i18n",

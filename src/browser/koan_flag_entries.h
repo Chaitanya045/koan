@@ -68,6 +68,10 @@
        kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanWindowDrag)},     \
       {"koan-welcome", "Koan welcome screen",                                \
        "Zen's welcome screen on Chromium's first run.", kOsDesktop,          \
-       FEATURE_VALUE_TYPE(koan::features::kKoanWelcome)},
+       FEATURE_VALUE_TYPE(koan::features::kKoanWelcome)},                    \
+      {"koan-welcome-webui", "Koan welcome screen as a web page",            \
+       "Zen's welcome flow ported as chrome://koan-welcome, in place of "    \
+       "the native one.",                                                    \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanWelcomeWebUI)},
 
 #endif  // KOAN_BROWSER_KOAN_FLAG_ENTRIES_H_

@@ -45,6 +45,9 @@ BASE_DECLARE_FEATURE(kKoanMediaControls);
 BASE_DECLARE_FEATURE(kKoanDownloadAnimation);
 BASE_DECLARE_FEATURE(kKoanWindowDrag);
 BASE_DECLARE_FEATURE(kKoanWelcome);
+// The welcome screen as a WebUI page (chrome://koan-welcome), Zen's own
+// flow ported; off: the native (Views) welcome screen.
+BASE_DECLARE_FEATURE(kKoanWelcomeWebUI);
 
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
@@ -59,6 +62,7 @@ bool IsMediaControlsEnabled();
 bool IsDownloadAnimationEnabled();
 bool IsWindowDragEnabled();
 bool IsWelcomeEnabled();
+bool IsWelcomeWebUIEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read

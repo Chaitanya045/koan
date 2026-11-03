@@ -47,6 +47,8 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_welcome_icons_data.h"
 #include "koan/browser/ui/views/koan_zen_welcome.h"
+#include "koan/browser/ui/webui/koan_welcome_host.h"
+#include "koan/common/koan_url_constants.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -80,6 +82,7 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/webview/webview.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -122,7 +125,9 @@ constexpr base::TimeDelta kTextStagger = base::Milliseconds(30);
 constexpr base::TimeDelta kTextDuration = base::Milliseconds(300);
 constexpr base::TimeDelta kFadeDuration = base::Milliseconds(250);
 constexpr base::TimeDelta kPagesFadeDuration = base::Milliseconds(450);
-constexpr base::TimeDelta kFinishFadeDuration = base::Milliseconds(300);
+// Short: the screen must be gone within half a second of "Dive in!" (a real
+// click reaches it some 0.3s after the press on the Mac).
+constexpr base::TimeDelta kFinishFadeDuration = base::Milliseconds(150);
 
 gfx::FontList Font(int size, gfx::Font::Weight weight) {
   const gfx::FontList base;
@@ -2350,18 +2355,72 @@ void KoanWelcome::Show() {
   title_bar_corner_->SetPaintToLayer();
   title_bar_corner_->layer()->SetFillsBoundsOpaquely(false);
 #endif
-  auto* view =
-      widget_->SetContentsView(std::make_unique<KoanWelcomeView>(this));
-  LayoutWidget();
-  widget_->Show();
-  widget_->LayoutRootViewIfNecessary();
-  view->FocusStart();
-  view->PlayIntro();
+  if (features::IsWelcomeWebUIEnabled()) {
+    ShowWebUI();
+  } else {
+    auto* view =
+        widget_->SetContentsView(std::make_unique<KoanWelcomeView>(this));
+    LayoutWidget();
+    widget_->Show();
+    widget_->LayoutRootViewIfNecessary();
+    view->FocusStart();
+    view->PlayIntro();
+  }
   // Seen once it is actually on screen (not merely decided on).
   if (widget_->IsVisible()) {
     browser_view_->GetProfile()->GetPrefs()->SetBoolean(
         prefs::kWelcomeScreenSeen, true);
   }
+}
+
+void KoanWelcome::ShowWebUI() {
+  // chrome://koan-welcome, Zen's welcome flow, fills the screen's widget;
+  // the page reaches this object through its KoanWelcomeHost.
+  auto web_view = std::make_unique<views::WebView>(browser_view_->GetProfile());
+  content::WebContents* contents = web_view->GetWebContents();
+  KoanWelcomeHost::Callbacks callbacks;
+  callbacks.import = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome) {
+        if (welcome) {
+          chrome::ExecuteCommand(welcome->browser_view_->browser(),
+                                 IDC_IMPORT_SETTINGS);
+        }
+      },
+      weak_factory_.GetWeakPtr());
+  callbacks.finish = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome, std::vector<GURL> essentials) {
+        if (!welcome || std::exchange(welcome->finishing_, true)) {
+          return;
+        }
+        // The page has faded out already; the choices it made are applied
+        // as they were made, but the Essentials, which go now.
+        KoanWelcomeChoices choices;
+        choices.essentials = std::move(essentials);
+        // Not from inside the page's own message: closing destroys it.
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE, base::BindOnce(
+                           [](base::WeakPtr<KoanWelcome> welcome,
+                              KoanWelcomeChoices choices) {
+                             if (welcome) {
+                               welcome->Close();
+                               welcome->Apply(choices);
+                               welcome->FocusBrowser();
+                             }
+                           },
+                           welcome, std::move(choices)));
+      },
+      weak_factory_.GetWeakPtr());
+  callbacks.skip =
+      base::BindRepeating(&KoanWelcome::Skip, weak_factory_.GetWeakPtr());
+  KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
+  web_view->LoadInitialURL(GURL(kWelcomeURL));
+  views::WebView* view = widget_->SetContentsView(std::move(web_view));
+  LayoutWidget();
+  widget_->Show();
+  widget_->LayoutRootViewIfNecessary();
+  // The keyboard goes to the page (its start button has the focus).
+  view->RequestFocus();
+  contents->Focus();
 }
 
 void KoanWelcome::Finish(const KoanWelcomeChoices& choices) {

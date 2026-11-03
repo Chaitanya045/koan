@@ -75,6 +75,8 @@ class KoanWelcome {
  private:
   void MaybeShow();
   void Show();
+  // koan-welcome-webui: the screen is chrome://koan-welcome.
+  void ShowWebUI();
   void Close();
   // After the screen closes: the window active, the keyboard on its page.
   void FocusBrowser();
