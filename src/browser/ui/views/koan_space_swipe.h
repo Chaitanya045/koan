@@ -19,24 +19,50 @@ namespace koan {
 
 class KoanWorkspaceController;
 
-// Zen's two-finger swipe between Spaces (ZenSpacesSwipe): the Space follows
-// the fingers across the sidebar, and lifting them switches Space or lets it
-// spring back (KoanWorkspaceController::UpdateSwipe(), EndSwipe()).
+// Zen's two-finger swipe between Spaces (ZenSpacesSwipe.mjs), with Gecko's
+// swipe tracker (widget/SwipeTracker.cpp, patched by Zen) that feeds it. All
+// numbers are theirs.
+//
+// The tracker turns the fingers' travel into a gesture amount: -x / 550 on
+// macOS (widget.swipe.pixel-size, in points), so 550pt of travel is 1; moving
+// the fingers left makes it positive, right negative. The Space is shown
+// translated by a function of that amount (SwipeTranslate()), and when the
+// fingers lift the swipe succeeds (SwipeSucceeds()) if the amount plus the
+// last event's velocity (amounts per second) times Zen's contribution reaches
+// Zen's threshold. A negative amount (fingers moving right) goes to the next
+// Space, a positive one to the previous (ZenSpacesSwipe #handleSwipeEnd(),
+// zen.workspaces.natural-scroll off), the strip moving the other way from the
+// fingers.
 
-// How far the Space is drawn from rest for fingers moved `offset` pixels
-// (positive: to the right) across a sidebar `width` wide: it drags harder
-// the further it is pulled (Zen's force multiplier, 1 - |x| / (4.5 * width)),
-// and stops at the sidebar's edge.
-float ResistedSwipeOffset(float offset, float width);
+// The gesture amount of `travel` points of finger movement to the left.
+float SwipeGestureAmount(float travel_left);
 
-// Where a swipe that ended at `offset` (as drawn) with the fingers moving at
-// `velocity` pixels per second counts as going to: the offset and the
-// distance the speed carries it.
-float ProjectedSwipeOffset(float offset, float velocity);
+// The state SwipeTranslate() carries between the events of a gesture
+// (ZenSpacesSwipe's swipeState.lastDelta).
+struct SwipeTranslateState {
+  float last_delta = 0;
+};
 
-// Whether a swipe that is going to `projected` (as above) switches Space: a
-// quarter of the sidebar's width (Zen's SUCCESS_THRESHOLD).
-bool SwipeSucceeds(float projected, float width);
+// Zen's translateX for a cumulative gesture amount: `amount` times
+// zen.workspaces.swipe-actions.delta-multiplier added to the last delta, made
+// to drag harder the closer it gets to `strip_width` * 4.5 (their "force
+// multiplier"), and held where it was once that falls to a half. Updates
+// `state`.
+float SwipeTranslate(float amount,
+                     float strip_width,
+                     SwipeTranslateState& state);
+
+// How far the Space is drawn from rest, in pixels (positive: to the right),
+// for a translateX: Zen translates each Space by translateX / 2 percent of its
+// own width.
+float SwipeOffsetPixels(float translate, float strip_width);
+
+// Whether a swipe ending at gesture `amount` with the fingers last moving at
+// `velocity` (amounts per second) switches Space: Gecko's
+// SwipeTracker::ComputeSwipeSuccess() with Zen's threshold (0.25,
+// ZenSpacesSwipe.SUCCESS_THRESHOLD) and velocity contribution (0.5,
+// SUCCESS_VELOCITY_CONTRIBUTION).
+bool SwipeSucceeds(float amount, float velocity);
 
 // The state of one swipe gesture, from the scroll events macOS sends. Those
 // carry no scroll phase (ui::ScrollEvent leaves it at kNone, see the TODO in
@@ -57,10 +83,11 @@ class KoanSwipeTracker {
  public:
   class Delegate {
    public:
-    // The fingers moved `offset` pixels from where they went down.
-    virtual void UpdateSwipe(float offset) = 0;
-    // The fingers lifted at `velocity` pixels per second along x.
-    virtual void EndSwipe(float velocity) = 0;
+    // The gesture's amount (SwipeGestureAmount() of the travel so far) changed.
+    virtual void UpdateSwipe(float amount) = 0;
+    // The fingers lifted: the amount, and the velocity of the last movement in
+    // amounts per second.
+    virtual void EndSwipe(float amount, float velocity) = 0;
 
    protected:
     ~Delegate() = default;
@@ -100,8 +127,9 @@ class KoanSwipeTracker {
   State state_ = State::kIdle;
   float total_x_ = 0;
   float total_y_ = 0;
-  // Pixels per second along x, smoothed over the last events.
-  float velocity_x_ = 0;
+  // The last movement's velocity, in amounts per second (Gecko's
+  // mCurrentVelocity: not smoothed, not reset while the fingers rest).
+  float velocity_ = 0;
   double last_move_seconds_ = 0;
   bool has_moved_ = false;
   // The system's momentum has begun (so the next end is its end).
@@ -124,8 +152,8 @@ class KoanSpaceSwipe : public KoanSwipeTracker::Delegate {
   bool OnScrollEvent(const ui::ScrollEvent& event);
 
   // KoanSwipeTracker::Delegate:
-  void UpdateSwipe(float offset) override;
-  void EndSwipe(float velocity) override;
+  void UpdateSwipe(float amount) override;
+  void EndSwipe(float amount, float velocity) override;
 
  private:
   const raw_ptr<KoanWorkspaceController> controller_;

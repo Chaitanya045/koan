@@ -227,13 +227,14 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // upstream's VerticalTabStripFocusSwipeController.
   void OnSpaceWheel(bool forward);
   // Zen's two-finger swipe (koan_space_swipe.h): the Space follows the
-  // fingers by `offset` pixels (positive: to the right) from where it rests,
-  // then EndSwipe() when they lift, at `velocity` pixels per second, switches
-  // to the next or previous Space, or lets the Space spring back. Both do
-  // nothing where the sidebar shows no Space to swipe (one Space, the Create
-  // form open).
-  void UpdateSwipe(float offset);
-  void EndSwipe(float velocity);
+  // fingers by the gesture `amount` (positive: fingers moving left; the
+  // strip moves the other way, as in Zen), then EndSwipe() when they lift,
+  // with the last movement's `velocity` (amounts per second): it switches to
+  // the next (fingers moved right) or previous Space, or lets the Space
+  // spring back. Both do nothing where the sidebar shows no Space to swipe
+  // (one Space, the Create form open).
+  void UpdateSwipe(float amount);
+  void EndSwipe(float amount, float velocity);
   // Keeps the tab context menu's "Move To" submenu alive while the menu is
   // open (until the next tab menu: there is one at a time).
   void KeepTabMenuSubmenu(std::unique_ptr<ui::SimpleMenuModel> submenu);
@@ -355,7 +356,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // how far the Space was dragged when it switched, for the slide to start
   // from (PlaySwitchAnimation()).
   bool swiping_ = false;
+  // Pixels from rest (positive: to the right), and ZenSpacesSwipe's lastDelta.
   float swipe_offset_ = 0;
+  float swipe_last_delta_ = 0;
   std::optional<float> swipe_start_offset_;
 
   // The old Spaces sliding out, and the views the animation gave a layer.
