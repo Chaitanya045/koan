@@ -272,6 +272,23 @@ SkColor FloatingUrlBarCardColor(const ui::ColorProviderKey& key) {
   return t.dark() ? SkColorSetRGB(24, 24, 24) : SK_ColorWHITE;
 }
 
+void AddZenTabColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
+  const bool dark = key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
+  // The window's primary colour: its Space theme's, else the default theme's.
+  const SkColor primary =
+      key.user_color && key.user_color_source ==
+                            ui::ColorProviderKey::UserColorSource::kAccent
+          ? *key.user_color
+          : look::ZenDefaultPrimary(look::CurrentLook().zen_accent, dark);
+  const look::ZenTabColors tabs = look::ComputeZenTabColors(primary, dark);
+  mixer[kColorKoanToolboxText] = {tabs.text};
+  mixer[kColorToolbarText] = {tabs.text};
+  mixer[kColorKoanSidebarTabSelected] = {tabs.selected};
+  mixer[kColorKoanSidebarTabHovered] = {tabs.hovered};
+  mixer[kColorKoanSidebarRowHovered] = {tabs.hovered};
+  mixer[kColorKoanSidebarRowPressed] = {tabs.pressed};
+}
+
 void AddZenSuggestionColors(ui::ColorMixer& mixer,
                             const ui::ColorProviderKey& key) {
   const Tokens t(key);
@@ -365,6 +382,7 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   const Tokens t(key);
 
   // The sidebar is shadcn's Sidebar: tab rows are `sidebar-accent` items.
+  mixer[kColorKoanToolboxText] = {t[Token::kSidebarForeground]};
   mixer[kColorKoanSidebarTabSelected] = {t[Token::kSidebarAccent]};
   mixer[kColorKoanSidebarTabHovered] = {
       t.Over(Token::kSidebarAccent, Token::kSidebar, 0.6f)};

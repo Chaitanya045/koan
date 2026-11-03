@@ -38,19 +38,9 @@ constexpr SkAlpha Alpha(float opacity) {
 void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   const bool dark = key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
 
-  // Tab rows (Zen's --tab-background-color-selected, Firefox's
-  // --tab-hover-background-color): selected white at 80% (18% in dark mode),
-  // hovered the text colour at 11%.
-  mixer[kColorKoanSidebarTabSelected] = {
-      SkColorSetA(SK_ColorWHITE, Alpha(dark ? 0.18f : 0.8f))};
-  mixer[kColorKoanSidebarTabHovered] =
-      ui::SetAlpha(kColorToolbarText, Alpha(0.11f));
-
-  // Zen's toolbar button hover and press backgrounds, New Tab at 70%.
-  mixer[kColorKoanSidebarRowHovered] =
-      ui::SetAlpha(kColorToolbarText, Alpha(0.07f));
-  mixer[kColorKoanSidebarRowPressed] =
-      ui::SetAlpha(kColorToolbarText, Alpha(0.1f));
+  // Tab rows, the toolbar text and the hover and press backgrounds derive
+  // from the primary colour (koan_shadcn_color_mixer.cc); New Tab is at 70%.
+  AddZenTabColors(mixer, key);
   mixer[kColorKoanSidebarNewTabForeground] =
       ui::SetAlpha(kColorToolbarText, Alpha(0.7f));
   mixer[kColorKoanSidebarSeparator] =

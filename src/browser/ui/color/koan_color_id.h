@@ -21,6 +21,10 @@ enum KoanColorIds : ui::ColorId {
   // and a hovered tab's.
   kColorKoanSidebarTabSelected = kKoanColorsStart,
   kColorKoanSidebarTabHovered,
+  // The toolbar and tab text (Zen's --toolbox-textcolor, derived from the
+  // theme's primary colour): the text of the sidebar's rows. kColorToolbarText
+  // is the same colour in the Zen look.
+  kColorKoanToolboxText,
   // The New Tab row's background
   // while hovered and pressed, and its icon and label.
   kColorKoanSidebarRowHovered,

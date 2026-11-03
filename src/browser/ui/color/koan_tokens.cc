@@ -429,6 +429,104 @@ std::optional<CustomTheme> ParseThemeCss(std::string_view css) {
   return theme;
 }
 
+namespace {
+
+// Zen's blendColors: `a` at `percent`, `b` at the rest, each channel rounded
+// half up (JavaScript's Math.round).
+SkColor Blend(SkColor a, SkColor b, double percent) {
+  const double p = percent / 100.0;
+  auto channel = [&](uint8_t x, uint8_t y) {
+    return static_cast<uint8_t>(std::floor(x * p + y * (1 - p) + 0.5));
+  };
+  return SkColorSetRGB(channel(SkColorGetR(a), SkColorGetR(b)),
+                       channel(SkColorGetG(a), SkColorGetG(b)),
+                       channel(SkColorGetB(a), SkColorGetB(b)));
+}
+
+}  // namespace
+
+SkColor ZenDefaultPrimary(std::optional<SkColor> system_accent, bool dark) {
+  // macOS's default accent blue.
+  const SkColor accent = system_accent.value_or(SkColorSetRGB(0, 122, 255));
+  const SkColor mixed = Blend(
+      accent, dark ? SkColorSetRGB(23, 23, 26) : SkColorSetRGB(240, 240, 244),
+      dark ? 80 : 50);
+  if (dark) {
+    return Blend(mixed, SK_ColorBLACK, 40);
+  }
+  return ZenPrimaryForTheme(mixed, false);
+}
+
+SkColor ZenPrimaryForTheme(SkColor dominant, bool dark) {
+  if (dark || (SkColorGetR(dominant) == SkColorGetG(dominant) &&
+               SkColorGetG(dominant) == SkColorGetB(dominant))) {
+    return SkColorSetRGB(SkColorGetR(dominant), SkColorGetG(dominant),
+                         SkColorGetB(dominant));
+  }
+  // HSL with saturation + 0.3 and lightness 40% itself, 60% of 0.42.
+  const double r = SkColorGetR(dominant) / 255.0;
+  const double g = SkColorGetG(dominant) / 255.0;
+  const double b = SkColorGetB(dominant) / 255.0;
+  const double max = std::max({r, g, b});
+  const double min = std::min({r, g, b});
+  const double d = max - min;
+  double hue = 0;
+  if (d != 0) {
+    if (max == r) {
+      hue = std::fmod((g - b) / d, 6.0);
+    } else if (max == g) {
+      hue = (b - r) / d + 2;
+    } else {
+      hue = (r - g) / d + 4;
+    }
+  }
+  hue = hue < 0 ? hue + 6 : hue;
+  const double l = (min + max) / 2;
+  const double s = d == 0 ? 0 : d / (1 - std::abs(2 * l - 1));
+  const double saturation = std::min(1.0, s + 0.3);
+  const double lightness = l * 0.4 + 0.42 * 0.6;
+  const double q = lightness < 0.5
+                       ? lightness * (1 + saturation)
+                       : lightness + saturation - lightness * saturation;
+  const double p = 2 * lightness - q;
+  auto channel = [&](double t) {
+    t = std::fmod(t + 1, 1.0);
+    double v;
+    if (t < 1.0 / 6) {
+      v = p + (q - p) * 6 * t;
+    } else if (t < 0.5) {
+      v = q;
+    } else if (t < 2.0 / 3) {
+      v = p + (q - p) * (2.0 / 3 - t) * 6;
+    } else {
+      v = p;
+    }
+    return static_cast<uint8_t>(std::floor(v * 255 + 0.5));
+  };
+  const double h = hue / 6;
+  return SkColorSetRGB(channel(h + 1.0 / 3), channel(h), channel(h - 1.0 / 3));
+}
+
+ZenTabColors ComputeZenTabColors(SkColor primary, bool dark) {
+  ZenTabColors colors;
+  // --toolbox-textcolor: the primary blended 20% into white (black), at 90%
+  // (Zen's translucent-sidebar case, macOS; 5% where the sidebar is opaque).
+  colors.text = SkColorSetA(
+      Blend(primary, dark ? SK_ColorWHITE : SK_ColorBLACK, 20), 0xe6);
+  // The selected tab: the primary blended into white at 22.5% (2.5% in light
+  // mode), at 22% (80.4%) opacity. Fitted to what Zen draws for its default
+  // theme: #c6cfd8 at 22% and #f9fcff at 80.4%.
+  colors.selected = SkColorSetA(
+      Blend(primary, SK_ColorWHITE, dark ? 22.5 : 2.5), dark ? 0x38 : 0xcd);
+  // --toolbarbutton-background-color-hover/-active: the branding paper
+  // (#e2e2e2 in dark mode) or the dark branding colour (#101010) at 7% / 10%.
+  const SkColor reverse =
+      dark ? SkColorSetRGB(0xe2, 0xe2, 0xe2) : SkColorSetRGB(0x10, 0x10, 0x10);
+  colors.hovered = SkColorSetA(reverse, 0x12);
+  colors.pressed = SkColorSetA(reverse, 0x1a);
+  return colors;
+}
+
 ZenAccent ComputeZenAccent(SkColor primary, bool dark) {
   const OklchColor lch = SkColorToOklch(primary);
   auto clamped = [&](float low, float high) {
@@ -476,11 +574,11 @@ TokenSet ZenTokens(bool dark, std::optional<SkColor> zen_accent) {
   // --zen-colors-border-contrast: 11% white, or 11% of rgb(181, 181, 181).
   const SkColor border = dark ? SkColorSetARGB(0x1c, 255, 255, 255)
                               : SkColorSetARGB(0x1c, 181, 181, 181);
-  // --zen-primary-color: the Space theme's, else the default theme's
-  // (measured on Zen 1.24b: a navy in dark mode, a blue in light mode). The
+  // --zen-primary-color for a Space without theme colours: derived from the
+  // system accent (a navy in dark mode, a blue in light mode, on a default
+  // Mac). A Space theme's own reaches a window through its colour key. The
   // accent colours Zen uses (selected rows, buttons, links) derive from it.
-  const SkColor primary_color = zen_accent.value_or(
-      dark ? SkColorSetRGB(2, 41, 84) : SkColorSetRGB(22, 131, 255));
+  const SkColor primary_color = ZenDefaultPrimary(zen_accent, dark);
   const ZenAccent zen = ComputeZenAccent(primary_color, dark);
   const SkColor accent = zen.button_background;
   const SkColor on_accent = SkColorSetRGB(0xfb, 0xfb, 0xfe);

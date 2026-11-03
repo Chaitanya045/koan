@@ -27,6 +27,12 @@ void AddKoanColorMixer(ui::ColorProvider* provider,
 // so none of them can loop back through Chromium's recipes.
 SkColor FloatingUrlBarCardColor(const ui::ColorProviderKey& key);
 
+// Zen's sidebar colours that derive from the window's primary colour (the
+// Space theme's, from its colour key, or the default theme's from the system
+// accent): the toolbar and tab text (also `kColorToolbarText`), the selected
+// and hovered tab rows and the pressed row. Computed values, not references.
+void AddZenTabColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key);
+
 // Zen's suggestion-row colours that depend on the accent and the card
 // (AddZenColors can't read the tokens): the selected row, the title text.
 void AddZenSuggestionColors(ui::ColorMixer& mixer,

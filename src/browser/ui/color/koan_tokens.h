@@ -115,6 +115,34 @@ struct ZenAccent {
 };
 ZenAccent ComputeZenAccent(SkColor primary, bool dark);
 
+// Zen's primary colour (--zen-primary-color) for a Space without theme
+// colours, from the system accent colour (ZenGradientGenerator.mjs,
+// getNativeAccentColor and getAccentColorForUI): the accent blended with the
+// toolbar's base colour (80% in dark mode, 50% in light), then in dark mode
+// darkened to 40%, in light mode saturated and lightened in HSL. macOS's
+// default blue (0, 122, 255) gives the measured navy (2, 41, 84) in dark mode
+// and (22, 131, 255) in light mode.
+SkColor ZenDefaultPrimary(std::optional<SkColor> system_accent, bool dark);
+
+// The same adjustment of a Space theme's dominant colour into the primary
+// colour (getAccentColorForUI): unchanged in dark mode, lightened and
+// saturated in light mode. A Space's primary colour reaches a window through
+// its colour key.
+SkColor ZenPrimaryForTheme(SkColor dominant, bool dark);
+
+// What Zen draws with the primary colour in the sidebar (default theme,
+// measured on Zen 1.24b): the toolbar and tab text (--toolbox-textcolor: the
+// primary blended into white or black, at 90% opacity), the selected tab's
+// fill, and a hovered tab's (--toolbarbutton-background-color-hover: the
+// branding colour at 7%).
+struct ZenTabColors {
+  SkColor text;
+  SkColor selected;
+  SkColor hovered;
+  SkColor pressed;
+};
+ZenTabColors ComputeZenTabColors(SkColor primary, bool dark);
+
 // What makes the tokens.
 struct Look {
   Style style = Style::kZen;
@@ -123,10 +151,11 @@ struct Look {
   Accent accent = Accent::kNone;
   // The pasted theme, if any; applied over the base and accent.
   std::optional<CustomTheme> custom;
-  // The Zen style's accent (Zen's --zen-primary-color): the dominant colour of
-  // the active Space's theme, or `zen.theme.accent-color`. Without one, Zen's
-  // default, the system's accent colour (CSS AccentColor, macOS blue unless
-  // the user chose another). Set it with SetZenAccent() (koan_look.h).
+  // The Zen style's system accent colour (CSS AccentColor, which is Zen's
+  // `zen.theme.accent-color`): macOS's accent colour, from which Zen derives
+  // its primary colour when a Space has no theme colours (ZenDefaultPrimary()).
+  // Without one, macOS's default blue. Set it with SetZenAccent()
+  // (koan_look.h).
   std::optional<SkColor> zen_accent;
 
   friend bool operator==(const Look&, const Look&) = default;
