@@ -342,6 +342,8 @@ inline constexpr int kWelcomeMockGap = 26;
 inline constexpr int kWelcomeMockGridGap = 24;
 inline constexpr int kWelcomeMockTabHeight = 72;
 inline constexpr int kWelcomeMockTabCornerRadius = 26;
+// Smaller tiles than this leave no room for the mock tabs: they go.
+inline constexpr int kWelcomeMockMinTileWithTabs = 56;
 inline constexpr int kWelcomeTileCornerRadius = 32;
 inline constexpr int kWelcomeTileBorder = 3;
 inline constexpr int kWelcomeTileNameFontSize = 12;

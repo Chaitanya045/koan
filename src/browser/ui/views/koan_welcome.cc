@@ -394,8 +394,8 @@ void AnimateIn(views::View* view,
 
 // A page's button. The primary action is filled: Zen's accent button, or
 // shadcn's default button (`primary` with `primary-foreground` text). The
-// other is Zen's accent text, or shadcn's outline button. A disabled button
-// is drawn at half opacity (shadcn's `disabled:opacity-50`).
+// other ("Skip for now") is Zen's accent text, or shadcn's ghost button. A
+// disabled button is drawn at half opacity (shadcn's `disabled:opacity-50`).
 class KoanWelcomeButton : public views::Button {
   METADATA_HEADER(KoanWelcomeButton, views::Button)
 
@@ -432,12 +432,10 @@ class KoanWelcomeButton : public views::Button {
       flags.setColor(hovered ? palette.accent_hovered : palette.accent);
       canvas->DrawRoundRect(bounds, metrics.button_radius, flags);
       text = palette.on_accent;
-    } else if (metrics.shadcn) {
-      flags.setColor(
-          hovered ? GetColorProvider()->GetColor(kColorKoanWelcomeHover)
-                  : GetColorProvider()->GetColor(kColorKoanWelcomeOptionFill));
+    } else if (metrics.shadcn && hovered) {
+      // shadcn's ghost button: `accent` behind it on hover only.
+      flags.setColor(GetColorProvider()->GetColor(kColorKoanWelcomeHover));
       canvas->DrawRoundRect(bounds, metrics.button_radius, flags);
-      StrokeRoundRect(canvas, bounds, metrics.button_radius, palette.border);
     }
     canvas->DrawStringRectWithFlags(
         text_, Font(metrics.button_font_size, metrics.button_weight), text,
@@ -1271,92 +1269,129 @@ class KoanWelcomeMockBrowserView : public views::View {
 
   // views::View:
   void Layout(PassKey) override {
-    const gfx::Rect sidebar = SidebarBounds();
-    const int grid_y = sidebar.y() + kSidebarInsets.top() +
-                       kWelcomeMockDotSize + kWelcomeMockDotsMargin +
-                       kWelcomeMockGap;
-    const int tile = (sidebar.width() - kSidebarInsets.width() -
-                      (kColumns - 1) * kWelcomeMockGridGap) /
-                     kColumns;
+    // The whole window fits the pane (Zen lets it run off the bottom): the
+    // tiles are as big as the width allows, or smaller to fit the height;
+    // the two mock tabs below them go first when there is no room.
+    gfx::Rect area = GetLocalBounds();
+    const int margin =
+        std::min(kWelcomeMockPaddingTop, std::min(width(), height()) / 12);
+    area.Inset(margin);
+    window_ = area;
+    sidebar_ = window_;
+    sidebar_.set_width(
+        static_cast<int>(window_.width() * kWelcomeMockSidebarWidth));
+    const gfx::Insets insets = Insets(sidebar_.size());
+    const int inner_width = sidebar_.width() - insets.width();
+    const int header =
+        kWelcomeMockDotSize + kWelcomeMockDotsMargin + kWelcomeMockGap;
+    const int room = area.height() - insets.height() - header;
+    const auto fit = [&](int tabs, int& tile, int& gap, int& tab_height) {
+      tile = inner_width / kColumns;
+      for (; tile > 0; --tile) {
+        gap = std::min(kWelcomeMockGridGap, tile / 4);
+        const int grid_width = kColumns * tile + (kColumns - 1) * gap;
+        tab_height = std::min(kWelcomeMockTabHeight, tile * 3 / 5);
+        const int rows =
+            (static_cast<int>(children().size()) + kColumns - 1) / kColumns;
+        const int grid_height = rows * tile + (rows - 1) * gap;
+        const int needed = grid_height + tabs * (tab_height + kWelcomeMockGap);
+        if (grid_width <= inner_width && needed <= room) {
+          return;
+        }
+      }
+    };
+    tabs_ = 2;
+    fit(tabs_, tile_, gap_, tab_height_);
+    if (tile_ < kWelcomeMockMinTileWithTabs) {
+      tabs_ = 0;
+      fit(tabs_, tile_, gap_, tab_height_);
+    }
+    const int rows =
+        (static_cast<int>(children().size()) + kColumns - 1) / kColumns;
+    const int content_height = header + rows * tile_ + (rows - 1) * gap_ +
+                               tabs_ * (tab_height_ + kWelcomeMockGap);
+    // The window as tall as its content, centred in the pane.
+    window_.set_height(
+        std::min(area.height(), content_height + insets.height()));
+    window_.set_y(area.y() + (area.height() - window_.height()) / 2);
+    sidebar_.set_y(window_.y());
+    sidebar_.set_height(window_.height());
+    const int grid_x =
+        sidebar_.x() + insets.left() +
+        (inner_width - (kColumns * tile_ + (kColumns - 1) * gap_)) / 2;
+    const int grid_y = sidebar_.y() + insets.top() + header;
     for (size_t i = 0; i < children().size(); ++i) {
       children()[i]->SetBounds(
-          sidebar.x() + kSidebarInsets.left() +
-              (i % kColumns) * (tile + kWelcomeMockGridGap),
-          grid_y + (i / kColumns) * (tile + kWelcomeMockGridGap), tile, tile);
+          grid_x + static_cast<int>(i % kColumns) * (tile_ + gap_),
+          grid_y + static_cast<int>(i / kColumns) * (tile_ + gap_), tile_,
+          tile_);
     }
   }
   void OnPaint(gfx::Canvas* canvas) override {
     const Palette palette = GetPalette(this);
+    const float corner =
+        std::min<float>(GetMetrics().mock_radius, window_.height() / 4.0f);
+    const SkRRect rounded =
+        SkRRect::MakeRectXY(gfx::RectToSkRect(window_), corner, corner);
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    // The window, rounded at the top left only.
-    const SkRect window = gfx::RectToSkRect(MockBounds());
-    const float corner = GetMetrics().mock_radius;
-    const SkVector radii[4] = {{corner, corner}, {0, 0}, {0, 0}, {0, 0}};
-    SkRRect rounded;
-    rounded.setRectRadii(window, radii);
     canvas->sk_canvas()->save();
     canvas->sk_canvas()->clipRRect(rounded, true);
     flags.setColor(palette.mock);
-    canvas->DrawRect(MockBounds(), flags);
-    const gfx::Rect sidebar = SidebarBounds();
+    canvas->DrawRect(window_, flags);
     flags.setColor(palette.surface);
-    canvas->DrawRect(sidebar, flags);
-    // Three window dots, and two tabs under the grid.
+    canvas->DrawRect(sidebar_, flags);
+    // Three window dots, and the mock tabs under the grid.
+    const gfx::Insets insets = Insets(sidebar_.size());
     flags.setColor(palette.tile);
     for (int i = 0; i < 3; ++i) {
       canvas->DrawCircle(
-          gfx::PointF(
-              sidebar.x() + kSidebarInsets.left() + kWelcomeMockDotSize / 2.0f +
-                  i * (kWelcomeMockDotSize + kWelcomeMockDotGap),
-              sidebar.y() + kSidebarInsets.top() + kWelcomeMockDotSize / 2.0f),
+          gfx::PointF(sidebar_.x() + insets.left() +
+                          kWelcomeMockDotSize / 2.0f +
+                          i * (kWelcomeMockDotSize + kWelcomeMockDotGap),
+                      sidebar_.y() + insets.top() + kWelcomeMockDotSize / 2.0f),
           kWelcomeMockDotSize / 2.0f, flags);
     }
     int y = children().empty()
-                ? sidebar.y()
+                ? sidebar_.y()
                 : children().back()->bounds().bottom() + kWelcomeMockGap;
-    for (int i = 0; i < 2; ++i) {
-      canvas->DrawRoundRect(gfx::Rect(sidebar.x() + kSidebarInsets.left(), y,
-                                      sidebar.width() - kSidebarInsets.width(),
-                                      kWelcomeMockTabHeight),
-                            kWelcomeMockTabCornerRadius, flags);
-      y += kWelcomeMockTabHeight + kWelcomeMockGap;
+    for (int i = 0; i < tabs_; ++i) {
+      canvas->DrawRoundRect(
+          gfx::Rect(sidebar_.x() + insets.left(), y,
+                    sidebar_.width() - insets.width(), tab_height_),
+          std::min(kWelcomeMockTabCornerRadius, tab_height_ / 2), flags);
+      y += tab_height_ + kWelcomeMockGap;
     }
     canvas->sk_canvas()->restore();
-    if (GetMetrics().shadcn) {
-      // shadcn's card outline, along the window's top and left edges.
-      cc::PaintFlags line;
-      line.setAntiAlias(true);
-      line.setStyle(cc::PaintFlags::kStroke_Style);
-      line.setStrokeWidth(1);
-      line.setColor(palette.border);
-      SkRRect outline = rounded;
-      outline.inset(0.5f, 0.5f);
-      canvas->sk_canvas()->drawRRect(outline, line);
-    }
+    // The window's outline, all the way round.
+    cc::PaintFlags line;
+    line.setAntiAlias(true);
+    line.setStyle(cc::PaintFlags::kStroke_Style);
+    line.setStrokeWidth(1);
+    line.setColor(palette.border);
+    SkRRect outline = rounded;
+    outline.inset(0.5f, 0.5f);
+    canvas->sk_canvas()->drawRRect(outline, line);
   }
 
  private:
   static constexpr int kColumns = 3;
-  std::vector<base::RepeatingClosure> toggles_;
-  static constexpr auto kSidebarInsets =
-      gfx::Insets::VH(kWelcomeMockSidebarPaddingVertical,
-                      kWelcomeMockSidebarPaddingHorizontal);
 
-  // zen-welcome.css: the page pads 3rem at the top, 6rem on the left; the
-  // window is 92% of that wide, aligned to the bottom right.
-  gfx::Rect MockBounds() const {
-    const int window_width = static_cast<int>(
-        (width() - kWelcomeMockPaddingLeft) * kWelcomeMockWidth);
-    return gfx::Rect(width() - window_width, kWelcomeMockPaddingTop,
-                     window_width, height() - kWelcomeMockPaddingTop);
+  // Zen's padding of the mock sidebar, less in a small one.
+  static gfx::Insets Insets(const gfx::Size& sidebar) {
+    return gfx::Insets::VH(
+        std::min(kWelcomeMockSidebarPaddingVertical, sidebar.height() / 12),
+        std::min(kWelcomeMockSidebarPaddingHorizontal, sidebar.width() / 10));
   }
-  gfx::Rect SidebarBounds() const {
-    gfx::Rect sidebar = MockBounds();
-    sidebar.set_width(
-        static_cast<int>(sidebar.width() * kWelcomeMockSidebarWidth));
-    return sidebar;
-  }
+
+  std::vector<base::RepeatingClosure> toggles_;
+  // Set by Layout().
+  gfx::Rect window_;
+  gfx::Rect sidebar_;
+  int tile_ = 0;
+  int gap_ = 0;
+  int tabs_ = 0;
+  int tab_height_ = 0;
 };
 
 BEGIN_METADATA(KoanWelcomeMockBrowserView)
