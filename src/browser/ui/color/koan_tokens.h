@@ -113,6 +113,11 @@ struct Look {
   Accent accent = Accent::kNone;
   // The pasted theme, if any; applied over the base and accent.
   std::optional<CustomTheme> custom;
+  // The Zen style's accent (Zen's --zen-primary-color): the dominant colour of
+  // the active Space's theme, or `zen.theme.accent-color`. Without one, Zen's
+  // default, the system's accent colour (CSS AccentColor, macOS blue unless
+  // the user chose another). Set it with SetZenAccent() (koan_look.h).
+  std::optional<SkColor> zen_accent;
 
   friend bool operator==(const Look&, const Look&) = default;
 };

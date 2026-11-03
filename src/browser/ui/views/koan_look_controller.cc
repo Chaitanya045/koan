@@ -99,6 +99,8 @@ class LookController : public look::Observer {
     // A pasted theme that doesn't parse is ignored.
     next.custom =
         look::ParseThemeCss(local_state->GetString(prefs::kLookCustomCss));
+    // Not a pref: the Space theme sets it.
+    next.zen_accent = look::CurrentLook().zen_accent;
     look::SetLook(std::move(next));
   }
 

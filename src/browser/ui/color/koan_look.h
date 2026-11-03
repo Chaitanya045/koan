@@ -31,6 +31,11 @@ const Look& CurrentLook();
 // Changes the look. Returns false if it is the current one.
 bool SetLook(Look look);
 
+// Sets (or clears) the Zen style's accent colour (Look::zen_accent) and
+// refreshes every window. The Space theme service calls it with the active
+// Space's accent.
+bool SetZenAccent(std::optional<SkColor> accent);
+
 bool IsShadcnStyle();
 
 // The current look's tokens for light or dark, cached until the look changes.

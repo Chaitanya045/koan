@@ -433,7 +433,7 @@ namespace {
 
 // Zen's colours (Zen 1.24b's zen-theme.css, with its default accent colour:
 // macOS's blue) as tokens.
-TokenSet ZenTokens(bool dark) {
+TokenSet ZenTokens(bool dark, std::optional<SkColor> zen_accent) {
   // Zen's text (Firefox's), its browser background (--zen-main-browser-
   // background), the content area (the branding colour), dialogs
   // (--zen-dialog-background), panels (--arrowpanel-background), the URL bar
@@ -504,7 +504,7 @@ TokenSet ZenTokens(bool dark) {
 
 TokenSet ResolveTokens(const Look& look, bool dark) {
   if (look.style == Style::kZen) {
-    return ZenTokens(dark);
+    return ZenTokens(dark, look.zen_accent);
   }
   TokenSet tokens;
   const std::span<const OklchColor, kTokenCount> palette =

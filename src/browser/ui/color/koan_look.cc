@@ -47,6 +47,12 @@ bool SetLook(Look look) {
   return true;
 }
 
+bool SetZenAccent(std::optional<SkColor> accent) {
+  Look next = GetState().look;
+  next.zen_accent = accent;
+  return SetLook(std::move(next));
+}
+
 bool IsShadcnStyle() {
   return GetState().look.style == Style::kShadcn;
 }
