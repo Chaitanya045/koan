@@ -12,6 +12,8 @@
 #include "ui/color/color_mixer.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_key.h"
+#include "ui/color/color_recipe.h"
+#include "ui/color/color_transform.h"
 #include "ui/gfx/color_utils.h"
 
 namespace koan {
@@ -67,7 +69,8 @@ class Tokens {
     return static_cast<SkAlpha>(opacity * SK_AlphaOPAQUE + 0.5f);
   }
 
-  const look::TokenSet& tokens_;
+  // A copy: it is small, and the look may change while providers are built.
+  const look::TokenSet tokens_;
   bool dark_;
 };
 
