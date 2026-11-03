@@ -21,3 +21,4 @@ Each file ends with a **test script** the Mac loop can run in both Zen and Koan.
 | [spaces.md](spaces.md) | Spaces: switching, animation, swipe, create/rename/delete, Clear |
 | [essentials-and-pinned.md](essentials-and-pinned.md) | Essentials grid, pinned tabs, reset button, close behaviours |
 | [folders.md](folders.md) | folders: create, expand/collapse, active tab, reset, search popup, menu, drag/drop |
+| [split-view.md](split-view.md) | split view: create (shortcuts, menu, drag), resize, rearrange, unsplit, sidebar row |
