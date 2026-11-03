@@ -216,6 +216,7 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   NSMenu* _spacesMenu;
   NSInteger _staticItemCount;
   id _trackingObserver;
+  id _windowObserver;
 }
 
 + (KoanMenuTarget*)shared {
@@ -317,95 +318,6 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   if (item.action == @selector(spaceCommand:)) {
     return controller->workspaces()->IsEnabled() &&
            controller->workspaces()->GetActiveSpace().has_value();
-  }
-  return controller->workspaces()->IsEnabled();
-}
-
-- (void)setSpacesMenu:(NSMenu*)menu staticItemCount:(NSInteger)count;
-// Shows the keys of the active window's shortcuts in `mainMenu` (see the
-// definition).
-- (void)refreshKeysIn:(NSMenu*)mainMenu;
-// Refreshes the keys whenever the menu bar opens.
-- (void)observeMenuBar:(NSMenu*)mainMenu;
-@end
-
-namespace {
-
-// The label of a Space in the menus: "<icon>  <name>", like Move To.
-NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
-  return base::SysUTF16ToNSString(
-      space.icon.empty() ? space.name
-                         : base::StrCat({space.icon, u"  ", space.name}));
-}
-
-}  // namespace
-
-@implementation KoanMenuTarget {
-  NSMenu* _spacesMenu;
-  NSInteger _staticItemCount;
-  id _trackingObserver;
-}
-
-+ (KoanMenuTarget*)shared {
-  static KoanMenuTarget* shared = [[KoanMenuTarget alloc] init];
-  return shared;
-}
-
-- (void)perform:(NSMenuItem*)item {
-  if (koan::KoanBrowserViewController* controller = ActiveController()) {
-    controller->shortcuts()->Run(static_cast<Action>(item.tag));
-  }
-}
-
-- (void)switchSpace:(NSMenuItem*)item {
-  koan::KoanBrowserViewController* controller = ActiveController();
-  if (!controller) {
-    return;
-  }
-  const auto spaces = controller->workspaces()->GetSpaces();
-  if (item.tag >= 0 && item.tag < static_cast<NSInteger>(spaces.size())) {
-    controller->workspaces()->SwitchTo(spaces[item.tag].id);
-  }
-}
-
-- (void)dockSwitchSpace:(NSMenuItem*)item {
-  if (koan::KoanBrowserViewController* controller = ActiveController()) {
-    [NSApp activateIgnoringOtherApps:YES];
-    controller->browser_view()->browser()->GetWindow()->Activate();
-  }
-  [self switchSpace:item];
-}
-
-- (void)moveToSpace:(NSMenuItem*)item {
-  koan::KoanBrowserViewController* controller = ActiveController();
-  if (!controller) {
-    return;
-  }
-  const auto spaces = controller->workspaces()->GetSpaces();
-  if (item.tag < 0 || item.tag >= static_cast<NSInteger>(spaces.size())) {
-    return;
-  }
-  // The selected tabs, like Move To in the tab context menu.
-  TabStripModel* model =
-      controller->browser_view()->browser()->GetTabStripModel();
-  std::vector<tabs::TabInterface*> tabs;
-  for (size_t index :
-       model->selection_model().GetListSelectionModel().selected_indices()) {
-    tabs.push_back(model->GetTabAtIndex(static_cast<int>(index)));
-  }
-  if (!tabs.empty()) {
-    controller->workspaces()->MoveTabsToSpace(tabs, spaces[item.tag].id);
-  }
-}
-
-// NSMenuItemValidation:
-- (BOOL)validateMenuItem:(NSMenuItem*)item {
-  koan::KoanBrowserViewController* controller = ActiveController();
-  if (!controller) {
-    return NO;
-  }
-  if (item.action == @selector(perform:)) {
-    return controller->shortcuts()->CanRun(static_cast<Action>(item.tag));
   }
   return controller->workspaces()->IsEnabled();
 }
@@ -525,11 +437,8 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
       [claimed addObject:item];
     }
   }
-  // Without a window with Koan's UI its shortcuts do nothing, and Chrome's
-  // items keep their keys.
-  if (!controller) {
-    return;
-  }
+  // Without a window the defaults decide, so the menus are right before the
+  // first window is active (the Mac bench found them stale otherwise).
   for (NSMenuItem* item in items) {
     for (const Relocated& relocated : kRelocated) {
       if (IsChromeCommand(item, relocated.command)) {
@@ -585,6 +494,18 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
                 if (root == mainMenu) {
                   [weak_self refreshKeysIn:mainMenu];
                 }
+              }];
+  // And when another window becomes the main one (its profile may have other
+  // shortcuts), in case the tracking notification doesn't reach the menu bar.
+  if (_windowObserver) {
+    [[NSNotificationCenter defaultCenter] removeObserver:_windowObserver];
+  }
+  _windowObserver = [[NSNotificationCenter defaultCenter]
+      addObserverForName:NSWindowDidBecomeMainNotification
+                  object:nil
+                   queue:nil
+              usingBlock:^(NSNotification* notification) {
+                [weak_self refreshKeysIn:mainMenu];
               }];
 }
 
