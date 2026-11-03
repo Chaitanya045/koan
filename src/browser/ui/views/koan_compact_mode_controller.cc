@@ -72,8 +72,9 @@ namespace {
 
 constexpr base::TimeDelta kToolbarRevealDuration = base::Milliseconds(160);
 constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
-// How long the pointer must be away before the toolbar hides again.
-constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
+// How long the pointer must be away before the toolbar hides again (Zen's
+// zen.view.compact.toolbar-hide-after-hover.duration).
+constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(1000);
 // Zen's zen.view.compact.sidebar-keep-hover.duration: how long the sidebar
 // stays out after the pointer leaves it.
 constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
@@ -425,7 +426,7 @@ void KoanCompactModeController::CheckSidebarPeek() {
   // Give the pointer time to reach the sidebar after a keyboard peek.
   const base::TimeTicks hide_at =
       std::max(sidebar_peek_started_ + kSidebarPeekGrace,
-               *sidebar_unhovered_since_ + kToolbarHideDelay);
+               *sidebar_unhovered_since_ + kSidebarKeepHover);
   if (!tab_strip || now >= hide_at) {
     sidebar_peek_timer_.Stop();
     peek_lock_.reset();
