@@ -167,6 +167,17 @@ sync` up to 3 times (a re-run of bootstrap.sh wouldn't do: src is already
 at the pinned revision then, so it skips the sync). "Re-run failed jobs"
 also works for this.
 
+**googlesource incident, 2026-11-03:** fetching
+`third_party/clang-format/script` at `9f796802` (pinned by our DEPS, by
+main and by 158.0.8127.2) fails with HTTP 500 (`--depth=1`) / 400, three
+gclient attempts in a row, and gitiles answers 404 for the commit; the
+mirror's main moved to 47dce84. It worked on 11-02 09:30. The scripts are
+only `git cl format`'s (`third_party/clang-format` has no BUILD.gn), so the
+CI's `.gclient` drops it and webpagereplay's copy via `custom_deps`. Any
+fresh `gclient sync` of this Chromium (the Mac, #89's re-sync) hits the
+same until googlesource fixes it; the same two `custom_deps` lines work
+around it.
+
 The .dmg is uploaded with `archive: false`, so the browser download is the
 .dmg itself. `gh run download` (2.96) can't fetch such artifacts ("zip:
 not a valid zip file"); `gh api .../actions/artifacts/<id>/zip` returns

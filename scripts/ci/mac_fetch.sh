@@ -3,8 +3,9 @@
 #
 #   scripts/ci/mac_fetch.sh
 #
-# 1. scripts/bootstrap.sh with a .gclient for target_os mac and
-#    checkout_configuration "small" (no benchmark or GPU test data): a
+# 1. scripts/bootstrap.sh with a .gclient for target_os mac,
+#    checkout_configuration "small" (no benchmark or GPU test data) and
+#    without the deps the build doesn't need and that failed to fetch: a
 #    shallow (--no-history) checkout of the pinned revision
 #    (CHROMIUM_VERSION, line 2, whatever it is: a main commit or a release
 #    tag's commit) and its hooks (clang, Rust, node, ...). Nothing here
@@ -36,7 +37,13 @@ solutions = [{
   "name": "src",
   "url": "https://chromium.googlesource.com/chromium/src.git",
   "managed": False,
-  "custom_deps": {},
+  "custom_deps": {
+    # clang-format's scripts (git cl format), not used by the build. Since
+    # 2026-11-03 googlesource answers fetches of the pinned commit
+    # (9f796802, also pinned by main and 158.0.8127.2) with HTTP 500.
+    "src/third_party/clang-format/script": None,
+    "src/third_party/webpagereplay/third_party/clang-format/script": None,
+  },
   "custom_vars": {
     "checkout_configuration": "small",
   },
