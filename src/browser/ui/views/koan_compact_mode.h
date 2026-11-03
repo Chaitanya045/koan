@@ -19,6 +19,11 @@ namespace koan {
 // Called from BrowserViewTabbedLayoutImpl.
 bool IsCompactModeActive(const views::View* browser_view);
 
+// Whether compact mode hides the sidebar but keeps its header (the sidebar
+// toggle and the navigation buttons: single toolbar), which then sits in the
+// window's top row, at its leading corner.
+bool KeepsSidebarNav(const views::View* browser_view);
+
 // Whether the top toolbar is hidden (compact mode or single toolbar), so the
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);

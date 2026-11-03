@@ -1375,9 +1375,12 @@ void KoanCompactModeController::UpdateCaptionButtons() {
     const bool page_side_shown = !caption_strip_collapsible_ ||
                                  caption_strip_revealed_ ||
                                  (can_reveal_toolbar() && toolbar_revealed_);
+    // (With single toolbar, compact mode keeps the sidebar's header, which
+    // has the lights beside its buttons.)
     SetTrafficLightsShown(
         browser_view_, page_side_shown || (!IsSidebarOnRight(browser_view_) &&
-                                           traffic_lights_->IsSidebarShown()));
+                                           (traffic_lights_->IsSidebarShown() ||
+                                            keeps_sidebar_nav())));
     return;
   }
 #endif

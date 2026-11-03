@@ -179,6 +179,13 @@ bool IsCompactModeActive(const views::View* browser_view) {
   return controller && controller->compact_mode()->hides_sidebar();
 }
 
+bool KeepsSidebarNav(const views::View* browser_view) {
+  const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  const KoanBrowserViewController* controller =
+      view ? KoanBrowserViewController::From(view) : nullptr;
+  return controller && controller->compact_mode()->keeps_sidebar_nav();
+}
+
 bool IsToolbarHidden(const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
   const KoanBrowserViewController* controller =
