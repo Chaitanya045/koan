@@ -2,6 +2,8 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//testing/test.gni")
+
 # shadcn/ui's design tokens and the current look. Depends on //base and Skia
 # only, so views, the settings page and unit tests can use it.
 source_set("tokens") {
@@ -37,4 +39,33 @@ source_set("color") {
     "//ui/color",
     "//ui/gfx",
   ]
+}
+
+# The look's tests: the token layer (OKLCH, pasted themes, Zen's colour
+# derivations) and a ColorProvider built for every look, light and dark, that
+# fails on a colour recipe cycle. Pure logic over //base, Skia and //ui/color,
+# no browser. Build and run:
+#   autoninja -C out/Koan koan/browser/ui/color:koan_look_unittests
+#   out/Koan/koan_look_unittests
+test("koan_look_unittests") {
+  sources = [
+    "koan_look_providers_unittest.cc",
+    "koan_tokens_unittest.cc",
+  ]
+  deps = [
+    ":color",
+    ":tokens",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//chrome/browser/ui/color:color_headers",
+    "//components/color:color_headers",
+    "//koan/browser:features",
+    "//skia",
+    "//testing/gtest",
+    "//ui/color",
+    "//ui/color:mixers",
+    "//ui/gfx",
+  ]
+  data_deps = [ "//third_party/icu:icudata" ]
 }
