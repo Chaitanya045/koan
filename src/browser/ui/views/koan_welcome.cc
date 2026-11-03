@@ -45,6 +45,7 @@
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_welcome_icons_data.h"
 #include "koan/browser/ui/views/koan_zen_welcome.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkRRect.h"
@@ -60,6 +61,7 @@
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -67,6 +69,8 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
@@ -284,6 +288,74 @@ void StrokeRoundRect(gfx::Canvas* canvas,
   canvas->DrawRoundRect(rect, std::max(0.0f, radius - width / 2), flags);
 }
 
+// Type-ahead in a list of choices: the first after `from` (wrapping around)
+// whose name starts with `c`, ignoring case.
+std::optional<size_t> FindByFirstLetter(
+    const std::vector<std::u16string>& names,
+    size_t from,
+    char16_t c) {
+  if (names.empty() || !base::IsAsciiAlpha(c)) {
+    return std::nullopt;
+  }
+  const char16_t lower = base::ToLowerASCII(c);
+  for (size_t step = 1; step <= names.size(); ++step) {
+    const size_t i = (from + step) % names.size();
+    if (!names[i].empty() && base::ToLowerASCII(names[i][0]) == lower) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+// The focus groups of the choice lists: each list is one Tab stop, and the
+// arrow keys move within it (as radio buttons do).
+enum FocusGroup { kOptionsGroup = 1, kSwatchesGroup, kTilesGroup };
+
+// An Essential's icon from 1x and 2x PNGs.
+gfx::ImageSkia DecodeIcon(base::span<const uint8_t> png_1x,
+                          base::span<const uint8_t> png_2x) {
+  gfx::ImageSkia image;
+  const SkBitmap bitmap_1x = gfx::PNGCodec::Decode(png_1x);
+  const SkBitmap bitmap_2x = gfx::PNGCodec::Decode(png_2x);
+  if (!bitmap_1x.isNull()) {
+    image.AddRepresentation(gfx::ImageSkiaRep(bitmap_1x, 1.0f));
+  }
+  if (!bitmap_2x.isNull()) {
+    image.AddRepresentation(gfx::ImageSkiaRep(bitmap_2x, 2.0f));
+  }
+  return image;
+}
+
+// Zen's favicons for the Essentials (welcome_icons/), in the order of
+// kWelcomeEssentialApps; `dark` for a dark surface (GitHub's mark is white
+// there, as in Zen's dark mode).
+gfx::ImageSkia GetEssentialIcon(size_t index, bool dark) {
+  namespace icons = welcome_icons;
+  switch (index) {
+    case 0:
+      return DecodeIcon(icons::kObsidian32, icons::kObsidian64);
+    case 1:
+      return DecodeIcon(icons::kDiscord32, icons::kDiscord64);
+    case 2:
+      return DecodeIcon(icons::kTrello32, icons::kTrello64);
+    case 3:
+      return DecodeIcon(icons::kSlack32, icons::kSlack64);
+    case 4:
+      return dark ? DecodeIcon(icons::kGithubDark32, icons::kGithubDark64)
+                  : DecodeIcon(icons::kGithub32, icons::kGithub64);
+    case 5:
+      return DecodeIcon(icons::kTuta32, icons::kTuta64);
+    case 6:
+      return DecodeIcon(icons::kNotion32, icons::kNotion64);
+    case 7:
+      return DecodeIcon(icons::kCalendar32, icons::kCalendar64);
+    case 8:
+      return DecodeIcon(icons::kFigma32, icons::kFigma64);
+    default:
+      return gfx::ImageSkia();
+  }
+}
+
 // Lets the keyboard reach `button` (also on macOS, where buttons otherwise
 // only take focus with Full Keyboard Access), with a focus ring of its
 // shape.
@@ -497,9 +569,17 @@ class KoanWelcomeOption : public views::Button {
                                                    : strong_ + u" " + text_);
     GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
     MakeFocusable(this, GetMetrics().option_radius);
+    SetGroup(kOptionsGroup);
   }
 
   bool selected() const { return selected_; }
+  // What typing a letter matches: "YES" / "NO", or the engine's name.
+  const std::u16string& name() const {
+    return strong_.empty() ? text_ : strong_;
+  }
+  // For the e2e tests (UI DevTools).
+  bool GetSelected() const { return selected_; }
+  std::u16string GetChoiceName() const { return name(); }
   void SetSelected(bool selected) {
     selected_ = selected;
     GetViewAccessibility().SetCheckedState(
@@ -508,25 +588,29 @@ class KoanWelcomeOption : public views::Button {
     SchedulePaint();
   }
 
-  // Up/Left and Down/Right move the choice, as in a radio group.
-  void set_on_arrow(base::RepeatingCallback<void(int)> on_arrow) {
-    on_arrow_ = std::move(on_arrow);
+  // The list's keys: the arrows, Enter and type-ahead (see
+  // KoanWelcomeOptionsView::OnOptionKey). Returns whether it took the key.
+  void set_on_key(base::RepeatingCallback<bool(KoanWelcomeOption*,
+                                               const ui::KeyEvent&)> on_key) {
+    on_key_ = std::move(on_key);
   }
 
   // views::Button:
   bool OnKeyPressed(const ui::KeyEvent& event) override {
-    switch (event.key_code()) {
-      case ui::VKEY_UP:
-      case ui::VKEY_LEFT:
-        on_arrow_.Run(-1);
-        return true;
-      case ui::VKEY_DOWN:
-      case ui::VKEY_RIGHT:
-        on_arrow_.Run(1);
-        return true;
-      default:
-        return views::Button::OnKeyPressed(event);
+    if (on_key_ && on_key_.Run(this, event)) {
+      return true;
     }
+    return views::Button::OnKeyPressed(event);
+  }
+  // One Tab stop for the list: the chosen option.
+  bool IsGroupFocusTraversable() const override { return false; }
+  views::View* GetSelectedViewForGroup(int group) override {
+    for (views::View* sibling : parent()->children()) {
+      if (static_cast<KoanWelcomeOption*>(sibling)->selected()) {
+        return sibling;
+      }
+    }
+    return parent()->children().front();
   }
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
@@ -558,26 +642,6 @@ class KoanWelcomeOption : public views::Button {
     canvas->DrawRoundRect(card, radius, flags);
     flags.setLooper(nullptr);
 
-    // An engine's tile on the trailing side, clipped by the card.
-    if (engine_) {
-      canvas->Save();
-      canvas->sk_canvas()->clipRRect(
-          SkRRect::MakeRectXY(gfx::RectFToSkRect(card), radius, radius), true);
-      const float tile_width = card.width() * kWelcomeEngineTileWidth;
-      const gfx::RectF tile(card.right() - tile_width, card.y(), tile_width,
-                            card.height());
-      flags.setColor(palette.tile);
-      canvas->DrawRect(tile, flags);
-      canvas->DrawStringRectWithFlags(
-          text_.substr(0, 1),
-          Font(metrics.shadcn ? metrics.option_font_size + 4
-                              : kWelcomeEngineTileFontSize,
-               gfx::Font::Weight::BOLD),
-          palette.text_secondary, gfx::ToEnclosingRect(tile),
-          gfx::Canvas::TEXT_ALIGN_CENTER);
-      canvas->Restore();
-    }
-
     // The outline: the accent (shadcn's `primary`) when chosen.
     StrokeRoundRect(canvas, card, radius,
                     selected_ ? palette.accent : palette.border);
@@ -602,6 +666,24 @@ class KoanWelcomeOption : public views::Button {
     int x =
         metrics.option_padding + metrics.radio_size +
         (metrics.shadcn ? metrics.option_padding / 2 : kWelcomeOptionTextGap);
+    if (engine_) {
+      // The engine's icon before its name. Chromium bundles the engines'
+      // logos only in Google Chrome builds (enable_builtin_search_provider_
+      // assets), so Koan shows a search glyph in a round badge.
+      const int badge = kWelcomeEngineBadgeSize;
+      const gfx::PointF center(x + badge / 2.0f, height() / 2.0f);
+      cc::PaintFlags badge_flags;
+      badge_flags.setAntiAlias(true);
+      badge_flags.setColor(palette.tile);
+      canvas->DrawCircle(center, badge / 2.0f, badge_flags);
+      canvas->DrawImageInt(
+          gfx::CreateVectorIcon(vector_icons::kSearchIcon,
+                                kWelcomeEngineBadgeIconSize,
+                                palette.text_secondary),
+          static_cast<int>(center.x()) - kWelcomeEngineBadgeIconSize / 2,
+          static_cast<int>(center.y()) - kWelcomeEngineBadgeIconSize / 2);
+      x += badge + metrics.option_padding / 2;
+    }
     const gfx::Font::Weight weight =
         metrics.shadcn ? gfx::Font::Weight::MEDIUM
                        : (engine_ ? gfx::Font::Weight::SEMIBOLD
@@ -618,9 +700,7 @@ class KoanWelcomeOption : public views::Button {
                                       gfx::Canvas::NO_SUBPIXEL_RENDERING);
       x += gfx::GetStringWidth(strong, strong_font);
     }
-    const int right =
-        engine_ ? static_cast<int>(width() * (1 - kWelcomeEngineTileWidth))
-                : width() - metrics.option_padding;
+    const int right = width() - metrics.option_padding;
     canvas->DrawStringRectWithFlags(text_, regular, color,
                                     gfx::Rect(x, 0, right - x, height()),
                                     gfx::Canvas::NO_SUBPIXEL_RENDERING);
@@ -631,10 +711,13 @@ class KoanWelcomeOption : public views::Button {
   const std::u16string text_;
   const bool engine_;
   bool selected_ = false;
-  base::RepeatingCallback<void(int)> on_arrow_;
+  base::RepeatingCallback<bool(KoanWelcomeOption*, const ui::KeyEvent&)>
+      on_key_;
 };
 
 BEGIN_METADATA(KoanWelcomeOption)
+ADD_READONLY_PROPERTY_METADATA(bool, Selected)
+ADD_READONLY_PROPERTY_METADATA(std::u16string, ChoiceName)
 END_METADATA
 
 // A column of options, centred: a radio group named after the page.
@@ -660,9 +743,8 @@ class KoanWelcomeOptionsView : public views::View {
     option->SetCallback(base::BindRepeating(
         &KoanWelcomeOptionsView::Select, base::Unretained(this),
         base::Unretained(option), std::move(on_select)));
-    option->set_on_arrow(base::BindRepeating(&KoanWelcomeOptionsView::Move,
-                                             base::Unretained(this),
-                                             base::Unretained(option)));
+    option->set_on_key(base::BindRepeating(&KoanWelcomeOptionsView::OnOptionKey,
+                                           base::Unretained(this)));
     option->SetSelected(selected);
     const int count = static_cast<int>(children().size());
     for (int i = 0; i < count; ++i) {
@@ -706,6 +788,46 @@ class KoanWelcomeOptionsView : public views::View {
     on_select.Run();
   }
 
+  // A radio group's keys on `option`: Up/Left and Down/Right move the
+  // choice, Enter (and Space, as for any button) chooses, and a letter jumps
+  // to the next choice starting with it ("G" for Google, "N" for NO).
+  bool OnOptionKey(KoanWelcomeOption* option, const ui::KeyEvent& event) {
+    switch (event.key_code()) {
+      case ui::VKEY_UP:
+      case ui::VKEY_LEFT:
+        Move(option, -1);
+        return true;
+      case ui::VKEY_DOWN:
+      case ui::VKEY_RIGHT:
+        Move(option, 1);
+        return true;
+      case ui::VKEY_RETURN: {
+        const std::optional<size_t> index = GetIndexOf(option);
+        if (index) {
+          Select(option, on_selects_[*index]);
+        }
+        return true;
+      }
+      default:
+        break;
+    }
+    if (event.IsControlDown() || event.IsAltDown() || event.IsCommandDown()) {
+      return false;
+    }
+    std::vector<std::u16string> names;
+    for (const views::View* child : children()) {
+      names.push_back(static_cast<const KoanWelcomeOption*>(child)->name());
+    }
+    const std::optional<size_t> from = GetIndexOf(option);
+    const std::optional<size_t> match =
+        FindByFirstLetter(names, from.value_or(0), event.GetCharacter());
+    if (!match) {
+      return false;
+    }
+    Move(option, static_cast<int>(*match) - static_cast<int>(*from));
+    return true;
+  }
+
   // Selects and focuses the option `delta` away from `from`.
   void Move(KoanWelcomeOption* from, int delta) {
     const std::optional<size_t> index = GetIndexOf(from);
@@ -733,11 +855,41 @@ class KoanWelcomeSwatch : public views::Button {
 
  public:
   KoanWelcomeSwatch(PressedCallback callback, const SpaceColor& color)
-      : views::Button(std::move(callback)), color_(color.color) {
+      : views::Button(std::move(callback)),
+        color_(color.color),
+        name_(color.name) {
     GetViewAccessibility().SetName(color.name);
     GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
     SetFocusBehavior(FocusBehavior::ALWAYS);
     views::InstallCircleHighlightPathGenerator(this);
+    SetGroup(kSwatchesGroup);
+  }
+
+  bool selected() const { return selected_; }
+  const std::u16string& name() const { return name_; }
+  bool GetSelected() const { return selected_; }
+  std::u16string GetChoiceName() const { return name_; }
+  // The colours' keys (KoanWelcomeColorsView::OnSwatchKey).
+  void set_on_key(base::RepeatingCallback<bool(KoanWelcomeSwatch*,
+                                               const ui::KeyEvent&)> on_key) {
+    on_key_ = std::move(on_key);
+  }
+
+  // views::Button: one Tab stop for the colours, the chosen one.
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (on_key_ && on_key_.Run(this, event)) {
+      return true;
+    }
+    return views::Button::OnKeyPressed(event);
+  }
+  bool IsGroupFocusTraversable() const override { return false; }
+  views::View* GetSelectedViewForGroup(int group) override {
+    for (views::View* sibling : parent()->children()) {
+      if (static_cast<KoanWelcomeSwatch*>(sibling)->selected()) {
+        return sibling;
+      }
+    }
+    return parent()->children().front();
   }
 
   void SetSelected(bool selected) {
@@ -777,10 +929,15 @@ class KoanWelcomeSwatch : public views::Button {
 
  private:
   const SkColor color_;
+  const std::u16string name_;
   bool selected_ = false;
+  base::RepeatingCallback<bool(KoanWelcomeSwatch*, const ui::KeyEvent&)>
+      on_key_;
 };
 
 BEGIN_METADATA(KoanWelcomeSwatch)
+ADD_READONLY_PROPERTY_METADATA(bool, Selected)
+ADD_READONLY_PROPERTY_METADATA(std::u16string, ChoiceName)
 END_METADATA
 
 // A panel of colours, like a small colour picker.
@@ -799,6 +956,11 @@ class KoanWelcomeColorsView : public views::View {
       swatch->SetCallback(base::BindRepeating(
           &KoanWelcomeColorsView::Pick, base::Unretained(this),
           base::Unretained(swatch), color.color, pick));
+      swatch->set_on_key(base::BindRepeating(
+          &KoanWelcomeColorsView::OnSwatchKey, base::Unretained(this)));
+      picks_.push_back(base::BindRepeating(
+          &KoanWelcomeColorsView::Pick, base::Unretained(this),
+          base::Unretained(swatch), color.color, pick));
       swatch->SetSelected(selected == color.color);
       swatch->GetViewAccessibility().SetPosInSet(++position);
       swatch->GetViewAccessibility().SetSetSize(
@@ -812,9 +974,9 @@ class KoanWelcomeColorsView : public views::View {
     for (size_t i = 0; i < children().size(); ++i) {
       children()[i]->SetBounds(
           panel.x() + kWelcomePanelPadding +
-              (i % 3) * (kWelcomeSwatchSize + kWelcomeSwatchGap),
+              (i % kColumns) * (kWelcomeSwatchSize + kWelcomeSwatchGap),
           panel.y() + kWelcomePanelPadding +
-              (i / 3) * (kWelcomeSwatchSize + kWelcomeSwatchGap),
+              (i / kColumns) * (kWelcomeSwatchSize + kWelcomeSwatchGap),
           kWelcomeSwatchSize, kWelcomeSwatchSize);
     }
   }
@@ -848,6 +1010,58 @@ class KoanWelcomeColorsView : public views::View {
     }
     pick.Run(color);
   }
+
+  // The grid's keys: Left/Right one colour, Up/Down a row, Enter (and Space)
+  // picks, a letter jumps to the next colour named with it.
+  bool OnSwatchKey(KoanWelcomeSwatch* swatch, const ui::KeyEvent& event) {
+    const std::optional<size_t> index = GetIndexOf(swatch);
+    if (!index) {
+      return false;
+    }
+    const int count = static_cast<int>(children().size());
+    int target = static_cast<int>(*index);
+    switch (event.key_code()) {
+      case ui::VKEY_LEFT:
+        target -= 1;
+        break;
+      case ui::VKEY_RIGHT:
+        target += 1;
+        break;
+      case ui::VKEY_UP:
+        target -= kColumns;
+        break;
+      case ui::VKEY_DOWN:
+        target += kColumns;
+        break;
+      case ui::VKEY_RETURN:
+        break;
+      default: {
+        if (event.IsControlDown() || event.IsAltDown() ||
+            event.IsCommandDown()) {
+          return false;
+        }
+        std::vector<std::u16string> names;
+        for (const views::View* child : children()) {
+          names.push_back(static_cast<const KoanWelcomeSwatch*>(child)->name());
+        }
+        const std::optional<size_t> match =
+            FindByFirstLetter(names, *index, event.GetCharacter());
+        if (!match) {
+          return false;
+        }
+        target = static_cast<int>(*match);
+      }
+    }
+    if (target < 0 || target >= count) {
+      return true;
+    }
+    children()[static_cast<size_t>(target)]->RequestFocus();
+    picks_[static_cast<size_t>(target)].Run();
+    return true;
+  }
+
+  static constexpr int kColumns = 3;
+  std::vector<base::RepeatingClosure> picks_;
 };
 
 BEGIN_METADATA(KoanWelcomeColorsView)
@@ -859,15 +1073,48 @@ class KoanWelcomeEssentialTile : public views::Button {
 
  public:
   KoanWelcomeEssentialTile(PressedCallback callback,
-                           const WelcomeEssentialApp& app)
-      : views::Button(std::move(callback)), app_(app) {
+                           const WelcomeEssentialApp& app,
+                           size_t index)
+      : views::Button(std::move(callback)),
+        app_(app),
+        icon_(GetEssentialIcon(index, /*dark=*/false)),
+        dark_icon_(GetEssentialIcon(index, /*dark=*/true)) {
     GetViewAccessibility().SetName(app.name);
     SetTooltipText(app.name);
     GetViewAccessibility().SetRole(ax::mojom::Role::kToggleButton);
     MakeFocusable(this, GetMetrics().tile_radius);
+    SetGroup(kTilesGroup);
   }
 
   bool selected() const { return selected_; }
+  std::u16string name() const { return app_->name; }
+  bool GetSelected() const { return selected_; }
+  std::u16string GetChoiceName() const { return name(); }
+  // The grid's keys (KoanWelcomeMockBrowserView::OnTileKey).
+  void set_on_key(base::RepeatingCallback<bool(KoanWelcomeEssentialTile*,
+                                               const ui::KeyEvent&)> on_key) {
+    on_key_ = std::move(on_key);
+  }
+  // The tile the grid's Tab stop is on: the last one focused.
+  void set_roving(bool roving) { roving_ = roving; }
+  bool roving() const { return roving_; }
+
+  // views::Button: one Tab stop for the grid.
+  bool OnKeyPressed(const ui::KeyEvent& event) override {
+    if (on_key_ && on_key_.Run(this, event)) {
+      return true;
+    }
+    return views::Button::OnKeyPressed(event);
+  }
+  bool IsGroupFocusTraversable() const override { return false; }
+  views::View* GetSelectedViewForGroup(int group) override {
+    for (views::View* sibling : parent()->children()) {
+      if (static_cast<KoanWelcomeEssentialTile*>(sibling)->roving()) {
+        return sibling;
+      }
+    }
+    return parent()->children().front();
+  }
   void SetSelected(bool selected) {
     selected_ = selected;
     GetViewAccessibility().SetCheckedState(
@@ -903,14 +1150,16 @@ class KoanWelcomeEssentialTile : public views::Button {
                         kWelcomeTileBorder);
       }
     }
-    // The app's initial in its colour, its name below.
-    const int initial_size = std::max(16, width() * 30 / 100);
-    gfx::Rect initial = GetLocalBounds();
-    initial.set_height(height() * 3 / 4);
-    canvas->DrawStringRectWithFlags(std::u16string(app_->name, 1),
-                                    Font(initial_size, gfx::Font::Weight::BOLD),
-                                    app_->color, initial,
-                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+    // The app's icon (Zen's favicon), its name below.
+    const gfx::ImageSkia& icon =
+        color_utils::IsDark(palette.tile) ? dark_icon_ : icon_;
+    const int icon_size = std::max(16, width() * 36 / 100);
+    if (!icon.isNull()) {
+      canvas->DrawImageInt(icon, 0, 0, icon.width(), icon.height(),
+                           (width() - icon_size) / 2,
+                           height() * 3 / 8 - icon_size / 2, icon_size,
+                           icon_size, /*filter=*/true);
+    }
     gfx::Rect name = GetLocalBounds();
     name.Inset(gfx::Insets::TLBR(height() * 3 / 5, 4, 0, 4));
     canvas->DrawStringRectWithFlags(
@@ -921,10 +1170,17 @@ class KoanWelcomeEssentialTile : public views::Button {
 
  private:
   const raw_ref<const WelcomeEssentialApp> app_;
+  const gfx::ImageSkia icon_;
+  const gfx::ImageSkia dark_icon_;
   bool selected_ = false;
+  bool roving_ = false;
+  base::RepeatingCallback<bool(KoanWelcomeEssentialTile*, const ui::KeyEvent&)>
+      on_key_;
 };
 
 BEGIN_METADATA(KoanWelcomeEssentialTile)
+ADD_READONLY_PROPERTY_METADATA(bool, Selected)
+ADD_READONLY_PROPERTY_METADATA(std::u16string, ChoiceName)
 END_METADATA
 
 // The Essentials page: a mock browser whose sidebar holds the apps, at the
@@ -936,8 +1192,11 @@ class KoanWelcomeMockBrowserView : public views::View {
   explicit KoanWelcomeMockBrowserView(std::set<size_t>* selected) {
     for (size_t i = 0; i < std::size(kWelcomeEssentialApps); ++i) {
       auto* tile = AddChildView(std::make_unique<KoanWelcomeEssentialTile>(
-          views::Button::PressedCallback(), kWelcomeEssentialApps[i]));
-      tile->SetCallback(base::BindRepeating(
+          views::Button::PressedCallback(), kWelcomeEssentialApps[i], i));
+      tile->set_on_key(base::BindRepeating(
+          &KoanWelcomeMockBrowserView::OnTileKey, base::Unretained(this)));
+      tile->set_roving(i == 0);
+      toggles_.push_back(base::BindRepeating(
           [](KoanWelcomeEssentialTile* tile, std::set<size_t>* selected,
              size_t index) {
             tile->SetSelected(!tile->selected());
@@ -948,8 +1207,66 @@ class KoanWelcomeMockBrowserView : public views::View {
             }
           },
           base::Unretained(tile), base::Unretained(selected), i));
+      tile->SetCallback(toggles_.back());
       tile->SetSelected(selected->contains(i));
     }
+  }
+
+  // The grid's keys: the arrows move between apps (three to a row), Enter
+  // (and Space) adds or removes the focused one, a letter jumps to the next
+  // app named with it.
+  bool OnTileKey(KoanWelcomeEssentialTile* tile, const ui::KeyEvent& event) {
+    const std::optional<size_t> index = GetIndexOf(tile);
+    if (!index) {
+      return false;
+    }
+    const int count = static_cast<int>(children().size());
+    int target = static_cast<int>(*index);
+    switch (event.key_code()) {
+      case ui::VKEY_LEFT:
+        target -= 1;
+        break;
+      case ui::VKEY_RIGHT:
+        target += 1;
+        break;
+      case ui::VKEY_UP:
+        target -= kColumns;
+        break;
+      case ui::VKEY_DOWN:
+        target += kColumns;
+        break;
+      case ui::VKEY_RETURN:
+        toggles_[*index].Run();
+        return true;
+      default: {
+        if (event.IsControlDown() || event.IsAltDown() ||
+            event.IsCommandDown()) {
+          return false;
+        }
+        std::vector<std::u16string> names;
+        for (const views::View* child : children()) {
+          names.push_back(
+              static_cast<const KoanWelcomeEssentialTile*>(child)->name());
+        }
+        const std::optional<size_t> match =
+            FindByFirstLetter(names, *index, event.GetCharacter());
+        if (!match) {
+          return false;
+        }
+        target = static_cast<int>(*match);
+      }
+    }
+    if (target < 0 || target >= count) {
+      return true;
+    }
+    for (views::View* child : children()) {
+      static_cast<KoanWelcomeEssentialTile*>(child)->set_roving(false);
+    }
+    auto* next = static_cast<KoanWelcomeEssentialTile*>(
+        children()[static_cast<size_t>(target)].get());
+    next->set_roving(true);
+    next->RequestFocus();
+    return true;
   }
 
   // views::View:
@@ -958,14 +1275,14 @@ class KoanWelcomeMockBrowserView : public views::View {
     const int grid_y = sidebar.y() + kSidebarInsets.top() +
                        kWelcomeMockDotSize + kWelcomeMockDotsMargin +
                        kWelcomeMockGap;
-    const int tile =
-        (sidebar.width() - kSidebarInsets.width() - 2 * kWelcomeMockGridGap) /
-        3;
+    const int tile = (sidebar.width() - kSidebarInsets.width() -
+                      (kColumns - 1) * kWelcomeMockGridGap) /
+                     kColumns;
     for (size_t i = 0; i < children().size(); ++i) {
-      children()[i]->SetBounds(sidebar.x() + kSidebarInsets.left() +
-                                   (i % 3) * (tile + kWelcomeMockGridGap),
-                               grid_y + (i / 3) * (tile + kWelcomeMockGridGap),
-                               tile, tile);
+      children()[i]->SetBounds(
+          sidebar.x() + kSidebarInsets.left() +
+              (i % kColumns) * (tile + kWelcomeMockGridGap),
+          grid_y + (i / kColumns) * (tile + kWelcomeMockGridGap), tile, tile);
     }
   }
   void OnPaint(gfx::Canvas* canvas) override {
@@ -1020,6 +1337,8 @@ class KoanWelcomeMockBrowserView : public views::View {
   }
 
  private:
+  static constexpr int kColumns = 3;
+  std::vector<base::RepeatingClosure> toggles_;
   static constexpr auto kSidebarInsets =
       gfx::Insets::VH(kWelcomeMockSidebarPaddingVertical,
                       kWelcomeMockSidebarPaddingHorizontal);
@@ -1379,6 +1698,8 @@ class KoanWelcomePagesView : public views::View {
     }
 
     content_ = AddChildView(CreateContent(page));
+    // Tab goes from Back to the page's choices, then to its buttons.
+    content_->InsertBeforeInFocusList(buttons_.get());
     InvalidateLayout();
 
     for (size_t i = 0; i < text_.size(); ++i) {
@@ -1907,6 +2228,12 @@ void KoanWelcome::MaybeShow() {
 }
 
 void KoanWelcome::Show() {
+#if BUILDFLAG(IS_MAC)
+  // The first window opens filling the screen, for the welcome and after.
+  if (!browser_view_->GetWidget()->IsMaximized()) {
+    browser_view_->GetWidget()->Maximize();
+  }
+#endif
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_CONTROL);

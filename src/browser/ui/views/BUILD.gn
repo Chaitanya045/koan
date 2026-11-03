@@ -37,6 +37,59 @@ source_set("views") {
   ]
 }
 
+# The welcome screen's Essentials icons: Zen's favicons (MPL-2.0, see
+# THIRD_PARTY_NOTICES.md) as 1x and 2x PNGs, in the binary.
+action("welcome_icons_data") {
+  script = "//koan/browser/ui/fonts/embed_binary.py"
+  sources = [
+    "welcome_icons/calendar-32.png",
+    "welcome_icons/calendar-64.png",
+    "welcome_icons/discord-32.png",
+    "welcome_icons/discord-64.png",
+    "welcome_icons/figma-32.png",
+    "welcome_icons/figma-64.png",
+    "welcome_icons/github-32.png",
+    "welcome_icons/github-64.png",
+    "welcome_icons/github-dark-32.png",
+    "welcome_icons/github-dark-64.png",
+    "welcome_icons/notion-32.png",
+    "welcome_icons/notion-64.png",
+    "welcome_icons/obsidian-32.png",
+    "welcome_icons/obsidian-64.png",
+    "welcome_icons/slack-32.png",
+    "welcome_icons/slack-64.png",
+    "welcome_icons/trello-32.png",
+    "welcome_icons/trello-64.png",
+    "welcome_icons/tuta-32.png",
+    "welcome_icons/tuta-64.png",
+  ]
+  outputs = [ "$target_gen_dir/koan_welcome_icons_data.h" ]
+  args = [
+    "--namespace=koan::welcome_icons",
+    rebase_path(outputs[0], root_build_dir),
+    "kCalendar32=" + rebase_path("welcome_icons/calendar-32.png", root_build_dir),
+    "kCalendar64=" + rebase_path("welcome_icons/calendar-64.png", root_build_dir),
+    "kDiscord32=" + rebase_path("welcome_icons/discord-32.png", root_build_dir),
+    "kDiscord64=" + rebase_path("welcome_icons/discord-64.png", root_build_dir),
+    "kFigma32=" + rebase_path("welcome_icons/figma-32.png", root_build_dir),
+    "kFigma64=" + rebase_path("welcome_icons/figma-64.png", root_build_dir),
+    "kGithub32=" + rebase_path("welcome_icons/github-32.png", root_build_dir),
+    "kGithub64=" + rebase_path("welcome_icons/github-64.png", root_build_dir),
+    "kGithubDark32=" + rebase_path("welcome_icons/github-dark-32.png", root_build_dir),
+    "kGithubDark64=" + rebase_path("welcome_icons/github-dark-64.png", root_build_dir),
+    "kNotion32=" + rebase_path("welcome_icons/notion-32.png", root_build_dir),
+    "kNotion64=" + rebase_path("welcome_icons/notion-64.png", root_build_dir),
+    "kObsidian32=" + rebase_path("welcome_icons/obsidian-32.png", root_build_dir),
+    "kObsidian64=" + rebase_path("welcome_icons/obsidian-64.png", root_build_dir),
+    "kSlack32=" + rebase_path("welcome_icons/slack-32.png", root_build_dir),
+    "kSlack64=" + rebase_path("welcome_icons/slack-64.png", root_build_dir),
+    "kTrello32=" + rebase_path("welcome_icons/trello-32.png", root_build_dir),
+    "kTrello64=" + rebase_path("welcome_icons/trello-64.png", root_build_dir),
+    "kTuta32=" + rebase_path("welcome_icons/tuta-32.png", root_build_dir),
+    "kTuta64=" + rebase_path("welcome_icons/tuta-64.png", root_build_dir),
+  ]
+}
+
 source_set("impl") {
   sources = [
     "koan_browser_view_controller.cc",
@@ -125,6 +178,7 @@ source_set("impl") {
     "koan_zen_window_drag.h",
   ]
   deps = [
+    ":welcome_icons_data",
     ":views",
     "//base:i18n",
     "//cc/paint",

@@ -4,8 +4,18 @@
 // Essentials end up pinned.
 //
 //   scripts/e2e/run.sh welcome
-import { check, evalIn, finish, mouseOn, pages, saveShot, shownViews, sleep,
+import { check, evalIn, finish, mouseOn, pages, saveShot, shownViews, sleep, viewEvent,
          views } from './lib/koan.mjs';
+
+// A key on a view (UI DevTools), e.g. 89 for Y, 40 for Down, 13 for Enter.
+const viewKey = async (view, keyCode) => {
+  await viewEvent(view, 'DOM.dispatchKeyEvent',
+                  { type: 'keyPressed', keyCode, code: 0, flags: 0, key: 0, isChar: false });
+  await sleep(500);
+};
+// The chosen choices of a list (class `cls`), by name.
+const chosen = (vs, cls) => shownViews(vs, cls).filter(v => v.props.Selected === 'true')
+    .map(v => v.props.ChoiceName).join(', ');
 
 const press = async (view, wait = 1000) => {
   await mouseOn(view, 'mousePressed');
@@ -40,6 +50,16 @@ const [page] = await pages();
 const active = await evalIn(page, 'document.activeElement?.tagName');
 check('...and the keyboard stays on the screen, not in the page', active !== 'A', active);
 check('...with YES / NO', shownViews(vs, 'KoanWelcomeOption').length === 2);
+// The keyboard: typing a choice's first letter picks it, the arrows move.
+let options = shownViews(vs, 'KoanWelcomeOption');
+await viewKey(options[1], 89);   // Y
+vs = await views();
+check('Typing Y picks YES', chosen(vs, 'KoanWelcomeOption') === 'YES',
+      chosen(vs, 'KoanWelcomeOption'));
+await viewKey(options[0], 40);   // Down
+vs = await views();
+check('...and Down moves to NO', chosen(vs, 'KoanWelcomeOption') === 'NO',
+      chosen(vs, 'KoanWelcomeOption'));
 saveShot('welcome-import');
 
 const next = async () => {
@@ -51,14 +71,46 @@ check('Next: colours', heading() === 'Your space, your colors.', heading());
 check('...to pick from', shownViews(vs, 'KoanWelcomeSwatch').length === 9);
 await press(shownViews(vs, 'KoanWelcomeSwatch')[4], 800);
 vs = await views();
+check('Clicking a colour picks it', chosen(vs, 'KoanWelcomeSwatch') === 'Blue',
+      chosen(vs, 'KoanWelcomeSwatch'));
+await viewKey(shownViews(vs, 'KoanWelcomeSwatch')[4], 39);   // Right
+vs = await views();
+check('...Right picks the next one', chosen(vs, 'KoanWelcomeSwatch') === 'Violet',
+      chosen(vs, 'KoanWelcomeSwatch'));
+await viewKey(shownViews(vs, 'KoanWelcomeSwatch')[5], 84);   // T
+vs = await views();
+check('...and typing T picks Teal', chosen(vs, 'KoanWelcomeSwatch') === 'Teal',
+      chosen(vs, 'KoanWelcomeSwatch'));
 await next();
 check('Next: the search engine', heading() === 'Pick your search engine.', heading());
+options = shownViews(vs, 'KoanWelcomeOption');
+const names = options.map(o => o.props.ChoiceName ?? '');
+const initial = n => n.slice(0, 1).toLowerCase();
+const target = names.find((n, i) => options[i].props.Selected !== 'true' &&
+                                    /[a-z]/.test(initial(n)) &&
+                                    names.filter(m => initial(m) === initial(n)).length === 1);
+check('...a list of engines', options.length >= 2, names.join(', '));
+if (target) {
+  await viewKey(options.find(o => o.props.Selected === 'true') ?? options[0],
+                initial(target).toUpperCase().charCodeAt(0));
+  vs = await views();
+  check(`...typing ${initial(target).toUpperCase()} picks ${target}`,
+        chosen(vs, 'KoanWelcomeOption') === target, chosen(vs, 'KoanWelcomeOption'));
+}
 await next();
 check('Next: Essentials', heading() === 'Choose the apps you use most.', heading());
 const tiles = shownViews(vs, 'KoanWelcomeEssentialTile');
 check('...nine apps to choose from', tiles.length === 9);
 await press(tiles[0], 300);   // Obsidian
 await press(tiles[4], 300);   // GitHub
+await viewKey(tiles[6], 13);  // Enter on Notion adds it...
+vs = await views();
+check('Enter adds an Essential', chosen(vs, 'KoanWelcomeEssentialTile') ===
+      'Obsidian, GitHub, Notion', chosen(vs, 'KoanWelcomeEssentialTile'));
+await viewKey(tiles[6], 13);  // ...and again removes it
+vs = await views();
+check('...and removes it again', chosen(vs, 'KoanWelcomeEssentialTile') === 'Obsidian, GitHub',
+      chosen(vs, 'KoanWelcomeEssentialTile'));
 saveShot('welcome-essentials');
 await next();
 check('Next: default browser', heading() === 'Make Koan your default?', heading());

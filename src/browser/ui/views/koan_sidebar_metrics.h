@@ -372,6 +372,9 @@ inline constexpr int kWelcomeShadcnOptionPadding = 20;
 inline constexpr int kWelcomeShadcnOptionGap = 12;
 inline constexpr int kWelcomeShadcnRadioSize = 16;
 inline constexpr int kWelcomeShadcnRadioDotInset = 4;
+// A search engine's icon before its name: a 28px round badge, 16px glyph.
+inline constexpr int kWelcomeEngineBadgeSize = 28;
+inline constexpr int kWelcomeEngineBadgeIconSize = 16;
 inline constexpr int kWelcomeShadcnPreviewInset = 8;
 inline constexpr int kWelcomeShadcnPreviewDotSpacing = 24;
 inline constexpr int kWelcomeShadcnRise = 12;
