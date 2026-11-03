@@ -10,6 +10,9 @@
 #    (CHROMIUM_VERSION, line 2, whatever it is: a main commit or a release
 #    tag's commit) and its hooks (clang, Rust, node, ...). Nothing here
 #    names a Chromium version; changing CHROMIUM_VERSION is enough.
+#    scripts/ci/mac_check_deps.py then checks that every git dependency is
+#    there, and takes any that googlesource can't serve from Chromium's
+#    source tarball of the same version (if it pins the same commit).
 # 2. scripts/ci/prune_chromium_source.py: drops what the "lite" tarball
 #    drops (test data, web tests, other platforms), so the source archive
 #    every build job downloads stays small.
@@ -53,6 +56,9 @@ EOF
 
 step "Fetching Chromium (scripts/bootstrap.sh)"
 scripts/bootstrap.sh
+
+step "Checking the dependencies"
+python3 -I scripts/ci/mac_check_deps.py chromium "$(sed -n 1p CHROMIUM_VERSION)"
 
 step "Pruning test data"
 du -sh chromium/src

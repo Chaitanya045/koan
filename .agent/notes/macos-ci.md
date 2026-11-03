@@ -12,7 +12,15 @@ fetch ──► build-01 ──► build-02 ──► … ──► build-16 ─
  (src)     (out-1)      (out-2)            (.dmg)                (develop)
 ```
 
-- **plan** (ubuntu): decides whether to build. Not for PRs from forks
+- **Triggers:** the nightly (`cron 23 1 * * *`), `workflow_dispatch`
+  (optional `ref`), and the `macos-build` label on a pull request (its
+  head, once per labelling). Never on pushes: in the first two hours after
+  review, every push to #70 started a 16 h chain that the next push
+  cancelled. Pull requests only get ci.yml's actionlint + shellcheck. The
+  label exists because `workflow_dispatch` only works for workflows on
+  the default branch, so before merge a branch can't be dispatched.
+- **plan** (ubuntu): decides whether to build. Not for other labels, not
+  for PRs from forks
   (their scripts would run on 16 × 6 h of macOS runners), and not for a
   nightly when no build input (`src/ patches/ branding/ build/ scripts/
   CHROMIUM_VERSION VERSION .github/workflows/macos*`) changed between the
@@ -167,7 +175,7 @@ sync` up to 3 times (a re-run of bootstrap.sh wouldn't do: src is already
 at the pinned revision then, so it skips the sync). "Re-run failed jobs"
 also works for this.
 
-**googlesource incident, 2026-11-03:** fetching
+**googlesource incident, 2026-11-03 (two lost commits):** fetching
 `third_party/clang-format/script` at `9f796802` (pinned by our DEPS, by
 main and by 158.0.8127.2) fails with HTTP 500 (`--depth=1`) / 400, three
 gclient attempts in a row, and gitiles answers 404 for the commit; the
@@ -177,6 +185,18 @@ CI's `.gclient` drops it and webpagereplay's copy via `custom_deps`. Any
 fresh `gclient sync` of this Chromium (the Mac, #89's re-sync) hits the
 same until googlesource fixes it; the same two `custom_deps` lines work
 around it.
+
+The same happened to `third_party/search_engines_data/resources` at
+`5dc9f1af` (also pinned by main and 158.0.8127.2; gitiles 404), which the
+build does need (`prepopulated_engines.json`). Worse, gclient's second
+sync attempt reported success with the directory missing (the first had
+moved it to `_bad_scm/`), so the fetch passed and build 1 failed after 8 s
+("missing and no known rule to make it"). `scripts/ci/mac_check_deps.py`
+now runs after the sync: every git dependency in `gclient revinfo` must be
+a non-empty directory; a missing one is taken from Chromium's official
+`chromium-<CHROMIUM_VERSION line 1>-lite.tar.xz` (streamed once, only those
+paths extracted) if that tag's DEPS pins the same commit — 158.0.8111.0's
+does — else the fetch fails right there.
 
 The .dmg is uploaded with `archive: false`, so the browser download is the
 .dmg itself. `gh run download` (2.96) can't fetch such artifacts ("zip:
