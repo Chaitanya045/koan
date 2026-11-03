@@ -513,11 +513,25 @@ ZenTabColors ComputeZenTabColors(SkColor primary, bool dark) {
   // (Zen's translucent-sidebar case, macOS; 5% where the sidebar is opaque).
   colors.text = SkColorSetA(
       Blend(primary, dark ? SK_ColorWHITE : SK_ColorBLACK, 20), 0xe6);
-  // The selected tab: the primary blended into white at 22.5% (2.5% in light
-  // mode), at 22% (80.4%) opacity. Fitted to what Zen draws for its default
-  // theme: #c6cfd8 at 22% and #f9fcff at 80.4%.
-  colors.selected = SkColorSetA(
-      Blend(primary, SK_ColorWHITE, dark ? 22.5 : 2.5), dark ? 0x38 : 0xcd);
+  // The selected tab (zen-workspaces.css --tab-background-color-selected):
+  // color-mix(in srgb, rgba(255, 255, 255, 0.8) 98%, primary) in light mode,
+  // color-mix(in srgb, rgba(255, 255, 255, 0.18) 95%, primary) in dark mode.
+  // CSS mixes premultiplied: the alpha is the weighted one, the colour the
+  // weighted premultiplied colours over it.
+  {
+    const double white_alpha = dark ? 0.18 : 0.8;
+    const double white_weight = dark ? 0.95 : 0.98;
+    const double alpha = white_alpha * white_weight + (1 - white_weight);
+    auto channel = [&](uint8_t primary_channel) {
+      const double premultiplied = 255 * white_alpha * white_weight +
+                                   primary_channel * (1 - white_weight);
+      return static_cast<uint8_t>(std::floor(premultiplied / alpha + 0.5));
+    };
+    colors.selected = SkColorSetARGB(
+        static_cast<uint8_t>(std::floor(alpha * 255 + 0.5)),
+        channel(SkColorGetR(primary)), channel(SkColorGetG(primary)),
+        channel(SkColorGetB(primary)));
+  }
   // --toolbarbutton-background-color-hover/-active: the branding paper
   // (#e2e2e2 in dark mode) or the dark branding colour (#101010) at 7% / 10%.
   const SkColor reverse =
