@@ -1,0 +1,19 @@
+diff --git a/chrome/browser/ui/views/omnibox/omnibox_result_view.cc b/chrome/browser/ui/views/omnibox/omnibox_result_view.cc
+--- a/chrome/browser/ui/views/omnibox/omnibox_result_view.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_result_view.cc
+@@ -32,6 +32,7 @@
+ #include "components/omnibox/browser/omnibox_popup_selection.h"
+ #include "components/strings/grit/components_strings.h"
+ #include "components/vector_icons/vector_icons.h"
++#include "koan/browser/ui/views/koan_omnibox_rows.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkPathBuilder.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+@@ -345,6 +346,7 @@
+ 
+   const float half_row_height = OmniboxMatchCellView::kRowHeight / 2;
+   gfx::RoundedCornersF radii = {0, half_row_height, half_row_height, 0};
++  koan::AdjustOmniboxRowRadii(radii);
+   return views::CreateRoundedRectBackground(
+       GetOmniboxBackgroundColorId(part_state), radii);
+ }

@@ -108,6 +108,8 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorOmniboxResultsBackgroundHovered] = {
       kColorOmniboxResultsBackgroundSelected};
   mixer[kColorOmniboxResultsTextSelected] = {SK_ColorWHITE};
+  mixer[kColorKoanOmniboxRowTitle] =
+      ui::SetAlpha(kColorOmniboxText, Alpha(0.7f));
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 

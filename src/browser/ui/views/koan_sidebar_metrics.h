@@ -141,6 +141,11 @@ inline int FloatingUrlBarShadowBlur() {
 inline int FloatingUrlBarShadowSpread() {
   return look::IsShadcnStyle() ? -3 : kFloatingUrlBarShadowSpread;
 }
+// Zen's suggestion rows (zen-omnibox.css, measured on Zen 1.24b): 49pt high,
+// the selected one rounded by 8, the text 14pt.
+inline constexpr int kOmniboxRowHeight = 49;
+inline constexpr float kOmniboxRowCornerRadius = 8;
+inline constexpr int kOmniboxRowFontSize = 14;
 // Zen's input row (--urlbar-container-height) is 62pt.
 inline constexpr int kFloatingUrlBarInputHeight = 62;
 // The floating bar's text size given the omnibox's own: shadcn's 16, Zen's

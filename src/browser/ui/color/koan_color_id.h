@@ -57,6 +57,8 @@ enum KoanColorIds : ui::ColorId {
   // to use with a background blur (kFloatingUrlBarBlurRadius).
   kColorKoanFloatingUrlBarGlass,
   kColorKoanFloatingUrlBarBorder,
+  // The title of a suggestion row (Zen: white at 70%).
+  kColorKoanOmniboxRowTitle,
 
   // Toasts: a vertical gradient, the text, and the background of the
   // shortcut in it.

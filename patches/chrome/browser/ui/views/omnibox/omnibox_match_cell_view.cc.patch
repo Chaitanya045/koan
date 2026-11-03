@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/ui/views/omnibox/omnibox_match_cell_view.cc b/chrome/browser/ui/views/omnibox/omnibox_match_cell_view.cc
+--- a/chrome/browser/ui/views/omnibox/omnibox_match_cell_view.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_match_cell_view.cc
+@@ -20,6 +20,7 @@
+ #include "components/omnibox/browser/vector_icons.h"
+ #include "components/omnibox/common/omnibox_feature_configs.h"
+ #include "content/public/common/color_parser.h"
++#include "koan/browser/ui/views/koan_omnibox_rows.h"
+ #include "skia/ext/image_operations.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+@@ -563,7 +564,7 @@
+     height = kRowHeight + 4;
+   } else {
+     // The height for traditional 1-line matches.
+-    height = kRowHeight;
++    height = koan::OmniboxRowHeight(kRowHeight);
+   }
+ 
+   return gfx::Size(width, height);
