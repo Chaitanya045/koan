@@ -14,7 +14,7 @@ Chrome.
 | Action | Keys | Chrome had |
 |---|---|---|
 | Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
-| Show the sidebar in compact mode | Ctrl+Alt+S (⌘⌥S) | |
+| Show the sidebar in compact mode | Ctrl+Alt+S (⌘⌥S) | Stays out until pressed again |
 | Next / previous Space | Ctrl+Alt+Right / Ctrl+Alt+Left (⌘⌥→ / ⌘⌥←) | macOS: next / previous tab (still Ctrl+Tab) |
 | Space 1 to 10 | macOS: Ctrl+1 … Ctrl+9, Ctrl+0 (no keys elsewhere, as in Zen; set them in Settings) | |
 | Split view: side by side | Ctrl+Alt+V (⌘⌥V) | |

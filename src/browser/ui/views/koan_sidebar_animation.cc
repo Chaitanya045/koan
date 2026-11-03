@@ -10,6 +10,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "ui/base/class_property.h"
@@ -20,6 +21,7 @@
 #include "ui/gfx/geometry/cubic_bezier.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/views/view_utils.h"
+#include "ui/views/widget/widget.h"
 
 namespace koan {
 
@@ -176,6 +178,31 @@ namespace {
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(SidebarReveal, kSidebarRevealKey)
 
 }  // namespace
+
+struct SidebarHold::Impl {
+  std::unique_ptr<ExpandOnHoverLock> lock;
+};
+
+SidebarHold::SidebarHold() = default;
+SidebarHold::~SidebarHold() = default;
+
+std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view) {
+  auto* browser_view = views::AsViewClass<BrowserView>(view);
+  if (!browser_view && view && view->GetWidget()) {
+    browser_view =
+        views::AsViewClass<BrowserView>(view->GetWidget()->client_view());
+  }
+  TabStripRegionView* region =
+      browser_view ? browser_view->tab_strip_view() : nullptr;
+  if (!region || region->GetClassName() != "VerticalTabStripRegionView") {
+    return nullptr;
+  }
+  std::unique_ptr<SidebarHold> hold(new SidebarHold());
+  hold->impl_ = std::make_unique<SidebarHold::Impl>();
+  hold->impl_->lock =
+      region->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepCurrentState);
+  return hold;
+}
 
 bool UseSingleReflowSidebarAnimation() {
   return features::IsSidebarSingleReflowEnabled();

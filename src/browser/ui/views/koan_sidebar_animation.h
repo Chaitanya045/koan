@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_ANIMATION_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_ANIMATION_H_
 
+#include <memory>
+
 namespace views {
 class View;
 }
@@ -31,6 +33,26 @@ bool UseSingleReflowSidebarAnimation();
 // as the animation starts and as gone (0) once it has ended. Otherwise the
 // progress is returned as it is, and the layer has no transform.
 double LayoutSidebarReveal(views::View* browser_view, double progress);
+
+// Keeps the sidebar as it is (out, if compact mode's hover revealed it) while
+// this lives: held by a menu opened from the sidebar, as Zen's `has-popup-menu`
+// keeps the toolbox open while one of its popups is.
+class SidebarHold {
+ public:
+  ~SidebarHold();
+  SidebarHold(const SidebarHold&) = delete;
+  SidebarHold& operator=(const SidebarHold&) = delete;
+
+ private:
+  friend std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view);
+  SidebarHold();
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+// `view` is the BrowserView or a view in its window. Null if there is no
+// vertical tab strip.
+std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view);
 
 }  // namespace koan
 

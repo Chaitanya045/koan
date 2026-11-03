@@ -60,7 +60,12 @@ point of Koan.
 | Toggle with Ctrl+S | Same | |
 | Hide the sidebar, reveal at the left edge | Same | With single toolbar (the default) that's all, like Zen. |
 | Hide the toolbar too (multiple toolbars), reveal at the top edge | Same | |
-| Peek the sidebar (Ctrl+Alt+S) | Same | |
+| Show the sidebar (Cmd+Opt+S, `zen-user-show`) | Same | A toggle: the sidebar stays out, wherever the pointer is, until the shortcut is used again (it used to hide itself after a few seconds). |
+| A popup opened from the sidebar keeps it open (`has-popup-menu`) | Same | Upstream's menus on the sidebar hold it; Koan's Space and + menus now do too. Zen also keeps it until the next mouse move after the popup closes; Koan lets go when it closes. |
+| Toggling compact mode animates the sidebar's margin for 0.1 s (`animate-sidebar`) | Missing | The sidebar goes at once and the page changes size once. |
+| Leaving the window through the edge keeps the sidebar out within 200 pt / 100 pt (`ZenMouseTrackerCocoa.mm`) | Missing | See the row above on pointer events outside the window; needs a native tracker. |
+| The empty tab keeps the sidebar out (`zen-has-empty-tab`); a drag of a tab keeps it out (`movingtab`) | Missing | |
+| Native fullscreen with compact mode: the page runs edge to edge, no margins or radius (`zen.view.borderless-fullscreen`); flash after leaving DOM fullscreen | Missing | Compact mode doesn't apply in fullscreen yet. |
 | The hidden sidebar slides in over the page, without a relayout per frame | Same | The strip is laid out once at its width and slides in with a layer transform (compositor thread); nothing under it is laid out again. Upstream resizes it on every frame. |
 | Hiding the sidebar doesn't jump the page | Same | Compact mode gives the sidebar no width from the moment it starts collapsing, so the page changes size once, not at the animation's end. |
 | The sidebar stays out 150 ms after the pointer leaves its edge (`sidebar-keep-hover.duration`) | Same | From the edge hot zone; once the pointer is on the sidebar, Chromium's own hover tracking closes it as soon as the pointer leaves (no 150 ms). |
