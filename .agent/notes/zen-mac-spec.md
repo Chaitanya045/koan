@@ -836,6 +836,22 @@ adjustable** in Zen: the only knobs are the on/off pref
 `zen.widget.macos.window-vibrancy` and the material index
 `zen.widget.macos.window-material` (15.3).
 
+**Screenshots** (active window over the striped backdrop, one colour
+`rgb(173,6,154)`, picker open; `opacity-*.jpg`): `opacity-01-min-0.30`,
+`opacity-02-default-0.50`, `opacity-03-max-0.80`,
+`opacity-04-max-0.80-grain-0.94`, `opacity-05-default-grain-0.5`. What they
+show: at **0.30** the sidebar is almost only the blurred backdrop with a faint
+tint, and the slider's wave is **flat** (a straight line) with a small 10 px
+thumb; at **0.50** the wave has grown to its full height up to the thumb
+(16 px); at **0.80** the wave is complete and the thumb is 25 px (the thumb
+width follows the value: 10 / 16 / 25 px); the sidebar is a strong magenta. Grain
+shows as fine noise over the colour and also over the picker's field.
+
+**Colours:** the resolved colours for the default theme in dark and light (frame,
+card, panel, context menu, floating URL bar, tab rows, tab text, accent) with
+the CSS variable each comes from are in
+[zen-colors.json](zen-colors.json).
+
 ### 15.8 Screenshots (active window over the striped backdrop)
 
 | File | State |
