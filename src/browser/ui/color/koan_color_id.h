@@ -10,9 +10,10 @@
 
 namespace koan {
 
-// Colours of Koan's own views, after Chrome's. Defined in koan_color_mixer.cc
-// (mostly from Chrome's colours, Zen's values today), so a restyle changes
-// them in one place.
+// Colours of Koan's own views, after Chrome's. Defined per look: in the shadcn
+// style (the default) from shadcn's tokens, in koan_shadcn_color_mixer.cc;
+// in the Zen style with Zen's values, in koan_color_mixer.cc. A view only
+// names the id, so a restyle changes it in one place.
 enum KoanColorIds : ui::ColorId {
   kKoanColorsStart = kChromeColorsEnd,
 
