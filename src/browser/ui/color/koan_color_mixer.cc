@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/color/koan_look.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_mixer.h"
@@ -31,10 +32,10 @@ constexpr SkAlpha Alpha(float opacity) {
   return static_cast<SkAlpha>(opacity * SK_AlphaOPAQUE);
 }
 
-// Koan's own colours (koan_color_id.h), Zen's for now: shades of the toolbar
+// Koan's own colours (koan_color_id.h) in the Zen style: shades of the toolbar
 // text on the sidebar (zen-tabs/vertical-tabs.css, zen-theme.css), the URL
 // bar's (zen-omnibox.css) and the accent colour for toasts (zen-popup.css).
-void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
+void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   const bool dark = key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
 
   // Tab rows (Zen's --tab-background-color-selected, Firefox's
@@ -270,7 +271,12 @@ void AddKoanColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
 void AddKoanColorMixer(ui::ColorProvider* provider,
                        const ui::ColorProviderKey& key) {
   ui::ColorMixer& mixer = provider->AddMixer();
-  AddKoanColors(mixer, key);
+  if (look::IsShadcnStyle()) {
+    AddShadcnChromiumColors(mixer, key);
+    AddShadcnKoanColors(mixer, key);
+  } else {
+    AddZenColors(mixer, key);
+  }
 
   if (!features::IsSidebarEnabled()) {
     return;

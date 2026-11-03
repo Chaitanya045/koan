@@ -2,17 +2,39 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+# shadcn/ui's design tokens and the current look. Depends on //base and Skia
+# only, so views, the settings page and unit tests can use it.
+source_set("tokens") {
+  sources = [
+    "koan_look.cc",
+    "koan_look.h",
+    "koan_oklch.cc",
+    "koan_oklch.h",
+    "koan_shadcn_palettes.inc",
+    "koan_tokens.cc",
+    "koan_tokens.h",
+  ]
+  public_deps = [
+    "//base",
+    "//third_party/skia",
+  ]
+}
+
 # Koan colour overrides, registered from
-# chrome/browser/ui/color/chrome_color_mixers.cc.
+# chrome/browser/ui/color/chrome_color_mixers.cc (and, for the system and core
+# colours, from ui/color/color_mixers.cc).
 source_set("color") {
   sources = [
     "koan_color_id.h",
     "koan_color_mixer.cc",
     "koan_color_mixer.h",
+    "koan_shadcn_color_mixer.cc",
   ]
+  public_deps = [ ":tokens" ]
   deps = [
     "//chrome/browser/ui/color:color_headers",
     "//koan/browser:features",
     "//ui/color",
+    "//ui/gfx",
   ]
 }

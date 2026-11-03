@@ -6,16 +6,35 @@
 #define KOAN_BROWSER_UI_COLOR_KOAN_COLOR_MIXER_H_
 
 namespace ui {
+class ColorMixer;
 class ColorProvider;
 struct ColorProviderKey;
 }  // namespace ui
 
 namespace koan {
 
-// Adds Koan's Zen-style colour overrides. Must run after Chrome's own mixers
-// and before custom-theme mixers, so installed themes still win.
+// Adds Koan's colours for the current look (look::CurrentLook()): shadcn's
+// tokens, or Zen's values. Must run after Chrome's own mixers and before
+// custom-theme mixers, so installed themes still win.
 void AddKoanColorMixer(ui::ColorProvider* provider,
                        const ui::ColorProviderKey& key);
+
+// Sets Chromium's system (`kColorSys*`) and core colours from shadcn's
+// tokens when the look is shadcn, and does nothing for Zen's. It must run
+// after the native core mixer and before ui_color_mixer.cc, so that every
+// colour derived from them (menus, bubbles, dialogs, buttons, textfields, the
+// omnibox, tab strip, toolbar, WebUI pages …) follows without being listed.
+// Called through ui::SetCoreColorMixerOverride() (patches/ui/color).
+void AddKoanCoreColorMixer(ui::ColorProvider* provider,
+                           const ui::ColorProviderKey& key);
+
+// The shadcn look's parts of AddKoanColorMixer (koan_shadcn_color_mixer.cc):
+// Chromium leaves that macOS's native mixers set after the early mixer, and
+// the Koan colour ids.
+void AddShadcnChromiumColors(ui::ColorMixer& mixer,
+                             const ui::ColorProviderKey& key);
+void AddShadcnKoanColors(ui::ColorMixer& mixer,
+                         const ui::ColorProviderKey& key);
 
 }  // namespace koan
 

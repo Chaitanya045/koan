@@ -90,6 +90,8 @@ struct CustomTheme {
   std::array<std::optional<SkColor>, kTokenCount> light;
   std::array<std::optional<SkColor>, kTokenCount> dark;
   std::optional<float> radius;
+
+  friend bool operator==(const CustomTheme&, const CustomTheme&) = default;
 };
 
 // Parses the CSS of a theme (`:root { --background: oklch(1 0 0); … }
