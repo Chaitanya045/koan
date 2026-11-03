@@ -65,6 +65,7 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
@@ -1342,10 +1343,13 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
     // (Also ends the new-tab session, whichever row was taken.)
     const bool new_tab_session =
         controller && controller->url_bar()->TakeNewTabDisposition();
+    // What the bar opens from a new-tab session, or from the empty tab
+    // (which never navigates: Zen's UrlbarChildController.getWhere), opens
+    // in a new tab.
     *disposition = AdjustedOmniboxDisposition(
         *disposition, is_open_tab_match,
         is_open_tab_match && HasOpenTabWithUrl(browser, destination_url),
-        new_tab_session);
+        new_tab_session || IsEmptyTab(browser->GetActiveTabInterface()));
     if (*disposition != WindowOpenDisposition::kCurrentTab) {
       return;
     }

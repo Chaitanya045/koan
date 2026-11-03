@@ -57,6 +57,23 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
 bool IsInSpaceForm(const views::View* tab_strip_view,
                    const views::View* region,
                    const gfx::Point& point);
+// Zen's empty tab: a Space whose only tab shows an empty page (a new tab
+// page or about:blank) is an empty Space, drawn with no tab row in the
+// sidebar. Zen hides one blank tab per window and selects it when the last
+// tab closes; here the Space's only tab, which a Space needs to exist, is
+// that tab. Not for Essentials or when Spaces are off.
+bool IsEmptyTab(const tabs::TabInterface* tab);
+
+// TabGroupViewVerticalLayout: whether `view` is a tab row to hide (see
+// IsEmptyTab()).
+bool IsEmptyTabView(const views::View* view);
+
+// Browser::TabStripEmpty(): Zen keeps the window when its last tab closes
+// (browser.tabs.closeWindowWithLastTab is false). Returns true if `browser`
+// stays: it gets an empty tab (a new tab page in the window's Space) soon.
+// False, so the window closes, when the window itself is closing, in a
+// private window, or without Koan's Spaces.
+bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser);
 
 // The Spaces feature of the tab context menu (koan_tab_menu.h): with Spaces on,
 // replaces the tab group items of the tab context menu for the tab at
