@@ -7,6 +7,7 @@
 //   Zen's theme stylesheets (colour values)
 //   zen-workspaces.css (the Spaces' colour values)
 //   zen-library.css (the Library's colour values)
+//   zen-omnibox.css, zen-popup.css (the floating URL bar card's colours)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 

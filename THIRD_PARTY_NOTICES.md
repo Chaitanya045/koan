@@ -30,7 +30,11 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/webui/resources/koan_settings.js` | `zen-preferences.ftl` (strings) |
 | `src/browser/ui/views/koan_pinned_tabs.cc` | `ZenPinnedTabManager.mjs`, `zen-general.ftl` (strings) |
 | `src/browser/ui/views/koan_sidebar_metrics.h` | Zen's sidebar, toolbar and URL bar stylesheets (sizes, shadows), `zen-workspaces.css` (Space sizes) |
-| `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values), `zen-workspaces.css` (Space colours), `zen-library.css` (Library colours) |
+| `src/browser/ui/color/koan_color_mixer.cc` | Zen's theme stylesheets (colour values), `zen-workspaces.css` (Space colours), `zen-library.css` (Library colours), `zen-omnibox.css` and `zen-popup.css` (the floating URL bar card's colours) |
+| `src/browser/ui/color/koan_tokens.{h,cc}` | `zen-theme.css` (Zen's colours), `ZenGradientGenerator.mjs`, `zen-buttons.css` (the primary and accent colours' derivation) |
+| `src/browser/ui/color/koan_shadcn_color_mixer.cc` | `zen-omnibox.css`, `zen-popup.css` (the floating URL bar card and suggestion colours), `zen-theme.css` (tab colours) |
+| `src/browser/ui/views/koan_omnibox_rows.{h,cc}` | `zen-omnibox.css` (the suggestion rows' height, radius and font) |
+| `src/browser/ui/views/koan_url_bar_controller.cc` | `zen-omnibox.css`, `ZenUIManager.mjs` (the floating URL bar card: size, position, input, divider), the `zen.urlbar` preferences |
 | `src/browser/ui/views/koan_space_menu.cc` | `ZenSpaceManager.mjs` (the Space and Create menus), `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_space_creation.cc` | `ZenSpaceCreation.mjs`, `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_library.h`, `koan_library_controller.cc` | `ZenLibrary.mjs` (open/close spring, toggle, unmounting) |
