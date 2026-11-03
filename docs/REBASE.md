@@ -280,7 +280,10 @@ the session-restore browser tests and `tab_restore_browsertest.cc` (restored
 tabs now load on demand), and the `freezing_policy` tests that enumerate
 `CannotFreezeReason`s or expect infinite-tabs freezing of pinned tabs.
 
-Then run the smoke tests (all off-screen, see `.agent/notes/build.md`):
+Then run Koan's unit tests (`scripts/test_unit.sh`) and, for the session and
+Spaces hooks, the browser tests (`scripts/test_browser.sh`): they fail where a
+new Chromium changed an API Koan's logic reads. Then the smoke tests (all
+off-screen, see `.agent/notes/build.md`):
 
 ```sh
 scripts/shot_ui.sh /tmp/k.png -- https://example.com            # look

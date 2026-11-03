@@ -24,6 +24,8 @@ remains MIT-licensed. Source for every file is in this repository.
 | Koan file | Ported from (Zen) |
 | --- | --- |
 | `src/browser/koan_shortcut_table.cc` | `ZenKeyboardShortcuts.mjs`, `zen-preferences.ftl` |
+| `src/browser/koan_fuzzy_score.{h,cc}` | `ZenUBActionsProvider.sys.mjs` (fuzzy scoring) |
+| `src/browser/koan_library_logic.{h,cc}` | `ZenLibraryHistorySection.mjs` (URL and site formatting), `ZenLibrarySpacesSection.mjs` (the card drag) |
 | `src/browser/ui/views/koan_commands.cc` | `ZenUBGlobalActions.sys.mjs`, `zen-command-palette.ftl` |
 | `src/browser/ui/views/koan_command_palette.cc` | `ZenUBActionsProvider.sys.mjs` (fuzzy scoring) |
 | `src/browser/ui/webui/koan_settings_rows.cc` | `zen-preferences.ftl` |

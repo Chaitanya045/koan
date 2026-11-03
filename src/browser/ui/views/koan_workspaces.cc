@@ -13,8 +13,6 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/i18n/break_iterator.h"
-#include "base/i18n/char_iterator.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -47,6 +45,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_space_title.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_library.h"
@@ -59,7 +58,6 @@
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
-#include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/mojom/themes.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -97,24 +95,6 @@ constexpr char16_t kDefaultSpaceName[] = u"Space";
 // stores it as the grey tab group colour.
 constexpr tab_groups::TabGroupColorId kDefaultThemeColor =
     tab_groups::TabGroupColorId::kGrey;
-
-// Whether `grapheme` (one grapheme cluster) is an emoji: a flag, a
-// pictograph shown as an emoji by default, or one made an emoji with the
-// variation selector or in a ZWJ sequence. Symbols that are text by default,
-// like (c), (R), TM and arrows, start plain names.
-bool IsEmoji(const std::u16string& grapheme) {
-  if (grapheme.empty()) {
-    return false;
-  }
-  const int32_t first = base::i18n::UTF16CharIterator(grapheme).get();
-  if (u_hasBinaryProperty(first, UCHAR_REGIONAL_INDICATOR) ||
-      u_hasBinaryProperty(first, UCHAR_EMOJI_PRESENTATION)) {
-    return true;
-  }
-  return u_hasBinaryProperty(first, UCHAR_EXTENDED_PICTOGRAPHIC) &&
-         (grapheme.find(u'\uFE0F') != std::u16string::npos ||
-          grapheme.find(u'\u200D') != std::u16string::npos);
-}
 
 // Seed colours for Space tints, one per tab group colour. Fixed values (not
 // looked up from the current theme, which the tint itself changes).
@@ -433,28 +413,12 @@ void KoanWorkspaceController::InstallViews() {
 
 std::pair<std::u16string, std::u16string> KoanWorkspaceController::SplitTitle(
     const std::u16string& raw_title) {
-  std::u16string title;
-  base::TrimWhitespace(raw_title, base::TRIM_ALL, &title);
-  base::i18n::BreakIterator iter(title,
-                                 base::i18n::BreakIterator::BREAK_CHARACTER);
-  if (title.empty() || !iter.Init() || !iter.Advance()) {
-    return {std::u16string(), title};
-  }
-  std::u16string first(iter.GetString());
-  if (!IsEmoji(first)) {
-    return {std::u16string(), title};
-  }
-  std::u16string name;
-  base::TrimWhitespace(title.substr(first.size()), base::TRIM_LEADING, &name);
-  return {first, name};
+  return SplitSpaceTitle(raw_title);
 }
 
 std::u16string KoanWorkspaceController::JoinTitle(const std::u16string& icon,
                                                   const std::u16string& name) {
-  if (icon.empty() || name.empty()) {
-    return icon + name;
-  }
-  return base::StrCat({icon, u" ", name});
+  return JoinSpaceTitle(icon, name);
 }
 
 std::vector<KoanWorkspaceController::SpaceInfo>

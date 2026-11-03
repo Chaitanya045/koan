@@ -1,0 +1,101 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+
+# Koan's unit tests: pure logic that links without the browser (//base,
+# //ui/base and the small Koan source sets, no //chrome/browser). Run on
+# every build; see "Which test to write" in CONTRIBUTING.md for what belongs here.
+test("koan_unittests") {
+  sources = [
+    "//koan/browser/koan_fuzzy_score_unittest.cc",
+    "//koan/browser/koan_library_logic_unittest.cc",
+    "//koan/browser/koan_prefs_unittest.cc",
+    "//koan/browser/koan_shortcut_table_unittest.cc",
+    "//koan/browser/koan_space_title_unittest.cc",
+    "//koan/browser/ui/color/koan_color_mixer_unittest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//chrome/browser/ui/color:color_headers",
+    "//components/performance_manager",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/sync_preferences:test_support",
+    "//koan/browser:features",
+    "//koan/browser:fuzzy_score",
+    "//koan/browser:library_logic",
+    "//koan/browser:prefs",
+    "//koan/browser:shortcut_table",
+    "//koan/browser:space_title",
+    "//koan/browser/ui/color",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//skia",
+    "//ui/base",
+    "//ui/color",
+    "//ui/events:events_base",
+    "//url",
+  ]
+  data_deps = [ "//third_party/icu:icudata" ]
+}
+
+# Koan's browser tests (InProcessBrowserTest): Spaces, pinned tabs and what
+# Koan keeps in the session, against a real browser window. They need a
+# display (Xvfb, or --ozone-platform=headless) and run on request, with
+# scripts/test_browser.sh; see "Which test to write" in CONTRIBUTING.md.
+source_set("browsertests_impl") {
+  testonly = true
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  sources = [
+    "browser/koan_browser_test_utils.cc",
+    "browser/koan_browser_test_utils.h",
+    "browser/koan_session_data_browsertest.cc",
+    "browser/koan_session_restore_browsertest.cc",
+    "browser/koan_spaces_browsertest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//chrome/browser",
+    "//chrome/browser/prefs",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/sessions:test_support",
+    "//chrome/browser/ui:browser_tabstrip",
+    "//chrome/browser/ui/tabs:tab_strip",
+    "//chrome/browser/ui/views/frame:browser_widget",
+    "//chrome/test:test_support",
+    "//chrome/test:test_support_ui",
+    "//chrome/test/base:browser_tests_runner",
+    "//components/prefs",
+    "//components/tab_groups",
+    "//components/tabs:public",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//koan/browser:prefs",
+    "//koan/browser/ui/views:impl",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
+    "//url",
+  ]
+}
+
+test("koan_browsertests") {
+  use_xvfb = use_xvfb_in_this_config
+  deps = [
+    ":browsertests_impl",
+    "//chrome:packed_resources",
+    "//chrome:resources",
+    "//chrome:strings",
+  ]
+  data_deps = [ "//testing:test_scripts_shared" ]
+  if (is_mac) {
+    # As for the other tests that start a browser (sync_performance_tests).
+    ldflags = [ "-Wl,-ObjC" ]
+  }
+}
