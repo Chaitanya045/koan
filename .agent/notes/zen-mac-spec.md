@@ -31,12 +31,16 @@ already be fixed by an open PR; re-check against the next Mac pass.
   cropped (macOS's own screen-recording indicator).
 - Windows in the screenshots are inactive (the capture tool doesn't
   activate them), so traffic lights are grey ("grey out inactive windows").
-- **Not captured yet** (screen slot ran out; marked *PENDING* below):
-  native fullscreen and the notch, the *look* of native context menus and
-  menu-bar menus (their **contents** are listed in section 11 from the DOM),
-  the compact-mode hover reveal (the reveal itself, done by command, is in
-  section 5), Glance (didn't open from a scripted call; behaviour read from
-  source), and a second small-window pass.
+- The second capture pass (sections 2A, 5, 7, 11, 12) reproduced the states in
+  the **user's two photos of their real Zen** (windowed and fullscreen). The
+  photos are *not* committed (they show the user's tabs and mail); everything
+  below was re-measured in the fresh profile with the same content shape
+  (7 Essentials, a "General" Space with an emoji, ~10 tabs, 3 Spaces).
+- Still not captured: the pill's host-and-port text in a URL like
+  `host:port` (Zen shows the host only when `show-domain-only-in-sidebar`
+  is on; a port is part of the host in the photo), and the page-action icons
+  that appear inside the pill while it is hovered or focused (seen in the
+  fullscreen photo).
 
 ## 1. Onboarding (welcome)
 
@@ -248,13 +252,60 @@ top edge: **that is wrong for Zen on Mac**, which shows them always.
 | Page UI (settings) | system 13 | |
 | Default theme | primary colour `rgb(2,41,84)`; sidebar over a translucent blue-grey background; text `rgb(251,251,254)` | |
 
+## 2A. Ground truth: the user's windowed and fullscreen Zen, and the matching capture
+
+Reference photos (user's own Zen, not committed): windowed and fullscreen.
+Reproduced in a fresh profile as `ref-01-windowed-fresh-profile.png` and
+`ref-02-fullscreen-notch-strip.png`; geometry in
+`~/work/koan/.cache/zen-ref/raw/measure-ref-{windowed,fullscreen}.json`.
+Both states use the **default single-toolbar layout**: **no toolbar or URL bar
+across the top**, the whole chrome is the sidebar.
+
+**Windowed (maximised 1470 x 923; sidebar 262 wide as in the photo)**
+
+| Item | Value (pt) |
+|---|---|
+| Row 1 (`#zen-sidebar-top-buttons`) | x 6, **y 3, h 38** (44 with its 3 pt margins); items left to right: traffic lights (box 70 x 20 at x 6, y 12), **sidebar toggle** (right after the lights, x ~76-94), then **back / forward / reload right-aligned** as 31 x 29 buttons at x = sidebar - 99 / -68 / -37 (163, 194, 225 here), y 7.5 |
+| Row 2: URL pill (`.urlbar-background`) | **246 x 36** at (8, 44.5), radius **14**, fill = the same 13.5% tint as the tiles (`oklch(0.866 0.015 251 / .135)`: slightly lighter than the sidebar), no border or shadow; shows the host (and port) only, 13.75 / 500, favicon at the left |
+| Essentials grid | container 262 x 112 at y 81, padding 6, **gap 4**; **4 per row** here (7 tiles = 4 + 3), tile **59.5 x 50** (inner background 55.5 x 46, 2 pt margin), tile radius **14**, favicon 16 x 16 centred; row pitch 54 (y 87, 141) |
+| Space header | full width x **44** at y 193 (after the grid), emoji (16 pt, x 17) + name "General" (13 / 600, dim, x 42) |
+| Divider row (`.pinned-tabs-container-separator`) | 250 x **22** at y 237: a **1 pt line** `rgba(255,255,255,.1)` from x 15 to ~214, and the **"Clear" button** (36.9 x 18.5, 10 pt / 500, right-aligned) which appears while the pointer is over the sidebar (hidden otherwise: absent in the windowed photo, present in the fullscreen one) |
+| "+ New Tab" row | 246 x **36** at (8, 261), radius 14, dim text, "+" icon; it comes **first**, above the tabs (`show-newtab-button-top`) |
+| Tab rows | **218 x 40** at x 6 (inner pill 214 x 36, radius **14**), pitch 40: favicon + title, no close button until hovered; **selected** = a lighter rounded pill (`color(srgb .776 .81 .848 / .22)`, i.e. 22% light blue-grey) |
+| Bottom bar | **32 high** (y 885-917, 6 pt above the window bottom), padding 6: Library button 32 x 32 at x 6 (the app/menu icon), **Space switcher** in the middle (one 17 x 32 button per Space starting at x 105.5: the current Space shows its emoji, the others show a dot until hovered), **"+" 32 x 32** at the right (x 224) |
+| Content card | at (**sidebar width**, **8**), right/bottom gap **8**, radius **7**, no gap on its left side (the 6 pt splitter belongs to the sidebar); its top edge is **above** the traffic-lights row (card y 8, lights centre y 22). In the photo it looks level with the lights only because of the camera angle |
+
+At the default 230 pt sidebar the same 7 Essentials wrap **3 + 3 + 1**: the
+grid rule is `repeat(auto-fit, minmax(max(23.7%, tile-min), 1fr))` with a fixed
+4 pt gap, so four tiles fit only when the container is >= ~231 pt wide (the
+user's sidebar is wider than the default). The count also changes the rule
+(`data-hack-type` in `ZenSpaceManager.mjs`): exactly 6 or 9 tiles use 30% columns
+(3 per row); an even count below 8 (2, 4) uses paired columns; 5 uses 25% / min
+48; everything else is 23.7% (4 per row).
+
+**Fullscreen (native macOS fullscreen)**
+
+| Item | Value |
+|---|---|
+| Window | the **notch strip stays black above the window** (33 pt, the OS safe area); the Zen window sits below it at (0, 33) with the same 1470 x 923 size; nothing is drawn under the notch, the sidebar starts below it |
+| Traffic lights | **gone** (`.titlebar-buttonbox-container` has no size) |
+| Row 1 | starts with the **sidebar toggle at the far left** (x 6), then back / forward / reload right-aligned exactly as windowed (x 163 / 194 / 225); row height unchanged (38) |
+| Everything else | unchanged: URL pill, Essentials, Space header, divider, tabs, bottom bar, and the **content card keeps its 8 pt margins and 7 pt radius** |
+| Menu bar / toolbars | the menu bar auto-hides (reappears at the top edge); `zen.view.borderless-fullscreen` = true |
+| Attributes | `inFullscreen=true sizemode=fullscreen` |
+
+Koan to match: no top toolbar; row 1 = lights + toggle + right-aligned
+back/forward/reload; 36-high pill at radius 14; the Essentials rule above;
+44-high Space header; divider with Clear; 36-high "+ New Tab" first; 40-pt
+rows; 32-high bottom bar with the Space switcher in the middle.
+
 ## 3. Sidebar content
 
 Screenshots: `main-02`, `main-07-pinned-and-folder.png`.
 
 | Element | Size / position (pt) | Detail |
 |---|---|---|
-| **Essentials** | tiles **51.5 x 50** (4 per row; x = 6, 61.5, 117, 172.5; y 87) | gap 4; tile bg radius **14** (inner 47.5 x 46), 16 x 16 favicon centred (radius 4) over a 13.5% tint `oklch(0.866 0.015 251 / .135)`; max 12 per Space; shown in every Space (`zen.workspaces.separate-essentials` true) |
+| **Essentials** | tiles **51.5 x 50** for 4 tiles in a 230 sidebar (x = 6, 61.5, 117, 172.5; y 87); with 7 tiles and a 262 sidebar **59.5 x 50**, 4 + 3 (see 2A for the column rule) | gap 4; tile bg radius **14** (inner 47.5 x 46), 16 x 16 favicon centred (radius 4) over a 13.5% tint `oklch(0.866 0.015 251 / .135)`; max 12 per Space; shown in every Space (`zen.workspaces.separate-essentials` true) |
 | **Space header** (`.zen-current-workspace-indicator`) | full width x **44** at y 139 | icon + name "Space", 13 / 600, dim; padding 17 / 12 / 17 / 17, gap 9 |
 | **Folder** (`zen-folder`) | 218 x **40** | label 13.75 / **600**, 32 pt left padding (icon + chevron), children indented 14; collapsed shows its tab icons; sub-folders up to 5 |
 | **Pinned tab** | 218 x 40 | same as a normal tab; pinned section above the "+ New Tab" row |
@@ -271,29 +322,84 @@ divider, "New Tab" row above one tab, no Essentials shown, bottom controls
 tiny; the URL pill has no site icon/placeholder. Re-check against current
 builds before filing.
 
-## 4. URL bar
+## 4. URL bar and New Tab (the floating panel)
 
-Screenshots: `main-02` (pill), `main-03-urlbar-focused-floating.png`,
-`main-04-cmd-t-floating-urlbar.png`.
+Screenshots: `main-02` (the pill at rest), `main-21-cmd-t-panel.png` (Cmd+T),
+`main-22-cmd-l-panel.png` (Cmd+L), `main-23-cmd-t-panel-native-crop.png`
+(native pixels), `main-03` / `main-04` (earlier takes). The robot glyph in the
+panel's first row is Marionette's remote-control indicator; in a normal
+window it is the site/identity icon. Measured in the running app (DOM
+geometry and computed styles, `~/work/koan/.cache/zen-ref/raw/urlbar-*.json`),
+a 60 fps window recording, and real key events (`postToPid`), in a 1470 x 923
+window. Source: `zen-omnibox.css`, `ZenUrlbarController.mjs`, `ZenUIManager.mjs`.
 
-- At rest it is the **pill in the sidebar** (216 x 38, radius 4) showing the
-  site's domain only (`zen.urlbar.show-domain-only-in-sidebar`), 13.75 / 500,
-  with a copy-URL button on hover (`single-toolbar-show-copy-url`). The
-  site's favicon sits at its left.
-- `zen.urlbar.behavior = "floating-on-type"` (default): clicking the pill,
-  **Cmd+L** or **Cmd+T** opens a **floating** card in the middle of the
-  window: **750 pt wide**, x = 360 (centred), top y = **295** (about 1/3
-  down), 15 pt radius, 16.5 pt text; the first row is the input with the
-  search glyph; below it suggestions (Wikipedia, YouTube, Reddit, Add-ons for
-  Firefox as defaults) with site icons, ~218 pt of results. Esc / click
-  outside closes it. Cmd+T does **not** open a tab: the new-tab page is the
-  URL bar (`zen.urlbar.replace-newtab`).
-- `zen.urlbar.open-on-startup` true: the bar is open on a fresh window.
+### 4.1 The pill at rest (sidebar)
 
-Koan now: Cmd+T / URL typing opens a similar floating bar (preview-A `13`),
-but the card is ~450 pt wide on a 1470 pt window in the capture, the
-suggestions use Google rows, and the new-tab page leaks Google's NTP
-(`bugs.md` #96).
+246 x 36 at (8, 44.5) in a 262 sidebar (sidebar width - 16 wide), radius **14**, the
+13.5% tint fill; text 13.75 pt / 500, the host only
+(`zen.urlbar.show-domain-only-in-sidebar`), favicon at the left, copy-URL
+button on hover (`single-toolbar-show-copy-url`). While the floating panel is
+open the pill is **blank** (`pageproxystate=invalid`; no text, no icon).
+
+### 4.2 The floating panel (same for Cmd+T and Cmd+L)
+
+| Property | Value |
+|---|---|
+| Position | **centred in the window** (not in the page card): x = (window width - width) / 2 = 360, **top = window height / 2 - 333/2 = 295**: Zen centres it as if it were always 333 pt tall (`FLOATING_URLBAR_MIN_HEIGHT`), so its top stays fixed whatever the result count |
+| Width | `min(window width / 1.5, 750)` = **750** here (`FLOATING_URLBAR_MAX_WIDTH`); min-width `min(90%, 62rem)` |
+| Height | **62** input row + results: 279.6 with 4 results (the list is capped at **244** pt: `#urlbar-results { max-height: 244px }`); hugs its content |
+| Radius | **15** (both the container and its background) |
+| Fill | dark: `rgb(24,24,24)`; light: white. **Opaque, no blur** by default (`backdrop-filter: none`); only with `zen.theme.acrylic-urlbar` on does it become 92% / 93% alpha with `blur(40px)` |
+| Edge | `0.5 pt` outline `rgb(75,75,75)` (dark) / `rgba(0,0,0,.2)` (light) |
+| Shadow | `0 30px 140px -15px` at **60%** black (dark) / **80%** (light): a long soft shadow, mostly below the panel |
+| z-order | above the page, the sidebar and the splitter (z-index 1000) |
+| Input row | 62 pt high, padding 12 / 14, a 38-high input box starting at x +81 (identity icon + search glyph before it), text **16.5 pt / 500** (`1.5em` of the 11 pt root on macOS), `rgb(251,251,254)`, placeholder **"Search..."** |
+| Results box | x +12 (726 wide), top +62 (the first row starts 11 pt below the input row, 10.6 pt of padding), side padding 1.4 |
+| Row (`.urlbarView-row`) | **49 pt high** (45 min + 2 + 2 border), 728.8 wide, radius **8**, text colour white at 70%; hover = 5% tint; **selected** = fill `color-mix(accent-button-bg, transparent 40%)` with white text |
+| Row content | favicon **24 x 24** (radius 4, padding 4, i.e. a 16 pt icon in a tile) at x +8; title **14 pt / 500**; then " — " and the URL in **14 pt / 500 `rgb(170,170,170)`** (e.g. "YouTube - youtube.com"); open tabs end with a **"Switch to Tab"** label: 14 pt / **600**, in a pill 100 x 23, radius 8, padding 4 / 8, opacity .7, followed by a keycap showing the Tab key |
+| Default results (empty input) | the open-tab match(es) first (as `switchtab` rows), then top sites: here Wikipedia (switch to tab), YouTube, Reddit, Add-ons for Firefox; as you type they become matching open tabs, history, bookmarks and search suggestions |
+
+### 4.3 Open and close animation
+
+**None.** In a 60 fps window recording the panel region changes from the page to
+the finished panel **in one frame** (<= 17 ms) on both Cmd+T and Cmd+L, and
+disappears in one frame on Esc. There is no fade, scale or slide, and no
+sidebar animation. (Source agrees: the only urlbar animations are the
+search-mode switch, `scale 1 -> .98 -> 1` over 0.25 s, and a one-second
+`zen-urlbar-searchmode` gradient sweep when a search engine chip is chosen.)
+
+### 4.4 Cmd+T (New Tab) versus Cmd+L
+
+| | **Cmd+T** | **Cmd+L** |
+|---|---|---|
+| Panel | identical size, position and look | identical |
+| What it is | a **New Tab session** (`zen-newtab`): nothing is created yet | edits the current tab's address |
+| Input | **empty**, placeholder "Search..." | the current URL, **fully selected** (`https://www.debian.org/`, 0-23) |
+| Sidebar | the **"+ New Tab" row is highlighted** (`in-urlbar` on every new-tab button); the **current tab loses its selected pill** (`_visuallySelected = false`); the URL pill is blank | the current tab stays selected; the pill is blank; "+ New Tab" is not highlighted |
+| Results | open tabs + top sites (a fresh-tab list) | the same default list while the text is selected; typing filters it |
+| Enter on a result | opens it in a **new tab** (tab count +1, the new tab is selected); a "Switch to Tab" result is meant to switch to the existing tab (not tested; the Enter I sent opened google.com in a new tab, tab count 20 -> 21) | navigates the **current tab** |
+| Esc | closes the panel in **one press, even after typing; no tab is created** (tab count unchanged, the previous tab's pill returns) | closes the panel and **reverts** the pill to the URL |
+| Clicking outside | closes it; per `docs/ZEN_PARITY.md` the click also reaches what was clicked (**not re-tested here**) | same (not re-tested) |
+| Pressed again | **Cmd+T while the panel is open closes it** (toggle, no tab; verified, tab count unchanged) | not tested |
+| Memory | the typed text is kept for **45 s** (`zen.urlbar.wait-to-clear` = 45000): Cmd+T within 45 s reopens with the same text and results; afterwards it is empty | no memory (always the current URL) |
+| Pref | `zen.urlbar.replace-newtab` = true (default): with it off, Cmd+T makes a real blank tab | `zen.urlbar.behavior` = `floating-on-type`: the bar floats only while editing (others: always-floating, normal) |
+| New window | `zen.urlbar.open-on-startup` = true: a window opens with the panel up | |
+
+Clicking the sidebar **pill** opens the same floating panel (as in the
+source and `docs/ZEN_PARITY.md`; I focused the URL bar through the API rather than
+by clicking). The "+ New Tab" row is highlighted while the panel is in
+New Tab mode, i.e. it opens that same session.
+
+### 4.5 Koan now vs Zen
+
+Koan (preview-A `13`): a floating bar that is ~450 pt wide on a 1470 pt window
+(Zen 750), suggestion rows with Google search first, "AI Mode" chip, and the
+new-tab page leaking Google's NTP (`bugs.md` #96). For #95: build exactly
+4.2 (750 / 295 / radius 15 / opaque dark #181818 / the long shadow / 0.5 pt
+outline / 49-pt rows / "Switch to Tab" pill), no animation, and 4.4's
+Cmd+T-versus-Cmd+L rules (empty input and highlighted "+ New Tab" row,
+Enter = new tab, one Esc closes with no tab created, 45 s text memory,
+Cmd+T toggles).
 
 ## 5. Compact mode
 
@@ -319,7 +425,13 @@ Screenshots: `main-05-compact-mode-on.png`, `main-06-compact-sidebar-shown.png`.
 - Also: toast "Sidebar hidden! Use Ctrl+S ..." when the sidebar is dragged
   closed; background-tab-opened toast in compact mode
   (`show-background-tab-toast`).
-- *PENDING: capture of the pointer-driven reveal and the toast.*
+- **Captured** (`main-15-compact-hover-reveal.png`): with the pointer warped to
+  the left edge (x 2) nothing has appeared **0.18 s** later; **~0.7 s** later the
+  sidebar is a **floating rounded panel over the page** (246 wide, ~10 pt inset,
+  darker and more opaque than the docked sidebar, "Clear" and the copy-URL
+  button visible because the pointer is over it); moving the pointer away hides
+  it again in **< 0.5 s**. The page does not move. (Timings include the ~0.3 s
+  capture latency; the source's `0.25 s` slide and `150 ms` keep-hover apply.)
 
 ## 6. Spaces
 
@@ -339,8 +451,16 @@ Screenshots: `main-10-create-space.png`.
 
 ## 7. Glance, split view, pinned and folders (behaviour)
 
-- **Glance** (from source; scripted call didn't open one so no capture):
-  activation `zen.glance.activation-method` = **alt** (Opt-click a link);
+- **Glance** (captured with a real Option-click on a link:
+  `main-16-glance.png`): measured: the **page behind** is scaled to **0.97**
+  (1164 x 879.8 from 1200 x 907, still radius 7, same shadow) and dimmed;
+  the glance card is centred at ~80% of the content width and the full
+  height, same 7 pt radius; **three 32 x 32 round buttons** sit to the right
+  of the card at x 1354 (just outside it), y 35 / 79 / 123 (pitch 44): close,
+  expand to a full tab, split view. Opening grows the card from the clicked
+  link (the first frame is a dark card with a "Transferring data..." status).
+  The glance tab appears in the sidebar as a child of its parent tab.
+  From source: activation `zen.glance.activation-method` = **alt** (Opt-click a link);
   the page opens in a card at **80% width x 100% height of the content area**
   with the page behind it scaled to **0.97**, animation **350 ms**
   (`zen.glance.animation-duration`), radius = `--zen-native-inner-radius`;
@@ -419,8 +539,21 @@ Folder**, Live Folder >, | **Theme picker**, Set Profile >, | Reload/Bookmark/
 Select All Tabs, Undo Close Tab, | Customize Sidebar, Turn on Vertical Tabs,
 | Tabs on the right, Customize..., Full-screen autohide.
 
-*PENDING: how the native menus look (they are NSMenus; Zen uses default
-context menus: `zen.view.context-menu.refresh` false).*
+**How they look** (all native macOS NSMenus with the system's translucent
+glass, 12-13 pt text, no custom styling since `zen.view.context-menu.refresh`
+is false): `main-17-tab-context-menu.png` (tab menu: *New Tab Below*, Move to
+Folder >, Add Split View... | Reload Tab, Mute Tab, **Add to Essentials** with
+a "7 / 12" badge | Change Label..., Change Icon... | Pin Tab, Unload Tab,
+Duplicate Tab | Bookmark Tab..., Move Tab >, Share >, Open in New Container Tab
+>, Select All Tabs | Send to Mobile > ... with a scroll arrow at the bottom),
+`main-18-menubar-zen.png` (About Zen, Settings... Cmd+, Services >, Hide Zen
+Cmd+H, Hide Others Opt+Cmd+H, Show All, Quit Zen Cmd+Q), `main-19-menubar-view.png`
+(Appearance >, Toolbars >, Sidebar >, Collapse Pinned Tabs, Zoom >, Page Style
+>, Repair Text Encoding, Enter Full Screen Ctrl+Cmd+F), `main-20-menubar-spaces.png`
+(Create Space, Theme..., Change Name..., Change Icon... | Next Space
+Opt+Cmd+Right, Previous Space Opt+Cmd+Left | one row per Space with its icon and
+Ctrl+1, Ctrl+2...). The menu bar reads: Apple, Zen, File, Edit, View, Spaces,
+History, Bookmarks, Tools, Window, Help.
 
 ### Zen's own shortcuts on macOS (read from the running app's `<key>` elements)
 
@@ -447,11 +580,13 @@ Ctrl+S). Koan's Space and Library bindings already match. Check against #90.
 
 ## 12. Fullscreen and the notch
 
-*PENDING.* From source: `zen.view.borderless-fullscreen` = true; Zen enters
-native macOS fullscreen (`macnativefullscreen=true`); the toolbars hide and
-reappear on pointer at the top edge (`full-screen-autohide`). The notch is on
-this Mac (menu bar is 33 pt tall), so a captured fullscreen window shows the
-notch strip; measure the safe-area inset in a second pass.
+Captured (`ref-02-fullscreen-notch-strip.png`, details in section 2A). Native
+macOS fullscreen: the menu bar and notch area stay a **black 33 pt strip**
+above a Zen window of the normal 1470 x 923 size, so nothing is cropped by the
+notch and nothing sits under it. Traffic lights disappear; the sidebar toggle
+becomes the first item of row 1; the page card keeps its 8 pt margins and
+rounded corners. Reaching the top edge reveals the menu bar. `Enter Full
+Screen` is Ctrl+Cmd+F.
 
 ## 13. Animation table (source; all verified in the code, onboarding also in video)
 
@@ -492,4 +627,191 @@ the current build before filing issues.)
 6. **Compact mode**: 150 ms keep-hover, 250 ms spring slide, 10 pt float
    margin, hot-zone 200 / 100 pt outside the window (#98).
 7. **Theme picker**: Zen's gradient panel vs Koan's single colour (#41).
-8. Fullscreen/notch and native menus: capture before judging.
+8. Fullscreen: no traffic lights, toggle first in row 1, black notch strip above
+   an unchanged 923-high window, card margins kept (2A, 12).
+9. Native menus (Zen / View / Spaces / tab context): see section 11 for the
+   exact contents and shortcuts, and the screenshots.
+
+## 15. Zen's own look: glass and the theme picker (supersedes any shadcn look)
+
+Captured later on 2026-11-03 for the glass (#103/#105) and theme picker (#41)
+threads. Zen 1.24b, macOS 27.0.1, same Mac. To see translucency I put my own
+bright, high-detail striped window (`backdrop`: 70 pt colour stripes, a 6 pt
+black/white checker band, 90 pt black text) behind a smaller Zen window and
+captured regions that contained only those two windows (every capture was
+checked against the on-screen window list before and after and discarded
+otherwise). **The window must be ACTIVE**: an inactive Zen is flat (15.6).
+Raw data: `~/work/koan/.cache/zen-ref/raw/` (`prefs-glass-theme.json`,
+`glass-*.json`, `picker-open.json`); shipped defaults:
+`~/work/koan/.cache/zen-src-1.24b/defaults/preferences/firefox.js`.
+
+### 15.1 The model: native vibrancy under a tint layer under the UI
+
+1. The macOS window is **non-opaque** and its content has a native
+   `NSVisualEffectView` (the XUL binary calls `setMaterial:`,
+   `setBlendingMode:`, `setState:`). `#main-window` (and `#browser`,
+   `#zen-main-app-wrapper`, `#navigator-toolbox`) are `background: transparent`
+   on macOS (`@media (-moz-platform: macos)` in `zen-theme.css`).
+2. One full-window **theme layer** (`#zen-browser-background`, with a
+   `::before` / `::after` pair that cross-fades between Spaces) paints the
+   Space's theme *with alpha* over the vibrancy. It covers the whole window:
+   the sidebar, the top row and the 8 pt ring around the page card.
+3. The UI sits on top: transparent sidebar, tabs, tinted pill/tiles; the
+   **page card** (web content, radius 7) is above the layer.
+
+### 15.2 Prefs (defaults, from Zen's shipped `firefox.js`; none edited unless stated)
+
+| Pref | Default | Notes |
+|---|---|---|
+| `zen.widget.macos.window-vibrancy` | `true` | master switch; `false` = flat opaque window (measured) |
+| `zen.widget.macos.window-material` | `1` (int) | read **live** (changing it re-materials the window at once); values below |
+| `widget.macos.sidebar-blend-mode.behind-window` | `true` | the legacy switch; `ZenUIMigration` v7 sets `window-vibrancy=false` if a user had this `false` |
+| `widget.macos.titlebar-blend-mode.behind-window` | `false` | |
+| `widget.transparent-windows` | `true` | |
+| `zen.widget.mac.mono-window-controls` | `true` | grey (mono) traffic lights when inactive |
+| `zen.widget.macos.override-system-swipe-gestures` | `true` | |
+| `zen.theme.acrylic-sidebar` | `false` | extra blur for the floating compact sidebar |
+| `zen.theme.acrylic-urlbar` | `false` | blur + 92% alpha for the floating URL bar |
+| `zen.view.window.scheme` | `2` | 0 dark, 1 light, 2 auto (follows the system) |
+| `zen.view.grey-out-inactive-windows` | `true` | inactive windows are greyed |
+| `zen.theme.dark-mode-bias` | `0.3` | how readily a colour is treated as "dark" |
+| `zen.theme.use-system-colors` | `false`, `zen.theme.accent-color` = `AccentColor` | |
+| `zen.theme.border-radius` / `content-element-separation` | `-1` (auto) / `8` | |
+| `zen.theme.gradient.show-custom-colors` | `false` | hides the custom-colour list in the picker |
+| `layout.css.prefers-reduced-transparency.enabled` | `false` | web-content flag only; chrome CSS still honours the media feature (15.6) |
+| `browser.theme.toolbar-theme` | `2`, set to `0` at startup (user value) | |
+
+All 79 related prefs with default, current value and "user set" flag are in
+`prefs-glass-theme.json`. Only `browser.theme.toolbar-theme` and
+`zen.view.compact.enable-at-startup` show a user value in this profile
+(both written by Zen itself).
+
+### 15.3 Window material (`zen.widget.macos.window-material`)
+
+Measured as the mean RGB of a fixed sidebar patch over my stripe backdrop,
+dark scheme, no theme (higher = more of the backdrop shows):
+
+| Value | Mean RGB | | Value | Mean RGB |
+|---|---|---|---|---|
+| **1 (default)** | **44, 61, 78** (most see-through) | | 5, 7, 8-12, 0 | 37, 43, 50 (all the same: a fallback) |
+| 2 | 41, 57, 72 | | 6 | 35, 38, 42 (darkest) |
+| 3 | 39, 52, 65 | | `window-vibrancy=false` | 28, 29, 29 (flat, opaque) |
+| 4 | 37, 48, 58 | | | |
+
+So the pref is an index into a short native material list, not a raw
+`NSVisualEffectMaterial`; the default is the lightest of them.
+
+### 15.4 Which surfaces are translucent
+
+| Surface | Glass? |
+|---|---|
+| Window background, sidebar, top row, the 8 pt ring around the card | **Yes**: vibrancy + the theme layer's alpha |
+| Page card with a **real page** | No (opaque) |
+| Page card with a **blank / new-tab page** | **Yes**: a transparent document shows the window glass (`glass-06-active-blank-page-card.jpg`, `picker-03-...jpg`) |
+| URL pill, Essentials tiles, selected tab pill | only a tint: 13.5% light (`oklch(.866 .015 251 / .135)`), 22% for the selected tab |
+| Floating compact sidebar | glass; blur boost with `acrylic-sidebar` |
+| Theme picker panel | frosted glass (blurred page behind it, `picker-01-open.jpg`) |
+| Cmd+T / Cmd+L floating URL panel | **opaque** `rgb(24,24,24)` (white in light); with `acrylic-urlbar`: `rgba(20,20,20,.92)` + `backdrop-filter: url(zen-backdrop-filters.svg#underlay-dark) blur(40px)`; same 15 pt radius, 0.5 pt outline, long shadow (section 4) |
+| Context menus, menu-bar menus | native `NSMenu` (system glass; `widget.macos.native-context-menus` = true); Zen adds no styling (`main-17`, `main-18..20`) |
+| Dialog/arrow panels (`--arrowpanel-background`) | opaque `rgb(31,31,31)` / `rgb(244,244,244)` |
+
+### 15.5 Blur strength and the tint over it
+
+- **Blur**: the system material, heavy and not tunable from CSS or prefs
+  (apart from the material choice). In `glass-01-...jpg` the 70 pt stripes
+  with 1 px edges turn into soft colour bands with transitions tens of points wide,
+  and the 90 pt black backdrop text disappears completely.
+- **Default theme** (no colour): the layer is `rgba(0,0,0,0.4)` in dark and
+  fully transparent in light; so dark = darkened blur, light = bright, washed
+  blur (`glass-01`, `glass-03`).
+- **One colour** (picker default opacity **0.5**): the layer is
+  `rgba(c*0.92 + white*0.08, 0.5)` (the 0.92 is `blendWithWhiteOverlay`:
+  `min(1, op + 0.3 + 0.6 * (1 - op - 0.3))` at `op = .5`), e.g. the dot
+  `rgb(173,6,154)` gives `rgba(180,26,162,0.5)`: the blur stays visible through
+  it, tinted (`glass-02`, `glass-04`).
+- **Several colours**: stacked gradients, every stop at alpha = opacity: for a
+  3-dot analogous preset `linear-gradient(-5deg, rgba(245,218,221,.5) 10%,
+  transparent 80%), radial-gradient(circle at 95% 0%, rgba(229,245,218,.5) 0%,
+  transparent 75%), radial-gradient(circle at 0% 0%, rgba(245,238,218,.5) ...)`
+  (rotation -30 deg in the algorithm; `picker-02`, `picker-03`).
+- **Opacity slider range**: min **0.30**, max **0.80**, step 0.001, default 0.5
+ . Texture (grain, a PNG
+  overlay) 0..1, default 0 (`--zen-grainy-background-opacity`).
+- A dark colour keeps light text even in the Light scheme: the dark/light UI
+  decision follows the colour (`zen-should-be-dark-mode`, `glass-04`).
+
+### 15.6 Active vs inactive, and "Reduce transparency"
+
+- **Inactive** (another app has focus): the whole window goes **flat**: no
+  blur, no tint, opaque dark grey, traffic lights grey (`glass-05-inactive-flat.jpg`
+  vs `glass-06`). This is the native vibrancy following the window state plus
+  `zen.view.grey-out-inactive-windows` (`:-moz-window-inactive` ->
+  `InactiveCaption`). Screenshots of an inactive window say nothing about the glass.
+- **Reduce transparency**: Zen's CSS only gates `acrylic-sidebar` and
+  `acrylic-urlbar` on `(prefers-reduced-transparency: reduce)`. Emulated with
+  `ui.prefersReducedTransparency = 1` (a profile pref, not the system
+  setting): the acrylic floating URL panel fell back to opaque
+  `rgb(24,24,24)` with no filter, verified. The window vibrancy is the
+  system's `NSVisualEffectView`, which macOS itself makes opaque under the
+  system's Reduce Transparency; I did **not** flip that system setting (a
+  system change) and this Mac has it off. No Zen code path overrides it.
+
+### 15.7 The theme picker
+
+**Open**: sidebar context menu "Theme picker", Spaces > Theme..., or Edit Theme
+in the Create-Space form (`cmd_zenOpenZenThemePicker`). It is a native
+popover (`PanelMultiView.openPopup`, position `topright topleft`, x -10) that
+opens at the **top of the window overlapping the sidebar's right edge**;
+`zen.theme` changes are written to the active Space.
+
+**Geometry** (`picker-open.json`, pt; panel at (269,141) in an 1100 x 720 window):
+
+| Control | Size / position |
+|---|---|
+| Panel | **380 x 514**, padding 10, frosted glass |
+| Scheme buttons (top) | three **30 x 30**, radius 5.2, at x 393 / 444 / 495 (gap 21), y 167: **auto** (sparkle), **light** (sun), **dark** (moon); the current one has a 10% white fill; they write `zen.view.window.scheme` 2 / 1 / 0 |
+| Dotted field | **358 x 358**, radius 8 (panel radius - 4), fill 3% white, a 1 px dot grid every 6 px, hint "Click to add a color" centred |
+| Dots | primary **38 px** with a 6 px white border and a dark ring, drag it to change the theme; others `--icon-size-medium` with a 3 px white border; scale 1.05 on hover, 1.2 while dragging; **max 3** |
+| Field actions (bottom, centred) | three **30 x 30** buttons: **+** add a dot, **-** remove, **shuffle** (cycle harmony) |
+| Presets | row of **26 x 26** circles (1 px 10% shadow), **41** presets in pages of 8 with left/right arrows (page 282 wide); hover scale 1.05, press 0.95 (0.1 s); 1-dot presets are flat colours (e.g. `rgb(244,239,223)` cream, `rgb(240,184,205)` pink, `rgb(233,195,227)` lilac), 3-dot ones a gradient swatch |
+| Opacity slider | a **sine-wave** track 250 wide whose wave is cut off at the value, pill thumb (hover scale 1.1 over 0.5 s), 0.30 - 0.80, default 0.5 |
+| Texture knob | **66 x 66** round dial at the right of the slider (grain 0..1) |
+
+**Colour harmonies** (the shuffle button / adding dots): `complementary`
+[180], `singleAnalogous` [310], `splitComplementary` [150, 210], `analogous`
+[50, 310], `triadic` [120, 240], `floating` [] (dots move independently).
+(Source, `calculateCompliments`: dragging the primary dot moves the others by the
+harmony's angles, unless it is `floating`; not exercised on screen.) Presets store `data-position` (x, y in the 358
+field), `data-lightness` (80-90 for the pastels) and `data-algo`.
+
+**How a Space's gradient appears**: the colours become the whole-window layer
+(15.1), so the **sidebar, the top row and the 8 pt ring** show the gradient
+over the blur, with the page card above it; a separate toolbar element
+(`#zen-toolbar-background`) exists for the multi-toolbar layout. Each Space keeps its own theme; switching Spaces cross-fades
+the layers.
+
+**Animations**: edits are applied **live and instantly**: in a window recording,
+adding a dot, applying a preset and switching to light each landed in a
+**single frame** (both layers have `transition: 0s`). Only a **Space switch**
+cross-fades (`--zen-background-opacity`, `zen.workspaces.switch-animation-duration`
+= 250 ms). The panel's own open/close is the native popover's (not captured
+separately).
+
+### 15.8 Screenshots (active window over the striped backdrop)
+
+| File | State |
+|---|---|
+| `glass-01-dark-no-theme-active.jpg` | dark, no theme (Space "General") |
+| `glass-02-dark-one-colour-active.jpg` | dark, one colour, default opacity 0.5 |
+| `glass-03-light-no-theme-active.jpg` | light, no theme |
+| `glass-04-light-one-colour-active.jpg` | light scheme, same one colour |
+| `glass-05-inactive-flat.jpg` | inactive: flat, no glass |
+| `glass-06-active-blank-page-card.jpg` | active, blank page card also shows the glass |
+| `glass-07-urlbar-opaque-default.jpg`, `glass-08-urlbar-acrylic-pref.jpg` | Cmd+T panel default and with `acrylic-urlbar` |
+| `picker-01-open.jpg`, `picker-02-three-dots-dark.jpg`, `picker-03-three-dots-closed.jpg` | the picker and a 3-dot gradient |
+
+Caveats: region captures include my test backdrop (not the user's
+wallpaper); my Zen was quit once by something else and relaunched
+(same profile) between `glass-06` and the picker shots, so tab titles differ;
+the user's own Zen lives in a fullscreen Space and re-raises itself, so
+capture protocol = verify on-screen windows before and after.
