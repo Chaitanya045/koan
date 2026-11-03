@@ -84,6 +84,15 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view) {
       .Contains(pointer);
 }
 
+bool HidesSidebarTrailingControls(const views::View* host) {
+  const views::Widget* widget = host->GetWidget();
+  const views::View* browser_view = widget ? widget->client_view() : nullptr;
+  // The row Zen has is the one Koan's single toolbar makes (the toolbar is
+  // hidden and the sidebar's header stays).
+  return HasTrafficLights() && browser_view && IsToolbarHidden(browser_view) &&
+         (!IsCompactModeActive(browser_view) || KeepsSidebarNav(browser_view));
+}
+
 gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds) {
   // (Compiled everywhere, so that the Linux build checks it; only macOS has
   // traffic lights.)

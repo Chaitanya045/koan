@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index 485aa1faf322a7cab9f33c029986c373caccaf8a..d5a4b34b01d58d21aa3f5719fbda8260b30f2e25 100644
+index 485aa1faf322a7cab9f33c029986c373caccaf8a..8dc72fd3ef5ad89fc98b72b4854b754851e70d87 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 @@ -24,6 +24,7 @@
@@ -31,7 +31,27 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..d5a4b34b01d58d21aa3f5719fbda8260
        layout.child_layouts.emplace_back(collapse_button_.get(),
                                          /*visible=*/true, bounds);
        current_y =
-@@ -327,7 +332,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -295,7 +300,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+         (is_collapsing || (is_collapsed && available_width <= collapsed_width));
+ 
+     if (segmented_control_) {
+-      const bool visible = !hide_trailing_control && show_segmented_control;
++      const bool visible = !hide_trailing_control && show_segmented_control &&
++                           !koan::HidesSidebarTrailingControls(this);
+       gfx::Rect bounds;
+       if (visible) {
+         const gfx::Size pref_size = segmented_control_->GetPreferredSize();
+@@ -311,7 +317,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+                                         bounds);
+     }
+     if (combo_button_) {
+-      const bool visible = !hide_trailing_control && !show_segmented_control;
++      const bool visible = !hide_trailing_control && !show_segmented_control &&
++                           !koan::HidesSidebarTrailingControls(this);
+       gfx::Rect bounds;
+       if (visible) {
+         const gfx::Size pref_size =
+@@ -327,7 +334,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        }
        layout.child_layouts.emplace_back(combo_button_.get(), visible, bounds);
      }
@@ -42,7 +62,16 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..d5a4b34b01d58d21aa3f5719fbda8260
  
    layout.host_size = host_size;
  
-@@ -539,6 +547,7 @@ int VerticalTabStripTopContainer::GetPreferredWidth(
+@@ -533,12 +543,15 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
+ int VerticalTabStripTopContainer::GetPreferredWidth(
+     bool show_segmented_control) const {
+   int total_width =
+-      GetTrailingControlPreferredSize(show_segmented_control).width();
++      koan::HidesSidebarTrailingControls(this)
++          ? 0
++          : GetTrailingControlPreferredSize(show_segmented_control).width();
+   if (collapse_button_) {
+     total_width +=
          collapse_button_->GetPreferredSize().width() +
          GetLayoutConstant(LayoutConstant::kVerticalTabStripTopButtonPadding);
    }
