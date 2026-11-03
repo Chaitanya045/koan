@@ -31,12 +31,16 @@ already be fixed by an open PR; re-check against the next Mac pass.
   cropped (macOS's own screen-recording indicator).
 - Windows in the screenshots are inactive (the capture tool doesn't
   activate them), so traffic lights are grey ("grey out inactive windows").
-- **Not captured yet** (screen slot ran out; marked *PENDING* below):
-  native fullscreen and the notch, the *look* of native context menus and
-  menu-bar menus (their **contents** are listed in section 11 from the DOM),
-  the compact-mode hover reveal (the reveal itself, done by command, is in
-  section 5), Glance (didn't open from a scripted call; behaviour read from
-  source), and a second small-window pass.
+- The second capture pass (sections 2A, 5, 7, 11, 12) reproduced the states in
+  the **user's two photos of their real Zen** (windowed and fullscreen). The
+  photos are *not* committed (they show the user's tabs and mail); everything
+  below was re-measured in the fresh profile with the same content shape
+  (7 Essentials, a "General" Space with an emoji, ~10 tabs, 3 Spaces).
+- Still not captured: the pill's host-and-port text in a URL like
+  `host:port` (Zen shows the host only when `show-domain-only-in-sidebar`
+  is on; a port is part of the host in the photo), and the page-action icons
+  that appear inside the pill while it is hovered or focused (seen in the
+  fullscreen photo).
 
 ## 1. Onboarding (welcome)
 
@@ -248,13 +252,60 @@ top edge: **that is wrong for Zen on Mac**, which shows them always.
 | Page UI (settings) | system 13 | |
 | Default theme | primary colour `rgb(2,41,84)`; sidebar over a translucent blue-grey background; text `rgb(251,251,254)` | |
 
+## 2A. Ground truth: the user's windowed and fullscreen Zen, and the matching capture
+
+Reference photos (user's own Zen, not committed): windowed and fullscreen.
+Reproduced in a fresh profile as `ref-01-windowed-fresh-profile.png` and
+`ref-02-fullscreen-notch-strip.png`; geometry in
+`~/work/koan/.cache/zen-ref/raw/measure-ref-{windowed,fullscreen}.json`.
+Both states use the **default single-toolbar layout**: **no toolbar or URL bar
+across the top**, the whole chrome is the sidebar.
+
+**Windowed (maximised 1470 x 923; sidebar 262 wide as in the photo)**
+
+| Item | Value (pt) |
+|---|---|
+| Row 1 (`#zen-sidebar-top-buttons`) | x 6, **y 3, h 38** (44 with its 3 pt margins); items left to right: traffic lights (box 70 x 20 at x 6, y 12), **sidebar toggle** (right after the lights, x ~76-94), then **back / forward / reload right-aligned** as 31 x 29 buttons at x = sidebar - 99 / -68 / -37 (163, 194, 225 here), y 7.5 |
+| Row 2: URL pill (`.urlbar-background`) | **246 x 36** at (8, 44.5), radius **14**, fill = the same 13.5% tint as the tiles (`oklch(0.866 0.015 251 / .135)`: slightly lighter than the sidebar), no border or shadow; shows the host (and port) only, 13.75 / 500, favicon at the left |
+| Essentials grid | container 262 x 112 at y 81, padding 6, **gap 4**; **4 per row** here (7 tiles = 4 + 3), tile **59.5 x 50** (inner background 55.5 x 46, 2 pt margin), tile radius **14**, favicon 16 x 16 centred; row pitch 54 (y 87, 141) |
+| Space header | full width x **44** at y 193 (after the grid), emoji (16 pt, x 17) + name "General" (13 / 600, dim, x 42) |
+| Divider row (`.pinned-tabs-container-separator`) | 250 x **22** at y 237: a **1 pt line** `rgba(255,255,255,.1)` from x 15 to ~214, and the **"Clear" button** (36.9 x 18.5, 10 pt / 500, right-aligned) which appears while the pointer is over the sidebar (hidden otherwise: absent in the windowed photo, present in the fullscreen one) |
+| "+ New Tab" row | 246 x **36** at (8, 261), radius 14, dim text, "+" icon; it comes **first**, above the tabs (`show-newtab-button-top`) |
+| Tab rows | **218 x 40** at x 6 (inner pill 214 x 36, radius **14**), pitch 40: favicon + title, no close button until hovered; **selected** = a lighter rounded pill (`color(srgb .776 .81 .848 / .22)`, i.e. 22% light blue-grey) |
+| Bottom bar | **32 high** (y 885-917, 6 pt above the window bottom), padding 6: Library button 32 x 32 at x 6 (the app/menu icon), **Space switcher** in the middle (one 17 x 32 button per Space starting at x 105.5: the current Space shows its emoji, the others show a dot until hovered), **"+" 32 x 32** at the right (x 224) |
+| Content card | at (**sidebar width**, **8**), right/bottom gap **8**, radius **7**, no gap on its left side (the 6 pt splitter belongs to the sidebar); its top edge is **above** the traffic-lights row (card y 8, lights centre y 22). In the photo it looks level with the lights only because of the camera angle |
+
+At the default 230 pt sidebar the same 7 Essentials wrap **3 + 3 + 1**: the
+grid rule is `repeat(auto-fit, minmax(max(23.7%, tile-min), 1fr))` with a fixed
+4 pt gap, so four tiles fit only when the container is >= ~231 pt wide (the
+user's sidebar is wider than the default). The count also changes the rule
+(`data-hack-type` in `ZenSpaceManager.mjs`): exactly 6 or 9 tiles use 30% columns
+(3 per row); an even count below 8 (2, 4) uses paired columns; 5 uses 25% / min
+48; everything else is 23.7% (4 per row).
+
+**Fullscreen (native macOS fullscreen)**
+
+| Item | Value |
+|---|---|
+| Window | the **notch strip stays black above the window** (33 pt, the OS safe area); the Zen window sits below it at (0, 33) with the same 1470 x 923 size; nothing is drawn under the notch, the sidebar starts below it |
+| Traffic lights | **gone** (`.titlebar-buttonbox-container` has no size) |
+| Row 1 | starts with the **sidebar toggle at the far left** (x 6), then back / forward / reload right-aligned exactly as windowed (x 163 / 194 / 225); row height unchanged (38) |
+| Everything else | unchanged: URL pill, Essentials, Space header, divider, tabs, bottom bar, and the **content card keeps its 8 pt margins and 7 pt radius** |
+| Menu bar / toolbars | the menu bar auto-hides (reappears at the top edge); `zen.view.borderless-fullscreen` = true |
+| Attributes | `inFullscreen=true sizemode=fullscreen` |
+
+Koan to match: no top toolbar; row 1 = lights + toggle + right-aligned
+back/forward/reload; 36-high pill at radius 14; the Essentials rule above;
+44-high Space header; divider with Clear; 36-high "+ New Tab" first; 40-pt
+rows; 32-high bottom bar with the Space switcher in the middle.
+
 ## 3. Sidebar content
 
 Screenshots: `main-02`, `main-07-pinned-and-folder.png`.
 
 | Element | Size / position (pt) | Detail |
 |---|---|---|
-| **Essentials** | tiles **51.5 x 50** (4 per row; x = 6, 61.5, 117, 172.5; y 87) | gap 4; tile bg radius **14** (inner 47.5 x 46), 16 x 16 favicon centred (radius 4) over a 13.5% tint `oklch(0.866 0.015 251 / .135)`; max 12 per Space; shown in every Space (`zen.workspaces.separate-essentials` true) |
+| **Essentials** | tiles **51.5 x 50** for 4 tiles in a 230 sidebar (x = 6, 61.5, 117, 172.5; y 87); with 7 tiles and a 262 sidebar **59.5 x 50**, 4 + 3 (see 2A for the column rule) | gap 4; tile bg radius **14** (inner 47.5 x 46), 16 x 16 favicon centred (radius 4) over a 13.5% tint `oklch(0.866 0.015 251 / .135)`; max 12 per Space; shown in every Space (`zen.workspaces.separate-essentials` true) |
 | **Space header** (`.zen-current-workspace-indicator`) | full width x **44** at y 139 | icon + name "Space", 13 / 600, dim; padding 17 / 12 / 17 / 17, gap 9 |
 | **Folder** (`zen-folder`) | 218 x **40** | label 13.75 / **600**, 32 pt left padding (icon + chevron), children indented 14; collapsed shows its tab icons; sub-folders up to 5 |
 | **Pinned tab** | 218 x 40 | same as a normal tab; pinned section above the "+ New Tab" row |
@@ -319,7 +370,13 @@ Screenshots: `main-05-compact-mode-on.png`, `main-06-compact-sidebar-shown.png`.
 - Also: toast "Sidebar hidden! Use Ctrl+S ..." when the sidebar is dragged
   closed; background-tab-opened toast in compact mode
   (`show-background-tab-toast`).
-- *PENDING: capture of the pointer-driven reveal and the toast.*
+- **Captured** (`main-15-compact-hover-reveal.png`): with the pointer warped to
+  the left edge (x 2) nothing has appeared **0.18 s** later; **~0.7 s** later the
+  sidebar is a **floating rounded panel over the page** (246 wide, ~10 pt inset,
+  darker and more opaque than the docked sidebar, "Clear" and the copy-URL
+  button visible because the pointer is over it); moving the pointer away hides
+  it again in **< 0.5 s**. The page does not move. (Timings include the ~0.3 s
+  capture latency; the source's `0.25 s` slide and `150 ms` keep-hover apply.)
 
 ## 6. Spaces
 
@@ -339,8 +396,16 @@ Screenshots: `main-10-create-space.png`.
 
 ## 7. Glance, split view, pinned and folders (behaviour)
 
-- **Glance** (from source; scripted call didn't open one so no capture):
-  activation `zen.glance.activation-method` = **alt** (Opt-click a link);
+- **Glance** (captured with a real Option-click on a link:
+  `main-16-glance.png`): measured: the **page behind** is scaled to **0.97**
+  (1164 x 879.8 from 1200 x 907, still radius 7, same shadow) and dimmed;
+  the glance card is centred at ~80% of the content width and the full
+  height, same 7 pt radius; **three 32 x 32 round buttons** sit to the right
+  of the card at x 1354 (just outside it), y 35 / 79 / 123 (pitch 44): close,
+  expand to a full tab, split view. Opening grows the card from the clicked
+  link (the first frame is a dark card with a "Transferring data..." status).
+  The glance tab appears in the sidebar as a child of its parent tab.
+  From source: activation `zen.glance.activation-method` = **alt** (Opt-click a link);
   the page opens in a card at **80% width x 100% height of the content area**
   with the page behind it scaled to **0.97**, animation **350 ms**
   (`zen.glance.animation-duration`), radius = `--zen-native-inner-radius`;
@@ -419,8 +484,21 @@ Folder**, Live Folder >, | **Theme picker**, Set Profile >, | Reload/Bookmark/
 Select All Tabs, Undo Close Tab, | Customize Sidebar, Turn on Vertical Tabs,
 | Tabs on the right, Customize..., Full-screen autohide.
 
-*PENDING: how the native menus look (they are NSMenus; Zen uses default
-context menus: `zen.view.context-menu.refresh` false).*
+**How they look** (all native macOS NSMenus with the system's translucent
+glass, 12-13 pt text, no custom styling since `zen.view.context-menu.refresh`
+is false): `main-17-tab-context-menu.png` (tab menu: *New Tab Below*, Move to
+Folder >, Add Split View... | Reload Tab, Mute Tab, **Add to Essentials** with
+a "7 / 12" badge | Change Label..., Change Icon... | Pin Tab, Unload Tab,
+Duplicate Tab | Bookmark Tab..., Move Tab >, Share >, Open in New Container Tab
+>, Select All Tabs | Send to Mobile > ... with a scroll arrow at the bottom),
+`main-18-menubar-zen.png` (About Zen, Settings... Cmd+, Services >, Hide Zen
+Cmd+H, Hide Others Opt+Cmd+H, Show All, Quit Zen Cmd+Q), `main-19-menubar-view.png`
+(Appearance >, Toolbars >, Sidebar >, Collapse Pinned Tabs, Zoom >, Page Style
+>, Repair Text Encoding, Enter Full Screen Ctrl+Cmd+F), `main-20-menubar-spaces.png`
+(Create Space, Theme..., Change Name..., Change Icon... | Next Space
+Opt+Cmd+Right, Previous Space Opt+Cmd+Left | one row per Space with its icon and
+Ctrl+1, Ctrl+2...). The menu bar reads: Apple, Zen, File, Edit, View, Spaces,
+History, Bookmarks, Tools, Window, Help.
 
 ### Zen's own shortcuts on macOS (read from the running app's `<key>` elements)
 
@@ -447,11 +525,13 @@ Ctrl+S). Koan's Space and Library bindings already match. Check against #90.
 
 ## 12. Fullscreen and the notch
 
-*PENDING.* From source: `zen.view.borderless-fullscreen` = true; Zen enters
-native macOS fullscreen (`macnativefullscreen=true`); the toolbars hide and
-reappear on pointer at the top edge (`full-screen-autohide`). The notch is on
-this Mac (menu bar is 33 pt tall), so a captured fullscreen window shows the
-notch strip; measure the safe-area inset in a second pass.
+Captured (`ref-02-fullscreen-notch-strip.png`, details in section 2A). Native
+macOS fullscreen: the menu bar and notch area stay a **black 33 pt strip**
+above a Zen window of the normal 1470 x 923 size, so nothing is cropped by the
+notch and nothing sits under it. Traffic lights disappear; the sidebar toggle
+becomes the first item of row 1; the page card keeps its 8 pt margins and
+rounded corners. Reaching the top edge reveals the menu bar. `Enter Full
+Screen` is Ctrl+Cmd+F.
 
 ## 13. Animation table (source; all verified in the code, onboarding also in video)
 
@@ -492,4 +572,7 @@ the current build before filing issues.)
 6. **Compact mode**: 150 ms keep-hover, 250 ms spring slide, 10 pt float
    margin, hot-zone 200 / 100 pt outside the window (#98).
 7. **Theme picker**: Zen's gradient panel vs Koan's single colour (#41).
-8. Fullscreen/notch and native menus: capture before judging.
+8. Fullscreen: no traffic lights, toggle first in row 1, black notch strip above
+   an unchanged 923-high window, card margins kept (2A, 12).
+9. Native menus (Zen / View / Spaces / tab context): see section 11 for the
+   exact contents and shortcuts, and the screenshots.
