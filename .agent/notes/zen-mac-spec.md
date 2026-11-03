@@ -797,6 +797,45 @@ cross-fades (`--zen-background-opacity`, `zen.workspaces.switch-animation-durati
 = 250 ms). The panel's own open/close is the native popover's (not captured
 separately).
 
+### 15.9 Adjusting the glass: the opacity slider and the grain dial
+
+Both live in the theme picker's bottom row and edit the **active Space's theme**.
+
+| Control | Range | Default | Stored | Effect |
+|---|---|---|---|---|
+| **Opacity** slider (sine-wave track, 250 pt wide, pill thumb) | `0.30 - 0.80`, step `0.001` | `0.5` | `workspace.theme.opacity` | alpha of the theme colour layer over the (fixed) native blur; a haptic tick at every 0.1 |
+| **Grain** dial (66 x 66 pt, a knob on a ring of 16 dots) | 16 steps `k / 16`, `0 .. 0.9375` | `0` (off) | `workspace.theme.texture` | opacity of the tiled `grain-bg.png` above the colour layer (`.zen-browser-grain`), also `--zen-grainy-background-opacity`; `0` hides it; 0.2 s fade |
+| Light / dark / auto buttons | 3 | auto (`2`) | **pref** `zen.view.window.scheme` (0 dark, 1 light, 2 auto) | **global**, applies to every Space and window |
+
+**Storage (verified):** `prefs.js` contains no opacity, texture or theme pref:
+after setting opacity 0.30 / 0.50 / 0.80 and 0.80 + grain 0.9375 and forcing
+`Services.prefs.savePrefFile`, the `zen.*` lines were byte-identical (only
+`zen.workspaces.active` is there). The values are in the Space's object
+`{type: "gradient", gradientColors: [...], opacity, texture}`, saved to
+`zen-sessions.jsonlz4` (plus its backup and `sessionstore-backups`) when the picker
+closes; while dragging, the change is applied live and not yet saved.
+**It is per Space**: in the test profile "General" held a colour with opacity
+0.8 and grain 0.9375 while "Work" and "Play" still had
+`{gradientColors: [], opacity: 0.5, texture: 0}`; every new Space starts there.
+
+**Computed layer for one colour `rgb(173,6,154)` (live):**
+
+| Opacity | `#zen-browser-background::after` | Notes |
+|---|---|---|
+| 0.30 (min) | `rgba(186, 46, 170, 0.30)` | most backdrop and blur showing, pale tint |
+| 0.50 (default) | `rgba(180, 26, 162, 0.50)` | |
+| 0.80 (max) | `rgba(173, 6, 154, 0.80)` | nearly the solid colour; still 20% see-through |
+| 0.80 + grain 0.9375 | same, plus `.zen-browser-grain` at 0.9375 | grain overlay `display: flex` |
+
+The colour is mixed with white on macOS by
+`blendedAlpha = min(1, op + 0.30 + 0.60 * (1 - (op + 0.30)))`
+(0.84 at 0.30, 0.92 at 0.50, 1.0 from 0.70 up), so a lower opacity is also a
+paler colour. The default theme (no colour) ignores the slider in dark
+(`rgba(0,0,0,.4)` fixed) and is transparent in light. The **blur itself is not
+adjustable** in Zen: the only knobs are the on/off pref
+`zen.widget.macos.window-vibrancy` and the material index
+`zen.widget.macos.window-material` (15.3).
+
 ### 15.8 Screenshots (active window over the striped backdrop)
 
 | File | State |
