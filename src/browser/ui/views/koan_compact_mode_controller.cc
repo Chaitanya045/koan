@@ -1035,6 +1035,10 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
     if (ui::Layer* layer = top_container->layer()) {
       layer->GetAnimator()->AbortAllAnimations();
       layer->SetTransform(gfx::Transform());
+      // A hidden toolbar's layer is hidden (HideAwayToolbarLayer()): without
+      // this the toolbar stays invisible in the fullscreen toolbar, a blank
+      // grey band above the sidebar.
+      layer->SetVisible(true);
     }
     top_container->SetCanProcessEventsWithinSubtree(true);
   }
