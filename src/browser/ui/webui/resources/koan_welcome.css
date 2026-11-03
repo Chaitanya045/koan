@@ -17,10 +17,9 @@
 
 :root {
   color-scheme: light dark;
-  /* zen-theme.css takes the system's AccentColor (zen.theme.accent-color);
-   * on the user's Mac Zen's buttons came out oklch(0.55 0.089 254.6) and
-   * its accent text oklch(0.7 0.089 254.6), which this gives. */
-  --zen-primary-color: oklch(0.6 0.0888 254.6);
+  /* zen-theme.css; koan_welcome.js then sets it from the system's accent
+   * as ZenGradientGenerator.mjs does for the default theme. */
+  --zen-primary-color: AccentColor;
   --zen-main-browser-background: light-dark(rgb(235, 235, 235), #1b1b1b);
   /* zen-buttons.css */
   --zen-accent-button-color: light-dark(

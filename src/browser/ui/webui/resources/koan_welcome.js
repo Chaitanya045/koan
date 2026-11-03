@@ -116,6 +116,98 @@ const kSpring = {type: 'spring', bounce: 0.35, visualDuration: 0.35};
 const kExit = {duration: 0.12, ease: 'easeIn'};
 const kFade = {duration: 0.25, ease: 'easeOut'};
 
+// ---- Zen's accent: --zen-primary-color, from the system's accent the way
+// ZenGradientGenerator.mjs works it out for a Space with the default theme
+// (getNativeAccentColor, then getAccentColorForUI).
+
+function blendColors(rgb1, rgb2, percentage) {
+  const p = percentage / 100;
+  return rgb1.map((c, i) => Math.round(c * p + rgb2[i] * (1 - p)));
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) {
+    return [0, 0, l];
+  }
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h;
+  if (max === r) {
+    h = (g - b) / d + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / d + 2;
+  } else {
+    h = (r - g) / d + 4;
+  }
+  return [h * 60, s, l];
+}
+
+function hslToRgb(h, s, l) {
+  if (s === 0) {
+    const v = Math.round(l * 255);
+    return [v, v, v];
+  }
+  const hue = (p, q, t) => {
+    t = (t + 1) % 1;
+    if (t < 1 / 6) {
+      return p + (q - p) * 6 * t;
+    }
+    if (t < 1 / 2) {
+      return q;
+    }
+    if (t < 2 / 3) {
+      return p + (q - p) * (2 / 3 - t) * 6;
+    }
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hue(p, q, h + 1 / 3), hue(p, q, h), hue(p, q, h - 1 / 3)].map(
+      v => Math.round(v * 255));
+}
+
+// The CSS AccentColor, as Zen reads it (InspectorUtils.colorToRGBA).
+function cssAccentColor() {
+  const probe = document.createElement('span');
+  probe.style.color = 'AccentColor';
+  document.body.appendChild(probe);
+  const match = getComputedStyle(probe).color.match(/\d+(\.\d+)?/g);
+  probe.remove();
+  return match ? match.slice(0, 3).map(Number) : [0, 0, 0];
+}
+
+function zenPrimaryColor(systemAccent) {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  // getToolbarModifiedBaseRaw()
+  const toolbarBase = dark ? [23, 23, 26] : [240, 240, 244];
+  let rgb = blendColors(systemAccent, toolbarBase, dark ? 80 : 50);
+  if (dark) {
+    rgb = blendColors(rgb, [0, 0, 0], 40);
+    return `rgb(${rgb.join(', ')})`;
+  }
+  // getAccentColorForUI(), light.
+  if (rgb[0] === rgb[1] && rgb[1] === rgb[2]) {
+    return `rgb(${rgb.join(', ')})`;
+  }
+  const [h, s, l] = rgbToHsl(...rgb);
+  return `rgb(${hslToRgb(h / 360, Math.min(1, s + 0.3), l * 0.4 + 0.42 * 0.6)
+                   .join(', ')})`;
+}
+
+function applyPrimaryColor(data) {
+  const accent = data.systemAccent ?? cssAccentColor();
+  const set = () => document.documentElement.style.setProperty(
+      '--zen-primary-color', zenPrimaryColor(accent));
+  set();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', set);
+}
+
 // ---- Building blocks.
 
 function createOption({id, group, checked, l10n, text, extra}) {
@@ -581,13 +673,15 @@ function getWelcomePages(data) {
           content.appendChild(createThemePicker(data.colors));
           return;
         }
-        // Zen anchors its picker on a box the picker's size (macOS: as
-        // tall plus 10, 20 narrower; measured 360 x 524.4 for a 380 x 514
-        // panel) and opens it over the box.
+        // ZenWelcome.mjs sizes an anchor from the panel ("20 is the shadow
+        // width * 2"; on macOS 90 taller) and opens the panel over it at its
+        // top left (position "overlap"). Koan's picker centres on the rect it
+        // gets: the panel's own, at the anchor's top left.
         const anchor = document.createElement('div');
         anchor.id = 'zen-welcome-workspace-colors-anchor';
-        anchor.style.width = `${data.themePicker.width - 20}px`;
-        anchor.style.height = `${data.themePicker.height + 10.4}px`;
+        const {width, height} = data.themePicker;
+        anchor.style.width = `${width - 20}px`;
+        anchor.style.height = `${data.isMac ? height + 90 : height - 20}px`;
         content.appendChild(anchor);
         const place = () => {
           if (!anchor.isConnected) {
@@ -595,7 +689,7 @@ function getWelcomePages(data) {
             return;
           }
           const r = anchor.getBoundingClientRect();
-          chrome.send('showThemePicker', [r.x, r.y, r.width, r.height]);
+          chrome.send('showThemePicker', [r.x, r.y, width, height]);
         };
         // Once the page's fade-in has placed it; again when the window
         // resizes (the picker follows).
@@ -768,6 +862,7 @@ async function animateInitialStage(data) {
 async function start() {
   setText(document.getElementById('zen-welcome-back'), 'zen-welcome-back');
   const data = await sendWithPromise('getWelcomeData');
+  applyPrimaryColor(data);
   animateInitialStage(data);
 }
 

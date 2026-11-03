@@ -47,6 +47,7 @@
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_system_accent.h"
 #include "koan/browser/ui/views/koan_welcome_icons_data.h"
 #include "koan/browser/ui/views/koan_welcome_mac.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -2516,6 +2517,8 @@ void KoanWelcome::ShowWebUI() {
   callbacks.close_theme_picker = base::BindRepeating(
       &KoanWelcome::CloseThemePicker, weak_factory_.GetWeakPtr());
 #endif
+  callbacks.system_accent =
+      base::BindRepeating([] { return GetSystemAccentColor(); });
   callbacks.space_color = base::BindRepeating(
       [](base::WeakPtr<KoanWelcome> welcome, int color_id) {
         KoanBrowserViewController* controller =

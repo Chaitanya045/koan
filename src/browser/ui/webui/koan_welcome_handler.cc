@@ -15,6 +15,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/profiles/profile.h"
@@ -141,13 +142,29 @@ void KoanWelcomeHandler::OnImportSourcesLoaded(base::Value callback_id) {
     }
   }
 
-  ResolveJavascriptCallback(callback_id,
-                            base::DictValue()
-                                .Set("importSources", std::move(sources))
-                                .Set("colors", std::move(colors))
-                                .Set("themePicker", std::move(theme_picker))
-                                .Set("engines", SearchEngines())
-                                .Set("defaultEngine", default_engine));
+  // Zen's theme maths starts from the system's accent (AccentColor).
+  base::Value system_accent;
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().system_accent) {
+    if (const std::optional<SkColor> accent =
+            host->callbacks().system_accent.Run()) {
+      system_accent =
+          base::Value(base::ListValue()
+                          .Append(static_cast<int>(SkColorGetR(*accent)))
+                          .Append(static_cast<int>(SkColorGetG(*accent)))
+                          .Append(static_cast<int>(SkColorGetB(*accent))));
+    }
+  }
+
+  ResolveJavascriptCallback(
+      callback_id, base::DictValue()
+                       .Set("systemAccent", std::move(system_accent))
+                       .Set("isMac", static_cast<bool>(BUILDFLAG(IS_MAC)))
+                       .Set("importSources", std::move(sources))
+                       .Set("colors", std::move(colors))
+                       .Set("themePicker", std::move(theme_picker))
+                       .Set("engines", SearchEngines())
+                       .Set("defaultEngine", default_engine));
 }
 
 base::ListValue KoanWelcomeHandler::SearchEngines() const {

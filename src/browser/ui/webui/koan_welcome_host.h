@@ -10,6 +10,7 @@
 
 #include "base/functional/callback.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
@@ -38,6 +39,8 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
     base::RepeatingCallback<std::optional<gfx::Size>()> theme_picker_size;
     base::RepeatingCallback<void(const gfx::Rect& anchor)> show_theme_picker;
     base::RepeatingClosure close_theme_picker;
+    // The system's accent colour (Zen's AccentColor), if it has one.
+    base::RepeatingCallback<std::optional<SkColor>()> system_accent;
     // "Dive in!": pin `essentials` and close the screen.
     base::RepeatingCallback<void(std::vector<GURL> essentials)> finish;
     // A press outside the card: the window follows the pointer.
