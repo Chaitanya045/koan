@@ -38,6 +38,10 @@ documentation lives in [`docs/`](../../docs) and
   workspaces and Essentials
 - [research-phase3-glance-split.md](research-phase3-glance-split.md): Glance
   and split view
+- [zen-mac-spec.md](zen-mac-spec.md): what Zen 1.24b looks like and does on
+  macOS (measured), with screenshots and where Koan differs
+- [zen-onboarding-port.md](zen-onboarding-port.md): reusing Zen's welcome as
+  a `chrome://koan-welcome` WebUI: API mapping, CSS changes, phases
 
 ## Records
 
