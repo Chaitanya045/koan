@@ -47,7 +47,14 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
 }
 
+// Registers Koan's local-state prefs, and sets Koan's defaults for upstream
+// ones.
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
+  registry->RegisterStringPref(kLookStyle, "shadcn");
+  registry->RegisterStringPref(kLookMode, "dark");
+  registry->RegisterStringPref(kLookBase, "neutral");
+  registry->RegisterStringPref(kLookAccent, "none");
+  registry->RegisterStringPref(kLookCustomCss, "");
   namespace pm = performance_manager::user_tuning::prefs;
   // Memory Saver: discard tabs that have been hidden for 4 hours (the
   // balanced setting) until they are opened again. Chromium ships it off.
