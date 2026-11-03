@@ -7,8 +7,12 @@
 #include <algorithm>
 
 #include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 
@@ -26,6 +30,24 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
                                  sidebar_side)
              : gfx::Insets::TLBR(top, sidebar_side, kContentCardMargin,
                                  kContentCardMargin);
+}
+
+// Zen's zen.view.borderless-fullscreen (on by default; zenThemeModifier.js
+// updateElementSeparation()): in fullscreen with compact mode on and no split
+// view, the page has no gap around it and fills the screen. Only macOS keeps
+// the card in fullscreen at all (see UseContentCard()).
+bool IsBorderlessFullscreen(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  const MultiContentsView* contents = browser_view->multi_contents_view();
+  return browser_view->IsFullscreen() &&
+         browser_view->GetProfile()
+             ->GetOriginalProfile()
+             ->GetPrefs()
+             ->GetBoolean(prefs::kCompactModeEnabled) &&
+         !(contents && contents->IsInSplitView());
+#else
+  return false;
+#endif
 }
 
 }  // namespace
@@ -48,7 +70,9 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
   if (browser_view->IsFullscreen()) {
     // (See UseContentCard().)
-    return SidebarSideInsets(browser_view, kContentCardMargin, 0);
+    return IsBorderlessFullscreen(browser_view)
+               ? gfx::Insets()
+               : SidebarSideInsets(browser_view, kContentCardMargin, 0);
   }
 #endif
   if (IsToolbarHidden(browser_view)) {
@@ -78,7 +102,7 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 gfx::RoundedCornersF ActiveContentsRadii(
     const BrowserView* browser_view,
     const gfx::RoundedCornersF& default_radii) {
-  return UseContentCard(browser_view)
+  return UseContentCard(browser_view) && !IsBorderlessFullscreen(browser_view)
              ? gfx::RoundedCornersF(ContentCardCornerRadius())
              : default_radii;
 }
