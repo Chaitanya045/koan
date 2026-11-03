@@ -98,6 +98,40 @@ function renderRow(row) {
       });
       break;
     }
+    case 'textarea': {
+      // A theme pasted from ui.shadcn.com/themes or tweakcn.com; the browser
+      // checks it and keeps the old theme if it isn't one.
+      const area = h('textarea', {
+        'aria-label': row.label,
+        spellcheck: false,
+        placeholder: ':root {\n  --background: oklch(1 0 0);\n  --primary: ' +
+            'oklch(0.205 0 0);\n}\n.dark {\n  --background: oklch(0.145 0 0);\n}',
+      });
+      const status = h('span', {class: 'theme-status', role: 'status'});
+      const apply = async () => {
+        const ok = await sendWithPromise('setPref', row.pref, area.value.trim());
+        status.classList.toggle('error', !ok);
+        status.textContent = ok ?
+            (area.value.trim() ? 'Theme applied' : 'Theme removed') :
+            'That is not a theme: expected CSS with --background, ' +
+                '--primary … in :root and .dark';
+      };
+      el = h('div', {class: 'row theme-paste'}, h('span', {}, row.label), area,
+             h('div', {class: 'theme-actions'},
+               h('button', {onclick: apply}, 'Apply'),
+               h('button', {onclick: () => {
+                 area.value = '';
+                 apply();
+               }}, 'Remove'),
+               status));
+      updaters.push(() => {
+        if (document.activeElement !== area) {
+          area.value = prefValue(row.pref) || '';
+        }
+        area.disabled = disabled();
+      });
+      break;
+    }
     case 'layout': {
       const cards = row.options.map(
           option => h(
@@ -461,6 +495,11 @@ async function main() {
   addWebUiListener('pref-changed', (pref, value) => {
     settings.prefs[pref] = value;
     updateAll();
+    if (pref.startsWith('koan.look.')) {
+      // The page draws from the same tokens as the browser: fetch them again.
+      document.getElementById('look-tokens').href =
+          `/koan_tokens.css?${Date.now()}`;
+    }
   });
   addWebUiListener('shortcuts-changed', shortcuts => {
     settings.shortcuts = shortcuts;

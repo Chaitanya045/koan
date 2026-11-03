@@ -403,8 +403,9 @@ class DownloadIconView : public views::View {
                            std::lround(center.y() - size / 2.f), size, size);
     canvas->Save();
     if (preview_) {
-      SkPath clip = SkPath::RRect(gfx::RectToSkRect(target),
-                                  library::SmallRadius(), library::SmallRadius());
+      SkPath clip =
+          SkPath::RRect(gfx::RectToSkRect(target), library::SmallRadius(),
+                        library::SmallRadius());
       canvas->ClipPath(clip, /*do_anti_alias=*/true);
     }
     canvas->DrawImageInt(image, 0, 0, image.width(), image.height(), target.x(),

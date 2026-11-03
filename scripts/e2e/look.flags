@@ -1,0 +1,2 @@
+# Frame dumps, to check the colours the window really draws.
+--ozone-dump-file={dump}

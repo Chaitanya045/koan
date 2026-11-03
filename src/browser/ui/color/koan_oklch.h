@@ -20,8 +20,9 @@ struct OklchColor {
 
 // Converts to sRGB with Björn Ottosson's OKLab matrices and the sRGB transfer
 // function, so a token comes out as the colour a browser draws for the same
-// CSS. A colour outside the sRGB gamut keeps its lightness and hue and loses
-// chroma until it fits (what CSS Color 4's gamut mapping approximates).
+// CSS. A colour outside the sRGB gamut is mapped into it with CSS Color 4's
+// algorithm (it keeps its lightness and hue and loses chroma until the
+// clipped colour is within a just-noticeable difference).
 SkColor OklchToSkColor(const OklchColor& color);
 
 // The same for CIE-style HSL (hue in degrees, saturation and lightness 0..1),

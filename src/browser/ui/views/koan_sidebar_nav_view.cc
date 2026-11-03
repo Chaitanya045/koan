@@ -235,8 +235,8 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   pill_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   pill->SetPreferredSize(gfx::Size(0, kPillHeight));
-  pill->SetBackground(views::CreateRoundedRectBackground(kColorKoanUrlPill,
-                                                         UrlPillCornerRadius()));
+  pill->SetBackground(views::CreateRoundedRectBackground(
+      kColorKoanUrlPill, UrlPillCornerRadius()));
   // The focus ring follows the pill's corners.
   views::InstallRoundRectHighlightPathGenerator(pill.get(), gfx::Insets(),
                                                 UrlPillCornerRadius());

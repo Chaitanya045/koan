@@ -35,9 +35,80 @@ Rgb OklchToLinearSrgb(double l, double c, double h_degrees) {
 }
 
 bool InGamut(const Rgb& rgb) {
-  constexpr double kEpsilon = 1e-4;
+  constexpr double kEpsilon = 1e-6;
   return std::ranges::all_of(
       rgb, [](double v) { return v >= -kEpsilon && v <= 1.0 + kEpsilon; });
+}
+
+Rgb Clip(const Rgb& rgb) {
+  return {std::clamp(rgb[0], 0.0, 1.0), std::clamp(rgb[1], 0.0, 1.0),
+          std::clamp(rgb[2], 0.0, 1.0)};
+}
+
+// Linear sRGB -> OKLab.
+std::array<double, 3> LinearSrgbToOklab(const Rgb& rgb) {
+  const double l = std::cbrt(0.4122214708 * rgb[0] + 0.5363325363 * rgb[1] +
+                             0.0514459929 * rgb[2]);
+  const double m = std::cbrt(0.2119034982 * rgb[0] + 0.6806995451 * rgb[1] +
+                             0.1073969566 * rgb[2]);
+  const double s = std::cbrt(0.0883024619 * rgb[0] + 0.2817188376 * rgb[1] +
+                             0.6299787005 * rgb[2]);
+  return {0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+          1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+          0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s};
+}
+
+// The distance between two colours in OKLab (CSS Color 4's deltaEOK).
+double DeltaEOk(const Rgb& a, const Rgb& b) {
+  const auto lab_a = LinearSrgbToOklab(a);
+  const auto lab_b = LinearSrgbToOklab(b);
+  return std::hypot(lab_a[0] - lab_b[0], lab_a[1] - lab_b[1],
+                    lab_a[2] - lab_b[2]);
+}
+
+// CSS Color 4's gamut mapping to sRGB (the algorithm browsers use for
+// out-of-gamut oklch()): reduce the chroma until the clipped colour is
+// within a just-noticeable difference of the unclipped one.
+Rgb MapToSrgbGamut(double l, double c, double h) {
+  constexpr double kJnd = 0.02;
+  constexpr double kEpsilon = 0.0001;
+  if (l >= 1.0) {
+    return {1, 1, 1};
+  }
+  if (l <= 0.0) {
+    return {0, 0, 0};
+  }
+  Rgb current = OklchToLinearSrgb(l, c, h);
+  if (InGamut(current)) {
+    return Clip(current);
+  }
+  Rgb clipped = Clip(current);
+  if (DeltaEOk(clipped, current) < kJnd) {
+    return clipped;
+  }
+  double min = 0.0;
+  double max = c;
+  bool min_in_gamut = true;
+  while (max - min > kEpsilon) {
+    const double chroma = (min + max) / 2;
+    current = OklchToLinearSrgb(l, chroma, h);
+    if (min_in_gamut && InGamut(current)) {
+      min = chroma;
+      continue;
+    }
+    clipped = Clip(current);
+    const double e = DeltaEOk(clipped, current);
+    if (e < kJnd) {
+      if (kJnd - e < kEpsilon) {
+        return clipped;
+      }
+      min_in_gamut = false;
+      min = chroma;
+    } else {
+      max = chroma;
+    }
+  }
+  return clipped;
 }
 
 double LinearToGamma(double v) {
@@ -52,24 +123,8 @@ uint8_t ToByte(double v) {
 }  // namespace
 
 SkColor OklchToSkColor(const OklchColor& color) {
-  const double lightness = std::clamp<double>(color.l, 0.0, 1.0);
-  double chroma = std::max<double>(color.c, 0.0);
-  Rgb rgb = OklchToLinearSrgb(lightness, chroma, color.h);
-  if (!InGamut(rgb)) {
-    // Bisect the chroma that still fits.
-    double low = 0.0;
-    double high = chroma;
-    for (int i = 0; i < 24; ++i) {
-      const double mid = (low + high) / 2;
-      if (InGamut(OklchToLinearSrgb(lightness, mid, color.h))) {
-        low = mid;
-      } else {
-        high = mid;
-      }
-    }
-    chroma = low;
-    rgb = OklchToLinearSrgb(lightness, chroma, color.h);
-  }
+  const Rgb rgb = MapToSrgbGamut(std::clamp<double>(color.l, 0.0, 1.0),
+                                 std::max<double>(color.c, 0.0), color.h);
   return SkColorSetARGB(ToByte(color.a), ToByte(LinearToGamma(rgb[0])),
                         ToByte(LinearToGamma(rgb[1])),
                         ToByte(LinearToGamma(rgb[2])));

@@ -2,10 +2,12 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
+#include <string>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -16,10 +18,13 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_mixer.h"
 #include "koan/browser/ui/color/koan_look.h"
+#include "koan/browser/ui/fonts/koan_fonts.h"
 #include "koan/browser/ui/views/koan_look_hooks.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/color/color_mixers.h"
-#include "ui/color/color_provider_manager.h"
 #include "ui/color/color_provider_key.h"
+#include "ui/color/color_provider_manager.h"
+#include "ui/gfx/font_list.h"
 #include "ui/native_theme/native_theme.h"
 
 namespace koan {
@@ -77,12 +82,14 @@ class LookController : public look::Observer {
   void Reload() {
     PrefService* local_state = g_browser_process->local_state();
     look::Look next;
-    next.style = look::StyleFromString(local_state->GetString(prefs::kLookStyle))
-                     .value_or(look::Style::kShadcn);
+    next.style =
+        look::StyleFromString(local_state->GetString(prefs::kLookStyle))
+            .value_or(look::Style::kShadcn);
     next.mode = look::ModeFromString(local_state->GetString(prefs::kLookMode))
                     .value_or(look::Mode::kDark);
-    next.base = look::BaseColorFromString(local_state->GetString(prefs::kLookBase))
-                    .value_or(look::BaseColor::kNeutral);
+    next.base =
+        look::BaseColorFromString(local_state->GetString(prefs::kLookBase))
+            .value_or(look::BaseColor::kNeutral);
     next.accent =
         look::AccentFromString(local_state->GetString(prefs::kLookAccent))
             .value_or(look::Accent::kNone);
@@ -96,6 +103,20 @@ class LookController : public look::Observer {
   PrefChangeRegistrar registrar_;
 };
 
+// Geist is shadcn's typeface: the native UI's default font in the shadcn
+// style, from the next start (fonts are loaded once, and the switch is
+// rare). macOS only: Koan ships nowhere else.
+void ApplyDefaultFont() {
+#if BUILDFLAG(IS_MAC)
+  if (!look::IsShadcnStyle() || !fonts::RegisterBundledFonts()) {
+    return;
+  }
+  gfx::FontList::SetDefaultFontDescription(std::string(fonts::kSansFamily) +
+                                           ", 13px");
+  ui::ResourceBundle::GetSharedInstance().ReloadFonts();
+#endif
+}
+
 LookController& GetController() {
   static base::NoDestructor<LookController> controller;
   return *controller;
@@ -103,8 +124,7 @@ LookController& GetController() {
 
 }  // namespace
 
-void AdjustColorProviderKey(const Profile* profile,
-                            ui::ColorProviderKey& key) {
+void AdjustColorProviderKey(const Profile* profile, ui::ColorProviderKey& key) {
   static bool installed = false;
   if (!installed) {
     installed = true;
@@ -112,6 +132,8 @@ void AdjustColorProviderKey(const Profile* profile,
     // A provider built before this (for a window that isn't a browser's) has
     // the old colours.
     ui::ColorProviderManager::Get().ResetColorProviderCache();
+    GetController().EnsureInitialized();
+    ApplyDefaultFont();
   }
   GetController().EnsureInitialized();
   if (!look::IsShadcnStyle() || profile->IsIncognitoProfile() ||

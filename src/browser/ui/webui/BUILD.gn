@@ -29,6 +29,8 @@ source_set("webui") {
     "//koan/browser:features",
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
+    "//koan/browser/ui/color:tokens",
+    "//koan/browser/ui/fonts",
     "//koan/common:url_constants",
     "//ui/base",
     "//ui/events:event_constants",

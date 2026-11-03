@@ -267,9 +267,9 @@ class KoanGlanceBackdrop : public views::View {
       return;
     }
     // Only around the card: a drop shadow also fills the shape itself.
-    const SkRRect card =
-        SkRRect::MakeRectXY(gfx::RectToSkRect(card_bounds_),
-                            ContentCardCornerRadius(), ContentCardCornerRadius());
+    const SkRRect card = SkRRect::MakeRectXY(gfx::RectToSkRect(card_bounds_),
+                                             ContentCardCornerRadius(),
+                                             ContentCardCornerRadius());
     gfx::ScopedCanvas scoped(canvas);
     canvas->sk_canvas()->clipRRect(card, SkClipOp::kDifference, true);
     cc::PaintFlags shadow;

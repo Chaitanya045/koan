@@ -153,8 +153,9 @@ Arguments SplitArguments(std::string_view text) {
     result.alpha = std::string(
         base::TrimWhitespaceASCII(text.substr(slash + 1), base::TRIM_ALL));
   }
-  for (std::string_view part : base::SplitStringPiece(
-           colours, " ,\t\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+  for (std::string_view part :
+       base::SplitStringPiece(colours, " ,\t\n", base::TRIM_WHITESPACE,
+                              base::SPLIT_WANT_NONEMPTY)) {
     result.values.emplace_back(part);
   }
   return result;
@@ -168,9 +169,8 @@ std::optional<float> ParseAlpha(const Arguments& arguments) {
   if (!number) {
     return std::nullopt;
   }
-  return static_cast<float>(
-      std::clamp(number->percent ? number->value / 100 : number->value, 0.0,
-                 1.0));
+  return static_cast<float>(std::clamp(
+      number->percent ? number->value / 100 : number->value, 0.0, 1.0));
 }
 
 // hsl(222.2 84% 4.9% / 50%), hsl(222, 84%, 4.9%) and shadcn's bare
@@ -267,7 +267,8 @@ std::optional<SkColor> ParseHex(std::string_view text) {
 // The part of `value` inside the parentheses of `function(…)`.
 std::optional<std::string_view> FunctionArguments(std::string_view value,
                                                   std::string_view function) {
-  if (!base::StartsWith(value, function, base::CompareCase::INSENSITIVE_ASCII)) {
+  if (!base::StartsWith(value, function,
+                        base::CompareCase::INSENSITIVE_ASCII)) {
     return std::nullopt;
   }
   value.remove_prefix(function.size());
@@ -382,8 +383,8 @@ std::optional<CustomTheme> ParseThemeCss(std::string_view css) {
     name.remove_prefix(2);
     if (const size_t important = value.find("!important");
         important != std::string_view::npos) {
-      value = base::TrimWhitespaceASCII(value.substr(0, important),
-                                        base::TRIM_ALL);
+      value =
+          base::TrimWhitespaceASCII(value.substr(0, important), base::TRIM_ALL);
     }
     if (name == "radius") {
       if (auto radius = ParseRadius(value)) {
@@ -479,9 +480,8 @@ std::string TokensToCss(const TokenSet& tokens) {
             : base::StringPrintf("rgb(%d %d %d / %.3g)", SkColorGetR(color),
                                  SkColorGetG(color), SkColorGetB(color),
                                  SkColorGetA(color) / 255.0);
-    css += base::StringPrintf("--%s: %s;\n",
-                              std::string(kTokenNames[i]).c_str(),
-                              value.c_str());
+    css += base::StringPrintf(
+        "--%s: %s;\n", std::string(kTokenNames[i]).c_str(), value.c_str());
   }
   css += base::StringPrintf("--radius: %gpx;\n", tokens.radius);
   return css;

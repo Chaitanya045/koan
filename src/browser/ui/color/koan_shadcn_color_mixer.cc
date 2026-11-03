@@ -140,7 +140,8 @@ void AddKoanCoreColorMixer(ui::ColorProvider* provider,
   // steps in between lighten towards `secondary` (shadcn's hover surface).
   mixer[ui::kColorSysSurface] = {t[Token::kBackground]};
   mixer[ui::kColorSysSurface1] = {t[Token::kCard]};
-  mixer[ui::kColorSysSurface2] = {t.Over(Token::kSecondary, Token::kCard, 0.5f)};
+  mixer[ui::kColorSysSurface2] = {
+      t.Over(Token::kSecondary, Token::kCard, 0.5f)};
   mixer[ui::kColorSysSurface3] = {t[Token::kSecondary]};
   mixer[ui::kColorSysSurface4] = {
       t.Over(Token::kForeground, Token::kSecondary, 0.04f)};
@@ -170,7 +171,8 @@ void AddKoanCoreColorMixer(ui::ColorProvider* provider,
   mixer[ui::kColorSysNeutralOutline] = {
       t.Opaque(Token::kBorder, Token::kBackground)};
   mixer[ui::kColorSysNeutralContainer] = {t[Token::kMuted]};
-  mixer[ui::kColorSysDivider] = {t.Opaque(Token::kSidebarBorder, Token::kSidebar)};
+  mixer[ui::kColorSysDivider] = {
+      t.Opaque(Token::kSidebarBorder, Token::kSidebar)};
 
   // Chrome's surfaces. The frame, toolbar, tab strip and sidebar are one
   // surface, shadcn's `sidebar`; the page floats on it as a `background`
@@ -208,7 +210,8 @@ void AddKoanCoreColorMixer(ui::ColorProvider* provider,
   mixer[ui::kColorSysStateFocusRingInverse] = {t[Token::kRing]};
   mixer[ui::kColorSysStateTextHighlight] = {t[Token::kPrimary]};
   mixer[ui::kColorSysStateOnTextHighlight] = {t[Token::kPrimaryForeground]};
-  mixer[ui::kColorSysStateFocusHighlight] = {t.Alpha(Token::kForeground, hover)};
+  mixer[ui::kColorSysStateFocusHighlight] = {
+      t.Alpha(Token::kForeground, hover)};
   // shadcn disables with `opacity-50`.
   mixer[ui::kColorSysStateDisabled] = {t.Alpha(Token::kForeground, 0.5f)};
   mixer[ui::kColorSysStateDisabledContainer] = {
@@ -222,7 +225,8 @@ void AddKoanCoreColorMixer(ui::ColorProvider* provider,
   mixer[ui::kColorSysStateHeaderHover] = {t[Token::kSidebarAccent]};
   mixer[ui::kColorSysStateHeaderHoverInactive] = {
       t.Alpha(Token::kForeground, hover)};
-  mixer[ui::kColorSysStateHeaderSelect] = {t.Alpha(Token::kSidebarAccent, 0.6f)};
+  mixer[ui::kColorSysStateHeaderSelect] = {
+      t.Alpha(Token::kSidebarAccent, 0.6f)};
   mixer[ui::kColorSysStateHover] = {t.Alpha(Token::kForeground, hover)};
   mixer[ui::kColorSysStateFocus] = {t.Alpha(Token::kForeground, 0.12f)};
   mixer[ui::kColorSysStatePressed] = {t.Alpha(Token::kForeground, 0.12f)};
@@ -321,8 +325,7 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanSpaceFormField] = {t.InputFill(Token::kSidebar)};
   mixer[kColorKoanSpaceFormFieldHovered] = {t[Token::kSidebarAccent]};
   mixer[kColorKoanSpaceFormDescription] = {t[Token::kMutedForeground]};
-  mixer[kColorKoanSpaceIconBorder] = {
-      t.Opaque(Token::kInput, Token::kSidebar)};
+  mixer[kColorKoanSpaceIconBorder] = {t.Opaque(Token::kInput, Token::kSidebar)};
   mixer[kColorKoanEmojiHovered] = {t[Token::kAccent]};
 
   // The Library is a Sheet: `background`, with `accent` hovers.
@@ -361,7 +364,8 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanMediaProgress] = {t[Token::kPrimary]};
 
   // The download animation.
-  mixer[kColorKoanDownloadArcRing] = {t.Opaque(Token::kBorder, Token::kPopover)};
+  mixer[kColorKoanDownloadArcRing] = {
+      t.Opaque(Token::kBorder, Token::kPopover)};
   mixer[kColorKoanDownloadArcCircle] = {t[Token::kPrimary]};
   mixer[kColorKoanDownloadArcIcon] = {t[Token::kPrimaryForeground]};
   mixer[kColorKoanDownloadArcShadow] = ui::SetAlpha(
