@@ -530,10 +530,10 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanWelcomeAccentHovered] = {
       t.Over(Token::kPrimary, Token::kBackground, 0.9f)};
   mixer[kColorKoanWelcomeOnAccent] = {t[Token::kPrimaryForeground]};
-  // The window dimmed behind the screen (shadcn's dialog overlay), an option
-  // like an input (`bg-input/30` on the card) and the hover of the ghost and
-  // outline buttons (`hover:bg-accent`).
-  mixer[kColorKoanWelcomeScrim] = {t.Alpha(Token::kBackground, 0.85f)};
+  // The screen hides the window entirely, on `background` (Views can't blur
+  // the page behind it); an option like an input (`bg-input/30` on the card)
+  // and the hover of the ghost and outline buttons (`hover:bg-accent`).
+  mixer[kColorKoanWelcomeScrim] = {t[Token::kBackground]};
   mixer[kColorKoanWelcomeOptionFill] = {t.InputFill(Token::kCard)};
   mixer[kColorKoanWelcomeHover] = {t[Token::kAccent]};
 }

@@ -34,7 +34,6 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
 #include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
-#include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
@@ -43,7 +42,6 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
-#include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_welcome_icons_data.h"
 #include "koan/browser/ui/views/koan_zen_welcome.h"
@@ -2037,8 +2035,8 @@ class KoanWelcomeView : public views::View {
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
     if (GetMetrics().shadcn) {
-      // shadcn: the window dimmed behind a near-black scrim (its dialog
-      // overlay), the card lifted off it by a small shadow.
+      // shadcn: the window hidden behind `background`, the card lifted off
+      // it by a small shadow.
       canvas->DrawColor(provider->GetColor(kColorKoanWelcomeScrim));
       if (pages_->GetVisible() && CardRadius() > 0) {
         cc::PaintFlags flags;
@@ -2273,7 +2271,7 @@ void KoanWelcome::Show() {
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_CONTROL);
   params.parent = browser_view_->GetWidget()->GetNativeView();
-  // shadcn's scrim lets the window show through, dimmed.
+  // The card's rounded corners and shadow show the scrim behind them.
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.name = "KoanWelcome";
   widget_ = std::make_unique<views::Widget>();
@@ -2413,18 +2411,8 @@ void KoanWelcome::LayoutWidget() {
   if (title_bar_corner_) {
     title_bar_corner_->SetBoundsRect(gfx::Rect(0, 0, lights.right(), row));
   }
-#else
-  // Everything but the window's controls: the strip above the page (where
-  // Koan reveals the window buttons, and which grows into their row while
-  // they show) and a toolbar above the page (multiple toolbars). The window
-  // drags and closes from there as usual.
-  int top = ContentCardInsets(browser_view_).top();
-  const views::View* top_container = browser_view_->top_container();
-  if (top_container->parent() == browser_view_ && top_container->GetVisible()) {
-    top = std::max(top, top_container->bounds().bottom());
-  }
-  bounds.Inset(gfx::Insets::TLBR(top, 0, 0, 0));
 #endif
+  // Elsewhere all of the window: Esc closes the screen.
   widget_->SetBounds(browser_view_->ConvertRectToWidget(bounds));
 }
 

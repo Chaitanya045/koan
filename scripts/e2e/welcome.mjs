@@ -28,8 +28,10 @@ check('A first run shows the welcome screen over the window',
       shownViews(vs, 'KoanWelcomeView').length === 1);
 const screen = shownViews(vs, 'KoanWelcomeView')[0];
 const frame = vs.find(v => v.cls === 'BrowserView');
-check('...but not over the strip with the window buttons at the top',
-      screen && frame && screen.h < frame.h, `${screen?.h} of ${frame?.h}`);
+check('...covering all of it, the strip at the top included',
+      screen && frame && screen.y === frame.y && screen.h === frame.h &&
+          screen.w === frame.w,
+      `${screen?.w}x${screen?.h} at ${screen?.y} of ${frame?.w}x${frame?.h} at ${frame?.y}`);
 const title = vs.filter(v => v.cls === 'Label' && v.path.at(-1) === 'KoanWelcomeView')
     .map(v => v.props.Text).join('');
 check('..."Welcome to a calmer internet"', title === 'Welcome toa calmer internet', title);
