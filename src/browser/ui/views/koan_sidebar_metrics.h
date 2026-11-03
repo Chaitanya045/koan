@@ -129,6 +129,12 @@ inline constexpr int kFloatingUrlBarShadowSpread = -15;
 // (text-base: 16px).
 // The shadcn card's magnifier (lucide's search, 16px).
 inline constexpr int kFloatingUrlBarMagnifierSize = 16;
+// The glass card's background blur (zen-omnibox.css: blur(40px)) and its
+// outline's width (0.5px; shadcn's border is 1px).
+inline constexpr float kFloatingUrlBarBlurRadius = 40;
+inline float FloatingUrlBarBorderWidth() {
+  return look::IsShadcnStyle() ? 1.f : 0.5f;
+}
 inline int FloatingUrlBarShadowY() {
   return look::IsShadcnStyle() ? 10 : kFloatingUrlBarShadowY;
 }

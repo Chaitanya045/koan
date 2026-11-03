@@ -53,6 +53,9 @@ enum KoanColorIds : ui::ColorId {
   // a glass pane makes its alpha < 1 and blurs behind it. Its 1px outline and
   // the divider under the field.
   kColorKoanFloatingUrlBarBackground,
+  // The same as a glass pane: Zen's acrylic (zen.theme.acrylic-urlbar) fill,
+  // to use with a background blur (kFloatingUrlBarBlurRadius).
+  kColorKoanFloatingUrlBarGlass,
   kColorKoanFloatingUrlBarBorder,
 
   // Toasts: a vertical gradient, the text, and the background of the

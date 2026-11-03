@@ -346,6 +346,7 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   // `shadow-lg`.
   mixer[kColorKoanUrlPill] = {t.InputFill(Token::kSidebar)};
   mixer[kColorKoanFloatingUrlBarBackground] = {t[Token::kPopover]};
+  mixer[kColorKoanFloatingUrlBarGlass] = {t.Alpha(Token::kPopover, 0.9f)};
   mixer[kColorKoanFloatingUrlBarBorder] = {
       t.Opaque(Token::kBorder, Token::kPopover)};
   mixer[kColorKoanFloatingUrlBarShadow] = ui::SetAlpha(

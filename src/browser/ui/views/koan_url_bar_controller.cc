@@ -126,11 +126,14 @@ class KoanUrlBarBackdrop : public views::View {
     cc::PaintFlags border;
     border.setAntiAlias(true);
     border.setStyle(cc::PaintFlags::kStroke_Style);
-    border.setStrokeWidth(1);
+    border.setStrokeWidth(FloatingUrlBarBorderWidth());
     border.setColor(colors->GetColor(kColorKoanFloatingUrlBarBorder));
+    // Just outside the card, as Zen's outline is.
     gfx::RectF ring(card_);
-    ring.Outset(0.5f);
-    canvas->DrawRoundRect(ring, FloatingUrlBarCornerRadius() + 0.5f, border);
+    ring.Outset(FloatingUrlBarBorderWidth() / 2);
+    canvas->DrawRoundRect(
+        ring, FloatingUrlBarCornerRadius() + FloatingUrlBarBorderWidth() / 2,
+        border);
   }
 
  private:

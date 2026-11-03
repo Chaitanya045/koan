@@ -86,12 +86,22 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   // The URL pill on the tab colour; the floating URL bar's long shadow
   // (box-shadow 0 30px 140px -15px) black at 80% (60% in dark mode).
   mixer[kColorKoanUrlPill] = {kColorTabBackgroundActiveFrameActive};
-  // The card is Zen's panel colour (--arrowpanel-background; a glass pane
-  // wants it translucent) with --zen-colors-border-contrast around it.
-  mixer[kColorKoanFloatingUrlBarBackground] = {
-      dark ? SkColorSetRGB(31, 31, 31) : SkColorSetRGB(244, 244, 244)};
-  mixer[kColorKoanFloatingUrlBarBorder] =
-      ui::SetAlpha(kColorToolbarText, Alpha(0.11f));
+  // The floating URL bar (zen-omnibox.css, #urlbar[breakout-extend]): white
+  // or rgb(24, 24, 24), a glass pane (zen.theme.acrylic-urlbar) at 93% / 92%
+  // of white or rgb(20, 20, 20) with a 40px blur, and a 0.5px outline,
+  // rgba(0, 0, 0, 0.2) or rgb(75, 75, 75). Its urls and the title separator
+  // (.urlbarView-url) are #4f4f4f or #aaa.
+  mixer[kColorKoanFloatingUrlBarBackground] = {dark ? SkColorSetRGB(24, 24, 24)
+                                                    : SK_ColorWHITE};
+  mixer[kColorKoanFloatingUrlBarGlass] = {
+      dark ? SkColorSetARGB(Alpha(0.92f), 20, 20, 20)
+           : SkColorSetA(SK_ColorWHITE, Alpha(0.93f))};
+  mixer[kColorKoanFloatingUrlBarBorder] = {
+      dark ? SkColorSetRGB(75, 75, 75)
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.2f))};
+  mixer[kColorOmniboxResultsUrl] = {dark ? SkColorSetRGB(0xaa, 0xaa, 0xaa)
+                                         : SkColorSetRGB(0x4f, 0x4f, 0x4f)};
+  mixer[kColorOmniboxResultsUrlSelected] = {kColorOmniboxResultsUrl};
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 
