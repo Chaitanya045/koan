@@ -69,6 +69,8 @@ void KoanWelcomeHandler::RegisterMessages() {
   add("finish", &KoanWelcomeHandler::HandleFinish);
   add("skip", &KoanWelcomeHandler::HandleSkip);
   add("startWindowDrag", &KoanWelcomeHandler::HandleStartWindowDrag);
+  add("showThemePicker", &KoanWelcomeHandler::HandleShowThemePicker);
+  add("closeThemePicker", &KoanWelcomeHandler::HandleCloseThemePicker);
 }
 
 void KoanWelcomeHandler::HandleGetWelcomeData(const base::ListValue& args) {
@@ -128,10 +130,22 @@ void KoanWelcomeHandler::OnImportSourcesLoaded(base::Value callback_id) {
     }
   }
 
+  base::Value theme_picker;
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().theme_picker_size) {
+    if (const std::optional<gfx::Size> size =
+            host->callbacks().theme_picker_size.Run()) {
+      theme_picker = base::Value(base::DictValue()
+                                     .Set("width", size->width())
+                                     .Set("height", size->height()));
+    }
+  }
+
   ResolveJavascriptCallback(callback_id,
                             base::DictValue()
                                 .Set("importSources", std::move(sources))
                                 .Set("colors", std::move(colors))
+                                .Set("themePicker", std::move(theme_picker))
                                 .Set("engines", SearchEngines())
                                 .Set("defaultEngine", default_engine));
 }
@@ -235,6 +249,30 @@ void KoanWelcomeHandler::HandleStartWindowDrag(const base::ListValue& args) {
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().window_drag) {
     host->callbacks().window_drag.Run();
+  }
+}
+
+void KoanWelcomeHandler::HandleShowThemePicker(const base::ListValue& args) {
+  // The anchor's rect in the page: x, y, width, height.
+  if (args.size() < 4 || !std::ranges::all_of(args, [](const base::Value& v) {
+        return v.is_int() || v.is_double();
+      })) {
+    return;
+  }
+  const gfx::Rect anchor(static_cast<int>(args[0].GetDouble()),
+                         static_cast<int>(args[1].GetDouble()),
+                         static_cast<int>(args[2].GetDouble()),
+                         static_cast<int>(args[3].GetDouble()));
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().show_theme_picker) {
+    host->callbacks().show_theme_picker.Run(anchor);
+  }
+}
+
+void KoanWelcomeHandler::HandleCloseThemePicker(const base::ListValue& args) {
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().close_theme_picker) {
+    host->callbacks().close_theme_picker.Run();
   }
 }
 

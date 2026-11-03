@@ -577,7 +577,33 @@ function getWelcomePages(data) {
       // a panel of its colours in the picker's place.
       render(content) {
         removeVideoBackground();
-        content.appendChild(createThemePicker(data.colors));
+        if (!data.themePicker) {
+          content.appendChild(createThemePicker(data.colors));
+          return;
+        }
+        // Zen anchors its picker on a box the picker's size (macOS: as
+        // tall plus 10, 20 narrower; measured 360 x 524.4 for a 380 x 514
+        // panel) and opens it over the box.
+        const anchor = document.createElement('div');
+        anchor.id = 'zen-welcome-workspace-colors-anchor';
+        anchor.style.width = `${data.themePicker.width - 20}px`;
+        anchor.style.height = `${data.themePicker.height + 10.4}px`;
+        content.appendChild(anchor);
+        const place = () => {
+          if (!anchor.isConnected) {
+            removeEventListener('resize', place);
+            return;
+          }
+          const r = anchor.getBoundingClientRect();
+          chrome.send('showThemePicker', [r.x, r.y, r.width, r.height]);
+        };
+        // Once the page's fade-in has placed it; again when the window
+        // resizes (the picker follows).
+        requestAnimationFrame(() => requestAnimationFrame(place));
+        addEventListener('resize', place);
+      },
+      leave() {
+        chrome.send('closeThemePicker');
       },
     },
     {

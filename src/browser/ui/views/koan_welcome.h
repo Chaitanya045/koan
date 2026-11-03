@@ -15,8 +15,13 @@
 
 class BrowserView;
 
+namespace koan {
+class KoanThemeController;
+}
+
 namespace views {
 class View;
+class WebView;
 class Widget;
 }  // namespace views
 
@@ -80,6 +85,11 @@ class KoanWelcome {
   void Close();
   // After the screen closes: the window active, the keyboard on its page.
   void FocusBrowser();
+  // Closes the theme picker the colours page opened, if it did (#41).
+  void CloseThemePicker();
+#if __has_include("koan/browser/ui/views/koan_theme_controller.h")
+  KoanThemeController* ThemeController() const;
+#endif
   void LayoutWidget();
   // macOS: the traffic lights' area in BrowserView coordinates (empty when
   // the frame shows none, e.g. in fullscreen).
@@ -96,8 +106,11 @@ class KoanWelcome {
   raw_ptr<views::View> title_bar_corner_ = nullptr;
   // Finish() ran: the screen is fading out, its choices about to apply.
   bool finishing_ = false;
-  // The screen is chrome://koan-welcome (koan-welcome-webui).
+  // The screen is chrome://koan-welcome (koan-welcome-webui), in this view.
   bool web_ui_ = false;
+  raw_ptr<views::WebView> web_view_ = nullptr;
+  // The colours page opened the theme picker (#41) over itself.
+  bool theme_picker_open_ = false;
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

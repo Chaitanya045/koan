@@ -43,6 +43,8 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
   void HandleFinish(const base::ListValue& args);
   void HandleSkip(const base::ListValue& args);
   void HandleStartWindowDrag(const base::ListValue& args);
+  void HandleShowThemePicker(const base::ListValue& args);
+  void HandleCloseThemePicker(const base::ListValue& args);
 
   base::ListValue SearchEngines() const;
 

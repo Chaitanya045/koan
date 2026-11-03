@@ -37,6 +37,7 @@ source_set("webui") {
     "//components/tab_groups",
     "//components/user_data_importer/common",
     "//services/network/public/mojom",
+    "//ui/gfx/geometry",
     "//url",
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",

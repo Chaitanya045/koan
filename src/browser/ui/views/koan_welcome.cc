@@ -50,6 +50,12 @@
 #include "koan/browser/ui/views/koan_welcome_icons_data.h"
 #include "koan/browser/ui/views/koan_welcome_mac.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
+// Koan's theme picker (#41, PR #62) opens over the colours page when it is
+// in the tree; until it lands there, the page shows its own colours.
+#if __has_include("koan/browser/ui/views/koan_theme_controller.h")
+#include "koan/browser/ui/views/koan_theme_controller.h"
+#define KOAN_WELCOME_HAS_THEME_PICKER 1
+#endif
 #include "koan/browser/ui/views/koan_zen_welcome.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
 #include "koan/common/koan_url_constants.h"
@@ -2480,6 +2486,36 @@ void KoanWelcome::ShowWebUI() {
                             views::Widget::MoveLoopEscapeBehavior::kDontHide);
       },
       weak_factory_.GetWeakPtr());
+#if defined(KOAN_WELCOME_HAS_THEME_PICKER)
+  callbacks.theme_picker_size = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome) -> std::optional<gfx::Size> {
+        KoanThemeController* theme =
+            welcome ? welcome->ThemeController() : nullptr;
+        // An empty size: no picker here (Space themes off); the page shows
+        // its own colours.
+        const gfx::Size size = theme ? theme->ThemePickerSize() : gfx::Size();
+        return size.IsEmpty() ? std::nullopt : std::optional<gfx::Size>(size);
+      },
+      weak_factory_.GetWeakPtr());
+  callbacks.show_theme_picker = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome, const gfx::Rect& anchor) {
+        KoanThemeController* theme =
+            welcome ? welcome->ThemeController() : nullptr;
+        if (!theme || !welcome->web_view_) {
+          return;
+        }
+        // The page's CSS pixels are the WebView's DIPs (the page isn't
+        // zoomed).
+        gfx::Rect in_screen = anchor;
+        in_screen.Offset(
+            welcome->web_view_->GetBoundsInScreen().OffsetFromOrigin());
+        welcome->theme_picker_open_ = true;
+        theme->ShowThemePickerForWelcome(in_screen);
+      },
+      weak_factory_.GetWeakPtr());
+  callbacks.close_theme_picker = base::BindRepeating(
+      &KoanWelcome::CloseThemePicker, weak_factory_.GetWeakPtr());
+#endif
   callbacks.space_color = base::BindRepeating(
       [](base::WeakPtr<KoanWelcome> welcome, int color_id) {
         KoanBrowserViewController* controller =
@@ -2502,6 +2538,7 @@ void KoanWelcome::ShowWebUI() {
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
   web_view->LoadInitialURL(GURL(kWelcomeURL));
   views::WebView* view = widget_->SetContentsView(std::move(web_view));
+  web_view_ = view;
   LayoutWidget();
   widget_->Show();
   widget_->LayoutRootViewIfNecessary();
@@ -2591,7 +2628,29 @@ void KoanWelcome::FocusBrowser() {
   }
 }
 
+void KoanWelcome::CloseThemePicker() {
+  if (!std::exchange(theme_picker_open_, false)) {
+    return;
+  }
+#if defined(KOAN_WELCOME_HAS_THEME_PICKER)
+  if (KoanThemeController* theme = ThemeController()) {
+    theme->CloseThemePickerForWelcome();
+  }
+#endif
+}
+
+#if defined(KOAN_WELCOME_HAS_THEME_PICKER)
+KoanThemeController* KoanWelcome::ThemeController() const {
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return controller ? controller->theme() : nullptr;
+}
+#endif
+
 void KoanWelcome::Close() {
+  // The theme picker the colours page opened goes with the screen.
+  CloseThemePicker();
+  web_view_ = nullptr;
   if (widget_ && !widget_->IsClosed()) {
     widget_->CloseNow();
   }
