@@ -130,6 +130,24 @@ SkColor OklchToSkColor(const OklchColor& color) {
                         ToByte(LinearToGamma(rgb[2])));
 }
 
+OklchColor SkColorToOklch(SkColor color) {
+  auto linear = [](uint8_t v) {
+    const double c = v / 255.0;
+    return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+  };
+  const auto lab =
+      LinearSrgbToOklab({linear(SkColorGetR(color)), linear(SkColorGetG(color)),
+                         linear(SkColorGetB(color))});
+  const double chroma = std::hypot(lab[1], lab[2]);
+  double hue = std::atan2(lab[2], lab[1]) * 180.0 / std::numbers::pi;
+  if (hue < 0) {
+    hue += 360.0;
+  }
+  return {static_cast<float>(lab[0]), static_cast<float>(chroma),
+          chroma < 1e-4 ? 0.0f : static_cast<float>(hue),
+          SkColorGetA(color) / 255.0f};
+}
+
 SkColor HslToSkColor(float h, float s, float l, float a) {
   const double hue = std::fmod(std::fmod(h, 360.0f) + 360.0f, 360.0f);
   const double sat = std::clamp(s, 0.0f, 1.0f);

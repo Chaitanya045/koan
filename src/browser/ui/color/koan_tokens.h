@@ -105,6 +105,16 @@ struct CustomTheme {
 // nullopt if the text has no token at all.
 std::optional<CustomTheme> ParseThemeCss(std::string_view css);
 
+// Zen's accent colours from its primary colour (--zen-primary-color, zen-
+// buttons.css): the accent button's background and the accent text and
+// borders, as the primary colour with its OKLCH lightness clamped to 0.35-0.6
+// (light), 0.55-0.7 (dark; the background) or 0.7-0.85 (dark; the text).
+struct ZenAccent {
+  SkColor button_background;
+  SkColor text;
+};
+ZenAccent ComputeZenAccent(SkColor primary, bool dark);
+
 // What makes the tokens.
 struct Look {
   Style style = Style::kZen;

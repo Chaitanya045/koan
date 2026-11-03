@@ -35,15 +35,15 @@ look::TokenSet TokensFor(const ui::ColorProviderKey& key) {
       key.user_color_source != ui::ColorProviderKey::UserColorSource::kAccent) {
     return tokens;
   }
-  const SkColor accent = *key.user_color;
-  const SkColor on_accent = color_utils::GetColorWithMaxContrast(accent);
-  for (const Token token :
-       {Token::kPrimary, Token::kRing, Token::kSidebarPrimary}) {
-    tokens.colors[static_cast<int>(token)] = accent;
+  // Zen derives its accent colours from the primary colour (zen-buttons.css).
+  const look::ZenAccent zen = look::ComputeZenAccent(
+      *key.user_color,
+      key.color_mode == ui::ColorProviderKey::ColorMode::kDark);
+  for (const Token token : {Token::kPrimary, Token::kSidebarPrimary}) {
+    tokens.colors[static_cast<int>(token)] = zen.button_background;
   }
-  for (const Token token :
-       {Token::kPrimaryForeground, Token::kSidebarPrimaryForeground}) {
-    tokens.colors[static_cast<int>(token)] = on_accent;
+  for (const Token token : {Token::kRing, Token::kSidebarRing}) {
+    tokens.colors[static_cast<int>(token)] = zen.text;
   }
   return tokens;
 }

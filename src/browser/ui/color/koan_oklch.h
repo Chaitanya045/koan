@@ -25,6 +25,9 @@ struct OklchColor {
 // clipped colour is within a just-noticeable difference).
 SkColor OklchToSkColor(const OklchColor& color);
 
+// The OKLCH of an sRGB colour (hue in degrees; 0 for a grey).
+OklchColor SkColorToOklch(SkColor color);
+
 // The same for CIE-style HSL (hue in degrees, saturation and lightness 0..1),
 // for the pre-OKLCH themes (hsl(222.2 84% 4.9%)) people still paste.
 SkColor HslToSkColor(float h, float s, float l, float a);

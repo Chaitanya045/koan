@@ -429,6 +429,18 @@ std::optional<CustomTheme> ParseThemeCss(std::string_view css) {
   return theme;
 }
 
+ZenAccent ComputeZenAccent(SkColor primary, bool dark) {
+  const OklchColor lch = SkColorToOklch(primary);
+  auto clamped = [&](float low, float high) {
+    OklchColor out = lch;
+    out.l = std::clamp(lch.l, low, high);
+    out.a = 1.0f;
+    return OklchToSkColor(out);
+  };
+  return {clamped(dark ? 0.55f : 0.35f, dark ? 0.7f : 0.6f),
+          dark ? clamped(0.7f, 0.85f) : clamped(0.35f, 0.6f)};
+}
+
 namespace {
 
 // Zen's colours (Zen 1.24b's zen-theme.css, with its default accent colour:
@@ -443,8 +455,12 @@ TokenSet ZenTokens(bool dark, std::optional<SkColor> zen_accent) {
       dark ? SkColorSetRGB(0xfb, 0xfb, 0xfe) : SkColorSetRGB(0x15, 0x14, 0x1a);
   const SkColor muted_foreground =
       dark ? SkColorSetRGB(0xae, 0xae, 0xb2) : SkColorSetRGB(0x5b, 0x5b, 0x66);
+  // The frame and sidebar: on macOS Zen paints them as glass over the
+  // window's vibrancy; measured flat (an inactive window, or vibrancy off)
+  // they are #181717 and #e5e5e5. (--zen-main-browser-background, #1b1b1b
+  // and #ebebeb, is the colour of the page card.)
   const SkColor browser =
-      dark ? SkColorSetRGB(0x1b, 0x1b, 0x1b) : SkColorSetRGB(0xeb, 0xeb, 0xeb);
+      dark ? SkColorSetRGB(0x18, 0x17, 0x17) : SkColorSetRGB(0xe5, 0xe5, 0xe5);
   const SkColor content =
       dark ? SkColorSetRGB(0x10, 0x10, 0x10) : SkColorSetRGB(0xfa, 0xfb, 0xff);
   const SkColor dialog =
@@ -457,11 +473,16 @@ TokenSet ZenTokens(bool dark, std::optional<SkColor> zen_accent) {
       dark ? SkColorSetRGB(0x32, 0x32, 0x32) : SkColorSetRGB(0xd8, 0xd8, 0xd8);
   const SkColor muted =
       dark ? SkColorSetRGB(0x2b, 0x2b, 0x2b) : SkColorSetRGB(0xe0, 0xe0, 0xe2);
-  // --zen-colors-border-contrast.
-  const SkColor border =
-      SkColorSetA(dark ? SK_ColorWHITE : SK_ColorBLACK, 0x1c);
-  const SkColor accent =
-      dark ? SkColorSetRGB(10, 132, 255) : SkColorSetRGB(0, 122, 255);
+  // --zen-colors-border-contrast: 11% white, or 11% of rgb(181, 181, 181).
+  const SkColor border = dark ? SkColorSetARGB(0x1c, 255, 255, 255)
+                              : SkColorSetARGB(0x1c, 181, 181, 181);
+  // --zen-primary-color: the Space theme's, else the default theme's
+  // (measured on Zen 1.24b: a navy in dark mode, a blue in light mode). The
+  // accent colours Zen uses (selected rows, buttons, links) derive from it.
+  const SkColor primary_color = zen_accent.value_or(
+      dark ? SkColorSetRGB(2, 41, 84) : SkColorSetRGB(22, 131, 255));
+  const ZenAccent zen = ComputeZenAccent(primary_color, dark);
+  const SkColor accent = zen.button_background;
   const SkColor on_accent = SkColorSetRGB(0xfb, 0xfb, 0xfe);
   const SkColor destructive =
       dark ? SkColorSetRGB(0xff, 0x6b, 0x6b) : SkColorSetRGB(0xd7, 0x00, 0x22);
@@ -486,7 +507,7 @@ TokenSet ZenTokens(bool dark, std::optional<SkColor> zen_accent) {
   set(Token::kDestructive, destructive);
   set(Token::kBorder, border);
   set(Token::kInput, urlbar);
-  set(Token::kRing, accent);
+  set(Token::kRing, zen.text);
   set(Token::kSidebar, browser);
   set(Token::kSidebarForeground, foreground);
   set(Token::kSidebarPrimary, accent);
@@ -494,7 +515,7 @@ TokenSet ZenTokens(bool dark, std::optional<SkColor> zen_accent) {
   set(Token::kSidebarAccent, hover);
   set(Token::kSidebarAccentForeground, foreground);
   set(Token::kSidebarBorder, border);
-  set(Token::kSidebarRing, accent);
+  set(Token::kSidebarRing, zen.text);
   // --zen-border-radius.
   tokens.radius = 7;
   return tokens;
