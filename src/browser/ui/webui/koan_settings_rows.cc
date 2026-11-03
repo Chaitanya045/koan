@@ -31,9 +31,9 @@ constexpr Pane kPanes[] = {
 constexpr Group kGroups[] = {
     // Koan's own (Zen has no such setting): the shadcn look (#48).
     {"look", "looks", "Appearance", "Style",
-     "Koan draws with shadcn/ui's design system by default. Zen's own look is "
-     "available too. Changes apply at once; the font changes after a "
-     "restart."},
+     "Koan's default look is Zen's. shadcn/ui's design system (dark, with "
+     "Geist) is available too. Changes apply at once; the font changes "
+     "after a restart."},
     {"look-colors", "looks", "Appearance", "shadcn colours",
      "For the shadcn style: light or dark, a base colour, an accent colour, "
      "or a theme of your own from ui.shadcn.com/themes or tweakcn.com."},
@@ -119,8 +119,8 @@ constexpr Option kPinnedTabCloseBehaviors[] = {
 
 // The shadcn look (koan::look names).
 constexpr Option kLookStyles[] = {
+    {"zen", "Zen (default)"},
     {"shadcn", "shadcn/ui"},
-    {"zen", "Zen"},
 };
 constexpr Option kLookModes[] = {
     {"dark", "Dark"},

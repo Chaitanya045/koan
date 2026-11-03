@@ -87,7 +87,7 @@ class LookController : public look::Observer {
     look::Look next;
     next.style =
         look::StyleFromString(local_state->GetString(prefs::kLookStyle))
-            .value_or(look::Style::kShadcn);
+            .value_or(look::Style::kZen);
     next.mode = look::ModeFromString(local_state->GetString(prefs::kLookMode))
                     .value_or(look::Mode::kDark);
     next.base =

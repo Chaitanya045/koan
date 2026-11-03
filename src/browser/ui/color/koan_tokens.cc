@@ -429,7 +429,83 @@ std::optional<CustomTheme> ParseThemeCss(std::string_view css) {
   return theme;
 }
 
+namespace {
+
+// Zen's colours (Zen 1.24b's zen-theme.css, with its default accent colour:
+// macOS's blue) as tokens.
+TokenSet ZenTokens(bool dark) {
+  // Zen's text (Firefox's), its browser background (--zen-main-browser-
+  // background), the content area (the branding colour), dialogs
+  // (--zen-dialog-background), panels (--arrowpanel-background), the URL bar
+  // (--zen-urlbar-background) and a hover (--zen-toolbar-element-bg-hover) on
+  // the browser background.
+  const SkColor foreground =
+      dark ? SkColorSetRGB(0xfb, 0xfb, 0xfe) : SkColorSetRGB(0x15, 0x14, 0x1a);
+  const SkColor muted_foreground =
+      dark ? SkColorSetRGB(0xae, 0xae, 0xb2) : SkColorSetRGB(0x5b, 0x5b, 0x66);
+  const SkColor browser =
+      dark ? SkColorSetRGB(0x1b, 0x1b, 0x1b) : SkColorSetRGB(0xeb, 0xeb, 0xeb);
+  const SkColor content =
+      dark ? SkColorSetRGB(0x10, 0x10, 0x10) : SkColorSetRGB(0xfa, 0xfb, 0xff);
+  const SkColor dialog =
+      dark ? SkColorSetRGB(0x1c, 0x1c, 0x1c) : SkColorSetRGB(0xfa, 0xfb, 0xff);
+  const SkColor panel =
+      dark ? SkColorSetRGB(0x1f, 0x1f, 0x1f) : SkColorSetRGB(0xf4, 0xf4, 0xf4);
+  const SkColor urlbar =
+      dark ? SkColorSetRGB(0x18, 0x18, 0x18) : SkColorSetRGB(0xf4, 0xf4, 0xf4);
+  const SkColor hover =
+      dark ? SkColorSetRGB(0x32, 0x32, 0x32) : SkColorSetRGB(0xd8, 0xd8, 0xd8);
+  const SkColor muted =
+      dark ? SkColorSetRGB(0x2b, 0x2b, 0x2b) : SkColorSetRGB(0xe0, 0xe0, 0xe2);
+  // --zen-colors-border-contrast.
+  const SkColor border =
+      SkColorSetA(dark ? SK_ColorWHITE : SK_ColorBLACK, 0x1c);
+  const SkColor accent =
+      dark ? SkColorSetRGB(10, 132, 255) : SkColorSetRGB(0, 122, 255);
+  const SkColor on_accent = SkColorSetRGB(0xfb, 0xfb, 0xfe);
+  const SkColor destructive =
+      dark ? SkColorSetRGB(0xff, 0x6b, 0x6b) : SkColorSetRGB(0xd7, 0x00, 0x22);
+  TokenSet tokens;
+  auto set = [&](Token token, SkColor color) {
+    tokens.colors[static_cast<int>(token)] = color;
+  };
+  set(Token::kBackground, content);
+  set(Token::kForeground, foreground);
+  set(Token::kCard, dialog);
+  set(Token::kCardForeground, foreground);
+  set(Token::kPopover, panel);
+  set(Token::kPopoverForeground, foreground);
+  set(Token::kPrimary, accent);
+  set(Token::kPrimaryForeground, on_accent);
+  set(Token::kSecondary, hover);
+  set(Token::kSecondaryForeground, foreground);
+  set(Token::kMuted, muted);
+  set(Token::kMutedForeground, muted_foreground);
+  set(Token::kAccent, hover);
+  set(Token::kAccentForeground, foreground);
+  set(Token::kDestructive, destructive);
+  set(Token::kBorder, border);
+  set(Token::kInput, urlbar);
+  set(Token::kRing, accent);
+  set(Token::kSidebar, browser);
+  set(Token::kSidebarForeground, foreground);
+  set(Token::kSidebarPrimary, accent);
+  set(Token::kSidebarPrimaryForeground, on_accent);
+  set(Token::kSidebarAccent, hover);
+  set(Token::kSidebarAccentForeground, foreground);
+  set(Token::kSidebarBorder, border);
+  set(Token::kSidebarRing, accent);
+  // --zen-border-radius.
+  tokens.radius = 7;
+  return tokens;
+}
+
+}  // namespace
+
 TokenSet ResolveTokens(const Look& look, bool dark) {
+  if (look.style == Style::kZen) {
+    return ZenTokens(dark);
+  }
   TokenSet tokens;
   const std::span<const OklchColor, kTokenCount> palette =
       BasePalette(look.base, dark);

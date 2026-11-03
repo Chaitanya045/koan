@@ -346,23 +346,26 @@ Besides the shortcuts above:
 
 ## Look
 
-Koan's default look is **shadcn/ui's design system**, dark and near-black
-(Chromium's greys never show): the window's
-frame, the sidebar, tabs, Essentials, Spaces bar, URL bar and its
-suggestions, menus, bubbles, dialogs, the find bar, infobars, toasts,
-Glance, the Library, Settings and Chromium's own pages (new tab page,
-history, downloads) all take their colours from shadcn's tokens
-(`background`, `foreground`, `card`, `popover`, `primary`, `secondary`,
-`muted`, `accent`, `destructive`, `border`, `input`, `ring`, the `sidebar-*`
-set) and their corner radii from `--radius` (10px: sm 6, md 8, lg 10, xl 14).
-The font is Geist (bundled, SIL OFL), from the next start. Zen's own look is
-one setting away.
+Koan's default look is **Zen's**: its colours (Zen 1.24b's zen-theme.css:
+browser background `#1b1b1b` / `#ebebeb`, dialogs, panels, text, borders,
+the system accent colour), per-Space gradient themes and, on macOS, glass.
+Everything Koan or Chromium draws (the frame, sidebar, tabs, Essentials,
+Spaces bar, URL bar, menus, bubbles, dialogs, find bar, settings, the new tab
+page) takes its colours from that token set, so Chromium's own surfaces
+match Zen too. The Zen look follows the system's light or dark mode.
+
+**shadcn/ui's design system** is a second look, dark and near-black
+(Chromium's greys never show): the same surfaces take their colours from
+shadcn's tokens (`background`, `foreground`, `card`, `popover`, `primary`,
+`secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`, the
+`sidebar-*` set) and their corner radii from `--radius` (10px: sm 6, md 8,
+lg 10, xl 14). The font is Geist (bundled, SIL OFL), from the next start.
 
 **Settings > Look and Feel > Appearance** (browser-wide, applies at once to
 every window):
 
-- **Look**: shadcn/ui (default) or Zen. Zen keeps its gradient themes and
-  the theme picker's per-Space colours.
+- **Look**: Zen (default) or shadcn/ui. Zen has its gradient themes and the
+  theme picker's per-Space colours; the choices below are shadcn's.
 - **Mode**: Dark (default), Light, or Automatic (follow the system). The
   mode is the window's colour mode, so on macOS the title bar, scrollbars and
   native menus follow it. Websites keep their own colour scheme
@@ -383,8 +386,9 @@ every window):
 The colours are shadcn's own OKLCH values, converted to sRGB exactly, and
 generated from its registry (`scripts/gen_shadcn_palettes.py`).
 
-In the shadcn style the floating URL bar (typing in the URL bar, or ⌘T / ⌘L)
-is a command-dialog card: 55% of the window wide, a little above the middle,
+In both looks the floating URL bar (typing in the URL bar, or ⌘T / ⌘L) is a
+command-dialog card with a magnifier, a "Search..." placeholder, a divider and
+"title — url" suggestions. In the shadcn style it is 55% of the window wide, a little above the middle,
 on `popover` (#18181b) with a 1px `border` outline, shadcn's soft shadow and a
 `rounded-xl` corner, in Geist. Suggestions below it are `popover` too, with
 `accent` for the selected row. The field has a magnifier and a "Search..."

@@ -86,7 +86,12 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   // The URL pill on the tab colour; the floating URL bar's long shadow
   // (box-shadow 0 30px 140px -15px) black at 80% (60% in dark mode).
   mixer[kColorKoanUrlPill] = {kColorTabBackgroundActiveFrameActive};
-  mixer[kColorKoanFloatingUrlBarBorder] = {SK_ColorTRANSPARENT};
+  // The card is Zen's panel colour (--arrowpanel-background; a glass pane
+  // wants it translucent) with --zen-colors-border-contrast around it.
+  mixer[kColorKoanFloatingUrlBarBackground] = {
+      dark ? SkColorSetRGB(31, 31, 31) : SkColorSetRGB(244, 244, 244)};
+  mixer[kColorKoanFloatingUrlBarBorder] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.11f));
   mixer[kColorKoanFloatingUrlBarShadow] =
       ui::SetAlpha(ui::kColorShadowBase, Alpha(dark ? 0.6f : 0.8f));
 
@@ -272,8 +277,10 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
 void AddKoanColorMixer(ui::ColorProvider* provider,
                        const ui::ColorProviderKey& key) {
   ui::ColorMixer& mixer = provider->AddMixer();
+  // Chromium's leaves and the URL bar's card follow the active token set;
+  // Koan's own views have their values per look.
+  AddShadcnChromiumColors(mixer, key);
   if (look::IsShadcnStyle()) {
-    AddShadcnChromiumColors(mixer, key);
     AddShadcnKoanColors(mixer, key);
   } else {
     AddZenColors(mixer, key);

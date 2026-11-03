@@ -597,8 +597,11 @@ void KoanUrlBarController::ApplyCardStyle() {
 }
 
 bool KoanUrlBarController::IsCommandCard() const {
-  return placement_ == Placement::kFloating && features::IsUrlBarEnabled() &&
-         look::IsShadcnStyle();
+  return placement_ == Placement::kFloating && features::IsUrlBarEnabled();
+}
+
+ui::Layer* KoanUrlBarController::card_layer() const {
+  return IsCommandCard() ? browser_view_->top_container()->layer() : nullptr;
 }
 
 void KoanUrlBarController::Layout() {

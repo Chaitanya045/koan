@@ -25,6 +25,10 @@
 class BrowserView;
 class LocationBarView;
 
+namespace ui {
+class Layer;
+}
+
 namespace views {
 class View;
 }  // namespace views
@@ -95,9 +99,14 @@ class KoanUrlBarController : public views::ViewObserver,
   // koan_url_bar.h hooks.
   void OnOmniboxChanged(bool user_input_in_progress);
 
-  // Whether the floating bar is shadcn's command-dialog card: it has a
-  // magnifier and a "Search..." placeholder.
+  // Whether the floating bar is the command-dialog card (in either look): it
+  // has a magnifier, a "Search..." placeholder and a divider.
   bool IsCommandCard() const;
+  // The card's layer while it is open, null otherwise: the one a glass look
+  // blurs behind (Layer::SetBackgroundBlur), with the translucent
+  // kColorKoanFloatingUrlBarBackground. It is clipped to the card's rounded
+  // corners.
+  ui::Layer* card_layer() const;
   // Whether what the user opens now should go to a new tab; ends the new-tab
   // session if so.
   bool TakeNewTabDisposition();

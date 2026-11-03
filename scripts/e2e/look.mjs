@@ -1,5 +1,5 @@
-// End-to-end test of Koan's look (issue #48): the default is the shadcn style
-// in dark mode, drawn from shadcn's tokens everywhere (the window's frame as
+// End-to-end test of Koan's look (issue #48): the default is Zen's, and the
+// shadcn style (dark mode), drawn from shadcn's tokens everywhere (the window's frame as
 // pixels, the settings page as computed styles), and the look switches live:
 // light mode, the Zen style, a base colour, an accent and a pasted theme.
 //
@@ -37,7 +37,11 @@ const sidebarPixel = async () => {
   return frame.pixel(3, Math.floor(frame.height / 2));
 };
 
-check('The default style is shadcn', await pref('koan.look.style') === 'shadcn');
+check('The default style is Zen', await pref('koan.look.style') === 'zen');
+const zenDefault = await sidebarPixel();
+check('...and the window is Zen\'s, not shadcn\'s near-black',
+      !near(zenDefault, [9, 9, 11], 1), `${zenDefault}`);
+check('Switching to shadcn works', await set('koan.look.style', 'shadcn'));
 check('...dark', await pref('koan.look.mode') === 'dark');
 check('...with the Black base colour', await pref('koan.look.base') === 'black');
 check('The page draws from shadcn\'s dark background',

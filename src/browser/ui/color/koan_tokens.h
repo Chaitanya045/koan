@@ -53,7 +53,9 @@ std::string_view TokenCssName(Token token);
 // shadcn's default `--radius`, 0.625rem.
 inline constexpr float kDefaultRadius = 10;
 
-// Koan's look: shadcn/ui's design system, or Zen's.
+// Koan's look: Zen's (the default), or shadcn/ui's design system. Both are
+// token sets (ResolveTokens), so every surface Koan or Chromium draws follows
+// whichever is active.
 enum class Style { kShadcn, kZen };
 // Light or dark, or following the system (shadcn's `.dark` class).
 enum class Mode { kAuto, kLight, kDark };
@@ -105,7 +107,7 @@ std::optional<CustomTheme> ParseThemeCss(std::string_view css);
 
 // What makes the tokens.
 struct Look {
-  Style style = Style::kShadcn;
+  Style style = Style::kZen;
   Mode mode = Mode::kDark;
   BaseColor base = BaseColor::kBlack;
   Accent accent = Accent::kNone;
@@ -115,8 +117,13 @@ struct Look {
   friend bool operator==(const Look&, const Look&) = default;
 };
 
-// The tokens of `look` for light or dark: the base colour's, the accent's
-// primary colour over it, then the pasted theme over both.
+// The tokens of `look` for light or dark. In the shadcn style: the base
+// colour's, the accent's primary colour over it, then the pasted theme over
+// both. In the Zen style: Zen's own colours (zen-theme.css: its browser
+// background, dialog and panel colours, text and borders, and the system
+// accent colour for `primary`), which the base, accent and pasted theme leave
+// alone. Zen's `input` is its URL bar's colour, an opaque fill, where
+// shadcn's is a translucent border.
 TokenSet ResolveTokens(const Look& look, bool dark);
 
 // The scale of `--radius`, rounded to whole pixels (never below 0).
