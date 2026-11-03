@@ -721,9 +721,11 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
 }
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
+  // (Not in fullscreen, where Chromium hosts the top container itself: on
+  // macOS the content card stays, see UseContentCard().)
   if (!features::IsCompactModeEnabled() ||
       !GetTopContainerOverlayView(browser_view_) ||
-      !UseContentCard(browser_view_)) {
+      !UseContentCard(browser_view_) || browser_view_->IsFullscreen()) {
     return Mode::kNone;
   }
   const PrefService* prefs = GetPrefs();

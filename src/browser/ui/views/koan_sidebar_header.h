@@ -37,6 +37,12 @@ void MirrorSidebarHeaderLayout(const views::View* host,
                                views::ProposedLayout& layout,
                                int width);
 
+// Whether the sidebar's top row drops Chromium's tab groups / tab search
+// buttons at its trailing end, as Zen's has none: on macOS, where the traffic
+// lights, the sidebar toggle and the navigation buttons then share one row
+// with the toolbar hidden (single toolbar); false elsewhere.
+bool HidesSidebarTrailingControls(const views::View* host);
+
 // Where `bounds` (in `host`) would be under the macOS traffic lights, which
 // are over the window's leading corner whatever Chromium reserved for them
 // (it reserves nothing while the sidebar sits above the toolbar's row, or

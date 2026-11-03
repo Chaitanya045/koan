@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
@@ -30,12 +31,19 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
 }  // namespace
 
 bool UseContentCard(const BrowserView* browser_view) {
+  // On macOS the card stays in fullscreen, as in Zen: the toolbar is hidden
+  // there (revealed from the top edge), so it is a card inset by the usual
+  // gutter, with the sidebar beside it. Elsewhere fullscreen is edge to edge.
   return features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
          browser_view->ShouldDrawVerticalTabStrip() &&
-         !browser_view->IsFullscreen();
+         (BUILDFLAG(IS_MAC) || !browser_view->IsFullscreen());
 }
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
+  if (browser_view->IsFullscreen()) {
+    // (macOS: see UseContentCard().)
+    return SidebarSideInsets(browser_view, kContentCardMargin, 0);
+  }
   if (IsToolbarHidden(browser_view)) {
     // No toolbar above the card: it reaches the top of the window, leaving
     // only a gutter, or (while revealed) the strip where the frame draws its
