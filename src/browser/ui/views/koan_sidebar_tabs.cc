@@ -235,7 +235,12 @@ class KoanNewTabRow : public views::Button {
       canvas->DrawRoundRect(GetLocalBounds(), SidebarRowCornerRadius(), flags);
     }
 
-    const SkColor color = provider->GetColor(kColorKoanSidebarNewTabForeground);
+    // Zen's [in-urlbar] row has the selected tab's text colour, not the 70%
+    // of the plain row (vertical-tabs.css).
+    const ui::ColorId color_id =
+        selected_ ? ui::ColorId(kColorToolbarText)
+                  : ui::ColorId(kColorKoanSidebarNewTabForeground);
+    const SkColor color = provider->GetColor(color_id);
     const bool expanded = width() >= kMinExpandedRowWidth;
     const gfx::Rect icon(
         expanded ? kNewTabIconX : (width() - kNewTabIconSize) / 2,
