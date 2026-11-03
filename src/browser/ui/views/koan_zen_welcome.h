@@ -94,6 +94,11 @@ inline constexpr auto kWelcomeEssentialApps =
         {"https://figma.com", u"Figma", SkColorSetRGB(0xf2, 0x4e, 0x1e)},
     });
 
+// The top edge of Zen's welcome video (zen-videos/welcome-background.mp4),
+// averaged over its loop: on macOS the title bar row beside and behind the
+// traffic lights takes it while chrome://koan-welcome plays the video below.
+inline constexpr SkColor kWelcomeVideoTopColor = SkColorSetRGB(160, 196, 125);
+
 // Search engines the search page leaves out (by name, lower case).
 inline constexpr auto kWelcomeExcludedEngines =
     std::to_array<const char16_t*>({u"wikipedia", u"ebay"});

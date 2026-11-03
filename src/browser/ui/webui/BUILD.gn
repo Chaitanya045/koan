@@ -25,6 +25,7 @@ source_set("webui") {
   ]
   deps = [
     ":resources",
+    ":welcome_media",
     ":welcome_resources",
     "//base",
     "//chrome/browser:shell_integration",
@@ -80,7 +81,8 @@ action("welcome_resources") {
     "resources/koan_welcome.css",
     "resources/koan_welcome.html",
     "resources/koan_welcome.js",
-    "resources/welcome_back.svg",
+    "resources/welcome_media/back.svg",
+    "resources/welcome_media/forward.svg",
     "resources/welcome_favicons/calendar.svg",
     "resources/welcome_favicons/discord.svg",
     "resources/welcome_favicons/figma.svg",
@@ -101,7 +103,9 @@ action("welcome_resources") {
     "kKoanWelcomeJs=" +
         rebase_path("resources/koan_welcome.js", root_build_dir),
     "kKoanWelcomeBackSvg=" +
-        rebase_path("resources/welcome_back.svg", root_build_dir),
+        rebase_path("resources/welcome_media/back.svg", root_build_dir),
+    "kKoanWelcomeForwardSvg=" +
+        rebase_path("resources/welcome_media/forward.svg", root_build_dir),
     "kKoanWelcomeFaviconCalendar=" +
         rebase_path("resources/welcome_favicons/calendar.svg", root_build_dir),
     "kKoanWelcomeFaviconDiscord=" +
@@ -120,5 +124,24 @@ action("welcome_resources") {
         rebase_path("resources/welcome_favicons/trello.svg", root_build_dir),
     "kKoanWelcomeFaviconTuta=" +
         rebase_path("resources/welcome_favicons/tuta.svg", root_build_dir),
+  ]
+}
+
+# Zen's welcome video (re-encoded: the same footage at 2% of the size) and
+# grain, as byte arrays (koan_welcome_media.h).
+action("welcome_media") {
+  script = "//koan/browser/ui/fonts/embed_binary.py"
+  sources = [
+    "resources/welcome_media/grain-bg.png",
+    "resources/welcome_media/welcome-background.mp4",
+  ]
+  outputs = [ "$target_gen_dir/koan_welcome_media.h" ]
+  args = [
+    "--namespace=koan::welcome_media",
+    rebase_path(outputs[0], root_build_dir),
+    "kGrainBg=" +
+        rebase_path("resources/welcome_media/grain-bg.png", root_build_dir),
+    "kVideo=" + rebase_path("resources/welcome_media/welcome-background.mp4",
+                            root_build_dir),
   ]
 }

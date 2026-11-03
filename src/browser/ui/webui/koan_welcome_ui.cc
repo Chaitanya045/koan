@@ -9,18 +9,18 @@
 #include <string_view>
 #include <utility>
 
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/string_view_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
-#include "koan/browser/ui/color/koan_look.h"
-#include "koan/browser/ui/color/koan_tokens.h"
-#include "koan/browser/ui/fonts/koan_fonts.h"
 #include "koan/browser/ui/webui/koan_welcome_handler.h"
+#include "koan/browser/ui/webui/koan_welcome_media.h"
 #include "koan/browser/ui/webui/koan_welcome_resources.h"
 #include "koan/common/koan_url_constants.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
@@ -28,16 +28,6 @@
 namespace koan {
 
 namespace {
-
-// The welcome screen is the look's dark tokens whatever the mode (the user
-// asked for it black), in Geist.
-std::string TokensStylesheet() {
-  return base::StrCat(
-      {"@font-face { font-family: 'Geist'; src: url(/geist.woff2) "
-       "format('woff2'); font-weight: 100 900; font-display: block; }\n"
-       ":root {\n  color-scheme: dark;\n",
-       look::TokensToCss(look::CurrentTokens(/*dark=*/true)), "}\n"});
-}
 
 // Zen's favicons for the Essentials (welcome_favicons/).
 std::string_view Favicon(std::string_view name) {
@@ -71,12 +61,14 @@ void ServeResource(const std::string& path,
     data = kKoanWelcomeCss;
   } else if (path == "koan_welcome.js") {
     data = kKoanWelcomeJs;
-  } else if (path == "koan_tokens.css") {
-    data = TokensStylesheet();
-  } else if (path == "geist.woff2") {
-    data = std::string(fonts::SansWoff2());
   } else if (path == "back.svg") {
     data = kKoanWelcomeBackSvg;
+  } else if (path == "forward.svg") {
+    data = kKoanWelcomeForwardSvg;
+  } else if (path == "grain-bg.png") {
+    data = std::string(base::as_string_view(welcome_media::kGrainBg));
+  } else if (path == "welcome-background.mp4") {
+    data = std::string(base::as_string_view(welcome_media::kVideo));
   } else if (path.starts_with("favicons/") && IsSvg(path)) {
     data = std::string(Favicon(std::string_view(path).substr(
         9, path.size() - 9 - std::string_view(".svg").size())));
@@ -100,10 +92,13 @@ KoanWelcomeUI::KoanWelcomeUI(content::WebUI* web_ui)
   source->SetRequestFilter(
       base::BindRepeating([](const std::string&) { return true; }),
       base::BindRepeating(&ServeResource));
-  // The engines' logos where a build bundles them (chrome://theme).
+  // The engines' logos where a build bundles them (chrome://theme); Zen's
+  // video, played from a blob.
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ImgSrc,
       "img-src chrome://theme 'self' data:;");
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::MediaSrc, "media-src 'self' blob:;");
   web_ui->AddMessageHandler(std::make_unique<KoanWelcomeHandler>(profile));
 }
 

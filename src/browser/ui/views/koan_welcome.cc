@@ -2225,9 +2225,16 @@ class KoanWelcomeTitleBarArea : public views::View {
     GetViewAccessibility().SetIsIgnored(true);
   }
 
+  // The row's colour instead of the scrim's (the WebUI screen's video).
+  void SetColor(SkColor color) {
+    color_ = color;
+    SchedulePaint();
+  }
+
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
-    canvas->DrawColor(GetColorProvider()->GetColor(kColorKoanWelcomeScrim));
+    canvas->DrawColor(
+        color_.value_or(GetColorProvider()->GetColor(kColorKoanWelcomeScrim)));
   }
   bool OnMousePressed(const ui::MouseEvent& event) override {
     press_in_screen_ = event.location();
@@ -2270,6 +2277,7 @@ class KoanWelcomeTitleBarArea : public views::View {
 
   const raw_ptr<BrowserView> browser_view_;
   std::optional<gfx::Point> press_in_screen_;
+  std::optional<SkColor> color_;
 };
 
 BEGIN_METADATA(KoanWelcomeTitleBarArea)
@@ -2413,6 +2421,15 @@ void KoanWelcome::ShowWebUI() {
   callbacks.skip =
       base::BindRepeating(&KoanWelcome::Skip, weak_factory_.GetWeakPtr());
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
+  // The title bar row (macOS) above the page's video takes its top edge.
+  for (views::View* part :
+       {title_bar_widget_ ? title_bar_widget_->GetContentsView() : nullptr,
+        title_bar_corner_.get()}) {
+    if (part) {
+      static_cast<KoanWelcomeTitleBarArea*>(part)->SetColor(
+          kWelcomeVideoTopColor);
+    }
+  }
   web_view->LoadInitialURL(GURL(kWelcomeURL));
   views::WebView* view = widget_->SetContentsView(std::move(web_view));
   LayoutWidget();

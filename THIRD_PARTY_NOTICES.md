@@ -50,8 +50,9 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_zen_media.{h,cc}` | `ZenMediaController.mjs`, `zen-media-controls.css` (the media cards' stack, timing and time format) |
 | `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |
 | `src/browser/ui/views/welcome_icons/*.png` | `zen-images/favicons/*.svg` (the Essentials' icons on the welcome screen, as PNGs; the logos are their owners' trademarks) |
-| `src/browser/ui/webui/resources/koan_welcome.{html,css,js}` | `ZenWelcome.mjs`, `zen-welcome.css`, `zen-buttons.css`, `zen-welcome.ftl` (Zen 1.24b's welcome flow, chrome://koan-welcome) |
+| `src/browser/ui/webui/resources/koan_welcome.{html,css,js}` | `ZenWelcome.mjs`, `zen-welcome.css`, `zen-buttons.css`, `zen-theme.css`, `zen-welcome.ftl` (Zen 1.24b's welcome flow with Zen's look, chrome://koan-welcome) |
 | `src/browser/ui/webui/resources/welcome_favicons/*.svg` | `zen-images/favicons/*.svg` (the Essentials' icons; the logos are their owners' trademarks) |
+| `src/browser/ui/webui/resources/welcome_media/*` | `zen-videos/welcome-background.mp4` (re-encoded with H.264 at a lower bitrate, the same footage), `zen-images/grain-bg.png`, `zen-icons/back.svg`, `zen-icons/forward.svg` |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).

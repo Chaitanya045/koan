@@ -6,12 +6,36 @@
  * contributors (https://github.com/zen-browser/desktop), MPL-2.0:
  *   zen-welcome.css
  *   zen-buttons.css
+ *   zen-theme.css (the defaults the welcome screen uses)
  * Koan's changes, Copyright 2026 The Koan Authors, are under the same
  * licence. */
 
-/* chrome://koan-welcome: Zen's welcome screen (1.24b). Zen's colours are the
- * look's tokens (koan_tokens.css); Zen's background video is the page's
- * `background`. */
+/* chrome://koan-welcome: Zen 1.24b's welcome screen with Zen's own look.
+ * What Firefox gives Zen's page is here: its window (the system font, light
+ * or dark with the system), Zen's accent and window background
+ * (zen-theme.css), its big accent and footer buttons (zen-buttons.css). */
+
+:root {
+  color-scheme: light dark;
+  /* zen-theme.css: the system's accent colour. */
+  --zen-primary-color: rgb(0, 122, 255);
+  --zen-main-browser-background: light-dark(rgb(235, 235, 235), #1b1b1b);
+  /* zen-buttons.css */
+  --zen-accent-button-color: light-dark(
+    oklch(from var(--zen-primary-color) clamp(0.35, l, 0.6) c h),
+    oklch(from var(--zen-primary-color) clamp(0.7, l, 0.85) c h)
+  );
+  --zen-accent-button-background: light-dark(
+    oklch(from var(--zen-primary-color) clamp(0.35, l, 0.6) c h),
+    oklch(from var(--zen-primary-color) clamp(0.55, l, 0.7) c h)
+  );
+}
+
+@supports (color: AccentColor) {
+  :root {
+    --zen-primary-color: AccentColor;
+  }
+}
 
 html,
 body {
@@ -19,27 +43,26 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'Geist', Inter, system-ui, sans-serif;
-  font-size: 16px;
+  /* Zen's window behind the page once the video has gone. */
+  background: var(--zen-main-browser-background);
+  font: menu;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
 
-*:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+button {
+  font: inherit;
 }
 
-/* zen-buttons.css: Zen's big accent buttons; the primary is shadcn's
- * default (`primary` on `primary-foreground`), the other a ghost button. */
+/* zen-buttons.css */
 .zen-big-accent-button {
   appearance: none;
   border: none;
   border-radius: 12px;
   padding: 1.2rem 1rem;
   background: transparent;
-  color: var(--foreground);
+  color: var(--zen-accent-button-color);
   font: inherit;
   font-size: 1.2rem;
   font-weight: 600;
@@ -49,34 +72,39 @@ body {
 
   &:hover {
     scale: 1.03;
-    background: var(--accent);
+    filter: brightness(1.1);
   }
 
   &:active:hover {
     scale: 1;
+    color: color-mix(in srgb, var(--zen-accent-button-color) 80%, transparent);
   }
 
   &.primary {
-    background: var(--primary);
-    color: var(--primary-foreground);
+    background: var(--zen-accent-button-background);
+    color: white;
 
     &:hover {
-      filter: brightness(0.92);
+      filter: brightness(1.1);
+    }
+
+    &:active:hover {
+      color: rgba(255, 255, 255, 0.8);
     }
   }
 
-  &:disabled {
-    opacity: 0.5;
-    pointer-events: none;
+  &:focus-visible {
+    outline: 2px solid var(--zen-accent-button-color);
+    outline-offset: 2px;
   }
 }
 
-/* Zen's footer button, the start button's shape. */
+/* zen-buttons.css: the footer button, the start button's shape; Firefox's
+ * list-style-image arrow is an SVG here. */
 .footer-button {
   appearance: none;
   border: none;
-  border-radius: 12px;
-  font: inherit;
+  border-radius: 8px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
@@ -88,9 +116,17 @@ body {
     scale: 0.98;
   }
 
-  & svg {
-    width: 18px;
-    height: 18px;
+  &::before {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    mask: url(/forward.svg) center / contain no-repeat;
+  }
+
+  &:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 2px;
   }
 }
 
@@ -126,13 +162,19 @@ body {
 }
 
 #zen-welcome {
-  --zen-welcome-accent: var(--primary);
-  --zen-welcome-sidebar-bg: var(--card);
-  --zen-welcome-content-bg: var(--background);
-  --zen-welcome-surface-bg: var(--card);
-  --zen-welcome-tile-bg: var(--muted);
-  --zen-welcome-border: var(--border);
-  --zen-welcome-text-secondary: var(--muted-foreground);
+  --zen-welcome-accent: var(--zen-accent-button-color);
+  --zen-welcome-sidebar-bg: light-dark(#ffffff, #1c1c1e);
+  --zen-welcome-content-bg: light-dark(#f6f6f8f5, #2b2b30ed);
+  --zen-welcome-surface-bg: light-dark(#ffffff, #1c1c1e);
+  --zen-welcome-tile-bg: light-dark(#ececee, #333338);
+  --zen-welcome-border: light-dark(
+    rgba(0, 0, 0, 0.14),
+    rgba(255, 255, 255, 0.16)
+  );
+  --zen-welcome-text-secondary: light-dark(
+    rgba(0, 0, 0, 0.6),
+    rgba(255, 255, 255, 0.6)
+  );
 }
 
 #zen-welcome-start {
@@ -146,9 +188,8 @@ body {
     
     padding: 1em !important;
     min-width: 100px;
-    background: var(--primary) !important;
-    color: var(--primary-foreground);
-    fill: currentColor !important;
+    background: rgb(62, 115, 62) !important;
+    fill: white !important;
 
     will-change: transform;
     transition: scale 0.15s ease-out;
@@ -174,7 +215,7 @@ body {
     white-space: nowrap;
     /* Layered (transformed) glyphs are drawn with grayscale AA on macOS;
      * use it for the whole title so animating characters don't look bolder. */
-    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased;
     transform: translateY(-5%);
 
     & > span {
@@ -196,7 +237,7 @@ body {
   justify-content: start;
   align-items: stretch;
   background: var(--zen-welcome-content-bg);
-  color: var(--foreground);
+  color: light-dark(#111111, #ffffff);
   border-radius: 1.4rem;
   position: relative;
   width: 86%;
@@ -245,8 +286,7 @@ body {
       height: 16px;
       background: currentColor;
       mask: url(/back.svg) center / contain no-repeat;
-      -moz-context-properties: fill;
-      fill: currentColor;
+            fill: currentColor;
     }
 
     &[disabled] {
@@ -296,6 +336,16 @@ body {
     height: 100%;
     overflow: hidden;
 
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background-image: url(/grain-bg.png);
+      opacity: 0.3;
+      mix-blend-mode: overlay;
+      pointer-events: none;
+    }
   }
 
   .zen-welcome-page {
@@ -447,11 +497,6 @@ body {
           pointer-events: none;
         }
 
-        &:has(input:focus-visible) {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
-        }
-
         .zen-welcome-import-profile-name {
           overflow: hidden;
           white-space: nowrap;
@@ -466,7 +511,7 @@ body {
           box-sizing: border-box;
           border-radius: 50%;
           border: 1.5px solid
-            var(--input);
+            light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.4));
 
           &::after {
             content: "";
@@ -525,8 +570,6 @@ body {
       scale: 1.03;
     }
 
-    /* Koan: hidden but focusable, so that each list is one Tab stop
-     * with the arrow keys (Zen hides the inputs with display: none). */
     & input {
       position: absolute;
       opacity: 0;
@@ -537,7 +580,7 @@ body {
     }
 
     &:has(input:focus-visible) {
-      outline: 2px solid var(--ring);
+      outline: 2px solid var(--zen-welcome-accent);
       outline-offset: 2px;
     }
 
@@ -559,7 +602,7 @@ body {
       box-sizing: border-box;
       border-radius: 50%;
       border: 1px solid
-        var(--input);
+        light-dark(rgba(0, 0, 0, 0.45), rgba(255, 255, 255, 0.5));
 
       &::after {
         content: "";
@@ -596,7 +639,7 @@ body {
     width: 92%;
     height: 100%;
     border-top-left-radius: 2.4rem;
-    background: var(--muted);
+    background: light-dark(#e3e3e5, #232326);
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
     overflow: hidden;
 
@@ -673,19 +716,19 @@ body {
 /* Koan's additions. */
 
 /* A search engine or browser without a bundled logo: its initial on a
- * neutral tile, like an icon (never a keycap). */
+ * neutral tile (Chromium bundles engine logos only in Google Chrome). */
 .engine-icon-letter {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--secondary);
-  color: var(--secondary-foreground);
-  font-weight: 600;
-  font-size: 15px;
+  background: var(--zen-welcome-surface-bg);
+  color: var(--zen-welcome-text-secondary);
+  font-weight: 700;
+  font-size: 14px;
 }
 
-/* The colours page: Zen's theme picker is a panel beside the page; until
- * Koan has it (#41), a panel of its colours in the same place. */
+/* The colours page: Zen opens its theme picker panel beside the page;
+ * until Koan has it (#41), a panel of its colours in the same place. */
 .zen-welcome-colors-panel {
   display: grid;
   grid-template-columns: repeat(3, 56px);
@@ -718,15 +761,15 @@ body {
     position: absolute;
     inset: 1px;
     border-radius: 50%;
-    border: 2px solid var(--border);
+    border: 2.5px solid color-mix(in srgb, var(--zen-welcome-swatch) 50%, transparent);
   }
 
   &:has(:checked)::after {
-    border-color: var(--foreground);
+    border-color: light-dark(#111111, #ffffff);
   }
 
   &:has(input:focus-visible) {
-    outline: 2px solid var(--ring);
+    outline: 2px solid var(--zen-welcome-accent);
     outline-offset: 2px;
   }
 
@@ -748,6 +791,6 @@ body {
 }
 
 .zen-welcome-essential:focus-visible {
-  outline: 2px solid var(--ring);
+  outline: 2px solid var(--zen-welcome-accent);
   outline-offset: 2px;
 }

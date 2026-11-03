@@ -9,11 +9,11 @@
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
-// chrome://koan-welcome: Zen's welcome flow (1.24b's ZenWelcome.mjs) as a
-// page over the window. What Zen asks of Firefox (the migration wizard, the
-// search service, the shell service, Essentials, the theme picker) goes to
-// koan_welcome_handler.cc; Zen's motion library is the Web Animations API
-// with Zen's durations, offsets and staggers.
+// chrome://koan-welcome: Zen's welcome flow (1.24b's ZenWelcome.mjs), with
+// Zen's own look, as a page over the window. What Zen asks of Firefox (the
+// migration wizard, the search service, the shell service, Essentials, the
+// theme picker) goes to koan_welcome_handler.cc; Zen's motion library is the
+// Web Animations API with Zen's durations, offsets and staggers.
 
 import {sendWithPromise} from 'chrome://resources/js/cr.js';
 
@@ -147,6 +147,28 @@ function animate(targets, values, options = {}) {
     });
     return animation.finished.catch(() => {});
   }));
+}
+
+// Zen's background video. A WebUI data source serves no byte ranges, which
+// looping needs: the page plays it from a blob.
+async function playVideoBackground() {
+  const video = document.getElementById('zen-welcome-video');
+  try {
+    const response = await fetch('/welcome-background.mp4');
+    video.src = URL.createObjectURL(await response.blob());
+    await video.play();
+  } catch {}
+}
+
+function removeVideoBackground() {
+  const video = document.getElementById('zen-welcome-video');
+  if (!video) {
+    return;
+  }
+  animate(video, {opacity: 0}, {duration: 0.6, ease: 'easeOut'}).then(() => {
+    video.pause();
+    video.remove();
+  });
 }
 
 const kSpring = {type: 'spring', bounce: 0.35, visualDuration: 0.35};
@@ -534,6 +556,7 @@ function getWelcomePages(data) {
       // Zen opens its gradient theme picker here; until Koan has it (#41),
       // a panel of its colours in the picker's place.
       render(content) {
+        removeVideoBackground();
         const panel = document.createElement('div');
         panel.className = 'zen-welcome-colors-panel';
         panel.setAttribute('role', 'radiogroup');
@@ -720,6 +743,7 @@ async function animateInitialStage(data) {
 
 async function start() {
   setText(document.getElementById('zen-welcome-back'), 'zen-welcome-back');
+  playVideoBackground();
   const data = await sendWithPromise('getWelcomeData');
   animateInitialStage(data);
 }
