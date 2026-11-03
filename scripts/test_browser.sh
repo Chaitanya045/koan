@@ -17,7 +17,9 @@ cd "$ROOT/chromium/src"
 flags=()
 if [[ $(uname -s) == Linux ]]; then
   flags=(--ozone-platform=headless --in-process-gpu --disable-gpu
-    --password-store=basic --window-size=1280,800
-    --ozone-override-screen-size=1280,800)
+    --password-store=basic "--window-size=1280,800"
+    "--ozone-override-screen-size=1280,800")
 fi
-exec out/Koan/koan_browsertests "${flags[@]}" "$@"
+out=out/Koan
+[[ ${KOAN_CONFIG:-} == release ]] && out=out/Release
+exec "$out/koan_browsertests" "${flags[@]}" "$@"

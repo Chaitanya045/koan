@@ -31,6 +31,11 @@ KoanPinnedTabController* GetPinnedTabs(Browser* browser);
 // The names of the window's Spaces in sidebar order.
 std::vector<std::u16string> SpaceNames(Browser* browser);
 
+// Writes the window's session to disk now, so the next browser (a test's
+// restart) restores it; the session service otherwise saves a little later,
+// and a browser closed first would lose the last changes.
+void FlushSession(Browser* browser);
+
 // The indices of the tabs of `space` in the tab strip.
 std::vector<int> TabsOfSpace(TabStripModel* tab_strip,
                              const tab_groups::TabGroupId& space);

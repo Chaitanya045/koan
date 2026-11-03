@@ -15,6 +15,7 @@
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -57,13 +58,17 @@ class KoanSessionRestoreBrowserTest : public InProcessBrowserTest {
 
  protected:
   // Waits for the restored window to have `tabs` tabs and `spaces` Spaces.
+  // Only for a state a fresh window isn't in (it has one tab and one Space),
+  // else it returns before the session is restored; tests that restore
+  // that much wait on what they restore.
   void WaitForRestore(int tabs, size_t spaces) {
     ASSERT_TRUE(base::test::RunUntil(
         [&] { return browser()->tab_strip_model()->count() == tabs; }));
     ASSERT_TRUE(WaitForSpaceCount(browser(), spaces));
   }
 
-  // The index of the tab in the Space called `name`, with the given URL.
+  // The index of the tab in the Space called `name`, with the given URL, or
+  // -1.
   int FindTab(const std::u16string& name, const GURL& url) {
     KoanWorkspaceController* spaces = GetSpaces(browser());
     TabStripModel* tab_strip = browser()->tab_strip_model();
@@ -79,6 +84,17 @@ class KoanSessionRestoreBrowserTest : public InProcessBrowserTest {
     }
     return -1;
   }
+
+  // The tab pinned in its Space, or null.
+  tabs::TabInterface* FindPinnedTab() {
+    TabStripModel* tab_strip = browser()->tab_strip_model();
+    for (int i = 0; i < tab_strip->count(); ++i) {
+      if (IsPinnedInSpace(tab_strip->GetTabAtIndex(i))) {
+        return tab_strip->GetTabAtIndex(i);
+      }
+    }
+    return nullptr;
+  }
 };
 
 }  // namespace
@@ -93,9 +109,11 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, PRE_SpacesComeBack) {
   spaces->CreateSpace(u"Play", u"", {});
   ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
   spaces->SwitchTo(spaces->GetSpaces()[1].id);
+  FlushSession(browser());
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SpacesComeBack) {
+  // Three tabs and three Spaces: more than a fresh window has.
   ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/3, /*spaces=*/3));
   EXPECT_THAT(SpaceNames(browser()),
               testing::ElementsAre(u"Space", u"Work", u"Play"));
@@ -125,14 +143,16 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, PRE_PinnedTabComesBack) {
   // Then away from it.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), OtherUrl()));
   EXPECT_TRUE(IsAwayFromPinnedUrl(tab_strip->GetActiveTab()));
+  FlushSession(browser());
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, PinnedTabComesBack) {
   ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/2, /*spaces=*/2));
   // Pinned tabs stay in their Space, and are still pinned there; the pinned
   // URL came with the session, and the tab is where it was.
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return FindTab(u"Work", OtherUrl()) != -1; }));
   const int index = FindTab(u"Work", OtherUrl());
-  ASSERT_NE(-1, index);
   tabs::TabInterface* tab = browser()->tab_strip_model()->GetTabAtIndex(index);
   EXPECT_TRUE(IsPinnedInSpace(tab));
   EXPECT_TRUE(IsPinnedForUser(tab));
@@ -153,13 +173,16 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
   TabStripModel* tab_strip = browser()->tab_strip_model();
   GetPinnedTabs(browser())->PinInSpace(tab_strip->GetActiveTab());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), OtherUrl()));
+  // A second tab, so the restored window differs from a fresh one.
+  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
+  FlushSession(browser());
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
                        PinnedTabRestoresToPinnedUrl) {
-  ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/1, /*spaces=*/1));
-  tabs::TabInterface* tab = browser()->tab_strip_model()->GetTabAtIndex(0);
-  EXPECT_TRUE(IsPinnedInSpace(tab));
+  ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/2, /*spaces=*/1));
+  ASSERT_TRUE(base::test::RunUntil([&] { return FindPinnedTab() != nullptr; }));
+  tabs::TabInterface* tab = FindPinnedTab();
   EXPECT_EQ(PinnedUrl(), tab->GetContents()->GetVisibleURL());
   EXPECT_FALSE(IsAwayFromPinnedUrl(tab));
 }
@@ -174,14 +197,23 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
   EXPECT_EQ("tab data",
             GetTabSessionData(tab_strip->GetWebContentsAt(0), kTabDataKey));
   EXPECT_EQ("window data", GetWindowSessionData(browser(), kWindowDataKey));
+  // A second tab, so the restored window differs from a fresh one.
+  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
+  FlushSession(browser());
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SessionDataComesBack) {
-  ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/1, /*spaces=*/1));
-  content::WebContents* contents =
-      browser()->tab_strip_model()->GetWebContentsAt(0);
-  EXPECT_EQ("tab data", GetTabSessionData(contents, kTabDataKey));
-  EXPECT_EQ("window data", GetWindowSessionData(browser(), kWindowDataKey));
+  ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/2, /*spaces=*/1));
+  TabStripModel* tab_strip = browser()->tab_strip_model();
+  // The first tab had the data; the second had none.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return GetTabSessionData(tab_strip->GetWebContentsAt(0), kTabDataKey) ==
+           "tab data";
+  }));
+  EXPECT_EQ("", GetTabSessionData(tab_strip->GetWebContentsAt(1), kTabDataKey));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return GetWindowSessionData(browser(), kWindowDataKey) == "window data";
+  }));
 }
 
 }  // namespace koan
