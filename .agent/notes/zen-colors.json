@@ -1,0 +1,216 @@
+{
+  "_meta": {
+    "zen": "1.24b",
+    "platform": "macOS 27.0.1, MacBook Air M4, 2x",
+    "date": "2026-11-03",
+    "how": "computed = getComputedStyle / a probe element resolving var() in the running Zen (Marionette chrome context); pixel = mean of a patch from a native-resolution (2x) region capture of an ACTIVE window over a bright striped backdrop (active) or with another app active (inactive = flat, no glass); source files: ~/work/koan/.cache/zen-ref/raw/colors-computed.json, colors-pixels.json, colors-sample-meta.json; screenshots: s/c-{dark,light}-{active,inactive,urlbar,appmenu,ctxmenu}.png (not committed, contain the test backdrop).",
+    "default_theme": "No colours in the Space (opacity 0.5, texture 0). Scheme set through pref zen.view.window.scheme (0 dark, 1 light).",
+    "glass_note": "On macOS the window is a native vibrancy view under a theme layer, so any colour marked \"glass\" depends on what is behind the window (and on window-material, default 1). The flat/opaque values are what you get when the window is inactive, or with zen.widget.macos.window-vibrancy=false; they are the safe base for an opaque implementation.",
+    "accent_note": "The default primary colour is NOT the same in both schemes: dark rgb(2,41,84) (navy), light rgb(22,131,255) (macOS-like blue)."
+  },
+  "frame_sidebar_background": {
+    "css": "#zen-browser-background::after (theme layer) over NSVisualEffectView; opaque fallback = :-moz-window-inactive background (InactiveCaption)",
+    "dark": {
+      "layer": "rgba(0, 0, 0, 0.4)  (#000000 @ 0.4)",
+      "glass": true,
+      "flat_inactive_pixel": "#181717 (spread 0.0)",
+      "note": "also --zen-main-browser-background = #1b1b1b used for the page-card default when no layer"
+    },
+    "light": {
+      "layer": "none (fully transparent: pure light vibrancy)",
+      "glass": true,
+      "flat_inactive_pixel": "#e5e5e5 (spread 0.0)",
+      "note": "--zen-main-browser-background = rgb(235,235,235)"
+    },
+    "includes": "sidebar, the top row, and the 8 pt ring around the page card (same layer)"
+  },
+  "content_area_behind_page_card_(the_8pt_ring)": {
+    "css": "same #zen-browser-background layer; the card sits above it",
+    "dark": {
+      "layer": "rgba(0, 0, 0, 0.4)",
+      "glass": true,
+      "flat_inactive_pixel_top_ring": "#181717 (spread 0.0)",
+      "flat_inactive_pixel_right_ring": "#171717 (spread 0.5)"
+    },
+    "light": {
+      "layer": "transparent",
+      "glass": true,
+      "flat_inactive_pixel_top_ring": "#e4e4e4 (spread 0.5)",
+      "flat_inactive_pixel_right_ring": "#dddddd (spread 1.6)"
+    }
+  },
+  "page_card_blank_page_background": {
+    "css": "#tabbrowser-tabpanels browser[type=content] (a blank or new-tab document is transparent: the glass shows through)",
+    "dark": {
+      "computed": "rgba(255, 255, 255, 0.1)",
+      "glass": true
+    },
+    "light": {
+      "computed": "rgba(255, 255, 255, 0.6)",
+      "glass": true
+    },
+    "note": "a real web page is opaque: its own background (e.g. example.com rendered dark/light by content-theme)"
+  },
+  "panel_app_menu": {
+    "css": "--arrowpanel-background (the panel material also gets native popover glass, so the on-screen colour varies)",
+    "dark": {
+      "css_variable": "--arrowpanel-background = light-dark(rgb(244,244,244), rgb(31,31,31))",
+      "computed": "rgb(31, 31, 31)  (#1f1f1f)",
+      "text": "rgb(251, 251, 254)  (#fbfbfe)",
+      "glass": true,
+      "separator": "--panel-separator-color = currentColor @ 15% (#fbfbfe26)"
+    },
+    "light": {
+      "css_variable": "--arrowpanel-background",
+      "computed": "rgb(244, 244, 244)  (#f4f4f4)",
+      "text": "rgb(21, 20, 26)  (#15141a)",
+      "glass": true,
+      "separator": "currentColor @ 15% (#15141a26)"
+    },
+    "note": "appMenu-popup / arrowpanel elements have a transparent own background in the DOM; the frosted look is the native popover material. Pixel patches over the striped backdrop ranged widely (see colors-pixels.json) so use the variable, plus blur."
+  },
+  "context_menu_native": {
+    "css": "native NSMenu (widget.macos.native-context-menus = true): colours come from macOS, not Zen CSS",
+    "dark": {
+      "pixel_over_dark_page": "#222222 (right margin patch, spread 0)",
+      "note": "system menu glass"
+    },
+    "light": {
+      "pixel_over_light_page": "#eeeeee (right margin patch, spread 0)",
+      "note": "system menu glass"
+    },
+    "note": "highlighted item is the macOS system accent (blue in this Mac), text SF 13 pt; the menu follows the SYSTEM appearance, not zen.view.window.scheme"
+  },
+  "floating_urlbar_card_Cmd+T": {
+    "css": "#urlbar[open][zen-floating-urlbar] .urlbar-background",
+    "dark": {
+      "background": "rgb(24, 24, 24)  (#181818)",
+      "background_pixel": "#181818",
+      "border": "outline 0.5px solid rgb(75, 75, 75)  (#4b4b4b)  (a 1 px #4b4b4b row at the top edge in the capture)",
+      "shadow": "rgba(0, 0, 0, 0.6) 0 30px 140px -15px",
+      "input_text": "rgb(251, 251, 254)",
+      "placeholder": "#fbfbfe @ 0.54",
+      "row_text": "rgba(255, 255, 255, 0.7)",
+      "row_url_text": "rgb(170, 170, 170)  (#aaaaaa)",
+      "selected_row": "--zen-selected-bg = color-mix(accent-button-background, transparent 40%), text white",
+      "radius": "15px"
+    },
+    "light": {
+      "background": "rgb(255, 255, 255)  (#ffffff)",
+      "border": "outline 0.5px solid rgba(0, 0, 0, 0.2)  (a #979797 row over the page in the capture)",
+      "shadow": "rgba(0, 0, 0, 0.8) 0 30px 140px -15px",
+      "input_text": "rgb(0, 0, 0)",
+      "placeholder": "#000000 @ 0.54",
+      "row_text": "rgba(0, 0, 0, 0.7)",
+      "row_url_text": "rgb(79, 79, 79)  (#4f4f4f)",
+      "selected_row": "same variable, text white",
+      "radius": "15px"
+    },
+    "note": "opaque by default (zen.theme.acrylic-urlbar=false); with acrylic: rgba(20,20,20,.92) dark / rgba(255,255,255,.93) light + blur(40px)"
+  },
+  "tab_row_selected": {
+    "css": "tab[selected] .tab-background",
+    "dark": {
+      "background": "color(srgb 0.77553 0.810132 0.848283 / 0.22)  = #c6cfd8 @ 0.22",
+      "glass": true
+    },
+    "light": {
+      "background": "color(srgb 0.977271 0.987904 1 / 0.804)  = #f9fcff @ 0.804",
+      "glass": true
+    },
+    "radius": "14px (214 x 36 pill)"
+  },
+  "tab_row_hover": {
+    "css": "tab:hover .tab-background (--tab-background-color-hover = --toolbarbutton-background-color-hover = color-mix(--zen-branding-bg-reverse 7%, transparent))",
+    "dark": {
+      "background": "#e2e2e2 @ 0.07  (#e2e2e2 @ 7%)"
+    },
+    "light": {
+      "background": "#101010 @ 0.07  (#101010 @ 7%)"
+    },
+    "active_press": "--toolbarbutton-background-color-active = same colour @ 10%",
+    "selected_when_hovered": "unchanged (same as selected)"
+  },
+  "tab_title_text": {
+    "css": ".tab-label color = --toolbox-textcolor (also --toolbar-color)",
+    "dark": {
+      "color": "rgba(204, 212, 221, 0.9)  (#ccd4dd @ 0.9)",
+      "pixel_extreme": "#c3c6d0"
+    },
+    "light": {
+      "color": "rgba(4, 26, 51, 0.9)  (#041a33 @ 0.9)",
+      "pixel_extreme": "#1f2d44"
+    },
+    "note": "the toolbox text colour is derived from the theme primary colour"
+  },
+  "accent": {
+    "css": "--zen-primary-color; --zen-accent-button-background / --zen-accent-button-color (oklch, converted here)",
+    "dark": {
+      "primary": "rgb(2, 41, 84)  (#022954)",
+      "accent_button_background": "oklch(0.55 0.0888 254.6)  ~ #4c74a5",
+      "accent_button_color_text_border": "oklch(0.7 0.0888 254.6)  ~ #78a1d5",
+      "colors_primary": "color(srgb 0.0518 0.0824 0.1161) = #0d151e",
+      "colors_border": "color(srgb .257 .266 .276) = #424446"
+    },
+    "light": {
+      "primary": "rgb(22, 131, 255)  (#1683ff)",
+      "accent_button_background": "oklch(0.6 0.2056 256.3)  ~ #047bf7",
+      "accent_button_color_text_border": "oklch(0.6 0.2056 256.3)  ~ #047bf7",
+      "colors_primary": "color(srgb .0431 .2569 .5) = #0b4280",
+      "colors_border": "color(srgb .8086 .8514 .9 / .5) = #ced9e6 @ 0.5"
+    },
+    "note": "accent is clamped in oklch lightness 0.35-0.6 (backgrounds) / lifted for text on dark; selected options, welcome primary button, selected URL result use these"
+  },
+  "other_useful": {
+    "css": "misc variables",
+    "dark": {
+      "--zen-main-browser-background": "#1b1b1b",
+      "--zen-dialog-background": "#1c1c1c",
+      "--zen-in-content-dialog-background": "#101010",
+      "--zen-input-border-color": "#42414d",
+      "--zen-toolbar-element-bg (URL pill, tiles)": "oklch(0.866 0.015 251 / 0.135)",
+      "--toolbar-background-color": "#ffffff @ 0.15",
+      "--input-background-color": "#000000 @ 0.2",
+      "--zen-branding-bg / bg-reverse": "#101010 / #e2e2e2"
+    },
+    "light": {
+      "--zen-main-browser-background": "#ebebeb",
+      "--zen-dialog-background": "#fafbff",
+      "--zen-in-content-dialog-background": "color(srgb .9817 .9903 1)",
+      "--zen-input-border-color": "#cccccc",
+      "--zen-toolbar-element-bg (URL pill, tiles)": "oklch(0.216 0.0569 253.2 / 0.07)",
+      "--toolbar-background-color": "#ffffff @ 0.6",
+      "--input-background-color": "#ffffff @ 0.2",
+      "--zen-branding-bg / bg-reverse": "#e2e2e2 / #101010"
+    }
+  },
+  "inactive_window_flat": {
+    "css": "#zen-main-app-wrapper:-moz-window-inactive { background: InactiveCaption } (zen.view.grey-out-inactive-windows = true), native vibrancy goes flat when the window is not active",
+    "measured_with": "window INACTIVE (another app active), zen.widget.macos.window-vibrancy = true (glass on), default theme",
+    "dark": {
+      "frame / sidebar / ring": "#181717 = rgb(24, 23, 23) (spread 0)",
+      "url_pill": "#303031",
+      "essentials_tile": "#2d2d2e (favicon variance)",
+      "example.com page card": "#242424 (the page, not Zen)",
+      "traffic_lights": "grey (zen.widget.mac.mono-window-controls)"
+    },
+    "light": {
+      "frame / sidebar / ring": "#e5e5e5 = rgb(229, 229, 229) (spread 0; ring edges #e3e3e3 .. #dcdcdc near the window edge)",
+      "url_pill": "#d5d7d9",
+      "essentials_tile": "#d7d9da",
+      "example.com page card": "#ededed (the page)",
+      "traffic_lights": "grey"
+    },
+    "note": "These are the SYSTEM colours Gecko resolves for InactiveCaption in each appearance, not --zen-main-browser-background (#1b1b1b / #ebebeb); the theme colour layer is not visible while inactive (verified with the default theme only)."
+  },
+  "theme_panel_placement": {
+    "anchor": "#TabsToolbar (the sidebar tab area: x 6 .. sidebarWidth-6, y 81 .. windowHeight-6), NOT the toolbox or the URL bar",
+    "position": "topright topleft, x -10, y 0 (y -160 only when opened from the Create-Space form Edit Theme button)",
+    "panel_size": [
+      380,
+      514
+    ],
+    "measured_window_coords": "left edge x = sidebarWidth + 7 (262 -> 269, 230 -> 237); vertical centre = centre of #TabsToolbar, i.e. top y = 81 + (TabsToolbarHeight - 514)/2 (720 high window -> 141, 923 high -> 242); no popover tail (hidepopovertail=true)",
+    "entry_points_all_same_command": "cmd_zenOpenZenThemePicker: Space \"more actions\" > Theme... (context_zenChangeWorkspaceTheme), sidebar context menu > Theme picker (zenToolbarThemePicker), Spaces menu > Theme..."
+  }
+}
