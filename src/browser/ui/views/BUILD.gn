@@ -107,6 +107,8 @@ source_set("impl") {
     "koan_tab_activation.h",
     "koan_toast.cc",
     "koan_toast.h",
+    "koan_system_accent.h",
+    "koan_system_accent_observer.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
     "koan_zen_download_animation.cc",
@@ -237,8 +239,21 @@ source_set("impl") {
     "//ui/gfx",
     "//ui/gfx/geometry:geometry_skia",
     "//ui/menus",
+    "//ui/native_theme",
     "//ui/views",
   ]
+  if (is_mac) {
+    sources += [
+      "koan_system_accent_mac.mm",
+      "koan_system_accent_observer_mac.mm",
+    ]
+    frameworks = [ "AppKit.framework" ]
+  } else {
+    sources += [
+      "koan_system_accent.cc",
+      "koan_system_accent_observer.cc",
+    ]
+  }
   if (use_aura) {
     # Glance animates the page's native window (an aura::Window). macOS
     # uses NSViews instead and has no Aura.

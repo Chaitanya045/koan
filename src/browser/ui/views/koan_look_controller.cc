@@ -22,6 +22,8 @@
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/fonts/koan_fonts.h"
 #include "koan/browser/ui/views/koan_look_hooks.h"
+#include "koan/browser/ui/views/koan_system_accent.h"
+#include "koan/browser/ui/views/koan_system_accent_observer.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/color/color_mixers.h"
 #include "ui/color/color_provider_key.h"
@@ -58,6 +60,12 @@ class LookController : public look::Observer {
                                                base::Unretained(this)));
     }
     Reload();
+    // Zen's default accent is the system's (`zen.theme.accent-color` is
+    // "AccentColor"); a Space's own accent reaches a window through its
+    // colour key instead.
+    UpdateSystemAccent();
+    ObserveSystemAccentChanges(base::BindRepeating(
+        &LookController::UpdateSystemAccent, base::Unretained(this)));
     // After the first load, so loading doesn't refresh anything.
     look::AddObserver(this);
   }
@@ -82,6 +90,8 @@ class LookController : public look::Observer {
   }
 
  private:
+  void UpdateSystemAccent() { look::SetZenAccent(GetSystemAccentColor()); }
+
   void Reload() {
     PrefService* local_state = g_browser_process->local_state();
     look::Look next;
