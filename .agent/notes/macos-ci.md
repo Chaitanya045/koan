@@ -142,6 +142,12 @@ rest as no-ops). Artifacts: source 5.8 GB; out-1/2/3 0.56/0.73/1.05 GB;
 (arm64, `codesign --verify --deep --strict` OK, `hdiutil verify` OK).
 Memory never below ~44% free at `JOBS=3`; swap ≤ 130 MB.
 
+The .dmg is uploaded with `archive: false`, so the browser download is the
+.dmg itself. `gh run download` (2.96) can't fetch such artifacts ("zip:
+not a valid zip file"); `gh api .../actions/artifacts/<id>/zip` returns
+the raw .dmg (checked: same SHA-256 as on the runner). docs/USAGE.md shows
+that.
+
 **Runner** (`xcode-27`, run 41402833326): 3 × "Apple M1 (Virtual)", 7 GB,
 a 150 GB disk with 36 GB free; `mac_runner_setup.sh` frees it to
 **101 GB** in ~2 min (two extra Xcodes, Android SDK, .NET, tool cache,
