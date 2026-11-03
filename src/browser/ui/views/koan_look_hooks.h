@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_LOOK_HOOKS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_LOOK_HOOKS_H_
 
+#include <optional>
+
 class Profile;
 
 namespace ui {
@@ -22,6 +24,12 @@ namespace koan {
 // NSWindow appearance (title bar, scrollbars, Cocoa menus) is dark.
 // Incognito and enterprise-isolated profiles keep their own.
 void AdjustColorProviderKey(const Profile* profile, ui::ColorProviderKey& key);
+
+// Called at the top of ChromeLayoutProvider::GetCornerRadiusMetric(): in the
+// shadcn style, the corner radius of what `token` (a views::ShapeContextToken
+// or ChromeShapeContextTokens) rounds, from shadcn's radius scale; nullopt
+// for the Zen style and for tokens the look doesn't shape.
+std::optional<int> GetLookCornerRadius(int token);
 
 }  // namespace koan
 

@@ -2,6 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -13,6 +14,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "koan/browser/koan_prefs.h"
@@ -26,6 +28,7 @@
 #include "ui/color/color_provider_manager.h"
 #include "ui/gfx/font_list.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/layout/layout_provider.h"
 
 namespace koan {
 
@@ -122,7 +125,48 @@ LookController& GetController() {
   return *controller;
 }
 
+// shadcn's shape for what Chromium rounds: buttons, textfields, comboboxes and
+// menus are `rounded-md`, dialogs and popovers `rounded-lg`, cards and the
+// side panel `rounded-xl`.
+std::optional<look::Step> ShapeStep(views::ShapeContextToken id) {
+  using Step = look::Step;
+  switch (id) {
+    case views::kBadgeRadius:
+    case kExtensionsMenuButtonRadius:
+      return Step::kSm;
+    case views::kButtonRadius:
+    case views::kComboboxRadius:
+    case views::kMenuRadius:
+    case views::kMenuAuxRadius:
+    case views::kMenuTouchRadius:
+    case views::kTextfieldRadius:
+    case views::kContentSeparatorRadius:
+    case kActionAppMenuFooterButtonCornerRadius:
+      return Step::kMd;
+    case views::kDialogRadius:
+    case kFindBarViewRadius:
+    case kRecentActivityContainerRadius:
+    case kFeatureFirstRunInfoBoxRoundedBorderRadius:
+    case kActionAppMenuContainerCornerRadius:
+    case kActionAppMenuBlockEntryCornerRadius:
+      return Step::kLg;
+    case kSidePanelContentRadius:
+    case kOmniboxExpandedRadius:
+      return Step::kXl;
+    default:
+      return std::nullopt;
+  }
+}
+
 }  // namespace
+
+std::optional<int> GetLookCornerRadius(int token) {
+  if (!look::IsShadcnStyle()) {
+    return std::nullopt;
+  }
+  const std::optional<look::Step> step = ShapeStep(token);
+  return step ? std::optional<int>(look::Radius(*step)) : std::nullopt;
+}
 
 void AdjustColorProviderKey(const Profile* profile, ui::ColorProviderKey& key) {
   static bool installed = false;
