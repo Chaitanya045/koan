@@ -92,7 +92,7 @@ class LookController : public look::Observer {
                     .value_or(look::Mode::kDark);
     next.base =
         look::BaseColorFromString(local_state->GetString(prefs::kLookBase))
-            .value_or(look::BaseColor::kNeutral);
+            .value_or(look::BaseColor::kBlack);
     next.accent =
         look::AccentFromString(local_state->GetString(prefs::kLookAccent))
             .value_or(look::Accent::kNone);

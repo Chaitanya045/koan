@@ -30,7 +30,7 @@ TOKENS = [
     'sidebar-accent', 'sidebar-accent-foreground', 'sidebar-border',
     'sidebar-ring',
 ]
-BASES = ['neutral', 'zinc', 'slate', 'stone', 'gray']
+BASES = ['black', 'neutral', 'zinc', 'slate', 'stone', 'gray']
 ACCENTS = ['blue', 'green', 'orange', 'red', 'rose', 'violet', 'yellow']
 
 ENTRY = re.compile(
@@ -100,8 +100,23 @@ def fmt(color):
   return '{%s}' % ', '.join(num(v) + 'f' for v in color)
 
 
+def add_black(bases):
+  """Koan's default, "Black": shadcn's Zinc in light mode; in dark mode its
+  near-black surfaces (background zinc-950 #09090b, card and popover zinc-900
+  #18181b) with the pre-v4 Zinc's opaque zinc-800 (#27272a) borders and inputs
+  instead of translucent white, and the sidebar (the window's frame) as dark
+  as the page. Everything else is Zinc's."""
+  zinc = bases['zinc']
+  dark = dict(zinc['dark'])
+  zinc_800 = (0.274, 0.006, 286.033, 1.0)
+  dark['border'] = dark['input'] = dark['sidebar-border'] = zinc_800
+  dark['sidebar'] = dark['background']
+  bases['black'] = {'light': dict(zinc['light']), 'dark': dark}
+
+
 def main():
   bases = parse_bases(open(sys.argv[1]).read())
+  add_black(bases)
   accents = parse_accents(open(sys.argv[2]).read())
 
   out = []

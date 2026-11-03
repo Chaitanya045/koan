@@ -288,6 +288,8 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   mixer[kColorOmniboxResultsBackgroundHovered] = {t[Token::kAccent]};
   mixer[kColorOmniboxResultsBackgroundSelected] = {t[Token::kAccent]};
   mixer[kColorFindBarBackground] = {t[Token::kPopover]};
+  // The new tab page is the page's own surface.
+  mixer[kColorNewTabPageBackground] = {t[Token::kBackground]};
   // The URL pill and omnibox have Input's `border-input`.
   mixer[kColorLocationBarBorder] = {t.Opaque(Token::kInput, Token::kSidebar)};
 

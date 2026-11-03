@@ -346,7 +346,8 @@ Besides the shortcuts above:
 
 ## Look
 
-Koan's default look is **shadcn/ui's design system**, dark: the window's
+Koan's default look is **shadcn/ui's design system**, dark and near-black
+(Chromium's greys never show): the window's
 frame, the sidebar, tabs, Essentials, Spaces bar, URL bar and its
 suggestions, menus, bubbles, dialogs, the find bar, infobars, toasts,
 Glance, the Library, Settings and Chromium's own pages (new tab page,
@@ -367,7 +368,10 @@ every window):
   native menus follow it. Websites keep their own colour scheme
   (Chromium's Appearance setting), as in Zen. Private windows are always
   dark.
-- **Base colour**: Neutral (default), Zinc, Slate, Stone or Gray.
+- **Base colour**: Black (default), Neutral, Zinc, Slate, Stone or Gray.
+  Black is Koan's near-black Zinc: background and frame `#09090b`, cards and
+  popovers `#18181b`, borders and hover surfaces `#27272a`. The others are
+  shadcn's own (Neutral's dark background is `#0a0a0a`, its cards `#171717`).
 - **Accent colour**: none (the base's own primary colour), Blue, Green,
   Orange, Red, Rose, Violet or Yellow.
 - **Paste a theme**: the CSS that ui.shadcn.com/themes or tweakcn.com makes

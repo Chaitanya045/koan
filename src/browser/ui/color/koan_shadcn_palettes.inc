@@ -2,6 +2,62 @@
 // Do not edit.
 
 // Each palette lists the tokens in Token order (koan_tokens.h).
+constexpr OklchColor kBlackLight[kTokenCount] = {
+    {1.0f, 0.0f, 0.0f, 1.0f},  // background
+    {0.141f, 0.005f, 285.823f, 1.0f},  // foreground
+    {1.0f, 0.0f, 0.0f, 1.0f},  // card
+    {0.141f, 0.005f, 285.823f, 1.0f},  // card-foreground
+    {1.0f, 0.0f, 0.0f, 1.0f},  // popover
+    {0.141f, 0.005f, 285.823f, 1.0f},  // popover-foreground
+    {0.21f, 0.006f, 285.885f, 1.0f},  // primary
+    {0.985f, 0.0f, 0.0f, 1.0f},  // primary-foreground
+    {0.967f, 0.001f, 286.375f, 1.0f},  // secondary
+    {0.21f, 0.006f, 285.885f, 1.0f},  // secondary-foreground
+    {0.967f, 0.001f, 286.375f, 1.0f},  // muted
+    {0.552f, 0.016f, 285.938f, 1.0f},  // muted-foreground
+    {0.967f, 0.001f, 286.375f, 1.0f},  // accent
+    {0.21f, 0.006f, 285.885f, 1.0f},  // accent-foreground
+    {0.577f, 0.245f, 27.325f, 1.0f},  // destructive
+    {0.92f, 0.004f, 286.32f, 1.0f},  // border
+    {0.92f, 0.004f, 286.32f, 1.0f},  // input
+    {0.705f, 0.015f, 286.067f, 1.0f},  // ring
+    {0.985f, 0.0f, 0.0f, 1.0f},  // sidebar
+    {0.141f, 0.005f, 285.823f, 1.0f},  // sidebar-foreground
+    {0.21f, 0.006f, 285.885f, 1.0f},  // sidebar-primary
+    {0.985f, 0.0f, 0.0f, 1.0f},  // sidebar-primary-foreground
+    {0.967f, 0.001f, 286.375f, 1.0f},  // sidebar-accent
+    {0.21f, 0.006f, 285.885f, 1.0f},  // sidebar-accent-foreground
+    {0.92f, 0.004f, 286.32f, 1.0f},  // sidebar-border
+    {0.705f, 0.015f, 286.067f, 1.0f},  // sidebar-ring
+};
+constexpr OklchColor kBlackDark[kTokenCount] = {
+    {0.141f, 0.005f, 285.823f, 1.0f},  // background
+    {0.985f, 0.0f, 0.0f, 1.0f},  // foreground
+    {0.21f, 0.006f, 285.885f, 1.0f},  // card
+    {0.985f, 0.0f, 0.0f, 1.0f},  // card-foreground
+    {0.21f, 0.006f, 285.885f, 1.0f},  // popover
+    {0.985f, 0.0f, 0.0f, 1.0f},  // popover-foreground
+    {0.92f, 0.004f, 286.32f, 1.0f},  // primary
+    {0.21f, 0.006f, 285.885f, 1.0f},  // primary-foreground
+    {0.274f, 0.006f, 286.033f, 1.0f},  // secondary
+    {0.985f, 0.0f, 0.0f, 1.0f},  // secondary-foreground
+    {0.274f, 0.006f, 286.033f, 1.0f},  // muted
+    {0.705f, 0.015f, 286.067f, 1.0f},  // muted-foreground
+    {0.274f, 0.006f, 286.033f, 1.0f},  // accent
+    {0.985f, 0.0f, 0.0f, 1.0f},  // accent-foreground
+    {0.704f, 0.191f, 22.216f, 1.0f},  // destructive
+    {0.274f, 0.006f, 286.033f, 1.0f},  // border
+    {0.274f, 0.006f, 286.033f, 1.0f},  // input
+    {0.552f, 0.016f, 285.938f, 1.0f},  // ring
+    {0.141f, 0.005f, 285.823f, 1.0f},  // sidebar
+    {0.985f, 0.0f, 0.0f, 1.0f},  // sidebar-foreground
+    {0.488f, 0.243f, 264.376f, 1.0f},  // sidebar-primary
+    {0.985f, 0.0f, 0.0f, 1.0f},  // sidebar-primary-foreground
+    {0.274f, 0.006f, 286.033f, 1.0f},  // sidebar-accent
+    {0.985f, 0.0f, 0.0f, 1.0f},  // sidebar-accent-foreground
+    {0.274f, 0.006f, 286.033f, 1.0f},  // sidebar-border
+    {0.552f, 0.016f, 285.938f, 1.0f},  // sidebar-ring
+};
 constexpr OklchColor kNeutralLight[kTokenCount] = {
     {1.0f, 0.0f, 0.0f, 1.0f},  // background
     {0.145f, 0.0f, 0.0f, 1.0f},  // foreground

@@ -5,9 +5,10 @@
 //
 //   scripts/e2e/run.sh look
 //
-// shadcn's Neutral palette (ui.shadcn.com/docs/theming), as sRGB: dark
-// background #0a0a0a, sidebar #171717, primary #e5e5e5; light background
-// #ffffff, sidebar #fafafa.
+// Koan's default "Black" base colour (shadcn's Zinc with near-black dark
+// surfaces), as sRGB: dark background and sidebar #09090b, card #18181b,
+// border #27272a; light background #ffffff, sidebar #fafafa. Neutral's dark
+// background is #0a0a0a.
 import {
   CTRL, check, evalIn, finish, front, key, pages, settingsCall, sleep,
   waitFor, windowFrame,
@@ -38,12 +39,18 @@ const sidebarPixel = async () => {
 
 check('The default style is shadcn', await pref('koan.look.style') === 'shadcn');
 check('...dark', await pref('koan.look.mode') === 'dark');
-check('...with the Neutral base colour', await pref('koan.look.base') === 'neutral');
+check('...with the Black base colour', await pref('koan.look.base') === 'black');
 check('The page draws from shadcn\'s dark background',
-      await waitFor(async () => await bg() === 'rgb(10, 10, 10)'), await bg());
+      await waitFor(async () => await bg() === 'rgb(9, 9, 11)'), await bg());
 const sidebar = await sidebarPixel();
-check('The window\'s sidebar and frame are shadcn\'s dark sidebar colour',
-      near(sidebar, [23, 23, 23]), `${sidebar}`);
+check('The window\'s sidebar and frame are near-black too (#09090b)',
+      near(sidebar, [9, 9, 11]), `${sidebar}`);
+check('...and the page\'s cards are #18181b',
+      await evalIn(settings, `getComputedStyle(document.documentElement)
+          .getPropertyValue('--card').trim()`) === '#18181b');
+check('...and its borders #27272a',
+      await evalIn(settings, `getComputedStyle(document.documentElement)
+          .getPropertyValue('--border').trim()`) === '#27272a');
 check('The page has the Look settings',
       await evalIn(settings, `['koan.look.style', 'koan.look.mode', 'koan.look.base',
           'koan.look.accent', 'koan.look.custom_css'].every(
@@ -59,14 +66,14 @@ check('...and so does the window (sidebar #fafafa)', near(light, [250, 250, 250]
 
 // A base colour and an accent.
 await set('koan.look.mode', 'dark');
-await set('koan.look.base', 'zinc');
-check('The Zinc base colour changes the page (#09090b)',
-      await waitFor(async () => await bg() === 'rgb(9, 9, 11)'), await bg());
 await set('koan.look.base', 'neutral');
+check('The Neutral base colour changes the page (#0a0a0a)',
+      await waitFor(async () => await bg() === 'rgb(10, 10, 10)'), await bg());
+await set('koan.look.base', 'black');
 await set('koan.look.accent', 'blue');
 check('The Blue accent changes the primary colour',
       await waitFor(async () => (await evalIn(settings,
-          `getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()`)) !== '#e5e5e5'));
+          `getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()`)) !== '#e4e4e7'));
 await set('koan.look.accent', 'none');
 
 // A pasted theme: validated, applied to the page and the native UI, removable.
@@ -83,16 +90,16 @@ check('...and its sidebar colour the window\'s frame', near(pasted, [255, 0, 0])
       `${pasted}`);
 await set('koan.look.custom_css', '');
 check('Removing it restores the base colour',
-      await waitFor(async () => await bg() === 'rgb(10, 10, 10)'), await bg());
+      await waitFor(async () => await bg() === 'rgb(9, 9, 11)'), await bg());
 
 // The Zen style, live.
 check('Switching to Zen works', await set('koan.look.style', 'zen'));
 check('...the page keeps Zen\'s own colours',
-      await waitFor(async () => (await bg()) !== 'rgb(10, 10, 10)'), await bg());
+      await waitFor(async () => (await bg()) !== 'rgb(9, 9, 11)'), await bg());
 const zen = await sidebarPixel();
 check('...and the window leaves shadcn\'s sidebar colour',
-      !near(zen, [23, 23, 23], 1), `${zen}`);
+      !near(zen, [9, 9, 11], 1), `${zen}`);
 await set('koan.look.style', 'shadcn');
-check('Back to shadcn', await waitFor(async () => await bg() === 'rgb(10, 10, 10)'));
+check('Back to shadcn', await waitFor(async () => await bg() === 'rgb(9, 9, 11)'));
 
 finish();

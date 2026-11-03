@@ -57,9 +57,11 @@ inline constexpr float kDefaultRadius = 10;
 enum class Style { kShadcn, kZen };
 // Light or dark, or following the system (shadcn's `.dark` class).
 enum class Mode { kAuto, kLight, kDark };
-// shadcn's base colours, and its accent themes (which change the primary
-// colour only; kNone keeps the base colour's own).
-enum class BaseColor { kNeutral, kZinc, kSlate, kStone, kGray };
+// shadcn's base colours, plus Koan's own default "Black" (Zinc with
+// near-black surfaces: background #09090b, card and popover #18181b, borders
+// #27272a, the window's frame as dark as the page), and its accent themes
+// (which change the primary colour only; kNone keeps the base colour's own).
+enum class BaseColor { kBlack, kNeutral, kZinc, kSlate, kStone, kGray };
 enum class Accent {
   kNone,
   kBlue,
@@ -105,7 +107,7 @@ std::optional<CustomTheme> ParseThemeCss(std::string_view css);
 struct Look {
   Style style = Style::kShadcn;
   Mode mode = Mode::kDark;
-  BaseColor base = BaseColor::kNeutral;
+  BaseColor base = BaseColor::kBlack;
   Accent accent = Accent::kNone;
   // The pasted theme, if any; applied over the base and accent.
   std::optional<CustomTheme> custom;

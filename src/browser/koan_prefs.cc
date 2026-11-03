@@ -52,7 +52,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookStyle, "shadcn");
   registry->RegisterStringPref(kLookMode, "dark");
-  registry->RegisterStringPref(kLookBase, "neutral");
+  registry->RegisterStringPref(kLookBase, "black");
   registry->RegisterStringPref(kLookAccent, "none");
   registry->RegisterStringPref(kLookCustomCss, "");
   namespace pm = performance_manager::user_tuning::prefs;

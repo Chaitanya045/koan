@@ -128,8 +128,8 @@ constexpr Option kLookModes[] = {
     {"auto", "Automatic (follow the system)"},
 };
 constexpr Option kLookBases[] = {
-    {"neutral", "Neutral"}, {"zinc", "Zinc"}, {"slate", "Slate"},
-    {"stone", "Stone"},     {"gray", "Gray"},
+    {"black", "Black (default)"}, {"neutral", "Neutral"}, {"zinc", "Zinc"},
+    {"slate", "Slate"},           {"stone", "Stone"},     {"gray", "Gray"},
 };
 constexpr Option kLookAccents[] = {
     {"none", "None (the base colour's own)"},

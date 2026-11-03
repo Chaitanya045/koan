@@ -58,6 +58,8 @@ constexpr std::array<std::string_view, kTokenCount> kTokenNames = {
 
 const OklchColor* BasePalette(BaseColor base, bool dark) {
   switch (base) {
+    case BaseColor::kBlack:
+      return dark ? kBlackDark : kBlackLight;
     case BaseColor::kNeutral:
       return dark ? kNeutralDark : kNeutralLight;
     case BaseColor::kZinc:
@@ -69,7 +71,7 @@ const OklchColor* BasePalette(BaseColor base, bool dark) {
     case BaseColor::kGray:
       return dark ? kGrayDark : kGrayLight;
   }
-  return dark ? kNeutralDark : kNeutralLight;
+  return dark ? kBlackDark : kBlackLight;
 }
 
 std::span<const AccentOverride> AccentOverrides(Accent accent, bool dark) {
@@ -521,9 +523,9 @@ constexpr std::pair<Mode, std::string_view> kModeNames[] = {
     {Mode::kDark, "dark"},
 };
 constexpr std::pair<BaseColor, std::string_view> kBaseNames[] = {
-    {BaseColor::kNeutral, "neutral"}, {BaseColor::kZinc, "zinc"},
-    {BaseColor::kSlate, "slate"},     {BaseColor::kStone, "stone"},
-    {BaseColor::kGray, "gray"},
+    {BaseColor::kBlack, "black"}, {BaseColor::kNeutral, "neutral"},
+    {BaseColor::kZinc, "zinc"},   {BaseColor::kSlate, "slate"},
+    {BaseColor::kStone, "stone"}, {BaseColor::kGray, "gray"},
 };
 constexpr std::pair<Accent, std::string_view> kAccentNames[] = {
     {Accent::kNone, "none"},     {Accent::kBlue, "blue"},

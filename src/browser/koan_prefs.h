@@ -23,8 +23,8 @@ namespace koan::prefs {
 // design system ("shadcn", the default) or Zen's ("zen"); the rest apply to
 // the shadcn style. Names are koan::look::StyleToString() & co.
 // - kLookMode: "auto" (the system), "light" or "dark" (the default).
-// - kLookBase: shadcn's base colour: neutral (default), zinc, slate, stone,
-//   gray.
+// - kLookBase: black (default: Koan's near-black Zinc), or shadcn's base
+//   colours neutral, zinc, slate, stone, gray.
 // - kLookAccent: none (default), blue, green, orange, red, rose, violet,
 //   yellow.
 // - kLookCustomCss: a theme pasted from ui.shadcn.com/themes or tweakcn.com,
