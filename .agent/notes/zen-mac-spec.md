@@ -883,3 +883,21 @@ wallpaper); my Zen was quit once by something else and relaunched
 (same profile) between `glass-06` and the picker shots, so tab titles differ;
 the user's own Zen lives in a fullscreen Space and re-raises itself, so
 capture protocol = verify on-screen windows before and after.
+
+## 16. Small windows
+
+Measured by resizing the window (`window.resizeTo`) with 7 Essentials and ~10 tabs
+(`small-window.json`; screenshots `small-01-1200x720.jpg`, `small-02-700x495.jpg`).
+
+| Item | Value |
+|---|---|
+| **Minimum window** | **500 x 495 pt** (`#main-window` `min-width: 500px`, `min-height: 495px`); a resize below that is clamped |
+| First-run window | 1200 x 720 (locked during onboarding; min 875 x 560 while it runs) |
+| Layout at 1200 x 720, 1000 x 650, 900 x 600, 800 x 520, 700 x 495 and 500 x 495 | **identical**: row 1 (lights, toggle, back/forward/reload), pill, Essentials, Space header, tabs and the bottom bar keep their sizes; only the **page card** shrinks (`window - sidebar - 8` wide, `window - 16` high) |
+| Sidebar width | **independent of the window size**: in this profile 206 pt at every size (the width is a stored user setting, resizable by dragging the splitter; the very first window had 230); it does not collapse or switch to compact mode by itself |
+| Row 1 at width 206 | lights box 70 x 20 at x 6; back / forward / reload buttons 31 x 29 at x 107 / 138 / 169 (always sidebar width - 99 / -68 / -37) |
+| Essentials at sidebar 206 | container 194 wide: 7 tiles wrap **3 + 3 + 1** (tile 62 x 50, gap 4), because four columns need >= ~231 (see 2A) |
+| Card at 500 x 495 | 286 x 479 at (206, 8): still the 8 pt gap on the right and bottom, radius 7 |
+
+So there is no responsive behaviour in Zen's chrome: a narrow window just gives
+a narrow page. (Compact mode, `Cmd+S`, is the user's tool for reclaiming width.)
