@@ -22,6 +22,9 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
@@ -42,6 +45,15 @@ namespace {
 
 using Action = koan::shortcuts::Action;
 using Binding = koan::shortcuts::Binding;
+using ColorScheme = ThemeService::BrowserColorScheme;
+
+// The Spaces menu's items on the active Space (Zen's Theme…, Change Name…,
+// Change Icon…); an item's tag.
+enum SpaceCommand {
+  kEditTheme,
+  kChangeName,
+  kChangeIcon,
+};
 
 // The window whose Spaces and shortcuts the menus act on: the one that was
 // active last. Null without a window that has Koan's UI (e.g. a popup).
@@ -174,8 +186,141 @@ void InsertAfter(NSMenu* menu, NSInteger tag, NSArray<NSMenuItem*>* items) {
 - (void)dockSwitchSpace:(NSMenuItem*)item;
 // Moves the active window's selected tabs to the Space at the item's tag.
 - (void)moveToSpace:(NSMenuItem*)item;
+// Theme…, Change Name… and Change Icon… for the active Space (the item's tag
+// is a SpaceCommand).
+- (void)spaceCommand:(NSMenuItem*)item;
+// View > Appearance: the browser's colour scheme in the item's tag.
+- (void)setAppearance:(NSMenuItem*)item;
 // Sets the Spaces menu, which is rebuilt each time it opens after its first
 // `count` items.
+- (void)setSpacesMenu:(NSMenu*)menu staticItemCount:(NSInteger)count;
+// Shows the keys of the active window's shortcuts in `mainMenu` (see the
+// definition).
+- (void)refreshKeysIn:(NSMenu*)mainMenu;
+// Refreshes the keys whenever the menu bar opens.
+- (void)observeMenuBar:(NSMenu*)mainMenu;
+@end
+
+namespace {
+
+// The label of a Space in the menus: "<icon>  <name>", like Move To.
+NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
+  return base::SysUTF16ToNSString(
+      space.icon.empty() ? space.name
+                         : base::StrCat({space.icon, u"  ", space.name}));
+}
+
+}  // namespace
+
+@implementation KoanMenuTarget {
+  NSMenu* _spacesMenu;
+  NSInteger _staticItemCount;
+  id _trackingObserver;
+}
+
++ (KoanMenuTarget*)shared {
+  static KoanMenuTarget* shared = [[KoanMenuTarget alloc] init];
+  return shared;
+}
+
+- (void)perform:(NSMenuItem*)item {
+  if (koan::KoanBrowserViewController* controller = ActiveController()) {
+    controller->shortcuts()->Run(static_cast<Action>(item.tag));
+  }
+}
+
+- (void)switchSpace:(NSMenuItem*)item {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  if (!controller) {
+    return;
+  }
+  const auto spaces = controller->workspaces()->GetSpaces();
+  if (item.tag >= 0 && item.tag < static_cast<NSInteger>(spaces.size())) {
+    controller->workspaces()->SwitchTo(spaces[item.tag].id);
+  }
+}
+
+- (void)dockSwitchSpace:(NSMenuItem*)item {
+  if (koan::KoanBrowserViewController* controller = ActiveController()) {
+    [NSApp activateIgnoringOtherApps:YES];
+    controller->browser_view()->browser()->GetWindow()->Activate();
+  }
+  [self switchSpace:item];
+}
+
+- (void)moveToSpace:(NSMenuItem*)item {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  if (!controller) {
+    return;
+  }
+  const auto spaces = controller->workspaces()->GetSpaces();
+  if (item.tag < 0 || item.tag >= static_cast<NSInteger>(spaces.size())) {
+    return;
+  }
+  // The selected tabs, like Move To in the tab context menu.
+  TabStripModel* model =
+      controller->browser_view()->browser()->GetTabStripModel();
+  std::vector<tabs::TabInterface*> tabs;
+  for (size_t index :
+       model->selection_model().GetListSelectionModel().selected_indices()) {
+    tabs.push_back(model->GetTabAtIndex(static_cast<int>(index)));
+  }
+  if (!tabs.empty()) {
+    controller->workspaces()->MoveTabsToSpace(tabs, spaces[item.tag].id);
+  }
+}
+
+- (void)spaceCommand:(NSMenuItem*)item {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  if (!controller) {
+    return;
+  }
+  koan::KoanWorkspaceController* workspaces = controller->workspaces();
+  switch (item.tag) {
+    case kEditTheme:
+      workspaces->EditActiveSpaceTheme();
+      break;
+    case kChangeName:
+      workspaces->StartRename();
+      break;
+    case kChangeIcon:
+      workspaces->ShowIconPickerForActiveSpace();
+      break;
+  }
+}
+
+- (void)setAppearance:(NSMenuItem*)item {
+  if (koan::KoanBrowserViewController* controller = ActiveController()) {
+    ThemeServiceFactory::GetForProfile(controller->browser_view()->GetProfile())
+        ->SetBrowserColorScheme(static_cast<ColorScheme>(item.tag));
+  }
+}
+
+// NSMenuItemValidation:
+- (BOOL)validateMenuItem:(NSMenuItem*)item {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  if (!controller) {
+    return NO;
+  }
+  if (item.action == @selector(perform:)) {
+    return controller->shortcuts()->CanRun(static_cast<Action>(item.tag));
+  }
+  if (item.action == @selector(setAppearance:)) {
+    const ColorScheme current = ThemeServiceFactory::GetForProfile(
+                                    controller->browser_view()->GetProfile())
+                                    ->GetBrowserColorScheme();
+    item.state = current == static_cast<ColorScheme>(item.tag)
+                     ? NSControlStateValueOn
+                     : NSControlStateValueOff;
+    return YES;
+  }
+  if (item.action == @selector(spaceCommand:)) {
+    return controller->workspaces()->IsEnabled() &&
+           controller->workspaces()->GetActiveSpace().has_value();
+  }
+  return controller->workspaces()->IsEnabled();
+}
+
 - (void)setSpacesMenu:(NSMenu*)menu staticItemCount:(NSInteger)count;
 // Shows the keys of the active window's shortcuts in `mainMenu` (see the
 // definition).
@@ -287,6 +432,9 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
     if (item.action == @selector(perform:)) {
       item.enabled = controller && controller->shortcuts()->CanRun(
                                        static_cast<Action>(item.tag));
+    } else if (item.action == @selector(spaceCommand:)) {
+      item.enabled = controller && controller->workspaces()->IsEnabled() &&
+                     controller->workspaces()->GetActiveSpace().has_value();
     }
   }
   if (!controller || !controller->workspaces()->IsEnabled()) {
@@ -457,18 +605,48 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
                                                 @"Koan Settings…") ]);
   }
 
-  // File: Zen's wording.
-  for (NSMenuItem* item in [main_menu itemWithTag:IDC_FILE_MENU]
-           .submenu.itemArray) {
-    if (IsChromeCommand(item, IDC_NEW_INCOGNITO_WINDOW)) {
-      item.title = @"New Private Window";
+  // File: Zen's wording, and its New Blank Window (Cmd+Shift+N) after New
+  // Window. Koan has no window sync, so it is a plain new window.
+  if (NSMenu* file = [main_menu itemWithTag:IDC_FILE_MENU].submenu) {
+    for (NSMenuItem* item in file.itemArray) {
+      if (IsChromeCommand(item, IDC_NEW_INCOGNITO_WINDOW)) {
+        item.title = @"New Private Window";
+      }
     }
+    InsertAfter(file, IDC_NEW_WINDOW, @[ ActionItem(Action::kNewWindow, target,
+                                                    @"New Blank Window") ]);
   }
 
   // View: compact mode, and the panels with a key of Zen's and no menu item.
   // Not the History menu: HistoryMenuBridge hits a NOTREACHED() for any item
   // it doesn't know (ShouldMenuItemBeVisible).
   if (NSMenu* view = [main_menu itemWithTag:IDC_VIEW_MENU].submenu) {
+    // Zen's View starts with Appearance > Automatic / Light / Dark.
+    NSMenu* appearance = [[NSMenu alloc] initWithTitle:@"Appearance"];
+    const struct {
+      NSString* title;
+      ColorScheme scheme;
+    } kSchemes[] = {
+        {@"Automatic", ColorScheme::kSystem},
+        {@"Light", ColorScheme::kLight},
+        {@"Dark", ColorScheme::kDark},
+    };
+    for (const auto& entry : kSchemes) {
+      NSMenuItem* item =
+          [[NSMenuItem alloc] initWithTitle:entry.title
+                                     action:@selector(setAppearance:)
+                              keyEquivalent:@""];
+      item.target = target;
+      item.tag = static_cast<NSInteger>(entry.scheme);
+      [appearance addItem:item];
+    }
+    NSMenuItem* appearance_item =
+        [[NSMenuItem alloc] initWithTitle:@"Appearance"
+                                   action:nil
+                            keyEquivalent:@""];
+    appearance_item.submenu = appearance;
+    [view insertItem:appearance_item atIndex:0];
+    [view insertItem:[NSMenuItem separatorItem] atIndex:1];
     InsertAfter(view, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE, @[
       [NSMenuItem separatorItem],
       ActionItem(Action::kToggleCompactMode, target),
@@ -481,11 +659,28 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
     ]);
   }
 
-  // Spaces, after View as in Zen (ZenMenubar.mjs #initSpacesMenu). Zen's
-  // Edit Theme, Change Name and Change Icon open from the Space's header or
-  // bottom bar here.
+  // Spaces, after View as in Zen 1.24b (ZenMenubar.mjs #initSpacesMenu):
+  // Create Space, Theme…, Change Name…, Change Icon…, Next Space, Previous
+  // Space. Koan adds the list of Spaces and Move To below them.
   NSMenu* spaces = [[NSMenu alloc] initWithTitle:@"Spaces"];
   [spaces addItem:ActionItem(Action::kNewWorkspace, target, @"Create Space")];
+  const struct {
+    NSString* title;
+    SpaceCommand command;
+  } kSpaceCommands[] = {
+      {@"Theme…", kEditTheme},
+      {@"Change Name…", kChangeName},
+      {@"Change Icon…", kChangeIcon},
+  };
+  for (const auto& entry : kSpaceCommands) {
+    NSMenuItem* item =
+        [[NSMenuItem alloc] initWithTitle:entry.title
+                                   action:@selector(spaceCommand:)
+                            keyEquivalent:@""];
+    item.target = target;
+    item.tag = entry.command;
+    [spaces addItem:item];
+  }
   [spaces addItem:[NSMenuItem separatorItem]];
   [spaces addItem:ActionItem(Action::kWorkspaceForward, target, @"Next Space")];
   [spaces addItem:ActionItem(Action::kWorkspaceBackward, target,

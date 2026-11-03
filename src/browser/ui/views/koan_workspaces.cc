@@ -1008,6 +1008,20 @@ void KoanWorkspaceController::EditSpaceTheme(
   theme_menu_->RunMenuAt(anchor);
 }
 
+void KoanWorkspaceController::ShowIconPickerForActiveSpace() {
+  const std::optional<tab_groups::TabGroupId> active = GetActiveSpace();
+  if (active && header_ && header_->GetVisible()) {
+    ShowIconPicker(*active, header_);
+  }
+}
+
+void KoanWorkspaceController::EditActiveSpaceTheme() {
+  const std::optional<tab_groups::TabGroupId> active = GetActiveSpace();
+  if (active && header_ && header_->GetVisible()) {
+    EditSpaceTheme(*active, header_);
+  }
+}
+
 void KoanWorkspaceController::OnSpaceWheel(bool forward) {
   const base::TimeTicks now = base::TimeTicks::Now();
   if (now - last_wheel_switch_ >= kWheelSwitchCooldown) {

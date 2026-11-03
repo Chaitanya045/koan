@@ -89,17 +89,21 @@ menus.
 shortcuts and any you changed):
 
 - **Koan** (app menu): Koan Settings… (⌘,).
-- **View:** Toggle Compact Mode, Toggle Floating Sidebar, Switch Single /
+- **File:** New Blank Window (⌘⇧N, Zen's; a plain new window here, there is
+  no window sync) after New Window, and New Incognito Window is called New
+  Private Window.
+- **View:** Appearance > Automatic / Light / Dark (first, as in Zen), then
+  Chrome's items and Toggle Compact Mode, Toggle Floating Sidebar, Switch Single /
   Multiple Toolbars, Show Bookmarks Sidebar, Toggle Reader Mode, Toggle
   Library.
-- **Spaces** (after View, as in Zen): Create Space, Next Space, Previous
-  Space, then your Spaces (✓ on the active one, ⌃1… as set) and Move To (the
-  selected tabs to another Space).
+- **Spaces** (after View, as in Zen 1.24b): Create Space, Theme…, Change
+  Name…, Change Icon…, Next Space, Previous Space, then Koan's own: your
+  Spaces (✓ on the active one, ⌃1… as set) and Move To (the selected tabs to
+  another Space). Theme… and Change Icon… open on the Space's header.
 - **Tab:** Split View (side by side, stacked, grid, close, new empty),
   Expand Glance (no key shown: ⌘O is Open File's, and only expands while
   Glance is open), Toggle Pin Tab, Close All Unpinned Tabs, Copy Current URL
   (and as Markdown).
-- **File:** New Incognito Window is called New Private Window.
 
 Items are greyed when they don't apply (no Spaces, no split view, ...).
 

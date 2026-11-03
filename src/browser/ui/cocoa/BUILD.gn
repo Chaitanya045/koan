@@ -23,6 +23,8 @@ source_set("impl") {
     "//base",
     "//chrome/app:command_ids",
     "//chrome/browser:global_keyboard_shortcuts_mac",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/themes",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/cocoa",
     "//chrome/browser/ui/tabs:tab_strip",
