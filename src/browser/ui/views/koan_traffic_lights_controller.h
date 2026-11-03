@@ -11,6 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "build/build_config.h"
 #include "ui/views/view_observer.h"
 
 class BrowserView;
@@ -60,6 +61,10 @@ class KoanTrafficLightsController : public views::ViewObserver {
   // What AppKit was last told to centre the lights in.
   std::optional<int> applied_height_;
   bool update_pending_ = false;
+#if BUILDFLAG(IS_MAC)
+  // The title bar was made transparent (ClearTitlebar()).
+  bool titlebar_cleared_ = false;
+#endif
   base::WeakPtrFactory<KoanTrafficLightsController> weak_factory_{this};
 };
 

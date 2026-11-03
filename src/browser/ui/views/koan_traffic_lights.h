@@ -45,6 +45,12 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view);
 #if BUILDFLAG(IS_MAC)
 // Shows or hides the window's traffic lights.
 void SetTrafficLightsShown(const BrowserView* browser_view, bool shown);
+
+// Makes sure nothing of the window's title bar paints: the content fills the
+// window, the title bar is transparent, with no separator line (Chromium sets
+// the first two; the last is automatic, which macOS may draw as a strip under
+// the traffic lights). Idempotent.
+void ClearTitlebar(const BrowserView* browser_view);
 #endif
 
 }  // namespace koan

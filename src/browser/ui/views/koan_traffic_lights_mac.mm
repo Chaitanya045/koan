@@ -24,4 +24,16 @@ void SetTrafficLightsShown(const BrowserView* browser_view, bool shown) {
   }
 }
 
+void ClearTitlebar(const BrowserView* browser_view) {
+  const views::Widget* widget = browser_view->GetWidget();
+  NSWindow* window =
+      widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
+  if (!window) {
+    return;
+  }
+  window.titlebarAppearsTransparent = YES;
+  window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+  window.styleMask |= NSWindowStyleMaskFullSizeContentView;
+}
+
 }  // namespace koan
