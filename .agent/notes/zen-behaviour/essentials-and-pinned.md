@@ -14,7 +14,7 @@ Zen 1.24b. Source: `src/zen/tabs/ZenPinnedTabManager.mjs` (1197 lines), `src/zen
 | Lives in | the **Essentials grid** at the top of the sidebar, shared by **all Spaces** of the same container (with no containers: all Spaces) | the **pinned section of one Space** (between the Space header and the divider; also inside folders) | the Space's tab list under "+ New Tab" |
 | Max | `zen.tabs.essentials.max` = **12** (the context menu shows `n / 12`) | unlimited | n/a |
 | Moves between Spaces | **never** (shown everywhere) | yes (stays pinned) | yes |
-| Close (Cmd+W / middle-click) | never closes: unload + switch (see 4) | same | closes |
+| Close (Cmd+W / middle-click) | follows the pinned-tab close behaviour (default: reset + unload + switch to another tab; only the `close` option removes it) | same | closes |
 | Look | tile: 50 high, inner 46, radius 14, 16 px favicon centred (spec 2A/16) | a normal 218 x 40 row (36 pill, r14) | same |
 
 ## 2. Layout of the sidebar column
@@ -81,7 +81,7 @@ Essentials have `padding: 0`.
 Details: an **Essential is never closed** (the `close` behaviour is downgraded to unload-switch for
 Essentials: `noClose`); a pinned tab inside an **active folder** plays the folder's unload animation first
 (`gZenFolders.animateUnload`); a **Glance** child closes through the Glance (waits for `GlanceClose`, max 3 s);
-a **split-view group** unloads/resets all its tabs; **middle-click** on an already-unloaded pinned tab
+a **split-view group** unloads/resets all its tabs; **middle-click** on an already-unloaded **pinned (non-Essential)** tab
 **closes it for real** (`zen.pinned-tab-manager.wheel-close-if-pending` true) while the first middle-click
 unloads it. `explicitUnloadTabs` can be refused (e.g. a tab with an active call), in which case nothing else happens.
 Normal tabs are untouched by this handler.
@@ -123,7 +123,7 @@ errors "That doesn't look like a valid URL.", toast "Pinned tab URL has been upd
 
 ## 7. LIVE CHECK list
 
-1. Cmd+W on an Essential: which tab is selected afterwards (the "blur-to" choice) and the unload look (grey).
+1. Cmd+W on an Essential (default behavior) and with `close`: which tab is selected afterwards (the "blur-to" choice) and the unload look (grey).
 2. Cmd+click on the reset button: what is created (the "separate from pinned tab" action).
 3. The drag indicator between Essential tiles (line vs gap, haptics) and dropping on the right/bottom edge.
 4. Adding a 13th Essential: any toast/shake or fully silent?
@@ -141,7 +141,7 @@ errors "That doesn't look like a valid URL.", toast "Pinned tab URL has been upd
 4. Pinned tab: navigate to another domain by link: opens in a new tab; navigate within the domain: stays, and
    no reset button; use the address bar to leave the pinned URL: the reset button + "Back to pinned url".
 5. Cmd+W on the selected pinned tab (default behavior): another tab is selected, the pinned tab is grey
-   (unloaded) and back at its pinned URL; middle-click it: closes. Change the pref to `close`: Cmd+W closes a pinned
-   tab but never an Essential.
+   (unloaded) and back at its pinned URL; middle-click it again: closes it (a pinned non-Essential only; an
+   Essential just stays unloaded). Set the pref to `close`: Cmd+W removes pinned tabs, and Essentials too (LIVE CHECK).
 6. Drag an Essential into the pinned section: it becomes pinned at the position; drag back to Essentials.
 7. Relaunch: Essentials in place, all unloaded.
