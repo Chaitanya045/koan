@@ -31,19 +31,26 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
 }  // namespace
 
 bool UseContentCard(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
   // On macOS the card stays in fullscreen, as in Zen: the toolbar is hidden
   // there (revealed from the top edge), so it is a card inset by the usual
-  // gutter, with the sidebar beside it. Elsewhere fullscreen is edge to edge.
+  // gutter, with the sidebar beside it.
+  const bool allowed_in_fullscreen = true;
+#else
+  // Elsewhere fullscreen is edge to edge.
+  const bool allowed_in_fullscreen = !browser_view->IsFullscreen();
+#endif
   return features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
-         browser_view->ShouldDrawVerticalTabStrip() &&
-         (BUILDFLAG(IS_MAC) || !browser_view->IsFullscreen());
+         browser_view->ShouldDrawVerticalTabStrip() && allowed_in_fullscreen;
 }
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
   if (browser_view->IsFullscreen()) {
-    // (macOS: see UseContentCard().)
+    // (See UseContentCard().)
     return SidebarSideInsets(browser_view, kContentCardMargin, 0);
   }
+#endif
   if (IsToolbarHidden(browser_view)) {
     // No toolbar above the card: it reaches the top of the window, leaving
     // only a gutter, or (while revealed) the strip where the frame draws its
