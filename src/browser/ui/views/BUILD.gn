@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//testing/test.gni")
 
 # Hook declarations called from upstream views code. Header-only and
 # dependency-light so upstream targets can depend on it without cycles; the
@@ -35,6 +36,33 @@ source_set("views") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/menus",
+  ]
+}
+
+# Zen's compact mode slide curve (MPL-2.0, see koan_sidebar_curve.cc): pure
+# logic over //base and //ui/gfx/geometry, so the unit tests can use it.
+source_set("sidebar_curve") {
+  sources = [
+    "koan_sidebar_curve.cc",
+    "koan_sidebar_curve.h",
+  ]
+  deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# Build and run:
+#   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
+#   out/Koan/koan_views_unittests
+test("koan_views_unittests") {
+  sources = [ "koan_sidebar_curve_unittest.cc" ]
+  deps = [
+    ":sidebar_curve",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gtest",
   ]
 }
 
@@ -127,6 +155,7 @@ source_set("impl") {
     "koan_zen_window_drag.h",
   ]
   deps = [
+    ":sidebar_curve",
     ":views",
     "//base:i18n",
     "//cc/paint",

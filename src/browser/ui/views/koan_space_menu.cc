@@ -122,6 +122,8 @@ KoanSpaceMenu::~KoanSpaceMenu() = default;
 void KoanSpaceMenu::RunMenuAt(views::View* anchor,
                               const gfx::Point& screen_point) {
   anchor_.SetView(anchor);
+  // An old runner's close callback must not let go of the new hold.
+  runner_.reset();
   hold_ = HoldSidebarOpen(anchor);
   runner_ = std::make_unique<views::MenuRunner>(
       &model_,
@@ -219,6 +221,7 @@ KoanCreateMenu::KoanCreateMenu(KoanWorkspaceController* controller)
 KoanCreateMenu::~KoanCreateMenu() = default;
 
 void KoanCreateMenu::RunMenuAt(views::View* anchor) {
+  runner_.reset();
   hold_ = HoldSidebarOpen(anchor);
   runner_ = std::make_unique<views::MenuRunner>(
       &model_, views::MenuRunner::HAS_MNEMONICS,

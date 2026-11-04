@@ -27,11 +27,14 @@ bool UseSingleReflowSidebarAnimation();
 // returns the progress the layout uses for the strip's width.
 //
 // While compact mode hides the sidebar, the strip is laid out once at the
-// width it shows at and slid in with a transform on its layer (which runs on
-// the compositor and doesn't lay out its children again), instead of getting
-// a new width on every frame. The layout therefore sees it as in (1) as soon
-// as the animation starts and as gone (0) once it has ended. Otherwise the
-// progress is returned as it is, and the layer has no transform.
+// width it shows at, and a Koan animation (Zen's timings and easing, see
+// koan_sidebar_curve.h) slides its layer in and out with a transform, instead
+// of the strip getting a new width on every frame; the strip's children are
+// not laid out again. The animation runs on the main thread, which sets the
+// transform on each tick. Upstream's progress only tells which way it goes.
+// The layout therefore sees the strip as in (1) as soon as the animation
+// starts and as gone (0) once it has ended. Otherwise the progress is returned
+// as it is, and the layer has no transform.
 double LayoutSidebarReveal(views::View* browser_view, double progress);
 
 // Keeps the sidebar as it is (out, if compact mode's hover revealed it) while

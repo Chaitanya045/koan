@@ -78,8 +78,6 @@ constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(1000);
 // Zen's zen.view.compact.sidebar-keep-hover.duration: how long the sidebar
 // stays out after the pointer leaves it.
 constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
-// How long a keyboard-opened sidebar stays before hover decides.
-constexpr base::TimeDelta kSidebarPeekGrace = base::Seconds(3);
 
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
 
@@ -406,36 +404,6 @@ bool KoanCompactModeController::PeekSidebar() {
         tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
   }
   return true;
-}
-
-void KoanCompactModeController::CheckSidebarPeek() {
-  if (!peek_lock_) {
-    return;
-  }
-  auto* tab_strip = browser_view_->tab_strip_view();
-  if (tab_strip && tab_strip->IsMouseHovered()) {
-    sidebar_unhovered_since_.reset();
-    sidebar_peek_timer_.Stop();
-    return;
-  }
-  const base::TimeTicks now = base::TimeTicks::Now();
-  if (!sidebar_unhovered_since_) {
-    sidebar_unhovered_since_ = now;
-  }
-  // Give the pointer time to reach the sidebar after a keyboard peek.
-  const base::TimeTicks hide_at =
-      std::max(sidebar_peek_started_ + kSidebarPeekGrace,
-               *sidebar_unhovered_since_ + kSidebarKeepHover);
-  if (!tab_strip || now >= hide_at) {
-    sidebar_peek_timer_.Stop();
-    peek_lock_.reset();
-    UpdatePointerMonitor();
-    return;
-  }
-  if (!sidebar_peek_timer_.IsRunning()) {
-    sidebar_peek_timer_.Start(FROM_HERE, hide_at - now, this,
-                              &KoanCompactModeController::CheckSidebarPeek);
-  }
 }
 
 void KoanCompactModeController::FlashSidebar() {
@@ -792,19 +760,6 @@ void KoanCompactModeController::UpdateActiveSoon() {
 
 void KoanCompactModeController::UpdateActive() {
   const Mode desired = DesiredMode();
-  if (desired == Mode::kNone &&
-      GetPrefs()->GetBoolean(prefs::kCompactModeEnabled)) {
-    // Compact mode is on but this window can't apply it: say why (a Mac
-    // window in native fullscreen, for one, isn't a card window).
-    VLOG(1) << "Koan: compact mode is on but not applied: feature "
-            << features::IsCompactModeEnabled() << ", overlay "
-            << !!GetTopContainerOverlayView(browser_view_) << ", card window "
-            << UseContentCard(browser_view_) << " (sidebar "
-            << features::IsSidebarEnabled() << ", normal "
-            << browser_view_->GetIsNormalType() << ", vertical tabs "
-            << browser_view_->ShouldDrawVerticalTabStrip() << ", fullscreen "
-            << browser_view_->IsFullscreen() << ")";
-  }
   if (desired == mode_ &&
       (mode_ != Mode::kCompact ||
        (DesiredSingleToolbar() == compact_keeps_sidebar_nav_ &&
@@ -1003,7 +958,6 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
 
   toolbar_hide_timer_.Stop();
   toolbar_unwanted_since_.reset();
-  sidebar_peek_timer_.Stop();
   EndFlash();
   hover_release_timer_.Stop();
   hover_lock_.reset();

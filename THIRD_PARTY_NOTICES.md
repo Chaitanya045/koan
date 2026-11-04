@@ -24,6 +24,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | Koan file | Ported from (Zen) |
 | --- | --- |
 | `src/browser/koan_shortcut_table.cc` | `ZenKeyboardShortcuts.mjs`, `zen-preferences.ftl` |
+| `src/browser/ui/views/koan_sidebar_curve.{h,cc}` and its unit test | `src/zen/compact-mode/sidebar.inc.css` (compact mode's slide easing table, 250 ms / 150 ms timings) |
 | `src/browser/ui/views/koan_commands.cc` | `ZenUBGlobalActions.sys.mjs`, `zen-command-palette.ftl` |
 | `src/browser/ui/views/koan_command_palette.cc` | `ZenUBActionsProvider.sys.mjs` (fuzzy scoring) |
 | `src/browser/ui/webui/koan_settings_rows.cc` | `zen-preferences.ftl` |

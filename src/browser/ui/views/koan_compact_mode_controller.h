@@ -134,9 +134,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // hides. Like Zen, this doesn't turn compact mode on.
   void SetCompactModeHides(bool sidebar, bool toolbar);
 
-  // Compact mode: slides the hidden sidebar out (Zen's Ctrl+Alt+S); it
-  // slides away once the pointer isn't over it. Returns false outside
-  // compact mode.
+  // Compact mode: Zen's Ctrl+Alt+S slides the hidden sidebar out and keeps it
+  // there until it is used again. Returns false outside compact mode.
   bool PeekSidebar();
 
   // A drag of the sidebar's edge collapsed it: like Zen, hide it in compact
@@ -228,7 +227,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void InstallContextMenu();
   void OnContextMenuClosed();
 
-  void CheckSidebarPeek();
   // Zen's flash popup: the hidden sidebar pops up for a moment.
   void FlashSidebar();
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
@@ -300,12 +298,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   std::unique_ptr<ExpandOnHoverLock> flash_lock_;
 
   base::OneShotTimer toolbar_hide_timer_;
-  base::OneShotTimer sidebar_peek_timer_;
   base::OneShotTimer flash_timer_;
   // Keeps the sidebar out for a moment after the pointer leaves its hot zone.
   base::OneShotTimer hover_release_timer_;
-  std::optional<base::TimeTicks> sidebar_unhovered_since_;
-  base::TimeTicks sidebar_peek_started_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
 
