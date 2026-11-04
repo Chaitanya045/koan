@@ -399,6 +399,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
+  // The pointer left the window (through an edge) and hasn't come back.
+  bool pointer_left_window_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
   // The monitor sees all the application's windows (fullscreen), not just the
   // browser window's.

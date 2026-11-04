@@ -85,9 +85,16 @@ namespace {
 
 constexpr base::TimeDelta kToolbarRevealDuration = base::Milliseconds(160);
 constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
-// How long the pointer must be away before the toolbar hides again (Zen's
-// zen.view.compact.toolbar-hide-after-hover.duration).
-constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(1000);
+// How long a revealed toolbar stays after the pointer leaves the window
+// through its edge: Zen's zen.view.compact.toolbar-hide-after-hover.duration,
+// the fallback where it can't follow the pointer outside the window. With the
+// pointer inside the window the toolbar collapses as soon as the pointer is
+// off it.
+constexpr base::TimeDelta kToolbarHideAfterEdgeLeave = base::Milliseconds(1000);
+// How long the window buttons' strip stays once the pointer is off it, and
+// how often to look again while a menu is open (a closing menu sends no
+// event).
+constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
 // Zen's zen.view.compact.sidebar-keep-hover.duration: how long the sidebar
 // stays out after the pointer leaves it.
 constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
@@ -835,6 +842,13 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
   // that is closing is torn down by the browser's own tasks.)
   if (IsClosing()) {
     return;
+  }
+  // Leaving the window gives the toolbar Zen's longer fallback delay; the
+  // first move back over the window hides it at once.
+  if (event.type() == ui::EventType::kMouseExited) {
+    pointer_left_window_ = true;
+  } else {
+    pointer_left_window_ = false;
   }
   CheckRevealedHides();
   CheckFullscreenEdges();
@@ -1656,7 +1670,9 @@ void KoanCompactModeController::CheckToolbarHide() {
   if (!toolbar_unwanted_since_) {
     toolbar_unwanted_since_ = now;
   }
-  const base::TimeTicks hide_at = *toolbar_unwanted_since_ + kToolbarHideDelay;
+  const base::TimeTicks hide_at =
+      *toolbar_unwanted_since_ +
+      (pointer_left_window_ ? kToolbarHideAfterEdgeLeave : base::TimeDelta());
   if (now >= hide_at) {
     SetToolbarRevealed(false, /*animate=*/true);
     return;
