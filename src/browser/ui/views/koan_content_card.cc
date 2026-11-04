@@ -6,8 +6,12 @@
 
 #include <algorithm>
 
+#include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 
@@ -27,15 +31,47 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
                                  kContentCardMargin);
 }
 
+// Zen's zen.view.borderless-fullscreen (on by default; zenThemeModifier.js
+// updateElementSeparation()): in fullscreen with compact mode on and no split
+// view, the page has no gap around it and fills the screen. Only macOS keeps
+// the card in fullscreen at all (see UseContentCard()).
+bool IsBorderlessFullscreen(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  return browser_view->IsFullscreen() && !browser_view->IsInSplitView() &&
+         browser_view->GetProfile()
+             ->GetOriginalProfile()
+             ->GetPrefs()
+             ->GetBoolean(prefs::kCompactModeEnabled);
+#else
+  return false;
+#endif
+}
+
 }  // namespace
 
 bool UseContentCard(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  // On macOS the card stays in fullscreen, as in Zen: the toolbar is hidden
+  // there (revealed from the top edge), so it is a card inset by the usual
+  // gutter, with the sidebar beside it.
+  const bool allowed_in_fullscreen = true;
+#else
+  // Elsewhere fullscreen is edge to edge.
+  const bool allowed_in_fullscreen = !browser_view->IsFullscreen();
+#endif
   return features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
-         browser_view->ShouldDrawVerticalTabStrip() &&
-         !browser_view->IsFullscreen();
+         browser_view->ShouldDrawVerticalTabStrip() && allowed_in_fullscreen;
 }
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  if (browser_view->IsFullscreen()) {
+    // (See UseContentCard().)
+    return IsBorderlessFullscreen(browser_view)
+               ? gfx::Insets()
+               : SidebarSideInsets(browser_view, kContentCardMargin, 0);
+  }
+#endif
   if (IsToolbarHidden(browser_view)) {
     // No toolbar above the card: it reaches the top of the window, leaving
     // only a gutter, or (while revealed) the strip where the frame draws its
@@ -45,7 +81,8 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
         IsCaptionStripCollapsed(browser_view)
             ? kContentCardMargin
             : std::max(kContentCardMargin,
-                       GetCaptionButtonAreaSize(browser_view).height());
+                       GetHiddenToolbarRowHeight(
+                           GetCaptionButtonAreaSize(browser_view).height()));
     // Compact mode may hide the sidebar: then a gutter on its side too.
     const int sidebar_side =
         IsCompactModeActive(browser_view) ? kContentCardMargin : 0;
@@ -62,7 +99,7 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 gfx::RoundedCornersF ActiveContentsRadii(
     const BrowserView* browser_view,
     const gfx::RoundedCornersF& default_radii) {
-  return UseContentCard(browser_view)
+  return UseContentCard(browser_view) && !IsBorderlessFullscreen(browser_view)
              ? gfx::RoundedCornersF(ContentCardCornerRadius())
              : default_radii;
 }

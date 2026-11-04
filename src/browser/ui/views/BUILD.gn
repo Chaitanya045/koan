@@ -27,6 +27,7 @@ source_set("views") {
     "koan_split_view.h",
     "koan_url_bar.h",
     "koan_spaces.h",
+    "koan_traffic_lights.h",
   ]
   public_deps = [
     "//base",
@@ -52,17 +53,45 @@ source_set("sidebar_curve") {
   ]
 }
 
+# Zen's two-finger swipe between Spaces (MPL-2.0, see koan_swipe_tracker.h):
+# the gesture state machine and the formulas, plain C++ so that the unit tests
+# can use them.
+source_set("swipe_tracker") {
+  sources = [
+    "koan_swipe_tracker.cc",
+    "koan_swipe_tracker.h",
+  ]
+  deps = [ "//base" ]
+}
+
+# Where a sidebar button goes to clear the macOS traffic lights: geometry only.
+source_set("lights_geometry") {
+  sources = [
+    "koan_lights_geometry.cc",
+    "koan_lights_geometry.h",
+  ]
+  deps = [ "//base" ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
 test("koan_views_unittests") {
-  sources = [ "koan_sidebar_curve_unittest.cc" ]
+  sources = [
+    "koan_lights_geometry_unittest.cc",
+    "koan_sidebar_curve_unittest.cc",
+    "koan_swipe_tracker_unittest.cc",
+  ]
   deps = [
+    ":lights_geometry",
     ":sidebar_curve",
+    ":swipe_tracker",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
+    "//ui/gfx:test_support",  # gfx::PrintTo(), for EXPECT_EQ on a gfx::Rect
   ]
 }
 
@@ -109,6 +138,8 @@ source_set("impl") {
     "koan_space_menu.h",
     "koan_welcome.cc",
     "koan_welcome.h",
+    "koan_space_swipe.cc",
+    "koan_space_swipe.h",
     "koan_window_controls.cc",
     "koan_window_controls.h",
     "koan_window_drag.cc",
@@ -143,6 +174,9 @@ source_set("impl") {
     "koan_toast.h",
     "koan_system_accent.h",
     "koan_system_accent_observer.h",
+    "koan_traffic_lights.cc",
+    "koan_traffic_lights_controller.cc",
+    "koan_traffic_lights_controller.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
     "koan_zen_download_animation.cc",
@@ -154,8 +188,13 @@ source_set("impl") {
     "koan_zen_window_drag.cc",
     "koan_zen_window_drag.h",
   ]
+  if (is_mac) {
+    sources += [ "koan_traffic_lights_mac.mm" ]
+  }
   deps = [
+    ":lights_geometry",
     ":sidebar_curve",
+    ":swipe_tracker",
     ":views",
     "//base:i18n",
     "//cc/paint",
@@ -181,6 +220,7 @@ source_set("impl") {
     "//chrome/browser/profiles:profile",
     "//chrome/browser/themes",
     "//ui/base/mojom",
+    "//ui/display",
     "//chrome/browser/ui/tabs:tab_enums",
     "//components/input",
     "//components/split_tabs",

@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..acd70980901e871078705b9bcc1b1a2009b1895d 100644
+--- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -65,6 +65,7 @@
+ #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
+ #include "components/viz/common/frame_timing_details.h"
+ #include "components/web_modal/web_contents_modal_dialog_host.h"
++#include "koan/browser/ui/views/koan_traffic_lights.h"
+ #include "ui/accessibility/platform/ax_platform_node.h"
+ #include "ui/actions/actions.h"
+ #include "ui/base/accelerators/global_accelerator_listener/global_accelerator_listener.h"
+@@ -288,6 +289,11 @@ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
+     if (!browser_view_->ShouldDrawTabStrip()) {
+       *titlebar_height += kWebAppMenuMargin * 2;
+     }
++    // Koan: the sidebar's top row is the traffic lights' row.
++    if (const std::optional<int> koan_height =
++            koan::GetTrafficLightsTitlebarHeight(browser_view_)) {
++      *titlebar_height = *koan_height;
++    }
+   } else {
+     *override_titlebar_height = false;
+     *titlebar_height = 0;

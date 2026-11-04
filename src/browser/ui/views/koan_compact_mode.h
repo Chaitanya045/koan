@@ -19,6 +19,11 @@ namespace koan {
 // Called from BrowserViewTabbedLayoutImpl.
 bool IsCompactModeActive(const views::View* browser_view);
 
+// Whether compact mode hides the sidebar but keeps its header (the sidebar
+// toggle and the navigation buttons: single toolbar), which then sits in the
+// window's top row, at its leading corner.
+bool KeepsSidebarNav(const views::View* browser_view);
+
 // Whether the top toolbar is hidden (compact mode or single toolbar), so the
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);
@@ -64,6 +69,14 @@ void InsetLayoutChildren(Layout& layout, int inset) {
 // revealed toolbar leaves for the sidebar (Zen's navbar is above the page
 // only); otherwise 0. Called when the top container is laid out on its own.
 int GetRevealedToolbarSidebarInset(const views::View* browser_view);
+
+// The height of the sidebar's top row where Koan's toolbar is hidden and the
+// strip reaches the top of the window, given `caption_buttons_height`, the
+// height of the frame's caption buttons beside it. On macOS the row holds
+// the traffic lights and has Zen's toolbar height, whatever the buttons'
+// own (koan_traffic_lights.h centres them in it); elsewhere it is just the
+// buttons' height.
+int GetHiddenToolbarRowHeight(int caption_buttons_height);
 
 }  // namespace koan
 

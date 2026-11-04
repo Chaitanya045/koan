@@ -37,9 +37,12 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_traffic_lights.h"
+#include "koan/browser/ui/views/koan_traffic_lights_controller.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -220,6 +223,12 @@ KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
       pref_change_registrar_.prefs()->GetBoolean(prefs::kTabsOnRight);
   opened_in_compact_mode_ = GetPrefs()->GetBoolean(prefs::kCompactModeEnabled);
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
+#if BUILDFLAG(IS_MAC)
+  traffic_lights_ = std::make_unique<KoanTrafficLightsController>(
+      browser_view_,
+      base::BindRepeating(&KoanCompactModeController::UpdateCaptionButtons,
+                          base::Unretained(this)));
+#endif
 }
 
 KoanCompactModeController::~KoanCompactModeController() {
@@ -257,6 +266,9 @@ void KoanCompactModeController::OnAddedToWidget() {
 }
 
 void KoanCompactModeController::OnBrowserViewLayout() {
+  if (traffic_lights_) {
+    traffic_lights_->OnBrowserViewLayout();
+  }
   // Fullscreen and tab strip mode changes show up as layouts. Re-evaluate
   // outside of layout, since (de)activation reparents views.
   if (mode_ != DesiredMode()) {
@@ -677,9 +689,11 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
 }
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
+  // (Not in fullscreen, where Chromium hosts the top container itself: on
+  // macOS the content card stays, see UseContentCard().)
   if (!features::IsCompactModeEnabled() ||
       !GetTopContainerOverlayView(browser_view_) ||
-      !UseContentCard(browser_view_)) {
+      !UseContentCard(browser_view_) || browser_view_->IsFullscreen()) {
     return Mode::kNone;
   }
   const PrefService* prefs = GetPrefs();
@@ -752,6 +766,15 @@ bool KoanCompactModeController::IsHideToolbarOnlyBlocked() const {
   return !(IsSidebarOnRight(browser_view_) ? trailing : leading).IsEmpty();
 }
 
+void KoanCompactModeController::CancelSpaceSwipe() {
+  // A swipe between Spaces drags the sidebar's content: the sidebar going
+  // away or coming back under the fingers ends it.
+  if (auto* controller = KoanBrowserViewController::From(browser_view_);
+      controller && controller->workspaces()) {
+    controller->workspaces()->CancelSwipe(/*animate=*/false);
+  }
+}
+
 void KoanCompactModeController::UpdateActiveSoon() {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanCompactModeController::UpdateActive,
@@ -803,6 +826,7 @@ void KoanCompactModeController::OnContentCardChanged() {
 }
 
 void KoanCompactModeController::Activate(Mode mode) {
+  CancelSpaceSwipe();
   // What compact mode hides; decided before `mode_` changes, as the sidebar's
   // collapsed state means something else once compact mode hides it.
   const bool single_toolbar = DesiredSingleToolbar();
@@ -928,6 +952,7 @@ KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
 }
 
 void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
+  CancelSpaceSwipe();
   VLOG(1) << (mode_ == Mode::kCompact ? "Koan: compact mode off"
                                       : "Koan: single toolbar off");
   // The URL bar lets go of the top container before it moves back.
@@ -1115,7 +1140,11 @@ bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
       (toolbar_hot_zone_ && toolbar_hot_zone_->IsMouseHovered())) {
     return true;
   }
-  // The window buttons came with it.
+  // The window buttons came with it. macOS' are AppKit's, over the window:
+  // the pointer on them leaves its views.
+  if (traffic_lights_ && IsPointerOverTrafficLights(browser_view_)) {
+    return true;
+  }
   if (const BrowserFrameView* frame =
           browser_view_->browser_widget()
               ? browser_view_->browser_widget()->GetFrameView()
@@ -1241,6 +1270,9 @@ void KoanCompactModeController::CheckCaptionStripHide() {
     return;
   }
   bool wanted = caption_hot_zone_ && caption_hot_zone_->IsMouseHovered();
+  if (traffic_lights_ && IsPointerOverTrafficLights(browser_view_)) {
+    wanted = true;
+  }
   if (const BrowserFrameView* frame =
           browser_view_->browser_widget()
               ? browser_view_->browser_widget()->GetFrameView()
@@ -1287,6 +1319,11 @@ bool KoanCompactModeController::IsCaptionButtonBesideSidebar(
 }
 
 bool KoanCompactModeController::HasPageSideCaptionButtons() const {
+  // The traffic lights are at the window's leading edge: over the page where
+  // the sidebar is hidden or on the right.
+  if (traffic_lights_) {
+    return hides_sidebar() || IsSidebarOnRight(browser_view_);
+  }
   const BrowserWidget* widget = browser_view_->browser_widget();
   const BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
   if (!frame) {
@@ -1302,6 +1339,24 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
 }
 
 void KoanCompactModeController::UpdateCaptionButtons() {
+#if BUILDFLAG(IS_MAC)
+  if (traffic_lights_) {
+    // The traffic lights are AppKit's: shown or hidden, as the other
+    // platforms' buttons fade, and on the sidebar's side (the leading one)
+    // for as long as the sidebar is there, as in Zen, where they are part of
+    // it.
+    const bool page_side_shown = !caption_strip_collapsible_ ||
+                                 caption_strip_revealed_ ||
+                                 (can_reveal_toolbar() && toolbar_revealed_);
+    // (With single toolbar, compact mode keeps the sidebar's header, which
+    // has the lights beside its buttons.)
+    SetTrafficLightsShown(
+        browser_view_, page_side_shown || (!IsSidebarOnRight(browser_view_) &&
+                                           (traffic_lights_->IsSidebarShown() ||
+                                            keeps_sidebar_nav())));
+    return;
+  }
+#endif
   BrowserWidget* widget = browser_view_->browser_widget();
   BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
   if (!frame) {

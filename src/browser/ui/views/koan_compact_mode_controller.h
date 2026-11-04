@@ -42,6 +42,7 @@ class KoanHotZone;
 class KoanSidebarContextMenuController;
 class KoanSidebarNavButtons;
 class KoanSidebarNavView;
+class KoanTrafficLightsController;
 
 // Zen's compact mode and layouts for one window.
 //
@@ -99,6 +100,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
     return mode_ == Mode::kCompact && hide_sidebar_;
   }
   // Compact mode or single toolbar: the top toolbar takes no layout space.
+  // Compact mode with single toolbar: the sidebar is hidden but its header
+  // (toggle, navigation buttons) stays, in the window's top row.
+  bool keeps_sidebar_nav() const { return compact_keeps_sidebar_nav_; }
   bool hides_toolbar() const {
     return mode_ == Mode::kSingleToolbar ||
            (mode_ == Mode::kCompact && hide_toolbar_);
@@ -188,6 +192,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // collapsed sidebar, buttons on its side, only the toolbar hidden.
   bool IsHideToolbarOnlyBlocked() const;
   void UpdateActiveSoon();
+  void CancelSpaceSwipe();
   void UpdateActive();
   void Activate(Mode mode);
   // `keep_sidebar_hidden`: compact mode goes on hiding the sidebar (only
@@ -283,6 +288,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> caption_hot_zone_ = nullptr;
   // Lets the pointer through the revealed toolbar to the caption buttons.
   std::unique_ptr<KoanCaptionButtonsTargeter> caption_buttons_targeter_;
+  // macOS: the traffic lights, which the window buttons below stand for.
+  std::unique_ptr<KoanTrafficLightsController> traffic_lights_;
   bool caption_strip_collapsible_ = false;
   bool caption_strip_revealed_ = false;
   base::OneShotTimer caption_hide_timer_;
