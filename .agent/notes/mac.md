@@ -174,3 +174,20 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   Chromium's collapsed icon strip. Not changed here: the card's gutter and
   the hot zones need the page's native view out of the way, and the toolbar
   lives in the immersive overlay widget there.
+
+## "Relaunch ... to keep it encrypted" infobar (#141)
+
+`MaybeShowOSCryptAsyncAvailabilityInfoBar` (`infobar_utils.cc`, feature
+`kOSCryptAsyncAvailabilityInfoBar`, on by default on macOS) shows it when the
+async `Encryptor` has no key. With `--use-mock-keychain` (what
+`scripts/run_mac.sh` and test launches pass) the async key provider
+(`KeychainKeyProvider`) asks a `FakeKeychainV2`, which refuses an item without
+its access group (`errSecMissingEntitlement`), so `KeychainPassword::GetPassword()`
+is empty and encryption is "unavailable" on every launch. Koan switches the
+infobar off in that case (`koan_feature_overrides.cc`). Without the flag the
+login keychain item "Koan Safe Storage" is created by the first launch with no
+prompt; an ad-hoc signed build whose signature changed since the item was
+created gets a keychain access prompt ("Always Allow" doesn't stick across
+builds): if that is denied the bar is the correct warning. A stable local
+signing identity would stop the prompts (not set up).
+
