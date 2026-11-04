@@ -17,6 +17,7 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/events/event_observer.h"
 #include "ui/menus/simple_menu_model.h"
@@ -426,7 +427,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Declared after the models it shows, so it goes first.
   std::unique_ptr<views::MenuRunner> menu_runner_;
   // Keeps the sidebar out while its menu is open.
-  std::unique_ptr<ExpandOnHoverLock> menu_lock_;
+  std::unique_ptr<SidebarHold> menu_hold_;
 
   base::WeakPtrFactory<KoanCompactModeController> weak_factory_{this};
 };

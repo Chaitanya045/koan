@@ -50,7 +50,11 @@ class KoanSpaceMenu : public ui::SimpleMenuModel::Delegate {
 
  private:
   void Execute(int command_id);
-  void OnMenuClosed() { hold_.reset(); }
+  void OnMenuClosed() {
+    if (hold_) {
+      hold_->ReleaseWhenPointerMoves();
+    }
+  }
 
   const raw_ptr<KoanWorkspaceController> controller_;
   // The Space the menu acts on.
@@ -82,7 +86,11 @@ class KoanCreateMenu : public ui::SimpleMenuModel::Delegate {
   bool IsCommandIdEnabled(int command_id) const override;
 
  private:
-  void OnMenuClosed() { hold_.reset(); }
+  void OnMenuClosed() {
+    if (hold_) {
+      hold_->ReleaseWhenPointerMoves();
+    }
+  }
 
   // The entries as they were when the menu opened, by command id - 1.
   const std::vector<KoanWorkspaceController::CreateMenuEntry> entries_;

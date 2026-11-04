@@ -4,7 +4,11 @@
 
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -14,10 +18,14 @@
 #include "koan/browser/ui/views/koan_sidebar_curve.h"
 #include "ui/base/class_property.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/screen.h"
+#include "ui/events/event.h"
+#include "ui/events/event_observer.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/views/event_monitor.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
@@ -137,8 +145,20 @@ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(SidebarReveal, kSidebarRevealKey)
 
 }  // namespace
 
-struct SidebarHold::Impl {
+struct SidebarHold::Impl : public ui::EventObserver {
+  void OnEvent(const ui::Event& event) override {
+    lock.reset();
+    // Not from inside its own dispatch.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&Impl::StopMonitoring, weak_factory.GetWeakPtr()));
+  }
+  void StopMonitoring() { monitor.reset(); }
+
   std::unique_ptr<ExpandOnHoverLock> lock;
+  raw_ptr<views::Widget> widget = nullptr;
+  std::unique_ptr<views::EventMonitor> monitor;
+  base::WeakPtrFactory<Impl> weak_factory{this};
 };
 
 SidebarHold::SidebarHold() = default;
@@ -163,6 +183,25 @@ void ReleaseExpandOnHoverLockSoon(std::unique_ptr<ExpandOnHoverLock>& lock) {
                                                              std::move(lock));
 }
 
+void SidebarHold::ReleaseWhenPointerMoves() {
+  views::Widget* widget = impl_->widget;
+  if (impl_->monitor) {
+    return;
+  }
+  if (!widget || !impl_->lock) {
+    impl_->lock.reset();
+    return;
+  }
+  if (widget->GetWindowBoundsInScreen().Contains(
+          display::Screen::Get()->GetCursorScreenPoint())) {
+    impl_->lock.reset();
+    return;
+  }
+  impl_->monitor = views::EventMonitor::CreateWindowMonitor(
+      impl_.get(), widget->GetNativeWindow(),
+      {ui::EventType::kMouseMoved, ui::EventType::kMouseEntered});
+}
+
 std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view) {
   auto* browser_view = views::AsViewClass<BrowserView>(view);
   if (!browser_view && view && view->GetWidget()) {
@@ -176,6 +215,7 @@ std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view) {
   }
   std::unique_ptr<SidebarHold> hold(new SidebarHold());
   hold->impl_ = std::make_unique<SidebarHold::Impl>();
+  hold->impl_->widget = browser_view->GetWidget();
   hold->impl_->lock =
       region->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepCurrentState);
   return hold;
