@@ -137,12 +137,10 @@ Ctrl+Alt+B switches to the multiple-toolbars layout (a toolbar above the
 page, as in Chrome) and back. The layout applies to all windows and
 persists.
 
-**Collapsed sidebar**: the sidebar toggle (left end of its top row)
-collapses the sidebar to icons, Zen's "Collapsed Sidebar" layout: the
-toolbar sits above the page, and the sidebar expands over the page while
-the pointer is on it (right-click the toggle to turn that off). Like Zen,
-single toolbar needs the full sidebar: the toggle or Ctrl+Alt+B expands it
-into single toolbar again.
+**Sidebar toggle**: the button at the left end of the sidebar's top row
+(⌘S) toggles compact mode, as in Zen: the sidebar hides, the page fills the
+card and there is no toolbar. (Chromium's own collapse to an icon rail, with
+its tab group and tab search buttons, is not used: Zen has neither.)
 
 **Tabs on the right**: right-click an empty part of the sidebar and pick
 **Tabs on the right** (or Settings > Look and Feel > Vertical Tabs).

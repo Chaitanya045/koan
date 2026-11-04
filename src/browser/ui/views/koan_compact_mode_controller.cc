@@ -17,6 +17,9 @@
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
+#include "chrome/browser/ui/browser_actions.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -50,6 +53,7 @@
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
+#include "ui/actions/actions.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom-shared.h"
@@ -327,7 +331,45 @@ void KoanCompactModeController::OnAddedToWidget() {
                 &KoanCompactModeController::OnSidebarCollapseChanged,
                 base::Unretained(this))));
   }
+  InstallSidebarToggleAction();
   UpdateActiveSoon();
+}
+
+void KoanCompactModeController::InstallSidebarToggleAction() {
+  BrowserWindowInterface* browser = browser_view_->browser();
+  BrowserActions* actions = BrowserActions::From(browser);
+  if (!features::IsCompactModeEnabled() || !browser_view_->GetIsNormalType() ||
+      !actions || !actions->root_action_item()) {
+    return;
+  }
+  actions::ActionItem* toggle = actions::ActionManager::Get().FindAction(
+      kActionToggleCollapseVertical, actions->root_action_item());
+  if (!toggle) {
+    return;
+  }
+  // The action is the window's own (BrowserActions), so this only changes
+  // this window's sidebar button, its menu item and its shortcut. In Zen the
+  // sidebar button toggles compact mode; collapsing the sidebar to Chromium's
+  // icon rail, with its tab group and tab search buttons and its toolbar, is
+  // not something Zen has.
+  toggle->SetInvokeActionCallback(base::BindRepeating(
+      [](base::WeakPtr<KoanCompactModeController> controller,
+         BrowserWindowInterface* browser, actions::ActionItem* item,
+         actions::ActionInvocationContext context) {
+        if (controller && controller->CanCompactMode()) {
+          controller->ToggleCompactMode();
+          return;
+        }
+        // Where compact mode doesn't apply (fullscreen), upstream's.
+        chrome::ToggleCollapseVerticalTabs(browser);
+      },
+      weak_factory_.GetWeakPtr(), base::Unretained(browser)));
+}
+
+bool KoanCompactModeController::CanCompactMode() const {
+  return features::IsCompactModeEnabled() &&
+         GetTopContainerOverlayView(browser_view_) &&
+         UseContentCard(browser_view_);
 }
 
 void KoanCompactModeController::OnBrowserViewLayout() {
@@ -820,9 +862,7 @@ KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
   // UseContentCard(): Chromium moves the top container to its own overlay
   // widget then, and Koan takes it back, see OnImmersiveFullscreenChanged().
   // Elsewhere fullscreen has no content card.)
-  if (!features::IsCompactModeEnabled() ||
-      !GetTopContainerOverlayView(browser_view_) ||
-      !UseContentCard(browser_view_)) {
+  if (!CanCompactMode()) {
     return Mode::kNone;
   }
   const PrefService* prefs = GetPrefs();
