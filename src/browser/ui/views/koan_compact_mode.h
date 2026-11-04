@@ -7,11 +7,27 @@
 
 #include <algorithm>
 
+class BrowserView;
+
 namespace views {
 class View;
 }
 
 namespace koan {
+
+// Whether the window is fullscreen: BrowserView::IsFullscreen() without the
+// crash while the window is going away. Then browser_widget() is null (the
+// BrowserView's own call dereferences it) while GetWidget() still returns the
+// dying widget, so that is no test of the window being alive.
+bool IsWindowFullscreen(const BrowserView* browser_view);
+
+// macOS: whether the page is fullscreen (a video's fullscreen button, or an
+// extension), as opposed to the browser window (the green button, ⌃⌘F).
+// Koan is suspended then, as in Zen (`:not([inDOMFullscreen])`): the page fills
+// the screen, no card, no radius, no hot zones, no URL bar. Chromium keeps its
+// immersive mode (and the vertical tab strip's "draw" state) on then, so
+// nothing else tells Koan. False elsewhere.
+bool IsContentFullscreen(const BrowserView* browser_view);
 
 // Whether compact mode is applied to the window of `browser_view` (a
 // BrowserView). When true, the vertical tab strip takes no layout space (it
@@ -27,6 +43,16 @@ bool KeepsSidebarNav(const views::View* browser_view);
 // Whether the top toolbar is hidden (compact mode or single toolbar), so the
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);
+
+// macOS: whether the window is in native fullscreen with Koan's toolbar
+// hidden (single toolbar, or compact mode hiding the toolbar). Like Zen,
+// nothing of the top chrome is revealed from the top edge then (Chromium's
+// toolbar, bookmarks bar and title bar strip): Koan's own layout stays, with
+// the sidebar's header and the URL pill, or in compact mode the toolbar's
+// own slide. Called from the BrowserView and BrowserFrameViewMac hooks, so
+// that Chromium's fullscreen toolbar style is "none" and its dialogs anchor
+// to the window. False elsewhere.
+bool HidesFullscreenTopChrome(const views::View* browser_view);
 
 // Whether the strip at the top of the window where the frame draws its
 // caption buttons (close, ...) is collapsed: like Zen, those buttons only

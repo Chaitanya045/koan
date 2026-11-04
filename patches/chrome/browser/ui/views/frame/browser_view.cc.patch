@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index d1f00fb02a47e3c8b51028b2d820983eb2d306b2..3b0d741295e1ccb68b8020df61e524399776c84c 100644
+index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a772307fdb3 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -309,6 +309,7 @@
+@@ -310,6 +310,8 @@
  #include "content/public/common/content_switches.h"
  #include "content/public/common/drop_data.h"
  #include "extensions/common/command.h"
 +#include "koan/browser/ui/views/koan_browser_view_hooks.h"
++#include "koan/browser/ui/views/koan_compact_mode.h"
  #include "media/capture/capture_switches.h"
  #include "third_party/blink/public/common/features.h"
  #include "third_party/blink/public/common/permissions/permission_utils.h"
-@@ -1116,9 +1117,13 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
+@@ -1117,9 +1119,13 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
    auto* const animation_controller = BrowserAnimationController::From(browser_);
    CHECK(animation_controller);
    animation_controller->set_browser_view(this);
@@ -24,3 +25,28 @@ index d1f00fb02a47e3c8b51028b2d820983eb2d306b2..3b0d741295e1ccb68b8020df61e52439
    // Remove the layout manager to avoid dangling. This needs to be earlier than
    // other cleanups that destroy views referenced in the layout manager.
    SetLayoutManager(nullptr);
+@@ -1591,8 +1597,11 @@ float BrowserView::GetTopControlsSlideBehaviorShownRatio() const {
+ 
+ views::Widget* BrowserView::GetWidgetForAnchoring() {
+ #if BUILDFLAG(IS_MAC)
++  // Koan: not while Koan's toolbar is hidden, see HidesFullscreenTopChrome().
+   if (WindowFeatureController::From(browser())->UsesImmersiveFullscreenMode()) {
+-    return IsFullscreen() ? overlay_widget_.get() : GetWidget();
++    return IsFullscreen() && !koan::HidesFullscreenTopChrome(this)
++               ? overlay_widget_.get()
++               : GetWidget();
+   }
+ #endif
+   return GetWidget();
+@@ -2306,9 +2315,10 @@ void BrowserView::FullscreenStateChanged() {
+   // In mac fullscreen the toolbar view is hosted in the overlay widget that has
+   // a higher z-order level. This overlay widget should be used for anchoring
+   // secondary UIs, otherwise they will be covered by the toolbar.
++  // Koan: not while Koan's toolbar is hidden, see HidesFullscreenTopChrome().
+   views::Widget* widget_for_anchoring =
+       WindowFeatureController::From(browser())->UsesImmersiveFullscreenMode() &&
+-              IsFullscreen()
++              IsFullscreen() && !koan::HidesFullscreenTopChrome(this)
+           ? overlay_widget_.get()
+           : nullptr;
+ 

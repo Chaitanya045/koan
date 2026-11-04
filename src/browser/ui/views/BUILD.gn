@@ -204,6 +204,8 @@ source_set("impl") {
     "//chrome/browser/ui:browser_command_controller",
     "//chrome/browser/ui:browser_actions",
     "//chrome/browser/ui/actions:actions_headers",
+    "//chrome/browser/ui/exclusive_access",
+    "//chrome/browser/ui/immersive:immersive_mode_controller",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/views/omnibox",
     "//chrome/common",
@@ -272,6 +274,7 @@ source_set("impl") {
     "//components/sessions",
     "//chrome/browser/browsing_data:constants",
     "//chrome/browser/first_run",
+    "//chrome/browser/search",
     "//chrome/browser/search_engines",
     "//chrome/browser/ui/tabs:utils",
     "//chrome/browser/ui/views/frame:toolbar_button_provider",
@@ -322,6 +325,8 @@ source_set("impl") {
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
     ]
+    # Content (page) fullscreen: koan::IsContentFullscreen().
+    deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
     frameworks = [ "AppKit.framework" ]
   } else {
     sources += [

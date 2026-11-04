@@ -25,6 +25,8 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/search.h"
+#include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -41,6 +43,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+#include "chrome/common/webui_url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
@@ -51,6 +54,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
@@ -291,6 +295,10 @@ KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
       swipe_(std::make_unique<KoanSpaceSwipe>(this)) {
   if (IsEnabled()) {
     tab_strip_model()->AddObserver(this);
+    session_restored_subscription_ =
+        SessionRestore::RegisterOnSessionRestoredCallback(
+            base::BindRepeating(&KoanWorkspaceController::OnSessionRestored,
+                                base::Unretained(this)));
   }
   AddDefaultCreateMenuEntries();
 }
@@ -368,12 +376,17 @@ void KoanWorkspaceController::OnWidgetDestroying(views::Widget* widget) {
 }
 
 void KoanWorkspaceController::OnBrowserViewDestroying() {
+  session_restored_subscription_ = base::CallbackListSubscription();
   CancelSwipe(/*animate=*/false);
   pref_change_registrar_.RemoveAll();
   widget_observation_.Reset();
   slide_outs_.clear();
   switch_layered_views_.clear();
-  create_form_lock_.reset();
+  // The window is closing: the browser's animation controller is gone (the
+  // lock's release would collapse the sidebar with an animation), and this
+  // runs after KoanCompactModeController's teardown. Same for the menus' holds,
+  // which release their locks the same way when they are destroyed below.
+  ReleaseExpandOnHoverLockSoon(create_form_lock_);
   if (region_) {
     region_->RemovePreTargetHandler(wheel_handler_.get());
     region_ = nullptr;
@@ -1074,6 +1087,54 @@ void KoanWorkspaceController::KeepStartupEssential() {
   }
 }
 
+void KoanWorkspaceController::OnSessionRestored(Profile* profile,
+                                                int tab_count) {
+  if (restore_started_ && profile == browser_view_->GetProfile()) {
+    restore_started_ = false;
+    drop_startup_space_ = pre_restore_space_.has_value();
+    ScheduleUpdate();
+  }
+}
+
+bool KoanWorkspaceController::IsUntouchedStartupSpace(
+    const tab_groups::TabGroupId& space) const {
+  const std::optional<SpaceInfo> info = GetSpace(space);
+  if (!info || info->name != kDefaultSpaceName || !info->icon.empty() ||
+      info->theme.color) {
+    return false;
+  }
+  TabStripModel* model = tab_strip_model();
+  const gfx::Range tabs = model->group_model()->GetTabGroup(space)->ListTabs();
+  if (tabs.length() != 1) {
+    return false;
+  }
+  // Upstream's HasSingleNewTabPage(), which decides whether a restore after a
+  // crash replaces the tab the window started on.
+  const int index = static_cast<int>(tabs.start());
+  content::WebContents* contents = model->GetWebContentsAt(index);
+  return !model->IsTabPinned(index) &&
+         (contents->GetURL() == chrome::ChromeUINewTabURLAsGURL() ||
+          search::IsInstantNTP(contents));
+}
+
+void KoanWorkspaceController::DropStartupSpaceAfterRestore() {
+  const std::optional<tab_groups::TabGroupId> space =
+      std::exchange(pre_restore_space_, std::nullopt);
+  if (!space || GetSpaces().size() < 2 || !IsUntouchedStartupSpace(*space)) {
+    return;
+  }
+  TabStripModel* model = tab_strip_model();
+  if (GetActiveSpace() == space) {
+    Cycle(/*forward=*/true);
+  }
+  deleting_.insert(*space);
+  last_active_tabs_.erase(*space);
+  model->CloseWebContentsAt(
+      static_cast<int>(
+          model->group_model()->GetTabGroup(*space)->ListTabs().start()),
+      TabCloseTypes::CLOSE_USER_GESTURE);
+}
+
 void KoanWorkspaceController::EnsureOneSpaceShown() {
   TabStripModel* model = tab_strip_model();
   if (model->empty() || model->closing_all() ||
@@ -1156,6 +1217,10 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     } else {
       WriteSpace(NewSpaceGroup(loose), {.name = kDefaultSpaceName});
     }
+    spaces = GetSpaces();
+  }
+  if (std::exchange(drop_startup_space_, false)) {
+    DropStartupSpaceAfterRestore();
     spaces = GetSpaces();
   }
 
@@ -1429,6 +1494,19 @@ void KoanWorkspaceController::OnTabStripModelChanged(
 }
 
 void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
+  if (change.type == TabGroupChange::kCreated && !restore_started_ &&
+      SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+    // The first Space a restore adds: the window's only Space until now is
+    // the one it started with (a window the restore creates has none, and
+    // Spaces the user made are never replaced).
+    restore_started_ = true;
+    std::vector<SpaceInfo> before = GetSpaces();
+    std::erase_if(
+        before, [&](const SpaceInfo& info) { return info.id == change.group; });
+    pre_restore_space_ = before.size() == 1
+                             ? std::make_optional(before.front().id)
+                             : std::nullopt;
+  }
   if (change.type == TabGroupChange::kClosed) {
     const bool deleted = deleting_.erase(change.group);
     const TabGroupChange::CloseChange* close = change.GetCloseChange();
@@ -1438,7 +1516,13 @@ void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
             TabGroupChange::TabGroupClosureReason::kDetachedToAnotherTabstrip;
     auto it = std::ranges::find(spaces_snapshot_, change.group,
                                 &decltype(spaces_snapshot_)::value_type::first);
-    if (!deleted && !moved_away && it != spaces_snapshot_.end()) {
+    // A session restored into this window (Restore after a crash) closes the
+    // tab the window started on: that Space goes, the restored Spaces stay.
+    // Zen's restore never adds a Space.
+    const bool replaced_by_restore =
+        restore_started_ && pre_restore_space_ == change.group;
+    if (!deleted && !moved_away && !replaced_by_restore &&
+        it != spaces_snapshot_.end()) {
       std::optional<tab_groups::TabGroupId> next;
       if (it + 1 != spaces_snapshot_.end()) {
         next = (it + 1)->first;

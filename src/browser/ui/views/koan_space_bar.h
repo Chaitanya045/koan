@@ -21,12 +21,13 @@ namespace koan {
 
 class KoanSpaceButton;
 
-// Zen's sidebar bottom bar: one button per Space (its emoji, or a dot),
-// the active one in colour and the others greyed out, and "+" with Zen's
-// Create menu, with an optional leading button before them (the Library's).
-// Like Zen, the Space buttons are hidden while there is only one Space, and
-// inactive ones shrink to dots when they don't fit. In a sidebar too narrow
-// for a row (icons only), they stack above "+".
+// Zen's sidebar bottom bar: an optional leading button (the Library's) at
+// the start, "+" with Zen's Create menu at the end, and between them the
+// Space switcher, one narrow button per Space, centred: the current Space
+// shows its icon (or a dot for none) in colour, the others a small grey dot
+// until hovered. Like Zen, the Space buttons are hidden while there is only
+// one Space. In a sidebar too narrow for a row (icons only), they stack
+// above "+" at full size.
 class KoanSpaceBarView : public views::View {
   METADATA_HEADER(KoanSpaceBarView, views::View)
 
@@ -42,15 +43,21 @@ class KoanSpaceBarView : public views::View {
   // Shows `spaces`, reusing the buttons of Spaces it already shows.
   void Update(const std::vector<KoanWorkspaceController::SpaceInfo>& spaces);
 
-  // Whether the Space buttons don't fit at full size.
-  bool overflows() const { return overflows_; }
+  // Whether the Space buttons are in a row, shrunk to dots but for the
+  // current or hovered one (Zen's icons-overflow), rather than a column.
+  bool compact() const { return compact_; }
   // Whether the buttons stack (a sidebar too narrow for a row).
   bool IsNarrow(int width) const;
+  // Whether a Space button is hovered, pressed or focused.
+  bool IsAnyButtonHovered() const;
+  // A Space button's state changed: the others may change how they look.
+  void OnButtonStateChanged();
 
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
+  void OnPaint(gfx::Canvas* canvas) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
  private:
@@ -58,7 +65,7 @@ class KoanSpaceBarView : public views::View {
   std::vector<raw_ptr<KoanSpaceButton>> buttons_;
   raw_ptr<views::Button> create_button_ = nullptr;
   raw_ptr<views::View> leading_ = nullptr;
-  bool overflows_ = false;
+  bool compact_ = true;
 };
 
 }  // namespace koan

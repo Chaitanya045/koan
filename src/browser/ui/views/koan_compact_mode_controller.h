@@ -75,6 +75,12 @@ class KoanTrafficLightsController;
 // In both, the omnibox opens out of the hidden toolbar as Zen's URL bar
 // (KoanUrlBarController) while it has focus.
 //
+// Both go on in macOS' native fullscreen, as in Zen: Chromium's immersive
+// mode would move the top container to its own overlay widget and reveal it
+// at the top edge (with a title bar strip), so Koan takes it back and the
+// fullscreen toolbar style is "none" (HidesFullscreenTopChrome()); only the
+// menu bar appears there.
+//
 // Tabs on the right (pref koan.tabs.on_right) mirrors the window: see
 // IsSidebarOnRight() in koan_compact_mode.h.
 //
@@ -110,9 +116,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool is_toolbar_revealed() const { return toolbar_revealed_; }
   // The caption-button strip above the page is collapsed (the card starts at
   // the gutter).
-  bool caption_strip_collapsed() const {
-    return caption_strip_collapsible_ && !caption_strip_revealed_;
-  }
+  bool caption_strip_collapsed() const;
   // The "Tabs on the right" setting. Where the sidebar is, is
   // IsSidebarOnRight() (koan_compact_mode.h), which also checks the window.
   bool tabs_on_right() const { return tabs_on_right_; }
@@ -224,6 +228,34 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // runs while they are hidden or while the pointer rests over them.
   void UpdatePointerMonitor();
   void CheckRevealedHides();
+  // The page's own fullscreen (video) starts or ends, or the window's:
+  // Koan's hover state is cleared (Zen's sizemodechange ->
+  // _clearAllHoverStates) and the card is laid out again.
+  void OnFullscreenStateChanged();
+  void ClearHoverStates();
+  // The window is closing or gone (its widget is closed, the browser is going
+  // to be deleted, or OnBrowserViewDestroying() ran): no UI work, and no
+  // letting go of a lock, which starts an animation.
+  bool IsClosing() const;
+  // Native fullscreen (macOS): the page covers the window, so the pointer at
+  // the screen's edge reveals the hidden sidebar and toolbar, watched here
+  // instead of by the hot zones.
+  bool WantsFullscreenEdges() const;
+  void CheckFullscreenEdges();
+
+  // Hides the toolbar (single toolbar, compact mode): moves the top
+  // container, if it is not there already, into the overlay view of this
+  // window, above the page. Where the BrowserView or macOS' immersive
+  // fullscreen has it (see below), takes it from there.
+  void ParkTopContainer();
+  // macOS: native fullscreen moves the top container into Chromium's overlay
+  // widget, which reveals it from the top edge (with a title bar strip).
+  // Where Koan hides the toolbar, the top container goes back to Koan's
+  // overlay as the fullscreen starts and ends, and Chromium is told to
+  // reveal nothing (HidesFullscreenTopChrome()).
+  void OnImmersiveFullscreenChanged();
+  // Tells Chromium that what Koan hides in fullscreen changed.
+  void UpdateFullscreenTopChrome();
 
   // Single toolbar: adds KoanSidebarNavView to the top of the sidebar.
   void InstallSidebarNav();
@@ -237,6 +269,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert);
   void EndFlash();
+  // Lets go of `lock`; deferred while the window is being destroyed.
+  void ReleaseLock(std::unique_ptr<ExpandOnHoverLock>& lock);
 
   // The caption-button strip.
   void OnCaptionHotZoneHovered(bool hovered);
@@ -282,6 +316,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Koan asked upstream to expand the sidebar (it animates).
   bool expanding_sidebar_ = false;
   std::optional<size_t> top_container_index_;
+  // macOS: told when native fullscreen starts and ends.
+  class ImmersiveObserver;
+  std::unique_ptr<ImmersiveObserver> immersive_observer_;
 
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;
@@ -291,6 +328,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // macOS: the traffic lights, which the window buttons below stand for.
   std::unique_ptr<KoanTrafficLightsController> traffic_lights_;
   bool caption_strip_collapsible_ = false;
+  // macOS, tabs on the right: the traffic lights stay at the window's left
+  // as in Zen, so the strip above the page that holds them stays open (no
+  // gutter there) when windowed.
+  bool lights_keep_strip_open_ = false;
   bool caption_strip_revealed_ = false;
   base::OneShotTimer caption_hide_timer_;
   std::optional<base::TimeTicks> caption_unwanted_since_;
@@ -309,6 +350,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Keeps the sidebar out for a moment after the pointer leaves its hot zone.
   base::OneShotTimer hover_release_timer_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
+  bool edge_sidebar_hovered_ = false;
+  // macOS: told when fullscreen of the window or of the page starts or ends.
+  base::CallbackListSubscription fullscreen_subscription_;
+  // The window is being destroyed (OnBrowserViewDestroying()): no UI work.
+  bool destroying_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
 
   // The sidebar's context menu.

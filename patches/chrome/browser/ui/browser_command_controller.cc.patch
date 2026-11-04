@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index afc3f64..b28f396 100644
+index afc3f64..96c38f0 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
 @@ -147,6 +147,7 @@
@@ -10,7 +10,19 @@ index afc3f64..b28f396 100644
  #include "printing/buildflags/buildflags.h"
  #include "third_party/omnibox_proto/chrome_aim_entry_point.pb.h"
  #include "ui/accessibility/accessibility_features.h"
-@@ -783,6 +784,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -531,7 +532,10 @@ bool BrowserCommandController::IsReservedCommandOrKey(
+     // full-screen mode. According to the discussion in
+     // http://crbug.com/40511102, the commands should be reserved for
+     // browser-side handling if the browser window's toolbar is visible.
+-    if (window()->IsToolbarShowing()) {
++    // Koan: also in Koan's own fullscreen, where the toolbar is hidden but the
++    // reserved browser shortcuts (⌘T, ⌘W ...) still work, as in a window.
++    if (window()->IsToolbarShowing() ||
++        koan::KeepsReservedCommandsInFullscreen(browser_)) {
+       if (command_id == IDC_FULLSCREEN) {
+         return true;
+       }
+@@ -783,6 +787,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        CloseWindow(browser_);
        break;
      case IDC_NEW_TAB: {
@@ -21,7 +33,18 @@ index afc3f64..b28f396 100644
        NewTab(browser_, NewTabTypes::kNewTabCommand);
        break;
      }
-@@ -1124,10 +1129,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -942,6 +950,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+ 
+ #if BUILDFLAG(IS_MAC)
+     case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
++      // Koan: no such setting in its layout (the menu item is hidden too).
++      if (koan::IgnoresFullscreenToolbarToggle(browser_)) {
++        break;
++      }
+       chrome::ToggleAlwaysShowToolbarInFullscreen(browser_);
+       break;
+     case IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS: {
+@@ -1124,10 +1136,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        FindPrevious(browser_);
        break;
      case IDC_CLOSE_FIND_OR_STOP:
@@ -34,7 +57,7 @@ index afc3f64..b28f396 100644
        }
        break;
  
-@@ -2806,7 +2811,8 @@ void BrowserCommandController::UpdateCommandsForFind() {
+@@ -2806,7 +2818,8 @@ void BrowserCommandController::UpdateCommandsForFind() {
  }
  
  void BrowserCommandController::UpdateCloseFindOrStop() {

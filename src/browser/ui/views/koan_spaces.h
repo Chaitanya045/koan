@@ -19,6 +19,10 @@ namespace ui {
 class SimpleMenuModel;
 }
 
+namespace gfx {
+class Point;
+}
+
 namespace views {
 struct ProposedLayout;
 class View;
@@ -39,6 +43,15 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
                      int y,
                      int available_height,
                      views::ProposedLayout& layouts);
+
+// VerticalTabStripRegionView::IsPositionInWindowCaption(): whether `point`
+// (in `region`'s coordinates) is over the Create-a-Space form in
+// `tab_strip_view`. The form is client area: on macOS a point that counts as
+// window caption never reaches the views (AppKit starts a window drag), so
+// its buttons would take no clicks.
+bool IsInSpaceForm(const views::View* tab_strip_view,
+                   const views::View* region,
+                   const gfx::Point& point);
 
 // The Spaces feature of the tab context menu (koan_tab_menu.h): with Spaces on,
 // replaces the tab group items of the tab context menu for the tab at

@@ -94,22 +94,28 @@ inline constexpr int kClearPadding = 8;
 // How far the icon moves down while the button is pressed.
 inline constexpr int kClearPressedOffset = 2;
 
-// The sidebar's URL pill (and the URL bar while it edits over the pill), and
-// the floating URL bar (#urlbar[breakout-extend]).
+// The sidebar's URL pill (and the URL bar while it edits over the pill): the
+// sidebar's --border-radius-medium (14px), like the tab rows and Essentials;
+// and the floating URL bar (#urlbar[breakout-extend]).
 inline float UrlPillCornerRadius() {
-  return static_cast<float>(look::StyleRadius(9, look::Step::kMd));
+  return static_cast<float>(look::StyleRadius(14, look::Step::kMd));
 }
 inline float FloatingUrlBarCornerRadius() {
   return static_cast<float>(look::ScaleRadius(15));
 }
 
-// The pill's insets before the site's name and after its buttons, the gap
-// between them, and its icon buttons (Zen's urlbar page-action size).
-inline constexpr int kUrlPillLeadingInset = 12;
+// The pill (zen-mac-spec.md 2A, 4.1): 36 high and the sidebar's width less 8
+// on either side; the site identity button first (Zen's 26px #identity-box,
+// a 16px favicon starting 9 into the pill), the host 6 after it in 13.75pt
+// (14) medium, then the copy-URL button (on hover) before the end.
+inline constexpr int kUrlPillHeight = 36;
+inline constexpr int kUrlPillMargin = 8;
+inline constexpr int kUrlPillLeadingInset = 4;
 inline constexpr int kUrlPillTrailingInset = 5;
-inline constexpr int kUrlPillSpacing = 2;
+inline constexpr int kUrlPillSpacing = 6;
 inline constexpr int kUrlPillButtonSize = 26;
 inline constexpr int kUrlPillIconSize = 16;
+inline constexpr int kUrlPillFontSize = 14;
 
 // Zen's floating URL bar (ZenUIManager.mjs, zen-omnibox.css): min(window
 // width / 1.5, 750) wide, centred vertically as if it were at least 333 tall
@@ -354,24 +360,34 @@ inline constexpr int kSpaceIconSize = 16;
 inline constexpr int kSpaceIconGap = 7;
 inline constexpr int kSpaceActionsSize = 26;
 inline constexpr int kSpaceHeaderBackgroundInset = 4;
-// The bottom bar's Space buttons: 30px (32px on macOS), 3px apart, 6px
-// corners, a 12px emoji (15px on macOS) or an 8px dot; 10px wide with a 4px
-// dot when they don't fit.
+// The bottom bar (#zen-sidebar-foot-buttons, zen-mac-spec.md 2A): 32px
+// buttons (30px off macOS) with 6px padding around the row and 4px between
+// the Library button, the Space switcher and "+". The switcher's buttons
+// (#zen-workspaces-button) are 6px rounded, with a 12px emoji (15px on
+// macOS) or an 8px dot for a Space with no icon. In the sidebar Zen always
+// shows them shrunk to fit (icons-overflow, ZenSpaceManager.mjs
+// onWindowResize()): half of 34px (32px off macOS) wide, side by side and
+// centred, the current Space's icon and a 4px dot for the others until
+// hovered; narrower (at least 10px) when even those don't fit. In a sidebar
+// too narrow for a row they are full size, stacked, 3px apart.
 #if BUILDFLAG(IS_MAC)
 inline constexpr int kSpaceButtonSize = 32;
 inline constexpr int kSpaceButtonEmojiSize = 15;
+inline constexpr int kSpaceButtonCompactWidth = 17;
 #else
 inline constexpr int kSpaceButtonSize = 30;
 inline constexpr int kSpaceButtonEmojiSize = 12;
+inline constexpr int kSpaceButtonCompactWidth = 16;
 #endif
 inline constexpr int kSpaceButtonGap = 3;
 inline int SpaceButtonCornerRadius() {
   return look::ScaleRadius(6);
 }
-inline constexpr int kSpaceButtonCollapsedWidth = 10;
+inline constexpr int kSpaceButtonMinWidth = 10;
 inline constexpr int kSpaceDotSize = 8;
 inline constexpr int kSpaceCollapsedDotSize = 4;
 inline constexpr int kSpaceBarPadding = 6;
+inline constexpr int kSpaceBarGap = 4;
 // The Create-a-Space form: 10px padding, 8px rounded fields 10px apart,
 // the 24x22 icon box with 6px corners, buttons 8px apart.
 inline constexpr int kSpaceFormPadding = 10;

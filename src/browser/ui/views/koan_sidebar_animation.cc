@@ -142,7 +142,26 @@ struct SidebarHold::Impl {
 };
 
 SidebarHold::SidebarHold() = default;
-SidebarHold::~SidebarHold() = default;
+
+SidebarHold::~SidebarHold() {
+  // A hold goes with its menu, which a closing window destroys too late to
+  // collapse the sidebar (see ReleaseExpandOnHoverLockSoon()).
+  if (impl_) {
+    ReleaseExpandOnHoverLockSoon(impl_->lock);
+  }
+}
+
+void ReleaseExpandOnHoverLockSoon(std::unique_ptr<ExpandOnHoverLock>& lock) {
+  if (!lock) {
+    return;
+  }
+  if (!base::SequencedTaskRunner::HasCurrentDefault()) {
+    lock.reset();
+    return;
+  }
+  base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                             std::move(lock));
+}
 
 std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view) {
   auto* browser_view = views::AsViewClass<BrowserView>(view);

@@ -37,7 +37,7 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
 // the card in fullscreen at all (see UseContentCard()).
 bool IsBorderlessFullscreen(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
-  return browser_view->IsFullscreen() && !browser_view->IsInSplitView() &&
+  return IsWindowFullscreen(browser_view) && !browser_view->IsInSplitView() &&
          browser_view->GetProfile()
              ->GetOriginalProfile()
              ->GetPrefs()
@@ -57,7 +57,7 @@ bool UseContentCard(const BrowserView* browser_view) {
   const bool allowed_in_fullscreen = true;
 #else
   // Elsewhere fullscreen is edge to edge.
-  const bool allowed_in_fullscreen = !browser_view->IsFullscreen();
+  const bool allowed_in_fullscreen = !IsWindowFullscreen(browser_view);
 #endif
   return features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
          browser_view->ShouldDrawVerticalTabStrip() && allowed_in_fullscreen;
@@ -65,11 +65,28 @@ bool UseContentCard(const BrowserView* browser_view) {
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
-  if (browser_view->IsFullscreen()) {
-    // (See UseContentCard().)
-    return IsBorderlessFullscreen(browser_view)
-               ? gfx::Insets()
-               : SidebarSideInsets(browser_view, kContentCardMargin, 0);
+  if (IsContentFullscreen(browser_view)) {
+    // The page's own fullscreen: it fills the screen (Koan's card is
+    // suspended, see koan_compact_mode.h).
+    return gfx::Insets();
+  }
+  if (IsWindowFullscreen(browser_view)) {
+    // (See UseContentCard().) Where Koan hides the toolbar (single toolbar,
+    // compact mode), the usual layout below applies: a gutter above the
+    // page (no strip for window buttons in fullscreen) and beside a hidden
+    // sidebar. Otherwise Chromium reveals the toolbar over the page from
+    // the top edge, so the page is a card inset by the gutter.
+    if (IsBorderlessFullscreen(browser_view)) {
+      // Zen measured the page at (0, 0) filling the screen. A hidden sidebar
+      // and toolbar are revealed by the pointer at the screen's edge, which
+      // compact mode watches itself (no gutter to hover).
+      return gfx::Insets();
+    }
+    if (!IsToolbarHidden(browser_view)) {
+      return SidebarSideInsets(
+          browser_view, kContentCardMargin,
+          IsCompactModeActive(browser_view) ? kContentCardMargin : 0);
+    }
   }
 #endif
   if (IsToolbarHidden(browser_view)) {
@@ -99,7 +116,9 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 gfx::RoundedCornersF ActiveContentsRadii(
     const BrowserView* browser_view,
     const gfx::RoundedCornersF& default_radii) {
-  return UseContentCard(browser_view) && !IsBorderlessFullscreen(browser_view)
+  return UseContentCard(browser_view) &&
+                 !IsBorderlessFullscreen(browser_view) &&
+                 !IsContentFullscreen(browser_view)
              ? gfx::RoundedCornersF(ContentCardCornerRadius())
              : default_radii;
 }

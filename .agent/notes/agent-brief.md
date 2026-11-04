@@ -59,3 +59,14 @@ Many threads share one build lock, so builds queue. Batch your changes and build
 - The Mac loop keeps **one integration branch** (`preview/*`) built from the active PR heads. It launches Koan from a terminal with its logs captured, and checks the logs and crash reports after each pass.
 - Nothing counts as done until it has passed on the Mac.
 - While the user is at the Mac, builds run at `-j 3` + nice and UI testing pauses. Full speed only when they're away.
+
+## Subagents (user, 2026-11-04)
+If you spawn subagents (the Agent tool) for reviews, searches or checks, use **Opus 5.5 at medium effort** (`model: "opus"`, `effort: "medium"`). Always pass both explicitly.
+
+## Upstream audit first (user, 2026-11-04)
+Before building or changing any Koan feature that sits on top of an upstream Chromium feature (vertical tabs, tab groups/Spaces, omnibox/NTP, fullscreen/immersive, side panel, menus, settings, session restore, profiles/Incognito, bookmarks bar):
+1. Map the upstream feature first, from pristine source (`git -C ~/work/koan/chromium/src show HEAD:<path>`). Cover every state, pref, command, accelerator, menu item, settings row, saved state, extension API, and **macOS-specific path**.
+2. For each one, decide **lock**, **override**, **redirect** or **reuse**, and write the decision down in `.agent/notes/upstream/<area>.md`.
+3. Make sure no upstream state that breaks Zen's behaviour can be reached by a user, an old profile or an extension. Add a test for each.
+
+Reviews check the PR against that file. The completed audits are in `.cache/reviews/vertical-tabs-audit.md` and `upstream-audit-2.md`.

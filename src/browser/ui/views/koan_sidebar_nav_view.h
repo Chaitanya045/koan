@@ -19,6 +19,7 @@ class BrowserView;
 
 namespace views {
 class Button;
+class ImageButton;
 class Label;
 }  // namespace views
 
@@ -27,11 +28,11 @@ namespace koan {
 // Zen's single-toolbar sidebar header is two pieces:
 // - KoanSidebarNavButtons (back / forward / reload) at the trailing end of
 //   the vertical tab strip's top row, next to the sidebar toggle;
-// - KoanSidebarNavView below it: a URL pill with the site's name, Zen's
-//   copy-URL button on hover (pref koan.urlbar.show_copy_url) and the site
-//   panel button. Clicking the pill (or Ctrl+L) opens Zen's URL bar
-//   (KoanUrlBarController), in the pill or floating; the pill is empty
-//   meanwhile.
+// - KoanSidebarNavView below it: a URL pill with the site identity button
+//   (the favicon, which opens the site panel), the site's name and Zen's
+//   copy-URL button on hover (pref koan.urlbar.show_copy_url). Clicking the
+//   pill (or Ctrl+L) opens Zen's URL bar (KoanUrlBarController), in the pill or
+//   floating; the pill is empty meanwhile.
 class KoanSidebarNavButtons : public views::BoxLayoutView,
                               public CommandObserver {
   METADATA_HEADER(KoanSidebarNavButtons, views::BoxLayoutView)
@@ -73,6 +74,8 @@ class KoanSidebarNavView : public views::View,
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
 
   // views::ViewObserver (the copy button's focus):
   void OnViewFocused(views::View* observed_view) override;
@@ -87,13 +90,18 @@ class KoanSidebarNavView : public views::View,
   // while the pill is hovered or the button has focus.
   void UpdateCopyButtonOpacity();
   void ShowSitePanel();
+  // The identity button: the site panel for a page, the URL bar on an empty
+  // tab.
+  void OnSiteButtonPressed();
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<views::View> url_pill_ = nullptr;
   raw_ptr<views::Label> url_label_ = nullptr;
   raw_ptr<views::Button> copy_button_ = nullptr;
-  raw_ptr<views::Button> site_button_ = nullptr;
+  raw_ptr<views::ImageButton> site_button_ = nullptr;
   bool editing_ = false;
+  // Whether the pill shows a page (not an empty tab).
+  bool has_page_ = false;
   bool hovered_ = false;
   // The active tab's UI changes (URL, title, favicon), from the same
   // TabUIHelper the tab strip draws from.

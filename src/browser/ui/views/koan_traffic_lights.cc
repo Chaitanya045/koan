@@ -40,7 +40,7 @@ bool OwnsTitlebar(const BrowserView* browser_view) {
   return browser_view && features::IsSidebarEnabled() &&
          browser_view->GetIsNormalType() &&
          browser_view->ShouldDrawVerticalTabStrip() &&
-         !browser_view->IsFullscreen();
+         !IsWindowFullscreen(browser_view);
 }
 
 std::optional<int> GetTrafficLightsTitlebarHeight(
@@ -115,7 +115,7 @@ gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds) {
       browser_widget ? browser_widget->GetFrameView() : nullptr;
   // The lights are over the sidebar only on its leading side (not with tabs
   // on the right) and out of fullscreen, where macOS shows them by itself.
-  if (!frame || browser_view->IsFullscreen() ||
+  if (!frame || IsWindowFullscreen(browser_view) ||
       IsSidebarOnRight(browser_view) || !frame->CaptionButtonsOnLeadingEdge()) {
     return bounds;
   }

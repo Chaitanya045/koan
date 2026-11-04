@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
-index b1ea4a69f42333b238abbf67b0278467ea41bb28..e6042da1a64d9c609989bee860d110504f6bff8d 100644
+index b1ea4a69f42333b238abbf67b0278467ea41bb28..d779da032ad5a82008fc4f8389545a6c1f05b177 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 @@ -47,6 +47,8 @@
@@ -115,7 +115,18 @@ index b1ea4a69f42333b238abbf67b0278467ea41bb28..e6042da1a64d9c609989bee860d11050
  
        // Set the target size of the contents.
        views().multi_contents_view->SetTargetContentBounds(
-@@ -1359,6 +1397,18 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -1332,6 +1370,10 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+     } else {
+       views().multi_contents_view->SetTargetContentBounds(std::nullopt);
+     }
++  } else if (koan::UseSingleReflowSidebarAnimation()) {
++    // Koan: not clipping now (where upstream never does, e.g. macOS, nothing
++    // else resets what the sidebar's animation set).
++    views().multi_contents_view->SetTargetContentBounds(std::nullopt);
+   }
+ 
+   // Make final visual adjustments required for child views to paint.
+@@ -1359,6 +1401,18 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
            base::ClampCeil(browser_params.leading_exclusion.content.width()) -
            tabstrip_bounds->x();
      }
@@ -134,7 +145,7 @@ index b1ea4a69f42333b238abbf67b0278467ea41bb28..e6042da1a64d9c609989bee860d11050
  
      views().vertical_tab_strip_region_view->SetToolbarHeightForLayout(
          std::max(0, toolbar_height));
-@@ -1551,6 +1601,11 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
+@@ -1551,6 +1605,11 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
      }
    }
  

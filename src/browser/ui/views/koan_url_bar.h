@@ -33,6 +33,25 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
 // a tab as usual. Called from BrowserCommandController.
 bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 
+// macOS: whether the reserved commands (Chromium's list, accelerator_table.cc:
+// new / close tab and window, restore and switch tabs; ⌘T, ⌘W, ⌘N ...) stay
+// the browser's in `browser`'s fullscreen, as in a window, instead of going
+// to the page first. Not the others: ⌘L and ⌃⌘F are not reserved in a window
+// either (a page can swallow them there, as in Firefox).
+// Chromium does that only while the fullscreen window shows its toolbar
+// (autohide, revealed); Koan's native fullscreen always has the toolbar
+// hidden, yet its shortcuts must work. The page's own fullscreen (a video)
+// keeps Chromium's rule (it may hold the keyboard). False elsewhere. Called
+// from BrowserCommandController::IsReservedCommandOrKey().
+bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser);
+
+// macOS: whether `browser`'s window has no "Always Show Toolbar in Full
+// Screen" (View menu, ⇧⌘F, the toolbar action): Koan's toolbar is hidden and
+// fullscreen reveals nothing at the top edge, whatever that setting
+// (Chromium's, synced) says. Called from BrowserCommandController, which then
+// ignores the command; the menu item is hidden by the macOS menu validation.
+bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
+
 // The omnibox text of `location_bar` (a LocationBarView) changed;
 // `user_input_in_progress` is whether the user is typing. With Zen's
 // "floating-on-type" URL bar behaviour, the first keystroke lifts the bar
@@ -41,8 +60,9 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
 
 // The omnibox of `location_bar` (a LocationBarView) is installing its
-// placeholder text: in the floating shadcn card it is "Search...". Called
-// from OmniboxViewViews::InstallPlaceholderText().
+// placeholder text: Zen's "Search..." in the floating card, and while the URL
+// bar edits in the pill (not Chromium's AI Mode hint) unless a keyword mode
+// has its own. Called from OmniboxViewViews::InstallPlaceholderText().
 void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text);
 
 // Whether the floating command card is open for `location_bar`: its input
@@ -56,6 +76,12 @@ bool ShowsCardPlaceholder(views::View* location_bar);
 // OmniboxViewViews::UpdatePlaceholderTextColor().
 ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
                                             ui::ColorId id);
+
+// Whether the page action icons (site settings, install, bookmark star, ...)
+// and content setting icons of `location_bar` (a LocationBarView) are hidden:
+// while it is open as Zen's URL bar, over the sidebar's pill or floating, as
+// Zen's has none. Called from LocationBarView::ShouldHidePageActionIcons().
+bool HidesPageActionIcons(const views::View* location_bar);
 
 // Whether `view` (the location bar, or a row of its omnibox popup) is in a
 // window whose floating URL bar is Zen's card: only then do the suggestion

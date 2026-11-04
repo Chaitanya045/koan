@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_controller.h"
 #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -297,8 +298,11 @@ void KoanUrlBarController::OnNewTabAction() {
 
 bool KoanUrlBarController::OpenForNewTab() {
   LocationBarView* bar = location_bar();
+  // (In fullscreen, the toolbar is out of sight, except where Koan's stays
+  // hidden: on macOS, see HidesFullscreenTopChrome().)
   if (!features::IsUrlBarEnabled() || !browser_view_->GetIsNormalType() ||
-      browser_view_->IsFullscreen() ||
+      (IsWindowFullscreen(browser_view_) && !compact_mode_->hides_toolbar()) ||
+      IsContentFullscreen(browser_view_) ||
       browser_view_->browser()->GetTabStripModel()->empty() || !bar ||
       !bar->omnibox_view() ||
       !browser_view_->GetProfile()
@@ -464,7 +468,9 @@ bool KoanUrlBarController::IsPillAvailable() const {
 
 KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
   // In the multiple-toolbars layout the omnibox edits in the toolbar.
-  if (!compact_mode_->hides_toolbar() || browser_view_->IsFullscreen()) {
+  // (Also in macOS' fullscreen: Koan's toolbar stays hidden there, see
+  // HidesFullscreenTopChrome().)
+  if (!compact_mode_->hides_toolbar() || IsContentFullscreen(browser_view_)) {
     return Placement::kNone;
   }
   // Without the Koan URL bar, Koan's earlier behaviour: always floating.
@@ -525,6 +531,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     placement_ = Placement::kNone;
     UpdateKeyHandler();
     ApplyCardStyle();
+    RefreshPageActions();
     browser_view_->InvalidateLayout();
     compact_mode_->OnUrlBarOpenChanged();
     return;
@@ -554,6 +561,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     ui::Layer* layer = top_container->layer();
     layer->GetAnimator()->AbortAllAnimations();
     layer->SetTransform(gfx::Transform());
+    RefreshPageActions();
     compact_mode_->OnUrlBarOpenChanged();
   }
   // The style first: the larger floating font can change the toolbar's
@@ -568,6 +576,17 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
         .Once()
         .SetDuration(kFadeDuration)
         .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
+  }
+}
+
+void KoanUrlBarController::RefreshPageActions() {
+  // The location bar asks HidesPageActionIcons() when it changes. Not while
+  // it is out of a window (OnChanged() needs its colour provider).
+  LocationBarView* bar = location_bar();
+  if (bar && bar->GetWidget()) {
+    LocationBar* location = bar;
+    location->OnChanged();
+    location->UpdateContentSettingsIcons();
   }
 }
 
@@ -884,6 +903,19 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
   return controller && controller->url_bar()->OpenForNewTab();
 }
 
+bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser) {
+  const BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  return browser_view && HidesFullscreenTopChrome(browser_view) &&
+         !IsContentFullscreen(browser_view);
+}
+
+bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser) {
+  const BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  return browser_view && IsToolbarHidden(browser_view);
+}
+
 // The URL bar controller of the window `view` belongs to, if any: `view` is
 // the location bar or a row of the omnibox popup, whose widget is a child of
 // the browser window's. Null for no view (upstream's location_bar_view_ is
@@ -925,9 +957,26 @@ ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
 
 void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
   KoanUrlBarController* url_bar = UrlBarOf(location_bar);
-  if (url_bar && url_bar->IsCommandCard()) {
+  if (!url_bar) {
+    return;
+  }
+  // Zen's "Search..." in the card, and in the pill too (not Chromium's AI
+  // Mode "Press Tab" hint), unless a search engine's keyword mode has its
+  // own placeholder.
+  const bool keyword_placeholder = !static_cast<LocationBarView*>(location_bar)
+                                        ->GetOmniboxController()
+                                        ->edit_model()
+                                        ->keyword_placeholder()
+                                        .empty();
+  if (url_bar->IsCommandCard() ||
+      (url_bar->is_open() && !keyword_placeholder)) {
     text = u"Search...";
   }
+}
+
+bool HidesPageActionIcons(const views::View* location_bar) {
+  const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
+  return url_bar && url_bar->is_open();
 }
 
 bool ShowsZenCardRows(const views::View* view) {

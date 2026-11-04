@@ -35,6 +35,7 @@
 
 class BrowserView;
 class ExpandOnHoverLock;
+class Profile;
 class TabStripModel;
 
 namespace gfx {
@@ -311,6 +312,14 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Brings back closed Spaces, puts loose (ungrouped, unpinned) tabs into a
   // Space and focuses one.
   void EnsureOneSpaceShown();
+  // A session restored into this window (Restore after a crash) leaves the
+  // Space the window started in, with its new tab page: closes it (Zen's
+  // restore adds no Space). Only that Space, and only if it is untouched.
+  void DropStartupSpaceAfterRestore();
+  // Whether `space` is the window's one Space from before a session restore
+  // that is still one untouched new tab page: what restoring replaces.
+  bool IsUntouchedStartupSpace(const tab_groups::TabGroupId& space) const;
+  void OnSessionRestored(Profile* profile, int tab_count);
   // Once, when the window first has tabs: puts back the Essential it opened
   // on.
   void KeepStartupEssential();
@@ -365,6 +374,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::vector<ClosedSpace> closed_spaces_;
   // Spaces being deleted (their tabs are closing).
   std::set<tab_groups::TabGroupId> deleting_;
+  // A session restore is adding Spaces to this window (set by its first new
+  // Space), the window's only Space from before it, and whether the restore
+  // finished, so that Space is to go if it is still untouched.
+  bool restore_started_ = false;
+  std::optional<tab_groups::TabGroupId> pre_restore_space_;
+  bool drop_startup_space_ = false;
+  base::CallbackListSubscription session_restored_subscription_;
   // The Space shown last, for animating and as a fallback.
   std::optional<tab_groups::TabGroupId> last_space_;
   // Whether the first update with tabs ran, and the Essential selected

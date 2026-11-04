@@ -63,20 +63,32 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanPinnedTabSublabel] =
       ui::SetAlpha(kColorToolbarText, Alpha(0.6f));
 
-  // Essentials tiles: the text colour at 8% (15% in dark mode), on hover
-  // black at 10% (the selected colour in dark mode), selected white at 85%
-  // (20% in dark mode).
-  mixer[kColorKoanEssentialsTile] =
-      ui::SetAlpha(kColorToolbarText, Alpha(dark ? 0.15f : 0.08f));
+  // Essentials tiles (and the URL pill): --zen-toolbar-element-bg,
+  // color-mix(in oklch, var(--toolbox-textcolor) 8%, transparent) (15% in
+  // dark mode). The mix keeps the text colour's own alpha (90%), so the tint
+  // is 13.5% in dark mode (zen-mac-spec.md 2A: oklch(.866 .015 251 / .135)).
+  // On hover black at 10% (the selected colour in dark mode), selected white
+  // at 85% (20% in dark mode).
+  mixer[kColorKoanEssentialsTile] = ui::AlphaBlend(
+      kColorToolbarText, SK_ColorTRANSPARENT, Alpha(dark ? 0.15f : 0.08f));
   mixer[kColorKoanEssentialsTileSelected] = {
       SkColorSetA(SK_ColorWHITE, Alpha(dark ? 0.2f : 0.85f))};
   mixer[kColorKoanEssentialsTileHovered] =
       dark ? ui::ColorTransform(kColorKoanEssentialsTileSelected)
            : ui::ColorTransform(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)));
 
-  // The URL pill on the tab colour; the floating URL bar's long shadow
-  // (box-shadow 0 30px 140px -15px) black at 80% (60% in dark mode).
-  mixer[kColorKoanUrlPill] = {kColorTabBackgroundActiveFrameActive};
+  // The URL pill (zen-omnibox.css .urlbar-background): the Essentials tiles'
+  // tint (--zen-toolbar-element-bg), on hover --zen-toolbar-element-bg-hover
+  // (black at 8%, white at 10% in dark mode); its text the toolbar text at
+  // 59% (measured on Zen 1.24b, zen-mac-spec.md 2.4). The floating URL bar's
+  // long shadow (box-shadow 0 30px 140px -15px) black at 80% (60% in dark
+  // mode).
+  mixer[kColorKoanUrlPill] = {kColorKoanEssentialsTile};
+  mixer[kColorKoanUrlPillHovered] = {
+      dark ? SkColorSetA(SK_ColorWHITE, Alpha(0.1f))
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.08f))};
+  mixer[kColorKoanUrlPillForeground] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.59f));
   // The floating URL bar (zen-omnibox.css, #urlbar[breakout-extend]): white
   // or rgb(24, 24, 24), a glass pane (zen.theme.acrylic-urlbar) at 93% / 92%
   // of white or rgb(20, 20, 20) with a 40px blur, and a 0.5px outline,

@@ -12,6 +12,9 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/fullscreen_util_mac.h"
+#endif
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
@@ -172,6 +175,20 @@ void KoanBrowserViewController::UpdateContentCard() {
       ActiveContentsRadii(browser_view_, contents->GetBackgroundRadii()));
 }
 
+bool IsWindowFullscreen(const BrowserView* browser_view) {
+  return browser_view && browser_view->browser_widget() &&
+         browser_view->IsFullscreen();
+}
+
+bool IsContentFullscreen(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  return IsWindowFullscreen(browser_view) &&
+         fullscreen_utils::IsInContentFullscreen(browser_view->browser());
+#else
+  return false;
+#endif
+}
+
 bool IsCompactModeActive(const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
   const KoanBrowserViewController* controller =
@@ -191,6 +208,15 @@ bool IsToolbarHidden(const views::View* browser_view) {
   const KoanBrowserViewController* controller =
       view ? KoanBrowserViewController::From(view) : nullptr;
   return controller && controller->compact_mode()->hides_toolbar();
+}
+
+bool HidesFullscreenTopChrome(const views::View* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  return view && IsWindowFullscreen(view) && IsToolbarHidden(view);
+#else
+  return false;
+#endif
 }
 
 bool IsCaptionStripCollapsed(const views::View* browser_view) {

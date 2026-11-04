@@ -119,7 +119,8 @@ page gets it first, as in every browser.
 Koan starts in Zen's default layout, **single toolbar**: there is no toolbar
 across the top, and the page reaches the top of the window. The top row of
 the sidebar has the sidebar toggle, back / forward / reload and the tab
-groups / tab search buttons; below it is a pill with the current site.
+groups / tab search buttons; below it is a rounded grey pill with the
+current site's icon and name (just the host, like Zen).
 
 ![Single toolbar](screenshots/desktop-single-toolbar.png)
 
@@ -151,10 +152,24 @@ right-to-left UI, where the sidebar is normally on the right, it goes to
 the left.)
 
 On macOS the window buttons (traffic lights) are AppKit's and stay at the
-top left. With the sidebar there they are in its top row; with the sidebar
-hidden (compact mode) or on the right, and the toolbar hidden, they hide
-too and come back with the sidebar, the toolbar, or the strip that opens
-when the pointer reaches the top edge.
+top left. With the sidebar there they are in its top row; with tabs on the
+right they stay at the left, in a strip above the page; with the sidebar
+hidden (compact mode) and the toolbar hidden, they hide too and come back
+with the sidebar, the toolbar, or the strip that opens when the pointer
+reaches the top edge.
+
+**Fullscreen on macOS** keeps the same layout, as in Zen: nothing is shown
+from the top edge but the menu bar (no toolbar, no bookmarks bar, no title
+bar strip). The sidebar's top row has the sidebar toggle and back / forward
+/ reload; Ctrl+L or the pill edits the address over the page. With the
+sidebar collapsed to icons (the toolbar above the page), the toolbar is
+revealed at the top edge.
+
+**Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
+and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
+> Appearance > Bookmarks bar); Chromium's own "Show bookmarks bar" setting
+and the View menu's "Always Show Toolbar in Full Screen" (disabled while the
+toolbar is hidden) don't change that.
 
 ## URL bar
 
@@ -182,8 +197,11 @@ within 45 seconds.
 
 Hover the pill (or Tab to it) for the **copy** button: it copies the page's
 URL and says so ("Copied current URL!"), as do Ctrl+Shift+C and
-Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The button at the end of the pill
-opens the site's panel (security, permissions, cookies and site settings).
+Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The site's icon at the start of the
+pill opens the site's panel (security, permissions, cookies and site settings);
+on an empty tab it is a magnifier that edits the address. As in Zen, the pill
+and the URL bar show none of Chromium's page actions (site settings, install,
+bookmark star).
 
 | "Normal": editing in place, widened | Copied |
 |---|---|
@@ -243,9 +261,11 @@ and a toast reminds you that Ctrl+Shift+T reopens them, the last closed
 tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
-bottom is Zen's bottom bar: one button per Space (its emoji, or a dot; the
-active one in colour, the others grey) and **+**, which opens the Create
-menu: Create Space, New Split and New Tab.
+bottom is Zen's bottom bar: the Library button on the left, **+** on the
+right, which opens the Create menu (Create Space, New Split and New Tab),
+and the Space switcher in the middle: one narrow button per Space, centred.
+The current Space shows its emoji (or a dot if it has none) in colour, the
+others a small grey dot that turns into their emoji while you hover it.
 The Space buttons only show once there is more than one Space.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:

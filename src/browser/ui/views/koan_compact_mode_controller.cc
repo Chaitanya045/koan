@@ -11,11 +11,15 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+#include "chrome/browser/ui/immersive/immersive_mode_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
@@ -35,6 +39,7 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
@@ -49,6 +54,7 @@
 #include "ui/base/mojom/menu_source_type.mojom-shared.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -83,6 +89,13 @@ constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(1000);
 constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
 
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
+
+// Native fullscreen: how close to the window's edge the pointer reveals the
+// sidebar or toolbar that compact mode hides. Zen's element keeps a sliver
+// of 1px (+ the element separation) at the edge, which the pointer, stopped
+// by the screen, rests on: 2pt covers it and rounding. The page covers the
+// window edge to edge there, so no view of ours could take the pointer.
+constexpr int kFullscreenEdgeSize = 2;
 
 // Zen's flash popup (zen.view.compact.toolbar-flash-popup.duration).
 constexpr base::TimeDelta kFlashDuration = base::Milliseconds(800);
@@ -205,6 +218,29 @@ class KoanCaptionButtonsTargeter : public views::ViewTargeterDelegate {
   const raw_ptr<BrowserView> browser_view_;
 };
 
+// Tells the controller when native fullscreen starts and ends (Chromium's
+// immersive mode; only macOS has it for normal windows).
+class KoanCompactModeController::ImmersiveObserver
+    : public ImmersiveModeController::Observer {
+ public:
+  ImmersiveObserver(ImmersiveModeController* controller,
+                    base::RepeatingClosure on_changed)
+      : on_changed_(std::move(on_changed)) {
+    observation_.Observe(controller);
+  }
+
+  // ImmersiveModeController::Observer:
+  void OnImmersiveFullscreenEntered() override { on_changed_.Run(); }
+  void OnImmersiveFullscreenExited() override { on_changed_.Run(); }
+  void OnImmersiveModeControllerDestroyed() override { observation_.Reset(); }
+
+ private:
+  const base::RepeatingClosure on_changed_;
+  base::ScopedObservation<ImmersiveModeController,
+                          ImmersiveModeController::Observer>
+      observation_{this};
+};
+
 KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
     : browser_view_(browser_view) {
   pref_change_registrar_.Init(GetPrefs());
@@ -238,6 +274,33 @@ KoanCompactModeController::~KoanCompactModeController() {
 }
 
 void KoanCompactModeController::OnAddedToWidget() {
+#if BUILDFLAG(IS_MAC)
+  // (After BrowserView, which is added to the immersive mode controller
+  // first: by the time this runs, it has put the top container where
+  // Chromium wants it.)
+  if (!immersive_observer_) {
+    if (auto* immersive =
+            ImmersiveModeController::From(browser_view_->browser())) {
+      immersive_observer_ = std::make_unique<ImmersiveObserver>(
+          immersive,
+          base::BindRepeating(
+              &KoanCompactModeController::OnImmersiveFullscreenChanged,
+              base::Unretained(this)));
+    }
+  }
+  // The page's own fullscreen leaves Chromium's immersive mode on, so only
+  // the fullscreen controller says when it starts and ends.
+  if (!fullscreen_subscription_) {
+    if (auto* manager =
+            ExclusiveAccessManager::From(browser_view_->browser())) {
+      fullscreen_subscription_ =
+          manager->fullscreen_controller()->RegisterOnFullscreenStateChanged(
+              base::BindRepeating(
+                  &KoanCompactModeController::OnFullscreenStateChanged,
+                  base::Unretained(this)));
+    }
+  }
+#endif
   if (!focus_manager_ && browser_view_->GetFocusManager()) {
     focus_manager_ = browser_view_->GetFocusManager();
     focus_manager_->AddFocusChangeListener(this);
@@ -298,10 +361,18 @@ void KoanCompactModeController::OnBrowserViewLayout() {
 }
 
 void KoanCompactModeController::OnBrowserViewDestroying() {
+  // From here on the window is going away: no UI work (the widget and the
+  // browser's animation controller may be gone), see Deactivate() and
+  // UpdateCaptionButtons(). Letting go of a lock makes the sidebar's region
+  // decide again and collapse with an animation, so the locks are released
+  // through ReleaseLock(), which defers that until the region is gone.
+  destroying_ = true;
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   collapse_subscription_ = {};
   resizing_subscription_ = {};
-  menu_lock_.reset();
+  // Order matters: resetting the menu runner may run OnContextMenuClosed(),
+  // which releases menu_lock_ again, so it is released (and null) first.
+  ReleaseLock(menu_lock_);
   menu_runner_.reset();
   if (mode_ != Mode::kNone) {
     Deactivate(/*keep_sidebar_hidden=*/false);
@@ -366,6 +437,14 @@ bool KoanCompactModeController::PrefHidesToolbar() const {
   const std::string& hide = GetPrefs()->GetString(prefs::kCompactModeHide);
   return hide == prefs::kCompactModeHideToolbar ||
          hide == prefs::kCompactModeHideBoth;
+}
+
+bool KoanCompactModeController::caption_strip_collapsed() const {
+  if (caption_strip_collapsible_ && !caption_strip_revealed_) {
+    return true;
+  }
+  // (Native fullscreen has no lights to make room for.)
+  return lights_keep_strip_open_ && IsWindowFullscreen(browser_view_);
 }
 
 void KoanCompactModeController::OnTabsOnRightChanged() {
@@ -435,7 +514,16 @@ void KoanCompactModeController::FlashSidebar() {
 
 void KoanCompactModeController::EndFlash() {
   flash_timer_.Stop();
-  flash_lock_.reset();
+  ReleaseLock(flash_lock_);
+}
+
+void KoanCompactModeController::ReleaseLock(
+    std::unique_ptr<ExpandOnHoverLock>& lock) {
+  if (destroying_) {
+    ReleaseExpandOnHoverLockSoon(lock);
+    return;
+  }
+  lock.reset();
 }
 
 void KoanCompactModeController::OnTabStripModelChanged(
@@ -553,12 +641,12 @@ void KoanCompactModeController::ShowContextMenu(
                           views::MenuAnchorPosition::kTopLeft, source_type);
   // No menu (e.g. another one was open), or it ran to its end (macOS).
   if (!menu_runner_->IsRunning()) {
-    menu_lock_.reset();
+    ReleaseLock(menu_lock_);
   }
 }
 
 void KoanCompactModeController::OnContextMenuClosed() {
-  menu_lock_.reset();
+  ReleaseLock(menu_lock_);
 }
 
 bool KoanCompactModeController::IsCommandIdChecked(int command_id) const {
@@ -647,7 +735,11 @@ void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
     return;
   }
   // Focusing anything else in the toolbar (e.g. Alt+F) reveals it; it stays
-  // until focus leaves (checked again on each focus change).
+  // until focus leaves (checked again on each focus change). Not over the
+  // page's own fullscreen (Koan is suspended there, see IsContentFullscreen()).
+  if (IsContentFullscreen(browser_view_)) {
+    return;
+  }
   if (focused_now && browser_view_->top_container()->Contains(focused_now)) {
     SetToolbarRevealed(true, /*animate=*/true);
   }
@@ -686,14 +778,49 @@ bool KoanCompactModeController::is_toolbar_away() const {
 
 void KoanCompactModeController::OnEvent(const ui::Event& event) {
   CheckRevealedHides();
+  CheckFullscreenEdges();
+}
+
+bool KoanCompactModeController::WantsFullscreenEdges() const {
+  return mode_ != Mode::kNone && IsWindowFullscreen(browser_view_) &&
+         !IsContentFullscreen(browser_view_) &&
+         (sidebar_hot_zone_ || toolbar_hot_zone_);
+}
+
+void KoanCompactModeController::CheckFullscreenEdges() {
+  if (!WantsFullscreenEdges()) {
+    edge_sidebar_hovered_ = false;
+    return;
+  }
+  gfx::Point pointer = display::Screen::Get()->GetCursorScreenPoint();
+  views::View::ConvertPointFromScreen(browser_view_, &pointer);
+  const gfx::Rect bounds = browser_view_->GetLocalBounds();
+  if (sidebar_hot_zone_) {
+    const bool at_edge =
+        IsSidebarOnRight(browser_view_)
+            ? pointer.x() >= bounds.right() - kFullscreenEdgeSize
+            : pointer.x() < bounds.x() + kFullscreenEdgeSize;
+    const bool hovered =
+        at_edge && pointer.y() >= bounds.y() && pointer.y() < bounds.bottom();
+    if (hovered != edge_sidebar_hovered_) {
+      edge_sidebar_hovered_ = hovered;
+      OnSidebarHotZoneHovered(hovered);
+    }
+  }
+  if (toolbar_hot_zone_ && pointer.y() < bounds.y() + kFullscreenEdgeSize &&
+      pointer.x() >= bounds.x() && pointer.x() < bounds.right()) {
+    OnToolbarHotZoneHovered(true);
+  }
 }
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
-  // (Not in fullscreen, where Chromium hosts the top container itself: on
-  // macOS the content card stays, see UseContentCard().)
+  // (Also in macOS' native fullscreen, where the content card stays, see
+  // UseContentCard(): Chromium moves the top container to its own overlay
+  // widget then, and Koan takes it back, see OnImmersiveFullscreenChanged().
+  // Elsewhere fullscreen has no content card.)
   if (!features::IsCompactModeEnabled() ||
       !GetTopContainerOverlayView(browser_view_) ||
-      !UseContentCard(browser_view_) || browser_view_->IsFullscreen()) {
+      !UseContentCard(browser_view_)) {
     return Mode::kNone;
   }
   const PrefService* prefs = GetPrefs();
@@ -800,6 +927,7 @@ void KoanCompactModeController::UpdateActive() {
   if (desired != Mode::kNone) {
     Activate(desired);
   }
+  UpdateFullscreenTopChrome();
   // The sidebar is given back (a closing window leaves it for the others);
   // from now on this window's sidebar state is its own.
   if (!hides_sidebar()) {
@@ -864,15 +992,7 @@ void KoanCompactModeController::Activate(Mode mode) {
   // Mirrors BrowserView::ReparentTopContainerForStartOfImmersive(); the
   // layout positions a top container that isn't parented to the BrowserView.
   views::View* top_container = browser_view_->top_container();
-  if (hides_toolbar() && top_container->parent() == browser_view_) {
-    views::View* overlay = GetTopContainerOverlayView(browser_view_);
-    top_container_index_ = browser_view_->GetIndexOf(top_container);
-    top_container->SetPaintToLayer();
-    top_container->layer()->SetFillsBoundsOpaquely(false);
-    top_container->SetProperty(views::kViewDoesNotLayOutChildren, false);
-    overlay->AddChildView(top_container);
-    overlay->SetVisible(true);
-  }
+  ParkTopContainer();
   if (can_reveal_toolbar()) {
     caption_buttons_targeter_ =
         std::make_unique<KoanCaptionButtonsTargeter>(browser_view_);
@@ -882,7 +1002,12 @@ void KoanCompactModeController::Activate(Mode mode) {
   if (hides_toolbar()) {
     SetToolbarRevealed(false, /*animate=*/false);
     // Zen: no strip for the window buttons; they appear at the top edge.
-    caption_strip_collapsible_ = true;
+    // Zen's macOS lights are always there, though: with the sidebar on the
+    // right (not in its top row) they are over the page's corner, so the
+    // strip with them stays open.
+    lights_keep_strip_open_ =
+        traffic_lights_ && IsSidebarOnRight(browser_view_) && !hides_sidebar();
+    caption_strip_collapsible_ = !lights_keep_strip_open_;
     caption_strip_revealed_ = false;
   }
   if (mode == Mode::kSingleToolbar || compact_keeps_sidebar_nav_) {
@@ -917,9 +1042,133 @@ void KoanCompactModeController::Activate(Mode mode) {
         add_hot_zone(&KoanCompactModeController::OnCaptionHotZoneHovered);
   }
   UpdateCaptionButtons();
+  UpdatePointerMonitor();
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+}
+
+void KoanCompactModeController::ParkTopContainer() {
+  views::View* top_container = browser_view_->top_container();
+  views::View* overlay = GetTopContainerOverlayView(browser_view_);
+  if (!hides_toolbar() || !overlay || top_container->parent() == overlay) {
+    return;
+  }
+  // Where it goes back to (not from Chromium's overlay widget, whose
+  // fullscreen ends with it back in the BrowserView, and so another park).
+  if (top_container->parent() == browser_view_) {
+    top_container_index_ = browser_view_->GetIndexOf(top_container);
+  }
+  top_container->SetPaintToLayer();
+  top_container->layer()->SetFillsBoundsOpaquely(false);
+  top_container->SetProperty(views::kViewDoesNotLayOutChildren, false);
+  overlay->AddChildView(top_container);
+  overlay->SetVisible(true);
+}
+
+bool KoanCompactModeController::IsClosing() const {
+  const BrowserWidget* widget = browser_view_->browser_widget();
+  return destroying_ || !widget || widget->IsClosed() ||
+         browser_view_->browser()->IsDeleteScheduled();
+}
+
+void KoanCompactModeController::ClearHoverStates() {
+  // A closing window is torn down by the browser's own tasks, and
+  // BrowserDidClose (which reaches here through the immersive mode controller)
+  // comes first: nothing to clear, and releasing a lock now starts a collapse
+  // animation just before the animation controller is destroyed.
+  if (IsClosing()) {
+    return;
+  }
+  // Nothing stays revealed from before the change (Zen's sizemodechange).
+  edge_sidebar_hovered_ = false;
+  hover_release_timer_.Stop();
+  if (toolbar_revealed_) {
+    SetToolbarRevealed(false, /*animate=*/false);
+  }
+  // The locks are let go of after this call, and not at all if the window is
+  // closing by then (it can start closing in between): letting a lock go
+  // collapses the sidebar, an animation.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<KoanCompactModeController> self) {
+                       if (self && !self->IsClosing()) {
+                         self->ReleaseLock(self->hover_lock_);
+                         self->ReleaseLock(self->peek_lock_);
+                       }
+                     },
+                     weak_factory_.GetWeakPtr()));
+}
+
+void KoanCompactModeController::OnFullscreenStateChanged() {
+  // (A posted notification: it can arrive after the window started closing.)
+  if (IsClosing() || mode_ == Mode::kNone) {
+    return;
+  }
+  ClearHoverStates();
+  UpdatePointerMonitor();
+  // The page's own fullscreen drops the card (see IsContentFullscreen()): lay
+  // the contents out again (its corners follow the layout).
+  OnContentCardChanged();
+}
+
+void KoanCompactModeController::OnImmersiveFullscreenChanged() {
+  if (destroying_ || mode_ == Mode::kNone) {
+    return;
+  }
+  ClearHoverStates();
+  // The URL bar lets go of the top container before it moves: Chromium has
+  // just destroyed the layer it styled (leaving fullscreen), or the bar's
+  // card would end up in the wrong window state.
+  if (auto* controller = KoanBrowserViewController::From(browser_view_)) {
+    controller->url_bar()->EndEditing();
+  }
+  // (Native fullscreen has no strip for window buttons, and no lights over
+  // the page: AppKit's come with the menu bar.)
+  SetCaptionStripRevealed(false);
+  UpdatePointerMonitor();
+  if (!hides_toolbar()) {
+    return;
+  }
+  // Chromium has just put the top container where it reveals it from the top
+  // edge (or taken it out of fullscreen, destroying its layer). Hide it
+  // again, as when the mode was activated.
+  ParkTopContainer();
+  browser_view_->top_container()->SetCanProcessEventsWithinSubtree(
+      toolbar_revealed_);
+  ApplyToolbarTransform(/*animate=*/false);
+  browser_view_->InvalidateLayout();
+}
+
+void KoanCompactModeController::UpdateFullscreenTopChrome() {
+#if BUILDFLAG(IS_MAC)
+  if (!IsWindowFullscreen(browser_view_)) {
+    return;
+  }
+  // Dialogs and bubbles anchor to the window where Koan's toolbar is, not to
+  // Chromium's overlay widget (which holds its toolbar, and is out of sight
+  // while nothing is revealed).
+  if (MultiContentsView* contents = browser_view_->multi_contents_view()) {
+    views::Widget* anchor = HidesFullscreenTopChrome(browser_view_)
+                                ? nullptr
+                                : browser_view_->overlay_widget();
+    contents->SetProperty(views::kWidgetForAnchoringKey, anchor);
+  }
+  // AppKit's own title bar: nothing of it at the top edge but the menu bar
+  // while Koan hides its toolbar, else it has the lights, as usual.
+  if (HidesFullscreenTopChrome(browser_view_)) {
+    HideFullscreenTitlebar(browser_view_);
+  } else {
+    RestoreFullscreenTitlebar(browser_view_);
+    SetTrafficLightsShown(browser_view_, true);
+  }
+  // The toolbar style: "none" while Koan hides its toolbar, else the user's.
+  if (BrowserWidget* widget = browser_view_->browser_widget()) {
+    if (BrowserFrameView* frame = widget->GetFrameView()) {
+      frame->UpdateFullscreenTopUI();
+    }
+  }
+#endif
 }
 
 void KoanCompactModeController::InstallSidebarNav() {
@@ -962,6 +1211,7 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   hide_toolbar_ = false;
   compact_keeps_sidebar_nav_ = false;
   caption_strip_collapsible_ = false;
+  lights_keep_strip_open_ = false;
   caption_strip_revealed_ = false;
   caption_hide_timer_.Stop();
   caption_unwanted_since_.reset();
@@ -985,9 +1235,10 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   toolbar_unwanted_since_.reset();
   EndFlash();
   hover_release_timer_.Stop();
-  hover_lock_.reset();
-  peek_lock_.reset();
+  ReleaseLock(hover_lock_);
+  ReleaseLock(peek_lock_);
   pointer_monitor_.reset();
+  edge_sidebar_hovered_ = false;
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }
@@ -1004,14 +1255,24 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   bool restore_top_container =
       top_container->parent() != browser_view_ && top_container_index_;
 #if BUILDFLAG(IS_MAC)
-  // Immersive fullscreen moves the top container into its own overlay
-  // widget, and keeps it there until it ends: leave it there, hide Koan's
-  // (now empty) overlay, and undo Koan's own state on the top container:
-  // the hidden toolbar's slide out of view and its ignoring the pointer.
-  // The layer stays; the overlay widget paints the top container with it.
-  if (const views::Widget* immersive = browser_view_->overlay_widget();
-      immersive && top_container->GetWidget() == immersive) {
+  // Immersive fullscreen has the top container in its own overlay widget
+  // (Koan's overlay holds it in between, see
+  // OnImmersiveFullscreenChanged()): leave it there until the fullscreen
+  // ends, hide Koan's (now empty) overlay, and undo Koan's own state on the
+  // top container: the hidden toolbar's slide out of view and its ignoring
+  // the pointer. The layer stays; the overlay widget paints the top
+  // container with it.
+  const ImmersiveModeController* immersive_controller =
+      ImmersiveModeController::From(browser_view_->browser());
+  if (views::View* immersive = browser_view_->overlay_widget()
+                                   ? browser_view_->overlay_view()
+                                   : nullptr;
+      immersive && immersive_controller && immersive_controller->IsEnabled()) {
     restore_top_container = false;
+    if (top_container->parent() != immersive) {
+      immersive->AddChildView(top_container);
+      immersive->SetVisible(true);
+    }
     if (views::View* overlay = GetTopContainerOverlayView(browser_view_)) {
       overlay->SetVisible(false);
     }
@@ -1044,6 +1305,12 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   top_container_index_.reset();
   toolbar_revealed_ = false;
 
+  // A closing window has no layout to do, and leaves the sidebar as it is for
+  // the others (expanding it again is an animation).
+  if (destroying_) {
+    return;
+  }
+
   if (auto* state =
           tabs::VerticalTabStripStateController::From(browser_view_->browser());
       state && !keep_sidebar_hidden) {
@@ -1060,8 +1327,10 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
 
 void KoanCompactModeController::SetToolbarRevealed(bool revealed,
                                                    bool animate) {
-  // The open URL bar owns the top container.
-  if (!hides_toolbar() || IsUrlBarOpen()) {
+  // The open URL bar owns the top container. Over the page's own fullscreen
+  // nothing is revealed (Koan is suspended there).
+  if (!hides_toolbar() || IsUrlBarOpen() ||
+      (revealed && IsContentFullscreen(browser_view_))) {
     return;
   }
   const bool changed = toolbar_revealed_ != revealed;
@@ -1196,7 +1465,8 @@ void KoanCompactModeController::CheckToolbarHide() {
 
 void KoanCompactModeController::UpdatePointerMonitor() {
   const bool wanted =
-      mode_ != Mode::kNone && (toolbar_revealed_ || caption_strip_revealed_);
+      mode_ != Mode::kNone &&
+      (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges());
   views::Widget* widget = browser_view_->GetWidget();
   if (!wanted || !widget) {
     pointer_monitor_.reset();
@@ -1216,7 +1486,7 @@ void KoanCompactModeController::CheckRevealedHides() {
 }
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
-  if (mode_ == Mode::kNone) {
+  if (mode_ == Mode::kNone || IsContentFullscreen(browser_view_)) {
     return;
   }
   if (hovered) {
@@ -1233,15 +1503,16 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   // strip, and upstream's hover tracking keeps it open until it leaves; the
   // lock is kept for Zen's keep-hover time, so the hand-over between the two
   // doesn't close it for a moment.
-  hover_release_timer_.Start(
-      FROM_HERE, kSidebarKeepHover,
-      base::BindOnce(
-          [](KoanCompactModeController* self) { self->hover_lock_.reset(); },
-          base::Unretained(this)));
+  hover_release_timer_.Start(FROM_HERE, kSidebarKeepHover,
+                             base::BindOnce(
+                                 [](KoanCompactModeController* self) {
+                                   self->ReleaseLock(self->hover_lock_);
+                                 },
+                                 base::Unretained(this)));
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
-  if (hovered) {
+  if (hovered && !IsContentFullscreen(browser_view_)) {
     SetToolbarRevealed(true, /*animate=*/true);
   }
 }
@@ -1319,6 +1590,10 @@ bool KoanCompactModeController::IsCaptionButtonBesideSidebar(
 }
 
 bool KoanCompactModeController::HasPageSideCaptionButtons() const {
+  // (Native fullscreen on macOS: no buttons over the page.)
+  if (IsWindowFullscreen(browser_view_)) {
+    return false;
+  }
   // The traffic lights are at the window's leading edge: over the page where
   // the sidebar is hidden or on the right.
   if (traffic_lights_) {
@@ -1339,8 +1614,17 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
 }
 
 void KoanCompactModeController::UpdateCaptionButtons() {
+  if (destroying_) {
+    // The window is going away: nothing to show or hide.
+    return;
+  }
 #if BUILDFLAG(IS_MAC)
   if (traffic_lights_) {
+    // AppKit shows the lights by itself in fullscreen, with the menu bar;
+    // they are laid out again when it ends.
+    if (IsWindowFullscreen(browser_view_)) {
+      return;
+    }
     // The traffic lights are AppKit's: shown or hidden, as the other
     // platforms' buttons fade, and on the sidebar's side (the leading one)
     // for as long as the sidebar is there, as in Zen, where they are part of
@@ -1403,6 +1687,16 @@ void KoanCompactModeController::UpdateCaptionButtons() {
 }
 
 void KoanCompactModeController::LayoutHotZones() {
+  // The page's own fullscreen covers the window: no zone takes the pointer.
+  if (IsContentFullscreen(browser_view_)) {
+    for (KoanHotZone* zone : {sidebar_hot_zone_.get(), toolbar_hot_zone_.get(),
+                              caption_hot_zone_.get()}) {
+      if (zone) {
+        zone->SetBoundsRect(gfx::Rect());
+      }
+    }
+    return;
+  }
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
   const gfx::Insets gutter = ContentCardInsets(browser_view_);
   // Along the hidden sidebar's edge, where it slides in.
