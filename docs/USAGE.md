@@ -186,8 +186,10 @@ Tab on a pinned tab, Next Space with two Spaces, ...).
 Vertical tabs are on by default, laid out like Zen's. The
 **Essentials** are square tiles at the top, up to four across, shared by
 every Space. Below them is the Space header (the active Space's icon and
-name), then a thin line, **+ New Tab** (opens a tab at the top of the
-Space's tabs) and the tabs. A tab's close button shows while you point at
+name), then the Space's pinned tabs, a thin line, **+ New Tab** (opens a
+tab at the top of the Space's other tabs) and the other tabs. The pinned
+tabs, the line, New Tab and the tabs scroll together; the Essentials and
+the Space header stay put. A tab's close button shows while you point at
 it.
 
 While the pointer is over the sidebar, **↓ Clear** appears at the end of
@@ -215,8 +217,11 @@ compact mode was set to hide just the toolbar, the drag makes it hide both.
 
 As in Zen there are two kinds of pinned tab:
 
-- **Pinned tabs** belong to their Space and stay at the top of its
-  tabs. Pin a tab with Ctrl+Shift+D or "Pin" in its context menu.
+- **Pinned tabs** belong to their Space and sit in its pinned section,
+  between the Space header and the line above **+ New Tab**; unpinned, a
+  tab moves below New Tab. Pin a tab with Ctrl+Shift+D or "Pin" in its
+  context menu. While a pinned tab is loaded, pointing at it shows a dash
+  ("Unload and switch to tab") where other tabs have their close button.
 - **Essentials** are shared by all Spaces, up to 12 per window: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
   Dragging a tab into the grid also makes it an Essential.
