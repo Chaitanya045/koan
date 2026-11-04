@@ -25,6 +25,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -1424,7 +1425,16 @@ void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
             TabGroupChange::TabGroupClosureReason::kDetachedToAnotherTabstrip;
     auto it = std::ranges::find(spaces_snapshot_, change.group,
                                 &decltype(spaces_snapshot_)::value_type::first);
-    if (!deleted && !moved_away && it != spaces_snapshot_.end()) {
+    // A session restored into this window (Restore after a crash) closes the
+    // tab the window started on, which was alone in its Space: that Space
+    // goes, the restored Spaces stay. Zen's restore never adds a Space.
+    const bool replaced_by_restore =
+        SessionRestore::IsRestoring(browser_view_->GetProfile()) &&
+        std::ranges::any_of(GetSpaces(), [&](const SpaceInfo& other) {
+          return other.id != change.group;
+        });
+    if (!deleted && !moved_away && !replaced_by_restore &&
+        it != spaces_snapshot_.end()) {
       std::optional<tab_groups::TabGroupId> next;
       if (it + 1 != spaces_snapshot_.end()) {
         next = (it + 1)->first;

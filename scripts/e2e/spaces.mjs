@@ -389,4 +389,37 @@ check('...and deletes the Space, showing another',
       s.buttons.map(b => b.name).join() === 'Home,Scratch' && s.header?.name === 'Scratch',
       JSON.stringify({ spaces: s.buttons.map(b => b.name), header: s.header?.name }));
 
+// ---- The form's buttons take real clicks. The events above go straight to
+// a view; these are sent to the window's root view, which routes them by
+// position like the pointer does, so a view over the buttons (or a caption
+// region) would swallow them.
+async function rootClick(view) {
+  const vs = await views();
+  const root = vs.find(v => v.cls === 'BrowserRootView' && v.widget === view.widget);
+  const x = Math.round(view.ax + view.w / 2);
+  const y = Math.round(view.ay + view.h / 2);
+  await mouse(root, 'mouseMoved', x, y);
+  await mouse(root, 'mousePressed', x, y);
+  await mouse(root, 'mouseReleased', x, y);
+  await sleep(1200);
+}
+await key(VK.N, CTRL | ALT, 'n');
+s = await sidebar();
+await type(shown(s.vs, 'Textfield').find(t => t.path.includes('KoanSpaceCreationView')), 'Clicked');
+s = await sidebar();
+const formButton = text => shown(s.vs, 'MdTextButton')
+    .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === text);
+check('The form is open with Create Space enabled once it has a name',
+      formButton('Create Space')?.props.Enabled === 'true');
+await rootClick(formButton('Create Space'));
+s = await sidebar();
+check('Clicking Create Space creates the Space and shows it',
+      s.header?.name === 'Clicked' && !one(s.vs, 'KoanSpaceCreationView'),
+      JSON.stringify({ header: s.header?.name, form: !!one(s.vs, 'KoanSpaceCreationView') }));
+await key(VK.N, CTRL | ALT, 'n');
+s = await sidebar();
+await rootClick(formButton('Cancel'));
+s = await sidebar();
+check('Clicking Cancel closes the form', !one(s.vs, 'KoanSpaceCreationView'));
+
 finish();
