@@ -350,6 +350,15 @@ if (BEHAVIOR === 'float') {
       /^(PageActionView|PageActionIconView|ContentSettingImageView|StarView|PwaInstallView)$/.test(v.cls));
   check('...with none of Chromium\'s page actions', pageActions.length === 0,
         pageActions.map(v => `${v.cls}:${v.p.TooltipText ?? ''}`).join(' '));
+  // ...nor its AI Mode button or hint, and Zen's "Search..." placeholder.
+  const aiMode = vs.filter(v => v.shown && v.w > 0 && v.path.includes('LocationBarView') &&
+      (/^AiMode/.test(v.cls) ||
+       /AI Mode/.test(`${v.p.TooltipText ?? ''} ${v.p.AccessibleName ?? ''} ${v.p.Text ?? ''}`)));
+  check('...and no AI Mode button or hint', aiMode.length === 0,
+        aiMode.map(v => `${v.cls}:${v.p.TooltipText ?? v.p.Text ?? ''}`).join(' '));
+  const placeholder = find(vs, 'OmniboxViewViews')?.p.PlaceholderText;
+  check('...with Zen\'s placeholder', placeholder === undefined || placeholder === 'Search...',
+        JSON.stringify(placeholder));
   shot('in-pill');
 }
 await type(find(vs, 'OmniboxViewViews'), 'wiki');
