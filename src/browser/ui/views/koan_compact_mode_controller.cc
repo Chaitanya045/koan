@@ -1062,6 +1062,7 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
   if (HidesFullscreenTopChrome(browser_view_)) {
     HideFullscreenTitlebar(browser_view_);
   } else {
+    RestoreFullscreenTitlebar(browser_view_);
     SetTrafficLightsShown(browser_view_, true);
   }
   // The toolbar style: "none" while Koan hides its toolbar, else the user's.

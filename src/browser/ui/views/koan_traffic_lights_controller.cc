@@ -35,6 +35,12 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
   const bool fullscreen = browser_view_->IsFullscreen();
   if (fullscreen != was_fullscreen_) {
     was_fullscreen_ = fullscreen;
+#if BUILDFLAG(IS_MAC)
+    if (!fullscreen) {
+      // The title bar comes back to the window with its lights.
+      RestoreFullscreenTitlebar(browser_view_);
+    }
+#endif
     applied_height_.reset();
     on_changed_.Run();
   }
