@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
-index b1ea4a69f42333b238abbf67b0278467ea41bb28..73d1b32ac4507682fd462b569108519895fe44ff 100644
+index b1ea4a69f42333b238abbf67b0278467ea41bb28..e6042da1a64d9c609989bee860d110504f6bff8d 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_impl.cc
 @@ -47,6 +47,8 @@
@@ -115,16 +115,18 @@ index b1ea4a69f42333b238abbf67b0278467ea41bb28..73d1b32ac4507682fd462b5691085198
  
        // Set the target size of the contents.
        views().multi_contents_view->SetTargetContentBounds(
-@@ -1359,6 +1397,16 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
+@@ -1359,6 +1397,18 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
            base::ClampCeil(browser_params.leading_exclusion.content.width()) -
            tabstrip_bounds->x();
      }
 +    // Koan: with Koan's toolbar hidden beside a visible strip, the strip
-+    // reaches the top, its top row beside the caption buttons on its side.
++    // reaches the top, its top row beside the caption buttons on its side
++    // (also where compact mode hides the strip but keeps that row).
 +    if (!toolbar_bounds && koan::IsToolbarHidden(views().browser_view) &&
-+        !koan::IsCompactModeActive(views().browser_view)) {
-+      toolbar_height =
-+          base::ClampCeil(browser_params.leading_exclusion.content.height());
++        (!koan::IsCompactModeActive(views().browser_view) ||
++         koan::KeepsSidebarNav(views().browser_view))) {
++      toolbar_height = koan::GetHiddenToolbarRowHeight(
++          base::ClampCeil(browser_params.leading_exclusion.content.height()));
 +      caption_button_width =
 +          base::ClampCeil(browser_params.leading_exclusion.content.width()) -
 +          tabstrip_bounds->x();
@@ -132,7 +134,7 @@ index b1ea4a69f42333b238abbf67b0278467ea41bb28..73d1b32ac4507682fd462b5691085198
  
      views().vertical_tab_strip_region_view->SetToolbarHeightForLayout(
          std::max(0, toolbar_height));
-@@ -1551,6 +1599,11 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
+@@ -1551,6 +1601,11 @@ void BrowserViewTabbedLayoutImpl::ConfigureTopContainerBackground(
      }
    }
  
