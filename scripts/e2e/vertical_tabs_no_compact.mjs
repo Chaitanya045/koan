@@ -13,12 +13,15 @@ const toggleOf = vs => vs.find(v => v.shown && v.path.at(-1) === 'VerticalTabStr
                                     v.cls !== 'KoanSidebarNavButtons' && v.w > 0);
 
 let vs = await views();
-checkKoanSidebar('Without compact mode', {}, vs);
+// (Without KoanCompactMode there is no single toolbar either: Koan's overlay
+// layouts are one feature, so Chromium's toolbar is drawn above the page.)
+const WITHOUT = { toolbar: true };
+checkKoanSidebar('Without compact mode', WITHOUT, vs);
 const width = region(vs).w;
 
 await press(VK.L, CTRL | SHIFT, 'L', 1500);
 vs = await views();
-checkKoanSidebar('Shift+Cmd+L', {}, vs);
+checkKoanSidebar('Shift+Cmd+L', WITHOUT, vs);
 check('...the sidebar is as wide as before', region(vs).w === width, `${region(vs).w} vs ${width}`);
 
 const button = toggleOf(vs);
@@ -29,7 +32,7 @@ if (button) {
   await sleep(1500);
 }
 vs = await views();
-checkKoanSidebar('The sidebar button', {}, vs);
+checkKoanSidebar('The sidebar button', WITHOUT, vs);
 check('...the sidebar is as wide as before', region(vs).w === width, `${region(vs).w} vs ${width}`);
 
 // A drag below the snap width.
@@ -44,7 +47,7 @@ for (const dx of [-60, -120, -200, -260]) {
 await mouseOn(resize, 'mouseReleased', 2 - 260, 300);
 await sleep(1500);
 vs = await views();
-checkKoanSidebar('After the drag', {}, vs);
+checkKoanSidebar('After the drag', WITHOUT, vs);
 check('...it snapped back to its width', region(vs).w === width, `${region(vs).w} vs ${width}`);
 
 check('Koan still answers', await alive());
