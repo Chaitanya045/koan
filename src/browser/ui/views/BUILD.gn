@@ -272,6 +272,7 @@ source_set("impl") {
     "//components/sessions",
     "//chrome/browser/browsing_data:constants",
     "//chrome/browser/first_run",
+    "//chrome/browser/search",
     "//chrome/browser/search_engines",
     "//chrome/browser/ui/tabs:utils",
     "//chrome/browser/ui/views/frame:toolbar_button_provider",
