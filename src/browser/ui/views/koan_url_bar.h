@@ -39,6 +39,12 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
 // BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault().
 bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser);
 
+// The Focus Location command (Cmd+L, the action and the legacy command both
+// end in chrome::FocusLocationBar()): the floating bar opens for the
+// keyboard, also when the bar is already open in the pill. Called at the
+// start of chrome::FocusLocationBar().
+void OnFocusLocationBarCommand(BrowserWindowInterface* browser);
+
 // Zen's zen.urlbar.replace-newtab for the New Tab command (IDC_NEW_TAB: ⌘T
 // on macOS, which runs as a reserved command before any accelerator, and the
 // menu bar's File > New Tab): opens the URL bar in place of a new tab, or

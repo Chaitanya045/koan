@@ -42,6 +42,10 @@ check('Esc closes it', !(await floating()));
 await clickView('KoanUrlPill');
 await sleep(800);
 check('A click on the pill edits in the pill: not floating', !(await floating()));
+// O2: Cmd+L while the bar is open in the pill floats it.
+await key(page, VK.L, CTRL, 'l');
+check('Cmd+L with the bar open in the pill floats it', await waitFor(floating),
+      'no backdrop');
 await key(page, VK.ESC, 0, 'Escape');
 await sleep(500);
 
