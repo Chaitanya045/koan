@@ -204,6 +204,43 @@ async function keyTo(page, code, modifiers, keyName = '') {
 }
 const rowsWith = async url => (await rows()).filter(r => r.p.PinnedUrl === url);
 
+// The active Space's sidebar (Zen's layout): its header, the pinned tabs, the
+// divider (Clear), the New Tab row and the normal tabs, by their positions
+// in the window. The Space's tabs (not the Essentials) that show.
+async function sidebarLayout() {
+  const s = await uiSession();
+  s.close();
+  const one = cls => s.nodes.find(n => n.cls === cls && n.shown);
+  const tabs = s.nodes.filter(n => n.cls === 'KoanTabRow' && n.parent?.shown &&
+                                   n.path.includes('UnpinnedTabContainerView'));
+  const views = want => tabs.filter(r => (r.p.PinnedInSpace === 'true') === want)
+      .map(r => ({ url: r.p.Url, ay: r.parent.ay, h: r.parent.h }));
+  return { header: one('KoanSpaceHeaderView'), divider: one('KoanClearTabsRow'),
+           newTab: one('KoanNewTabRow'), rows: one('KoanSidebarTabRowsView'),
+           pinned: views(true), normal: views(false) };
+}
+const bottom = v => v.ay + v.h;
+// Header < pinned < divider < New Tab < normal, the divider only with normal
+// tabs (Zen hides it without them); the rows scroll with the tabs.
+const inZenOrder = l => {
+  if (!l.header || !l.newTab || !l.rows?.path.includes('UnpinnedTabContainerView')) {
+    return false;
+  }
+  const top = Math.min(...l.pinned.map(t => t.ay), l.divider?.ay ?? Infinity, l.newTab.ay);
+  const pinnedEnd = Math.max(bottom(l.header), ...l.pinned.map(bottom));
+  const dividerOk = l.normal.length
+      ? !!l.divider && pinnedEnd <= l.divider.ay && bottom(l.divider) <= l.newTab.ay
+      : !l.divider && pinnedEnd <= l.newTab.ay;
+  return bottom(l.header) <= top && dividerOk &&
+         l.normal.every(t => t.ay >= bottom(l.newTab));
+};
+const layoutSummary = l => ({
+  header: l.header && [l.header.ay, l.header.h],
+  pinned: l.pinned.map(t => [t.url, t.ay]), divider: l.divider && [l.divider.ay, l.divider.h],
+  newTab: l.newTab && [l.newTab.ay, l.newTab.h], normal: l.normal.map(t => [t.url, t.ay]),
+  rowsIn: l.rows?.path.at(-1),
+});
+
 // --- Pin the active tab to its Space (Ctrl+Shift+D). ---
 const first = await activePage();
 const PIN_URL = first.url;
@@ -216,6 +253,14 @@ check('Ctrl+Shift+D pins the tab to its Space (not an Essential)',
       !pinned.path.includes('PinnedTabContainerView'),
       JSON.stringify(pinned && { url: pinned.p.PinnedUrl, path: pinned.path.slice(-3) }));
 check('...and no reset button at its pinned URL', pinned && !pinned.shown);
+check('...and its close button is Zen\'s unload button ("Unload and switch to tab")',
+      pinned?.p.UnloadButton === 'true',
+      JSON.stringify(pinned && { unload: pinned.p.UnloadButton }));
+{
+  const l = await sidebarLayout();
+  check('It moves up to the pinned section: Space header < pinned tabs < divider < ' +
+        'New Tab < normal tabs (Zen)', inZenOrder(l), JSON.stringify(layoutSummary(l)));
+}
 
 // --- Navigating away shows the reset button. ---
 await navigate(first, AWAY_URL);
@@ -267,6 +312,8 @@ check('...resets it to its pinned URL', pinned?.p.AwayFromPinnedUrl === 'false',
       JSON.stringify(pinned?.p.AwayFromPinnedUrl));
 check('...and unloads it', pinned?.p.Discarded === 'true',
       JSON.stringify(pinned?.p.Discarded));
+check('...and, unloaded, it has a close button again (closing it closes it)',
+      pinned?.p.UnloadButton === 'false', JSON.stringify(pinned?.p.UnloadButton));
 
 // --- The context menu: Add to Essentials with Zen's "n / 12" badge. ---
 s = await uiSession();
@@ -555,6 +602,15 @@ check('A tab moved among the pinned tabs is pinned in place',
       allAre(st, { pinned: true }) &&
       JSON.stringify(order) === JSON.stringify([Y(2), Y(1)]),
       JSON.stringify({ st, order }));
+// Unpinned, it moves down past the divider and the New Tab row, live.
+await keyTo(await pageByUrl(Y(2)), VK.D, CTRL | SHIFT, 'd');
+await sleep(1000);
+{
+  const l = await sidebarLayout();
+  check('Unpinning moves the tab below the divider and the New Tab row',
+        inZenOrder(l) && l.normal.some(t => t.url === Y(2)) &&
+        l.pinned.some(t => t.url === Y(1)), JSON.stringify(layoutSummary(l)));
+}
 for (const n of [1, 2]) {
   const page = await pageByUrl(Y(n));
   if (page) await browserCall('Target.closeTarget', { targetId: page.id });
@@ -572,11 +628,23 @@ await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.D, CTRL | SHIFT, 'd');
 const tabShown = async url => !!(await rowsWith(url))[0]?.parent?.shown;
 const essentialShown = async () => !!(await essentialRow())?.parent?.shown;
 check('A tab pinned in a Space shows there', await tabShown(`${PIN_URL}?space1`));
+{
+  const l = await sidebarLayout();
+  check('...in that Space\'s pinned section, above its New Tab row',
+        inZenOrder(l) && l.pinned.length === 1 && l.pinned[0].url === `${PIN_URL}?space1`,
+        JSON.stringify(layoutSummary(l)));
+}
 check('...tabs pinned outside it don\'t', !await tabShown(PIN_URL));
 check('...and the Essential does', await essentialShown());
 await createSpace(await pageByUrl(`${PIN_URL}?space1`), 'Space 2');
 check('In another Space, the first Space\'s pinned tab is hidden',
       !await tabShown(`${PIN_URL}?space1`));
+{
+  const l = await sidebarLayout();
+  check('...and its rows sit right below its header, with no pinned tabs',
+        inZenOrder(l) && !l.pinned.length && l.rows.ay === bottom(l.header),
+        JSON.stringify(layoutSummary(l)));
+}
 check('...and the Essential still shows', await essentialShown());
 // Back to the first Space for the rest.
 for (let i = 0; i < 2; i++) {

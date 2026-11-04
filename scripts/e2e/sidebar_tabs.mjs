@@ -187,9 +187,14 @@ const inContainer = (vs, cls, container) =>
 }
 let vs = await views();
 const rows = find(vs, 'KoanSidebarTabRowsView');
-check('The rows sit in the tab strip',
-      rows?.shown && rows.path.at(-1) === 'TabStripView' && rows.h > 0,
+check('The rows sit in the Space\'s tab list, scrolling with the tabs (Zen)',
+      rows?.shown && rows.path.at(-1) === 'TabGroupView' &&
+      rows.path.includes('UnpinnedTabContainerView') && rows.h > 0,
       JSON.stringify(rows && { shown: rows.shown, parent: rows.path.at(-1), h: rows.h }));
+const spaceHeader = find(vs, 'KoanSpaceHeaderView');
+check('...right below the Space header (no pinned tabs)',
+      spaceHeader?.shown && rows && rows.y === spaceHeader.y + spaceHeader.h,
+      `header bottom ${spaceHeader && spaceHeader.y + spaceHeader.h}, rows ${rows?.y}`);
 const bottomPlus = find(vs, 'NewTabButton');
 check('...and no "+" button at the bottom of the sidebar',
       bottomPlus && !bottomPlus.shown,
