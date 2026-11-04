@@ -373,8 +373,9 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   // IsClosing() is true from here on.)
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   // Order matters: resetting the menu runner may run OnContextMenuClosed(),
-  // which releases menu_lock_ again, so it is released (and null) first.
-  ReleaseLock(menu_lock_);
+  // which would keep the hold, so it is released (and null) first. (A hold's
+  // lock is let go of after the current task, see SidebarHold.)
+  menu_hold_.reset();
   menu_runner_.reset();
   if (mode_ != Mode::kNone) {
     Deactivate();
@@ -694,10 +695,7 @@ void KoanCompactModeController::ShowContextMenu(
   context_menu_model_->AddCheckItem(kCommandTabsOnRight, u"Tabs on the right");
   // The sidebar stays out (it may be compact mode's overlay) while its menu
   // is open, as with upstream's menus on it.
-  if (auto* tab_strip = browser_view_->tab_strip_view()) {
-    menu_lock_ = tab_strip->GetExpandOnHoverLock(
-        ExpandOnHoverLockType::kKeepCurrentState);
-  }
+  menu_hold_ = HoldSidebarOpen(browser_view_);
   menu_runner_ = std::make_unique<views::MenuRunner>(
       context_menu_model_.get(),
       views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
@@ -708,12 +706,14 @@ void KoanCompactModeController::ShowContextMenu(
                           views::MenuAnchorPosition::kTopLeft, source_type);
   // No menu (e.g. another one was open), or it ran to its end (macOS).
   if (!menu_runner_->IsRunning()) {
-    ReleaseLock(menu_lock_);
+    OnContextMenuClosed();
   }
 }
 
 void KoanCompactModeController::OnContextMenuClosed() {
-  ReleaseLock(menu_lock_);
+  if (menu_hold_) {
+    menu_hold_->ReleaseWhenPointerMoves();
+  }
 }
 
 bool KoanCompactModeController::IsCommandIdChecked(int command_id) const {

@@ -45,6 +45,13 @@ double LayoutSidebarReveal(views::View* browser_view, double progress);
 class SidebarHold {
  public:
   ~SidebarHold();
+
+  // The menu has closed. Zen removes `has-popup-menu` at once if the pointer
+  // is over the window, and otherwise at the pointer's next move over it, so a
+  // sidebar whose menu closed with the pointer elsewhere doesn't snap shut
+  // under it. Call once.
+  void ReleaseWhenPointerMoves();
+
   SidebarHold(const SidebarHold&) = delete;
   SidebarHold& operator=(const SidebarHold&) = delete;
 
