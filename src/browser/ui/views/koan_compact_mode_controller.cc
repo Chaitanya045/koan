@@ -11,11 +11,13 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/immersive/immersive_mode_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
@@ -205,6 +207,29 @@ class KoanCaptionButtonsTargeter : public views::ViewTargeterDelegate {
   const raw_ptr<BrowserView> browser_view_;
 };
 
+// Tells the controller when native fullscreen starts and ends (Chromium's
+// immersive mode; only macOS has it for normal windows).
+class KoanCompactModeController::ImmersiveObserver
+    : public ImmersiveModeController::Observer {
+ public:
+  ImmersiveObserver(ImmersiveModeController* controller,
+                    base::RepeatingClosure on_changed)
+      : on_changed_(std::move(on_changed)) {
+    observation_.Observe(controller);
+  }
+
+  // ImmersiveModeController::Observer:
+  void OnImmersiveFullscreenEntered() override { on_changed_.Run(); }
+  void OnImmersiveFullscreenExited() override { on_changed_.Run(); }
+  void OnImmersiveModeControllerDestroyed() override { observation_.Reset(); }
+
+ private:
+  const base::RepeatingClosure on_changed_;
+  base::ScopedObservation<ImmersiveModeController,
+                          ImmersiveModeController::Observer>
+      observation_{this};
+};
+
 KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
     : browser_view_(browser_view) {
   pref_change_registrar_.Init(GetPrefs());
@@ -238,6 +263,21 @@ KoanCompactModeController::~KoanCompactModeController() {
 }
 
 void KoanCompactModeController::OnAddedToWidget() {
+#if BUILDFLAG(IS_MAC)
+  // (After BrowserView, which is added to the immersive mode controller
+  // first: by the time this runs, it has put the top container where
+  // Chromium wants it.)
+  if (!immersive_observer_) {
+    if (auto* immersive =
+            ImmersiveModeController::From(browser_view_->browser())) {
+      immersive_observer_ = std::make_unique<ImmersiveObserver>(
+          immersive,
+          base::BindRepeating(
+              &KoanCompactModeController::OnImmersiveFullscreenChanged,
+              base::Unretained(this)));
+    }
+  }
+#endif
   if (!focus_manager_ && browser_view_->GetFocusManager()) {
     focus_manager_ = browser_view_->GetFocusManager();
     focus_manager_->AddFocusChangeListener(this);
@@ -689,11 +729,13 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
 }
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
-  // (Not in fullscreen, where Chromium hosts the top container itself: on
-  // macOS the content card stays, see UseContentCard().)
+  // (Also in macOS' native fullscreen, where the content card stays, see
+  // UseContentCard(): Chromium moves the top container to its own overlay
+  // widget then, and Koan takes it back, see OnImmersiveFullscreenChanged().
+  // Elsewhere fullscreen has no content card.)
   if (!features::IsCompactModeEnabled() ||
       !GetTopContainerOverlayView(browser_view_) ||
-      !UseContentCard(browser_view_) || browser_view_->IsFullscreen()) {
+      !UseContentCard(browser_view_)) {
     return Mode::kNone;
   }
   const PrefService* prefs = GetPrefs();
@@ -800,6 +842,7 @@ void KoanCompactModeController::UpdateActive() {
   if (desired != Mode::kNone) {
     Activate(desired);
   }
+  UpdateFullscreenTopChrome();
   // The sidebar is given back (a closing window leaves it for the others);
   // from now on this window's sidebar state is its own.
   if (!hides_sidebar()) {
@@ -864,15 +907,7 @@ void KoanCompactModeController::Activate(Mode mode) {
   // Mirrors BrowserView::ReparentTopContainerForStartOfImmersive(); the
   // layout positions a top container that isn't parented to the BrowserView.
   views::View* top_container = browser_view_->top_container();
-  if (hides_toolbar() && top_container->parent() == browser_view_) {
-    views::View* overlay = GetTopContainerOverlayView(browser_view_);
-    top_container_index_ = browser_view_->GetIndexOf(top_container);
-    top_container->SetPaintToLayer();
-    top_container->layer()->SetFillsBoundsOpaquely(false);
-    top_container->SetProperty(views::kViewDoesNotLayOutChildren, false);
-    overlay->AddChildView(top_container);
-    overlay->SetVisible(true);
-  }
+  ParkTopContainer();
   if (can_reveal_toolbar()) {
     caption_buttons_targeter_ =
         std::make_unique<KoanCaptionButtonsTargeter>(browser_view_);
@@ -920,6 +955,69 @@ void KoanCompactModeController::Activate(Mode mode) {
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+}
+
+void KoanCompactModeController::ParkTopContainer() {
+  views::View* top_container = browser_view_->top_container();
+  views::View* overlay = GetTopContainerOverlayView(browser_view_);
+  if (!hides_toolbar() || !overlay || top_container->parent() == overlay) {
+    return;
+  }
+  // Where it goes back to (not from Chromium's overlay widget, whose
+  // fullscreen ends with it back in the BrowserView, and so another park).
+  if (top_container->parent() == browser_view_) {
+    top_container_index_ = browser_view_->GetIndexOf(top_container);
+  }
+  top_container->SetPaintToLayer();
+  top_container->layer()->SetFillsBoundsOpaquely(false);
+  top_container->SetProperty(views::kViewDoesNotLayOutChildren, false);
+  overlay->AddChildView(top_container);
+  overlay->SetVisible(true);
+}
+
+void KoanCompactModeController::OnImmersiveFullscreenChanged() {
+  if (mode_ == Mode::kNone) {
+    return;
+  }
+  // (Native fullscreen has no strip for window buttons, and no lights over
+  // the page: AppKit's come with the menu bar.)
+  SetCaptionStripRevealed(false);
+  if (!hides_toolbar()) {
+    return;
+  }
+  // Chromium has just put the top container where it reveals it from the top
+  // edge (or taken it out of fullscreen, destroying its layer). Hide it
+  // again, as when the mode was activated.
+  ParkTopContainer();
+  if (!IsUrlBarOpen()) {
+    browser_view_->top_container()->SetCanProcessEventsWithinSubtree(
+        toolbar_revealed_);
+    ApplyToolbarTransform(/*animate=*/false);
+  }
+  browser_view_->InvalidateLayout();
+}
+
+void KoanCompactModeController::UpdateFullscreenTopChrome() {
+#if BUILDFLAG(IS_MAC)
+  if (!browser_view_->IsFullscreen()) {
+    return;
+  }
+  // Dialogs and bubbles anchor to the window where Koan's toolbar is, not to
+  // Chromium's overlay widget (which holds its toolbar, and is out of sight
+  // while nothing is revealed).
+  if (MultiContentsView* contents = browser_view_->multi_contents_view()) {
+    views::Widget* anchor = HidesFullscreenTopChrome(browser_view_)
+                                ? nullptr
+                                : browser_view_->overlay_widget();
+    contents->SetProperty(views::kWidgetForAnchoringKey, anchor);
+  }
+  // The toolbar style: "none" while Koan hides its toolbar, else the user's.
+  if (BrowserWidget* widget = browser_view_->browser_widget()) {
+    if (BrowserFrameView* frame = widget->GetFrameView()) {
+      frame->UpdateFullscreenTopUI();
+    }
+  }
+#endif
 }
 
 void KoanCompactModeController::InstallSidebarNav() {
@@ -1004,14 +1102,24 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   bool restore_top_container =
       top_container->parent() != browser_view_ && top_container_index_;
 #if BUILDFLAG(IS_MAC)
-  // Immersive fullscreen moves the top container into its own overlay
-  // widget, and keeps it there until it ends: leave it there, hide Koan's
-  // (now empty) overlay, and undo Koan's own state on the top container:
-  // the hidden toolbar's slide out of view and its ignoring the pointer.
-  // The layer stays; the overlay widget paints the top container with it.
-  if (const views::Widget* immersive = browser_view_->overlay_widget();
-      immersive && top_container->GetWidget() == immersive) {
+  // Immersive fullscreen has the top container in its own overlay widget
+  // (Koan's overlay holds it in between, see
+  // OnImmersiveFullscreenChanged()): leave it there until the fullscreen
+  // ends, hide Koan's (now empty) overlay, and undo Koan's own state on the
+  // top container: the hidden toolbar's slide out of view and its ignoring
+  // the pointer. The layer stays; the overlay widget paints the top
+  // container with it.
+  const ImmersiveModeController* immersive_controller =
+      ImmersiveModeController::From(browser_view_->browser());
+  if (views::View* immersive = browser_view_->overlay_widget()
+                                   ? browser_view_->overlay_view()
+                                   : nullptr;
+      immersive && immersive_controller && immersive_controller->IsEnabled()) {
     restore_top_container = false;
+    if (top_container->parent() != immersive) {
+      immersive->AddChildView(top_container);
+      immersive->SetVisible(true);
+    }
     if (views::View* overlay = GetTopContainerOverlayView(browser_view_)) {
       overlay->SetVisible(false);
     }
@@ -1319,6 +1427,10 @@ bool KoanCompactModeController::IsCaptionButtonBesideSidebar(
 }
 
 bool KoanCompactModeController::HasPageSideCaptionButtons() const {
+  // (Native fullscreen on macOS: no buttons over the page.)
+  if (browser_view_->IsFullscreen()) {
+    return false;
+  }
   // The traffic lights are at the window's leading edge: over the page where
   // the sidebar is hidden or on the right.
   if (traffic_lights_) {
@@ -1341,6 +1453,11 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
 void KoanCompactModeController::UpdateCaptionButtons() {
 #if BUILDFLAG(IS_MAC)
   if (traffic_lights_) {
+    // AppKit shows the lights by itself in fullscreen, with the menu bar;
+    // they are laid out again when it ends.
+    if (browser_view_->IsFullscreen()) {
+      return;
+    }
     // The traffic lights are AppKit's: shown or hidden, as the other
     // platforms' buttons fade, and on the sidebar's side (the leading one)
     // for as long as the sidebar is there, as in Zen, where they are part of

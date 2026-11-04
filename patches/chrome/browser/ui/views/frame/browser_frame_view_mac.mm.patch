@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_mac.mm b/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
+index 8615eb60acaf1a7a9a23a08b505577c8eefb700b..6835b32761f93a29dd235c69a9ea387609b38db2 100644
+--- a/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_frame_view_mac.mm
+@@ -49,6 +49,7 @@
+ #include "chrome/common/pref_names.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/remote_cocoa/common/native_widget_ns_window.mojom.h"
++#include "koan/browser/ui/views/koan_compact_mode.h"
+ #include "ui/base/hit_test.h"
+ #include "ui/base/theme_provider.h"
+ #include "ui/base/ui_base_features.h"
+@@ -255,6 +256,12 @@ void BrowserFrameViewMac::UpdateFullscreenTopUI() {
+     bool always_show = fullscreen_utils::IsAlwaysShowToolbarEnabled(browser);
+     new_style = GetUserPreferredToolbarStyle(always_show);
+   }
++  // Koan: where Koan's own toolbar stays hidden (single toolbar), nothing is
++  // revealed from the top edge, as in Zen: not the toolbar, the bookmarks bar
++  // or the title bar strip with the window buttons.
++  if (koan::HidesFullscreenTopChrome(GetBrowserView())) {
++    new_style = FullscreenToolbarStyle::TOOLBAR_NONE;
++  }
+ 
+   if (WindowFeatureController::From(GetBrowserView()->browser())
+           ->UsesImmersiveFullscreenMode()) {

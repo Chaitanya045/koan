@@ -75,6 +75,12 @@ class KoanTrafficLightsController;
 // In both, the omnibox opens out of the hidden toolbar as Zen's URL bar
 // (KoanUrlBarController) while it has focus.
 //
+// Both go on in macOS' native fullscreen, as in Zen: Chromium's immersive
+// mode would move the top container to its own overlay widget and reveal it
+// at the top edge (with a title bar strip), so Koan takes it back and the
+// fullscreen toolbar style is "none" (HidesFullscreenTopChrome()); only the
+// menu bar appears there.
+//
 // Tabs on the right (pref koan.tabs.on_right) mirrors the window: see
 // IsSidebarOnRight() in koan_compact_mode.h.
 //
@@ -225,6 +231,20 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void UpdatePointerMonitor();
   void CheckRevealedHides();
 
+  // Hides the toolbar (single toolbar, compact mode): moves the top
+  // container, if it is not there already, into the overlay view of this
+  // window, above the page. Where the BrowserView or macOS' immersive
+  // fullscreen has it (see below), takes it from there.
+  void ParkTopContainer();
+  // macOS: native fullscreen moves the top container into Chromium's overlay
+  // widget, which reveals it from the top edge (with a title bar strip).
+  // Where Koan hides the toolbar, the top container goes back to Koan's
+  // overlay as the fullscreen starts and ends, and Chromium is told to
+  // reveal nothing (HidesFullscreenTopChrome()).
+  void OnImmersiveFullscreenChanged();
+  // Tells Chromium that what Koan hides in fullscreen changed.
+  void UpdateFullscreenTopChrome();
+
   // Single toolbar: adds KoanSidebarNavView to the top of the sidebar.
   void InstallSidebarNav();
   // Right-clicking the sidebar opens ShowContextMenu() (the region view is
@@ -282,6 +302,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Koan asked upstream to expand the sidebar (it animates).
   bool expanding_sidebar_ = false;
   std::optional<size_t> top_container_index_;
+  // macOS: told when native fullscreen starts and ends.
+  class ImmersiveObserver;
+  std::unique_ptr<ImmersiveObserver> immersive_observer_;
 
   raw_ptr<KoanHotZone> sidebar_hot_zone_ = nullptr;
   raw_ptr<KoanHotZone> toolbar_hot_zone_ = nullptr;

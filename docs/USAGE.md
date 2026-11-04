@@ -93,6 +93,16 @@ hidden (compact mode) or on the right, and the toolbar hidden, they hide
 too and come back with the sidebar, the toolbar, or the strip that opens
 when the pointer reaches the top edge.
 
+**Fullscreen on macOS** keeps the same layout, as in Zen: nothing is shown
+from the top edge but the menu bar (no toolbar, no bookmarks bar, no title
+bar strip). The sidebar's top row has the sidebar toggle and back / forward
+/ reload; Ctrl+L or the pill edits the address over the page. With the
+sidebar collapsed to icons (the toolbar above the page), the toolbar is
+revealed at the top edge.
+
+**Bookmarks bar**: off, as in Zen, also on the new tab page. Turn it on in
+Chromium's Settings > Appearance > Show bookmarks bar.
+
 ## URL bar
 
 Like Zen's, the URL bar opens where you are and floats once you type:

@@ -28,6 +28,16 @@ bool KeepsSidebarNav(const views::View* browser_view);
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);
 
+// macOS: whether the window is in native fullscreen with Koan's toolbar
+// hidden (single toolbar, or compact mode hiding the toolbar). Like Zen,
+// nothing of the top chrome is revealed from the top edge then (Chromium's
+// toolbar, bookmarks bar and title bar strip): Koan's own layout stays, with
+// the sidebar's header and the URL pill, or in compact mode the toolbar's
+// own slide. Called from the BrowserView and BrowserFrameViewMac hooks, so
+// that Chromium's fullscreen toolbar style is "none" and its dialogs anchor
+// to the window. False elsewhere.
+bool HidesFullscreenTopChrome(const views::View* browser_view);
+
 // Whether the strip at the top of the window where the frame draws its
 // caption buttons (close, ...) is collapsed: like Zen, those buttons only
 // show while the pointer is at the top edge, and the page card otherwise

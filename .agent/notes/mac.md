@@ -128,9 +128,14 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   `holder()->layer()` may work there, untested.
 - No caption button views: Koan's caption-button hiding is a no-op; the
   traffic lights are AppKit's.
-- Immersive fullscreen keeps the toolbar in `BrowserView::overlay_widget()`;
-  compact mode leaves it there when it deactivates, but resets its own
-  hidden-toolbar transform and pointer blocking on it.
+- Immersive fullscreen moves the top container into
+  `BrowserView::overlay_widget()`. While Koan hides the toolbar (single
+  toolbar, compact), Koan's controller takes it back into its own overlay on
+  entering and exiting (an `ImmersiveModeController::Observer`) and the
+  fullscreen toolbar style is `none` (no reveal at the top edge); when the
+  mode deactivates in fullscreen the top container goes back to Chromium's
+  overlay widget, with its hidden-toolbar transform and pointer blocking
+  reset.
 - Traffic lights (#72): AppKit's. Koan sets the title bar height they are
   centred in (hook in `browser_native_widget_mac.mm`), hides and shows them
   with `standardWindowButton:` like the other platforms' caption buttons
@@ -159,8 +164,6 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   (not at the end, when the width used to jump from 56 to 0), and the hidden
   sidebar's reveal is a layer transform on a strip laid out once
   (`koan_sidebar_animation.*`).
-- Compact mode is off in native fullscreen (`UseContentCard()` needs a
-  window that isn't fullscreen): a fullscreen Mac window shows the sidebar as
-  Chromium's collapsed icon strip. Not changed here: the card's gutter and
-  the hot zones need the page's native view out of the way, and the toolbar
-  lives in the immersive overlay widget there.
+- Compact mode and single toolbar apply in native fullscreen on macOS (the
+  card stays, see `UseContentCard()`); see the entry above for the top
+  container.
