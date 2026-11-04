@@ -28,6 +28,7 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -373,6 +374,23 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
     height += header_height;
   }
   return height;
+}
+
+bool IsInSpaceForm(const views::View* tab_strip_view,
+                   const views::View* region,
+                   const gfx::Point& point) {
+  if (!tab_strip_view) {
+    return false;
+  }
+  for (const views::View* child : tab_strip_view->children()) {
+    if (views::IsViewClass<KoanSpaceCreationView>(child) &&
+        child->GetVisible()) {
+      gfx::Point point_in_form = point;
+      views::View::ConvertPointToTarget(region, child, &point_in_form);
+      return child->HitTestPoint(point_in_form);
+    }
+  }
+  return false;
 }
 
 BEGIN_METADATA(KoanSpaceHeaderView)
