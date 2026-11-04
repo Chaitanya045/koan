@@ -116,9 +116,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool is_toolbar_revealed() const { return toolbar_revealed_; }
   // The caption-button strip above the page is collapsed (the card starts at
   // the gutter).
-  bool caption_strip_collapsed() const {
-    return caption_strip_collapsible_ && !caption_strip_revealed_;
-  }
+  bool caption_strip_collapsed() const;
   // The "Tabs on the right" setting. Where the sidebar is, is
   // IsSidebarOnRight() (koan_compact_mode.h), which also checks the window.
   bool tabs_on_right() const { return tabs_on_right_; }
@@ -319,6 +317,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // macOS: the traffic lights, which the window buttons below stand for.
   std::unique_ptr<KoanTrafficLightsController> traffic_lights_;
   bool caption_strip_collapsible_ = false;
+  // macOS, tabs on the right: the traffic lights stay at the window's left
+  // as in Zen, so the strip above the page that holds them stays open (no
+  // gutter there) when windowed.
+  bool lights_keep_strip_open_ = false;
   bool caption_strip_revealed_ = false;
   base::OneShotTimer caption_hide_timer_;
   std::optional<base::TimeTicks> caption_unwanted_since_;

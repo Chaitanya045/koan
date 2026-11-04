@@ -88,10 +88,11 @@ right-to-left UI, where the sidebar is normally on the right, it goes to
 the left.)
 
 On macOS the window buttons (traffic lights) are AppKit's and stay at the
-top left. With the sidebar there they are in its top row; with the sidebar
-hidden (compact mode) or on the right, and the toolbar hidden, they hide
-too and come back with the sidebar, the toolbar, or the strip that opens
-when the pointer reaches the top edge.
+top left. With the sidebar there they are in its top row; with tabs on the
+right they stay at the left, in a strip above the page; with the sidebar
+hidden (compact mode) and the toolbar hidden, they hide too and come back
+with the sidebar, the toolbar, or the strip that opens when the pointer
+reaches the top edge.
 
 **Fullscreen on macOS** keeps the same layout, as in Zen: nothing is shown
 from the top edge but the menu bar (no toolbar, no bookmarks bar, no title

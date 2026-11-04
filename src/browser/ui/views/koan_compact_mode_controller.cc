@@ -416,6 +416,14 @@ bool KoanCompactModeController::PrefHidesToolbar() const {
          hide == prefs::kCompactModeHideBoth;
 }
 
+bool KoanCompactModeController::caption_strip_collapsed() const {
+  if (caption_strip_collapsible_ && !caption_strip_revealed_) {
+    return true;
+  }
+  // (Native fullscreen has no lights to make room for.)
+  return lights_keep_strip_open_ && browser_view_->IsFullscreen();
+}
+
 void KoanCompactModeController::OnTabsOnRightChanged() {
   tabs_on_right_ =
       pref_change_registrar_.prefs()->GetBoolean(prefs::kTabsOnRight);
@@ -957,7 +965,12 @@ void KoanCompactModeController::Activate(Mode mode) {
   if (hides_toolbar()) {
     SetToolbarRevealed(false, /*animate=*/false);
     // Zen: no strip for the window buttons; they appear at the top edge.
-    caption_strip_collapsible_ = true;
+    // Zen's macOS lights are always there, though: with the sidebar on the
+    // right (not in its top row) they are over the page's corner, so the
+    // strip with them stays open.
+    lights_keep_strip_open_ =
+        traffic_lights_ && IsSidebarOnRight(browser_view_) && !hides_sidebar();
+    caption_strip_collapsible_ = !lights_keep_strip_open_;
     caption_strip_revealed_ = false;
   }
   if (mode == Mode::kSingleToolbar || compact_keeps_sidebar_nav_) {
@@ -1114,6 +1127,7 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   hide_toolbar_ = false;
   compact_keeps_sidebar_nav_ = false;
   caption_strip_collapsible_ = false;
+  lights_keep_strip_open_ = false;
   caption_strip_revealed_ = false;
   caption_hide_timer_.Stop();
   caption_unwanted_since_.reset();
