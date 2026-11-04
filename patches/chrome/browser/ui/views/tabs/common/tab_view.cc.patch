@@ -1,5 +1,4 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 3982c27b065406909e709cac83c75f1a794056e0..bfe49ce4b75042c836db03a7b644d9046dadd90d 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
 @@ -65,6 +65,7 @@
@@ -10,7 +9,7 @@ index 3982c27b065406909e709cac83c75f1a794056e0..bfe49ce4b75042c836db03a7b644d904
  #include "third_party/skia/include/core/SkPath.h"
  #include "third_party/skia/include/core/SkPathBuilder.h"
  #include "third_party/skia/include/core/SkRRect.h"
-@@ -417,6 +418,7 @@ TabView::TabView(TabCollectionNode* collection_node)
+@@ -417,6 +418,7 @@
              &TabView::OnCollapseStateChanged, base::Unretained(this)));
    }
    close_button_observation_.Observe(close_button_);
@@ -18,3 +17,11 @@ index 3982c27b065406909e709cac83c75f1a794056e0..bfe49ce4b75042c836db03a7b644d904
  }
  
  TabView::~TabView() = default;
+@@ -1261,6 +1263,7 @@
+   TabStyle::TabColors colors = tab_styling()->CalculateTargetColors();
+   title_->SetEnabledColor(colors.foreground_color);
+   close_button_->SetColors(colors);
++  koan::OnTabViewColorsChanged(this);
+   alert_indicator_->OnParentTabButtonColorChanged();
+ 
+   UpdateBorder();
