@@ -37,6 +37,7 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
@@ -355,6 +356,8 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   collapse_subscription_ = {};
   resizing_subscription_ = {};
+  // Order matters: resetting the menu runner may run OnContextMenuClosed(),
+  // which releases menu_lock_ again, so it is released (and null) first.
   ReleaseLock(menu_lock_);
   menu_runner_.reset();
   if (mode_ != Mode::kNone) {
@@ -503,11 +506,7 @@ void KoanCompactModeController::EndFlash() {
 void KoanCompactModeController::ReleaseLock(
     std::unique_ptr<ExpandOnHoverLock>& lock) {
   if (destroying_) {
-    // Letting go makes the sidebar's region decide again, and collapse with
-    // an animation. Later, once the region is gone, a lock is harmless: the
-    // region clears them when it is destroyed.
-    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
-                                                               std::move(lock));
+    ReleaseExpandOnHoverLockSoon(lock);
     return;
   }
   lock.reset();
@@ -628,12 +627,12 @@ void KoanCompactModeController::ShowContextMenu(
                           views::MenuAnchorPosition::kTopLeft, source_type);
   // No menu (e.g. another one was open), or it ran to its end (macOS).
   if (!menu_runner_->IsRunning()) {
-    menu_lock_.reset();
+    ReleaseLock(menu_lock_);
   }
 }
 
 void KoanCompactModeController::OnContextMenuClosed() {
-  menu_lock_.reset();
+  ReleaseLock(menu_lock_);
 }
 
 bool KoanCompactModeController::IsCommandIdChecked(int command_id) const {
@@ -1436,11 +1435,12 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   // strip, and upstream's hover tracking keeps it open until it leaves; the
   // lock is kept for Zen's keep-hover time, so the hand-over between the two
   // doesn't close it for a moment.
-  hover_release_timer_.Start(
-      FROM_HERE, kSidebarKeepHover,
-      base::BindOnce(
-          [](KoanCompactModeController* self) { self->hover_lock_.reset(); },
-          base::Unretained(this)));
+  hover_release_timer_.Start(FROM_HERE, kSidebarKeepHover,
+                             base::BindOnce(
+                                 [](KoanCompactModeController* self) {
+                                   self->ReleaseLock(self->hover_lock_);
+                                 },
+                                 base::Unretained(this)));
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
