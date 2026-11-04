@@ -56,6 +56,15 @@ void SetTrafficLightsShown(const BrowserView* browser_view, bool shown);
 // the first two; the last is automatic, which macOS may draw as a strip under
 // the traffic lights). Idempotent.
 void ClearTitlebar(const BrowserView* browser_view);
+
+// Native fullscreen where Koan hides its toolbar (HidesFullscreenTopChrome()):
+// Chromium's toolbar style is "none", but AppKit still slides its own thin
+// title bar down with the menu bar, with the traffic lights. Hides the
+// lights and makes it transparent, so that only the menu bar shows at the
+// top edge, as in Zen. Idempotent; AppKit may rebuild the title bar during
+// the transition, so the caller applies it on every layout in fullscreen.
+// Out of fullscreen, the usual rules show the lights again.
+void HideFullscreenTitlebar(const BrowserView* browser_view);
 #endif
 
 }  // namespace koan

@@ -204,6 +204,7 @@ source_set("impl") {
     "//chrome/browser/ui:browser_command_controller",
     "//chrome/browser/ui:browser_actions",
     "//chrome/browser/ui/actions:actions_headers",
+    "//chrome/browser/ui/immersive:immersive_mode_controller",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/views/omnibox",
     "//chrome/common",

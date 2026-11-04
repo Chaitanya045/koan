@@ -100,8 +100,11 @@ bar strip). The sidebar's top row has the sidebar toggle and back / forward
 sidebar collapsed to icons (the toolbar above the page), the toolbar is
 revealed at the top edge.
 
-**Bookmarks bar**: off, as in Zen, also on the new tab page. Turn it on in
-Chromium's Settings > Appearance > Show bookmarks bar.
+**Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
+and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
+> Appearance > Bookmarks bar); Chromium's own "Show bookmarks bar" setting
+and the View menu's "Always Show Toolbar in Full Screen" (disabled while the
+toolbar is hidden) don't change that.
 
 ## URL bar
 

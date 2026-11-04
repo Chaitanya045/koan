@@ -51,6 +51,7 @@
 #include "ui/base/mojom/menu_source_type.mojom-shared.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -85,6 +86,13 @@ constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(1000);
 constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
 
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
+
+// Native fullscreen: how close to the window's edge the pointer reveals the
+// sidebar or toolbar that compact mode hides. Zen's element keeps a sliver
+// of 1px (+ the element separation) at the edge, which the pointer, stopped
+// by the screen, rests on: 2pt covers it and rounding. The page covers the
+// window edge to edge there, so no view of ours could take the pointer.
+constexpr int kFullscreenEdgeSize = 2;
 
 // Zen's flash popup (zen.view.compact.toolbar-flash-popup.duration).
 constexpr base::TimeDelta kFlashDuration = base::Milliseconds(800);
@@ -726,6 +734,38 @@ bool KoanCompactModeController::is_toolbar_away() const {
 
 void KoanCompactModeController::OnEvent(const ui::Event& event) {
   CheckRevealedHides();
+  CheckFullscreenEdges();
+}
+
+bool KoanCompactModeController::WantsFullscreenEdges() const {
+  return mode_ != Mode::kNone && browser_view_->IsFullscreen() &&
+         (sidebar_hot_zone_ || toolbar_hot_zone_);
+}
+
+void KoanCompactModeController::CheckFullscreenEdges() {
+  if (!WantsFullscreenEdges()) {
+    edge_sidebar_hovered_ = false;
+    return;
+  }
+  gfx::Point pointer = display::Screen::Get()->GetCursorScreenPoint();
+  views::View::ConvertPointFromScreen(browser_view_, &pointer);
+  const gfx::Rect bounds = browser_view_->GetLocalBounds();
+  if (sidebar_hot_zone_) {
+    const bool at_edge =
+        IsSidebarOnRight(browser_view_)
+            ? pointer.x() >= bounds.right() - kFullscreenEdgeSize
+            : pointer.x() < bounds.x() + kFullscreenEdgeSize;
+    const bool hovered =
+        at_edge && pointer.y() >= bounds.y() && pointer.y() < bounds.bottom();
+    if (hovered != edge_sidebar_hovered_) {
+      edge_sidebar_hovered_ = hovered;
+      OnSidebarHotZoneHovered(hovered);
+    }
+  }
+  if (toolbar_hot_zone_ && pointer.y() < bounds.y() + kFullscreenEdgeSize &&
+      pointer.x() >= bounds.x() && pointer.x() < bounds.right()) {
+    OnToolbarHotZoneHovered(true);
+  }
 }
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
@@ -952,6 +992,7 @@ void KoanCompactModeController::Activate(Mode mode) {
         add_hot_zone(&KoanCompactModeController::OnCaptionHotZoneHovered);
   }
   UpdateCaptionButtons();
+  UpdatePointerMonitor();
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
@@ -979,9 +1020,16 @@ void KoanCompactModeController::OnImmersiveFullscreenChanged() {
   if (mode_ == Mode::kNone) {
     return;
   }
+  // The URL bar lets go of the top container before it moves: Chromium has
+  // just destroyed the layer it styled (leaving fullscreen), or the bar's
+  // card would end up in the wrong window state.
+  if (auto* controller = KoanBrowserViewController::From(browser_view_)) {
+    controller->url_bar()->EndEditing();
+  }
   // (Native fullscreen has no strip for window buttons, and no lights over
   // the page: AppKit's come with the menu bar.)
   SetCaptionStripRevealed(false);
+  UpdatePointerMonitor();
   if (!hides_toolbar()) {
     return;
   }
@@ -989,11 +1037,9 @@ void KoanCompactModeController::OnImmersiveFullscreenChanged() {
   // edge (or taken it out of fullscreen, destroying its layer). Hide it
   // again, as when the mode was activated.
   ParkTopContainer();
-  if (!IsUrlBarOpen()) {
-    browser_view_->top_container()->SetCanProcessEventsWithinSubtree(
-        toolbar_revealed_);
-    ApplyToolbarTransform(/*animate=*/false);
-  }
+  browser_view_->top_container()->SetCanProcessEventsWithinSubtree(
+      toolbar_revealed_);
+  ApplyToolbarTransform(/*animate=*/false);
   browser_view_->InvalidateLayout();
 }
 
@@ -1010,6 +1056,13 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
                                 ? nullptr
                                 : browser_view_->overlay_widget();
     contents->SetProperty(views::kWidgetForAnchoringKey, anchor);
+  }
+  // AppKit's own title bar: nothing of it at the top edge but the menu bar
+  // while Koan hides its toolbar, else it has the lights, as usual.
+  if (HidesFullscreenTopChrome(browser_view_)) {
+    HideFullscreenTitlebar(browser_view_);
+  } else {
+    SetTrafficLightsShown(browser_view_, true);
   }
   // The toolbar style: "none" while Koan hides its toolbar, else the user's.
   if (BrowserWidget* widget = browser_view_->browser_widget()) {
@@ -1086,6 +1139,7 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   hover_lock_.reset();
   peek_lock_.reset();
   pointer_monitor_.reset();
+  edge_sidebar_hovered_ = false;
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }
@@ -1304,7 +1358,8 @@ void KoanCompactModeController::CheckToolbarHide() {
 
 void KoanCompactModeController::UpdatePointerMonitor() {
   const bool wanted =
-      mode_ != Mode::kNone && (toolbar_revealed_ || caption_strip_revealed_);
+      mode_ != Mode::kNone &&
+      (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges());
   views::Widget* widget = browser_view_->GetWidget();
   if (!wanted || !widget) {
     pointer_monitor_.reset();

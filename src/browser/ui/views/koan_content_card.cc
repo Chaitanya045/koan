@@ -72,11 +72,10 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
     // sidebar. Otherwise Chromium reveals the toolbar over the page from
     // the top edge, so the page is a card inset by the gutter.
     if (IsBorderlessFullscreen(browser_view)) {
-      // The edge to edge page still leaves a hidden sidebar its gutter: the
-      // pointer reveals it there.
-      return IsCompactModeActive(browser_view)
-                 ? SidebarSideInsets(browser_view, 0, kContentCardMargin)
-                 : gfx::Insets();
+      // Zen measured the page at (0, 0) filling the screen. A hidden sidebar
+      // and toolbar are revealed by the pointer at the screen's edge, which
+      // compact mode watches itself (no gutter to hover).
+      return gfx::Insets();
     }
     if (!IsToolbarHidden(browser_view)) {
       return SidebarSideInsets(

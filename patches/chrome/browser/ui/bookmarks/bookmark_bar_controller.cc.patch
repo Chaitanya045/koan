@@ -1,0 +1,42 @@
+diff --git a/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc b/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc
+index 68287f6eb78bf85479a488bee3be414657db072a..49b94844903bc1699732376081a22527a5da7b34 100644
+--- a/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc
++++ b/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc
+@@ -84,6 +84,12 @@ BookmarkBarController::BookmarkBarController(BrowserWindowInterface& browser,
+       base::BindRepeating(&BookmarkBarController::UpdateBookmarkBarState,
+                           base::Unretained(this),
+                           StateChangeReason::kPrefChange));
++  // Koan: its own setting for showing the bar (see ShouldShowBookmarkBar()).
++  pref_change_registrar_.Add(
++      "koan.bookmarks_bar.show",
++      base::BindRepeating(&BookmarkBarController::UpdateBookmarkBarState,
++                          base::Unretained(this),
++                          StateChangeReason::kPrefChange));
+   pref_change_registrar_.Add(
+       bookmarks::prefs::kShowTabGroupsInBookmarkBar,
+       base::BindRepeating(&BookmarkBarController::UpdateBookmarkBarState,
+@@ -226,6 +232,15 @@ bool BookmarkBarController::ShouldShowBookmarkBar() const {
+     return false;
+   }
+ 
++  // Koan: Zen has no bookmarks bar. Unless the user turned it on in Koan's
++  // settings (kBookmarksBarShow, koan/browser/koan_prefs.h), none shows, also
++  // on the new tab page and whatever Chromium's own settings say (an import
++  // turns them on); turned on, it shows on every page (below).
++  if (!profile->GetOriginalProfile()->GetPrefs()->GetBoolean(
++          "koan.bookmarks_bar.show")) {
++    return false;
++  }
++
+   PrefService* prefs = profile->GetPrefs();
+   bool should_show_bar =
+       base::FeatureList::IsEnabled(ntp_features::kNtpSimplificationBookmarkBar)
+@@ -234,6 +249,8 @@ bool BookmarkBarController::ShouldShowBookmarkBar() const {
+                     bookmarks::prefs::kBookmarkBarVisibilityState)) ==
+                 bookmarks::BookmarkBarVisibilityState::kAlwaysShow
+           : prefs->GetBoolean(bookmarks::prefs::kShowBookmarkBar);
++  // Koan: turned on in Koan's settings, the bar shows on every page.
++  should_show_bar = true;
+ 
+   if (browser_defaults::bookmarks_enabled && should_show_bar &&
+       !BrowserWindowFullscreenController::From(base::to_address(browser_))

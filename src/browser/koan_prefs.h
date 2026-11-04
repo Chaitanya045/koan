@@ -190,6 +190,14 @@ inline constexpr char kDownloadAnimation[] =
 inline constexpr char kDragWindowFromContent[] =
     "koan.view.drag_window_from_content";
 
+// Whether the bookmarks bar may show at all. Zen has none, so Koan's default
+// is no bar anywhere (also on the new tab page, and after an import, which
+// would turn Chromium's own setting on); Koan's settings turn it on. Gated in
+// BookmarkBarController::ShouldShowBookmarkBar() by a hook patch that reads
+// this pref by name: keep the name in
+// patches/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc.patch.
+inline constexpr char kBookmarksBarShow[] = "koan.bookmarks_bar.show";
+
 // Whether the welcome screen was shown (zen.welcome-screen.seen).
 inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
 

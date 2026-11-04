@@ -230,6 +230,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // runs while they are hidden or while the pointer rests over them.
   void UpdatePointerMonitor();
   void CheckRevealedHides();
+  // Native fullscreen (macOS): the page covers the window, so the pointer at
+  // the screen's edge reveals the hidden sidebar and toolbar, watched here
+  // instead of by the hot zones.
+  bool WantsFullscreenEdges() const;
+  void CheckFullscreenEdges();
 
   // Hides the toolbar (single toolbar, compact mode): moves the top
   // container, if it is not there already, into the overlay view of this
@@ -332,6 +337,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Keeps the sidebar out for a moment after the pointer leaves its hot zone.
   base::OneShotTimer hover_release_timer_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
+  bool edge_sidebar_hovered_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
 
   // The sidebar's context menu.
