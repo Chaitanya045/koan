@@ -68,9 +68,9 @@ document, frosted-glass background (spec 15.4).
 - **Right-click a dot (mouse-up)**: **removes** it; remaining dots are renumbered, the first becomes primary, the harmony
   is recomputed for the new count.
 - **Add colour button**: ignored at 3 dots; otherwise adds a dot at the wheel centre and re-lays out by the next harmony
-  (1 -> 2: *complementary* 180 deg; 2 -> 3: *analogous* 50/310 deg; or whatever matches the selected algorithm +1).
+  (live: 1 -> 2 gives *complementary* (180 deg); 2 -> 3 gives *splitComplementary* (150/210 deg), not analogous; or whatever matches the selected algorithm +1).
 - **Remove colour button**: removes the **last** dot (highest ID), renumbers.
-- **Toggle algorithm button**: cycles among harmonies whose angle count equals `dots - 1`:
+- **Toggle algorithm button** (live: with 3 dots it cycles split -> analogous -> triadic -> split); cycles among harmonies whose angle count equals `dots - 1`:
   - 2 dots: complementary (180), singleAnalogous (310);
   - 3 dots: splitComplementary (150, 210), analogous (50, 310), triadic (120, 240);
   - 1 dot: floating (no partner).

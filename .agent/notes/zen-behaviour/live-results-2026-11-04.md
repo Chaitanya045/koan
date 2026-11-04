@@ -120,3 +120,52 @@ Raw captures: `~/work/koan/.cache/zen-ref/raw/live1/s-*.png` (not committed).
 ## Not covered
 
 Folder double-click, drag/drop of any kind, theme picker panel, Library, Space delete / rename.
+
+
+---
+
+# Third session (09:40-09:48 Mac time): theme picker, Library, Space rename/delete, folders, drag and drop, key and menu dumps
+
+Same method; pointer events were real HID events (`mouseMoved`/`leftMouseDragged`), keys through Marionette. The full key table is in
+`keyboard-shortcuts.md` section 3 and the menu orders in `context-menus.md` section 8 (both dumped from the running app).
+
+## Theme picker (`theme-picker.md`)
+
+| Check | Result |
+|---|---|
+| Open (`cmd_zenOpenZenThemePicker`) | Panel `x 237, y 196, 380 x 514` in a 1249 x 830 window (**left = sidebar 230 + 7**); wheel `358 x 358` at (248, 207); scheme buttons `30 x 30` at x 361 / 412 / 463, y 222 (auto, light, dark); action buttons (add, remove, algorithm) `30 x 30` at the same x, y 523; hint label `121 x 16` centred on the wheel; colour pages row `282 x 28` at y 575 with **5 pages**; opacity slider (wavy line) `250` wide at y 656, texture dial `66 x 66` at (530, 623) with **16 dots**; custom-colours section `display: none` (default) |
+| Defaults | opacity `0.5`, min `0.30`, max `0.8`, step `0.001`; no dots; theme `{"type":"gradient","gradientColors":[],"opacity":0.5,"texture":0}` |
+| First wheel click | One **primary** dot; position stored as `{"x":..,"y":..}` in wheel pixels (click at (250,110): colour `rgb(249, 11, 189)`); the hint label goes (`display: none`) |
+| Add colour | 1 -> 2 dots: harmony **complementary**; 2 -> 3: **splitComplementary** (not analogous); a 4th add is ignored |
+| Algorithm button, 3 dots | cycles `splitComplementary -> analogous -> triadic -> splitComplementary` (`analogous` positions e.g. (250,110), (277,189), (172,80)) |
+| Live theme | Every change updates `workspace.theme` at once (gradientColors with `c`, `algorithm`, `isPrimary`, `lightness`, `position`); opacity written as set (0.8, then 0.3), `texture` 0.25 |
+| Scheme button | **Light** sets `zen.view.window.scheme = 1` immediately; the panel stays open |
+| Close with Esc | Panel closes; reopening restores the 3 dots, opacity 0.3 and the hint stays hidden: saved on close |
+| Look (capture `t-picker-3dots.png`) | flat grey translucent panel with a dotted wheel area; primary dot large with a white ring, the others smaller; wavy white slider with a rounded thumb; round texture dial; 8 round swatches with chevrons; the sidebar and page ring take the pink-to-purple theme |
+
+## Library (`library.md`)
+
+| Check | Result |
+|---|---|
+| Alt+Shift+L | Opens: panel `0, 0, 418 x 830`; rail `110` wide; content `308` wide; page wrapper `translateX(188px)` (= 418 - 230); sidebar toolbox `scale(0.96)`, `opacity 0` |
+| Animation | From the first movement to progress 1.0: **~135 ms**; **overshoot to 1.015** at +165 ms, settles by ~+330 ms. Toolbox opacity is already 0 at progress 0.41; page wrapper offset follows (`36 -> 188 px`) |
+| Rail | six tabs `94 x 77.5` at x 8, y 116.5 + 101.5 n: **Routing, Media, Downloads, Boosts, Spaces, History** (top to bottom), History active by default (empty profile: "No history found"); footer buttons `30 x 28` at y 794 (back, customize, donate) |
+| Capture | traffic lights sit in the Library header; search box "Search History..." and a Filter button on top of the list |
+| Section memory | After opening Spaces, closing and reopening shows Spaces (`zen.library.last-tab`) |
+| Spaces section | with one Space: one card `242 x 740` at (135, 45) and the "+" container |
+| Esc | Closes it |
+| Cmd+T while open | **Does not close it**; opens the floating URL bar (`zen-newtab`) over the Library |
+
+## Spaces rename / delete (`spaces.md`)
+
+- Rename (`cmd_zenChangeWorkspaceName`): the Space name in the header becomes an input with the whole text selected (`Space`, 0..5); typing + Enter commits (toast **"Workspace has been successfully renamed!"**); Esc cancels.
+- Delete: the UI path uses a blocking `Services.prompt.confirm` ("Delete Space?"), so it was driven through `removeWorkspace`: the Space's non-Essential tabs close, Essentials stay, and **the first Space becomes active** in all three cases (deleting the middle, last, first).
+
+## Folders and drag and drop (`folders.md`, `essentials-and-pinned.md`)
+
+- Single click on a folder header toggles it (expanded -> collapsed). **Double click does not rename** (two toggles, no `zen-renaming-tab`).
+- Real drag (press, 30 drag steps, release): a loose tab dropped on the **centre of a folder header** joins the folder as a pinned child **at the start** (`['DragMe','FF']`). A loose tab dropped on the **Essentials area** becomes an Essential (appended last). An **Essential dragged onto a folder header** moves into the folder (first) and leaves Essentials.
+
+## Not covered
+
+Drag reorder indicators and haptics, the Library's History/Downloads rows with data, split-view drag-to-edge, tab drag over tab in the sidebar, Space reorder drag in the Library.

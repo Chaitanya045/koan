@@ -185,7 +185,7 @@ Tabs** | **New Subfolder…** | ---- | **Change Space** (submenu of the other Sp
 
 - Drag a tab (or several, or a split group) **onto a folder header**: the folder is highlighted (icon switches to
   open if it was collapsed); drop adds the tab(s) as pinned children of the folder; a collapsed target expands (or
-  stays collapsed if it has an active tab, 4.1).
+  stays collapsed if it has an active tab, 4.1). **Live (real drag with HID events): dropping a tab on the header centre puts it at the START of the folder** (`[DragMe, FF]`); dropping an **Essential** on a folder header moves it into the folder (placed first) and removes it from Essentials; dropping a loose tab on the Essentials area makes it an Essential (appended last).
 - Drop **between** rows inside an expanded folder inserts at that position and pins the tab; between top-level
   pinned rows and the folder inserts outside. Rule over a folder **header** (`ZenDragAndDrop.js` ~1676, pref
   `zen.tabs.folder-dragover-threshold-percent` = **20**): pointer in the **top 20 %** of the row = *into* the folder;
