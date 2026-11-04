@@ -199,6 +199,7 @@ struct SidebarHold::Impl : public ui::EventObserver {
         base::BindOnce(&Impl::StopMonitoring, weak_factory.GetWeakPtr()));
   }
   void StopMonitoring() { monitor.reset(); }
+  void ReleaseLock() { lock.reset(); }
 
   std::unique_ptr<ExpandOnHoverLock> lock;
   raw_ptr<views::Widget> widget = nullptr;
@@ -239,7 +240,12 @@ void SidebarHold::ReleaseWhenPointerMoves() {
   }
   if (widget->GetWindowBoundsInScreen().Contains(
           display::Screen::Get()->GetCursorScreenPoint())) {
-    impl_->lock.reset();
+    // Still open for Zen's keep-hover time (measured: open at +0.12 s, closed
+    // by +0.6 s with the pointer over the page), then it follows the pointer.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&Impl::ReleaseLock, impl_->weak_factory.GetWeakPtr()),
+        kSidebarKeepHoverDuration);
     return;
   }
   impl_->monitor = views::EventMonitor::CreateWindowMonitor(
