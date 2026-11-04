@@ -231,6 +231,10 @@ sidebar member min-height 28.
 - A tab dragged into the content area while the middle half is hovered does nothing (no preview).
 - Drag preview needs `draggedTab.documentGlobal === window` (another window's tab is ignored).
 
+> **Live note (2026-11-04):** Cmd+Opt+V/H/G fired from synthesized key events; **Cmd+Opt+U did not** (the `cmd_zenSplitViewUnsplit` command never ran,
+> the split was only deactivated). Calling `gZenViewSplitter.unsplitCurrentView()` dissolves the group correctly. Treat the
+> shortcut failure as an artefact of synthesized key events (Option+U is a macOS dead key); the shortcut stays as specified.
+
 ## 8. LIVE CHECK list
 
 1. Which modifier triggers the click-split (3.4) and whether a plain click on a tab inside the split row unsplits.
