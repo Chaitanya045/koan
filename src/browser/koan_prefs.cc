@@ -76,6 +76,18 @@ bool AgentReadyByDefault() {
 
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream
 // ones.
+void OverrideUpstreamProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry) {
+  // chrome/common/pref_names.h kSearchSuggestEnabled,
+  // components/omnibox/browser/omnibox_pref_names.h kShowAiModeOmniboxButton
+  // and kAIModeSettings (1: AI Mode disallowed). Written out: these headers'
+  // targets are not dependencies of this one.
+  registry->SetDefaultPrefValue("search.suggest_enabled", base::Value(false));
+  registry->SetDefaultPrefValue("omnibox.show_ai_mode_omnibox_button",
+                                base::Value(false));
+  registry->SetDefaultPrefValue("omnibox.ai_mode_settings", base::Value(1));
+}
+
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookStyle, "zen");
   registry->RegisterStringPref(kLookMode, "dark");

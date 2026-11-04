@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index 24239e48a3d78ae5d6d4f0e7edb2f44f0fdd3ce4..ce4201a2a9e610963eeffa46be37634780207d3c 100644
+index fdd05fad32252be538eef299e830625a6a3c96ba..2eb7d1ee9291a60f2ceaa68cc81e5364e5832ba4 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
-@@ -227,6 +227,7 @@
+@@ -229,6 +229,7 @@
  #include "content/public/browser/render_process_host.h"
  #include "content/public/common/buildflags.h"
  #include "extensions/buildflags/buildflags.h"
@@ -10,7 +10,7 @@ index 24239e48a3d78ae5d6d4f0e7edb2f44f0fdd3ce4..ce4201a2a9e610963eeffa46be376347
  #include "net/http/http_server_properties_manager.h"
  #include "pdf/buildflags.h"
  #include "printing/buildflags/buildflags.h"
-@@ -1776,6 +1777,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+@@ -1829,6 +1830,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
    headless::RegisterPrefs(registry);
    media_router::RegisterLocalStatePrefs(registry);
    performance_manager::user_tuning::prefs::RegisterLocalStatePrefs(registry);
@@ -18,3 +18,13 @@ index 24239e48a3d78ae5d6d4f0e7edb2f44f0fdd3ce4..ce4201a2a9e610963eeffa46be376347
    PerformanceInterventionMetricsReporter::RegisterLocalStatePrefs(registry);
    RegisterBrowserPrefs(registry);
    speech::SodaInstaller::RegisterLocalStatePrefs(registry);
+@@ -2587,6 +2589,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+ #endif  // BUILDFLAG(IS_ANDROID)
+ 
+   registry->RegisterBooleanPref(prefs::kStaticStorageQuotaEnabled, false);
++
++  // Koan: Zen's defaults for prefs registered above (koan_prefs.h).
++  koan::prefs::OverrideUpstreamProfilePrefDefaults(registry);
+ }
+ 
+ void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {

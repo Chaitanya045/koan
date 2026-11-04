@@ -52,6 +52,7 @@
 #include "koan/browser/omnibox/koan_omnibox_hooks.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_commands.h"
+#include "koan/browser/ui/views/koan_zero_suggest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/page_transition_types.h"
@@ -558,6 +559,8 @@ void AddAutocompleteProviders(
   if (provider_types & static_cast<int>(AutocompleteProvider::Type::kBuiltin)) {
     providers.push_back(base::MakeRefCounted<KoanCommandProvider>(
         controller->autocomplete_provider_client()));
+    providers.push_back(
+        CreateZeroSuggestProvider(controller->autocomplete_provider_client()));
   }
 }
 

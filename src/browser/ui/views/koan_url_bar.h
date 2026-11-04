@@ -23,13 +23,21 @@ namespace koan {
 // While the URL bar is open in place of a new tab (Ctrl+T or the sidebar's
 // new-tab button with Zen's zen.urlbar.replace-newtab), whatever the user
 // opens from it goes to a new foreground tab: turns the kCurrentTab
-// disposition into kNewForegroundTab. So does `destination_url` on another
-// site than the active tab's when that tab is pinned or an Essential (Zen's
-// zen.tabs.open-pinned-in-new-tab, koan_pinned_site.h). Called from
-// ChromeOmniboxClient::OnAutocompleteAccept().
+// disposition into kNewForegroundTab, or kSwitchToTab for an open tab's row
+// (`is_open_tab_match`). So does `destination_url` on another site than the
+// active tab's when that tab is pinned or an Essential (Zen's
+// zen.tabs.open-pinned-in-new-tab, koan_pinned_site.h), unless it is an open
+// tab's row. Called from ChromeOmniboxClient::OnAutocompleteAccept().
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
+                                   bool is_open_tab_match,
                                    const GURL& destination_url,
                                    WindowOpenDisposition* disposition);
+
+// Whether a new tab page must not focus the URL bar by itself, as Chromium
+// does: with Zen's URL bar the floating card opens only when the user asks
+// (Cmd+L, Cmd+T, a click on the pill). Called from
+// BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault().
+bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser);
 
 // Zen's zen.urlbar.replace-newtab for the New Tab command (IDC_NEW_TAB: ⌘T
 // on macOS, which runs as a reserved command before any accelerator, and the

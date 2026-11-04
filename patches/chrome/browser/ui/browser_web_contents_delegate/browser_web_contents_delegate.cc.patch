@@ -1,17 +1,19 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
+index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7cd6f5f718 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -88,6 +88,9 @@
+@@ -88,6 +88,10 @@
  #include "content/public/common/drop_data.h"
  #include "content/public/common/url_constants.h"
  #include "content/public/common/window_container_type.mojom-shared.h"
 +#include "koan/browser/agent/koan_agent_tab_hooks.h"
 +#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_glance.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
  #include "extensions/browser/extension_registry.h"
  #include "extensions/browser/extension_system.h"
  #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
-@@ -547,6 +550,11 @@
+@@ -547,6 +551,11 @@ content::PreloadingEligibility
  BrowserWebContentsDelegate::IsPrerender2Supported(
      content::WebContents& web_contents,
      content::PreloadingTriggerType trigger_type) {
@@ -23,7 +25,7 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
    Profile* profile =
        Profile::FromBrowserContext(web_contents.GetBrowserContext());
    return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs());
-@@ -579,6 +587,35 @@
+@@ -579,6 +588,35 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
                                    std::move(navigation_handle_callback));
    }
  
@@ -59,7 +61,7 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
    // If the source is already split, navigate the other pane instead of
    // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
    // sees new_contents == this and skips the DidOpenRequestedURL notification,
-@@ -719,6 +756,11 @@
+@@ -719,6 +757,11 @@ content::WebContents* BrowserWebContentsDelegate::AddNewContents(
      }
    }
  
@@ -71,7 +73,19 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
    FullscreenController* fullscreen_controller =
        exclusive_access_manager_->fullscreen_controller();
  #if BUILDFLAG(IS_MAC)
-@@ -1172,6 +1214,11 @@
+@@ -927,6 +970,11 @@ bool BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault(
+     return false;
+   }
+ 
++  // Koan: a new tab page doesn't open the floating URL bar by itself (Zen).
++  if (koan::SuppressesDefaultUrlBarFocus(&*browser_)) {
++    return false;
++  }
++
+   // This should be based on the pending entry if there is one, so that
+   // back/forward navigations to the NTP are handled.  The visible entry can't
+   // be used here, since back/forward navigations are not treated as visible
+@@ -1172,6 +1220,11 @@ void BrowserWebContentsDelegate::RunFileChooser(
      content::RenderFrameHost* render_frame_host,
      scoped_refptr<content::FileSelectListener> listener,
      const blink::mojom::FileChooserParams& params) {
@@ -83,7 +97,7 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
    FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
                                     params);
  }
-@@ -1180,6 +1227,10 @@
+@@ -1180,6 +1233,10 @@ void BrowserWebContentsDelegate::EnumerateDirectory(
      content::WebContents* web_contents,
      scoped_refptr<content::FileSelectListener> listener,
      const base::FilePath& path) {

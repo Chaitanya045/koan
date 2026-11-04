@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_controller.h"
 #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
+#include "chrome/browser/ui/omnibox/omnibox_next_features.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -306,6 +307,15 @@ KoanUrlBarController::KoanUrlBarController(
     BrowserView* browser_view,
     KoanCompactModeController* compact_mode)
     : browser_view_(browser_view), compact_mode_(compact_mode) {
+  // Audit O15, the leak detector: Koan's card and its row styling are for
+  // Chromium's Views suggestions popup; koan_feature_overrides.cc turns the
+  // WebUI one off. Something turning it back on (a roll, a flag) fails here in
+  // DCHECK builds, and says so in the log elsewhere.
+  if (omnibox::IsWebUIOmniboxPopupEnabled()) {
+    LOG(ERROR) << "Koan: Chromium's WebUI omnibox popup is on; the URL bar's "
+                  "suggestions are not Zen's";
+    DCHECK(false);
+  }
   InstallNewTabAction();
   // The glass card follows its setting and Reduce Transparency live (the
   // window's activity is subscribed once it has a widget).
@@ -448,13 +458,17 @@ bool KoanUrlBarController::OpenForNewTab() {
     return true;
   }
   new_tab_ = true;
+  // The keyboard: floating, even if the pill was being edited.
+  edit_in_pill_ = false;
   UpdateKeyHandler();
   std::u16string text;
   if (base::TimeTicks::Now() - last_search_time_ < kKeepLastSearch) {
     text = last_search_;
   }
   last_search_.clear();
-  bar->FocusLocation(/*is_user_initiated=*/true,
+  // Not "user initiated": that would start the zero-prefix request with the
+  // page's address, and the empty box needs its own, below.
+  bar->FocusLocation(/*is_user_initiated=*/false,
                      /*clear_focus_if_failed=*/false);
   if (!bar->omnibox_view()->HasFocus()) {
     new_tab_ = false;
@@ -465,8 +479,18 @@ bool KoanUrlBarController::OpenForNewTab() {
   if (is_open()) {
     SetPlacement(DesiredPlacement());
   }
-  // Zen opens the new-tab bar empty (or with the unfinished search).
-  bar->omnibox_view()->SetUserText(text, /*update_popup=*/true);
+  // Zen opens the new-tab bar empty (or with the unfinished search). Empty,
+  // it lists the open tabs and the most visited sites at once
+  // (koan_zero_suggest.h).
+  if (text.empty()) {
+    bar->omnibox_view()->SetUserText(text, /*update_popup=*/false);
+    OmniboxController* omnibox_controller = bar->GetOmniboxController();
+    omnibox_controller->StopAutocomplete(/*clear_result=*/true);
+    omnibox_controller->edit_model()->StartZeroSuggestRequest(
+        /*user_clobbered_permanent_text=*/true);
+  } else {
+    bar->omnibox_view()->SetUserText(text, /*update_popup=*/true);
+  }
   return true;
 }
 
@@ -514,6 +538,13 @@ void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
     return;
   }
   LocationBarView* bar = location_bar();
+  // An invisible focus (search::FocusOmnibox(OMNIBOX_FOCUS_INVISIBLE), from a
+  // search page's own box) is not the user asking for the URL bar.
+  if (focused_now && bar && bar->Contains(focused_now) &&
+      bar->GetOmniboxController()->edit_model()->focus_state() ==
+          OMNIBOX_FOCUS_INVISIBLE) {
+    return;
+  }
   if (focused_now && bar && bar->Contains(focused_now)) {
     if (!is_open()) {
       user_input_in_progress_ =
@@ -532,7 +563,12 @@ void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
   }
 }
 
+void KoanUrlBarController::NoteEditInPill() {
+  edit_in_pill_ = true;
+}
+
 void KoanUrlBarController::EndEditing() {
+  edit_in_pill_ = false;
   SetPlacement(Placement::kNone);
   floated_ = false;
   user_input_in_progress_ = false;
@@ -616,10 +652,12 @@ KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
       compact_mode_->hides_sidebar() || !IsPillAvailable()) {
     return Placement::kFloating;
   }
-  // Zen's floating-on-type: the first keystroke floats the bar, and the
-  // new-tab bar (opened by keyboard, empty) floats right away.
+  // Zen's floating-on-type: the bar floats unless the input was focused by a
+  // mouse press (UrlbarInputBase #openPopover, test_Click_Shoudnt_FLoat_
+  // Urlbar): Cmd+L and Cmd+T float at once, and a click on the pill edits in
+  // the pill until the first keystroke floats it.
   if (behavior != prefs::kUrlBarBehaviorNormal &&
-      (user_input_in_progress_ || new_tab_)) {
+      (!edit_in_pill_ || user_input_in_progress_ || new_tab_)) {
     return Placement::kFloating;
   }
   return Placement::kInPill;
@@ -1144,6 +1182,7 @@ void CopyCurrentUrl(BrowserView* browser_view, bool markdown) {
 // The koan_url_bar.h hooks.
 
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
+                                   bool is_open_tab_match,
                                    const GURL& destination_url,
                                    WindowOpenDisposition* disposition) {
   if (!browser || *disposition != WindowOpenDisposition::kCurrentTab) {
@@ -1153,18 +1192,35 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   if (controller && controller->url_bar()->TakeNewTabDisposition()) {
-    *disposition = WindowOpenDisposition::kNewForegroundTab;
+    // An open tab's row (its "Switch to Tab") switches to the tab; anything
+    // else opens a new one.
+    *disposition = is_open_tab_match ? WindowOpenDisposition::kSwitchToTab
+                                     : WindowOpenDisposition::kNewForegroundTab;
     return;
   }
-  // A pinned tab or Essential keeps its site (Zen's getOpenUILinkWhere).
+  // A pinned tab or Essential keeps its site (Zen's getOpenUILinkWhere); an
+  // open tab's row switches to that tab as usual.
   content::WebContents* active =
       browser->GetTabStripModel()->GetActiveWebContents();
-  if (active && IsPinnedForUser(active) &&
+  if (!is_open_tab_match && active && IsPinnedForUser(active) &&
       browser->GetProfile()->GetPrefs()->GetBoolean(
           prefs::kOpenPinnedInNewTab) &&
       !StaysOnPinnedSite(active->GetLastCommittedURL(), destination_url)) {
     *disposition = WindowOpenDisposition::kNewForegroundTab;
   }
+}
+
+bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser) {
+  BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller && features::IsUrlBarEnabled() &&
+         controller->compact_mode()->hides_toolbar() &&
+         browser_view->GetProfile()
+             ->GetOriginalProfile()
+             ->GetPrefs()
+             ->GetBoolean(prefs::kUrlBarReplaceNewTab);
 }
 
 bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
