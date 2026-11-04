@@ -28,7 +28,7 @@ Chrome.
 | Pin / unpin tab (pinned to its Space) | Ctrl+Shift+D | Bookmark all tabs |
 | Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | Ctrl+W, Ctrl+F4 (⌘W) | |
 | Close all unpinned tabs (in the Space; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
-| Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still, otherwise) |
+| Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still on Linux; unbound on macOS, as in Zen) |
 | Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
 | Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
 | Save page | Ctrl+Alt+Shift+S | |
@@ -39,7 +39,7 @@ Chrome.
 | New private window | Ctrl+Shift+P | Print using system dialog |
 | Mute site | Ctrl+M | |
 | Bookmarks | Ctrl+B | |
-| Library: Downloads | Ctrl+Shift+Y (⌘⇧J) | macOS: Downloads page (⌘⇧J) |
+| Library: Downloads | Ctrl+Shift+Y (⌘J) | macOS: Downloads page (⌘⇧J, now ⌘J) |
 | Reading mode | Ctrl+Alt+R | |
 | Edit the address | Ctrl+L, or click the URL pill | |
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
@@ -66,8 +66,8 @@ Zen's Firefox-based macOS differences are followed:
 | Pin / unpin tab; close all unpinned tabs | ⌘⇧D; ⌘⇧K | Bookmark All Tabs |
 | New window | ⌘N (Chrome's), ⌘⇧N | New Incognito Window (now ⌘⇧P) |
 | New private window | ⌘⇧P | |
-| Inspect element | ⌘⌥L | Downloads (⌘⌥L; still ⌘⇧J) |
-| Downloads | ⌘⇧J | |
+| Inspect element | ⌘⌥L, ⌘⇧L | Downloads (⌘⌥L), collapse of the vertical tab strip (⌘⇧L); ⌘⌥C still works |
+| Downloads | ⌘J (Firefox's) | Chrome's ⌘⇧J |
 | Mute site | ⌃M (Control, as in Firefox) | |
 | Bookmarks sidebar | ⌘B | |
 | Reading mode | ⌘⌥R | |
@@ -101,9 +101,9 @@ shortcuts and any you changed):
   Spaces (✓ on the active one, ⌃1… as set) and Move To (the selected tabs to
   another Space). Theme… and Change Icon… open on the Space's header.
 - **Tab:** Split View (side by side, stacked, grid, close, new empty),
-  Expand Glance (no key shown: ⌘O is Open File's, and only expands while
-  Glance is open), Toggle Pin Tab, Close All Unpinned Tabs, Copy Current URL
-  (and as Markdown).
+  Expand Glance (⌘O; Zen leaves Open File unbound, as does Koan now),
+  Toggle Pin Tab, Close All Unpinned Tabs, Copy Current URL (and as
+  Markdown).
 
 Items are greyed when they don't apply (no Spaces, no split view, ...).
 

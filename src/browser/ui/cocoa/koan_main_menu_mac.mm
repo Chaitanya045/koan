@@ -430,10 +430,7 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   NSMutableSet<NSMenuItem*>* claimed = [NSMutableSet set];
   for (NSMenuItem* item in items) {
     if (item.target == self && item.action == @selector(perform:)) {
-      // Expanding Glance shares Cmd+O with Open File, which keeps the key.
-      if (static_cast<Action>(item.tag) != Action::kGlanceExpand) {
-        SetKey(item, key_of(static_cast<Action>(item.tag)));
-      }
+      SetKey(item, key_of(static_cast<Action>(item.tag)));
       [claimed addObject:item];
     }
   }
@@ -450,11 +447,10 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   }
   std::vector<MenuKey> koan_keys;
   for (const Binding& binding : bindings) {
-    // Glance's Cmd+O only applies while it is open, and the Library's
-    // History keys (Cmd+Y ...) only with a Library: elsewhere Chrome's items
-    // (Show Full History, Home) keep their keys and run.
-    if (binding.action != Action::kGlanceExpand &&
-        binding.action != Action::kLibraryHistory) {
+    // The Library's History keys (Cmd+Y ...) only apply with a Library:
+    // elsewhere Chrome's items (Show Full History, Home) keep their keys and
+    // run.
+    if (binding.action != Action::kLibraryHistory) {
       if (std::optional<MenuKey> key = MenuKeyFor(binding.accelerator)) {
         koan_keys.push_back(*key);
       }
@@ -644,6 +640,18 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
       ActionItem(Action::kCopyUrl, target),
       ActionItem(Action::kCopyUrlMarkdown, target),
     ]);
+  }
+
+  // Firefox's keys that Zen leaves unbound (browser-sets-inc-xhtml.patch):
+  // Open File (Cmd+O, which is Expand Glance's) and Bookmark All Tabs.
+  NSMutableArray<NSMenuItem*>* all_items = [NSMutableArray array];
+  CollectItems(main_menu, all_items);
+  for (NSMenuItem* item in all_items) {
+    if (IsChromeCommand(item, IDC_OPEN_FILE) ||
+        IsChromeCommand(item, IDC_BOOKMARK_ALL_TABS)) {
+      item.keyEquivalent = @"";
+      item.keyEquivalentModifierMask = 0;
+    }
   }
 
   [target refreshKeysIn:main_menu];

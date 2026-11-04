@@ -170,7 +170,7 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_C, kAccel | kShift | kAlt, Action::kCopyUrlMarkdown),
       bind(ui::VKEY_D, kAccel | kShift, Action::kTogglePinTab),
       bind(ui::VKEY_K, kAccel | kShift, Action::kCloseUnpinnedTabs),
-      // Zen: Accel+O while Glance is open.
+      // Zen: Accel+O while Glance is open (Zen leaves Open File unbound).
       bind(ui::VKEY_O, kAccel, Action::kGlanceExpand),
       bind(ui::VKEY_L, kAlt | kShift, Action::kLibrary),
   // Firefox's history keys, which Zen sends to the Library's History:
@@ -199,10 +199,11 @@ std::vector<Binding> DefaultBindings() {
       // Control+M on macOS too (Firefox's "control" modifier, not "accel").
       bind(ui::VKEY_M, kCtrl, Action::kMuteSite),
       bind(ui::VKEY_B, kAccel, Action::kBookmarks),
-  // Firefox's Downloads key, which Zen sends to the Library's
-  // Downloads: Ctrl+Shift+Y, on macOS Cmd+Shift+J (also Chrome's).
+  // Firefox's Downloads key (key_openDownloads), which Zen sends to the
+  // Library's Downloads: Ctrl+Shift+Y, on macOS Cmd+J (Chrome's is
+  // Cmd+Shift+J, which its menu gives up).
 #if BUILDFLAG(IS_MAC)
-      bind(ui::VKEY_J, kAccel | kShift, Action::kDownloads),
+      bind(ui::VKEY_J, kAccel, Action::kDownloads),
 #else
       bind(ui::VKEY_Y, kCtrl | kShift, Action::kDownloads),
 #endif
@@ -216,8 +217,11 @@ std::vector<Binding> DefaultBindings() {
   };
 #if BUILDFLAG(IS_MAC)
   // Zen moves the inspector from "I" to "L" and keeps Firefox's modifiers:
-  // Cmd+Option on macOS (it replaces Chrome's Cmd+Option+L, Downloads).
+  // Cmd+Option+L (key_inspector; it replaces Chrome's Cmd+Option+L,
+  // Downloads) and Cmd+Shift+L (key_inspectorMac; Chrome's collapse of the
+  // vertical tab strip).
   bindings.push_back(bind(ui::VKEY_L, kAccel | kAlt, Action::kInspect));
+  bindings.push_back(bind(ui::VKEY_L, kAccel | kShift, Action::kInspect));
   // Zen on macOS: Ctrl+1..9 and Ctrl+0 switch to Space 1..10.
   for (int number = 1; number <= 10; ++number) {
     bindings.push_back(
