@@ -178,7 +178,7 @@ If the moved tab was the "last selected tab" of its old Space that memory is cle
 1. Swipe on the real trackpad: the strip follows the finger; the commit distance (25% of the sidebar width) and the
    rubber band feel; the Add Space ring at the last Space; the Library opening from the first Space.
 2. Cmd+Opt+Right with 3 Spaces: the slide direction on wrap (last -> first).
-3. Delete Space dialog look (native alert) and which Space becomes active.
+3. Delete Space dialog look (native alert: `Services.prompt.confirm`, blocks scripting). **Live (via `removeWorkspace`, 2026-11-04): after deleting the active Space the FIRST Space becomes active** (tested deleting the middle, the last and the first of 3), its tabs close and Essentials stay.
 4. Whether the last Space can be deleted.
 5. The "+" bottom-bar button menu contents (this file only knows "New Folder" / "New Space").
 6. The Spaces menu rows' Ctrl+N hints (seen: Ctrl+1, Ctrl+2 for Work, Play).

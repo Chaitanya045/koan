@@ -50,17 +50,123 @@ In this file **Cmd** is the XUL `accel` modifier (Control on other platforms), *
 Everything else in `browser-sets.inc.xhtml` keeps Firefox's default (see 3). The two `Cmd+Opt+Left/Right` meanings collide with
 Firefox's default "previous/next tab" on macOS; in Zen they switch **Spaces** (verified live).
 
-## 3. Firefox defaults that stay (macOS), most used
+## 3. Every other key in the window (live dump, macOS, 2026-11-04)
 
-From Firefox's macOS keyset, unchanged by Zen's patch; **from memory plus the patch context, to be verified by the live dump in section 6**:
+Dumped from a running Zen 1.24b with `[...document.querySelectorAll("key")]` and `ShortcutUtils.prettifyShortcut` (136 `<key>` elements, 125 with a binding).
+These are Firefox's own keys as Zen ships them (after the changes in section 2), in `mainKeyset`:
 
-| Group | Keys |
-|---|---|
-| Tabs | Cmd+T new tab, Cmd+W close tab, Cmd+Shift+T reopen closed tab (or window/session), Cmd+Shift+W close window, Cmd+1..8 select tab n, Cmd+9 last tab, Ctrl+Tab / Ctrl+Shift+Tab next/previous tab, Cmd+Shift+[ and ] previous/next tab, Ctrl+PageUp/PageDown |
-| Windows | Cmd+N new window, Cmd+Shift+P new private window, Cmd+M minimise, Cmd+H hide, Cmd+Q quit, Ctrl+Cmd+F full screen |
-| Navigation | Cmd+L focus the URL bar (Zen: floating), Cmd+R reload, Cmd+Shift+R reload bypassing cache, Cmd+[ and Cmd+Left back, Cmd+] and Cmd+Right forward, Cmd+. stop, Cmd+Shift+H history/library |
-| Page | Cmd+F find, Cmd+G / Cmd+Shift+G find next/previous, Cmd+P print, Cmd+U view source, Cmd++ / Cmd+- / Cmd+0 zoom |
-| Bookmarks and tools | Cmd+D bookmark this page, Cmd+Shift+B bookmarks toolbar, Cmd+B bookmarks sidebar, Cmd+, settings, Cmd+Opt+I developer tools |
+| Shortcut | Key id | Command |
+|---|---|---|
+| ⌘N | `key_newNavigator` | `cmd_newNavigator` |
+| ⌘T | `key_newNavigatorTab` | `cmd_newNavigatorTabNoEvent` |
+| ⌘L | `focusURLBar` | `Browser:OpenLocation` |
+| ⌘K | `key_search` | `Tools:Search` |
+| ⌥⌘F | `key_search2` | `Tools:Search` |
+| ⌘J | `key_openDownloads` | `Tools:Downloads` |
+| ⇧⌘E | `key_openAddons` | `Tools:Addons` |
+| ⇧⌥⌘S | `key_savePage` | `Browser:SavePage` |
+| ⌘P | `printKb` | `cmd_print` |
+| ⌘W | `key_close` | `cmd_close` |
+| ⇧⌘W | `key_closeWindow` | `cmd_closeWindow` |
+| ⌃M | `key_toggleMute` | `cmd_toggleMute` |
+| ⌘Z | `key_undo` |  |
+| ⇧⌘Z | `key_redo` |  |
+| ⌘X | `key_cut` |  |
+| ⌘C | `key_copy` |  |
+| ⌘V | `key_paste` |  |
+| Del | `key_delete` | `cmd_delete` |
+| ⌘A | `key_selectAll` |  |
+| Backspace | `(no id)` | `cmd_handleBackspace` |
+| ⇧Backspace | `(no id)` | `cmd_handleShiftBackspace` |
+| ⌘← | `goBackKb` | `Browser:Back` |
+| ⌘→ | `goForwardKb` | `Browser:Forward` |
+| ⌘[ | `goBackKb2` | `Browser:Back` |
+| ⌘] | `goForwardKb2` | `Browser:Forward` |
+| ⌥Home | `goHome` |  |
+| F5 | `key_reload2` | `Browser:Reload` |
+| ⌘Y | `showAllHistoryKb` | `Browser:ShowAllHistory` |
+| ⌃⌘F | `key_enterFullScreen` | `View:FullScreen` |
+| ⇧⌘F | `key_enterFullScreen_old` | `View:FullScreen` |
+| F11 | `key_enterFullScreen_compat` | `View:FullScreen` |
+| ⌃⌘F | `key_exitFullScreen` | `View:FullScreen` | disabled (shown only in the opposite state)
+| ⇧⌘F | `key_exitFullScreen_old` | `View:FullScreen` | disabled (shown only in the opposite state)
+| F11 | `key_exitFullScreen_compat` | `View:FullScreen` | disabled (shown only in the opposite state)
+| ⌥⌘R | `key_toggleReaderMode` | `View:ReaderView` | disabled (shown only in the opposite state)
+| ⇧⌥⌘] | `key_togglePictureInPicture` | `View:PictureInPicture` |
+| ⇧⌥⌘} | `(no id)` | `View:PictureInPicture` |
+| ⌘R | `key_reload` | `Browser:Reload` |
+| ⇧⌘R | `key_reload_skip_cache` | `Browser:ReloadSkipCache` |
+| ⇧Esc | `key_aboutProcesses` | `View:AboutProcesses` |
+| ⌘U | `key_viewSource` | `View:PageSource` |
+| ⌥⌘U | `key_viewSourceSafari` | `View:PageSource` |
+| ⌘I | `key_viewInfo` | `View:PageInfo` |
+| ⌘F | `key_find` | `cmd_find` |
+| ⌘G | `key_findAgain` | `cmd_findAgain` |
+| ⇧⌘G | `key_findPrevious` | `cmd_findPrevious` |
+| ⌘E | `key_findSelection` | `cmd_findSelection` |
+| F3 | `key_findAgain2` | `cmd_findAgain` |
+| ⇧F3 | `key_findPrevious2` | `cmd_findPrevious` |
+| ⌘D | `addBookmarkAsKb` | `Browser:AddBookmarkAs` |
+| ⇧⌘O | `manBookmarkKb` | `Browser:ShowAllBookmarks` |
+| ⌘B | `viewBookmarksSidebarKb` |  |
+| ⇧⌘B | `viewBookmarksToolbarKb` |  |
+| ⌘. | `key_stop_mac` | `Browser:Stop` |
+| ⌃X | `viewGenaiChatSidebarKb` |  |
+| ⌃Z | `toggleSidebarKb` |  |
+| ⇧⌘H | `key_gotoHistory` |  |
+| ⌘- | `key_fullZoomReduce` | `cmd_fullZoomReduce` |
+| ⌘_ | `(no id)` | `cmd_fullZoomReduce` |
+| ⌘+ | `key_fullZoomEnlarge` | `cmd_fullZoomEnlarge` |
+| ⌘= | `(no id)` | `cmd_fullZoomEnlarge` |
+| ⌘0 | `key_fullZoomReset` | `cmd_fullZoomReset` |
+| ⇧⌃Tab | `key_showAllTabs` |  |
+| ⇧⌘X | `key_switchTextDirection` | `cmd_switchTextDirection` |
+| ⇧⌘P | `key_privatebrowsing` | `Tools:PrivateBrowsing` |
+| ⇧⌘S | `key_screenshot` | `Browser:Screenshot` |
+| ⇧⌘A | `key_searchTabs` | `Browser:SearchTabs` |
+| ⇧⌘Del | `key_sanitize` | `Tools:Sanitize` |
+| ⇧⌘Backspace | `key_sanitize_mac` | `Tools:Sanitize` |
+| ⌘Q | `key_quitApplication` |  |
+| ⇧⌘T | `key_restoreLastClosedTabOrWindowOrSession` | `History:RestoreLastClosedTabOrWindowOrSession` |
+| ⌘1 | `key_selectTab1` |  |
+| ⌘2 | `key_selectTab2` |  |
+| ⌘3 | `key_selectTab3` |  |
+| ⌘4 | `key_selectTab4` |  |
+| ⌘5 | `key_selectTab5` |  |
+| ⌘6 | `key_selectTab6` |  |
+| ⌘7 | `key_selectTab7` |  |
+| ⌘8 | `key_selectTab8` |  |
+| ⌘9 | `key_selectLastTab` |  |
+| ⌘M | `key_minimizeWindow` | `cmd_minimizeWindow` |
+| ⌘, | `key_preferencesCmdMac` |  |
+| ⌘H | `key_hideThisAppCmdMac` |  |
+| ⌥⌘H | `key_hideOtherAppsCmdMac` |  |
+
+Developer-tools keyset (`devtoolsKeyset`):
+
+| Shortcut | Key id | Command |
+|---|---|---|
+| ⌥⌘I | `key_toggleToolbox` |  |
+| F12 | `key_toggleToolboxF12` |  |
+| ⇧⌥⌘I | `key_browserToolbox` |  |
+| ⇧⌘J | `key_browserConsole` |  |
+| ⌥⌘M | `key_responsiveDesignMode` |  |
+| ⌥⌘L | `key_inspector` |  |
+| ⌥⌘K | `key_webconsole` |  |
+| ⌥⌘Z | `key_jsdebugger` |  |
+| ⌥⌘E | `key_netmonitor` |  |
+| ⇧F7 | `key_styleeditor` |  |
+| ⇧F5 | `key_performance` |  |
+| ⇧F9 | `key_storage` |  |
+| ⌥⌘W | `key_dom` |  |
+| ⇧F12 | `key_accessibility` |  |
+| ⇧⌘L | `key_inspectorMac` |  |
+
+Notes from the dump:
+- **Not `<key>` elements** (handled elsewhere, so absent from the dump): Ctrl+Tab / Ctrl+Shift+Tab (`⇧⌃Tab` here is only "show all tabs"), Cmd+Shift+[ / ], Ctrl+PageUp/PageDown, Cmd+Opt+Left/Right as *tab* switching: in Zen Cmd+Opt+Left/Right are the Space keys (`zen-workspace-forward/backward`), so there is no key conflict.
+- **History is Cmd+Y** (`showAllHistoryKb`); Cmd+Shift+H is `key_gotoHistory`; **Cmd+Shift+O** opens the bookmarks library; **Cmd+B** the bookmarks sidebar; **Cmd+Shift+B** the bookmarks toolbar; **Cmd+K** / **Cmd+Opt+F** search; **Cmd+Shift+A** is "search tabs"; **Cmd+Shift+S** screenshot; **Cmd+I** page info; **Cmd+J** downloads; **Cmd+Shift+E** add-ons; **Ctrl+M** mute tab; **Cmd+Shift+P** private window; **Ctrl+Z** `toggleSidebarKb` (Firefox's sidebar toggle; Zen's own "Toggle Sidebar's Width" stays unbound); **Ctrl+X** `viewGenaiChatSidebarKb`.
+- Disabled duplicates (`key_exitFullScreen*`, `key_toggleReaderMode`) are the state-dependent twins of an enabled key.
+- `Cmd+Shift+Delete`/`Cmd+Shift+Backspace` clear history (`key_sanitize`).
 
 ## 4. Customisation
 
@@ -85,7 +191,7 @@ From Firefox's macOS keyset, unchanged by Zen's patch; **from memory plus the pa
 
 ## 6. LIVE CHECK
 
-1. Dump every key to a table (Marionette, chrome context): `[...document.querySelectorAll("key")].map(k => [k.id, k.getAttribute("modifiers"), k.getAttribute("key") || k.getAttribute("keycode"), k.getAttribute("command"), ShortcutUtils.prettifyShortcut(k)])`, and compare with sections 1-3 (fills in the full list and fixes errors in section 3).
+1. (Done 2026-11-04) the full key dump is section 3; all Zen keys in section 1 matched.
 2. Real keyboard: does Cmd+Opt+U fire (Option+U is a dead key)? Does Cmd+Shift+* mean Cmd+Shift+8 on a US layout?
 3. Cmd+Opt+Left/Right conflict: which one wins in the real app (we saw Spaces).
 4. Settings -> keyboard shortcut editor: layout, search, conflict handling, reset.

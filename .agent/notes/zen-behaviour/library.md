@@ -28,7 +28,7 @@ Related: `spaces.md` (swipe at the edge Space), `theme-picker.md` (Spaces sectio
 | Swipe on the trackpad past the **first Space** (left edge; last Space for a right sidebar) with `gZenWorkspaces.shouldSwipeEdgeActions` | drags the Library open (see 2.2) |
 | **Esc** while open | closes it (unless a section handles Esc: e.g. Space routing's form, a media viewer; or focus is inside the Library but not in the search box: then Esc is ignored) |
 | Footer **back** button (tooltip "Close library") | closes |
-| Opening **any new tab** while open (`TabOpen`) | closes it (unless the Library itself opened the tab with `keepOpenWhile`, e.g. Cmd-click in History) |
+| A tab being **opened** while it is open (`TabOpen`) | closes it (unless the Library itself opened the tab with `keepOpenWhile`, e.g. Cmd-click in History). **Live: Cmd+T does *not* close it**: it opens the floating URL bar (`zen-newtab`) over the open Library; only the new tab on Enter would close the Library |
 | Clicking a row that opens something (a history page, a Space's tab, a download) | opens it and closes the Library |
 | Disabled while open: `cmd_zenToggleSidebar` and `cmd_zenToggleTabsOnRight` (held and released afterwards) | |
 
