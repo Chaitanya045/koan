@@ -69,6 +69,8 @@ Zen's Firefox-based macOS differences are followed:
 | Inspect element | ⌘⌥L, ⌘⇧L | Downloads (⌘⌥L), collapse of the vertical tab strip (⌘⇧L); ⌘⌥C still works |
 | Downloads | ⌘J (Firefox's) | Chrome's ⌘⇧J |
 | Mute site | ⌃M (Control, as in Firefox) | |
+| View Source; Bookmark Manager | ⌘U; ⇧⌘O (Firefox's, which Zen keeps) | ⌘⌥U (Unsplit's now); ⌘⌥B |
+| Stop loading | ⌘. and the stop button, not Esc (Zen leaves Esc unbound) | Esc |
 | Bookmarks sidebar | ⌘B | |
 | Reading mode | ⌘⌥R | |
 | Library | ⌥⇧L | |
@@ -96,10 +98,10 @@ shortcuts and any you changed):
   Chrome's items and Toggle Compact Mode, Toggle Floating Sidebar, Switch Single /
   Multiple Toolbars, Show Bookmarks Sidebar, Toggle Reader Mode, Toggle
   Library.
-- **Spaces** (after View, as in Zen 1.24b): Create Space, Theme…, Change
+- **Spaces** (after View, as in Zen 1.24b): Create Space, Edit Theme…, Change
   Name…, Change Icon…, Next Space, Previous Space, then Koan's own: your
   Spaces (✓ on the active one, ⌃1… as set) and Move To (the selected tabs to
-  another Space). Theme… and Change Icon… open on the Space's header.
+  another Space). Edit Theme… and Change Icon… open on the Space's header.
 - **Tab:** Split View (side by side, stacked, grid, close, new empty),
   Expand Glance (⌘O; Zen leaves Open File unbound, as does Koan now),
   Toggle Pin Tab, Close All Unpinned Tabs, Copy Current URL (and as

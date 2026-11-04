@@ -45,6 +45,9 @@
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/common/koan_url_constants.h"
+#if BUILDFLAG(IS_MAC)
+#include "koan/browser/ui/cocoa/koan_main_menu.h"
+#endif
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/focus/focus_manager.h"
@@ -145,6 +148,11 @@ void KoanShortcutController::OnShortcutsChanged() {
     focus_manager_->UnregisterAccelerators(this);
     RegisterAccelerators();
   }
+#if BUILDFLAG(IS_MAC)
+  // The menu bar's keys follow, or the old key would still run the action
+  // through the menu.
+  RefreshMainMenuKeys();
+#endif
 }
 
 void KoanShortcutController::OnBrowserViewDestroying() {

@@ -1,6 +1,8 @@
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index afc3f64..b28f396 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -146,6 +146,7 @@
+@@ -147,6 +147,7 @@
  #include "extensions/browser/extension_registry.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/extension_urls.h"
@@ -8,7 +10,7 @@
  #include "printing/buildflags/buildflags.h"
  #include "third_party/omnibox_proto/chrome_aim_entry_point.pb.h"
  #include "ui/accessibility/accessibility_features.h"
-@@ -759,6 +760,10 @@
+@@ -783,6 +784,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        CloseWindow(browser_);
        break;
      case IDC_NEW_TAB: {
@@ -19,3 +21,26 @@
        NewTab(browser_, NewTabTypes::kNewTabCommand);
        break;
      }
+@@ -1124,10 +1129,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       FindPrevious(browser_);
+       break;
+     case IDC_CLOSE_FIND_OR_STOP:
++      // Koan: Zen leaves Esc unbound as Stop (the stop button, and Cmd+.
++      // on macOS, still stop).
+       if (CanCloseFind(browser_)) {
+         CloseFind(browser_);
+-      } else if (IsCommandEnabled(IDC_STOP)) {
+-        ExecuteCommand(IDC_STOP);
+       }
+       break;
+ 
+@@ -2806,7 +2811,8 @@ void BrowserCommandController::UpdateCommandsForFind() {
+ }
+ 
+ void BrowserCommandController::UpdateCloseFindOrStop() {
+-  bool enabled = CanCloseFind(browser_) || IsCommandEnabled(IDC_STOP);
++  // Koan: Esc only closes the find bar, the page gets it otherwise.
++  bool enabled = CanCloseFind(browser_);
+   command_updater_->UpdateCommandEnabled(IDC_CLOSE_FIND_OR_STOP, enabled);
+ }
+ 

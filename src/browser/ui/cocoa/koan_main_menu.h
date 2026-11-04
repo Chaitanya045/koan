@@ -33,6 +33,10 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa);
 void ExtendDockMenu(NSMenu* dock_menu);
 #endif  // __OBJC__
 
+// Shows the keys of the shortcuts now in effect in the menu bar, after the
+// user changed them in the settings page. Does nothing without Koan's menus.
+void RefreshMainMenuKeys();
+
 // Every shortcut Chrome has on macOS: those of its menus and those it keeps
 // in a table outside them. For the settings page to say that a key replaces
 // one.

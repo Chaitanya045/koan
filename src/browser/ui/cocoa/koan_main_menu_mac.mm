@@ -5,6 +5,7 @@
 // Contains material ported from Zen Browser, Copyright the Zen Browser
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
 //   ZenMenubar.mjs
+//   zen-menubar.ftl
 //   zen-workspaces.ftl
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
@@ -40,6 +41,7 @@
 #include "ui/base/models/list_selection_model.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_code_conversion_mac.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 
 namespace {
 
@@ -131,6 +133,19 @@ constexpr Relocated kRelocated[] = {
     {Action::kDownloads, IDC_SHOW_DOWNLOADS},
 };
 
+// Keys of Firefox's that Zen keeps and Chrome's item has elsewhere or not at
+// all: View Source (key_viewSource) and Show All Bookmarks (manBookmarkKb).
+struct FixedKey {
+  int command;
+  ui::KeyboardCode key;
+  int modifiers;
+};
+constexpr FixedKey kFixedKeys[] = {
+    {IDC_VIEW_SOURCE, ui::VKEY_U, ui::EF_COMMAND_DOWN},
+    {IDC_SHOW_BOOKMARK_MANAGER, ui::VKEY_O,
+     ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
+};
+
 // What Chrome's items had before Koan changed their keys (an NSArray of the
 // key equivalent and the mask), so that a shortcut the user moves or clears
 // gives the key back.
@@ -199,6 +214,8 @@ void InsertAfter(NSMenu* menu, NSInteger tag, NSArray<NSMenuItem*>* items) {
 - (void)refreshKeysIn:(NSMenu*)mainMenu;
 // Refreshes the keys whenever the menu bar opens.
 - (void)observeMenuBar:(NSMenu*)mainMenu;
+// Refreshes the keys of the menu bar Koan extended, if it is the main menu.
+- (void)refreshMainMenu;
 @end
 
 namespace {
@@ -217,6 +234,7 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   NSInteger _staticItemCount;
   id _trackingObserver;
   id _windowObserver;
+  NSMenu* _mainMenu;
 }
 
 + (KoanMenuTarget*)shared {
@@ -457,7 +475,9 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
     }
   }
   for (NSMenuItem* item in items) {
-    if ([claimed containsObject:item] || item.keyEquivalent.length == 0) {
+    // Koan's own items (the Spaces list's Ctrl+1... too) keep theirs.
+    if ([claimed containsObject:item] || item.target == self ||
+        item.keyEquivalent.length == 0) {
       continue;
     }
     for (const MenuKey& key : koan_keys) {
@@ -470,9 +490,26 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
       }
     }
   }
+  // Firefox's keys that Chrome has on others: View Source is Cmd+U (Chrome's
+  // Cmd+Option+U is Koan's Unsplit) and the bookmarks library Cmd+Shift+O.
+  for (NSMenuItem* item in items) {
+    for (const FixedKey& fixed : kFixedKeys) {
+      if (IsChromeCommand(item, fixed.command)) {
+        RememberKey(item);
+        SetKey(item, ui::Accelerator(fixed.key, fixed.modifiers));
+      }
+    }
+  }
+}
+
+- (void)refreshMainMenu {
+  if (_mainMenu && NSApp.mainMenu == _mainMenu) {
+    [self refreshKeysIn:_mainMenu];
+  }
 }
 
 - (void)observeMenuBar:(NSMenu*)mainMenu {
+  _mainMenu = mainMenu;
   if (_trackingObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:_trackingObserver];
   }
@@ -501,7 +538,10 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
                   object:nil
                    queue:nil
               usingBlock:^(NSNotification* notification) {
-                [weak_self refreshKeysIn:mainMenu];
+                // After the window became the last active browser.
+                dispatch_async(dispatch_get_main_queue(), ^{
+                  [weak_self refreshKeysIn:mainMenu];
+                });
               }];
 }
 
@@ -584,7 +624,7 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   }
 
   // Spaces, after View as in Zen 1.24b (ZenMenubar.mjs #initSpacesMenu):
-  // Create Space, Theme…, Change Name…, Change Icon…, Next Space, Previous
+  // Create Space, Edit Theme…, Change Name…, Change Icon…, Next Space, Previous
   // Space. Koan adds the list of Spaces and Move To below them.
   NSMenu* spaces = [[NSMenu alloc] initWithTitle:@"Spaces"];
   [spaces addItem:ActionItem(Action::kNewWorkspace, target, @"Create Space")];
@@ -592,7 +632,7 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
     NSString* title;
     SpaceCommand command;
   } kSpaceCommands[] = {
-      {@"Theme…", kEditTheme},
+      {@"Edit Theme…", kEditTheme},
       {@"Change Name…", kChangeName},
       {@"Change Icon…", kChangeIcon},
   };
@@ -686,6 +726,10 @@ void ExtendDockMenu(NSMenu* dock_menu) {
         spaces[i].active ? NSControlStateValueOn : NSControlStateValueOff;
     [dock_menu addItem:item];
   }
+}
+
+void RefreshMainMenuKeys() {
+  [[KoanMenuTarget shared] refreshMainMenu];
 }
 
 std::vector<ui::Accelerator> ChromiumMacAccelerators() {

@@ -329,6 +329,10 @@ source_set("impl") {
       "koan_system_accent_observer.cc",
     ]
   }
+  if (is_mac) {
+    # KoanShortcutController refreshes the menu bar's keys.
+    deps += [ "//koan/browser/ui/cocoa:hooks" ]
+  }
   if (use_aura) {
     # Glance animates the page's native window (an aura::Window). macOS
     # uses NSViews instead and has no Aura.
