@@ -348,12 +348,14 @@ void KoanCompactModeController::OnBrowserViewLayout() {
 void KoanCompactModeController::OnBrowserViewDestroying() {
   // From here on the window is going away: no UI work (the widget and the
   // browser's animation controller may be gone), see Deactivate() and
-  // UpdateCaptionButtons().
+  // UpdateCaptionButtons(). Letting go of a lock makes the sidebar's region
+  // decide again and collapse with an animation, so the locks are released
+  // through ReleaseLock(), which defers that until the region is gone.
   destroying_ = true;
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   collapse_subscription_ = {};
   resizing_subscription_ = {};
-  menu_lock_.reset();
+  ReleaseLock(menu_lock_);
   menu_runner_.reset();
   if (mode_ != Mode::kNone) {
     Deactivate(/*keep_sidebar_hidden=*/false);
@@ -495,7 +497,20 @@ void KoanCompactModeController::FlashSidebar() {
 
 void KoanCompactModeController::EndFlash() {
   flash_timer_.Stop();
-  flash_lock_.reset();
+  ReleaseLock(flash_lock_);
+}
+
+void KoanCompactModeController::ReleaseLock(
+    std::unique_ptr<ExpandOnHoverLock>& lock) {
+  if (destroying_) {
+    // Letting go makes the sidebar's region decide again, and collapse with
+    // an animation. Later, once the region is gone, a lock is harmless: the
+    // region clears them when it is destroyed.
+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(FROM_HERE,
+                                                               std::move(lock));
+    return;
+  }
+  lock.reset();
 }
 
 void KoanCompactModeController::OnTabStripModelChanged(
@@ -1155,8 +1170,8 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   toolbar_unwanted_since_.reset();
   EndFlash();
   hover_release_timer_.Stop();
-  hover_lock_.reset();
-  peek_lock_.reset();
+  ReleaseLock(hover_lock_);
+  ReleaseLock(peek_lock_);
   pointer_monitor_.reset();
   edge_sidebar_hovered_ = false;
   if (sidebar_hot_zone_) {
