@@ -302,3 +302,7 @@ Incident 15:10–15:13: the Mac loop's scripted run kept driving while I was on 
 PASS: ⌘S toggles compact and back with no clipping (s16/001-002); ⌘⇧D pins (s16/003); ⇧⌘L opens the inspector (s16/004); ⌘⇧P opens an Incognito window (s16/005);
 tab menu has no "Show tabs horizontally" (s16/006); settings/appearance has no "Tab strip position" (s16/007); a profile copy with vertical_tabs.enabled=false starts vertical with its session (s16/009). No crash, no FATAL/CHECK.
 Minor: a second ⇧⌘L does not close DevTools; compact draws the traffic lights over the page (expected until #144); Incognito page says "Chromium won't save"; Chrome's appearance page keeps AI Mode / tab search / bookmarks-bar rows (#101).
+
+## Session 17 (16:31 IST): plain develop 77a44141 (KoanCheck-d77)
+### B44. develop 77a44141: closing any window crashes (SEGV in Widget::IsFullscreen ← KoanCompactModeController::UpdateCaptionButtons ← Deactivate ← OnBrowserViewDestroying) — blocker
+Hands-on repro: fresh profile, open Wikipedia, click the red close button (compact OFF) → "Koan quit unexpectedly", `Received signal 11 SEGV_ACCERR 0x160`. Regression from the #128 merge; fix in #129 (5ece4c30/baafd745).
