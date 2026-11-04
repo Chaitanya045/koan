@@ -15,7 +15,7 @@ what was decided and where it lives, per the "Upstream audit first" rule.
 | O8 remote zero-suggest | **Reuse** upstream's own rule (no `SearchSuggestEnabled()`, no remote request) via O7; Koan's provider lists open tabs and top sites | `koan_zero_suggest.cc`; no `zero_suggest_provider.cc` patch |
 | O9 switch-to-tab | **Redirect**: an open-tab row in a new-tab session keeps `kSwitchToTab` | `chrome_omnibox_client.cc.patch`, `koan_url_bar_controller.cc` |
 | O10 engine choice | **Redirect**: the welcome records `ChoiceMadeLocation::kChoiceScreen` | `koan_welcome.cc` |
-| O13 IPH | **Override** the tab-group, vertical-tab, split-view, side-panel, Glic and Lens IPH features | `koan_feature_overrides.cc` |
+| O13 IPH | **Override** the tab-group, vertical-tab, split-view, side-panel, extensions, Glic and Lens IPH features. They stop promos being shown; the "Attempting to show IPH ... before browser initialization complete" log line (a promo asked for during startup) is logged whatever the feature state and stays (baseline on develop) | `koan_feature_overrides.cc` |
 | O15 leak detector | **Lock** (loud): the URL bar controller DCHECKs that the WebUI popup is off | `koan_url_bar_controller.cc` |
 
 Not in this PR (stay with #96): Koan's empty NTP and the NTP entry points
