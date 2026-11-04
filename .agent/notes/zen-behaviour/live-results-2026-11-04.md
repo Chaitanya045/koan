@@ -66,3 +66,57 @@ revealed sidebar the row starts with the sidebar toggle at the left.
 ## Not covered this slot
 
 Spaces, Essentials/pinned, split view, Glance, theme picker, Library, folder double-click and the sidebar drag cases: need another slot.
+
+---
+
+# Second session (09:27-09:32 Mac time): Spaces, Essentials, split view, Glance
+
+Same method (fresh profile, real key events through Marionette key actions, DOM geometry sampled every frame). Window 1249 x 830, sidebar 230.
+Raw captures: `~/work/koan/.cache/zen-ref/raw/live1/s-*.png` (not committed).
+
+## Spaces (`spaces.md`)
+
+| Check | Result |
+|---|---|
+| Space strip geometry | With 3 Spaces the `zen-workspace` elements sit at `x = 0` (active), `230` (next) and `-230` (previous): one sidebar width apart, only the active one visible |
+| Cmd+Opt+Right / Left | Moves to the next / previous Space; **wraps** (last -> first, first -> last) |
+| Ctrl+1 | Goes to the first Space |
+| Animation | From the key to the first movement ~25 ms; the strips slide `0|230|-230 -> -230|0|230` (`-16.9 / 213.1` after the first frame, `-229.4 / 0.6` near the end) and settle **~260 ms** after the first movement (251 ms from first sample to last in the recording: 176 -> 437): matches `zen.workspaces.switch-animation-duration = 250` with a decelerating curve |
+| Not checked | delete dialog, rename toast, which Space is active after delete |
+
+## Essentials (`essentials-and-pinned.md`)
+
+| Check | Result |
+|---|---|
+| 7 tiles at sidebar 230 | tiles **70 x 50**, x = 6 / 80 / 154, rows at y = 87 / 141 / 195 (pitch 54): **3 + 3 + 1**, gap 4, 6 padding; container `0, 81, 230 x 166` (`.zen-essentials-container`) |
+| Shared across Spaces | Switching to another Space shows the same 7 tiles; the selected tab there was that Space's empty tab, not an Essential |
+| Maximum | The 12th tile is added; for the 13th `canEssentialBeAdded` returns **false** and `addToEssentials` does nothing (no exception, tab stays a normal tab). Second row of 4 columns not tested (the 12 were 3 columns wide at 230) |
+| Cmd+W on a selected Essential (default `reset-unload-switch`) | The Essential becomes `pending` (unloaded) and the selection moves to **the last Essential (E12)**, not to a normal tab; the tile stays |
+| Cmd+W with `close-shortcut-behavior = close` | The Essential **is removed** (12 -> 11): confirms the correction in `essentials-and-pinned.md` |
+
+## Split view (`split-view.md`)
+
+| Check | Result |
+|---|---|
+| Cmd+Opt+V on two tabs | Panes `x 230 / 740`, `y 8`, **502 x 814 each**: gap **8** between them (740 - 732), 8 top/bottom, content width 1011 + 8 ... as the script says. Selected pane: `outline: solid 2px color(srgb 0.535 0.596 0.664)`; the other pane `none` |
+| Cmd+Opt+H | Panes stacked: `x 230`, width 1012, heights **402.5**, second pane at y **419.5**: vertical gap **9** (the column gap is sep + 1, as in the script) |
+| Cmd+Opt+G with 2 tabs | Same as V (side by side) |
+| Sidebar group row | Group container `8, 409, 214 x 36`; members `105 x 32` each side by side (x 10 and 115) |
+| **Cmd+Opt+U** | **Did not fire** the `cmd_zenSplitViewUnsplit` command when sent as synthesized key events (key `u`, alt+meta delivered, no `command` event); the split view was merely deactivated and another tab selected, the group stayed. Calling `gZenViewSplitter.unsplitCurrentView()` works (group dissolved, selected tab unchanged). So the shortcut itself is **unverified**: likely a synthesized-event artefact (Option+U is a macOS dead key); re-check with a real keyboard if it matters |
+| Cmd+Opt+V/H/G | Fired normally |
+
+## Glance (`glance.md`)
+
+| Check | Result |
+|---|---|
+| Opening (API, from a 120 x 20 rect at (600, 300)) | The card starts at the link rectangle and ends at `x 331, y 8, 809 x 814` in a 1011-wide content area: **80 % wide (809 = 0.8 x 1011), full height, centred** ((1011 - 809) / 2 = 101 -> x 331). It overshoots at ~270 ms (`y = 3`, width 817) then settles; total ~350 ms (149 -> 500 ms in the recording) |
+| Parent page behind | Opacity falls to **0.29-0.30** by ~330 ms (0.3 is the target); its scale is applied by transform (the `scale` property reads `none`; the spec's 0.97 was measured visually) |
+| Buttons | `.zen-glance-sidebar-container` at `x 1139.9, y 23, 56 wide`; three **32 x 32** buttons at `x 1151.9`, `y 35 / 79 / 123` (pitch 44) |
+| Esc, no element focused | Closes immediately; the Glance tab is removed (16 -> 15 tabs) |
+| Esc with an input focused | The close button turns **`rgb(220, 53, 69)`** and grows from **32 to 82 wide** (shows "Confirm"); `waitconfirmation` reverts after ~3 s (false at +3.7 s); a second Esc within 3 s closes it |
+| Cmd+O | The Glance becomes a normal tab appended after the parent and selected; overlay gone |
+| Split button | Two panes `502 x 814` at x 230 and 740: **parent on the left, glance tab on the right, glance tab selected** (`sel` on the right pane); the sidebar shows the group row |
+
+## Not covered
+
+Folder double-click, drag/drop of any kind, theme picker panel, Library, Space delete / rename.
