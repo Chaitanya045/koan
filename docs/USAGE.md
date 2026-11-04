@@ -334,8 +334,10 @@ belongs to a Space, and new tabs open in the active one.
 - From the keyboard, the header takes focus (Tab through the sidebar):
   Enter or the menu key opens its menu, F2 renames the Space.
 - **Edit Theme…** (right-click the header) picks the Space's colour: the
-  browser takes it while the Space is active, or keeps your theme with
-  Default.
+  window takes it while the Space is active, or keeps your colour and your
+  theme (also a Chrome Web Store theme) with Default. Each window shows
+  its own Space's colour, so two windows on different Spaces differ;
+  your own colour (Settings > Appearance) is never changed.
 - **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
   on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
   horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
@@ -355,11 +357,27 @@ belongs to a Space, and new tabs open in the active one.
   and others Memory Saver keeps) stay loaded; a toast says how many.
 - **Delete Space** (same menu) closes the Space's tabs after asking. The
   last Space can't be deleted.
+  It is gone for good: reopening one of its tabs (Ctrl+Shift+T, History)
+  puts the tab in the Space you're in.
 - Closing a Space's last tab leaves the Space with a new tab, where Zen
   shows an empty Space.
+- Tabs in other Spaces keep running like any background tab (Koan's
+  background-tab policy freezes all but the 5 most recently used ones);
+  switching Space doesn't freeze them.
 
 Spaces and the active one are restored on restart (Koan restores the
-previous session by default; change it in Settings > On startup).
+previous session by default). With Settings > On startup set to the New
+Tab page or to pages, the window still opens with your Spaces (their
+names, icons and colours; each with a new tab, the startup pages in the
+Space that was active). So does a window opened on macOS after you closed
+the last one.
+
+Chrome's tab group commands do Zen's thing in a Space window: ⌘⌃P
+(New tab group) opens the Create-a-Space form, ⌘⌃W (Close group) asks to
+delete the Space, ⌘⌃X / ⌘⌃Z go to the next / previous Space, ⌘⌃C opens a
+new tab as ⌘T does. Tab > Group Tab isn't there (use Move To). A Space is
+never collapsed, and a tab group an extension makes becomes a Space with
+the default theme (unless the extension sets a colour).
 
 ## Compact mode
 
