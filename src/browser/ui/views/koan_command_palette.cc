@@ -550,6 +550,10 @@ int KoanCommandPalette::FuzzyScore(std::u16string_view target,
   return matched == query.size() ? score : 0;
 }
 
+bool UsesLocalZeroSuggestSection() {
+  return features::IsUrlBarEnabled();
+}
+
 void AddAutocompleteProviders(
     AutocompleteController* controller,
     int provider_types,

@@ -1,0 +1,12 @@
+diff --git a/components/omnibox/browser/autocomplete_result.cc b/components/omnibox/browser/autocomplete_result.cc
+index 0b24734e66f96e4568d6f989d54a82c81b1ee740..350e0f7257f706664de0c5b1806b00113de94b32 100644
+--- a/components/omnibox/browser/autocomplete_result.cc
++++ b/components/omnibox/browser/autocomplete_result.cc
+@@ -58,6 +58,7 @@
+ #include "components/strings/grit/components_strings.h"
+ #include "components/url_formatter/url_fixer.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/omnibox/koan_omnibox_hooks.h"
+ #include "omnibox_triggered_feature_service.h"
+ #include "third_party/metrics_proto/omnibox_event.pb.h"
+ #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
