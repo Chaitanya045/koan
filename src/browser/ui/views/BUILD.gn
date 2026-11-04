@@ -204,6 +204,7 @@ source_set("impl") {
     "//chrome/browser/ui:browser_command_controller",
     "//chrome/browser/ui:browser_actions",
     "//chrome/browser/ui/actions:actions_headers",
+    "//chrome/browser/ui/exclusive_access",
     "//chrome/browser/ui/immersive:immersive_mode_controller",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/views/omnibox",
@@ -324,6 +325,8 @@ source_set("impl") {
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
     ]
+    # Content (page) fullscreen: koan::IsContentFullscreen().
+    deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
     frameworks = [ "AppKit.framework" ]
   } else {
     sources += [

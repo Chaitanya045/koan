@@ -33,6 +33,25 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
 // a tab as usual. Called from BrowserCommandController.
 bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 
+// macOS: whether the reserved commands (Chromium's list, accelerator_table.cc:
+// new / close tab and window, restore and switch tabs; ⌘T, ⌘W, ⌘N ...) stay
+// the browser's in `browser`'s fullscreen, as in a window, instead of going
+// to the page first. Not the others: ⌘L and ⌃⌘F are not reserved in a window
+// either (a page can swallow them there, as in Firefox).
+// Chromium does that only while the fullscreen window shows its toolbar
+// (autohide, revealed); Koan's native fullscreen always has the toolbar
+// hidden, yet its shortcuts must work. The page's own fullscreen (a video)
+// keeps Chromium's rule (it may hold the keyboard). False elsewhere. Called
+// from BrowserCommandController::IsReservedCommandOrKey().
+bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser);
+
+// macOS: whether `browser`'s window has no "Always Show Toolbar in Full
+// Screen" (View menu, ⇧⌘F, the toolbar action): Koan's toolbar is hidden and
+// fullscreen reveals nothing at the top edge, whatever that setting
+// (Chromium's, synced) says. Called from BrowserCommandController, which then
+// ignores the command; the menu item is hidden by the macOS menu validation.
+bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
+
 // The omnibox text of `location_bar` (a LocationBarView) changed;
 // `user_input_in_progress` is whether the user is typing. With Zen's
 // "floating-on-type" URL bar behaviour, the first keystroke lifts the bar

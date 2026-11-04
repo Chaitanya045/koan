@@ -65,6 +65,11 @@ bool UseContentCard(const BrowserView* browser_view) {
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
+  if (IsContentFullscreen(browser_view)) {
+    // The page's own fullscreen: it fills the screen (Koan's card is
+    // suspended, see koan_compact_mode.h).
+    return gfx::Insets();
+  }
   if (IsWindowFullscreen(browser_view)) {
     // (See UseContentCard().) Where Koan hides the toolbar (single toolbar,
     // compact mode), the usual layout below applies: a gutter above the
@@ -111,7 +116,9 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 gfx::RoundedCornersF ActiveContentsRadii(
     const BrowserView* browser_view,
     const gfx::RoundedCornersF& default_radii) {
-  return UseContentCard(browser_view) && !IsBorderlessFullscreen(browser_view)
+  return UseContentCard(browser_view) &&
+                 !IsBorderlessFullscreen(browser_view) &&
+                 !IsContentFullscreen(browser_view)
              ? gfx::RoundedCornersF(ContentCardCornerRadius())
              : default_radii;
 }
