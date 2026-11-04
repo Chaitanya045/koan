@@ -297,6 +297,9 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
           .DeriveWithWeight(gfx::Font::Weight::MEDIUM));
   url_label_->SetEnabledColor(kColorKoanUrlPillForeground);
   url_label_->SetAutoColorReadabilityEnabled(false);
+  // The pill's tint is translucent and the sidebar's layer is not opaque:
+  // no subpixel text (Label::PaintText() DCHECKs an opaque background).
+  url_label_->SetSubpixelRenderingEnabled(false);
   url_label_->SetCanProcessEventsWithinSubtree(false);
   // The pill is named after the site already.
   url_label_->GetViewAccessibility().SetIsIgnored(true);
