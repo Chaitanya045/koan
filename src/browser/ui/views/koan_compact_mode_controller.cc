@@ -472,6 +472,10 @@ void KoanCompactModeController::OnSidebarCollapseSettled() {
   if (!hides_sidebar() || !state || !state->IsCollapsed()) {
     return;
   }
+  // An empty tab holds the sidebar out as compact mode hides it; the sidebar
+  // that was just hidden is not slid back in (Zen applies that state without
+  // animation).
+  UpdateEmptyTabLock();
   VLOG(1) << "Koan: sidebar settled collapsed (peek requested: "
           << peek_requested_ << ", hover lock: " << !!hover_lock_
           << ", edge hovered: " << edge_sidebar_hovered_ << ")";
@@ -628,14 +632,13 @@ void KoanCompactModeController::UpdateEmptyTabLock() {
           browser_view_->browser()->GetTabStripModel()->GetActiveWebContents(),
           browser_view_->GetProfile());
   if (!wanted) {
-    empty_tab_lock_.reset();
+    ReleaseLock(empty_tab_lock_);
     return;
   }
   if (!empty_tab_lock_) {
-    if (auto* tab_strip = browser_view_->tab_strip_view()) {
-      empty_tab_lock_ =
-          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
-    }
+    // Not yet while the sidebar collapses: UpdateActive() asks again when it
+    // has.
+    empty_tab_lock_ = TakeExpandedLock();
   }
 }
 
@@ -1043,6 +1046,8 @@ void KoanCompactModeController::UpdateActive() {
     // The URL bar behaviour pref may have changed.
     KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
     SyncSidebar();
+    // The sidebar may have finished collapsing.
+    UpdateEmptyTabLock();
     return;
   }
   if (mode_ != Mode::kNone) {
@@ -1054,6 +1059,7 @@ void KoanCompactModeController::UpdateActive() {
   UpdateFullscreenTopChrome();
   OnContentCardChanged();
   KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
+  UpdateEmptyTabLock();
   SyncSidebar();
 }
 

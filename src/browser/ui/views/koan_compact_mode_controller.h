@@ -319,6 +319,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Zen's `zen-has-empty-tab`: while the selected tab is empty (a blank
   // page), the sidebar is out and can't hide.
   void UpdateEmptyTabLock();
+  // A lock that keeps the sidebar out, or null while it is still collapsing.
+  std::unique_ptr<ExpandOnHoverLock> TakeExpandedLock();
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert);
   void EndFlash();
