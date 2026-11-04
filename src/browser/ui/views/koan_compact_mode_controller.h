@@ -191,6 +191,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Zen's check for a compact variant that would strand the window buttons:
   // collapsed sidebar, buttons on its side, only the toolbar hidden.
   bool IsHideToolbarOnlyBlocked() const;
+  // Whether compact mode can apply in this window (a normal window with
+  // Koan's sidebar, not in fullscreen).
+  bool CanCompactMode() const;
+  // The sidebar button's action toggles compact mode, as Zen's does.
+  void InstallSidebarToggleAction();
   void UpdateActiveSoon();
   void CancelSpaceSwipe();
   void UpdateActive();

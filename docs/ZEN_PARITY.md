@@ -62,6 +62,7 @@ point of Koan.
 | Hide the sidebar, reveal at the left edge | Same | With single toolbar (the default) that's all, like Zen. |
 | Hide the toolbar too (multiple toolbars), reveal at the top edge | Same | |
 | Show the sidebar (Cmd+Opt+S, `zen-user-show`) | Same | A toggle: the sidebar stays out, wherever the pointer is, until the shortcut is used again (it used to hide itself after a few seconds). |
+| The sidebar button in the top row toggles compact mode | Same | Through the window's `kActionToggleCollapseVertical` action (button, menu item and shortcut), which Koan re-points (`KoanCompactModeController::InstallSidebarToggleAction()`); upstream's collapse is used only where compact mode doesn't apply (fullscreen). Chromium's tab groups and tab search buttons are gone from the header (`vertical_tab_strip_top_container.cc.patch`); Zen has neither. |
 | A popup opened from the sidebar keeps it open (`has-popup-menu`) | Same | Upstream's menus on the sidebar hold it; Koan's Space and + menus now do too. Zen also keeps it until the next mouse move after the popup closes; Koan lets go when it closes. |
 | Toggling compact mode animates the sidebar's margin for 0.1 s (`animate-sidebar`) | Missing | The sidebar goes at once and the page changes size once. |
 | Leaving the window through the edge keeps the sidebar out within 200 pt / 100 pt (`ZenMouseTrackerCocoa.mm`) | Missing | See the row above on pointer events outside the window; needs a native tracker. |
