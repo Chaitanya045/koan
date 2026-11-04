@@ -735,7 +735,11 @@ void KoanCompactModeController::OnDidChangeFocus(views::View* focused_before,
     return;
   }
   // Focusing anything else in the toolbar (e.g. Alt+F) reveals it; it stays
-  // until focus leaves (checked again on each focus change).
+  // until focus leaves (checked again on each focus change). Not over the
+  // page's own fullscreen (Koan is suspended there, see IsContentFullscreen()).
+  if (IsContentFullscreen(browser_view_)) {
+    return;
+  }
   if (focused_now && browser_view_->top_container()->Contains(focused_now)) {
     SetToolbarRevealed(true, /*animate=*/true);
   }
@@ -1062,7 +1066,20 @@ void KoanCompactModeController::ParkTopContainer() {
   overlay->SetVisible(true);
 }
 
+bool KoanCompactModeController::IsClosing() const {
+  const BrowserWidget* widget = browser_view_->browser_widget();
+  return destroying_ || !widget || widget->IsClosed() ||
+         browser_view_->browser()->IsDeleteScheduled();
+}
+
 void KoanCompactModeController::ClearHoverStates() {
+  // A closing window is torn down by the browser's own tasks, and
+  // BrowserDidClose (which reaches here through the immersive mode controller)
+  // comes first: nothing to clear, and releasing a lock now starts a collapse
+  // animation just before the animation controller is destroyed.
+  if (IsClosing()) {
+    return;
+  }
   // Nothing stays revealed from before the change (Zen's sizemodechange).
   edge_sidebar_hovered_ = false;
   hover_release_timer_.Stop();
@@ -1070,20 +1087,22 @@ void KoanCompactModeController::ClearHoverStates() {
     SetToolbarRevealed(false, /*animate=*/false);
   }
   // The locks are let go of after this call, and not at all if the window is
-  // gone by then: letting a lock go collapses the sidebar, an animation.
+  // closing by then (it can start closing in between): letting a lock go
+  // collapses the sidebar, an animation.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
                      [](base::WeakPtr<KoanCompactModeController> self) {
-                       if (self && !self->destroying_) {
-                         self->hover_lock_.reset();
-                         self->peek_lock_.reset();
+                       if (self && !self->IsClosing()) {
+                         self->ReleaseLock(self->hover_lock_);
+                         self->ReleaseLock(self->peek_lock_);
                        }
                      },
                      weak_factory_.GetWeakPtr()));
 }
 
 void KoanCompactModeController::OnFullscreenStateChanged() {
-  if (destroying_ || mode_ == Mode::kNone) {
+  // (A posted notification: it can arrive after the window started closing.)
+  if (IsClosing() || mode_ == Mode::kNone) {
     return;
   }
   ClearHoverStates();
@@ -1308,8 +1327,10 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
 
 void KoanCompactModeController::SetToolbarRevealed(bool revealed,
                                                    bool animate) {
-  // The open URL bar owns the top container.
-  if (!hides_toolbar() || IsUrlBarOpen()) {
+  // The open URL bar owns the top container. Over the page's own fullscreen
+  // nothing is revealed (Koan is suspended there).
+  if (!hides_toolbar() || IsUrlBarOpen() ||
+      (revealed && IsContentFullscreen(browser_view_))) {
     return;
   }
   const bool changed = toolbar_revealed_ != revealed;

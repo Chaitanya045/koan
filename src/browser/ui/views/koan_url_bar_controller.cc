@@ -910,6 +910,12 @@ bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser) {
          !IsContentFullscreen(browser_view);
 }
 
+bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser) {
+  const BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  return browser_view && IsToolbarHidden(browser_view);
+}
+
 // The URL bar controller of the window `view` belongs to, if any: `view` is
 // the location bar or a row of the omnibox popup, whose widget is a child of
 // the browser window's. Null for no view (upstream's location_bar_view_ is

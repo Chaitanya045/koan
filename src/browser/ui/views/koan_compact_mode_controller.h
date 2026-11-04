@@ -233,6 +233,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // _clearAllHoverStates) and the card is laid out again.
   void OnFullscreenStateChanged();
   void ClearHoverStates();
+  // The window is closing or gone (its widget is closed, the browser is going
+  // to be deleted, or OnBrowserViewDestroying() ran): no UI work, and no
+  // letting go of a lock, which starts an animation.
+  bool IsClosing() const;
   // Native fullscreen (macOS): the page covers the window, so the pointer at
   // the screen's edge reveals the hidden sidebar and toolbar, watched here
   // instead of by the hot zones.

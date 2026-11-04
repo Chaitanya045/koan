@@ -45,6 +45,13 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 // from BrowserCommandController::IsReservedCommandOrKey().
 bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser);
 
+// macOS: whether `browser`'s window has no "Always Show Toolbar in Full
+// Screen" (View menu, ⇧⌘F, the toolbar action): Koan's toolbar is hidden and
+// fullscreen reveals nothing at the top edge, whatever that setting
+// (Chromium's, synced) says. Called from BrowserCommandController, which then
+// ignores the command; the menu item is hidden by the macOS menu validation.
+bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
+
 // The omnibox text of `location_bar` (a LocationBarView) changed;
 // `user_input_in_progress` is whether the user is typing. With Zen's
 // "floating-on-type" URL bar behaviour, the first keystroke lifts the bar
