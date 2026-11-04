@@ -12,6 +12,7 @@ source_set("views") {
   sources = [
     "koan_browser_view_hooks.h",
     "koan_compact_mode.h",
+    "koan_empty_tab.h",
     "koan_glance.h",
     "koan_look_hooks.h",
     "koan_omnibox_rows.h",
@@ -127,6 +128,7 @@ source_set("impl") {
     "koan_compact_mode_controller.h",
     "koan_content_card.cc",
     "koan_crash_restore.cc",
+    "koan_empty_tab.cc",
     "koan_essentials.cc",
     "koan_emoji_picker.cc",
     "koan_emoji_picker.h",

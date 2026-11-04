@@ -201,6 +201,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
 
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
+
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
@@ -313,6 +316,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   // Zen's flash popup: the hidden sidebar pops up for a moment.
   void FlashSidebar();
+  // Zen's `zen-has-empty-tab`: while the selected tab is empty (a blank
+  // page), the sidebar is out and can't hide.
+  void UpdateEmptyTabLock();
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert);
   void EndFlash();
@@ -390,6 +396,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Held while the pointer is on the traffic lights (CheckLightsHold()).
   std::unique_ptr<ExpandOnHoverLock> lights_lock_;
   base::OneShotTimer lights_release_timer_;
+  std::unique_ptr<ExpandOnHoverLock> empty_tab_lock_;
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;

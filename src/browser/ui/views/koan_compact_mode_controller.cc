@@ -39,6 +39,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_content_card.h"
+#include "koan/browser/ui/views/koan_empty_tab.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
@@ -610,6 +611,34 @@ void KoanCompactModeController::OnTabStripModelChanged(
   if (change.type() == TabStripModelChange::kInserted) {
     MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
   }
+  if (selection.active_tab_changed()) {
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::OnTabChangedAt(tabs::TabInterface* tab,
+                                               TabChangeType change_type) {
+  if (change_type == TabChangeType::kAll) {
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::UpdateEmptyTabLock() {
+  const bool wanted =
+      hides_sidebar() &&
+      IsEmptyTab(
+          browser_view_->browser()->GetTabStripModel()->GetActiveWebContents(),
+          browser_view_->GetProfile());
+  if (!wanted) {
+    empty_tab_lock_.reset();
+    return;
+  }
+  if (!empty_tab_lock_) {
+    if (auto* tab_strip = browser_view_->tab_strip_view()) {
+      empty_tab_lock_ =
+          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    }
+  }
 }
 
 void KoanCompactModeController::MaybeShowBackgroundTabToast(
@@ -622,7 +651,7 @@ void KoanCompactModeController::MaybeShowBackgroundTabToast(
   const auto* strip = views::AsViewClass<VerticalTabStripRegionView>(region);
   // Not while the sidebar is out (isSidebarPotentiallyOpen(): hovered or
   // pinned).
-  if (!hides_sidebar() || peek_lock_ ||
+  if (!hides_sidebar() || peek_lock_ || empty_tab_lock_ ||
       (strip && strip->is_expanded_on_hover())) {
     return;
   }
@@ -1130,6 +1159,7 @@ void KoanCompactModeController::Activate(Mode mode) {
     anchor->SetCanProcessEventsWithinSubtree(false);
     bubble_fallback_anchor_ = browser_view_->AddChildView(std::move(anchor));
   }
+  UpdateEmptyTabLock();
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
@@ -1495,6 +1525,7 @@ void KoanCompactModeController::Deactivate() {
   hover_release_timer_.Stop();
   hover_poll_timer_.Stop();
   ReleaseLock(hover_lock_);
+  ReleaseLock(empty_tab_lock_);
   ReleaseLock(peek_lock_);
   lights_release_timer_.Stop();
   ReleaseLock(lights_lock_);
