@@ -21,12 +21,14 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
+#include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget_observer.h"
@@ -49,7 +51,13 @@ namespace views {
 class View;
 }
 
+namespace ui {
+class ScrollEvent;
+}
+
 namespace koan {
+
+class KoanSpaceSwipe;
 
 class KoanCreateMenu;
 class KoanSpaceBarView;
@@ -226,7 +234,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // one Space per notch, at most every 200 ms. Touchpad swipes are
   // upstream's VerticalTabStripFocusSwipeController.
   void OnSpaceWheel(bool forward);
-  // Zen's two-finger swipe (koan_space_swipe.h): the Space follows the
+  // Zen's two-finger swipe (koan_swipe_tracker.h, koan_space_swipe.h): the Space follows the
   // fingers by the gesture `amount` (positive: fingers moving left; the
   // strip moves the other way, as in Zen), then EndSwipe() when they lift,
   // with the last movement's `velocity` (amounts per second): it switches to
@@ -235,6 +243,14 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // (one Space, the Create form open).
   void UpdateSwipe(float amount);
   void EndSwipe(float amount, float velocity);
+  // A touchpad scroll over the sidebar (macOS): whether it is part of a swipe,
+  // which then takes it.
+  bool OnSwipeScroll(const ui::ScrollEvent& event);
+  // Abandons a swipe in progress: the end of the gesture can't be relied on to
+  // arrive (the sidebar or its header went away, compact mode toggled, the
+  // window lost focus, the fingers rested too long). The Space springs back
+  // with `animate`, else is put back at once.
+  void CancelSwipe(bool animate);
   // Keeps the tab context menu's "Move To" submenu alive while the menu is
   // open (until the next tab menu: there is one at a time).
   void KeepTabMenuSubmenu(std::unique_ptr<ui::SimpleMenuModel> submenu);
@@ -311,6 +327,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Gives each a layer for it (dropped by DropSwitchLayers()).
   std::vector<views::View*> GetSlidingViews();
   bool CanSwipe() const;
+  void OnSwipeTimeout();
+  // Lets the views the swipe dragged go back to rest.
+  void SpringBackSwipe();
   void OnSlideOutDone(SlideOutLayers* slide_out);
   // Drops the layers the animation gave the header and the tabs.
   void DropSwitchLayers();
@@ -352,14 +371,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
 
   base::TimeTicks last_wheel_switch_;
 
-  // A swipe is following the fingers, `swipe_offset_` pixels from rest; and
-  // how far the Space was dragged when it switched, for the slide to start
-  // from (PlaySwitchAnimation()).
-  bool swiping_ = false;
-  // Pixels from rest (positive: to the right), and ZenSpacesSwipe's lastDelta.
-  float swipe_offset_ = 0;
-  float swipe_last_delta_ = 0;
-  std::optional<float> swipe_start_offset_;
+  // The swipe: where the Space is dragged to (koan_swipe_tracker.h), the
+  // events' tracker, and the watchdog that abandons a swipe whose end never
+  // came.
+  SwipeDrag drag_;
+  std::unique_ptr<KoanSpaceSwipe> swipe_;
+  base::OneShotTimer swipe_timer_;
 
   // The old Spaces sliding out, and the views the animation gave a layer.
   std::vector<std::unique_ptr<SlideOutLayers>> slide_outs_;

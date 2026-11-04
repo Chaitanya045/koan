@@ -1,12 +1,18 @@
-// Copyright 2026 The Koan Authors
-// Use of this source code is governed by the MIT license that can be
-// found in the LICENSE file.
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   ZenSpacesSwipe.mjs (the values the tests check)
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
 
 // Unit tests for the swipe gesture's state machine and Zen's formulas, to run
 // in koan_unittests (#87) once it exists. The sequences are the ones macOS
-// sends: see SwipePhase in koan_space_swipe.h.
+// sends: see SwipePhase in koan_swipe_tracker.h.
 
-#include "koan/browser/ui/views/koan_space_swipe.h"
+#include "koan/browser/ui/views/koan_swipe_tracker.h"
 
 #include <vector>
 
@@ -172,6 +178,86 @@ TEST(KoanSwipeTest, TheOffsetIsHalfAPercentOfTheWidthPerUnit) {
   // translateX(offset / 2 %): a translate of 50 is 25% of the width.
   EXPECT_FLOAT_EQ(57.5f, SwipeOffsetPixels(50, 230));
   EXPECT_FLOAT_EQ(-57.5f, SwipeOffsetPixels(-50, 230));
+}
+
+// An abandoned swipe: the end of the gesture never reached the sidebar.
+
+TEST(KoanSwipeTrackerTest, CancelForgetsTheGestureWithoutTellingTheDelegate) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  Drag(tracker, -10, 4, now);
+  tracker.Cancel();
+  EXPECT_EQ(0, delegate.ends);
+  // The rest of the gesture is nobody's: no momentum is taken...
+  EXPECT_FALSE(tracker.OnScroll(-3, 0, SwipePhase::kMomentum, now + 0.1));
+  // ...and fingers that go on start a new gesture from nothing.
+  delegate.amounts.clear();
+  EXPECT_TRUE(tracker.OnScroll(-14, 0, SwipePhase::kUpdate, now + 0.2));
+  ASSERT_EQ(1u, delegate.amounts.size());
+  EXPECT_FLOAT_EQ(14 / 550.f, delegate.amounts[0]);
+}
+
+TEST(KoanSwipeTrackerTest, ALateEndAfterCancelIsNoSwipe) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  Drag(tracker, -10, 4, now);
+  tracker.Cancel();
+  EXPECT_FALSE(tracker.OnScroll(0, 0, SwipePhase::kEnd, now + 5));
+  EXPECT_EQ(0, delegate.ends);
+}
+
+TEST(SwipeDragTest, FollowsTheAmountAndSlidesOnFromWhereItWas) {
+  SwipeDrag drag;
+  EXPECT_FALSE(drag.live());
+  const float offset = drag.Update(-0.1f, 230);
+  EXPECT_TRUE(drag.live());
+  EXPECT_LT(offset, 0);
+  EXPECT_FLOAT_EQ(offset, drag.offset());
+  // Fingers up: the drag is over, and the slide starts from where it was, once.
+  EXPECT_FLOAT_EQ(offset, drag.Release());
+  EXPECT_FALSE(drag.live());
+  EXPECT_FLOAT_EQ(offset, drag.TakeSlideOffset());
+  EXPECT_FLOAT_EQ(0, drag.TakeSlideOffset());
+}
+
+TEST(SwipeDragTest, ASwitchWhileTheDragGoesOnSlidesFromTheDrag) {
+  SwipeDrag drag;
+  const float offset = drag.Update(0.08f, 230);
+  // (A shortcut or a click switches Space under the fingers.)
+  EXPECT_FLOAT_EQ(offset, drag.TakeSlideOffset());
+  EXPECT_FALSE(drag.live());
+}
+
+TEST(SwipeDragTest, AnAbandonedDragLeavesNothingForTheNextSwitch) {
+  SwipeDrag drag;
+  drag.Update(-0.2f, 230);
+  drag.Reset();
+  EXPECT_FALSE(drag.live());
+  EXPECT_FLOAT_EQ(0, drag.offset());
+  // The next switch of Space, whatever starts it, doesn't slide in from a
+  // stale offset.
+  EXPECT_FLOAT_EQ(0, drag.TakeSlideOffset());
+}
+
+TEST(SwipeDragTest, AReleasedSwipeThatWasNotUsedIsForgottenWithReset) {
+  SwipeDrag drag;
+  drag.Update(-0.2f, 230);
+  drag.Release();
+  // The swipe didn't switch Space and the controller let go of it.
+  drag.Reset();
+  EXPECT_FLOAT_EQ(0, drag.TakeSlideOffset());
+}
+
+TEST(SwipeDragTest, ANewDragStartsFromRest) {
+  SwipeDrag drag;
+  drag.Update(-0.2f, 230);
+  drag.Release();
+  drag.Reset();
+  const float first = drag.Update(-0.1f, 230);
+  SwipeDrag fresh;
+  EXPECT_FLOAT_EQ(fresh.Update(-0.1f, 230), first);
 }
 
 }  // namespace koan

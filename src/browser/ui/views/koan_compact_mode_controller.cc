@@ -42,6 +42,7 @@
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -765,6 +766,15 @@ bool KoanCompactModeController::IsHideToolbarOnlyBlocked() const {
   return !(IsSidebarOnRight(browser_view_) ? trailing : leading).IsEmpty();
 }
 
+void KoanCompactModeController::CancelSpaceSwipe() {
+  // A swipe between Spaces drags the sidebar's content: the sidebar going
+  // away or coming back under the fingers ends it.
+  if (auto* controller = KoanBrowserViewController::From(browser_view_);
+      controller && controller->workspaces()) {
+    controller->workspaces()->CancelSwipe(/*animate=*/false);
+  }
+}
+
 void KoanCompactModeController::UpdateActiveSoon() {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanCompactModeController::UpdateActive,
@@ -816,6 +826,7 @@ void KoanCompactModeController::OnContentCardChanged() {
 }
 
 void KoanCompactModeController::Activate(Mode mode) {
+  CancelSpaceSwipe();
   // What compact mode hides; decided before `mode_` changes, as the sidebar's
   // collapsed state means something else once compact mode hides it.
   const bool single_toolbar = DesiredSingleToolbar();
@@ -941,6 +952,7 @@ KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
 }
 
 void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
+  CancelSpaceSwipe();
   VLOG(1) << (mode_ == Mode::kCompact ? "Koan: compact mode off"
                                       : "Koan: single toolbar off");
   // The URL bar lets go of the top container before it moves back.

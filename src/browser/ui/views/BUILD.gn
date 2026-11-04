@@ -53,13 +53,40 @@ source_set("sidebar_curve") {
   ]
 }
 
+# Zen's two-finger swipe between Spaces (MPL-2.0, see koan_swipe_tracker.h):
+# the gesture state machine and the formulas, plain C++ so that the unit tests
+# can use them.
+source_set("swipe_tracker") {
+  sources = [
+    "koan_swipe_tracker.cc",
+    "koan_swipe_tracker.h",
+  ]
+  deps = [ "//base" ]
+}
+
+# Where a sidebar button goes to clear the macOS traffic lights: geometry only.
+source_set("lights_geometry") {
+  sources = [
+    "koan_lights_geometry.cc",
+    "koan_lights_geometry.h",
+  ]
+  deps = [ "//base" ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
 test("koan_views_unittests") {
-  sources = [ "koan_sidebar_curve_unittest.cc" ]
+  sources = [
+    "koan_lights_geometry_unittest.cc",
+    "koan_sidebar_curve_unittest.cc",
+    "koan_swipe_tracker_unittest.cc",
+  ]
   deps = [
+    ":lights_geometry",
     ":sidebar_curve",
+    ":swipe_tracker",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -164,7 +191,9 @@ source_set("impl") {
     sources += [ "koan_traffic_lights_mac.mm" ]
   }
   deps = [
+    ":lights_geometry",
     ":sidebar_curve",
+    ":swipe_tracker",
     ":views",
     "//base:i18n",
     "//cc/paint",

@@ -192,6 +192,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // collapsed sidebar, buttons on its side, only the toolbar hidden.
   bool IsHideToolbarOnlyBlocked() const;
   void UpdateActiveSoon();
+  void CancelSpaceSwipe();
   void UpdateActive();
   void Activate(Mode mode);
   // `keep_sidebar_hidden`: compact mode goes on hiding the sidebar (only

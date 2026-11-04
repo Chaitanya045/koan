@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_lights_geometry.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/display/screen.h"
@@ -35,6 +36,13 @@ bool HasTrafficLights() {
 
 }  // namespace
 
+bool OwnsTitlebar(const BrowserView* browser_view) {
+  return browser_view && features::IsSidebarEnabled() &&
+         browser_view->GetIsNormalType() &&
+         browser_view->ShouldDrawVerticalTabStrip() &&
+         !browser_view->IsFullscreen();
+}
+
 std::optional<int> GetTrafficLightsTitlebarHeight(
     const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
@@ -46,8 +54,7 @@ std::optional<int> GetTrafficLightsTitlebarHeight(
   // the sidebar hidden they come with the toolbar, or, with single toolbar,
   // stay in the sidebar's header, which compact mode keeps; in fullscreen
   // Chromium slides them in with the menu bar.
-  if (!view || !features::IsSidebarEnabled() || !view->GetIsNormalType() ||
-      !view->ShouldDrawVerticalTabStrip() || view->IsFullscreen() ||
+  if (!OwnsTitlebar(view) ||
       (IsCompactModeActive(view) && !KeepsSidebarNav(view)) ||
       !IsToolbarHidden(view)) {
     return std::nullopt;
@@ -122,19 +129,11 @@ gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds) {
       gfx::Size(static_cast<int>(exclusion.content.width()),
                 static_cast<int>(exclusion.content.height() +
                                  exclusion.vertical_padding)));
-  const gfx::Rect on_window = host->ConvertRectToWidget(bounds);
-  if (!on_window.Intersects(lights)) {
-    return bounds;
-  }
+  // In the host's own coordinates.
   const gfx::Point origin = host->ConvertRectToWidget(gfx::Rect()).origin();
-  gfx::Rect moved = bounds;
-  const int right_of_lights = lights.right() - origin.x();
-  if (host->width() >= right_of_lights + bounds.width()) {
-    moved.set_x(std::max(bounds.x(), right_of_lights));
-  } else {
-    moved.set_y(std::max(bounds.y(), lights.bottom() - origin.y()));
-  }
-  return moved;
+  gfx::Rect lights_in_host = lights;
+  lights_in_host.Offset(-origin.x(), -origin.y());
+  return MoveClearOf(bounds, lights_in_host, host->width());
 }
 
 }  // namespace koan

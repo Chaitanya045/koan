@@ -27,24 +27,33 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
   // The sidebar's region is rebuilt on a switch between vertical and
   // horizontal tabs.
   ObserveSidebar();
+  // Fullscreen rebuilds the title bar: AppKit lays the lights out itself and
+  // may show them again, and what the title bar was laid out with is gone. Both
+  // ways, the caller shows or hides them again, and the height is applied
+  // again once out of it.
+  const bool fullscreen = browser_view_->IsFullscreen();
+  if (fullscreen != was_fullscreen_) {
+    was_fullscreen_ = fullscreen;
+    applied_height_.reset();
+    on_changed_.Run();
+  }
+  if (fullscreen) {
+    return;
+  }
 #if BUILDFLAG(IS_MAC)
-  if (!titlebar_cleared_ && browser_view_->GetWidget()) {
+  if (!titlebar_cleared_ && browser_view_->GetWidget() &&
+      OwnsTitlebar(browser_view_)) {
     titlebar_cleared_ = true;
     ClearTitlebar(browser_view_);
   }
 #endif
-  // Fullscreen changes the title bar itself; AppKit lays the lights out
-  // when it ends.
-  if (browser_view_->IsFullscreen() || update_pending_) {
+  if (update_pending_ ||
+      (applied_height_ && *applied_height_ == GetTrafficLightsTitlebarHeight(
+                                                  browser_view_.get()))) {
     return;
   }
-  const std::optional<int> height =
-      GetTrafficLightsTitlebarHeight(browser_view_.get());
-  if (height == applied_height_) {
-    return;
-  }
-  applied_height_ = height;
-  // Not from inside layout: it resizes the window.
+  // Not from inside layout: it resizes the window. (The height is read when
+  // it runs, so a change in between counts.)
   update_pending_ = true;
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
@@ -94,15 +103,21 @@ void KoanTrafficLightsController::NotifyIfSidebarChanged() {
 void KoanTrafficLightsController::LayOutTrafficLights() {
   update_pending_ = false;
   BrowserWidget* widget = browser_view_->browser_widget();
-  if (BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
-      frame && !browser_view_->IsFullscreen()) {
-    // BrowserFrameViewMac makes AppKit lay the title bar out again, toggling
-    // the window's style mask, which may bring the traffic lights back.
-    frame->OnTabStripStateChanged();
-#if BUILDFLAG(IS_MAC)
-    ClearTitlebar(browser_view_);
-#endif
+  BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
+  // (Out of fullscreen, OnBrowserViewLayout() asks again.)
+  if (!frame || browser_view_->IsFullscreen()) {
+    return;
   }
+  // BrowserFrameViewMac makes AppKit lay the title bar out again, asking for
+  // the height now, and toggling the window's style mask, which may bring the
+  // traffic lights back.
+  applied_height_ = GetTrafficLightsTitlebarHeight(browser_view_.get());
+  frame->OnTabStripStateChanged();
+#if BUILDFLAG(IS_MAC)
+  if (OwnsTitlebar(browser_view_)) {
+    ClearTitlebar(browser_view_);
+  }
+#endif
   on_changed_.Run();
 }
 

@@ -36,6 +36,11 @@ namespace koan {
 std::optional<int> GetTrafficLightsTitlebarHeight(
     const views::View* browser_view);
 
+// Whether Koan sets the window's title bar up: a normal browser window with
+// Koan's sidebar (vertical tabs), out of fullscreen (where macOS runs it). Not
+// popups, app windows, or a window with horizontal tabs.
+bool OwnsTitlebar(const BrowserView* browser_view);
+
 // Whether the pointer is over the traffic lights. Those sit over the window
 // but not in its views, so the pointer over them is a mouse exit for the
 // window; compact mode keeps the toolbar it revealed (not yet the peeked

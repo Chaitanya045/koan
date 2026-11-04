@@ -58,9 +58,12 @@ class KoanTrafficLightsController : public views::ViewObserver {
   base::ScopedObservation<views::View, views::ViewObserver>
       sidebar_observation_{this};
   bool sidebar_shown_ = false;
-  // What AppKit was last told to centre the lights in.
-  std::optional<int> applied_height_;
+  // What AppKit was last laid out with: the height the lights are centred in
+  // (null: Chromium's), or unknown (null outer: after fullscreen, which
+  // rebuilds the title bar).
+  std::optional<std::optional<int>> applied_height_ = std::optional<int>();
   bool update_pending_ = false;
+  bool was_fullscreen_ = false;
 #if BUILDFLAG(IS_MAC)
   // The title bar was made transparent (ClearTitlebar()).
   bool titlebar_cleared_ = false;
