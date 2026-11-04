@@ -196,6 +196,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool CanCompactMode() const;
   // The sidebar button's action toggles compact mode, as Zen's does.
   void InstallSidebarToggleAction();
+  void OnSidebarToggleAction();
+  // The button's tooltip and menu text say what it does now.
+  void UpdateSidebarToggleText();
   void UpdateActiveSoon();
   void CancelSpaceSwipe();
   void UpdateActive();

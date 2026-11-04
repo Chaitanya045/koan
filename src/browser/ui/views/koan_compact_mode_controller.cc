@@ -286,19 +286,51 @@ void KoanCompactModeController::InstallSidebarToggleAction() {
   // this window's sidebar button, its menu item and its shortcut. In Zen the
   // sidebar button toggles compact mode; collapsing the sidebar to Chromium's
   // icon rail, with its tab group and tab search buttons and its toolbar, is
-  // not something Zen has.
+  // not something Zen has. Also in fullscreen, where compact mode doesn't show
+  // but its setting still toggles, as with the shortcut. (Upstream's own
+  // collapse, for the menu item or shortcut when kUseActionsForBrowserCommands
+  // is off, is not reached from here.)
   toggle->SetInvokeActionCallback(base::BindRepeating(
       [](base::WeakPtr<KoanCompactModeController> controller,
-         BrowserWindowInterface* browser, actions::ActionItem* item,
-         actions::ActionInvocationContext context) {
-        if (controller && controller->CanCompactMode()) {
-          controller->ToggleCompactMode();
-          return;
+         actions::ActionItem* item, actions::ActionInvocationContext context) {
+        if (controller) {
+          controller->OnSidebarToggleAction();
         }
-        // Where compact mode doesn't apply (fullscreen), upstream's.
-        chrome::ToggleCollapseVerticalTabs(browser);
       },
-      weak_factory_.GetWeakPtr(), base::Unretained(browser)));
+      weak_factory_.GetWeakPtr()));
+  UpdateSidebarToggleText();
+}
+
+void KoanCompactModeController::OnSidebarToggleAction() {
+  // A sidebar collapsed to Chromium's icon rail (a profile from an earlier
+  // build) is brought back first: nothing else here would.
+  if (auto* state =
+          tabs::VerticalTabStripStateController::From(browser_view_->browser());
+      state && !hides_sidebar() && IsSidebarCollapsedByUser()) {
+    expanding_sidebar_ = true;
+    state->RequestCollapse(false);
+    return;
+  }
+  ToggleCompactMode();
+}
+
+void KoanCompactModeController::UpdateSidebarToggleText() {
+  BrowserActions* actions = BrowserActions::From(browser_view_->browser());
+  if (!actions || !actions->root_action_item()) {
+    return;
+  }
+  actions::ActionItem* toggle = actions::ActionManager::Get().FindAction(
+      kActionToggleCollapseVertical, actions->root_action_item());
+  if (!toggle) {
+    return;
+  }
+  // Upstream rewrites these ("Collapse tabs") on every collapse change; this
+  // runs after that (from UpdateActive(), a posted task).
+  const std::u16string text = GetPrefs()->GetBoolean(prefs::kCompactModeEnabled)
+                                  ? u"Disable compact mode"
+                                  : u"Enable compact mode";
+  toggle->SetText(text);
+  toggle->SetTooltipText(text);
 }
 
 bool KoanCompactModeController::CanCompactMode() const {
@@ -830,6 +862,7 @@ void KoanCompactModeController::UpdateActive() {
         DesiredHideToolbar() == hide_toolbar_))) {
     // The URL bar behaviour pref may have changed.
     KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
+    UpdateSidebarToggleText();
     return;
   }
   if (mode_ != Mode::kNone) {
@@ -848,6 +881,7 @@ void KoanCompactModeController::UpdateActive() {
   }
   OnContentCardChanged();
   KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
+  UpdateSidebarToggleText();
 }
 
 void KoanCompactModeController::OnContentCardChanged() {
