@@ -271,3 +271,17 @@ Essential; the bottom row (Library button + "+") appears **twice** (y≈855 and 
 
 ### B42. Page context menu is Chromium's (Cast…, Google Lens "Search this tab with image search", Create QR code, Open in reading mode) — minor
 s6-041-page-menu.jpg. Link menu has Zen's Split Link to New Tab and Open Link in Glance (OK) plus Chromium's "Copy link to highlight", "Search Google for…" (s6-042).
+
+## Session 7–11 (14:29–14:45 IST): fix builds
+
+| Build | Result |
+|---|---|
+| KoanCheck-c136 probe | Create Space / Cancel / Edit Theme… real clicks: nothing; buttons only get move/enter/exit events (lines sent to the loop) |
+| Koan-release-129-5560b0c0 | PASS: no crash on red close in compact, close with the Space form open, close after ⌘⌥S, toggle+close within 50 ms (both ways), quit in compact; relaunch reopens both windows in compact |
+| KoanCheck-c128b | fullscreen peek: no Chromium toolbar now, but an empty ~32 pt grey strip under the menu bar covers the page (#146 comment); compact+fullscreen edge to edge, left edge reveals sidebar. Also: ⌃⌘F hid my crash dialog behind fullscreen |
+| KoanCheck-c147 | **crash on launch** (DCHECK label.cc:1005) |
+| KoanCheck-c147b | PASS: launches; rounded grey pill, no tune/page actions; Space dots show the current Space and switch on click (s10-003-crops) |
+| KoanCheck-c145b | #136 PASS (Create, Cancel, Edit Theme… on real clicks; no window drag); **#140 still FAILS**: after SIGSEGV + Restore a second Space also named "Space" appears with the startup NTP (s9-012/013) |
+| KoanCheck-c150 | (1) pin → above the divider PASS (s11-004); (2) unpin → back below New Tab live PASS (s11-008); (3) dash on loaded pinned hover, × after unload PASS (s11-005-crop, s11-006); (4) each Space shows its own pinned run, 18 switches no crash PASS (s11-c-spaces); horizontal↔vertical round trip no crash, but the Space header row is gone afterwards (#148 still) (s11-017); ⌘⇧D is Chromium's Bookmark All Tabs on this base (no #90) — checks done via the menu; (5)(6)(8) not done yet |
+
+Minor: B43 a single ⌘Q only shows Chromium's "Hold ⌘Q to Quit" bubble (s7-017) — Zen quits (with its own confirm) on one press; to verify in Zen.
