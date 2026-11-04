@@ -219,3 +219,45 @@ the top shows only the macOS menu bar; no toolbar, no bookmarks bar).
 Actual: (1) on entering fullscreen the sidebar is shown and the page is drawn shifted/clipped under it (s5-050-fs-compact.jpg);
 (2) the top peek shows Chromium's toolbar under the menu bar: traffic lights, back/forward/reload, site-settings icon + "github.com" omnibox,
 Install, bookmark star, profile avatar, ⋮ (s5-051-fs-top-peek.jpg). Exit restores compact correctly (no crash).
+
+## Session 6 (14:21 IST, KoanCheck-c144, profile-10): click everything, normal window
+View-tree inventory: `inv-normal.tsv` (UI DevTools; every shown view). Checklist: `inventory.md`.
+
+### B33. Tab menu "Show tabs horizontally" turns Koan into Chrome; going back loses the Space header — major
+Steps: right-click a tab or an Essential > "Show tabs horizontally". Then right-click a tab > "Show tabs vertically".
+Expected (Zen): no such item (Zen has no horizontal tab strip).
+Actual: Chromium's horizontal tab strip with tab-group chips "Unfocus" and "Space" (the Space is a Chromium tab group) and the full
+Chromium toolbar (omnibox, "Ask" AI button, Install, star, avatar, ⋮) (s6-026-horizontal.jpg, s6-027-htab-menu.jpg). After
+"Show tabs vertically" the sidebar is back but the **Space header row ("Space" + options) is gone** (s6-028-back-vertical.jpg, s6-033).
+
+### B34. "Tabs on the right" removes the traffic lights — major
+Steps: right-click empty sidebar > Tabs on the right. Expected (Zen): sidebar on the right; traffic lights stay at the top left.
+Actual: no close/minimise/zoom buttons anywhere (s6-031-tabs-right.jpg, s6-031-corners.jpg). Turning it off brings them back (s6-033).
+
+### B35. Empty-sidebar menu has 2 items; Zen has 10 — minor
+s6-030. Koan: Enable compact mode, Tabs on the right. Zen (context-menus.md §8): Enable compact mode, Hide sidebar / Hide toolbar / Hide both,
+New Folder, Live Folder ▸, Theme…, Tabs on the right, Customize Toolbar….
+
+### B36. Pill "Site information" opens Chromium's page-info bubble — minor
+s6-004-siteinfo.jpg (Connection is secure / Cookies and site data / Site settings). Zen: its site-data panel, with the identity icon on the
+left of the pill, Clear site data, Add Extensions, All Site Settings.
+
+### B37. Space options menu: no Manage Spaces…, Share Space…, Space Routing Settings; "Edit Theme…" vs Zen "Theme…" — minor
+s6-006-space-options.jpg.
+
+### B38. Create New (+) popup has no "Create Folder" — minor
+s6-012-create-new.jpg: Create Space / New Split / New Tab. Zen: Create Space, Create Folder, ---, New Split, New Tab; the "+" rotates 45°.
+
+### B39. After Clear, Cmd+Shift+T restores one tab, not the cleared batch — minor (check in Zen)
+s6-022 -> s6-023/024: two tabs cleared, one ⇧⌘T brought back only GitHub.
+
+### B40. Tab/Essential context menus still carry Chromium items — minor (extends B20)
+s6-001-menu-check.jpg, s6-025-essential-menu.jpg: "Move Tab to New Window", "Add Tab to Reading List", "Show tabs horizontally", "Mute Site";
+missing Zen's Move to Folder, New Folder, Bookmark Tab…, Move to Start/End, Select All Tabs, Close Duplicate/Multiple, Reopen Closed Tabs,
+Add Route for Domain, "1 / 12" on Add to Essentials.
+
+PASS this session: Copy URL (clipboard + "Copied current URL!" toast, s6-003); Unload Space (toast, s6-007); Clear (toast "Tabs Closed! Use ⇧⌘T to undo.",
+keeps the selected tab, s6-008); "+ New Tab" row opens the floating bar (s6-010); Library button, rail Downloads / Spaces / History, Filter
+(When / Sort / Closed tabs), ← close (s6-016..021); Essential menu has Remove from Essentials, Change Icon…, Edit Essential URL ▸, Reset Essential Tab
+and no Close/Pin (s6-025). Note (dump): the whole Chromium ToolbarView stays alive in the tree, hidden only by its layer (TopContainerView
+layer visible=false); it is what the fullscreen peek shows (#146).
