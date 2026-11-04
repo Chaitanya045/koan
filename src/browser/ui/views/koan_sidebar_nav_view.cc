@@ -40,6 +40,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_empty_tab.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
@@ -75,14 +76,12 @@ std::u16string DisplayUrl(content::WebContents* contents, Profile* profile) {
   if (!contents) {
     return std::u16string();
   }
-  const GURL& url = contents->GetVisibleURL();
   // An empty tab, or a new tab page (also one served from the search engine,
   // e.g. google.com's), shows Zen's placeholder.
-  if (url.is_empty() || url.IsAboutBlank() ||
-      url == GURL(chrome::kChromeUINewTabURL) || search::IsNTPURL(url) ||
-      search::IsNTPOrRelatedURL(url, profile)) {
+  if (IsEmptyTab(contents, profile)) {
     return std::u16string();
   }
+  const GURL& url = contents->GetVisibleURL();
   if (url.SchemeIsHTTPOrHTTPS() && url.has_host()) {
     // Zen shows just the site in the sidebar.
     return base::UTF8ToUTF16(url_formatter::StripWWW(std::string(url.host())));
