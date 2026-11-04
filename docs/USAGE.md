@@ -87,27 +87,26 @@ itself (⌘Q, ⌘H, ⌘M, ⌘Space, ⌘Tab, ⌘`, ⌃ with the arrow keys, ⇧�
 and says "Replaces Chromium's shortcut" for the keys it takes from Chrome's
 menus.
 
-**Menu bar.** Koan adds to Chrome's menus (the keys follow the window's
-shortcuts and any you changed):
+**Menu bar.** Zen 1.24b's: File, Edit, View, Spaces, History, Bookmarks,
+Tools, Window, Help. Chrome's Profiles and Tab menus are hidden, and the keys
+follow the shortcuts in effect (also after you change one in Settings):
 
-- **Koan** (app menu): Koan Settings… (⌘,).
+- **Zen** (app menu): Settings… (⌘,), which opens Koan's settings.
 - **File:** New Blank Window (⌘⇧N, Zen's; a plain new window here, there is
-  no window sync) after New Window, and New Incognito Window is called New
-  Private Window.
-- **View:** Appearance > Automatic / Light / Dark (first, as in Zen), then
-  Chrome's items and Toggle Compact Mode, Toggle Floating Sidebar, Switch Single /
-  Multiple Toolbars, Show Bookmarks Sidebar, Toggle Reader Mode, Toggle
-  Library.
-- **Spaces** (after View, as in Zen 1.24b): Create Space, Edit Theme…, Change
-  Name…, Change Icon…, Next Space, Previous Space, then Koan's own: your
-  Spaces (✓ on the active one, ⌃1… as set) and Move To (the selected tabs to
-  another Space). Edit Theme… and Change Icon… open on the Space's header.
-- **Tab:** Split View (side by side, stacked, grid, close, new empty),
-  Expand Glance (⌘O; Zen leaves Open File unbound, as does Koan now),
-  Toggle Pin Tab, Close All Unpinned Tabs, Copy Current URL (and as
-  Markdown).
+  no window sync) after New Window, and New Private Window (⌘⇧P) for
+  Chrome's Incognito.
+- **View:** Appearance > Automatic / Light / Dark first, as in Zen; Chrome's
+  bookmark bar, full-screen toolbar, full URLs, AI, Lens, vertical tabs, Cast
+  and Developer items are hidden. (Zen's Toolbars, Sidebar and Collapse
+  Pinned Tabs aren't there: Koan has no such menu items.)
+- **Spaces:** Create Space, Edit Theme…, Change Name…, Change Icon…, Next
+  Space (⌘⌥→), Previous Space (⌘⌥←). Edit Theme… and Change Icon… open on the
+  Space's header. The Library, compact mode, split view, Glance and pinning
+  are in the sidebar, the command palette and their keys, as in Zen.
+- **Tools:** Downloads (⌘J), Extensions, and Browser Tools (Developer Tools,
+  JavaScript Console, View Source ⌘U, Task Manager).
 
-Items are greyed when they don't apply (no Spaces, no split view, ...).
+Items are greyed when they don't apply (no Spaces, ...).
 
 **Dock menu:** New Window and New Private Window, as in Zen's Dock menu, and
 your Spaces (✓ on the active one) to switch the window that was active last.

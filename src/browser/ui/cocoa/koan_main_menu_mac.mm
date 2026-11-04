@@ -14,6 +14,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <utility>
@@ -187,6 +188,32 @@ void InsertAfter(NSMenu* menu, NSInteger tag, NSArray<NSMenuItem*>* items) {
   }
 }
 
+// Hides the items of `menu` with one of `tags`.
+void HideItems(NSMenu* menu, std::initializer_list<int> tags) {
+  for (NSMenuItem* item in menu.itemArray) {
+    for (int tag : tags) {
+      if (item.tag == tag) {
+        item.hidden = YES;
+      }
+    }
+  }
+}
+
+// An item that runs Chrome's command like its own menus' items do
+// (AppController / the window dispatch it), with the key Chrome has for it.
+NSMenuItem* ChromeItem(NSString* title, int command) {
+  NSMenuItem* item =
+      [[NSMenuItem alloc] initWithTitle:title
+                                 action:@selector(commandDispatch:)
+                          keyEquivalent:@""];
+  item.tag = command;
+  if (const ui::Accelerator* accelerator =
+          AcceleratorsCocoa::GetInstance()->GetAcceleratorForCommand(command)) {
+    SetKey(item, *accelerator);
+  }
+  return item;
+}
+
 }  // namespace
 
 // The target and validator of Koan's menu items, and the delegate of the
@@ -199,16 +226,13 @@ void InsertAfter(NSMenu* menu, NSInteger tag, NSArray<NSMenuItem*>* items) {
 - (void)switchSpace:(NSMenuItem*)item;
 // The same from the Dock, which first brings the window forward.
 - (void)dockSwitchSpace:(NSMenuItem*)item;
-// Moves the active window's selected tabs to the Space at the item's tag.
-- (void)moveToSpace:(NSMenuItem*)item;
 // Theme…, Change Name… and Change Icon… for the active Space (the item's tag
 // is a SpaceCommand).
 - (void)spaceCommand:(NSMenuItem*)item;
 // View > Appearance: the browser's colour scheme in the item's tag.
 - (void)setAppearance:(NSMenuItem*)item;
-// Sets the Spaces menu, which is rebuilt each time it opens after its first
-// `count` items.
-- (void)setSpacesMenu:(NSMenu*)menu staticItemCount:(NSInteger)count;
+// Sets the Spaces menu, whose items are enabled each time it opens.
+- (void)setSpacesMenu:(NSMenu*)menu;
 // Shows the keys of the active window's shortcuts in `mainMenu` (see the
 // definition).
 - (void)refreshKeysIn:(NSMenu*)mainMenu;
@@ -231,7 +255,6 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
 
 @implementation KoanMenuTarget {
   NSMenu* _spacesMenu;
-  NSInteger _staticItemCount;
   id _trackingObserver;
   id _windowObserver;
   NSMenu* _mainMenu;
@@ -265,28 +288,6 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
     controller->browser_view()->browser()->GetWindow()->Activate();
   }
   [self switchSpace:item];
-}
-
-- (void)moveToSpace:(NSMenuItem*)item {
-  koan::KoanBrowserViewController* controller = ActiveController();
-  if (!controller) {
-    return;
-  }
-  const auto spaces = controller->workspaces()->GetSpaces();
-  if (item.tag < 0 || item.tag >= static_cast<NSInteger>(spaces.size())) {
-    return;
-  }
-  // The selected tabs, like Move To in the tab context menu.
-  TabStripModel* model =
-      controller->browser_view()->browser()->GetTabStripModel();
-  std::vector<tabs::TabInterface*> tabs;
-  for (size_t index :
-       model->selection_model().GetListSelectionModel().selected_indices()) {
-    tabs.push_back(model->GetTabAtIndex(static_cast<int>(index)));
-  }
-  if (!tabs.empty()) {
-    controller->workspaces()->MoveTabsToSpace(tabs, spaces[item.tag].id);
-  }
 }
 
 - (void)spaceCommand:(NSMenuItem*)item {
@@ -340,22 +341,17 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   return controller->workspaces()->IsEnabled();
 }
 
-- (void)setSpacesMenu:(NSMenu*)menu staticItemCount:(NSInteger)count {
+- (void)setSpacesMenu:(NSMenu*)menu {
   _spacesMenu = menu;
-  _staticItemCount = count;
   menu.delegate = self;
   // The items' states are set in -menuNeedsUpdate:, with the Spaces.
   menu.autoenablesItems = NO;
 }
 
-// NSMenuDelegate: the Spaces menu lists the Spaces of the active window, and
-// the other Spaces to move the tabs to.
+// NSMenuDelegate: the Spaces menu enables its items for the active window.
 - (void)menuNeedsUpdate:(NSMenu*)menu {
   if (menu != _spacesMenu) {
     return;
-  }
-  while (menu.numberOfItems > _staticItemCount) {
-    [menu removeItemAtIndex:menu.numberOfItems - 1];
   }
   koan::KoanBrowserViewController* controller = ActiveController();
   for (NSMenuItem* item in menu.itemArray) {
@@ -367,51 +363,6 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
                      controller->workspaces()->GetActiveSpace().has_value();
     }
   }
-  if (!controller || !controller->workspaces()->IsEnabled()) {
-    return;
-  }
-  const auto spaces = controller->workspaces()->GetSpaces();
-  if (spaces.empty()) {
-    return;
-  }
-  [menu addItem:[NSMenuItem separatorItem]];
-  NSMenu* move_menu = [[NSMenu alloc] initWithTitle:@""];
-  for (size_t i = 0; i < spaces.size(); ++i) {
-    NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:SpaceTitle(spaces[i])
-                                                  action:@selector(switchSpace:)
-                                           keyEquivalent:@""];
-    item.target = self;
-    item.tag = static_cast<NSInteger>(i);
-    item.state =
-        spaces[i].active ? NSControlStateValueOn : NSControlStateValueOff;
-    // Zen's Ctrl+1..0 (macOS only).
-    if (i < 10) {
-      SetKey(item, controller->shortcuts()->GetAccelerator(static_cast<Action>(
-                       static_cast<int>(Action::kSwitchWorkspace1) +
-                       static_cast<int>(i))));
-    }
-    [menu addItem:item];
-    if (!spaces[i].active) {
-      NSMenuItem* move_item =
-          [[NSMenuItem alloc] initWithTitle:SpaceTitle(spaces[i])
-                                     action:@selector(moveToSpace:)
-                              keyEquivalent:@""];
-      move_item.target = self;
-      move_item.tag = static_cast<NSInteger>(i);
-      [move_menu addItem:move_item];
-    }
-  }
-  [menu addItem:[NSMenuItem separatorItem]];
-  NSMenuItem* move = [[NSMenuItem alloc] initWithTitle:@"Move To"
-                                                action:nil
-                                         keyEquivalent:@""];
-  move.submenu = move_menu;
-  move.enabled =
-      move_menu.numberOfItems > 0 && controller->browser_view()
-                                             ->browser()
-                                             ->GetTabStripModel()
-                                             ->GetActiveTab() != nullptr;
-  [menu addItem:move];
 }
 
 // Gives each Koan item the key of its shortcut as the active window has it,
@@ -448,7 +399,10 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   NSMutableSet<NSMenuItem*>* claimed = [NSMutableSet set];
   for (NSMenuItem* item in items) {
     if (item.target == self && item.action == @selector(perform:)) {
-      SetKey(item, key_of(static_cast<Action>(item.tag)));
+      // Zen's Create Space has no key; Koan's still works from the window.
+      SetKey(item, static_cast<Action>(item.tag) == Action::kNewWorkspace
+                       ? std::optional<ui::Accelerator>()
+                       : key_of(static_cast<Action>(item.tag)));
       [claimed addObject:item];
     }
   }
@@ -555,30 +509,43 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   }
   KoanMenuTarget* target = [KoanMenuTarget shared];
 
-  // App menu: Zen's Open Preferences (Cmd+,) opens Koan's settings, so the
-  // key moves from Chrome's Preferences, which opens chrome://settings.
+  // Zen's menu bar (Zen 1.24b: File Edit View Spaces History Bookmarks Tools
+  // Window Help). Chrome's items that Zen doesn't have are hidden, not
+  // removed: AppController and the Tab, Profiles and History bridges find
+  // their items by tag and CHECK that they exist.
+  HideItems(main_menu, {IDC_PROFILE_MAIN_MENU, IDC_TAB_MENU});
+
+  // App menu: Zen's Settings… (Cmd+,) opens Koan's settings, so the key moves
+  // from Chrome's Preferences…, which opens chrome://settings and is hidden.
   if (NSMenu* app = [main_menu itemWithTag:IDC_CHROME_MENU].submenu) {
-    InsertAfter(app, IDC_OPTIONS, @[ ActionItem(Action::kOpenSettings, target,
-                                                @"Koan Settings…") ]);
+    HideItems(app, {IDC_OPTIONS});
+    InsertAfter(app, IDC_OPTIONS,
+                @[ ActionItem(Action::kOpenSettings, target, @"Settings…") ]);
   }
 
-  // File: Zen's wording, and its New Blank Window (Cmd+Shift+N) after New
-  // Window. Koan has no window sync, so it is a plain new window.
+  // File: Zen's New Blank Window (Cmd+Shift+N) after New Window (Koan has no
+  // window sync, so it is a plain new window) and New Private Window.
   if (NSMenu* file = [main_menu itemWithTag:IDC_FILE_MENU].submenu) {
     for (NSMenuItem* item in file.itemArray) {
       if (IsChromeCommand(item, IDC_NEW_INCOGNITO_WINDOW)) {
         item.title = @"New Private Window";
       }
     }
+    HideItems(file, {IDC_NEW_ISOLATED_WINDOW});
     InsertAfter(file, IDC_NEW_WINDOW, @[ ActionItem(Action::kNewWindow, target,
                                                     @"New Blank Window") ]);
   }
 
-  // View: compact mode, and the panels with a key of Zen's and no menu item.
-  // Not the History menu: HistoryMenuBridge hits a NOTREACHED() for any item
-  // it doesn't know (ShouldMenuItemBeVisible).
+  // View: Zen's starts with Appearance > Automatic / Light / Dark. Chrome's
+  // bookmark bar, toolbar, URL, AI, Lens, search and vertical tab items, Cast
+  // and Developer (Browser Tools in Tools) are not Zen's.
   if (NSMenu* view = [main_menu itemWithTag:IDC_VIEW_MENU].submenu) {
-    // Zen's View starts with Appearance > Automatic / Light / Dark.
+    HideItems(view,
+              {IDC_SHOW_BOOKMARK_BAR, IDC_TOGGLE_FULLSCREEN_TOOLBAR,
+               IDC_SHOW_FULL_URLS, IDC_SHOW_GOOGLE_LENS_SHORTCUT,
+               IDC_SHOW_AI_MODE_OMNIBOX_BUTTON, IDC_SHOW_SEARCH_TOOLS,
+               IDC_TOGGLE_VERTICAL_TABS, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE,
+               IDC_CUSTOMIZE_TOUCH_BAR, IDC_ROUTE_MEDIA, IDC_DEVELOPER_MENU});
     NSMenu* appearance = [[NSMenu alloc] initWithTitle:@"Appearance"];
     // Zen's first, disabled item (zen-menubar-appearance-description).
     NSMenuItem* websites =
@@ -611,21 +578,11 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
     appearance_item.submenu = appearance;
     [view insertItem:appearance_item atIndex:0];
     [view insertItem:[NSMenuItem separatorItem] atIndex:1];
-    InsertAfter(view, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE, @[
-      [NSMenuItem separatorItem],
-      ActionItem(Action::kToggleCompactMode, target),
-      ActionItem(Action::kCompactModeShowSidebar, target),
-      ActionItem(Action::kToggleSingleToolbar, target),
-      [NSMenuItem separatorItem],
-      ActionItem(Action::kBookmarks, target),
-      ActionItem(Action::kReaderMode, target),
-      ActionItem(Action::kLibrary, target),
-    ]);
   }
 
   // Spaces, after View as in Zen 1.24b (ZenMenubar.mjs #initSpacesMenu):
-  // Create Space, Edit Theme…, Change Name…, Change Icon…, Next Space, Previous
-  // Space. Koan adds the list of Spaces and Move To below them.
+  // Create Space, Edit Theme…, Change Name…, Change Icon…, Next Space,
+  // Previous Space.
   NSMenu* spaces = [[NSMenu alloc] initWithTitle:@"Spaces"];
   [spaces addItem:ActionItem(Action::kNewWorkspace, target, @"Create Space")];
   const struct {
@@ -649,7 +606,7 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   [spaces addItem:ActionItem(Action::kWorkspaceForward, target, @"Next Space")];
   [spaces addItem:ActionItem(Action::kWorkspaceBackward, target,
                              @"Previous Space")];
-  [target setSpacesMenu:spaces staticItemCount:spaces.numberOfItems];
+  [target setSpacesMenu:spaces];
   NSMenuItem* spaces_item = [[NSMenuItem alloc] initWithTitle:@"Spaces"
                                                        action:nil
                                                 keyEquivalent:@""];
@@ -659,27 +616,36 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
       insertItem:spaces_item
          atIndex:view_index == -1 ? main_menu.numberOfItems : view_index + 1];
 
-  // Tab: split view, pinned tabs and the page's URL.
-  if (NSMenu* tab = [main_menu itemWithTag:IDC_TAB_MENU].submenu) {
-    NSMenu* split = [[NSMenu alloc] initWithTitle:@"Split View"];
-    for (Action action :
-         {Action::kSplitVertical, Action::kSplitHorizontal, Action::kSplitGrid,
-          Action::kUnsplit, Action::kNewEmptySplit}) {
-      [split addItem:ActionItem(action, target)];
-    }
-    NSMenuItem* split_item = [[NSMenuItem alloc] initWithTitle:@"Split View"
-                                                        action:nil
-                                                 keyEquivalent:@""];
-    split_item.submenu = split;
-    InsertAfter(tab, IDC_NEW_SPLIT_TAB, @[
-      split_item,
-      ActionItem(Action::kGlanceExpand, target),
-      [NSMenuItem separatorItem],
-      ActionItem(Action::kTogglePinTab, target),
-      ActionItem(Action::kCloseUnpinnedTabs, target),
-      ActionItem(Action::kCopyUrl, target),
-      ActionItem(Action::kCopyUrlMarkdown, target),
-    ]);
+  // Tools, before the hidden Profiles menu (after Bookmarks) as in Zen:
+  // Downloads, Extensions, Browser Tools. Downloads moves here from Window.
+  NSMenu* tools = [[NSMenu alloc] initWithTitle:@"Tools"];
+  [tools addItem:ChromeItem(@"Downloads", IDC_SHOW_DOWNLOADS)];
+  [tools addItem:ChromeItem(@"Extensions", IDC_MANAGE_EXTENSIONS)];
+  [tools addItem:[NSMenuItem separatorItem]];
+  NSMenu* browser_tools = [[NSMenu alloc] initWithTitle:@"Browser Tools"];
+  [browser_tools addItem:ChromeItem(@"Developer Tools", IDC_DEV_TOOLS)];
+  [browser_tools
+      addItem:ChromeItem(@"JavaScript Console", IDC_DEV_TOOLS_CONSOLE)];
+  [browser_tools addItem:ChromeItem(@"View Source", IDC_VIEW_SOURCE)];
+  [browser_tools
+      addItem:ChromeItem(@"Task Manager", IDC_TASK_MANAGER_MAIN_MENU)];
+  NSMenuItem* browser_tools_item =
+      [[NSMenuItem alloc] initWithTitle:@"Browser Tools"
+                                 action:nil
+                          keyEquivalent:@""];
+  browser_tools_item.submenu = browser_tools;
+  [tools addItem:browser_tools_item];
+  NSMenuItem* tools_item = [[NSMenuItem alloc] initWithTitle:@"Tools"
+                                                      action:nil
+                                               keyEquivalent:@""];
+  tools_item.submenu = tools;
+  const NSInteger profiles_index =
+      [main_menu indexOfItemWithTag:IDC_PROFILE_MAIN_MENU];
+  [main_menu insertItem:tools_item
+                atIndex:profiles_index == -1 ? main_menu.numberOfItems
+                                             : profiles_index];
+  if (NSMenu* window = [main_menu itemWithTag:IDC_WINDOW_MENU].submenu) {
+    HideItems(window, {IDC_SHOW_DOWNLOADS, IDC_MANAGE_EXTENSIONS});
   }
 
   // Firefox's keys that Zen leaves unbound (browser-sets-inc-xhtml.patch):

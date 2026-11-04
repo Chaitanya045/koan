@@ -320,20 +320,53 @@ function onShortcutFocus(input, action) {
   chrome.send('setEditing', [true]);
 }
 
+// Saves `key` (what was typed) for `action`, or says why it can't be.
+async function commitShortcut(input, action, key) {
+  const conflict = conflictOf(key, action);
+  let problem = null;
+  if (conflict) {
+    problem =
+        `Conflicts with ${groupTitle(conflict.group)} -> ${conflict.label}`;
+  } else if (isTabCycling(key)) {
+    problem = settings.shortcuts.mac ?
+        '⌃ Tab and ⌃ Page Up/Down switch tabs' :
+        'Ctrl+Tab and Ctrl+Page Up/Down switch tabs';
+  } else if (!isValidKey(key)) {
+    problem = settings.shortcuts.mac ?
+        'Use ⌃, ⌥ or ⌘ with the key, or a function key' :
+        'Use Ctrl, Alt or Win with the key, or a function key';
+  }
+  if (problem) {
+    input.classList.add('invalid');
+    setNote(input, 'conflict', problem);
+  } else if (await sendWithPromise('setShortcut', action.id, key)) {
+    input.classList.remove('invalid');
+    input.classList.add('valid');
+    setTimeout(() => input.classList.remove('valid'), 1000);
+    if (settings.shortcuts.chromium.some(k => sameKey(k, key))) {
+      setNote(input, 'replaces', 'Replaces Chromium\'s shortcut for this key');
+    }
+  } else {
+    input.classList.add('invalid');
+    setNote(input, 'conflict', 'This key can\'t be used for a shortcut');
+  }
+}
+
 function onShortcutBlur(input, action) {
   chrome.send('setEditing', [false]);
   input.classList.remove('editing');
-  if (!editor.saved) {
-    input.classList.add('unsaved');
-    setNote(input, 'unsaved', 'Unsaved shortcut! Please save it by ' +
-            'clicking the "Escape" key after retyping it.');
+  // Leaving the field with keys typed saves them too (Zen asks for Escape;
+  // people click away).
+  const unsaved = editor.saved ? null : editor.latest;
+  editor.action = null;
+  editor.latest = null;
+  editor.saved = true;
+  if (unsaved) {
+    commitShortcut(input, action, unsaved);
   }
   // The field shows the key that is bound; a refused one stays explained by
   // its note.
   showKeys(input, action);
-  editor.action = null;
-  editor.latest = null;
-  editor.saved = true;
 }
 
 async function onShortcutKeyDown(event, input, action) {
@@ -351,36 +384,8 @@ async function onShortcutKeyDown(event, input, action) {
   // so Enter alone is never one.
   if (!modifiers && (event.key === 'Escape' ||
                      (event.key === 'Enter' && editor.latest))) {
-    const key = editor.latest;
-    if (key) {
-      const conflict = conflictOf(key, action);
-      let problem = null;
-      if (conflict) {
-        problem =
-            `Conflicts with ${groupTitle(conflict.group)} -> ${conflict.label}`;
-      } else if (isTabCycling(key)) {
-        problem = settings.shortcuts.mac ?
-            '⌃ Tab and ⌃ Page Up/Down switch tabs' :
-            'Ctrl+Tab and Ctrl+Page Up/Down switch tabs';
-      } else if (!isValidKey(key)) {
-        problem = settings.shortcuts.mac ?
-            'Use ⌃, ⌥ or ⌘ with the key, or a function key' :
-            'Use Ctrl, Alt or Win with the key, or a function key';
-      }
-      if (problem) {
-        input.classList.add('invalid');
-        setNote(input, 'conflict', problem);
-      } else if (await sendWithPromise('setShortcut', action.id, key)) {
-        input.classList.remove('invalid');
-        input.classList.add('valid');
-        setTimeout(() => input.classList.remove('valid'), 1000);
-        if (settings.shortcuts.chromium.some(k => sameKey(k, key))) {
-          setNote(input, 'replaces', 'Replaces Chromium\'s shortcut for this key');
-        }
-      } else {
-        input.classList.add('invalid');
-        setNote(input, 'conflict', 'This key can\'t be used for a shortcut');
-      }
+    if (editor.latest) {
+      await commitShortcut(input, action, editor.latest);
     }
     editor.saved = true;
     input.blur();
