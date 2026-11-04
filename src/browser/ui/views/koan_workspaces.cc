@@ -42,6 +42,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+#include "chrome/common/webui_url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
@@ -292,6 +293,10 @@ KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
       swipe_(std::make_unique<KoanSpaceSwipe>(this)) {
   if (IsEnabled()) {
     tab_strip_model()->AddObserver(this);
+    session_restored_subscription_ =
+        SessionRestore::RegisterOnSessionRestoredCallback(
+            base::BindRepeating(&KoanWorkspaceController::OnSessionRestored,
+                                base::Unretained(this)));
   }
   AddDefaultCreateMenuEntries();
 }
@@ -1061,6 +1066,45 @@ void KoanWorkspaceController::KeepStartupEssential() {
   }
 }
 
+void KoanWorkspaceController::OnSessionRestored(Profile* profile,
+                                                int tab_count) {
+  if (restore_added_spaces_ && profile == browser_view_->GetProfile()) {
+    restore_added_spaces_ = false;
+    drop_startup_space_ = true;
+    ScheduleUpdate();
+  }
+}
+
+void KoanWorkspaceController::DropStartupSpaceAfterRestore() {
+  TabStripModel* model = tab_strip_model();
+  const std::vector<SpaceInfo> spaces = GetSpaces();
+  if (spaces.size() < 2) {
+    return;
+  }
+  // The Space the window opened with: one new tab page, unnamed, no icon,
+  // no theme.
+  for (const SpaceInfo& space : spaces) {
+    const gfx::Range tabs =
+        model->group_model()->GetTabGroup(space.id)->ListTabs();
+    if (tabs.length() != 1 || space.name != kDefaultSpaceName ||
+        !space.icon.empty() || space.theme.color) {
+      continue;
+    }
+    const int index = static_cast<int>(tabs.start());
+    if (model->IsTabPinned(index) || model->GetWebContentsAt(index)->GetURL() !=
+                                         chrome::ChromeUINewTabURLAsGURL()) {
+      continue;
+    }
+    if (GetActiveSpace() == space.id) {
+      Cycle(/*forward=*/true);
+    }
+    deleting_.insert(space.id);
+    last_active_tabs_.erase(space.id);
+    model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_USER_GESTURE);
+    return;
+  }
+}
+
 void KoanWorkspaceController::EnsureOneSpaceShown() {
   TabStripModel* model = tab_strip_model();
   if (model->empty() || model->closing_all() ||
@@ -1143,6 +1187,10 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     } else {
       WriteSpace(NewSpaceGroup(loose), {.name = kDefaultSpaceName});
     }
+    spaces = GetSpaces();
+  }
+  if (std::exchange(drop_startup_space_, false)) {
+    DropStartupSpaceAfterRestore();
     spaces = GetSpaces();
   }
 
@@ -1416,6 +1464,10 @@ void KoanWorkspaceController::OnTabStripModelChanged(
 }
 
 void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
+  if (change.type == TabGroupChange::kCreated &&
+      SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+    restore_added_spaces_ = true;
+  }
   if (change.type == TabGroupChange::kClosed) {
     const bool deleted = deleting_.erase(change.group);
     const TabGroupChange::CloseChange* close = change.GetCloseChange();
