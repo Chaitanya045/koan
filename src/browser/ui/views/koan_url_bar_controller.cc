@@ -575,8 +575,10 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
 }
 
 void KoanUrlBarController::RefreshPageActions() {
-  // The location bar asks HidesPageActionIcons() when it changes.
-  if (LocationBarView* bar = location_bar()) {
+  // The location bar asks HidesPageActionIcons() when it changes. Not while
+  // it is out of a window (OnChanged() needs its colour provider).
+  LocationBarView* bar = location_bar();
+  if (bar && bar->GetWidget()) {
     LocationBar* location = bar;
     location->OnChanged();
     location->UpdateContentSettingsIcons();
@@ -937,7 +939,19 @@ ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
 
 void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
   KoanUrlBarController* url_bar = UrlBarOf(location_bar);
-  if (url_bar && url_bar->IsCommandCard()) {
+  if (!url_bar) {
+    return;
+  }
+  // Zen's "Search..." in the card, and in the pill too (not Chromium's AI
+  // Mode "Press Tab" hint), unless a search engine's keyword mode has its
+  // own placeholder.
+  const bool keyword_placeholder = !static_cast<LocationBarView*>(location_bar)
+                                        ->GetOmniboxController()
+                                        ->edit_model()
+                                        ->keyword_placeholder()
+                                        .empty();
+  if (url_bar->IsCommandCard() ||
+      (url_bar->is_open() && !keyword_placeholder)) {
     text = u"Search...";
   }
 }
