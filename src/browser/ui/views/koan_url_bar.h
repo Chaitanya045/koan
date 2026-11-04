@@ -41,8 +41,9 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
 
 // The omnibox of `location_bar` (a LocationBarView) is installing its
-// placeholder text: in the floating shadcn card it is "Search...". Called
-// from OmniboxViewViews::InstallPlaceholderText().
+// placeholder text: Zen's "Search..." in the floating card, and while the URL
+// bar edits in the pill (not Chromium's AI Mode hint) unless a keyword mode
+// has its own. Called from OmniboxViewViews::InstallPlaceholderText().
 void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text);
 
 // Whether the floating command card is open for `location_bar`: its input

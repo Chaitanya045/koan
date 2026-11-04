@@ -57,6 +57,7 @@ class KoanSpaceBarView : public views::View {
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
+  void OnPaint(gfx::Canvas* canvas) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
  private:

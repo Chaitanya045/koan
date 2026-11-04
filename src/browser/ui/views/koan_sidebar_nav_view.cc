@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -62,14 +63,16 @@ constexpr int kButtonSize = 28;
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
 
-std::u16string DisplayUrl(content::WebContents* contents) {
+std::u16string DisplayUrl(content::WebContents* contents, Profile* profile) {
   if (!contents) {
     return std::u16string();
   }
   const GURL& url = contents->GetVisibleURL();
-  // An empty tab shows Zen's placeholder.
+  // An empty tab, or a new tab page (also one served from the search engine,
+  // e.g. google.com's), shows Zen's placeholder.
   if (url.is_empty() || url.IsAboutBlank() ||
-      url == GURL(chrome::kChromeUINewTabURL)) {
+      url == GURL(chrome::kChromeUINewTabURL) || search::IsNTPURL(url) ||
+      search::IsNTPOrRelatedURL(url, profile)) {
     return std::u16string();
   }
   if (url.SchemeIsHTTPOrHTTPS() && url.has_host()) {
@@ -362,6 +365,16 @@ void KoanSidebarNavView::OnTabStripModelChanged(
   }
 }
 
+void KoanSidebarNavView::OnTabChangedAt(tabs::TabInterface* tab,
+                                        TabChangeType change_type) {
+  // The favicon arrives after the navigation (and with it the TabUIHelper
+  // callback): refresh the identity button when the active tab changes.
+  if (tab &&
+      tab == browser_view_->browser()->GetTabStripModel()->GetActiveTab()) {
+    UpdateUrl();
+  }
+}
+
 void KoanSidebarNavView::ObserveActiveTab() {
   tab_ui_subscription_ = {};
   tabs::TabInterface* tab =
@@ -376,7 +389,7 @@ void KoanSidebarNavView::ObserveActiveTab() {
 void KoanSidebarNavView::UpdateUrl() {
   content::WebContents* contents =
       browser_view_->browser()->GetTabStripModel()->GetActiveWebContents();
-  const std::u16string text = DisplayUrl(contents);
+  const std::u16string text = DisplayUrl(contents, browser_view_->GetProfile());
   // Zen's placeholder for an empty tab.
   url_label_->SetText(editing_       ? std::u16string()
                       : text.empty() ? u"Search..."
