@@ -13,6 +13,10 @@
 class BrowserView;
 class PrefService;
 
+namespace tabs {
+enum class VerticalTabStripCollapseState;
+}  // namespace tabs
+
 namespace actions {
 class ActionItem;
 }  // namespace actions
@@ -22,7 +26,7 @@ namespace koan {
 // Koan owns the sidebar. The sidebar is upstream's vertical tab strip, and
 // this is the one place in Koan that decides what that strip's state machine
 // may do in one window (the audit and the decision are in
-// .agent/notes/vertical-tabs-audit.md, option A; the rules in
+// .agent/notes/upstream/vertical-tabs.md, option A; the rules in
 // koan_vertical_tabs.h are what the hook in VerticalTabStripStateControllerImpl
 // enforces):
 //
@@ -52,6 +56,13 @@ class KoanVerticalTabsPolicy {
   void OnAddedToWidget();
   void OnBrowserViewDestroying();
 
+  // Whether the window is closing or destroyed, the one answer for all of
+  // Koan's per-window code (compact mode asks it too): the widget is closed,
+  // its deletion is scheduled, or OnBrowserViewDestroying() ran. Then nothing
+  // starts a sidebar animation (the browser's animation controller is gone or
+  // about to be) and locks are let go of later.
+  bool IsClosing() const;
+
   // Compact mode hides the sidebar (collapses the strip, which then slides
   // over the page on hover) or gives it back (expands it). Nothing else
   // collapses the strip; does nothing once the window is being destroyed (the
@@ -78,10 +89,14 @@ class KoanVerticalTabsPolicy {
   // keeps them at their defaults so that the settings page is truthful.
   void RemoveOldPrefs();
   void StartWatching();
+  void OnCollapseChanged(tabs::VerticalTabStripCollapseState state);
 
   const raw_ptr<BrowserView> browser_view_;
   PrefChangeRegistrar pref_change_registrar_;
+  bool added_ = false;
   bool destroying_ = false;
+  // A request to collapse or expand is under way (its animation hasn't ended).
+  bool settling_ = false;
   // What SetSidebarHidden() last asked for (debug builds check that the strip
   // settles there).
   bool hidden_ = false;

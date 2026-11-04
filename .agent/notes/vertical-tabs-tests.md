@@ -1,12 +1,12 @@
 # Vertical tabs lockdown (#154, PR #155): the 26 audit tests, as the Mac loop runs them
 
-Source: `.agent/notes/vertical-tabs-audit.md` section 4 (numbers are the same). Run on a **DCHECK build**, so that `KoanVerticalTabsPolicy`'s leak detector (`DLOG(FATAL)` when the strip's mode changes, or it collapses or expands without Koan asking) can fire; a crash or a `Koan: the vertical tab strip was ...` line in the log fails any test.
+Source: `.agent/notes/upstream/vertical-tabs.md` section 4 (numbers are the same). Run on a **DCHECK build**, so that `KoanVerticalTabsPolicy`'s leak detector (`DLOG(FATAL)` when the strip's mode changes, or it collapses or expands without Koan asking) can fire; a crash or a `Koan: the vertical tab strip was ...` line in the log fails any test.
 
-Written but **not run** (Mac only, nothing is built on Linux): the e2e scripts compile (`node --check`) and import what they use, nothing else is known. Expect to fix selectors and timings on the first Mac pass; tell the author what changed.
+**Status of the scripts.** The five `scripts/e2e/vertical_tabs_*.mjs` scripts below go through `scripts/e2e/run.sh`, which sources `koan_test_env.sh` and exits on anything but Linux (headless Ozone, UI DevTools). Linux builds are off, so **they run nowhere today**; they are kept as the specification of what each test checks, for when Linux comes back. The Mac loop's harness (`tmp/regress.sh`, `drv/*.mjs`, real keys and a real pointer) is where the 26 tests have to run: the port is agreed with the Mac loop (see "Mac harness port" at the end). Until a test is ported, its Mac status is "not run".
 
 Every check also asserts the common invariant (`scripts/e2e/lib/vertical_tabs.mjs`, `checkKoanSidebar()`): vertical strip, no horizontal `TabStripRegionView`, no icon rail (a strip 1 to 119 wide), no Chromium toolbar drawn (unless `koan.single_toolbar` is false), Koan's Space header inside the region, expanded 163 to 500 or hidden by compact mode with width 0.
 
-## Automated (`scripts/e2e/run.sh <name>`; `KEEP_LOG=<file>` for the leak-detector check)
+## Written as Linux e2e scripts (`scripts/e2e/run.sh <name>`; `KEEP_LOG=<file>` for the leak-detector check); to port to the Mac harness
 
 | Test (audit §4) | Script | Notes |
 |---|---|---|
@@ -44,3 +44,9 @@ UI DevTools can't read a menu item's label (`MenuItemView` paints its title) and
 - **M23 the 10 minute hint.** Compact on, leave for 11 minutes: no bubble.
 - **M25 extensions.** Load a test extension with `chrome.windows.create({type: 'normal'})`: Koan sidebar; `{type: 'popup'}`: no sidebar, no crash. `chrome.tabGroups.update(spaceGroup, {collapsed: true})` and `chrome.tabs.ungroup` on a Space's tabs: Koan's Space state stays consistent (that is the Spaces audit's scope, report what you see).
 - **M26 extension shortcut on Shift+Cmd+L.** An extension `commands` entry with `Command+Shift+L`: record which one runs (Chromium lets the browser's accelerator win for reserved ones, an extension's for the others); no rail either way.
+
+## Mac harness port
+
+Open: which of the loop's drivers (`drv/*.mjs`) can send real key events (Shift+Cmd+L, Shift+Cmd+A, Left x8 on the focused resize area), a real pointer path (`cliclick`, front-pid check first), and read the view tree (UI DevTools over ssh, `koan-mac-test-harness`). The scripts' checks are written against UI DevTools views and CDP; the port keeps the checks, swaps `key()`/`mouseOn()` for the Mac driver's, and reads `KEEP_LOG` from the loop's captured browser log. Not yet ported; add a row here per test as it is.
+
+**Compact mode toggled quickly** (test 21, the one that would have caught the review's F1): press Cmd+S twice within the collapse animation (about 250 ms), and 20 times in 10 s; the sidebar must end expanded at Zen's width (compact off) or hidden (compact on), never 56 wide.

@@ -31,6 +31,7 @@ source_set("views") {
   ]
   public_deps = [
     "//base",
+    "//koan/browser:vertical_tabs",
     "//koan/browser/ui/color:tokens",
     "//ui/base",
     "//ui/color",

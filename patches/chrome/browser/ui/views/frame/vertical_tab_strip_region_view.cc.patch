@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
-index 338178e..5daba73 100644
+index 338178e75c4cd0f82708153edf434945b2cd0c58..5daba736db4c96984f5e592270eb31640cf7e47a 100644
 --- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 +++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
 @@ -61,6 +61,10 @@

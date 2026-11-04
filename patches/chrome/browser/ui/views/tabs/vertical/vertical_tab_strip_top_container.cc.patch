@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index 485aa1f..d64f2a0 100644
+index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95dc9d2b1bf 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 @@ -24,6 +24,7 @@
@@ -87,7 +87,7 @@ index 485aa1f..d64f2a0 100644
 +  // Koan: the sidebar button's menu is Koan's sidebar menu, not upstream's
 +  // "Expand tabs on hover" (always on in Koan).
 +  if (source == collapse_button_ &&
-+      koan::ShowSidebarButtonContextMenu(source, point, source_type)) {
++      koan::ShowSidebarButtonContextMenu(browser_, point, source_type)) {
 +    return;
 +  }
    if (source == collapse_button_) {

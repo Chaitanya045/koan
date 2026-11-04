@@ -8,6 +8,7 @@
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
@@ -81,7 +82,7 @@ const TabMenuFeature* FeatureOf(int command_id) {
 // "Show tabs horizontally" item, and not the separator that sat above it
 // alone.
 void RemoveShowTabsHorizontally(ui::SimpleMenuModel* menu) {
-  if (!features::IsSidebarEnabled()) {
+  if (!OwnsSidebar()) {
     return;
   }
   const std::optional<size_t> at =

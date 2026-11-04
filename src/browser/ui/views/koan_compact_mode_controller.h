@@ -379,8 +379,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
-  // The window is being destroyed (OnBrowserViewDestroying()): no UI work.
-  bool destroying_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
 
   // The sidebar's context menu.

@@ -2,6 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
+#include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 
 #include <algorithm>
@@ -1690,6 +1691,15 @@ bool ShowsSpaceHeader(const views::View* tab_group_view) {
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   return controller && controller->workspaces()->IsEnabled();
+}
+
+std::optional<bool> HidesMenuCommand(BrowserView* browser_view,
+                                     int command_id) {
+  if (command_id == IDC_TOGGLE_VERTICAL_TABS ||
+      command_id == IDC_TOGGLE_VERTICAL_TABS_COLLAPSE) {
+    return OwnsSidebar();
+  }
+  return std::nullopt;
 }
 
 }  // namespace koan

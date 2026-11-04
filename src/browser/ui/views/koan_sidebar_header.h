@@ -9,6 +9,8 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
+class BrowserWindowInterface;
+
 namespace views {
 class View;
 struct ProposedLayout;
@@ -58,7 +60,7 @@ gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds);
 // `screen_point`. Upstream's menu for that button has the one item "Expand
 // tabs on hover", which Koan keeps on. Returns false if Koan has no menu for
 // this window (the caller then shows upstream's).
-bool ShowSidebarButtonContextMenu(views::View* source,
+bool ShowSidebarButtonContextMenu(BrowserWindowInterface* browser,
                                   const gfx::Point& screen_point,
                                   ui::mojom::MenuSourceType source_type);
 

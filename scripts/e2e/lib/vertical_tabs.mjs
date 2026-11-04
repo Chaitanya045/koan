@@ -1,5 +1,5 @@
 // Shared checks for the "Koan owns the sidebar" tests (vertical_tabs_*.mjs,
-// .agent/notes/vertical-tabs-audit.md section 4): whatever an old profile, a
+// .agent/notes/upstream/vertical-tabs.md section 4): whatever an old profile, a
 // shortcut, a drag or a setting does, the window keeps Koan's vertical
 // sidebar, and Chromium's icon rail, horizontal tab strip and toolbar don't
 // show up.

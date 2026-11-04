@@ -10,14 +10,30 @@
 
 namespace koan {
 
-bool ForcesVerticalTabs() {
+namespace {
+int g_collapse_requests = 0;
+}  // namespace
+
+bool OwnsSidebar() {
   return features::IsSidebarEnabled();
+}
+
+ScopedSidebarCollapseRequest::ScopedSidebarCollapseRequest() {
+  ++g_collapse_requests;
+}
+
+ScopedSidebarCollapseRequest::~ScopedSidebarCollapseRequest() {
+  --g_collapse_requests;
+}
+
+bool IsSidebarCollapseRequestAllowed() {
+  return g_collapse_requests > 0;
 }
 
 bool InitialSidebarCollapsed(const PrefService* prefs) {
   // What compact mode hides: the sidebar, unless only the toolbar is hidden
   // (and then not with single toolbar, which has no toolbar to hide).
-  return ForcesVerticalTabs() && features::IsCompactModeEnabled() &&
+  return OwnsSidebar() && features::IsCompactModeEnabled() &&
          prefs->GetBoolean(prefs::kCompactModeEnabled) &&
          (prefs->GetBoolean(prefs::kSingleToolbarEnabled) ||
           prefs->GetString(prefs::kCompactModeHide) !=

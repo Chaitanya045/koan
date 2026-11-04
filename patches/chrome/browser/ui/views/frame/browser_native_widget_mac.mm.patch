@@ -1,17 +1,18 @@
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-index fd4cc9a..645032b 100644
+index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..2ba039bc24c400d69f003084128c4fcf2f40373b 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-@@ -65,6 +65,8 @@
+@@ -65,6 +65,9 @@
  #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
  #include "components/viz/common/frame_timing_details.h"
  #include "components/web_modal/web_contents_modal_dialog_host.h"
 +#include "koan/browser/ui/views/koan_compact_mode.h"
++#include "koan/browser/ui/views/koan_spaces.h"
 +#include "koan/browser/ui/views/koan_traffic_lights.h"
  #include "ui/accessibility/platform/ax_platform_node.h"
  #include "ui/actions/actions.h"
  #include "ui/base/accelerators/global_accelerator_listener/global_accelerator_listener.h"
-@@ -288,6 +290,11 @@ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
+@@ -288,6 +291,11 @@ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
      if (!browser_view_->ShouldDrawTabStrip()) {
        *titlebar_height += kWebAppMenuMargin * 2;
      }
@@ -23,7 +24,7 @@ index fd4cc9a..645032b 100644
    } else {
      *override_titlebar_height = false;
      *titlebar_height = 0;
-@@ -519,6 +526,14 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
+@@ -519,6 +527,14 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
          result->new_toggle_state =
              prefs->GetBoolean(prefs::kShowFullscreenToolbar);
        }
@@ -38,28 +39,23 @@ index fd4cc9a..645032b 100644
        break;
      }
      case IDC_SHOW_FULL_URLS: {
-@@ -571,6 +586,12 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
-         result->new_toggle_state =
-             vertical_tab_strip_state_controller->ShouldDisplayVerticalTabs();
-       }
-+      // Koan: the sidebar is always vertical; no such menu item (after the
-+      // above, which un-hides it outside immersive mode).
-+      if (koan::OwnsSidebar()) {
-+        result->set_hidden_state = true;
-+        result->new_hidden_state = true;
-+      }
+@@ -614,6 +630,19 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
        break;
      }
-     case IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: {
-@@ -583,6 +604,11 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
-             vertical_tab_strip_state_controller->GetCollapseState() !=
-             tabs::VerticalTabStripCollapseState::kExpanded;
-       }
-+      // Koan: collapsing is compact mode's, which has its own item.
-+      if (koan::OwnsSidebar()) {
-+        result->set_hidden_state = true;
-+        result->new_hidden_state = true;
-+      }
-       break;
-     }
-     case IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS: {
+   }
++
++  // Koan: items upstream offers that have no place in Koan's windows (View >
++  // Show Tabs Vertically / Collapse Vertical Tabs: the sidebar is always
++  // vertical and compact mode has its own item, koan_spaces.h). The menu bar is
++  // shared by the windows, so this shows them again in any other.
++  if (const std::optional<bool> koan_hidden =
++          koan::HidesMenuCommand(browser_view_, tag)) {
++    result->set_hidden_state = true;
++    result->new_hidden_state = *koan_hidden;
++    if (*koan_hidden) {
++      result->enable = false;
++    }
++  }
+ }
+ 
+ bool BrowserNativeWidgetMac::WillExecuteCommand(

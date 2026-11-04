@@ -354,7 +354,8 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   // UpdateCaptionButtons(). Letting go of a lock makes the sidebar's region
   // decide again and collapse with an animation, so the locks are released
   // through ReleaseLock(), which defers that until the region is gone.
-  destroying_ = true;
+  // (KoanVerticalTabsPolicy::OnBrowserViewDestroying() ran first, so
+  // IsClosing() is true from here on.)
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   // Order matters: resetting the menu runner may run OnContextMenuClosed(),
   // which releases menu_lock_ again, so it is released (and null) first.
@@ -482,7 +483,7 @@ void KoanCompactModeController::EndFlash() {
 
 void KoanCompactModeController::ReleaseLock(
     std::unique_ptr<ExpandOnHoverLock>& lock) {
-  if (destroying_) {
+  if (IsClosing()) {
     ReleaseExpandOnHoverLockSoon(lock);
     return;
   }
@@ -964,9 +965,10 @@ void KoanCompactModeController::ParkTopContainer() {
 }
 
 bool KoanCompactModeController::IsClosing() const {
-  const BrowserWidget* widget = browser_view_->browser_widget();
-  return destroying_ || !widget || widget->IsClosed() ||
-         browser_view_->browser()->IsDeleteScheduled();
+  // One answer for the window: KoanVerticalTabsPolicy::IsClosing().
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return !controller || controller->vertical_tabs()->IsClosing();
 }
 
 void KoanCompactModeController::ClearHoverStates() {
@@ -1010,7 +1012,7 @@ void KoanCompactModeController::OnFullscreenStateChanged() {
 }
 
 void KoanCompactModeController::OnImmersiveFullscreenChanged() {
-  if (destroying_ || mode_ == Mode::kNone) {
+  if (IsClosing() || mode_ == Mode::kNone) {
     return;
   }
   ClearHoverStates();
@@ -1371,7 +1373,7 @@ void KoanCompactModeController::Deactivate() {
   toolbar_revealed_ = false;
 
   // A closing window has no layout to do.
-  if (destroying_) {
+  if (IsClosing()) {
     return;
   }
 
@@ -1671,7 +1673,7 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
 }
 
 void KoanCompactModeController::UpdateCaptionButtons() {
-  if (destroying_) {
+  if (IsClosing()) {
     // The window is going away: nothing to show or hide.
     return;
   }
