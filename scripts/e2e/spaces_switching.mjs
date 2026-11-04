@@ -16,7 +16,7 @@ import {
   CDP_PORT, CTRL, ALT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
   key, menuMouse, onPage, openMenus, pages, readPref, sleep, tabMenuCommand,
   viewEvent,
-  viewMouse, viewTree, visiblePage, waitFor,
+  viewMouse, viewTree, visiblePage, waitFor, windowTints,
 } from './lib/koan.mjs';
 
 const site = await servePages();
@@ -164,11 +164,21 @@ menu = await headerMenu();
 await menuMouse(menu, menu.items[2]);  // Edit Theme...
 [menu] = openMenus(await viewTree());
 await menuMouse(menu, menu.items[1]);  // the first colour
-const seed = await waitFor(() => readPref('koan.workspaces.tint_applied'));
+const seed = await waitFor(async () => (await windowTints())[0]);
 s = await sidebar();
 const icon = s.icon;
 check('B has an icon and a colour', icon === emoji?.props.Label && !!seed,
       `${icon} / ${seed}`);
+// G1 (Spaces lockdown): the tint is the window's. A new window, in its
+// default-theme Space, has none while this one keeps B's.
+const second = (await browserCall('Target.createTarget',
+                                  { url: 'about:blank', newWindow: true })).result.targetId;
+await sleep(2000);
+const tints = await windowTints();
+check('Two windows on different Spaces show different colours',
+      tints.includes(seed) && tints.includes(0), JSON.stringify(tints));
+await browserCall('Target.closeTarget', { targetId: second });
+await sleep(1500);
 // Back with Ctrl+Alt+Left. (Right after the theme menu, with the emoji
 // picker still open, a synthetic click on the bar can be dropped.)
 await key(await find('b2'), 37, CTRL | ALT, 'ArrowLeft');
@@ -223,8 +233,8 @@ s = await sidebar();
 check('Swiping after a restart lands on the Space\'s last active tab',
       s.name === 'B' && await isShown('b2'), s.name);
 check('...and B keeps its colour',
-      await waitFor(async () => await readPref('koan.workspaces.tint_applied') === seed),
-      `${await readPref('koan.workspaces.tint_applied')} vs ${seed}`);
+      await waitFor(async () => (await windowTints())[0] === seed),
+      `${(await windowTints())[0]} vs ${seed}`);
 await wheel('right');
 s = await sidebar();
 n = delta(await loads('e1'), before);
