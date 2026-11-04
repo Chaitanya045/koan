@@ -127,17 +127,29 @@ class KoanSpaceButton : public views::Button,
           (collapsed ? kSpaceCollapsedDotSize : kSpaceDotSize) / 2.f, flags);
       return;
     }
-    // The emoji can be wider than a shrunk button: centred on it, unclipped
-    // by its width (Zen's icon is positioned absolutely).
+    // In the row the emoji is wider than the shrunk button, and this view's
+    // layer would clip it: the bar paints it (PaintIcon()), under it.
+    if (!bar_->compact()) {
+      PaintIcon(canvas, GetLocalBounds());
+    }
+  }
+
+  // Whether the bar paints this button's emoji (in the row, while it shows).
+  bool BarPaintsIcon() const {
+    return GetVisible() && bar_->compact() && !GetCollapsed() && !icon_.empty();
+  }
+
+  // The emoji, centred on `bounds` and at least a full button wide (Zen's
+  // icon is positioned absolutely, overflowing its button).
+  void PaintIcon(gfx::Canvas* canvas, gfx::Rect bounds) const {
     const gfx::FontList font = gfx::FontList().DeriveWithSizeDelta(
         kSpaceButtonEmojiSize - gfx::FontList().GetFontSize());
-    gfx::Rect text_bounds = GetLocalBounds();
-    const int text_width = std::max(text_bounds.width(), kSpaceButtonSize);
-    text_bounds.set_x((text_bounds.width() - text_width) / 2);
-    text_bounds.set_width(text_width);
+    const int width = std::max(bounds.width(), kSpaceButtonSize);
+    bounds.set_x(bounds.x() + (bounds.width() - width) / 2);
+    bounds.set_width(width);
     canvas->DrawStringRectWithFlags(
-        icon_, font, provider->GetColor(kColorKoanSpaceForeground), text_bounds,
-        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_ELLIPSIS);
+        icon_, font, GetColorProvider()->GetColor(kColorKoanSpaceForeground),
+        bounds, gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_ELLIPSIS);
   }
 
   void StateChanged(ButtonState old_state) override {
@@ -265,6 +277,7 @@ void KoanSpaceBarView::Update(
     RemoveChildViewT(gone);
   }
   ReorderChildView(create_button_, children().size());
+  SchedulePaint();
   // Zen hides the buttons while there is only one Space.
   for (KoanSpaceButton* button : buttons_) {
     button->SetVisible(buttons_.size() > 1);
@@ -281,6 +294,20 @@ bool KoanSpaceBarView::IsAnyButtonHovered() const {
 void KoanSpaceBarView::OnButtonStateChanged() {
   for (KoanSpaceButton* button : buttons_) {
     button->OnBarStateChanged();
+  }
+  // The emoji it paints for them.
+  SchedulePaint();
+}
+
+void KoanSpaceBarView::OnPaint(gfx::Canvas* canvas) {
+  views::View::OnPaint(canvas);
+  // The shown emoji of the row's buttons, which their own layers would clip.
+  // Only a lit button shows one (the current or hovered Space), so it has
+  // full opacity and colour, like the button over it.
+  for (const KoanSpaceButton* button : buttons_) {
+    if (button->BarPaintsIcon()) {
+      button->PaintIcon(canvas, button->bounds());
+    }
   }
 }
 
