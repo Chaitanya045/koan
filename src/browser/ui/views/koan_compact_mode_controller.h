@@ -340,6 +340,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   base::OneShotTimer hover_release_timer_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
   bool edge_sidebar_hovered_ = false;
+  // The window is being destroyed (OnBrowserViewDestroying()): no UI work.
+  bool destroying_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
 
   // The sidebar's context menu.

@@ -16,8 +16,9 @@ class View;
 namespace koan {
 
 // Whether the window is fullscreen: BrowserView::IsFullscreen() without the
-// crash while the window is going away (its widget is gone before Koan's
-// controllers are, and the BrowserView's own call dereferences it).
+// crash while the window is going away. Then browser_widget() is null (the
+// BrowserView's own call dereferences it) while GetWidget() still returns the
+// dying widget, so that is no test of the window being alive.
 bool IsWindowFullscreen(const BrowserView* browser_view);
 
 // Whether compact mode is applied to the window of `browser_view` (a

@@ -346,6 +346,10 @@ void KoanCompactModeController::OnBrowserViewLayout() {
 }
 
 void KoanCompactModeController::OnBrowserViewDestroying() {
+  // From here on the window is going away: no UI work (the widget and the
+  // browser's animation controller may be gone), see Deactivate() and
+  // UpdateCaptionButtons().
+  destroying_ = true;
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   collapse_subscription_ = {};
   resizing_subscription_ = {};
@@ -1221,6 +1225,12 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   top_container_index_.reset();
   toolbar_revealed_ = false;
 
+  // A closing window has no layout to do, and leaves the sidebar as it is for
+  // the others (expanding it again is an animation).
+  if (destroying_) {
+    return;
+  }
+
   if (auto* state =
           tabs::VerticalTabStripStateController::From(browser_view_->browser());
       state && !keep_sidebar_hidden) {
@@ -1521,6 +1531,10 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
 }
 
 void KoanCompactModeController::UpdateCaptionButtons() {
+  if (destroying_) {
+    // The window is going away: nothing to show or hide.
+    return;
+  }
 #if BUILDFLAG(IS_MAC)
   if (traffic_lights_) {
     // AppKit shows the lights by itself in fullscreen, with the menu bar;
