@@ -47,6 +47,10 @@ UI DevTools can't read a menu item's label (`MenuItemView` paints its title) and
 
 ## Mac harness port
 
-Open: which of the loop's drivers (`drv/*.mjs`) can send real key events (Shift+Cmd+L, Shift+Cmd+A, Left x8 on the focused resize area), a real pointer path (`cliclick`, front-pid check first), and read the view tree (UI DevTools over ssh, `koan-mac-test-harness`). The scripts' checks are written against UI DevTools views and CDP; the port keeps the checks, swaps `key()`/`mouseOn()` for the Mac driver's, and reads `KEEP_LOG` from the loop's captured browser log. Not yet ported; add a row here per test as it is.
+The Mac loop's port is in `scripts/mac/` (README there: `vtabs.sh`, `drv/vtabs.mjs`; real keys with `keypress2`, pointer with `ptr`, UI DevTools views with `fv.mjs`, `PREFS=` seeds and `FLAGS=` per run). Ctrl+S is the compact key until #90; Shift+Cmd+L is the sidebar button's.
 
-**Compact mode toggled quickly** (test 21, the one that would have caught the review's F1): press Cmd+S twice within the collapse animation (about 250 ms), and 20 times in 10 s; the sidebar must end expanded at Zen's width (compact off) or hidden (compact on), never 56 wide.
+Result on c155e (#155 4e7b6d02, DCHECKs on): **passed** T1/T2/T6 (old profile starts expanded at 163, no rail, the three prefs absent after quit), T13 (Shift+Cmd+L x6 alternates 0/240; found that a *hidden* View item never fires its key, so "Collapse Vertical Tabs" stays visible), T14, T20, T21 a-d (two toggles 60 ms apart, three, 20 in 10 s, close mid-animation), T22, T24; crash-path 21/0, regression 22/0/1 skipped.
+
+**Not yet run on the Mac:** T17/T18 (need a drag verb in `ptr`), T19 (needs focus on the resize area), T3's pointer half, M4, M5, M7-M11, M15/M16 (no hook), M21 (menu open), M23, M25, M26. The hands-on tester has M7, M8, M10, M11, M3 and M23.
+
+**Compact mode toggled quickly** (test 21, the one that would have caught the review's F1): passes on c155e; keep it in every run.
