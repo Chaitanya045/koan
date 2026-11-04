@@ -74,9 +74,18 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
       dark ? ui::ColorTransform(kColorKoanEssentialsTileSelected)
            : ui::ColorTransform(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)));
 
-  // The URL pill on the tab colour; the floating URL bar's long shadow
-  // (box-shadow 0 30px 140px -15px) black at 80% (60% in dark mode).
-  mixer[kColorKoanUrlPill] = {kColorTabBackgroundActiveFrameActive};
+  // The URL pill (zen-omnibox.css .urlbar-background): the Essentials tiles'
+  // tint (--zen-toolbar-element-bg), on hover --zen-toolbar-element-bg-hover
+  // (black at 8%, white at 10% in dark mode); its text the toolbar text at
+  // 59% (measured on Zen 1.24b, zen-mac-spec.md 2.4). The floating URL bar's
+  // long shadow (box-shadow 0 30px 140px -15px) black at 80% (60% in dark
+  // mode).
+  mixer[kColorKoanUrlPill] = {kColorKoanEssentialsTile};
+  mixer[kColorKoanUrlPillHovered] = {
+      dark ? SkColorSetA(SK_ColorWHITE, Alpha(0.1f))
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.08f))};
+  mixer[kColorKoanUrlPillForeground] =
+      ui::SetAlpha(kColorToolbarText, Alpha(0.59f));
   // The floating URL bar (zen-omnibox.css, #urlbar[breakout-extend]): white
   // or rgb(24, 24, 24), a glass pane (zen.theme.acrylic-urlbar) at 93% / 92%
   // of white or rgb(20, 20, 20) with a 40px blur, and a 0.5px outline,

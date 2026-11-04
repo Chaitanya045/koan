@@ -57,6 +57,12 @@ bool ShowsCardPlaceholder(views::View* location_bar);
 ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
                                             ui::ColorId id);
 
+// Whether the page action icons (site settings, install, bookmark star, ...)
+// and content setting icons of `location_bar` (a LocationBarView) are hidden:
+// while it is open as Zen's URL bar, over the sidebar's pill or floating, as
+// Zen's has none. Called from LocationBarView::ShouldHidePageActionIcons().
+bool HidesPageActionIcons(const views::View* location_bar);
+
 // Whether `view` (the location bar, or a row of its omnibox popup) is in a
 // window whose floating URL bar is Zen's card: only then do the suggestion
 // rows take Zen's styling (koan_omnibox_rows.h). False for any other omnibox

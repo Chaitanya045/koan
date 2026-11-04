@@ -140,6 +140,9 @@ class KoanUrlBarController : public views::ViewObserver,
   void Layout();
   gfx::Rect CardBounds() const;
   void HideToolbarSiblings();
+  // Shows or hides the location bar's page actions for the placement (Zen's
+  // URL bar has none).
+  void RefreshPageActions();
   // Handles the omnibox's keys (Esc) while the bar is open or open for a new
   // tab.
   void UpdateKeyHandler();

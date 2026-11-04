@@ -419,6 +419,8 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.
   mixer[kColorKoanUrlPill] = {t.InputFill(Token::kSidebar)};
+  mixer[kColorKoanUrlPillHovered] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanUrlPillForeground] = {t[Token::kSidebarForeground]};
   mixer[kColorKoanFloatingUrlBarBackground] = {FloatingUrlBarCardColor(key)};
   mixer[kColorKoanOmniboxRowTitle] = {t[Token::kForeground]};
   mixer[kColorKoanFloatingUrlBarFocusRing] = {t[Token::kRing]};

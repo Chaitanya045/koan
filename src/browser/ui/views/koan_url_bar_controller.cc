@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_controller.h"
 #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -525,6 +526,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     placement_ = Placement::kNone;
     UpdateKeyHandler();
     ApplyCardStyle();
+    RefreshPageActions();
     browser_view_->InvalidateLayout();
     compact_mode_->OnUrlBarOpenChanged();
     return;
@@ -554,6 +556,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     ui::Layer* layer = top_container->layer();
     layer->GetAnimator()->AbortAllAnimations();
     layer->SetTransform(gfx::Transform());
+    RefreshPageActions();
     compact_mode_->OnUrlBarOpenChanged();
   }
   // The style first: the larger floating font can change the toolbar's
@@ -568,6 +571,15 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
         .Once()
         .SetDuration(kFadeDuration)
         .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
+  }
+}
+
+void KoanUrlBarController::RefreshPageActions() {
+  // The location bar asks HidesPageActionIcons() when it changes.
+  if (LocationBarView* bar = location_bar()) {
+    LocationBar* location = bar;
+    location->OnChanged();
+    location->UpdateContentSettingsIcons();
   }
 }
 
@@ -928,6 +940,11 @@ void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
   if (url_bar && url_bar->IsCommandCard()) {
     text = u"Search...";
   }
+}
+
+bool HidesPageActionIcons(const views::View* location_bar) {
+  const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
+  return url_bar && url_bar->is_open();
 }
 
 bool ShowsZenCardRows(const views::View* view) {
