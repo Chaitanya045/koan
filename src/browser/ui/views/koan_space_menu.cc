@@ -122,12 +122,21 @@ KoanSpaceMenu::~KoanSpaceMenu() = default;
 void KoanSpaceMenu::RunMenuAt(views::View* anchor,
                               const gfx::Point& screen_point) {
   anchor_.SetView(anchor);
+  // An old runner's close callback must not let go of the new hold.
+  runner_.reset();
+  hold_ = HoldSidebarOpen(anchor);
   runner_ = std::make_unique<views::MenuRunner>(
       &model_,
-      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU);
+      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
+      base::BindRepeating(&KoanSpaceMenu::OnMenuClosed,
+                          base::Unretained(this)));
   runner_->RunMenuAt(
       anchor->GetWidget(), nullptr, gfx::Rect(screen_point, gfx::Size()),
       views::MenuAnchorPosition::kTopLeft, ui::mojom::MenuSourceType::kMouse);
+  // No menu, or it ran to its end (macOS).
+  if (!runner_->IsRunning()) {
+    hold_.reset();
+  }
 }
 
 void KoanSpaceMenu::ExecuteCommand(int command_id, int event_flags) {
@@ -212,9 +221,16 @@ KoanCreateMenu::KoanCreateMenu(KoanWorkspaceController* controller)
 KoanCreateMenu::~KoanCreateMenu() = default;
 
 void KoanCreateMenu::RunMenuAt(views::View* anchor) {
+  runner_.reset();
+  hold_ = HoldSidebarOpen(anchor);
   runner_ = std::make_unique<views::MenuRunner>(
-      &model_, views::MenuRunner::HAS_MNEMONICS);
+      &model_, views::MenuRunner::HAS_MNEMONICS,
+      base::BindRepeating(&KoanCreateMenu::OnMenuClosed,
+                          base::Unretained(this)));
   RunBelow(runner_.get(), anchor);
+  if (!runner_->IsRunning()) {
+    hold_.reset();
+  }
 }
 
 void KoanCreateMenu::ExecuteCommand(int command_id, int event_flags) {

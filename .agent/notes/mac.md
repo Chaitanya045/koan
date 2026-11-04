@@ -133,3 +133,27 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   hidden-toolbar transform and pointer blocking on it.
 - Shortcuts are still Ctrl-based. ⌘ shortcuts, traffic lights in the
   sidebar and trackpad swipes are later parts of #51.
+
+## Sidebar animations (#94)
+
+- Upstream animates panels differently per platform
+  (`browser_animations::GetPanelAnimationType()`, `common_animation_values.h`):
+  Linux and Windows lay the page out once at its final size and clip it
+  (`kClipAndSingleReflow`); **macOS on Apple Silicon resizes the page on
+  every animation frame** (`kContinuousFrameResizeWithSurfaceSync`). The
+  Linux e2e never sees that, and on a Mac it is the flicker when the sidebar
+  expands or collapses (the page is cleared and redrawn at each size, with
+  Koan's card around it). `koan::UseSingleReflowSidebarAnimation()`
+  (feature `KoanSidebarSingleReflow`, chrome://flags "Koan sidebar single
+  reflow") makes the tabbed layout take the clip branch everywhere;
+  `--disable-features=KoanSidebarSingleReflow` gives upstream's macOS
+  behaviour back to compare.
+- Compact mode zeroes the sidebar's width from the start of its collapse
+  (not at the end, when the width used to jump from 56 to 0), and the hidden
+  sidebar's reveal is a layer transform on a strip laid out once
+  (`koan_sidebar_animation.*`).
+- Compact mode is off in native fullscreen (`UseContentCard()` needs a
+  window that isn't fullscreen): a fullscreen Mac window shows the sidebar as
+  Chromium's collapsed icon strip. Not changed here: the card's gutter and
+  the hot zones need the page's native view out of the way, and the toolbar
+  lives in the immersive overlay widget there.

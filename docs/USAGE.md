@@ -14,7 +14,7 @@ Chrome.
 | Action | Keys | Chrome had |
 |---|---|---|
 | Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
-| Show the sidebar in compact mode | Ctrl+Alt+S (⌘⌥S) | |
+| Show the sidebar in compact mode | Ctrl+Alt+S (⌘⌥S) | Stays out until pressed again |
 | Next / previous Space | Ctrl+Alt+Right / Ctrl+Alt+Left (⌘⌥→ / ⌘⌥←) | macOS: next / previous tab (still Ctrl+Tab) |
 | Space 1 to 10 | macOS: Ctrl+1 … Ctrl+9, Ctrl+0 (no keys elsewhere, as in Zen; set them in Settings) | |
 | Split view: side by side | Ctrl+Alt+V (⌘⌥V) | |
@@ -274,6 +274,7 @@ Ctrl+S hides the sidebar; the page fills the window with a thin margin.
 Move the pointer to the left edge (or press Ctrl+Alt+S) to slide the
 sidebar out, with its navigation buttons and URL pill. Ctrl+L and Ctrl+T
 open the floating URL bar. The setting applies to all windows and persists.
+The sidebar slides in over the page; the page doesn't move or reflow.
 
 In the multiple-toolbars layout you choose what compact mode hides, in the
 sidebar's menu under **Compact Mode**: **Hide sidebar** (the default, as in

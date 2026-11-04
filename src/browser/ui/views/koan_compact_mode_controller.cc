@@ -72,10 +72,12 @@ namespace {
 
 constexpr base::TimeDelta kToolbarRevealDuration = base::Milliseconds(160);
 constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
-// How long the pointer must be away before the toolbar hides again.
-constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
-// How long a keyboard-opened sidebar stays before hover decides.
-constexpr base::TimeDelta kSidebarPeekGrace = base::Seconds(3);
+// How long the pointer must be away before the toolbar hides again (Zen's
+// zen.view.compact.toolbar-hide-after-hover.duration).
+constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(1000);
+// Zen's zen.view.compact.sidebar-keep-hover.duration: how long the sidebar
+// stays out after the pointer leaves it.
+constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
 
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
 
@@ -391,48 +393,17 @@ bool KoanCompactModeController::PeekSidebar() {
   if (!hides_sidebar()) {
     return false;
   }
-  if (!peek_lock_) {
-    if (auto* tab_strip = browser_view_->tab_strip_view()) {
-      peek_lock_ =
-          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
-    }
-  }
-  sidebar_unhovered_since_.reset();
-  sidebar_peek_started_ = base::TimeTicks::Now();
-  sidebar_peek_timer_.Stop();
-  CheckSidebarPeek();
-  UpdatePointerMonitor();
-  return true;
-}
-
-void KoanCompactModeController::CheckSidebarPeek() {
-  if (!peek_lock_) {
-    return;
-  }
-  auto* tab_strip = browser_view_->tab_strip_view();
-  if (tab_strip && tab_strip->IsMouseHovered()) {
-    sidebar_unhovered_since_.reset();
-    sidebar_peek_timer_.Stop();
-    return;
-  }
-  const base::TimeTicks now = base::TimeTicks::Now();
-  if (!sidebar_unhovered_since_) {
-    sidebar_unhovered_since_ = now;
-  }
-  // Give the pointer time to reach the sidebar after a keyboard peek.
-  const base::TimeTicks hide_at =
-      std::max(sidebar_peek_started_ + kSidebarPeekGrace,
-               *sidebar_unhovered_since_ + kToolbarHideDelay);
-  if (!tab_strip || now >= hide_at) {
-    sidebar_peek_timer_.Stop();
+  // Zen's cmd_zenCompactModeShowSidebar toggles `zen-user-show`: the sidebar
+  // stays out, wherever the pointer is, until the shortcut is used again.
+  if (peek_lock_) {
     peek_lock_.reset();
-    UpdatePointerMonitor();
-    return;
+    return true;
   }
-  if (!sidebar_peek_timer_.IsRunning()) {
-    sidebar_peek_timer_.Start(FROM_HERE, hide_at - now, this,
-                              &KoanCompactModeController::CheckSidebarPeek);
+  if (auto* tab_strip = browser_view_->tab_strip_view()) {
+    peek_lock_ =
+        tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
   }
+  return true;
 }
 
 void KoanCompactModeController::FlashSidebar() {
@@ -987,8 +958,8 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
 
   toolbar_hide_timer_.Stop();
   toolbar_unwanted_since_.reset();
-  sidebar_peek_timer_.Stop();
   EndFlash();
+  hover_release_timer_.Stop();
   hover_lock_.reset();
   peek_lock_.reset();
   pointer_monitor_.reset();
@@ -1022,6 +993,10 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
     if (ui::Layer* layer = top_container->layer()) {
       layer->GetAnimator()->AbortAllAnimations();
       layer->SetTransform(gfx::Transform());
+      // A hidden toolbar's layer is hidden (HideAwayToolbarLayer()): without
+      // this the toolbar stays invisible in the fullscreen toolbar, a blank
+      // grey band above the sidebar.
+      layer->SetVisible(true);
     }
     top_container->SetCanProcessEventsWithinSubtree(true);
   }
@@ -1192,8 +1167,7 @@ void KoanCompactModeController::CheckToolbarHide() {
 
 void KoanCompactModeController::UpdatePointerMonitor() {
   const bool wanted =
-      mode_ != Mode::kNone &&
-      (toolbar_revealed_ || caption_strip_revealed_ || peek_lock_ != nullptr);
+      mode_ != Mode::kNone && (toolbar_revealed_ || caption_strip_revealed_);
   views::Widget* widget = browser_view_->GetWidget();
   if (!wanted || !widget) {
     pointer_monitor_.reset();
@@ -1210,7 +1184,6 @@ void KoanCompactModeController::UpdatePointerMonitor() {
 void KoanCompactModeController::CheckRevealedHides() {
   CheckToolbarHide();
   CheckCaptionStripHide();
-  CheckSidebarPeek();
 }
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
@@ -1218,6 +1191,7 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
     return;
   }
   if (hovered) {
+    hover_release_timer_.Stop();
     if (!hover_lock_) {
       if (auto* tab_strip = browser_view_->tab_strip_view()) {
         hover_lock_ = tab_strip->GetExpandOnHoverLock(
@@ -1227,8 +1201,14 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
     return;
   }
   // Once the strip has slid over the hot zone the pointer is inside the
-  // strip, and upstream's hover tracking keeps it open until it leaves.
-  hover_lock_.reset();
+  // strip, and upstream's hover tracking keeps it open until it leaves; the
+  // lock is kept for Zen's keep-hover time, so the hand-over between the two
+  // doesn't close it for a moment.
+  hover_release_timer_.Start(
+      FROM_HERE, kSidebarKeepHover,
+      base::BindOnce(
+          [](KoanCompactModeController* self) { self->hover_lock_.reset(); },
+          base::Unretained(this)));
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {

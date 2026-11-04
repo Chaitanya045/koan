@@ -52,8 +52,11 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
     return SidebarSideInsets(browser_view, top, sidebar_side);
   }
   // The vertical tab strip already leaves a gap on its side, and the toolbar
-  // sits directly above the card.
-  return SidebarSideInsets(browser_view, 0, 0);
+  // sits directly above the card. Where compact mode hides just the sidebar,
+  // a gutter takes its place, with the hot zone that slides it in.
+  return SidebarSideInsets(
+      browser_view, 0,
+      IsCompactModeActive(browser_view) ? kContentCardMargin : 0);
 }
 
 gfx::RoundedCornersF ActiveContentsRadii(

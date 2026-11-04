@@ -14,6 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/tab_groups/tab_group_id.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/view_tracker.h"
@@ -49,6 +50,7 @@ class KoanSpaceMenu : public ui::SimpleMenuModel::Delegate {
 
  private:
   void Execute(int command_id);
+  void OnMenuClosed() { hold_.reset(); }
 
   const raw_ptr<KoanWorkspaceController> controller_;
   // The Space the menu acts on.
@@ -58,6 +60,8 @@ class KoanSpaceMenu : public ui::SimpleMenuModel::Delegate {
   ui::SimpleMenuModel model_{this};
   std::map<int, tab_groups::TabGroupId> switch_commands_;
   views::ViewTracker anchor_;
+  // Keeps the sidebar out (compact mode) while the menu is open.
+  std::unique_ptr<SidebarHold> hold_;
   std::unique_ptr<views::MenuRunner> runner_;
   base::WeakPtrFactory<KoanSpaceMenu> weak_factory_{this};
 };
@@ -78,9 +82,13 @@ class KoanCreateMenu : public ui::SimpleMenuModel::Delegate {
   bool IsCommandIdEnabled(int command_id) const override;
 
  private:
+  void OnMenuClosed() { hold_.reset(); }
+
   // The entries as they were when the menu opened, by command id - 1.
   const std::vector<KoanWorkspaceController::CreateMenuEntry> entries_;
   ui::SimpleMenuModel model_{this};
+  // Keeps the sidebar out (compact mode) while the menu is open.
+  std::unique_ptr<SidebarHold> hold_;
   std::unique_ptr<views::MenuRunner> runner_;
 };
 

@@ -14,6 +14,7 @@ namespace koan::features {
 
 BASE_FEATURE(kKoanSidebar, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanCompactMode, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanSidebarSingleReflow, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWorkspaces, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanGlance, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanRestoreTabsOnDemand, base::FEATURE_ENABLED_BY_DEFAULT);
@@ -32,6 +33,10 @@ bool IsSidebarEnabled() {
 
 bool IsCompactModeEnabled() {
   return base::FeatureList::IsEnabled(kKoanCompactMode);
+}
+
+bool IsSidebarSingleReflowEnabled() {
+  return base::FeatureList::IsEnabled(kKoanSidebarSingleReflow);
 }
 
 bool IsWorkspacesEnabled() {
