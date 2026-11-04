@@ -193,3 +193,29 @@ s4-menus-1.jpg, s4-menus-2.jpg vs main-18/19/20.
 B12 #130 · B2 #131 · B1 #132 · B10+B11 #133 · B13+B14+B26 #134 · B4 #135 · B17 #136 · B19(+B30) #137 · B21 #138 · B27 #139 · B15 #140 · B7 #141.
 Commented on existing: B5 -> #101, B6/B22 -> #95, B28 -> #41, B3/B8/B25/B31 -> #71, PR #90 checklist -> #90.
 Not yet tested: fullscreen + top peek, folders, split view ⌘⌥H/G, Incognito window, small window, ⌘N second window use, quit/relaunch session restore, onboarding (first run), trackpad swipe, #129 re-test.
+
+## Tester incident (2026-11-04 14:17)
+A mistyped coordinate (x=50, outside my Koan window) clicked the user's desktop Calendar widget and launched Calendar.app (pid 54265). I quit that pid at once (it wasn't running before). The input tool now refuses any click whose topmost window isn't one of my own pids.
+
+## Session 5 (14:13 IST): fix builds and fullscreen
+
+| Build | Check | Result |
+|---|---|---|
+| Koan-release-129-4d20b7c5 | compact on, red close button | **no crash**; window closes, app stays (s5) — #130 fixed |
+| same | compact on (Ctrl+S), ⌘W to the last tab | **no crash** — #130 fixed; the window still closes (#134) |
+| same | ⌘N after closing | new window **not** in compact mode: Zen's compact is global — minor |
+| KoanCheck-c90g (#90 e75acc5b) | rebind Toggle Compact Mode to ⌃⇧K, click away | field green, ⌃⇧K; **saved after reload**; old ⌘S **dead**; ⌃⇧K toggles — #139 fixed (s5-011/016-crop, s5-013/014). Menu bar now Koan File Edit View Spaces History Bookmarks Tools Profiles Window Help (Tab gone, Tools added; Profiles still extra). View has no "Toggle Compact Mode" item to show the new key (s5-012-crop): **check** |
+| KoanCheck-c142 | Ctrl+S on/off ×3 | **no clipping** — #131 fixed (s5-020) |
+| c142 | top-row sidebar button | still Chromium rail + toolbar (expected: c143 fixes) (s5-021) |
+| KoanCheck-c143 | top-row sidebar button on/off | toggles compact, no Chromium rail or toolbar — #132 fixed (s5-030, 033); revealed top row still split (#133); clipping on off (#131, not in this build) |
+| KoanCheck-c144 | compact: lights over the page | **gone** (s5-040); hover reveal: one top row (lights, toggle, back/fwd/reload), pill under it — #133 fixed (s5-041) |
+| c144 | ⌃⌘F fullscreen with compact on | **B32** below |
+
+### B32. Fullscreen: compact mode is dropped (sidebar shown, page clipped) and the top peek shows Chromium's full toolbar — major
+Build: KoanCheck-c144 (develop + #144); same top peek as the user's report on the preview.
+Steps: compact on, ⌃⌘F, then move the pointer to the top edge.
+Expected (Zen fullscreen-and-notch.md, live-results: compact + fullscreen → card edge to edge (0,0,1470,923), sidebar only on left-edge hover;
+the top shows only the macOS menu bar; no toolbar, no bookmarks bar).
+Actual: (1) on entering fullscreen the sidebar is shown and the page is drawn shifted/clipped under it (s5-050-fs-compact.jpg);
+(2) the top peek shows Chromium's toolbar under the menu bar: traffic lights, back/forward/reload, site-settings icon + "github.com" omnibox,
+Install, bookmark star, profile avatar, ⋮ (s5-051-fs-top-peek.jpg). Exit restores compact correctly (no crash).
