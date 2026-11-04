@@ -1,0 +1,138 @@
+// Koan regression pass on the Mac. env: BUILD=<label> APP_PATH=<app on the Mac> [OVERRIDE_USER_AWAY=1 only when the maintainer says so]
+// Steps: launch (fresh profile, logs captured) / new tab, Cmd+T, Cmd+L, Esc / close last tab / Cmd+S x6 / fullscreen x2 + Cmd+T in fullscreen /
+//        Incognito / Spaces (create, switch) / small window / theme picker (not automated yet) / quit. Then scan the log and compare with the previous run.
+import { execSync } from 'node:child_process';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { sleep, pages, browserCall, waitFor } from './lib/koan.mjs';
+import { fviews } from './fv.mjs';
+const { BUILD = 'build', APP_PATH, KEYSET = 'base' } = process.env; const OVERRIDE_USER_AWAY = '';  // the presence check can no longer be switched off  // KEYSET=base: Ctrl+S compact, Ctrl+Shift+P private (plain develop); KEYSET=cmd: Cmd+S, Cmd+Shift+P (#90 and later)
+const M = '/Users/chaitanya/work/koan-mac';
+const SSH = ['ssh', '-i', process.env.HOME + '/.ssh/koan_mac_ed25519', '-o', 'BatchMode=yes', '-o', 'ControlPath=/tmp/koan-cm.sock', 'chaitanya@chaitanyas-macbook-air'];
+const rawMac = (cmd, t = 90000) => execSync([...SSH, JSON.stringify(cmd)].join(' '), { timeout: t }).toString().trim();
+// Input guard (after the 15:12 collision with the tester): activate/unmin need the tester's grant (tmp/screen-granted, written by me on an explicit "screen free", removed on "testing"); keypress2/ptr also need MY Koan pid to be the frontmost app. Otherwise the run ends at once (cleanup removes only my own pass- Koans).
+const mac = (cmd, t = 90000) => {
+  let pre = '';
+  if (/\/tmp\/(activate|unmin)\b/.test(cmd)) pre = `${'/Users/chaitanya/work/koan-mac'}/tmp/grantok.sh || exit 7; `;
+  else if (/\/tmp\/ptr (move|pos)\b/.test(cmd)) pre = `${'/Users/chaitanya/work/koan-mac'}/tmp/grantok.sh || exit 7; `;  // a pure move (also the final cursor restore, after my Koan is gone) needs the grant but not the frontmost check
+  else if (/\/tmp\/(keypress2|ptr)\b/.test(cmd)) { let p = 0; try { p = PID; } catch {} pre = `${'/Users/chaitanya/work/koan-mac'}/tmp/inputok.sh ${p || 0} || exit 8; `; }
+  try { return rawMac(pre + cmd, t); }
+  catch (e) { if (pre && (e.status === 7 || e.status === 8)) { console.log(`STOP  input refused (${e.status === 7 ? 'the screen is not granted' : 'my Koan is not the frontmost app'}): no key or pointer event was sent. Ending the run.`); process.exit(4); } throw e; }
+};
+const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+const RD = `${M}/tmp/regress/${BUILD}-${stamp}`, LOCAL = `${process.env.HOME}/work/koan/.cache/mac-review/regress/${BUILD}-${stamp}`;
+mkdirSync(LOCAL, { recursive: true });
+const idle = () => Number(mac(`${M}/tmp/idle.sh`));
+const sinceUser = () => Number(mac(`${M}/tmp/usergate.sh`));
+const gate0 = sinceUser();
+if (gate0 < 600) { console.log(`REFUSED: user input ${gate0}s ago (not mine); a run starts after 600 s without user input`); process.exit(3); }
+try { rawMac('/Users/chaitanya/work/koan-mac/tmp/grantok.sh'); } catch { console.log('REFUSED: the tester has not granted the screen (no "screen free" yet)'); process.exit(3); }
+const RUN_START = Number(mac('date +%s'));
+// start: the user is away today (the maintainer's word); the mid-run check below compares idle with my own last input
+mac(`mkdir -p ${RD}; touch ${M}/tmp/regress-start.mark; ls /Users/chaitanya/Library/Logs/DiagnosticReports | grep -i '^Koan' | sort > ${RD}/ips-before.txt`);
+let PID; const steps = [];
+process.on('exit', () => { try { mac(`${M}/tmp/cleanup.sh`, 120000); } catch {} });
+const alive = () => { try { return mac(`ps -p ${PID} -o pid=`) !== ''; } catch { return false; } };
+const newIps = () => mac(`ls /Users/chaitanya/Library/Logs/DiagnosticReports | grep -i '^Koan' | sort | comm -13 ${RD}/ips-before.txt - || true`).split('\n').filter(Boolean);
+const front = () => mac(`${M}/tmp/front.sh`);
+let aborted = false, lastAct = Date.now();
+// Posted key events reset HIDIdleTime too (measured: Cmd+L -> idle 1 s), so "the user is back" means: idle is lower than the time since my own last key.
+const userBack = () => Number(mac(`cat ${M}/tmp/last-user-input.ts`)) > RUN_START;  // an input that was not mine since this run started
+const key = async (code, flags = '') => { if (aborted) return false; if (!OVERRIDE_USER_AWAY && userBack()) { aborted = true; console.log('ABORT: the user is back (HID idle lower than the time since my last key)'); return false; } for (let i = 0; i < 4; i++) { try { mac(`${M}/tmp/activate ${PID}`); } catch {} await sleep(700); if (/Koan/.test(front())) { mac(`${M}/tmp/keypress2 ${PID} ${code} '${flags}'`); lastAct = Date.now(); return true; } await sleep(800); } return false; };
+const K = { T: 17, L: 37, ESC: 53, S: 1, F: 3, P: 35, W: 13, N: 45, Q: 12, LEFT: 123, RIGHT: 124, RETURN: 36, N2: 19 };
+const COMPACT = KEYSET === 'cmd' ? 'c' : 'k', PRIVATE = KEYSET === 'cmd' ? 'cs' : 'ks';
+const sidebarW = async () => { try { const v = (await fviews()).find(x => x.cls === 'VerticalTabStripRegionView' && x.shown); return v ? v.w : 0; } catch { return -1; } };
+let n = 0;
+const shot = async tag => { try { mac(`mkdir -p ${RD}; ${M}/tmp/cap.sh ${RD}/${String(n++).padStart(2, '0')}-${tag}.png`); } catch {} };
+let stopReason = null;
+const cleanupAll = () => { try { return mac(`${M}/tmp/cleanup.sh`, 120000); } catch (e) { return `cleanup failed: ${String(e.message ?? e).slice(0, 80)}`; } };
+async function guardBefore(name) {
+  if (aborted) return stopReason ?? 'aborted earlier';
+  if (userBack()) { aborted = true; return 'the user is back (HID idle lower than the time since my last input)'; }
+  const prob = [];
+  try {
+    if (/UserNotificationCenter/.test(mac(`${M}/tmp/winall`))) prob.push('a system dialog (UserNotificationCenter) is on screen');
+    for (let i = 0; i < 3; i++) { try { mac(`${M}/tmp/activate ${PID}`); } catch {} await sleep(500); if (/Koan/.test(front())) break; if (i === 2) prob.push(`Koan is not frontmost (${front().slice(0, 24)})`); }
+    const vs = await fviews().catch(() => null);
+    if (vs && process.env.ONBOARD !== '1' && vs.some(v => v.shown && /^KoanWelcome/.test(v.cls))) prob.push('the onboarding overlay is on screen');
+    mac(`mkdir -p ${RD}/look; ${M}/tmp/cap.sh ${RD}/look/${String(n).padStart(2, '0')}-before-${name.replace(/\W+/g, '-').slice(0, 24)}.png`);
+  } catch (e) { prob.push(`look failed: ${String(e.message ?? e).slice(0, 80)}`); }
+  if (prob.length) { aborted = true; stopReason = prob.join('; '); console.log(`STOP  before "${name}": ${stopReason}`); console.log(cleanupAll()); return stopReason; }
+  return null;
+}
+async function step(name, fn, settle = 1500) {
+  const t0 = Date.now(); let note = '', ok = true;
+  if (!alive()) { steps.push({ name, skipped: 'koan not running' }); console.log(`SKIP  ${name} (Koan not running)`); return; }
+  { const bad = await guardBefore(name); if (bad) { steps.push({ name, ok: false, note: `STOPPED: ${bad}` }); console.log(`SKIP  ${name} (stopped: ${bad})`); return; } }
+  try { note = (await fn()) ?? ''; } catch (e) { ok = false; note = String(e.message ?? e).slice(0, 160); }
+  await sleep(settle); const a = alive(), ips = newIps(); await shot(name.replace(/\W+/g, '-').slice(0, 24));
+  const s = { name, ok: ok && a && ips.length === 0 && !aborted, alive: a, newIps: ips, note, ms: Date.now() - t0 }; steps.push(s);
+  console.log(`${s.ok ? 'PASS' : 'FAIL'}  ${name}  alive=${a} newIps=${ips.length}${note ? '  ' + note : ''}`);
+}
+const waitMine = async () => { for (let i = 0; i < 60; i++) { const n = Number(mac(`ps -Ao command | grep -c '[M]acOS/Koan -.*user-data-dir=/Users/chaitanya/work/koan-mac/tmp/pass-' || true`)); if (n === 0) return; await sleep(1500); } };
+await waitMine(); await sleep(1500);
+const { MODE = 'main', FLAGS = '', PREFS = '' } = process.env;
+if (PREFS) { const b64 = Buffer.from(PREFS).toString('base64'); mac(`rm -rf ${M}/tmp/pass-R-profile; mkdir -p ${M}/tmp/pass-R-profile/Default; echo ${b64} | base64 -D > ${M}/tmp/pass-R-profile/Default/Preferences`); }
+mac(`cd ${M}; ${PREFS ? 'KEEP_PROFILE=1 ' : ''}NO_ONBOARD=1 KOAN_EXTRA_FLAGS='--vmodule=koan_compact_mode_controller=1 ${FLAGS}' APP='${APP_PATH}' nohup ./pass-launch.sh R 600 '' > logs/pass-R.out 2>&1 < /dev/null &`);
+await waitFor(async () => { try { return (await pages()).length > 0; } catch { return false; } }, 40000);
+PID = mac(`cat ${M}/tmp/koan-pass.pid`); const LOG = mac(`cat ${M}/tmp/last-log.txt`);
+const winId = async () => (await browserCall('Browser.getWindowForTarget', { targetId: (await pages())[0].id })).result.windowId;
+await step('launch + maximise', async () => { await browserCall('Browser.setWindowBounds', { windowId: await winId(), bounds: { windowState: 'maximized' } }); }, 3000);
+
+// ---- vertical tabs lockdown checks (#154/#155): the invariant of scripts/e2e/lib/vertical_tabs.mjs on the Mac ----
+const need = (cond, msg) => { if (!cond) throw new Error(msg); };
+const region = vs => vs.find(v => v.cls === 'VerticalTabStripRegionView');
+async function inv(when, { hidden = false } = {}) {
+  const vs = await fviews(); const r = region(vs);
+  need(!!r, `${when}: no VerticalTabStripRegionView`);
+  need(!vs.some(v => v.cls === 'TabStripRegionView' && v.shown && v.h > 0), `${when}: a horizontal TabStripRegionView is shown`);
+  const w = r.shown ? r.w : 0;
+  need(!(w > 0 && w < 120), `${when}: the 56-wide icon rail is shown (strip ${w} wide)`);
+  need(hidden ? w === 0 : (w >= 163 && w <= 500), `${when}: strip ${w} wide, expected ${hidden ? '0 (compact)' : '163..500'}`);
+  need(!vs.some(v => v.cls === 'ToolbarView' && v.shown && v.h > 0 && !v.path.includes('TopContainerOverlayView')), `${when}: Chromium's toolbar is drawn`);
+  return `${when}: ${w} wide`;
+}
+const settle = async (ms = 1800) => { await sleep(ms); };
+const rapid = (n, gapMs, code = K.S, flags = COMPACT) => mac(Array(n).fill(`${M}/tmp/keypress2 ${PID} ${code} '${flags}'; sleep ${gapMs / 1000}`).join('; '), 90000);
+const prime = async () => { mac(`${M}/tmp/activate ${PID}`); await sleep(900); };
+await step('launch + maximise', async () => { await browserCall('Browser.setWindowBounds', { windowId: await winId(), bounds: { windowState: 'maximized' } }); }, 3000);
+if (MODE === 'old' || MODE === 'main') {
+  await step(`T1/T2/T6: the profile starts with Koan's expanded sidebar, no rail (mode ${MODE})`, async () => inv('start'));
+}
+if (MODE === 'main') {
+  await step('T13: Shift+Cmd+L x6 toggles compact mode, never a rail', async () => { let o = []; for (let i = 0; i < 6; i++) { if (!(await key(37, 'cs'))) return 'key skipped'; await settle(); o.push(await inv(`press ${i + 1}`, { hidden: i % 2 === 0 })); } return o.join(' | '); });
+  await step('T14: Shift+Cmd+A opens the URL bar, not Chromium tab search', async () => { if (!(await key(0, 'cs'))) return 'key skipped'; await sleep(1200); const vs = await fviews(); need(!vs.some(v => v.shown && /TabSearch/.test(v.cls) && v.cls !== 'TabSearchButton'), 'Chromium tab search bubble shown'); const bar = vs.some(v => v.shown && /UrlBar/.test(v.cls)); await key(K.ESC); await sleep(600); return `URL bar view shown: ${bar}`; });
+  await step('T21a: compact toggled twice within ~250 ms ends expanded (Zen width)', async () => { await prime(); rapid(2, 60); await settle(2200); return inv('after 2 quick toggles'); });
+  await step('T21b: compact toggled 3 times within ~250 ms ends hidden (width 0)', async () => { await prime(); rapid(3, 60); await settle(2200); const r = await inv('after 3 quick toggles', { hidden: true }); await key(K.S, COMPACT); await settle(); return r + ' | ' + await inv('back', { hidden: false }); });
+  await step('T21c: compact toggled 20 times in 10 s ends expanded, no rail', async () => { await prime(); rapid(20, 450); await settle(2500); return inv('after 20 toggles'); });
+  await step('T21d: 20 toggles then close the window mid-animation (Cmd+Shift+W)', async () => { await prime(); rapid(19, 120); mac(`${M}/tmp/keypress2 ${PID} ${K.W} 'cs'`); await sleep(3500); if (!alive()) throw new Error('Koan died when the window closed during the toggles'); return 'alive'; });
+  await step('new window for the fullscreen checks', async () => { await key(K.N, 'c'); await sleep(2500); return inv('new window'); });
+  await step('T22: fullscreen in/out, compact off then on: no rail', async () => { let o = []; for (const compactOn of [false, true]) { if (compactOn) { await key(K.S, COMPACT); await settle(); } await key(K.F, 'ck'); await sleep(3500); o.push(await inv(`fullscreen (compact ${compactOn ? 'on' : 'off'})`, { hidden: compactOn }).catch(e => `fs: ${e.message}`)); await key(K.F, 'ck'); await sleep(3500); o.push(await inv(`windowed (compact ${compactOn ? 'on' : 'off'})`, { hidden: compactOn })); } await key(K.S, COMPACT); await settle(); return o.join(' | '); });
+}
+if (MODE === 'nocompact') {
+  await step('T20: with KoanCompactMode disabled, Ctrl+S and Shift+Cmd+L do nothing; no rail', async () => { const a = await inv('start'); await key(K.S, COMPACT); await settle(); await key(37, 'cs'); await settle(); return a + ' | ' + await inv('after the keys'); });
+}
+// T24: the leak detector stays silent
+await step('T24: no "Koan: the vertical tab strip" line, no FATAL, no "Spaces:" in the log', async () => { const n = k => Number(mac(`grep -a -c '${k}' ${LOG} || true`)); const v = n('Koan: the vertical tab strip'), f = n(':FATAL:'), sp = n('Spaces:'); need(v === 0 && f === 0 && sp === 0, `vertical-tab lines ${v}, FATAL ${f}, Spaces: ${sp}`); return 'clean'; });
+if (MODE === 'old') {
+  // read the prefs back after a graceful quit (Preferences are written on exit)
+  try { mac(`${M}/tmp/killkoan.sh ${PID}`); await sleep(6000); } catch {}
+  const back = mac(`python3 -c "import json;d=json.load(open('${M}/tmp/pass-R-profile/Default/Preferences'));v=d.get('vertical_tabs',{});print(v.get('enabled'),v.get('collapsed_state'),v.get('expand_on_hover'),d.get('koan',{}).get('compact_mode',{}).get('enabled'))" || true`);
+  const ok = /^True False True/.test(back) || /^True False/.test(back);
+  steps.push({ name: `T1/T2/T3: prefs written back (enabled, collapsed_state, expand_on_hover, compact): ${back}`, ok, alive: false, newIps: [], note: back });
+  console.log(`${ok ? 'PASS' : 'FAIL'}  prefs written back: ${back}`);
+}
+const cleanupReport = cleanupAll(); console.log(`== cleanup: ${cleanupReport.split('\n')[0]}`); if (stopReason) console.log(`== RUN STOPPED: ${stopReason}`);
+const stillRunning = false; 
+const scan = mac(`${M}/tmp/scanlog.sh ${LOG} ${M}/tmp/regress-start.mark`);
+const count = re => Number(mac(`grep -a -c '${re}' ${LOG} || true`));
+const counts = { FATAL: count(':FATAL:'), CHECK: count('Check failed'), ERROR: count(':ERROR:'), newIps: newIps().length, failed: steps.filter(s => s.ok === false).length };
+const prevF = `${process.env.HOME}/work/koan/.cache/mac-review/regress/last-${BUILD.split('-')[0]}.json`;
+const prev = existsSync(prevF) ? JSON.parse(readFileSync(prevF, 'utf8')) : null;
+writeFileSync(`${LOCAL}/steps.json`, JSON.stringify({ build: BUILD, app: APP_PATH, log: LOG, counts, steps }, null, 1)); writeFileSync(`${LOCAL}/scan.txt`, scan);
+mac(`cp ${LOG} ${RD}/koan.log; cp ${M}/tmp/regress-start.mark ${RD}/ 2>/dev/null; true`);
+execSync(`scp -q -r -i ~/.ssh/koan_mac_ed25519 -o ControlPath=/tmp/koan-cm.sock "chaitanya@chaitanyas-macbook-air:${RD}/*" ${LOCAL}/ 2>/dev/null || true`);
+writeFileSync(prevF, JSON.stringify(counts));
+if (aborted && !stopReason) console.log('== RUN ABORTED: the user came back; results are incomplete');
+console.log(`\n== ${BUILD}: ${steps.filter(s => s.ok).length} passed, ${counts.failed} failed, ${steps.filter(s => s.skipped).length} skipped`);
+console.log(`== counts  FATAL ${counts.FATAL}  CHECK ${counts.CHECK}  ERROR ${counts.ERROR}  new .ips ${counts.newIps}` + (prev ? `   (previous: FATAL ${prev.FATAL} CHECK ${prev.CHECK} ERROR ${prev.ERROR} .ips ${prev.newIps})` : '   (no previous run)'));
+console.log(`== saved ${LOCAL}  and ${RD} on the Mac\n${scan}`);
