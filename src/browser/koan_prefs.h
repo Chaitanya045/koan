@@ -92,16 +92,25 @@ inline constexpr char kUrlBarShowCopyUrl[] = "koan.urlbar.show_copy_url";
 // per-workspace themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
 
-// The workspace tint Koan last applied as the browser's user colour (0:
-// none), and the user's own colour from before it, so "All tabs" can restore
-// it. Restoring only happens while Koan's tint is still the current colour,
-// so a colour the user picks meanwhile is never overwritten.
-// kWorkspaceTintSavedColor is 0 for "no user colour".
+// Obsolete: until the tint became per window (a window's user colour
+// override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's
+// colour as the profile's user colour and kept the user's own here (0: none).
+// Read once to give a profile its own colour back, then cleared
+// (MigrateWorkspaceTint()). Remove after 2027-03.
 inline constexpr char kWorkspaceTintApplied[] = "koan.workspaces.tint_applied";
 inline constexpr char kWorkspaceTintSavedColor[] =
     "koan.workspaces.tint_saved_color";
 inline constexpr char kWorkspaceTintSavedVariant[] =
     "koan.workspaces.tint_saved_variant";
+
+// The Spaces of the window the user was in last, so a window that opens
+// without a session restore and without another window (startup set to the
+// New Tab page or to pages; macOS's new window after the last one closed)
+// gets them back (KoanWorkspaceController::RecreateStoredSpaces()): a list of
+// {"title": "<icon> <name>", "color": tab_groups::TabGroupColorId,
+// "active": bool}, in order. The session holds the Spaces otherwise (their tab
+// groups).
+inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
 // whether Glance is on, and which modifier+click previews a link: "alt"

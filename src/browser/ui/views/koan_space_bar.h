@@ -50,6 +50,9 @@ class KoanSpaceBarView : public views::View {
   bool IsNarrow(int width) const;
   // Whether a Space button is hovered, pressed or focused.
   bool IsAnyButtonHovered() const;
+  // The window's user colour override (its Space's tint) as an ARGB value,
+  // or 0 for none: a UI DevTools property, which the e2e tests read.
+  int GetWindowTint() const;
   // A Space button's state changed: the others may change how they look.
   void OnButtonStateChanged();
 

@@ -83,14 +83,31 @@ bool WrapsSpaces(TabStripModel* tab_strip);
 // "Unfocus" pill). Not in windows without Spaces (e.g. Incognito).
 bool ShowsSpaceHeader(const views::View* tab_group_view);
 
-// BrowserNativeWidgetMac::ValidateUserInterfaceItem() (the Mac menu bar), after
-// upstream's own validation: whether the menu item for `command_id` is hidden
-// in the window of `browser_view`; nullopt leaves it as upstream has it. The
-// one table of Koan's hides (the menu bar is shared by the windows, so each
-// window's validation sets the item both ways): Koan owns the sidebar, so
-// View > "Show Tabs Vertically" has no place (#154). "Collapse Vertical Tabs"
-// stays, as the menu item of Shift+Cmd+L: AppKit doesn't fire a hidden item's
-// key equivalent.
+// Whether `tab_strip`'s window has Spaces (koan_tab_menu.cc swallows
+// upstream's tab group commands there).
+bool HasSpaces(TabStripModel* tab_strip);
+
+// TabStripCollectionController::UpdateFocusModeTheme(): upstream gives a
+// focused group's window the group's colour (a per-window user colour
+// override, which also suppresses the profile's theme). In a Spaces window
+// Koan sets the override instead (KoanWorkspaceController): the Space
+// theme's colour, or none for Zen's default theme, so the user's colour and
+// theme show. Returns false where upstream decides (no Spaces).
+bool ApplySpaceColor(TabStripModel* tab_strip);
+
+// TabView::UpdateFocusFreezing(): whether `tab`'s window has Spaces, whose
+// other Spaces' tabs upstream's focus mode must not freeze (Koan's
+// background-tab policy decides, docs/PERFORMANCE.md; Zen freezes nothing
+// per Space).
+bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab);
+
+// BrowserNativeWidgetMac::ValidateUserInterfaceItem(), after upstream:
+// whether the menu bar item for `command_id` is hidden in `browser_view`'s
+// window, for the items Koan decides (upstream's tab group items: Tab > Group
+// Tab, hidden in a Spaces window, shown in any other); nullopt for the rest.
+// View > "Show Tabs Vertically" is hidden while Koan owns the sidebar (#154);
+// "Collapse Vertical Tabs" stays, as the menu item of Shift+Cmd+L: AppKit
+// doesn't fire a hidden item's key equivalent.
 std::optional<bool> HidesMenuCommand(BrowserView* browser_view, int command_id);
 
 }  // namespace koan

@@ -273,6 +273,8 @@ source_set("impl") {
     "//chrome/browser/ui/views/tabs/common:impl",
     "//chrome/browser/ui/views/tabs/shared",
     "//chrome/browser/ui/views/tabs/dragging",
+    "//chrome/browser/ui/views/tabs/groups",
+    "//components/bookmarks/common",
     "//chrome/browser/ui/views/tabs/tab",
     "//components/favicon/core",
     "//components/favicon_base",
