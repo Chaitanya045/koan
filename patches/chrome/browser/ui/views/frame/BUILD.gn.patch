@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index 41231752d903fec4f355a7b20037f5058904661c..f032b1ef6ac8d4770d8e5e9c1863d979e2be998d 100644
+index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb36867031d27a 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
 @@ -566,6 +566,7 @@ source_set("vertical_tab_strip_region_view") {
@@ -18,7 +18,15 @@ index 41231752d903fec4f355a7b20037f5058904661c..f032b1ef6ac8d4770d8e5e9c1863d979
      "//media/capture:capture_switches",
      "//third_party/blink/public/common:headers",
      "//ui/accessibility",
-@@ -2023,6 +2025,7 @@ if (is_mac) {
+@@ -1958,6 +1960,7 @@ if (is_mac) {
+       "//chrome/browser/ui/window_feature_controller",
+       "//chrome/common:constants",
+       "//components/remote_cocoa/common:mojo",
++      "//koan/browser/ui/views",
+       "//ui/base",
+       "//ui/base:features",
+       "//ui/compositor",
+@@ -2023,6 +2026,7 @@ if (is_mac) {
        "//components/remote_cocoa/app_shim",
        "//components/remote_cocoa/common:mojo",
        "//components/web_modal",
@@ -26,7 +34,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..f032b1ef6ac8d4770d8e5e9c1863d979
        "//skia",
        "//ui/accessibility",
        "//ui/actions",
-@@ -2953,6 +2956,7 @@ source_set("browser_view_layout_impl") {
+@@ -2953,6 +2957,7 @@ source_set("browser_view_layout_impl") {
      "//build:buildflag_header_h",
      "//chrome/browser/ui/immersive:immersive_mode_controller",
      "//chrome/browser/ui/views/bookmarks",
@@ -34,7 +42,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..f032b1ef6ac8d4770d8e5e9c1863d979
      "//ui/base:features",
    ]
  }
-@@ -3012,6 +3016,7 @@ source_set("browser_view_tabbed_layout_impl") {
+@@ -3012,6 +3017,7 @@ source_set("browser_view_tabbed_layout_impl") {
      "//ui/views",
    ]
    deps = [
@@ -42,7 +50,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..f032b1ef6ac8d4770d8e5e9c1863d979
      ":custom_corners",
      ":custom_corners_background",
      ":custom_floating_corner",
-@@ -3229,6 +3234,7 @@ source_set("multi_contents_view_impl") {
+@@ -3229,6 +3235,7 @@ source_set("multi_contents_view_impl") {
      "//components/tabs:public",
      "//content/public/browser",
      "//content/public/common",

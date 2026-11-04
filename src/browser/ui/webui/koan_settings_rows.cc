@@ -37,6 +37,10 @@ constexpr Group kGroups[] = {
     {"look-colors", "looks", "Appearance", "shadcn colours",
      "For the shadcn style: light or dark, a base colour, an accent colour, "
      "or a theme of your own from ui.shadcn.com/themes or tweakcn.com."},
+    // Koan's own: Zen has no bookmarks bar.
+    {"bookmarks-bar", "looks", "Appearance", "Bookmarks bar",
+     "Zen has no bookmarks bar, so Koan shows none, also on the new tab page "
+     "and after importing bookmarks. Turn it on to see Chromium's."},
     {"layout", "looks", "Sidebar and tabs layout", "Browser Layout",
      "Choose the layout that suits you best"},
     {"vertical-tabs", "looks", "Sidebar and tabs layout", "Vertical Tabs",
@@ -202,6 +206,10 @@ constexpr Row kRows[] = {
               "tabs in compact mode",
      .is_available = features::IsCompactModeEnabled,
      .indent = true},
+    {.group = "bookmarks-bar",
+     .control = Control::kCheckbox,
+     .pref = prefs::kBookmarksBarShow,
+     .label = "Show the bookmarks bar"},
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kTabsOnRight,

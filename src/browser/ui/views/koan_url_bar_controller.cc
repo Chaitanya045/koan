@@ -298,8 +298,10 @@ void KoanUrlBarController::OnNewTabAction() {
 
 bool KoanUrlBarController::OpenForNewTab() {
   LocationBarView* bar = location_bar();
+  // (In fullscreen, the toolbar is out of sight, except where Koan's stays
+  // hidden: on macOS, see HidesFullscreenTopChrome().)
   if (!features::IsUrlBarEnabled() || !browser_view_->GetIsNormalType() ||
-      browser_view_->IsFullscreen() ||
+      (browser_view_->IsFullscreen() && !compact_mode_->hides_toolbar()) ||
       browser_view_->browser()->GetTabStripModel()->empty() || !bar ||
       !bar->omnibox_view() ||
       !browser_view_->GetProfile()
@@ -465,7 +467,9 @@ bool KoanUrlBarController::IsPillAvailable() const {
 
 KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
   // In the multiple-toolbars layout the omnibox edits in the toolbar.
-  if (!compact_mode_->hides_toolbar() || browser_view_->IsFullscreen()) {
+  // (Also in macOS' fullscreen: Koan's toolbar stays hidden there, see
+  // HidesFullscreenTopChrome().)
+  if (!compact_mode_->hides_toolbar()) {
     return Placement::kNone;
   }
   // Without the Koan URL bar, Koan's earlier behaviour: always floating.

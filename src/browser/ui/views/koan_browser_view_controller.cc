@@ -193,6 +193,15 @@ bool IsToolbarHidden(const views::View* browser_view) {
   return controller && controller->compact_mode()->hides_toolbar();
 }
 
+bool HidesFullscreenTopChrome(const views::View* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  return view && view->IsFullscreen() && IsToolbarHidden(view);
+#else
+  return false;
+#endif
+}
+
 bool IsCaptionStripCollapsed(const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
   const KoanBrowserViewController* controller =

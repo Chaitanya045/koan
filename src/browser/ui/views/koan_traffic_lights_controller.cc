@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "ui/views/view.h"
 
@@ -34,10 +35,22 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
   const bool fullscreen = browser_view_->IsFullscreen();
   if (fullscreen != was_fullscreen_) {
     was_fullscreen_ = fullscreen;
+#if BUILDFLAG(IS_MAC)
+    if (!fullscreen) {
+      // The title bar comes back to the window with its lights.
+      RestoreFullscreenTitlebar(browser_view_);
+    }
+#endif
     applied_height_.reset();
     on_changed_.Run();
   }
   if (fullscreen) {
+#if BUILDFLAG(IS_MAC)
+    // Nothing of AppKit's title bar shows at the top edge but the menu bar.
+    if (HidesFullscreenTopChrome(browser_view_)) {
+      HideFullscreenTitlebar(browser_view_);
+    }
+#endif
     return;
   }
 #if BUILDFLAG(IS_MAC)

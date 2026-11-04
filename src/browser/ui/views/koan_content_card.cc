@@ -66,10 +66,22 @@ bool UseContentCard(const BrowserView* browser_view) {
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
   if (browser_view->IsFullscreen()) {
-    // (See UseContentCard().)
-    return IsBorderlessFullscreen(browser_view)
-               ? gfx::Insets()
-               : SidebarSideInsets(browser_view, kContentCardMargin, 0);
+    // (See UseContentCard().) Where Koan hides the toolbar (single toolbar,
+    // compact mode), the usual layout below applies: a gutter above the
+    // page (no strip for window buttons in fullscreen) and beside a hidden
+    // sidebar. Otherwise Chromium reveals the toolbar over the page from
+    // the top edge, so the page is a card inset by the gutter.
+    if (IsBorderlessFullscreen(browser_view)) {
+      // Zen measured the page at (0, 0) filling the screen. A hidden sidebar
+      // and toolbar are revealed by the pointer at the screen's edge, which
+      // compact mode watches itself (no gutter to hover).
+      return gfx::Insets();
+    }
+    if (!IsToolbarHidden(browser_view)) {
+      return SidebarSideInsets(
+          browser_view, kContentCardMargin,
+          IsCompactModeActive(browser_view) ? kContentCardMargin : 0);
+    }
   }
 #endif
   if (IsToolbarHidden(browser_view)) {
