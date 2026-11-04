@@ -15,6 +15,9 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/logging.h"
+#include "base/no_destructor.h"
+#include "ui/events/event_handler.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
@@ -48,6 +51,23 @@
 #include "ui/views/view_class_properties.h"
 
 namespace koan {
+
+
+// PROBE (#136, not for merge): logs the mouse events the form's subtree sees.
+class KoanProbeHandler : public ui::EventHandler {
+ public:
+  void OnMouseEvent(ui::MouseEvent* event) override {
+    if (event->type() == ui::EventType::kMouseMoved) {
+      return;
+    }
+    LOG(ERROR) << "KOAN-PROBE-136 mouse type=" << static_cast<int>(event->type())
+               << " flags=" << event->flags() << " loc="
+               << event->location().ToString() << " target="
+               << (event->target() ? static_cast<views::View*>(event->target())
+                                         ->GetClassName()
+                                   : "null");
+  }
+};
 
 namespace {
 
@@ -152,6 +172,8 @@ KoanSpaceCreationView::KoanSpaceCreationView(
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
 
+  static base::NoDestructor<KoanProbeHandler> probe;
+  AddPreTargetHandler(probe.get());
   title_ = AddChildView(std::make_unique<views::Label>(u"Create a Space"));
   title_->SetFontList(gfx::FontList()
                           .DeriveWithSizeDelta(kTitleSizeDelta)
@@ -294,12 +316,14 @@ void KoanSpaceCreationView::SetTheme(
 }
 
 void KoanSpaceCreationView::Finish(bool create) {
+  LOG(ERROR) << "KOAN-PROBE-136 Finish create=" << create;
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanSpaceCreationView::DoFinish,
                                 weak_factory_.GetWeakPtr(), create));
 }
 
 void KoanSpaceCreationView::DoFinish(bool create) {
+  LOG(ERROR) << "KOAN-PROBE-136 DoFinish create=" << create;
   // Closing the form deletes it.
   KoanWorkspaceController* controller = controller_;
   const std::u16string name(name_->GetText());
