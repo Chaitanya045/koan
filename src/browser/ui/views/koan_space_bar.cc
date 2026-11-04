@@ -83,13 +83,23 @@ class KoanSpaceButton : public views::Button,
     }
   }
 
-  bool IsCollapsed() const {
-    return bar_->overflows() && !active_ && GetState() != STATE_HOVERED &&
-           !HasFocus();
+  bool IsHoveredOrFocused() const {
+    return GetState() == STATE_HOVERED || GetState() == STATE_PRESSED ||
+           HasFocus();
   }
 
-  int GetLayoutWidth() const {
-    return IsCollapsed() ? kSpaceButtonCollapsedWidth : kSpaceButtonSize;
+  // Zen's overflow-icons.inc.css: in the row, a Space shows a small dot
+  // instead of its icon unless it is hovered, or it is the current one and
+  // no other Space button is hovered.
+  bool GetCollapsed() const {
+    return bar_->compact() && !IsHoveredOrFocused() &&
+           (!active_ || bar_->IsAnyButtonHovered());
+  }
+
+  // Refreshes how it looks after a button of the bar changed state.
+  void OnBarStateChanged() {
+    UpdateLook(/*animate=*/true);
+    SchedulePaint();
   }
 
   // views::Button:
@@ -98,11 +108,15 @@ class KoanSpaceButton : public views::Button,
     const gfx::RectF bounds(GetLocalBounds());
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
+    // The row's shrunk buttons have no hover background (Zen's
+    // icons-overflow).
+    if (!bar_->compact() &&
+        (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED)) {
       flags.setColor(provider->GetColor(kColorKoanSpaceButtonHovered));
       canvas->DrawRoundRect(bounds, SpaceButtonCornerRadius(), flags);
     }
-    if (IsCollapsed() || icon_.empty()) {
+    const bool collapsed = GetCollapsed();
+    if (collapsed || icon_.empty()) {
       // A dot: `muted-foreground`, `foreground` when lit, in the shadcn style
       // (Zen's is one faint colour that the button's opacity dims).
       flags.setColor(provider->GetColor(look::IsShadcnStyle() && IsLit()
@@ -110,24 +124,26 @@ class KoanSpaceButton : public views::Button,
                                             : kColorKoanSpaceDot));
       canvas->DrawCircle(
           bounds.CenterPoint(),
-          (IsCollapsed() ? kSpaceCollapsedDotSize : kSpaceDotSize) / 2.f,
-          flags);
+          (collapsed ? kSpaceCollapsedDotSize : kSpaceDotSize) / 2.f, flags);
       return;
     }
+    // The emoji can be wider than a shrunk button: centred on it, unclipped
+    // by its width (Zen's icon is positioned absolutely).
+    const gfx::FontList font = gfx::FontList().DeriveWithSizeDelta(
+        kSpaceButtonEmojiSize - gfx::FontList().GetFontSize());
+    gfx::Rect text_bounds = GetLocalBounds();
+    const int text_width = std::max(text_bounds.width(), kSpaceButtonSize);
+    text_bounds.set_x((text_bounds.width() - text_width) / 2);
+    text_bounds.set_width(text_width);
     canvas->DrawStringRectWithFlags(
-        icon_,
-        gfx::FontList().DeriveWithSizeDelta(kSpaceButtonEmojiSize -
-                                            gfx::FontList().GetFontSize()),
-        provider->GetColor(kColorKoanSpaceForeground), GetLocalBounds(),
-        gfx::Canvas::TEXT_ALIGN_CENTER);
+        icon_, font, provider->GetColor(kColorKoanSpaceForeground), text_bounds,
+        gfx::Canvas::TEXT_ALIGN_CENTER | gfx::Canvas::NO_ELLIPSIS);
   }
 
   void StateChanged(ButtonState old_state) override {
     views::Button::StateChanged(old_state);
-    UpdateLook(/*animate=*/true);
-    if (bar_->overflows()) {
-      bar_->InvalidateLayout();
-    }
+    // The current Space's icon depends on whether another one is hovered.
+    bar_->OnButtonStateChanged();
   }
 
   void AddedToWidget() override {
@@ -137,16 +153,12 @@ class KoanSpaceButton : public views::Button,
 
   void OnFocus() override {
     views::Button::OnFocus();
-    if (bar_->overflows()) {
-      bar_->InvalidateLayout();
-    }
+    bar_->OnButtonStateChanged();
   }
 
   void OnBlur() override {
     views::Button::OnBlur();
-    if (bar_->overflows()) {
-      bar_->InvalidateLayout();
-    }
+    bar_->OnButtonStateChanged();
   }
 
   // views::ContextMenuController: Zen's Space menu, for this Space.
@@ -168,7 +180,7 @@ class KoanSpaceButton : public views::Button,
     // A shadcn dot is already the muted colour: dimming it again makes it
     // vanish on a near-black sidebar.
     const bool dimmed =
-        !lit && !(look::IsShadcnStyle() && (IsCollapsed() || icon_.empty()));
+        !lit && !(look::IsShadcnStyle() && (GetCollapsed() || icon_.empty()));
     std::unique_ptr<ui::ScopedLayerAnimationSettings> settings;
     if (animate) {
       settings = std::make_unique<ui::ScopedLayerAnimationSettings>(
@@ -189,6 +201,7 @@ class KoanSpaceButton : public views::Button,
 BEGIN_METADATA(KoanSpaceButton)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, Label)
 ADD_READONLY_PROPERTY_METADATA(bool, Active)
+ADD_READONLY_PROPERTY_METADATA(bool, Collapsed)
 END_METADATA
 
 KoanSpaceBarView::KoanSpaceBarView(KoanWorkspaceController* controller)
@@ -259,12 +272,22 @@ void KoanSpaceBarView::Update(
   InvalidateLayout();
 }
 
+bool KoanSpaceBarView::IsAnyButtonHovered() const {
+  return std::ranges::any_of(buttons_, [](const KoanSpaceButton* button) {
+    return button->GetVisible() && button->IsHoveredOrFocused();
+  });
+}
+
+void KoanSpaceBarView::OnButtonStateChanged() {
+  for (KoanSpaceButton* button : buttons_) {
+    button->OnBarStateChanged();
+  }
+}
+
 bool KoanSpaceBarView::IsNarrow(int width) const {
-  // No room for one Space button between "+" and the room kept for it on
-  // the other side.
-  return width <
-         2 * (SidebarStripInset() + kSpaceButtonSize + kSpaceButtonGap) +
-             kSpaceButtonSize;
+  // No room for the leading button, one Space button and "+" in a row.
+  return width < 2 * (kSpaceBarPadding + kSpaceButtonSize + kSpaceBarGap) +
+                     kSpaceButtonCompactWidth;
 }
 
 gfx::Size KoanSpaceBarView::CalculatePreferredSize(
@@ -291,9 +314,13 @@ void KoanSpaceBarView::Layout(PassKey) {
   const auto place = [this](views::View* view, const gfx::Rect& rect) {
     view->SetBoundsRect(GetMirroredRect(rect));
   };
-  if (IsNarrow(area.width())) {
+  const bool compact = !IsNarrow(area.width());
+  if (compact != compact_) {
+    compact_ = compact;
+    OnButtonStateChanged();
+  }
+  if (!compact) {
     // A column, centred: the leading button, the Spaces, "+".
-    overflows_ = false;
     const int x = (area.width() - kSpaceButtonSize) / 2;
     int y = kSpaceBarPadding;
     if (leading_) {
@@ -309,32 +336,31 @@ void KoanSpaceBarView::Layout(PassKey) {
     place(create_button_, gfx::Rect(x, y, kSpaceButtonSize, kSpaceButtonSize));
     return;
   }
+  // Zen's row: the leading button at the start, "+" at the end, the Space
+  // switcher between them (4px from each), its buttons centred in it.
   const int y = (area.height() - kSpaceButtonSize) / 2;
-  place(create_button_,
-        gfx::Rect(area.right() - SidebarStripInset() - kSpaceButtonSize, y,
-                  kSpaceButtonSize, kSpaceButtonSize));
+  const int end = area.right() - kSpaceBarPadding - kSpaceButtonSize;
+  place(create_button_, gfx::Rect(end, y, kSpaceButtonSize, kSpaceButtonSize));
   if (leading_) {
-    place(leading_, gfx::Rect(SidebarStripInset(), y, kSpaceButtonSize,
-                              kSpaceButtonSize));
+    place(leading_,
+          gfx::Rect(kSpaceBarPadding, y, kSpaceButtonSize, kSpaceButtonSize));
   }
-  // The Space buttons are centred in the room left of "+", keeping as much
-  // room on the other side (where Zen has its sidebar button, and Koan the
-  // Library's).
-  const int side = SidebarStripInset() + kSpaceButtonSize + kSpaceButtonGap;
-  const int room = std::max(0, area.width() - 2 * side);
-  const int count = static_cast<int>(buttons_.size());
-  overflows_ = count * kSpaceButtonSize + (count - 1) * kSpaceButtonGap > room;
-  const int gap = overflows_ ? 0 : kSpaceButtonGap;
-  int total = 0;
-  for (KoanSpaceButton* button : buttons_) {
-    total += button->GetLayoutWidth() + gap;
+  const int start = kSpaceBarPadding + kSpaceButtonSize + kSpaceBarGap;
+  const int room = std::max(0, end - kSpaceBarGap - start);
+  const int count = static_cast<int>(std::ranges::count_if(
+      buttons_,
+      [](const KoanSpaceButton* button) { return button->GetVisible(); }));
+  if (count == 0) {
+    return;
   }
-  total -= gap;
-  int x = side + (room - total) / 2;
+  const int width =
+      std::clamp(room / count, kSpaceButtonMinWidth, kSpaceButtonCompactWidth);
+  int x = start + std::max(0, (room - count * width) / 2);
   for (KoanSpaceButton* button : buttons_) {
-    const int width = button->GetLayoutWidth();
-    place(button, gfx::Rect(x, y, width, kSpaceButtonSize));
-    x += width + gap;
+    if (button->GetVisible()) {
+      place(button, gfx::Rect(x, y, width, kSpaceButtonSize));
+      x += width;
+    }
   }
 }
 

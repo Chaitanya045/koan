@@ -39,6 +39,7 @@
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
@@ -58,8 +59,6 @@ namespace koan {
 namespace {
 
 constexpr int kButtonSize = 28;
-constexpr int kPillHeight = 36;
-constexpr int kPadding = 12;
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
 
@@ -185,7 +184,8 @@ BEGIN_METADATA(KoanSidebarNavButtons)
 END_METADATA
 
 // The URL pill, a button: pressing it (anywhere but its buttons) edits the
-// address; hovering it (or its buttons) shows the copy button.
+// address; hovering it (or its buttons) lightens it (Zen's #urlbar:hover
+// .urlbar-background) and shows the copy button.
 class KoanUrlPill : public views::Button {
   METADATA_HEADER(KoanUrlPill, views::Button)
 
@@ -194,35 +194,57 @@ class KoanUrlPill : public views::Button {
               base::RepeatingCallback<void(bool)> on_hover)
       : views::Button(std::move(on_press)), on_hover_(std::move(on_hover)) {
     SetNotifyEnterExitOnChild(true);
+    UpdateBackground();
   }
+
+  bool GetHovered() const { return hovered_; }
 
   // views::Button:
   void OnMouseEntered(const ui::MouseEvent& event) override {
     views::Button::OnMouseEntered(event);
-    on_hover_.Run(true);
+    SetHovered(true);
   }
   void OnMouseExited(const ui::MouseEvent& event) override {
     views::Button::OnMouseExited(event);
-    on_hover_.Run(false);
+    SetHovered(false);
   }
 
  private:
+  void SetHovered(bool hovered) {
+    if (hovered_ == hovered) {
+      return;
+    }
+    hovered_ = hovered;
+    UpdateBackground();
+    on_hover_.Run(hovered);
+  }
+
+  // A fill only, no border or shadow (Zen's .urlbar-background).
+  void UpdateBackground() {
+    SetBackground(views::CreateRoundedRectBackground(
+        hovered_ ? kColorKoanUrlPillHovered : kColorKoanUrlPill,
+        UrlPillCornerRadius()));
+  }
+
   base::RepeatingCallback<void(bool)> on_hover_;
+  bool hovered_ = false;
 };
 
 BEGIN_METADATA(KoanUrlPill)
+ADD_READONLY_PROPERTY_METADATA(bool, Hovered)
 END_METADATA
 
 KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
     : browser_view_(browser_view) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
-      gfx::Insets::TLBR(2, kPadding, 8, kPadding)));
+      gfx::Insets::TLBR(2, kUrlPillMargin, 8, kUrlPillMargin)));
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
 
-  // Zen's single-toolbar URL bar: the site's name, then the copy-URL button
-  // (on hover) and the site panel button at the end.
+  // Zen's single-toolbar URL bar: the site identity button (the favicon),
+  // the site's name, then the copy-URL button (on hover). Chromium's page
+  // actions (site settings, install, bookmark star) are not in it.
   auto pill = std::make_unique<KoanUrlPill>(
       base::BindRepeating(&KoanSidebarNavView::FocusOmnibox,
                           base::Unretained(this)),
@@ -234,9 +256,7 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
       kUrlPillSpacing));
   pill_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
-  pill->SetPreferredSize(gfx::Size(0, kPillHeight));
-  pill->SetBackground(views::CreateRoundedRectBackground(
-      kColorKoanUrlPill, UrlPillCornerRadius()));
+  pill->SetPreferredSize(gfx::Size(0, kUrlPillHeight));
   // The focus ring follows the pill's corners.
   views::InstallRoundRectHighlightPathGenerator(pill.get(), gfx::Insets(),
                                                 UrlPillCornerRadius());
@@ -248,16 +268,6 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   pill->GetViewAccessibility().SetDescription(u"Search or enter address");
   url_pill_ = AddChildView(std::move(pill));
 
-  url_label_ = url_pill_->AddChildView(std::make_unique<views::Label>());
-  url_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  url_label_->SetElideBehavior(gfx::ELIDE_TAIL);
-  url_label_->SetFontList(
-      url_label_->font_list().DeriveWithWeight(gfx::Font::Weight::MEDIUM));
-  url_label_->SetCanProcessEventsWithinSubtree(false);
-  // The pill is named after the site already.
-  url_label_->GetViewAccessibility().SetIsIgnored(true);
-  pill_layout->SetFlexForView(url_label_, 1);
-
   const auto pill_button = [&](views::Button::PressedCallback callback,
                                const gfx::VectorIcon& icon,
                                std::u16string name) {
@@ -268,6 +278,32 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
     button->SetPreferredSize(gfx::Size(kUrlPillButtonSize, kUrlPillButtonSize));
     return url_pill_->AddChildView(std::move(button));
   };
+  // Zen's identity box at the start of the pill: the site's favicon, which
+  // opens Chromium's page info for the site (security, permissions, cookies,
+  // site settings), as Zen's site data panel does; a magnifier on an empty
+  // tab. The image is set in UpdateUrl().
+  site_button_ =
+      pill_button(base::BindRepeating(&KoanSidebarNavView::OnSiteButtonPressed,
+                                      base::Unretained(this)),
+                  vector_icons::kSearchIcon, u"Site information");
+
+  url_label_ = url_pill_->AddChildView(std::make_unique<views::Label>());
+  url_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  url_label_->SetElideBehavior(gfx::ELIDE_TAIL);
+  url_label_->SetFontList(
+      url_label_->font_list()
+          .DeriveWithSizeDelta(kUrlPillFontSize -
+                               url_label_->font_list().GetFontSize())
+          .DeriveWithWeight(gfx::Font::Weight::MEDIUM));
+  url_label_->SetEnabledColor(kColorKoanUrlPillForeground);
+  url_label_->SetAutoColorReadabilityEnabled(false);
+  // The pill's tint is translucent and the sidebar's layer is not opaque:
+  // no subpixel text (Label::PaintText() DCHECKs an opaque background).
+  url_label_->SetSubpixelRenderingEnabled(false);
+  url_label_->SetCanProcessEventsWithinSubtree(false);
+  // The pill is named after the site already.
+  url_label_->GetViewAccessibility().SetIsIgnored(true);
+  pill_layout->SetFlexForView(url_label_, 1);
   // Zen's #zen-copy-url-button ("Copy URL"), confirmed with Zen's toast.
   copy_button_ =
       pill_button(base::BindRepeating(&CopyCurrentUrl,
@@ -279,12 +315,6 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   copy_button_->SetPaintToLayer();
   copy_button_->layer()->SetFillsBoundsOpaquely(false);
   copy_button_observation_.Observe(copy_button_.get());
-  // Zen's site panel button (#zen-site-data-icon-button): Chromium's page
-  // info for the site (security, permissions, cookies, site settings).
-  site_button_ =
-      pill_button(base::BindRepeating(&KoanSidebarNavView::ShowSitePanel,
-                                      base::Unretained(this)),
-                  vector_icons::kTuneIcon, u"Site information");
 
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
   ObserveActiveTab();
@@ -354,14 +384,44 @@ void KoanSidebarNavView::UpdateUrl() {
   // The pill reads as the site it shows.
   url_pill_->GetViewAccessibility().SetName(
       text.empty() ? u"Search or enter address" : text);
-  // Like Zen, the buttons are only there for a page (not an empty tab).
+  // Like Zen, the copy button is only there for a page (not an empty tab).
   const bool has_page = !editing_ && !text.empty();
+  has_page_ = !text.empty();
   copy_button_->SetVisible(
       has_page &&
       browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs()->GetBoolean(
           prefs::kUrlBarShowCopyUrl));
-  site_button_->SetVisible(has_page);
   UpdateCopyButtonOpacity();
+  // The identity button: the page's favicon, a magnifier on an empty tab, and
+  // nothing while the URL bar edits over the pill (it has its own icon).
+  site_button_->SetVisible(!editing_);
+  ui::ImageModel favicon;
+  if (has_page) {
+    tabs::TabInterface* tab =
+        browser_view_->browser()->GetTabStripModel()->GetActiveTab();
+    if (TabUIHelper* helper = tab ? TabUIHelper::From(tab) : nullptr) {
+      favicon = helper->GetFavicon();
+    }
+  }
+  site_button_->SetImageModel(
+      views::Button::STATE_NORMAL,
+      !favicon.IsEmpty() ? favicon
+                         : ui::ImageModel::FromVectorIcon(
+                               vector_icons::kSearchIcon,
+                               kColorKoanUrlPillForeground, kUrlPillIconSize));
+  const std::u16string site_name =
+      has_page ? u"Site information" : u"Search or enter address";
+  site_button_->SetTooltipText(site_name);
+  site_button_->GetViewAccessibility().SetName(site_name);
+}
+
+void KoanSidebarNavView::OnSiteButtonPressed() {
+  // On an empty tab the magnifier edits the address, like the pill.
+  if (!has_page_) {
+    FocusOmnibox();
+    return;
+  }
+  ShowSitePanel();
 }
 
 void KoanSidebarNavView::FocusOmnibox() {

@@ -56,7 +56,8 @@ page gets it first, as in every browser.
 Koan starts in Zen's default layout, **single toolbar**: there is no toolbar
 across the top, and the page reaches the top of the window. The top row of
 the sidebar has the sidebar toggle, back / forward / reload and the tab
-groups / tab search buttons; below it is a pill with the current site.
+groups / tab search buttons; below it is a rounded grey pill with the
+current site's icon and name (just the host, like Zen).
 
 ![Single toolbar](screenshots/desktop-single-toolbar.png)
 
@@ -119,8 +120,11 @@ within 45 seconds.
 
 Hover the pill (or Tab to it) for the **copy** button: it copies the page's
 URL and says so ("Copied current URL!"), as do Ctrl+Shift+C and
-Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The button at the end of the pill
-opens the site's panel (security, permissions, cookies and site settings).
+Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The site's icon at the start of the
+pill opens the site's panel (security, permissions, cookies and site settings);
+on an empty tab it is a magnifier that edits the address. As in Zen, the pill
+and the URL bar show none of Chromium's page actions (site settings, install,
+bookmark star).
 
 | "Normal": editing in place, widened | Copied |
 |---|---|
@@ -180,9 +184,11 @@ and a toast reminds you that Ctrl+Shift+T reopens them, the last closed
 tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
-bottom is Zen's bottom bar: one button per Space (its emoji, or a dot; the
-active one in colour, the others grey) and **+**, which opens the Create
-menu: Create Space, New Split and New Tab.
+bottom is Zen's bottom bar: the Library button on the left, **+** on the
+right, which opens the Create menu (Create Space, New Split and New Tab),
+and the Space switcher in the middle: one narrow button per Space, centred.
+The current Space shows its emoji (or a dot if it has none) in colour, the
+others a small grey dot that turns into their emoji while you hover it.
 The Space buttons only show once there is more than one Space.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:

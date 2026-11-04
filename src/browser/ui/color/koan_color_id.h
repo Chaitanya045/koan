@@ -50,8 +50,11 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanEssentialsTileSelected,
 
   // The URL bar (koan_sidebar_nav_view.cc, koan_url_bar_controller.cc): the
-  // sidebar's URL pill and the floating URL bar's shadow.
+  // sidebar's URL pill (its fill, hovered fill and text) and the floating URL
+  // bar's shadow.
   kColorKoanUrlPill,
+  kColorKoanUrlPillHovered,
+  kColorKoanUrlPillForeground,
   kColorKoanFloatingUrlBarShadow,
   // The floating URL bar's card (and the location bar's fill): opaque for now;
   // a glass pane makes its alpha < 1 and blurs behind it. Its 1px outline and
