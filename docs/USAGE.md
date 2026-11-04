@@ -501,7 +501,7 @@ from its sidebar.
     follows that instead, as the page notes; Ctrl+Page Up/Down still follow
     Koan's settings.
 - **Keyboard Shortcuts**: Zen's shortcut editor. Click a shortcut, type
-  the new keys and press **Esc** to save them; **Backspace** clears the
+  the new keys and press **Esc** (or **Enter**) to save them; **Backspace** clears the
   shortcut, **Tab** leaves it unchanged. A key another shortcut already
   uses is refused ("Conflicts with ..."), and so are Ctrl+Tab and
   Ctrl+Page Up/Down, which switch tabs. A key needs Ctrl, Alt or Win

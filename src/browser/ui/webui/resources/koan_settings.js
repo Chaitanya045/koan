@@ -346,7 +346,11 @@ async function onShortcutKeyDown(event, input, action) {
     input.blur();
     return;
   }
-  if (!modifiers && event.key === 'Escape') {
+  // Escape saves the keys typed, as in Zen. So does a bare Enter, which would
+  // otherwise replace them with "↩": a shortcut needs a modifier or an F-key,
+  // so Enter alone is never one.
+  if (!modifiers && (event.key === 'Escape' ||
+                     (event.key === 'Enter' && editor.latest))) {
     const key = editor.latest;
     if (key) {
       const conflict = conflictOf(key, action);
@@ -380,6 +384,9 @@ async function onShortcutKeyDown(event, input, action) {
     }
     editor.saved = true;
     input.blur();
+    return;
+  }
+  if (!modifiers && event.key === 'Enter') {
     return;
   }
   if (!modifiers && event.key === 'Backspace') {
