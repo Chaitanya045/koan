@@ -1,9 +1,10 @@
 // End-to-end test of Zen's URL bar against a real build: the behaviour
 // setting (edit in the pill, float on the first keystroke), Ctrl+T opening
-// the URL bar instead of a tab (replace-newtab), the pill's copy-URL button
-// and toast, and its site panel button. Then: the new-tab bar through a
-// window switch, a pill edit in compact mode's peeked sidebar, and the
-// multiple-toolbars layout (Esc, the tab strip's "+" button, Alt+Enter).
+// the URL bar instead of a tab (replace-newtab), the pill's look and size,
+// its copy-URL button and toast, its site icon (page info) and no page
+// actions. Then: the new-tab bar through a window switch, a pill edit in
+// compact mode's peeked sidebar, and the multiple-toolbars layout (Esc, the
+// tab strip's "+" button, Alt+Enter).
 //
 // TODO(#51): on macOS, ⌘T is a reserved command that runs before any
 // accelerator (koan::MaybeOpenUrlBarForNewTab() in BrowserCommandController
@@ -278,16 +279,32 @@ const pillLabel = vs.find(v => v.cls === 'Label' && v.path.at(-1) === 'KoanUrlPi
 check('The pill shows the site, like Zen', pillLabel?.p.Text === 'example.com',
       JSON.stringify(pillLabel?.p.Text));
 const pillButtons = () => vs.filter(v => v.path.at(-1) === 'KoanUrlPill' && v.cls === 'ImageButton');
+const pillButton = name => pillButtons().find(b => b.p.TooltipText === name);
+// Zen's pill (zen-mac-spec.md 2A, 4.1): the sidebar's width less 8 on either
+// side, 36 high; the identity button (the favicon) first, 4 in.
+const nav = find(vs, 'KoanSidebarNavView');
+check('The pill is 36 high, 8 in from the sidebar\'s edges',
+      pill?.h === 36 && pill.x === 8 && pill.w === nav?.w - 16,
+      `${pill?.w}x${pill?.h} at ${pill?.x} in ${nav?.w}`);
+const site = pillButtons()[0];
+check('...with the site\'s icon at its start (Zen\'s identity box), no tune button',
+      site?.p.TooltipText === 'Site information' && site.shown && site.x === 4 &&
+          site.w === 26 && pillLabel && pillLabel.x > site.x + site.w,
+      pillButtons().map(b => `${b.p.TooltipText}@${b.x}`).join(' '));
 // Zen's copy button is transparent until hovered, but keeps its place (Tab
 // and screen readers reach it).
-check('...with the site panel button, and the copy button transparent until hovered',
-      pillButtons().length === 2 && pillButtons()[0].shown &&
-          pillButtons()[0].p.opacity === '0' && pillButtons()[1].shown,
+check('...and the copy button at the end, transparent until hovered',
+      pillButtons().length === 2 && pillButton('Copy URL')?.shown &&
+          pillButton('Copy URL').p.opacity === '0' &&
+          pillButton('Copy URL').x > pillLabel.x,
       pillButtons().map(b => `${b.p.TooltipText}:${b.shown}:${b.p.opacity}`).join(' '));
+check('The pill is not hovered at rest', pill?.p.Hovered === 'false', pill?.p.Hovered);
 await mouse(pill, 'mouseEntered');
 await sleep(500);
 vs = await views();
-const copy = pillButtons()[0];
+check('Hovering the pill lightens it (Zen\'s hover background)',
+      find(vs, 'KoanUrlPill')?.p.Hovered === 'true', find(vs, 'KoanUrlPill')?.p.Hovered);
+const copy = pillButton('Copy URL');
 check('Hovering the pill shows the copy-URL button', copy?.shown && copy.p.opacity === '1',
       `${copy?.p.TooltipText} ${copy?.p.opacity}`);
 await click(copy);
@@ -302,9 +319,9 @@ vs = await views();
 check('The toast goes away by itself', !shown(vs, 'KoanToastView'));
 await mouse(find(vs, 'KoanUrlPill'), 'mouseExited');
 
-await click(pillButtons()[1]);
+await click(pillButton('Site information'));
 vs = await views();
-check('The site panel button opens the page info bubble', shown(vs, 'PageInfoBubbleView'));
+check('The site\'s icon opens the page info bubble', shown(vs, 'PageInfoBubbleView'));
 const closeInfo = vs.find(v => v.path.includes('PageInfoBubbleView') && v.shown &&
     /close/i.test(`${v.p.TooltipText ?? ''} ${v.p.AccessibleName ?? ''}`));
 if (closeInfo) await click(closeInfo);
@@ -327,6 +344,12 @@ if (BEHAVIOR === 'float') {
   check('...showing just the location bar',
         toolbarChildren.length === 1 && toolbarChildren[0].cls === 'LocationBarView',
         toolbarChildren.map(v => v.cls).join(' '));
+  // Zen's URL bar has no page actions (Chromium's site settings, install,
+  // bookmark star, content settings).
+  const pageActions = vs.filter(v => v.shown && v.w > 0 && v.path.includes('LocationBarView') &&
+      /^(PageActionView|PageActionIconView|ContentSettingImageView|StarView|PwaInstallView)$/.test(v.cls));
+  check('...with none of Chromium\'s page actions', pageActions.length === 0,
+        pageActions.map(v => `${v.cls}:${v.p.TooltipText ?? ''}`).join(' '));
   shot('in-pill');
 }
 await type(find(vs, 'OmniboxViewViews'), 'wiki');

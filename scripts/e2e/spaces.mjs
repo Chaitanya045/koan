@@ -145,6 +145,46 @@ check('The bottom bar shows both Spaces, the new one active',
       s.buttons[1].active && s.buttons[0].label === '' && !s.buttons[0].active,
       JSON.stringify(s.buttons.map(b => [b.label, b.name, b.active])));
 
+// ---- Zen's bottom bar (zen-mac-spec.md 2A): "+" (32 on macOS, 30 elsewhere)
+// at the end, 6 in; the Space switcher in the middle: Zen's shrunk buttons
+// (half of 34, 32 elsewhere), side by side and centred between the leading
+// button and "+"; the current Space shows its icon, the others a dot until
+// hovered (B18).
+{
+  const bar = one(s.vs, 'KoanSpaceBarView');
+  const size = s.create?.h;
+  const [first, second] = s.buttons.map(b => b.view);
+  const half = size === 32 ? 17 : 16;
+  check('"+" is at the end of the bottom bar, 6 in',
+        [30, 32].includes(size) && s.create.w === size && s.create.x === bar.w - 6 - size,
+        JSON.stringify({ bar: bar?.w, create: s.create && [s.create.x, s.create.w, s.create.h] }));
+  check('...the Space buttons are Zen\'s shrunk ones, side by side',
+        first?.w === half && second?.w === half && first.h === size &&
+            second.x === first.x + first.w,
+        JSON.stringify(s.buttons.map(b => [b.view.x, b.view.w, b.view.h])));
+  check('...centred in the bar',
+        Math.abs((first.x + second.x + second.w) - bar.w) <= 1,
+        `${first.x}..${second.x + second.w} in ${bar.w}`);
+  check('...the current Space shows its icon, the other a dot',
+        s.buttons[1].view.props.Collapsed === 'false' &&
+            s.buttons[0].view.props.Collapsed === 'true',
+        JSON.stringify(s.buttons.map(b => [b.name, b.active, b.view.props.Collapsed])));
+  await mouse(first, 'mouseEntered', 5, 10);
+  await sleep(500);
+  s = await sidebar();
+  check('Hovering the other Space shows its icon, and the current one a dot',
+        s.buttons[0].view.props.Collapsed === 'false' &&
+            s.buttons[1].view.props.Collapsed === 'true',
+        JSON.stringify(s.buttons.map(b => [b.name, b.view.props.Collapsed])));
+  await mouse(s.buttons[0].view, 'mouseExited', 5, 10);
+  await sleep(500);
+  s = await sidebar();
+  check('...and back when the pointer leaves',
+        s.buttons[1].view.props.Collapsed === 'false' &&
+            s.buttons[0].view.props.Collapsed === 'true',
+        JSON.stringify(s.buttons.map(b => [b.name, b.view.props.Collapsed])));
+}
+
 await key(VK.T, CTRL, 't');
 s = await sidebar();
 check('A new tab opens in the active Space', s.tabs === 2, `${s.tabs} tab(s)`);
