@@ -43,6 +43,7 @@
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
+#include "koan/browser/ui/views/koan_sidebar_curve.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
@@ -96,9 +97,6 @@ constexpr base::TimeDelta kToolbarHideAfterEdgeLeave = base::Milliseconds(1000);
 // how often to look again while a menu is open (a closing menu sends no
 // event).
 constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
-// Zen's zen.view.compact.sidebar-keep-hover.duration: how long the sidebar
-// stays out after the pointer leaves it.
-constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
 
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
 
@@ -1821,12 +1819,13 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   // strip, and upstream's hover tracking keeps it open until it leaves; the
   // lock is kept for Zen's keep-hover time, so the hand-over between the two
   // doesn't close it for a moment.
-  hover_release_timer_.Start(FROM_HERE, kSidebarKeepHover,
-                             base::BindOnce(
-                                 [](KoanCompactModeController* self) {
-                                   self->ReleaseLock(self->hover_lock_);
-                                 },
-                                 base::Unretained(this)));
+  hover_release_timer_.Start(
+      FROM_HERE, kSidebarKeepHoverDuration,
+      base::BindOnce(
+          [](KoanCompactModeController* self) {
+            self->ReleaseLock(self->hover_lock_);
+          },
+          base::Unretained(this)));
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
