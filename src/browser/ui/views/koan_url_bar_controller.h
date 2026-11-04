@@ -90,6 +90,8 @@ class KoanUrlBarController : public views::ViewObserver,
   // the pill, not floating (Zen: a mouse press never floats the bar at once).
   // Any other way in (Cmd+L, Cmd+T) opens the floating card.
   void NoteEditInPill();
+  // Cmd+L (chrome::FocusLocationBar()), before the focus moves: it floats.
+  void OnFocusLocationCommand();
 
   // Called by KoanCompactModeController.
   void OnBrowserViewLayout();
@@ -151,6 +153,10 @@ class KoanUrlBarController : public views::ViewObserver,
   // tab.
   void UpdateKeyHandler();
   void FloatOnType();
+  // Posted after the omnibox got focus: an invisible focus closes the bar
+  // again.
+  void CloseIfFocusInvisible();
+  void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
 
   const raw_ptr<BrowserView> browser_view_;

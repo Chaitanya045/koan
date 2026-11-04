@@ -7,9 +7,12 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
+#include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -23,6 +26,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/search_engines/template_url_service_observer.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
@@ -52,24 +56,45 @@ DEFINE_UI_CLASS_PROPERTY_TYPE(koan::KoanBrowserViewController*)
 
 namespace koan {
 
-namespace {
-
 // Zen has no Google AI: Chromium's @gemini and @aimode search shortcuts (the
-// starter pack) are turned off once the search engines have loaded. The user
-// may turn one on again in Settings > Search engine; it then stays on until
-// the next launch. (Audit O6, .agent/notes/upstream/.)
-void DeactivateAiStarterPacks(TemplateURLService* service) {
-  using template_url_starter_pack_data::StarterPackId;
-  for (TemplateURL* url : service->GetTemplateURLs()) {
-    const StarterPackId id = url->starter_pack_id();
-    if ((id == StarterPackId::kGemini || id == StarterPackId::kAiMode) &&
-        url->is_active() != TemplateURLData::ActiveStatus::kFalse) {
-      service->SetIsActiveTemplateURL(url, /*is_active=*/false);
+// starter pack) are kept switched off, once the search engines have loaded
+// and whenever they change, so Settings > Search engine can't switch them back
+// on. (Audit O6, .agent/notes/upstream/omnibox-lockdown.md.)
+class AiStarterPackFilter : public TemplateURLServiceObserver {
+ public:
+  explicit AiStarterPackFilter(TemplateURLService* service)
+      : service_(service) {
+    observation_.Observe(service);
+    if (service->loaded()) {
+      Apply();
     }
   }
-}
 
-}  // namespace
+  // TemplateURLServiceObserver (also called once the service has loaded):
+  void OnTemplateURLServiceChanged() override { Apply(); }
+
+ private:
+  void Apply() {
+    // Deactivating one notifies the observers again.
+    if (applying_) {
+      return;
+    }
+    base::AutoReset<bool> applying(&applying_, true);
+    using template_url_starter_pack_data::StarterPackId;
+    for (TemplateURL* url : service_->GetTemplateURLs()) {
+      const StarterPackId id = url->starter_pack_id();
+      if ((id == StarterPackId::kGemini || id == StarterPackId::kAiMode) &&
+          url->is_active() != TemplateURLData::ActiveStatus::kFalse) {
+        service_->SetIsActiveTemplateURL(url, /*is_active=*/false);
+      }
+    }
+  }
+
+  const raw_ptr<TemplateURLService> service_;
+  bool applying_ = false;
+  base::ScopedObservation<TemplateURLService, TemplateURLServiceObserver>
+      observation_{this};
+};
 
 namespace {
 
@@ -109,14 +134,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
   ++g_live_count;
   if (TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
           browser_view->browser()->GetProfile())) {
-    if (service->loaded()) {
-      DeactivateAiStarterPacks(service);
-    } else {
-      // Unretained: the subscription goes with this controller, the service
-      // with the profile, which outlives the window.
-      starter_packs_loaded_ = service->RegisterOnLoadedCallback(
-          base::BindOnce(&DeactivateAiStarterPacks, base::Unretained(service)));
-    }
+    ai_starter_pack_filter_ = std::make_unique<AiStarterPackFilter>(service);
   }
   observations_.AddObservation(browser_view);
   if (MultiContentsView* contents = browser_view->multi_contents_view()) {

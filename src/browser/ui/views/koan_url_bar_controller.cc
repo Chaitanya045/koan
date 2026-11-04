@@ -407,19 +407,19 @@ void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
     return;
   }
   LocationBarView* bar = location_bar();
-  // An invisible focus (search::FocusOmnibox(OMNIBOX_FOCUS_INVISIBLE), from a
-  // search page's own box) is not the user asking for the URL bar.
-  if (focused_now && bar && bar->Contains(focused_now) &&
-      bar->GetOmniboxController()->edit_model()->focus_state() ==
-          OMNIBOX_FOCUS_INVISIBLE) {
-    return;
-  }
   if (focused_now && bar && bar->Contains(focused_now)) {
     if (!is_open()) {
       user_input_in_progress_ =
           bar->GetOmniboxController()->edit_model()->user_input_in_progress();
     }
     SetPlacement(DesiredPlacement());
+    // An invisible focus (search::FocusOmnibox(OMNIBOX_FOCUS_INVISIBLE), from
+    // a search page's own box) is not the user asking for the URL bar. Upstream
+    // focuses the omnibox first and marks the focus invisible afterwards, so
+    // this can only be told once it has finished: look again then.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanUrlBarController::CloseIfFocusInvisible,
+                                  weak_factory_.GetWeakPtr()));
     return;
   }
   const bool was_open = is_open() || new_tab_;
@@ -429,6 +429,34 @@ void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
   // (the pill shows it; the omnibox is out of sight).
   if (was_open && bar && features::IsUrlBarEnabled()) {
     bar->Revert();
+  }
+}
+
+void KoanUrlBarController::CloseIfFocusInvisible() {
+  LocationBarView* bar = location_bar();
+  if (!is_open() || new_tab_ || !bar || !bar->omnibox_view() ||
+      !bar->omnibox_view()->HasFocus() ||
+      bar->GetOmniboxController()->edit_model()->focus_state() !=
+          OMNIBOX_FOCUS_INVISIBLE) {
+    return;
+  }
+  EndEditing();
+}
+
+void KoanUrlBarController::OnFocusLocationCommand() {
+  // Cmd+L floats the bar, also when it is already open in the pill (no focus
+  // change then, so nothing else would move it).
+  edit_in_pill_ = false;
+  if (is_open()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanUrlBarController::FloatIfOpenInPill,
+                                  weak_factory_.GetWeakPtr()));
+  }
+}
+
+void KoanUrlBarController::FloatIfOpenInPill() {
+  if (placement_ == Placement::kInPill) {
+    SetPlacement(DesiredPlacement());
   }
 }
 
@@ -580,6 +608,12 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     floated_ = true;
   }
   if (opening) {
+    // Audit O15, also on every opening: the AI Mode popup (the composebox
+    // that covers the location bar) must not be reachable in a Koan window.
+    if (omnibox::IsAimPopupEnabled(browser_view_->GetProfile())) {
+      LOG(ERROR) << "Koan: Chromium's AI Mode omnibox popup is available";
+      DCHECK(false);
+    }
     if (KoanSidebarNavView* nav = compact_mode_->sidebar_nav()) {
       nav->SetEditing(true);
     }
@@ -948,6 +982,16 @@ bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser) {
              ->GetOriginalProfile()
              ->GetPrefs()
              ->GetBoolean(prefs::kUrlBarReplaceNewTab);
+}
+
+void OnFocusLocationBarCommand(BrowserWindowInterface* browser) {
+  BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  if (KoanBrowserViewController* controller =
+          browser_view ? KoanBrowserViewController::From(browser_view)
+                       : nullptr) {
+    controller->url_bar()->OnFocusLocationCommand();
+  }
 }
 
 bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
