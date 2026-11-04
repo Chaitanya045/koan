@@ -7,11 +7,18 @@
 
 #include <algorithm>
 
+class BrowserView;
+
 namespace views {
 class View;
 }
 
 namespace koan {
+
+// Whether the window is fullscreen: BrowserView::IsFullscreen() without the
+// crash while the window is going away (its widget is gone before Koan's
+// controllers are, and the BrowserView's own call dereferences it).
+bool IsWindowFullscreen(const BrowserView* browser_view);
 
 // Whether compact mode is applied to the window of `browser_view` (a
 // BrowserView). When true, the vertical tab strip takes no layout space (it

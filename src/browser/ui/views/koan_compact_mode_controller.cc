@@ -421,7 +421,7 @@ bool KoanCompactModeController::caption_strip_collapsed() const {
     return true;
   }
   // (Native fullscreen has no lights to make room for.)
-  return lights_keep_strip_open_ && browser_view_->IsFullscreen();
+  return lights_keep_strip_open_ && IsWindowFullscreen(browser_view_);
 }
 
 void KoanCompactModeController::OnTabsOnRightChanged() {
@@ -746,7 +746,7 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
 }
 
 bool KoanCompactModeController::WantsFullscreenEdges() const {
-  return mode_ != Mode::kNone && browser_view_->IsFullscreen() &&
+  return mode_ != Mode::kNone && IsWindowFullscreen(browser_view_) &&
          (sidebar_hot_zone_ || toolbar_hot_zone_);
 }
 
@@ -1058,7 +1058,7 @@ void KoanCompactModeController::OnImmersiveFullscreenChanged() {
 
 void KoanCompactModeController::UpdateFullscreenTopChrome() {
 #if BUILDFLAG(IS_MAC)
-  if (!browser_view_->IsFullscreen()) {
+  if (!IsWindowFullscreen(browser_view_)) {
     return;
   }
   // Dialogs and bubbles anchor to the window where Koan's toolbar is, not to
@@ -1498,7 +1498,7 @@ bool KoanCompactModeController::IsCaptionButtonBesideSidebar(
 
 bool KoanCompactModeController::HasPageSideCaptionButtons() const {
   // (Native fullscreen on macOS: no buttons over the page.)
-  if (browser_view_->IsFullscreen()) {
+  if (IsWindowFullscreen(browser_view_)) {
     return false;
   }
   // The traffic lights are at the window's leading edge: over the page where
@@ -1525,7 +1525,7 @@ void KoanCompactModeController::UpdateCaptionButtons() {
   if (traffic_lights_) {
     // AppKit shows the lights by itself in fullscreen, with the menu bar;
     // they are laid out again when it ends.
-    if (browser_view_->IsFullscreen()) {
+    if (IsWindowFullscreen(browser_view_)) {
       return;
     }
     // The traffic lights are AppKit's: shown or hidden, as the other

@@ -301,7 +301,7 @@ bool KoanUrlBarController::OpenForNewTab() {
   // (In fullscreen, the toolbar is out of sight, except where Koan's stays
   // hidden: on macOS, see HidesFullscreenTopChrome().)
   if (!features::IsUrlBarEnabled() || !browser_view_->GetIsNormalType() ||
-      (browser_view_->IsFullscreen() && !compact_mode_->hides_toolbar()) ||
+      (IsWindowFullscreen(browser_view_) && !compact_mode_->hides_toolbar()) ||
       browser_view_->browser()->GetTabStripModel()->empty() || !bar ||
       !bar->omnibox_view() ||
       !browser_view_->GetProfile()
