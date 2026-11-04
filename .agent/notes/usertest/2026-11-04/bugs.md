@@ -285,3 +285,13 @@ s6-041-page-menu.jpg. Link menu has Zen's Split Link to New Tab and Open Link in
 | KoanCheck-c150 | (1) pin → above the divider PASS (s11-004); (2) unpin → back below New Tab live PASS (s11-008); (3) dash on loaded pinned hover, × after unload PASS (s11-005-crop, s11-006); (4) each Space shows its own pinned run, 18 switches no crash PASS (s11-c-spaces); horizontal↔vertical round trip no crash, but the Space header row is gone afterwards (#148 still) (s11-017); ⌘⇧D is Chromium's Bookmark All Tabs on this base (no #90) — checks done via the menu; (5)(6)(8) not done yet |
 
 Minor: B43 a single ⌘Q only shows Chromium's "Hold ⌘Q to Quit" bubble (s7-017) — Zen quits (with its own confirm) on one press; to verify in Zen.
+
+## Session 12–15 (15:10–15:24 IST): c145d, c151, c128c, c90h
+Incident 15:10–15:13: the Mac loop's scripted run kept driving while I was on screen (its gate counted my keys as its own); my guard stopped my input at once. The loop paused at my request and now needs an explicit "screen free" grant.
+
+| Build | Result |
+|---|---|
+| KoanCheck-c145d (#145 52cf4214) | (a) 3 tabs, SIGSEGV, Restore: ONE Space, no dots PASS (s12-005). (b-i) quit/relaunch with "Space"=only NTP + "Work": both Spaces, empty Space kept PASS. (b-ii) SIGSEGV + Restore: exactly two Spaces, empty "Space" survives, Ctrl+3 nothing PASS (s12-c-ii, c-ii2); minor: Restore selects "Work" though "Space" was active. (c) close last tab of Work: keeps a new tab, window stays PASS (s12-c-019). (d) #136: Edit Theme list, Create, Cancel PASS (s12-c-d). No crash. |
+| KoanCheck-c151 (#151 258305fe) | (1) wikipedia.org pill shows W favicon PASS; (2) NTP pill "Search..." + magnifier PASS (s13-c-12); (3) no "Press Tab" hint PASS, AI Mode chip still shows (expected w/o #96) (s13-004/006); (4) ⌘⇧W with floating bar and with pill editing, hold-⌘Q with bar open: no crash PASS; (5) 🚀 Space emoji unclipped current and hovered PASS (s13-c-emoji); (6) resting pill rgb(54,53,53) on 24 ≈ 13.5% white PASS. |
+| KoanCheck-c128c (#128 06db10fd) | fullscreen top peek: menu bar only, no grey strip PASS (s14-001; a transparent Koan window 0,33 1470×115 exists during the peek); Tabs on the right: lights stay top-left above the page PASS (s14-003); fullscreen + right: no strip, no lights, 8 pt gutter PASS (s14-004); off again normal (s14-005). No crash. |
+| KoanCheck-c90h (#90 2717a7b4 + #148) | tab menu: no "Show tabs horizontally" PASS (s15-001); settings/appearance: no "Tab strip position" PASS (still Chromium rows: AI Mode side panel, tab search, bookmarks bar — minor, #101) (s15-002); ⌘⇧D pins, ⌘S compact, ⌘⇧P Incognito PASS (Incognito page says "Chromium won't save" — minor) (s15-005); profile copy with vertical_tabs.enabled=false starts vertical PASS (s15-006). |
