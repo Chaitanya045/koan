@@ -26,3 +26,8 @@ Each file ends with a **test script** the Mac loop can run in both Zen and Koan.
 | [fullscreen-and-notch.md](fullscreen-and-notch.md) | native macOS fullscreen (notch strip, borderless compact) and DOM fullscreen |
 | [theme-picker.md](theme-picker.md) | theme picker: wheel, dots and harmonies, presets, opacity, grain, scheme, saving |
 | [library.md](library.md) | Library: slide-over shell, rail and customize, History, Downloads (+ button stack), Spaces cards |
+| [keyboard-shortcuts.md](keyboard-shortcuts.md) | every Zen key (macOS), Firefox keys Zen changes/unbinds, the shortcut editor |
+| [context-menus.md](context-menus.md) | tab, sidebar, Space and create-new menus: items and when they show |
+| [settings.md](settings.md) | Zen's Settings categories: layout cards, tabs, pinned tabs, Glance, mods |
+| [onboarding.md](onboarding.md) | the welcome flow page by page (visuals in the spec) |
+| [live-results-2026-11-04.md](live-results-2026-11-04.md) | LIVE CHECK results from real Zen (two sessions) |
