@@ -38,8 +38,8 @@ std::optional<int> GetTrafficLightsTitlebarHeight(
 
 // Whether the pointer is over the traffic lights. Those sit over the window
 // but not in its views, so the pointer over them is a mouse exit for the
-// window; compact mode keeps the sidebar and toolbar it revealed while the
-// pointer is on them (Zen's ZenCompactMode.mjs, onLeave).
+// window; compact mode keeps the toolbar it revealed (not yet the peeked
+// sidebar) while the pointer is on them (Zen's ZenCompactMode.mjs, onLeave).
 bool IsPointerOverTrafficLights(const BrowserView* browser_view);
 
 #if BUILDFLAG(IS_MAC)
