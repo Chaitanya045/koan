@@ -63,11 +63,14 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanPinnedTabSublabel] =
       ui::SetAlpha(kColorToolbarText, Alpha(0.6f));
 
-  // Essentials tiles: the text colour at 8% (15% in dark mode), on hover
-  // black at 10% (the selected colour in dark mode), selected white at 85%
-  // (20% in dark mode).
-  mixer[kColorKoanEssentialsTile] =
-      ui::SetAlpha(kColorToolbarText, Alpha(dark ? 0.15f : 0.08f));
+  // Essentials tiles (and the URL pill): --zen-toolbar-element-bg,
+  // color-mix(in oklch, var(--toolbox-textcolor) 8%, transparent) (15% in
+  // dark mode). The mix keeps the text colour's own alpha (90%), so the tint
+  // is 13.5% in dark mode (zen-mac-spec.md 2A: oklch(.866 .015 251 / .135)).
+  // On hover black at 10% (the selected colour in dark mode), selected white
+  // at 85% (20% in dark mode).
+  mixer[kColorKoanEssentialsTile] = ui::AlphaBlend(
+      kColorToolbarText, SK_ColorTRANSPARENT, Alpha(dark ? 0.15f : 0.08f));
   mixer[kColorKoanEssentialsTileSelected] = {
       SkColorSetA(SK_ColorWHITE, Alpha(dark ? 0.2f : 0.85f))};
   mixer[kColorKoanEssentialsTileHovered] =
