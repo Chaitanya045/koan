@@ -620,7 +620,10 @@ void KoanCompactModeController::MaybeShowBackgroundTabToast(
   // button that switches to it.
   const views::View* region = browser_view_->tab_strip_view();
   const auto* strip = views::AsViewClass<VerticalTabStripRegionView>(region);
-  if (!hides_sidebar() || (strip && strip->is_expanded_on_hover())) {
+  // Not while the sidebar is out (isSidebarPotentiallyOpen(): hovered or
+  // pinned).
+  if (!hides_sidebar() || peek_lock_ ||
+      (strip && strip->is_expanded_on_hover())) {
     return;
   }
   for (const TabStripModelChange::ContentsWithIndex& inserted :
