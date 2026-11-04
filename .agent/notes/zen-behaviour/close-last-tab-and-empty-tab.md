@@ -111,7 +111,7 @@ So the usual sequence is: Cmd+W (last tab closes, empty tab shown) -> Cmd+W agai
 | Ctrl+Tab | skips it (never offered) |
 | Drag a tab onto the sidebar | normal; the empty tab is not a drop target (the empty-tab guard in `ZenDragAndDrop.js`) |
 | Switch Space | the empty tab moves to that Space's container (first position) and is selected only if that Space has no other tab to show |
-| Quit and relaunch | session restore restores the empty tab; with `zen.urlbar.open-on-startup` the URL bar opens on launch |
+| Quit and relaunch | session restore restores the empty tab. The source (`ZenSpaceManager.mjs` ~1100) calls `BrowserCommands.openTab()` when `zen.urlbar.open-on-startup` is true, but **live (2026-11-04, fresh profile launched with Marionette, window focused) the floating URL bar was NOT open** after 8 s: only the empty tab and the visible sidebar. See `live-results-2026-11-04.md` |
 
 ## 6. Prefs
 
@@ -150,5 +150,6 @@ So the usual sequence is: Cmd+W (last tab closes, empty tab shown) -> Cmd+W agai
 5. From the empty state press Cmd+T, type `example.com`, Enter: a **new** tab opens
    and the empty state is gone; close it: back to the empty state.
 6. From the empty state: Cmd+F does nothing; Ctrl+Tab does not show it.
-7. Quit/relaunch from the empty state: window restores on the empty tab and the
-   floating URL bar is open.
+7. Quit/relaunch from the empty state: window restores on the empty tab (verified live; compact mode
+   also restores). The floating URL bar was **not** open live although the pref is true: Koan should match the
+   shipped behaviour only after this is re-checked in the user's real Zen (not a Marionette launch).
