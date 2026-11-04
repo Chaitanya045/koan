@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
-index b2aaf8d..45d5096 100644
+index b2aaf8d..c9c1976 100644
 --- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
 +++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
 @@ -161,7 +161,8 @@ export function getHtml(this: SettingsAppearancePageElement) {
@@ -12,3 +12,14 @@ index b2aaf8d..45d5096 100644
        <div class="flex cr-padded-text" aria-hidden="true">
          $i18n{tabStripPosition}
        </div>
+@@ -171,8 +172,8 @@ export function getHtml(this: SettingsAppearancePageElement) {
+               this.onTabStripPositionSettingsControlChange_}">
+       </settings-dropdown-menu>
+     </div>
+-    <div class="list-frame indented-toggles"
+-        ?hidden="${!this.verticalTabsEnabledPref_?.value}">
++    <!-- Koan: nor its expand-on-hover and tab strip toggles. -->
++    <div class="list-frame indented-toggles" hidden>
+       ${this.showVerticalTabsExpandOnHoverSetting_() ? html`
+         <settings-toggle-button id="showVerticalTabsExpandOnHover"
+             pref-key="vertical_tabs.expand_on_hover"
