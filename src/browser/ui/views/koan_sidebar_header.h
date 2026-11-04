@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_HEADER_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_HEADER_H_
 
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace views {
@@ -50,6 +52,15 @@ bool HidesSidebarTrailingControls(const views::View* host);
 // them: to their right where the row has the room, else below them.
 // `bounds` itself elsewhere, and everywhere but on macOS.
 gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds);
+
+// Shows the sidebar menu (the one the rest of the sidebar has: Zen's toolbar
+// context menu) for a right click on the sidebar button `source`, at
+// `screen_point`. Upstream's menu for that button has the one item "Expand
+// tabs on hover", which Koan keeps on. Returns false if Koan has no menu for
+// this window (the caller then shows upstream's).
+bool ShowSidebarButtonContextMenu(views::View* source,
+                                  const gfx::Point& screen_point,
+                                  ui::mojom::MenuSourceType source_type);
 
 }  // namespace koan
 

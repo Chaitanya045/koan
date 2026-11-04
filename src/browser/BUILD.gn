@@ -137,6 +137,7 @@ source_set("feature_overrides") {
     "//base",
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/tabs:features",
+    "//components/feature_engagement/public:feature_constants",
     "//components/performance_manager",
     "//components/variations",
   ]

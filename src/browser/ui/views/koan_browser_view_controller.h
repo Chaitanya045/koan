@@ -31,6 +31,7 @@ class KoanSidebarTabsController;
 class KoanTabActivationTracker;
 class KoanToast;
 class KoanUrlBarController;
+class KoanVerticalTabsPolicy;
 class KoanWelcome;
 class KoanWindowDragController;
 class KoanWorkspaceController;
@@ -56,6 +57,8 @@ class KoanBrowserViewController : public views::ViewObserver {
   KoanCompactModeController* compact_mode() const {
     return compact_mode_.get();
   }
+  // What the sidebar's state machine may do in this window.
+  KoanVerticalTabsPolicy* vertical_tabs() const { return vertical_tabs_.get(); }
   KoanToast* toast() const { return toast_.get(); }
   KoanUrlBarController* url_bar() const { return url_bar_.get(); }
   KoanWorkspaceController* workspaces() const { return workspaces_.get(); }
@@ -93,6 +96,8 @@ class KoanBrowserViewController : public views::ViewObserver {
   void UpdateContentCard();
 
   const raw_ptr<BrowserView> browser_view_;
+  // First: compact mode and the rest ask it to change the sidebar's state.
+  std::unique_ptr<KoanVerticalTabsPolicy> vertical_tabs_;
   std::unique_ptr<KoanCompactModeController> compact_mode_;
   std::unique_ptr<KoanToast> toast_;
   std::unique_ptr<KoanSidebarTabsController> sidebar_tabs_;

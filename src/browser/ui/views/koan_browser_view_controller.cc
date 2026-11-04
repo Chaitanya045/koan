@@ -36,6 +36,7 @@
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_drag.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -57,6 +58,7 @@ int g_live_count = 0;
 
 KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
     : browser_view_(browser_view),
+      vertical_tabs_(std::make_unique<KoanVerticalTabsPolicy>(browser_view)),
       compact_mode_(std::make_unique<KoanCompactModeController>(browser_view)),
       toast_(std::make_unique<KoanToast>(browser_view)),
       sidebar_tabs_(std::make_unique<KoanSidebarTabsController>(browser_view)),
@@ -105,6 +107,8 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
 // static
 void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
   if (KoanBrowserViewController* controller = From(browser_view)) {
+    // First: from here on nothing touches the sidebar's state.
+    controller->vertical_tabs_->OnBrowserViewDestroying();
     controller->command_palette_->OnBrowserViewDestroying();
     controller->shortcuts_->OnBrowserViewDestroying();
     controller->compact_mode_->OnBrowserViewDestroying();
@@ -137,6 +141,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     views::View* observed_view) {
   if (observed_view == browser_view_) {
     VLOG(1) << "Koan: window attached to widget";
+    vertical_tabs_->OnAddedToWidget();
     compact_mode_->OnAddedToWidget();
     sidebar_tabs_->OnAddedToWidget();
     workspaces_->OnAddedToWidget();

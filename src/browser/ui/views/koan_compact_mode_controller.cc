@@ -17,15 +17,12 @@
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/actions/chrome_action_id.h"
-#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
@@ -49,11 +46,11 @@
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "koan/browser/ui/views/koan_traffic_lights_controller.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
-#include "ui/actions/actions.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom-shared.h"
@@ -263,7 +260,6 @@ KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
                           base::Unretained(this)));
   tabs_on_right_ =
       pref_change_registrar_.prefs()->GetBoolean(prefs::kTabsOnRight);
-  opened_in_compact_mode_ = GetPrefs()->GetBoolean(prefs::kCompactModeEnabled);
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
 #if BUILDFLAG(IS_MAC)
   traffic_lights_ = std::make_unique<KoanTrafficLightsController>(
@@ -311,91 +307,7 @@ void KoanCompactModeController::OnAddedToWidget() {
     focus_manager_ = browser_view_->GetFocusManager();
     focus_manager_->AddFocusChangeListener(this);
   }
-  // Collapsing the sidebar to icons switches between single toolbar and the
-  // collapsed layout.
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && !collapse_subscription_) {
-    resizing_subscription_ =
-        state->RegisterOnResizingChanged(base::BindRepeating(
-            [](KoanCompactModeController* self,
-               tabs::VerticalTabStripStateController* state, bool is_resizing) {
-              if (is_resizing) {
-                self->resizing_from_expanded_ = !state->IsCollapsed();
-              }
-            },
-            base::Unretained(this), base::Unretained(state)));
-    collapse_subscription_ = state->RegisterOnCollapseChanged(
-        base::IgnoreArgs<tabs::VerticalTabStripCollapseState>(
-            base::BindRepeating(
-                &KoanCompactModeController::OnSidebarCollapseChanged,
-                base::Unretained(this))));
-  }
-  InstallSidebarToggleAction();
   UpdateActiveSoon();
-}
-
-void KoanCompactModeController::InstallSidebarToggleAction() {
-  BrowserWindowInterface* browser = browser_view_->browser();
-  BrowserActions* actions = BrowserActions::From(browser);
-  if (!features::IsCompactModeEnabled() || !browser_view_->GetIsNormalType() ||
-      !actions || !actions->root_action_item()) {
-    return;
-  }
-  actions::ActionItem* toggle = actions::ActionManager::Get().FindAction(
-      kActionToggleCollapseVertical, actions->root_action_item());
-  if (!toggle) {
-    return;
-  }
-  // The action is the window's own (BrowserActions), so this only changes
-  // this window's sidebar button, its menu item and its shortcut. In Zen the
-  // sidebar button toggles compact mode; collapsing the sidebar to Chromium's
-  // icon rail, with its tab group and tab search buttons and its toolbar, is
-  // not something Zen has. Also in fullscreen, where compact mode doesn't show
-  // but its setting still toggles, as with the shortcut. (Upstream's own
-  // collapse, for the menu item or shortcut when kUseActionsForBrowserCommands
-  // is off, is not reached from here.)
-  toggle->SetInvokeActionCallback(base::BindRepeating(
-      [](base::WeakPtr<KoanCompactModeController> controller,
-         actions::ActionItem* item, actions::ActionInvocationContext context) {
-        if (controller) {
-          controller->OnSidebarToggleAction();
-        }
-      },
-      weak_factory_.GetWeakPtr()));
-  UpdateSidebarToggleText();
-}
-
-void KoanCompactModeController::OnSidebarToggleAction() {
-  // A sidebar collapsed to Chromium's icon rail (a profile from an earlier
-  // build) is brought back first: nothing else here would.
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && !hides_sidebar() && IsSidebarCollapsedByUser()) {
-    expanding_sidebar_ = true;
-    state->RequestCollapse(false);
-    return;
-  }
-  ToggleCompactMode();
-}
-
-void KoanCompactModeController::UpdateSidebarToggleText() {
-  BrowserActions* actions = BrowserActions::From(browser_view_->browser());
-  if (!actions || !actions->root_action_item()) {
-    return;
-  }
-  actions::ActionItem* toggle = actions::ActionManager::Get().FindAction(
-      kActionToggleCollapseVertical, actions->root_action_item());
-  if (!toggle) {
-    return;
-  }
-  // Upstream rewrites these ("Collapse tabs") on every collapse change; this
-  // runs after that (from UpdateActive(), a posted task).
-  const std::u16string text = GetPrefs()->GetBoolean(prefs::kCompactModeEnabled)
-                                  ? u"Disable compact mode"
-                                  : u"Enable compact mode";
-  toggle->SetText(text);
-  toggle->SetTooltipText(text);
 }
 
 bool KoanCompactModeController::CanCompactMode() const {
@@ -444,14 +356,12 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   // through ReleaseLock(), which defers that until the region is gone.
   destroying_ = true;
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
-  collapse_subscription_ = {};
-  resizing_subscription_ = {};
   // Order matters: resetting the menu runner may run OnContextMenuClosed(),
   // which releases menu_lock_ again, so it is released (and null) first.
   ReleaseLock(menu_lock_);
   menu_runner_.reset();
   if (mode_ != Mode::kNone) {
-    Deactivate(/*keep_sidebar_hidden=*/false);
+    Deactivate();
   }
   pointer_monitor_.reset();
   if (focus_manager_) {
@@ -468,20 +378,7 @@ void KoanCompactModeController::ToggleCompactMode() {
 
 void KoanCompactModeController::ToggleSingleToolbar() {
   PrefService* prefs = GetPrefs();
-  const bool single_toolbar = !DesiredSingleToolbar();
-  prefs->SetBoolean(prefs::kSingleToolbarEnabled, single_toolbar);
-  // Single toolbar needs an expanded sidebar (Zen's layout picker expands
-  // it too).
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      single_toolbar && state && IsSidebarCollapsedByUser()) {
-    if (collapsed_before_) {
-      collapsed_before_ = false;
-    } else {
-      expanding_sidebar_ = true;
-      state->RequestCollapse(false);
-    }
-  }
+  prefs->SetBoolean(prefs::kSingleToolbarEnabled, !DesiredSingleToolbar());
 }
 
 void KoanCompactModeController::ToggleTabsOnRight() {
@@ -529,7 +426,7 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
   // The hot zones and which window buttons hide depend on the side.
   if (mode_ != Mode::kNone) {
     const Mode mode = mode_;
-    Deactivate(/*keep_sidebar_hidden=*/hides_sidebar());
+    Deactivate();
     Activate(mode);
   }
   // Everything in the window is laid out again, mirrored or not; the
@@ -544,16 +441,6 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
     top_container->InvalidateLayout();
   }
   OnContentCardChanged();
-}
-
-void KoanCompactModeController::OnSidebarCollapseChanged() {
-  if (const auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && !state->IsCollapsed()) {
-    expanding_sidebar_ = false;
-    collapsed_by_drag_ = false;
-  }
-  UpdateActiveSoon();
 }
 
 bool KoanCompactModeController::PeekSidebar() {
@@ -745,11 +632,6 @@ bool KoanCompactModeController::IsCommandIdChecked(int command_id) const {
   }
 }
 
-bool KoanCompactModeController::IsCommandIdEnabled(int command_id) const {
-  return command_id != kCommandCompactModeHideToolbar ||
-         !IsHideToolbarOnlyBlocked();
-}
-
 void KoanCompactModeController::ExecuteCommand(int command_id,
                                                int event_flags) {
   switch (command_id) {
@@ -778,8 +660,7 @@ void KoanCompactModeController::OnSidebarDragCollapsed() {
     return;
   }
   // ZenCustomizableUI.sys.mjs #collapseSidebarIntoCompactMode(): compact
-  // mode hides the sidebar; it was expanded, so it comes back expanded.
-  collapsed_by_drag_ = true;
+  // mode hides the sidebar; it comes back at the width it had.
   if (!PrefHidesSidebar()) {
     SetCompactModeHides(/*sidebar=*/true, /*toolbar=*/true);
   }
@@ -907,35 +788,8 @@ KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
   return Mode::kNone;
 }
 
-bool KoanCompactModeController::IsSidebarCollapsedByUser() const {
-  // Compact mode collapsed it (and keeps it collapsed while it switches
-  // variants): what counts is how it was before.
-  if (collapsed_before_) {
-    return *collapsed_before_;
-  }
-  // A window opened while compact mode hides the sidebar starts collapsed
-  // by compact mode (Chromium keeps the collapse per profile): the other
-  // windows know how it was before.
-  const int before =
-      GetPrefs()->GetInteger(prefs::kCompactModeSidebarCollapsedBefore);
-  if (opened_in_compact_mode_ &&
-      before != prefs::kSidebarCollapsedBeforeUnknown) {
-    return before == prefs::kSidebarCollapsedBeforeYes;
-  }
-  // A drag of its edge from expanded collapses it on the way to hiding it
-  // (Zen decides on release), and Koan's own expanding is under way.
-  const auto* state =
-      tabs::VerticalTabStripStateController::From(browser_view_->browser());
-  if (!state || (state->IsResizing() && resizing_from_expanded_) ||
-      collapsed_by_drag_ || expanding_sidebar_) {
-    return false;
-  }
-  return state->IsCollapsed();
-}
-
 bool KoanCompactModeController::DesiredSingleToolbar() const {
-  return GetPrefs()->GetBoolean(prefs::kSingleToolbarEnabled) &&
-         !IsSidebarCollapsedByUser();
+  return GetPrefs()->GetBoolean(prefs::kSingleToolbarEnabled);
 }
 
 bool KoanCompactModeController::DesiredHideSidebar() const {
@@ -943,28 +797,8 @@ bool KoanCompactModeController::DesiredHideSidebar() const {
 }
 
 bool KoanCompactModeController::DesiredHideToolbar() const {
-  // Single toolbar has no toolbar to show. Where hiding just the toolbar is
-  // blocked, this window hides the sidebar instead; the setting stays (Zen,
-  // with one window per setting, rewrites it).
-  return DesiredSingleToolbar() ||
-         (PrefHidesToolbar() &&
-          (PrefHidesSidebar() || !IsHideToolbarOnlyBlocked()));
-}
-
-bool KoanCompactModeController::IsHideToolbarOnlyBlocked() const {
-  // ZenCompactMode.mjs checkIfIllegalState(): with the sidebar collapsed to
-  // icons, the window buttons on its side sit in the toolbar's row, so
-  // hiding just the toolbar would take them away. Only where compact mode
-  // applies.
-  if (!features::IsCompactModeEnabled() || !UseContentCard(browser_view_) ||
-      !IsSidebarCollapsedByUser()) {
-    return false;
-  }
-  const gfx::Size leading = GetCaptionButtonAreaSize(browser_view_,
-                                                     /*leading=*/true);
-  const gfx::Size trailing = GetCaptionButtonAreaSize(browser_view_,
-                                                      /*leading=*/false);
-  return !(IsSidebarOnRight(browser_view_) ? trailing : leading).IsEmpty();
+  // Single toolbar has no toolbar to show.
+  return DesiredSingleToolbar() || PrefHidesToolbar();
 }
 
 void KoanCompactModeController::CancelSpaceSwipe() {
@@ -991,27 +825,30 @@ void KoanCompactModeController::UpdateActive() {
         DesiredHideToolbar() == hide_toolbar_))) {
     // The URL bar behaviour pref may have changed.
     KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
-    UpdateSidebarToggleText();
+    SyncSidebar();
     return;
   }
   if (mode_ != Mode::kNone) {
-    // A hidden sidebar that stays hidden isn't expanded in between.
-    Deactivate(/*keep_sidebar_hidden=*/hides_sidebar() &&
-               desired == Mode::kCompact && DesiredHideSidebar());
+    Deactivate();
   }
   if (desired != Mode::kNone) {
     Activate(desired);
   }
   UpdateFullscreenTopChrome();
-  // The sidebar is given back (a closing window leaves it for the others);
-  // from now on this window's sidebar state is its own.
-  if (!hides_sidebar()) {
-    GetPrefs()->ClearPref(prefs::kCompactModeSidebarCollapsedBefore);
-    opened_in_compact_mode_ = false;
-  }
   OnContentCardChanged();
   KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
-  UpdateSidebarToggleText();
+  SyncSidebar();
+}
+
+void KoanCompactModeController::SyncSidebar() {
+  // The sidebar is collapsed while compact mode hides it, and only then: the
+  // one rule behind which the strip's state is Koan's (see
+  // KoanVerticalTabsPolicy). A hidden sidebar that stays hidden while the
+  // variant changes is not expanded in between.
+  KoanVerticalTabsPolicy* policy =
+      KoanBrowserViewController::From(browser_view_)->vertical_tabs();
+  policy->SetSidebarHidden(hides_sidebar());
+  policy->UpdateSidebarButtonText();
 }
 
 void KoanCompactModeController::OnContentCardChanged() {
@@ -1031,10 +868,8 @@ void KoanCompactModeController::OnContentCardChanged() {
 
 void KoanCompactModeController::Activate(Mode mode) {
   CancelSpaceSwipe();
-  // What compact mode hides; decided before `mode_` changes, as the sidebar's
-  // collapsed state means something else once compact mode hides it.
+  // What compact mode hides.
   const bool single_toolbar = DesiredSingleToolbar();
-  const bool collapsed_by_user = IsSidebarCollapsedByUser();
   hide_sidebar_ = mode == Mode::kCompact && DesiredHideSidebar();
   hide_toolbar_ = mode == Mode::kCompact && DesiredHideToolbar();
   mode_ = mode;
@@ -1044,25 +879,6 @@ void KoanCompactModeController::Activate(Mode mode) {
           << (hide_sidebar_ ? ", sidebar hidden" : "")
           << (hide_toolbar_ && !compact_keeps_sidebar_nav_ ? ", toolbar hidden"
                                                            : "");
-
-  // Hidden sidebar: collapse it; the layout then gives it zero width and
-  // upstream's expand-on-hover draws it over the page.
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && hide_sidebar_) {
-    // Kept when only the variant changed (see UpdateActive()).
-    if (!collapsed_before_) {
-      collapsed_before_ = collapsed_by_user;
-    }
-    GetPrefs()->SetInteger(prefs::kCompactModeSidebarCollapsedBefore,
-                           *collapsed_before_
-                               ? prefs::kSidebarCollapsedBeforeYes
-                               : prefs::kSidebarCollapsedBeforeNo);
-    if (!state->IsCollapsed()) {
-      state->RequestCollapse(true);
-    }
-  }
-  collapsed_by_drag_ = false;
 
   // Toolbar: move the top container into the overlay view, above the page.
   // Mirrors BrowserView::ReparentTopContainerForStartOfImmersive(); the
@@ -1443,7 +1259,7 @@ KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
   return static_cast<KoanSidebarNavView*>(sidebar_nav_.view());
 }
 
-void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
+void KoanCompactModeController::Deactivate() {
   CancelSpaceSwipe();
   VLOG(1) << (mode_ == Mode::kCompact ? "Koan: compact mode off"
                                       : "Koan: single toolbar off");
@@ -1554,21 +1370,9 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   top_container_index_.reset();
   toolbar_revealed_ = false;
 
-  // A closing window has no layout to do, and leaves the sidebar as it is for
-  // the others (expanding it again is an animation).
+  // A closing window has no layout to do.
   if (destroying_) {
     return;
-  }
-
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && !keep_sidebar_hidden) {
-    if (collapsed_before_.has_value() && !*collapsed_before_ &&
-        state->IsCollapsed()) {
-      expanding_sidebar_ = true;
-      state->RequestCollapse(false);
-    }
-    collapsed_before_.reset();
   }
 
   browser_view_->InvalidateLayout();
