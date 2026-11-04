@@ -540,12 +540,20 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   // bookmark bar, toolbar, URL, AI, Lens, search and vertical tab items, Cast
   // and Developer (Browser Tools in Tools) are not Zen's.
   if (NSMenu* view = [main_menu itemWithTag:IDC_VIEW_MENU].submenu) {
-    HideItems(view,
-              {IDC_SHOW_BOOKMARK_BAR, IDC_TOGGLE_FULLSCREEN_TOOLBAR,
-               IDC_SHOW_FULL_URLS, IDC_SHOW_GOOGLE_LENS_SHORTCUT,
-               IDC_SHOW_AI_MODE_OMNIBOX_BUTTON, IDC_SHOW_SEARCH_TOOLS,
-               IDC_TOGGLE_VERTICAL_TABS, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE,
-               IDC_CUSTOMIZE_TOUCH_BAR, IDC_ROUTE_MEDIA, IDC_DEVELOPER_MENU});
+    HideItems(view, {IDC_SHOW_BOOKMARK_BAR, IDC_TOGGLE_FULLSCREEN_TOOLBAR,
+                     IDC_SHOW_FULL_URLS, IDC_SHOW_GOOGLE_LENS_SHORTCUT,
+                     IDC_SHOW_AI_MODE_OMNIBOX_BUTTON, IDC_SHOW_SEARCH_TOOLS,
+                     IDC_TOGGLE_VERTICAL_TABS, IDC_CUSTOMIZE_TOUCH_BAR,
+                     IDC_ROUTE_MEDIA, IDC_DEVELOPER_MENU});
+    // Chrome's "Collapse Vertical Tabs" stays: upstream shows it whenever the
+    // tabs are vertical (a hidden item's key wouldn't fire either), and it is
+    // Zen's "Toggle Sidebar's Width" (zen-sidebar-shortcut-toggle), which Zen
+    // leaves without a key: Chrome's Shift+Cmd+L is Koan's inspector.
+    for (NSMenuItem* item in view.itemArray) {
+      if (IsChromeCommand(item, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE)) {
+        item.title = @"Toggle Sidebar's Width";
+      }
+    }
     NSMenu* appearance = [[NSMenu alloc] initWithTitle:@"Appearance"];
     // Zen's first, disabled item (zen-menubar-appearance-description).
     NSMenuItem* websites =
