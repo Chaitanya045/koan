@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+#include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
 #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
@@ -151,6 +152,18 @@ TabGroupView* SpaceTabsView(const TabStripView* strip,
     }
   }
   return nullptr;
+}
+
+// After the rows left `group`: its animating layout manager keys its layout
+// maps by child view (raw_ptr), and only rebuilds its starting map when an
+// animation starts or ends, so it would keep the rows there, to dangle once
+// they are deleted (when the window closes, say, while the group view, a
+// closing Space animating out, outlives them). Recomputes its target and
+// rebuilds both maps from its current children. Needs an open widget, which
+// MoveRowsTo() checks: a closed one skips the recomputation.
+void ForgetRows(TabGroupView* group) {
+  static_cast<TabCollectionAnimatingLayoutManager*>(group->GetLayoutManager())
+      ->ResetViewsToTargetLayout({});
 }
 
 // Zen's focus order in a Space: the pinned tabs, Clear, New Tab, then the
@@ -588,18 +601,17 @@ void KoanSidebarTabsController::OnBrowserViewDestroying() {
   }
   if (rows_) {
     rows_observation_.Reset();
+    // Never deleted here: left to their parent, which deletes them in order.
+    // A Space's group view drops its animating layout manager before its
+    // children; the tab strip deletes its children after the tab list's
+    // group views (TabCollectionNode::Deinitialize() runs first), whose
+    // layout maps may still name the rows from when they were in them.
+    // Deleted now, the rows would dangle in those maps (the closing widget
+    // no longer recomputes layouts). Inert meanwhile: they call into this
+    // controller.
     KoanSidebarTabRowsView* rows = std::exchange(rows_, nullptr);
-    if (views::IsViewClass<TabGroupView>(rows->parent())) {
-      // Left to the Space's group view, which drops its animating layout
-      // manager before its children. Removed now, they would stay in that
-      // manager's layout maps (the closing widget no longer recomputes
-      // layouts) and dangle there once deleted. Inert meanwhile: they call
-      // into this controller.
-      rows->SetCanProcessEventsWithinSubtree(false);
-      rows->SetFocusBehavior(views::View::FocusBehavior::NEVER);
-    } else {
-      rows->parent()->RemoveChildViewT(rows);
-    }
+    rows->SetCanProcessEventsWithinSubtree(false);
+    rows->SetFocusBehavior(views::View::FocusBehavior::NEVER);
   }
 }
 
@@ -725,6 +737,9 @@ void KoanSidebarTabsController::MoveRowsTo(
   // Moved, not rebuilt: the Clear button keeps its state.
   std::unique_ptr<KoanSidebarTabRowsView> rows =
       parent->RemoveChildViewT(rows_.get());
+  if (auto* old_group = views::AsViewClass<TabGroupView>(parent)) {
+    ForgetRows(old_group);
+  }
   rows_ = host == strip
               ? strip->AddChildViewAt(std::move(rows), RowsIndexInStrip(strip))
               : host->AddChildView(std::move(rows));
