@@ -261,3 +261,13 @@ keeps the selected tab, s6-008); "+ New Tab" row opens the floating bar (s6-010)
 (When / Sort / Closed tabs), ← close (s6-016..021); Essential menu has Remove from Essentials, Change Icon…, Edit Essential URL ▸, Reset Essential Tab
 and no Close/Pin (s6-025). Note (dump): the whole Chromium ToolbarView stays alive in the tree, hidden only by its layer (TopContainerView
 layer visible=false); it is what the fullscreen peek shows (#146).
+
+### B41. Split Link from an Essential: the split lands inside the Essentials tile and the sidebar's bottom bar is drawn twice — major
+Steps: open the Wikipedia Essential, right-click a link ("China") > Split Link to New Tab.
+Expected (Zen split-view.md): the two tabs split side by side; the new tab is a normal tab in the Space list; one bottom bar.
+Actual (s6-043-split-link.jpg): the split works, but the Essentials tile now shows both favicons (W + globe), so the new tab became part of the
+Essential; the bottom row (Library button + "+") appears **twice** (y≈855 and y≈899). Panes carry Chromium footers ("en.wikipedia.org ×", "×").
+(The Space header came back here.)
+
+### B42. Page context menu is Chromium's (Cast…, Google Lens "Search this tab with image search", Create QR code, Open in reading mode) — minor
+s6-041-page-menu.jpg. Link menu has Zen's Split Link to New Tab and Open Link in Glance (OK) plus Chromium's "Copy link to highlight", "Search Google for…" (s6-042).
