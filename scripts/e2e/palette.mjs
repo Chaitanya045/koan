@@ -9,7 +9,10 @@
 // times; Ctrl+T opens a tab). Text is typed into the omnibox as character
 // events; Tab, Enter, arrows and Esc go to the browser window's widget, so
 // they take the same path as real keys (pre-target handlers, focus manager,
-// focused view). The rows are read from Chromium's WebUI popup. At the end Koan is restarted on
+// focused view). The rows are read from Chromium's WebUI popup, which Koan now
+// turns off (omnibox lockdown O1): until rows() reads the Views popup's result
+// views (OmniboxResultView; their accessible names and selection), this test
+// finds no rows. At the end Koan is restarted on
 // the same profile to check the opt-outs. Prints one PASS/FAIL line per
 // check; exits non-zero on any failure.
 import { spawn } from 'node:child_process';

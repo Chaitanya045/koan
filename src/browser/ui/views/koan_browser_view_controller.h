@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
@@ -119,6 +120,8 @@ class KoanBrowserViewController : public views::ViewObserver {
   std::map<std::string, std::string> session_data_;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       observations_{this};
+  // Until the search engines have loaded (see the constructor).
+  base::CallbackListSubscription starter_packs_loaded_;
   base::WeakPtrFactory<KoanBrowserViewController> weak_factory_{this};
 };
 

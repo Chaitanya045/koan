@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/choice_made_location.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/vector_icons/vector_icons.h"
@@ -1118,8 +1119,12 @@ class KoanWelcomePagesView : public views::View {
           /*engine=*/true,
           base::BindRepeating(
               [](TemplateURLService* service, int prepopulate_id) {
+                // Koan's welcome is the search engine choice screen: record
+                // the choice, so that Chromium doesn't ask again (its own
+                // dialog, for users in the EEA).
                 service->SetUserSelectedDefaultSearchProviderByPrepopulateId(
-                    prepopulate_id);
+                    prepopulate_id,
+                    search_engines::ChoiceMadeLocation::kChoiceScreen);
               },
               base::Unretained(service), engine->prepopulate_id()));
     }

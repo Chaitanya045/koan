@@ -136,9 +136,17 @@ source_set("feature_overrides") {
   deps = [
     "//base",
     "//chrome/browser/ui:ui_features",
+    "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/tabs:features",
+    "//chrome/browser/ui/webui/new_tab_page/composebox/variations",
+    "//chrome/common:chrome_features",
+    "//components/contextual_tasks/public:feature_list",
     "//components/feature_engagement/public:feature_constants",
+    "//components/lens:features",
+    "//components/omnibox/browser:aim_eligibility_service_features",
+    "//components/optimization_guide/core:features",
     "//components/performance_manager",
+    "//components/search",
     "//components/variations",
   ]
   if (is_mac) {

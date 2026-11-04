@@ -190,6 +190,8 @@ source_set("impl") {
     "koan_zen_window_drag.h",
     "koan_vertical_tabs_policy.cc",
     "koan_vertical_tabs_policy.h",
+    "koan_zero_suggest.cc",
+    "koan_zero_suggest.h",
   ]
   if (is_mac) {
     sources += [
