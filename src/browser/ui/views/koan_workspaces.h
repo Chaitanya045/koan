@@ -234,11 +234,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // one Space per notch, at most every 200 ms. Touchpad swipes are
   // upstream's VerticalTabStripFocusSwipeController.
   void OnSpaceWheel(bool forward);
-  // Zen's two-finger swipe (koan_swipe_tracker.h, koan_space_swipe.h): the Space follows the
-  // fingers by the gesture `amount` (positive: fingers moving left; the
-  // strip moves the other way, as in Zen), then EndSwipe() when they lift,
-  // with the last movement's `velocity` (amounts per second): it switches to
-  // the next (fingers moved right) or previous Space, or lets the Space
+  // Zen's two-finger swipe (koan_swipe_tracker.h, koan_space_swipe.h): the
+  // Space follows the fingers by the gesture `amount` (positive: fingers moving
+  // left; the strip moves the other way, as in Zen), then EndSwipe() when they
+  // lift, with the last movement's `velocity` (amounts per second): it switches
+  // to the next (fingers moved right) or previous Space, or lets the Space
   // spring back. Both do nothing where the sidebar shows no Space to swipe
   // (one Space, the Create form open).
   void UpdateSwipe(float amount);
