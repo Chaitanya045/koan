@@ -4,7 +4,10 @@
 
 #include "koan/browser/ui/views/koan_tab_menu.h"
 
+#include <optional>
+
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
@@ -108,6 +111,13 @@ void AddKoanTabMenuItems(
                          submenus);
   for (const TabMenuFeature& feature : kFeatures) {
     feature.add_items(context);
+  }
+  // Zen has no horizontal tabs: no "Show tabs horizontally".
+  if (features::IsSidebarEnabled()) {
+    if (const std::optional<size_t> toggle =
+            menu->GetIndexOfCommandId(TabStripModel::CommandToggleVertical)) {
+      menu->RemoveItemAt(*toggle);
+    }
   }
 }
 

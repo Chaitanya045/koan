@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/toolbar/BUILD.gn b/chrome/browser/ui/toolbar/BUILD.gn
+index 875dde1..e4fe257 100644
+--- a/chrome/browser/ui/toolbar/BUILD.gn
++++ b/chrome/browser/ui/toolbar/BUILD.gn
+@@ -234,6 +234,7 @@ source_set("impl") {
+       "//components/webapps/common",
+       "//content/public/browser",
+       "//content/public/common",
++      "//koan/browser:features",
+       "//extensions/common:extension_features",
+       "//media",
+       "//net",

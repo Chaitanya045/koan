@@ -1,0 +1,14 @@
+diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+index b2aaf8d..45d5096 100644
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -161,7 +161,8 @@ export function getHtml(this: SettingsAppearancePageElement) {
+ </if>
+ 
+ 
+-    <div class="cr-row">
++    <!-- Koan: Zen has no horizontal tabs. -->
++    <div class="cr-row" hidden>
+       <div class="flex cr-padded-text" aria-hidden="true">
+         $i18n{tabStripPosition}
+       </div>

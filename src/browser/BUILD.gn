@@ -86,6 +86,7 @@ source_set("tab_hooks") {
   deps = [
     ":features",
     ":prefs",
+    "//chrome/common:constants",
     "//components/prefs",
     "//components/user_prefs",
     "//content/public/browser",
