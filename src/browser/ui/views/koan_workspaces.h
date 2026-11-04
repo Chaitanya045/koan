@@ -358,6 +358,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   bool RecreateStoredSpaces(const std::vector<int>& loose);
   // Keeps prefs::kWorkspaceList up to date from the window the user is in.
   void StoreSpaces();
+  // Drops the connection a Space has to a saved tab group (an old profile's,
+  // opened from the bookmarks bar or the everything menu): no sync, no
+  // Chrome "Delete group?" dialog.
+  void DisconnectSavedGroups();
   // Closes upstream's tab group editor, which has nothing to edit here.
   void CloseGroupEditors();
   // Debug builds: fails loudly if upstream state leaked into the Spaces

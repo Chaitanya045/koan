@@ -33,6 +33,7 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_restore.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -58,7 +59,10 @@
 #include "chrome/common/webui_url_constants.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
+#include "components/saved_tab_groups/public/types.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
@@ -66,6 +70,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
+#include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
@@ -1210,6 +1215,7 @@ void KoanWorkspaceController::Update() {
   // tabs) and come back with it.
   InstallViews();
   EnsureOneSpaceShown();
+  DisconnectSavedGroups();
   KeepStartupEssential();
   SnapshotSpaces();
   StoreSpaces();
@@ -1599,6 +1605,29 @@ void KoanWorkspaceController::StoreSpaces() {
                                                    std::move(list));
 }
 
+void KoanWorkspaceController::DisconnectSavedGroups() {
+  // Spaces aren't saved groups (koan::SavesTabGroups()), but an old profile
+  // may have saved groups already, and opening one (the everything menu, a
+  // bookmarks bar chip) makes a Space connected to it. Connected, its
+  // renames sync, a remote delete closes its tabs and closing it asks
+  // Chrome's "Delete group?". Koan drops the connection (the saved group
+  // stays, as closed): upstream's dialog only asks for a group the service
+  // maps (SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog()), and a
+  // sync change only reaches a mapped one.
+  tab_groups::TabGroupSyncService* service =
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(
+          browser_view_->GetProfile());
+  if (!service) {
+    return;
+  }
+  for (const SpaceInfo& space : GetSpaces()) {
+    if (service->GetGroup(space.id)) {
+      service->RemoveLocalTabGroupMapping(space.id,
+                                          tab_groups::ClosingSource::kUnknown);
+    }
+  }
+}
+
 void KoanWorkspaceController::CloseGroupEditors() {
   views::Widget* widget = browser_view_->GetWidget();
   if (!widget) {
@@ -1622,16 +1651,57 @@ void KoanWorkspaceController::CheckSpaces() {
 #if DCHECK_IS_ON()
   TabStripModel* model = tab_strip_model();
   BrowserWidget* widget = browser_view_->browser_widget();
-  // Only a window at rest: not while another update is due (this one
-  // changed the model), while tabs close or a Space is being deleted, while
-  // a tab is dragged (dragged tabs leave and rejoin Spaces), while a session
-  // is restored into it, or while it goes away.
+  // Only a window at rest. Every state a valid window passes through on its
+  // way somewhere else is skipped, so the check never fires falsely:
+  // - another update is due: this one changed the model, or something
+  //   changed it after (a new Space's group leaves focus mode until the next
+  //   update: NewSpaceGroup(); loose tabs, a closed Space coming back);
+  // - the window goes away (destroying, closed, delete scheduled, closing
+  //   all tabs), or has no tabs or no Space yet (first update, Essentials
+  //   only);
+  // - tabs of a Space being deleted are closing (a "Leave site?" may hold
+  //   them);
+  // - a tab is dragged: dragged tabs leave and rejoin Spaces;
+  // - a session is being restored, into this window or another;
+  // - the Create-a-Space form is open: the Space rows are hidden and the new
+  //   Space is made when the form is done;
+  // - Glance is open or closing: its page isn't a tab until it expands, and
+  //   expanding or splitting it inserts a tab next to its source (an
+  //   Essential's is loose until the next update);
+  // - a split is being made: its tabs may be in different groups, or one
+  //   pinned, until the split settles;
+  // - upstream's ephemeral group ("Focus tabs", a flag) is focused.
+  // The Space switch animation, the swipe and the sidebar's collapse change
+  // no model state. Popups and Incognito have no Spaces, so no Update().
+  const KoanBrowserViewController* koan =
+      KoanBrowserViewController::From(browser_view_);
+  const KoanGlanceController* glance = koan ? koan->glance() : nullptr;
+  const auto split_settling = [model] {
+    for (int i = 0; i < model->count(); ++i) {
+      tabs::TabInterface* tab = model->GetTabAtIndex(i);
+      if (!tab->IsSplit()) {
+        continue;
+      }
+      for (tabs::TabInterface* other :
+           model->GetSplitData(*tab->GetSplit())->ListTabs()) {
+        if (other->GetGroup() != tab->GetGroup() ||
+            other->IsPinned() != tab->IsPinned()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
   if (destroying_ || update_pending_ || !widget || widget->IsClosed() ||
       model->empty() || model->closing_all() || !deleting_.empty() ||
       browser_view_->browser()->IsDeleteScheduled() ||
       widget->tab_drag_kind() != TabDragKind::kNone ||
       SessionRestore::IsRestoring(browser_view_->GetProfile()) ||
-      GetSpaces().empty()) {
+      GetSpaces().empty() || creation_form_ ||
+      (glance && (glance->is_open() || glance->is_closing())) ||
+      split_settling() ||
+      (model->GetFocusedGroup() &&
+       model->IsEphemeralTabGroup(*model->GetFocusedGroup()))) {
     return;
   }
   std::string leak;
@@ -2087,8 +2157,10 @@ void KoanWorkspaceController::ApplySpaceColor() {
   // gradient), and the profile's colour and theme stay the user's. None for
   // Zen's default theme, so the user's colour, and an extension theme, show
   // (an override suppresses the theme, BrowserWidget::GetCustomTheme()).
-  views::Widget* widget = browser_view_->GetWidget();
-  if (!widget || destroying_ || !IsEnabled()) {
+  // (As upstream: browser_widget(), which is null once the window is being
+  // deleted, and not a closed one; the hook can run during window close.)
+  BrowserWidget* widget = browser_view_->browser_widget();
+  if (!widget || widget->IsClosed() || destroying_ || !IsEnabled()) {
     return;
   }
   widget->SetUserColorOverride(GetSpaceColor());
