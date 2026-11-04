@@ -188,3 +188,8 @@ Cmd+Shift+D in a Glance then once more in the URL bar left the tab "Pin" (s4/018
 
 ### B31. Spaces menu "Create Space" shows ⌃⌥N; File/Window/Help are Chromium's (Profiles and Tab menus, "Show tabs vertically", AI Mode) — minor
 s4-menus-1.jpg, s4-menus-2.jpg vs main-18/19/20.
+
+## Issues filed (2026-11-04 13:55 IST)
+B12 #130 · B2 #131 · B1 #132 · B10+B11 #133 · B13+B14+B26 #134 · B4 #135 · B17 #136 · B19(+B30) #137 · B21 #138 · B27 #139 · B15 #140 · B7 #141.
+Commented on existing: B5 -> #101, B6/B22 -> #95, B28 -> #41, B3/B8/B25/B31 -> #71, PR #90 checklist -> #90.
+Not yet tested: fullscreen + top peek, folders, split view ⌘⌥H/G, Incognito window, small window, ⌘N second window use, quit/relaunch session restore, onboarding (first run), trackpad swipe, #129 re-test.
