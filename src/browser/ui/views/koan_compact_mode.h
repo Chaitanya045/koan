@@ -40,6 +40,13 @@ bool IsCompactModeActive(const views::View* browser_view);
 // window's top row, at its leading corner.
 bool KeepsSidebarNav(const views::View* browser_view);
 
+// Whether Koan owns the sidebar (its feature is on): the vertical tab strip is
+// always on, and Chromium's own ways to change its mode or collapse it are
+// not offered (see .agent/notes/vertical-tabs-audit.md). Called from
+// BrowserNativeWidgetMac's menu validation, so the View menu's items for them
+// stay hidden.
+bool OwnsSidebar();
+
 // Whether the top toolbar is hidden (compact mode or single toolbar), so the
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);
