@@ -328,3 +328,17 @@ Tester slip: a click meant for the rail toggle hit my own window's red close but
 ## Session 23–24 (20:08–20:12 IST)
 **m150 (#150) finished:** (8) drag GitHub from the list into the pinned section → it becomes pinned (menu "Unpin", dash on hover); it landed above Wikipedia (drop at the edge) (s23-drag-in); drag it back below New Tab → unpinned (s23-drag-out). Space switch Space↔Two ×3 with a pinned run in each: frames at +120 ms already settled, identical row positions, each Space shows only its own pinned run (s23-switch). No crash. **#150 hands-on: PASS** except (5) and Tab order not testable on this base / Mac.
 **m158c (#158 31cb19af, SHA 56f6180b…): ⌘T-empty still FAILS:** on a page, an empty ⌘T (fresh, or after typing and deleting, waited 2.5 s) shows only the "Search..." field, no open-tab rows, no top sites (s24-empty-cmdT, s24-empty-cmdT-wait). On the startup NTP the first ⌘T showed no bar at all (s24-001). Typed rows work: "wiki" → open tab row with "Switch to this tab", Enter switches to the existing tab (s24-switch-to-tab).
+
+## Session 25–26 (20:13–20:21 IST): KoanCheck-c159 (develop 17d35100 + #159 32d629f2), Spaces lockdown — partial
+No "Spaces:" DCHECK, no FATAL/CHECK, no dump in any log (4 launches).
+| # | Result |
+|---|---|
+| 1 G1 | **FAIL**: Edit Theme > Blue is selected (s25-blue-selected) but the window doesn't change: sidebar rgb(24,23,23) and card identical before/after (s25-blue); Spaces tint off/on changes nothing (s25-tint-toggle). (Zen's dark default look; may be the look's fixed tokens overriding the tint) |
+| 5 G2 | PASS: ticker page in Space A, 15 s in Space B: "ticks 23 / seconds 23" (s26-ticker). chrome://discards is disabled in this build ("Internal debugging pages are currently disabled") |
+| 7 G4 | PASS: ⌘⌃P opens Create form; ⌘⌃W "Delete Space?" (Cancel keeps; disabled with one Space); ⌘⌃X/Z next/prev with wrap (s25-xz-wrap); ⌘⌃C floating bar, Esc leaves no tab |
+| 10 G7 | **FAIL**: Tab menu has no "Group Tab" (s25-tabmenu), but with ⌥ held the alternate "Group Selected Tab" (disabled) shows (s25-tabmenu-opt). Popup window part not done |
+| 12 G9 | PASS: startup "New tab page", 3 Spaces (C with 🚀, B blue), Quit + relaunch: Space/B/🚀C in order, each a new tab, on C (s26-g9-relaunch); last window closed + ⌘N: the Spaces come back on B. kill -9 + relaunch: one Space; **Restore gives 4 Spaces incl. a second "Space" with the startup NTP** (s26-restore-4spaces) — the #140 duplicate, fixed by #145 which isn't in this base |
+| 13 G10 | PASS: close a tab of B2, Delete B2 (Yes), ⌘⇧T → tab in the shown Space, B2 gone (s26-g10); close B's last page, ⌘⇧T → back in B (s26-g10b) |
+| 14 G11 | PASS: 20 switches + 10 s, no Focus/Unfocus promo |
+| 17 G14 (part) | PASS: 20 rapid ⌘⌃X switches then ⇧⌘W mid-animation: no Spaces: DCHECK, no crash |
+| 2, 3, 4, 6, 8, 9, 11, 15, 16, 17 rest | not done yet |
