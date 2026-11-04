@@ -80,8 +80,11 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   static size_t RowsIndexInStrip(const TabStripView* strip);
   // Moves the rows into the active Space's tab group view, after its pinned
   // tabs (Zen's pinned section), or into the tab strip without a Space.
+  // Both also put the rows after the pinned tabs in the focus order.
   void ScheduleUpdateRowsHost();
   void UpdateRowsHost();
+  // The same for the Space `space` (the active one).
+  void MoveRowsTo(std::optional<tab_groups::TabGroupId> space);
   // The window switched between vertical and horizontal tabs.
   void OnModeChanged(tabs::VerticalTabStripStateController* state);
   void OnCollapseChanged(tabs::VerticalTabStripCollapseState state);

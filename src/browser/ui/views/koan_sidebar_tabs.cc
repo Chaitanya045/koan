@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
+#include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
 #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
@@ -132,12 +133,10 @@ bool IsInPinnedSection(const views::View* view) {
   });
 }
 
-// The tab group view of the window's active Space in `strip`, where the rows
-// go, or null without one.
-views::View* SpaceTabsView(const TabStripView* strip,
-                           const TabStripModel* model) {
-  const std::optional<tab_groups::TabGroupId> focused =
-      model->GetFocusedGroup();
+// The tab group view of the Space `focused` (the window's active one) in
+// `strip`, where the rows go, or null without one.
+TabGroupView* SpaceTabsView(const TabStripView* strip,
+                            std::optional<tab_groups::TabGroupId> focused) {
   const UnpinnedTabContainerView* container =
       focused ? strip->GetUnpinnedTabsContainer() : nullptr;
   if (!container) {
@@ -145,13 +144,36 @@ views::View* SpaceTabsView(const TabStripView* strip,
   }
   for (views::View* child : container->children()) {
     auto* group = views::AsViewClass<TabGroupView>(child);
-    // A closing group animating out is no longer focused.
-    if (group && group->IsGroupFocused() &&
+    // A closing group animating out has lost its node.
+    if (group && group->collection_node() &&
         group->GetTabGroup().id() == *focused) {
       return ShowsSpaceHeader(group) ? group : nullptr;
     }
   }
   return nullptr;
+}
+
+// Zen's focus order in a Space: the pinned tabs, Clear, New Tab, then the
+// other tabs. `rows` is a child of `group`.
+void PlaceRowsInFocusList(views::View* rows, TabGroupView* group) {
+  if (!group->collection_node()) {
+    return;
+  }
+  views::View* last_pinned = nullptr;
+  views::View* first_normal = nullptr;
+  for (views::View* child : group->collection_node()->GetDirectChildren()) {
+    if (!IsInPinnedSection(child)) {
+      first_normal = child;
+      break;
+    }
+    last_pinned = child;
+  }
+  // (A dragged tab's view may be elsewhere for the drag.)
+  if (last_pinned && last_pinned->parent() == group) {
+    rows->InsertAfterInFocusList(last_pinned);
+  } else if (!last_pinned && first_normal && first_normal->parent() == group) {
+    rows->InsertBeforeInFocusList(first_normal);
+  }
 }
 
 }  // namespace
@@ -566,7 +588,18 @@ void KoanSidebarTabsController::OnBrowserViewDestroying() {
   }
   if (rows_) {
     rows_observation_.Reset();
-    rows_->parent()->RemoveChildViewT(std::exchange(rows_, nullptr));
+    KoanSidebarTabRowsView* rows = std::exchange(rows_, nullptr);
+    if (views::IsViewClass<TabGroupView>(rows->parent())) {
+      // Left to the Space's group view, which drops its animating layout
+      // manager before its children. Removed now, they would stay in that
+      // manager's layout maps (the closing widget no longer recomputes
+      // layouts) and dangle there once deleted. Inert meanwhile: they call
+      // into this controller.
+      rows->SetCanProcessEventsWithinSubtree(false);
+      rows->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    } else {
+      rows->parent()->RemoveChildViewT(rows);
+    }
   }
 }
 
@@ -668,17 +701,25 @@ void KoanSidebarTabsController::ScheduleUpdateRowsHost() {
 
 void KoanSidebarTabsController::UpdateRowsHost() {
   rows_host_update_pending_ = false;
+  MoveRowsTo(browser_view_->browser()->GetTabStripModel()->GetFocusedGroup());
+}
+
+void KoanSidebarTabsController::MoveRowsTo(
+    std::optional<tab_groups::TabGroupId> space) {
   TabStripView* strip = rows_ ? GetVerticalTabStrip() : nullptr;
-  if (!strip) {
+  // Not while the window closes (its last tab closing changes the focused
+  // Space): a closed widget doesn't recompute layouts, so the group view the
+  // rows leave would keep them in its animating layout manager's maps.
+  if (!strip || !strip->GetWidget() || strip->GetWidget()->IsClosed()) {
     return;
   }
-  views::View* host =
-      SpaceTabsView(strip, browser_view_->browser()->GetTabStripModel());
-  if (!host) {
-    host = strip;
-  }
+  TabGroupView* group = SpaceTabsView(strip, space);
+  views::View* host = group ? static_cast<views::View*>(group) : strip;
   views::View* parent = rows_->parent();
   if (parent == host) {
+    if (group) {
+      PlaceRowsInFocusList(rows_, group);
+    }
     return;
   }
   // Moved, not rebuilt: the Clear button keeps its state.
@@ -691,6 +732,9 @@ void KoanSidebarTabsController::UpdateRowsHost() {
   // its place).
   rows_->SetVisible(host != strip ||
                     strip->unpinned_tabs_scroll_view()->GetVisible());
+  if (group) {
+    PlaceRowsInFocusList(rows_, group);
+  }
 }
 
 void KoanSidebarTabsController::UpdateClearRow() {
@@ -792,7 +836,10 @@ void KoanSidebarTabsController::OnTabGroupFocusChanged(
     std::optional<tab_groups::TabGroupId> new_focused_group_id,
     std::optional<tab_groups::TabGroupId> old_focused_group_id) {
   UpdateClearRow();
-  // Each Space has its own pinned tabs: the rows go to the new Space.
+  // Each Space has its own pinned tabs: the rows go to the new Space at
+  // once, so it never shows a frame without them (its group view exists
+  // already). The posted pass re-checks once the views have caught up.
+  MoveRowsTo(new_focused_group_id);
   ScheduleUpdateRowsHost();
 }
 
@@ -801,6 +848,9 @@ void KoanSidebarTabsController::OnTabChangedAt(tabs::TabInterface* tab,
   // A tab starting or stopping to play sound changes what Clear keeps.
   if (change_type == TabChangeType::kAll) {
     UpdateClearRow();
+    // So does pinning a tab in place, and it moves the rows in the focus
+    // order.
+    ScheduleUpdateRowsHost();
   }
 }
 
