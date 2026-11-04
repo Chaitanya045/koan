@@ -94,6 +94,21 @@ source_set("tab_hooks") {
   ]
 }
 
+# The vertical tab strip's state under Koan's control (see
+# koan_vertical_tabs.h), called from the strip's state controller.
+source_set("vertical_tabs") {
+  sources = [
+    "koan_vertical_tabs.cc",
+    "koan_vertical_tabs.h",
+  ]
+  deps = [
+    ":features",
+    ":prefs",
+    "//base",
+    "//components/prefs",
+  ]
+}
+
 # Koan switches for renderer processes, appended from
 # ChromeContentBrowserClient::AppendExtraCommandLineSwitches().
 source_set("renderer_switches") {
