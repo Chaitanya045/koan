@@ -1,16 +1,16 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
-index 997eab8..cbc4cce 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.cc
-@@ -50,6 +50,7 @@
+@@ -50,6 +50,8 @@
  #include "components/tabs/public/tab_context_menu_command.h"
  #include "components/tabs/public/tab_group.h"
  #include "components/tabs/public/tab_interface.h"
 +#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
++#include "koan/browser/ui/views/koan_spaces.h"
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/views/focus/focus_manager.h"
  #include "ui/views/interaction/element_tracker_views.h"
-@@ -318,6 +319,9 @@ void TabStripCollectionController::SelectTab(
+@@ -318,6 +320,9 @@
  void TabStripCollectionController::CloseTab(
      const tabs::TabInterface* tab_interface,
      CloseTabSource source) {
@@ -20,3 +20,15 @@ index 997eab8..cbc4cce 100644
    base::OnceCallback<void(CloseTabSource)> on_approved =
        tab_closing_helper_
            ? base::BindOnce(
+@@ -624,6 +629,11 @@
+ 
+ void TabStripCollectionController::UpdateFocusModeTheme(
+     std::optional<tab_groups::TabGroupId> group_id) {
++  // Koan: a Spaces window takes its Space theme's colour, or none (the
++  // user's colour and theme), not the group's (koan_spaces.h).
++  if (koan::ApplySpaceColor(model_)) {
++    return;
++  }
+   std::optional<SkColor> color;
+   if (group_id.has_value() && model_ && model_->group_model() &&
+       model_->group_model()->ContainsTabGroup(group_id.value())) {
