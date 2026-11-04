@@ -22,6 +22,19 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // Workspaces are tab groups shown one at a time: upstream's group focus
   // mode hides every other group and scopes tab cycling to the focused one.
   overrides.EnableFeature(features::kTabGroupsFocusing);
+  // Browser commands run through the window's ActionItems, which Koan points
+  // at its own (the Spaces' group commands, the URL bar's new tab). On by
+  // default; forced so that a field trial can't bring back the legacy
+  // command switch.
+  overrides.EnableFeature(features::kUseActionsForBrowserCommands);
+  // Upstream's tab group promos have no place with Spaces: "Focus" and
+  // "Unfocus" a group (Koan hides the group header and the Unfocus pill they
+  // point at), and saving groups (Spaces aren't saved groups).
+  overrides.DisableFeature(feature_engagement::kIPHTabGroupsFocusingFeature);
+  overrides.DisableFeature(feature_engagement::kIPHTabGroupsUnfocusingFeature);
+  overrides.DisableFeature(feature_engagement::kIPHTabGroupsSaveV2IntroFeature);
+  overrides.DisableFeature(
+      feature_engagement::kIPHTabGroupsSaveV2CloseGroupFeature);
   // Zen closes a tab with no history on Back and returns to its opener;
   // upstream's back-to-opener does exactly that. Switched by
   // prefs::kCloseOnBackWithNoHistory (koan_tab_hooks.h).
