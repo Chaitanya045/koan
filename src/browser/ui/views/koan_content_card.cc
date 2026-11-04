@@ -37,7 +37,7 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
 // the card in fullscreen at all (see UseContentCard()).
 bool IsBorderlessFullscreen(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
-  return browser_view->IsFullscreen() && !browser_view->IsInSplitView() &&
+  return IsWindowFullscreen(browser_view) && !browser_view->IsInSplitView() &&
          browser_view->GetProfile()
              ->GetOriginalProfile()
              ->GetPrefs()
@@ -57,7 +57,7 @@ bool UseContentCard(const BrowserView* browser_view) {
   const bool allowed_in_fullscreen = true;
 #else
   // Elsewhere fullscreen is edge to edge.
-  const bool allowed_in_fullscreen = !browser_view->IsFullscreen();
+  const bool allowed_in_fullscreen = !IsWindowFullscreen(browser_view);
 #endif
   return features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
          browser_view->ShouldDrawVerticalTabStrip() && allowed_in_fullscreen;
@@ -65,7 +65,7 @@ bool UseContentCard(const BrowserView* browser_view) {
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
-  if (browser_view->IsFullscreen()) {
+  if (IsWindowFullscreen(browser_view)) {
     // (See UseContentCard().) Where Koan hides the toolbar (single toolbar,
     // compact mode), the usual layout below applies: a gutter above the
     // page (no strip for window buttons in fullscreen) and beside a hidden

@@ -24,6 +24,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -130,7 +131,8 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
           event.button != blink::WebPointerProperties::Button::kLeft ||
           event.click_count != 1 ||
           (event.GetModifiers() & blink::WebInputEvent::kKeyModifiers) ||
-          browser_view_->IsFullscreen() || !features::IsWindowDragEnabled() ||
+          IsWindowFullscreen(browser_view_) ||
+          !features::IsWindowDragEnabled() ||
           !browser_view_->GetProfile()->GetPrefs()->GetBoolean(
               prefs::kDragWindowFromContent)) {
         return false;

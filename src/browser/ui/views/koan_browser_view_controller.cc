@@ -172,6 +172,11 @@ void KoanBrowserViewController::UpdateContentCard() {
       ActiveContentsRadii(browser_view_, contents->GetBackgroundRadii()));
 }
 
+bool IsWindowFullscreen(const BrowserView* browser_view) {
+  return browser_view && browser_view->browser_widget() &&
+         browser_view->IsFullscreen();
+}
+
 bool IsCompactModeActive(const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
   const KoanBrowserViewController* controller =
@@ -196,7 +201,7 @@ bool IsToolbarHidden(const views::View* browser_view) {
 bool HidesFullscreenTopChrome(const views::View* browser_view) {
 #if BUILDFLAG(IS_MAC)
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
-  return view && view->IsFullscreen() && IsToolbarHidden(view);
+  return view && IsWindowFullscreen(view) && IsToolbarHidden(view);
 #else
   return false;
 #endif

@@ -346,6 +346,10 @@ void KoanCompactModeController::OnBrowserViewLayout() {
 }
 
 void KoanCompactModeController::OnBrowserViewDestroying() {
+  // From here on the window is going away: no UI work (the widget and the
+  // browser's animation controller may be gone), see Deactivate() and
+  // UpdateCaptionButtons().
+  destroying_ = true;
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   collapse_subscription_ = {};
   resizing_subscription_ = {};
@@ -421,7 +425,7 @@ bool KoanCompactModeController::caption_strip_collapsed() const {
     return true;
   }
   // (Native fullscreen has no lights to make room for.)
-  return lights_keep_strip_open_ && browser_view_->IsFullscreen();
+  return lights_keep_strip_open_ && IsWindowFullscreen(browser_view_);
 }
 
 void KoanCompactModeController::OnTabsOnRightChanged() {
@@ -746,7 +750,7 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
 }
 
 bool KoanCompactModeController::WantsFullscreenEdges() const {
-  return mode_ != Mode::kNone && browser_view_->IsFullscreen() &&
+  return mode_ != Mode::kNone && IsWindowFullscreen(browser_view_) &&
          (sidebar_hot_zone_ || toolbar_hot_zone_);
 }
 
@@ -1058,7 +1062,7 @@ void KoanCompactModeController::OnImmersiveFullscreenChanged() {
 
 void KoanCompactModeController::UpdateFullscreenTopChrome() {
 #if BUILDFLAG(IS_MAC)
-  if (!browser_view_->IsFullscreen()) {
+  if (!IsWindowFullscreen(browser_view_)) {
     return;
   }
   // Dialogs and bubbles anchor to the window where Koan's toolbar is, not to
@@ -1220,6 +1224,12 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   }
   top_container_index_.reset();
   toolbar_revealed_ = false;
+
+  // A closing window has no layout to do, and leaves the sidebar as it is for
+  // the others (expanding it again is an animation).
+  if (destroying_) {
+    return;
+  }
 
   if (auto* state =
           tabs::VerticalTabStripStateController::From(browser_view_->browser());
@@ -1498,7 +1508,7 @@ bool KoanCompactModeController::IsCaptionButtonBesideSidebar(
 
 bool KoanCompactModeController::HasPageSideCaptionButtons() const {
   // (Native fullscreen on macOS: no buttons over the page.)
-  if (browser_view_->IsFullscreen()) {
+  if (IsWindowFullscreen(browser_view_)) {
     return false;
   }
   // The traffic lights are at the window's leading edge: over the page where
@@ -1521,11 +1531,15 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
 }
 
 void KoanCompactModeController::UpdateCaptionButtons() {
+  if (destroying_) {
+    // The window is going away: nothing to show or hide.
+    return;
+  }
 #if BUILDFLAG(IS_MAC)
   if (traffic_lights_) {
     // AppKit shows the lights by itself in fullscreen, with the menu bar;
     // they are laid out again when it ends.
-    if (browser_view_->IsFullscreen()) {
+    if (IsWindowFullscreen(browser_view_)) {
       return;
     }
     // The traffic lights are AppKit's: shown or hidden, as the other
