@@ -5,6 +5,7 @@
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -22,9 +23,9 @@
 #include "ui/events/event.h"
 #include "ui/events/event_observer.h"
 #include "ui/gfx/animation/animation.h"
-#include "ui/gfx/animation/animation_delegate.h"
-#include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/views/animation/animation_builder.h"
+#include "ui/views/animation/animation_sequence_block.h"
 #include "ui/views/event_monitor.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
@@ -42,14 +43,16 @@ namespace koan {
 // Slides the sidebar's layer in and out for one window, with Zen's timings and
 // easing, from the progress of upstream's expand-on-hover animation (which
 // only tells it which way to go). The strip is laid out once, at the width it
-// shows at; only its layer's transform changes, every frame, on the compositor.
-class SidebarReveal : public gfx::AnimationDelegate {
+// shows at; only its layer's transform changes, in a chain of short linear
+// transform animations that follow Zen's curve (the compositor can't take a
+// `linear()` table, but it runs a chain of linear segments by itself).
+class SidebarReveal {
  public:
   SidebarReveal(views::View* browser_view, views::View* region)
-      : browser_view_(browser_view), region_(region), animation_(this) {}
+      : browser_view_(browser_view), region_(region) {}
   SidebarReveal(const SidebarReveal&) = delete;
   SidebarReveal& operator=(const SidebarReveal&) = delete;
-  ~SidebarReveal() override = default;
+  ~SidebarReveal() = default;
 
   // Returns the progress the layout uses for the strip's width.
   double Update(double raw) {
@@ -59,70 +62,106 @@ class SidebarReveal : public gfx::AnimationDelegate {
       SetTarget(0.0);
     }
     last_raw_ = raw;
-    if (raw == 0.0 && !animation_.is_animating() && value_ != 0.0) {
-      // Left over (e.g. compact mode was switched off while it was out).
-      value_ = 0.0;
-      target_ = 0.0;
+    if (!animating_) {
+      if (raw == 0.0 && value_ != 0.0) {
+        // Left over (e.g. compact mode was switched off while it was out).
+        value_ = 0.0;
+        target_ = 0.0;
+      }
+      // Not while it slides: that would stop it.
+      SetTransformNow(value_);
     }
-    ApplyTransform();
-    return (raw > 0.0 || value_ > 0.0 || animation_.is_animating()) ? 1.0 : 0.0;
+    return (raw > 0.0 || value_ > 0.0 || animating_) ? 1.0 : 0.0;
   }
 
   // Compact mode is off: the strip is where the layout puts it.
   void Reset() {
-    animation_.Stop();
+    ++generation_;
+    animating_ = false;
     value_ = 0.0;
     target_ = 0.0;
     last_raw_ = 0.0;
     region_->layer()->SetTransform(gfx::Transform());
   }
 
-  // gfx::AnimationDelegate:
-  void AnimationProgressed(const gfx::Animation* animation) override {
-    if (!IsCompactModeActive(browser_view_)) {
-      // Compact mode was switched off while the strip was sliding: it is
-      // where the layout puts it from now on.
-      value_ = 0.0;
-      target_ = 0.0;
-    } else {
-      value_ = SidebarSlideValue(from_, target_, animation_.GetCurrentValue());
+ private:
+  // Where the strip is now, 0 (hidden) to 1 (out).
+  double CurrentValue() const {
+    if (!animating_) {
+      return value_;
     }
-    ApplyTransform();
-  }
-  void AnimationEnded(const gfx::Animation* animation) override {
-    value_ = target_;
-    ApplyTransform();
-    // The layout kept the strip at its width until now.
-    browser_view_->InvalidateLayout();
+    const double t = (base::TimeTicks::Now() - slide_start_) / slide_duration_;
+    return SidebarSlideValue(from_, target_, t);
   }
 
- private:
   void SetTarget(double target) {
     if (target == target_) {
       return;
     }
+    const double from = CurrentValue();
     target_ = target;
-    from_ = value_;
+    ++generation_;
     if (!gfx::Animation::ShouldRenderRichAnimation()) {
-      animation_.Stop();
-      value_ = target_;
+      animating_ = false;
+      value_ = target;
+      region_->layer()->SetTransform(TransformFor(value_));
       return;
     }
-    animation_.SetDuration(target > from_ ? kSidebarRevealDuration
-                                          : kSidebarHideDuration);
-    animation_.Start();
+    from_ = from;
+    // Where it was, at once, whatever the layer reports (this also stops a
+    // slide under way).
+    region_->layer()->SetTransform(TransformFor(from));
+    animating_ = true;
+    value_ = from;
+    slide_start_ = base::TimeTicks::Now();
+    slide_duration_ =
+        target > from ? kSidebarRevealDuration : kSidebarHideDuration;
+    // Zen's spring is smooth: 25 segments follow it to within a fraction of
+    // a pixel; the ease needs fewer.
+    const int segments = target > from ? 25 : 10;
+    views::AnimationBuilder builder;
+    builder
+        .OnEnded(base::BindOnce(&SidebarReveal::OnSlideEnded,
+                                weak_factory_.GetWeakPtr(), generation_))
+        .OnAborted(base::DoNothing());
+    views::AnimationSequenceBlock* block = nullptr;
+    for (int i = 1; i <= segments; ++i) {
+      const double t = static_cast<double>(i) / segments;
+      // The last one is exactly where it stops (the CSS drops the spring's
+      // 1.003 at the end).
+      const double value =
+          i == segments ? target : SidebarSlideValue(from, target, t);
+      block = block ? &block->Then() : &builder.Once();
+      block->SetDuration(slide_duration_ / segments)
+          .SetTransform(region_->layer(), TransformFor(value));
+    }
   }
 
-  void ApplyTransform() {
+  void OnSlideEnded(int generation) {
+    if (generation != generation_) {
+      return;  // Replaced by a newer slide.
+    }
+    animating_ = false;
+    value_ = target_;
+    // The layout kept the strip at its width until now.
+    browser_view_->InvalidateLayout();
+  }
+
+  gfx::Transform TransformFor(double value) const {
     // Layer transforms aren't mirrored with the layout: the sidebar sits on
     // the right with tabs on the right, or in a right-to-left UI, but not in
     // both.
     const bool slides_from_right =
         IsSidebarOnRight(browser_view_) != base::i18n::IsRTL();
     const float offset = static_cast<float>(
-        (1.0 - value_) * tabs::kVerticalTabStripDefaultUncollapsedWidth);
+        (1.0 - value) * tabs::kVerticalTabStripDefaultUncollapsedWidth);
     gfx::Transform transform;
     transform.Translate(slides_from_right ? offset : -offset, 0);
+    return transform;
+  }
+
+  void SetTransformNow(double value) {
+    const gfx::Transform transform = TransformFor(value);
     if (region_->layer()->transform() != transform) {
       region_->layer()->SetTransform(transform);
     }
@@ -130,13 +169,19 @@ class SidebarReveal : public gfx::AnimationDelegate {
 
   const raw_ptr<views::View> browser_view_;
   const raw_ptr<views::View> region_;
-  gfx::LinearAnimation animation_;
-  // How far out the strip is: 0 hidden, 1 out (more while it overshoots).
+  // How far out the strip is: 0 hidden, 1 out. While it slides, where the
+  // slide started.
   double value_ = 0.0;
   double from_ = 0.0;
   double target_ = 0.0;
+  bool animating_ = false;
+  base::TimeTicks slide_start_;
+  base::TimeDelta slide_duration_;
+  // Tells a finished slide from one that was replaced.
+  int generation_ = 0;
   // Upstream's progress at the last layout, to tell which way it is going.
   double last_raw_ = 0.0;
+  base::WeakPtrFactory<SidebarReveal> weak_factory_{this};
 };
 
 namespace {
