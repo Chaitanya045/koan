@@ -6,13 +6,15 @@
 
 #include <algorithm>
 #include <memory>
+#include <vector>
 
-#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -67,34 +69,51 @@ class AiStarterPackFilter : public TemplateURLServiceObserver {
       : service_(service) {
     observation_.Observe(service);
     if (service->loaded()) {
-      Apply();
+      ScheduleApply();
     }
   }
 
   // TemplateURLServiceObserver (also called once the service has loaded):
-  void OnTemplateURLServiceChanged() override { Apply(); }
+  void OnTemplateURLServiceChanged() override { ScheduleApply(); }
 
  private:
-  void Apply() {
-    // Deactivating one notifies the observers again.
-    if (applying_) {
+  // Not from the notification itself: deactivating a search engine runs the
+  // service's own Update(), which notifies and touches other observer lists
+  // that forbid re-entrancy (a CHECK failure at startup when done inside the
+  // "loaded" notification).
+  void ScheduleApply() {
+    if (apply_scheduled_) {
       return;
     }
-    base::AutoReset<bool> applying(&applying_, true);
+    apply_scheduled_ = true;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&AiStarterPackFilter::Apply,
+                                  weak_factory_.GetWeakPtr()));
+  }
+
+  void Apply() {
+    apply_scheduled_ = false;
     using template_url_starter_pack_data::StarterPackId;
+    // Deactivating one notifies the observers again, which schedules another
+    // pass; that pass finds nothing left to do.
+    std::vector<raw_ptr<TemplateURL>> to_deactivate;
     for (TemplateURL* url : service_->GetTemplateURLs()) {
       const StarterPackId id = url->starter_pack_id();
       if ((id == StarterPackId::kGemini || id == StarterPackId::kAiMode) &&
           url->is_active() != TemplateURLData::ActiveStatus::kFalse) {
-        service_->SetIsActiveTemplateURL(url, /*is_active=*/false);
+        to_deactivate.emplace_back(url);
       }
+    }
+    for (TemplateURL* url : to_deactivate) {
+      service_->SetIsActiveTemplateURL(url, /*is_active=*/false);
     }
   }
 
   const raw_ptr<TemplateURLService> service_;
-  bool applying_ = false;
+  bool apply_scheduled_ = false;
   base::ScopedObservation<TemplateURLService, TemplateURLServiceObserver>
       observation_{this};
+  base::WeakPtrFactory<AiStarterPackFilter> weak_factory_{this};
 };
 
 namespace {

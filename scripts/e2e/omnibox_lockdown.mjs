@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import {
   CDP_PORT, CTRL, check, clickView, finish, front, key, pages, readPref,
-  shownViews, sleep, views, waitFor, browserCall,
+  shownViews, sleep, views, viewTree, typeInto, waitFor, browserCall,
 } from './lib/koan.mjs';
 
 const VK = { T: 84, L: 76, ESC: 27 };
@@ -55,6 +55,21 @@ await sleep(1000);
 const tabRows = shownViews(await views(), 'OmniboxResultView');
 check('Cmd+T with an empty box lists open tabs (and top sites), local only',
       tabRows.length >= 1, `${tabRows.length} row(s)`);
+await key(page, VK.ESC, 0, 'Escape');
+await sleep(500);
+
+// O6: no @gemini / @aimode shortcuts (the filter runs after the search engines
+// load, off the notification: inside it, the browser died at startup).
+await key(page, VK.L, CTRL, 'l');
+await waitFor(floating);
+const box = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown);
+await typeInto(box, '@');
+const atRows = (await views()).filter(v => v.cls === 'OmniboxTextView' && v.shown)
+    .map(v => v.props?.Text ?? '');
+console.log(`INFO  '@' lists: ${atRows.join(' | ')}`);
+check('Typing @ lists no Gemini or AI Mode shortcut',
+      atRows.length > 0 && !atRows.some(t => /gemini|aimode|ai mode/i.test(t)),
+      atRows.join(' | '));
 await key(page, VK.ESC, 0, 'Escape');
 await sleep(500);
 
