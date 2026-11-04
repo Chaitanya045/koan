@@ -228,6 +228,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // runs while they are hidden or while the pointer rests over them.
   void UpdatePointerMonitor();
   void CheckRevealedHides();
+  // The page's own fullscreen (video) starts or ends, or the window's:
+  // Koan's hover state is cleared (Zen's sizemodechange ->
+  // _clearAllHoverStates) and the card is laid out again.
+  void OnFullscreenStateChanged();
+  void ClearHoverStates();
   // Native fullscreen (macOS): the page covers the window, so the pointer at
   // the screen's edge reveals the hidden sidebar and toolbar, watched here
   // instead of by the hot zones.
@@ -342,6 +347,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   base::OneShotTimer hover_release_timer_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
   bool edge_sidebar_hovered_ = false;
+  // macOS: told when fullscreen of the window or of the page starts or ends.
+  base::CallbackListSubscription fullscreen_subscription_;
   // The window is being destroyed (OnBrowserViewDestroying()): no UI work.
   bool destroying_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;

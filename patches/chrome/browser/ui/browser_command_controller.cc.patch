@@ -1,6 +1,8 @@
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index afc3f64a97c6a8676a656fca1a3ede18eb23b1fb..c5ac7ef72c358d8429c268a171d4cf862c8d0be1 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -146,6 +146,7 @@
+@@ -147,6 +147,7 @@
  #include "extensions/browser/extension_registry.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/extension_urls.h"
@@ -8,7 +10,19 @@
  #include "printing/buildflags/buildflags.h"
  #include "third_party/omnibox_proto/chrome_aim_entry_point.pb.h"
  #include "ui/accessibility/accessibility_features.h"
-@@ -759,6 +760,10 @@
+@@ -531,7 +532,10 @@ bool BrowserCommandController::IsReservedCommandOrKey(
+     // full-screen mode. According to the discussion in
+     // http://crbug.com/40511102, the commands should be reserved for
+     // browser-side handling if the browser window's toolbar is visible.
+-    if (window()->IsToolbarShowing()) {
++    // Koan: also in Koan's own fullscreen, where the toolbar is hidden but the
++    // browser's shortcuts (⌘T, ⌘W, ⌘L ...) still work, as in a window.
++    if (window()->IsToolbarShowing() ||
++        koan::KeepsReservedCommandsInFullscreen(browser_)) {
+       if (command_id == IDC_FULLSCREEN) {
+         return true;
+       }
+@@ -783,6 +787,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        CloseWindow(browser_);
        break;
      case IDC_NEW_TAB: {

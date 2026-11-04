@@ -17,6 +17,8 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
@@ -284,6 +286,18 @@ void KoanCompactModeController::OnAddedToWidget() {
           base::BindRepeating(
               &KoanCompactModeController::OnImmersiveFullscreenChanged,
               base::Unretained(this)));
+    }
+  }
+  // The page's own fullscreen leaves Chromium's immersive mode on, so only
+  // the fullscreen controller says when it starts and ends.
+  if (!fullscreen_subscription_) {
+    if (auto* manager =
+            ExclusiveAccessManager::From(browser_view_->browser())) {
+      fullscreen_subscription_ =
+          manager->fullscreen_controller()->RegisterOnFullscreenStateChanged(
+              base::BindRepeating(
+                  &KoanCompactModeController::OnFullscreenStateChanged,
+                  base::Unretained(this)));
     }
   }
 #endif
@@ -765,6 +779,7 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
 
 bool KoanCompactModeController::WantsFullscreenEdges() const {
   return mode_ != Mode::kNone && IsWindowFullscreen(browser_view_) &&
+         !IsContentFullscreen(browser_view_) &&
          (sidebar_hot_zone_ || toolbar_hot_zone_);
 }
 
@@ -1047,10 +1062,42 @@ void KoanCompactModeController::ParkTopContainer() {
   overlay->SetVisible(true);
 }
 
-void KoanCompactModeController::OnImmersiveFullscreenChanged() {
-  if (mode_ == Mode::kNone) {
+void KoanCompactModeController::ClearHoverStates() {
+  // Nothing stays revealed from before the change (Zen's sizemodechange).
+  edge_sidebar_hovered_ = false;
+  hover_release_timer_.Stop();
+  if (toolbar_revealed_) {
+    SetToolbarRevealed(false, /*animate=*/false);
+  }
+  // The locks are let go of after this call, and not at all if the window is
+  // gone by then: letting a lock go collapses the sidebar, an animation.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<KoanCompactModeController> self) {
+                       if (self && !self->destroying_) {
+                         self->hover_lock_.reset();
+                         self->peek_lock_.reset();
+                       }
+                     },
+                     weak_factory_.GetWeakPtr()));
+}
+
+void KoanCompactModeController::OnFullscreenStateChanged() {
+  if (destroying_ || mode_ == Mode::kNone) {
     return;
   }
+  ClearHoverStates();
+  UpdatePointerMonitor();
+  // The page's own fullscreen drops the card (see IsContentFullscreen()): lay
+  // the contents out again (its corners follow the layout).
+  OnContentCardChanged();
+}
+
+void KoanCompactModeController::OnImmersiveFullscreenChanged() {
+  if (destroying_ || mode_ == Mode::kNone) {
+    return;
+  }
+  ClearHoverStates();
   // The URL bar lets go of the top container before it moves: Chromium has
   // just destroyed the layer it styled (leaving fullscreen), or the bar's
   // card would end up in the wrong window state.
@@ -1418,7 +1465,7 @@ void KoanCompactModeController::CheckRevealedHides() {
 }
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
-  if (mode_ == Mode::kNone) {
+  if (mode_ == Mode::kNone || IsContentFullscreen(browser_view_)) {
     return;
   }
   if (hovered) {
@@ -1444,7 +1491,7 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
-  if (hovered) {
+  if (hovered && !IsContentFullscreen(browser_view_)) {
     SetToolbarRevealed(true, /*animate=*/true);
   }
 }
@@ -1619,6 +1666,16 @@ void KoanCompactModeController::UpdateCaptionButtons() {
 }
 
 void KoanCompactModeController::LayoutHotZones() {
+  // The page's own fullscreen covers the window: no zone takes the pointer.
+  if (IsContentFullscreen(browser_view_)) {
+    for (KoanHotZone* zone : {sidebar_hot_zone_.get(), toolbar_hot_zone_.get(),
+                              caption_hot_zone_.get()}) {
+      if (zone) {
+        zone->SetBoundsRect(gfx::Rect());
+      }
+    }
+    return;
+  }
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
   const gfx::Insets gutter = ContentCardInsets(browser_view_);
   // Along the hidden sidebar's edge, where it slides in.

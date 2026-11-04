@@ -21,6 +21,14 @@ namespace koan {
 // dying widget, so that is no test of the window being alive.
 bool IsWindowFullscreen(const BrowserView* browser_view);
 
+// macOS: whether the page is fullscreen (a video's fullscreen button, or an
+// extension), as opposed to the browser window (the green button, ⌃⌘F).
+// Koan is suspended then, as in Zen (`:not([inDOMFullscreen])`): the page fills
+// the screen, no card, no radius, no hot zones, no URL bar. Chromium keeps its
+// immersive mode (and the vertical tab strip's "draw" state) on then, so
+// nothing else tells Koan. False elsewhere.
+bool IsContentFullscreen(const BrowserView* browser_view);
+
 // Whether compact mode is applied to the window of `browser_view` (a
 // BrowserView). When true, the vertical tab strip takes no layout space (it
 // only appears as a hover overlay) and the toolbar floats above the page.

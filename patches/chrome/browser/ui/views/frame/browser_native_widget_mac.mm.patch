@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..e9aced663e5451145caeef02dd6f0f62db019bde 100644
+index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..e056a7eaaec75fb15cb4bf42664b266e67512331 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 @@ -65,6 +65,8 @@
@@ -23,13 +23,16 @@ index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..e9aced663e5451145caeef02dd6f0f62
    } else {
      *override_titlebar_height = false;
      *titlebar_height = 0;
-@@ -519,6 +526,11 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
+@@ -519,6 +526,14 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
          result->new_toggle_state =
              prefs->GetBoolean(prefs::kShowFullscreenToolbar);
        }
 +      // Koan: with its toolbar hidden (single toolbar) fullscreen reveals
-+      // nothing at the top edge, whatever this says: not an item to offer.
-+      if (koan::IsToolbarHidden(browser_view_)) {
++      // nothing at the top edge, whatever this says: not an item to offer,
++      // neither greyed out nor there (the setting is Chromium's, synced).
++      result->set_hidden_state = true;
++      result->new_hidden_state = koan::IsToolbarHidden(browser_view_);
++      if (result->new_hidden_state) {
 +        result->enable = false;
 +      }
        break;

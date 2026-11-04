@@ -302,6 +302,7 @@ bool KoanUrlBarController::OpenForNewTab() {
   // hidden: on macOS, see HidesFullscreenTopChrome().)
   if (!features::IsUrlBarEnabled() || !browser_view_->GetIsNormalType() ||
       (IsWindowFullscreen(browser_view_) && !compact_mode_->hides_toolbar()) ||
+      IsContentFullscreen(browser_view_) ||
       browser_view_->browser()->GetTabStripModel()->empty() || !bar ||
       !bar->omnibox_view() ||
       !browser_view_->GetProfile()
@@ -469,7 +470,7 @@ KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
   // In the multiple-toolbars layout the omnibox edits in the toolbar.
   // (Also in macOS' fullscreen: Koan's toolbar stays hidden there, see
   // HidesFullscreenTopChrome().)
-  if (!compact_mode_->hides_toolbar()) {
+  if (!compact_mode_->hides_toolbar() || IsContentFullscreen(browser_view_)) {
     return Placement::kNone;
   }
   // Without the Koan URL bar, Koan's earlier behaviour: always floating.
@@ -900,6 +901,13 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   return controller && controller->url_bar()->OpenForNewTab();
+}
+
+bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser) {
+  const BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  return browser_view && HidesFullscreenTopChrome(browser_view) &&
+         !IsContentFullscreen(browser_view);
 }
 
 // The URL bar controller of the window `view` belongs to, if any: `view` is
