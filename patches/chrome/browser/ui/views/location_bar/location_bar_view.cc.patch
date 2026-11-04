@@ -20,7 +20,7 @@
    // When the user is typing in the omnibox, the page action icons are no longer
    // associated with the current omnibox text, so hide them.
    if (GetOmniboxController()->edit_model()->user_input_in_progress()) {
-@@ -2120,6 +2126,13 @@
+@@ -2120,6 +2126,16 @@
    // user text has been entered into the omnibox, so refresh the icon on
    // changes.
    RefreshAiModePageAction();
@@ -28,8 +28,11 @@
 +  if (omnibox_view_) {
 +    koan::OnOmniboxChanged(
 +        this, GetOmniboxController()->edit_model()->user_input_in_progress());
-+    RefreshPageActionContainerViewAndIconsVisibility(
-+        ShouldHidePageActionIcons());
++    // ...and has no page actions while it is open.
++    if (page_actions::PageActionController* controller =
++            GetPageActionController()) {
++      controller->SetShouldHidePageActions(ShouldHidePageActionIcons());
++    }
 +  }
  }
  
