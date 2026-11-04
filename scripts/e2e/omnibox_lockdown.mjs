@@ -71,11 +71,12 @@ check('No AI Mode button in the omnibox by default',
 check('AI Mode is disallowed by its policy pref default',
       await readPref('omnibox.ai_mode_settings') === 1);
 
-// The log: none of what the lockdown removes.
+// The log: none of what the lockdown removes. (Not the "Attempting to show IPH
+// ... before browser initialization complete" lines: they are logged for any
+// promo asked for at startup, whatever its feature's state.)
 const log = process.env.KOAN_LOG ? fs.readFileSync(process.env.KOAN_LOG, 'utf8') : '';
 for (const [what, pattern] of [
     ['Chromium\'s WebUI omnibox popup being on (O15)', /WebUI omnibox popup is on/],
-    ['in-product help for tab groups (O13)', /IPH_TabGroups/],
     ['the on-device model service (O5)', /on_device_model/]]) {
   const lines = log.split('\n').filter(l => pattern.test(l));
   check(`The browser's log has nothing about ${what}`,

@@ -145,8 +145,13 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
       optimization_guide::features::kOptimizationGuideModelExecution);
 
   // O13: Zen has no in-product help, and none for the features Koan
-  // repurposes: tab groups' focus mode (Spaces), vertical tabs (the sidebar),
-  // split view, side panels, and Google's AI entry points.
+  // repurposes. (Code that asks for a promo before the browser has finished
+  // starting still gets one line in the log, "Attempting to show IPH ...;
+  // IPH will not be shown": BrowserUserEducationInterfaceImpl logs that
+  // before it looks at whether the feature is on. So these switch off what
+  // is shown, not that line.) The features: tab groups' focus mode (Spaces),
+  // vertical tabs (the sidebar), split view, side panels, and Google's AI entry
+  // points.
   namespace fe = feature_engagement;
   for (const base::Feature* iph : {
            &fe::kIPHVerticalTabsExpandOnHoverFeature,
@@ -160,6 +165,7 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
            &fe::kIPHLensOverlayFeature,
            &fe::kIPHOmniboxAskGLensIconFeature,
            &fe::kIPHOmniboxEverywhereLensPromoFeature,
+           &fe::kIPHExtensionsZeroStatePromoFeature,
        }) {
     overrides.DisableFeature(*iph);
   }
