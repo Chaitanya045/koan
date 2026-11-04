@@ -170,7 +170,7 @@ function check(name, ok, detail = '') {
 }
 
 const ALT = 1, CTRL = 2, SHIFT = 8;
-const VK = { D: 68, N: 78, T: 84, LEFT: 37 };
+const VK = { D: 68, N: 78, T: 84, W: 87, LEFT: 37 };
 // The views inside the pinned (Essentials) or the unpinned tab container.
 const inContainer = (vs, cls, container) =>
   vs.filter(v => v.cls === cls && v.shown && v.path.includes(container));
@@ -319,6 +319,32 @@ const left = inContainer(vs, 'TabView', 'UnpinnedTabContainerView');
 check('Clear in a Space keeps the Space, with a fresh tab',
       space?.shown && find(vs, 'KoanSpaceHeaderView')?.shown && left.length === 1,
       `${left.length} tab(s) left`);
+
+// Ctrl+W (⌘W) on a window's last tab closes the window, with the rows in
+// its Space's tab list: their teardown once left a dangling pointer in the
+// Space's layout (Mac DCHECK build). Koan must keep running.
+{
+  const version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
+  const browser = await connect(version.webSocketDebuggerUrl);
+  const { targetId } = (await browser.send('Target.createTarget',
+                                           { url: 'about:blank', newWindow: true })).result;
+  browser.close();
+  await sleep(2500);
+  const target = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
+      .find(t => t.id === targetId);
+  const c = await connect(target.webSocketDebuggerUrl);
+  const base = { windowsVirtualKeyCode: VK.W, nativeVirtualKeyCode: VK.W, modifiers: CTRL, key: 'w' };
+  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
+  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  c.close();
+  await sleep(3000);
+  const after = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)
+      .then(r => r.json()).catch(() => null);
+  check('Ctrl+W on a window\'s last tab closes the window, and Koan keeps running',
+        after && !after.some(t => t.id === targetId) &&
+        find(await views(), 'KoanSidebarTabRowsView')?.shown,
+        after ? `${after.filter(t => t.type === 'page').length} page(s) left` : 'no CDP');
+}
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);
