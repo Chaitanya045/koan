@@ -306,3 +306,10 @@ Minor: a second ⇧⌘L does not close DevTools; compact draws the traffic light
 ## Session 17 (16:31 IST): plain develop 77a44141 (KoanCheck-d77)
 ### B44. develop 77a44141: closing any window crashes (SEGV in Widget::IsFullscreen ← KoanCompactModeController::UpdateCaptionButtons ← Deactivate ← OnBrowserViewDestroying) — blocker
 Hands-on repro: fresh profile, open Wikipedia, click the red close button (compact OFF) → "Koan quit unexpectedly", `Received signal 11 SEGV_ACCERR 0x160`. Regression from the #128 merge; fix in #129 (5ece4c30/baafd745).
+
+## Session 18–20 (16:50–18:47 IST)
+| Build | Result |
+|---|---|
+| KoanCheck-d77 (plain develop 77a44141) | red close with compact OFF → SEGV in Widget::IsFullscreen ← UpdateCaptionButtons ← OnBrowserViewDestroying (#153 filed, blocker) |
+| KoanCheck-c129t (#129 baafd745) | no crash: red close plain/compact, ⇧⌘W in fullscreen, ⌘W last tab in compact+fullscreen (keeps a new tab), ⇧⌘W with the Create Space form open in fullscreen, hold-⌘Q with a fullscreen window; after Koan > Quit Koan, relaunch reopens both windows in compact PASS (s19-a, s19-004). Minor: a held ⌘Q once did not quit (Warn Before Quitting on) |
+| KoanCheck-c157 (#152 babe488c + #157 d94fb1fb) | video page-fullscreen, single toolbar and compact: pointer 2 s at top and left edge, nothing slides in, video fills below the menu bar, no gap/radius; Esc restores (s20-a, s20-b) PASS. View menu has no "Always Show Toolbar in Full Screen" PASS (s20-c9). Close window during video fullscreen and during browser fullscreen: no crash PASS. **B45 (major, #157):** on a page whose keydown listener calls preventDefault (data: test page), ⌘L does nothing and ⌃⌘F does not enter fullscreen, windowed or in fullscreen; ⌘T/⌘W/⌘N still act (s20-c, s20-d, s20-e). ⌘L works on example.com (s20-f) |
