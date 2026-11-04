@@ -81,7 +81,7 @@ Raw captures: `~/work/koan/.cache/zen-ref/raw/live1/s-*.png` (not committed).
 | Space strip geometry | With 3 Spaces the `zen-workspace` elements sit at `x = 0` (active), `230` (next) and `-230` (previous): one sidebar width apart, only the active one visible |
 | Cmd+Opt+Right / Left | Moves to the next / previous Space; **wraps** (last -> first, first -> last) |
 | Ctrl+1 | Goes to the first Space |
-| Animation | From the key to the first movement ~25 ms; the strips slide `0|230|-230 -> -230|0|230` (`-16.9 / 213.1` after the first frame, `-229.4 / 0.6` near the end) and settle **~260 ms** after the first movement (251 ms from first sample to last in the recording: 176 -> 437): matches `zen.workspaces.switch-animation-duration = 250` with a decelerating curve |
+| Animation | From the key to the first movement ~25 ms; the strips slide `0|230|-230 -> -230|0|230` (`-16.9 / 213.1` after the first frame, `-229.4 / 0.6` near the end) and settle **~260 ms** after the first movement (176 -> 437 ms in the recording): matches `zen.workspaces.switch-animation-duration = 250` with a decelerating curve |
 | Not checked | delete dialog, rename toast, which Space is active after delete |
 
 ## Essentials (`essentials-and-pinned.md`)
@@ -98,7 +98,7 @@ Raw captures: `~/work/koan/.cache/zen-ref/raw/live1/s-*.png` (not committed).
 
 | Check | Result |
 |---|---|
-| Cmd+Opt+V on two tabs | Panes `x 230 / 740`, `y 8`, **502 x 814 each**: gap **8** between them (740 - 732), 8 top/bottom, content width 1011 + 8 ... as the script says. Selected pane: `outline: solid 2px color(srgb 0.535 0.596 0.664)`; the other pane `none` |
+| Cmd+Opt+V on two tabs | Panes `x 230 / 740`, `y 8`, **502 x 814 each**: gap **8** between them (740 - 732); 8 above and below. Selected pane: `outline: solid 2px color(srgb 0.535 0.596 0.664)`; the other pane `none` |
 | Cmd+Opt+H | Panes stacked: `x 230`, width 1012, heights **402.5**, second pane at y **419.5**: vertical gap **9** (the column gap is sep + 1, as in the script) |
 | Cmd+Opt+G with 2 tabs | Same as V (side by side) |
 | Sidebar group row | Group container `8, 409, 214 x 36`; members `105 x 32` each side by side (x 10 and 115) |
