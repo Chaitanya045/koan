@@ -47,6 +47,11 @@ void MirrorSidebarHeaderLayout(const views::View* host,
 // with the toolbar hidden (single toolbar); false elsewhere.
 bool HidesSidebarTrailingControls(const views::View* host);
 
+// Whether the header is laid out as an expanded sidebar's, in one row, though
+// the sidebar is collapsed in upstream's terms: compact mode's sidebar, which
+// only ever shows as the hover reveal at its full width.
+bool ShowsExpandedSidebarHeader(const views::View* host);
+
 // Where `bounds` (in `host`) would be under the macOS traffic lights, which
 // are over the window's leading corner whatever Chromium reserved for them
 // (it reserves nothing while the sidebar sits above the toolbar's row, or
