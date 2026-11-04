@@ -52,8 +52,24 @@ bool IsSpacesCommandEnabled(const TabStripModel* tab_strip,
   return false;
 }
 
+// Upstream's tab group commands do nothing in a Spaces window: a tab is
+// always in one Space, and "Move To" moves it to another. Their menu items
+// are gone (ReplaceTabGroupMenuItems()), but the commands stay reachable
+// without them: Chrome's group shortcuts and Tab > Group Tab call them
+// (chrome::GroupTab(), CreateNewTabGroup()), as does any other caller of
+// ExecuteContextMenuCommand().
 bool ExecuteSpacesCommand(TabStripModel* tab_strip, int index, int command_id) {
-  return false;
+  switch (command_id) {
+    case TabStripModel::CommandToggleGrouped:
+    case TabStripModel::CommandAddToNewGroup:
+    case TabStripModel::CommandAddToNewGroupFromMenuItem:
+    case TabStripModel::CommandAddToExistingGroup:
+    case TabStripModel::CommandRemoveFromGroup:
+    case TabStripModel::CommandToggleFocusGroup:
+      return HasSpaces(tab_strip);
+    default:
+      return false;
+  }
 }
 
 // Every feature's part of the menu, in the order they add their items.
