@@ -51,6 +51,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
@@ -373,7 +374,11 @@ void KoanWorkspaceController::OnBrowserViewDestroying() {
   widget_observation_.Reset();
   slide_outs_.clear();
   switch_layered_views_.clear();
-  create_form_lock_.reset();
+  // The window is closing: the browser's animation controller is gone (the
+  // lock's release would collapse the sidebar with an animation), and this
+  // runs after KoanCompactModeController's teardown. Same for the menus' holds,
+  // which release their locks the same way when they are destroyed below.
+  ReleaseExpandOnHoverLockSoon(create_form_lock_);
   if (region_) {
     region_->RemovePreTargetHandler(wheel_handler_.get());
     region_ = nullptr;

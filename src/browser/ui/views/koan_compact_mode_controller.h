@@ -260,6 +260,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert);
   void EndFlash();
+  // Lets go of `lock`; deferred while the window is being destroyed.
+  void ReleaseLock(std::unique_ptr<ExpandOnHoverLock>& lock);
 
   // The caption-button strip.
   void OnCaptionHotZoneHovered(bool hovered);

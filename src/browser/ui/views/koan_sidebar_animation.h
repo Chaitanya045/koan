@@ -7,6 +7,8 @@
 
 #include <memory>
 
+class ExpandOnHoverLock;
+
 namespace views {
 class View;
 }
@@ -52,6 +54,14 @@ class SidebarHold {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
+
+// Lets go of `lock`, a lock on the sidebar (may be null), after the current
+// task. For teardown: closing a window destroys the browser's animation
+// controller before the BrowserView, and letting go of a lock makes the
+// sidebar's region decide again and collapse with an animation, which needs it.
+// By the time the task runs the region is gone and the lock is inert (the
+// region clears its locks in its destructor).
+void ReleaseExpandOnHoverLockSoon(std::unique_ptr<ExpandOnHoverLock>& lock);
 
 // `view` is the BrowserView or a view in its window. Null if there is no
 // vertical tab strip.
