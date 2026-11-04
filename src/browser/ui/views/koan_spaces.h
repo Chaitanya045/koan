@@ -88,8 +88,9 @@ bool ShowsSpaceHeader(const views::View* tab_group_view);
 // in the window of `browser_view`; nullopt leaves it as upstream has it. The
 // one table of Koan's hides (the menu bar is shared by the windows, so each
 // window's validation sets the item both ways): Koan owns the sidebar, so
-// View > "Show Tabs Vertically" and "Collapse Vertical Tabs" have no place
-// (#154); compact mode has its own item.
+// View > "Show Tabs Vertically" has no place (#154). "Collapse Vertical Tabs"
+// stays, as the menu item of Shift+Cmd+L: AppKit doesn't fire a hidden item's
+// key equivalent.
 std::optional<bool> HidesMenuCommand(BrowserView* browser_view, int command_id);
 
 }  // namespace koan
