@@ -33,8 +33,11 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
 // a tab as usual. Called from BrowserCommandController.
 bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 
-// macOS: whether the shortcuts ⌘T, ⌘W, ⌘N, ⌘L ... stay the browser's in
-// `browser`'s fullscreen, as in a window, instead of going to the page first.
+// macOS: whether the reserved commands (Chromium's list, accelerator_table.cc:
+// new / close tab and window, restore and switch tabs; ⌘T, ⌘W, ⌘N ...) stay
+// the browser's in `browser`'s fullscreen, as in a window, instead of going
+// to the page first. Not the others: ⌘L and ⌃⌘F are not reserved in a window
+// either (a page can swallow them there, as in Firefox).
 // Chromium does that only while the fullscreen window shows its toolbar
 // (autohide, revealed); Koan's native fullscreen always has the toolbar
 // hidden, yet its shortcuts must work. The page's own fullscreen (a video)

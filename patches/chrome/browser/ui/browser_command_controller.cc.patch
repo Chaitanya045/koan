@@ -16,7 +16,7 @@ index afc3f64a97c6a8676a656fca1a3ede18eb23b1fb..c5ac7ef72c358d8429c268a171d4cf86
      // browser-side handling if the browser window's toolbar is visible.
 -    if (window()->IsToolbarShowing()) {
 +    // Koan: also in Koan's own fullscreen, where the toolbar is hidden but the
-+    // browser's shortcuts (⌘T, ⌘W, ⌘L ...) still work, as in a window.
++    // reserved browser shortcuts (⌘T, ⌘W ...) still work, as in a window.
 +    if (window()->IsToolbarShowing() ||
 +        koan::KeepsReservedCommandsInFullscreen(browser_)) {
        if (command_id == IDC_FULLSCREEN) {
