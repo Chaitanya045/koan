@@ -49,7 +49,8 @@ bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser);
 // Screen" (View menu, ⇧⌘F, the toolbar action): Koan's toolbar is hidden and
 // fullscreen reveals nothing at the top edge, whatever that setting
 // (Chromium's, synced) says. Called from BrowserCommandController, which then
-// ignores the command; the menu item is hidden by the macOS menu validation.
+// ignores the command; the menu item is hidden by the macOS menu table
+// (HidesMenuCommand(), koan_spaces.h).
 bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
 
 // The view Chromium's bubbles anchor to instead of the toolbar's, where the

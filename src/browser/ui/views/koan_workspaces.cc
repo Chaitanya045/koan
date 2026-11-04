@@ -69,6 +69,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
@@ -2215,25 +2216,35 @@ bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab) {
 
 std::optional<bool> HidesMenuCommand(BrowserView* browser_view,
                                      int command_id) {
-  // View > "Show Tabs Vertically": Koan owns the sidebar, which is always
-  // vertical (#154). Upstream's validation sets this item's hidden state
-  // itself (hidden only in immersive fullscreen), so a hide at menu build
-  // time doesn't hold.
-  // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: AppKit doesn't fire the key
-  // equivalent of a hidden item, enabled or not, so hiding it would kill
-  // Shift+Cmd+L, which is the sidebar button's shortcut. It stays, and its
-  // check mark follows the collapse state, i.e. compact mode hiding the
-  // sidebar. Its title is the menu bar's to change.)
-  if (command_id == IDC_TOGGLE_VERTICAL_TABS) {
-    return OwnsSidebar();
+  // Every item Koan owns gets an answer both ways: the menu bar is shared by
+  // the windows, and AppKit keeps a hidden item hidden until told otherwise.
+  switch (command_id) {
+    // Upstream's tab group items (Tab > Group Tab, its Option alternate): a
+    // tab is always in a Space, "Move To" moves it to another.
+    case IDC_WINDOW_GROUP_TAB:
+    case IDC_GROUP_TARGET_TAB:
+      return browser_view && SpacesOf(browser_view->browser()) != nullptr;
+    // View > Always Show Toolbar in Full Screen: with Koan's toolbar hidden
+    // (single toolbar) fullscreen reveals nothing at the top edge, whatever
+    // the setting (Chromium's, synced) says, so it isn't offered, neither
+    // greyed out nor there. (The command itself is ignored there:
+    // IgnoresFullscreenToolbarToggle().)
+    case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
+      return browser_view && IsToolbarHidden(browser_view);
+    // View > "Show Tabs Vertically": Koan owns the sidebar, which is always
+    // vertical (#154). Upstream's validation sets this item's hidden state
+    // itself (hidden only in immersive fullscreen), so a hide at menu build
+    // time doesn't hold.
+    // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: AppKit doesn't fire the key
+    // equivalent of a hidden item, enabled or not, so hiding it would kill
+    // Shift+Cmd+L, which is the sidebar button's shortcut. It stays, and its
+    // check mark follows the collapse state, i.e. compact mode hiding the
+    // sidebar. Its title is the menu bar's to change.)
+    case IDC_TOGGLE_VERTICAL_TABS:
+      return OwnsSidebar();
+    default:
+      return std::nullopt;
   }
-  if (command_id != IDC_WINDOW_GROUP_TAB &&
-      command_id != IDC_GROUP_TARGET_TAB) {
-    return std::nullopt;
-  }
-  // (The menu bar is shared by the windows: each one's validation sets the
-  // item both ways.)
-  return browser_view && SpacesOf(browser_view->browser()) != nullptr;
 }
 
 }  // namespace koan

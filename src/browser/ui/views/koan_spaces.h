@@ -101,13 +101,21 @@ bool ApplySpaceColor(TabStripModel* tab_strip);
 // per Space).
 bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab);
 
-// BrowserNativeWidgetMac::ValidateUserInterfaceItem(), after upstream:
-// whether the menu bar item for `command_id` is hidden in `browser_view`'s
-// window, for the items Koan decides (upstream's tab group items: Tab > Group
-// Tab, hidden in a Spaces window, shown in any other); nullopt for the rest.
-// View > "Show Tabs Vertically" is hidden while Koan owns the sidebar (#154);
-// "Collapse Vertical Tabs" stays, as the menu item of Shift+Cmd+L: AppKit
-// doesn't fire a hidden item's key equivalent.
+// BrowserNativeWidgetMac::ValidateUserInterfaceItem() (the Mac menu bar),
+// after upstream's own validation: Koan's one table of the menu bar items it
+// hides per window. For an item Koan decides, whether it is hidden (and
+// disabled) in `browser_view`'s window, or shown; nullopt for every other item
+// (upstream's state stands). The menu bar is shared by the windows, so each
+// window's validation sets an owned item both ways. Today:
+// - View > "Show Tabs Vertically", hidden while Koan owns the sidebar (#154).
+//   "Collapse Vertical Tabs" stays, as the menu item of Shift+Cmd+L: AppKit
+//   doesn't fire a hidden item's key equivalent.
+// - View > Always Show Toolbar in Full Screen, hidden while Koan's toolbar is
+//   hidden.
+// - The Tab menu's Group Tab and its Option alternate, hidden in a Spaces
+//   window.
+// Other features add their items here rather than set the hidden state
+// themselves.
 std::optional<bool> HidesMenuCommand(BrowserView* browser_view, int command_id);
 
 }  // namespace koan
