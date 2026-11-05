@@ -367,3 +367,8 @@ PASS: ⇧⌘L and the sidebar button toggle compact both ways, never a rail, no 
 FAIL/unclear: keyboard resize — click on the edge then ←×12: width unchanged (s29-d left).
 Minor: while dragging narrower the top row splits (traffic lights on their own row) before compact kicks in (s29-drag).
 Not done: drag in compact's revealed sidebar, 10-minute hint (would hold the loop 11 min), toast-once (second drag).
+
+## Session 30 (09:52–09:57 IST): KoanCheck-c90g (develop b7a833c6 + #90 c49738b1), --use-mock-keychain
+PASS: no keychain infobar (s30-a); every menu opens, no crash (s30-m1, m2); ⌘S, ⌘⌥→, ⌘⌥⇧S, ⇧⌘N (one window), ⌘O (nothing) from a page and the URL bar (s30-keys); in a Glance ⌘S, ⌘⌥⇧S, ⇧⌘N, ⌘⇧D (pins the Glance's parent), ⌘O expands (s30-glance); Esc doesn't stop a load (s30-e); tab menu has no "Show tabs horizontally" (s30-tmc); rebind Toggle Compact Mode to ⌃⇧K: saved, ⌘S dead, ⌃⇧K toggles (s30-r2c, r34); "Toggle Sidebar's Width" in View. No DCHECK/dump.
+FAIL: View still shows "✓ Show tabs vertically" (s30-m1); the Profiles menu is in the menu bar (the loop's note says hidden) (s30-m2).
+CONFLICT: ⇧⌘L opens DevTools here (#90) vs compact in #155 (s30-e, 3rd frame).
