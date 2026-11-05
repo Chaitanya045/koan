@@ -756,7 +756,9 @@ bool KoanCompactModeController::WantsFullscreenEdges() const {
 
 void KoanCompactModeController::CheckFullscreenEdges() {
   if (!WantsFullscreenEdges()) {
-    edge_sidebar_hovered_ = false;
+    if (std::exchange(edge_sidebar_hovered_, false)) {
+      OnSidebarHotZoneHovered(false);
+    }
     return;
   }
   // The monitor hears the whole application (see UpdatePointerMonitor()):
@@ -765,7 +767,11 @@ void KoanCompactModeController::CheckFullscreenEdges() {
   const gfx::Point screen_pointer =
       display::Screen::Get()->GetCursorScreenPoint();
   if (!browser_view_->GetBoundsInScreen().Contains(screen_pointer)) {
-    edge_sidebar_hovered_ = false;
+    // (The hover lock is let go of, not just forgotten: the pointer can leave
+    // for another display straight from the edge.)
+    if (std::exchange(edge_sidebar_hovered_, false)) {
+      OnSidebarHotZoneHovered(false);
+    }
     return;
   }
   gfx::Point pointer = screen_pointer;
