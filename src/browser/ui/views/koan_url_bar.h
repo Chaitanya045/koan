@@ -52,6 +52,20 @@ bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser);
 // ignores the command; the menu item is hidden by the macOS menu validation.
 bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
 
+// The view Chromium's bubbles anchor to instead of the toolbar's, where the
+// toolbar is hidden: the URL pill's site icon in Koan's single toolbar (Zen
+// anchors permission prompts, page info and the like to the identity box
+// there), else the sidebar header's buttons while the sidebar is hidden.
+// Null where the toolbar is there (the anchor is upstream's). Where compact
+// mode hides just the toolbar (no pill), this slides it in and holds it for
+// as long as a bubble anchored to it is open, and returns null (the anchor is
+// upstream's, the revealed toolbar). `view` is the BrowserView or any view in
+// its window (the location bar, the toolbar). Called from the hook patches in
+// ToolbarView::GetBubbleAnchor(), LocationBarView::GetAnchorOrNull() and
+// GetChipAnchor(), bubble_anchor_util::GetPageInfoAnchorConfiguration() and
+// DownloadToolbarUIController::OnBubbleAnchorAssembled().
+views::View* GetBubbleAnchorView(const views::View* view);
+
 // The omnibox text of `location_bar` (a LocationBarView) changed;
 // `user_input_in_progress` is whether the user is typing. With Zen's
 // "floating-on-type" URL bar behaviour, the first keystroke lifts the bar

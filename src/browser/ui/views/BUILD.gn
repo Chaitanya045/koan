@@ -211,6 +211,7 @@ source_set("impl") {
     "//chrome/browser/ui/immersive:immersive_mode_controller",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/views/omnibox",
+    "//chrome/browser/ui/views/permissions/chip",
     "//chrome/common",
     "//chrome/browser/resource_coordinator",
     "//chrome/browser/performance_manager",

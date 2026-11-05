@@ -12,6 +12,7 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -21,6 +22,7 @@
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view_tracker.h"
+#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 class PrefService;
@@ -88,6 +90,7 @@ class KoanTrafficLightsController;
 // live in KoanShortcutController; right-clicking the sidebar opens Zen's
 // toolbar context menu (Compact Mode, Tabs on the right).
 class KoanCompactModeController : public views::FocusChangeListener,
+                                  public views::WidgetObserver,
                                   public ui::EventObserver,
                                   public TabStripModelObserver,
                                   public ui::SimpleMenuModel::Delegate {
@@ -125,6 +128,22 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // mode with the header kept). KoanUrlBarController edits over it.
   KoanSidebarNavView* sidebar_nav();
 
+  // Where a bubble about the page points while Koan hides the toolbar (see
+  // GetBubbleAnchorView() in koan_url_bar.h): the pill's site icon, else the
+  // header's buttons, else a fixed point at the window's top; null when the
+  // toolbar is there (or, with compact mode hiding just the toolbar, when it
+  // is to slide in under the bubble). Changes nothing but for scheduling a
+  // check of which bubbles are open (ReconcileBubbleHold()): it is called
+  // from layout and for bubbles that never open.
+  views::View* GetBubbleAnchor();
+
+  // A bubble is about to open at the peeked sidebar's pill (Koan's own page
+  // info button, which doesn't ask GetBubbleAnchor()): hold the sidebar out
+  // from now, before it opens, so the pill the bubble points at stays, and
+  // let go again when the bubble is gone (ReconcileBubbleHold()). Does
+  // nothing unless compact mode hides the sidebar.
+  void HoldSidebarForBubble();
+
   // Called by KoanUrlBarController when the omnibox is lifted out of the
   // toolbar or put back.
   void OnUrlBarOpenChanged();
@@ -159,6 +178,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool reveals_toolbar_beside_sidebar() const {
     return can_reveal_toolbar() && !hides_sidebar();
   }
+
+  // views::WidgetObserver (a bubble that holds the toolbar or the sidebar
+  // out):
+  void OnWidgetDestroying(views::Widget* widget) override;
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
 
   // views::FocusChangeListener:
   void OnDidChangeFocus(views::View* focused_before,
@@ -221,6 +245,16 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool IsTopContainerShown() const;
   void HideAwayToolbarLayer();
   bool ShouldKeepToolbarRevealed() const;
+  // A bubble (permission prompt, page info, bookmark, download ...) anchored
+  // to the revealed toolbar is open.
+  bool HasBubbleAnchoredToToolbar() const;
+  // Looks (a moment after an anchor was asked for, and when a bubble goes
+  // away) at which bubbles are open: with compact mode hiding the toolbar,
+  // the toolbar comes in without animation and the bubbles are placed again;
+  // anchored to a peeked sidebar's pill, they hold the sidebar out; with
+  // none, both go as they would. Not from inside layout.
+  void ScheduleBubbleCheck();
+  void ReconcileBubbleHold();
   void CheckToolbarHide();
 
   // While the toolbar, the caption strip or a peeked sidebar is out, watches
@@ -351,6 +385,14 @@ class KoanCompactModeController : public views::FocusChangeListener,
   base::OneShotTimer hover_release_timer_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
   bool edge_sidebar_hovered_ = false;
+  // Bubbles that hold the toolbar or the sidebar out (see
+  // ReconcileBubbleHold()).
+  base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
+      bubble_widgets_{this};
+  std::unique_ptr<ExpandOnHoverLock> bubble_lock_;
+  // A point at the window's top that is always on screen while Koan hides the
+  // toolbar: where bubbles point when neither the pill nor the header is.
+  raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
   // The window is being destroyed (OnBrowserViewDestroying()): no UI work.
