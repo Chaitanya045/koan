@@ -37,7 +37,9 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
@@ -541,6 +543,12 @@ void KoanSidebarNavView::ShowSitePanel() {
       contents ? contents->GetController().GetVisibleEntry() : nullptr;
   if (!entry || entry->IsInitialEntry() || !GetWidget()) {
     return;
+  }
+  // The pill is in the peeked sidebar (compact mode): keep it out while the
+  // bubble that points at it is open.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->compact_mode()->HoldSidebarForBubble();
   }
   PageInfoBubbleView::CreatePageInfoBubble(
       PageInfoBubbleSpecification::Builder(

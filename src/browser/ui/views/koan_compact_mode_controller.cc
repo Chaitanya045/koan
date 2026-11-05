@@ -1265,6 +1265,20 @@ bool KoanCompactModeController::HasBubbleAnchoredToToolbar() const {
   return false;
 }
 
+void KoanCompactModeController::HoldSidebarForBubble() {
+  if (IsClosing() || !hides_sidebar()) {
+    return;
+  }
+  if (!bubble_lock_) {
+    if (auto* tab_strip = browser_view_->tab_strip_view()) {
+      bubble_lock_ =
+          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    }
+  }
+  // The bubble is open when the checks run, and the lock goes when it closes.
+  ScheduleBubbleCheck();
+}
+
 void KoanCompactModeController::ScheduleBubbleCheck() {
   // The bubble may be shown a moment after its anchor was asked for (a
   // permission chip waits for its anchor).
