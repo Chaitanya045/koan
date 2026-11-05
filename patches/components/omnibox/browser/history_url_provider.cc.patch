@@ -1,0 +1,20 @@
+diff --git a/components/omnibox/browser/history_url_provider.cc b/components/omnibox/browser/history_url_provider.cc
+index 5067628f1f948856a99da41808a05d9d564c6299..9303244347afd2d983cbbbdacf7ce5115134f51a 100644
+--- a/components/omnibox/browser/history_url_provider.cc
++++ b/components/omnibox/browser/history_url_provider.cc
+@@ -1142,9 +1142,12 @@ AutocompleteMatch HistoryURLProvider::HistoryMatchToACMatch(
+       params.input.parts().scheme.is_nonempty() || !params.trim_http ||
+           history_match.match_in_scheme,
+       history_match.match_in_subdomain);
+-  match.contents = url_formatter::FormatUrl(info.url(), format_types,
+-                                            base::UnescapeRule::SPACES, nullptr,
+-                                            nullptr, nullptr);
++  // Koan: a URL ending in "%20" formats to contents with a trailing space,
++  // which AutocompleteResult::AppendMatches() DCHECKs against (providers
++  // sanitize their contents): typing "example.com/a%20" crashed DCHECK builds.
++  match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
++      info.url(), format_types, base::UnescapeRule::SPACES, nullptr, nullptr,
++      nullptr));
+   auto term_matches = FindTermMatches(params.input.text(), match.contents);
+   match.contents_class = ClassifyTermMatches(
+       term_matches, match.contents.size(),
