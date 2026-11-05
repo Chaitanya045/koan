@@ -184,6 +184,7 @@ source_set("impl") {
     "koan_zen_download_animation.h",
     "koan_zen_media.cc",
     "koan_zen_media.h",
+    "koan_zen_compact_strings.h",
     "koan_zen_toasts.h",
     "koan_zen_welcome.h",
     "koan_zen_window_drag.cc",

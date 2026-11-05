@@ -2373,13 +2373,17 @@ std::optional<bool> HidesMenuCommand(BrowserView* browser_view,
     // vertical (#154). Upstream's validation sets this item's hidden state
     // itself (hidden only in immersive fullscreen), so a hide at menu build
     // time doesn't hold.
-    // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: AppKit doesn't fire the key
-    // equivalent of a hidden item, enabled or not, so hiding it would kill
-    // Shift+Cmd+L, which is the sidebar button's shortcut. It stays, and its
-    // check mark follows the collapse state, i.e. compact mode hiding the
-    // sidebar. Its title is the menu bar's to change.)
+    // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: it stays, titled "Toggle Sidebar's
+    // Width" by the menu bar, and runs compact mode; its check mark follows the
+    // collapse state, i.e. compact mode hiding the sidebar. It has no key: the
+    // sidebar action keeps none, Shift+Cmd+L is Koan's inspector.)
     case IDC_TOGGLE_VERTICAL_TABS:
-      return OwnsSidebar();
+      // With Koan's sidebar off nothing here overrides upstream's own state
+      // (nullopt, not false).
+      if (OwnsSidebar()) {
+        return true;
+      }
+      return std::nullopt;
     default:
       return std::nullopt;
   }

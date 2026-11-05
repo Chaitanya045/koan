@@ -84,6 +84,10 @@ class KoanUrlBarController : public views::ViewObserver,
   // closes it if it is already open for one, like Zen. Returns false if the
   // window should open a tab as usual (replace-newtab off, ...).
   bool OpenForNewTab();
+  // Zen's "search tabs" (Shift+Cmd+A): the bar opens with the open tabs as its
+  // scope (Chromium's "@tabs"). False if the bar can't open now (the caller
+  // falls back to focusing the omnibox).
+  bool OpenForTabSearch();
   // Closes the omnibox without opening anything: the page gets focus back.
   void Close();
 
@@ -130,6 +134,9 @@ class KoanUrlBarController : public views::ViewObserver,
   void InstallNewTabAction();
   void OnNewTabAction();
 
+  // Whether the floating bar can open now: the feature, a normal window with
+  // tabs and an omnibox, not in a fullscreen that hides the toolbar's view.
+  bool CanOpenBar() const;
   Placement DesiredPlacement() const;
   void SetPlacement(Placement placement);
   bool IsPillAvailable() const;

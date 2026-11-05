@@ -142,10 +142,13 @@ persists.
 card and there is no toolbar. Chromium's own collapse to an icon rail, with
 its tab group and tab search buttons, is not in Koan: Zen has neither, and
 the sidebar is always vertical and always full width. That also goes for the
-menus: there is no "Show tabs horizontally" (or "Collapse tabs") in the tab
-menu, the View menu or the app menu, and no "Expand tabs on hover" (always
-on) in the sidebar button's menu, which is the sidebar's menu. ⇧⌘A (tab
-search) opens the URL bar.
+menus: there is no "Show tabs horizontally" in the tab menu, the View menu or
+the app menu, and no "Expand tabs on hover" (always on) in the sidebar
+button's menu, which is the sidebar's menu. The View menu's "Toggle Sidebar's
+Width" does the same as the button and has no key (⇧⌘L opens the inspector, as
+in Zen). The button's tooltip is Zen's, "Toggle Compact Mode". ⇧⌘A searches the
+open tabs, as in Zen: the URL bar opens with the open tabs as its scope
+(Chromium's @tabs), and Enter on a match switches to that tab.
 
 **Tabs on the right**: right-click an empty part of the sidebar and pick
 **Tabs on the right** (or Settings > Look and Feel > Vertical Tabs).

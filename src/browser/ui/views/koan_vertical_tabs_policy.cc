@@ -27,6 +27,8 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
+#include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_zen_compact_strings.h"
 #include "ui/actions/actions.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/views/view.h"
@@ -141,8 +143,8 @@ void KoanVerticalTabsPolicy::InstallActions() {
     }
   }
 
-  // The sidebar button (and its menu item and Shift+Cmd+L): in Zen the
-  // sidebar button toggles compact mode. Chromium's collapse to an icon rail,
+  // The sidebar button and its menu item: in Zen the sidebar button toggles
+  // compact mode. Chromium's collapse to an icon rail,
   // with its tab group and tab search buttons and its toolbar, is not
   // something Zen has.
   if (actions::ActionItem* toggle = FindAction(kActionToggleCollapseVertical)) {
@@ -162,8 +164,8 @@ void KoanVerticalTabsPolicy::InstallActions() {
   UpdateSidebarButtonText();
 
   // Shift+Cmd+A: Chromium's tab search bubble hangs off the header's tab
-  // search button, which Koan removes. Koan's URL bar is where tabs are
-  // searched.
+  // search button, which Koan removes. Zen's key opens the URL bar over the
+  // open tabs ("search tabs"), and so does Koan's.
   if (actions::ActionItem* search = FindAction(kActionTabSearch)) {
     search->SetInvokeActionCallback(base::BindRepeating(
         [](base::WeakPtr<KoanVerticalTabsPolicy> policy,
@@ -189,6 +191,12 @@ void KoanVerticalTabsPolicy::OnSidebarButtonAction() {
 }
 
 void KoanVerticalTabsPolicy::OnTabSearchAction() {
+  // Zen's Shift+Cmd+A is "search tabs": the URL bar over the open tabs.
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  if (controller && controller->url_bar()->OpenForTabSearch()) {
+    return;
+  }
   chrome::ExecuteCommand(browser_view_->browser(), IDC_FOCUS_LOCATION);
 }
 
@@ -200,13 +208,10 @@ void KoanVerticalTabsPolicy::UpdateSidebarButtonText() {
   if (!toggle) {
     return;
   }
-  // Upstream rewrites these ("Collapse tabs") on every collapse change; this
-  // runs after that (from compact mode's UpdateActive(), a posted task).
-  const std::u16string text = GetPrefs()->GetBoolean(prefs::kCompactModeEnabled)
-                                  ? u"Disable compact mode"
-                                  : u"Enable compact mode";
-  toggle->SetText(text);
-  toggle->SetTooltipText(text);
+  // Zen's text for the button, whatever the state. Upstream rewrites these
+  // ("Collapse tabs") on every collapse change; this runs after that.
+  toggle->SetText(kToggleCompactModeLabel);
+  toggle->SetTooltipText(kToggleCompactModeTooltip);
 }
 
 void KoanVerticalTabsPolicy::RemoveOldPrefs() {

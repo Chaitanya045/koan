@@ -86,6 +86,8 @@ constexpr base::TimeDelta kFadeDuration = base::Milliseconds(120);
 
 // Zen's zen.urlbar.wait-to-clear.
 constexpr base::TimeDelta kKeepLastSearch = base::Seconds(45);
+// Chromium's omnibox scope for the open tabs (the @tabs starter pack keyword).
+constexpr char16_t kTabSearchScope[] = u"@tabs ";
 
 }  // namespace
 
@@ -296,19 +298,45 @@ void KoanUrlBarController::OnNewTabAction() {
   }
 }
 
-bool KoanUrlBarController::OpenForNewTab() {
+bool KoanUrlBarController::CanOpenBar() const {
   LocationBarView* bar = location_bar();
   // (In fullscreen, the toolbar is out of sight, except where Koan's stays
   // hidden: on macOS, see HidesFullscreenTopChrome().)
-  if (!features::IsUrlBarEnabled() || !browser_view_->GetIsNormalType() ||
-      (IsWindowFullscreen(browser_view_) && !compact_mode_->hides_toolbar()) ||
-      IsContentFullscreen(browser_view_) ||
-      browser_view_->browser()->GetTabStripModel()->empty() || !bar ||
-      !bar->omnibox_view() ||
-      !browser_view_->GetProfile()
-           ->GetOriginalProfile()
-           ->GetPrefs()
-           ->GetBoolean(prefs::kUrlBarReplaceNewTab)) {
+  return features::IsUrlBarEnabled() && browser_view_->GetIsNormalType() &&
+         (!IsWindowFullscreen(browser_view_) ||
+          compact_mode_->hides_toolbar()) &&
+         !IsContentFullscreen(browser_view_) &&
+         !browser_view_->browser()->GetTabStripModel()->empty() && bar &&
+         bar->omnibox_view();
+}
+
+bool KoanUrlBarController::OpenForTabSearch() {
+  if (!CanOpenBar()) {
+    return false;
+  }
+  LocationBarView* bar = location_bar();
+  bar->FocusLocation(/*is_user_initiated=*/true,
+                     /*clear_focus_if_failed=*/false);
+  if (!bar->omnibox_view()->HasFocus()) {
+    return false;
+  }
+  // Already focused before (no focus change): place it.
+  if (is_open()) {
+    SetPlacement(DesiredPlacement());
+  }
+  // Zen's "search tabs" (Browser:SearchTabs) is the URL bar restricted to the
+  // open tabs; Chromium's restriction is the @tabs scope. Enter on a match
+  // switches to that tab.
+  bar->omnibox_view()->SetUserText(kTabSearchScope, /*update_popup=*/true);
+  return true;
+}
+
+bool KoanUrlBarController::OpenForNewTab() {
+  LocationBarView* bar = location_bar();
+  if (!CanOpenBar() || !browser_view_->GetProfile()
+                            ->GetOriginalProfile()
+                            ->GetPrefs()
+                            ->GetBoolean(prefs::kUrlBarReplaceNewTab)) {
     return false;
   }
   // Zen: the shortcut again closes the bar it opened.
