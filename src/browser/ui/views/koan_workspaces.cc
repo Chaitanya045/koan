@@ -2,8 +2,8 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
+#include "koan/browser/koan_vertical_tabs.h"
 
 #include <algorithm>
 #include <array>

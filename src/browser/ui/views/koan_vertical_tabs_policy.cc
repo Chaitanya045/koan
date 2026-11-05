@@ -240,8 +240,8 @@ void KoanVerticalTabsPolicy::StartWatching() {
   // koan::InitialSidebarCollapsed().)
   hidden_ = state->IsCollapsed();
 #if DCHECK_IS_ON()
-  mode_subscription_ = state->RegisterOnModeWillChange(
-      base::BindRepeating(&OnModeWillChange));
+  mode_subscription_ =
+      state->RegisterOnModeWillChange(base::BindRepeating(&OnModeWillChange));
 #endif
   collapse_subscription_ = state->RegisterOnCollapseChanged(base::BindRepeating(
       &KoanVerticalTabsPolicy::OnCollapseChanged, base::Unretained(this)));
@@ -252,7 +252,8 @@ void KoanVerticalTabsPolicy::OnCollapseChanged(
   if (IsClosing()) {
     return;
   }
-  const bool settled = state != tabs::VerticalTabStripCollapseState::kCollapsing;
+  const bool settled =
+      state != tabs::VerticalTabStripCollapseState::kCollapsing;
   if (settled) {
     if ((state == tabs::VerticalTabStripCollapseState::kCollapsed) == hidden_) {
       settling_ = false;
@@ -268,8 +269,9 @@ void KoanVerticalTabsPolicy::OnCollapseChanged(
   // Upstream rewrites the sidebar button's text on every collapse change
   // ("Collapse tabs"), after this notification: put Koan's back after it.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&KoanVerticalTabsPolicy::UpdateSidebarButtonText,
-                                weak_factory_.GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(&KoanVerticalTabsPolicy::UpdateSidebarButtonText,
+                     weak_factory_.GetWeakPtr()));
 }
 
 bool ShowSidebarButtonContextMenu(BrowserWindowInterface* browser,
