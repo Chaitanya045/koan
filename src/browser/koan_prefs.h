@@ -91,9 +91,17 @@ inline constexpr char kUrlBarReplaceNewTab[] = "koan.urlbar.replace_newtab";
 // sidebar's URL pill on hover. On by default, like Zen.
 inline constexpr char kUrlBarShowCopyUrl[] = "koan.urlbar.show_copy_url";
 
-// Whether the browser takes the active workspace's colour (Zen's
-// per-workspace themes).
+// Whether windows show their active Space's theme (Zen's per-Space
+// gradient themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
+
+// Zen's dark theme styles: 0 default, 1 night (AMOLED), 2 colorful.
+inline constexpr char kDarkThemeStyle[] = "koan.theme.dark_style";
+
+// Whether the theme picker shows the custom colour list
+// (zen.theme.gradient.show-custom-colors, off by default like Zen's).
+inline constexpr char kShowCustomColors[] =
+    "koan.theme.gradient.show_custom_colors";
 
 // Obsolete: until the tint became per window (a window's user colour
 // override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's

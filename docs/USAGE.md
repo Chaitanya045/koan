@@ -343,18 +343,15 @@ belongs to a Space, and new tabs open in the active one.
 - **Create** a Space with **+ > Create Space** (or Ctrl+Alt+N): the sidebar
   shows Zen's Create-a-Space form (a collapsed sidebar expands over the
   page until you're done). Click the dashed box to pick an emoji
-  (search by keyword), type a name, Edit Theme… to pick its colour, then
+  (search by keyword), type a name, Theme… to pick its theme (see Space themes), then
   Create Space (or Enter); Escape or Cancel goes back.
 - **Rename**: double-click the Space's name in the header (or right-click
   the header > Change Name…) and type; Enter keeps it, Escape cancels.
   Double-click the icon (or Change Icon…) to pick another emoji, or none.
 - From the keyboard, the header takes focus (Tab through the sidebar):
   Enter or the menu key opens its menu, F2 renames the Space.
-- **Edit Theme…** (right-click the header) picks the Space's colour: the
-  window takes it while the Space is active, or keeps your colour and your
-  theme (also a Chrome Web Store theme) with Default. Each window shows
-  its own Space's colour, so two windows on different Spaces differ;
-  your own colour (Settings > Appearance) is never changed.
+- **Theme…** (right-click the header) opens Zen's theme picker for
+  the Space (see Space themes below).
 - **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
   on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
   horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
@@ -395,6 +392,56 @@ delete the Space, ⌘⌃X / ⌘⌃Z go to the next / previous Space, ⌘⌃C ope
 new tab as ⌘T does. Tab > Group Tab isn't there (use Move To). A Space is
 never collapsed, and a tab group an extension makes becomes a Space with
 the default theme (unless the extension sets a colour).
+
+## Space themes
+
+Every Space has its own gradient theme, as in Zen. Right-click the Space's
+header (or a Space in the bottom bar) and choose **Theme…**, or run
+**Open Theme Picker** from the command palette (for the active Space), to
+open Zen's theme picker beside the sidebar. In the Create-a-Space form,
+**Theme…** picks the new Space's theme; the window previews it until
+you create the Space or cancel.
+
+- **Colour field**: click to place a colour, drag the big dot to change it,
+  right-click it to remove it. Up to three colours.
+- **+ / − / harmony**: add or remove a colour; the third button cycles the
+  colour harmony (Complementary, Split, Analogous, Triadic, Floating) that
+  places the other dots around the big one.
+- **Presets**: five pages of Zen's preset swatches (arrows to page).
+- **Opacity**: the wave slider; a flatter wave is a lighter tint. On macOS,
+  over the glass (the blurred desktop behind the window), it sets how much
+  of the blur shows: to the left Zen's most transparent, to the right fully
+  opaque (no blur). It works without colours there too, and each Space keeps
+  its own value.
+- **Grain**: drag the handle around the dial for Zen's grain texture.
+- **Automatic / Light / Dark** (top of the field): the window scheme, which
+  websites follow too.
+
+From the keyboard: Tab to the field, Enter adds a colour, the arrow keys
+move the big dot (Shift for bigger steps), Delete removes it; the swatches
+are one Tab stop (arrows move between them, Space applies one); the opacity
+slider and the grain dial take the arrow keys, Home and End.
+
+Changes show on the window at once and are saved when the panel closes.
+A Space's theme is kept with its tabs in the session, so it comes back
+after a restart; a tab moved to another Space takes that Space's theme.
+The window's sidebar, toolbar and the margin around the page show the
+gradient; switching Spaces cross-fades to the next Space's gradient. A
+theme also decides whether the window's own colours are light or dark and
+sets their accent, like Zen; websites keep following the appearance setting.
+
+What websites use (Automatic, Light or Dark) is the picker's scheme
+buttons, and the palette's "Switch to ... Appearance / Mode".
+**Settings > Look and Feel > Dark Theme Styles** picks Default, Night (a
+black window) or Colorful (dark surfaces tinted with the accent); Night and
+Colorful are Koan's own (Zen has only the setting's name so far).
+**Settings > Tab Management > Workspaces** turns Space themes off. The
+custom colour list of Zen's picker is off by default, as in Zen; turn it on
+with the pref `koan.theme.gradient.show_custom_colors`.
+
+With a Chrome Web Store theme installed, the theme keeps the window's look
+and Space themes are off until you remove it (Settings > Appearance >
+Reset to default).
 
 ## Compact mode
 
@@ -541,7 +588,7 @@ from its sidebar.
 - **Look and Feel**: the look (see "Look" above), the browser layout (Only
   Sidebar / Sidebar and Top Toolbar), tabs on the right, compact mode, what
   it hides and its flash popup.
-- **Tab Management**: whether the active Space tints the browser,
+- **Tab Management**: whether windows show the active Space's theme,
   whether background tabs freeze (see "Memory and power"), and Zen's tab
   behaviours (Zen's defaults):
   - closing a tab switches to the **most recently used** tab rather than a
@@ -611,10 +658,10 @@ with three sections down its side, and opens on the one you used last:
   where you keep or delete it. While anything downloads, the Downloads tab
   shows a progress ring. Right-click the Downloads tab to clear the list or open
   `chrome://downloads`.
-- **Spaces**: a card per Space with its tabs, tinted with its theme. Click
-  the name to rename it, the icon for the Spaces' emoji picker, the brush
-  for Edit Theme; drag the arrows at the bottom to reorder the Spaces (the
-  bottom bar follows). **⋯** has Change Icon, Edit Theme, Unload Space,
+- **Spaces**: a card per Space with its tabs, tinted with its theme's main
+  colour. Click the name to rename it, the icon for the Spaces' emoji
+  picker, the brush for the theme picker; drag the arrows at the bottom to reorder the Spaces (the
+  bottom bar follows). **⋯** has Change Icon, Theme…, Unload Space,
   Unload All Other Spaces, Create Space and Delete Space (it asks, and not
   for the only Space). **+** after the last card, like Create Space, closes
   the Library and opens the Create-a-Space form. Click a tab to go there.
