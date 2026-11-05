@@ -271,6 +271,16 @@ constexpr Row kRows[] = {
      .pref = prefs::kUrlBarShowCopyUrl,
      .label = "Show the copy URL button in the sidebar's URL bar",
      .is_available = features::IsUrlBarEnabled},
+    // Zen's about:config pref zen.theme.acrylic-urlbar (default off). Off
+    // macOS it blurs the page only (there is no desktop to see through).
+    {.group = "urlbar",
+     .control = Control::kCheckbox,
+     .pref = prefs::kLookAcrylicUrlBar,
+     .label = "Glass URL bar (translucent, with the page blurred behind it)",
+     .is_available = features::IsUrlBarEnabled,
+     .local_state = true,
+     .note = "Off while macOS's Reduce Transparency is on, and in a window "
+             "that isn't active"},
     // Tab Management.
     {.group = "workspaces",
      .control = Control::kCheckbox,

@@ -689,6 +689,14 @@ while macOS's Reduce Transparency (System Settings, Accessibility, Display)
 is on, and while the window is being captured. An inactive window goes flat and opaque,
 like Zen's. It needs macOS 26 or later, and on an Intel Mac it is off until you turn it on; not on other platforms.
 
+Zen's `zen.theme.acrylic-urlbar` is "Glass URL bar" (`chrome://koan-settings`,
+URL Bar): the floating URL bar (⌘T / ⌘L) turns translucent with the page
+blurred behind it. Off by default, as in Zen; it also stays opaque while
+macOS's Reduce Transparency is on and in a window that isn't active (Zen's
+rules). The card is translucent over a blur of the page; only the card of
+the window it opens in changes. The suggestion list under it stays opaque. Off
+macOS only the page is blurred.
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"): Koan
