@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 03111c8cb7cd0786314a448d01c358ae1b06a858..c96f7b07ff879d248e0ffce6d5e1094714fa4364 100644
+index 03111c8cb7cd0786314a448d01c358ae1b06a858..191661e2abc123b55838480eb9a3297805d63428 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -410,6 +410,8 @@
@@ -35,3 +35,18 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..c96f7b07ff879d248e0ffce6d5e10947
      }
      const auto effective_page_colors =
          PageColorsController::GetEffectivePageColors(*profile.GetPrefs());
+@@ -4142,6 +4154,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+           web_contents->GetColorProvider().GetColor(kColorToolbar))
+           ? blink::mojom::PreferredColorScheme::kDark
+           : blink::mojom::PreferredColorScheme::kLight;
++  // Koan: unless a Space theme sets the window's mode; the page's
++  // scrollbars follow the appearance setting then, as its colour scheme.
++  if (const std::optional<bool> dark = koan::PrefersDarkWebColorScheme(
++          web_contents, security_principal.IsWebUI())) {
++    preferred_root_scrollbar_color_scheme =
++        *dark ? blink::mojom::PreferredColorScheme::kDark
++              : blink::mojom::PreferredColorScheme::kLight;
++  }
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_GUEST_VIEW)
