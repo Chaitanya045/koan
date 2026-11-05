@@ -10,6 +10,7 @@
 #include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
@@ -700,6 +701,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
     view_->PlayOpenAnimation(grow_rect_, /*fresh=*/false);
     return;
   }
+  VLOG(1) << "Koan Glance: open";
   source_ = source ? std::make_unique<SourceTracker>(this, source) : nullptr;
 
   content::WebContents::CreateParams create_params(browser_view_->GetProfile());
@@ -754,6 +756,7 @@ void KoanGlanceController::Close() {
 }
 
 void KoanGlanceController::CloseNow() {
+  VLOG(1) << "Koan Glance: closing";
   EndConfirm();
   closing_ = true;
   ReleaseCommands(/*restore=*/true);
@@ -810,6 +813,7 @@ void KoanGlanceController::TearDown() {
   if (!is_open()) {
     return;
   }
+  VLOG(1) << "Koan Glance: torn down";
   ReleaseCommands(/*restore=*/true);
   DestroyWidget();
   ReleaseContents();
@@ -822,6 +826,7 @@ void KoanGlanceController::TearDown() {
 }
 
 std::unique_ptr<content::WebContents> KoanGlanceController::TakeContents() {
+  VLOG(1) << "Koan Glance: the page becomes a tab";
   close_timer_.Stop();
   confirm_timer_.Stop();
   // For the tab again (Split Glance keeps it active).
@@ -1069,11 +1074,6 @@ void KoanGlanceController::FocusPage() {
   if (!is_open() || closing_ || !view_) {
     return;
   }
-  // On macOS the page only gets keys while the card's own window is the key
-  // window, as it is when the card opens (Show()); the URL bar opened over
-  // it made the browser window key. (Aura: activates the browser window,
-  // which already is.)
-  widget_->Activate();
   view_->web_view()->RequestFocus();
 }
 
@@ -1317,6 +1317,9 @@ void KoanGlanceController::OnTabStripModelChanged(
     source_gone |= change.GetReplace()->old_contents == tab;
   }
   if (source_gone || selection.active_tab_changed()) {
+    VLOG(1) << "Koan Glance: tab strip change "
+            << static_cast<int>(change.type())
+            << (source_gone ? ", the tab under it went" : ", another tab");
     TearDown();
   }
 }

@@ -2,6 +2,8 @@
 
 These are the Mac steps for audit 3 GL2/GL4 (`.agent/notes/upstream/split-glance-library-media.md` §2.5: GT4, GT8, GT13, GT14) and for PR #165's review findings.
 
+Run the test Koan with `--vmodule=koan_glance_controller=1`: it logs `Koan Glance: open`, `closing`, `torn down`, `the page becomes a tab` and `tab strip change …`, which say why a card went.
+
 The bench rules apply to every run: the screen is granted, the frontmost pid is the test Koan's, and the run uses a fresh `pass-` profile, a DCHECK build and logs captured from the terminal.
 
 **Scripted:** `scripts/mac/glance/glance.mjs` runs steps 1–10 and 13 (the first part). It uses the DevTools protocol and UI DevTools for the checks. Real keys and menu clicks go through the bench tools in `scripts/mac/tools/` (`keypress2`, `inputok.sh`, `frontpid.sh` and `grantok.sh`; the same files as in #155). Compile the `.m` files on the Mac (`clang -framework Cocoa -o keypress2 keypress2.m`) and copy them to `TOOLS`. Those tools write and read the bench's fixed paths under `~/work/koan-mac/tmp`. Steps 11, 12, 14 and 15 stay manual.
@@ -34,7 +36,7 @@ The checks the harness reads:
 
 Keys are posted with `scripts/mac/tools/keypress2 <pid> <keycode> c` (⌘), the pointer with `ptr` (both compiled on the Mac). The keycodes are: W 13, R 15, F 3, L 37, [ 33, ] 30, = 24, - 27, 0 29, C 8 (with `cs` for ⌘⇧C), Esc 53.
 
-1. **GT4 ⌘W by key.** Glance `#child`, then ⌘W. The card is gone, and the tab count and the parent's URL are unchanged. Open the Glance again, then press ⌘W twice within 100 ms (during the close animation): only the Glance closes. ⌘W once more, after the card is gone, closes the parent tab.
+1. **GT4 ⌘W by key.** Glance `#child`, then ⌘W. The card is gone, and the tab count and the parent's URL are unchanged. Open the Glance again, then press ⌘W twice within 100 ms (during the close animation): only the Glance closes. ⌘W once more, after the card is gone, closes the parent tab. *macOS:* the card doesn't animate (it closes at once), so there is no "during the close"; a second ⌘W closes the tab, as it should (the script skips this part there).
 2. **GT4 File > Close Tab.** Glance `#child`, then File > Close Tab from the menu bar: only the Glance closes.
 3. **⌘W with a page that eats keys.** Glance `#keeper`, then ⌘W: the card closes (reserved key, `PreHandleKeyboardEvent`). The page may show "saw w" first; that's fine. **This step decides review 2's finding 6.** On macOS the reservation works only while the browser window is the key NSWindow; the Glance's child window has no command dispatcher. If the card stays open, report it together with which window was key: the fix is a dispatcher for the Glance's NSWindow that asks `IsReservedCommandOrKey`.
 4. **Reload.** Glance `#child`, then ⌘R: the Glance target's `timeOrigin` changes and `#loads` shows 2. The parent's `#loads` is unchanged. Repeat with View > Reload This Page.
@@ -46,6 +48,7 @@ Keys are posted with `scripts/mac/tools/keypress2 <pid> <keycode> c` (⌘), the 
 6. **Zoom.** Glance `#child`, then ⌘= twice. The Glance target's `devicePixelRatio` grows, and the parent's is unchanged. ⌘0 resets it (this is the bug's other case: the parent at 100% used to disable Actual Size). ⌘- shrinks it. Reset with ⌘0 before going on.
 7. **Find is off in a Glance (review finding 5).** Glance `#child`. Edit > Find > Find… is disabled (`get enabled`), and ⌘F opens no find bar. After Esc, Find is enabled again and ⌘F opens the parent's find bar (then Esc).
 8. **⌘L edits the Glance URL in place (user decision).**
+   - First, typing: Glance `#child`, click its field, type `2`. The field gets it (not the parent page). The script also logs `document.hasFocus()` of both pages: on macOS the card's window never becomes key (a `TYPE_CONTROL` widget), so this decides how keys reach a Glance page there.
    - Glance `#child`, then ⌘L. The URL bar opens **in the sidebar pill**, not floating, with `http://localhost:8762/child.html` selected (UI DevTools: the omnibox text).
    - Type `localhost:8762/child2.html`, then Enter. The Glance now shows child2. The card is still a Glance (no new tab), and the parent's URL is unchanged.
    - ⌘L again, then Esc: the bar closes, the card stays, and the Glance page has focus again: a second Esc closes the card.
