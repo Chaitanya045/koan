@@ -37,6 +37,12 @@ void ExtendDockMenu(NSMenu* dock_menu);
 // user changed them in the settings page. Does nothing without Koan's menus.
 void RefreshMainMenuKeys();
 
+// Whether the Profiles menu is removed from the menu bar: Zen has none
+// (browser.profiles.enabled=false). ProfileMenuController shows the menu
+// again whenever it has content, so hiding the item is not enough; called from
+// -[AppController initProfileMenu].
+bool HidesProfilesMenu();
+
 // Every shortcut Chrome has on macOS: those of its menus and those it keeps
 // in a table outside them. For the settings page to say that a key replaces
 // one.

@@ -88,7 +88,7 @@ and says "Replaces Chromium's shortcut" for the keys it takes from Chrome's
 menus.
 
 **Menu bar.** Zen 1.24b's: File, Edit, View, Spaces, History, Bookmarks,
-Tools, Window, Help. Chrome's Profiles and Tab menus are hidden, and the keys
+Tools, Window, Help. Chrome's Tab menu is hidden and its Profiles menu removed (Zen sets `browser.profiles.enabled=false`), and the keys
 follow the shortcuts in effect (also after you change one in Settings):
 
 - **Zen** (app menu): Settings… (⌘,), which opens Koan's settings.

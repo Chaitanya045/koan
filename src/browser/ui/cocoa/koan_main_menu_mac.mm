@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/tabs/public/tab_interface.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
@@ -700,6 +701,10 @@ void ExtendDockMenu(NSMenu* dock_menu) {
         spaces[i].active ? NSControlStateValueOn : NSControlStateValueOff;
     [dock_menu addItem:item];
   }
+}
+
+bool HidesProfilesMenu() {
+  return features::IsSidebarEnabled();
 }
 
 void RefreshMainMenuKeys() {
