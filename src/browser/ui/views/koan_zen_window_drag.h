@@ -6,6 +6,7 @@
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
 //   ZenWindowDragChild.sys.mjs
 //   zen-default-prefs.js
+//   nsZenNativeWindowMove.mm (koan_native_window_move_mac.mm)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
@@ -16,6 +17,10 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_ZEN_WINDOW_DRAG_H_
 
 #include <string>
+
+#include "build/build_config.h"
+
+class BrowserView;
 
 namespace koan {
 
@@ -34,6 +39,16 @@ inline constexpr float kWindowDragSnappedThreshold = 50;
 // interactive cursor, and not the scrollbar. Zen's ZenWindowDragChild
 // checks.
 std::u16string IsEmptySpaceScript(double x, double y);
+
+#if BUILDFLAG(IS_MAC)
+// Hands the window to AppKit to move while the left button is down
+// (-[NSWindow performWindowDragWithEvent:], Zen's StartNativeWindowMoveCocoa):
+// a native drag, with macOS' edge tiling and its drag to another Space, and
+// none of the checks of Chromium's emulated move loop, which crashes a
+// release build if anything holds the capture. Returns false if there is
+// nothing to drag (no window, or the button is up already).
+bool StartNativeWindowMove(const BrowserView* browser_view);
+#endif
 
 }  // namespace koan
 

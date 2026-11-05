@@ -31,8 +31,9 @@ namespace koan {
 // Watches the mouse events Chromium forwards to the active tab's page.
 // Whether the pressed point is empty space is decided in the page (an
 // isolated world, so pages can't interfere) while the button is held; the
-// move then works like a title bar drag: on macOS the window follows the
-// pointer (Widget::RunMoveLoop), on Linux the window manager moves it. It
+// move then works like a title bar drag: on macOS AppKit moves the window
+// (-[NSWindow performWindowDragWithEvent:], with edge tiling and the drag to
+// another Space), on Linux the window manager does. It
 // only looks at the page, so the sidebar's side, compact mode and the
 // window buttons' hot zone above the page don't matter.
 class KoanWindowDragController : public TabStripModelObserver,
