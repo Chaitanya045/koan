@@ -75,4 +75,9 @@ std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser) {
   return base::SysNSStringToUTF8(text);
 }
 
+void MakeCardWindowKey(views::Widget* card) {
+  NSWindow* window = card ? card->GetNativeWindow().GetNativeNSWindow() : nil;
+  [window makeKeyWindow];
+}
+
 }  // namespace koan
