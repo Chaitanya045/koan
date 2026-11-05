@@ -1173,15 +1173,26 @@ void KoanCompactModeController::HoldSidebarForBubble() {
 
 void KoanCompactModeController::ScheduleBubbleCheck() {
   // The bubble may be shown a moment after its anchor was asked for (a
-  // permission chip waits for its anchor).
-  for (const base::TimeDelta delay :
-       {base::Milliseconds(0), base::Milliseconds(150),
-        base::Milliseconds(600)}) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&KoanCompactModeController::ReconcileBubbleHold,
-                       weak_factory_.GetWeakPtr()),
-        delay);
+  // permission chip waits for its anchor). Anchors are asked on every layout
+  // while a prompt is pending (a live resize): one run of checks, not one per
+  // ask. A first check not yet run covers this ask too; a run further along
+  // starts again.
+  if (bubble_check_timer_.IsRunning() && bubble_check_step_ == 0) {
+    return;
+  }
+  bubble_check_step_ = 0;
+  bubble_check_timer_.Start(FROM_HERE, base::TimeDelta(), this,
+                            &KoanCompactModeController::RunBubbleCheck);
+}
+
+void KoanCompactModeController::RunBubbleCheck() {
+  ReconcileBubbleHold();
+  // 150 ms after the first check, 600 ms after the start.
+  if (bubble_check_step_ < 2) {
+    bubble_check_timer_.Start(
+        FROM_HERE, base::Milliseconds(bubble_check_step_ == 0 ? 150 : 450),
+        this, &KoanCompactModeController::RunBubbleCheck);
+    ++bubble_check_step_;
   }
 }
 
@@ -1209,12 +1220,16 @@ void KoanCompactModeController::ReconcileBubbleHold() {
       bubble_widgets_.AddObservation(widget);
     }
   }
-  if (on_toolbar && !toolbar_revealed_) {
-    // The bubble was placed against the toolbar's place off the window, and
-    // an anchor follows its view's bounds, not a compositor animation of its
-    // layer: bring the toolbar in at once and place the bubbles again.
-    if (ui::Layer* layer = top_container->layer()) {
-      layer->GetAnimator()->AbortAllAnimations();
+  ui::Layer* toolbar_layer = top_container->layer();
+  if (on_toolbar &&
+      (!toolbar_revealed_ ||
+       (toolbar_layer && toolbar_layer->GetAnimator()->is_animating()))) {
+    // The bubble was placed against the toolbar's place off the window (or
+    // against its place part way through sliding in), and an anchor follows
+    // its view's bounds, not a compositor animation of its layer: bring the
+    // toolbar in at once and place the bubbles again.
+    if (toolbar_layer) {
+      toolbar_layer->GetAnimator()->AbortAllAnimations();
     }
     SetToolbarRevealed(true, /*animate=*/false);
     for (views::Widget* widget : bubbles) {
@@ -1500,8 +1515,11 @@ void KoanCompactModeController::CheckToolbarHide() {
   if (ShouldKeepToolbarRevealed()) {
     toolbar_unwanted_since_.reset();
     toolbar_hide_timer_.Stop();
-    // A menu closing sends the window no event: look again later.
-    if (views::MenuController::GetForOwnerWidget(browser_view_->GetWidget())) {
+    // A menu closing sends the window no event: look again later. Nor does a
+    // bubble that a toolbar button opened (not watched, see
+    // ReconcileBubbleHold()) closing by keyboard.
+    if (views::MenuController::GetForOwnerWidget(browser_view_->GetWidget()) ||
+        HasBubbleAnchoredToToolbar()) {
       toolbar_hide_timer_.Start(FROM_HERE, kToolbarHideDelay, this,
                                 &KoanCompactModeController::CheckToolbarHide);
     }
