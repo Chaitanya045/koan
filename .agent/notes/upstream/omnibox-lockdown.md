@@ -17,6 +17,8 @@ what was decided and where it lives, per the "Upstream audit first" rule.
 | O10 engine choice | **Redirect**: the welcome records `ChoiceMadeLocation::kChoiceScreen` | `koan_welcome.cc` |
 | O13 IPH | **Override** the tab-group, vertical-tab, split-view, side-panel, extensions, Glic and Lens IPH features. They stop promos being shown; the "Attempting to show IPH ... before browser initialization complete" log line (a promo asked for during startup) is logged whatever the feature state and stays (baseline on develop) | `koan_feature_overrides.cc` |
 | O15 leak detector | **Lock** (loud): the URL bar controller DCHECKs that the WebUI popup is off, and, each time the bar opens, that the AI Mode popup (`omnibox::IsAimPopupEnabled`) isn't available | `koan_url_bar_controller.cc` |
+| Z36 Compose ("Help me write") | **Override**: `compose::features::kEnableCompose` off directly (zen-firefox-overrides.md), not only through model execution | `koan_feature_overrides.cc` |
+| Z23 floating bar survives window blur | **Already covered**: `OnFocusChanged` ignores the focus loss of an inactive window, so the bar, its text and the new-tab session stay (Zen's `closeOnWindowBlur`=false); tested for the new-tab bar in `urlbar.mjs` ("Switching away and back keeps the new-tab bar") | `koan_url_bar_controller.cc` |
 
 Not in this PR (stay with #96): Koan's empty NTP and the NTP entry points
 (N1-N5, O11, O12), the empty tab, the Google-NTP `search.cc` hook, the

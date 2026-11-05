@@ -140,6 +140,7 @@ source_set("feature_overrides") {
     "//chrome/browser/ui/tabs:features",
     "//chrome/browser/ui/webui/new_tab_page/composebox/variations",
     "//chrome/common:chrome_features",
+    "//components/compose/core/browser:features",
     "//components/contextual_tasks/public:feature_list",
     "//components/feature_engagement/public:feature_constants",
     "//components/lens:features",
