@@ -356,3 +356,8 @@ No "Spaces:" DCHECK, FATAL or dump in any of 5 launches.
 | 17 | PASS: Delete Space on a "Leave site?" page → prompt; Cancel keeps the Space and the page, no DCHECK (s27-leave-site, s27-c45). The Space's other tabs are already closed by then (partial delete) — minor. Popup and Incognito: no DCHECK. A tab dropped on another Space's dot does nothing (#76). Inactive main window drew an empty sidebar while the popup was front (gone after closing it) — minor |
 | 3, 11, 15 | not run: they need a Chrome Web Store theme, a copy of the user's own Chrome profile, or installing an extension, which the test rules forbid |
 | 4, 6 | not run (need an old-build profile / Chrome profile seed) |
+
+## Session 28 (08:01–08:07 IST): KoanCheck-c150d (#150 b78d5b75) — PASS
+Space switch Space↔Two with a pinned run in each, region stills every ~0.1 s: the switch slides, the incoming Space has its pinned run, divider and rows from the first frame, nothing grows in or jumps (s28-switch-frames). ⌘W ×6 in a Space with one pinned tab: alternates between the pinned tab (divider hidden when no normal tabs) and a fresh new tab, window stays, no crash (s28-cmdw). ⇧⌘W on a second window, Koan > Quit: no crash; relaunch restores both Spaces with their pinned runs (s28-relaunch). No Spaces: DCHECK, FATAL, dump or .ips.
+Not testable: trackpad swipe (synthetic scroll events carry no gesture phase); Tab-key order (macOS keyboard navigation is off, a system setting); collapsed sidebar (no #155 in this base).
+Tester slip: a misplaced right-click opened Change Icon… (emoji picker), closed with Esc.
