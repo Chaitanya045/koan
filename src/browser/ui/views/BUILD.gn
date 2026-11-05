@@ -11,6 +11,7 @@ import("//testing/test.gni")
 source_set("views") {
   sources = [
     "koan_browser_view_hooks.h",
+    "koan_command_policy.h",
     "koan_compact_mode.h",
     "koan_glance.h",
     "koan_look_hooks.h",
@@ -103,6 +104,7 @@ source_set("impl") {
     "koan_browser_view_hooks.cc",
     "koan_command_palette.cc",
     "koan_command_palette.h",
+    "koan_command_policy.cc",
     "koan_command_registry.cc",
     "koan_command_registry.h",
     "koan_commands.cc",
@@ -316,6 +318,7 @@ source_set("impl") {
     "//components/blocked_content",
     "//components/javascript_dialogs",
     "//components/user_prefs",
+    "//components/zoom",
     "//ui/accessibility",
     "//koan/browser/omnibox:hooks",
     "//koan/browser/ui/vector_icons",

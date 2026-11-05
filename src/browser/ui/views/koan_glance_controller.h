@@ -70,11 +70,23 @@ class KoanGlanceController : public content::WebContentsDelegate,
   void ExpandToTab();
   void OpenInSplit();
 
+  // Browser commands (IDC_*) while the card is open act on the Glance page,
+  // as on a tab in Zen: ⌘W closes the card, ⌘R reloads the Glance page, ...
+  // Returns whether it took `command_id`; false while no card is open or the
+  // card is closing. Called from koan_command_policy.cc for every route to a
+  // command (keys, the Mac menu bar, chrome::ExecuteCommand).
+  bool HandleBrowserCommand(int command_id);
+
   // Called by KoanBrowserViewController.
   void OnBrowserViewLayout();
   void OnBrowserViewDestroying();
 
   // content::WebContentsDelegate:
+  void NavigationStateChanged(content::WebContents* source,
+                              content::InvalidateTypes changed_flags) override;
+  void LoadingStateChanged(content::WebContents* source,
+                           bool should_show_loading_ui) override;
+  void ShowRepostFormWarningDialog(content::WebContents* source) override;
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
       const content::OpenURLParams& params,
@@ -132,9 +144,35 @@ class KoanGlanceController : public content::WebContentsDelegate,
     bool editing_ = false;
   };
 
+  // Watches the tab the card was opened over: when its WebContents goes
+  // away (closed, or replaced by a discard or a prerender activation without
+  // a tab strip change Glance saw first), the card goes too.
+  class SourceTracker : public content::WebContentsObserver {
+   public:
+    SourceTracker(KoanGlanceController* controller,
+                  content::WebContents* source);
+
+    // content::WebContentsObserver:
+    void WebContentsDestroyed() override;
+    // The tab's own updates of the window's commands (BrowserCommandController
+    // follows the active tab): Glance's are applied again afterwards.
+    void DidStartLoading() override;
+    void DidStopLoading() override;
+    void NavigationEntryCommitted(
+        const content::LoadCommittedDetails& load_details) override;
+
+   private:
+    const raw_ptr<KoanGlanceController> controller_;
+  };
+
   // Tracks presses in the active tab (also after a navigation gave it a new
   // WebContents).
   void TrackActiveTab();
+
+  // The tab's WebContents the card was opened over; null once it is gone.
+  content::WebContents* source() const {
+    return source_ ? source_->web_contents() : nullptr;
+  }
 
   // The rect the card grows out of, in the overlay's coordinates: a small
   // card around the latest press in the tab or the Glance page, or in the
@@ -143,6 +181,14 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
   // Shrinks the card away (after beforeunload let it go) and drops it.
   void CloseNow();
+  // After the tab under the card went away (SourceTracker).
+  void TearDownIfSourceGone();
+  // ⌘L in a Glance: the page becomes a tab and the URL bar takes focus.
+  void ExpandAndFocusLocation();
+  // Enables the commands HandleBrowserCommand() takes (Back, Forward, Stop,
+  // zoom) for the Glance page while the card is open, and for the active tab
+  // again once it closes, as BrowserCommandController does for the tab.
+  void UpdateCommandState();
   // Ends the close button's "Confirm" state.
   void EndConfirm();
   // Resets the page's dialogs and detaches it from this delegate.
@@ -160,7 +206,7 @@ class KoanGlanceController : public content::WebContentsDelegate,
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<KoanGlanceView> view_ = nullptr;
   std::unique_ptr<content::WebContents> contents_;
-  raw_ptr<content::WebContents> source_ = nullptr;
+  std::unique_ptr<SourceTracker> source_;
   // Where the card grew out of (Zen's originalPosition): it shrinks back
   // there on close.
   gfx::Rect grow_rect_;

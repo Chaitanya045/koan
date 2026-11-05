@@ -153,6 +153,9 @@ point of Koan.
 | "Search for ..." on selected text opens in Glance (`zen.glance.enable-contextmenu-search`) | Missing | #74. |
 | Glance on a link in the Glance page | Different | Zen 1.23 ignores it; Koan shows the link in the card (as #37 asks). |
 | Close with Esc or a click outside | Same | beforeunload can keep the page; while typing, the first Esc turns the close button red and a second closes (Zen asks whenever anything in the page has focus, and labels the button "Confirm"). macOS: no grow/shrink (the page is an NSView); not verified on a Mac. |
+| Browser shortcuts in a Glance act on the Glance tab: ⌘W closes the Glance, ⌘R / ⌘[ / ⌘] / zoom act on its page | Same | From keys, the menu bar and the toolbar (`koan_command_policy.cc`); the toolbar's Back / Forward / Stop and the zoom items follow the Glance page while it is open. Reloading a page from a form POST does nothing in a Glance (Zen asks to resubmit); a ⌘-click on Back or Reload goes back in the Glance instead of in a new tab. |
+| ⌘L in a Glance edits the Glance's URL | Different | Koan's URL bar shows the tab's page, so ⌘L expands the Glance to a tab first. |
+| ⌘F in a Glance finds in the Glance page | Missing | Nothing happens (the parent isn't searched): the Glance page has no find bar until it gets tab helpers (audit 3 GL3). |
 | Expand to a tab (Ctrl+O), split Glance | Same | Zen's button column: 34 px round buttons, 12 px apart, beside the card. No expand animation. |
 | Split view side by side / stacked | Same | Ctrl+Alt+V / Ctrl+Alt+H (⌘⌥ on macOS, Zen's accel). |
 | Split grid of 3–4 tabs (Ctrl+Alt+G) | Missing | Chromium's split view has exactly two panes: `TabStripModel::AddToNewSplit` CHECKs one or two tabs, `SplitTabLayout` is side by side or stacked, `MultiContentsView` holds two contents. Ctrl+Alt+G splits side by side. |

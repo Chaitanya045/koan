@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
+#include "koan/browser/ui/views/koan_command_policy.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
@@ -88,6 +89,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
     observations_.AddObservation(contents);
   }
   VLOG(1) << "Koan: window created (" << g_live_count << " open)";
+  InstallCommandPolicy(browser_view);
   SetUpTestWindowData(this);
 }
 
