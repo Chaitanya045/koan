@@ -1079,9 +1079,15 @@ void KoanGlanceController::EditUrl() {
 }
 
 void KoanGlanceController::FocusPage() {
-  if (is_open() && !closing_ && view_) {
-    view_->web_view()->RequestFocus();
+  if (!is_open() || closing_ || !view_) {
+    return;
   }
+  // On macOS the page only gets keys while the card's own window is the key
+  // window, as it is when the card opens (Show()); the URL bar opened over
+  // it made the browser window key. (Aura: activates the browser window,
+  // which already is.)
+  widget_->Activate();
+  view_->web_view()->RequestFocus();
 }
 
 bool KoanGlanceController::LoadFromUrlBar(const GURL& url,
