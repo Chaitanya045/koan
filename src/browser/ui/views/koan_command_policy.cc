@@ -4,9 +4,8 @@
 
 #include "koan/browser/ui/views/koan_command_policy.h"
 
-#include <iterator>
-
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -233,9 +232,10 @@ void InstallCommandPolicy(BrowserView* browser_view) {
     return;
   }
 #if DCHECK_IS_ON()
-  for (size_t a = 0; a < std::size(kRows); ++a) {
-    for (size_t b = a + 1; b < std::size(kRows); ++b) {
-      DCHECK_NE(kRows[a].action, kRows[b].action) << "an action in two rows";
+  const base::span<const Row> rows(kRows);
+  for (size_t a = 0; a < rows.size(); ++a) {
+    for (const Row& other : rows.subspan(a + 1)) {
+      DCHECK_NE(rows[a].action, other.action) << "an action in two rows";
     }
   }
 #endif
