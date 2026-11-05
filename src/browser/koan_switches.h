@@ -21,6 +21,12 @@ inline constexpr char kGlanceOff[] = "off";
 // koan::kTestWindowDataKey, which a restored or reopened window keeps.
 inline constexpr char kTestWindowData[] = "koan-test-window-data";
 
+// For tests off macOS: koan::IsWindowGlassEnabled()
+// is true in every window, so what paints the window's background draws it
+// translucent (over the headless window's plain backdrop; there is no blur to
+// see).
+inline constexpr char kTestWindowGlass[] = "koan-test-window-glass";
+
 }  // namespace koan::switches
 
 #endif  // KOAN_BROWSER_KOAN_SWITCHES_H_

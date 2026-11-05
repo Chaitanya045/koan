@@ -1,0 +1,2 @@
+# The Space theme over the glass, off macOS: IsWindowGlassEnabled() is true.
+--koan-test-window-glass

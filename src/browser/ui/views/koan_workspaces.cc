@@ -73,6 +73,7 @@
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
@@ -82,6 +83,7 @@
 #include "koan/browser/ui/views/koan_space_swipe.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
@@ -128,10 +130,17 @@ constexpr base::TimeDelta kSwipeIdleTimeout = base::Milliseconds(2000);
 // The name Zen gives a Space it creates by itself.
 constexpr char16_t kDefaultSpaceName[] = u"Space";
 
-// A Space with Zen's default theme keeps the user's browser colour; Koan
-// stores it as the grey tab group colour.
-constexpr tab_groups::TabGroupColorId kDefaultThemeColor =
+// Spaces' tab groups are grey: the colour doesn't show (a Space's look is
+// its theme).
+constexpr tab_groups::TabGroupColorId kSpaceGroupColor =
     tab_groups::TabGroupColorId::kGrey;
+
+// Where a Space's theme is kept: with each of its tabs, in their session
+// data (koan_session_data.h), so it comes back with the tabs; "{}" for the
+// default theme. A tab that joins a Space takes its theme (see
+// TabGroupedStateChanged()).
+constexpr char kSpaceThemeSessionKey[] = "koan.space_theme";
+constexpr char kDefaultThemeData[] = "{}";
 
 // Whether `grapheme` (one grapheme cluster) is an emoji: a flag, a
 // pictograph shown as an emoji by default, or one made an emoji with the
@@ -149,34 +158,6 @@ bool IsEmoji(const std::u16string& grapheme) {
   return u_hasBinaryProperty(first, UCHAR_EXTENDED_PICTOGRAPHIC) &&
          (grapheme.find(u'\uFE0F') != std::u16string::npos ||
           grapheme.find(u'\u200D') != std::u16string::npos);
-}
-
-// Seed colours for Space tints, one per tab group colour. Fixed values (not
-// looked up from the current theme, which the tint itself changes).
-SkColor TintSeed(tab_groups::TabGroupColorId color) {
-  switch (color) {
-    case tab_groups::TabGroupColorId::kGrey:
-      return SkColorSetRGB(0x5F, 0x63, 0x68);
-    case tab_groups::TabGroupColorId::kBlue:
-      return SkColorSetRGB(0x1A, 0x73, 0xE8);
-    case tab_groups::TabGroupColorId::kRed:
-      return SkColorSetRGB(0xD9, 0x30, 0x25);
-    case tab_groups::TabGroupColorId::kYellow:
-      return SkColorSetRGB(0xF9, 0xAB, 0x00);
-    case tab_groups::TabGroupColorId::kGreen:
-      return SkColorSetRGB(0x1E, 0x8E, 0x3E);
-    case tab_groups::TabGroupColorId::kPink:
-      return SkColorSetRGB(0xD0, 0x18, 0x84);
-    case tab_groups::TabGroupColorId::kPurple:
-      return SkColorSetRGB(0x93, 0x34, 0xE6);
-    case tab_groups::TabGroupColorId::kCyan:
-      return SkColorSetRGB(0x12, 0xB5, 0xCB);
-    case tab_groups::TabGroupColorId::kOrange:
-      return SkColorSetRGB(0xFA, 0x90, 0x3E);
-    case tab_groups::TabGroupColorId::kNumEntries:
-      break;
-  }
-  return SkColorSetRGB(0x1A, 0x73, 0xE8);
 }
 
 // The ids of the Spaces deleted (Delete Space) since the browser started, in
@@ -412,6 +393,7 @@ void KoanWorkspaceController::OnAddedToWidget() {
   InstallViews();
   InstallGroupActions();
   ScheduleUpdate();
+  // A swipe's end may not reach a window that isn't key (#91).
   widget_observation_.Observe(browser_view_->GetWidget());
   Profile* profile = browser_view_->GetProfile()->GetOriginalProfile();
   MigrateWorkspaceTint(profile);
@@ -466,7 +448,6 @@ void KoanWorkspaceController::OnBrowserViewDestroying() {
   session_restored_subscription_ = base::CallbackListSubscription();
   destroying_ = true;
   CancelSwipe(/*animate=*/false);
-  pref_change_registrar_.RemoveAll();
   widget_observation_.Reset();
   slide_outs_.clear();
   switch_layered_views_.clear();
@@ -481,7 +462,6 @@ void KoanWorkspaceController::OnBrowserViewDestroying() {
   }
   space_menu_.reset();
   create_menu_.reset();
-  theme_menu_.reset();
   icon_picker_.reset();
   tab_menu_submenu_.reset();
   view_observations_.RemoveAllObservations();
@@ -832,12 +812,36 @@ KoanWorkspaceController::ReadSpace(const tab_groups::TabGroupId& space) const {
   const tab_groups::TabGroupVisualData* visuals =
       groups->GetTabGroup(space)->visual_data();
   auto [icon, name] = SplitTitle(visuals->title());
+  std::string theme =
+      ThemeOfTabs(space, /*except=*/nullptr).value_or(kDefaultThemeData);
   return SpaceData{
       .name = std::move(name),
       .icon = std::move(icon),
-      .theme = SpaceTheme{.color = visuals->color() == kDefaultThemeColor
-                                       ? std::nullopt
-                                       : std::make_optional(visuals->color())}};
+      .theme = SpaceTheme{.stored = theme == kDefaultThemeData ? std::string()
+                                                               : theme}};
+}
+
+std::optional<std::string> KoanWorkspaceController::ThemeOfTabs(
+    const tab_groups::TabGroupId& space,
+    const tabs::TabInterface* except) const {
+  TabStripModel* model = tab_strip_model();
+  TabGroupModel* groups = model->group_model();
+  if (!groups || !groups->ContainsTabGroup(space)) {
+    return std::nullopt;
+  }
+  const gfx::Range range = groups->GetTabGroup(space)->ListTabs();
+  for (size_t index = range.start(); index < range.end(); ++index) {
+    tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(index));
+    if (tab == except || !tab->GetContents()) {
+      continue;
+    }
+    std::string data =
+        GetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey);
+    if (!data.empty()) {
+      return data;
+    }
+  }
+  return std::nullopt;
 }
 
 void KoanWorkspaceController::WriteSpace(const tab_groups::TabGroupId& space,
@@ -849,10 +853,21 @@ void KoanWorkspaceController::WriteSpace(const tab_groups::TabGroupId& space,
   base::AutoReset<bool> writing(&writing_space_, true);
   // A Space is never collapsed (NormalizeSpaces()).
   tab_strip_model()->ChangeTabGroupVisuals(
-      space, tab_groups::TabGroupVisualData(
-                 JoinTitle(data.icon, data.name),
-                 data.theme.color.value_or(kDefaultThemeColor),
-                 /*is_collapsed=*/false));
+      space, tab_groups::TabGroupVisualData(JoinTitle(data.icon, data.name),
+                                            kSpaceGroupColor,
+                                            /*is_collapsed=*/false));
+  const std::string theme =
+      data.theme.is_default() ? kDefaultThemeData : data.theme.stored;
+  TabStripModel* model = tab_strip_model();
+  const gfx::Range range = groups->GetTabGroup(space)->ListTabs();
+  for (size_t index = range.start(); index < range.end(); ++index) {
+    content::WebContents* contents =
+        model->GetTabAtIndex(static_cast<int>(index))->GetContents();
+    if (contents &&
+        GetTabSessionData(contents, kSpaceThemeSessionKey) != theme) {
+      SetTabSessionData(contents, kSpaceThemeSessionKey, theme);
+    }
+  }
 }
 
 void KoanWorkspaceController::RenameSpace(const tab_groups::TabGroupId& space,
@@ -1190,16 +1205,37 @@ void KoanWorkspaceController::ShowIconPicker(
 }
 
 void KoanWorkspaceController::EditSpaceTheme(
-    const tab_groups::TabGroupId& space,
-    views::View* anchor) {
-  if (!GetSpace(space) || !anchor) {
+    const tab_groups::TabGroupId& space) {
+  if (!GetSpace(space) || !CanEditSpaceTheme()) {
     return;
   }
-  theme_menu_ = std::make_unique<KoanThemeMenu>(
-      GetSpaceTheme(space),
-      base::BindRepeating(&KoanWorkspaceController::SetSpaceTheme,
-                          weak_factory_.GetWeakPtr(), space));
-  theme_menu_->RunMenuAt(anchor);
+  KoanBrowserViewController::From(browser_view_)
+      ->theme()
+      ->ShowThemePicker(space);
+}
+
+void KoanWorkspaceController::EditNewSpaceTheme(
+    const SpaceTheme& theme,
+    base::OnceCallback<void(const SpaceTheme&)> on_done) {
+  if (!CanEditSpaceTheme()) {
+    return;
+  }
+  KoanBrowserViewController::From(browser_view_)
+      ->theme()
+      ->ShowThemePickerForNewSpace(
+          theme.stored,
+          base::BindOnce(
+              [](base::OnceCallback<void(const SpaceTheme&)> on_done,
+                 std::string stored) {
+                std::move(on_done).Run(SpaceTheme{.stored = std::move(stored)});
+              },
+              std::move(on_done)));
+}
+
+bool KoanWorkspaceController::CanEditSpaceTheme() const {
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return controller && controller->theme()->IsEnabled();
 }
 
 void KoanWorkspaceController::ShowIconPickerForActiveSpace() {
@@ -1212,7 +1248,7 @@ void KoanWorkspaceController::ShowIconPickerForActiveSpace() {
 void KoanWorkspaceController::EditActiveSpaceTheme() {
   const std::optional<tab_groups::TabGroupId> active = GetActiveSpace();
   if (active && header_ && header_->GetVisible()) {
-    EditSpaceTheme(*active, header_);
+    EditSpaceTheme(*active);
   }
 }
 
@@ -1289,7 +1325,7 @@ bool KoanWorkspaceController::IsUntouchedStartupSpace(
     const tab_groups::TabGroupId& space) const {
   const std::optional<SpaceInfo> info = GetSpace(space);
   if (!info || info->name != kDefaultSpaceName || !info->icon.empty() ||
-      info->theme.color) {
+      !info->theme.is_default()) {
     return false;
   }
   TabStripModel* model = tab_strip_model();
@@ -1613,13 +1649,13 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
       continue;
     }
     auto [icon, name] = SplitTitle(base::UTF8ToUTF16(*title));
-    const auto color_id = static_cast<tab_groups::TabGroupColorId>(*color);
+    // The Space's theme (Zen's theme object, as in its tabs' session data;
+    // none before #62, whose group colours were only a stand-in tint).
+    const std::string* theme = dict->FindString("theme");
     stored.emplace_back(
         SpaceData{.name = std::move(name),
                   .icon = std::move(icon),
-                  .theme = {.color = color_id == kDefaultThemeColor
-                                         ? std::nullopt
-                                         : std::make_optional(color_id)}},
+                  .theme = {.stored = theme ? *theme : std::string()}},
         dict->FindBool("active").value_or(false));
   }
   if (stored.empty()) {
@@ -1670,8 +1706,8 @@ void KoanWorkspaceController::StoreSpaces() {
   for (const auto& [id, data] : spaces_snapshot_) {
     list.Append(base::DictValue()
                     .Set("title", JoinTitle(data.icon, data.name))
-                    .Set("color", static_cast<int>(data.theme.color.value_or(
-                                      kDefaultThemeColor)))
+                    .Set("color", static_cast<int>(kSpaceGroupColor))
+                    .Set("theme", data.theme.stored)
                     .Set("active", GetActiveSpace() == id));
   }
   if (list.empty()) {
@@ -1829,7 +1865,11 @@ void KoanWorkspaceController::CheckSpaces() {
       leak += " upstream's group editor is open;";
     }
   }
-  if (widget->user_color_override() != GetSpaceColor()) {
+  // The window's colours are only the ones its Space theme set
+  // (KoanThemeController::ApplyWindowColors()).
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_.get());
+      controller && !controller->theme()->HasAppliedWindowColors()) {
     leak += " the window has a colour Koan didn't set;";
   }
   if (TabStripRegionView* region = browser_view_->tab_strip_view()) {
@@ -2200,6 +2240,25 @@ void KoanWorkspaceController::OnTabGroupAdded(
   }
 }
 
+void KoanWorkspaceController::TabGroupedStateChanged(
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
+    tabs::TabInterface* tab,
+    int index) {
+  if (!new_group || !tab || !tab->GetContents()) {
+    return;
+  }
+  // A tab that joins a Space takes its theme. The first tab of a Space that
+  // is being restored (its other tabs have none yet) keeps the theme it
+  // brought back, which is the Space's.
+  if (std::optional<std::string> theme = ThemeOfTabs(*new_group, tab);
+      theme &&
+      GetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey) != *theme) {
+    SetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey, *theme);
+  }
+}
+
 void KoanWorkspaceController::OnTabGroupFocusChanged(
     std::optional<tab_groups::TabGroupId> new_focused_group_id,
     std::optional<tab_groups::TabGroupId> old_focused_group_id) {
@@ -2252,51 +2311,22 @@ void KoanWorkspaceController::OnViewIsDeleting(views::View* observed_view) {
   }
 }
 
-// Tint.
-
-std::optional<SkColor> KoanWorkspaceController::GetSpaceColor() const {
-  // With the tint switched off, as for the default theme: the user's colour.
-  if (!browser_view_->GetProfile()->GetPrefs()->GetBoolean(
-          prefs::kWorkspaceTint)) {
-    return std::nullopt;
-  }
-  std::optional<tab_groups::TabGroupId> space = GetActiveSpace();
-  if (!space && last_space_ && GetSpace(*last_space_)) {
-    space = last_space_;
-  }
-  const std::optional<tab_groups::TabGroupColorId> color =
-      space ? GetSpaceTheme(*space).color : std::nullopt;
-  return color ? std::make_optional(TintSeed(*color)) : std::nullopt;
-}
+// Colour.
 
 void KoanWorkspaceController::ApplySpaceColor() {
-  // A per-window user colour, as upstream's focus mode sets for a focused
-  // group: the window's Space tints only this window (Zen's per-window
-  // gradient), and the profile's colour and theme stay the user's. None for
-  // Zen's default theme, so the user's colour, and an extension theme, show
-  // (an override suppresses the theme, BrowserWidget::GetCustomTheme()).
-  // (As upstream: browser_widget(), which is null once the window is being
-  // deleted, and not a closed one; the hook can run during window close.)
+  // The window's colours are its Space theme's, from KoanThemeController,
+  // their one writer: a per-window user colour and colour mode, as
+  // upstream's focus mode sets for a focused group, so the profile's colour
+  // and theme stay the user's. (As upstream: browser_widget(), which is null
+  // once the window is being deleted, and not a closed one; the hook can run
+  // during window close.)
   BrowserWidget* widget = browser_view_->browser_widget();
   if (!widget || widget->IsClosed() || destroying_ || !IsEnabled()) {
     return;
   }
-  const std::optional<SkColor> color = GetSpaceColor();
-  if (widget->user_color_override() == color) {
-    return;
-  }
-  // The window re-themes itself (Widget::SetUserColorOverride()). Its child
-  // widgets take the colour through their parent's key but aren't told
-  // (upstream re-themes them only with kThemeChangeOptimization): on macOS
-  // the fullscreen overlay with the sidebar and toolbar, compact mode's,
-  // Glance, the floating URL bar. A profile colour change used to reach them
-  // all through the native theme.
-  widget->SetUserColorOverride(color);
-  for (views::Widget* child :
-       views::Widget::GetAllChildWidgets(widget->GetNativeView())) {
-    if (child != widget && !child->IsClosed()) {
-      child->ThemeChanged();
-    }
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_.get())) {
+    controller->theme()->ApplyWindowColors();
   }
 }
 

@@ -54,6 +54,11 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_zen_media.{h,cc}` | `ZenMediaController.mjs`, `zen-media-controls.css` (the media cards' stack, timing and time format) |
 | `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |
 | `src/browser/ui/views/koan_swipe_tracker.{h,cc}`, `koan_swipe_tracker_unittest.cc` | `ZenSpacesSwipe.mjs` (success threshold, velocity weight, resistance), Gecko's `SwipeTracker.cpp` units as Zen patches it |
+| `src/browser/ui/views/koan_space_theme.h`, `koan_space_theme.cc` | `ZenGradientGenerator.mjs` (colour maths, harmonies, preset swatches, opacity wave), `browser.xhtml` (preset swatch data) |
+| `src/browser/ui/views/koan_theme_picker.cc` | `zen-gradient-generator.css` (panel sizes), `zen-workspaces.ftl` (strings) |
+| `src/browser/ui/views/koan_theme_platform.h`, `koan_theme_platform.cc`, `koan_theme_platform_mac.mm` | `zen-browser-ui.css` (InactiveCaption), `prefs/zen/macos.yaml` (native popovers); Firefox `widget/cocoa/nsLookAndFeel.mm`, `toolkit/themes/shared/global-shared.css` |
+| `src/browser/ui/views/koan_haptics.h`, `koan_haptics.cc`, `koan_haptics_mac.mm` | `ZenCommonUtils.h`, `cocoa/ZenHapticFeedback.mm` (haptic feedback) |
+| `src/browser/ui/views/resources/grain-bg.png` | `zen-images/grain-bg.png` (unmodified) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).
@@ -72,6 +77,20 @@ https://github.com/shadcn-ui/ui (MIT, Copyright (c) 2023 shadcn).
 `src/browser/ui/fonts/geist/` bundles Geist Sans and Geist Mono, Copyright (c)
 2023 Vercel, in collaboration with basement.studio, under the SIL Open Font
 License 1.1 (`src/browser/ui/fonts/geist/OFL.txt`).
+
+## Icons: Lucide (ISC)
+
+`third_party/icons/lucide/*.svg` are icons from [Lucide](https://lucide.dev)
+(`lucide-static` 1.67.0), ISC licensed, Copyright (c) Lucide Icons and
+Contributors; some derive from Feather (MIT, Copyright (c) Cole Bemis). The
+full notice is in `third_party/icons/LICENSE-lucide`. Koan converts the ones it
+uses to `src/browser/ui/vector_icons/koan_*.icon` (#110's
+`scripts/gen_koan_icons.py`) to give its UI Zen's icon vocabulary and weight.
+Zen's own icons are Nucleo icons and are **not** used or shipped by Koan.
+
+| Koan file | From |
+| --- | --- |
+| `third_party/icons/lucide/*.svg`, `src/browser/ui/vector_icons/koan_*.icon` | Lucide (ISC) |
 
 ## Chromium-derived files
 

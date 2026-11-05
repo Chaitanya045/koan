@@ -97,6 +97,13 @@ constexpr Option kCompactModeHides[] = {
     {prefs::kCompactModeHideBoth, "Hide Both"},
 };
 
+// Zen's dark theme styles (zen-preferences.ftl).
+constexpr Option kDarkThemeStyles[] = {
+    {"0", "Default Dark Theme"},
+    {"1", "Night Theme"},
+    {"2", "Colorful Dark Theme"},
+};
+
 // Zen's Glance trigger methods (zen-glance-trigger-*), in Zen's order. On
 // macOS Ctrl+click is a right-click, so it can't trigger anything.
 constexpr Option kGlanceTriggers[] = {
@@ -233,6 +240,13 @@ constexpr Row kRows[] = {
      .pref = prefs::kDragWindowFromContent,
      .label = "Allow dragging the window from web pages",
      .is_available = features::IsWindowDragEnabled},
+    {.group = "dark-theme",
+     .control = Control::kMenu,
+     .pref = prefs::kDarkThemeStyle,
+     .label = "Dark theme style",
+     .options = kDarkThemeStyles,
+     .depends_on = prefs::kWorkspaceTint,
+     .is_available = features::IsWorkspacesEnabled},
     {.group = "glance",
      .control = Control::kCheckbox,
      .pref = prefs::kGlanceEnabled,
@@ -275,7 +289,7 @@ constexpr Row kRows[] = {
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kWorkspaceTint,
-     .label = "Tint the browser with the active Space's colour",
+     .label = "Show the active Space's theme",
      .is_available = features::IsWorkspacesEnabled},
     // Zen keeps its tab behaviours in the workspaces group too.
     {.group = "workspaces",
