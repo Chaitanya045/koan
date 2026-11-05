@@ -737,6 +737,15 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   widget_params.opacity =
       views::Widget::InitParams::WindowOpacity::kTranslucent;
   widget_params.name = "KoanGlance";
+#if BUILDFLAG(IS_MAC)
+  // The page in the card gets keys only from the key window, and a
+  // TYPE_CONTROL child window can't be key unless it can be activated: on
+  // macOS the card's window is key while it is open (as a bubble's is), and
+  // the browser window keeps painting as active meanwhile. (Aura routes keys
+  // through the top-level window's focus.)
+  widget_params.activatable = views::Widget::InitParams::Activatable::kYes;
+  paint_as_active_ = browser_view_->GetWidget()->LockPaintAsActive();
+#endif
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(widget_params));
   view_ = widget_->SetContentsView(
@@ -770,6 +779,7 @@ void KoanGlanceController::Close() {
 
 void KoanGlanceController::CloseNow() {
   VLOG(1) << "Koan Glance: closing";
+  closed_at_ = base::TimeTicks::Now();
   EndConfirm();
   closing_ = true;
   ReleaseCommands(/*restore=*/true);
@@ -908,7 +918,11 @@ void KoanGlanceController::TearDownIfSourceGone() {
 
 bool KoanGlanceController::HandleBrowserCommand(int command_id) {
   if (!is_open()) {
-    return false;
+    // ⌘W pressed twice (or repeating) closes the card, not the tab under it
+    // too, as in Zen: for as long as the close animation lasts, also where
+    // the card closes at once (macOS).
+    return command_id == IDC_CLOSE_TAB && !closed_at_.is_null() &&
+           base::TimeTicks::Now() - closed_at_ < kAnimationDuration;
   }
   // ⌘W again (or its key repeat) while the card shrinks away: not the tab
   // under it. Once the card is gone, ⌘W closes the tab.
@@ -1087,6 +1101,9 @@ void KoanGlanceController::FocusPage() {
   if (!is_open() || closing_ || !view_) {
     return;
   }
+  // macOS: the card's window becomes key again (the URL bar made the
+  // browser window key). Elsewhere a no-op: the card can't be activated.
+  widget_->Activate();
   view_->web_view()->RequestFocus();
 }
 
@@ -1118,7 +1135,7 @@ void KoanGlanceController::OnBrowserViewDestroying() {
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   close_timer_.Stop();
   confirm_timer_.Stop();
-  DestroyWidget();
+  DestroyWidget(/*give_back_key=*/false);
   if (contents_) {
     ReleaseContents();
     contents_.reset();
@@ -1130,11 +1147,20 @@ void KoanGlanceController::OnBrowserViewDestroying() {
   awaiting_beforeunload_ = false;
 }
 
-void KoanGlanceController::DestroyWidget() {
+void KoanGlanceController::DestroyWidget(bool give_back_key) {
   view_ = nullptr;
-  if (widget_) {
-    widget_->CloseNow();
-    widget_.reset();
+  if (!widget_) {
+    return;
+  }
+  // macOS: the card's window was key; the browser window is again.
+  const bool was_key = widget_->IsActive();
+  widget_->CloseNow();
+  widget_.reset();
+#if BUILDFLAG(IS_MAC)
+  paint_as_active_.reset();
+#endif
+  if (was_key && give_back_key) {
+    browser_view_->GetWidget()->Activate();
   }
 }
 
@@ -1223,9 +1249,15 @@ content::WebContents* KoanGlanceController::OpenURLFromTab(
   // underneath.
   content::WebContents* tab = this->source();
   if (tab && tab->GetDelegate()) {
-    return tab->GetDelegate()->OpenURLFromTab(
+    content::WebContents* opened = tab->GetDelegate()->OpenURLFromTab(
         tab, params, std::move(navigation_handle_callback));
+    VLOG(1) << "Koan Glance: opened from the page, disposition "
+            << static_cast<int>(params.disposition) << ": "
+            << (opened ? "done" : "nothing");
+    return opened;
   }
+  VLOG(1) << "Koan Glance: no tab to open from (disposition "
+          << static_cast<int>(params.disposition) << ")";
   return nullptr;
 }
 
@@ -1268,6 +1300,16 @@ KoanGlanceController::PreHandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
   // The browser's reserved keys (⌘W, ⌘T, ⌘N, tab switching) before the page,
   // as in a tab: a page can't keep the card open by swallowing ⌘W.
+#if BUILDFLAG(IS_MAC)
+  // The card's window has no ChromeCommandDispatcherDelegate (browser
+  // windows' prePerformKeyEquivalent), so its key equivalents reach the
+  // page first: run the reserved ones here, as that delegate does.
+  if (const int command =
+          ReservedCommandForKeyEvent(browser_view_->browser(), event)) {
+    chrome::ExecuteCommand(browser_view_->browser(), command);
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+#endif
   return browser_view_->PreHandleKeyboardEvent(event);
 }
 

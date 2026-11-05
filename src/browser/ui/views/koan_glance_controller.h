@@ -15,27 +15,34 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/widget/widget.h"
 
 class BrowserView;
+class BrowserWindowInterface;
 class GURL;
 
 namespace actions {
 class ActionItem;
 }
 
-namespace views {
-class Widget;
-}
-
 namespace koan {
 
 class KoanGlanceView;
+
+#if BUILDFLAG(IS_MAC)
+// macOS: the browser command that `event` (a key in the Glance page) runs
+// and that the browser reserves (IsReservedCommandOrKey: ⌘W, ⌘T, ⌘N, tab
+// switching ...), or 0 (koan_glance_controller_mac.mm).
+int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
+                               const input::NativeWebKeyboardEvent& event);
+#endif
 
 // Zen-style Glance for one window: a link opened as a floating card over
 // the current page, with the page dimmed behind it. The card grows out of
@@ -224,7 +231,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
   // Drops the overlay and returns the Glance WebContents (detached from the
   // card, its animations finished) so it can be inserted into the tab strip.
   std::unique_ptr<content::WebContents> TakeContents();
-  void DestroyWidget();
+  // `give_back_key`: if the card's window was key (macOS), the browser
+  // window becomes key again; not while the window goes.
+  void DestroyWidget(bool give_back_key = true);
   void LayoutWidget();
 
   const raw_ptr<BrowserView> browser_view_;
@@ -245,6 +254,14 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
   std::unique_ptr<InputTracker> tab_input_;
   std::unique_ptr<InputTracker> glance_input_;
+
+  // When the card last started closing: a second ⌘W right after is the
+  // card's, not the tab's (HandleBrowserCommand()).
+  base::TimeTicks closed_at_;
+#if BUILDFLAG(IS_MAC)
+  // The browser window paints as active while the card's window is key.
+  std::unique_ptr<views::Widget::PaintAsActiveLock> paint_as_active_;
+#endif
 
   // HoldCommands().
   bool holds_commands_ = false;

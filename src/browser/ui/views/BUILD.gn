@@ -260,6 +260,7 @@ source_set("impl") {
   ]
   if (is_mac) {
     sources += [
+      "koan_glance_controller_mac.mm",
       "koan_native_window_move_mac.mm",
       "koan_traffic_lights_mac.mm",
       "koan_workspaces_mac.mm",
@@ -417,6 +418,10 @@ source_set("impl") {
       "koan_system_accent_observer_mac.mm",
     ]
     deps += [
+      # Glance: the browser's reserved keys in the card's window
+      # (CommandForKeyEvent, koan_glance_controller_mac.mm).
+      "//chrome/browser:global_keyboard_shortcuts_mac",
+
       # The command policy's fullscreen-toolbar row
       # (chrome::ToggleAlwaysShowToolbarInFullscreen).
       "//chrome/browser/ui:browser_commands_mac",
