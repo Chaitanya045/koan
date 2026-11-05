@@ -68,5 +68,6 @@ Before building or changing any Koan feature that sits on top of an upstream Chr
 1. Map the upstream feature first, from pristine source (`git -C ~/work/koan/chromium/src show HEAD:<path>`). Cover every state, pref, command, accelerator, menu item, settings row, saved state, extension API, and **macOS-specific path**.
 2. For each one, decide **lock**, **override**, **redirect** or **reuse**, and write the decision down in `.agent/notes/upstream/<area>.md`.
 3. Make sure no upstream state that breaks Zen's behaviour can be reached by a user, an old profile or an extension. Add a test for each.
+4. **Check what Zen suppresses in Firefox for the same feature (user, 2026-11-05).** Look at Zen's Firefox patches (`.cache/zen-desktop-1.24b/src/**/*.patch`), its pref overrides (`prefs/*/*.yaml`, plus the shipped `firefox.js` defaults), CSS that hides Firefox UI, and JS that wraps tabbrowser and urlbar methods. Each Firefox behaviour Zen turns off has a Chromium equivalent that Koan probably has to turn off too. The inventory is in `.agent/notes/upstream/zen-firefox-overrides.md`.
 
 Reviews check the PR against that file. The completed audits are in `.cache/reviews/vertical-tabs-audit.md` and `upstream-audit-2.md`.
