@@ -1,0 +1,38 @@
+diff --git a/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc b/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
+index f3775921610c4f64fa93736ac6234153b8222bb9..c8c90da66bbda2f7d49300657826dfe4985889f4 100644
+--- a/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
++++ b/components/omnibox/browser/zero_suggest_verbatim_match_provider.cc
+@@ -166,9 +166,10 @@ void ZeroSuggestVerbatimMatchProvider::CreateVerbatimMatch(
+   // Make sure the URL is formatted the same was as most visited sites.
+   auto format_types = AutocompleteMatch::GetFormatTypes(false, false);
+   match.suggestion_group_id = omnibox::GROUP_MOBILE_SEARCH_READY_OMNIBOX;
+-  match.contents = url_formatter::FormatUrl(input.current_url(), format_types,
+-                                            base::UnescapeRule::SPACES, nullptr,
+-                                            nullptr, nullptr);
++  // Koan: sanitized, as AutocompleteResult::AppendMatches() DCHECKs (#166).
++  match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
++      input.current_url(), format_types, base::UnescapeRule::SPACES, nullptr,
++      nullptr, nullptr));
+ 
+   TermMatches term_matches;
+   if (input.text().length() > 0) {
+@@ -216,12 +217,13 @@ void ZeroSuggestVerbatimMatchProvider::CreateVerbatimMatch(
+             dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
+                 match.destination_url);
+         match.fill_into_edit = base::UTF8ToUTF16(original_url.spec());
+-        match.contents = url_formatter::FormatUrl(
+-            original_url,
+-            url_formatter::kFormatUrlOmitDefaults |
+-                url_formatter::kFormatUrlOmitHTTPS |
+-                url_formatter::kFormatUrlOmitTrivialSubdomains,
+-            base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
++        match.contents =
++            AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
++                original_url,
++                url_formatter::kFormatUrlOmitDefaults |
++                    url_formatter::kFormatUrlOmitHTTPS |
++                    url_formatter::kFormatUrlOmitTrivialSubdomains,
++                base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+       }
+     }
+   }

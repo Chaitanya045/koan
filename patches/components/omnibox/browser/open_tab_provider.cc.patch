@@ -1,0 +1,19 @@
+diff --git a/components/omnibox/browser/open_tab_provider.cc b/components/omnibox/browser/open_tab_provider.cc
+index 7a2c444d9f26a639841703bd4c18a94e257b031c..782fea795ebc4f0982ea01946be8c3c154cdb4d9 100644
+--- a/components/omnibox/browser/open_tab_provider.cc
++++ b/components/omnibox/browser/open_tab_provider.cc
+@@ -210,11 +210,12 @@ AutocompleteMatch OpenTabProvider::CreateOpenTabMatch(
+   // already opened these URLs so there's no need for them to make nuanced
+   // judgements about the URL (for example, whether the scheme is http:// or
+   // https:// or whether there's a "www" subdomain).
+-  match.contents = url_formatter::FormatUrl(
++  // Koan: sanitized, as AutocompleteResult::AppendMatches() DCHECKs (#166).
++  match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
+       url,
+       AutocompleteMatch::GetFormatTypes(/*preserve_scheme=*/false,
+                                         /*preserve_subdomain=*/false),
+-      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
++      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+ 
+   auto contents_terms = FindTermMatches(input.text(), match.contents);
+   match.contents_class = ClassifyTermMatches(

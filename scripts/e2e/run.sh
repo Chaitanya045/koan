@@ -25,7 +25,8 @@
 # '{"koan":{"urlbar":{"behavior":"float"}}}', {profile} as above).
 # SHOTS=<dir> lets the test save screenshots there (the window's off-screen
 # frames go to $SHOTS/frames).
-# KEEP_LOG=<file> keeps the browser's log there.
+# KEEP_LOG=<file> keeps the browser's log there. KOAN_LOG (exported to the tests)
+# is the log's path while the test runs.
 set -euo pipefail
 
 source "$(dirname "$0")/../koan_test_env.sh"
@@ -106,6 +107,7 @@ args=("$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof"
   --enable-features="$features" "${extra[@]}" "${dump[@]}")
 KOAN_CHROME_ARGS=$(printf '%s\n' "${args[@]}")
 export KOAN_CHROME_ARGS
+export KOAN_LOG="$prof.log"
 "${args[@]}" "${urls[@]}" >"$prof.log" 2>&1 &
 pid=$!
 for _ in $(seq 1 60); do

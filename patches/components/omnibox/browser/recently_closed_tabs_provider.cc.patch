@@ -1,0 +1,32 @@
+diff --git a/components/omnibox/browser/recently_closed_tabs_provider.cc b/components/omnibox/browser/recently_closed_tabs_provider.cc
+index 645baba9818d43822ec01da7f74f0ef1e9b4e5de..6963a487b7890759a6cd130b5fab8790ebbba72d 100644
+--- a/components/omnibox/browser/recently_closed_tabs_provider.cc
++++ b/components/omnibox/browser/recently_closed_tabs_provider.cc
+@@ -149,9 +149,10 @@ void RecentlyClosedTabsProvider::Start(const AutocompleteInput& input,
+   match.description = u"";
+   // Zero suggest results should always omit protocols and never appear bold.
+   auto format_types = AutocompleteMatch::GetFormatTypes(false, false);
+-  match.contents = url_formatter::FormatUrl(match.destination_url, format_types,
+-                                            base::UnescapeRule::SPACES, nullptr,
+-                                            nullptr, nullptr);
++  // Koan: sanitized, as AutocompleteResult::AppendMatches() DCHECKs (#166).
++  match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
++      match.destination_url, format_types, base::UnescapeRule::SPACES, nullptr,
++      nullptr, nullptr));
+   match.description_class = ClassifyTermMatches({}, match.description.length(),
+                                                 ACMatchClassification::NONE,
+                                                 ACMatchClassification::NONE);
+@@ -297,11 +298,11 @@ AutocompleteMatch RecentlyClosedTabsProvider::CreateRecentlyClosedTabMatch(
+   match.has_tab_match = false;
+ 
+   // Elide all optional parts of the URL, matching open tab suggestions.
+-  match.contents = url_formatter::FormatUrl(
++  match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
+       url,
+       AutocompleteMatch::GetFormatTypes(/*preserve_scheme=*/false,
+                                         /*preserve_subdomain=*/false),
+-      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
++      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+   match.contents_class = ClassifyTermMatches(
+       FindTermMatches(input.text(), match.contents), match.contents.size(),
+       ACMatchClassification::MATCH | ACMatchClassification::URL,
