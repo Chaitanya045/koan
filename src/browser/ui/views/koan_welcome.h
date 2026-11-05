@@ -15,36 +15,28 @@
 class BrowserView;
 
 namespace views {
+class WebView;
 class Widget;
-}
+}  // namespace views
 
 namespace koan {
 
-// What the user chose on the welcome pages that applies once they close.
-struct KoanWelcomeChoices {
-  KoanWelcomeChoices();
-  KoanWelcomeChoices(const KoanWelcomeChoices&);
-  KoanWelcomeChoices& operator=(const KoanWelcomeChoices&);
-  ~KoanWelcomeChoices();
+class KoanThemeController;
 
-  bool import = false;
-  // Sites to pin as Essentials.
-  std::vector<GURL> essentials;
-};
-
-// Zen's welcome screen (ZenWelcome.mjs, zen-welcome.ftl), shown over the
-// first window on Chromium's first run: "Welcome to a calmer
-// internet", then pages to import from another browser, give the browser a
-// colour, pick the search engine, choose Essentials and make Koan the
-// default browser. Zen's ad blocker page is left out (see ZEN_PARITY.md).
+// Zen's welcome (ZenWelcome.mjs, zen-welcome.css, zen-welcome.ftl) on
+// Chromium's first run: chrome://koan-welcome (koan_welcome_ui.h) fills the
+// first window, which it sizes to Zen's 1200 x 720 at most, centres and
+// locks while it shows, with the traffic lights hidden. "Welcome to a calmer
+// internet", then pages to import from another browser, colour the Space,
+// pick the search engine, choose Essentials and make Koan the default
+// browser. Zen's ad blocker page is left out (see ZEN_PARITY.md).
 //
-// The screen is a child widget over the window, below the window's controls
-// (so the window still moves and closes), and takes the keyboard: Tab moves
-// between its buttons, arrows between choices, Esc skips it. It shows once
-// (pref koan.welcome_screen.seen, set once the screen is on screen) and only
-// on Chromium's first run, i.e. of a new user data directory (not for each
-// profile in it), so --no-first-run skips it and --force-first-run brings
-// it back.
+// The page is a WebView in a child widget over the whole window; this object
+// is its KoanWelcomeHost (what the page asks of the window). It shows once
+// (pref koan.welcome_screen.seen, set once the screen is on screen, as Zen
+// sets zen.welcome-screen.seen at the start) and only on Chromium's first
+// run, i.e. of a new user data directory (not for each profile in it), so
+// --no-first-run skips it and --force-first-run brings it back.
 class KoanWelcome {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
@@ -59,28 +51,46 @@ class KoanWelcome {
   void OnBrowserViewLayout();
   void OnBrowserViewDestroying();
 
-  // Called by the screen when the user is done: closes it (with a fade) and
-  // applies `choices`, once (a second "Dive in!" during the fade does
-  // nothing).
-  void Finish(const KoanWelcomeChoices& choices);
-
-  // Called when the user leaves the screen with Esc: closes it, applying
-  // nothing more.
-  void Skip();
-
-  BrowserView* browser_view() const { return browser_view_; }
-
  private:
   void MaybeShow();
   void Show();
-  void Close();
+  // Zen's window while the welcome shows: the size it was given, locked
+  // (`locked`), or as it was before (`!locked`).
+  void LockWindow(bool locked);
+  // "Dive in!": the page has faded out; it closes, then the Essentials are
+  // pinned and, if the import page picked a browser, the import dialog opens.
+  void Finish(std::vector<GURL> essentials);
+  // Esc: closes the screen, applying nothing more.
+  void Skip();
+  // `restore_window`: the window's buttons and size lock as they were (not
+  // while the window is being destroyed).
+  void Close(bool restore_window = true);
+  // After the screen closes: the window active, the keyboard on its page.
+  void FocusBrowser();
+  // The surface outside the card drags the window (Zen's
+  // -moz-window-dragging: drag); EndWindowDrag() after AppKit's drag.
+  void StartWindowDrag();
+  void EndWindowDrag();
+  // Closes the theme picker the colours page opened, if it did (#41).
+  void CloseThemePicker();
+#if __has_include("koan/browser/ui/views/koan_theme_controller.h")
+  KoanThemeController* ThemeController() const;
+#endif
   void LayoutWidget();
-  void Apply(const KoanWelcomeChoices& choices);
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
-  // Finish() ran: the screen is fading out, its choices about to apply.
+  raw_ptr<views::WebView> web_view_ = nullptr;
+  // The window's resize and maximize before LockWindow(true).
+  bool could_resize_ = true;
+  bool could_maximize_ = true;
+  bool window_locked_ = false;
+  // The import page picked a browser: its import opens after the screen.
+  bool import_ = false;
+  // Finish() ran: its choices apply once.
   bool finishing_ = false;
+  // The colours page opened the theme picker (#41) over itself.
+  bool theme_picker_open_ = false;
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };
