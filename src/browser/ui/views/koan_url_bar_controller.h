@@ -185,6 +185,9 @@ class KoanUrlBarController : public views::ViewObserver,
   // Posted after the omnibox got focus: an invisible focus closes the bar
   // again.
   void CloseIfFocusInvisible();
+  // Posted after a new-tab session opened empty: asks for the open tabs and
+  // top sites again if the first request found no list.
+  void RetryNewTabZeroSuggest();
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
 
