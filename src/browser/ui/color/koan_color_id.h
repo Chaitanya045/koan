@@ -94,7 +94,7 @@ enum KoanColorIds : ui::ColorId {
 
   // Spaces (koan_space_*.cc): the header's text and its hover background, a
   // bottom bar button's hover background, the dot of a Space without an
-  // icon, the Create-a-Space form's fields (and the Edit Theme button's
+  // icon, the Create-a-Space form's fields (and the Theme… button's
   // hover), its description and the dashed box of the icon, and an emoji's
   // hover background in the emoji picker.
   kColorKoanSpaceForeground,
@@ -125,25 +125,14 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanLibraryIcon,
   kColorKoanLibraryIconFill,
   kColorKoanLibraryProgressTrack,
-  // Spaces: a card (tinted with the space's colour on top) and its outline,
-  // an empty icon slot, and the add button with its "+".
+  // Spaces: a card (tinted with the space theme's primary colour on top)
+  // and its outline, an empty icon slot, and the add button with its "+".
   kColorKoanLibrarySpaceCard,
   kColorKoanLibrarySpaceCardBorder,
   kColorKoanLibrarySpaceIconEmpty,
   kColorKoanLibraryAddSpace,
   kColorKoanLibraryAddSpaceHovered,
   kColorKoanLibraryAddSpaceForeground,
-  // A Space theme's colour, as its card in the Library is tinted with (one
-  // per tab group colour, the colours a Space's theme can take).
-  kColorKoanLibrarySpaceTintGrey,
-  kColorKoanLibrarySpaceTintBlue,
-  kColorKoanLibrarySpaceTintRed,
-  kColorKoanLibrarySpaceTintYellow,
-  kColorKoanLibrarySpaceTintGreen,
-  kColorKoanLibrarySpaceTintPink,
-  kColorKoanLibrarySpaceTintPurple,
-  kColorKoanLibrarySpaceTintCyan,
-  kColorKoanLibrarySpaceTintOrange,
 
   // Media cards in the sidebar (koan_media_controller.cc): the card, its
   // shadow and outline, and the progress bar's track and played part.
@@ -186,6 +175,39 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanWelcomeAccent,
   kColorKoanWelcomeAccentHovered,
   kColorKoanWelcomeOnAccent,
+
+  // Space themes (koan_theme_controller.cc, zen-theme.css): the window behind
+  // a theme's gradient, the window without a theme, and the surface a theme's
+  // colours are blended into. A theme family can supply its own.
+  kColorKoanThemeWindow,
+  kColorKoanThemeDefaultBackground,
+  kColorKoanThemeTintBase,
+  // An inactive translucent window, greyed out (Zen's
+  // zen.view.grey-out-inactive-windows: InactiveCaption, flat and opaque).
+  kColorKoanThemeInactiveWindow,
+
+  // Zen's theme picker (koan_theme_picker.cc, zen-gradient-generator.css), in
+  // the window's light or dark scheme: the panel and its text, the colour
+  // field and its dot grid, the icon buttons (icon, hover), the colour dots'
+  // border, the opacity slider's wave (up to the thumb and after it), track
+  // and thumb, the grain dial's step dots, handle, knob border and shine, and
+  // the preset swatches' shadow.
+  kColorKoanThemePickerBackground,
+  kColorKoanThemePickerForeground,
+  kColorKoanThemePickerField,
+  kColorKoanThemePickerFieldGrid,
+  kColorKoanThemePickerIcon,
+  kColorKoanThemePickerButtonHovered,
+  kColorKoanThemePickerDotBorder,
+  kColorKoanThemePickerWave,
+  kColorKoanThemePickerWaveDim,
+  kColorKoanThemePickerTrack,
+  kColorKoanThemePickerThumb,
+  kColorKoanThemePickerDialDot,
+  kColorKoanThemePickerDialHandle,
+  kColorKoanThemePickerDialBorder,
+  kColorKoanThemePickerDialShine,
+  kColorKoanThemePickerSwatchShadow,
 
   kKoanColorsEnd,
 };

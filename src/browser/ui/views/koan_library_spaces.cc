@@ -37,7 +37,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
@@ -49,6 +48,7 @@
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "koan/browser/ui/views/koan_library_view.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_space_theme.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -97,31 +97,6 @@ constexpr float kPlusStroke = 1.5f;
 constexpr base::TimeDelta kRebuildDelay = base::Milliseconds(150);
 // Cards slide aside while one is dragged (translate 0.2s ease).
 constexpr base::TimeDelta kShiftDuration = base::Milliseconds(200);
-
-// The colour a card is tinted with for a Space theme's colour.
-ui::ColorId TintColorId(tab_groups::TabGroupColorId color) {
-  switch (color) {
-    case tab_groups::TabGroupColorId::kGrey:
-      return kColorKoanLibrarySpaceTintGrey;
-    case tab_groups::TabGroupColorId::kBlue:
-      return kColorKoanLibrarySpaceTintBlue;
-    case tab_groups::TabGroupColorId::kRed:
-      return kColorKoanLibrarySpaceTintRed;
-    case tab_groups::TabGroupColorId::kYellow:
-      return kColorKoanLibrarySpaceTintYellow;
-    case tab_groups::TabGroupColorId::kGreen:
-      return kColorKoanLibrarySpaceTintGreen;
-    case tab_groups::TabGroupColorId::kPink:
-      return kColorKoanLibrarySpaceTintPink;
-    case tab_groups::TabGroupColorId::kPurple:
-      return kColorKoanLibrarySpaceTintPurple;
-    case tab_groups::TabGroupColorId::kCyan:
-      return kColorKoanLibrarySpaceTintCyan;
-    case tab_groups::TabGroupColorId::kOrange:
-    case tab_groups::TabGroupColorId::kNumEntries:
-      return kColorKoanLibrarySpaceTintOrange;
-  }
-}
 
 const TabGroup* GroupOf(TabStripModel* model,
                         const tab_groups::TabGroupId& id) {
@@ -324,8 +299,8 @@ class SpaceCard : public views::View {
   METADATA_HEADER(SpaceCard, views::View)
 
  public:
-  // `tint`: the Space theme's colour, none for the default theme.
-  explicit SpaceCard(std::optional<ui::ColorId> tint) : tint_(tint) {
+  // `tint`: the Space theme's primary colour, none for the default theme.
+  explicit SpaceCard(std::optional<SkColor> tint) : tint_(tint) {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
   }
@@ -336,12 +311,11 @@ class SpaceCard : public views::View {
   // views::View:
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    // The card tinted with the space's colour, standing in for Zen's
-    // per-space gradient (the theme is Koan's tint colour until #41).
+    // The card tinted with the theme's primary colour, standing in for
+    // Zen's per-space gradient.
     SkColor color = provider->GetColor(kColorKoanLibrarySpaceCard);
     if (tint_) {
-      color = color_utils::AlphaBlend(provider->GetColor(*tint_), color,
-                                      library::kSpaceCardTint);
+      color = color_utils::AlphaBlend(*tint_, color, library::kSpaceCardTint);
     }
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
@@ -357,7 +331,7 @@ class SpaceCard : public views::View {
   }
 
  private:
-  const std::optional<ui::ColorId> tint_;
+  const std::optional<SkColor> tint_;
   std::u16string name_;
 };
 
@@ -551,12 +525,11 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
   }
 
  private:
-  // A card, and the buttons that menus and pickers open from.
+  // A card, and the button the icon picker opens from.
   struct Card {
     tab_groups::TabGroupId id;
     raw_ptr<SpaceCard> card;
     raw_ptr<views::View> icon;
-    raw_ptr<views::View> theme;
   };
 
   TabStripModel* model() const { return workspaces_->tab_strip_model(); }
@@ -609,9 +582,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     }
 
     auto card_view = std::make_unique<SpaceCard>(
-        space.theme.color
-            ? std::optional<ui::ColorId>(TintColorId(*space.theme.color))
-            : std::nullopt);
+        theme::SpaceTheme::FromStoredJson(space.theme.stored).PrimaryColor());
     SpaceCard* card = card_view.get();
     card->set_name(name);
     card->SetPreferredSize(gfx::Size(kCardWidth, 0));
@@ -669,7 +640,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
       header->SetFlexForView(added, 1);
     }
 
-    views::View* theme = header->AddChildView(library::CreateIconButton(
+    header->AddChildView(library::CreateIconButton(
         base::BindRepeating(&KoanLibrarySpacesSection::EditTheme,
                             base::Unretained(this), id),
         kBrushFilledIcon, u"Change theme"));
@@ -726,8 +697,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
         base::Unretained(more_button)));
     footer->AddChildView(std::move(more));
 
-    cards_.push_back(
-        {id, strip_->AddChildView(std::move(card_view)), icon, theme});
+    cards_.push_back({id, strip_->AddChildView(std::move(card_view)), icon});
   }
 
   void StartRename(const tab_groups::TabGroupId& id) {
@@ -772,10 +742,10 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     }
   }
 
-  // Edit Theme... (the Spaces' own theme menu), at the card's brush.
+  // Theme...: the theme picker for the Space.
   void EditTheme(const tab_groups::TabGroupId& id) {
-    if (const Card* card = FindCard(id)) {
-      workspaces_->EditSpaceTheme(id, card->theme);
+    if (FindCard(id)) {
+      workspaces_->EditSpaceTheme(id);
     }
   }
 
@@ -790,7 +760,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     };
     menu->AddItem(u"Change Icon…",
                   bind(&KoanLibrarySpacesSection::ShowIconPicker));
-    menu->AddItem(u"Edit Theme…", bind(&KoanLibrarySpacesSection::EditTheme));
+    menu->AddItem(u"Theme…", bind(&KoanLibrarySpacesSection::EditTheme));
     menu->AddSeparator();
     menu->AddItem(u"Unload Space", bind(&KoanLibrarySpacesSection::Unload));
     menu->AddItem(u"Unload All Other Spaces",

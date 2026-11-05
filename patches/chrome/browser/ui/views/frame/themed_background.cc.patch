@@ -1,0 +1,34 @@
+diff --git a/chrome/browser/ui/views/frame/themed_background.cc b/chrome/browser/ui/views/frame/themed_background.cc
+index 169aee34fb3855b3e85fc99725013a2259290e08..6283863d316344cb7ad679c43cabb20fbbba7d00 100644
+--- a/chrome/browser/ui/views/frame/themed_background.cc
++++ b/chrome/browser/ui/views/frame/themed_background.cc
+@@ -12,6 +12,7 @@
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
+ #include "chrome/grit/theme_resources.h"
++#include "koan/browser/ui/views/koan_window_background.h"
+ #include "ui/base/theme_provider.h"
+ #include "ui/color/color_id.h"
+ #include "ui/color/color_provider.h"
+@@ -107,6 +108,10 @@ void ThemedBackground::PaintBackground(gfx::Canvas* canvas,
+                                        const views::View* view,
+                                        const BrowserView* browser_view,
+                                        ThemeChoice theme_choice) {
++  // Koan: the active Space's gradient (Zen's per-Space themes).
++  if (koan::PaintWindowBackground(canvas, view, browser_view)) {
++    return;
++  }
+   bool painted =
+       PaintThemeCustomImage(canvas, view, browser_view, theme_choice);
+   if (!painted) {
+@@ -119,6 +124,10 @@ std::optional<SkColor> ThemedBackground::GetBackgroundColor(
+     const views::View* view,
+     const BrowserView* browser_view,
+     ThemeChoice theme_choice) {
++  // Koan paints a gradient, not a solid colour.
++  if (koan::PaintsWindowBackground(browser_view)) {
++    return std::nullopt;
++  }
+   std::pair<int, ui::ColorId> theme_choice_info =
+       GetThemeChoiceInfo(theme_choice, view);
+   const bool will_be_painted =

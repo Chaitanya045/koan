@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb36867031d27a 100644
+index 41231752d903fec4f355a7b20037f5058904661c..aefbac7bf9a1720aad61e995bc7216c535afe146 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
 @@ -566,6 +566,7 @@ source_set("vertical_tab_strip_region_view") {
@@ -18,7 +18,23 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//media/capture:capture_switches",
      "//third_party/blink/public/common:headers",
      "//ui/accessibility",
-@@ -1958,6 +1960,7 @@ if (is_mac) {
+@@ -1239,6 +1241,7 @@ source_set("themed_background_impl") {
+     "//chrome/browser/ui/color:color_headers",
+     "//chrome/browser/ui/views/frame:browser_view_header",
+     "//chrome/browser/ui/views/tabs:tab_strip",
++    "//koan/browser/ui/views",
+     "//ui/base",
+     "//ui/color",
+     "//ui/gfx",
+@@ -1635,6 +1638,7 @@ source_set("multi_contents_background_view_impl") {
+   public_deps = [ ":multi_contents_background_view" ]
+   deps = [
+     ":themed_background",
++    "//koan/browser/ui/views",
+     "//ui/base/metadata",
+     "//ui/compositor",
+     "//ui/gfx/geometry",
+@@ -1958,6 +1962,7 @@ if (is_mac) {
        "//chrome/browser/ui/window_feature_controller",
        "//chrome/common:constants",
        "//components/remote_cocoa/common:mojo",
@@ -26,7 +42,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
        "//ui/base",
        "//ui/base:features",
        "//ui/compositor",
-@@ -2023,6 +2026,7 @@ if (is_mac) {
+@@ -2023,6 +2028,7 @@ if (is_mac) {
        "//components/remote_cocoa/app_shim",
        "//components/remote_cocoa/common:mojo",
        "//components/web_modal",
@@ -34,7 +50,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
        "//skia",
        "//ui/accessibility",
        "//ui/actions",
-@@ -2953,6 +2957,7 @@ source_set("browser_view_layout_impl") {
+@@ -2953,6 +2959,7 @@ source_set("browser_view_layout_impl") {
      "//build:buildflag_header_h",
      "//chrome/browser/ui/immersive:immersive_mode_controller",
      "//chrome/browser/ui/views/bookmarks",
@@ -42,7 +58,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//ui/base:features",
    ]
  }
-@@ -3012,6 +3017,7 @@ source_set("browser_view_tabbed_layout_impl") {
+@@ -3012,6 +3019,7 @@ source_set("browser_view_tabbed_layout_impl") {
      "//ui/views",
    ]
    deps = [
@@ -50,7 +66,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      ":custom_corners",
      ":custom_corners_background",
      ":custom_floating_corner",
-@@ -3229,6 +3235,7 @@ source_set("multi_contents_view_impl") {
+@@ -3229,6 +3237,7 @@ source_set("multi_contents_view_impl") {
      "//components/tabs:public",
      "//content/public/browser",
      "//content/public/common",
