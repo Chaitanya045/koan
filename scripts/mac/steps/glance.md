@@ -4,7 +4,7 @@ These are the Mac steps for audit 3 GL2/GL4 (`.agent/notes/upstream/split-glance
 
 The bench rules apply to every run: the screen is granted, the frontmost pid is the test Koan's, and the run uses a fresh `pass-` profile, a DCHECK build and logs captured from the terminal.
 
-**Scripted:** `glance.mjs` runs steps 1–10 and 13 (the first part). It uses the DevTools protocol and UI DevTools for the checks. Real keys and menu clicks go through the bench tools in `scripts/mac/tools/` (`keypress2`, `inputok.sh`, `frontpid.sh` and `grantok.sh`; the same files as in #155). Compile the `.m` files on the Mac (`clang -framework Cocoa -o keypress2 keypress2.m`) and copy them to `TOOLS`. Those tools write and read the bench's fixed paths under `~/work/koan-mac/tmp`. Steps 11, 12, 14 and 15 stay manual.
+**Scripted:** `scripts/mac/glance/glance.mjs` runs steps 1–10 and 13 (the first part). It uses the DevTools protocol and UI DevTools for the checks. Real keys and menu clicks go through the bench tools in `scripts/mac/tools/` (`keypress2`, `inputok.sh`, `frontpid.sh` and `grantok.sh`; the same files as in #155). Compile the `.m` files on the Mac (`clang -framework Cocoa -o keypress2 keypress2.m`) and copy them to `TOOLS`. Those tools write and read the bench's fixed paths under `~/work/koan-mac/tmp`. Steps 11, 12, 14 and 15 stay manual.
 
 ```
 scripts/mac/glance/serve.sh &        # on the Mac: the parent on 127.0.0.1:8761, the Glance pages on localhost:8762
@@ -54,7 +54,7 @@ Keys are posted with `scripts/mac/tools/keypress2 <pid> <keycode> c` (⌘), the 
 9. **⌘⇧C copies the Glance URL.** Glance `#child`, then ⌘⇧C. The clipboard (`pbpaste`) has `http://localhost:8762/child.html` and the toast shows. After Esc, ⌘⇧C copies the parent's URL.
 10. **POST reload (no resubmit).** Glance `#form`, click "POST it" (real click), then ⌘R. Nothing reloads, no dialog appears, and the server log (`serve.log`) shows no second POST.
 11. **GT8 discard, the default.** Glance `#child` over the active tab, then in another window open `chrome://discards` and urgently discard the parent tab. No crash. The Glance stays open over the discarded tab: in M158 a discard keeps the WebContents (`kWebContentsDiscard`).
-12. **GT8 replace (the `kReplaced` path).** Relaunch with `--disable-features=WebContentsDiscard` (pass the launcher's full `--disable-features` list plus this one, see `scripts/mac/README.md`). Repeat step 11: no crash, and the card closes, because the legacy discard replaces the WebContents.
+12. **GT8 replace (the `kReplaced` path).** Relaunch with `--disable-features=WebContentsDiscard` (pass the launcher's full `--disable-features` list plus this one, see `scripts/mac/README.md` on #155). Repeat step 11: no crash, and the card closes, because the legacy discard replaces the WebContents.
 13. **GT13 window close / quit.** With a Glance open, ⌘⇧W closes the window: no crash. Open a window again, open a Glance, then ⌘Q. No crash, and on the next launch no Glance page comes back as a tab.
 14. **GT14 context menu (hands-on tester).** Right-click inside the Glance page and run every item: Back, Reload, Open Link in New Tab / Window, Copy Link, Inspect, Translate, Lens. No crash, and new tabs open next to the parent.
 15. **Spaces rows still work (moved into the same table).** In a Spaces window: ⌘⌃P opens the Create Space form, ⌘⌃X / ⌘⌃Z cycle Spaces, and Tab > Group Tab is hidden. In View > Always Show Toolbar in Full Screen (compact mode, toolbar hidden), the item is hidden and ⇧⌘F does nothing. ⌘T opens the URL bar (replace-newtab).
