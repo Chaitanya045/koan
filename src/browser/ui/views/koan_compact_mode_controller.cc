@@ -761,6 +761,8 @@ void KoanCompactModeController::CheckFullscreenEdges() {
     const bool hovered =
         at_edge && pointer.y() >= bounds.y() && pointer.y() < bounds.bottom();
     if (hovered != edge_sidebar_hovered_) {
+      VLOG(1) << "Koan: fullscreen left edge " << (hovered ? "hovered" : "left")
+              << " at " << pointer.x() << "," << pointer.y();
       edge_sidebar_hovered_ = hovered;
       OnSidebarHotZoneHovered(hovered);
     }
@@ -1545,6 +1547,11 @@ void KoanCompactModeController::UpdatePointerMonitor() {
       mode_ != Mode::kNone &&
       (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges());
   views::Widget* widget = browser_view_->GetWidget();
+  VLOG(1) << "Koan: pointer monitor " << (wanted && widget ? "on" : "off")
+          << " (mode " << static_cast<int>(mode_) << ", fullscreen "
+          << IsWindowFullscreen(browser_view_) << ", edges "
+          << WantsFullscreenEdges() << ", sidebar zone "
+          << (sidebar_hot_zone_ != nullptr) << ")";
   if (!wanted || !widget) {
     pointer_monitor_.reset();
     return;
@@ -1564,8 +1571,12 @@ void KoanCompactModeController::CheckRevealedHides() {
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   if (mode_ == Mode::kNone || IsContentFullscreen(browser_view_)) {
+    VLOG(1) << "Koan: sidebar hot zone ignored (mode "
+            << static_cast<int>(mode_) << ")";
     return;
   }
+  VLOG(1) << "Koan: sidebar hot zone " << (hovered ? "hovered" : "left")
+          << (hover_lock_ ? ", holding" : "");
   if (hovered) {
     hover_release_timer_.Stop();
     if (!hover_lock_) {
