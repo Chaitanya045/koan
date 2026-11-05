@@ -414,5 +414,6 @@ Not done: the Dock menu (my rules: clicks only in my own windows), the rebind (p
 
 ## Session 37 (16:12–16:16 IST): KoanCheck-c163e (#163 4813ee5e)
 PASS: B48 fixed — compact + peek + the pill's site-info button: page info under the pill, the sidebar stays out (also with the pointer on the page), Esc closes both (s37-peek-pageinfo); Ctrl+Alt+B layout: page info at the omnibox's site icon (s37-cab-pageinfo). No DCHECK/dump.
-### B49. Native fullscreen + compact: the left screen edge no longer reveals the sidebar — major (regression; c128b revealed it)
+### B49. After page info in the Ctrl+Alt+B layout, fullscreen + compact never reveals the sidebar at the left edge — major (develop ef76c876, not #163)
 Steps: ⌃⌘F, Ctrl+S (compact on), move the pointer to x=0..3 and rest 1.5–2 s. Expected (Zen, and c128b): the sidebar slides in. Actual: nothing (s37-fs-no-peek: left = compact off shows the sidebar, right = compact on, pointer at the left edge, no sidebar). Unknown whether #163 or develop ef76c876.
+B49 narrowed (session 38, 16:30–16:36): both orders (fullscreen→compact, compact→fullscreen) reveal fine on a fresh profile (s38-orders-ok); Ctrl+Alt+B on/off alone: fine (s38-D); peek + pill page info alone: fine. **Trigger:** Ctrl+Alt+B layout → click the omnibox's site icon (page info) → Esc → Ctrl+Alt+B back → ⌃⌘F → Ctrl+S → pointer to the left edge: nothing (s38-F). Same on develop ef76c876 alone (KoanCheck-def7) (s38-G). Likely a stale hover/reveal lock left by the page-info bubble anchored in the multi-toolbar layout.
