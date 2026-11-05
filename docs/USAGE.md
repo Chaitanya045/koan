@@ -667,16 +667,21 @@ dragging.
 
 The first time Koan starts with a new profile it shows Zen's welcome
 screen: "Welcome to a calmer internet", then a few pages to import from
-another browser, pick a colour, choose the search engine and your
+another browser, give your Space a colour, choose the search engine and your
 Essentials, and make Koan the default browser. Every page can be skipped
-with Next. It shows once (start Koan with `--force-first-run` and a new user data
-directory to see it again). Tab moves between its buttons, the arrow keys
-between choices, Enter or Space picks, and Esc skips the rest. The window's
-own buttons stay usable above it.
+with Next. It shows once (start Koan with `--force-first-run` and a new user
+data directory to see it again). As in Zen, the window opens at 1200 x 720
+(less on a smaller screen), centred, and keeps that size until the welcome
+ends; the window buttons come back then. Drag the green background or the
+space around the card to move the window.
 
-| | |
-|---|---|
-| ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
+- Import: pick a browser, then Next, and Chromium's import dialog opens once
+  the welcome is over. "NO, start fresh." (the first choice) imports nothing.
+- The search engine changes as soon as you pick one.
+- Essentials: the apps you pick are pinned when you press "Dive in!".
+- Keyboard: each list of choices is one Tab stop; the arrow keys move in it,
+  Enter or Space picks, and typing a letter jumps to the choice starting with
+  it (G for Google, Y for YES). Esc skips the rest.
 
 ## Translucent window (macOS)
 
