@@ -194,6 +194,26 @@ Mac tests are **TT**, **GT** and **NT**. G1, O10 and F1 refer to the earlier aud
 - **TT9.** An incognito window from a themed window stays Chromium's dark incognito look, and its pages follow the device.
 - **TT10.** macOS appearance toggled in System Settings with the scheme on Auto: the window, menus and traffic lights follow within 1 s.
 
+### 1.6 #62 status (week 2, on #159)
+
+Decisions and where #62 stands, item by item. The Mac checks are in `scripts/mac/steps/theme_picker.md`.
+
+| Item | Decision | #62 | Test |
+|---|---|---|---|
+| T1 one owner | **Reuse with one owner.** `KoanThemeController::ApplyWindowColors()` is the only writer of `SetColorModeOverride` / `SetUserColorOverride` on the browser widget, and re-themes the child widgets. #159's hook (`koan::ApplySpaceColor`, swallowing `UpdateFocusModeTheme`) calls into it. It applies nothing while the controller hasn't seen the new Space yet, so no stale colour flashes. #159's `TintSeed` / `GetSpaceColor` are gone, and its `MigrateWorkspaceTint` is the only one. `CheckSpaces()` compares with `HasAppliedWindowColors()`. Agreed with #159's owner | done | B1, B2, B7, B8 |
+| T2 seed scope | **Reuse**, pending TT3. #97's core mixer (`AddKoanCoreColorMixer`, both looks) pins the core and 83 of upstream's 118 sys tokens to the look's fixed tokens. Only primary, ring and sidebar-primary take the window's user colour (`TokensFor`), as Zen's `--zen-primary-color`. Still seeded: `kColorSysIllo*`, the AI gradients (`kColorSysGradient*`, `kColorSysAiIllustration*`), `kColorSysActorUi*`, shadow and scrim. If TT3 shows them, pin them in that mixer (Option B, small). Option A (no user colour) would lose the per-window accent that #97 derives | answered by code; TT3 to confirm | B3 |
+| T3 scheme | **Reuse** `kBrowserColorScheme` (the picker's scheme buttons, Settings' Mode) | done | A6 |
+| T4 Customize Chrome | **Redirect**, not in #62: the side panel's commands, actions and settings Theme row stay upstream's | follow-up | — |
+| T5 extension themes | **Lock**, as Zen's `zen.theme.disable-lightweight`. `BrowserWidget::GetThemeProvider()` / `GetCustomTheme()` ignore an extension theme in normal and popup windows (`koan::LocksExtensionTheme()`, `browser_widget.cc.patch`), as upstream does under focus mode. Space themes no longer turn off. Web apps keep theirs; the theme stays installed. Glass's own `IsBrowserEligibleForGlass` extension-theme rule belongs to #103 | done (settings link: T4) | B4 |
+| T6 scrollbars | **Override** in the same hook: `preferred_root_scrollbar_color_scheme` follows `PrefersDarkWebColorScheme` | done | B5 |
+| T7 toolbar luminance | **Reuse.** The colour mode override is Zen's `shouldBeDarkMode` result, so `kColorToolbar` follows it; never transparent | by construction; no unit test yet | B9 |
+| T8 provider cache | **Reuse with a rule.** While a dot, the slider or the dial is dragged, the window's mode and accent stay as they were (only the background follows), so the overrides change only on release. Presets add one key each; no quantisation yet | partly | TT2 (not listed) |
+| T9 View > Appearance | not in #62 (the palette and the picker's scheme buttons cover it) | follow-up | — |
+| T-g Incognito | **Reuse.** The controller is off in OTR windows | done | B6 |
+| §0.2 / GL3 opaque layers | **Never opaque, set at creation.** Koan never calls `SetFillsBoundsOpaquely(true)`. `koan::MakeTranslucentLayer()` (`koan_glass_state.h`) runs when the theme paints translucently. The gutter's re-created layer (`MultiContentsBackgroundView::OnThemeChanged`) is made translucent right after `SetPaintToLayer` (`multi_contents_background_view.cc.patch`, `koan::OnWindowBackgroundLayerCreated`). `BrowserFrameViewMac`'s eligibility callback switches only its own layer (no `CustomCornersBackground`). The theme's paint follows the same eligibility through `AddWindowGlassObserver`, which runs after it, so its opaque paint meets its opaque layer. The posted fix-up during paint is a DCHECK-only detector. The `CustomCornersBackground` CHECKs stay | done | C1–C6 |
+
+The 4.1 rows that #62 covers: lightweight themes (locked), toolbar colour scheme (`kBrowserColorScheme`), website colour scheme (hook, scrollbars included), and LWT frame colours (the per-Space gradient). Still missing: the settings Theme row and Web Store link (T4), and View > Appearance (T9).
+
 ---
 
 ## 2. Glass / translucent window on macOS vs Koan's glass
