@@ -3,7 +3,7 @@
 // AutocompleteResult::AppendMatches() DCHECKed (SanitizeString(contents) !=
 // contents), killing a DCHECK build. Types the URLs one key at a time, in the
 // Cmd+T bar, and stops there; the browser must still be alive and the log free
-// of "Check failed". Fixed by components/omnibox/browser/history_url_provider.cc.patch.
+// of "Check failed". Fixed by components/omnibox/browser/verbatim_match.cc.patch (and history_url_provider.cc.patch).
 //
 //   scripts/e2e/run.sh omnibox_trailing_space
 //

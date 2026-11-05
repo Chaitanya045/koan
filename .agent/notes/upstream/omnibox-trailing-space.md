@@ -1,7 +1,12 @@
 # Typed URL ending in %20 kills DCHECK builds (issue #166)
 
-**Not Koan's code. Upstream Chromium 158.** `HistoryURLProvider::HistoryMatchToACMatch`
-(also used for the URL-what-you-typed match, so any typed URL reaches it) sets
+**Not Koan's code. Upstream Chromium 158.** The crashing match is the
+`url-what-you-typed` one: `VerbatimMatchForInput` (`verbatim_match.cc`, called by
+`HistoryURLProvider::Start` for the verbatim input; Provider: HistoryURL) sets
+`match.contents = display_string`, a `FormatUrl(..., UnescapeRule::SPACES)` result.
+(The first fix, #167's c1a5d6c9, sanitized only `HistoryURLProvider::HistoryMatchToACMatch`,
+the history-entry match, which also formats this way, and did not fix it: the Mac
+reproduced the DCHECK on that head with `data:text/html,a%20`.) `HistoryMatchToACMatch` sets
 
     match.contents = url_formatter::FormatUrl(url, format_types, UnescapeRule::SPACES, ...)
 
@@ -14,8 +19,9 @@ no DCHECK, so stock Chrome users never see it; Koan's tested builds are DCHECK
 builds. Koan patches none of HistoryURLProvider, `url_formatter` or `AppendMatches`
 on develop; the Koan providers (command palette, #97 rows, #58) set no URL contents.
 
-**Fix (this PR):** `patches/components/omnibox/browser/history_url_provider.cc.patch`
-sanitizes the contents there, before the term matches are computed from it.
+**Fix (this PR):** `patches/components/omnibox/browser/verbatim_match.cc.patch`
+(the match that crashed) and `history_url_provider.cc.patch` (the history-entry match)
+sanitize the contents, before the term matches are computed from them.
 
 **Guard:** `scripts/e2e/omnibox_trailing_space.mjs` types the repro one key at a time
 and greps the log for `:FATAL:` / `Check failed`. The same two greps are the Mac
