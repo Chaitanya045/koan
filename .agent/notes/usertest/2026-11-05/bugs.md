@@ -424,3 +424,11 @@ All three earlier failures now PASS:
 - 8 (--disable-features=UseActionsForBrowserCommands): ⌘⌃W asks "Delete Space?" (s39-delete-space); Cancel keeps all 4 tabs (s39-cancel-kept).
 - 10: no Tab menu in the bar (#90); tab context menu with ⌥ held has no group items (s39-ctx-opt).
 No Spaces: DCHECK, FATAL or dump.
+
+## Session 40 (21:37–21:40 IST): KoanCheck-c165i (#165 7410d102 on develop 47932183 + #159), Zen side by side
+FAIL (confirms the loop's glance.mjs): **double ⌘W (60 ms apart) closes the Glance AND the parent tab** (s40-a, frame 3: only a new tab left); Zen closes only the Glance, the parent stays (s40-z).
+FAIL: ⌘L in a Glance, Esc, then Esc again: the card stays — and stays stuck after more Esc and a click (s40-kr); Zen: 1st Esc closes the bar, 2nd closes the card (s40-zr). ⌘L edits in the pill (Zen floats; #165 says by user decision).
+FAIL: Glance page context menu > "Open Link in New Window": no window opens (window list unchanged).
+PASS: ⌘R reloads only the Glance (child loads 2, as Zen); Open Link in New Tab opens it next to the parent; Copy Link Address copies; Inspect opens DevTools for the Glance page; ⌘Q with a Glance open: no crash, nothing from the Glance restored (step 13). No DCHECK/dump.
+Still: Glance side buttons are blank white discs (#138), Zen has ×/expand/split icons (s40-z).
+Not done: steps 11/12 (chrome://discards), 5 (⌘[ history), 9 (⌘⇧C), Translate/Lens items.
