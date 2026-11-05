@@ -122,7 +122,7 @@ struct Environment {
   Rgb default_background = {0xe9, 0xe9, 0xe9};
   Rgb tint_base = {240, 240, 244};
   // Zen's canBeTransparent: the window is translucent, the blurred desktop
-  // behind it (Koan's glass, koan_window_glass.h). The theme is then drawn
+  // behind it (Koan's glass, koan_glass_state.h). The theme is then drawn
   // with Zen's maths for a transparent window.
   bool transparent = false;
   // Zen's platform branches for a transparent window: macOS lays a white
