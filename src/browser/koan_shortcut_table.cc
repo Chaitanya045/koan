@@ -163,8 +163,8 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_8, kAccel | kShift, Action::kNewEmptySplit),
       bind(ui::VKEY_MULTIPLY, kAccel | kShift, Action::kNewEmptySplit),
       // Zen: tabs and pages. Accel+T opens the URL bar in place of a new tab
-      // (zen.urlbar.replace-newtab); on macOS ⌘T is a reserved command, which
-      // koan::MaybeOpenUrlBarForNewTab() handles before any accelerator.
+      // (zen.urlbar.replace-newtab); on macOS ⌘T is a reserved command, whose
+      // action the command policy (koan_command_policy.cc) points there.
       bind(ui::VKEY_T, kAccel, Action::kNewTab),
       bind(ui::VKEY_C, kAccel | kShift, Action::kCopyUrl),
       bind(ui::VKEY_C, kAccel | kShift | kAlt, Action::kCopyUrlMarkdown),

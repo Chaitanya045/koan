@@ -7,6 +7,8 @@
 #include <memory>
 #include <utility>
 
+#include "base/auto_reset.h"
+#include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
@@ -16,6 +18,9 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
+#include "chrome/browser/ui/browser_actions.h"
+#include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -38,6 +43,7 @@
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/focused_node_details.h"
 #include "content/public/browser/invalidate_type.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/reload_type.h"
@@ -53,11 +59,13 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance.h"
 #include "koan/browser/ui/views/koan_split_view.h"
+#include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/mojom/frame/triggering_event_info.mojom-shared.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/actions/actions.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -597,6 +605,28 @@ void OpenLinkInGlance(content::WebContents* source,
   glance->Open(open_params, source);
 }
 
+namespace {
+
+// The commands whose enabled state follows the Glance page while the card is
+// open (KoanGlanceController::HoldCommands()).
+struct HeldCommand {
+  actions::ActionId action;
+  int command;
+};
+constexpr HeldCommand kHeldCommands[] = {
+    {kActionBack, IDC_BACK},
+    {kActionForward, IDC_FORWARD},
+    {kActionStop, IDC_STOP},
+    {kActionZoomPlus, IDC_ZOOM_PLUS},
+    {kActionZoomNormal, IDC_ZOOM_NORMAL},
+    {kActionZoomMinus, IDC_ZOOM_MINUS},
+    {kActionFind, IDC_FIND},
+    {kActionFindNext, IDC_FIND_NEXT},
+    {kActionFindPrevious, IDC_FIND_PREVIOUS},
+};
+
+}  // namespace
+
 KoanGlanceController::InputTracker::InputTracker(content::WebContents* contents)
     : content::WebContentsObserver(contents) {}
 
@@ -637,19 +667,6 @@ void KoanGlanceController::SourceTracker::WebContentsDestroyed() {
   // Not now: this tracker is dropped by the teardown, and the WebContents is
   // mid-destruction. Until then source() is null.
   controller_->PostAction(&KoanGlanceController::TearDownIfSourceGone);
-}
-
-void KoanGlanceController::SourceTracker::DidStartLoading() {
-  controller_->PostAction(&KoanGlanceController::UpdateCommandState);
-}
-
-void KoanGlanceController::SourceTracker::DidStopLoading() {
-  controller_->PostAction(&KoanGlanceController::UpdateCommandState);
-}
-
-void KoanGlanceController::SourceTracker::NavigationEntryCommitted(
-    const content::LoadCommittedDetails& load_details) {
-  controller_->PostAction(&KoanGlanceController::UpdateCommandState);
 }
 
 KoanGlanceController::KoanGlanceController(BrowserView* browser_view)
@@ -728,7 +745,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   grow_rect_ = GrowRect();
   view_->PlayOpenAnimation(grow_rect_, /*fresh=*/true);
   view_->web_view()->RequestFocus();
-  UpdateCommandState();
+  HoldCommands();
 }
 
 void KoanGlanceController::PostAction(void (KoanGlanceController::*action)()) {
@@ -752,7 +769,7 @@ void KoanGlanceController::Close() {
 void KoanGlanceController::CloseNow() {
   EndConfirm();
   closing_ = true;
-  UpdateCommandState();
+  ReleaseCommands(/*restore=*/true);
   if (content::WebContents* source = this->source()) {
     source->Focus();
   }
@@ -806,6 +823,7 @@ void KoanGlanceController::TearDown() {
   if (!is_open()) {
     return;
   }
+  ReleaseCommands(/*restore=*/true);
   DestroyWidget();
   ReleaseContents();
   base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
@@ -814,12 +832,13 @@ void KoanGlanceController::TearDown() {
   source_.reset();
   closing_ = false;
   awaiting_beforeunload_ = false;
-  UpdateCommandState();
 }
 
 std::unique_ptr<content::WebContents> KoanGlanceController::TakeContents() {
   close_timer_.Stop();
   confirm_timer_.Stop();
+  // For the tab again (Split Glance keeps it active).
+  ReleaseCommands(/*restore=*/true);
   view_->FinishPageAnimations();
   DestroyWidget();
   ReleaseContents();
@@ -827,10 +846,7 @@ std::unique_ptr<content::WebContents> KoanGlanceController::TakeContents() {
   glance_input_.reset();
   source_.reset();
   awaiting_beforeunload_ = false;
-  std::unique_ptr<content::WebContents> contents = std::move(contents_);
-  // For the tab again (Split Glance keeps it active).
-  UpdateCommandState();
-  return contents;
+  return std::move(contents_);
 }
 
 void KoanGlanceController::ExpandToTab() {
@@ -886,8 +902,13 @@ void KoanGlanceController::TearDownIfSourceGone() {
 }
 
 bool KoanGlanceController::HandleBrowserCommand(int command_id) {
-  if (!is_open() || closing_) {
+  if (!is_open()) {
     return false;
+  }
+  // ⌘W again (or its key repeat) while the card shrinks away: not the tab
+  // under it. Once the card is gone, ⌘W closes the tab.
+  if (closing_) {
+    return command_id == IDC_CLOSE_TAB;
   }
   content::NavigationController& history = contents_->GetController();
   switch (command_id) {
@@ -917,70 +938,166 @@ bool KoanGlanceController::HandleBrowserCommand(int command_id) {
       }
       return true;
     case IDC_FOCUS_LOCATION:
-      // The URL bar shows the tab's page, not the Glance's: like Zen's
-      // Glance tab, ⌘L edits the Glance page's URL, so it becomes the tab.
-      PostAction(&KoanGlanceController::ExpandAndFocusLocation);
+      // As in Zen, where the Glance is the selected tab: the URL bar edits
+      // the Glance page's address, and the card stays a Glance.
+      PostAction(&KoanGlanceController::EditUrl);
       return true;
     case IDC_FIND:
     case IDC_FIND_NEXT:
     case IDC_FIND_PREVIOUS:
-      // Not on the page under the card. The Glance page has no find bar
+      // Not on the page under the card (and disabled while the card is
+      // open, see GlanceEnables()). The Glance page has no find bar
       // (FindTabHelper is a tab helper; audit 3 GL3).
       return true;
     case IDC_ZOOM_PLUS:
       zoom::PageZoom::Zoom(contents_.get(), content::PAGE_ZOOM_IN);
-      UpdateCommandState();
+      ApplyCommandState();
       return true;
     case IDC_ZOOM_NORMAL:
       zoom::PageZoom::Zoom(contents_.get(), content::PAGE_ZOOM_RESET);
-      UpdateCommandState();
+      ApplyCommandState();
       return true;
     case IDC_ZOOM_MINUS:
       zoom::PageZoom::Zoom(contents_.get(), content::PAGE_ZOOM_OUT);
-      UpdateCommandState();
+      ApplyCommandState();
       return true;
     default:
       return false;
   }
 }
 
-void KoanGlanceController::UpdateCommandState() {
-  BrowserWindowInterface* browser = browser_view_->browser();
-  const bool glance = is_open() && !closing_;
-  content::WebContents* page =
-      glance ? contents_.get()
-             : browser->GetTabStripModel()->GetActiveWebContents();
-  if (!page) {
-    return;
+bool KoanGlanceController::GlanceEnables(int command_id) const {
+  content::WebContents* page = contents_.get();
+  switch (command_id) {
+    case IDC_BACK:
+      return chrome::CanGoBack(page);
+    case IDC_FORWARD:
+      return chrome::CanGoForward(page);
+    case IDC_STOP:
+      return page->IsLoading();
+    case IDC_ZOOM_PLUS:
+      return chrome::CanZoomIn(page);
+    case IDC_ZOOM_NORMAL:
+      return chrome::CanResetZoom(page);
+    case IDC_ZOOM_MINUS:
+      return chrome::CanZoomOut(page);
+    default:
+      // Find: nothing to find in, until the Glance page has a find bar.
+      return false;
   }
-  // The tab's values as in BrowserCommandController::UpdateCommandsForTabState
-  // and UpdateReloadStopState.
-  chrome::UpdateCommandEnabled(browser, IDC_BACK,
-                               glance ? chrome::CanGoBack(page)
-                                      : chrome::ShouldEnableBackButton(browser));
-  chrome::UpdateCommandEnabled(
-      browser, IDC_FORWARD,
-      glance ? chrome::CanGoForward(page)
-             : chrome::ShouldEnableForwardButton(browser));
-  chrome::UpdateCommandEnabled(browser, IDC_STOP, page->IsLoading());
-  BrowserWindow::FromBrowser(browser)->UpdateReloadStopState(
-      page->IsLoading(), /*force=*/false);
-  chrome::UpdateCommandEnabled(browser, IDC_ZOOM_PLUS, chrome::CanZoomIn(page));
-  chrome::UpdateCommandEnabled(browser, IDC_ZOOM_NORMAL,
-                               chrome::CanResetZoom(page));
-  chrome::UpdateCommandEnabled(browser, IDC_ZOOM_MINUS,
-                               chrome::CanZoomOut(page));
 }
 
-void KoanGlanceController::ExpandAndFocusLocation() {
+void KoanGlanceController::HoldCommands() {
+  if (holds_commands_) {
+    ApplyCommandState();
+    return;
+  }
+  holds_commands_ = true;
+  // The command controller sets these for the active tab whenever any tab in
+  // the window changes (navigation, loading, audio: TabStateChanged()), and a
+  // disabled action never runs. So watch the window's actions themselves and
+  // set them for the Glance page again after anyone else did.
+  BrowserActions* actions = BrowserActions::From(browser_view_->browser());
+  if (actions && actions->root_action_item()) {
+    for (const HeldCommand& held : kHeldCommands) {
+      actions::ActionItem* item = actions::ActionManager::Get().FindAction(
+          held.action, actions->root_action_item());
+      if (!item) {
+        continue;
+      }
+      // Unretained: the subscriptions are this controller's.
+      command_subscriptions_.push_back(
+          item->AddActionChangedCallback(base::BindRepeating(
+              &KoanGlanceController::OnHeldCommandChanged,
+              base::Unretained(this), held.command, base::Unretained(item))));
+    }
+  }
+  ApplyCommandState();
+}
+
+void KoanGlanceController::ApplyCommandState() {
+  if (!holds_commands_ || !contents_) {
+    return;
+  }
+  base::AutoReset<bool> applying(&applying_commands_, true);
+  BrowserWindowInterface* browser = browser_view_->browser();
+  for (const HeldCommand& held : kHeldCommands) {
+    chrome::UpdateCommandEnabled(browser, held.command,
+                                 GlanceEnables(held.command));
+  }
+  // The reload / stop button, which upstream sets with IDC_STOP.
+  BrowserWindow::FromBrowser(browser)->UpdateReloadStopState(
+      contents_->IsLoading(), /*force=*/false);
+}
+
+void KoanGlanceController::OnHeldCommandChanged(int command_id,
+                                                actions::ActionItem* item) {
+  if (applying_commands_ || !holds_commands_ || reapply_pending_ ||
+      !contents_ || item->GetEnabled() == GlanceEnables(command_id)) {
+    return;
+  }
+  // After the command controller's update is done (it may set several).
+  reapply_pending_ = true;
+  PostAction(&KoanGlanceController::ReapplyCommandState);
+}
+
+void KoanGlanceController::ReapplyCommandState() {
+  reapply_pending_ = false;
+  ApplyCommandState();
+}
+
+void KoanGlanceController::ReleaseCommands(bool restore) {
+  if (!holds_commands_) {
+    return;
+  }
+  holds_commands_ = false;
+  reapply_pending_ = false;
+  command_subscriptions_.clear();
+  if (!restore) {
+    return;
+  }
+  // Upstream's own values for the active tab again.
+  BrowserWindowInterface* browser = browser_view_->browser();
+  if (chrome::BrowserCommandController* commands =
+          chrome::BrowserCommandController::From(browser)) {
+    commands->TabStateChanged();
+    if (content::WebContents* active =
+            browser->GetTabStripModel()->GetActiveWebContents()) {
+      commands->LoadingStateChanged(active->IsLoading(), /*force=*/false);
+    }
+  }
+}
+
+void KoanGlanceController::EditUrl() {
   if (!is_open() || closing_ || awaiting_beforeunload_) {
     return;
   }
-  ExpandToTab();
-  if (BrowserWindow::FromBrowser(browser_view_->browser())
-          ->IsLocationBarVisible()) {
-    chrome::FocusLocationBar(browser_view_->browser());
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->url_bar()->OpenForGlance(contents_->GetVisibleURL());
   }
+}
+
+void KoanGlanceController::FocusPage() {
+  if (is_open() && !closing_ && view_) {
+    view_->web_view()->RequestFocus();
+  }
+}
+
+bool KoanGlanceController::LoadFromUrlBar(const GURL& url,
+                                          ui::PageTransition transition,
+                                          const std::string& extra_headers) {
+  if (!is_open() || closing_) {
+    return false;
+  }
+  content::NavigationController::LoadURLParams params(url);
+  params.transition_type = transition;
+  params.extra_headers = extra_headers;
+  contents_->GetController().LoadURLWithParams(params);
+  // Not while the omnibox runs the match: the page gets focus (and the URL
+  // bar closes) afterwards.
+  PostAction(&KoanGlanceController::FocusPage);
+  return true;
 }
 
 void KoanGlanceController::OnBrowserViewLayout() {
@@ -991,6 +1108,7 @@ void KoanGlanceController::OnBrowserViewLayout() {
 }
 
 void KoanGlanceController::OnBrowserViewDestroying() {
+  ReleaseCommands(/*restore=*/false);
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   close_timer_.Stop();
   confirm_timer_.Stop();
@@ -1053,14 +1171,14 @@ void KoanGlanceController::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
   if (source == contents_.get()) {
-    UpdateCommandState();
+    ApplyCommandState();
   }
 }
 
 void KoanGlanceController::LoadingStateChanged(content::WebContents* source,
                                                bool should_show_loading_ui) {
   if (source == contents_.get()) {
-    UpdateCommandState();
+    ApplyCommandState();
   }
 }
 
@@ -1138,6 +1256,15 @@ void KoanGlanceController::CloseContents(content::WebContents* source) {
   }
 }
 
+content::KeyboardEventProcessingResult
+KoanGlanceController::PreHandleKeyboardEvent(
+    content::WebContents* source,
+    const input::NativeWebKeyboardEvent& event) {
+  // The browser's reserved keys (⌘W, ⌘T, ⌘N, tab switching) before the page,
+  // as in a tab: a page can't keep the card open by swallowing ⌘W.
+  return browser_view_->PreHandleKeyboardEvent(event);
+}
+
 bool KoanGlanceController::HandleKeyboardEvent(
     content::WebContents* source,
     const input::NativeWebKeyboardEvent& event) {
@@ -1180,8 +1307,11 @@ void KoanGlanceController::OnTabStripModelChanged(
   if (!is_open()) {
     return;
   }
-  // A replace (a discard, a prerender or instant NTP swap) keeps the active
-  // index, so the selection may not change: the card was over the old page.
+  // A replace keeps the active index, so the selection may not change: the
+  // card was over the old page. (In M158 only the legacy discard replaces,
+  // with WebContentsDiscard off; the default discards in place, and a
+  // prerender activates inside the same WebContents, so neither touches
+  // the card.)
   bool source_gone = !source();
   if (change.type() == TabStripModelChange::kRemoved) {
     for (const auto& removed : change.GetRemove()->contents) {

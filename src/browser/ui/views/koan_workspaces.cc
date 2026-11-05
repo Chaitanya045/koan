@@ -36,8 +36,6 @@
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
-#include "chrome/browser/ui/actions/chrome_action_id.h"
-#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -86,7 +84,6 @@
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
-#include "ui/actions/actions.h"
 #include "ui/base/mojom/themes.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -413,7 +410,6 @@ void KoanWorkspaceController::OnAddedToWidget() {
     return;
   }
   InstallViews();
-  InstallGroupActions();
   ScheduleUpdate();
   widget_observation_.Observe(browser_view_->GetWidget());
   Profile* profile = browser_view_->GetProfile()->GetOriginalProfile();
@@ -586,58 +582,6 @@ bool KoanWorkspaceController::RunGroupCommand(int command_id) {
     default:
       return false;
   }
-}
-
-void KoanWorkspaceController::InstallGroupActions() {
-  BrowserActions* actions = BrowserActions::From(browser_view_->browser());
-  if (!actions || !actions->root_action_item()) {
-    return;
-  }
-  // The actions are the window's own (BrowserActions), like the new-tab one
-  // the URL bar takes (KoanUrlBarController::InstallNewTabAction()). They run
-  // Chrome's ⌘⌃ group keys, the Tab menu and the app menu's "Tab groups"
-  // (kUseActionsForBrowserCommands); in a Spaces window each does what
-  // RunGroupCommand() does for its command, also when it reaches the action
-  // while disabled. (Without that feature, the browser command reaches
-  // RunGroupCommand() through koan::HandleSpacesCommand().)
-  const auto install = [&](actions::ActionId id, std::optional<int> command,
-                           bool visible) {
-    actions::ActionItem* item = actions::ActionManager::Get().FindAction(
-        id, actions->root_action_item());
-    if (!item) {
-      return;
-    }
-    item->SetInvokeActionCallback(base::BindRepeating(
-        [](base::WeakPtr<KoanWorkspaceController> controller,
-           std::optional<int> command, actions::ActionItem* item,
-           actions::ActionInvocationContext) {
-          if (controller && command) {
-            controller->RunGroupCommand(*command);
-          }
-        },
-        weak_factory_.GetWeakPtr(), command));
-    // (Not disabled: the command controller sets the enabled state again;
-    // the callback is what decides.)
-    if (!visible) {
-      item->SetVisible(false);
-    }
-  };
-  install(kActionCreateNewTabGroup, IDC_CREATE_NEW_TAB_GROUP, /*visible=*/true);
-  install(kActionCloseTabGroup, IDC_CLOSE_TAB_GROUP, /*visible=*/true);
-  install(kActionFocusNextTabGroup, IDC_FOCUS_NEXT_TAB_GROUP,
-          /*visible=*/true);
-  install(kActionFocusPrevTabGroup, IDC_FOCUS_PREV_TAB_GROUP,
-          /*visible=*/true);
-  install(kActionAddNewTabToGroup, IDC_ADD_NEW_TAB_TO_GROUP, /*visible=*/true);
-  install(kActionAddNewTabRecentGroup, IDC_ADD_NEW_TAB_RECENT_GROUP,
-          /*visible=*/true);
-  install(kActionWindowGroupTab, IDC_WINDOW_GROUP_TAB, /*visible=*/false);
-  install(kActionGroupTargetTab, IDC_GROUP_TARGET_TAB, /*visible=*/false);
-  install(kActionGroupUngroupedTabs, IDC_GROUP_UNGROUPED_TABS,
-          /*visible=*/false);
-  // The app menu's saved "Tab groups" (Spaces aren't saved groups).
-  install(kActionTabGroupsMenu, std::nullopt, /*visible=*/false);
-  install(kActionSavedTabGroupsSubmenu, std::nullopt, /*visible=*/false);
 }
 
 // Spaces.
@@ -1744,7 +1688,7 @@ void KoanWorkspaceController::CloseGroupEditors() {
     return;
   }
   // Upstream opens its group editor for a new group (⌘⌃P, Group Tab) and
-  // from the group header; neither runs here (InstallGroupActions(), the
+  // from the group header; neither runs here (koan_command_policy.cc, the
   // hidden header), so this is a backstop for any other way.
   for (views::View* view :
        views::ElementTrackerViews::GetInstance()->GetAllMatchingViews(
@@ -2374,50 +2318,8 @@ std::optional<tab_groups::TabGroupId> CreateBackgroundSpace(
   return spaces->CreateBackgroundSpace(index, {.name = name, .icon = icon});
 }
 
-bool HandleSpacesCommand(BrowserWindowInterface* browser, int command_id) {
-  KoanWorkspaceController* spaces = SpacesOf(browser);
-  return spaces && spaces->RunGroupCommand(command_id);
-}
-
 bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab) {
   return tab && SpacesOf(tab->GetBrowserWindowInterface()) != nullptr;
-}
-
-std::optional<bool> HidesMenuCommand(BrowserView* browser_view,
-                                     int command_id) {
-  // Every item Koan owns gets an answer both ways: the menu bar is shared by
-  // the windows, and AppKit keeps a hidden item hidden until told otherwise.
-  switch (command_id) {
-    // Upstream's tab group items (Tab > Group Tab, its Option alternate): a
-    // tab is always in a Space, "Move To" moves it to another.
-    case IDC_WINDOW_GROUP_TAB:
-    case IDC_GROUP_TARGET_TAB:
-      return browser_view && SpacesOf(browser_view->browser()) != nullptr;
-    // View > Always Show Toolbar in Full Screen: with Koan's toolbar hidden
-    // (single toolbar) fullscreen reveals nothing at the top edge, whatever
-    // the setting (Chromium's, synced) says, so it isn't offered, neither
-    // greyed out nor there. (The command itself is ignored there:
-    // IgnoresFullscreenToolbarToggle().)
-    case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
-      return browser_view && IsToolbarHidden(browser_view);
-    // View > "Show Tabs Vertically": Koan owns the sidebar, which is always
-    // vertical (#154). Upstream's validation sets this item's hidden state
-    // itself (hidden only in immersive fullscreen), so a hide at menu build
-    // time doesn't hold.
-    // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: it stays, titled "Toggle
-    // Sidebar's Width" by the menu bar, and runs compact mode; its check mark
-    // follows the collapse state, i.e. compact mode hiding the sidebar. It has
-    // no key: the sidebar action keeps none, Shift+Cmd+L is Koan's inspector.)
-    case IDC_TOGGLE_VERTICAL_TABS:
-      // With Koan's sidebar off nothing here overrides upstream's own state
-      // (nullopt, not false).
-      if (OwnsSidebar()) {
-        return true;
-      }
-      return std::nullopt;
-    default:
-      return std::nullopt;
-  }
 }
 
 }  // namespace koan

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/color/color_id.h"
 
@@ -49,11 +50,24 @@ bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser);
 // start of chrome::FocusLocationBar().
 void OnFocusLocationBarCommand(BrowserWindowInterface* browser);
 
+// While the URL bar is open over a Glance card (⌘L: Zen's Glance is the
+// selected tab, so the URL bar edits its address), what the user picks loads
+// in the Glance page: returns true after loading `url` there, so the caller
+// skips its own navigation. False otherwise (no Glance session, a new-tab
+// disposition such as Alt+Enter, or not a web URL, which closes the card and
+// goes to the tab). Called from ChromeOmniboxClient::OnAutocompleteAccept(),
+// after MaybeAdjustOmniboxDisposition().
+bool MaybeOpenOmniboxMatchInGlance(BrowserWindowInterface* browser,
+                                   const GURL& url,
+                                   ui::PageTransition transition,
+                                   WindowOpenDisposition disposition,
+                                   const std::string& extra_headers);
+
 // Zen's zen.urlbar.replace-newtab for the New Tab command (IDC_NEW_TAB: ⌘T
 // on macOS, which runs as a reserved command before any accelerator, and the
 // menu bar's File > New Tab): opens the URL bar in place of a new tab, or
 // closes the one open for a new tab. Returns false if the command should open
-// a tab as usual. Called from BrowserCommandController.
+// a tab as usual. Called from the command policy (koan_command_policy.cc).
 bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 
 // macOS: whether the reserved commands (Chromium's list, accelerator_table.cc:
@@ -71,9 +85,9 @@ bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser);
 // macOS: whether `browser`'s window has no "Always Show Toolbar in Full
 // Screen" (View menu, ⇧⌘F, the toolbar action): Koan's toolbar is hidden and
 // fullscreen reveals nothing at the top edge, whatever that setting
-// (Chromium's, synced) says. Called from BrowserCommandController, which then
-// ignores the command; the menu item is hidden by the macOS menu table
-// (HidesMenuCommand(), koan_spaces.h).
+// (Chromium's, synced) says. Called from the command policy, which then
+// ignores the command; the menu item is hidden by its macOS menu table
+// (koan_command_policy.h).
 bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
 
 // The view Chromium's bubbles anchor to instead of the toolbar's, where the

@@ -163,7 +163,6 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
     observations_.AddObservation(contents);
   }
   VLOG(1) << "Koan: window created (" << g_live_count << " open)";
-  InstallCommandPolicy(browser_view);
   SetUpTestWindowData(this);
 }
 
@@ -178,6 +177,9 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
   browser_view->SetProperty(
       kKoanBrowserViewControllerKey,
       std::make_unique<KoanBrowserViewController>(browser_view));
+  // Once From() finds the controller: the policy's rows ask it which of
+  // them this window has (Spaces).
+  InstallCommandPolicy(browser_view);
 }
 
 // static
