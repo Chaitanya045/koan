@@ -21,15 +21,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/actions/chrome_action_id.h"
-#include "chrome/browser/ui/browser_actions.h"
-#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_controller.h"
 #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
-#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
@@ -47,11 +43,11 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
-#include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -233,9 +229,7 @@ END_METADATA
 KoanUrlBarController::KoanUrlBarController(
     BrowserView* browser_view,
     KoanCompactModeController* compact_mode)
-    : browser_view_(browser_view), compact_mode_(compact_mode) {
-  InstallNewTabAction();
-}
+    : browser_view_(browser_view), compact_mode_(compact_mode) {}
 
 KoanUrlBarController::~KoanUrlBarController() {
   if (views::View* omnibox = key_target_.view()) {
@@ -245,12 +239,13 @@ KoanUrlBarController::~KoanUrlBarController() {
 
 void KoanUrlBarController::UpdateKeyHandler() {
   // While the bar is open, or open for a new tab in the toolbar (the
-  // multiple-toolbars layout). Without the Koan URL bar, Chrome's Esc.
+  // multiple-toolbars layout), or over a Glance (wherever it edits: Esc
+  // gives the Glance page focus back). Otherwise, without the Koan URL bar,
+  // Chrome's Esc.
   LocationBarView* bar = location_bar();
-  views::View* omnibox =
-      features::IsUrlBarEnabled() && (is_open() || new_tab_) && bar
-          ? bar->omnibox_view()
-          : nullptr;
+  const bool handles_keys =
+      (features::IsUrlBarEnabled() && (is_open() || new_tab_)) || glance_edit_;
+  views::View* omnibox = handles_keys && bar ? bar->omnibox_view() : nullptr;
   if (key_target_.view() == omnibox) {
     return;
   }
@@ -260,39 +255,6 @@ void KoanUrlBarController::UpdateKeyHandler() {
   key_target_.SetView(omnibox);
   if (omnibox) {
     omnibox->AddPreTargetHandler(this);
-  }
-}
-
-void KoanUrlBarController::InstallNewTabAction() {
-  BrowserWindowInterface* browser = browser_view_->browser();
-  BrowserActions* actions = BrowserActions::From(browser);
-  if (!features::IsUrlBarEnabled() || !browser_view_->GetIsNormalType() ||
-      !actions || !actions->root_action_item()) {
-    return;
-  }
-  actions::ActionItem* new_tab = actions::ActionManager::Get().FindAction(
-      kActionNewTab, actions->root_action_item());
-  if (!new_tab) {
-    return;
-  }
-  // The action is the window's own (BrowserActions), so this only changes
-  // this window's new-tab button and menu item.
-  new_tab->SetInvokeActionCallback(base::BindRepeating(
-      [](base::WeakPtr<KoanUrlBarController> controller,
-         BrowserWindowInterface* browser, actions::ActionItem* item,
-         actions::ActionInvocationContext context) {
-        if (controller) {
-          controller->OnNewTabAction();
-          return;
-        }
-        chrome::NewTab(browser, NewTabTypes::kNewTabCommand);
-      },
-      weak_factory_.GetWeakPtr(), base::Unretained(browser)));
-}
-
-void KoanUrlBarController::OnNewTabAction() {
-  if (!OpenForNewTab()) {
-    chrome::NewTab(browser_view_->browser(), NewTabTypes::kNewTabCommand);
   }
 }
 
@@ -339,9 +301,52 @@ bool KoanUrlBarController::OpenForNewTab() {
   return true;
 }
 
+bool KoanUrlBarController::OpenForGlance(const GURL& url) {
+  LocationBarView* bar = location_bar();
+  if (!browser_view_->GetIsNormalType() || IsContentFullscreen(browser_view_) ||
+      !bar || !bar->omnibox_view()) {
+    return false;
+  }
+  EndNewTabSession(/*committed=*/false);
+  glance_edit_ = true;
+  UpdateKeyHandler();
+  bar->FocusLocation(/*is_user_initiated=*/true,
+                     /*clear_focus_if_failed=*/false);
+  if (!bar->omnibox_view()->HasFocus()) {
+    glance_edit_ = false;
+    UpdateKeyHandler();
+    return false;
+  }
+  // Already focused before (no focus change): place it for the Glance.
+  if (is_open()) {
+    SetPlacement(DesiredPlacement());
+  }
+  // The Glance page's address, not the tab's (which the omnibox shows), to
+  // edit; Zen selects it all.
+  bar->omnibox_view()->SetUserText(base::UTF8ToUTF16(url.spec()),
+                                   /*update_popup=*/false);
+  bar->omnibox_view()->SelectAll(/*reversed=*/true);
+  return true;
+}
+
+bool KoanUrlBarController::TakeGlanceEdit() {
+  if (!glance_edit_) {
+    return false;
+  }
+  glance_edit_ = false;
+  UpdateKeyHandler();
+  return true;
+}
+
 void KoanUrlBarController::Close() {
   LocationBarView* bar = location_bar();
-  if (views::WebView* web_view = browser_view_->GetActiveContentsWebView()) {
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  if (glance_edit_ && controller && controller->glance()->is_open() &&
+      !controller->glance()->is_closing()) {
+    controller->glance()->FocusPage();
+  } else if (views::WebView* web_view =
+                 browser_view_->GetActiveContentsWebView()) {
     web_view->RequestFocus();
   }
   views::FocusManager* focus_manager = browser_view_->GetFocusManager();
@@ -393,6 +398,7 @@ void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
   }
   const bool was_open = is_open() || new_tab_;
   EndNewTabSession(/*committed=*/false);
+  glance_edit_ = false;
   EndEditing();
   // Like Zen's single toolbar, a closed bar shows the page's address again
   // (the pill shows it; the omnibox is out of sight).
@@ -476,6 +482,13 @@ KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
   // Without the Koan URL bar, Koan's earlier behaviour: always floating.
   if (!features::IsUrlBarEnabled()) {
     return Placement::kFloating;
+  }
+  // Over a Glance (⌘L edits the Glance page's address) it stays in the pill:
+  // floating, it would be under the Glance card, a child window above the
+  // window's contents. *(live check: compact mode with the sidebar hidden,
+  // where it floats)*
+  if (glance_edit_ && !compact_mode_->hides_sidebar() && IsPillAvailable()) {
+    return Placement::kInPill;
   }
   // Compact mode with the sidebar hidden floats it too when it's opened from
   // a peeked sidebar's pill: Chromium collapses an expanded-on-hover sidebar
@@ -843,7 +856,8 @@ void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
                              ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
   if (event->type() == ui::EventType::kKeyPressed &&
       event->key_code() == ui::VKEY_ESCAPE &&
-      (event->flags() & kModifiers) == 0 && (is_open() || new_tab_)) {
+      (event->flags() & kModifiers) == 0 &&
+      (is_open() || new_tab_ || glance_edit_)) {
     event->SetHandled();
     // Not while the omnibox dispatches the key to this handler.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -855,6 +869,13 @@ void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
 void CopyCurrentUrl(BrowserView* browser_view, bool markdown) {
   content::WebContents* contents =
       browser_view->browser()->GetTabStripModel()->GetActiveWebContents();
+  // Over a Glance card, the Glance page's: Zen's Glance is the selected tab.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view);
+      controller && controller->glance()->is_open() &&
+      !controller->glance()->is_closing()) {
+    contents = controller->glance()->contents();
+  }
   if (!contents) {
     return;
   }
@@ -901,6 +922,34 @@ bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser) {
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   return controller && controller->url_bar()->OpenForNewTab();
+}
+
+bool MaybeOpenOmniboxMatchInGlance(BrowserWindowInterface* browser,
+                                   const GURL& url,
+                                   ui::PageTransition transition,
+                                   WindowOpenDisposition disposition,
+                                   const std::string& extra_headers) {
+  BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  if (!controller || !controller->url_bar()->is_glance_edit()) {
+    return false;
+  }
+  // Alt+Enter and the like: a new tab, as from the tab. A background tab
+  // keeps the omnibox (and the Glance session) open for the next pick.
+  if (disposition != WindowOpenDisposition::kCurrentTab) {
+    return false;
+  }
+  controller->url_bar()->TakeGlanceEdit();
+  KoanGlanceController* glance = controller->glance();
+  // Glance shows web pages (as it opens only http(s) links); anything else
+  // (chrome://, file:, javascript:) goes to the tab, and the card closes.
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    glance->PostAction(&KoanGlanceController::Close);
+    return false;
+  }
+  return glance->LoadFromUrlBar(url, transition, extra_headers);
 }
 
 bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser) {

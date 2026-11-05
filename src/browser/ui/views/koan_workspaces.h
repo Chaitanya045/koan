@@ -231,7 +231,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // IDC_CLOSE_TAB_GROUP, ...) as a Spaces window runs it: Zen's equivalent
   // (the Create form, Delete Space, the Space cycle, Koan's new tab) or
   // nothing. False for any other command. The window's ActionItems and the
-  // legacy browser command path both come here.
+  // legacy browser command path both come here (koan_command_policy.cc).
   bool RunGroupCommand(int command_id);
 
   // Zen's UI entry points.
@@ -334,9 +334,6 @@ class KoanWorkspaceController : public TabStripModelObserver,
   };
 
   void InstallViews();
-  // Points this window's upstream tab group actions (shortcuts, menu bar,
-  // app menu) at Spaces, or hides them.
-  void InstallGroupActions();
   // The "+" menu's own entries (Create Space, New Split, New Tab).
   void AddDefaultCreateMenuEntries();
   // Brings the model back to "one Space shown" soon (coalesced): never from

@@ -7,7 +7,10 @@
 
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -15,10 +18,16 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 
 class BrowserView;
+class GURL;
+
+namespace actions {
+class ActionItem;
+}
 
 namespace views {
 class Widget;
@@ -72,10 +81,19 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
   // Browser commands (IDC_*) while the card is open act on the Glance page,
   // as on a tab in Zen: ⌘W closes the card, ⌘R reloads the Glance page, ...
-  // Returns whether it took `command_id`; false while no card is open or the
-  // card is closing. Called from koan_command_policy.cc for every route to a
-  // command (keys, the Mac menu bar, chrome::ExecuteCommand).
+  // Returns whether it took `command_id`; false while no card is open, and
+  // while the card is closing for anything but ⌘W. Called from
+  // koan_command_policy.cc for every route to a command (keys, the Mac menu
+  // bar, chrome::ExecuteCommand, toolbar buttons).
   bool HandleBrowserCommand(int command_id);
+
+  // Gives the Glance page keyboard focus (the URL bar opened over it closed).
+  void FocusPage();
+  // What the user picked in the URL bar opened over the card (⌘L): loads it
+  // in the Glance page. False if there is no open card.
+  bool LoadFromUrlBar(const GURL& url,
+                      ui::PageTransition transition,
+                      const std::string& extra_headers);
 
   // Called by KoanBrowserViewController.
   void OnBrowserViewLayout();
@@ -101,6 +119,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
       bool user_gesture,
       bool* was_blocked) override;
   void CloseContents(content::WebContents* source) override;
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      content::WebContents* source,
+      const input::NativeWebKeyboardEvent& event) override;
   bool HandleKeyboardEvent(content::WebContents* source,
                            const input::NativeWebKeyboardEvent& event) override;
   void BeforeUnloadFired(content::WebContents* source,
@@ -145,8 +166,8 @@ class KoanGlanceController : public content::WebContentsDelegate,
   };
 
   // Watches the tab the card was opened over: when its WebContents goes
-  // away (closed, or replaced by a discard or a prerender activation without
-  // a tab strip change Glance saw first), the card goes too.
+  // away (the tab closed; a replace, which only the legacy discard does in
+  // M158, tears down at once in OnTabStripModelChanged()), the card goes too.
   class SourceTracker : public content::WebContentsObserver {
    public:
     SourceTracker(KoanGlanceController* controller,
@@ -154,12 +175,6 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
     // content::WebContentsObserver:
     void WebContentsDestroyed() override;
-    // The tab's own updates of the window's commands (BrowserCommandController
-    // follows the active tab): Glance's are applied again afterwards.
-    void DidStartLoading() override;
-    void DidStopLoading() override;
-    void NavigationEntryCommitted(
-        const content::LoadCommittedDetails& load_details) override;
 
    private:
     const raw_ptr<KoanGlanceController> controller_;
@@ -183,12 +198,22 @@ class KoanGlanceController : public content::WebContentsDelegate,
   void CloseNow();
   // After the tab under the card went away (SourceTracker).
   void TearDownIfSourceGone();
-  // ⌘L in a Glance: the page becomes a tab and the URL bar takes focus.
-  void ExpandAndFocusLocation();
-  // Enables the commands HandleBrowserCommand() takes (Back, Forward, Stop,
-  // zoom) for the Glance page while the card is open, and for the active tab
-  // again once it closes, as BrowserCommandController does for the tab.
-  void UpdateCommandState();
+  // ⌘L in a Glance: the URL bar opens with the Glance page's address.
+  void EditUrl();
+
+  // While the card is open, the enabled state of Back, Forward, Stop, zoom
+  // and Find (kHeldCommands) follows the Glance page, as it follows the
+  // selected tab in Zen: set for the Glance page, and set again whenever the
+  // command controller sets it for the active tab. Released (upstream's
+  // values for the active tab again, unless the window is going) when the
+  // card closes or becomes a tab.
+  void HoldCommands();
+  void ReleaseCommands(bool restore);
+  // The held commands' state for the Glance page.
+  void ApplyCommandState();
+  void ReapplyCommandState();
+  bool GlanceEnables(int command_id) const;
+  void OnHeldCommandChanged(int command_id, actions::ActionItem* item);
   // Ends the close button's "Confirm" state.
   void EndConfirm();
   // Resets the page's dialogs and detaches it from this delegate.
@@ -220,6 +245,12 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
   std::unique_ptr<InputTracker> tab_input_;
   std::unique_ptr<InputTracker> glance_input_;
+
+  // HoldCommands().
+  bool holds_commands_ = false;
+  bool applying_commands_ = false;
+  bool reapply_pending_ = false;
+  std::vector<base::CallbackListSubscription> command_subscriptions_;
 
   base::WeakPtrFactory<KoanGlanceController> weak_factory_{this};
 };
