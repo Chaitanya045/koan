@@ -64,7 +64,7 @@ Every line should be PASS:
 - G12: `tabs.group()` makes a grey Space.
 - G12: a colour the extension sets itself stays.
 - G3: `tabGroups.update({collapsed: true})` is undone.
-- `tabs.ungroup()`: the tab goes back into a Space.
+- `tabs.ungroup()`: the tab goes back into the Space it left, also when that Space isn't the one shown. When it was that Space's last tab, the Space comes back with that tab, under the same id and with no extra new tab. By hand: in the Chromium-toolbar layout (Ctrl+Alt+B), right-click a tab > Remove from group is gone (Koan's menu), so use the extension.
 - `tabGroups.move()`: the Space moves to the other window, and the source window keeps a Space.
 - `tabs.highlight()` in another Space activates that tab.
 

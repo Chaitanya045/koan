@@ -1359,9 +1359,21 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
       index = static_cast<int>(
           model->group_model()->GetTabGroup(*closed.next)->ListTabs().start());
     }
-    content::WebContents* contents = chrome::AddAndReturnTabAt(
-        browser_view_->browser(), GURL(), index, /*foreground=*/false);
-    const int new_index = model->GetIndexOfWebContents(contents);
+    // Its last tab was only taken out of it (chrome.tabs.ungroup()): that tab
+    // brings it back, as no new tab is needed. Else a new tab.
+    int new_index = TabStripModel::kNoTab;
+    for (const auto& [handle, space] : ungrouped_from_) {
+      tabs::TabInterface* tab = handle.Get();
+      if (space == closed.id && tab && !tab->GetGroup() && !tab->IsPinned()) {
+        new_index = model->GetIndexOfTab(tab);
+        break;
+      }
+    }
+    if (new_index == TabStripModel::kNoTab) {
+      content::WebContents* contents = chrome::AddAndReturnTabAt(
+          browser_view_->browser(), GURL(), index, /*foreground=*/false);
+      new_index = model->GetIndexOfWebContents(contents);
+    }
     if (new_index == TabStripModel::kNoTab) {
       continue;
     }
@@ -1408,13 +1420,41 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     if (!target && !spaces.empty()) {
       target = spaces.front().id;
     }
-    if (target) {
-      model->AddToExistingGroup(loose, *target, /*add_to_end=*/true);
-    } else {
-      WriteSpace(NewSpaceGroup(loose), {.name = kDefaultSpaceName});
+    // A tab taken out of its Space (chrome.tabs.ungroup(), upstream's group
+    // commands) goes back to that Space; the others to `target`. By handle:
+    // each move shifts the indices.
+    std::map<std::optional<tab_groups::TabGroupId>,
+             std::vector<tabs::TabHandle>>
+        by_space;
+    for (int index : loose) {
+      tabs::TabInterface* tab = model->GetTabAtIndex(index);
+      auto it = ungrouped_from_.find(tab->GetHandle());
+      std::optional<tab_groups::TabGroupId> space = target;
+      if (it != ungrouped_from_.end() && GetSpace(it->second)) {
+        space = it->second;
+      }
+      by_space[space].push_back(tab->GetHandle());
+    }
+    for (const auto& [space, handles] : by_space) {
+      std::vector<int> indices;
+      for (const tabs::TabHandle& handle : handles) {
+        if (tabs::TabInterface* tab = handle.Get()) {
+          indices.push_back(model->GetIndexOfTab(tab));
+        }
+      }
+      std::ranges::sort(indices);
+      if (indices.empty()) {
+        continue;
+      }
+      if (space) {
+        model->AddToExistingGroup(indices, *space, /*add_to_end=*/true);
+      } else {
+        WriteSpace(NewSpaceGroup(indices), {.name = kDefaultSpaceName});
+      }
     }
     spaces = GetSpaces();
   }
+  ungrouped_from_.clear();
   if (std::exchange(drop_startup_space_, false)) {
     DropStartupSpaceAfterRestore();
     spaces = GetSpaces();
@@ -2097,6 +2137,23 @@ void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
       header_->Update(info->icon, info->name);
     }
     ApplySpaceColor();
+  }
+  ScheduleUpdate();
+}
+
+void KoanWorkspaceController::TabGroupedStateChanged(
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
+    tabs::TabInterface* tab,
+    int index) {
+  // A tab leaving its group without moving (chrome.tabs.ungroup() of a
+  // Space's last tab, upstream's Remove from group) changes no tab strip
+  // contents (OnTabStripModelChanged() isn't called), so nothing else would
+  // bring it back into a Space. It goes back to the one it left
+  // (EnsureOneSpaceShown()).
+  if (old_group && !new_group && tab) {
+    ungrouped_from_.insert_or_assign(tab->GetHandle(), *old_group);
   }
   ScheduleUpdate();
 }

@@ -307,6 +307,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
       const TabStripSelectionChange& selection) override;
   void OnTabGroupChanged(const TabGroupChange& change) override;
   void OnTabGroupAdded(const tab_groups::TabGroupId& group_id) override;
+  void TabGroupedStateChanged(TabStripModel* tab_strip_model,
+                              std::optional<tab_groups::TabGroupId> old_group,
+                              std::optional<tab_groups::TabGroupId> new_group,
+                              tabs::TabInterface* tab,
+                              int index) override;
   void OnTabGroupFocusChanged(
       std::optional<tab_groups::TabGroupId> new_focused_group_id,
       std::optional<tab_groups::TabGroupId> old_focused_group_id) override;
@@ -424,6 +429,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // group isn't foreign, the visuals are Koan's).
   bool creating_space_ = false;
   bool writing_space_ = false;
+  // Tabs taken out of a Space since the last update, and the Space each left
+  // (it gets them back).
+  std::map<tabs::TabHandle, tab_groups::TabGroupId> ungrouped_from_;
   // Groups created outside Koan, still to get the default theme.
   std::set<tab_groups::TabGroupId> foreign_groups_;
   // Groups added with an id they had before (tab restore, a restored

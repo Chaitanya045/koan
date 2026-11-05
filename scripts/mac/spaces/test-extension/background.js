@@ -103,8 +103,19 @@ async function test15() {
   await chrome.tabs.ungroup([t3.id]);
   await sleep(SETTLE);
   const t3after = await chrome.tabs.get(t3.id);
-  check('tabs.ungroup(): the tab is back in a Space', t3after.groupId !== -1,
-        `groupId ${t3after.groupId}`);
+  check('tabs.ungroup(): the tab is back in its Space', t3after.groupId === space,
+        `groupId ${t3after.groupId}, Space ${space}`);
+
+  // Ungrouping a tab of a Space that isn't shown puts it back there, not in
+  // the Space shown; t1 is its Space's only tab, so the Space comes back with
+  // it (same id) rather than with a new tab.
+  await chrome.tabs.ungroup([t1.id]);
+  await sleep(SETTLE);
+  const t1after = await chrome.tabs.get(t1.id);
+  const g1tabs = await chrome.tabs.query({groupId: t1after.groupId});
+  check('tabs.ungroup() in another Space: the tab is back in that Space',
+        t1after.groupId === g1 && g1tabs.length === 1,
+        `groupId ${t1after.groupId} (was ${g1}), ${g1tabs.length} tab(s)`);
 
   // tabGroups.move() to another window: the Space moves, and the source
   // window keeps at least one Space.
