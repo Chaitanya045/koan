@@ -402,6 +402,11 @@ TabStripModel* KoanWorkspaceController::tab_strip_model() const {
 
 void KoanWorkspaceController::OnAddedToWidget() {
   if (!IsEnabled()) {
+#if BUILDFLAG(IS_MAC)
+    // Only for the menu bar, which each window sets as it becomes key
+    // (OnWidgetActivationChanged()).
+    widget_observation_.Observe(browser_view_->GetWidget());
+#endif
     return;
   }
   InstallViews();
@@ -433,6 +438,16 @@ void KoanWorkspaceController::OnTintPrefChanged() {
 
 void KoanWorkspaceController::OnWidgetActivationChanged(views::Widget* widget,
                                                         bool active) {
+#if BUILDFLAG(IS_MAC)
+  // The menu bar is shared: the key window's kind decides Tab > Group
+  // Selected Tab's state (SetTabGroupMenuAlternate()).
+  if (active) {
+    SetTabGroupMenuAlternate(/*alternate=*/!IsEnabled());
+  }
+#endif
+  if (!IsEnabled()) {
+    return;
+  }
   // The window the user comes to stores its Spaces (StoreSpaces()).
   if (active) {
     stored_spaces_.clear();
@@ -534,6 +549,42 @@ void KoanWorkspaceController::InstallViews() {
   }
 }
 
+bool KoanWorkspaceController::RunGroupCommand(int command_id) {
+  switch (command_id) {
+    // ⌘⌃P "New tab group": Zen's Create Space form.
+    case IDC_CREATE_NEW_TAB_GROUP:
+      ShowCreateForm();
+      return true;
+    // ⌘⌃W "Close group": Delete Space, which asks first (Zen's).
+    case IDC_CLOSE_TAB_GROUP:
+      if (std::optional<tab_groups::TabGroupId> active = GetActiveSpace()) {
+        DeleteSpace(*active);
+      }
+      return true;
+    // ⌘⌃X / ⌘⌃Z: the next or previous Space, wrapping around.
+    case IDC_FOCUS_NEXT_TAB_GROUP:
+      Cycle(/*forward=*/true);
+      return true;
+    case IDC_FOCUS_PREV_TAB_GROUP:
+      Cycle(/*forward=*/false);
+      return true;
+    // ⌘⌃C "New tab in group": a new tab is always in the Space, so Koan's new
+    // tab (the URL bar, as ⌘T).
+    case IDC_ADD_NEW_TAB_TO_GROUP:
+    case IDC_ADD_NEW_TAB_RECENT_GROUP:
+      chrome::ExecuteCommand(browser_view_->browser(), IDC_NEW_TAB);
+      return true;
+    // Tab > Group Tab (and its ⌥ alternate), "Group ungrouped tabs": a tab is
+    // always in a Space; "Move To" moves it to another.
+    case IDC_WINDOW_GROUP_TAB:
+    case IDC_GROUP_TARGET_TAB:
+    case IDC_GROUP_UNGROUPED_TABS:
+      return true;
+    default:
+      return false;
+  }
+}
+
 void KoanWorkspaceController::InstallGroupActions() {
   BrowserActions* actions = BrowserActions::From(browser_view_->browser());
   if (!actions || !actions->root_action_item()) {
@@ -541,71 +592,49 @@ void KoanWorkspaceController::InstallGroupActions() {
   }
   // The actions are the window's own (BrowserActions), like the new-tab one
   // the URL bar takes (KoanUrlBarController::InstallNewTabAction()). They run
-  // Chrome's ⌘⌃ group keys, the Tab menu and the app menu's "Tab groups";
-  // in a Spaces window each does Zen's equivalent or nothing (also for a
-  // browser command that reaches the action while disabled).
-  using Run = base::RepeatingCallback<void(KoanWorkspaceController*)>;
-  const auto install = [&](actions::ActionId id, Run run, bool visible) {
+  // Chrome's ⌘⌃ group keys, the Tab menu and the app menu's "Tab groups"
+  // (kUseActionsForBrowserCommands); in a Spaces window each does what
+  // RunGroupCommand() does for its command, also when it reaches the action
+  // while disabled. (Without that feature, the browser command reaches
+  // RunGroupCommand() through koan::HandleSpacesCommand().)
+  const auto install = [&](actions::ActionId id, std::optional<int> command,
+                           bool visible) {
     actions::ActionItem* item = actions::ActionManager::Get().FindAction(
         id, actions->root_action_item());
     if (!item) {
       return;
     }
     item->SetInvokeActionCallback(base::BindRepeating(
-        [](base::WeakPtr<KoanWorkspaceController> controller, Run run,
-           actions::ActionItem* item, actions::ActionInvocationContext) {
-          if (controller && run) {
-            run.Run(controller.get());
+        [](base::WeakPtr<KoanWorkspaceController> controller,
+           std::optional<int> command, actions::ActionItem* item,
+           actions::ActionInvocationContext) {
+          if (controller && command) {
+            controller->RunGroupCommand(*command);
           }
         },
-        weak_factory_.GetWeakPtr(), std::move(run)));
+        weak_factory_.GetWeakPtr(), command));
     // (Not disabled: the command controller sets the enabled state again;
-    // the no-op callback is what keeps them from running.)
+    // the callback is what decides.)
     if (!visible) {
       item->SetVisible(false);
     }
   };
-  // ⌘⌃P "New tab group": Zen's Create Space form.
-  install(kActionCreateNewTabGroup,
-          base::BindRepeating(&KoanWorkspaceController::ShowCreateForm),
+  install(kActionCreateNewTabGroup, IDC_CREATE_NEW_TAB_GROUP, /*visible=*/true);
+  install(kActionCloseTabGroup, IDC_CLOSE_TAB_GROUP, /*visible=*/true);
+  install(kActionFocusNextTabGroup, IDC_FOCUS_NEXT_TAB_GROUP,
           /*visible=*/true);
-  // ⌘⌃W "Close group": Delete Space, which asks first (Zen's).
-  install(kActionCloseTabGroup,
-          base::BindRepeating([](KoanWorkspaceController* spaces) {
-            if (std::optional<tab_groups::TabGroupId> active =
-                    spaces->GetActiveSpace()) {
-              spaces->DeleteSpace(*active);
-            }
-          }),
+  install(kActionFocusPrevTabGroup, IDC_FOCUS_PREV_TAB_GROUP,
           /*visible=*/true);
-  // ⌘⌃X / ⌘⌃Z: the next or previous Space, wrapping around.
-  install(kActionFocusNextTabGroup,
-          base::BindRepeating(
-              [](KoanWorkspaceController* spaces) { spaces->Cycle(true); }),
+  install(kActionAddNewTabToGroup, IDC_ADD_NEW_TAB_TO_GROUP, /*visible=*/true);
+  install(kActionAddNewTabRecentGroup, IDC_ADD_NEW_TAB_RECENT_GROUP,
           /*visible=*/true);
-  install(kActionFocusPrevTabGroup,
-          base::BindRepeating(
-              [](KoanWorkspaceController* spaces) { spaces->Cycle(false); }),
-          /*visible=*/true);
-  // ⌘⌃C "New tab in group": a new tab is always in the Space, so Koan's new
-  // tab (the URL bar, as ⌘T).
-  const auto new_tab = base::BindRepeating([](KoanWorkspaceController* spaces) {
-    chrome::ExecuteCommand(spaces->browser_view_->browser(), IDC_NEW_TAB);
-  });
-  install(kActionAddNewTabToGroup, new_tab, /*visible=*/true);
-  install(kActionAddNewTabRecentGroup, new_tab, /*visible=*/true);
-  // Tab > Group Tab (and its ⌥ alternate), "Group ungrouped tabs": a tab is
-  // always in a Space; "Move To" moves it to another.
-  for (const actions::ActionId id :
-       {kActionWindowGroupTab, kActionGroupTargetTab,
-        kActionGroupUngroupedTabs}) {
-    install(id, Run(), /*visible=*/false);
-  }
+  install(kActionWindowGroupTab, IDC_WINDOW_GROUP_TAB, /*visible=*/false);
+  install(kActionGroupTargetTab, IDC_GROUP_TARGET_TAB, /*visible=*/false);
+  install(kActionGroupUngroupedTabs, IDC_GROUP_UNGROUPED_TABS,
+          /*visible=*/false);
   // The app menu's saved "Tab groups" (Spaces aren't saved groups).
-  for (const actions::ActionId id :
-       {kActionTabGroupsMenu, kActionSavedTabGroupsSubmenu}) {
-    install(id, Run(), /*visible=*/false);
-  }
+  install(kActionTabGroupsMenu, std::nullopt, /*visible=*/false);
+  install(kActionSavedTabGroupsSubmenu, std::nullopt, /*visible=*/false);
 }
 
 // Spaces.
@@ -2164,7 +2193,23 @@ void KoanWorkspaceController::ApplySpaceColor() {
   if (!widget || widget->IsClosed() || destroying_ || !IsEnabled()) {
     return;
   }
-  widget->SetUserColorOverride(GetSpaceColor());
+  const std::optional<SkColor> color = GetSpaceColor();
+  if (widget->user_color_override() == color) {
+    return;
+  }
+  // The window re-themes itself (Widget::SetUserColorOverride()). Its child
+  // widgets take the colour through their parent's key but aren't told
+  // (upstream re-themes them only with kThemeChangeOptimization): on macOS
+  // the fullscreen overlay with the sidebar and toolbar, compact mode's,
+  // Glance, the floating URL bar. A profile colour change used to reach them
+  // all through the native theme.
+  widget->SetUserColorOverride(color);
+  for (views::Widget* child :
+       views::Widget::GetAllChildWidgets(widget->GetNativeView())) {
+    if (child != widget && !child->IsClosed()) {
+      child->ThemeChanged();
+    }
+  }
 }
 
 // Hooks (koan_spaces.h).
@@ -2208,6 +2253,11 @@ bool ApplySpaceColor(TabStripModel* tab_strip) {
 
 bool HasSpaces(TabStripModel* tab_strip) {
   return KoanWorkspaceController::FromTabStrip(tab_strip) != nullptr;
+}
+
+bool HandleSpacesCommand(BrowserWindowInterface* browser, int command_id) {
+  KoanWorkspaceController* spaces = SpacesOf(browser);
+  return spaces && spaces->RunGroupCommand(command_id);
 }
 
 bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab) {

@@ -23,6 +23,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_color.h"
@@ -225,6 +226,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // To" in the tab context menu).
   void MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
                        const tab_groups::TabGroupId& space);
+
+  // Upstream's tab group command `command_id` (IDC_CREATE_NEW_TAB_GROUP,
+  // IDC_CLOSE_TAB_GROUP, ...) as a Spaces window runs it: Zen's equivalent
+  // (the Create form, Delete Space, the Space cycle, Koan's new tab) or
+  // nothing. False for any other command. The window's ActionItems and the
+  // legacy browser command path both come here.
+  bool RunGroupCommand(int command_id);
 
   // Zen's UI entry points.
   // The Create-a-Space form in the sidebar (Ctrl+Alt+N, "+" > Create Space).
@@ -479,6 +487,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
 
   base::WeakPtrFactory<KoanWorkspaceController> weak_factory_{this};
 };
+
+#if BUILDFLAG(IS_MAC)
+// Whether the macOS menu bar's Tab > Group Selected Tab is the Option
+// alternate of Group Tab (upstream's menu), or a plain item that the menu
+// validation hides (a Spaces window is key). koan_workspaces_mac.mm.
+void SetTabGroupMenuAlternate(bool alternate);
+#endif
 
 }  // namespace koan
 

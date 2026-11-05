@@ -195,6 +195,7 @@ source_set("impl") {
     sources += [
       "koan_native_window_move_mac.mm",
       "koan_traffic_lights_mac.mm",
+      "koan_workspaces_mac.mm",
     ]
   }
   deps = [

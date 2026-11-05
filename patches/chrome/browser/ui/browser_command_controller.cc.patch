@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index afc3f64..96c38f0 100644
+index afc3f64a97c6a8676a656fca1a3ede18eb23b1fb..0e83b790aa3c9ba48b88a29420cb87ef201a7010 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -147,6 +147,7 @@
+@@ -147,6 +147,8 @@
  #include "extensions/browser/extension_registry.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/extension_urls.h"
++#include "koan/browser/ui/views/koan_spaces.h"
 +#include "koan/browser/ui/views/koan_url_bar.h"
  #include "printing/buildflags/buildflags.h"
  #include "third_party/omnibox_proto/chrome_aim_entry_point.pb.h"
  #include "ui/accessibility/accessibility_features.h"
-@@ -531,7 +532,10 @@ bool BrowserCommandController::IsReservedCommandOrKey(
+@@ -531,7 +533,10 @@ bool BrowserCommandController::IsReservedCommandOrKey(
      // full-screen mode. According to the discussion in
      // http://crbug.com/40511102, the commands should be reserved for
      // browser-side handling if the browser window's toolbar is visible.
@@ -22,7 +23,19 @@ index afc3f64..96c38f0 100644
        if (command_id == IDC_FULLSCREEN) {
          return true;
        }
-@@ -783,6 +787,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -697,6 +702,11 @@ void BrowserCommandController::HandleCommandWithDisposition(
+   //    E(kActionFoo, IDC_FOO)
+   // 2. Wire callback in BrowserActions::Initialize...() (browser_actions.cc).
+   // ===========================================================================
++  // Koan: a Spaces window runs upstream's tab group commands its own way
++  // (koan_spaces.h).
++  if (koan::HandleSpacesCommand(browser_, id)) {
++    return;
++  }
+   // The order of commands in this switch statement must match the function
+   // declaration order in browser.h!
+   switch (id) {
+@@ -783,6 +793,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        CloseWindow(browser_);
        break;
      case IDC_NEW_TAB: {
@@ -33,7 +46,7 @@ index afc3f64..96c38f0 100644
        NewTab(browser_, NewTabTypes::kNewTabCommand);
        break;
      }
-@@ -942,6 +950,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -942,6 +956,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
  
  #if BUILDFLAG(IS_MAC)
      case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
@@ -44,7 +57,7 @@ index afc3f64..96c38f0 100644
        chrome::ToggleAlwaysShowToolbarInFullscreen(browser_);
        break;
      case IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS: {
-@@ -1124,10 +1136,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -1124,10 +1142,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
        FindPrevious(browser_);
        break;
      case IDC_CLOSE_FIND_OR_STOP:
@@ -57,7 +70,7 @@ index afc3f64..96c38f0 100644
        }
        break;
  
-@@ -2806,7 +2818,8 @@ void BrowserCommandController::UpdateCommandsForFind() {
+@@ -2806,7 +2824,8 @@ void BrowserCommandController::UpdateCommandsForFind() {
  }
  
  void BrowserCommandController::UpdateCloseFindOrStop() {

@@ -8,6 +8,7 @@
 #include <optional>
 
 class BrowserView;
+class BrowserWindowInterface;
 class TabStripModel;
 
 namespace tab_groups {
@@ -86,6 +87,13 @@ bool ShowsSpaceHeader(const views::View* tab_group_view);
 // Whether `tab_strip`'s window has Spaces (koan_tab_menu.cc swallows
 // upstream's tab group commands there).
 bool HasSpaces(TabStripModel* tab_strip);
+
+// BrowserCommandController::HandleCommandWithDisposition(), first: runs
+// upstream's tab group command `command_id` the way a Spaces window does
+// (KoanWorkspaceController::RunGroupCommand()) and returns true, or returns
+// false (another command, or no Spaces). Only reached without
+// kUseActionsForBrowserCommands; with it the window's ActionItems do the same.
+bool HandleSpacesCommand(BrowserWindowInterface* browser, int command_id);
 
 // TabStripCollectionController::UpdateFocusModeTheme(): upstream gives a
 // focused group's window the group's colour (a per-window user colour
