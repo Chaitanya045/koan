@@ -32,12 +32,18 @@ bool UseSingleReflowSidebarAnimation();
 // width it shows at, and a Koan animation (Zen's timings and easing, see
 // koan_sidebar_curve.h) slides its layer in and out with a transform, instead
 // of the strip getting a new width on every frame; the strip's children are
-// not laid out again. The animation runs on the main thread, which sets the
-// transform on each tick. Upstream's progress only tells which way it goes.
+// not laid out again. The slide is a chain of short linear transform animations
+// that the compositor runs. Upstream's progress only tells which way it goes.
 // The layout therefore sees the strip as in (1) as soon as the animation
 // starts and as gone (0) once it has ended. Otherwise the progress is returned
 // as it is, and the layer has no transform.
 double LayoutSidebarReveal(views::View* browser_view, double progress);
+
+// The next time the sidebar is revealed (the strip going out) it just is out,
+// with no slide, once; `snap` false takes that back. For an empty tab holding
+// the sidebar as compact mode hides it: Zen applies that state without
+// animation.
+void SnapNextSidebarReveal(views::View* browser_view, bool snap);
 
 // Keeps the sidebar as it is (out, if compact mode's hover revealed it) while
 // this lives: held by a menu opened from the sidebar, as Zen's `has-popup-menu`
@@ -49,7 +55,8 @@ class SidebarHold {
   // The menu has closed. Zen removes `has-popup-menu` at once if the pointer
   // is over the window, and otherwise at the pointer's next move over it, so a
   // sidebar whose menu closed with the pointer elsewhere doesn't snap shut
-  // under it. Call once.
+  // under it. May be called again (the runner's callback, then after
+  // RunMenuAt()): later calls find the hold released or waiting.
   void ReleaseWhenPointerMoves();
 
   SidebarHold(const SidebarHold&) = delete;

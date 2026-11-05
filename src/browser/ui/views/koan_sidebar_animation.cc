@@ -15,8 +15,10 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_sidebar_curve.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "ui/base/class_property.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
@@ -74,8 +76,13 @@ class SidebarReveal {
     return (raw > 0.0 || value_ > 0.0 || animating_) ? 1.0 : 0.0;
   }
 
+  // The next reveal is not slid: the strip is just there (an empty tab holds
+  // the sidebar out as compact mode hides it, and Zen doesn't animate that).
+  void SnapNextReveal(bool snap) { snap_next_ = snap; }
+
   // Compact mode is off: the strip is where the layout puts it.
   void Reset() {
+    snap_next_ = false;
     ++generation_;
     animating_ = false;
     value_ = 0.0;
@@ -101,7 +108,11 @@ class SidebarReveal {
     const double from = CurrentValue();
     target_ = target;
     ++generation_;
-    if (!gfx::Animation::ShouldRenderRichAnimation()) {
+    const bool snap = snap_next_ && target == 1.0;
+    if (target == 1.0) {
+      snap_next_ = false;
+    }
+    if (snap || !gfx::Animation::ShouldRenderRichAnimation()) {
       animating_ = false;
       value_ = target;
       region_->layer()->SetTransform(TransformFor(value_));
@@ -123,7 +134,10 @@ class SidebarReveal {
     builder
         .OnEnded(base::BindOnce(&SidebarReveal::OnSlideEnded,
                                 weak_factory_.GetWeakPtr(), generation_))
-        .OnAborted(base::DoNothing());
+        // Aborted by something else (the layer recreated, all animations
+        // aborted): it is where it is, and nothing is under way.
+        .OnAborted(base::BindOnce(&SidebarReveal::OnSlideAborted,
+                                  weak_factory_.GetWeakPtr(), generation_));
     views::AnimationSequenceBlock* block = nullptr;
     for (int i = 1; i <= segments; ++i) {
       const double t = static_cast<double>(i) / segments;
@@ -144,6 +158,15 @@ class SidebarReveal {
     animating_ = false;
     value_ = target_;
     // The layout kept the strip at its width until now.
+    browser_view_->InvalidateLayout();
+  }
+
+  void OnSlideAborted(int generation) {
+    if (generation != generation_) {
+      return;
+    }
+    animating_ = false;
+    value_ = target_;
     browser_view_->InvalidateLayout();
   }
 
@@ -179,6 +202,7 @@ class SidebarReveal {
   base::TimeDelta slide_duration_;
   // Tells a finished slide from one that was replaced.
   int generation_ = 0;
+  bool snap_next_ = false;
   // Upstream's progress at the last layout, to tell which way it is going.
   double last_raw_ = 0.0;
   base::WeakPtrFactory<SidebarReveal> weak_factory_{this};
@@ -190,16 +214,41 @@ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(SidebarReveal, kSidebarRevealKey)
 
 }  // namespace
 
+namespace {
+
+// Whether the window of `widget` is closing (KoanVerticalTabsPolicy::
+// IsClosing()). Letting go of a hold's lock makes the sidebar's region decide
+// again and animate, which a closing window can't (the browser's animation
+// controller is gone or about to be).
+bool IsWindowClosing(views::Widget* widget) {
+  if (!widget || widget->IsClosed()) {
+    return true;
+  }
+  const auto* browser_view =
+      views::AsViewClass<BrowserView>(widget->client_view());
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return !controller || controller->vertical_tabs()->IsClosing();
+}
+
+}  // namespace
+
 struct SidebarHold::Impl : public ui::EventObserver {
   void OnEvent(const ui::Event& event) override {
-    lock.reset();
+    ReleaseLock();
     // Not from inside its own dispatch.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&Impl::StopMonitoring, weak_factory.GetWeakPtr()));
   }
   void StopMonitoring() { monitor.reset(); }
-  void ReleaseLock() { lock.reset(); }
+  void ReleaseLock() {
+    if (IsWindowClosing(widget)) {
+      ReleaseExpandOnHoverLockSoon(lock);
+    } else {
+      lock.reset();
+    }
+  }
 
   std::unique_ptr<ExpandOnHoverLock> lock;
   raw_ptr<views::Widget> widget = nullptr;
@@ -235,17 +284,15 @@ void SidebarHold::ReleaseWhenPointerMoves() {
     return;
   }
   if (!widget || !impl_->lock) {
-    impl_->lock.reset();
+    impl_->ReleaseLock();
     return;
   }
   if (widget->GetWindowBoundsInScreen().Contains(
           display::Screen::Get()->GetCursorScreenPoint())) {
-    // Still open for Zen's keep-hover time (measured: open at +0.12 s, closed
-    // by +0.6 s with the pointer over the page), then it follows the pointer.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&Impl::ReleaseLock, impl_->weak_factory.GetWeakPtr()),
-        kSidebarKeepHoverDuration);
+    // Zen's #onPopupHidden removes `has-popup-menu` at once with the pointer
+    // over the window; upstream's hover tracking keeps the sidebar out if the
+    // pointer is on it.
+    impl_->ReleaseLock();
     return;
   }
   impl_->monitor = views::EventMonitor::CreateWindowMonitor(
@@ -299,6 +346,25 @@ double LayoutSidebarReveal(views::View* browser_view, double progress) {
         std::make_unique<SidebarReveal>(browser_view, region));
   }
   return reveal->Update(progress);
+}
+
+void SnapNextSidebarReveal(views::View* browser_view, bool snap) {
+  auto* view = views::AsViewClass<BrowserView>(browser_view);
+  views::View* region = view ? view->tab_strip_view() : nullptr;
+  if (!region || region->GetClassName() != "VerticalTabStripRegionView" ||
+      !region->layer()) {
+    return;
+  }
+  SidebarReveal* reveal = region->GetProperty(kSidebarRevealKey);
+  if (!reveal) {
+    if (!snap) {
+      return;
+    }
+    reveal = region->SetProperty(
+        kSidebarRevealKey,
+        std::make_unique<SidebarReveal>(browser_view, region));
+  }
+  reveal->SnapNextReveal(snap);
 }
 
 }  // namespace koan
