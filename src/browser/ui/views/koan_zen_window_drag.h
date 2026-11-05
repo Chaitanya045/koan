@@ -6,6 +6,8 @@
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
 //   ZenWindowDragChild.sys.mjs
 //   zen-default-prefs.js
+//   nsZenNativeWindowMove.mm, expose_tiled_attribute_to_all_platforms.patch
+//   (koan_native_window_move_mac.mm)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
@@ -16,6 +18,10 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_ZEN_WINDOW_DRAG_H_
 
 #include <string>
+
+#include "build/build_config.h"
+
+class BrowserView;
 
 namespace koan {
 
@@ -34,6 +40,27 @@ inline constexpr float kWindowDragSnappedThreshold = 50;
 // interactive cursor, and not the scrollbar. Zen's ZenWindowDragChild
 // checks.
 std::u16string IsEmptySpaceScript(double x, double y);
+
+// Whether the window is maximized or tiled to an edge: un-snapping it takes
+// kWindowDragSnappedThreshold, not kWindowDragThreshold (Zen's
+// ZenWindowDragParent #isSnapped). macOS 15's tiling is not `isZoomed`: it is
+// read from the window's private tiling state as Zen does (macOS only; the
+// rest is Widget::IsMaximized()).
+bool IsWindowSnapped(const BrowserView* browser_view);
+
+#if BUILDFLAG(IS_MAC)
+// Hands the window to AppKit to move while the left button is down
+// (-[NSWindow performWindowDragWithEvent:], Zen's StartNativeWindowMoveCocoa):
+// a native drag, with macOS' edge tiling and its drag to another Space, and
+// none of the checks of Chromium's emulated move loop, which crashes a
+// release build if anything holds the capture. Returns false if there is
+// nothing to drag (no window, or the button is up already).
+bool StartNativeWindowMove(const BrowserView* browser_view);
+
+// After the drag AppKit took over (the first move with the button up): sends
+// the page's view the release that the window server swallowed.
+void EndNativeWindowMove(const BrowserView* browser_view);
+#endif
 
 }  // namespace koan
 

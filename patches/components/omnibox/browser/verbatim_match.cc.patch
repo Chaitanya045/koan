@@ -1,0 +1,16 @@
+diff --git a/components/omnibox/browser/verbatim_match.cc b/components/omnibox/browser/verbatim_match.cc
+index d5d01f536f67172ab38cbdb2ff724858fb209c6c..085159fbf1cbb90e0564d43c32079a86d3df22ea 100644
+--- a/components/omnibox/browser/verbatim_match.cc
++++ b/components/omnibox/browser/verbatim_match.cc
+@@ -140,7 +140,10 @@ AutocompleteMatch VerbatimMatchForInput(AutocompleteProvider* provider,
+     // "www.w.com", we want to highlight the fifth character, not the first.
+     // This relies on match.destination_url being the non-prefix-trimmed version
+     // of match.contents.
+-    match.contents = display_string;
++    // Koan: sanitized, as AutocompleteResult::AppendMatches() DCHECKs: a URL
++    // ending in "%20" displays with a trailing space (typing
++    // "data:text/html,a%20" crashed DCHECK builds, #166).
++    match.contents = AutocompleteMatch::SanitizeString(display_string);
+ 
+     TermMatches termMatches = {{0, 0, input.text().length()}};
+     match.contents_class = ClassifyTermMatches(

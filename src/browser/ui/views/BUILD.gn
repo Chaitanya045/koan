@@ -189,7 +189,10 @@ source_set("impl") {
     "koan_zen_window_drag.h",
   ]
   if (is_mac) {
-    sources += [ "koan_traffic_lights_mac.mm" ]
+    sources += [
+      "koan_native_window_move_mac.mm",
+      "koan_traffic_lights_mac.mm",
+    ]
   }
   deps = [
     ":lights_geometry",
