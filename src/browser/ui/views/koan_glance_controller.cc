@@ -734,26 +734,39 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
       content::NavigationController::LoadURLParams(params));
   glance_input_ = std::make_unique<InputTracker>(contents_.get(), this);
 
-  // A child widget over the contents area, so the overlay has its own native
+  // A widget over the contents area, so the overlay has its own native
   // window above the page's and receives the pointer everywhere over it.
+#if BUILDFLAG(IS_MAC)
+  // macOS: the page in the card gets keys only while the card's window is
+  // the key window, so the card is key while it is open (as a bubble is),
+  // and the browser window keeps painting as active meanwhile. That needs a
+  // top-level widget, with its own FocusManager: a child (TYPE_CONTROL)
+  // widget shares the browser window's, and every focus change there
+  // activates the browser window again (FocusManager::SetFocusedViewWithReason
+  // activates the manager's widget), so the card would lose key at once.
+  // Frameless, parented to the browser window (a child NSWindow, moved with
+  // it), no shadow.
+  views::Widget::InitParams widget_params(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+  widget_params.activatable = views::Widget::InitParams::Activatable::kYes;
+  widget_params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
+  paint_as_active_ = browser_view_->GetWidget()->LockPaintAsActive();
+#else
+  // A child widget: Aura gives it keys through the window's focus.
   views::Widget::InitParams widget_params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_CONTROL);
+#endif
   widget_params.parent = browser_view_->GetWidget()->GetNativeView();
   widget_params.opacity =
       views::Widget::InitParams::WindowOpacity::kTranslucent;
   widget_params.name = "KoanGlance";
-#if BUILDFLAG(IS_MAC)
-  // The page in the card gets keys only from the key window, and a
-  // TYPE_CONTROL child window can't be key unless it can be activated: on
-  // macOS the card's window is key while it is open (as a bubble's is), and
-  // the browser window keeps painting as active meanwhile. (Aura routes keys
-  // through the top-level window's focus.)
-  widget_params.activatable = views::Widget::InitParams::Activatable::kYes;
-  paint_as_active_ = browser_view_->GetWidget()->LockPaintAsActive();
-#endif
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(widget_params));
+#if BUILDFLAG(IS_MAC)
+  PrepareCardWindow(widget_.get());
+#endif
   view_ = widget_->SetContentsView(
       std::make_unique<KoanGlanceView>(this, contents_.get()));
   LayoutWidget();
@@ -764,13 +777,6 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   LogKeyWindow("before Show()");
   widget_->Show();
   LogKeyWindow("after Show()");
-#if BUILDFLAG(IS_MAC)
-  if (!widget_->IsActive()) {
-    // Diagnostics: does AppKit take it when asked directly?
-    MakeCardWindowKey(widget_.get());
-    LogKeyWindow("after makeKeyWindow");
-  }
-#endif
   widget_->LayoutRootViewIfNecessary();
   grow_rect_ = GrowRect();
   view_->PlayOpenAnimation(grow_rect_, /*fresh=*/true);
@@ -1217,7 +1223,13 @@ void KoanGlanceController::LayoutWidget() {
   if (UseContentCard(browser_view_)) {
     bounds.Inset(ContentCardInsets(browser_view_));
   }
+#if BUILDFLAG(IS_MAC)
+  // A top-level widget (see Open()): screen coordinates.
+  views::View::ConvertRectToScreen(contents_view, &bounds);
+  widget_->SetBounds(bounds);
+#else
   widget_->SetBounds(contents_view->ConvertRectToWidget(bounds));
+#endif
 }
 
 gfx::Rect KoanGlanceController::GrowRect() const {
