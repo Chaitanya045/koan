@@ -398,3 +398,12 @@ Not judgeable: tiling — dragging to the left screen edge pushed the window off
 PASS: drag the edge of compact's revealed (peeked) sidebar: it doesn't resize at all, never a rail, compact stays (s34-peekdrag); toast once per session: 1st drag below min → "Sidebar hidden!", 2nd → compact with no toast (s34-t); tab / sidebar button / Space header / empty sidebar menus only Koan's (s34-menus). No DCHECK/dump.
 Report (as the test list asks): Ctrl+Alt+B layout, app menu > More tools still lists "Show tabs horizontally" greyed out (s34-mt); the app menu also has Chromium's "Tab groups" and "Customise Chrome".
 Not done: the 10-minute hint (would hold the loop 11 min).
+
+## Session 35 (15:14–15:17 IST): KoanCheck-c163d (#163 ea32f963 on develop ef76c876)
+My earlier "blank sidebar panel" (s32) was a mis-click: in the peeked layout the pill sits at y≈224, my click at y=119 hit empty space. Not reproduced.
+### B48. Compact peek + page info: the sidebar slides away and page info hangs outside the window — major (#163 step 8)
+Steps: compact on, peek the sidebar, click the pill's site-info button. Expected (#163 step 8): page info opens at the pill and the sidebar stays out while it's open; Esc: sidebar slides away.
+Actual: page info opens, but the sidebar hides at once; the bubble stays where the pill was, mostly outside the window over the desktop (x 0–320, window starts at 221) (s35-pageinfo-sidebar-gone). Esc closes it, no blank panel (s35-pageinfo-esc). Same with the pointer moved onto the page.
+PASS: https download finishes silently, no panel opens by itself (s35-dl-fs left); notification prompt in native fullscreen at the pill (s35-dl-fs right). No DCHECK/dump.
+Minor: a plain-http download is blocked ("This file can't be downloaded securely") with no visible notice anywhere except the Library (s35-lib-blocked) — no panel opens, so the user doesn't learn it failed.
+Not done: camera/microphone (I won't turn on the Mac's camera or mic), CT/CB layouts.
