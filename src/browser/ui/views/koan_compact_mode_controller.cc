@@ -735,6 +735,16 @@ bool KoanCompactModeController::is_toolbar_away() const {
 }
 
 void KoanCompactModeController::OnEvent(const ui::Event& event) {
+  if (VLOG_IS_ON(2)) {
+    ++events_since_log_;
+    if (base::TimeTicks::Now() - last_event_log_ > base::Seconds(2)) {
+      VLOG(2) << "Koan: " << events_since_log_
+              << " pointer events (application wide: "
+              << pointer_monitor_is_application_wide_ << ")";
+      last_event_log_ = base::TimeTicks::Now();
+      events_since_log_ = 0;
+    }
+  }
   CheckRevealedHides();
   CheckFullscreenEdges();
 }
@@ -750,9 +760,18 @@ void KoanCompactModeController::CheckFullscreenEdges() {
     edge_sidebar_hovered_ = false;
     return;
   }
-  gfx::Point pointer = display::Screen::Get()->GetCursorScreenPoint();
+  const gfx::Point screen_pointer =
+      display::Screen::Get()->GetCursorScreenPoint();
+  gfx::Point pointer = screen_pointer;
   views::View::ConvertPointFromScreen(browser_view_, &pointer);
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
+  if (VLOG_IS_ON(2) && pointer.x() < 40 &&
+      base::TimeTicks::Now() - last_edge_log_ > base::Milliseconds(500)) {
+    last_edge_log_ = base::TimeTicks::Now();
+    VLOG(2) << "Koan: edge check, pointer " << pointer.ToString() << " (screen "
+            << screen_pointer.ToString() << ") in " << bounds.ToString()
+            << ", view at " << browser_view_->GetBoundsInScreen().ToString();
+  }
   if (sidebar_hot_zone_) {
     const bool at_edge =
         IsSidebarOnRight(browser_view_)
@@ -1556,11 +1575,26 @@ void KoanCompactModeController::UpdatePointerMonitor() {
     pointer_monitor_.reset();
     return;
   }
+  // At the screen's edge in native fullscreen the event goes to the window
+  // that is under the pointer, which is not always the browser window's
+  // (another window of the application can be there, as an invisible bubble's
+  // or the immersive overlay's), and a monitor of one window then never sees
+  // it: watch the whole application there, and decide by the pointer's place.
+  const bool application_wide = WantsFullscreenEdges();
+  if (pointer_monitor_ &&
+      pointer_monitor_is_application_wide_ != application_wide) {
+    pointer_monitor_.reset();
+  }
   if (!pointer_monitor_) {
-    pointer_monitor_ = views::EventMonitor::CreateWindowMonitor(
-        this, widget->GetNativeWindow(),
-        {ui::EventType::kMouseMoved, ui::EventType::kMouseDragged,
-         ui::EventType::kMouseEntered, ui::EventType::kMouseExited});
+    const std::set<ui::EventType> types = {
+        ui::EventType::kMouseMoved, ui::EventType::kMouseDragged,
+        ui::EventType::kMouseEntered, ui::EventType::kMouseExited};
+    pointer_monitor_is_application_wide_ = application_wide;
+    pointer_monitor_ = application_wide
+                           ? views::EventMonitor::CreateApplicationMonitor(
+                                 this, widget->GetNativeWindow(), types)
+                           : views::EventMonitor::CreateWindowMonitor(
+                                 this, widget->GetNativeWindow(), types);
   }
 }
 
