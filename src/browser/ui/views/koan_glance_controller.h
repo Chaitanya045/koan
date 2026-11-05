@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback_list.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -23,6 +24,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 class BrowserWindowInterface;
@@ -45,6 +47,9 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
 // macOS diagnostics: the key window, its first responder, and the card's
 // window (`card`, may be null) against the browser window's.
 std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser);
+// macOS diagnostics: makes the card's window the key window directly
+// ([NSWindow makeKeyWindow]).
+void MakeCardWindowKey(views::Widget* card);
 #endif
 
 // Zen-style Glance for one window: a link opened as a floating card over
@@ -59,7 +64,8 @@ std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser);
 // mouse events, and the page underneath gets none while Glance is open. The
 // card hosts a WebContents owned here until it is promoted into a tab.
 class KoanGlanceController : public content::WebContentsDelegate,
-                             public TabStripModelObserver {
+                             public TabStripModelObserver,
+                             public views::WidgetObserver {
  public:
   explicit KoanGlanceController(BrowserView* browser_view);
   KoanGlanceController(const KoanGlanceController&) = delete;
@@ -139,6 +145,10 @@ class KoanGlanceController : public content::WebContentsDelegate,
                          bool* proceed_to_fire_unload) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
+
+  // views::WidgetObserver (macOS key-window diagnostics, the card's and the
+  // browser window's activation while a card is open):
+  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -247,6 +257,10 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
+  // The card's and the browser window's widgets, while a card is open
+  // (activation diagnostics).
+  base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
+      activation_observations_{this};
   raw_ptr<KoanGlanceView> view_ = nullptr;
   std::unique_ptr<content::WebContents> contents_;
   std::unique_ptr<SourceTracker> source_;

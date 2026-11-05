@@ -10,6 +10,7 @@
 #include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
+#include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
@@ -756,11 +757,25 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   view_ = widget_->SetContentsView(
       std::make_unique<KoanGlanceView>(this, contents_.get()));
   LayoutWidget();
+  if (VLOG_IS_ON(1)) {
+    activation_observations_.AddObservation(widget_.get());
+    activation_observations_.AddObservation(browser_view_->GetWidget());
+  }
+  LogKeyWindow("before Show()");
   widget_->Show();
+  LogKeyWindow("after Show()");
+#if BUILDFLAG(IS_MAC)
+  if (!widget_->IsActive()) {
+    // Diagnostics: does AppKit take it when asked directly?
+    MakeCardWindowKey(widget_.get());
+    LogKeyWindow("after makeKeyWindow");
+  }
+#endif
   widget_->LayoutRootViewIfNecessary();
   grow_rect_ = GrowRect();
   view_->PlayOpenAnimation(grow_rect_, /*fresh=*/true);
   view_->web_view()->RequestFocus();
+  LogKeyWindow("after the page's RequestFocus()");
   HoldCommands();
   LogKeyWindow("opened");
 }
@@ -1103,6 +1118,15 @@ void KoanGlanceController::LogKeyWindow(const char* where) const {
 #endif
 }
 
+void KoanGlanceController::OnWidgetActivationChanged(views::Widget* widget,
+                                                    bool active) {
+  VLOG(1) << "Koan Glance keys: "
+          << (widget == widget_.get() ? "the card's" : "the browser window's")
+          << " widget " << (active ? "activated" : "deactivated") << ", from:\n"
+          << base::debug::StackTrace().ToString();
+  LogKeyWindow("activation change");
+}
+
 void KoanGlanceController::EditUrl() {
   if (!is_open() || closing_ || awaiting_beforeunload_) {
     return;
@@ -1166,6 +1190,7 @@ void KoanGlanceController::OnBrowserViewDestroying() {
 
 void KoanGlanceController::DestroyWidget(bool give_back_key) {
   view_ = nullptr;
+  activation_observations_.RemoveAllObservations();
   if (!widget_) {
     return;
   }
