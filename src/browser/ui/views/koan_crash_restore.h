@@ -22,7 +22,8 @@ namespace koan {
 //   bubble does nothing for them either);
 // - a second crash in a row. Like Firefox (max_resumed_crashes=1), the first
 //   crash is restored silently, and a crash within a minute of that
-//   restore (or during it) shows the bubble, so a session that crashes the browser can't loop.
+//   restore (or during it) shows the bubble. The minute is measured at the
+//   next launch from the time of the last silent restore (no timer), so a session that crashes the browser can't loop.
 //
 // Nothing is restored twice: a later launch of the same profile in this
 // process (a Dock reopen after every window was closed) or one while a
