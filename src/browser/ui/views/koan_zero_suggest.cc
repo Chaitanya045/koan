@@ -84,11 +84,13 @@ AutocompleteMatch KoanZeroSuggestProvider::MakeMatch(
   match.fill_into_edit = base::UTF8ToUTF16(url.spec());
   // Zen shows the title, then the site: what the user knows, without the
   // scheme or "www".
-  match.contents = url_formatter::FormatUrl(
+  // Sanitized, as Chromium's providers do: a URL ending in "%20" formats to
+  // contents with a trailing space, which AppendMatches() DCHECKs (#166).
+  match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
       url,
       AutocompleteMatch::GetFormatTypes(/*preserve_scheme=*/false,
                                         /*preserve_subdomain=*/false),
-      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
+      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
   match.contents_class = {ACMatchClassification(0, ACMatchClassification::URL)};
   match.description = title;
   match.description_class = {
