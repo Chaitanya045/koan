@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at https://mozilla.org/MPL/2.0/.
+   -
+   - Contains material ported from Zen Browser, Copyright the Zen Browser
+   - contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+   -   ZenWelcome.mjs (the screen's markup)
+   - Koan's changes, Copyright 2026 The Koan Authors, are under the same
+   - licence. -->
+<html dir="ltr" lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome to Koan</title>
+<link rel="stylesheet" href="/koan_welcome.css">
+<script src="/motion.min.js"></script>
+<script type="module" src="/koan_welcome.js"></script>
+</head>
+<body>
+<div id="zen-welcome-video" aria-hidden="true"></div>
+<div id="zen-welcome" role="dialog" aria-modal="true"
+     aria-label="Welcome to a calmer internet">
+  <div id="zen-welcome-start">
+    <h1 id="zen-welcome-title"></h1>
+    <button class="footer-button primary" id="zen-welcome-start-button"
+            aria-label="Start"></button>
+  </div>
+  <div id="zen-welcome-pages">
+    <div id="zen-welcome-page-sidebar">
+      <button id="zen-welcome-back"></button>
+      <div id="zen-welcome-page-sidebar-content" aria-live="polite"></div>
+      <div id="zen-welcome-page-sidebar-buttons"></div>
+    </div>
+    <div id="zen-welcome-page-content"></div>
+  </div>
+</div>
+</body>
+</html>

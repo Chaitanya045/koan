@@ -163,30 +163,6 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanDownloadTileIcon,
   kColorKoanDownloadTileShadow,
 
-  // The welcome screen (koan_welcome.cc): the backdrop's gradient, the
-  // title and the start button; the pages' card (sidebar, content, the
-  // surfaces of options and panels, tiles, the mock window), borders,
-  // shadows, text, radio circles and the accent buttons.
-  kColorKoanWelcomeBackdropTop,
-  kColorKoanWelcomeBackdropBottom,
-  kColorKoanWelcomeTitle,
-  kColorKoanWelcomeStartButton,
-  kColorKoanWelcomeStartButtonHovered,
-  kColorKoanWelcomeStartButtonIcon,
-  kColorKoanWelcomeSidebar,
-  kColorKoanWelcomeContent,
-  kColorKoanWelcomeSurface,
-  kColorKoanWelcomeTile,
-  kColorKoanWelcomeMockWindow,
-  kColorKoanWelcomeBorder,
-  kColorKoanWelcomeShadow,
-  kColorKoanWelcomeText,
-  kColorKoanWelcomeTextSecondary,
-  kColorKoanWelcomeRadio,
-  kColorKoanWelcomeAccent,
-  kColorKoanWelcomeAccentHovered,
-  kColorKoanWelcomeOnAccent,
-
   kKoanColorsEnd,
 };
 

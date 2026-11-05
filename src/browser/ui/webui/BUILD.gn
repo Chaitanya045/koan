@@ -12,6 +12,12 @@ source_set("webui") {
     "koan_settings_rows.h",
     "koan_settings_ui.cc",
     "koan_settings_ui.h",
+    "koan_welcome_handler.cc",
+    "koan_welcome_handler.h",
+    "koan_welcome_host.cc",
+    "koan_welcome_host.h",
+    "koan_welcome_ui.cc",
+    "koan_welcome_ui.h",
   ]
   public_deps = [
     "//content/public/browser",
@@ -19,7 +25,21 @@ source_set("webui") {
   ]
   deps = [
     ":resources",
+    ":welcome_media",
+    ":welcome_resources",
     "//base",
+    "//chrome/browser:shell_integration",
+    "//chrome/common:constants",
+    "//chrome/browser/importer",
+    "//chrome/browser/search_engines",
+    "//chrome/browser/themes",
+    "//chrome/browser/ui/tabs",
+    "//components/search_engines",
+    "//components/tab_groups",
+    "//components/user_data_importer/common",
+    "//services/network/public/mojom",
+    "//ui/gfx/geometry",
+    "//url",
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui:accelerator_table",
@@ -57,5 +77,77 @@ action("resources") {
         rebase_path("resources/koan_settings.css", root_build_dir),
     "kKoanSettingsJs=" +
         rebase_path("resources/koan_settings.js", root_build_dir),
+  ]
+}
+
+# chrome://koan-welcome's files as C++ strings (koan_welcome_resources.h):
+# the page (Zen's welcome, MPL-2.0) and Zen's Essentials favicons.
+action("welcome_resources") {
+  script = "embed_resources.py"
+  sources = [
+    "resources/koan_welcome.css",
+    "resources/koan_welcome.html",
+    "resources/koan_welcome.js",
+    "resources/welcome_media/back.svg",
+    "resources/welcome_media/forward.svg",
+    "resources/welcome_media/motion.min.js",
+    "resources/welcome_favicons/calendar.svg",
+    "resources/welcome_favicons/discord.svg",
+    "resources/welcome_favicons/figma.svg",
+    "resources/welcome_favicons/github.svg",
+    "resources/welcome_favicons/notion.svg",
+    "resources/welcome_favicons/obsidian.svg",
+    "resources/welcome_favicons/slack.svg",
+    "resources/welcome_favicons/trello.svg",
+    "resources/welcome_favicons/tuta.svg",
+  ]
+  outputs = [ "$target_gen_dir/koan_welcome_resources.h" ]
+  args = [
+    rebase_path(outputs[0], root_build_dir),
+    "kKoanWelcomeHtml=" +
+        rebase_path("resources/koan_welcome.html", root_build_dir),
+    "kKoanWelcomeCss=" +
+        rebase_path("resources/koan_welcome.css", root_build_dir),
+    "kKoanWelcomeJs=" +
+        rebase_path("resources/koan_welcome.js", root_build_dir),
+    "kKoanWelcomeBackSvg=" +
+        rebase_path("resources/welcome_media/back.svg", root_build_dir),
+    "kKoanWelcomeForwardSvg=" +
+        rebase_path("resources/welcome_media/forward.svg", root_build_dir),
+    "kKoanWelcomeMotionJs=" +
+        rebase_path("resources/welcome_media/motion.min.js", root_build_dir),
+    "kKoanWelcomeFaviconCalendar=" +
+        rebase_path("resources/welcome_favicons/calendar.svg", root_build_dir),
+    "kKoanWelcomeFaviconDiscord=" +
+        rebase_path("resources/welcome_favicons/discord.svg", root_build_dir),
+    "kKoanWelcomeFaviconFigma=" +
+        rebase_path("resources/welcome_favicons/figma.svg", root_build_dir),
+    "kKoanWelcomeFaviconGithub=" +
+        rebase_path("resources/welcome_favicons/github.svg", root_build_dir),
+    "kKoanWelcomeFaviconNotion=" +
+        rebase_path("resources/welcome_favicons/notion.svg", root_build_dir),
+    "kKoanWelcomeFaviconObsidian=" +
+        rebase_path("resources/welcome_favicons/obsidian.svg", root_build_dir),
+    "kKoanWelcomeFaviconSlack=" +
+        rebase_path("resources/welcome_favicons/slack.svg", root_build_dir),
+    "kKoanWelcomeFaviconTrello=" +
+        rebase_path("resources/welcome_favicons/trello.svg", root_build_dir),
+    "kKoanWelcomeFaviconTuta=" +
+        rebase_path("resources/welcome_favicons/tuta.svg", root_build_dir),
+  ]
+}
+
+# Zen's film grain, as bytes (koan_welcome_media.h).
+action("welcome_media") {
+  script = "//koan/browser/ui/fonts/embed_binary.py"
+  sources = [
+    "resources/welcome_media/grain-bg.png",
+  ]
+  outputs = [ "$target_gen_dir/koan_welcome_media.h" ]
+  args = [
+    "--namespace=koan::welcome_media",
+    rebase_path(outputs[0], root_build_dir),
+    "kGrainBg=" +
+        rebase_path("resources/welcome_media/grain-bg.png", root_build_dir),
   ]
 }

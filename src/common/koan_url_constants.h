@@ -11,6 +11,11 @@ namespace koan {
 inline constexpr char kSettingsHost[] = "koan-settings";
 inline constexpr char kSettingsURL[] = "chrome://koan-settings/";
 
+// The welcome screen on first run (Zen's welcome flow), shown over the window
+// (KoanWelcome).
+inline constexpr char kWelcomeHost[] = "koan-welcome";
+inline constexpr char kWelcomeURL[] = "chrome://koan-welcome/";
+
 }  // namespace koan
 
 #endif  // KOAN_COMMON_KOAN_URL_CONSTANTS_H_
