@@ -56,9 +56,22 @@ async function connect(url) {
 const targets = async () =>
   (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
       .filter(t => t.type === 'page');
-const glancePage = async () => (await targets()).find(t => t.url.includes(GLANCE_HOST));
-// Tabs: every page target except the Glance page (it isn't a tab).
-const tabPages = async () => (await targets()).filter(t => !t.url.includes(GLANCE_HOST));
+// Whether a page target is a tab: CDP finds a browser window only for a tab's
+// WebContents (Browser.getWindowForTarget fails for the Glance page, which
+// isn't one; a Glance expanded into a tab is one).
+async function isTab(t) {
+  const r = await browserCall('Browser.getWindowForTarget', { targetId: t.id });
+  return !!r.result?.windowId;
+}
+async function classified() {
+  const out = [];
+  for (const t of await targets()) out.push({ ...t, tab: await isTab(t) });
+  return out;
+}
+// The Glance page: on the Glance host, and not a tab.
+const glancePage = async () =>
+  (await classified()).find(t => !t.tab && t.url.includes(GLANCE_HOST));
+const tabPages = async () => (await classified()).filter(t => t.tab);
 
 async function browserCall(method, params = {}) {
   const v = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
@@ -224,9 +237,21 @@ async function closeCard() {
 }
 
 let failures = 0;
-function check(name, ok, detail = '') {
+async function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
-  if (!ok) failures++;
+  if (!ok) {
+    failures++;
+    await dump();
+  }
+}
+// The state after a failure: every page target (tab or not) and the card.
+async function dump() {
+  try {
+    const list = (await classified()).map(t => `${t.tab ? 'tab ' : 'page'} ${t.url}`);
+    console.log(`      state: card ${await cardOpen() ? 'shown' : 'not shown'}; ${list.join(' | ')}`);
+  } catch (e) {
+    console.log(`      state: unreadable (${e.message})`);
+  }
 }
 
 const timeOrigin = page => evalIn(page, 'performance.timeOrigin');
@@ -236,37 +261,41 @@ const parentUrl = async () => (await parentTab()).url;
 
 const steps = {
   async 1() {
+    await parentTab();
     const tabsBefore = (await tabPages()).length;
     await glance('child');
-    check('1 Glance opens', await cardOpen());
+    await check('1 Glance opens', await cardOpen());
     await key(K.W, 'c');
-    check('1 ⌘W closes the card', !!(await waitFor(async () => !(await cardOpen()), 3000)));
-    check('1 ⌘W keeps the tabs', (await tabPages()).length === tabsBefore,
+    await check('1 ⌘W closes the card', !!(await waitFor(async () => !(await cardOpen()), 3000)));
+    await check('1 ⌘W keeps the tabs', (await tabPages()).length === tabsBefore,
           `${tabsBefore} -> ${(await tabPages()).length}`);
     await glance('child');
     await key(K.W, 'c');
     await key(K.W, 'c');  // during the close animation
     await sleep(800);
-    check('1 ⌘W twice (during the close) keeps the tabs', (await tabPages()).length === tabsBefore);
+    await check('1 ⌘W twice (during the close) keeps the tabs', (await tabPages()).length === tabsBefore);
   },
   async 2() {
     if (!PID) return console.log('SKIP  2 (menu bar needs PID)');
+    await parentTab();
     const tabsBefore = (await tabPages()).length;
     await glance('child');
     menu('File', 'Close Tab');
     await sleep(1200);
-    check('2 File > Close Tab closes only the card',
-          !(await cardOpen()) && (await tabPages()).length === tabsBefore);
+    await check('2 File > Close Tab closes the card', !(await cardOpen()));
+    await check('2 File > Close Tab keeps the tabs', (await tabPages()).length === tabsBefore,
+          `${tabsBefore} -> ${(await tabPages()).length}`);
   },
   async 3() {
+    await parentTab();
     const tabsBefore = (await tabPages()).length;
     const page = await glance('keeper');
     await onPage(page, c => c.send('Page.bringToFront'));
     await key(K.W, 'c');
     await sleep(1000);
-    check('3 ⌘W closes the card even when the page eats keys', !(await cardOpen()),
+    await check('3 ⌘W closes the card even when the page eats keys', !(await cardOpen()),
           cdpKeysUsed ? 'CDP keys: not conclusive' : '');
-    check('3 tabs unchanged', (await tabPages()).length === tabsBefore);
+    await check('3 tabs unchanged', (await tabPages()).length === tabsBefore);
     await closeCard();
   },
   async 4() {
@@ -280,12 +309,12 @@ const steps = {
       const t = await timeOrigin(page);
       return t && t !== before ? t : null;
     }, 4000);
-    check('4 ⌘R reloads the Glance page', !!after);
-    check('4 ⌘R leaves the parent', (await timeOrigin(parent)) === parentOrigin);
+    await check('4 ⌘R reloads the Glance page', !!after);
+    await check('4 ⌘R leaves the parent', (await timeOrigin(parent)) === parentOrigin);
     if (PID) {
       const t = await timeOrigin(page);
       menu('View', 'Reload This Page');
-      check('4 View > Reload This Page reloads the Glance page',
+      await check('4 View > Reload This Page reloads the Glance page',
             !!(await waitFor(async () => (await timeOrigin(page)) !== t, 4000)));
     }
     await closeCard();
@@ -304,18 +333,18 @@ const steps = {
       const p = await glancePage();
       return p?.url.endsWith('child2.html') ? p : null;
     });
-    check('5 a link in the Glance navigates it', !!page);
+    await check('5 a link in the Glance navigates it', !!page);
     // Noise: the background tab reloads (it resets the window's commands).
     if (second) await evalIn(second, 'location.reload()');
     await sleep(1500);
-    if (PID) check('5 History > Back is enabled for the Glance', menuEnabled('History', 'Back'));
+    if (PID) await check('5 History > Back is enabled for the Glance', menuEnabled('History', 'Back'));
     await key(K.LBRACKET, 'c');
-    check('5 ⌘[ goes back in the Glance, after a background reload',
+    await check('5 ⌘[ goes back in the Glance, after a background reload',
           !!(await waitFor(async () => (await glancePage())?.url.endsWith('child.html'), 4000)));
     await key(K.RBRACKET, 'c');
-    check('5 ⌘] goes forward in the Glance',
+    await check('5 ⌘] goes forward in the Glance',
           !!(await waitFor(async () => (await glancePage())?.url.endsWith('child2.html'), 4000)));
-    check('5 the parent stays', (await parentTab()).url === url);
+    await check('5 the parent stays', (await parentTab()).url === url);
     await closeCard();
     if (second) await browserCall('Target.closeTarget', { targetId: second.id });
   },
@@ -328,24 +357,25 @@ const steps = {
     await key(K.EQUAL, 'c');
     page = await glancePage();
     const zoomed = await evalIn(page, 'devicePixelRatio');
-    check('6 ⌘= zooms the Glance page', zoomed > dpr, `${dpr} -> ${zoomed}`);
-    check('6 the parent keeps its zoom', (await evalIn(parent, 'devicePixelRatio')) === parentDpr);
+    await check('6 ⌘= zooms the Glance page', zoomed > dpr, `${dpr} -> ${zoomed}`);
+    await check('6 the parent keeps its zoom', (await evalIn(parent, 'devicePixelRatio')) === parentDpr);
     await key(K.ZERO, 'c');
-    check('6 ⌘0 resets the Glance page', (await evalIn(page, 'devicePixelRatio')) === dpr);
+    await check('6 ⌘0 resets the Glance page', (await evalIn(page, 'devicePixelRatio')) === dpr);
     await key(K.MINUS, 'c');
-    check('6 ⌘- shrinks it', (await evalIn(page, 'devicePixelRatio')) < dpr);
+    await check('6 ⌘- shrinks it', (await evalIn(page, 'devicePixelRatio')) < dpr);
     await key(K.ZERO, 'c');
     await closeCard();
   },
   async 7() {
     await glance('child');
-    if (PID) check('7 Edit > Find > Find… is disabled in a Glance', menuEnabled('Edit', 'Find…', 'Find') === false);
+    if (PID) await check('7 Edit > Find > Find… is disabled in a Glance', menuEnabled('Edit', 'Find…', 'Find') === false);
     await key(K.F, 'c');
-    check('7 ⌘F opens no find bar', !(await shown('FindBarView')));
+    await check('7 ⌘F opens no find bar', !(await shown('FindBarView')));
     await closeCard();
-    if (PID) check('7 Find is enabled again after the card', menuEnabled('Edit', 'Find…', 'Find') === true);
+    if (PID) await check('7 Find is enabled again after the card', menuEnabled('Edit', 'Find…', 'Find') === true);
   },
   async 8() {
+    await parentTab();
     const tabsBefore = (await tabPages()).length;
     const url = (await parentTab()).url;
     await glance('child');
@@ -356,16 +386,17 @@ const steps = {
     for (let i = 0; i < 5; i++) await key(K.LEFT);
     await key(K.TWO);
     await key(K.RETURN);
-    check('8 ⌘L + Enter loads the edited address in the Glance',
+    await check('8 ⌘L + Enter loads the edited address in the Glance',
           !!(await waitFor(async () => (await glancePage())?.url.endsWith('child2.html'), 4000)),
           cdpKeysUsed ? 'CDP keys reach the page, not the omnibox: not conclusive' : '');
-    check('8 the card stays a Glance', (await cardOpen()) && (await tabPages()).length === tabsBefore);
-    check('8 the parent stays', (await parentTab()).url === url);
+    await check('8 the card stays a Glance', (await cardOpen()) && (await tabPages()).length === tabsBefore);
+    await check('8 the parent stays', (await parentTab()).url === url);
     await key(K.L, 'c');
+    await check('8 ⌘L again opens the URL bar', await shown('OmniboxViewViews'));
     await key(K.ESC);
-    check('8 Esc closes the URL bar, the card stays', await cardOpen());
+    await check('8 Esc closes the URL bar, the card stays', await cardOpen());
     await key(K.ESC);
-    check('8 a second Esc closes the card (the Glance had focus again)',
+    await check('8 a second Esc closes the card (the Glance had focus again)',
           !!(await waitFor(async () => !(await cardOpen()), 3000)));
     await closeCard();
   },
@@ -373,21 +404,22 @@ const steps = {
     if (!PID) return console.log('SKIP  9 (clipboard needs the Mac)');
     await glance('child');
     await key(K.C, 'cs');
-    check('9 ⌘⇧C copies the Glance address', mac('pbpaste') === `http://${GLANCE_HOST}/child.html`);
+    await check('9 ⌘⇧C copies the Glance address', mac('pbpaste') === `http://${GLANCE_HOST}/child.html`);
     await closeCard();
     await key(K.C, 'cs');
-    check('9 after the card, ⌘⇧C copies the parent address', mac('pbpaste').startsWith(PARENT));
+    await check('9 after the card, ⌘⇧C copies the parent address', mac('pbpaste').startsWith(PARENT));
   },
   async 10() {
     let page = await glance('form');
     await clickIn(page, '#send');
     page = await waitFor(glancePage);
     await sleep(1000);
+    await check('10 the POST loads in the card', !!page && await cardOpen());
     const posted = await timeOrigin(page);
     await key(K.R, 'c');
     await sleep(2000);
-    check('10 ⌘R on a POST page does not resubmit', (await timeOrigin(page)) === posted);
-    check('10 the card is still there', await cardOpen());
+    await check('10 ⌘R on a POST page does not resubmit', (await timeOrigin(page)) === posted);
+    await check('10 the card is still there', await cardOpen());
     await closeCard();
   },
   async 13() {
@@ -398,7 +430,7 @@ const steps = {
     let alive = true;
     try { mac(`kill -0 ${PID}`); } catch { alive = false; }
     // (A macOS app stays running without windows.)
-    check('13 ⌘⇧W with a Glance open: no crash', alive);
+    await check('13 ⌘⇧W with a Glance open: no crash', alive);
     console.log('INFO  13 ⌘Q with a Glance open, then relaunch: run by hand (scripts/mac/steps/glance.md step 13)');
   },
 };
@@ -410,7 +442,7 @@ for (const s of wanted) {
   try {
     await steps[s]();
   } catch (e) {
-    check(`step ${s} ran`, false, e.message);
+    await check(`step ${s} ran`, false, e.message);
     await closeCard().catch(() => {});
   }
 }
