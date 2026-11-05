@@ -11,6 +11,7 @@
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/exit_type_service.h"
@@ -23,6 +24,11 @@
 namespace koan {
 
 namespace {
+
+// A silent restore that survives this long counts as having worked; a crash
+// later than that is a new crash, restored silently again. A crash sooner
+// than that (a crash loop) shows the bubble on the next launch.
+constexpr base::TimeDelta kStableAfter = base::Seconds(60);
 
 void SetResumedCrashes(base::WeakPtr<Profile> profile, int count) {
   if (profile) {
@@ -79,10 +85,15 @@ bool RestoreAfterCrash(BrowserWindowInterface* browser,
     return false;
   }
   prefs->SetInteger(prefs::kResumedCrashes, resumed + 1);
-  // Once the restore is done and the crash acknowledged, the count starts
-  // again: this crash was dealt with.
-  exit_type_service->AddCrashAckCallback(
-      base::BindOnce(&SetResumedCrashes, profile->GetWeakPtr(), 0));
+  // Written now, not with the next lazy write: a crash within seconds of this
+  // launch (kill -9 included) must still find the count on disk.
+  prefs->CommitPendingWrite();
+  // The count starts again once this session has run for a while (or ended
+  // cleanly, above): until then a crash is a crash loop.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&SetResumedCrashes, profile->GetWeakPtr(), 0),
+      kStableAfter);
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&RestoreNow, browser->GetWeakPtr(),
                                 exit_type_service->CreateCrashedLock()));
