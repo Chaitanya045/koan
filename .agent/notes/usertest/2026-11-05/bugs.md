@@ -417,3 +417,10 @@ PASS: B48 fixed — compact + peek + the pill's site-info button: page info unde
 ### B49. After page info in the Ctrl+Alt+B layout, fullscreen + compact never reveals the sidebar at the left edge — major (develop ef76c876, not #163)
 Steps: ⌃⌘F, Ctrl+S (compact on), move the pointer to x=0..3 and rest 1.5–2 s. Expected (Zen, and c128b): the sidebar slides in. Actual: nothing (s37-fs-no-peek: left = compact off shows the sidebar, right = compact on, pointer at the left edge, no sidebar). Unknown whether #163 or develop ef76c876.
 B49 narrowed (session 38, 16:30–16:36): both orders (fullscreen→compact, compact→fullscreen) reveal fine on a fresh profile (s38-orders-ok); Ctrl+Alt+B on/off alone: fine (s38-D); peek + pill page info alone: fine. **Trigger:** Ctrl+Alt+B layout → click the omnibox's site icon (page info) → Esc → Ctrl+Alt+B back → ⌃⌘F → Ctrl+S → pointer to the left edge: nothing (s38-F). Same on develop ef76c876 alone (KoanCheck-def7) (s38-G). Likely a stale hover/reveal lock left by the page-info bubble anchored in the multi-toolbar layout.
+
+## Session 39 (21:00–21:03 IST): KoanCheck-c159k (#159 16dfc726 on develop 47932183)
+All three earlier failures now PASS:
+- 1 (new criterion: accents only): default Space WindowTint=0; Red → WindowTint=-2543579 (0xFFD92025); selected row and pill warm-shifted (pill 48,48,49 → 53,49,48; header text 78,79,82 → 121,109,108) (s39-default-vs-red); window B on the default Space: WindowTint=0, neutral accents, window A stays red (s39-two-windows).
+- 8 (--disable-features=UseActionsForBrowserCommands): ⌘⌃W asks "Delete Space?" (s39-delete-space); Cancel keeps all 4 tabs (s39-cancel-kept).
+- 10: no Tab menu in the bar (#90); tab context menu with ⌥ held has no group items (s39-ctx-opt).
+No Spaces: DCHECK, FATAL or dump.
