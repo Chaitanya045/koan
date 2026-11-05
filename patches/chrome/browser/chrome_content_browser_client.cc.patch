@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 03111c8cb7cd0786314a448d01c358ae1b06a858..5691192adbf25fef009f508351eb072380f64e90 100644
+index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf10111757ed6251c 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -410,6 +410,10 @@
@@ -37,7 +37,22 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..5691192adbf25fef009f508351eb0723
      }
      const auto effective_page_colors =
          PageColorsController::GetEffectivePageColors(*profile.GetPrefs());
-@@ -4636,6 +4650,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
+@@ -4142,6 +4156,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+           web_contents->GetColorProvider().GetColor(kColorToolbar))
+           ? blink::mojom::PreferredColorScheme::kDark
+           : blink::mojom::PreferredColorScheme::kLight;
++  // Koan: unless a Space theme sets the window's mode; the page's
++  // scrollbars follow the appearance setting then, as its colour scheme.
++  if (const std::optional<bool> dark = koan::PrefersDarkWebColorScheme(
++          web_contents, security_principal.IsWebUI())) {
++    preferred_root_scrollbar_color_scheme =
++        *dark ? blink::mojom::PreferredColorScheme::kDark
++              : blink::mojom::PreferredColorScheme::kLight;
++  }
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_GUEST_VIEW)
+@@ -4636,6 +4658,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
    }
  #endif  // !BUILDFLAG(IS_ANDROID)
  
@@ -51,7 +66,7 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..5691192adbf25fef009f508351eb0723
    const BlockedWindowParams blocked_params(
        target_url, opener->GetGlobalFrameToken(), source_origin,
        opener->GetSiteInstance(), referrer, frame_name, disposition, features,
-@@ -7338,6 +7359,11 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
+@@ -7338,6 +7367,11 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
  bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
      content::RenderFrameHost* rfh,
      const url::Origin& caller_origin) {
