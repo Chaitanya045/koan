@@ -86,8 +86,15 @@ create() {
     [[ -n $line ]] && saved+=("$line")
   done < <(search_list)
   if [[ ${#saved[@]} -eq 0 ]]; then
-    echo "can't read the keychain search list (security list-keychains -d user); not creating anything" >&2
-    return 1
+    if [[ -n ${KOAN_SIGNING_KEYCHAIN:-} ]]; then
+      # A throw-away keychain at an explicit path (scripts/mac_signing_check.sh
+      # selftest) in a session without a user keychain domain, e.g. ssh: there
+      # is no search list to protect, and the path is not the user's.
+      echo "no user keychain search list here (ssh?); using only $KEYCHAIN" >&2
+    else
+      echo "can't read the keychain search list (security list-keychains -d user); not creating anything" >&2
+      return 1
+    fi
   fi
   [[ -f $KEYCHAIN ]] && had_keychain=1
   mkdir -p "$(dirname "$KEYCHAIN")"
@@ -96,7 +103,9 @@ create() {
 
   finish() {
     rm -rf "$work"
-    security list-keychains -d user -s "${saved[@]}" >/dev/null 2>&1 || true
+    if [[ ${#saved[@]} -gt 0 ]]; then
+      security list-keychains -d user -s "${saved[@]}" >/dev/null 2>&1 || true
+    fi
     if [[ $ok -eq 0 && $had_keychain -eq 0 ]]; then
       # This run made the keychain file and then failed: remove just that file.
       rm -f "$KEYCHAIN"
