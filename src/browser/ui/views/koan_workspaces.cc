@@ -1239,6 +1239,7 @@ void KoanWorkspaceController::ScheduleUpdate() {
 void KoanWorkspaceController::Update() {
   update_pending_ = false;
   if (!IsEnabled() || destroying_) {
+    ungrouped_from_.clear();
     return;
   }
   // The views go away with the vertical tab strip (switching to horizontal
@@ -1328,6 +1329,7 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
   if (model->empty() || model->closing_all() ||
       browser_view_->browser()->IsDeleteScheduled()) {
     closed_spaces_.clear();
+    ungrouped_from_.clear();
     return;
   }
   // A Space whose tabs didn't all close (a page's "Leave site?" was
@@ -1359,26 +1361,20 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
       index = static_cast<int>(
           model->group_model()->GetTabGroup(*closed.next)->ListTabs().start());
     }
-    // Its last tab was only taken out of it (chrome.tabs.ungroup()): that tab
-    // brings it back, as no new tab is needed. Else a new tab.
-    int new_index = TabStripModel::kNoTab;
-    for (const auto& [handle, space] : ungrouped_from_) {
-      tabs::TabInterface* tab = handle.Get();
-      if (space == closed.id && tab && !tab->GetGroup() && !tab->IsPinned()) {
-        new_index = model->GetIndexOfTab(tab);
-        break;
-      }
-    }
-    if (new_index == TabStripModel::kNoTab) {
+    // Its last tabs were only taken out of it (chrome.tabs.ungroup()): they
+    // bring it back, as no new tab is needed. Else a new tab.
+    std::vector<int> indices = ReclaimUngroupedTabs(closed.id);
+    if (indices.empty()) {
       content::WebContents* contents = chrome::AddAndReturnTabAt(
           browser_view_->browser(), GURL(), index, /*foreground=*/false);
-      new_index = model->GetIndexOfWebContents(contents);
-    }
-    if (new_index == TabStripModel::kNoTab) {
-      continue;
+      const int new_index = model->GetIndexOfWebContents(contents);
+      if (new_index == TabStripModel::kNoTab) {
+        continue;
+      }
+      indices = {new_index};
     }
     // Same id, so whatever refers to the Space still does.
-    model->AddToGroupForRestore({new_index}, closed.id);
+    model->AddToGroupForRestore(indices, closed.id);
     WriteSpace(closed.id, closed.data);
     if (closed.was_active && !model->GetFocusedGroup()) {
       // Zen stays on an Essential that was selected when the Space emptied.
@@ -1480,6 +1476,39 @@ void KoanWorkspaceController::SnapshotSpaces() {
   for (const SpaceInfo& space : GetSpaces()) {
     spaces_snapshot_.emplace_back(space.id, *ReadSpace(space.id));
   }
+}
+
+std::vector<int> KoanWorkspaceController::ReclaimUngroupedTabs(
+    const tab_groups::TabGroupId& space) {
+  TabStripModel* model = tab_strip_model();
+  for (const auto& [handle, from] : ungrouped_from_) {
+    tabs::TabInterface* tab = handle.Get();
+    // Still loose, and in this window (it may have been moved to another).
+    if (from != space || !tab || tab->GetGroup() || tab->IsPinned() ||
+        model->GetIndexOfTab(tab) == TabStripModel::kNoTab) {
+      continue;
+    }
+    if (!tab->IsSplit()) {
+      return {model->GetIndexOfTab(tab)};
+    }
+    // A split comes back whole: AddToGroupForRestore(), unlike
+    // AddToExistingGroup(), doesn't unsplit a split it gets only part of, so
+    // one of its tabs alone would make a one-tab split. If its other tab isn't
+    // loose here too, leave the split to the loose tabs' heal
+    // (AddToExistingGroup()) and give the Space a new tab.
+    std::vector<int> indices;
+    for (tabs::TabInterface* split_tab :
+         model->GetSplitData(*tab->GetSplit())->ListTabs()) {
+      if (split_tab->GetGroup() || split_tab->IsPinned() ||
+          model->GetIndexOfTab(split_tab) == TabStripModel::kNoTab) {
+        return {};
+      }
+      indices.push_back(model->GetIndexOfTab(split_tab));
+    }
+    std::ranges::sort(indices);
+    return indices;
+  }
+  return {};
 }
 
 void KoanWorkspaceController::NormalizeSpaces() {
@@ -2151,7 +2180,9 @@ void KoanWorkspaceController::TabGroupedStateChanged(
   // Space's last tab, upstream's Remove from group) changes no tab strip
   // contents (OnTabStripModelChanged() isn't called), so nothing else would
   // bring it back into a Space. It goes back to the one it left
-  // (EnsureOneSpaceShown()).
+  // (EnsureOneSpaceShown()). (Folders, #60: a feature that leaves a tab
+  // ungrouped on purpose must opt out of this heal, e.g. by pinning it or
+  // through a check here.)
   if (old_group && !new_group && tab) {
     ungrouped_from_.insert_or_assign(tab->GetHandle(), *old_group);
   }

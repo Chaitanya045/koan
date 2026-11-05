@@ -13,6 +13,7 @@
 //                  groups for test 6 (see seed_profiles.py).
 //   run('seed11')  with --disable-features=KoanWorkspaces: saved groups for
 //                  test 11.
+//   run('splitUngroup')  test 15b, by hand: a split-only Space ungrouped.
 // The toolbar button runs test15. Results also go to chrome.storage.local
 // ("result").
 
@@ -142,6 +143,40 @@ async function test15() {
   return lines;
 }
 
+// By hand (README, test 15b): make a Space whose only tabs are one split
+// view (Create Space, then New Split from the "+" menu, and close the
+// Space's other tab), show it, then run('splitUngroup'). Both tabs are
+// ungrouped at once; the Space must come back with both, still one split,
+// never a one-tab split.
+async function splitUngroup() {
+  const lines = [];
+  const check = (name, ok, detail) => {
+    lines.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  (' + detail + ')' : ''}`);
+  };
+  const win = await chrome.windows.getCurrent({populate: true});
+  const space = win.tabs.find(t => t.active).groupId;
+  const tabs = await chrome.tabs.query({groupId: space});
+  const split = tabs.length ? tabs[0].splitViewId : undefined;
+  check('Setup: the shown Space is two tabs in one split view',
+        tabs.length === 2 && split !== undefined && split !== -1 &&
+        tabs.every(t => t.splitViewId === split),
+        `${tabs.length} tab(s), splitViewId ${tabs.map(t => t.splitViewId)}`);
+  await chrome.tabs.ungroup(tabs.map(t => t.id));
+  await sleep(SETTLE);
+  const after = await Promise.all(tabs.map(t => chrome.tabs.get(t.id)));
+  check('Both tabs are back in the Space (same group id)',
+        after.every(t => t.groupId === space), after.map(t => t.groupId).join());
+  const splits = new Set(after.map(t => t.splitViewId));
+  // (Upstream may unsplit them on the ungroup; then both are plain tabs. What
+  // must never happen is one tab left in a split of its own.)
+  check('...still one split of two, or both unsplit (no one-tab split)',
+        splits.size === 1 && !splits.has(undefined),
+        after.map(t => t.splitViewId).join());
+  const inSpace = await chrome.tabs.query({groupId: space});
+  check('...with no extra new tab', inSpace.length === 2, `${inSpace.length} tab(s)`);
+  return lines;
+}
+
 async function run(action = 'test15') {
   const result = {action};
   try {
@@ -149,6 +184,9 @@ async function run(action = 'test15') {
       result.seed = await seed6();
     } else if (action === 'seed11') {
       result.seed = await seed11();
+    } else if (action === 'splitUngroup') {
+      result.lines = await splitUngroup();
+      result.lines.forEach(l => console.log(l));
     } else {
       result.lines = await test15();
       result.lines.forEach(l => console.log(l));

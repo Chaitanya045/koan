@@ -69,3 +69,20 @@ Every line should be PASS:
 - `tabs.highlight()` in another Space activates that tab.
 
 The lines also go to `chrome.storage.local` under `result`.
+
+### Test 15b: ungrouping a split-only Space (by hand, then scripted)
+
+This needs one split made by hand. In a Spaces window:
+1. Create a Space.
+2. In it, use "+" > New Split and pick a page, so the Space has a split view.
+3. Close the Space's other tab, so its only tabs are the two of the split.
+4. Show that Space.
+
+Then run `run('splitUngroup')` in the extension's service worker console. It ungroups both tabs at once.
+
+Expected, all PASS:
+- both tabs are back in that Space, under the same group id;
+- they are still one split of two, or both plain tabs if upstream unsplit them, but never a one-tab split;
+- there is no extra new tab;
+- no crash.
+

@@ -369,6 +369,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // from prefs::kWorkspaceList, the active one taking `loose` (the window's
   // first tabs). True if it made any.
   bool RecreateStoredSpaces(const std::vector<int>& loose);
+  // The tabs taken out of `space` that bring it back when it closed (its last
+  // tabs were ungrouped): the indices of one loose tab, or of a whole split;
+  // empty if none.
+  std::vector<int> ReclaimUngroupedTabs(const tab_groups::TabGroupId& space);
   // Keeps prefs::kWorkspaceList up to date from the window the user is in.
   void StoreSpaces();
   // Drops the connection a Space has to a saved tab group (an old profile's,
