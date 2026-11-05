@@ -22,11 +22,6 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // Workspaces are tab groups shown one at a time: upstream's group focus
   // mode hides every other group and scopes tab cycling to the focused one.
   overrides.EnableFeature(features::kTabGroupsFocusing);
-  // Browser commands run through the window's ActionItems, which Koan points
-  // at its own (the Spaces' group commands, the URL bar's new tab). On by
-  // default; forced so that a field trial can't bring back the legacy
-  // command switch.
-  overrides.EnableFeature(features::kUseActionsForBrowserCommands);
   // Upstream's tab group promos have no place with Spaces: "Focus" and
   // "Unfocus" a group (Koan hides the group header and the Unfocus pill they
   // point at), and saving groups (Spaces aren't saved groups).
@@ -42,8 +37,9 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
 
   // The sidebar is Koan's (KoanVerticalTabsPolicy): the commands that reach
   // upstream's vertical tab strip state run the window's actions, which Koan
-  // re-points, so the legacy command switch (which would not go through
-  // them) must not be what runs. On by default upstream; set here so that a
+  // re-points (also the Spaces' tab group commands and the URL bar's new
+  // tab), so the legacy command switch (which would not go through them)
+  // must not be what runs. On by default upstream; set here so that a
   // study can't turn it off. (A command-line switch still can; the state
   // controller's hook keeps the mode and collapse state safe then.)
   overrides.EnableFeature(features::kUseActionsForBrowserCommands);
