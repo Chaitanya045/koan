@@ -1,14 +1,17 @@
+diff --git a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
+index 10b7682418b0d6084a65a5fa40b7f96ad3191557..3ffd814b469ef0771d7b0416000c176abb86cb75 100644
 --- a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
 +++ b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
-@@ -63,6 +63,7 @@
+@@ -63,6 +63,8 @@ DEFINE_USER_DATA(DownloadToolbarUIController);
  #include "ui/views/controls/image_view.h"
  #include "ui/views/event_monitor.h"
  #include "ui/views/widget/widget.h"
 +#include "koan/browser/ui/views/koan_browser_view_hooks.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
  
  #if BUILDFLAG(IS_MAC)
  #include "chrome/browser/ui/fullscreen_util_mac.h"
-@@ -503,6 +504,9 @@
+@@ -503,6 +505,9 @@ void DownloadToolbarUIController::ShowPendingDownloadStartedAnimation() {
    }
    CHECK(show_download_started_animation_);
    has_pending_download_started_animation_ = false;
@@ -18,3 +21,28 @@
    if (!gfx::Animation::ShouldRenderRichAnimation()) {
      return;
    }
+@@ -596,6 +601,12 @@ void DownloadToolbarUIController::BubbleCloser::OnWidgetDestroyed(
+ void DownloadToolbarUIController::ShowBubble(
+     DownloadBubbleMode mode,
+     std::optional<ContentId> content_id) {
++  // Koan: Zen does not open the downloads panel by itself (alwaysOpenPanel is
++  // off); the started download flies to the Library (the animation).
++  if (mode == DownloadBubbleMode::kPartial &&
++      koan::ShowsDownloadAnimation(browser_view_)) {
++    return;
++  }
+   // Requests for a complete (i.e. non-partial) window override requests for a
+   // partial window.
+   if (!pending_bubble_ || mode == DownloadBubbleMode::kComplete) {
+@@ -624,6 +635,11 @@ void DownloadToolbarUIController::ShowBubble(
+ void DownloadToolbarUIController::OnBubbleAnchorAssembled(
+     base::expected<views::BubbleAnchor, GetAnchorFailureReason> anchor) {
+   pending_bubble_ = false;
++  // Koan: where the toolbar is hidden (single toolbar), the button is too:
++  // point at the pill.
++  if (views::View* koan_anchor = koan::GetBubbleAnchorView(browser_view_)) {
++    anchor = views::BubbleAnchor(koan_anchor);
++  }
+   // The bubble should not show if the button doesn't exist since it would have
+   // nothing to anchor to.
+   if (!anchor.has_value()) {

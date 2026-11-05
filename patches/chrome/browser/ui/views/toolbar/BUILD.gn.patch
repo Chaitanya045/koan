@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/views/toolbar/BUILD.gn b/chrome/browser/ui/views/toolbar/BUILD.gn
+index a5019f2ad2d118a2d5e0f028bb3e50e04ab636b5..7ec070604db90dbe014955c8d09864f7613cb21f 100644
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -226,6 +226,7 @@ source_set("impl") {
+   }
+ 
+   deps = [
++    "//koan/browser/ui/views",
+     ":toolbar",
+     "//base:i18n",
+     "//build:branding_buildflags",

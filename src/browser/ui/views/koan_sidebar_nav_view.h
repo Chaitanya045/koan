@@ -20,6 +20,7 @@ class BrowserView;
 namespace views {
 class Button;
 class ImageButton;
+class ImageView;
 class Label;
 }  // namespace views
 
@@ -66,6 +67,11 @@ class KoanSidebarNavView : public views::View,
   // The pill, over which the URL bar edits in place.
   views::View* url_pill() const { return url_pill_; }
 
+  // What a bubble about the page (permissions, page info, the bookmark
+  // bubble ...) points at: the site icon, else the pill. Null while neither
+  // is on screen (the sidebar is hidden).
+  views::View* bubble_anchor() const;
+
   // While the URL bar is open the pill is empty.
   void SetEditing(bool editing);
 
@@ -77,9 +83,14 @@ class KoanSidebarNavView : public views::View,
   void OnTabChangedAt(tabs::TabInterface* tab,
                       TabChangeType change_type) override;
 
-  // views::ViewObserver (the copy button's focus):
+  // views::ViewObserver (the copy button's focus, the location bar's in-use
+  // indicator):
   void OnViewFocused(views::View* observed_view) override;
   void OnViewBlurred(views::View* observed_view) override;
+  void OnViewVisibilityChanged(views::View* observed_view,
+                               views::View* starting_view,
+                               bool visible) override;
+  void OnViewIsDeleting(views::View* observed_view) override;
 
  private:
   void ObserveActiveTab();
@@ -90,6 +101,11 @@ class KoanSidebarNavView : public views::View,
   // while the pill is hovered or the button has focus.
   void UpdateCopyButtonOpacity();
   void ShowSitePanel();
+  // The camera / microphone (or location ...) indicator of Chromium's
+  // location bar is in the hidden toolbar: a dot next to the site icon says
+  // that something is in use (Zen shows the permission icons in the identity
+  // box). Its tooltip is the indicator's.
+  void UpdateInUse();
   // The identity button: the site panel for a page, the URL bar on an empty
   // tab.
   void OnSiteButtonPressed();
@@ -108,6 +124,9 @@ class KoanSidebarNavView : public views::View,
   base::CallbackListSubscription tab_ui_subscription_;
   base::ScopedObservation<views::View, views::ViewObserver>
       copy_button_observation_{this};
+  raw_ptr<views::ImageView> in_use_ = nullptr;
+  base::ScopedObservation<views::View, views::ViewObserver>
+      indicator_observation_{this};
 };
 
 }  // namespace koan

@@ -1,3 +1,5 @@
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 972bd7bc04d240f23d4c527bdb6faa81272421e5..7f5f5dbf086d10b0c3314b8f38c630828328f2eb 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
 @@ -119,6 +119,7 @@
@@ -8,7 +10,31 @@
  #include "services/device/public/cpp/device_features.h"
  #include "third_party/metrics_proto/omnibox_event.pb.h"
  #include "third_party/skia/include/core/SkColor.h"
-@@ -1296,6 +1297,11 @@
+@@ -1132,6 +1133,11 @@ std::optional<bubble_anchor_util::AnchorConfiguration>
+ LocationBarView::GetChipAnchor() {
+   auto* chip = GetChipController()->chip();
+   if (chip->GetVisible()) {
++    // Koan: the chip is in the hidden toolbar; the prompt points at the pill.
++    if (views::View* koan_anchor = koan::GetBubbleAnchorView(this)) {
++      return {{views::BubbleAnchor(koan_anchor), std::nullopt,
++               views::BubbleBorder::TOP_LEFT}};
++    }
+     return {{chip->GetAnchor(),
+              PermissionChipView::kPermissionRequestChipElementId,
+              views::BubbleBorder::TOP_LEFT}};
+@@ -1140,6 +1146,11 @@ LocationBarView::GetChipAnchor() {
+ }
+ 
+ ui::TrackedElement* LocationBarView::GetAnchorOrNull() {
++  // Koan: where the toolbar is hidden, the pill (Zen's identity box).
++  if (views::View* koan_anchor = koan::GetBubbleAnchorView(this)) {
++    return views::ElementTrackerViews::GetInstance()->GetElementForView(
++        koan_anchor, /*assign_temporary_id=*/true);
++  }
+   return views::ElementTrackerViews::GetInstance()->GetElementForView(this);
+ }
+ 
+@@ -1296,6 +1307,11 @@ bool LocationBarView::ShouldHidePageActionIcons() const {
      return false;
    }
  
@@ -20,7 +46,7 @@
    // When the user is typing in the omnibox, the page action icons are no longer
    // associated with the current omnibox text, so hide them.
    if (GetOmniboxController()->edit_model()->user_input_in_progress()) {
-@@ -2120,6 +2126,16 @@
+@@ -2120,6 +2136,16 @@ void LocationBarView::OnChanged() {
    // user text has been entered into the omnibox, so refresh the icon on
    // changes.
    RefreshAiModePageAction();

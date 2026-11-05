@@ -1,7 +1,16 @@
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..314a59a217bcf0381d6c82773c72235eff9abe51 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -205,6 +205,7 @@
+@@ -107,6 +107,7 @@ source_set("bubble_anchor_util_views_impl") {
+     "//components/payments/core",
+     "//components/tabs:public",
+     "//content/public/browser",
++    "//koan/browser/ui/views",
+     "//ui/base",
+     "//ui/views",
+   ]
+@@ -205,6 +206,7 @@ source_set("layout_provider_impl") {
      "//chrome/browser/ui/views/location_bar",
      "//components/omnibox/browser",
      "//components/omnibox/common",

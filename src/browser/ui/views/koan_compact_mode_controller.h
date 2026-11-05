@@ -125,6 +125,13 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // mode with the header kept). KoanUrlBarController edits over it.
   KoanSidebarNavView* sidebar_nav();
 
+  // Where a bubble about the page points while Koan hides the toolbar (see
+  // GetBubbleAnchorView() in koan_url_bar.h): the pill's site icon, else the
+  // header's buttons; null when the toolbar is there. With compact mode
+  // hiding just the toolbar it reveals the toolbar and keeps it until the
+  // bubble is gone, and returns null.
+  views::View* GetBubbleAnchor();
+
   // Called by KoanUrlBarController when the omnibox is lifted out of the
   // toolbar or put back.
   void OnUrlBarOpenChanged();
@@ -221,6 +228,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool IsTopContainerShown() const;
   void HideAwayToolbarLayer();
   bool ShouldKeepToolbarRevealed() const;
+  // A bubble (permission prompt, page info, bookmark, download ...) anchored
+  // to the revealed toolbar is open.
+  bool HasBubbleAnchoredToToolbar() const;
   void CheckToolbarHide();
 
   // While the toolbar, the caption strip or a peeked sidebar is out, watches

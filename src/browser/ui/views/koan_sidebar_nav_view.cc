@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -24,6 +25,8 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_specification.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
+#include "chrome/browser/ui/views/permissions/chip/permission_chip_view.h"
+#include "chrome/browser/ui/views/permissions/chip/permission_dashboard_view.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
@@ -41,6 +44,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
@@ -50,6 +54,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/proposed_layout.h"
@@ -60,6 +65,8 @@ namespace koan {
 namespace {
 
 constexpr int kButtonSize = 28;
+// The dot that says something (camera, microphone ...) is in use.
+constexpr int kInUseDotSize = 8;
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
 
@@ -290,6 +297,12 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
                                       base::Unretained(this)),
                   vector_icons::kSearchIcon, u"Site information");
 
+  // Something is in use (camera, microphone ...): see UpdateInUse().
+  in_use_ = url_pill_->AddChildView(std::make_unique<views::ImageView>());
+  in_use_->SetImage(ui::ImageModel::FromVectorIcon(
+      kCircleFilledIcon, ui::kColorAlertHighSeverity, kInUseDotSize));
+  in_use_->SetVisible(false);
+
   url_label_ = url_pill_->AddChildView(std::make_unique<views::Label>());
   url_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   url_label_->SetElideBehavior(gfx::ELIDE_TAIL);
@@ -318,6 +331,13 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   copy_button_->SetPaintToLayer();
   copy_button_->layer()->SetFillsBoundsOpaquely(false);
   copy_button_observation_.Observe(copy_button_.get());
+  if (LocationBarView* location_bar = browser_view_->GetLocationBarView()) {
+    if (PermissionDashboardView* dashboard =
+            location_bar->permission_dashboard_view()) {
+      indicator_observation_.Observe(dashboard->GetIndicatorChip());
+    }
+  }
+  UpdateInUse();
 
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
   ObserveActiveTab();
@@ -332,6 +352,40 @@ void KoanSidebarNavView::OnPillHovered(bool hovered) {
   UpdateCopyButtonOpacity();
 }
 
+void KoanSidebarNavView::OnViewVisibilityChanged(views::View* observed_view,
+                                                 views::View* starting_view,
+                                                 bool visible) {
+  UpdateInUse();
+}
+
+void KoanSidebarNavView::OnViewIsDeleting(views::View* observed_view) {
+  if (indicator_observation_.IsObservingSource(observed_view)) {
+    indicator_observation_.Reset();
+  }
+  if (copy_button_observation_.IsObservingSource(observed_view)) {
+    copy_button_observation_.Reset();
+  }
+}
+
+void KoanSidebarNavView::UpdateInUse() {
+  const views::View* chip = indicator_observation_.GetSource();
+  LocationBarView* location_bar = browser_view_->GetLocationBarView();
+  const bool in_use = chip && chip->GetVisible() && location_bar &&
+                      location_bar->permission_dashboard_view() &&
+                      location_bar->permission_dashboard_view()->GetVisible();
+  in_use_->SetVisible(in_use);
+  if (in_use) {
+    // (Chromium's text for the indicator when it has one.)
+    std::u16string tooltip =
+        static_cast<const PermissionChipView*>(chip)->GetTooltipText();
+    if (tooltip.empty()) {
+      tooltip = u"Camera, microphone or location in use";
+    }
+    in_use_->SetTooltipText(tooltip);
+    in_use_->GetViewAccessibility().SetName(tooltip);
+  }
+}
+
 void KoanSidebarNavView::OnViewFocused(views::View* observed_view) {
   UpdateCopyButtonOpacity();
 }
@@ -343,6 +397,16 @@ void KoanSidebarNavView::OnViewBlurred(views::View* observed_view) {
 void KoanSidebarNavView::UpdateCopyButtonOpacity() {
   copy_button_->layer()->SetOpacity(
       hovered_ || copy_button_->HasFocus() ? 1.0f : 0.0f);
+}
+
+views::View* KoanSidebarNavView::bubble_anchor() const {
+  for (views::View* view :
+       {static_cast<views::View*>(site_button_.get()), url_pill_.get()}) {
+    if (view && view->IsDrawn() && !view->GetVisibleBounds().IsEmpty()) {
+      return view;
+    }
+  }
+  return nullptr;
 }
 
 void KoanSidebarNavView::SetEditing(bool editing) {

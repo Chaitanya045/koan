@@ -63,6 +63,7 @@
 #include "ui/gfx/geometry/transform.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -1196,6 +1197,50 @@ void KoanCompactModeController::InstallSidebarNav() {
   }
 }
 
+views::View* KoanCompactModeController::GetBubbleAnchor() {
+  if (IsClosing() || !hides_toolbar()) {
+    return nullptr;
+  }
+  // Compact mode hides just the toolbar: it slides in under the bubble, which
+  // follows it (the anchor view moves), and stays while the bubble is open
+  // (ShouldKeepToolbarRevealed()).
+  if (can_reveal_toolbar()) {
+    SetToolbarRevealed(true, /*animate=*/true);
+    return nullptr;
+  }
+  if (KoanSidebarNavView* nav = sidebar_nav()) {
+    if (views::View* anchor = nav->bubble_anchor()) {
+      return anchor;
+    }
+  }
+  // The sidebar is hidden (compact mode keeps its header): the buttons.
+  views::View* buttons = sidebar_nav_buttons_.view();
+  if (buttons && buttons->IsDrawn() && !buttons->GetVisibleBounds().IsEmpty()) {
+    return buttons;
+  }
+  return nullptr;
+}
+
+bool KoanCompactModeController::HasBubbleAnchoredToToolbar() const {
+  const views::View* top_container = browser_view_->top_container();
+  views::Widget* widget = browser_view_->GetWidget();
+  if (!widget || !top_container) {
+    return false;
+  }
+  for (views::Widget* owned :
+       views::Widget::GetAllOwnedWidgets(widget->GetNativeView())) {
+    const views::BubbleDialogDelegate* bubble =
+        owned->IsVisible() && owned->widget_delegate()
+            ? owned->widget_delegate()->AsBubbleDialogDelegate()
+            : nullptr;
+    const views::View* anchor = bubble ? bubble->GetAnchorView() : nullptr;
+    if (anchor && top_container->Contains(anchor)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
   return static_cast<KoanSidebarNavView*>(sidebar_nav_.view());
 }
@@ -1423,6 +1468,10 @@ bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
         return true;
       }
     }
+  }
+  // Or a bubble anchored to it is open (a permission prompt, page info ...).
+  if (HasBubbleAnchoredToToolbar()) {
+    return true;
   }
   // Keep it while something in it has focus (omnibox editing) or a menu
   // (app menu, omnibox context menu, ...) is open.

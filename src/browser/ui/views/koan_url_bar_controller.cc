@@ -910,6 +910,17 @@ bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser) {
          !IsContentFullscreen(browser_view);
 }
 
+views::View* GetBubbleAnchorView(const views::View* view) {
+  const auto* browser_view = views::AsViewClass<BrowserView>(view);
+  if (!browser_view && view && view->GetWidget()) {
+    browser_view =
+        views::AsViewClass<BrowserView>(view->GetWidget()->client_view());
+  }
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller ? controller->compact_mode()->GetBubbleAnchor() : nullptr;
+}
+
 bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser) {
   const BrowserView* browser_view =
       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
