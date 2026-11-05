@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/startup/first_run_service.cc b/chrome/browser/ui/startup/first_run_service.cc
+index f48c1d5..ee19c49 100644
+--- a/chrome/browser/ui/startup/first_run_service.cc
++++ b/chrome/browser/ui/startup/first_run_service.cc
+@@ -30,6 +30,7 @@
+ #include "components/signin/public/identity_manager/account_info.h"
+ #include "components/signin/public/identity_manager/identity_manager.h"
+ #include "content/public/browser/browser_context.h"
++#include "koan/common/koan_branding.h"
+ 
+ namespace {
+ bool IsFirstRunEligibleProfile(Profile* profile) {
+@@ -80,7 +81,10 @@ bool IsFirstRunMarkedFinishedInPrefs() {
+ 
+ // static
+ void FirstRunService::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
+-  registry->RegisterBooleanPref(prefs::kFirstRunFinished, false);
++  // Koan: Chromium's sign-in intro window never opens (Zen has its own
++  // welcome, koan_welcome.cc, which does not use this pref).
++  registry->RegisterBooleanPref(prefs::kFirstRunFinished,
++                                !koan::kShowChromiumFirstRun);
+ }
+ 
+ FirstRunService::FirstRunService(Profile& profile,
