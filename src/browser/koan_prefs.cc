@@ -16,8 +16,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kCompactModeHide, kCompactModeHideSidebar);
   registry->RegisterBooleanPref(kCompactModeToolbarFlashPopup, false);
   registry->RegisterBooleanPref(kCompactModeDragCollapseHintSeen, false);
-  registry->RegisterIntegerPref(kCompactModeSidebarCollapsedBefore,
-                                kSidebarCollapsedBeforeUnknown);
   registry->RegisterBooleanPref(kTabsOnRight, false);
   registry->RegisterBooleanPref(kSingleToolbarEnabled, true);
   registry->RegisterStringPref(kUrlBarBehavior, kUrlBarBehaviorFloatingOnType);

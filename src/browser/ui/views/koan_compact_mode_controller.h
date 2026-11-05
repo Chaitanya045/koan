@@ -52,9 +52,9 @@ class KoanTrafficLightsController;
 // there is no top toolbar. The top container is hidden in the overlay
 // (below), the page card reaches the top of the window, and
 // KoanSidebarNavView at the top of the sidebar has the navigation buttons
-// and a URL pill. Like Zen, it needs an expanded sidebar: collapsing the
-// sidebar to icons gives Zen's "Collapsed Sidebar" layout (a toolbar above
-// the page) until it is expanded again.
+// and a URL pill. The sidebar is always expanded: Zen's "Collapsed Sidebar"
+// layout (icons only, a toolbar above the page) is not offered for now, and
+// Chromium's icon rail never shows (KoanVerticalTabsPolicy).
 //
 // Compact mode (Ctrl+S like Zen, pref koan.compact_mode.enabled) hides the
 // sidebar, the toolbar or both (Zen's "Compact Mode" submenu; with single
@@ -199,7 +199,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
-  bool IsCommandIdEnabled(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
 
  private:
@@ -209,25 +208,23 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool PrefHidesSidebar() const;
   bool PrefHidesToolbar() const;
   Mode DesiredMode() const;
-  // Whether the user collapsed the sidebar to icons (not compact mode).
-  bool IsSidebarCollapsedByUser() const;
-  // Single toolbar is on and possible (the sidebar is expanded), as in Zen.
+  // Single toolbar is on (the pref; the sidebar is always expanded unless
+  // compact mode hides it).
   bool DesiredSingleToolbar() const;
   // What compact mode hides, from the prefs and the layout.
   bool DesiredHideSidebar() const;
   bool DesiredHideToolbar() const;
-  // Zen's check for a compact variant that would strand the window buttons:
-  // collapsed sidebar, buttons on its side, only the toolbar hidden.
-  bool IsHideToolbarOnlyBlocked() const;
+  // Whether compact mode can apply in this window (a normal window with
+  // Koan's sidebar, and a content card: not in fullscreen except on macOS).
+  bool CanCompactMode() const;
+  // The sidebar is collapsed while compact mode hides it, and only then.
+  void SyncSidebar();
   void UpdateActiveSoon();
   void CancelSpaceSwipe();
   void UpdateActive();
   void Activate(Mode mode);
-  // `keep_sidebar_hidden`: compact mode goes on hiding the sidebar (only
-  // what else it hides changes), so it isn't expanded in between.
-  void Deactivate(bool keep_sidebar_hidden);
+  void Deactivate();
   void OnTabsOnRightChanged();
-  void OnSidebarCollapseChanged();
 
   // Compact mode with the toolbar hidden in the overlay, revealed at the top
   // edge (not single toolbar, which has no toolbar to reveal).
@@ -327,10 +324,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   const raw_ptr<BrowserView> browser_view_;
   PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
-  base::CallbackListSubscription collapse_subscription_;
-  base::CallbackListSubscription resizing_subscription_;
-  // The sidebar was expanded when the current drag of its edge started.
-  bool resizing_from_expanded_ = false;
 
   Mode mode_ = Mode::kNone;
   // In compact mode: what it hides.
@@ -340,15 +333,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool toolbar_revealed_ = false;
   // Whether compact mode keeps the sidebar header (single toolbar).
   bool compact_keeps_sidebar_nav_ = false;
-  // Compact mode hid the sidebar: whether it was collapsed before.
-  std::optional<bool> collapsed_before_;
-  // The window was opened while compact mode was on, and hasn't had its
-  // sidebar back since: its collapsed state may be compact mode's.
-  bool opened_in_compact_mode_ = false;
-  // A drag collapsed the sidebar into compact mode: it was expanded before.
-  bool collapsed_by_drag_ = false;
-  // Koan asked upstream to expand the sidebar (it animates).
-  bool expanding_sidebar_ = false;
   std::optional<size_t> top_container_index_;
   // macOS: told when native fullscreen starts and ends.
   class ImmersiveObserver;
@@ -395,8 +379,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
-  // The window is being destroyed (OnBrowserViewDestroying()): no UI work.
-  bool destroying_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
 
   // The sidebar's context menu.

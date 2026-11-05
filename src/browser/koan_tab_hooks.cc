@@ -80,13 +80,4 @@ bool SavesTabGroups(content::BrowserContext* context) {
   return !features::IsWorkspacesEnabled() || context->IsOffTheRecord();
 }
 
-bool KeepVerticalTabsOn(PrefService* prefs) {
-  if (!features::IsSidebarEnabled() ||
-      prefs->GetBoolean(::prefs::kVerticalTabsEnabled)) {
-    return false;
-  }
-  prefs->SetBoolean(::prefs::kVerticalTabsEnabled, true);
-  return true;
-}
-
 }  // namespace koan

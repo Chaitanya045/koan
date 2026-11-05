@@ -137,12 +137,15 @@ Ctrl+Alt+B switches to the multiple-toolbars layout (a toolbar above the
 page, as in Chrome) and back. The layout applies to all windows and
 persists.
 
-**Collapsed sidebar**: the sidebar toggle (left end of its top row)
-collapses the sidebar to icons, Zen's "Collapsed Sidebar" layout: the
-toolbar sits above the page, and the sidebar expands over the page while
-the pointer is on it (right-click the toggle to turn that off). Like Zen,
-single toolbar needs the full sidebar: the toggle or Ctrl+Alt+B expands it
-into single toolbar again.
+**Sidebar toggle**: the button at the left end of the sidebar's top row
+(⌘S) toggles compact mode, as in Zen: the sidebar hides, the page fills the
+card and there is no toolbar. Chromium's own collapse to an icon rail, with
+its tab group and tab search buttons, is not in Koan: Zen has neither, and
+the sidebar is always vertical and always full width. That also goes for the
+menus: there is no "Show tabs horizontally" (or "Collapse tabs") in the tab
+menu, the View menu or the app menu, and no "Expand tabs on hover" (always
+on) in the sidebar button's menu, which is the sidebar's menu. ⇧⌘A (tab
+search) opens the URL bar.
 
 **Tabs on the right**: right-click an empty part of the sidebar and pick
 **Tabs on the right** (or Settings > Look and Feel > Vertical Tabs).
@@ -161,9 +164,7 @@ reaches the top edge.
 **Fullscreen on macOS** keeps the same layout, as in Zen: nothing is shown
 from the top edge but the menu bar (no toolbar, no bookmarks bar, no title
 bar strip). The sidebar's top row has the sidebar toggle and back / forward
-/ reload; Ctrl+L or the pill edits the address over the page. With the
-sidebar collapsed to icons (the toolbar above the page), the toolbar is
-revealed at the top edge.
+/ reload; Ctrl+L or the pill edits the address over the page.
 
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
 and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
@@ -371,13 +372,7 @@ The sidebar slides in over the page; the page doesn't move or reflow.
 In the multiple-toolbars layout you choose what compact mode hides, in the
 sidebar's menu under **Compact Mode**: **Hide sidebar** (the default, as in
 Zen), **Hide toolbar** or **Hide both**. A hidden toolbar slides down when
-the pointer reaches the top edge, with the window buttons. With the sidebar
-collapsed to icons and the window buttons on its side, Zen doesn't offer
-hiding just the toolbar, and neither does Koan: the menu item is off, and
-if hiding just the toolbar is chosen (e.g. in Settings, or before the
-sidebar was collapsed), that window hides the sidebar instead. The choice
-itself is kept, for the other windows and for when the sidebar is expanded
-again.
+the pointer reaches the top edge, with the window buttons.
 
 The same choices are in Settings (Ctrl+,) > Look and Feel > Show in
 compact view, with Zen's "Briefly make the toolbar popup when switching or

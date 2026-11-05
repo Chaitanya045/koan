@@ -31,6 +31,7 @@ source_set("views") {
   ]
   public_deps = [
     "//base",
+    "//koan/browser:vertical_tabs",
     "//koan/browser/ui/color:tokens",
     "//ui/base",
     "//ui/color",
@@ -187,6 +188,8 @@ source_set("impl") {
     "koan_zen_welcome.h",
     "koan_zen_window_drag.cc",
     "koan_zen_window_drag.h",
+    "koan_vertical_tabs_policy.cc",
+    "koan_vertical_tabs_policy.h",
   ]
   if (is_mac) {
     sources += [
@@ -301,6 +304,7 @@ source_set("impl") {
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
     "//koan/browser:tab_hooks",
+    "//koan/browser:vertical_tabs",
     "//koan/common:url_constants",
     "//koan/browser/ui/color",
     "//koan/browser/ui/fonts",

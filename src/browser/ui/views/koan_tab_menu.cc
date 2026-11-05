@@ -8,6 +8,7 @@
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
@@ -112,11 +113,21 @@ void AddKoanTabMenuItems(
   for (const TabMenuFeature& feature : kFeatures) {
     feature.add_items(context);
   }
-  // Zen has no horizontal tabs: no "Show tabs horizontally".
-  if (features::IsSidebarEnabled()) {
+  // Zen has no horizontal tabs: no "Show tabs horizontally", and not the
+  // separator that sat above it alone.
+  if (OwnsSidebar()) {
     if (const std::optional<size_t> toggle =
             menu->GetIndexOfCommandId(TabStripModel::CommandToggleVertical)) {
       menu->RemoveItemAt(*toggle);
+      const bool separator_before =
+          *toggle > 0 &&
+          menu->GetTypeAt(*toggle - 1) == ui::MenuModel::TYPE_SEPARATOR;
+      const bool nothing_after =
+          *toggle >= menu->GetItemCount() ||
+          menu->GetTypeAt(*toggle) == ui::MenuModel::TYPE_SEPARATOR;
+      if (separator_before && nothing_after) {
+        menu->RemoveItemAt(*toggle - 1);
+      }
     }
   }
 }

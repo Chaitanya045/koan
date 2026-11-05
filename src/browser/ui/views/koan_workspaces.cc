@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "koan/browser/ui/views/koan_workspaces.h"
+#include "koan/browser/koan_vertical_tabs.h"
 
 #include <algorithm>
 #include <array>
@@ -1690,6 +1691,19 @@ bool ShowsSpaceHeader(const views::View* tab_group_view) {
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   return controller && controller->workspaces()->IsEnabled();
+}
+
+std::optional<bool> HidesMenuCommand(BrowserView* browser_view,
+                                     int command_id) {
+  // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: AppKit doesn't fire the key
+  // equivalent of a hidden item, enabled or not, so hiding it would kill
+  // Shift+Cmd+L, which is the sidebar button's shortcut. It stays, and its
+  // check mark follows the collapse state, i.e. compact mode hiding the
+  // sidebar. Its title is the menu bar's to change.)
+  if (command_id == IDC_TOGGLE_VERTICAL_TABS) {
+    return OwnsSidebar();
+  }
+  return std::nullopt;
 }
 
 }  // namespace koan

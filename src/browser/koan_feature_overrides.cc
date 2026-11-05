@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/features.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "components/feature_engagement/public/feature_constants.h"
 #include "components/performance_manager/public/features.h"
 #include "components/variations/feature_overrides.h"
 
@@ -25,6 +26,22 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // upstream's back-to-opener does exactly that. Switched by
   // prefs::kCloseOnBackWithNoHistory (koan_tab_hooks.h).
   overrides.EnableFeature(tabs::kBackToOpener);
+
+  // The sidebar is Koan's (KoanVerticalTabsPolicy): the commands that reach
+  // upstream's vertical tab strip state run the window's actions, which Koan
+  // re-points, so the legacy command switch (which would not go through
+  // them) must not be what runs. On by default upstream; set here so that a
+  // study can't turn it off. (A command-line switch still can; the state
+  // controller's hook keeps the mode and collapse state safe then.)
+  overrides.EnableFeature(features::kUseActionsForBrowserCommands);
+  // Upstream's hints about expand-on-hover (shown after any collapse, which
+  // compact mode does) and the vertical tabs tutorial and badge: Koan has no
+  // such choice to explain.
+  overrides.DisableFeature(
+      feature_engagement::kIPHVerticalTabsExpandOnHoverFeature);
+  overrides.DisableFeature(
+      feature_engagement::kIPHVerticalTabstripTutorialFeature);
+  overrides.DisableFeature(tabs::kVerticalTabsNewBadge);
 
   // Freeze background tabs beyond the 5 most recently used; they run for
   // 5 s each minute to catch up. Pinned tabs, tabs that played audio since

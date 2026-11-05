@@ -7,6 +7,8 @@
 
 #include <algorithm>
 
+#include "koan/browser/koan_vertical_tabs.h"  // koan::OwnsSidebar()
+
 class BrowserView;
 
 namespace views {
