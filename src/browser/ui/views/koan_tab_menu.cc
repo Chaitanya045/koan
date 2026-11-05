@@ -78,29 +78,6 @@ const TabMenuFeature* FeatureOf(int command_id) {
   return nullptr;
 }
 
-// Koan's sidebar is always vertical (Zen has no horizontal tab strip): no
-// "Show tabs horizontally" item, and not the separator that sat above it
-// alone.
-void RemoveShowTabsHorizontally(ui::SimpleMenuModel* menu) {
-  if (!OwnsSidebar()) {
-    return;
-  }
-  const std::optional<size_t> at =
-      menu->GetIndexOfCommandId(TabStripModel::CommandToggleVertical);
-  if (!at) {
-    return;
-  }
-  menu->RemoveItemAt(*at);
-  const bool separator_before =
-      *at > 0 && menu->GetTypeAt(*at - 1) == ui::MenuModel::TYPE_SEPARATOR;
-  const bool nothing_after =
-      *at >= menu->GetItemCount() ||
-      menu->GetTypeAt(*at) == ui::MenuModel::TYPE_SEPARATOR;
-  if (separator_before && nothing_after) {
-    menu->RemoveItemAt(*at - 1);
-  }
-}
-
 }  // namespace
 
 TabMenuContext::TabMenuContext(
@@ -131,17 +108,26 @@ void AddKoanTabMenuItems(
     int index,
     int num_tabs,
     std::vector<std::unique_ptr<ui::SimpleMenuModel>>& submenus) {
-  RemoveShowTabsHorizontally(menu);
   TabMenuContext context(*menu, delegate, *tab_strip, index, num_tabs,
                          submenus);
   for (const TabMenuFeature& feature : kFeatures) {
     feature.add_items(context);
   }
-  // Zen has no horizontal tabs: no "Show tabs horizontally".
-  if (features::IsSidebarEnabled()) {
+  // Zen has no horizontal tabs: no "Show tabs horizontally", and not the
+  // separator that sat above it alone.
+  if (OwnsSidebar()) {
     if (const std::optional<size_t> toggle =
             menu->GetIndexOfCommandId(TabStripModel::CommandToggleVertical)) {
       menu->RemoveItemAt(*toggle);
+      const bool separator_before =
+          *toggle > 0 &&
+          menu->GetTypeAt(*toggle - 1) == ui::MenuModel::TYPE_SEPARATOR;
+      const bool nothing_after =
+          *toggle >= menu->GetItemCount() ||
+          menu->GetTypeAt(*toggle) == ui::MenuModel::TYPE_SEPARATOR;
+      if (separator_before && nothing_after) {
+        menu->RemoveItemAt(*toggle - 1);
+      }
     }
   }
 }

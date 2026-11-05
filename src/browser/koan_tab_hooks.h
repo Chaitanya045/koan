@@ -52,12 +52,6 @@ bool ShowsFocusExitedToast(content::BrowserContext* context);
 // and saved groups reopen with every tab loading.
 bool SavesTabGroups(content::BrowserContext* context);
 
-// Zen has no horizontal tabs: with the sidebar on, the vertical tabs pref
-// (prefs::kVerticalTabsEnabled) is always on. Turns it back on if it is off
-// (an old profile, or the settings page) and returns whether it did. Called
-// from VerticalTabStripStateControllerImpl.
-bool KeepVerticalTabsOn(PrefService* prefs);
-
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_KOAN_TAB_HOOKS_H_

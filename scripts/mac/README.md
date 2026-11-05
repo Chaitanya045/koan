@@ -11,7 +11,7 @@ side through CDP (`--remote-debugging-port=9341`), both forwarded by an ssh Cont
 
 | env | meaning |
 |---|---|
-| `MODE=main` | T13 Shift+Cmd+L x6, T14 Shift+Cmd+A, T21 rapid compact toggles (2 / 3 / 20 within 250 ms .. 10 s, then close mid-animation), T22 fullscreen in/out with compact off and on, T24 log greps |
+| `MODE=main` | T13 the compact key x6 (Cmd+S with KEYSET=cmd, Ctrl+S otherwise), T13b Shift+Cmd+L opens the inspector and leaves the sidebar alone (#90 owns that key), T14 Shift+Cmd+A, T21 rapid compact toggles (2 / 3 / 20 within 250 ms .. 10 s, then close mid-animation), T22 fullscreen in/out with compact off and on, T24 log greps |
 | `MODE=old` | T1/T2/T6: start from a seeded old-Chrome profile (`PREFS=<json>`, e.g. `scripts/e2e/prefs/vertical_tabs_old_profile.json`), check the start state, then quit gracefully and read the three prefs back |
 | `MODE=nocompact` | T20: `FLAGS='--disable-features=MacAppCodeSignClone,KoanWelcome,KoanCompactMode'` (a later `--disable-features` replaces the launcher's own list, so pass all of it); Ctrl+S and Shift+Cmd+L must do nothing |
 

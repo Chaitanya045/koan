@@ -10,7 +10,7 @@
 // - the three prefs read as their defaults afterwards, and writing them again
 //   from chrome://settings (the Tab strip position dropdown, Expand tabs on
 //   hover) changes nothing in the window, and they snap back;
-// - Shift+Cmd+L (Ctrl+Shift+L here) toggles compact mode and never leaves a
+// - the compact key (Ctrl+S here, Cmd+S on the Mac) toggles compact mode and never leaves a
 //   rail, with the URL bar focused too;
 // - Shift+Cmd+A (tab search) opens Koan's URL bar, not Chromium's bubble.
 //
@@ -47,19 +47,19 @@ for (const [pref, value] of [['vertical_tabs.enabled', false],
         await readPref(pref) === !value, `${await readPref(pref)}`);
 }
 
-// Test 13: Shift+Cmd+L is the sidebar button: it toggles compact mode.
-await press(VK.L, CTRL | SHIFT, 'L', 1500);
+// Test 13: the compact key; Shift+Cmd+L is Koan's inspector (#90), not the sidebar's.
+await press(VK.S, CTRL, 's', 1500);
 vs = await views();
-checkKoanSidebar('Shift+Cmd+L', { hidden: true }, vs);
-await press(VK.L, CTRL | SHIFT, 'L', 1500);
+checkKoanSidebar('Ctrl+S', { hidden: true }, vs);
+await press(VK.S, CTRL, 's', 1500);
 vs = await views();
-checkKoanSidebar('Shift+Cmd+L again', {}, vs);
+checkKoanSidebar('Ctrl+S again', {}, vs);
 // ...with the URL bar focused (Ctrl+L).
 await press(VK.L, CTRL, 'l', 800);
-await press(VK.L, CTRL | SHIFT, 'L', 1500);
+await press(VK.S, CTRL, 's', 1500);
 vs = await views();
-check('Shift+Cmd+L with the URL bar focused: no icon rail', !railShown(vs));
-await press(VK.L, CTRL | SHIFT, 'L', 1500);
+check('The compact key with the URL bar focused: no icon rail', !railShown(vs));
+await press(VK.S, CTRL, 's', 1500);
 await key(await visiblePage(), 27, 0, 'Escape');
 await sleep(500);
 checkKoanSidebar('After the toggles', {}, await views());

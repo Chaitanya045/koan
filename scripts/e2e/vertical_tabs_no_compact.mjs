@@ -1,7 +1,7 @@
 // End-to-end test that without compact mode (the KoanCompactMode feature off,
 // scripts/e2e/vertical_tabs_no_compact.flags) the sidebar's entry points still
 // can't collapse it to Chromium's icon rail (audit tests 13 and 20; #154):
-// with nothing to hide the sidebar for, the sidebar button and Shift+Cmd+L do
+// with nothing to hide the sidebar for, the sidebar button and the compact key do
 // nothing, and a drag below the snap width snaps back.
 //
 //   scripts/e2e/run.sh vertical_tabs_no_compact
@@ -19,9 +19,9 @@ const WITHOUT = { toolbar: true };
 checkKoanSidebar('Without compact mode', WITHOUT, vs);
 const width = region(vs).w;
 
-await press(VK.L, CTRL | SHIFT, 'L', 1500);
+await press(VK.S, CTRL, 's', 1500);
 vs = await views();
-checkKoanSidebar('Shift+Cmd+L', WITHOUT, vs);
+checkKoanSidebar('Ctrl+S', WITHOUT, vs);
 check('...the sidebar is as wide as before', region(vs).w === width, `${region(vs).w} vs ${width}`);
 
 const button = toggleOf(vs);

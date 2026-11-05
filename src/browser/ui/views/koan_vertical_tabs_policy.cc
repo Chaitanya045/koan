@@ -28,6 +28,7 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "ui/actions/actions.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -153,6 +154,10 @@ void KoanVerticalTabsPolicy::InstallActions() {
           }
         },
         weak_factory_.GetWeakPtr()));
+    // Shift+Cmd+L is Koan's inspector on macOS (Zen's key_inspectorMac, see
+    // koan_shortcut_table.cc), not the sidebar button's: the action keeps no
+    // key, so it can't compete with it (the compact mode key is Cmd+S).
+    toggle->SetAccelerator(ui::Accelerator());
   }
   UpdateSidebarButtonText();
 
