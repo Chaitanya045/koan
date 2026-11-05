@@ -57,6 +57,12 @@ enum class Owner {
   // IgnoresFullscreenToolbarToggle(): no "Always Show Toolbar in Full
   // Screen" while Koan's toolbar is hidden (fullscreen F3).
   kFullscreenToolbar,
+  // Esc: Zen leaves it unbound as Stop, so it only closes the find bar; the
+  // page gets it otherwise (#90; the stop button and ⌘. still stop). The
+  // command is enabled only while the find bar can close
+  // (UpdateCloseFindOrStop() in browser_command_controller.cc.patch), so
+  // otherwise the key goes to the page.
+  kCloseFindOrStop,
 };
 
 struct Row {
@@ -133,6 +139,10 @@ constexpr Row kRows[] = {
        chrome::Zoom(browser, content::PAGE_ZOOM_OUT);
      }},
 
+    // Esc: the find bar only, never Stop. Upstream's callback would stop the
+    // page without a find bar; Koan's is the whole command.
+    {kActionCloseFindOrStop, IDC_CLOSE_FIND_OR_STOP, Owner::kCloseFindOrStop},
+
     // The URL bar: ⌘T, File > New Tab, the sidebar's "+ New Tab" row.
     {kActionNewTab, IDC_NEW_TAB, Owner::kNewTab,
      [](BrowserWindowInterface* browser, WindowOpenDisposition) {
@@ -186,6 +196,7 @@ bool Installs(Owner owner, BrowserView* browser_view) {
     case Owner::kNewTab:
       return features::IsUrlBarEnabled() && browser_view->GetIsNormalType();
     case Owner::kFullscreenToolbar:
+    case Owner::kCloseFindOrStop:
       return true;
   }
 }
@@ -210,6 +221,11 @@ bool Takes(const Row& row, BrowserWindowInterface* browser) {
       return MaybeOpenUrlBarForNewTab(browser);
     case Owner::kFullscreenToolbar:
       return IgnoresFullscreenToolbarToggle(browser);
+    case Owner::kCloseFindOrStop:
+      if (chrome::CanCloseFind(browser)) {
+        chrome::CloseFind(browser);
+      }
+      return true;
   }
 }
 
