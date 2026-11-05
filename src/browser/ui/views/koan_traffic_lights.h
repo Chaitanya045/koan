@@ -56,12 +56,6 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view);
 bool IsPointerOverWindow(const BrowserView* browser_view);
 
 #if BUILDFLAG(IS_MAC)
-// Logs (LOG(INFO)) every NSWindow of the application: class, title, frame,
-// visibility, alpha, level, whether it ignores the mouse, its parent and its
-// delegate's class. For finding the invisible window at the screen's left edge
-// after page info in the other layout (#168); callers check VLOG_IS_ON(1).
-void LogApplicationWindows(const char* when);
-
 // Shows or hides the window's traffic lights.
 void SetTrafficLightsShown(const BrowserView* browser_view, bool shown);
 

@@ -6,8 +6,6 @@
 
 #import <AppKit/AppKit.h>
 
-#include "base/logging.h"
-#include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "ui/views/widget/widget.h"
 
@@ -23,27 +21,6 @@ void SetTrafficLightsShown(const BrowserView* browser_view, bool shown) {
   for (NSWindowButton type :
        {NSWindowCloseButton, NSWindowMiniaturizeButton, NSWindowZoomButton}) {
     [[window standardWindowButton:type] setHidden:!shown];
-  }
-}
-
-void LogApplicationWindows(const char* when) {
-  for (NSWindow* window in NSApp.windows) {
-    LOG(INFO) << "Koan: window (" << when << ") "
-              << base::SysNSStringToUTF8(NSStringFromClass([window class]))
-              << " \"" << base::SysNSStringToUTF8(window.title ?: @"")
-              << "\" frame "
-              << base::SysNSStringToUTF8(NSStringFromRect(window.frame))
-              << " visible " << window.visible << " alpha " << window.alphaValue
-              << " level " << window.level << " ignoresMouse "
-              << window.ignoresMouseEvents << " key " << window.keyWindow
-              << " space " << window.onActiveSpace << " parent "
-              << (window.parentWindow
-                      ? base::SysNSStringToUTF8(
-                            NSStringFromClass([window.parentWindow class]))
-                      : "none")
-              << " delegate "
-              << base::SysNSStringToUTF8(
-                     NSStringFromClass([window.delegate class]));
   }
 }
 

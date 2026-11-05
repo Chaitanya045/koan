@@ -1045,11 +1045,6 @@ void KoanCompactModeController::OnImmersiveFullscreenChanged() {
   if (IsClosing() || mode_ == Mode::kNone) {
     return;
   }
-#if BUILDFLAG(IS_MAC)
-  if (VLOG_IS_ON(1)) {
-    LogApplicationWindows("fullscreen changed");
-  }
-#endif
   ClearHoverStates();
   // The URL bar lets go of the top container before it moves: Chromium has
   // just destroyed the layer it styled (leaving fullscreen), or the bar's

@@ -24,10 +24,12 @@ at x=0-3? was "sidebar hot zone hovered" logged, and did it hold?), the strip wi
 ## More cases (review of #171)
 
 Logs: run with `--vmodule=koan_compact_mode_controller=1`: "Koan: pointer monitor on (application wide | this window)" /
-"off" appear only on a change; "Koan: window (fullscreen changed) ..." lists every NSWindow of the application (class,
-title, frame, visible, alpha, level, ignoresMouse, key, space, parent, delegate) on each fullscreen change. **Send the
-window list from the failing state (4):** the invisible window at the screen's left edge (500x500 at x=0, y=456 in
-CGWindowList) is still unexplained.
+"off" appear only on a change.
+
+The "invisible window at the screen's left edge" in the failing state (500x500 or 64x64 at x=0, y=456 in CGWindowList) is a
+`TUINSWindow` (delegate `TUINSWindow`, not visible): macOS's own text-input helper window, there in every fullscreen
+change, also in the passing runs. It is not ours and not the cause; the window monitor missed the pointer there for
+another reason (the events went to a different window than the browser's), which the application-wide monitor avoids.
 
 | # | Do | Expect |
 |---|---|---|
