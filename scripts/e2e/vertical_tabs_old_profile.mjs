@@ -71,6 +71,8 @@ await sleep(1000);
 vs = await views();
 check('Tab search shows no Chromium bubble', !tabSearchBubbleShown(vs));
 check('...it opens Koan\'s URL bar', vs.some(v => v.cls === 'KoanUrlBarBackdrop' && v.shown));
+// Zen's search tabs is the omnibox in its tabs scope: the "Tabs" chip, not the text "@tabs ".
+check('...in the @tabs keyword mode (the Tabs chip)', vs.some(v => v.cls === 'SelectedKeywordView' && v.shown));
 await key(await visiblePage(), 27, 0, 'Escape');
 await sleep(500);
 

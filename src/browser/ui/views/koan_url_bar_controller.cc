@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -37,7 +38,11 @@
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_service.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
@@ -51,6 +56,7 @@
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -86,8 +92,6 @@ constexpr base::TimeDelta kFadeDuration = base::Milliseconds(120);
 
 // Zen's zen.urlbar.wait-to-clear.
 constexpr base::TimeDelta kKeepLastSearch = base::Seconds(45);
-// Chromium's omnibox scope for the open tabs (the @tabs starter pack keyword).
-constexpr char16_t kTabSearchScope[] = u"@tabs ";
 
 }  // namespace
 
@@ -314,6 +318,10 @@ bool KoanUrlBarController::OpenForTabSearch() {
   if (!CanOpenBar()) {
     return false;
   }
+  // A new-tab bar that is open is not this one (its Enter would open a tab).
+  if (new_tab_) {
+    EndNewTabSession(/*committed=*/false);
+  }
   LocationBarView* bar = location_bar();
   bar->FocusLocation(/*is_user_initiated=*/true,
                      /*clear_focus_if_failed=*/false);
@@ -324,10 +332,29 @@ bool KoanUrlBarController::OpenForTabSearch() {
   if (is_open()) {
     SetPlacement(DesiredPlacement());
   }
-  // Zen's "search tabs" (Browser:SearchTabs) is the URL bar restricted to the
-  // open tabs; Chromium's restriction is the @tabs scope. Enter on a match
-  // switches to that tab.
-  bar->omnibox_view()->SetUserText(kTabSearchScope, /*update_popup=*/true);
+  // Zen's "search tabs" (Browser:SearchTabs) is the URL bar in its tabs
+  // search mode: a "Tabs" chip and an empty input, with Enter on a match
+  // switching to that tab. Chromium's is the @tabs keyword mode. It has to be
+  // entered explicitly: SetUserText() clears keyword mode, and only typing the
+  // space after the keyword turns it on, so setting "@tabs " as text would be
+  // a plain web search.
+  OmniboxView* view = bar->omnibox_view();
+  TemplateURLService* service =
+      TemplateURLServiceFactory::GetForProfile(browser_view_->GetProfile());
+  const TemplateURL* tabs =
+      service ? service->FindStarterPackTemplateURL(
+                    template_url_starter_pack_data::StarterPackId::kTabs)
+              : nullptr;
+  if (!tabs || !tabs->CanBeUsedForKeywordMatching()) {
+    // No scope (the starter pack is off or the service isn't loaded): the
+    // caller focuses the omnibox as Chromium's shortcut does.
+    return false;
+  }
+  view->SetUserText(std::u16string(), /*update_popup=*/false);
+  bar->GetOmniboxController()->edit_model()->EnterKeywordMode(
+      metrics::OmniboxEventProto::KEYBOARD_SHORTCUT, tabs,
+      AutocompleteMatch::GetKeywordPlaceholder(
+          tabs, /*is_history_embeddings_enabled=*/false));
   return true;
 }
 
