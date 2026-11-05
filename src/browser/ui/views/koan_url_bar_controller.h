@@ -105,6 +105,8 @@ class KoanUrlBarController : public views::ViewObserver,
   bool IsCommandCard() const;
   // Whether it is Zen's (not shadcn's) card: 62pt tall.
   bool IsFloatingZenCard() const;
+  // The card layer's opacity: 1, or the glass fill's alpha for a glass card.
+  float CardOpacity() const;
   // The card's layer while it is open, null otherwise: the one a glass look
   // blurs behind (Layer::SetBackgroundBlur), with the translucent
   // kColorKoanFloatingUrlBarBackground. It is clipped to the card's rounded
@@ -169,6 +171,10 @@ class KoanUrlBarController : public views::ViewObserver,
       sibling_observation_{this};
   bool changing_toolbar_visibility_ = false;
   bool laying_out_ = false;
+  // Whether the open card is a glass pane: Zen's acrylic-urlbar setting, and
+  // not with macOS's Reduce Transparency on or in an inactive window. Per
+  // window; kept in step by ApplyCardStyle().
+  bool glass_card_ = false;
   base::ScopedObservation<views::View, views::ViewObserver>
       top_container_observation_{this};
   base::ScopedObservation<views::View, views::ViewObserver>

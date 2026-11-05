@@ -20,6 +20,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_actions.h"
@@ -51,6 +52,8 @@
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
+#include "koan/browser/ui/views/koan_window_glass.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -63,8 +66,10 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -131,8 +136,18 @@ class KoanUrlBarBackdrop : public views::View {
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorToolbar));
     flags.setLooper(gfx::CreateShadowDrawLooper(shadows));
-    canvas->DrawRoundRect(gfx::RectF(shape), FloatingUrlBarCornerRadius(),
-                          flags);
+    {
+      // Only the shadow, outside the card: a glass card blurs what is under
+      // it, which must be the page, not this shape.
+      gfx::ScopedCanvas scoped(canvas);
+      canvas->sk_canvas()->clipRRect(
+          SkRRect::MakeRectXY(gfx::RectToSkRect(card_),
+                              FloatingUrlBarCornerRadius(),
+                              FloatingUrlBarCornerRadius()),
+          SkClipOp::kDifference, /*doAntiAlias=*/true);
+      canvas->DrawRoundRect(gfx::RectF(shape), FloatingUrlBarCornerRadius(),
+                            flags);
+    }
     // shadcn's 1px `border` around the card, just outside it.
     cc::PaintFlags border;
     border.setAntiAlias(true);
@@ -575,7 +590,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     views::AnimationBuilder()
         .Once()
         .SetDuration(kFadeDuration)
-        .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
+        .SetOpacity(top_container, CardOpacity(), gfx::Tween::EASE_OUT);
   }
 }
 
@@ -669,6 +684,24 @@ void KoanUrlBarController::ApplyCardStyle() {
     omnibox->InstallPlaceholderText();
   }
 
+  // Zen's acrylic-urlbar: the card is a glass pane, with the page blurred
+  // behind it (zen-omnibox.css: backdrop-filter blur(40px)), while the setting
+  // is on, Reduce Transparency is off and the window is active.
+  const views::Widget* widget = browser_view_->GetWidget();
+  glass_card_ =
+      is_open() && IsCommandCard() && IsWindowGlassAllowed() && widget &&
+      widget->ShouldPaintAsActive() &&
+      g_browser_process->local_state()->GetBoolean(prefs::kLookAcrylicUrlBar);
+  if (ui::Layer* card = top_container->layer()) {
+    card->SetBackgroundBlur(glass_card_ ? kFloatingUrlBarBlurRadius : 0.0f);
+    // The translucent fill is the card's opacity, not other colours: this
+    // window only (no colour provider is rebuilt, no other window repaints),
+    // and the card keeps its opaque children (the field, the text).
+    if (!card->GetAnimator()->is_animating()) {
+      card->SetOpacity(CardOpacity());
+    }
+  }
+
   if (!is_open()) {
     return;
   }
@@ -677,6 +710,17 @@ void KoanUrlBarController::ApplyCardStyle() {
       floating ? FloatingUrlBarCornerRadius() : UrlPillCornerRadius()));
   layer->SetIsFastRoundedCorner(true);
   layer->SetMasksToBounds(true);
+}
+
+float KoanUrlBarController::CardOpacity() const {
+  if (!glass_card_) {
+    return 1.0f;
+  }
+  // Zen's fill: white at 93%, rgb(20, 20, 20) at 92% (the shadcn look's
+  // popover at 90%), over the blurred page.
+  return SkColorGetA(browser_view_->GetColorProvider()->GetColor(
+             kColorKoanFloatingUrlBarGlass)) /
+         255.0f;
 }
 
 bool KoanUrlBarController::IsFloatingZenCard() const {
