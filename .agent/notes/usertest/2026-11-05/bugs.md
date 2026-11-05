@@ -411,3 +411,8 @@ Not done: camera/microphone (I won't turn on the Mac's camera or mic), CT/CB lay
 ## Session 36 (15:47–15:51 IST): KoanCheck-c90i (#90 fbeed2fd on develop ef76c876)
 PASS: menu bar is exactly Koan File Edit View Spaces History Bookmarks Tools Window Help, no Profiles, no Tab (s36-bar); every menu opens, no crash (s36-m1, m2); 6× ⌘` between two windows: no crash; ⋮ > More tools (Ctrl+Alt+B layout) has no "Show tabs horizontally/vertically" (s36-mt; the single-toolbar layout has no ⋮ button); ⌘J opens the Library's Downloads; ⇧⌘L opens the inspector; ⌘S toggles compact (s36-k). View has "Toggle Sidebar's Width" and still "✓ Show tabs vertically" (expected on #90 alone). No DCHECK/dump.
 Not done: the Dock menu (my rules: clicks only in my own windows), the rebind (passed on c90g).
+
+## Session 37 (16:12–16:16 IST): KoanCheck-c163e (#163 4813ee5e)
+PASS: B48 fixed — compact + peek + the pill's site-info button: page info under the pill, the sidebar stays out (also with the pointer on the page), Esc closes both (s37-peek-pageinfo); Ctrl+Alt+B layout: page info at the omnibox's site icon (s37-cab-pageinfo). No DCHECK/dump.
+### B49. Native fullscreen + compact: the left screen edge no longer reveals the sidebar — major (regression; c128b revealed it)
+Steps: ⌃⌘F, Ctrl+S (compact on), move the pointer to x=0..3 and rest 1.5–2 s. Expected (Zen, and c128b): the sidebar slides in. Actual: nothing (s37-fs-no-peek: left = compact off shows the sidebar, right = compact on, pointer at the left edge, no sidebar). Unknown whether #163 or develop ef76c876.
