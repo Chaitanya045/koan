@@ -681,7 +681,7 @@ card on top, with Zen's default theme's tint over the blur (dark: black at
 `chrome://koan-settings` (Look and Feel, Theme Settings); it is off by itself
 while macOS's Reduce Transparency (System Settings, Accessibility, Display)
 is on, and while the window is being captured. An inactive window goes flat,
-like Zen's. macOS 26 or later; not on other platforms.
+like Zen's. It needs macOS 26 or later, and on an Intel Mac it is off until you turn it on; not on other platforms.
 
 ## Turning things off
 
