@@ -32,8 +32,9 @@ constexpr base::TimeDelta kStableAfter = base::Seconds(60);
 
 void SetResumedCrashes(base::WeakPtr<Profile> profile, int count) {
   if (profile) {
-    profile->GetOriginalProfile()->GetPrefs()->SetInteger(
-        prefs::kResumedCrashes, count);
+    PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
+    prefs->SetInteger(prefs::kResumedCrashes, count);
+    prefs->CommitPendingWrite();
   }
 }
 
@@ -63,6 +64,9 @@ bool RestoreAfterCrash(BrowserWindowInterface* browser,
     // The last session ended cleanly: a later crash restores again.
     if (resumed != 0) {
       prefs->SetInteger(prefs::kResumedCrashes, 0);
+      // On disk now: a kill -9 a few seconds into this launch must not bring
+      // the old count back.
+      prefs->CommitPendingWrite();
     }
     return false;
   }
