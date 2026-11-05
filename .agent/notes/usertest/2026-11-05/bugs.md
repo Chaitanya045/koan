@@ -393,3 +393,8 @@ Not done: camera (would turn the Mac's camera on), CT/CB layouts, download panel
 PASS: top-band drag moves the window (221,55 → 270,77), page log `move,down,move,up`; 20 fast drags no crash; step 3: after a drag, moving inside the sidebar adds no event to the page (s33-hover, rows 2-3 identical); 8b: drag released over the sidebar, then a text drag-select out of the page over the sidebar: the page sees `down,move,up` once, never up before down (s33-select-out); 8: ⇧⌘W and held ⌘Q during a held drag: ignored while the move loop runs, no crash/DCHECK/dump. 
 Minor: the drag-select out of the page left only one character selected (should extend to the line start).
 Not judgeable: tiling — dragging to the left screen edge pushed the window off-screen (x −960) with no tiling preview (synthetic events; macOS tiling may need a real pause at the edge), so step 6 wasn't done.
+
+## Session 34 (14:36–14:39 IST): KoanCheck-c155i (#155 1020a184 on develop ef76c876)
+PASS: drag the edge of compact's revealed (peeked) sidebar: it doesn't resize at all, never a rail, compact stays (s34-peekdrag); toast once per session: 1st drag below min → "Sidebar hidden!", 2nd → compact with no toast (s34-t); tab / sidebar button / Space header / empty sidebar menus only Koan's (s34-menus). No DCHECK/dump.
+Report (as the test list asks): Ctrl+Alt+B layout, app menu > More tools still lists "Show tabs horizontally" greyed out (s34-mt); the app menu also has Chromium's "Tab groups" and "Customise Chrome".
+Not done: the 10-minute hint (would hold the loop 11 min).
