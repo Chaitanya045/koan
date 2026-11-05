@@ -1825,13 +1825,12 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   // strip, and upstream's hover tracking keeps it open until it leaves; the
   // lock is kept for Zen's keep-hover time, so the hand-over between the two
   // doesn't close it for a moment.
-  hover_release_timer_.Start(
-      FROM_HERE, kSidebarKeepHoverDuration,
-      base::BindOnce(
-          [](KoanCompactModeController* self) {
-            self->ReleaseLock(self->hover_lock_);
-          },
-          base::Unretained(this)));
+  hover_release_timer_.Start(FROM_HERE, kSidebarKeepHoverDuration,
+                             base::BindOnce(
+                                 [](KoanCompactModeController* self) {
+                                   self->ReleaseLock(self->hover_lock_);
+                                 },
+                                 base::Unretained(this)));
 }
 
 void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
