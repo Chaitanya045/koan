@@ -341,8 +341,14 @@ source_set("impl") {
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
     ]
-    # Content (page) fullscreen: koan::IsContentFullscreen().
-    deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
+    deps += [
+      # The command policy's fullscreen-toolbar row
+      # (chrome::ToggleAlwaysShowToolbarInFullscreen).
+      "//chrome/browser/ui:browser_commands_mac",
+
+      # Content (page) fullscreen: koan::IsContentFullscreen().
+      "//chrome/browser/ui:fullscreen_util_mac",
+    ]
     frameworks = [ "AppKit.framework" ]
   } else {
     sources += [
