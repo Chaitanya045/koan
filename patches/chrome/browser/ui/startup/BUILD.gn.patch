@@ -1,13 +1,13 @@
 diff --git a/chrome/browser/ui/startup/BUILD.gn b/chrome/browser/ui/startup/BUILD.gn
-index d554afb..d36dfd5 100644
+index d554afb..6c1a8f7 100644
 --- a/chrome/browser/ui/startup/BUILD.gn
 +++ b/chrome/browser/ui/startup/BUILD.gn
 @@ -210,6 +210,8 @@ source_set("impl") {
      ]
      deps += [
        ":startup_tab",
++      "//koan/browser/ui/views",
 +      "//koan/common:branding",
-+      "//chrome/browser/sessions",
        "//apps",
        "//base:i18n",
        "//build:branding_buildflags",
