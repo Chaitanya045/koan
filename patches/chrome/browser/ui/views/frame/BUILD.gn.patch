@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index 41231752d903fec4f355a7b20037f5058904661c..aefbac7bf9a1720aad61e995bc7216c535afe146 100644
+index 41231752d903fec4f355a7b20037f5058904661c..b7df479190e3c50dee31c457351d73db0d109659 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
 @@ -566,6 +566,7 @@ source_set("vertical_tab_strip_region_view") {
@@ -74,3 +74,11 @@ index 41231752d903fec4f355a7b20037f5058904661c..aefbac7bf9a1720aad61e995bc7216c5
      "//ui/base:ozone_buildflags",
      "//ui/base/metadata",
      "//ui/compositor",
+@@ -3307,6 +3316,7 @@ source_set("browser_widget_impl") {
+     "//chrome/browser/ui/web_applications",
+     "//chrome/common:constants",
+     "//content/public/browser",
++    "//koan/browser/ui/views",
+     "//media/capture:capture_switches",
+     "//ui/base",
+     "//ui/base/mojom:ui_base_types",

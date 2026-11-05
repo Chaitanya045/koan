@@ -8,6 +8,7 @@
 #include <optional>
 
 class BrowserView;
+class BrowserWindowInterface;
 
 namespace content {
 class WebContents;
@@ -36,6 +37,14 @@ bool PaintWindowBackground(gfx::Canvas* canvas,
 // Whether Koan paints `browser_view`'s window background (then it has no
 // solid colour).
 bool PaintsWindowBackground(const BrowserView* browser_view);
+
+// From BrowserWidget::GetThemeProvider() and GetCustomTheme(): whether
+// `browser`'s window ignores an extension (Chrome Web Store) theme, as Zen
+// disables lightweight themes. Its images and colours are then not used, as
+// upstream does under focus mode's colour, so Koan's look, its Space themes
+// and the glass stay; the theme stays installed. All browser windows but web
+// apps.
+bool LocksExtensionTheme(const BrowserWindowInterface* browser);
 
 // From MultiContentsBackgroundView::OnThemeChanged(), right after it re-creates
 // its layer (a textured one where Koan paints the window, opaque by default):
