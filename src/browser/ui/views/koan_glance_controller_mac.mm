@@ -6,12 +6,12 @@
 
 #import <Cocoa/Cocoa.h>
 
-#include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#import "ui/base/cocoa/nsmenu_additions.h"
 #include "ui/gfx/native_ui_types.h"
 #include "ui/views/widget/widget.h"
 
@@ -33,12 +33,13 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
   if (!result.found()) {
     return 0;
   }
-  // Like the delegate: a repeating ⌘T / ⌘N opens nothing more.
+  // Like the delegate: a repeating ⌘T / ⌘N opens nothing more (it drops
+  // the key; passed on, it would reach the menu bar's item again).
   if (ns_event.isARepeat && (result.chrome_command == IDC_NEW_TAB ||
                              result.chrome_command == IDC_NEW_WINDOW ||
                              result.chrome_command ==
                                  IDC_NEW_INCOGNITO_WINDOW)) {
-    return 0;
+    return kDropKeyEvent;
   }
   chrome::BrowserCommandController* commands =
       chrome::BrowserCommandController::From(browser);
@@ -48,35 +49,31 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
              : 0;
 }
 
-std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser) {
-  NSWindow* key = NSApp.keyWindow;
-  NSWindow* card_window =
-      card ? card->GetNativeWindow().GetNativeNSWindow() : nil;
-  NSWindow* browser_window =
+bool PerformWindowMenuKey(views::Widget* browser,
+                          const input::NativeWebKeyboardEvent& event) {
+  NSEvent* ns_event = event.os_event.Get();
+  NSWindow* window =
       browser ? browser->GetNativeWindow().GetNativeNSWindow() : nil;
-  NSString* who = !key                     ? @"none"
-                  : key == card_window     ? @"the card's"
-                  : key == browser_window  ? @"the browser window"
-                                           : @"another window";
-  NSString* parent = !card_window.parentWindow ? @"none"
-                     : card_window.parentWindow == browser_window
-                         ? @"the browser window"
-                         : @"another window";
-  NSString* text = [NSString
-      stringWithFormat:
-          @"key window: %@ (%@ \"%@\"), its first responder %@; card window "
-          @"%@: canBecomeKey %d, isKey %d, visible %d, parent %@; card widget "
-          @"active %d, can activate %d; app active %d",
-          who, key.className, key.title, key.firstResponder.className,
-          card_window ? card_window.className : @"none",
-          card_window.canBecomeKeyWindow, card_window.isKeyWindow,
-          card_window.isVisible, parent, card ? card->IsActive() : 0,
-          card ? card->CanActivate() : 0, NSApp.isActive];
-  return base::SysNSStringToUTF8(text);
+  if (!ns_event || ns_event.type != NSEventTypeKeyDown || !window) {
+    return false;
+  }
+  NSMenuItem* item =
+      [[NSApp mainMenu] cr_menuItemForKeyEquivalentEvent:ns_event];
+  if (item.action == @selector(performMiniaturize:)) {
+    [window performMiniaturize:nil];
+    return true;
+  }
+  if (item.action == @selector(performZoom:)) {
+    [window performZoom:nil];
+    return true;
+  }
+  return false;
 }
 
 void PrepareCardWindow(views::Widget* card) {
   NSWindow* window = card->GetNativeWindow().GetNativeNSWindow();
+  // VoiceOver names the card's window (the page's dialog is inside it).
+  window.title = @"Glance";
   window.excludedFromWindowsMenu = YES;
 }
 

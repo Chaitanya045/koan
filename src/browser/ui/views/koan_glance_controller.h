@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/callback_list.h"
-#include "base/scoped_multi_source_observation.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -24,7 +23,6 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 class BrowserWindowInterface;
@@ -34,21 +32,34 @@ namespace actions {
 class ActionItem;
 }
 
+namespace ui {
+class Accelerator;
+}
+
 namespace koan {
 
 class KoanGlanceView;
 
 #if BUILDFLAG(IS_MAC)
-// macOS: the browser command that `event` (a key in the Glance page) runs
-// and that the browser reserves (IsReservedCommandOrKey: ⌘W, ⌘T, ⌘N, tab
-// switching ...), or 0 (koan_glance_controller_mac.mm).
+// macOS, koan_glance_controller_mac.mm. The card's window isn't a browser
+// window, so no ChromeCommandDispatcherDelegate handles its key
+// equivalents; the card's PreHandleKeyboardEvent() does what it would.
+
+// What ReservedCommandForKeyEvent() returns for a key to swallow: a
+// repeating ⌘T / ⌘N / ⇧⌘N, as the delegate drops them.
+inline constexpr int kDropKeyEvent = -1;
+// The browser command that `event` (a key in the Glance page) runs and that
+// the browser reserves (IsReservedCommandOrKey: ⌘W, ⌘T, ⌘N, tab switching
+// ...), kDropKeyEvent, or 0.
 int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
                                const input::NativeWebKeyboardEvent& event);
-// macOS diagnostics: the key window, its first responder, and the card's
-// window (`card`, may be null) against the browser window's.
-std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser);
-// macOS: the card's window is a top-level one (Open()); keeps it out of the
-// Window menu.
+// Window > Minimize (⌘M) and Window > Zoom go to the first responder, which
+// is in the card's window while it is key: whether `event` is the key
+// equivalent of one of them, and if so, does it to `browser`'s window.
+bool PerformWindowMenuKey(views::Widget* browser,
+                          const input::NativeWebKeyboardEvent& event);
+// The card's window is a top-level one (Open()): titled "Glance" for
+// VoiceOver, kept out of the Window menu.
 void PrepareCardWindow(views::Widget* card);
 #endif
 
@@ -64,8 +75,7 @@ void PrepareCardWindow(views::Widget* card);
 // mouse events, and the page underneath gets none while Glance is open. The
 // card hosts a WebContents owned here until it is promoted into a tab.
 class KoanGlanceController : public content::WebContentsDelegate,
-                             public TabStripModelObserver,
-                             public views::WidgetObserver {
+                             public TabStripModelObserver {
  public:
   explicit KoanGlanceController(BrowserView* browser_view);
   KoanGlanceController(const KoanGlanceController&) = delete;
@@ -146,10 +156,6 @@ class KoanGlanceController : public content::WebContentsDelegate,
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
 
-  // views::WidgetObserver (macOS key-window diagnostics, the card's and the
-  // browser window's activation while a card is open):
-  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
-
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
@@ -165,9 +171,7 @@ class KoanGlanceController : public content::WebContentsDelegate,
   // focus (for Esc).
   class InputTracker : public content::WebContentsObserver {
    public:
-    // `glance`: set for the Glance page's tracker (key-window logging).
-    InputTracker(content::WebContents* contents,
-                 KoanGlanceController* glance = nullptr);
+    explicit InputTracker(content::WebContents* contents);
 
     struct Press {
       gfx::Point point;
@@ -183,7 +187,6 @@ class KoanGlanceController : public content::WebContentsDelegate,
         const content::FocusedNodeDetails& details) override;
 
    private:
-    const raw_ptr<KoanGlanceController> glance_;
     std::optional<Press> press_;
     bool editing_ = false;
   };
@@ -223,9 +226,11 @@ class KoanGlanceController : public content::WebContentsDelegate,
   void TearDownIfSourceGone();
   // ⌘L in a Glance: the URL bar opens with the Glance page's address.
   void EditUrl();
-  // Diagnostics (--vmodule=koan_glance_controller=1): on macOS, which window
-  // is key and how the card's window stands, at `where`.
-  void LogKeyWindow(const char* where) const;
+  // A key in the Glance page the browser takes (PreHandleKeyboardEvent()),
+  // run after the key's dispatch: it may switch tabs, which closes the
+  // card's window, whose key handling is on the stack then.
+  void ProcessBrowserAccelerator(const ui::Accelerator& accelerator);
+  void RunBrowserCommand(int command_id);
 
   // While the card is open, the enabled state of Back, Forward, Stop, zoom
   // and Find (kHeldCommands) follows the Glance page, as it follows the
@@ -257,10 +262,6 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
-  // The card's and the browser window's widgets, while a card is open
-  // (activation diagnostics).
-  base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
-      activation_observations_{this};
   raw_ptr<KoanGlanceView> view_ = nullptr;
   std::unique_ptr<content::WebContents> contents_;
   std::unique_ptr<SourceTracker> source_;
@@ -278,13 +279,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
   std::unique_ptr<InputTracker> tab_input_;
   std::unique_ptr<InputTracker> glance_input_;
 
-  // When the card last started closing: a second ⌘W right after is the
-  // card's, not the tab's (HandleBrowserCommand()).
-  base::TimeTicks closed_at_;
-#if BUILDFLAG(IS_MAC)
-  // The browser window paints as active while the card's window is key.
-  std::unique_ptr<views::Widget::PaintAsActiveLock> paint_as_active_;
-#endif
+  // When ⌘W last closed the card: a second ⌘W right after is the card's,
+  // not the tab's (HandleBrowserCommand()).
+  base::TimeTicks closed_by_close_tab_at_;
 
   // HoldCommands().
   bool holds_commands_ = false;

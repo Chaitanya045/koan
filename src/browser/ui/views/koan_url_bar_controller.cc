@@ -24,6 +24,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -546,8 +547,10 @@ bool KoanUrlBarController::OpenForGlance(const GURL& url) {
   EndNewTabSession(/*committed=*/false);
   glance_edit_ = true;
   UpdateKeyHandler();
-  // macOS: the card's window is key; the omnibox is in the browser window.
+#if BUILDFLAG(IS_MAC)
+  // The card's window is key; the omnibox is in the browser window.
   browser_view_->GetWidget()->Activate();
+#endif
   bar->FocusLocation(/*is_user_initiated=*/true,
                      /*clear_focus_if_failed=*/false);
   if (!bar->omnibox_view()->HasFocus()) {
