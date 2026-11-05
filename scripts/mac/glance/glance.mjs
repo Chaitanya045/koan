@@ -272,11 +272,22 @@ const steps = {
     await check('1 ⌘W closes the card', !!(await waitFor(async () => !(await cardOpen()), 3000)));
     await check('1 ⌘W keeps the tabs', (await tabPages()).length === tabsBefore,
           `${tabsBefore} -> ${(await tabPages()).length}`);
-    // A second ⌘W while the card shrinks away is swallowed. On macOS the card
-    // doesn't animate (it closes at once), so a second ⌘W closes the tab,
-    // as it should once the card is gone: nothing to test there.
+    // ⌘W twice in a row (as the tester pressed it, ~60 ms apart) closes the
+    // card only, as in Zen: the card swallows ⌘W for its close animation's
+    // time, also on macOS, where it closes at once.
     if (PID) {
-      console.log('INFO  1 ⌘W twice: macOS closes the card at once (no animation), skipped');
+      await glance('child');
+      try {
+        mac(`${TOOLS}/inputok.sh ${PID} && ${TOOLS}/keypress2 ${PID} ${K.W} c && ` +
+            `${TOOLS}/keypress2 ${PID} ${K.W} c`);
+      } catch {
+        console.log('STOP  input not allowed');
+        process.exit(3);
+      }
+      await sleep(1200);
+      await check('1 ⌘W twice in a row closes only the card',
+                  !(await cardOpen()) && (await tabPages()).length === tabsBefore,
+                  `${tabsBefore} -> ${(await tabPages()).length}`);
     } else {
       await glance('child');
       await key(K.W, 'c');

@@ -310,6 +310,8 @@ bool KoanUrlBarController::OpenForGlance(const GURL& url) {
   EndNewTabSession(/*committed=*/false);
   glance_edit_ = true;
   UpdateKeyHandler();
+  // macOS: the card's window is key; the omnibox is in the browser window.
+  browser_view_->GetWidget()->Activate();
   bar->FocusLocation(/*is_user_initiated=*/true,
                      /*clear_focus_if_failed=*/false);
   if (!bar->omnibox_view()->HasFocus()) {
