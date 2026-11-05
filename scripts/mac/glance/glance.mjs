@@ -1,4 +1,4 @@
-// The scripted part of README.md's steps (PR #165: Glance commands, GL2/GL4).
+// The scripted part of scripts/mac/steps/glance.md's steps (PR #165: Glance commands, GL2/GL4).
 // It drives a test Koan through the DevTools protocol (CDP_PORT), reads its
 // views through UI DevTools (UI_PORT), and posts real keys and menu clicks
 // on the Mac through the bench tools (../tools: keypress2, inputok.sh).
@@ -17,7 +17,8 @@
 // keys. Menu steps are then skipped.
 //
 // Steps run: 1 2 3 4 5 6 7 8 9 10 13 (default: all of these). Steps 11, 12
-// (discards), 14 (context menu) and 15 are manual: see README.md.
+// (discards), 14 (context menu) and 15 are manual: see
+// scripts/mac/steps/glance.md.
 import { execSync } from 'node:child_process';
 
 const CDP_PORT = process.env.CDP_PORT;
@@ -398,7 +399,7 @@ const steps = {
     try { mac(`kill -0 ${PID}`); } catch { alive = false; }
     // (A macOS app stays running without windows.)
     check('13 ⌘⇧W with a Glance open: no crash', alive);
-    console.log('INFO  13 ⌘Q with a Glance open, then relaunch: run by hand (README step 13)');
+    console.log('INFO  13 ⌘Q with a Glance open, then relaunch: run by hand (scripts/mac/steps/glance.md step 13)');
   },
 };
 
