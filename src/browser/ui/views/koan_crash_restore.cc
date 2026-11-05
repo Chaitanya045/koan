@@ -11,6 +11,7 @@
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/logging.h"
 #include "base/time/time.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,18 +26,12 @@ namespace koan {
 
 namespace {
 
-// A silent restore that survives this long counts as having worked; a crash
-// later than that is a new crash, restored silently again. A crash sooner
-// than that (a crash loop) shows the bubble on the next launch.
+// A silent restore that was this long ago worked; a crash after that is a new
+// crash, restored silently again. A crash sooner than that (a crash loop)
+// shows the bubble on the next launch. Compared by the clock at the next
+// launch, not with a timer: a timer in a hidden app can be coalesced for a
+// long time (App Nap) and then never run before a kill.
 constexpr base::TimeDelta kStableAfter = base::Seconds(60);
-
-void SetResumedCrashes(base::WeakPtr<Profile> profile, int count) {
-  if (profile) {
-    PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
-    prefs->SetInteger(prefs::kResumedCrashes, count);
-    prefs->CommitPendingWrite();
-  }
-}
 
 // Runs after the launch, like the bubble's Restore button. Holds the crashed
 // lock until the restore has started, so that the exit type service waits for
@@ -59,7 +54,12 @@ bool RestoreAfterCrash(BrowserWindowInterface* browser,
     return false;
   }
   PrefService* prefs = profile->GetPrefs();
-  const int resumed = prefs->GetInteger(prefs::kResumedCrashes);
+  int resumed = prefs->GetInteger(prefs::kResumedCrashes);
+  const base::Time last = prefs->GetTime(prefs::kLastResumedTime);
+  const base::Time now = base::Time::Now();
+  VLOG(1) << "Koan: crash restore: resumed_crashes=" << resumed
+          << " last_resumed=" << last << " crashed=" << post_crash_launch
+          << " restored=" << profile->restored_last_session();
   if (!post_crash_launch) {
     // The last session ended cleanly: a later crash restores again.
     if (resumed != 0) {
@@ -68,6 +68,7 @@ bool RestoreAfterCrash(BrowserWindowInterface* browser,
       // the old count back.
       prefs->CommitPendingWrite();
     }
+    VLOG(1) << "Koan: crash restore: action=none (clean launch)";
     return false;
   }
   if (!kRestoreAfterCrashWithoutAsking) {
@@ -77,10 +78,16 @@ bool RestoreAfterCrash(BrowserWindowInterface* browser,
   // not a second time.
   if (profile->restored_last_session() ||
       SessionRestore::IsRestoring(profile)) {
+    VLOG(1) << "Koan: crash restore: action=none (already restored)";
     return true;
+  }
+  if (resumed >= 1 && now - last >= kStableAfter) {
+    // The last silent restore is long enough ago: this is a new crash.
+    resumed = 0;
   }
   // The last launch was a silent restore and it crashed too.
   if (resumed >= 1) {
+    VLOG(1) << "Koan: crash restore: action=bubble";
     return false;
   }
   ExitTypeService* exit_type_service =
@@ -89,15 +96,11 @@ bool RestoreAfterCrash(BrowserWindowInterface* browser,
     return false;
   }
   prefs->SetInteger(prefs::kResumedCrashes, resumed + 1);
+  prefs->SetTime(prefs::kLastResumedTime, now);
   // Written now, not with the next lazy write: a crash within seconds of this
   // launch (kill -9 included) must still find the count on disk.
   prefs->CommitPendingWrite();
-  // The count starts again once this session has run for a while (or ended
-  // cleanly, above): until then a crash is a crash loop.
-  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&SetResumedCrashes, profile->GetWeakPtr(), 0),
-      kStableAfter);
+  VLOG(1) << "Koan: crash restore: action=silent";
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&RestoreNow, browser->GetWeakPtr(),
                                 exit_type_service->CreateCrashedLock()));

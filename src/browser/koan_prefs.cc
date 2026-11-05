@@ -46,6 +46,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
   registry->RegisterIntegerPref(kResumedCrashes, 0);
+  registry->RegisterTimePref(kLastResumedTime, base::Time());
 }
 
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream
