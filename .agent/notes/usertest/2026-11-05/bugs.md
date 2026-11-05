@@ -407,3 +407,7 @@ Actual: page info opens, but the sidebar hides at once; the bubble stays where t
 PASS: https download finishes silently, no panel opens by itself (s35-dl-fs left); notification prompt in native fullscreen at the pill (s35-dl-fs right). No DCHECK/dump.
 Minor: a plain-http download is blocked ("This file can't be downloaded securely") with no visible notice anywhere except the Library (s35-lib-blocked) — no panel opens, so the user doesn't learn it failed.
 Not done: camera/microphone (I won't turn on the Mac's camera or mic), CT/CB layouts.
+
+## Session 36 (15:47–15:51 IST): KoanCheck-c90i (#90 fbeed2fd on develop ef76c876)
+PASS: menu bar is exactly Koan File Edit View Spaces History Bookmarks Tools Window Help, no Profiles, no Tab (s36-bar); every menu opens, no crash (s36-m1, m2); 6× ⌘` between two windows: no crash; ⋮ > More tools (Ctrl+Alt+B layout) has no "Show tabs horizontally/vertically" (s36-mt; the single-toolbar layout has no ⋮ button); ⌘J opens the Library's Downloads; ⇧⌘L opens the inspector; ⌘S toggles compact (s36-k). View has "Toggle Sidebar's Width" and still "✓ Show tabs vertically" (expected on #90 alone). No DCHECK/dump.
+Not done: the Dock menu (my rules: clicks only in my own windows), the rebind (passed on c90g).
