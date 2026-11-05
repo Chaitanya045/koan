@@ -19,9 +19,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
+#include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
 #include "chrome/browser/ui/views/tabs/shared/tab_strip_types.h"
+#include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
 #include "components/tabs/public/tab_interface.h"
@@ -34,6 +38,7 @@
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
@@ -63,6 +68,8 @@ namespace {
 
 constexpr char16_t kBackToPinnedUrl[] = u"Back to pinned url";
 constexpr char16_t kSeparateFromPinnedTab[] = u"Separate from pinned tab";
+constexpr char16_t kUnloadAndSwitch[] = u"Unload and switch to tab";
+constexpr char16_t kClose[] = u"Close";
 
 // Emoji offered by "Change Icon…".
 constexpr const char16_t* kIconChoices[] = {
@@ -200,6 +207,8 @@ class KoanTabRow : public views::Button {
         icon_ = child;
       } else if (auto* title = views::AsViewClass<TabTitle>(child)) {
         title_ = title;
+      } else if (auto* close = views::AsViewClass<TabCloseButton>(child)) {
+        close_button_ = close;
       }
     }
     // Like the row itself: reachable by screen readers, not a Tab stop.
@@ -216,6 +225,9 @@ class KoanTabRow : public views::Button {
     if (title_) {
       watcher_.Watch(title_);
       title_layout_bounds_ = title_->bounds();
+    }
+    if (close_button_) {
+      watcher_.Watch(close_button_);
     }
     Rows()[tab_view->GetTabInterface()] = this;
   }
@@ -280,8 +292,54 @@ class KoanTabRow : public views::Button {
     }
     UpdateBounds();
     UpdateSublabel();
+    UpdateCloseButton();
+    // Pinned or unpinned in place (the first tab of its Space, say): the
+    // Space's layout moves the separator and New Tab row past it.
+    if (const bool pinned = IsPinnedForUser(tab());
+        pinned != pinned_ && tab_view_) {
+      pinned_ = pinned;
+      tab_view_->InvalidateLayout();
+    }
     SchedulePaint();
   }
+
+  // Zen's pinned tab: while it is loaded, hovering it shows the unload
+  // button (a dash, "Unload and switch to tab") where other tabs have their
+  // close button; it runs the close behaviour (HandleCloseRequest()). Once
+  // unloaded, it shows the close button, which closes it. Also called after
+  // the tab view gave its close button new colours, which redraws the
+  // close icon.
+  void UpdateCloseButton() {
+    if (!close_button_) {
+      return;
+    }
+    const bool unloads = CloseButtonUnloads(tab());
+    if (unloads) {
+      const ui::ImageModel icon = ui::ImageModel::FromVectorIcon(
+          kRemoveIcon, close_button_->GetColors().foreground_color,
+          GetLayoutConstant(LayoutConstant::kTabCloseButtonSize));
+      for (const auto state :
+           {views::Button::STATE_NORMAL, views::Button::STATE_HOVERED,
+            views::Button::STATE_PRESSED}) {
+        close_button_->SetImageModel(state, icon);
+      }
+    } else if (close_button_unloads_) {
+      // Back to upstream's close icon: it draws it for new colours.
+      const TabStyle::TabColors colors = close_button_->GetColors();
+      close_button_->SetColors(TabStyle::TabColors());
+      close_button_->SetColors(colors);
+    }
+    if (unloads != close_button_unloads_) {
+      close_button_unloads_ = unloads;
+      close_button_->SetTooltipText(unloads ? kUnloadAndSwitch
+                                            : std::u16string());
+      close_button_->GetViewAccessibility().SetName(unloads ? kUnloadAndSwitch
+                                                            : kClose);
+    }
+  }
+
+  // Whether the close button is Zen's unload button (for tests).
+  bool GetUnloadButton() const { return close_button_unloads_; }
 
   void StartRenaming() {
     if (editor_ || !CanRename()) {
@@ -391,6 +449,8 @@ class KoanTabRow : public views::Button {
       title_ = nullptr;
     } else if (observed == sublabel_) {
       sublabel_ = nullptr;
+    } else if (observed == close_button_) {
+      close_button_ = nullptr;
     } else if (observed == tab_view_) {
       tab_view_ = nullptr;
     }
@@ -517,6 +577,11 @@ class KoanTabRow : public views::Button {
   raw_ptr<KoanTabSublabel> sublabel_;
   raw_ptr<views::View> icon_ = nullptr;
   raw_ptr<views::Label> title_ = nullptr;
+  raw_ptr<TabCloseButton> close_button_ = nullptr;
+  // The close button shows Zen's unload button.
+  bool close_button_unloads_ = false;
+  // The tab is pinned (as of the last Update()).
+  bool pinned_ = false;
   raw_ptr<KoanTabLabelEditor> editor_ = nullptr;
   // Where the row's layout put the label and the favicon, before Koan moved
   // them.
@@ -541,6 +606,7 @@ ADD_READONLY_PROPERTY_METADATA(bool, Discarded)
 ADD_READONLY_PROPERTY_METADATA(bool, Pending)
 ADD_READONLY_PROPERTY_METADATA(bool, Essential)
 ADD_READONLY_PROPERTY_METADATA(bool, Split)
+ADD_READONLY_PROPERTY_METADATA(bool, UnloadButton)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, WindowTestData)
 END_METADATA
 
@@ -693,6 +759,12 @@ void OnTabViewCreated(TabView* tab_view) {
   auto* sublabel = tab_view->AddChildView(std::make_unique<KoanTabSublabel>());
   tab_view->AddChildView(std::make_unique<KoanTabRow>(tab_view, sublabel))
       ->Update();
+}
+
+void OnTabViewColorsChanged(const TabView* tab_view) {
+  if (KoanTabRow* row = RowFor(tab_view->GetTabInterface())) {
+    row->UpdateCloseButton();
+  }
 }
 
 }  // namespace koan

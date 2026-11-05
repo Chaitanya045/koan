@@ -461,6 +461,16 @@ bool IsPendingTab(const tabs::TabInterface* tab) {
   return tab && IsPending(tab->GetContents());
 }
 
+bool CloseButtonUnloads(const tabs::TabInterface* tab) {
+  // Like HandleCloseRequest(): an unloaded pinned tab closes.
+  if (!features::IsPinnedTabsEnabled() || !IsPinnedInSpace(tab) ||
+      IsPending(tab->GetContents())) {
+    return false;
+  }
+  return CloseBehavior(Profile::FromBrowserContext(
+             tab->GetContents()->GetBrowserContext())) != "close";
+}
+
 KoanPinnedTabController::KoanPinnedTabController(BrowserView* browser_view)
     : browser_view_(browser_view) {
   if (features::IsPinnedTabsEnabled()) {

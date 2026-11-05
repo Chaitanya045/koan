@@ -27,6 +27,11 @@ namespace koan {
 // the end of TabView's constructor.
 void OnTabViewCreated(TabView* tab_view);
 
+// The tab view gave its close button new colours, which redraws upstream's
+// close icon: a pinned tab's close button shows Zen's unload button instead.
+// Called in TabView::UpdateColors().
+void OnTabViewColorsChanged(const TabView* tab_view);
+
 // The close button or a middle click on `tab`: a pinned tab follows Zen's
 // close behaviour instead of closing. Returns true if Koan handled it.
 bool HandleTabCloseRequest(const tabs::TabInterface* tab);

@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
-index e720d5d..6fb2663 100644
+index e720d5df8109d6df205b4e87ab026c5772d826d5..98ad30c9a3babd7255024ff06e8b9322badae47f 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,8 @@
  #include "chrome/browser/ui/views/tabs/common/tab_group_line_view.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_unfocus_button.h"
  #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
 +#include "koan/browser/ui/views/koan_spaces.h"
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
  #include "ui/views/layout/proposed_layout.h"
-@@ -55,8 +56,13 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+@@ -55,8 +57,13 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
          GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding));
    }
  
@@ -25,7 +26,7 @@ index e720d5d..6fb2663 100644
        gfx::Rect unfocus_bounds;
        unfocus_bounds.set_x(header_bounds.x());
        unfocus_bounds.set_y(height);
-@@ -83,12 +89,18 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+@@ -83,12 +90,18 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
      header_bounds.set_width(size_bounds.width().value() - header_bounds.x());
    }
  
@@ -48,3 +49,28 @@ index e720d5d..6fb2663 100644
    width = std::max(width, header_bounds.width() + header_bounds.x());
  
    // If the tab strip is not collapsed then the group line is below and left
+@@ -109,7 +122,14 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+ 
+   // Layout children in order. Children will have their preferred height and
+   // fill available width.
++  // Koan: Zen's separator and "+ New Tab" row, between the Space's pinned
++  // and normal tabs.
++  const bool koan_collapsed = tab_strip_collapse_state !=
++                              tabs::VerticalTabStripCollapseState::kExpanded;
+   for (auto* child : children) {
++    height += koan::PlaceSpaceTabRows(&TabGroupView(), child, koan_collapsed,
++                                      height, size_bounds, kTabVerticalPadding,
++                                      layouts);
+     gfx::Rect bounds = gfx::Rect(child->GetPreferredSize(size_bounds));
+ 
+     auto drag_data = TabGroupView().GetVisualDataForDraggedView(*child);
+@@ -136,6 +156,9 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+     height += bounds.height() + kTabVerticalPadding;
+     width = std::max(width, bounds.width() + bounds.x());
+   }
++  height += koan::PlaceSpaceTabRows(&TabGroupView(), nullptr, koan_collapsed,
++                                    height, size_bounds, kTabVerticalPadding,
++                                    layouts);
+   // Remove excess padding.
+   height -= kTabVerticalPadding;
+ 
