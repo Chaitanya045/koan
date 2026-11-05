@@ -93,10 +93,13 @@ constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
 // pointer inside the window the toolbar collapses as soon as the pointer is
 // off it.
 constexpr base::TimeDelta kToolbarHideAfterEdgeLeave = base::Milliseconds(1000);
-// How long the window buttons' strip stays once the pointer is off it, and
-// how often to look again while a menu is open (a closing menu sends no
-// event).
-constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(400);
+// How long the window buttons' strip stays once the pointer is off it: Zen's
+// zen.view.compact.toolbar-hide-after-hover.duration, the nearest value (Zen's
+// own buttons are hidden by the next mouseover elsewhere).
+constexpr base::TimeDelta kCaptionStripHideDelay = base::Milliseconds(1000);
+// How often to look again while a menu is open (a closing menu sends no
+// event). Koan's own, not a Zen value.
+constexpr base::TimeDelta kMenuPollInterval = base::Milliseconds(400);
 
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
 
@@ -475,7 +478,7 @@ void KoanCompactModeController::OnSidebarCollapseSettled() {
   // An empty tab holds the sidebar out as compact mode hides it; the sidebar
   // that was just hidden is not slid back in (Zen applies that state without
   // animation).
-  UpdateEmptyTabLock();
+  UpdateEmptyTabLock(/*snap_reveal=*/true);
   VLOG(1) << "Koan: sidebar settled collapsed (peek requested: "
           << peek_requested_ << ", hover lock: " << !!hover_lock_
           << ", edge hovered: " << edge_sidebar_hovered_ << ")";
@@ -625,20 +628,28 @@ void KoanCompactModeController::OnTabChangedAt(tabs::TabInterface* tab,
   }
 }
 
-void KoanCompactModeController::UpdateEmptyTabLock() {
+void KoanCompactModeController::UpdateEmptyTabLock(bool snap_reveal) {
+  TabStripModel* model = browser_view_->browser()->GetTabStripModel();
+  // Closing the window or all of its tabs makes a new active tab per closed
+  // one (new tab pages): no hold for those, and each would start an animation.
   const bool wanted =
-      hides_sidebar() &&
-      IsEmptyTab(
-          browser_view_->browser()->GetTabStripModel()->GetActiveWebContents(),
-          browser_view_->GetProfile());
+      hides_sidebar() && !IsClosing() && !model->closing_all() &&
+      IsEmptyTab(model->GetActiveWebContents(), browser_view_->GetProfile());
   if (!wanted) {
     ReleaseLock(empty_tab_lock_);
     return;
   }
   if (!empty_tab_lock_) {
-    // Not yet while the sidebar collapses: UpdateActive() asks again when it
-    // has.
+    // Not yet while the sidebar collapses: OnSidebarCollapseSettled() asks
+    // again when it has. Then, the sidebar that was just hidden is not slid
+    // back in: with an empty tab Zen doesn't animate the hiding at all.
+    if (snap_reveal) {
+      SnapNextSidebarReveal(browser_view_, true);
+    }
     empty_tab_lock_ = TakeExpandedLock();
+    if (snap_reveal && !empty_tab_lock_) {
+      SnapNextSidebarReveal(browser_view_, false);
+    }
   }
 }
 
@@ -1047,7 +1058,7 @@ void KoanCompactModeController::UpdateActive() {
     KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
     SyncSidebar();
     // The sidebar may have finished collapsing.
-    UpdateEmptyTabLock();
+    UpdateEmptyTabLock(/*snap_reveal=*/true);
     return;
   }
   if (mode_ != Mode::kNone) {
@@ -1059,7 +1070,7 @@ void KoanCompactModeController::UpdateActive() {
   UpdateFullscreenTopChrome();
   OnContentCardChanged();
   KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
-  UpdateEmptyTabLock();
+  UpdateEmptyTabLock(/*snap_reveal=*/true);
   SyncSidebar();
 }
 
@@ -1163,7 +1174,7 @@ void KoanCompactModeController::Activate(Mode mode) {
     anchor->SetCanProcessEventsWithinSubtree(false);
     bubble_fallback_anchor_ = browser_view_->AddChildView(std::move(anchor));
   }
-  UpdateEmptyTabLock();
+  UpdateEmptyTabLock(/*snap_reveal=*/true);
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
@@ -1467,7 +1478,8 @@ void KoanCompactModeController::ReconcileBubbleHold() {
   } else if (bubble_lock_) {
     ReleaseLock(bubble_lock_);
   }
-  // None open: the toolbar goes after its usual delay.
+  // None open: the toolbar goes as it does without a bubble (at once inside the
+  // window, after Zen's delay after a leave through its edge).
   if (!on_toolbar) {
     CheckToolbarHide();
   }
@@ -1742,7 +1754,7 @@ void KoanCompactModeController::CheckToolbarHide() {
     // ReconcileBubbleHold()) closing by keyboard.
     if (views::MenuController::GetForOwnerWidget(browser_view_->GetWidget()) ||
         HasBubbleAnchoredToToolbar()) {
-      toolbar_hide_timer_.Start(FROM_HERE, kToolbarHideDelay, this,
+      toolbar_hide_timer_.Start(FROM_HERE, kMenuPollInterval, this,
                                 &KoanCompactModeController::CheckToolbarHide);
     }
     return;
@@ -1885,7 +1897,8 @@ void KoanCompactModeController::CheckCaptionStripHide() {
   if (!caption_unwanted_since_) {
     caption_unwanted_since_ = now;
   }
-  const base::TimeTicks hide_at = *caption_unwanted_since_ + kToolbarHideDelay;
+  const base::TimeTicks hide_at =
+      *caption_unwanted_since_ + kCaptionStripHideDelay;
   if (now >= hide_at) {
     SetCaptionStripRevealed(false);
     return;
