@@ -189,6 +189,9 @@ async function visibleTab() {
   return null;
 }
 
+// The parent page's target, without bringing it to front (no focus change).
+const parentTarget = async () => (await tabPages()).find(t => t.url.startsWith(PARENT));
+
 // The parent page, as the active tab (opened if needed).
 async function parentTab() {
   let page = (await tabPages()).find(t => t.url.startsWith(PARENT));
@@ -269,11 +272,19 @@ const steps = {
     await check('1 ⌘W closes the card', !!(await waitFor(async () => !(await cardOpen()), 3000)));
     await check('1 ⌘W keeps the tabs', (await tabPages()).length === tabsBefore,
           `${tabsBefore} -> ${(await tabPages()).length}`);
-    await glance('child');
-    await key(K.W, 'c');
-    await key(K.W, 'c');  // during the close animation
-    await sleep(800);
-    await check('1 ⌘W twice (during the close) keeps the tabs', (await tabPages()).length === tabsBefore);
+    // A second ⌘W while the card shrinks away is swallowed. On macOS the card
+    // doesn't animate (it closes at once), so a second ⌘W closes the tab,
+    // as it should once the card is gone: nothing to test there.
+    if (PID) {
+      console.log('INFO  1 ⌘W twice: macOS closes the card at once (no animation), skipped');
+    } else {
+      await glance('child');
+      await key(K.W, 'c');
+      await key(K.W, 'c');  // during the close animation
+      await sleep(800);
+      await check('1 ⌘W twice (during the close) keeps the tabs',
+                  (await tabPages()).length === tabsBefore);
+    }
   },
   async 2() {
     if (!PID) return console.log('SKIP  2 (menu bar needs PID)');
@@ -378,6 +389,16 @@ const steps = {
     await parentTab();
     const tabsBefore = (await tabPages()).length;
     const url = (await parentTab()).url;
+    // First: do typed keys reach a Glance page at all (macOS: the card's
+    // window never becomes key)? Click its field, type "2".
+    let typing = await glance('child');
+    await clickIn(typing, '#field');
+    await key(K.TWO);
+    const value = await evalIn(typing, "document.getElementById('field').value");
+    const focus = `glance hasFocus ${await evalIn(typing, 'document.hasFocus()')}, ` +
+                  `parent hasFocus ${await evalIn(await parentTarget(), 'document.hasFocus()')}`;
+    await check('8 typing in the Glance page reaches it', value === '2', `value "${value}"; ${focus}`);
+    await closeCard();
     await glance('child');
     await key(K.L, 'c');
     await sleep(500);
@@ -395,6 +416,11 @@ const steps = {
     await check('8 ⌘L again opens the URL bar', await shown('OmniboxViewViews'));
     await key(K.ESC);
     await check('8 Esc closes the URL bar, the card stays', await cardOpen());
+    {
+      const g = await glancePage();
+      console.log(`INFO  8 after Esc: glance hasFocus ${g && await evalIn(g, 'document.hasFocus()')}, ` +
+                  `parent hasFocus ${await evalIn(await parentTarget(), 'document.hasFocus()')}`);
+    }
     await key(K.ESC);
     await check('8 a second Esc closes the card (the Glance had focus again)',
           !!(await waitFor(async () => !(await cardOpen()), 3000)));
@@ -411,6 +437,7 @@ const steps = {
   },
   async 10() {
     let page = await glance('form');
+    await check('10 the form page is in the card', !!page && await cardOpen());
     await clickIn(page, '#send');
     page = await waitFor(glancePage);
     await sleep(1000);
