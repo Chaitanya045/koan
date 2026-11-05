@@ -1312,13 +1312,16 @@ void KoanGlanceController::OnTabStripModelChanged(
   // with WebContentsDiscard off; the default discards in place, and a
   // prerender activates inside the same WebContents, so neither touches
   // the card.)
-  bool source_gone = !source();
-  if (change.type() == TabStripModelChange::kRemoved) {
+  // (A card opened without a tab under it has nothing to lose: only the
+  // selection closes it.)
+  content::WebContents* const tab = source();
+  bool source_gone = source_ && !tab;
+  if (tab && change.type() == TabStripModelChange::kRemoved) {
     for (const auto& removed : change.GetRemove()->contents) {
-      source_gone |= removed.contents == source();
+      source_gone |= removed.contents == tab;
     }
-  } else if (change.type() == TabStripModelChange::kReplaced) {
-    source_gone |= change.GetReplace()->old_contents == source();
+  } else if (tab && change.type() == TabStripModelChange::kReplaced) {
+    source_gone |= change.GetReplace()->old_contents == tab;
   }
   if (source_gone || selection.active_tab_changed()) {
     TearDown();

@@ -416,11 +416,18 @@ source_set("impl") {
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
     ]
-    # Content (page) fullscreen: koan::IsContentFullscreen().
-    deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
-    # IsPointerOverWindow(): AppKit's fullscreen title strip is a window of its
-    # own (remote_cocoa::IsNSToolbarFullScreenWindow()).
-    deps += [ "//components/remote_cocoa/app_shim" ]
+    deps += [
+      # The command policy's fullscreen-toolbar row
+      # (chrome::ToggleAlwaysShowToolbarInFullscreen).
+      "//chrome/browser/ui:browser_commands_mac",
+
+      # Content (page) fullscreen: koan::IsContentFullscreen().
+      "//chrome/browser/ui:fullscreen_util_mac",
+
+      # IsPointerOverWindow(): AppKit's fullscreen title strip is a window of
+      # its own (remote_cocoa::IsNSToolbarFullScreenWindow()).
+      "//components/remote_cocoa/app_shim",
+    ]
     frameworks = [ "AppKit.framework" ]
   } else {
     sources += [
