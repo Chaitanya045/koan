@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view.cc b/chrome/browser/ui/views/tabs/common/tab_group_view.cc
+index a94d733d8cb7c553c5e7760aedd80aaa1aaa5ad4..69440b29a0d67a634cf5ced08c44b6757729adbe 100644
+--- a/chrome/browser/ui/views/tabs/common/tab_group_view.cc
++++ b/chrome/browser/ui/views/tabs/common/tab_group_view.cc
+@@ -35,6 +35,7 @@
+ #include "components/tabs/public/tab_group.h"
+ #include "components/tabs/public/tab_group_tab_collection.h"
+ #include "content/public/browser/navigation_controller.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/list_selection_model.h"
+ #include "ui/gfx/geometry/rect.h"
+@@ -263,7 +264,10 @@ bool TabGroupView::ShouldAnimateOpacityForAddAndRemove(
+ }
+ 
+ bool TabGroupView::ShouldSnapToTarget(const views::View& child_view) const {
+-  return views::IsViewClass<SplitTabView>(&child_view);
++  // Koan: the separator and New Tab rows move into a Space's group when it
++  // becomes the active one, and are there at once (not animated in).
++  return views::IsViewClass<SplitTabView>(&child_view) ||
++         koan::IsSidebarTabRowsView(&child_view);
+ }
+ 
+ int TabGroupView::GetCrossoverWidth() const {

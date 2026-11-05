@@ -22,6 +22,7 @@
 #include "ui/views/view_observer.h"
 
 class BrowserView;
+class TabStripView;
 
 namespace koan {
 
@@ -30,9 +31,10 @@ class KoanSidebarTabRowsView;
 // Zen's sidebar tab list extras for one window: the "+ New Tab" row above the
 // unpinned tabs, the separator above them with a "Clear" button (closes the
 // unpinned tabs) and the "Tabs Closed!" toast. The rows live in
-// koan_sidebar_tabs.cc, are laid out by the hooks in koan_sidebar_tabs.h, and
-// take the place of Chromium's "+" button at the bottom of the tab strip,
-// which Koan hides. Only with Koan's sidebar on.
+// koan_sidebar_tabs.cc, sit between the active Space's pinned and normal
+// tabs, are laid out by the hooks in koan_sidebar_tabs.h, and take the place
+// of Chromium's "+" button at the bottom of the tab strip, which Koan hides.
+// Only with Koan's sidebar on.
 class KoanSidebarTabsController : public TabStripModelObserver,
                                   public ui::EventHandler,
                                   public views::ViewObserver {
@@ -70,8 +72,19 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   void OnViewIsDeleting(views::View* observed_view) override;
 
  private:
+  // The window's tab strip if it is vertical, or null.
+  TabStripView* GetVerticalTabStrip() const;
   // Adds the rows to the vertical tab strip, if there is one and it has none.
   void InstallRows();
+  // Where the rows go in the tab strip's children.
+  static size_t RowsIndexInStrip(const TabStripView* strip);
+  // Moves the rows into the active Space's tab group view, after its pinned
+  // tabs (Zen's pinned section), or into the tab strip without a Space.
+  // Both also put the rows after the pinned tabs in the focus order.
+  void ScheduleUpdateRowsHost();
+  void UpdateRowsHost();
+  // The same for the Space `space` (the active one).
+  void MoveRowsTo(std::optional<tab_groups::TabGroupId> space);
   // The window switched between vertical and horizontal tabs.
   void OnModeChanged(tabs::VerticalTabStripStateController* state);
   void OnCollapseChanged(tabs::VerticalTabStripCollapseState state);
@@ -87,6 +100,7 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // The vertical tab strip region; its pointer enter/exit reveals Clear.
   raw_ptr<views::View> region_ = nullptr;
   raw_ptr<KoanSidebarTabRowsView> rows_ = nullptr;
+  bool rows_host_update_pending_ = false;
   base::ScopedObservation<views::View, views::ViewObserver> rows_observation_{
       this};
   base::CallbackListSubscription mode_subscription_;

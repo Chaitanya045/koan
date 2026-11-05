@@ -89,6 +89,10 @@ bool IsPinnedInSpace(const tabs::TabInterface* tab);
 bool IsAwayFromPinnedUrl(const tabs::TabInterface* tab);
 // Whether `tab` isn't loaded: unloaded, or restored and not shown yet.
 bool IsPendingTab(const tabs::TabInterface* tab);
+// Whether the close button of `tab` runs the close behaviour rather than
+// closing it: a loaded tab pinned to its Space, unless the behaviour is to
+// close. Zen shows its unload button ("Unload and switch to tab") there.
+bool CloseButtonUnloads(const tabs::TabInterface* tab);
 
 // Pinned tabs' part of the tab context menu (a TabMenuFeature, see
 // koan_tab_menu.h).

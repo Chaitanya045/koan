@@ -12,27 +12,48 @@ class Canvas;
 }  // namespace gfx
 
 namespace views {
+class SizeBounds;
 class View;
 struct ProposedLayout;
 }  // namespace views
 
 namespace koan {
 
-// Hooks for TabStripView's vertical layout (tab_strip_view_layout.cc). Koan
-// puts Zen's rows between the pinned and unpinned tabs: the separator with a
-// "Clear" button (closes all unpinned tabs) and the "+ New Tab" row. The rows
-// are installed by KoanSidebarTabsController; without them these lay out
-// nothing.
+// Zen's rows between a Space's pinned and normal tabs: the separator with a
+// "Clear" button (closes all unpinned tabs) and the "+ New Tab" row. They
+// are installed by KoanSidebarTabsController in the active Space's tab group
+// view, inside the scrolling tab list (Zen's pinned section, the separator
+// and the normal tabs scroll together), and laid out by PlaceSpaceTabRows().
+// Without a Space (e.g. Incognito) they sit in the tab strip, above the tab
+// list, laid out by the TabStripView hooks below. Without the rows these lay
+// out nothing.
 
-// The rows' height, 0 when they are not installed.
+// Hooks for TabStripView's vertical layout (tab_strip_view_layout.cc).
+// The rows' height in the tab strip, 0 when they are not there.
 int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view);
 
 // Appends the rows to `layout` at (0, `y`), `width` wide, and returns their
-// height.
+// height, if they are in the tab strip.
 int PlaceSidebarTabRows(const TabStripView* tab_strip_view,
                         views::ProposedLayout& layout,
                         int width,
                         int y);
+
+// Hook for TabGroupViewVerticalLayout, called before laying out each child
+// `next_child` of `tab_group_view` and once more with null after the last:
+// if the rows are in this group and `next_child` doesn't belong to the
+// Space's pinned tabs, appends them to `layout` and returns the height the
+// caller moves down by (0 otherwise, and once they are placed). After pinned
+// tabs they go at `y`, followed by `tab_padding`; without pinned tabs at the
+// top of the group, in its top margin, as in the tab strip before. Tabs are
+// inset by the strip's padding when `collapsed`, and so are the rows.
+int PlaceSpaceTabRows(const views::View* tab_group_view,
+                      const views::View* next_child,
+                      bool collapsed,
+                      int y,
+                      const views::SizeBounds& size_bounds,
+                      int tab_padding,
+                      views::ProposedLayout& layout);
 
 // Whether `view` is Koan's rows view. Clicks on the rows must reach them, so
 // they are never part of the window caption.
