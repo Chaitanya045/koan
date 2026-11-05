@@ -17,9 +17,11 @@
 
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_actions.h"
@@ -340,6 +342,7 @@ bool KoanUrlBarController::OpenForNewTab() {
   bar->FocusLocation(/*is_user_initiated=*/false,
                      /*clear_focus_if_failed=*/false);
   if (!bar->omnibox_view()->HasFocus()) {
+    DLOG(WARNING) << "Koan: Cmd+T could not focus the URL bar; opening a tab";
     new_tab_ = false;
     UpdateKeyHandler();
     return false;
@@ -357,10 +360,34 @@ bool KoanUrlBarController::OpenForNewTab() {
     omnibox_controller->StopAutocomplete(/*clear_result=*/true);
     omnibox_controller->edit_model()->StartZeroSuggestRequest(
         /*user_clobbered_permanent_text=*/true);
+    // Upstream drops that request while the page has no entry yet (a window's
+    // first tab, still starting) or the popup is still closing: ask again once
+    // the focus has settled, if the list never came up.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&KoanUrlBarController::RetryNewTabZeroSuggest,
+                       weak_factory_.GetWeakPtr()),
+        base::Milliseconds(150));
   } else {
     bar->omnibox_view()->SetUserText(text, /*update_popup=*/true);
   }
   return true;
+}
+
+void KoanUrlBarController::RetryNewTabZeroSuggest() {
+  LocationBarView* bar = location_bar();
+  if (!new_tab_ || !bar || !bar->omnibox_view() ||
+      !bar->omnibox_view()->HasFocus() ||
+      !bar->omnibox_view()->GetText().empty()) {
+    return;
+  }
+  OmniboxController* omnibox_controller = bar->GetOmniboxController();
+  if (omnibox_controller->IsPopupOpen() ||
+      !omnibox_controller->autocomplete_controller()->done()) {
+    return;
+  }
+  omnibox_controller->edit_model()->StartZeroSuggestRequest(
+      /*user_clobbered_permanent_text=*/true);
 }
 
 void KoanUrlBarController::Close() {
