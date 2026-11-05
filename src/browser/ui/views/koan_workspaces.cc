@@ -2244,6 +2244,16 @@ void KoanWorkspaceController::TabGroupedStateChanged(
   if (old_group && !new_group && tab) {
     ungrouped_from_.insert_or_assign(tab->GetHandle(), *old_group);
   }
+  // A tab that joins a Space takes its theme. The first tab of a Space that
+  // is being restored (its other tabs have none yet) keeps the theme it
+  // brought back, which is the Space's.
+  if (new_group && tab && tab->GetContents()) {
+    if (std::optional<std::string> theme = ThemeOfTabs(*new_group, tab);
+        theme && GetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey) !=
+                     *theme) {
+      SetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey, *theme);
+    }
+  }
   ScheduleUpdate();
 }
 
@@ -2255,25 +2265,6 @@ void KoanWorkspaceController::OnTabGroupAdded(
   if (!creating_space_ && !tab_strip_model()->IsEphemeralTabGroup(group_id)) {
     foreign_groups_.insert(group_id);
     ScheduleUpdate();
-  }
-}
-
-void KoanWorkspaceController::TabGroupedStateChanged(
-    TabStripModel* tab_strip_model,
-    std::optional<tab_groups::TabGroupId> old_group,
-    std::optional<tab_groups::TabGroupId> new_group,
-    tabs::TabInterface* tab,
-    int index) {
-  if (!new_group || !tab || !tab->GetContents()) {
-    return;
-  }
-  // A tab that joins a Space takes its theme. The first tab of a Space that
-  // is being restored (its other tabs have none yet) keeps the theme it
-  // brought back, which is the Space's.
-  if (std::optional<std::string> theme = ThemeOfTabs(*new_group, tab);
-      theme &&
-      GetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey) != *theme) {
-    SetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey, *theme);
   }
 }
 
