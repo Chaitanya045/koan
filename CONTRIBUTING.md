@@ -90,6 +90,15 @@ committed in `branding/mac/rendered/`, and only Xcode's `iconutil` and
 `actool` run on the Mac. The scripts run with macOS's own bash 3.2 and BSD
 tools.
 
+**Signing.** An unsigned build is signed ad hoc, and its signature changes
+with every rebuild, so macOS stops recognising it for the Keychain item that
+holds your cookie and password key ("Koan Safe Storage") and asks again.
+To keep it stable, run `scripts/mac_signing_identity.sh create` once: it
+makes a self-signed code-signing certificate in a keychain file inside your
+Koan folder (nothing in your login keychain is touched or deleted), and
+`scripts/build.sh` then signs every build with it. Skip it and builds stay
+ad hoc signed. Details: `.agent/notes/mac.md`.
+
 **Everything stays in one folder**, e.g. `~/work/koan-mac`, so Chromium's
 tools (depot_tools, vpython, CIPD, siso) and Apple's don't scatter caches
 across your home directory. The folder's `env.sh` points `HOME`, `TMPDIR`
