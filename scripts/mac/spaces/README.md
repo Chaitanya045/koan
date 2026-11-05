@@ -45,6 +45,8 @@ Quit, then launch without the flag. Expected:
 - Saved A is a Space.
 - Open Saved B from the app menu's Tab groups (Chromium toolbar layout: Ctrl+Alt+B) or the everything menu. It opens as a Space.
 - In either Space, renaming, closing its last tab and Delete Space show only Koan's "Delete Space?", never Chrome's "Delete group?".
+- Reordering tabs inside either Space, Move To into and out of it, closing tabs, dragging a tab to another window and back, deleting the Space, and closing the window: no crash. A release build matters here: the crash this guards against is a release `CHECK`. The full step list is in `scripts/mac/steps/spaces_saved_groups.md`.
+- Known: once disconnected, a saved group counts as closed, so opening it again from the menu makes a second Space with the same name.
 
 ## Test 12: stored Spaces (G9)
 
