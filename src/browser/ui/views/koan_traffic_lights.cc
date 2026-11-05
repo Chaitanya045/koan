@@ -91,6 +91,12 @@ bool IsPointerOverTrafficLights(const BrowserView* browser_view) {
       .Contains(pointer);
 }
 
+#if !BUILDFLAG(IS_MAC)
+bool IsPointerOverWindow(const BrowserView* browser_view) {
+  return true;
+}
+#endif
+
 bool HidesSidebarTrailingControls(const views::View* host) {
   const views::Widget* widget = host->GetWidget();
   const views::View* browser_view = widget ? widget->client_view() : nullptr;

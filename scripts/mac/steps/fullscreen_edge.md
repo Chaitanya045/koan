@@ -20,3 +20,24 @@ wiggle (x=0..3, y +-20). The sidebar region (`VerticalTabStripRegionView`) is `x
 
 Report, for 4: the log lines around each action (was the pointer monitor on after Ctrl+S? did "left edge hovered" appear
 at x=0-3? was "sidebar hot zone hovered" logged, and did it hold?), the strip width over time, and the answers to 4a-4d.
+
+## More cases (review of #171)
+
+Logs: run with `--vmodule=koan_compact_mode_controller=1`: "Koan: pointer monitor on (application wide | this window)" /
+"off" appear only on a change; "Koan: window (fullscreen changed) ..." lists every NSWindow of the application (class,
+title, frame, visible, alpha, level, ignoresMouse, key, space, parent, delegate) on each fullscreen change. **Send the
+window list from the failing state (4):** the invisible window at the screen's left edge (500x500 at x=0, y=456 in
+CGWindowList) is still unexplained.
+
+| # | Do | Expect |
+|---|---|---|
+| 4e | In the failing state (4), reveal the sidebar (x=0) and click a tab at y about 470 | That tab activates (the stray window does not take the click). |
+| 4f | In the failing state, Ctrl+Alt+S | The sidebar peeks. |
+| 5 | Two displays, the external one on the left. A fullscreen + compact on the built-in display, B windowed on the external one. Move the pointer all over B, along B's top and left edges | A's sidebar and toolbar never reveal. |
+| 6 | Two fullscreen windows (two Spaces). Hover x=0 in A, three-finger swipe to B, hover x=0 | Only the visible one reacts; the other is still collapsed when you arrive. |
+| 7 | A fullscreen + compact; open a second window B (windowed, over A's display), move the pointer along A's screen edge where B is not | A reveals; over B nothing happens to A. |
+| 8 | Fullscreen + compact, right-click the sidebar to open its menu (or a tab context menu), move to x=0 | The sidebar does not slide under the menu. Same while dragging a tab: nothing slides. |
+| 9 | Fullscreen + compact with Glance open (Alt-click a link), pointer to x=0 | (Compare with Zen 1.24b live: Glance is in-window there.) Note what happens. |
+| 10 | Two windows, A fullscreen + compact; close A with Cmd+W while moving the pointer quickly in B | No crash, no DCHECK. |
+| 11 | Transitions, each with the "pointer monitor" log line checked (on/off and the type must match the state): enter fullscreen with the green button, Ctrl+Cmd+F and View > Enter Full Screen; leave it with Esc, the green button and the menu; a page's video fullscreen inside window fullscreen and Esc; compact on and off while in fullscreen; Ctrl+Alt+B while in fullscreen; move a fullscreen window's Space to the other display | After each, the monitor is application wide exactly while the window is fullscreen with compact edges (and "this window" or off otherwise), and the edge reveal works / does not work accordingly. |
+| 12 | Fullscreen + compact, scroll a long page with the trackpad with Instruments' Time Profiler on | `OnEvent` plus `EventFromNative` under 1% of the main thread. |

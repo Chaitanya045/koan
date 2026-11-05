@@ -388,10 +388,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // The monitor sees all the application's windows (fullscreen), not just the
   // browser window's.
   bool pointer_monitor_is_application_wide_ = false;
-  // For the log: when the last "events arrive" / edge line was written.
-  base::TimeTicks last_edge_log_;
-  base::TimeTicks last_event_log_;
-  int events_since_log_ = 0;
 
   // The sidebar's context menu.
   std::unique_ptr<KoanSidebarContextMenuController> context_menu_controller_;
