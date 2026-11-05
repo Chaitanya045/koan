@@ -30,7 +30,9 @@ if [[ $(koan_os) != mac ]]; then
 fi
 koan_require_mac_env
 
-dr() { codesign -d -r- "$1" 2>&1 | sed -n 's/^designated => //p'; }
+# codesign prints an implied requirement (ad hoc: cdhash H"...") as a comment,
+# "# designated => ...", and a signed one without the "# ".
+dr() { codesign -d -r- "$1" 2>&1 | sed -n -e 's/^# designated => //p' -e 's/^designated => //p'; }
 
 compare() {
   local x="$1" y="$2" drx dry rc=0
@@ -90,6 +92,7 @@ selftest() {
   echo
   echo "== negative control: the same app signed ad hoc (what a build without the identity has)"
   codesign --force --deep --sign - "$tmp/C.app"
+  [[ -n $(dr "$tmp/C.app") ]] || echo "FAIL: no requirement printed for the ad-hoc app, the control proves nothing"
   echo "ad hoc requirement: $(dr "$tmp/C.app")"
   mkapp "$tmp/D.app" 4
   codesign --force --deep --sign - "$tmp/D.app"
