@@ -6,7 +6,7 @@ Run the test Koan with `--vmodule=koan_glance_controller=1`: it logs `Koan Glanc
 
 The bench rules apply to every run: the screen is granted, the frontmost pid is the test Koan's, and the run uses a fresh `pass-` profile, a DCHECK build and logs captured from the terminal.
 
-**Scripted:** `scripts/mac/glance/glance.mjs` runs steps 1–10 and 13 (the first part). It uses the DevTools protocol and UI DevTools for the checks. Real keys and menu clicks go through the bench tools in `scripts/mac/tools/` (`keypress2`, `inputok.sh`, `frontpid.sh` and `grantok.sh`; the same files as in #155). Compile the `.m` files on the Mac (`clang -framework Cocoa -o keypress2 keypress2.m`) and copy them to `TOOLS`. Those tools write and read the bench's fixed paths under `~/work/koan-mac/tmp`. Steps 11, 12, 14 and 15 stay manual.
+**Scripted:** `scripts/mac/glance/glance.mjs` runs steps 1–10, 13 (the first part), 16, 17 and 18. It uses the DevTools protocol and UI DevTools for the checks. Real keys and menu clicks go through the bench tools in `scripts/mac/tools/` (`keypress2`, `inputok.sh`, `frontpid.sh` and `grantok.sh`; the same files as in #155). Compile the `.m` files on the Mac (`clang -framework Cocoa -o keypress2 keypress2.m`) and copy them to `TOOLS`. Those tools write and read the bench's fixed paths under `~/work/koan-mac/tmp`. Steps 11, 12, 14 and 15 stay manual.
 
 ```
 scripts/mac/glance/serve.sh &        # on the Mac: the parent on 127.0.0.1:8761, the Glance pages on localhost:8762
@@ -61,5 +61,14 @@ Keys are posted with `scripts/mac/tools/keypress2 <pid> <keycode> c` (⌘), the 
 13. **GT13 window close / quit.** With a Glance open, ⌘⇧W closes the window: no crash. Open a window again, open a Glance, then ⌘Q. No crash, and on the next launch no Glance page comes back as a tab.
 14. **GT14 context menu (hands-on tester).** Right-click inside the Glance page and run every item: Back, Reload, Open Link in New Tab / Window, Copy Link, Inspect, Translate, Lens. No crash, and new tabs open next to the parent.
 15. **Spaces rows still work (moved into the same table).** In a Spaces window: ⌘⌃P opens the Create Space form, ⌘⌃X / ⌘⌃Z cycle Spaces, and Tab > Group Tab is hidden. In View > Always Show Toolbar in Full Screen (compact mode, toolbar hidden), the item is hidden and ⇧⌘F does nothing. ⌘T opens the URL bar (replace-newtab).
+
+16. **Koan's shortcuts before Chrome's reserved keys (review 3 finding 1).** In a profile with one Space, with a second tab open in the background: Glance `#child`, then ⌘⌥→. Koan's next Space (nothing to switch to), not Chrome's next tab: the card and the parent tab stay. In a profile with two Spaces, the next Space shows (and the card goes).
+17. **Tab-switching reserved keys in a Glance (review 3 finding 3).** With a second tab open: Glance `#child`, then ⌘⇧]: no crash, the card goes, the next tab shows. Close a tab, Glance `#child`, then ⌘⇧T: no crash, the card goes, the closed tab is back. (Also ⌃Tab and ⌘⇧[ by hand.)
+18. **⌘M in a Glance (review 3 finding 5).** Glance `#child`, then ⌘M: the window minimises (CDP `Browser.getWindowForTarget` → `windowState` `minimized`), as in Zen. The script restores it over CDP and sends no key after it. By hand also Window > Zoom from the keyboard; by mouse the two menu items do nothing while the card has focus (known gap).
+19. **By hand: activation and windowing (review 3 finding 2).**
+    - With a Glance open, ⌘-Tab to Finder: the Koan window paints inactive (traffic lights, title bar). Back in Koan with the card focused: it paints active.
+    - Two Koan windows, a Glance open in A, B key: only B looks active.
+    - Fullscreen enter and exit with a card open: the card stays over the contents, in place.
+    - Drag the window to a second display with a card open: the card moves with it, in place.
 
 The Zen side-by-side, which goes to the tester: steps 1, 4, 5, 8 and 9 in Zen 1.24b's Glance (see `.agent/notes/zen-behaviour/glance.md`).

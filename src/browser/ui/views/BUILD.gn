@@ -329,6 +329,7 @@ source_set("impl") {
     "//ui/base/clipboard",
     "//ui/base/metadata",
     "//ui/compositor",
+    "//ui/content_accelerators",
     "//ui/events",
     "//skia",
     "//ui/gfx",

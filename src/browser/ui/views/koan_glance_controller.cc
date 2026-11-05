@@ -10,7 +10,6 @@
 #include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
-#include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
@@ -77,6 +76,7 @@
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/layer_owner.h"
+#include "ui/content_accelerators/accelerator_util.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/animation/tween.h"
@@ -98,6 +98,7 @@
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/fill_layout.h"
@@ -622,17 +623,12 @@ constexpr HeldCommand kHeldCommands[] = {
 
 }  // namespace
 
-KoanGlanceController::InputTracker::InputTracker(
-    content::WebContents* contents,
-    KoanGlanceController* glance)
-    : content::WebContentsObserver(contents), glance_(glance) {}
+KoanGlanceController::InputTracker::InputTracker(content::WebContents* contents)
+    : content::WebContentsObserver(contents) {}
 
 void KoanGlanceController::InputTracker::DidGetUserInteraction(
     const blink::WebInputEvent& event) {
   if (event.GetType() == blink::WebInputEvent::Type::kMouseDown) {
-    if (glance_) {
-      glance_->LogKeyWindow("press in the Glance page");
-    }
     // Any button: the activation click, or the right click that opened the
     // context menu. A press in a cross-site iframe comes in the iframe's
     // coordinates, so the card grows out of a point off the click there.
@@ -719,7 +715,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   zoom::ZoomController::CreateForWebContents(contents_.get());
   contents_->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
-  glance_input_ = std::make_unique<InputTracker>(contents_.get(), this);
+  glance_input_ = std::make_unique<InputTracker>(contents_.get());
 
   // A widget over the contents area, so the overlay has its own native
   // window above the page's and receives the pointer everywhere over it.
@@ -738,7 +734,6 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   widget_params.activatable = views::Widget::InitParams::Activatable::kYes;
   widget_params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
-  paint_as_active_ = browser_view_->GetWidget()->LockPaintAsActive();
 #else
   // A child widget: Aura gives it keys through the window's focus.
   views::Widget::InitParams widget_params(
@@ -757,20 +752,12 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   view_ = widget_->SetContentsView(
       std::make_unique<KoanGlanceView>(this, contents_.get()));
   LayoutWidget();
-  if (VLOG_IS_ON(1)) {
-    activation_observations_.AddObservation(widget_.get());
-    activation_observations_.AddObservation(browser_view_->GetWidget());
-  }
-  LogKeyWindow("before Show()");
   widget_->Show();
-  LogKeyWindow("after Show()");
   widget_->LayoutRootViewIfNecessary();
   grow_rect_ = GrowRect();
   view_->PlayOpenAnimation(grow_rect_, /*fresh=*/true);
   view_->web_view()->RequestFocus();
-  LogKeyWindow("after the page's RequestFocus()");
   HoldCommands();
-  LogKeyWindow("opened");
 }
 
 void KoanGlanceController::PostAction(void (KoanGlanceController::*action)()) {
@@ -793,7 +780,6 @@ void KoanGlanceController::Close() {
 
 void KoanGlanceController::CloseNow() {
   VLOG(1) << "Koan Glance: closing";
-  closed_at_ = base::TimeTicks::Now();
   EndConfirm();
   closing_ = true;
   ReleaseCommands(/*restore=*/true);
@@ -811,7 +797,6 @@ void KoanGlanceController::CloseNow() {
 }
 
 void KoanGlanceController::OnEscape() {
-  LogKeyWindow("Esc");
   if (!is_open() || closing_) {
     return;
   }
@@ -936,8 +921,10 @@ bool KoanGlanceController::HandleBrowserCommand(int command_id) {
     // ⌘W pressed twice (or repeating) closes the card, not the tab under it
     // too, as in Zen: for as long as the close animation lasts, also where
     // the card closes at once (macOS).
-    return command_id == IDC_CLOSE_TAB && !closed_at_.is_null() &&
-           base::TimeTicks::Now() - closed_at_ < kAnimationDuration;
+    return command_id == IDC_CLOSE_TAB &&
+           !closed_by_close_tab_at_.is_null() &&
+           base::TimeTicks::Now() - closed_by_close_tab_at_ <
+               kAnimationDuration;
   }
   // ⌘W again (or its key repeat) while the card shrinks away: not the tab
   // under it. Once the card is gone, ⌘W closes the tab.
@@ -949,6 +936,7 @@ bool KoanGlanceController::HandleBrowserCommand(int command_id) {
     case IDC_CLOSE_TAB:
       // ⌘W closes the card (with the page's beforeunload), not the tab under
       // it. From a key or menu item still being dispatched: afterwards.
+      closed_by_close_tab_at_ = base::TimeTicks::Now();
       PostAction(&KoanGlanceController::Close);
       return true;
     case IDC_RELOAD:
@@ -1102,22 +1090,15 @@ void KoanGlanceController::ReleaseCommands(bool restore) {
   }
 }
 
-void KoanGlanceController::LogKeyWindow(const char* where) const {
-#if BUILDFLAG(IS_MAC)
-  if (VLOG_IS_ON(1)) {
-    VLOG(1) << "Koan Glance keys: " << where << ": "
-            << DescribeKeyWindow(widget_.get(), browser_view_->GetWidget());
+void KoanGlanceController::ProcessBrowserAccelerator(
+    const ui::Accelerator& accelerator) {
+  if (views::FocusManager* focus_manager = browser_view_->GetFocusManager()) {
+    focus_manager->ProcessAccelerator(accelerator);
   }
-#endif
 }
 
-void KoanGlanceController::OnWidgetActivationChanged(views::Widget* widget,
-                                                    bool active) {
-  VLOG(1) << "Koan Glance keys: "
-          << (widget == widget_.get() ? "the card's" : "the browser window's")
-          << " widget " << (active ? "activated" : "deactivated") << ", from:\n"
-          << base::debug::StackTrace().ToString();
-  LogKeyWindow("activation change");
+void KoanGlanceController::RunBrowserCommand(int command_id) {
+  chrome::ExecuteCommand(browser_view_->browser(), command_id);
 }
 
 void KoanGlanceController::EditUrl() {
@@ -1138,7 +1119,6 @@ void KoanGlanceController::FocusPage() {
   // browser window key). Elsewhere a no-op: the card can't be activated.
   widget_->Activate();
   view_->web_view()->RequestFocus();
-  LogKeyWindow("focus back to the page");
 }
 
 bool KoanGlanceController::LoadFromUrlBar(const GURL& url,
@@ -1183,7 +1163,6 @@ void KoanGlanceController::OnBrowserViewDestroying() {
 
 void KoanGlanceController::DestroyWidget(bool give_back_key) {
   view_ = nullptr;
-  activation_observations_.RemoveAllObservations();
   if (!widget_) {
     return;
   }
@@ -1191,9 +1170,6 @@ void KoanGlanceController::DestroyWidget(bool give_back_key) {
   const bool was_key = widget_->IsActive();
   widget_->CloseNow();
   widget_.reset();
-#if BUILDFLAG(IS_MAC)
-  paint_as_active_.reset();
-#endif
   if (was_key && give_back_key) {
     browser_view_->GetWidget()->Activate();
   }
@@ -1339,19 +1315,45 @@ content::KeyboardEventProcessingResult
 KoanGlanceController::PreHandleKeyboardEvent(
     content::WebContents* source,
     const input::NativeWebKeyboardEvent& event) {
-  VLOG(1) << "Koan Glance keys: key event " << static_cast<int>(event.GetType())
-          << ", key code " << event.windows_key_code
-          << " reached the Glance page's delegate";
   // The browser's reserved keys (⌘W, ⌘T, ⌘N, tab switching) before the page,
   // as in a tab: a page can't keep the card open by swallowing ⌘W.
 #if BUILDFLAG(IS_MAC)
   // The card's window has no ChromeCommandDispatcherDelegate (browser
   // windows' prePerformKeyEquivalent), so its key equivalents reach the
-  // page first: run the reserved ones here, as that delegate does.
-  if (const int command =
-          ReservedCommandForKeyEvent(browser_view_->browser(), event)) {
-    chrome::ExecuteCommand(browser_view_->browser(), command);
-    return content::KeyboardEventProcessingResult::HANDLED;
+  // page first. Do here what that delegate does, in its order. Whatever runs
+  // runs after this key's dispatch: it may switch tabs, which closes the
+  // card's window while its key handling is on the stack.
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) {
+    // 1. The browser window's high-priority shortcuts first: Koan's keys
+    // that sit on Chrome's reserved ones (⌘⌥ arrows switch Spaces, not tabs;
+    // koan_shortcut_table.cc).
+    views::FocusManager* focus_manager = browser_view_->GetFocusManager();
+    const ui::Accelerator accelerator =
+        ui::GetAcceleratorFromNativeWebKeyboardEvent(event);
+    if (focus_manager && !focus_manager->shortcut_handling_suspended() &&
+        focus_manager->HasPriorityHandler(accelerator)) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&KoanGlanceController::ProcessBrowserAccelerator,
+                         weak_factory_.GetWeakPtr(), accelerator));
+      return content::KeyboardEventProcessingResult::HANDLED;
+    }
+    // 2. Window > Minimize and Zoom: the browser window's, as in Zen.
+    if (PerformWindowMenuKey(browser_view_->GetWidget(), event)) {
+      return content::KeyboardEventProcessingResult::HANDLED;
+    }
+    // 3. The reserved commands.
+    const int command =
+        ReservedCommandForKeyEvent(browser_view_->browser(), event);
+    if (command == kDropKeyEvent) {
+      return content::KeyboardEventProcessingResult::HANDLED;
+    }
+    if (command) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&KoanGlanceController::RunBrowserCommand,
+                                    weak_factory_.GetWeakPtr(), command));
+      return content::KeyboardEventProcessingResult::HANDLED;
+    }
   }
 #endif
   return browser_view_->PreHandleKeyboardEvent(event);
