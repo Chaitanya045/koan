@@ -388,3 +388,8 @@ tiling, close/⌘Q during a drag, fullscreen.
 PASS: ⌘D "Bookmark added" bubble right under the pill, fully on screen (s32-cmdD); notification prompt (S) at the pill (s32-notif-S); in compact with the sidebar hidden the prompt sits inside the window at the top left, never above it (s32-notif-CS); ⇧⌘W with the bookmark bubble open and hold-⌘Q with a prompt open: no crash/DCHECK/dump.
 INCONCLUSIVE: keyboard answer — Tab never focuses the prompt's buttons (macOS Full Keyboard Access off, a system setting). Peek + page info: after clicking the pill's site icon in the peeked sidebar the sidebar showed as a blank panel (no rows, no page info) and stayed after Esc (s32-peek-close-quit, frames 1-2) — needs a re-check.
 Not done: camera (would turn the Mac's camera on), CT/CB layouts, download panel, fullscreen.
+
+## Session 33 (12:55–13:00 IST): KoanCheck-c162d (#162 451282b4)
+PASS: top-band drag moves the window (221,55 → 270,77), page log `move,down,move,up`; 20 fast drags no crash; step 3: after a drag, moving inside the sidebar adds no event to the page (s33-hover, rows 2-3 identical); 8b: drag released over the sidebar, then a text drag-select out of the page over the sidebar: the page sees `down,move,up` once, never up before down (s33-select-out); 8: ⇧⌘W and held ⌘Q during a held drag: ignored while the move loop runs, no crash/DCHECK/dump. 
+Minor: the drag-select out of the page left only one character selected (should extend to the line start).
+Not judgeable: tiling — dragging to the left screen edge pushed the window off-screen (x −960) with no tiling preview (synthetic events; macOS tiling may need a real pause at the edge), so step 6 wasn't done.
