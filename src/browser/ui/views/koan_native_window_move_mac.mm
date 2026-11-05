@@ -50,8 +50,14 @@ NSEvent* MouseEvent(NSWindow* window, NSEventType type) {
 // window tiled (macOS 15 and later). None of this is public API: it is all
 // guarded and degrades to "not tiled" if the internals ever change.
 bool WindowIsTiled(NSWindow* window) {
-  static Ivar controller_ivar =
-      class_getInstanceVariable([NSWindow class], "_tilingStateController");
+  // (Only if it is an object: a future AppKit that keeps the name but changes
+  // the type would have `object_getIvar` read a struct as an `id`.)
+  static Ivar controller_ivar = [] {
+    Ivar ivar =
+        class_getInstanceVariable([NSWindow class], "_tilingStateController");
+    const char* type = ivar ? ivar_getTypeEncoding(ivar) : nullptr;
+    return type && type[0] == '@' ? ivar : nullptr;
+  }();
   if (!window || !controller_ivar) {
     return false;
   }
@@ -61,6 +67,10 @@ bool WindowIsTiled(NSWindow* window) {
   }
   return [controller performSelector:@selector(tilingState)] != nil;
 }
+
+// The view that had the button down when the drag started: it, and no other,
+// gets the release that the window server swallowed.
+__weak NSResponder* g_drag_view = nil;
 
 }  // namespace
 
@@ -83,6 +93,7 @@ bool StartNativeWindowMove(const BrowserView* browser_view) {
   if (!event) {
     return false;
   }
+  g_drag_view = window.firstResponder;
   [window performWindowDragWithEvent:event];
   return true;
 }
@@ -91,11 +102,22 @@ void EndNativeWindowMove(const BrowserView* browser_view) {
   // The window server's drag swallowed the real release, and the page's view
   // still has its button down (-[RenderWidgetHostViewCocoa
   // _hasOpenMouseDown]): it would go on taking the pointer's moves, hover and
-  // cursor over the sidebar, until the next click. Send it a release.
-  NSWindow* window = DraggableWindow(browser_view);
-  if (NSEvent* event =
-          window ? MouseEvent(window, NSEventTypeLeftMouseUp) : nil) {
-    [window sendEvent:event];
+  // cursor over the sidebar, until the next click. Send it a release, to the
+  // view that had the press (not to whatever is under the pointer now), and
+  // only while the physical button is up: a button that is down again is a
+  // new press.
+  NSResponder* responder = g_drag_view;
+  g_drag_view = nil;
+  const views::Widget* widget = browser_view->GetWidget();
+  NSWindow* window =
+      widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
+  if (!window || !responder || (NSEvent.pressedMouseButtons & 1) ||
+      ![responder isKindOfClass:[NSView class]] ||
+      static_cast<NSView*>(responder).window != window) {
+    return;
+  }
+  if (NSEvent* event = MouseEvent(window, NSEventTypeLeftMouseUp)) {
+    [responder mouseUp:event];
   }
 }
 

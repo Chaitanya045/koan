@@ -17,6 +17,7 @@ DCHECK build, a normal window with the sidebar, Dock and menu bar as usual.
 | 5 | macOS 15: drag the top band to the left screen edge and release | The tiling preview shows, the window tiles. Top edge: zoom. Drag onto another display / Space. |
 | 6 | Tile the window left, press in the top band and move 10 px | No drag (Z45: 50 px when tiled). Move 60 px: it un-tiles and follows. Same with a zoomed (green button, Option) window. |
 | 7 | Press without moving | Nothing moves; the page gets its click. |
-| 8 | Close the window or Cmd+Q during a drag | No crash. |
+| 8 | Close the window with Cmd+W (and with Cmd+Q) **during** a drag, with the button held | No crash, no CHECK (the controller is gone when AppKit's call returns). |
+| 8b | Drag, release with the pointer over the sidebar, then click in the page and select text, dragging out of the page | The click and the selection behave (the release for the page's view is posted after the drag, not on the next click); the page sees `down move up` once, never `up` before `down`. |
 | 9 | A PWA window (app shim) | The drag does nothing (documented: the NSWindow in the browser process is an invisible placeholder), no crash. |
 | 10 | Fullscreen | No drag. |

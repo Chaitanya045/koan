@@ -102,6 +102,9 @@ class KoanWindowDragController : public TabStripModelObserver,
   // view when the gesture ends.
 #if BUILDFLAG(IS_MAC)
   bool native_drag_started_ = false;
+  // The release of the page's view, posted when the native drag ended, is to
+  // be swallowed (the page has had its own).
+  bool swallow_next_up_ = false;
 #endif
   // Identifies the current press, so a late answer for an earlier one is
   // ignored.

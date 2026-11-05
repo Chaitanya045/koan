@@ -115,6 +115,10 @@ void KoanWindowDragController::WatchWidget(content::RenderWidgetHost* host) {
   }
   widget_host_ = host;
   state_ = State::kIdle;
+#if BUILDFLAG(IS_MAC)
+  native_drag_started_ = false;
+  swallow_next_up_ = false;
+#endif
   if (widget_host_) {
     widget_host_->AddMouseEventCallback(mouse_event_callback_);
     widget_host_observation_.Observe(widget_host_);
@@ -126,11 +130,11 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
   switch (event.GetType()) {
     case Type::kMouseDown: {
 #if BUILDFLAG(IS_MAC)
-      // A native drag that ended without a move after its release.
-      if (native_drag_started_) {
-        native_drag_started_ = false;
-        EndNativeWindowMove(browser_view_);
-      }
+      // A native drag that ended without a move after its release: the press
+      // sets the page's view up again by itself (a release now would end the
+      // click the user is making).
+      native_drag_started_ = false;
+      swallow_next_up_ = false;
 #endif
       state_ = State::kIdle;
       content::RenderWidgetHostView* view =
@@ -178,10 +182,19 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
         // manager took it).
 #if BUILDFLAG(IS_MAC)
         if (state_ == State::kDragging && native_drag_started_) {
-          // The page's view still has the button down: release it (the
-          // release it sends the page is swallowed, the page has its own).
+          // The page's view still has the button down: release it, from a
+          // task (we are inside its input routing), and swallow the release
+          // that sends the page (the page has its own).
           native_drag_started_ = false;
-          EndNativeWindowMove(browser_view_);
+          swallow_next_up_ = true;
+          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE, base::BindOnce(
+                             [](base::WeakPtr<KoanWindowDragController> self) {
+                               if (self) {
+                                 EndNativeWindowMove(self->browser_view_);
+                               }
+                             },
+                             weak_factory_.GetWeakPtr()));
         }
 #endif
         state_ = State::kIdle;
@@ -207,6 +220,13 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
       return true;
     }
     case Type::kMouseUp: {
+#if BUILDFLAG(IS_MAC)
+      if (swallow_next_up_) {
+        swallow_next_up_ = false;
+        state_ = State::kIdle;
+        return true;
+      }
+#endif
       // The page already got its release when the drag started.
       const bool dragging = state_ == State::kDragging;
       state_ = State::kIdle;
@@ -297,8 +317,14 @@ void KoanWindowDragController::StartDrag(const blink::WebMouseEvent& event) {
                        // handed to AppKit, so no window sticks to the
                        // pointer). Synthetic input (the e2e tests) never
                        // holds the physical button.
-                       self->native_drag_started_ =
+                       self->native_drag_started_ = true;
+                       const bool started =
                            StartNativeWindowMove(self->browser_view_);
+                       // (If AppKit runs the drag in a nested loop, the
+                       // window can close inside it, and this is gone.)
+                       if (self) {
+                         self->native_drag_started_ = started;
+                       }
                        // (AppKit takes the rest of the gesture, release
                        // included: it ends with the next move that has no
                        // button down, or the next press.)
