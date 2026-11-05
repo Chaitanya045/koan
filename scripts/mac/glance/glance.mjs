@@ -180,7 +180,20 @@ async function views() {
   return out;
 }
 const shown = async cls => (await views()).some(v => v.cls === cls && v.shown);
-const cardOpen = () => shown('KoanGlanceView');
+// The card is open: UI DevTools shows its view, or (macOS, where the card is a
+// top-level window of its own, which UI DevTools may not list) the Glance page
+// is visible. A closed card's page is deleted at once, so it can't be the
+// page of a card that is gone.
+async function cardSignals() {
+  const view = await shown('KoanGlanceView');
+  const page = await glancePage();
+  const visible = !!page && (await evalIn(page, 'document.visibilityState')) === 'visible';
+  return { view, visible };
+}
+const cardOpen = async () => {
+  const { view, visible } = await cardSignals();
+  return view || visible;
+};
 
 async function visibleTab() {
   for (const page of await tabPages()) {
@@ -251,7 +264,9 @@ async function check(name, ok, detail = '') {
 async function dump() {
   try {
     const list = (await classified()).map(t => `${t.tab ? 'tab ' : 'page'} ${t.url}`);
-    console.log(`      state: card ${await cardOpen() ? 'shown' : 'not shown'}; ${list.join(' | ')}`);
+    const { view, visible } = await cardSignals();
+    console.log(`      state: card view ${view ? 'shown' : 'not shown'} (UI DevTools), ` +
+                `Glance page ${visible ? 'visible' : 'not visible'}; ${list.join(' | ')}`);
   } catch (e) {
     console.log(`      state: unreadable (${e.message})`);
   }
