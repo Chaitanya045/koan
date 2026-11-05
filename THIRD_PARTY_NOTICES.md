@@ -47,6 +47,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_library_icons.cc` | `zen-icons/library/library-{downloads,history,spaces}-sprite.svg` (section icons) |
 | `src/browser/ui/views/koan_zen_welcome.h` | `ZenWelcome.mjs`, `zen-welcome.ftl` (the welcome screen's strings, pages and Essentials) |
 | `src/browser/ui/views/koan_zen_window_drag.{h,cc}` | `ZenWindowDragChild.sys.mjs`, `zen-default-prefs.js` (where a press may drag the window, the thresholds) |
+| `src/browser/ui/views/koan_native_window_move_mac.mm` | `nsZenNativeWindowMove.mm` (the native window move on macOS), `expose_tiled_attribute_to_all_platforms.patch` (`WindowIsTiled`, the tiling state of a window) |
 | `src/browser/ui/views/koan_zen_download_animation.{h,cc}` | `ZenDownloadAnimation.mjs` (the download arc, the tile's timing) |
 | `src/browser/ui/views/koan_zen_media.{h,cc}` | `ZenMediaController.mjs`, `zen-media-controls.css` (the media cards' stack, timing and time format) |
 | `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |

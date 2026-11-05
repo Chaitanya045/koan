@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_observer.h"
@@ -31,8 +32,9 @@ namespace koan {
 // Watches the mouse events Chromium forwards to the active tab's page.
 // Whether the pressed point is empty space is decided in the page (an
 // isolated world, so pages can't interfere) while the button is held; the
-// move then works like a title bar drag: on macOS the window follows the
-// pointer (Widget::RunMoveLoop), on Linux the window manager moves it. It
+// move then works like a title bar drag: on macOS AppKit moves the window
+// (-[NSWindow performWindowDragWithEvent:], with edge tiling and the drag to
+// another Space), on Linux the window manager does. It
 // only looks at the page, so the sidebar's side, compact mode and the
 // window buttons' hot zone above the page don't matter.
 class KoanWindowDragController : public TabStripModelObserver,
@@ -96,6 +98,14 @@ class KoanWindowDragController : public TabStripModelObserver,
       widget_host_observation_{this};
 
   State state_ = State::kIdle;
+  // AppKit has the window (macOS): its release must be sent to the page's
+  // view when the gesture ends.
+#if BUILDFLAG(IS_MAC)
+  bool native_drag_started_ = false;
+  // The release of the page's view, posted when the native drag ended, is to
+  // be swallowed (the page has had its own).
+  bool swallow_next_up_ = false;
+#endif
   // Identifies the current press, so a late answer for an earlier one is
   // ignored.
   int gesture_ = 0;
