@@ -18,6 +18,10 @@ namespace gfx {
 class Canvas;
 }
 
+namespace ui {
+struct ColorProviderKey;
+}
+
 namespace views {
 class View;
 }
@@ -45,6 +49,15 @@ bool PaintsWindowBackground(const BrowserView* browser_view);
 // and the glass stay; the theme stays installed. All browser windows but web
 // apps.
 bool LocksExtensionTheme(const BrowserWindowInterface* browser);
+
+// From BrowserWidget::GetColorProviderKey(): the window's Space theme sets its
+// colour mode (Zen's shouldBeDarkMode) and accent in `key`, the window's own,
+// after upstream's overrides. Its child widgets keep the window's scheme for
+// the mode (Zen applies it to #browser only; panels, menus and the open URL
+// bar keep zen.view.window.scheme), all but the window's own chrome (the
+// fullscreen overlay, Glance, the Library): koan_widget_color_key.h.
+void AdjustWindowColorKey(const BrowserWindowInterface* browser,
+                          ui::ColorProviderKey* key);
 
 // From MultiContentsBackgroundView::OnThemeChanged(), right after it re-creates
 // its layer (a textured one where Koan paints the window, opaque by default):
