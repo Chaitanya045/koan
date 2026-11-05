@@ -24,6 +24,12 @@ inline constexpr bool kShowChromiumFirstRun = false;
 // chrome/browser/ui/startup/infobar_utils.cc.
 inline constexpr bool kShowDefaultBrowserPrompts = false;
 
+// After a crash, Zen restores the previous session without asking
+// (SessionStartup / SessionStore patches). Chromium shows a "Restore pages?"
+// bubble and restores only when it is clicked. Checked in
+// chrome/browser/ui/startup/infobar_utils.cc.
+inline constexpr bool kRestoreAfterCrashWithoutAsking = true;
+
 // Like Zen, Koan reopens the previous session on startup by default, so
 // workspaces and Essentials survive restarts. Users can still change it in
 // Settings > On startup. Checked in

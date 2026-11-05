@@ -1,8 +1,17 @@
 diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
-index 94d977b..886e8da 100644
+index 94d977b..7869d1c 100644
 --- a/chrome/browser/ui/startup/infobar_utils.cc
 +++ b/chrome/browser/ui/startup/infobar_utils.cc
-@@ -41,6 +41,7 @@
+@@ -22,6 +22,8 @@
+ #include "chrome/browser/obsolete_system/obsolete_system.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/sessions/exit_type_service.h"
++#include "chrome/browser/sessions/session_restore.h"
+ #include "chrome/browser/ui/session_crashed_bubble.h"
+ #include "chrome/browser/ui/startup/automation_infobar_delegate.h"
+ #include "chrome/browser/ui/startup/bad_flags_prompt.h"
+@@ -41,6 +43,7 @@
  #include "components/tabs/public/tab_interface.h"
  #include "content/public/common/content_switches.h"
  #include "google_apis/google_api_keys.h"
@@ -10,7 +19,32 @@ index 94d977b..886e8da 100644
  
  #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
  #include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt.h"
-@@ -253,7 +254,7 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+@@ -218,9 +221,21 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+       !is_web_app && HasPendingUncleanExit(browser->GetProfile());
+   base::UmaHistogramBoolean("Startup.CrashBubbleShown", should_display_bubble);
+   if (should_display_bubble) {
+-    ShowSessionCrashedBubbleIfNotOffTheRecordProfile(
+-        browser,
+-        /*skip_tab_checking=*/false);
++    if (koan::kRestoreAfterCrashWithoutAsking) {
++      // Koan: Zen always restores after a crash, silently. This is what the
++      // bubble's Restore button does, with the lock it takes so that the exit
++      // type service waits for the restore to finish.
++      std::unique_ptr<ExitTypeService::CrashedLock> lock;
++      if (ExitTypeService* exit_type_service =
++              ExitTypeService::GetInstanceForProfile(browser->GetProfile())) {
++        lock = exit_type_service->CreateCrashedLock();
++      }
++      SessionRestore::RestoreSessionAfterCrash(browser);
++    } else {
++      ShowSessionCrashedBubbleIfNotOffTheRecordProfile(
++          browser,
++          /*skip_tab_checking=*/false);
++    }
+   }
+ 
+   // These info bars are not shown when the browser is being controlled by
+@@ -253,7 +268,7 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
    infobars::ContentInfoBarManager* infobar_manager =
        infobars::ContentInfoBarManager::FromWebContents(web_contents);
  
@@ -19,7 +53,7 @@ index 94d977b..886e8da 100644
      if (infobars::IsInfoBarMigrated(
              infobars::InfoBarDelegate::GOOGLE_API_KEYS_INFOBAR_DELEGATE)) {
        if (auto* manager =
-@@ -320,7 +321,9 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+@@ -320,7 +335,9 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
  #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
  
    // The default browser prompt should only be shown after the first run.
