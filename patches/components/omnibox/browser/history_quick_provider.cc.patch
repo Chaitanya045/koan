@@ -1,0 +1,21 @@
+diff --git a/components/omnibox/browser/history_quick_provider.cc b/components/omnibox/browser/history_quick_provider.cc
+index ea466919c8ca0756e26548afc0db21d8ff6a8db5..2a1d76fec049e02a73b840a67a3e359a8b781649 100644
+--- a/components/omnibox/browser/history_quick_provider.cc
++++ b/components/omnibox/browser/history_quick_provider.cc
+@@ -292,13 +292,14 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
+   //  'Google [Docs|Sheets...]', moving the latter to contents. But for
+   //  now, do the simpler thing of just clearing the URL.
+   if (!match.IsDocumentSuggestion()) {
+-    match.contents = url_formatter::FormatUrl(
++    // Koan: sanitized, as AutocompleteResult::AppendMatches() DCHECKs (#166).
++    match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
+         info.url(),
+         AutocompleteMatch::GetFormatTypes(
+             autocomplete_input_.parts().scheme.is_nonempty() ||
+                 history_match.match_in_scheme,
+             history_match.match_in_subdomain),
+-        base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
++        base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+     auto contents_terms =
+         FindTermMatches(autocomplete_input_.text(), match.contents);
+     match.contents_class = ClassifyTermMatches(

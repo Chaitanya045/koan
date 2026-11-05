@@ -3,24 +3,29 @@
 // AutocompleteResult::AppendMatches() DCHECKed (SanitizeString(contents) !=
 // contents), killing a DCHECK build. Types the URLs one key at a time, in the
 // Cmd+T bar, and stops there; the browser must still be alive and the log free
-// of "Check failed". Fixed by components/omnibox/browser/verbatim_match.cc.patch (and history_url_provider.cc.patch).
+// of "Check failed". Fixed by the sanitize patches listed in docs/REBASE.md
+// ("Omnibox match contents sanitized").
 //
 //   scripts/e2e/run.sh omnibox_trailing_space
 //
-// The log check needs run.sh's KOAN_LOG. For the Mac harness: the same keys,
-// then the same two log greps (":FATAL:" and "Check failed").
+// The log check reads run.sh's KOAN_LOG. The Mac rows (visiting the URL, Cmd+L
+// on it, retyping it, the query and ref cases) are in
+// scripts/mac/steps/omnibox_trailing_space.md.
 import fs from 'node:fs';
+import { primary } from './lib/fullscreen.mjs';
 import {
-  CTRL, check, finish, front, key, pages, shownViews, sleep, typeInto,
+  check, finish, front, key, pages, shownViews, sleep, typeInto,
   viewTree, views, waitFor,
 } from './lib/koan.mjs';
 
 const VK = { T: 84, ESC: 27 };
 const [page] = await pages();
 await front(page);
+const MOD = await primary();
 
-for (const url of ['example.com/a%20', 'data:text/html,a%20', 'example.com/a%20b%20']) {
-  await key(page, VK.T, CTRL, 't');
+for (const url of ['example.com/a%20', 'data:text/html,a%20', 'example.com/a%20b%20',
+                 'example.com/?q=a%20', 'example.com/a#b%20', 'view-source:example.com/a%20']) {
+  await key(page, VK.T, MOD, 't');
   const box = await waitFor(async () =>
       (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown));
   check(`Cmd+T opens the bar for ${url}`, !!box);
