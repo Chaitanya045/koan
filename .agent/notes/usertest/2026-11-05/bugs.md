@@ -383,3 +383,8 @@ OmniboxViewViews::DoInsertChar. Koan quit; "Koan quit unexpectedly" (mine, dismi
 with synthetic events (control: a native drag in Zen also lagged: +7,+93 for +100,+100); 20 fast drags: no crash; after a drag, hovering the sidebar/pill
 sends no `move` to the page (s31-hover) PASS; right-click during a drag: page menu, no crash (s31-mid). Not done: ⌘L/⌘T mid-drag (my guard refused them),
 tiling, close/⌘Q during a drag, fullscreen.
+
+## Session 32 (11:17–11:20 IST): KoanCheck-c163c (develop b7a833c6 + #163 8de6e92e)
+PASS: ⌘D "Bookmark added" bubble right under the pill, fully on screen (s32-cmdD); notification prompt (S) at the pill (s32-notif-S); in compact with the sidebar hidden the prompt sits inside the window at the top left, never above it (s32-notif-CS); ⇧⌘W with the bookmark bubble open and hold-⌘Q with a prompt open: no crash/DCHECK/dump.
+INCONCLUSIVE: keyboard answer — Tab never focuses the prompt's buttons (macOS Full Keyboard Access off, a system setting). Peek + page info: after clicking the pill's site icon in the peeked sidebar the sidebar showed as a blank panel (no rows, no page info) and stayed after Esc (s32-peek-close-quit, frames 1-2) — needs a re-check.
+Not done: camera (would turn the Mac's camera on), CT/CB layouts, download panel, fullscreen.
