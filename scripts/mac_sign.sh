@@ -24,7 +24,7 @@ koan_require_mac_env
 app="${1:?usage: scripts/mac_sign.sh path/to/Koan.app}"
 [[ -d $app ]] || { echo "no such app: $app" >&2; exit 1; }
 
-keychain="$KOAN_MAC/keychains/koan-signing.keychain-db"
+keychain="${KOAN_SIGNING_KEYCHAIN:-$KOAN_MAC/keychains/koan-signing.keychain-db}"
 if ! hash="$("$ROOT/scripts/mac_signing_identity.sh" status)"; then
   echo "no signing identity: $app stays ad-hoc signed, so its signature" >&2
   echo "changes with every build and saved logins may reset after a rebuild." >&2
@@ -32,11 +32,25 @@ if ! hash="$("$ROOT/scripts/mac_signing_identity.sh" status)"; then
   exit 0
 fi
 
-security unlock-keychain -p "koan-local-signing" "$keychain"
-# --deep re-signs the helper apps and frameworks inside too. No hardened
-# runtime and no entitlements, like the linker-signed build it replaces.
-codesign --force --deep --sign "$hash" --keychain "$keychain" \
-  --timestamp=none "$app"
-codesign --verify --deep --strict "$app"
+# A failed signing must not leave a half-signed bundle (--deep signs the
+# nested code first, then the outer app): any failure here re-signs the whole
+# app ad hoc, like the linker's signature it replaces, and says so.
+sign() {
+  security unlock-keychain -p "koan-local-signing" "$keychain" &&
+    # --deep re-signs the helper apps and frameworks inside too. No hardened
+    # runtime and no entitlements, like the linker-signed build it replaces.
+    codesign --force --deep --sign "$hash" --keychain "$keychain" \
+      --timestamp=none "$app" &&
+    codesign --verify --deep --strict "$app" &&
+    dr="$(codesign -d -r- "$app" 2>&1)" &&
+    [[ $dr == *'certificate leaf = H"'* ]]
+}
+if ! sign; then
+  echo "WARNING: signing $app with Koan Local Signing failed; signing it ad hoc instead." >&2
+  echo "Saved logins may reset after a rebuild. Look at the error above;" >&2
+  echo "KOAN_SIGN=0 skips signing, see .agent/notes/mac.md." >&2
+  codesign --force --deep --sign - "$app"
+  exit 0
+fi
 echo "signed $app with Koan Local Signing ($hash)" >&2
 codesign -d -r- "$app" 2>&1 | sed -n 's/^designated => /designated requirement: /p' >&2

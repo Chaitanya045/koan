@@ -18,11 +18,16 @@
 # the same across rebuilds, so the saved item keeps matching.
 #
 # The identity ("Koan Local Signing") is a self-signed code-signing
-# certificate in a keychain of its own, $KOAN_MAC/keychains/koan-signing.keychain-db.
-# It is not in the login keychain, not in the keychain search list, and not
-# trusted system-wide: it only signs builds on this Mac. Nothing here ever
+# certificate in a keychain of its own, $KOAN_MAC/keychains/koan-signing.keychain-db
+# (KOAN_SIGNING_KEYCHAIN overrides the path; scripts/mac_signing_check.sh uses
+# that for a throw-away one). It is not the login keychain and not trusted
+# system-wide: it only signs builds on this Mac. `security create-keychain`
+# always adds the new keychain to the user's keychain search list, so
+# `create` records the list first and puts it back exactly as it was (minus
+# any earlier copy of this keychain) when it finishes or fails. Nothing here
 # deletes or changes an existing keychain item or keychain; `create` makes
-# one new keychain file.
+# one new keychain file, and removes that file again only if this run made it
+# and then failed.
 #
 # Bash 3.2 (macOS's) compatible.
 set -euo pipefail
@@ -38,7 +43,7 @@ koan_require_mac_env
 
 NAME="Koan Local Signing"
 KEYCHAIN_DIR="$KOAN_MAC/keychains"
-KEYCHAIN="$KEYCHAIN_DIR/koan-signing.keychain-db"
+KEYCHAIN="${KOAN_SIGNING_KEYCHAIN:-$KEYCHAIN_DIR/koan-signing.keychain-db}"
 # The keychain holds one key that only signs local builds; its password
 # protects nothing worth guarding, and codesign needs the keychain unlocked.
 KEYCHAIN_PASSWORD="koan-local-signing"
@@ -46,31 +51,84 @@ KEYCHAIN_PASSWORD="koan-local-signing"
 # The certificate's SHA-1 hash, or nothing.
 identity_hash() {
   [[ -f $KEYCHAIN ]] || return 0
-  security find-certificate -c "$NAME" -Z "$KEYCHAIN" 2>/dev/null |
+  # A keychain file without the certificate (an earlier run failed) is "no
+  # identity", not an error.
+  { security find-certificate -c "$NAME" -Z "$KEYCHAIN" 2>/dev/null || true; } |
     sed -n 's/^SHA-1 hash: //p' | head -1
 }
 
+# The user's keychain search list, one path per line, without this keychain.
+search_list() {
+  { security list-keychains -d user || return 1; } |
+    sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//' |
+    grep -v '/koan-signing[^/]*$' || true
+}
+
+# Globals, not locals: the EXIT trap runs after create() has returned.
+had_keychain=0
+ok=0
+saved=()
+work=""
+
 create() {
-  local hash work
+  local hash cnf line
   hash="$(identity_hash)"
   if [[ -n $hash ]]; then
     echo "$NAME already exists ($hash)" >&2
     return 0
   fi
-  mkdir -p "$KEYCHAIN_DIR"
-  work="$(mktemp -d "$TMPDIR/koan-signing.XXXXXX")"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$work'" EXIT
+  # Everything private is 0600/0700, including the unencrypted key on disk.
+  umask 077
 
-  # A self-signed certificate valid for code signing, 10 years.
-  /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-    -keyout "$work/key.pem" -out "$work/cert.pem" \
-    -subj "/CN=$NAME" \
-    -addext "basicConstraints=critical,CA:false" \
-    -addext "keyUsage=critical,digitalSignature" \
-    -addext "extendedKeyUsage=critical,codeSigning" 2>/dev/null
+  # create-keychain adds the new keychain to the search list; record the list
+  # now and put it back exactly. Refuse to go on if it can't be read.
+  while IFS= read -r line; do
+    [[ -n $line ]] && saved+=("$line")
+  done < <(search_list)
+  if [[ ${#saved[@]} -eq 0 ]]; then
+    echo "can't read the keychain search list (security list-keychains -d user); not creating anything" >&2
+    return 1
+  fi
+  [[ -f $KEYCHAIN ]] && had_keychain=1
+  mkdir -p "$(dirname "$KEYCHAIN")"
+  work="$(mktemp -d "$TMPDIR/koan-signing.XXXXXX")"
+  cnf="$work/openssl.cnf"
+
+  finish() {
+    rm -rf "$work"
+    security list-keychains -d user -s "${saved[@]}" >/dev/null 2>&1 || true
+    if [[ $ok -eq 0 && $had_keychain -eq 0 ]]; then
+      # This run made the keychain file and then failed: remove just that file.
+      rm -f "$KEYCHAIN"
+      echo "failed; removed the new keychain file and restored the search list" >&2
+    fi
+  }
+  trap finish EXIT INT TERM
+
+  # A self-signed certificate valid for code signing, 10 years. A config file
+  # instead of -addext, which older LibreSSL (macOS's /usr/bin/openssl) lacks.
+  cat >"$cnf" <<EOF
+[req]
+distinguished_name = dn
+prompt = no
+x509_extensions = ext
+[dn]
+CN = $NAME
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+EOF
+  /usr/bin/openssl req -x509 -new -newkey rsa:2048 -nodes -sha256 -days 3650 \
+    -config "$cnf" -keyout "$work/key.pem" -out "$work/cert.pem"
+  # Algorithms `security import` reads on every macOS (3DES/SHA-1); OpenSSL 3's
+  # defaults (AES, PBKDF2) fail there with "MAC verification failed". Old
+  # LibreSSL may not know -macalg: try without.
   /usr/bin/openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" \
-    -name "$NAME" -out "$work/identity.p12" -passout "pass:$KEYCHAIN_PASSWORD"
+    -name "$NAME" -out "$work/identity.p12" -passout "pass:$KEYCHAIN_PASSWORD" \
+    -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 2>/dev/null ||
+    /usr/bin/openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" \
+      -name "$NAME" -out "$work/identity.p12" -passout "pass:$KEYCHAIN_PASSWORD"
 
   if [[ ! -f $KEYCHAIN ]]; then
     security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
@@ -83,7 +141,10 @@ create() {
   # So that codesign can use the key without asking each time.
   security set-key-partition-list -S apple-tool:,apple: -s \
     -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-  echo "created $NAME ($(identity_hash)) in $KEYCHAIN" >&2
+  hash="$(identity_hash)"
+  [[ -n $hash ]] || { echo "the certificate didn't import" >&2; return 1; }
+  ok=1
+  echo "created $NAME ($hash) in $KEYCHAIN; keychain search list unchanged" >&2
 }
 
 case "${1:-}" in
