@@ -230,6 +230,7 @@ source_set("impl") {
     "koan_traffic_lights.cc",
     "koan_traffic_lights_controller.cc",
     "koan_traffic_lights_controller.h",
+    "koan_widget_color_key.h",
     "koan_window_glass.cc",
     "koan_workspaces.cc",
     "koan_workspaces.h",

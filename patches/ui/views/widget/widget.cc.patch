@@ -1,0 +1,35 @@
+diff --git a/ui/views/widget/widget.cc b/ui/views/widget/widget.cc
+index eb2f39791d6fd0ea24df04de41b417985e5f409a..7707c806f451d7eeaf872a8c152ade33c12f195c 100644
+--- a/ui/views/widget/widget.cc
++++ b/ui/views/widget/widget.cc
+@@ -2729,6 +2729,19 @@ void Widget::SetBackgroundColor(std::optional<ui::ColorId> background_color) {
+ ////////////////////////////////////////////////////////////////////////////////
+ // Widget, ui::ColorProviderSource:
+ 
++// Koan: an embedder's say in the key a child widget takes from its parent
++// (koan/browser/ui/views/koan_widget_color_key.h declares it too).
++using ChildColorProviderKeyAdjuster = void (*)(const Widget* parent,
++                                               const Widget* child,
++                                               ui::ColorProviderKey* key);
++VIEWS_EXPORT void SetChildColorProviderKeyAdjuster(
++    ChildColorProviderKeyAdjuster adjuster);
++static ChildColorProviderKeyAdjuster g_child_color_provider_key_adjuster =
++    nullptr;
++void SetChildColorProviderKeyAdjuster(ChildColorProviderKeyAdjuster adjuster) {
++  g_child_color_provider_key_adjuster = adjuster;
++}
++
+ ui::ColorProviderKey Widget::GetColorProviderKey() const {
+   // Generally all Widgets should inherit the key of their parent, falling back
+   // to the key set by the NativeTheme otherwise.
+@@ -2738,6 +2751,10 @@ ui::ColorProviderKey Widget::GetColorProviderKey() const {
+   ui::ColorProviderKey key =
+       parent_ ? parent_->GetColorProviderKey()
+               : GetNativeTheme()->GetColorProviderKey(GetCustomTheme());
++  // Koan: the embedder may change what a child takes from its parent.
++  if (parent_ && g_child_color_provider_key_adjuster) {
++    g_child_color_provider_key_adjuster(parent_.get(), this, &key);
++  }
+ 
+   // Widgets may have specific overrides set on the Widget itself that should
+   // apply specifically to themselves and their children, apply these here.
