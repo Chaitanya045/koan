@@ -47,9 +47,9 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
 // macOS diagnostics: the key window, its first responder, and the card's
 // window (`card`, may be null) against the browser window's.
 std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser);
-// macOS diagnostics: makes the card's window the key window directly
-// ([NSWindow makeKeyWindow]).
-void MakeCardWindowKey(views::Widget* card);
+// macOS: the card's window is a top-level one (Open()); keeps it out of the
+// Window menu.
+void PrepareCardWindow(views::Widget* card);
 #endif
 
 // Zen-style Glance for one window: a link opened as a floating card over

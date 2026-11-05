@@ -453,10 +453,15 @@ const steps = {
     page = await waitFor(glancePage);
     await sleep(1000);
     await check('10 the POST loads in the card', !!page && await cardOpen());
-    const posted = await timeOrigin(page);
+    // The server counts the POSTs it answered (serve.sh's /posts).
+    const posts = () => evalIn(page, "fetch('/posts').then(r => r.text()).then(Number)");
+    const postsBefore = await posts();
     await key(K.R, 'c');
     await sleep(2000);
-    await check('10 ⌘R on a POST page does not resubmit', (await timeOrigin(page)) === posted);
+    page = await waitFor(glancePage);
+    const postsAfter = await posts();
+    await check('10 ⌘R on a POST page does not resubmit', postsAfter === postsBefore,
+                `POSTs ${postsBefore} -> ${postsAfter}`);
     await check('10 the card is still there', await cardOpen());
     await closeCard();
   },

@@ -11,9 +11,22 @@ serve() {
   python3 - "$1" >>"$log" 2>&1 <<'PY' &
 import http.server, sys
 class H(http.server.SimpleHTTPRequestHandler):
+    posts = 0
     def do_POST(self):
         n = int(self.headers.get('Content-Length', 0)); self.rfile.read(n)
+        H.posts += 1
         self.do_GET()
+    def do_GET(self):
+        # /posts: how many POSTs this server has answered (step 10).
+        if self.path == '/posts':
+            body = str(H.posts).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        super().do_GET()
 http.server.ThreadingHTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()
 PY
 }
