@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
-index e8f2df7fba871598e6313efb8cbf83ca8131b890..5352d9ba2cf5e87ee6e3a0c647524c0ec99316f3 100644
+index 94d977b..886e8da 100644
 --- a/chrome/browser/ui/startup/infobar_utils.cc
 +++ b/chrome/browser/ui/startup/infobar_utils.cc
 @@ -41,6 +41,7 @@
@@ -19,3 +19,14 @@ index e8f2df7fba871598e6313efb8cbf83ca8131b890..5352d9ba2cf5e87ee6e3a0c647524c0e
      if (infobars::IsInfoBarMigrated(
              infobars::InfoBarDelegate::GOOGLE_API_KEYS_INFOBAR_DELEGATE)) {
        if (auto* manager =
+@@ -320,7 +321,9 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+ #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+ 
+   // The default browser prompt should only be shown after the first run.
+-  if (is_first_run == chrome::startup::IsFirstRun::kNo) {
++  // Koan: Zen asks for the default browser once, in its welcome.
++  if (koan::kShowDefaultBrowserPrompts &&
++      is_first_run == chrome::startup::IsFirstRun::kNo) {
+ #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+     if (base::FeatureList::IsEnabled(features::kSeparateDefaultAndPinPrompt)) {
+       const int seed = features::kSeparateDefaultAndPinPromptRandSeed.Get();

@@ -51,6 +51,15 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   overrides.DisableFeature(
       feature_engagement::kIPHVerticalTabstripTutorialFeature);
   overrides.DisableFeature(tabs::kVerticalTabsNewBadge);
+  // Startup bars Zen doesn't have: "Koan will reopen your tabs" (Koan makes
+  // continue-where-you-left-off the default, which is exactly its trigger) and
+  // the PDF-viewer prompt. (The default-browser and pin prompts are gated in
+  // infobar_utils.cc; Zen asks once, in its welcome.)
+  overrides.DisableFeature(features::kSessionRestoreInfobar);
+#if BUILDFLAG(IS_MAC)
+  overrides.DisableFeature(features::kPdfInfoBar);
+  overrides.DisableFeature(features::kSeparateDefaultAndPinPrompt);
+#endif
 
   // Freeze background tabs beyond the 5 most recently used; they run for
   // 5 s each minute to catch up. Pinned tabs, tabs that played audio since
