@@ -32,6 +32,7 @@
 #include "koan/browser/ui/views/koan_system_accent.h"
 #include "koan/browser/ui/views/koan_theme_picker.h"
 #include "koan/browser/ui/views/koan_theme_platform.h"
+#include "koan/browser/ui/views/koan_widget_color_key.h"
 #include "koan/browser/ui/views/koan_window_background.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/mojom/themes.mojom.h"
@@ -111,6 +112,7 @@ void KoanThemeController::OnAddedToWidget() {
       profile()->IsOffTheRecord()) {
     return;
   }
+  InstallChildColorKeyAdjuster();
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
   observing_tab_strip_ = true;
   look::AddObserver(this);
@@ -145,6 +147,7 @@ void KoanThemeController::OnBrowserViewDestroying() {
   closed_picker_.reset();
   new_space_done_.Reset();
   switch_animation_.Stop();
+  grain_animation_.Stop();
   if (observing_tab_strip_) {
     browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
     observing_tab_strip_ = false;
@@ -289,9 +292,9 @@ void KoanThemeController::Update(bool animate) {
       switch_animation_.Stop();
       grain_animation_.Stop();
       fading_.clear();
-      SetWindowColors();
-      if (widget) {
-        // Views that cache the window's solid colour pick it up again.
+      // (A change of colours re-themes the window.) Views that cache the
+      // window's solid colour pick it up again.
+      if (!SetWindowColors() && widget) {
         widget->ThemeChanged();
       }
     }
@@ -336,7 +339,7 @@ void KoanThemeController::Update(bool animate) {
   // The theme's mode and accent reach every colour of the window (Chrome's
   // and Koan's colour IDs) through its colour key.
   if (widget) {
-    // (Setting an override already updated the window.)
+    // (A change of colours re-themes the window.)
     if (!SetWindowColors() && first) {
       // Views that cache the window's solid colour (the gutter's layer)
       // switch to painting the background.
@@ -361,40 +364,81 @@ bool KoanThemeController::PaintsTranslucent() const {
 }
 
 bool KoanThemeController::HasAppliedWindowColors() const {
+  // Koan sets the window's colours in its key (AdjustWindowColorKey()), never
+  // through the widget's overrides, and upstream's focus mode doesn't get to
+  // (koan::ApplySpaceColor()).
   const views::Widget* widget = browser_view_->GetWidget();
-  return !widget || (widget->color_mode_override() == applied_mode_ &&
-                     widget->user_color_override() == applied_color_);
+  return !widget || (!widget->color_mode_override().has_value() &&
+                     !widget->user_color_override().has_value());
+}
+
+void KoanThemeController::AdjustWindowColorKey(
+    ui::ColorProviderKey* key) const {
+  // The window's own scheme, which its panels keep (AdjustChildColorKey()).
+  window_mode_ = key->color_mode;
+  if (applied_mode_) {
+    key->color_mode = *applied_mode_;
+  }
+  if (applied_color_) {
+    key->user_color = *applied_color_;
+    key->user_color_source = ui::ColorProviderKey::UserColorSource::kAccent;
+  }
+}
+
+void KoanThemeController::AdjustChildColorKey(const views::Widget* child,
+                                              ui::ColorProviderKey* key) const {
+  // Zen sets zen-should-be-dark-mode on #browser only: panels, menus,
+  // dialogs, the find bar and the open URL bar keep the window's scheme
+  // (zen-theme.css), and the accent reaches them all. The window's own
+  // chrome in other widgets keeps the Space's: macOS's fullscreen overlay
+  // with the sidebar and toolbar, Glance and the Library (zen-glance.css,
+  // zen-library.css: --toolbar-color-scheme).
+  if (!applied_mode_ || child->GetName() == "KoanGlance" ||
+      child->GetName() == "KoanLibrary") {
+    return;
+  }
+#if BUILDFLAG(IS_MAC)
+  if (child == browser_view_->overlay_widget() ||
+      child == browser_view_->tab_overlay_widget()) {
+    return;
+  }
+#endif
+  key->color_mode = window_mode_;
 }
 
 bool KoanThemeController::SetWindowColors() {
   views::Widget* widget = browser_view_->GetWidget();
   // None for Zen's default theme or with Space themes off: the user's
   // colour and mode.
-  applied_mode_.reset();
-  applied_color_.reset();
+  std::optional<ui::ColorProviderKey::ColorMode> mode;
+  std::optional<SkColor> color;
   if (current_) {
     if (current_->dark) {
-      applied_mode_ = *current_->dark ? ui::ColorProviderKey::ColorMode::kDark
-                                      : ui::ColorProviderKey::ColorMode::kLight;
+      mode = *current_->dark ? ui::ColorProviderKey::ColorMode::kDark
+                             : ui::ColorProviderKey::ColorMode::kLight;
     }
     // The theme's primary colour is the window's accent (Chrome's and
     // Koan's colour IDs derive from it).
     if (const auto primary = current_->colors.find(theme::Token::kPrimary);
         primary != current_->colors.end()) {
-      applied_color_ = primary->second;
+      color = primary->second;
     }
   }
-  if (!widget || widget->IsClosed() ||
-      (widget->color_mode_override() == applied_mode_ &&
-       widget->user_color_override() == applied_color_)) {
+  if (mode == applied_mode_ && color == applied_color_) {
     return false;
   }
-  widget->SetColorModeOverride(applied_mode_);
-  widget->SetUserColorOverride(applied_color_);
-  // The window re-themes itself. Its child widgets take the colours through
-  // their parent's key but aren't told (upstream re-themes them only with
-  // kThemeChangeOptimization): on macOS the fullscreen overlay with the
-  // sidebar and toolbar, compact mode's, Glance, the floating URL bar.
+  applied_mode_ = mode;
+  applied_color_ = color;
+  if (!widget || widget->IsClosed()) {
+    return false;
+  }
+  // One re-theme for both, under the new key (two widget overrides would
+  // re-theme the window twice, once under an in-between key).
+  widget->ThemeChanged();
+  // Its child widgets take the colours through their parent's key but aren't
+  // told (upstream re-themes them only with kThemeChangeOptimization): on
+  // macOS the fullscreen overlay with the sidebar and toolbar, Glance, the
+  // floating URL bar, the bubbles.
   for (views::Widget* child :
        views::Widget::GetAllChildWidgets(widget->GetNativeView())) {
     if (child != widget && !child->IsClosed()) {
@@ -767,6 +811,44 @@ void KoanThemeController::AnimationEnded(const gfx::Animation* animation) {
   InvalidateBackground();
 }
 
+void AdjustWindowColorKey(const BrowserWindowInterface* browser,
+                          ui::ColorProviderKey* key) {
+  const BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  if (controller) {
+    controller->theme()->AdjustWindowColorKey(key);
+  }
+}
+
+namespace {
+
+void AdjustChildColorKey(const views::Widget* parent,
+                         const views::Widget* child,
+                         ui::ColorProviderKey* key) {
+  // Only a browser window's own children.
+  BrowserView* browser_view =
+      BrowserView::GetBrowserViewForNativeWindow(parent->GetNativeWindow());
+  const KoanBrowserViewController* controller =
+      browser_view && browser_view->GetWidget() == parent
+          ? KoanBrowserViewController::From(browser_view)
+          : nullptr;
+  if (controller) {
+    controller->theme()->AdjustChildColorKey(child, key);
+  }
+}
+
+}  // namespace
+
+void InstallChildColorKeyAdjuster() {
+  static bool installed = false;
+  if (!installed) {
+    installed = true;
+    views::SetChildColorProviderKeyAdjuster(&AdjustChildColorKey);
+  }
+}
+
 bool LocksExtensionTheme(const BrowserWindowInterface* browser) {
   // Zen disables lightweight themes (zen.theme.disable-lightweight;
   // LightweightThemeConsumer-sys-mjs.patch). Web apps keep theirs.
@@ -821,9 +903,9 @@ std::optional<bool> PrefersDarkWebColorScheme(
   }
   const BrowserWindowInterface* window = tab->GetBrowserWindowInterface();
   if (!window) {
-    // A tab between windows (dragged out, moved): the appearance setting,
-    // which is what websites get under a Space theme anyway.
-    return theme_service->BrowserUsesDarkColors();
+    // A tab between windows (dragged out, moved): no Space theme sets its
+    // mode, so Chrome decides.
+    return std::nullopt;
   }
   const BrowserView* browser_view =
       BrowserView::GetBrowserViewForBrowser(window);

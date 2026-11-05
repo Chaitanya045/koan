@@ -37,6 +37,7 @@ class Canvas;
 }  // namespace gfx
 
 namespace views {
+class Widget;
 class View;
 class ViewTracker;
 }  // namespace views
@@ -84,14 +85,24 @@ class KoanThemeController : public TabStripModelObserver,
   // theme). The shadcn style is flat.
   bool IsEnabled() const;
 
-  // The window's colour mode and accent (Widget::SetColorModeOverride(),
-  // SetUserColorOverride()): this controller is their one writer, from the
-  // Space theme shown. Re-applies them and re-themes the window's child
-  // widgets (from upstream's focus mode, koan::ApplySpaceColor()).
+  // The window's colour mode and accent, in its colour key
+  // (AdjustWindowColorKey()): this controller is their one writer, from the
+  // Space theme shown. Re-applies them and re-themes the window and its
+  // child widgets (from upstream's focus mode, koan::ApplySpaceColor()).
   void ApplyWindowColors();
-  // Whether the window's overrides are still the ones this controller set
-  // (the Spaces leak detector, KoanWorkspaceController::CheckSpaces()).
+  // Whether nothing set the window's colour overrides (the Spaces leak
+  // detector, KoanWorkspaceController::CheckSpaces()): this controller sets
+  // the colours in the window's key instead.
   bool HasAppliedWindowColors() const;
+  // The accent the Space theme puts in the window's colour key, if any.
+  std::optional<SkColor> window_accent() const { return applied_color_; }
+  // From BrowserWidget::GetColorProviderKey() (koan::AdjustWindowColorKey()):
+  // the Space theme's colour mode and accent in the window's key.
+  void AdjustWindowColorKey(ui::ColorProviderKey* key) const;
+  // For a child widget of the window (koan_widget_color_key.h): back to the
+  // window's own scheme, unless it is the window's chrome.
+  void AdjustChildColorKey(const views::Widget* child,
+                           ui::ColorProviderKey* key) const;
 
   // Paints the window's background (the active Space's gradient and grain)
   // behind `view`, aligned to the window.
@@ -239,6 +250,9 @@ class KoanThemeController : public TabStripModelObserver,
   Space current_space_;
   std::optional<ui::ColorProviderKey::ColorMode> applied_mode_;
   std::optional<SkColor> applied_color_;
+  // The window's scheme before the Space's mode, as its key last had it.
+  mutable ui::ColorProviderKey::ColorMode window_mode_ =
+      ui::ColorProviderKey::ColorMode::kLight;
 
   Space editing_space_;
   std::optional<theme::SpaceTheme> preview_;
