@@ -621,12 +621,17 @@ constexpr HeldCommand kHeldCommands[] = {
 
 }  // namespace
 
-KoanGlanceController::InputTracker::InputTracker(content::WebContents* contents)
-    : content::WebContentsObserver(contents) {}
+KoanGlanceController::InputTracker::InputTracker(
+    content::WebContents* contents,
+    KoanGlanceController* glance)
+    : content::WebContentsObserver(contents), glance_(glance) {}
 
 void KoanGlanceController::InputTracker::DidGetUserInteraction(
     const blink::WebInputEvent& event) {
   if (event.GetType() == blink::WebInputEvent::Type::kMouseDown) {
+    if (glance_) {
+      glance_->LogKeyWindow("press in the Glance page");
+    }
     // Any button: the activation click, or the right click that opened the
     // context menu. A press in a cross-site iframe comes in the iframe's
     // coordinates, so the card grows out of a point off the click there.
@@ -713,7 +718,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   zoom::ZoomController::CreateForWebContents(contents_.get());
   contents_->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
-  glance_input_ = std::make_unique<InputTracker>(contents_.get());
+  glance_input_ = std::make_unique<InputTracker>(contents_.get(), this);
 
   // A child widget over the contents area, so the overlay has its own native
   // window above the page's and receives the pointer everywhere over it.
@@ -744,6 +749,7 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   view_->PlayOpenAnimation(grow_rect_, /*fresh=*/true);
   view_->web_view()->RequestFocus();
   HoldCommands();
+  LogKeyWindow("opened");
 }
 
 void KoanGlanceController::PostAction(void (KoanGlanceController::*action)()) {
@@ -784,6 +790,7 @@ void KoanGlanceController::CloseNow() {
 }
 
 void KoanGlanceController::OnEscape() {
+  LogKeyWindow("Esc");
   if (!is_open() || closing_) {
     return;
   }
@@ -1074,6 +1081,15 @@ void KoanGlanceController::ReleaseCommands(bool restore) {
   }
 }
 
+void KoanGlanceController::LogKeyWindow(const char* where) const {
+#if BUILDFLAG(IS_MAC)
+  if (VLOG_IS_ON(1)) {
+    VLOG(1) << "Koan Glance keys: " << where << ": "
+            << DescribeKeyWindow(widget_.get(), browser_view_->GetWidget());
+  }
+#endif
+}
+
 void KoanGlanceController::EditUrl() {
   if (!is_open() || closing_ || awaiting_beforeunload_) {
     return;
@@ -1092,6 +1108,7 @@ void KoanGlanceController::FocusPage() {
   // browser window key). Elsewhere a no-op: the card can't be activated.
   widget_->Activate();
   view_->web_view()->RequestFocus();
+  LogKeyWindow("focus back to the page");
 }
 
 bool KoanGlanceController::LoadFromUrlBar(const GURL& url,
@@ -1285,6 +1302,9 @@ content::KeyboardEventProcessingResult
 KoanGlanceController::PreHandleKeyboardEvent(
     content::WebContents* source,
     const input::NativeWebKeyboardEvent& event) {
+  VLOG(1) << "Koan Glance keys: key event " << static_cast<int>(event.GetType())
+          << ", key code " << event.windows_key_code
+          << " reached the Glance page's delegate";
   // The browser's reserved keys (⌘W, ⌘T, ⌘N, tab switching) before the page,
   // as in a tab: a page can't keep the card open by swallowing ⌘W.
 #if BUILDFLAG(IS_MAC)
