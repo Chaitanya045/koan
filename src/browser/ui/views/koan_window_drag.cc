@@ -98,6 +98,13 @@ void KoanWindowDragController::ObserveActiveTab() {
                        : nullptr);
 }
 
+#if !BUILDFLAG(IS_MAC)
+bool IsWindowSnapped(const BrowserView* browser_view) {
+  const views::Widget* widget = browser_view->GetWidget();
+  return widget && widget->IsMaximized();
+}
+#endif
+
 void KoanWindowDragController::WatchWidget(content::RenderWidgetHost* host) {
   if (host == widget_host_) {
     return;
@@ -118,6 +125,13 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
   using Type = blink::WebInputEvent::Type;
   switch (event.GetType()) {
     case Type::kMouseDown: {
+#if BUILDFLAG(IS_MAC)
+      // A native drag that ended without a move after its release.
+      if (native_drag_started_) {
+        native_drag_started_ = false;
+        EndNativeWindowMove(browser_view_);
+      }
+#endif
       state_ = State::kIdle;
       content::RenderWidgetHostView* view =
           widget_host_ ? widget_host_->GetView() : nullptr;
@@ -162,6 +176,14 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
       if (!(event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown)) {
         // The release happened somewhere we didn't see it (e.g. the window
         // manager took it).
+#if BUILDFLAG(IS_MAC)
+        if (state_ == State::kDragging && native_drag_started_) {
+          // The page's view still has the button down: release it (the
+          // release it sends the page is swallowed, the page has its own).
+          native_drag_started_ = false;
+          EndNativeWindowMove(browser_view_);
+        }
+#endif
         state_ = State::kIdle;
         return false;
       }
@@ -171,10 +193,9 @@ bool KoanWindowDragController::OnMouseEvent(const blink::WebMouseEvent& event) {
       if (state_ != State::kArmed) {
         return false;
       }
-      // Un-snapping a maximized (or tiled: macOS reports tiling as zoomed)
-      // window takes a firmer gesture (Zen's SNAPPED_DRAG_START_THRESHOLD_PX).
-      const views::Widget* widget = browser_view_->GetWidget();
-      const float threshold = widget && widget->IsMaximized()
+      // Un-snapping a maximized or tiled window takes a firmer gesture (Zen's
+      // SNAPPED_DRAG_START_THRESHOLD_PX).
+      const float threshold = IsWindowSnapped(browser_view_)
                                   ? kWindowDragSnappedThreshold
                                   : kWindowDragThreshold;
       const gfx::Vector2dF moved = event.PositionInScreen() - press_in_screen_;
@@ -266,15 +287,21 @@ void KoanWindowDragController::StartDrag(const blink::WebMouseEvent& event) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
                      [](base::WeakPtr<KoanWindowDragController> self) {
-                       if (!self || !self->browser_view_->GetWidget() ||
-                           !StartNativeWindowMove(self->browser_view_)) {
-                         if (self) {
-                           self->state_ = State::kIdle;
-                         }
+                       if (!self || !self->browser_view_->GetWidget()) {
+                         return;
                        }
+                       // Where it can't start (the button is up already, or
+                       // a PWA's invisible window), the gesture stays ours
+                       // all the same, as in Zen: the page has had its
+                       // release, so it gets no more of it (nothing was
+                       // handed to AppKit, so no window sticks to the
+                       // pointer). Synthetic input (the e2e tests) never
+                       // holds the physical button.
+                       self->native_drag_started_ =
+                           StartNativeWindowMove(self->browser_view_);
                        // (AppKit takes the rest of the gesture, release
-                       // included: the state ends with the next move that
-                       // has no button down, or the next press.)
+                       // included: it ends with the next move that has no
+                       // button down, or the next press.)
                      },
                      weak_factory_.GetWeakPtr()));
 #endif
