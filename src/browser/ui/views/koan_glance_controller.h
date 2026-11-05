@@ -42,6 +42,9 @@ class KoanGlanceView;
 // switching ...), or 0 (koan_glance_controller_mac.mm).
 int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
                                const input::NativeWebKeyboardEvent& event);
+// macOS diagnostics: the key window, its first responder, and the card's
+// window (`card`, may be null) against the browser window's.
+std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser);
 #endif
 
 // Zen-style Glance for one window: a link opened as a floating card over
@@ -152,7 +155,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
   // focus (for Esc).
   class InputTracker : public content::WebContentsObserver {
    public:
-    explicit InputTracker(content::WebContents* contents);
+    // `glance`: set for the Glance page's tracker (key-window logging).
+    InputTracker(content::WebContents* contents,
+                 KoanGlanceController* glance = nullptr);
 
     struct Press {
       gfx::Point point;
@@ -168,6 +173,7 @@ class KoanGlanceController : public content::WebContentsDelegate,
         const content::FocusedNodeDetails& details) override;
 
    private:
+    const raw_ptr<KoanGlanceController> glance_;
     std::optional<Press> press_;
     bool editing_ = false;
   };
@@ -207,6 +213,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
   void TearDownIfSourceGone();
   // ⌘L in a Glance: the URL bar opens with the Glance page's address.
   void EditUrl();
+  // Diagnostics (--vmodule=koan_glance_controller=1): on macOS, which window
+  // is key and how the card's window stands, at `where`.
+  void LogKeyWindow(const char* where) const;
 
   // While the card is open, the enabled state of Back, Forward, Stop, zoom
   // and Find (kHeldCommands) follows the Glance page, as it follows the

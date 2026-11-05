@@ -6,11 +6,14 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "ui/gfx/native_ui_types.h"
+#include "ui/views/widget/widget.h"
 
 namespace koan {
 
@@ -43,6 +46,33 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
                  commands->IsReservedCommandOrKey(result.chrome_command, event)
              ? result.chrome_command
              : 0;
+}
+
+std::string DescribeKeyWindow(views::Widget* card, views::Widget* browser) {
+  NSWindow* key = NSApp.keyWindow;
+  NSWindow* card_window =
+      card ? card->GetNativeWindow().GetNativeNSWindow() : nil;
+  NSWindow* browser_window =
+      browser ? browser->GetNativeWindow().GetNativeNSWindow() : nil;
+  NSString* who = !key                     ? @"none"
+                  : key == card_window     ? @"the card's"
+                  : key == browser_window  ? @"the browser window"
+                                           : @"another window";
+  NSString* parent = !card_window.parentWindow ? @"none"
+                     : card_window.parentWindow == browser_window
+                         ? @"the browser window"
+                         : @"another window";
+  NSString* text = [NSString
+      stringWithFormat:
+          @"key window: %@ (%@ \"%@\"), its first responder %@; card window "
+          @"%@: canBecomeKey %d, isKey %d, visible %d, parent %@; card widget "
+          @"active %d, can activate %d; app active %d",
+          who, key.className, key.title, key.firstResponder.className,
+          card_window ? card_window.className : @"none",
+          card_window.canBecomeKeyWindow, card_window.isKeyWindow,
+          card_window.isVisible, parent, card ? card->IsActive() : 0,
+          card ? card->CanActivate() : 0, NSApp.isActive];
+  return base::SysNSStringToUTF8(text);
 }
 
 }  // namespace koan
