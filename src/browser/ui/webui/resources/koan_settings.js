@@ -5,6 +5,7 @@
 // Contains material ported from Zen Browser, Copyright the Zen Browser
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
 //   zen-preferences.ftl (strings)
+//   ZenKeyboardShortcuts.mjs (macOS key notation)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
@@ -224,19 +225,27 @@ const KEY_NAMES = {
   190: '.', 191: '/', 192: '`', 219: '[', 220: '\\', 221: ']', 222: '\'',
 };
 
-// Zen's display: Ctrl+Win+Alt+⇧+Key (also shortcuts::DisplayText() in
-// koan_shortcut_table.cc, for the command palette).
-// TODO(#51): on macOS Zen shows ⌃ ⌥ ⇧ ⌘ separated by spaces, ⌘ for "accel",
-// and ⎋ / ↩ for Escape / Enter; record ⌘ (metaKey) as the accelerator.
+// Zen's display: Ctrl+Win+Alt+⇧+Key, and on macOS "⌃ ⌘ ⌥ ⇧ Key" (also
+// shortcuts::DisplayText() in koan_shortcut_table.cc, for the command
+// palette). ⌘ is the key Zen calls "accel" there.
 function modifiersText(modifiers) {
   const m = settings.shortcuts.modifiers;
-  return [[m.ctrl, 'Ctrl'], [m.meta, 'Win'], [m.alt, 'Alt'], [m.shift, '⇧']]
-      .filter(([flag]) => modifiers & flag)
-      .map(([, name]) => `${name}+`)
+  const mac = settings.shortcuts.mac;
+  return [
+    [m.ctrl, '⌃', 'Ctrl'], [m.meta, '⌘', 'Win'], [m.alt, '⌥', 'Alt'],
+    [m.shift, '⇧', '⇧'],
+  ].filter(([flag]) => modifiers & flag)
+      .map(([, glyph, name]) => mac ? `${glyph} ` : `${name}+`)
       .join('');
 }
 
 function keyName(code) {
+  if (settings.shortcuts.mac) {
+    const glyph = {13: '↩', 27: '⎋', 32: '␣'}[code];
+    if (glyph) {
+      return glyph;
+    }
+  }
   if ((code >= 48 && code <= 57) || (code >= 65 && code <= 90)) {
     return String.fromCharCode(code);
   }
@@ -257,7 +266,7 @@ function sameKey(a, b) {
   return a.key === b.key && a.modifiers === b.modifiers;
 }
 
-// Like the browser's shortcut_table: a key with Ctrl, Alt or Win, or a
+// Like the browser's shortcut_table: a key with Ctrl, Alt or Win (⌘), or a
 // function key.
 function isValidKey(key) {
   const m = settings.shortcuts.modifiers;
@@ -311,20 +320,53 @@ function onShortcutFocus(input, action) {
   chrome.send('setEditing', [true]);
 }
 
+// Saves `key` (what was typed) for `action`, or says why it can't be.
+async function commitShortcut(input, action, key) {
+  const conflict = conflictOf(key, action);
+  let problem = null;
+  if (conflict) {
+    problem =
+        `Conflicts with ${groupTitle(conflict.group)} -> ${conflict.label}`;
+  } else if (isTabCycling(key)) {
+    problem = settings.shortcuts.mac ?
+        '⌃ Tab and ⌃ Page Up/Down switch tabs' :
+        'Ctrl+Tab and Ctrl+Page Up/Down switch tabs';
+  } else if (!isValidKey(key)) {
+    problem = settings.shortcuts.mac ?
+        'Use ⌃, ⌥ or ⌘ with the key, or a function key' :
+        'Use Ctrl, Alt or Win with the key, or a function key';
+  }
+  if (problem) {
+    input.classList.add('invalid');
+    setNote(input, 'conflict', problem);
+  } else if (await sendWithPromise('setShortcut', action.id, key)) {
+    input.classList.remove('invalid');
+    input.classList.add('valid');
+    setTimeout(() => input.classList.remove('valid'), 1000);
+    if (settings.shortcuts.chromium.some(k => sameKey(k, key))) {
+      setNote(input, 'replaces', 'Replaces Chromium\'s shortcut for this key');
+    }
+  } else {
+    input.classList.add('invalid');
+    setNote(input, 'conflict', 'This key can\'t be used for a shortcut');
+  }
+}
+
 function onShortcutBlur(input, action) {
   chrome.send('setEditing', [false]);
   input.classList.remove('editing');
-  if (!editor.saved) {
-    input.classList.add('unsaved');
-    setNote(input, 'unsaved', 'Unsaved shortcut! Please save it by ' +
-            'clicking the "Escape" key after retyping it.');
+  // Leaving the field with keys typed saves them too (Zen asks for Escape;
+  // people click away).
+  const unsaved = editor.saved ? null : editor.latest;
+  editor.action = null;
+  editor.latest = null;
+  editor.saved = true;
+  if (unsaved) {
+    commitShortcut(input, action, unsaved);
   }
   // The field shows the key that is bound; a refused one stays explained by
   // its note.
   showKeys(input, action);
-  editor.action = null;
-  editor.latest = null;
-  editor.saved = true;
 }
 
 async function onShortcutKeyDown(event, input, action) {
@@ -337,36 +379,19 @@ async function onShortcutKeyDown(event, input, action) {
     input.blur();
     return;
   }
-  if (!modifiers && event.key === 'Escape') {
-    const key = editor.latest;
-    if (key) {
-      const conflict = conflictOf(key, action);
-      let problem = null;
-      if (conflict) {
-        problem =
-            `Conflicts with ${groupTitle(conflict.group)} -> ${conflict.label}`;
-      } else if (isTabCycling(key)) {
-        problem = 'Ctrl+Tab and Ctrl+Page Up/Down switch tabs';
-      } else if (!isValidKey(key)) {
-        problem = 'Use Ctrl, Alt or Win with the key, or a function key';
-      }
-      if (problem) {
-        input.classList.add('invalid');
-        setNote(input, 'conflict', problem);
-      } else if (await sendWithPromise('setShortcut', action.id, key)) {
-        input.classList.remove('invalid');
-        input.classList.add('valid');
-        setTimeout(() => input.classList.remove('valid'), 1000);
-        if (settings.shortcuts.chromium.some(k => sameKey(k, key))) {
-          setNote(input, 'replaces', 'Replaces Chromium\'s shortcut for this key');
-        }
-      } else {
-        input.classList.add('invalid');
-        setNote(input, 'conflict', 'This key can\'t be used for a shortcut');
-      }
+  // Escape saves the keys typed, as in Zen. So does a bare Enter, which would
+  // otherwise replace them with "↩": a shortcut needs a modifier or an F-key,
+  // so Enter alone is never one.
+  if (!modifiers && (event.key === 'Escape' ||
+                     (event.key === 'Enter' && editor.latest))) {
+    if (editor.latest) {
+      await commitShortcut(input, action, editor.latest);
     }
     editor.saved = true;
     input.blur();
+    return;
+  }
+  if (!modifiers && event.key === 'Enter') {
     return;
   }
   if (!modifiers && event.key === 'Backspace') {

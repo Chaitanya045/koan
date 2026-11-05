@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index afc3f64a97c6a8676a656fca1a3ede18eb23b1fb..8177400cf2f3ab738c561174c5bec604a8484b40 100644
+index afc3f64..96c38f0 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
 @@ -147,6 +147,7 @@
@@ -44,3 +44,26 @@ index afc3f64a97c6a8676a656fca1a3ede18eb23b1fb..8177400cf2f3ab738c561174c5bec604
        chrome::ToggleAlwaysShowToolbarInFullscreen(browser_);
        break;
      case IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS: {
+@@ -1124,10 +1136,10 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       FindPrevious(browser_);
+       break;
+     case IDC_CLOSE_FIND_OR_STOP:
++      // Koan: Zen leaves Esc unbound as Stop (the stop button, and Cmd+.
++      // on macOS, still stop).
+       if (CanCloseFind(browser_)) {
+         CloseFind(browser_);
+-      } else if (IsCommandEnabled(IDC_STOP)) {
+-        ExecuteCommand(IDC_STOP);
+       }
+       break;
+ 
+@@ -2806,7 +2818,8 @@ void BrowserCommandController::UpdateCommandsForFind() {
+ }
+ 
+ void BrowserCommandController::UpdateCloseFindOrStop() {
+-  bool enabled = CanCloseFind(browser_) || IsCommandEnabled(IDC_STOP);
++  // Koan: Esc only closes the find bar, the page gets it otherwise.
++  bool enabled = CanCloseFind(browser_);
+   command_updater_->UpdateCommandEnabled(IDC_CLOSE_FIND_OR_STOP, enabled);
+ }
+ 

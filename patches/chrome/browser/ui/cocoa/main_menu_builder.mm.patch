@@ -1,0 +1,19 @@
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -23,6 +23,7 @@
+ #include "chrome/grit/generated_resources.h"
+ #include "components/dom_distiller/core/dom_distiller_features.h"
+ #include "components/strings/grit/components_strings.h"
++#include "koan/browser/ui/cocoa/koan_main_menu.h"
+ #include "ui/base/accelerators/platform_accelerator_cocoa.h"
+ #import "ui/base/cocoa/macos27_sdk.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -637,6 +638,8 @@
+     }
+   }
+ 
++  koan::ExtendMainMenu(main_menu, is_pwa);
++
+   nsapp.mainMenu = main_menu;
+ 
+   return main_menu;

@@ -144,7 +144,17 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   right. Trackpad swipes between Spaces: `KoanSpaceSwipe`. Neither could be
   run on a Mac by the agent that wrote them: see the PR for what the macOS CI
   compiled.
-- Shortcuts are still Ctrl-based. ⌘ shortcuts are #71.
+- Shortcuts follow Zen's macOS table (#71): `kAccel` is ⌘, the table is in
+  `src/browser/koan_shortcut_table.cc`, and the menu bar and Dock menu in
+  `src/browser/ui/cocoa/koan_main_menu_mac.mm` (hooks in
+  `main_menu_builder.mm` and `app_controller_mac.mm`). Key path on a Mac:
+  `ChromeCommandDispatcherDelegate` runs high-priority views accelerators
+  and Chrome's reserved commands first (`prePerformKeyEquivalent`), then the
+  page, then normal-priority accelerators (`postPerformKeyEquivalent`,
+  before the main menu). Koan registers shortcuts on reserved keys
+  (`shortcuts::IsReservedOnMac()`) at high priority, and keeps the menu bar's
+  keys in line with Koan's (items give up or take a key at "menu open").
+  Tried on a Mac by the Mac loop, not by the agent.
 
 ## Sidebar animations (#94)
 
@@ -167,3 +177,20 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
 - Compact mode and single toolbar apply in native fullscreen on macOS (the
   card stays, see `UseContentCard()`); see the entry above for the top
   container.
+
+## "Relaunch ... to keep it encrypted" infobar (#141)
+
+`MaybeShowOSCryptAsyncAvailabilityInfoBar` (`infobar_utils.cc`, feature
+`kOSCryptAsyncAvailabilityInfoBar`, on by default on macOS) shows it when the
+async `Encryptor` has no key. With `--use-mock-keychain` (what
+`scripts/run_mac.sh` and test launches pass) the async key provider
+(`KeychainKeyProvider`) asks a `FakeKeychainV2`, which refuses an item without
+its access group (`errSecMissingEntitlement`), so `KeychainPassword::GetPassword()`
+is empty and encryption is "unavailable" on every launch. Koan switches the
+infobar off in that case (`koan_feature_overrides.cc`). Without the flag the
+login keychain item "Koan Safe Storage" is created by the first launch with no
+prompt; an ad-hoc signed build whose signature changed since the item was
+created gets a keychain access prompt ("Always Allow" doesn't stick across
+builds): if that is denied the bar is the correct warning. A stable local
+signing identity would stop the prompts (not set up).
+

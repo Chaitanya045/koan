@@ -1,0 +1,33 @@
+diff --git a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
+index 4eb9220..d7bc4a6 100644
+--- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
++++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
+@@ -33,6 +33,7 @@
+ #include "components/prefs/pref_notifier_impl.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/sessions/core/session_id.h"
++#include "koan/browser/koan_tab_hooks.h"
+ #include "ui/actions/actions.h"
+ #include "ui/base/accelerators/accelerator.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -57,6 +58,8 @@ VerticalTabStripStateControllerImpl::VerticalTabStripStateControllerImpl(
+       browser_window_(browser_window) {
+   pref_change_registrar_.Init(pref_service_);
+ 
++  // Koan: Zen has no horizontal tabs; an old profile's pref is turned on.
++  koan::KeepVerticalTabsOn(pref_service_);
+   is_vertical_tabs_enabled_ =
+       pref_service_->GetBoolean(prefs::kVerticalTabsEnabled);
+ 
+@@ -258,6 +261,11 @@ void VerticalTabStripStateControllerImpl::NotifyCollapseChanged() {
+ }
+ 
+ void VerticalTabStripStateControllerImpl::OnModeChanged() {
++  // Koan: the pref went off (the settings page); it is on again, and that
++  // change comes back here.
++  if (koan::KeepVerticalTabsOn(pref_service_)) {
++    return;
++  }
+   const bool new_enabled =
+       pref_service_->GetBoolean(prefs::kVerticalTabsEnabled);
+   if (new_enabled &&

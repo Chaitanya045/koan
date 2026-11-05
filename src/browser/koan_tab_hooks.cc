@@ -8,6 +8,7 @@
 
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
+#include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
@@ -77,6 +78,15 @@ bool ShowsFocusExitedToast(content::BrowserContext* context) {
 
 bool SavesTabGroups(content::BrowserContext* context) {
   return !features::IsWorkspacesEnabled() || context->IsOffTheRecord();
+}
+
+bool KeepVerticalTabsOn(PrefService* prefs) {
+  if (!features::IsSidebarEnabled() ||
+      prefs->GetBoolean(::prefs::kVerticalTabsEnabled)) {
+    return false;
+  }
+  prefs->SetBoolean(::prefs::kVerticalTabsEnabled, true);
+  return true;
 }
 
 }  // namespace koan

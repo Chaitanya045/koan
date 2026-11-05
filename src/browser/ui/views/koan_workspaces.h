@@ -231,6 +231,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void StartRename();
   // Zen's emoji picker for the Space's icon.
   void ShowIconPicker(const tab_groups::TabGroupId& space, views::View* anchor);
+  // The Spaces menu bar's Change Icon… and Theme… for the active Space
+  // (Zen's cmd_zenChangeWorkspaceIcon / cmd_zenOpenZenThemePicker), anchored
+  // on the Space's header. Nothing without a visible header.
+  void ShowIconPickerForActiveSpace();
+  void EditActiveSpaceTheme();
   // Zen's mouse wheel over the sidebar (horizontal, or vertical with Ctrl):
   // one Space per notch, at most every 200 ms. Touchpad swipes are
   // upstream's VerticalTabStripFocusSwipeController.

@@ -2,6 +2,8 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//testing/test.gni")
+
 # Koan base::Features. Depends on //base only, so any upstream target can
 # depend on it cheaply.
 source_set("features") {
@@ -56,6 +58,23 @@ source_set("shortcut_table") {
   ]
 }
 
+# The shortcut table's tests, against Zen 1.24b's keys. Build and run:
+#   autoninja -C out/Koan koan/browser:koan_shortcut_unittests
+#   out/Koan/koan_shortcut_unittests
+test("koan_shortcut_unittests") {
+  sources = [ "koan_shortcut_table_unittest.cc" ]
+  deps = [
+    ":shortcut_table",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gtest",
+    "//ui/base",
+    "//ui/events:event_constants",
+    "//ui/events:events_base",
+  ]
+}
+
 # Zen's tab behaviours, called from upstream tab code (tab_strip_model.cc,
 # back_to_opener_controller.cc). No tab strip deps, so those can use it.
 source_set("tab_hooks") {
@@ -67,6 +86,7 @@ source_set("tab_hooks") {
   deps = [
     ":features",
     ":prefs",
+    "//chrome/common:constants",
     "//components/prefs",
     "//components/user_prefs",
     "//content/public/browser",
@@ -99,9 +119,13 @@ source_set("feature_overrides") {
     "koan_feature_overrides.h",
   ]
   deps = [
+    "//base",
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/tabs:features",
     "//components/performance_manager",
     "//components/variations",
   ]
+  if (is_mac) {
+    deps += [ "//components/os_crypt/common:switches" ]
+  }
 }

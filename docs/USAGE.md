@@ -6,7 +6,7 @@ plain Chromium (rendering, DevTools, extensions, `chrome://` pages).
 
 ## Shortcuts
 
-Koan uses Zen's default shortcuts (Zen shortcuts version 21, Linux). Where
+Koan uses Zen's default shortcuts (Zen shortcuts version 21). Where
 Zen deliberately rebinds a key that Chrome uses, Koan follows Zen; the
 "Chrome had" column says what moved. Everything not listed behaves as in
 Chrome.
@@ -28,7 +28,7 @@ Chrome.
 | Pin / unpin tab (pinned to its Space) | Ctrl+Shift+D | Bookmark all tabs |
 | Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | Ctrl+W, Ctrl+F4 (⌘W) | |
 | Close all unpinned tabs (in the Space; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
-| Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still, otherwise) |
+| Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still on Linux; unbound on macOS, as in Zen) |
 | Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
 | Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
 | Save page | Ctrl+Alt+Shift+S | |
@@ -39,7 +39,7 @@ Chrome.
 | New private window | Ctrl+Shift+P | Print using system dialog |
 | Mute site | Ctrl+M | |
 | Bookmarks | Ctrl+B | |
-| Library: Downloads | Ctrl+Shift+Y (⌘⇧J) | macOS: Downloads page (⌘⇧J) |
+| Library: Downloads | Ctrl+Shift+Y (⌘J) | macOS: Downloads page (⌘⇧J, now ⌘J) |
 | Reading mode | Ctrl+Alt+R | |
 | Edit the address | Ctrl+L, or click the URL pill | |
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
@@ -47,6 +47,69 @@ Chrome.
 | Koan settings (Zen's "Open Preferences") | Ctrl+, | |
 
 Change any of them in Settings > Keyboard Shortcuts (below).
+
+### On macOS
+
+Zen's "accel" is ⌘ on a Mac, so the keys above that say Ctrl are ⌘ there
+(the Space and Mute shortcuts excepted), shown in Zen's notation: `⌘ ⇧ C`.
+Zen's Firefox-based macOS differences are followed:
+
+| Action | Keys | What it takes |
+|---|---|---|
+| Toggle compact mode | ⌘S | Save Page (now ⌘⌥⇧S, also in File) |
+| Show the sidebar in compact mode | ⌘⌥S | |
+| Next / previous Space | ⌘⌥→ / ⌘⌥← | Chrome's tab switching (still ⌃Tab, ⌃⇧Tab, ⇧⌘[ and ⇧⌘]) |
+| Space 1 to 10 | ⌃1 … ⌃9, ⌃0 | macOS's Switch to Desktop 1-4, if you turned those on in System Settings |
+| Split view | ⌘⌥V / ⌘⌥H / ⌘⌥G / ⌘⌥U, ⌘⇧* | ⌘⌥H is Hide Others, ⌘⌥U View Source |
+| New tab (opens the URL bar) | ⌘T | |
+| Copy the page's URL (as Markdown) | ⌘⇧C (⌘⇧⌥C) | Inspect element (now ⌘⌥L; ⌘⌥C still works) |
+| Pin / unpin tab; close all unpinned tabs | ⌘⇧D; ⌘⇧K | Bookmark All Tabs |
+| New window | ⌘N (Chrome's), ⌘⇧N | New Incognito Window (now ⌘⇧P) |
+| New private window | ⌘⇧P | |
+| Inspect element | ⌘⌥L, ⌘⇧L | Downloads (⌘⌥L), collapse of the vertical tab strip (⌘⇧L); ⌘⌥C still works |
+| Downloads | ⌘J (Firefox's) | Chrome's ⌘⇧J |
+| Mute site | ⌃M (Control, as in Firefox) | |
+| View Source; Bookmark Manager | ⌘U; ⇧⌘O (Firefox's, which Zen keeps) | ⌘⌥U (Unsplit's now); ⌘⌥B |
+| Stop loading | ⌘. and the stop button, not Esc (Zen leaves Esc unbound) | Esc |
+| Bookmarks sidebar | ⌘B | |
+| Reading mode | ⌘⌥R | |
+| Library | ⌥⇧L | |
+| Koan settings | ⌘, | Preferences… (still in the Koan menu, no key) |
+| **Koan only:** single / multiple toolbars; create a Space | ⌃⌥B; ⌃⌥N | |
+
+Koan's shortcut takes the key where it is the same as Chrome's menu key, and
+the menu bar says so: the Chrome item that Koan took the key from shows no
+key (Hide Others, Bookmark All Tabs ...), and Save Page, New Private
+Window, Inspect Element, Mute and Downloads show Koan's key. A Space or tab
+shortcut that Chrome treats as reserved (⌘⇧N, ⌘⌥←, ⌘⌥→) is tried before
+Chrome's. Settings > Keyboard Shortcuts refuses keys macOS keeps for
+itself (⌘Q, ⌘H, ⌘M, ⌘Space, ⌘Tab, ⌘`, ⌃ with the arrow keys, ⇧⌘3/4/5 ...),
+and says "Replaces Chromium's shortcut" for the keys it takes from Chrome's
+menus.
+
+**Menu bar.** Zen 1.24b's: File, Edit, View, Spaces, History, Bookmarks,
+Tools, Window, Help. Chrome's Tab menu is hidden and its Profiles menu removed (Zen sets `browser.profiles.enabled=false`), and the keys
+follow the shortcuts in effect (also after you change one in Settings):
+
+- **Zen** (app menu): Settings… (⌘,), which opens Koan's settings.
+- **File:** New Blank Window (⌘⇧N, Zen's; a plain new window here, there is
+  no window sync) after New Window, and New Private Window (⌘⇧P) for
+  Chrome's Incognito.
+- **View:** Appearance > Automatic / Light / Dark first, as in Zen; Chrome's
+  bookmark bar, full-screen toolbar, full URLs, AI, Lens, vertical tabs, Cast
+  and Developer items are hidden. (Zen's Toolbars, Sidebar and Collapse
+  Pinned Tabs aren't there: Koan has no such menu items.)
+- **Spaces:** Create Space, Edit Theme…, Change Name…, Change Icon…, Next
+  Space (⌘⌥→), Previous Space (⌘⌥←). Edit Theme… and Change Icon… open on the
+  Space's header. The Library, compact mode, split view, Glance and pinning
+  are in the sidebar, the command palette and their keys, as in Zen.
+- **Tools:** Downloads (⌘J), Extensions, and Browser Tools (Developer Tools,
+  JavaScript Console, View Source ⌘U, Task Manager).
+
+Items are greyed when they don't apply (no Spaces, ...).
+
+**Dock menu:** New Window and New Private Window, as in Zen's Dock menu, and
+your Spaces (✓ on the active one) to switch the window that was active last.
 
 When a page uses a key itself (for example Ctrl+S in an online editor), the
 page gets it first, as in every browser.
@@ -462,11 +525,12 @@ from its sidebar.
     follows that instead, as the page notes; Ctrl+Page Up/Down still follow
     Koan's settings.
 - **Keyboard Shortcuts**: Zen's shortcut editor. Click a shortcut, type
-  the new keys and press **Esc** to save them; **Backspace** clears the
+  the new keys and press **Esc** (or **Enter**) to save them; **Backspace** clears the
   shortcut, **Tab** leaves it unchanged. A key another shortcut already
   uses is refused ("Conflicts with ..."), and so are Ctrl+Tab and
   Ctrl+Page Up/Down, which switch tabs. A key needs Ctrl, Alt or Win
-  (or is a function key). **Reset to Default** restores Zen's keys.
+  (⌃, ⌥ or ⌘ on macOS, where the keys macOS keeps for itself are refused too;
+  or is a function key). **Reset to Default** restores Zen's keys.
   Shortcuts for features switched off in `chrome://flags` aren't listed.
 
 Changes apply at once to every window, private windows included (they

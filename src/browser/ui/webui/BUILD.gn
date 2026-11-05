@@ -35,6 +35,9 @@ source_set("webui") {
     "//ui/base",
     "//ui/events:event_constants",
   ]
+  if (is_mac) {
+    deps += [ "//koan/browser/ui/cocoa:hooks" ]
+  }
 }
 
 # The page's files as C++ strings (koan_settings_resources.h).

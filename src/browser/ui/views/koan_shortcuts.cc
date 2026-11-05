@@ -45,12 +45,34 @@
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/common/koan_url_constants.h"
+#if BUILDFLAG(IS_MAC)
+#include "koan/browser/ui/cocoa/koan_main_menu.h"
+#endif
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/focus/focus_manager.h"
 #include "url/gurl.h"
 
 namespace koan {
+
+namespace {
+
+// Actions that open a window, a tab or a form, which a held key must not
+// repeat.
+bool CreatesSomething(shortcuts::Action action) {
+  switch (action) {
+    case shortcuts::Action::kNewTab:
+    case shortcuts::Action::kNewWindow:
+    case shortcuts::Action::kNewPrivateWindow:
+    case shortcuts::Action::kNewWorkspace:
+    case shortcuts::Action::kNewEmptySplit:
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
 
 KoanShortcutController::KoanShortcutController(
     BrowserView* browser_view,
@@ -93,15 +115,14 @@ void KoanShortcutController::RegisterAccelerators() {
   for (const Binding& binding : bindings_) {
     auto priority = ui::AcceleratorManager::kNormalPriority;
 #if BUILDFLAG(IS_MAC)
-    // On macOS Chrome runs its menu shortcuts before normal priority
-    // accelerators (ChromeCommandDispatcherDelegate's
-    // prePerformKeyEquivalent). Zen's Space keys are Chrome's
-    // Cmd+Option+arrow tab switching there, and the Library's History and
-    // Downloads keys (Cmd+Y, Cmd+Shift+H, Cmd+Shift+J) Chrome's History,
-    // Home and Downloads: those come first. (The other keys stay behind text
-    // fields and pages.)
-    if (binding.action == Action::kWorkspaceForward ||
-        binding.action == Action::kWorkspaceBackward ||
+    // On macOS Chrome runs its reserved commands (Cmd+Shift+N, Cmd+T, Cmd+W,
+    // Cmd+Option+arrows ...) in prePerformKeyEquivalent, before normal
+    // priority accelerators: a Koan shortcut on one of those keys, like Zen's
+    // Space keys (Chrome's tab switching) and Cmd+Shift+N, is high priority
+    // to come first. So are the Library's History and Downloads keys (Cmd+Y,
+    // Cmd+Shift+H, Cmd+Shift+J), which are Chrome's menu keys for History,
+    // Home and Downloads. (The others stay behind text fields and pages.)
+    if (shortcuts::IsReservedOnMac(binding.accelerator) ||
         binding.action == Action::kLibraryHistory ||
         binding.action == Action::kDownloads) {
       priority = ui::AcceleratorManager::kHighPriority;
@@ -127,6 +148,11 @@ void KoanShortcutController::OnShortcutsChanged() {
     focus_manager_->UnregisterAccelerators(this);
     RegisterAccelerators();
   }
+#if BUILDFLAG(IS_MAC)
+  // The menu bar's keys follow, or the old key would still run the action
+  // through the menu.
+  RefreshMainMenuKeys();
+#endif
 }
 
 void KoanShortcutController::OnBrowserViewDestroying() {
@@ -141,9 +167,11 @@ bool KoanShortcutController::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
   for (const Binding& binding : bindings_) {
     if (binding.accelerator == accelerator) {
-      // Like Chrome's New Tab, a held key doesn't repeat: it would open and
-      // close the URL bar over and over.
-      if (binding.action == Action::kNewTab && accelerator.IsRepeat()) {
+      // Like Chrome's New Tab and New Window, a held key doesn't repeat: it
+      // would open and close the URL bar, or open window after window. (On
+      // macOS Chrome drops those repeats after the high priority
+      // accelerators, which these come before.)
+      if (accelerator.IsRepeat() && CreatesSomething(binding.action)) {
         return true;
       }
       return Run(binding.action);
@@ -159,6 +187,69 @@ bool KoanShortcutController::AcceleratorPressed(
 
 bool KoanShortcutController::CanHandleAccelerators() const {
   return browser_view_->GetIsNormalType();
+}
+
+bool KoanShortcutController::CanRun(Action action) const {
+  const shortcuts::Info* info = nullptr;
+  for (const shortcuts::Info& candidate : shortcuts::Actions()) {
+    if (candidate.action == action) {
+      info = &candidate;
+      break;
+    }
+  }
+  if (!info || (info->is_available && !info->is_available())) {
+    return false;
+  }
+  const KoanWorkspaceController* workspaces = controller_->workspaces();
+  BrowserWindowInterface* browser = browser_view_->browser();
+  tabs::TabInterface* tab = browser->GetTabStripModel()->GetActiveTab();
+  if (const int number = shortcuts::SwitchWorkspaceNumber(action)) {
+    return workspaces->IsEnabled() &&
+           number <= static_cast<int>(workspaces->GetSpaces().size());
+  }
+  switch (action) {
+    case Action::kWorkspaceForward:
+    case Action::kWorkspaceBackward:
+      return workspaces->IsEnabled() && workspaces->GetSpaces().size() > 1;
+    case Action::kNewWorkspace:
+      return workspaces->IsEnabled();
+    case Action::kUnsplit:
+      return tab && tab->IsSplit();
+    case Action::kNewEmptySplit:
+      return chrome::IsCommandEnabled(browser, IDC_NEW_SPLIT_TAB);
+    case Action::kSplitGrid:
+    case Action::kSplitVertical:
+    case Action::kSplitHorizontal:
+    case Action::kCopyUrl:
+    case Action::kCopyUrlMarkdown:
+    case Action::kTogglePinTab:
+      return tab != nullptr;
+    case Action::kResetPinnedTab:
+      return tab && IsPinnedForUser(tab);
+    case Action::kGlanceExpand:
+      return controller_->glance()->is_open() &&
+             !controller_->glance()->is_closing();
+    case Action::kSavePage:
+      return chrome::IsCommandEnabled(browser, IDC_SAVE_PAGE);
+    case Action::kLibrary:
+      return controller_->library()->IsAvailable();
+    case Action::kInspect:
+      return chrome::IsCommandEnabled(browser, IDC_DEV_TOOLS_INSPECT);
+    case Action::kNewWindow:
+      return chrome::IsCommandEnabled(browser, IDC_NEW_WINDOW);
+    case Action::kNewPrivateWindow:
+      return chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW);
+    case Action::kMuteSite:
+      return chrome::IsCommandEnabled(browser, IDC_WINDOW_MUTE_SITE);
+    case Action::kBookmarks:
+      return chrome::IsCommandEnabled(browser, IDC_SHOW_BOOKMARK_SIDE_PANEL);
+    case Action::kDownloads:
+      return chrome::IsCommandEnabled(browser, IDC_SHOW_DOWNLOADS);
+    case Action::kReaderMode:
+      return chrome::IsCommandEnabled(browser, IDC_SHOW_READING_MODE);
+    default:
+      return true;
+  }
 }
 
 bool KoanShortcutController::Run(Action action) {

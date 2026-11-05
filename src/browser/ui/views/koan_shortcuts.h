@@ -51,6 +51,10 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   // Runs `action`; returns false if it doesn't apply right now (the key then
   // goes on to Chrome's own handler).
   bool Run(Action action);
+  // Whether `action` applies right now (its feature is on and there is
+  // something to act on), for menus that show it enabled or not. Run() may
+  // still return false for one that can: it also checks the page's state.
+  bool CanRun(Action action) const;
 
   // Closes the unpinned tabs of the focused workspace (or, with none focused,
   // the tabs in no workspace), like Zen's "Clear" in the sidebar
@@ -66,6 +70,8 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   // the selected tabs and those playing sound, unless that is all of them.
   static bool IsClosableByClear(const TabStripModel* model, int index);
 
+  // The keys in effect, for menus that show them.
+  const std::vector<Binding>& bindings() const { return bindings_; }
   // The key currently bound to `action` (the user may rebind it), if any.
   std::optional<ui::Accelerator> GetAccelerator(Action action) const;
   // Whether `accelerator` runs a Koan shortcut instead of Chrome's command.

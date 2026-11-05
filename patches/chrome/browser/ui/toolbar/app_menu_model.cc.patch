@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 49ef721..bae026c 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -157,6 +157,7 @@
+ #include "content/public/common/profiling.h"
+ #include "content/public/common/url_constants.h"
+ #include "extensions/common/extension_features.h"
++#include "koan/browser/koan_features.h"
+ #include "media/base/media_switches.h"
+ #include "ui/actions/actions.h"
+ #include "ui/base/accelerators/menu_label_accelerator_util.h"
+@@ -1075,7 +1076,9 @@ void ToolsMenuModel::Build(BrowserWindowInterface* browser) {
+       this, IDC_NAME_WINDOW, IDS_NAME_WINDOW,
+       features::IsRoundedIconsEnabled() ? kWebAssetIcon : kNameWindowOldIcon);
+ 
+-  if (auto* controller = tabs::VerticalTabStripStateController::From(browser)) {
++  // Koan: Zen has no horizontal tabs, so no switch.
++  if (auto* controller = tabs::VerticalTabStripStateController::From(browser);
++      controller && !koan::features::IsSidebarEnabled()) {
+     if (controller->ShouldDisplayVerticalTabs()) {
+       AddItemWithStringIdAndVectorIcon(
+           this, IDC_TOGGLE_VERTICAL_TABS, IDS_SWITCH_TO_HORIZONTAL_TAB,

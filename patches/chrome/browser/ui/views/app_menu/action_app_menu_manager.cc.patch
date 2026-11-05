@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/ui/views/app_menu/action_app_menu_manager.cc b/chrome/browser/ui/views/app_menu/action_app_menu_manager.cc
+index 7888046..fbd4fa5 100644
+--- a/chrome/browser/ui/views/app_menu/action_app_menu_manager.cc
++++ b/chrome/browser/ui/views/app_menu/action_app_menu_manager.cc
+@@ -106,6 +106,7 @@
+ #include "components/vector_icons/vector_icons.h"
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/koan_features.h"
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+ #include "chrome/browser/extensions/extension_ui_util.h"
+ #endif
+@@ -1105,9 +1106,11 @@ void ActionAppMenuManager::AddToolsAndActionsActions(
+ 
+               sub.AddAction(kActionNameWindow);
+ 
++              // Koan: Zen has no horizontal tabs, so no switch.
+               if (auto* controller =
+                       tabs::VerticalTabStripStateController::From(
+-                          browser_window_interface_.get())) {
++                          browser_window_interface_.get());
++                  controller && !koan::features::IsSidebarEnabled()) {
+                 if (controller->ShouldDisplayVerticalTabs()) {
+                   sub.AddAction(
+                       kActionToggleVerticalTabs,

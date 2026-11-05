@@ -4,10 +4,16 @@
 
 #include "koan/browser/koan_feature_overrides.h"
 
+#include "base/command_line.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "components/performance_manager/public/features.h"
 #include "components/variations/feature_overrides.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "components/os_crypt/common/os_crypt_switches.h"
+#endif
 
 namespace koan {
 
@@ -36,6 +42,18 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // measurement stays: energy saver's freezing of busy tabs needs it.)
   overrides.DisableFeature(
       performance_manager::features::kMemoryMeasurementInFreezingPolicy);
+
+#if BUILDFLAG(IS_MAC)
+  // "Relaunch the browser to load your profile data and keep it encrypted":
+  // shown when the encryption key can't be had. With --use-mock-keychain
+  // (scripts/run_mac.sh, tests) the key never can: the async key provider
+  // then asks a fake keychain, which refuses an item without its access group
+  // (errSecMissingEntitlement). That is no problem of the profile, so no bar.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          os_crypt::switches::kUseMockKeychain)) {
+    overrides.DisableFeature(features::kOSCryptAsyncAvailabilityInfoBar);
+  }
+#endif
 }
 
 }  // namespace koan

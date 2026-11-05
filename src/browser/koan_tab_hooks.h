@@ -9,6 +9,8 @@
 
 #include "base/functional/function_ref.h"
 
+class PrefService;
+
 namespace content {
 class BrowserContext;
 class WebContents;
@@ -49,6 +51,12 @@ bool ShowsFocusExitedToast(content::BrowserContext* context);
 // groups, restored from it). Not with Koan's Spaces: Zen has no such list,
 // and saved groups reopen with every tab loading.
 bool SavesTabGroups(content::BrowserContext* context);
+
+// Zen has no horizontal tabs: with the sidebar on, the vertical tabs pref
+// (prefs::kVerticalTabsEnabled) is always on. Turns it back on if it is off
+// (an old profile, or the settings page) and returns whether it did. Called
+// from VerticalTabStripStateControllerImpl.
+bool KeepVerticalTabsOn(PrefService* prefs);
 
 }  // namespace koan
 
