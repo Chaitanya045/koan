@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/new_tab_page/composebox/variations/composebox_fieldtrial.h"
 #include "chrome/common/chrome_features.h"
+#include "components/compose/core/browser/compose_features.h"
 #include "components/contextual_tasks/public/features.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/lens/lens_features.h"
@@ -143,6 +144,9 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   overrides.DisableFeature(ntp_features::kNtpCustomizeChromeAutoOpen);
   overrides.DisableFeature(
       optimization_guide::features::kOptimizationGuideModelExecution);
+  // Z36: "Help me write" (Compose) in the context menu of text fields, off
+  // directly, not only through the model execution above.
+  overrides.DisableFeature(compose::features::kEnableCompose);
 
   // O13: Zen has no in-product help, and none for the features Koan
   // repurposes. (Code that asks for a promo before the browser has finished
