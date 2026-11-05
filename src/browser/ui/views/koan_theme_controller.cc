@@ -100,16 +100,10 @@ KoanWorkspaceController* KoanThemeController::workspaces() const {
 bool KoanThemeController::IsEnabled() const {
   // Zen's per-Space gradients are the Zen style's; the shadcn style is flat.
   // A Space theme is a Space's: only where the window has Spaces.
-  if (look::IsShadcnStyle() || !workspaces() ||
-      !profile()->GetPrefs()->GetBoolean(prefs::kWorkspaceTint)) {
-    return false;
-  }
-  // A Chrome Web Store theme keeps deciding the window's colours and images:
-  // the Space's accent would turn it off in this window (BrowserWidget drops
-  // the custom theme under a user colour override, as for Focus Mode).
-  const ThemeService* theme_service =
-      ThemeServiceFactory::GetForProfile(profile());
-  return !theme_service || !theme_service->UsingExtensionTheme();
+  // (A Chrome Web Store theme doesn't turn them off: Koan windows don't take
+  // one, LocksExtensionTheme().)
+  return !look::IsShadcnStyle() && workspaces() &&
+         profile()->GetPrefs()->GetBoolean(prefs::kWorkspaceTint);
 }
 
 void KoanThemeController::OnAddedToWidget() {
@@ -771,6 +765,14 @@ void KoanThemeController::AnimationEnded(const gfx::Animation* animation) {
     fading_.clear();
   }
   InvalidateBackground();
+}
+
+bool LocksExtensionTheme(const BrowserWindowInterface* browser) {
+  // Zen disables lightweight themes (zen.theme.disable-lightweight;
+  // LightweightThemeConsumer-sys-mjs.patch). Web apps keep theirs.
+  return browser &&
+         (browser->GetType() == BrowserWindowInterface::TYPE_NORMAL ||
+          browser->GetType() == BrowserWindowInterface::TYPE_POPUP);
 }
 
 void OnWindowBackgroundLayerCreated(views::View* view,

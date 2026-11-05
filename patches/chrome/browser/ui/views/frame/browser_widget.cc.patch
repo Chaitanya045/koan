@@ -1,0 +1,33 @@
+diff --git a/chrome/browser/ui/views/frame/browser_widget.cc b/chrome/browser/ui/views/frame/browser_widget.cc
+index df70a8b38c53cbd6ecc03f54f264dd54b268ae92..f7ed25ea174cfee03feb167e0b55e7298e422886 100644
+--- a/chrome/browser/ui/views/frame/browser_widget.cc
++++ b/chrome/browser/ui/views/frame/browser_widget.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/ui/views/frame/top_container_view.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/common/chrome_switches.h"
++#include "koan/browser/ui/views/koan_window_background.h"
+ #include "ui/base/hit_test.h"
+ #include "ui/base/mojom/menu_source_type.mojom-shared.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+@@ -327,7 +328,9 @@ const ui::ThemeProvider* BrowserWidget::GetThemeProvider() const {
+   // If there is a user color override (e.g., Focus Mode is active),
+   // fallback to the un-themed baseline provider so custom extension
+   // theme images are suppressed.
+-  if (user_color_override().has_value()) {
++  // Koan: an extension theme is locked out (koan_window_background.h).
++  if (user_color_override().has_value() ||
++      koan::LocksExtensionTheme(browser_view_->browser())) {
+     Profile* profile = browser_view_->browser()->GetProfile();
+     return &ThemeServiceFactory::GetForProfile(profile)
+                 ->GetDefaultThemeProvider();
+@@ -355,7 +358,8 @@ ui::ColorProviderKey::ThemeInitializerSupplier* BrowserWidget::GetCustomTheme()
+   // enterprise isolated mode browser, or if there is a user color override
+   // (e.g. Focus Mode).
+   if (IsIncognitoBrowser() || IsEnterpriseIsolatedModeBrowser() ||
+-      user_color_override().has_value()) {
++      user_color_override().has_value() ||
++      koan::LocksExtensionTheme(browser_view_->browser())) {
+     return nullptr;
+   }
+ 
