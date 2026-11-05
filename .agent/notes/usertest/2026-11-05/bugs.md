@@ -372,3 +372,14 @@ Not done: drag in compact's revealed sidebar, 10-minute hint (would hold the loo
 PASS: no keychain infobar (s30-a); every menu opens, no crash (s30-m1, m2); ⌘S, ⌘⌥→, ⌘⌥⇧S, ⇧⌘N (one window), ⌘O (nothing) from a page and the URL bar (s30-keys); in a Glance ⌘S, ⌘⌥⇧S, ⇧⌘N, ⌘⇧D (pins the Glance's parent), ⌘O expands (s30-glance); Esc doesn't stop a load (s30-e); tab menu has no "Show tabs horizontally" (s30-tmc); rebind Toggle Compact Mode to ⌃⇧K: saved, ⌘S dead, ⌃⇧K toggles (s30-r2c, r34); "Toggle Sidebar's Width" in View. No DCHECK/dump.
 FAIL: View still shows "✓ Show tabs vertically" (s30-m1); the Profiles menu is in the menu bar (the loop's note says hidden) (s30-m2).
 CONFLICT: ⇧⌘L opens DevTools here (#90) vs compact in #155 (s30-e, 3rd frame).
+
+## Session 31 (10:18–10:25 IST): KoanCheck-c162c (develop b7a833c6 + #162 a368dedb)
+### B47. DCHECK crash while typing a data: URL with a space in the URL bar (autocomplete_result.cc:335) — major (DCHECK builds; release: wrong match contents)
+Steps: fresh profile, ⌘T, type `data:text/html,<title>drag</title><body style=margin:0;background:%23345;color:white;font:20px monospace;...` key by key.
+Actual: at the space after "20px", `FATAL autocomplete_result.cc:335 DCHECK failed: AutocompleteMatch::SanitizeString(match.contents) == match.contents`
+(Type url-what-you-typed, Provider HistoryURL; contents end in a trailing space) ← AutocompleteResult::AppendMatches ← AutocompleteController::UpdateResult ←
+OmniboxViewViews::DoInsertChar. Koan quit; "Koan quit unexpectedly" (mine, dismissed). Log: s31-dcheck-omnibox.txt.
+#162 checks: drag on the top band moves the window and the page sees `move,down,up,CLICK` (s31-drag) — how far the window follows can't be judged
+with synthetic events (control: a native drag in Zen also lagged: +7,+93 for +100,+100); 20 fast drags: no crash; after a drag, hovering the sidebar/pill
+sends no `move` to the page (s31-hover) PASS; right-click during a drag: page menu, no crash (s31-mid). Not done: ⌘L/⌘T mid-drag (my guard refused them),
+tiling, close/⌘Q during a drag, fullscreen.

@@ -1,0 +1,25 @@
+[85112:5155839:1105/101835.339299:FATAL:components/omnibox/browser/autocomplete_result.cc:335] DCHECK failed: AutocompleteMatch::SanitizeString(match.contents) == match.contents (data:text/html,<title>drag</title><body style=margin:0;background:%23345;color:wh
+0   Koan Framework                      0x00000001304d3730 base::debug::CollectStackTrace(base::span<void const*, 18446744073709551615ul, void const**>) + 24
+1   Koan Framework                      0x00000001304bee60 base::debug::StackTrace::StackTrace(unsigned long) + 224
+2   Koan Framework                      0x00000001303c102c logging::LogMessage::Flush() + 172
+3   Koan Framework                      0x00000001303c0e9c logging::LogMessage::~LogMessage() + 36
+4   Koan Framework                      0x00000001303a51b0 logging::(anonymous namespace)::DCheckLogMessage::~DCheckLogMessage() + 76
+5   Koan Framework                      0x00000001303a4a98 logging::CheckError::~CheckError() + 44
+6   Koan Framework                      0x00000001303a4ad8 logging::CheckError::~CheckError() + 12
+7   Koan Framework                      0x0000000134561ab4 AutocompleteResult::AppendMatches(std::__Cr::vector<AutocompleteMatch, std::__Cr::allocator<AutocompleteMatch>> const&) + 1220
+8   Koan Framework                      0x000000013453b910 AutocompleteController::AggregateNewMatches() + 272
+9   Koan Framework                      0x000000013453966c AutocompleteController::UpdateResult(AutocompleteController::UpdateType, bool) + 1132
+10  Koan Framework                      0x0000000134538ac8 AutocompleteController::Start(AutocompleteInput const&) + 1704
+11  Koan Framework                      0x000000012f7a0084 OmniboxController::StartAutocomplete(AutocompleteInput const&) const + 84
+12  Koan Framework                      0x000000012f7a4e1c OmniboxEditModel::StartAutocomplete(bool) + 1772
+13  Koan Framework                      0x000000012ff75d48 OmniboxViewViews::UpdatePopup() + 136
+14  Koan Framework                      0x000000012f7ae01c OmniboxEditModel::OnAfterPossibleChange(OmniboxView::StateChanges const&, bool) + 1032
+15  Koan Framework                      0x000000012ff76b10 OmniboxViewViews::OnAfterPossibleChange(bool) + 176
+16  Koan Framework                      0x0000000133ae1bbc views::Textfield::OnAfterUserAction() + 156
+17  Koan Framework                      0x0000000133ae66d4 views::Textfield::DoInsertChar(char16_t) + 144
+18  Koan Framework                      0x000000012ff79100 OmniboxViewViews::DoInsertChar(char16_t) + 176
+19  Koan Framework                      0x0000000133ae5304 views::Textfield::InsertChar(ui::KeyEvent const&) + 196
+20  Koan Framework                      0x0000000133b87db4 views::TextInputHost::InsertText(std::__Cr::basic_string<char16_t, std::__Cr::char_traits<char16_t>, std::__Cr::allocator<char16_t>> const&, bool) + 136
+21  Koan Framework                      0x0000000132c82448 -[BridgedContentView insertTextInternal:] + 456
+22  Koan Framework                      0x0000000132c842c4 -[BridgedContentView insertText:replacementRange:] + 104
+23  AppKit                              0x0000000194dfbef0 __99-[NSTextInputContext(NSInputContext_WithCompletion) insertText:replacementRange:completionHandler:]_block_invoke + 68
