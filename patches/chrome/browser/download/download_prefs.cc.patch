@@ -1,0 +1,16 @@
+diff --git a/chrome/browser/download/download_prefs.cc b/chrome/browser/download/download_prefs.cc
+index 2c70b38cd10d3d1abe80979c1eb41d6f65fca895..80ba2700090d3236685dac8b901db77be689bede 100644
+--- a/chrome/browser/download/download_prefs.cc
++++ b/chrome/browser/download/download_prefs.cc
+@@ -365,7 +365,10 @@ void DownloadPrefs::RegisterProfilePrefs(
+   registry->RegisterIntegerPref(policy::policy_prefs::kDownloadRestrictions, 0);
+   // TODO(chlily): Clean up the following two prefs once SysUI integration is
+   // enabled by default.
+-  registry->RegisterBooleanPref(prefs::kDownloadBubblePartialViewEnabled, true);
++  // Koan: Zen does not open the downloads panel by itself (alwaysOpenPanel is
++  // off); the started download flies to the Library. "Show downloads when
++  // they are done" in the settings turns the panel (at the pill) back on.
++  registry->RegisterBooleanPref(prefs::kDownloadBubblePartialViewEnabled, false);
+   registry->RegisterIntegerPref(prefs::kDownloadBubblePartialViewImpressions,
+                                 0);
+ 

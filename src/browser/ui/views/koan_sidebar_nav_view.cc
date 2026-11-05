@@ -47,6 +47,7 @@
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -65,8 +66,6 @@ namespace koan {
 namespace {
 
 constexpr int kButtonSize = 28;
-// The dot that says something (camera, microphone ...) is in use.
-constexpr int kInUseDotSize = 8;
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
 
@@ -299,8 +298,6 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
 
   // Something is in use (camera, microphone ...): see UpdateInUse().
   in_use_ = url_pill_->AddChildView(std::make_unique<views::ImageView>());
-  in_use_->SetImage(ui::ImageModel::FromVectorIcon(
-      kCircleFilledIcon, ui::kColorAlertHighSeverity, kInUseDotSize));
   in_use_->SetVisible(false);
 
   url_label_ = url_pill_->AddChildView(std::make_unique<views::Label>());
@@ -334,7 +331,8 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   if (LocationBarView* location_bar = browser_view_->GetLocationBarView()) {
     if (PermissionDashboardView* dashboard =
             location_bar->permission_dashboard_view()) {
-      indicator_observation_.Observe(dashboard->GetIndicatorChip());
+      chips_observation_.AddObservation(dashboard->GetIndicatorChip());
+      chips_observation_.AddObservation(dashboard->GetRequestChip());
     }
   }
   UpdateInUse();
@@ -359,8 +357,8 @@ void KoanSidebarNavView::OnViewVisibilityChanged(views::View* observed_view,
 }
 
 void KoanSidebarNavView::OnViewIsDeleting(views::View* observed_view) {
-  if (indicator_observation_.IsObservingSource(observed_view)) {
-    indicator_observation_.Reset();
+  if (chips_observation_.IsObservingSource(observed_view)) {
+    chips_observation_.RemoveObservation(observed_view);
   }
   if (copy_button_observation_.IsObservingSource(observed_view)) {
     copy_button_observation_.Reset();
@@ -368,22 +366,50 @@ void KoanSidebarNavView::OnViewIsDeleting(views::View* observed_view) {
 }
 
 void KoanSidebarNavView::UpdateInUse() {
-  const views::View* chip = indicator_observation_.GetSource();
   LocationBarView* location_bar = browser_view_->GetLocationBarView();
-  const bool in_use = chip && chip->GetVisible() && location_bar &&
-                      location_bar->permission_dashboard_view() &&
-                      location_bar->permission_dashboard_view()->GetVisible();
-  in_use_->SetVisible(in_use);
-  if (in_use) {
-    // (Chromium's text for the indicator when it has one.)
-    std::u16string tooltip =
-        static_cast<const PermissionChipView*>(chip)->GetTooltipText();
-    if (tooltip.empty()) {
-      tooltip = u"Camera, microphone or location in use";
+  PermissionDashboardView* dashboard =
+      location_bar ? location_bar->permission_dashboard_view() : nullptr;
+  // The indicator (in use) before a request.
+  PermissionChipView* chip = nullptr;
+  bool in_use = false;
+  if (dashboard && dashboard->GetVisible()) {
+    if (chips_observation_.IsObservingSource(dashboard->GetIndicatorChip()) &&
+        dashboard->GetIndicatorChip()->GetVisible()) {
+      chip = dashboard->GetIndicatorChip();
+      in_use = true;
+    } else if (chips_observation_.IsObservingSource(
+                   dashboard->GetRequestChip()) &&
+               dashboard->GetRequestChip()->GetVisible()) {
+      chip = dashboard->GetRequestChip();
     }
-    in_use_->SetTooltipText(tooltip);
-    in_use_->GetViewAccessibility().SetName(tooltip);
   }
+  const gfx::ImageSkia icon =
+      chip ? chip->GetImage(views::Button::STATE_NORMAL) : gfx::ImageSkia();
+  in_use_->SetVisible(chip && !icon.isNull());
+  if (!in_use_->GetVisible()) {
+    return;
+  }
+  // The chip's own icon (drawn for the chip's colours), in the colour of the
+  // pill, red while in use.
+  const ui::ColorId color =
+      in_use ? static_cast<ui::ColorId>(ui::kColorAlertHighSeverity)
+             : static_cast<ui::ColorId>(kColorKoanUrlPillForeground);
+  in_use_->SetImage(ui::ImageModel::FromImageGenerator(
+      base::BindRepeating(
+          [](gfx::ImageSkia icon, ui::ColorId color,
+             const ui::ColorProvider* provider) {
+            return gfx::ImageSkiaOperations::CreateColorMask(
+                icon, provider ? provider->GetColor(color) : SK_ColorGRAY);
+          },
+          icon, color),
+      icon.size()));
+  std::u16string tooltip = chip->GetTooltipText();
+  if (tooltip.empty()) {
+    tooltip = in_use ? u"Camera, microphone or location in use"
+                     : u"A site wants a permission";
+  }
+  in_use_->SetTooltipText(tooltip);
+  in_use_->GetViewAccessibility().SetName(tooltip);
 }
 
 void KoanSidebarNavView::OnViewFocused(views::View* observed_view) {

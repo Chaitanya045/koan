@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -1044,6 +1045,11 @@ void KoanCompactModeController::Activate(Mode mode) {
   }
   UpdateCaptionButtons();
   UpdatePointerMonitor();
+  if (hides_toolbar() && !bubble_fallback_anchor_) {
+    auto anchor = std::make_unique<views::View>();
+    anchor->SetCanProcessEventsWithinSubtree(false);
+    bubble_fallback_anchor_ = browser_view_->AddChildView(std::move(anchor));
+  }
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
@@ -1201,11 +1207,12 @@ views::View* KoanCompactModeController::GetBubbleAnchor() {
   if (IsClosing() || !hides_toolbar()) {
     return nullptr;
   }
-  // Compact mode hides just the toolbar: it slides in under the bubble, which
-  // follows it (the anchor view moves), and stays while the bubble is open
-  // (ShouldKeepToolbarRevealed()).
+  // (Called from layout, and for anchors that never get a bubble: it only
+  // asks for a look at what is open a moment later.)
+  ScheduleBubbleCheck();
+  // Compact mode hides just the toolbar: it comes in under the bubble (see
+  // ReconcileBubbleHold()) and the anchor is upstream's.
   if (can_reveal_toolbar()) {
-    SetToolbarRevealed(true, /*animate=*/true);
     return nullptr;
   }
   if (KoanSidebarNavView* nav = sidebar_nav()) {
@@ -1218,14 +1225,19 @@ views::View* KoanCompactModeController::GetBubbleAnchor() {
   if (buttons && buttons->IsDrawn() && !buttons->GetVisibleBounds().IsEmpty()) {
     return buttons;
   }
-  return nullptr;
+  // Neither is on screen: a point that is, never the slid-away toolbar.
+  return bubble_fallback_anchor_;
 }
 
-bool KoanCompactModeController::HasBubbleAnchoredToToolbar() const {
-  const views::View* top_container = browser_view_->top_container();
-  views::Widget* widget = browser_view_->GetWidget();
-  if (!widget || !top_container) {
-    return false;
+namespace {
+
+// The open bubbles of `browser_view`'s window, with their anchors.
+std::vector<std::pair<views::Widget*, const views::View*>> OpenBubbles(
+    BrowserView* browser_view) {
+  std::vector<std::pair<views::Widget*, const views::View*>> bubbles;
+  views::Widget* widget = browser_view->GetWidget();
+  if (!widget) {
+    return bubbles;
   }
   for (views::Widget* owned :
        views::Widget::GetAllOwnedWidgets(widget->GetNativeView())) {
@@ -1233,12 +1245,110 @@ bool KoanCompactModeController::HasBubbleAnchoredToToolbar() const {
         owned->IsVisible() && owned->widget_delegate()
             ? owned->widget_delegate()->AsBubbleDialogDelegate()
             : nullptr;
-    const views::View* anchor = bubble ? bubble->GetAnchorView() : nullptr;
-    if (anchor && top_container->Contains(anchor)) {
+    if (const views::View* anchor =
+            bubble ? bubble->GetAnchorView() : nullptr) {
+      bubbles.emplace_back(owned, anchor);
+    }
+  }
+  return bubbles;
+}
+
+}  // namespace
+
+bool KoanCompactModeController::HasBubbleAnchoredToToolbar() const {
+  const views::View* top_container = browser_view_->top_container();
+  for (const auto& [widget, anchor] : OpenBubbles(browser_view_)) {
+    if (top_container && top_container->Contains(anchor)) {
       return true;
     }
   }
   return false;
+}
+
+void KoanCompactModeController::ScheduleBubbleCheck() {
+  // The bubble may be shown a moment after its anchor was asked for (a
+  // permission chip waits for its anchor).
+  for (const base::TimeDelta delay :
+       {base::Milliseconds(0), base::Milliseconds(150),
+        base::Milliseconds(600)}) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&KoanCompactModeController::ReconcileBubbleHold,
+                       weak_factory_.GetWeakPtr()),
+        delay);
+  }
+}
+
+void KoanCompactModeController::ReconcileBubbleHold() {
+  if (IsClosing()) {
+    return;
+  }
+  views::View* top_container = browser_view_->top_container();
+  const KoanSidebarNavView* nav = sidebar_nav();
+  bool on_toolbar = false;
+  bool on_peeked_sidebar = false;
+  std::vector<views::Widget*> bubbles;
+  for (const auto& [widget, anchor] : OpenBubbles(browser_view_)) {
+    const bool toolbar =
+        can_reveal_toolbar() && top_container->Contains(anchor);
+    const bool sidebar = hides_sidebar() && nav && nav->Contains(anchor);
+    if (!toolbar && !sidebar) {
+      continue;
+    }
+    on_toolbar |= toolbar;
+    on_peeked_sidebar |= sidebar;
+    bubbles.push_back(widget);
+    // To be told when it goes away (or is hidden), to let go again.
+    if (!bubble_widgets_.IsObservingSource(widget)) {
+      bubble_widgets_.AddObservation(widget);
+    }
+  }
+  if (on_toolbar && !toolbar_revealed_) {
+    // The bubble was placed against the toolbar's place off the window, and
+    // an anchor follows its view's bounds, not a compositor animation of its
+    // layer: bring the toolbar in at once and place the bubbles again.
+    if (ui::Layer* layer = top_container->layer()) {
+      layer->GetAnimator()->AbortAllAnimations();
+    }
+    SetToolbarRevealed(true, /*animate=*/false);
+    for (views::Widget* widget : bubbles) {
+      if (views::BubbleDialogDelegate* bubble =
+              widget->widget_delegate()->AsBubbleDialogDelegate()) {
+        bubble->OnAnchorBoundsChanged();
+      }
+    }
+  }
+  // The peeked sidebar stays out as long as a bubble points at its pill (Zen
+  // holds it with the bubble's has-popup-menu).
+  if (on_peeked_sidebar) {
+    if (!bubble_lock_) {
+      if (auto* tab_strip = browser_view_->tab_strip_view()) {
+        bubble_lock_ = tab_strip->GetExpandOnHoverLock(
+            ExpandOnHoverLockType::kKeepExpanded);
+      }
+    }
+  } else if (bubble_lock_) {
+    ReleaseLock(bubble_lock_);
+  }
+  // None open: the toolbar goes after its usual delay.
+  if (!on_toolbar) {
+    CheckToolbarHide();
+  }
+}
+
+void KoanCompactModeController::OnWidgetDestroying(views::Widget* widget) {
+  if (bubble_widgets_.IsObservingSource(widget)) {
+    bubble_widgets_.RemoveObservation(widget);
+  }
+  // (A moment later: it is still there, and open, right now.)
+  ScheduleBubbleCheck();
+}
+
+void KoanCompactModeController::OnWidgetVisibilityChanged(views::Widget* widget,
+                                                          bool visible) {
+  if (!visible) {
+    ScheduleBubbleCheck();
+  }
 }
 
 KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
@@ -1284,6 +1394,12 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   ReleaseLock(peek_lock_);
   pointer_monitor_.reset();
   edge_sidebar_hovered_ = false;
+  bubble_widgets_.RemoveAllObservations();
+  ReleaseLock(bubble_lock_);
+  if (bubble_fallback_anchor_) {
+    browser_view_->RemoveChildViewT(
+        std::exchange(bubble_fallback_anchor_, nullptr));
+  }
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }
@@ -1748,6 +1864,17 @@ void KoanCompactModeController::LayoutHotZones() {
   }
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
   const gfx::Insets gutter = ContentCardInsets(browser_view_);
+  // The fixed point for bubbles: at the end of the top row, off the lights.
+  if (bubble_fallback_anchor_) {
+    const int row = GetHiddenToolbarRowHeight(
+        GetCaptionButtonAreaSize(browser_view_).height());
+    constexpr int kWidth = 24;
+    constexpr int kInset = 72;
+    bubble_fallback_anchor_->SetBoundsRect(gfx::Rect(
+        IsSidebarOnRight(browser_view_) ? bounds.right() - kInset - kWidth
+                                        : bounds.x() + kInset,
+        row - 2, kWidth, 2));
+  }
   // Along the hidden sidebar's edge, where it slides in.
   if (sidebar_hot_zone_) {
     sidebar_hot_zone_->SetBoundsRect(

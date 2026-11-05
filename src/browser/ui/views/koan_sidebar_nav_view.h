@@ -7,6 +7,7 @@
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -101,10 +102,11 @@ class KoanSidebarNavView : public views::View,
   // while the pill is hovered or the button has focus.
   void UpdateCopyButtonOpacity();
   void ShowSitePanel();
-  // The camera / microphone (or location ...) indicator of Chromium's
-  // location bar is in the hidden toolbar: a dot next to the site icon says
-  // that something is in use (Zen shows the permission icons in the identity
-  // box). Its tooltip is the indicator's.
+  // The camera / microphone (or location ...) indicator, and a permission
+  // request in its quiet form, are in the hidden toolbar: the chip's icon
+  // next to the site icon (Zen shows the permission icons in the identity
+  // box), red while something is in use, with the chip's tooltip. Pressing
+  // the site icon opens page info, with the permissions.
   void UpdateInUse();
   // The identity button: the site panel for a page, the URL bar on an empty
   // tab.
@@ -125,8 +127,10 @@ class KoanSidebarNavView : public views::View,
   base::ScopedObservation<views::View, views::ViewObserver>
       copy_button_observation_{this};
   raw_ptr<views::ImageView> in_use_ = nullptr;
-  base::ScopedObservation<views::View, views::ViewObserver>
-      indicator_observation_{this};
+  // The location bar's permission indicator and request chips (hidden with
+  // the toolbar).
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      chips_observation_{this};
 };
 
 }  // namespace koan
