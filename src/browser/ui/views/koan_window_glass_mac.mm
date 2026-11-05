@@ -1,0 +1,90 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+//
+// Contains material ported from Zen Browser, Copyright the Zen Browser
+// contributors (https://github.com/zen-browser/desktop), MPL-2.0:
+//   src/widget/cocoa/nsCocoaWindow-mm.patch (the window material view)
+//   prefs/zen/macos.yaml (window vibrancy and material)
+//   src/zen/spaces/ZenGradientGenerator.mjs (the default theme's tint)
+//   src/zen/common/styles/zen-theme.css, zen-toolbar.css (the transparent
+//   window and toolbar)
+// Koan's changes, Copyright 2026 The Koan Authors, are under the same
+// licence.
+
+#import "koan/browser/ui/views/koan_window_glass_mac.h"
+
+#include "chrome/browser/ui/views/frame/glass_frame_service.h"
+#include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_glass_tint.h"
+#include "koan/browser/ui/views/koan_window_glass.h"
+#include "ui/color/color_provider.h"
+
+// Clicks go to the views above, not to the blur.
+@interface KoanGlassBackgroundView : NSVisualEffectView
+@end
+
+@implementation KoanGlassBackgroundView
+- (NSView*)hitTest:(NSPoint)point {
+  return nil;
+}
+@end
+
+// Tells the glass frame service when Reduce Transparency changes, so it
+// re-decides which windows are glass.
+@interface KoanReduceTransparencyObserver : NSObject
+@end
+
+@implementation KoanReduceTransparencyObserver
+- (void)displayOptionsChanged:(NSNotification*)notification {
+  if (GlassFrameService* service = GlassFrameService::GetInstance()) {
+    service->OnThemeChanged();
+  }
+}
+@end
+
+namespace koan {
+
+NSView* CreateGlassBackgroundView(NSRect frame) {
+  NSVisualEffectView* view =
+      [[KoanGlassBackgroundView alloc] initWithFrame:frame];
+  // ZenWindowMaterialView (nsCocoaWindow-mm.patch): the default pref value
+  // zen.widget.macos.window-material = 1 is the HUD window material.
+  view.material = NSVisualEffectMaterialHUDWindow;
+  view.appearance = nil;
+  view.emphasized = NO;
+  view.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+  // Zen greys out inactive windows (zen.view.grey-out-inactive-windows,
+  // default on); the material does it natively: flat, no blur, while the
+  // window isn't active.
+  view.state = NSVisualEffectStateFollowsWindowActiveState;
+  view.wantsLayer = YES;
+  return view;
+}
+
+bool IsWindowGlassAllowed() {
+  return ![[NSWorkspace sharedWorkspace]
+      accessibilityDisplayShouldReduceTransparency];
+}
+
+SkColor GetGlassTint(const ui::ColorProvider& colors, bool window_active) {
+  return ResolveGlassTint(colors.GetColor(kColorKoanGlassTint), window_active);
+}
+
+void StartWindowGlass() {
+  static bool started = false;
+  if (started) {
+    return;
+  }
+  started = true;
+
+  static KoanReduceTransparencyObserver* observer =
+      [[KoanReduceTransparencyObserver alloc] init];
+  [[[NSWorkspace sharedWorkspace] notificationCenter]
+      addObserver:observer
+         selector:@selector(displayOptionsChanged:)
+             name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+           object:nil];
+}
+
+}  // namespace koan

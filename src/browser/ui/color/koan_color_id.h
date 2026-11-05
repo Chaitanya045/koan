@@ -187,6 +187,11 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanWelcomeAccentHovered,
   kColorKoanWelcomeOnAccent,
 
+  // A translucent window's tint over the blur (koan_window_glass_mac.mm): Zen's
+  // default theme (ZenGradientGenerator.mjs getBrowserBg()), black at 40% in
+  // dark mode, none in light mode on macOS.
+  kColorKoanGlassTint,
+
   kKoanColorsEnd,
 };
 
