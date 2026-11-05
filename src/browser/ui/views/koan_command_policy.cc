@@ -26,6 +26,7 @@
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/actions/actions.h"
 #include "ui/base/window_open_disposition.h"
@@ -63,6 +64,12 @@ enum class Owner {
   // (UpdateCloseFindOrStop() in browser_command_controller.cc.patch), so
   // otherwise the key goes to the page.
   kCloseFindOrStop,
+  // KoanVerticalTabsPolicy: Koan owns the sidebar (#154/#155). Upstream's
+  // vertical tab strip commands do nothing (mode, hover, feedback), the
+  // sidebar button toggles compact mode, tab search is the URL bar. Only
+  // where Koan owns the sidebar, in a normal window; the policy keeps these
+  // actions disabled and the button's key and text (InstallActions()).
+  kSidebar,
 };
 
 struct Row {
@@ -168,6 +175,21 @@ constexpr Row kRows[] = {
     {kActionSavedTabGroupsSubmenu, 0, Owner::kSpaces, nullptr,
      /*hidden=*/true},
 
+    // The sidebar (#155): the strip's mode, hover and feedback do nothing and
+    // aren't offered; the sidebar button (⇧⌘L's menu item) toggles compact
+    // mode; ⇧⌘A searches tabs in the URL bar (the header's tab search button,
+    // which upstream's bubble hangs off, is gone).
+    {kActionToggleVerticalTabs, IDC_TOGGLE_VERTICAL_TABS, Owner::kSidebar,
+     nullptr, /*hidden=*/true},
+    {kActionToggleVerticalTabsExpandOnHover,
+     IDC_TOGGLE_VERTICAL_TABS_EXPAND_ON_HOVER, Owner::kSidebar, nullptr,
+     /*hidden=*/true},
+    {kActionVerticalTabsSendFeedback, IDC_VERTICAL_TABS_SEND_FEEDBACK,
+     Owner::kSidebar, nullptr, /*hidden=*/true},
+    {kActionToggleCollapseVertical, IDC_TOGGLE_VERTICAL_TABS_COLLAPSE,
+     Owner::kSidebar},
+    {kActionTabSearch, IDC_TAB_SEARCH, Owner::kSidebar},
+
 #if BUILDFLAG(IS_MAC)
     // Fullscreen: View > Always Show Toolbar in Full Screen, ⇧⌘F.
     {kActionToggleFullscreenToolbar, IDC_TOGGLE_FULLSCREEN_TOOLBAR,
@@ -198,6 +220,8 @@ bool Installs(Owner owner, BrowserView* browser_view) {
     case Owner::kFullscreenToolbar:
     case Owner::kCloseFindOrStop:
       return true;
+    case Owner::kSidebar:
+      return OwnsSidebar() && browser_view->GetIsNormalType();
   }
 }
 
@@ -226,6 +250,16 @@ bool Takes(const Row& row, BrowserWindowInterface* browser) {
         chrome::CloseFind(browser);
       }
       return true;
+    case Owner::kSidebar: {
+      if (row.command == IDC_TOGGLE_VERTICAL_TABS_COLLAPSE) {
+        if (KoanBrowserViewController* controller = ControllerOf(browser)) {
+          controller->vertical_tabs()->OnSidebarButtonAction();
+        }
+      } else if (row.command == IDC_TAB_SEARCH) {
+        chrome::ExecuteCommand(browser, IDC_FOCUS_LOCATION);
+      }
+      return true;
+    }
   }
 }
 
