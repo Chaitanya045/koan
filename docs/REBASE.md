@@ -99,6 +99,68 @@ As above, and a milestone rebases more:
    below.
 4. Update the tables and prose here that name moved files.
 
+### Rehearsing the next milestone
+
+A new milestone's Beta comes about 4 weeks before it is Stable. Rehearse it
+then, so that when it reaches Stable the 2-week window is a pin bump and not a
+port. The rehearsal never moves the pin on `develop`, and never merges its
+ports early: they target the new milestone and don't apply to the pin.
+
+1. **Start.** The watcher opens an issue labelled `chromium-next-beta`
+   ("M159 Beta early warning: ...") with the patch check against the newest
+   Beta of the next milestone. Run it yourself any time:
+   `scripts/ci/check_patches.sh 159.0.8200.5`. No conflicts is good news, not
+   the end: go on to 3.
+2. **Patches.** Branch `rehearsal/m159` from `develop`. Port every `CONFLICT`
+   and `MISSING` on it (see "Procedure"), keeping each patch a call into
+   `//koan` (rules in `.agent/notes/agent-brief.md`, "Upgrade-safe code").
+   Open PRs that add patches need the same port (list them with
+   `gh pr diff <n> --name-only | grep ^patches/`). `python3
+   scripts/ci/patch_report.py --base origin/develop` shows what the ports cost.
+   Rebase the branch on `develop` weekly, and re-run the check when the Beta
+   changes (the issue updates itself).
+3. **Compile.** On the branch set `CHROMIUM_VERSION` to the Beta's tag and
+   commit (`scripts/update_chromium.sh` writes them, but it moves a
+   checkout: do it in a **second** Chromium checkout, so the daily one keeps
+   its objects; a new milestone changes the compiler and rebuilds everything,
+   plan for an overnight build). Build there through the Mac loop, the first
+   time with `autoninja -C out/Koan -k 0 chrome` (`scripts/build.sh` has no
+   pass-through) so one pass lists every compile error. For M158 that found
+   one failing step in about 58,000: `PopupBlockerTabHelper` had become a
+   per-tab helper. Fix `src/` on the branch: same code on every milestone
+   (rule 5), so an API rename is fixed at rebase time, not behind an `#if`.
+4. **Regression.** Run the Mac checks against the new build and against the
+   pin's build, and compare: the `scripts/mac` drivers (`vtabs.sh` modes) and
+   `steps/*.md`, and every guard in
+   `.agent/notes/upstream/behaviour-guards.md` that is runnable. A guard that
+   fails is an upstream behaviour that changed: fix the hook, or update the
+   guard and the REBASE row. Rows with no guard ("none") are where a break is
+   silent: look at those by hand.
+5. **Record.** Write `.agent/notes/upstream/rehearsal-m159.md`: the patch
+   table, the compile errors and their fixes, the guards that failed, the
+   hours spent. When the milestone reaches Stable and the `chromium-update`
+   issue opens, rebase the branch on `develop`, set the Stable tag (a point
+   release of the same branch: re-run the patch check and the build), open the
+   PR, and delete the branch.
+
+What the rehearsal does not touch: the pin and the patches on `develop`, and
+the daily Chromium checkout.
+
+### Keeping the next rebase mechanical
+
+The rules every change follows are in `.agent/notes/agent-brief.md`
+("Upgrade-safe code"). What enforces and measures them:
+
+- `scripts/ci/patch_report.py` runs on every PR (job "Patch health"): the
+  patch count, changed upstream lines, new and grown patches, and it fails a
+  new patch without a row in the hook table below.
+- Every row names the upstream **behaviour** the hook assumes, and
+  `.agent/notes/upstream/behaviour-guards.md` says which test fails when it
+  changes (and which rows have none).
+- `.agent/notes/upstream/patch-audit.md` lists what the current patches get
+  wrong against the rules, with a fix for each; work through it when a file is
+  open anyway.
+
 ## Procedure
 
 ```sh
@@ -180,7 +242,10 @@ to Folder" from 3002, inside split view's range, to 3300+).
 
 `update_chromium.sh` prints every `koan::` call site in `chromium/src`.
 For each, check the surrounding upstream code still means what the hook
-assumes:
+assumes. A new patch needs a row here (CI fails without one): what it hooks,
+why no extension point fits, and the upstream **behaviour** it assumes, with
+the test that fails if that changes (see
+`.agent/notes/upstream/behaviour-guards.md` for the existing ones):
 
 | Hook | File | Assumption to re-check |
 |---|---|---|

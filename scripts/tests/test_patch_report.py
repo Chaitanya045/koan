@@ -115,6 +115,14 @@ class RenderTest(unittest.TestCase):
     self.assertEqual(missing, [])
 
 
+class RepositoryTest(unittest.TestCase):
+
+  def test_every_patch_has_a_row_in_the_hook_table(self):
+    head = pr.sizes_on_disk()
+    rows = pr.table_rows((pr.ROOT / pr.REBASE_MD).read_text())
+    self.assertEqual(pr.missing_rows(list(head), head, rows), [])
+
+
 class GitTest(unittest.TestCase):
   """The whole thing on a throwaway repository."""
 
