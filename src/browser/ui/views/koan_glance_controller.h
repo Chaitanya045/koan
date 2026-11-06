@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback_list.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -60,6 +61,31 @@ void PerformMainMenuKey(const input::NativeWebKeyboardEvent& event);
 // The card's window is a top-level one (Open()): titled "Glance" for
 // VoiceOver, kept out of the Window menu.
 void PrepareCardWindow(views::Widget* card);
+
+// What the card does with a key equivalent before the page and the menu bar.
+enum class CardKeyResult { kUnhandled, kHandled, kDrop };
+
+// A command-dispatcher delegate on the card's window, as browser windows
+// have ChromeCommandDispatcherDelegate: the card's key equivalents go to
+// `handler` before the page and the menu bar (prePerformKeyEquivalent:), so
+// the browser window's high-priority shortcuts, Minimize / Zoom and the
+// reserved commands come first wherever the card's focus is. Without it, a
+// key the page doesn't take bubbles to the browser window's dispatcher,
+// which looks for accelerators on the card's own FocusManager and misses
+// Koan's (⌘⌥→ ran Chrome's next tab with Spaces on). Removed when this goes.
+class CardKeyDispatcher {
+ public:
+  using Handler = base::RepeatingCallback<CardKeyResult(
+      const input::NativeWebKeyboardEvent& event)>;
+  CardKeyDispatcher(views::Widget* card, Handler handler);
+  CardKeyDispatcher(const CardKeyDispatcher&) = delete;
+  CardKeyDispatcher& operator=(const CardKeyDispatcher&) = delete;
+  ~CardKeyDispatcher();
+
+ private:
+  struct ObjC;
+  std::unique_ptr<ObjC> objc_;
+};
 #endif
 
 // Zen-style Glance for one window: a link opened as a floating card over
@@ -230,6 +256,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
   // card's window, whose key handling is on the stack then.
   void RunBrowserCommand(int command_id);
 #if BUILDFLAG(IS_MAC)
+  // The card window's key equivalents, first (CardKeyDispatcher): the
+  // browser window's steps, as PreHandleKeyboardEvent() has them.
+  CardKeyResult OnCardKeyEquivalent(const input::NativeWebKeyboardEvent& event);
   // Steps 2 and 3 of PreHandleKeyboardEvent() (Window > Minimize / Zoom,
   // the reserved commands) for a key equivalent: whether they took it.
   bool TakeKeyEquivalent(const input::NativeWebKeyboardEvent& event);
@@ -268,6 +297,10 @@ class KoanGlanceController : public content::WebContentsDelegate,
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
+#if BUILDFLAG(IS_MAC)
+  // On the card's window while it is open (Open(), DestroyWidget()).
+  std::unique_ptr<CardKeyDispatcher> key_dispatcher_;
+#endif
   raw_ptr<KoanGlanceView> view_ = nullptr;
   std::unique_ptr<content::WebContents> contents_;
   std::unique_ptr<SourceTracker> source_;

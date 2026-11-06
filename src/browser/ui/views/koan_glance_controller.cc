@@ -761,6 +761,10 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   widget_->Init(std::move(widget_params));
 #if BUILDFLAG(IS_MAC)
   PrepareCardWindow(widget_.get());
+  key_dispatcher_ = std::make_unique<CardKeyDispatcher>(
+      widget_.get(),
+      base::BindRepeating(&KoanGlanceController::OnCardKeyEquivalent,
+                          weak_factory_.GetWeakPtr()));
 #endif
   view_ = widget_->SetContentsView(
       std::make_unique<KoanGlanceView>(this, contents_.get()));
@@ -1104,6 +1108,33 @@ void KoanGlanceController::ReleaseCommands(bool restore) {
 }
 
 #if BUILDFLAG(IS_MAC)
+CardKeyResult KoanGlanceController::OnCardKeyEquivalent(
+    const input::NativeWebKeyboardEvent& event) {
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) {
+    // 1. The browser window's high-priority shortcuts first: Koan's keys
+    // that sit on Chrome's reserved ones (⌘⌥ arrows switch Spaces, not tabs;
+    // koan_shortcut_table.cc). With a copy of the key: a shortcut may decline
+    // it when it runs (no Library in a private window, no Spaces), and the
+    // rest of the chain runs then.
+    views::FocusManager* focus_manager = browser_view_->GetFocusManager();
+    if (focus_manager && !focus_manager->shortcut_handling_suspended() &&
+        focus_manager->HasPriorityHandler(
+            ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
+      VLOG(1) << "Koan Glance: key " << event.windows_key_code
+              << " has a high-priority browser shortcut";
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&KoanGlanceController::ProcessPriorityKey,
+                                    weak_factory_.GetWeakPtr(), event));
+      return CardKeyResult::kHandled;
+    }
+    // 2 and 3: Window > Minimize / Zoom, the reserved commands.
+    if (TakeKeyEquivalent(event)) {
+      return CardKeyResult::kHandled;
+    }
+  }
+  return CardKeyResult::kUnhandled;
+}
+
 bool KoanGlanceController::TakeKeyEquivalent(
     const input::NativeWebKeyboardEvent& event) {
   // Both look the key up in the menu bar: only for key equivalents, not for
@@ -1226,6 +1257,9 @@ void KoanGlanceController::DestroyWidget(bool give_back_key) {
   if (!widget_) {
     return;
   }
+#if BUILDFLAG(IS_MAC)
+  key_dispatcher_.reset();
+#endif
   // macOS: the card's window was key; the browser window is again.
   const bool was_key = widget_->IsActive();
   widget_->CloseNow();
@@ -1383,27 +1417,14 @@ KoanGlanceController::PreHandleKeyboardEvent(
   // page first. Do here what that delegate does, in its order. Whatever runs
   // runs after this key's dispatch: it may switch tabs, which closes the
   // card's window while its key handling is on the stack.
-  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) {
-    // 1. The browser window's high-priority shortcuts first: Koan's keys
-    // that sit on Chrome's reserved ones (⌘⌥ arrows switch Spaces, not tabs;
-    // koan_shortcut_table.cc). With a copy of the key: a shortcut may decline
-    // it when it runs (no Library in a private window, no Spaces), and the
-    // rest of the chain runs then.
-    views::FocusManager* focus_manager = browser_view_->GetFocusManager();
-    if (focus_manager && !focus_manager->shortcut_handling_suspended() &&
-        focus_manager->HasPriorityHandler(
-            ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
-      VLOG(1) << "Koan Glance: key " << event.windows_key_code
-              << " has a high-priority browser shortcut";
-      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE, base::BindOnce(&KoanGlanceController::ProcessPriorityKey,
-                                    weak_factory_.GetWeakPtr(), event));
+  // (Key equivalents get here only if the card's CardKeyDispatcher left
+  // them to the page; other keys, e.g. ⌃Tab, may come here first.)
+  switch (OnCardKeyEquivalent(event)) {
+    case CardKeyResult::kHandled:
+    case CardKeyResult::kDrop:
       return content::KeyboardEventProcessingResult::HANDLED;
-    }
-    // 2 and 3: Window > Minimize / Zoom, the reserved commands.
-    if (TakeKeyEquivalent(event)) {
-      return content::KeyboardEventProcessingResult::HANDLED;
-    }
+    case CardKeyResult::kUnhandled:
+      break;
   }
 #endif
   return browser_view_->PreHandleKeyboardEvent(event);

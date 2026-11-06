@@ -6,15 +6,89 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/apple/foundation_util.h"
+#include "base/apple/owned_objc.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "components/input/native_web_keyboard_event.h"
+#import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#import "ui/base/cocoa/command_dispatcher.h"
 #include "ui/gfx/native_ui_types.h"
 #include "ui/views/widget/widget.h"
 
+// The card window's CommandDispatcherDelegate (CardKeyDispatcher).
+@interface KoanGlanceKeyDispatcher : NSObject <CommandDispatcherDelegate>
+- (instancetype)initWithHandler:(koan::CardKeyDispatcher::Handler)handler;
+@end
+
+@implementation KoanGlanceKeyDispatcher {
+  koan::CardKeyDispatcher::Handler _handler;
+}
+
+- (instancetype)initWithHandler:(koan::CardKeyDispatcher::Handler)handler {
+  if ((self = [super init])) {
+    _handler = std::move(handler);
+  }
+  return self;
+}
+
+- (ui::PerformKeyEquivalentResult)prePerformKeyEquivalent:(NSEvent*)event
+                                                   window:(NSWindow*)window {
+  if (event.type != NSEventTypeKeyDown) {
+    return ui::PerformKeyEquivalentResult::kUnhandled;
+  }
+  switch (_handler.Run(
+      input::NativeWebKeyboardEvent(base::apple::OwnedNSEvent(event)))) {
+    case koan::CardKeyResult::kHandled:
+      return ui::PerformKeyEquivalentResult::kHandled;
+    case koan::CardKeyResult::kDrop:
+      return ui::PerformKeyEquivalentResult::kDrop;
+    case koan::CardKeyResult::kUnhandled:
+      return ui::PerformKeyEquivalentResult::kUnhandled;
+  }
+}
+
+- (ui::PerformKeyEquivalentResult)postPerformKeyEquivalent:(NSEvent*)event
+                                                    window:(NSWindow*)window
+                                              isRedispatch:(BOOL)isRedispatch {
+  // What the page and the steps above left goes on to the browser window
+  // (commandDispatchParent) and the menu bar, as before.
+  return ui::PerformKeyEquivalentResult::kUnhandled;
+}
+
+@end
+
 namespace koan {
+
+struct CardKeyDispatcher::ObjC {
+  KoanGlanceKeyDispatcher* __strong delegate;
+  NativeWidgetMacNSWindow* __weak window;
+};
+
+CardKeyDispatcher::CardKeyDispatcher(views::Widget* card, Handler handler)
+    : objc_(std::make_unique<ObjC>()) {
+  // The card's window is a NativeWidgetMacNSWindow (in-process): its
+  // CommandDispatcher holds its delegate weakly, so this keeps it.
+  NativeWidgetMacNSWindow* window =
+      base::apple::ObjCCast<NativeWidgetMacNSWindow>(
+          card->GetNativeWindow().GetNativeNSWindow());
+  if (!window) {
+    return;
+  }
+  objc_->delegate =
+      [[KoanGlanceKeyDispatcher alloc] initWithHandler:std::move(handler)];
+  objc_->window = window;
+  [window setCommandDispatcherDelegate:objc_->delegate];
+}
+
+CardKeyDispatcher::~CardKeyDispatcher() {
+  if (NativeWidgetMacNSWindow* window = objc_->window) {
+    [window setCommandDispatcherDelegate:nil];
+  }
+}
+
 
 int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
                                const input::NativeWebKeyboardEvent& event) {
