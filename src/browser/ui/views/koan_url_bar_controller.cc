@@ -54,6 +54,7 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_omnibox_disposition.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
 #include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -1047,11 +1048,10 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
   // (Also ends the new-tab session, whichever row was taken.)
   const bool new_tab_session =
       controller && controller->url_bar()->TakeNewTabDisposition();
-  if (is_open_tab_match && HasOpenTabWithUrl(browser, destination_url)) {
-    *disposition = WindowOpenDisposition::kSwitchToTab;
-  } else if (new_tab_session) {
-    *disposition = WindowOpenDisposition::kNewForegroundTab;
-  }
+  *disposition = AdjustedOmniboxDisposition(
+      *disposition, is_open_tab_match,
+      is_open_tab_match && HasOpenTabWithUrl(browser, destination_url),
+      new_tab_session);
 }
 
 bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser) {

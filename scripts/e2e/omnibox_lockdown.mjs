@@ -82,6 +82,21 @@ await sleep(1000);
 check('Enter on the open tab\'s row switches to it: no new tab, that tab is active',
       (await pages()).length === tabCount && (await visiblePage())?.id === second,
       `${(await pages()).length} tab(s), was ${tabCount}`);
+// O8 on about:blank (page classification BLANK, not OTHER): the list is there
+// too, with the example.com tab and the first one.
+const blank = (await browserCall('Target.createTarget', { url: 'about:blank' }))
+    .result.targetId;
+await sleep(1000);
+await key((await pages()).find(p => p.id === blank) ?? page, VK.T, CTRL, 't');
+const blankRows = await waitFor(async () => {
+  const rs = shownViews(await views(), 'OmniboxResultView');
+  return rs.length >= 1 && rs;
+});
+check('Cmd+T on an about:blank tab lists the open tabs too', !!blankRows,
+      `${shownViews(await views(), 'OmniboxResultView').length} row(s)`);
+await key(page, VK.ESC, 0, 'Escape');
+await sleep(500);
+await browserCall('Target.closeTarget', { targetId: blank });
 await browserCall('Target.closeTarget', { targetId: second });
 await sleep(500);
 [page] = await pages();

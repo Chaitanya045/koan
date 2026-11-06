@@ -14,6 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
 #include "base/strings/escape.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/history/core/browser/history_types.h"
@@ -24,6 +25,7 @@
 #include "components/omnibox/browser/autocomplete_match_classification.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
+#include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/tab_matcher.h"
 #include "components/url_formatter/url_formatter.h"
 #include "koan/browser/koan_features.h"
@@ -35,6 +37,15 @@ namespace koan {
 
 namespace {
 
+// The live Koan zero-suggest providers (one per window's controller): what
+// IsLocalZeroSuggestMatch() recognizes a match by. Pointers only compared,
+// never used. (Not AutocompleteMatch::additional_info, which Chromium keeps
+// for chrome://omnibox-internals.)
+std::set<const AutocompleteProvider*>& LiveProviders() {
+  static base::NoDestructor<std::set<const AutocompleteProvider*>> providers;
+  return *providers;
+}
+
 // How many of each, and in all (Chromium's own limit for zero-prefix
 // suggestions is 8).
 constexpr size_t kMaxOpenTabs = 5;
@@ -44,16 +55,15 @@ constexpr size_t kMaxSuggestions = 8;
 constexpr int kOpenTabRelevance = 1500;
 constexpr int kTopSiteRelevance = 1000;
 
-// The additional-info key that marks a match as this provider's.
-constexpr char kMatchMark[] = "koan zero suggest";
-
 class KoanZeroSuggestProvider : public AutocompleteProvider {
  public:
   // There is no provider type for Koan: kBuiltin, like Chrome's chrome://
   // page suggestions, runs where the omnibox does (koan_command_palette.cc).
   explicit KoanZeroSuggestProvider(AutocompleteProviderClient* client)
       : AutocompleteProvider(AutocompleteProvider::Type::kBuiltin),
-        client_(client) {}
+        client_(client) {
+    LiveProviders().insert(this);
+  }
   KoanZeroSuggestProvider(const KoanZeroSuggestProvider&) = delete;
   KoanZeroSuggestProvider& operator=(const KoanZeroSuggestProvider&) = delete;
 
@@ -65,7 +75,7 @@ class KoanZeroSuggestProvider : public AutocompleteProvider {
   }
 
  private:
-  ~KoanZeroSuggestProvider() override = default;
+  ~KoanZeroSuggestProvider() override { LiveProviders().erase(this); }
 
   AutocompleteMatch MakeMatch(const GURL& url,
                               const std::u16string& title,
@@ -103,8 +113,6 @@ AutocompleteMatch KoanZeroSuggestProvider::MakeMatch(
     match.description_class = {
         ACMatchClassification(0, ACMatchClassification::NONE)};
   }
-  // SortAndCull()'s Koan section takes only these (IsLocalZeroSuggestMatch()).
-  match.RecordAdditionalInfo(kMatchMark, "1");
   return match;
 }
 
@@ -134,7 +142,10 @@ void KoanZeroSuggestProvider::Start(const AutocompleteInput& input,
     if (matches_.size() >= kMaxOpenTabs) {
       break;
     }
+    // (Not a second tab on the page being left either: Navigate()'s switch
+    // would find the active tab first and do nothing.)
     if (!tab.url.is_valid() || !tab.url.SchemeIsHTTPOrHTTPS() ||
+        tab.url.EqualsIgnoringRef(input.current_url()) ||
         !open_urls.insert(tab.url).second) {
       continue;
     }
@@ -182,8 +193,16 @@ void KoanZeroSuggestProvider::OnTopSites(
 
 }  // namespace
 
+bool UsesLocalZeroSuggestSection(
+    metrics::OmniboxEventProto::PageClassification classification) {
+  // Every omnibox (also about:blank, the home page and an invalid address),
+  // not the NTP's realbox, Omnibox Everywhere, Lens or a composebox.
+  return features::IsUrlBarEnabled() &&
+         !omnibox::IsWebUISearchbox(classification);
+}
+
 bool IsLocalZeroSuggestMatch(const AutocompleteMatch& match) {
-  return match.GetAdditionalInfoForDebugging(kMatchMark) == "1";
+  return match.provider && LiveProviders().contains(match.provider);
 }
 
 scoped_refptr<AutocompleteProvider> CreateZeroSuggestProvider(
