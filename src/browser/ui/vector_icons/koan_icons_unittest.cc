@@ -4,6 +4,7 @@
 
 #include "koan/browser/ui/vector_icons/koan_icons.h"
 
+#include <algorithm>
 #include <set>
 #include <string>
 
@@ -12,6 +13,14 @@
 #include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_rep.h"
+#include "ui/gfx/image/image_unittest_util.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/vector_icons.h"
 
@@ -95,8 +104,53 @@ TEST(KoanIconsTest, KoanIconsAndUnmappedIconsAreLeftAlone) {
             &vector_icons::kCloudOffIcon);
 }
 
+SkBitmap Rendered(const gfx::ImageSkia& image) {
+  return image.GetRepresentation(1.0f).GetBitmap();
+}
+
+// The icon painted at `size` x `size` (a square bitmap).
+SkBitmap Painted(const gfx::VectorIcon& icon, int size) {
+  gfx::Canvas canvas(gfx::Size(size, size), 1.0f, /*is_opaque=*/false);
+  gfx::PaintVectorIcon(&canvas, icon, size, SK_ColorBLACK);
+  return canvas.GetBitmap();
+}
+
+// What the patch to ui/gfx/paint_vector_icon.cc (docs/REBASE.md) must keep
+// doing: both ways of drawing an icon ask the registry. Fails if a rebase
+// drops the hook, or the icon cache keys something else than the icon drawn.
+TEST(KoanIconsHookTest, ChromiumIconsPaintAsKoanIcons) {
+  InstallVectorIconOverride();
+  constexpr int kSize = 17;
+  const gfx::VectorIcon& chromium =
+      vector_icons::kBackArrowChromeRefreshOldIcon;
+
+  // gfx::CreateVectorIcon, as every ImageModel and image button does.
+  const SkBitmap created =
+      Rendered(gfx::CreateVectorIcon(chromium, kSize, SK_ColorBLACK));
+  EXPECT_TRUE(gfx::test::AreBitmapsEqual(
+      created,
+      Rendered(gfx::CreateVectorIcon(kKoanBackIcon, kSize, SK_ColorBLACK))));
+  // gfx::PaintVectorIcon, as views that draw in OnPaint do.
+  EXPECT_TRUE(gfx::test::AreBitmapsEqual(Painted(chromium, kSize),
+                                         Painted(kKoanBackIcon, kSize)));
+
+  // The comparison tells icons apart: Back is not Forward.
+  EXPECT_FALSE(gfx::test::AreBitmapsEqual(
+      created,
+      Rendered(gfx::CreateVectorIcon(kKoanForwardIcon, kSize, SK_ColorBLACK))));
+  // And something was drawn.
+  bool drew = false;
+  for (int y = 0; y < created.height(); ++y) {
+    for (int x = 0; x < created.width(); ++x) {
+      drew |= SkColorGetA(created.getColor(x, y)) != 0;
+    }
+  }
+  EXPECT_TRUE(drew);
+}
+
 // The magnifier of the URL bar is Firefox's own glyph (Zen's identity icon):
-// a 16 unit box, and half opaque.
+// a 16 unit box, half opaque, with 14 units of ink (the 13.5 pt measured in
+// #178 is its anti-aliased edge).
 TEST(KoanIconsTest, UrlBarMagnifierIsFirefoxsAtHalfOpacity) {
   const base::span<const gfx::PathElement> path =
       kKoanUrlbarSearchGlassIcon.reps[0].path;
@@ -106,6 +160,26 @@ TEST(KoanIconsTest, UrlBarMagnifierIsFirefoxsAtHalfOpacity) {
   EXPECT_EQ(path[2].command, gfx::FILL_RULE_NONZERO);
   EXPECT_EQ(path[3].command, gfx::PATH_COLOR_ALPHA);
   EXPECT_EQ(path[4].arg, 128.f);
+
+  // Ink at 10 pixels to the unit.
+  constexpr int kScale = 10;
+  const SkBitmap bitmap = Painted(kKoanUrlbarSearchGlassIcon, 16 * kScale);
+  int left = bitmap.width(), top = bitmap.height(), right = -1, bottom = -1;
+  for (int y = 0; y < bitmap.height(); ++y) {
+    for (int x = 0; x < bitmap.width(); ++x) {
+      if (SkColorGetA(bitmap.getColor(x, y)) > 16) {
+        left = std::min(left, x);
+        right = std::max(right, x + 1);
+        top = std::min(top, y);
+        bottom = std::max(bottom, y + 1);
+      }
+    }
+  }
+  ASSERT_GT(right, left);
+  EXPECT_NEAR((right - left) / static_cast<double>(kScale), 14.0, 0.25);
+  EXPECT_NEAR((bottom - top) / static_cast<double>(kScale), 14.0, 0.25);
+  // Half opaque where it is drawn.
+  EXPECT_NEAR(SkColorGetA(bitmap.getColor(15, 65)), 128, 2);
 }
 
 // Zen's icon sizes (.agent/notes/zen-icons-inventory.md, "Render size").

@@ -682,8 +682,7 @@ from [Lucide](https://lucide.dev) (ISC); see `.agent/notes/koan-icons.md`
 for the table. Icons that Chromium's UI asks for in its Material style
 (toolbar, tabs, location bar, menus, permission chips, download bubble) are
 swapped for them. Web pages of Chromium (Settings, History, New Tab) keep their
-own icons. In builds with DCHECKs, `--koan-icon-trace=<file>` writes the icons the UI
-asked for (and their sizes), for debugging.
+own icons.
 
 ## Turning things off
 

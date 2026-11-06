@@ -205,6 +205,7 @@ source_set("koan_icons") {
     "//chrome/app/vector_icons",
     "//components/omnibox/browser:vector_icons",
     "//components/vector_icons",
+    "//koan/browser:features",
     "//ui/gfx",
     "//ui/views",
   ]
@@ -224,7 +225,10 @@ test("koan_icons_unittests") {
     "//base/test:test_support",
     "//chrome/app/vector_icons",
     "//components/vector_icons",
+    "//skia",
     "//testing/gtest",
     "//ui/gfx",
+    "//ui/gfx:test_support",
+    "//ui/views",
   ]
 }

@@ -257,6 +257,18 @@ opens on your desktop:
 Add an end-to-end test for new behaviour, and keep the existing ones
 passing. For UI changes, compare your screenshots with Zen's.
 
+Icons (`.agent/notes/koan-icons.md`) have two tests of their own:
+
+- `koan_icons_unittests` (`src/browser/ui/vector_icons/koan_icons_unittest.cc`):
+  the registry table, the gfx hook (a Chromium icon paints pixel-equal to its
+  Koan icon) and the URL bar magnifier's ink. It is not in CI and not part of
+  another test binary: build it with `scripts/build.sh koan_icons_unittests`
+  and run `out/Koan/koan_icons_unittests`.
+- `scripts/e2e/icons.mjs` checks which icon each surface paints, at which
+  size. It reads `--koan-icon-trace=<file>`, a developer switch that only
+  builds with DCHECKs have (it does nothing in a release build); run it with
+  `scripts/e2e/run.sh icons`.
+
 ## Commits
 
 - **Title:** one line that says what changed for the user, in plain words,

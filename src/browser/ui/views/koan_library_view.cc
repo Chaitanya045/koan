@@ -11,7 +11,6 @@
 // licence.
 
 #include "koan/browser/ui/views/koan_library_view.h"
-#include "koan/browser/ui/vector_icons/vector_icons.h"
 
 #include <algorithm>
 #include <memory>
@@ -33,6 +32,7 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/vector_icons/vector_icons.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_icons.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
