@@ -151,8 +151,12 @@ if (MODE === 'pinrev') {
           mac(ptr(park ? 3 : 700, 400), 30000);
           // A 1-2 px move at +d1 makes the hot zone see a hover while the collapse runs.
           const wiggle = park ? `${ptr(4, 400, 16)}; ` : '';
+          const peeksBefore = Number(mac(`grep -a -c 'Koan: peek sidebar key' ${LOG} || true`));
           mac(`${kp(K.S, COMPACT)}; sleep ${d1 / 1000}; ${wiggle}${kp(K.S, PIN)}; sleep ${d2 / 1000}; ${kp(K.S, PIN)}; sleep 1.2`, 30000);
           n++;
+          // Both pin keys must have reached the app: one that was dropped leaves the sidebar legitimately pinned (not a leak).
+          const peeks = Number(mac(`grep -a -c 'Koan: peek sidebar key' ${LOG} || true`)) - peeksBefore;
+          needLog(peeks === 2, `round ${n}: ${peeks} of the 2 pin keys reached the sidebar's peek handler (a dropped key is the driver's, not a lock leak)`);
           needLog(alive(), `Koan died in round ${n} (compact on, pin at +${d1} ms, again +${d2} ms, pointer ${park ? 'at the edge' : 'away'})`);
           if (park) {
             needLog((await sidebarW()) >= 163, `round ${n}: the pointer is at the edge but the sidebar is not out (${await sidebarW()} wide)`);

@@ -516,6 +516,8 @@ bool KoanCompactModeController::PeekSidebar() {
   }
   // Zen's cmd_zenCompactModeShowSidebar toggles `zen-user-show`: the sidebar
   // stays out, wherever the pointer is, until the shortcut is used again.
+  VLOG(1) << "Koan: peek sidebar key (held: " << !!peek_lock_
+          << ", requested: " << peek_requested_ << ")";
   if (peek_lock_ || peek_requested_) {
     peek_requested_ = false;
     ReleaseLock(peek_lock_);
