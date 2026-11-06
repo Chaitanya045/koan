@@ -14,11 +14,15 @@ if [ -f "$HERE/local.env" ]; then
   done < "$HERE/local.env"
 fi
 for k in KOAN_MAC_HOST KOAN_MAC_USER KOAN_MAC_KEY; do
-  if [ -z "${!k:-}" ]; then
-    echo "vtabs.sh: $k is not set. Set KOAN_MAC_HOST, KOAN_MAC_USER and KOAN_MAC_KEY in the environment" >&2
-    echo "or in $HERE/local.env (copy local.env.example); nothing about the Mac is kept in the repo." >&2
-    exit 2
-  fi
+  case "${!k:-}" in
+    "")
+      echo "vtabs.sh: $k is not set. Set KOAN_MAC_HOST, KOAN_MAC_USER and KOAN_MAC_KEY in the environment" >&2
+      echo "or in $HERE/local.env (copy local.env.example); nothing about the Mac is kept in the repo." >&2
+      exit 2 ;;
+    "<"*)
+      echo "vtabs.sh: $k is still the placeholder ${!k}. Put the real value in the environment or in $HERE/local.env." >&2
+      exit 2 ;;
+  esac
 done
 KEY="${KOAN_MAC_KEY/#\~/$HOME}"
 TARGET="$KOAN_MAC_USER@$KOAN_MAC_HOST"

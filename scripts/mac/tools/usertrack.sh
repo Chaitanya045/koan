@@ -1,7 +1,7 @@
 #!/bin/bash
 # usertrack.sh: daemon. Writes tmp/last-user-input.ts = the epoch of the last input that was NOT mine.
 # My input tools (keypress2, ptr) write tmp/own-input.ts when they run; an input within 3 s of that is mine, anything else is the user's (or zen-ref's).
-M=/Users/chaitanya/work/koan-mac; U=$M/tmp/last-user-input.ts
+M="${KOAN_MAC_ROOT:-$HOME/work/koan-mac}"; U=$M/tmp/last-user-input.ts
 [ -e $U ] || date +%s > $U       # unknown history: assume the user was here when this started
 prev=999999
 while true; do

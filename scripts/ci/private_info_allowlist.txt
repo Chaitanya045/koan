@@ -1,5 +1,12 @@
-# Files check_private_info.py does not scan (fnmatch globs, one per line).
-# A line can also opt out with koan-allow-private in it. Placeholders such as
-# <mac-host>, <mac-ip>, <user> and <ssh-key> never need either.
-scripts/tests/test_check_private_info.py
-scripts/ci/check_private_info.py
+# Tokens check_private_info.py lets through (exact match, one per line): obviously
+# fake examples only. Never a file, never a line. Real values belong in the
+# environment or scripts/mac/local.env; notes use <mac-host>, <mac-ip>, <user>,
+# <ssh-key>. Placeholders in angle brackets need no entry.
+example-host.local
+test-host-macbook-air
+10.0.0.1
+test_key_ed25519
+.ssh/test_key_ed25519
+/Users/Shared
+# A fixture's fake home folder in scripts/tests/test_branding.py.
+/Users/me

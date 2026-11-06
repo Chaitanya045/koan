@@ -2,7 +2,7 @@
 #import <Cocoa/Cocoa.h>
 static void post(CGEventType t, CGPoint p, CGMouseButton b){ CGEventRef e=CGEventCreateMouseEvent(NULL,t,p,b); CGEventSetIntegerValueField(e,kCGMouseEventClickState,1); CGEventPost(kCGHIDEventTap,e); CFRelease(e); }
 int main(int c,char**v){@autoreleasepool{
- { FILE*o=fopen("/Users/chaitanya/work/koan-mac/tmp/own-input.ts","w"); if(o){fprintf(o,"%ld\n",(long)time(NULL)); fclose(o);} }
+ { char path[1024]; const char*r=getenv("KOAN_MAC_ROOT"); const char*h=getenv("HOME"); if(r&&*r) snprintf(path,sizeof path,"%s/tmp/own-input.ts",r); else snprintf(path,sizeof path,"%s/work/koan-mac/tmp/own-input.ts",h?h:"."); FILE*o=fopen(path,"w"); if(o){fprintf(o,"%ld\n",(long)time(NULL)); fclose(o);} }
  if(c<2)return 2; NSString*cmd=@(v[1]);
  CGEventRef cur=CGEventCreate(NULL); CGPoint p=CGEventGetLocation(cur); CFRelease(cur);
  if([cmd isEqual:@"pos"]){ printf("%d %d\n",(int)p.x,(int)p.y); return 0; }

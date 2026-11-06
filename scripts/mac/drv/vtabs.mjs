@@ -21,12 +21,16 @@ const macSetting = k => {
     console.error(`vtabs.mjs: ${k} is not set. Set KOAN_MAC_HOST, KOAN_MAC_USER and KOAN_MAC_KEY in the environment or in scripts/mac/local.env (copy local.env.example).`);
     process.exit(2);
   }
+  if (v.startsWith('<')) {
+    console.error(`vtabs.mjs: ${k} is still the placeholder ${v}. Put the real value in the environment or in scripts/mac/local.env.`);
+    process.exit(2);
+  }
   return v;
 };
 const MAC_TARGET = `${macSetting('KOAN_MAC_USER')}@${macSetting('KOAN_MAC_HOST')}`;
 const MAC_KEY = macSetting('KOAN_MAC_KEY').replace(/^~/, process.env.HOME);
 const MAC_HOME = `/Users/${macSetting('KOAN_MAC_USER')}`;
-const M = `${MAC_HOME}/work/koan-mac`;
+const M = process.env.KOAN_MAC_ROOT || localEnv.KOAN_MAC_ROOT || `${MAC_HOME}/work/koan-mac`;
 const SSH = ['ssh', '-i', MAC_KEY, '-o', 'BatchMode=yes', '-o', 'ControlPath=/tmp/koan-cm.sock', MAC_TARGET];
 const rawMac = (cmd, t = 90000) => execSync([...SSH, JSON.stringify(cmd)].join(' '), { timeout: t }).toString().trim();
 // Input guard (after the 15:12 collision with the tester): activate/unmin need the tester's grant (tmp/screen-granted, written by me on an explicit "screen free", removed on "testing"); keypress2/ptr also need MY Koan pid to be the frontmost app. Otherwise the run ends at once (cleanup removes only my own pass- Koans).

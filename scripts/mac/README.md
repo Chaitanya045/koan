@@ -33,7 +33,7 @@ The shared invariant is `scripts/e2e/lib/vertical_tabs.mjs` `checkKoanSidebar()`
 Chromium `ToolbarView` drawn. Every run also fails on a "Koan: the vertical tab strip" log line, a
 `:FATAL:` line or a `Spaces:` line.
 
-Example: `MODE=old PREFS="$(cat scripts/e2e/prefs/vertical_tabs_old_profile.json)" scripts/mac/vtabs.sh build1 '/Users/me/work/koan-mac/apps/KoanCheck-x.app'`.
+Example: `MODE=old PREFS="$(cat scripts/e2e/prefs/vertical_tabs_old_profile.json)" scripts/mac/vtabs.sh build1 '/Users/<user>/work/koan-mac/apps/KoanCheck-x.app'`.
 
 ## Rules the drivers follow (do not remove)
 
