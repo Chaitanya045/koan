@@ -90,6 +90,7 @@ class KoanVerticalTabsPolicy {
   void RemoveOldPrefs();
   void StartWatching();
   void OnCollapseChanged(tabs::VerticalTabStripCollapseState state);
+  void NotifySettled();
 
   const raw_ptr<BrowserView> browser_view_;
   PrefChangeRegistrar pref_change_registrar_;

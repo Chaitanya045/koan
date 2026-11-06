@@ -272,6 +272,21 @@ void KoanVerticalTabsPolicy::OnCollapseChanged(
       FROM_HERE,
       base::BindOnce(&KoanVerticalTabsPolicy::UpdateSidebarButtonText,
                      weak_factory_.GetWeakPtr()));
+  // Whatever waits for the sidebar to be settled (compact mode's locks) runs in
+  // a task of its own: this is upstream's animation ended notification, and
+  // what starts a new animation from inside it is cleared by it.
+  if (settled) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanVerticalTabsPolicy::NotifySettled,
+                                  weak_factory_.GetWeakPtr()));
+  }
+}
+
+void KoanVerticalTabsPolicy::NotifySettled() {
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->compact_mode()->OnSidebarCollapseSettled();
+  }
 }
 
 bool ShowSidebarButtonContextMenu(BrowserWindowInterface* browser,

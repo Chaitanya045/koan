@@ -1,0 +1,47 @@
+diff --git a/chrome/browser/ui/animation/browser_animation_controller.cc b/chrome/browser/ui/animation/browser_animation_controller.cc
+index e8b59e5765b3fef28d33ab46d7a2a9a581d2e666..84ef83c9dc0fc836a9f6ddf04c2dbe52a249dd83 100644
+--- a/chrome/browser/ui/animation/browser_animation_controller.cc
++++ b/chrome/browser/ui/animation/browser_animation_controller.cc
+@@ -486,6 +486,7 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+   // Starts `motion` for the current group. Any existing motion will be
+   // canceled.
+   void Start(BrowserAnimationMotion motion, MotionInfo motion_info) {
++    ++start_count_;
+     const auto params = GetParamsLookup();
+     OnCancel(params);
+     current_motion_ = motion;
+@@ -504,6 +505,7 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+ 
+   // Resets the animation for the current group to the end of `motion`.
+   void Reset(BrowserAnimationMotion motion, MotionInfo motion_info) {
++    ++start_count_;
+     const auto params = GetParamsLookup();
+     if (current_motion_ != motion) {
+       OnCancel(params);
+@@ -619,7 +621,16 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+       logger_->MaybeLog();
+       logger_.reset();
+     }
++    const int start_count = start_count_;
+     Notify(BrowserAnimationUpdate::kEnded);
++    // Koan: a listener of `kEnded` can start the next motion (the vertical tab
++    // strip's region view does, from the collapse's end, with a keep-expanded
++    // lock held). That motion is now current and its animator is running:
++    // clearing it here fails CHECK(current_motion_) at the next step. Starting
++    // it already persisted this motion's values.
++    if (start_count != start_count_) {
++      return;
++    }
+     current_motion_ = BrowserAnimationMotion();
+     PersistCurrentValues(params);
+   }
+@@ -706,6 +717,9 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+   ValueLookup current_values_;
+   BrowserAnimationMotion current_motion_;
+   MotionInfo current_motion_info_;
++  // Koan: counts Start() and Reset(), to tell whether a listener started a
++  // motion during the kEnded notification (see OnAnimationEnded()).
++  int start_count_ = 0;
+   std::optional<Animator> animator_;
+   std::optional<Logger> logger_;
+ 

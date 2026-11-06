@@ -152,6 +152,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnAddedToWidget();
   void OnBrowserViewLayout();
   void OnBrowserViewDestroying();
+  // The sidebar finished collapsing or expanding (from the vertical tabs
+  // policy, in a task of its own): locks that had to wait for it are taken.
+  void OnSidebarCollapseSettled();
 
   // Flip the profile prefs.
   void ToggleCompactMode();
@@ -305,6 +308,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void EndFlash();
   // Lets go of `lock`; deferred while the window is being destroyed.
   void ReleaseLock(std::unique_ptr<ExpandOnHoverLock>& lock);
+  // A keep-expanded lock on the sidebar, or null: not while the sidebar is
+  // still collapsing (it would start upstream's expand animation from inside
+  // the collapse's ended notification, which clears it: a CHECK), and not in a
+  // closing window.
+  std::unique_ptr<ExpandOnHoverLock> TakeExpandedLock();
 
   // The caption-button strip.
   void OnCaptionHotZoneHovered(bool hovered);
@@ -321,6 +329,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnContentCardChanged();
 
   void OnSidebarHotZoneHovered(bool hovered);
+  void CheckHoverLock();
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
 
@@ -364,12 +373,18 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // release each other's hold on the sidebar.
   std::unique_ptr<ExpandOnHoverLock> hover_lock_;
   std::unique_ptr<ExpandOnHoverLock> peek_lock_;
+  // The peek shortcut was used while the sidebar collapsed, which refuses the
+  // lock: taken once it has (OnSidebarCollapseSettled()).
+  bool peek_requested_ = false;
   std::unique_ptr<ExpandOnHoverLock> flash_lock_;
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;
   // Keeps the sidebar out for a moment after the pointer leaves its hot zone.
   base::OneShotTimer hover_release_timer_;
+  // Watches the pointer while a hover lock was taken for a hover the hot zone
+  // never reported (CheckHoverLock()).
+  base::RepeatingTimer hover_poll_timer_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
   bool edge_sidebar_hovered_ = false;
   // Bubbles that hold the toolbar or the sidebar out (see
