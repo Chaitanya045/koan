@@ -103,6 +103,10 @@ class KoanGlanceController : public content::WebContentsDelegate,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
 
+  // Its widget while it shows, for the window's colours
+  // (KoanThemeController::AdjustChildColorKey()).
+  const views::Widget* widget() const { return widget_.get(); }
+
  private:
   // Watches a WebContents for what Glance needs from its input: the last
   // mouse press, in screen coordinates (the card grows out of it; Zen grows
