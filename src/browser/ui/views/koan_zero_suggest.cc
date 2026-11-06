@@ -3,10 +3,13 @@
 // found in the LICENSE file.
 
 #include "koan/browser/ui/views/koan_zero_suggest.h"
+#include "chrome/common/webui_url_constants.h"
+#include "content/public/common/url_constants.h"
 
 #include <algorithm>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -54,6 +57,23 @@ constexpr size_t kMaxSuggestions = 8;
 // Relevance of the two groups; tabs come first, each group in order.
 constexpr int kOpenTabRelevance = 1500;
 constexpr int kTopSiteRelevance = 1000;
+
+// Whether an open tab's page is worth a row: any page (a web page, a local
+// file, a data: page, chrome://settings ...), not a blank one or a new tab
+// page (Firefox lists neither as a tab to switch to).
+bool IsListableTab(const GURL& url) {
+  if (!url.is_valid() || url.IsAboutBlank() || url.SchemeIs("devtools")) {
+    return false;
+  }
+  if (url.SchemeIs(content::kChromeUIScheme)) {
+    const std::string& host = url.host();
+    return host != chrome::kChromeUINewTabHost &&
+           host != chrome::kChromeUINewTabPageHost &&
+           host != chrome::kChromeUINewTabPageThirdPartyHost &&
+           host != "koan-newtab";  // Koan's own (koan_url_constants.h).
+  }
+  return true;
+}
 
 class KoanZeroSuggestProvider : public AutocompleteProvider {
  public:
@@ -144,7 +164,7 @@ void KoanZeroSuggestProvider::Start(const AutocompleteInput& input,
     }
     // (Not a second tab on the page being left either: Navigate()'s switch
     // would find the active tab first and do nothing.)
-    if (!tab.url.is_valid() || !tab.url.SchemeIsHTTPOrHTTPS() ||
+    if (!IsListableTab(tab.url) ||
         tab.url.EqualsIgnoringRef(input.current_url()) ||
         !open_urls.insert(tab.url).second) {
       continue;
