@@ -10,6 +10,7 @@
 #include <string_view>
 
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace koan::agent {
 
@@ -719,12 +720,20 @@ base::span<const std::string_view> DeniedDomains() {
 }
 
 bool IsAllowedNavigationUrl(const GURL& url) {
-  return url.is_valid() && (url.SchemeIsHTTPOrHTTPS() || url.IsAboutBlank());
+  // GURL itself parses any length; what Chromium passes between processes is
+  // at most url::kMaxURLChars, so a longer URL is never a navigation the agent
+  // should start.
+  return url.is_valid() &&
+         url.possibly_invalid_spec().size() <= url::kMaxURLChars &&
+         (url.SchemeIsHTTPOrHTTPS() || url.IsAboutBlank());
 }
 
 std::string DisallowedNavigationScheme(const GURL& url) {
   if (!url.is_valid()) {
     return "(invalid)";
+  }
+  if (url.possibly_invalid_spec().size() > url::kMaxURLChars) {
+    return "(too long)";
   }
   // A scheme can be as long as the URL (up to 2 MB); the error and the audit
   // line get a bounded copy.

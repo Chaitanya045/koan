@@ -110,10 +110,12 @@ base::span<const MethodRule> MethodRules();
 base::span<const std::string_view> DeniedDomains();
 
 // Navigations the agent starts (Page.navigate, Target.createTarget,
-// Koan.openTab, a run step's `go`) may only go to http, https and about:blank.
-// Anything else (javascript:, file:, chrome:, view-source:, data:, blob:, ...)
-// is refused before dispatch with Koan.urlNotAllowed, instead of surprising
-// the agent with a detach later.
+// Koan.openTab, a run step's `go`) may only go to http, https and about:blank,
+// and to a URL of at most url::kMaxURLChars (2 MB, the most Chromium passes
+// between processes; GURL itself parses any length). Anything else
+// (javascript:, file:, chrome:, view-source:, data:, blob:, ...) is refused
+// before dispatch with Koan.urlNotAllowed, instead of surprising the agent with
+// a detach later.
 //
 // The caller must build `url` from the exact string that arrived on the wire
 // and navigate that same string (content's PageHandler::Navigate does
@@ -123,9 +125,9 @@ base::span<const std::string_view> DeniedDomains();
 bool IsAllowedNavigationUrl(const GURL& url);
 
 // The scheme to name in the Koan.urlNotAllowed error and the audit log: the
-// URL's scheme (at most 32 characters, then "..."), or "(invalid)" for a URL
-// that does not parse. A valid scheme is short ASCII; "(invalid)" cannot be
-// one.
+// URL's scheme (at most 32 characters, then "..."), "(invalid)" for a URL that
+// does not parse, or "(too long)" for one over the length limit. A valid scheme
+// is short ASCII, so neither marker can be one.
 std::string DisallowedNavigationScheme(const GURL& url);
 
 }  // namespace koan::agent

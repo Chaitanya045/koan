@@ -11,6 +11,7 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace koan::agent {
 
@@ -325,17 +326,32 @@ TEST(KoanAgentPolicyTest, LookAlikeSchemesAreRefused) {
   }
 }
 
-TEST(KoanAgentPolicyTest, AMultiMegabyteUrlIsInvalidAndRefused) {
-  // Over the parser's limit (2 MB), so GURL calls it invalid.
-  const std::string big =
-      "https://example.com/" + std::string(3 * 1024 * 1024, 'a');
-  const GURL url(big);
-  EXPECT_FALSE(url.is_valid());
-  EXPECT_FALSE(IsAllowedNavigationUrl(url));
-  EXPECT_EQ(DisallowedNavigationScheme(url), "(invalid)");
-  // Just under the limit is a valid http URL and is allowed.
-  EXPECT_TRUE(IsAllowedNavigationUrl(
-      GURL("https://example.com/" + std::string(1024 * 1024, 'a'))));
+// GURL parses any length (the 2 MB url::kMaxURLChars belongs to the IPC layer,
+// not to the parser: the Mac run showed that a 3 MB URL is valid), so the
+// filter has its own length limit, the most Chromium passes between processes.
+TEST(KoanAgentPolicyTest, AUrlOverTheLengthLimitIsRefusedWhateverItsScheme) {
+  const std::string prefix = "https://example.com/";
+  const GURL at_limit(prefix +
+                      std::string(url::kMaxURLChars - prefix.size(), 'a'));
+  ASSERT_TRUE(at_limit.is_valid());
+  ASSERT_EQ(at_limit.possibly_invalid_spec().size(), url::kMaxURLChars);
+  EXPECT_TRUE(IsAllowedNavigationUrl(at_limit));
+
+  const GURL over(prefix +
+                  std::string(url::kMaxURLChars - prefix.size() + 1, 'a'));
+  EXPECT_FALSE(IsAllowedNavigationUrl(over));
+  EXPECT_EQ(DisallowedNavigationScheme(over), "(too long)");
+
+  // Multi-megabyte, and about:blank with a huge fragment.
+  const GURL big(prefix + std::string(3 * 1024 * 1024, 'a'));
+  EXPECT_FALSE(IsAllowedNavigationUrl(big));
+  EXPECT_EQ(DisallowedNavigationScheme(big), "(too long)");
+  EXPECT_FALSE(IsAllowedNavigationUrl(
+      GURL("about:blank#" + std::string(3 * 1024 * 1024, 'a'))));
+
+  // A megabyte is fine.
+  EXPECT_TRUE(
+      IsAllowedNavigationUrl(GURL(prefix + std::string(1024 * 1024, 'a'))));
 }
 
 // GURL is what decides, so the filter is only as good as the string it was

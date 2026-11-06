@@ -12,14 +12,17 @@
 #include <string>
 
 #include "base/check.h"
+#include "base/check_op.h"
 #include "koan/browser/agent/koan_agent_policy.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   const std::string input(reinterpret_cast<const char*>(data), size);
   const GURL url(input);
   if (koan::agent::IsAllowedNavigationUrl(url)) {
     CHECK(url.is_valid());
+    CHECK_LE(url.possibly_invalid_spec().size(), url::kMaxURLChars);
     CHECK(url.SchemeIsHTTPOrHTTPS() || url.IsAboutBlank());
     CHECK(!url.SchemeIs("javascript"));
     CHECK(!url.SchemeIs("file"));
