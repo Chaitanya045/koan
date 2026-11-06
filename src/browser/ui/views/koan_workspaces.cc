@@ -55,7 +55,6 @@
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
-#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/groups/tab_group_editor_bubble_view.h"
 #include "chrome/browser/ui/views/tabs/shared/tab_strip_types.h"
 #include "chrome/common/webui_url_constants.h"
@@ -1452,6 +1451,10 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     }
   }
 
+  // The handed-over empty tab was for the loop above (or not needed: the last
+  // tab was loose); a later emptied Space must not adopt it.
+  empty_tab_ = tabs::TabHandle();
+
   // Loose tabs (dragged in from another window, unpinned, from an older
   // Koan) join the active Space, or a new one.
   std::vector<int> loose;
@@ -2173,6 +2176,15 @@ void KoanWorkspaceController::OnTabStripModelChanged(
   }
 }
 
+void KoanWorkspaceController::OnTabChangedAt(tabs::TabInterface* tab,
+                                             TabChangeType change_type) {
+  // The empty tab that navigated in place is an ordinary tab from then on.
+  // (Here, not in the sidebar's controller, which runs only with the sidebar.)
+  if (change_type == TabChangeType::kAll) {
+    ClearEmptyTabMarkIfNavigated(tab);
+  }
+}
+
 void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
   if (change.type == TabGroupChange::kCreated && !restore_started_ &&
       SessionRestore::IsRestoring(browser_view_->GetProfile())) {
@@ -2420,17 +2432,18 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
       browser->GetTabStripModel()->closing_all()) {
     return false;
   }
-  // The tab strip also empties when its last tab moves to another window. A
-  // tab drag hides this window and relies on the empty strip closing it.
-  if (TabDragController::IsActive()) {
-    return false;
-  }
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   if (!controller || !controller->workspaces()->IsEnabled()) {
     return false;
   }
+  // The tab strip also empties when its last tab moves to another window: a
+  // drag (which hides this window on macOS and relies on the empty strip
+  // closing it), "Move to another window", chrome.tabs.move. Those removals
+  // are never closes, so no separate check for a drag in progress: a global
+  // one would also close this window when its last tab *closes* while a drag
+  // runs in another window.
   if (!controller->workspaces()->LastTabsWereClosed()) {
     return false;
   }

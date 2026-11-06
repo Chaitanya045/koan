@@ -17,3 +17,7 @@ and `empty_tab.mjs` are the Linux drivers for several rows; they run nowhere now
 | 10 | With the `NewTabPageLocation` policy set (defaults write com.koan... NewTabPageLocation), close the window's only tab | One tab afterwards (the policy page), not two. |
 | 11 | Compact mode off, empty tab selected: turn compact on | The sidebar stays shown. Open a page in that tab by dropping a link: the sidebar can hide again. |
 | 12 | Ctrl+Tab / ⌘1-9 over a Space whose only other tab is the empty one | Known gap: the hidden empty tab is reached (ZEN_PARITY: Missing). |
+| 13 | Drag a tab that shows a new tab page (typed `chrome://newtab`, or the horizontal strip's +) out into a new window; also tab menu > Move to new window | The New Tab bar does **not** open in the new window (it is the window's adopted tab, not its own). A ⌘N window still opens it (row 1). |
+| 14 | With a new tab page open and the New Tab bar open on it: edit the theme colour or switch the look | The page loads again in the new colour; the bar stays open and keeps its focus. |
+| 15 | New window in a Space with a colour (Space tint) | The page's colour is the tinted window's, after at most one reload; no stale untinted page. |
+| 16 | Drag the theme colour picker continuously with several new tab pages open | No reload storm (each page reloads at most about four times a second, not on every step); a bookmark clicked in an NTP tab at the same time still opens. |

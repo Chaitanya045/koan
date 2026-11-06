@@ -906,6 +906,11 @@ void KoanSidebarTabsController::OnTabStripModelChanged(
   UpdateClearRow();
   // A Space's group view comes and goes with its tabs.
   ScheduleUpdateRowsHost();
+  if (change.type() == TabStripModelChange::kRemoved) {
+    for (const auto& removed : change.GetRemove()->contents) {
+      empty_tab_by_id_.erase(removed.tab->GetHandle().raw_value());
+    }
+  }
 }
 
 void KoanSidebarTabsController::OnTabGroupFocusChanged(
@@ -931,15 +936,14 @@ void KoanSidebarTabsController::OnTabChangedAt(tabs::TabInterface* tab,
     // row (IsEmptyTab()); the layouts are not told by the tab's URL. Only
     // when that changes: this runs for every title, icon and load change of
     // every tab.
-    ClearEmptyTabMarkIfNavigated(tab);
+    // An unknown tab (never seen, e.g. restored without a load) is laid out
+    // once, so a row hidden for a mark that is gone shows.
     const bool empty = IsEmptyTab(tab);
     const int32_t id = tab->GetHandle().raw_value();
-    if (empty != empty_tab_ids_.contains(id) && region_) {
-      if (empty) {
-        empty_tab_ids_.insert(id);
-      } else {
-        empty_tab_ids_.erase(id);
-      }
+    const auto known = empty_tab_by_id_.find(id);
+    if ((known == empty_tab_by_id_.end() || known->second != empty) &&
+        region_) {
+      empty_tab_by_id_[id] = empty;
       const auto relayout = [](auto& self, views::View* view) -> void {
         view->InvalidateLayout();
         for (views::View* child : view->children()) {

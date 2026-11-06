@@ -50,10 +50,24 @@ check('The page is empty: no content, script or extra requests',
       facts && facts.children === 0 && facts.text === '' && facts.scripts === 0 &&
       facts.images === 0 && facts.links === 0 && facts.resources === 0,
       JSON.stringify(facts));
-// The default look is Zen: an opaque theme colour (Partial against Zen's
-// window gradient, docs/ZEN_PARITY.md).
-check('...in the Zen look\'s opaque new tab page colour',
-      /^rgb\(\d+, \d+, \d+\)$/.test(facts?.background ?? ''), facts?.background);
+// The default look is Zen: Chromium's new tab page colour of the window's
+// provider (opaque; Partial against Zen's window gradient, ZEN_PARITY).
+// chrome://theme/colors.css has it as --color-new-tab-page-background.
+const css = await (async () => {
+  const id = (await browserCall('Target.createTarget', {
+      url: 'chrome://theme/colors.css?sets=ui,chrome', background: true })).result.targetId;
+  await sleep(800);
+  const page = (await pages()).find(p => p.id === id);
+  const text = page && await evalIn(page, 'document.body?.innerText');
+  await browserCall('Target.closeTarget', { targetId: id });
+  return text;
+})();
+const hex = css?.match(/--color-new-tab-page-background:\s*#([0-9a-fA-F]{6})/)?.[1];
+const wanted = hex && `rgb(${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4), 16)})`;
+check('...in the Zen look\'s new tab page colour (the window provider\'s)',
+      wanted ? facts?.background === wanted
+             : /^rgb\(\d+, \d+, \d+\)$/.test(facts?.background ?? ''),
+      `${facts?.background} vs ${wanted ?? css?.slice(0, 80)}`);
 if (process.env.SHOTS) {
   const r = await onPage(tab.page, c => c.send('Page.captureScreenshot', { format: 'png' }));
   fs.writeFileSync(`${process.env.SHOTS}/newtab.png`, Buffer.from(r.result.data, 'base64'));

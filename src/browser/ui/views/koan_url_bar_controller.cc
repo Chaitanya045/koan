@@ -12,7 +12,9 @@
 
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "chrome/browser/sessions/session_restore.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/common/webui_url_constants.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/common/url_constants.h"
 
 #include <algorithm>
@@ -449,12 +451,21 @@ void KoanUrlBarController::OpenOnStartup() {
     return;
   }
   // Only a window that starts on a new tab page: its only tab, on the empty
-  // page, and not one the user has already used.
+  // page.
   const TabStripModel* model = browser->GetTabStripModel();
   if (model->count() != 1) {
     return;
   }
   content::WebContents* contents = model->GetWebContentsAt(0);
+  // The window's own first tab, not one adopted from another window (a tab
+  // dragged out, "Move to new window", chrome.windows.create({tabId})): that
+  // one has committed pages already, where a tab made with the window is
+  // still on its initial navigation. Zen opens the bar only on its own empty
+  // tab. (Not during a tab drag either.)
+  if (TabDragController::IsActive() ||
+      !contents->GetController().IsInitialBlankNavigation()) {
+    return;
+  }
   const GURL& url = contents->GetVisibleURL();
   const bool empty_page =
       url.IsAboutBlank() || (url.SchemeIs(content::kChromeUIScheme) &&
@@ -682,9 +693,11 @@ KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
   // Zen's floating-on-type: the bar floats unless the input was focused by a
   // mouse press (UrlbarInputBase #openPopover, test_Click_Shoudnt_FLoat_
   // Urlbar): Cmd+L and Cmd+T float at once, and a click on the pill edits in
-  // the pill until the first keystroke floats it.
+  // the pill, which grows over the page as you type. Zen decides this once,
+  // when the bar opens (#openPopover returns early once it is open): typing
+  // after a click never floats it.
   if (behavior != prefs::kUrlBarBehaviorNormal &&
-      (!edit_in_pill_ || user_input_in_progress_ || new_tab_)) {
+      (!edit_in_pill_ || new_tab_)) {
     return Placement::kFloating;
   }
   return Placement::kInPill;
