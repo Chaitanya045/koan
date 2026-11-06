@@ -87,8 +87,11 @@ Chromium's icons.
    - `koan_icons_unittests` (`src/browser/ui/vector_icons/koan_icons_unittest.cc`;
      `scripts/build.sh koan_icons_unittests`, run `out/Koan/koan_icons_unittests`):
      every table entry exists, is a Koan icon on the 24 canvas, each Chromium
-     icon is mapped once, Koan and unmapped icons are left alone, and Zen's
-     sizes.
+     icon is mapped once, Koan and unmapped icons are left alone, Zen's sizes,
+     the URL bar magnifier's 14 unit ink, and `KoanIconsHookTest` (the gfx
+     hook: a Chromium icon paints pixel-equal to its Koan icon through both
+     `CreateVectorIcon` and `PaintVectorIcon`). Not in CI: the Mac loop builds
+     and runs it (`scripts/build.sh koan_icons_unittests`).
    - `scripts/e2e/icons.mjs`: the live window paints Koan icons, at the sizes
      above, for Back/Forward/Reload, the New Tab row, the bottom bar's "+", the
      Space actions, Clear, Copy URL, site information, Library and the tab close
