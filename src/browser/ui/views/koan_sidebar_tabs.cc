@@ -550,6 +550,19 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
   if (!features::IsSidebarEnabled() || !provider) {
     return false;
   }
+  // Zen unselects the current tab while its URL bar is open for a new tab:
+  // the "+ New Tab" row is the selected one then.
+  if (selected && tab.GetWidget()) {
+    if (const BrowserView* browser_view =
+            BrowserView::GetBrowserViewForNativeWindow(
+                tab.GetWidget()->GetNativeWindow())) {
+      if (const KoanBrowserViewController* controller =
+              KoanBrowserViewController::From(browser_view);
+          controller && controller->url_bar()->is_new_tab()) {
+        selected = false;
+      }
+    }
+  }
   if (pinned) {
     PaintEssentialsTile(canvas, tab, selected, hover, corner_radius);
     return true;
@@ -821,6 +834,17 @@ void KoanSidebarTabsController::UpdateClearRow() {
 void KoanSidebarTabsController::SetNewTabSelected(bool selected) {
   if (rows_) {
     rows_->new_tab_row()->SetSelected(selected);
+  }
+  // The current tab's pill goes (or comes back) with it. The tab rows are
+  // in the sidebar's region, each painting itself.
+  if (region_) {
+    const auto repaint = [](auto& self, views::View* view) -> void {
+      view->SchedulePaint();
+      for (views::View* child : view->children()) {
+        self(self, child);
+      }
+    };
+    repaint(repaint, region_);
   }
 }
 

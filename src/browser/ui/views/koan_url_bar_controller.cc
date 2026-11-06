@@ -79,7 +79,6 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
-#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -89,7 +88,6 @@
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
-#include "ui/views/animation/animation_builder.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/label.h"
@@ -127,10 +125,6 @@ bool HasOpenTabWithUrl(BrowserWindowInterface* browser, const GURL& url) {
   }
   return false;
 }
-
-// Zen fades the bar in where it opens. The sizes are in
-// koan_sidebar_metrics.h.
-constexpr base::TimeDelta kFadeDuration = base::Milliseconds(120);
 
 // Zen's zen.urlbar.wait-to-clear.
 constexpr base::TimeDelta kKeepLastSearch = base::Seconds(45);
@@ -903,15 +897,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
   // preferred height.
   ApplyCardStyle();
   Layout();
-  // Zen fades the bar in where it opens; moving from the pill to floating
-  // keeps what was just typed in view.
-  if (opening) {
-    top_container->layer()->SetOpacity(0.0f);
-    views::AnimationBuilder()
-        .Once()
-        .SetDuration(kFadeDuration)
-        .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
-  }
+  // Zen 1.24b on macOS opens and closes the bar in a single frame: no fade.
 }
 
 void KoanUrlBarController::RefreshPageActions() {
@@ -971,11 +957,6 @@ void KoanUrlBarController::ApplyCardStyle() {
         overlay->GetIndexOf(top_container).value());
     backdrop_->SetPaintToLayer();
     backdrop_->layer()->SetFillsBoundsOpaquely(false);
-    backdrop_->layer()->SetOpacity(0.0f);
-    views::AnimationBuilder()
-        .Once()
-        .SetDuration(kFadeDuration)
-        .SetOpacity(backdrop_, 1.0f, gfx::Tween::EASE_OUT);
   } else if (!zen_card && backdrop_) {
     views::View* overlay = backdrop_->parent();
     overlay->RemoveChildViewT(std::exchange(backdrop_, nullptr));
