@@ -40,6 +40,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_glance.h"
@@ -328,7 +329,7 @@ class KoanGlanceView : public views::View {
     buttons_->SetBetweenChildSpacing(kButtonGap);
     close_ = AddButton(vector_icons::kCloseIcon, u"Close (Esc)",
                        &KoanGlanceController::Close);
-    AddButton(kOpenInNewIcon, u"Expand Glance",
+    AddButton(kKoanFullscreenIcon, u"Expand Glance",
               &KoanGlanceController::ExpandToTab);
     AddButton(kSplitSceneIcon, u"Split Glance",
               &KoanGlanceController::OpenInSplit);

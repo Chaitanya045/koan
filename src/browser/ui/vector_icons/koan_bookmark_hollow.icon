@@ -1,0 +1,38 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's bookmark-hollow.svg: Lucide (ISC), lucide.dev icon "bookmark", converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 17.5, 1.1,
+QUADRATIC_TO, 20.7, 1.1, 20.7, 4.3,
+LINE_TO, 20.7, 20.8,
+QUADRATIC_TO, 20.7, 22.009, 19.654, 22.616,
+QUADRATIC_TO, 18.608, 23.223, 17.558, 22.623,
+LINE_TO, 12.595, 19.787,
+QUADRATIC_TO, 12, 19.447, 11.405, 19.787,
+LINE_TO, 6.442, 22.623,
+QUADRATIC_TO, 5.392, 23.223, 4.346, 22.616,
+QUADRATIC_TO, 3.3, 22.009, 3.3, 20.8,
+LINE_TO, 3.3, 4.3,
+QUADRATIC_TO, 3.3, 2.975, 4.237, 2.037,
+QUADRATIC_TO, 5.175, 1.1, 6.5, 1.1,
+CLOSE,
+MOVE_TO, 17.5, 3.1,
+LINE_TO, 6.5, 3.1,
+QUADRATIC_TO, 6.003, 3.1, 5.651, 3.451,
+QUADRATIC_TO, 5.3, 3.803, 5.3, 4.3,
+LINE_TO, 5.3, 20.8,
+QUADRATIC_TO, 5.3, 20.857, 5.35, 20.886,
+QUADRATIC_TO, 5.4, 20.915, 5.45, 20.887,
+LINE_TO, 10.413, 18.051,
+QUADRATIC_TO, 12, 17.144, 13.587, 18.051,
+LINE_TO, 18.55, 20.886,
+QUADRATIC_TO, 18.6, 20.915, 18.65, 20.886,
+QUADRATIC_TO, 18.7, 20.857, 18.7, 20.8,
+LINE_TO, 18.7, 4.3,
+QUADRATIC_TO, 18.7, 3.1, 17.5, 3.1,
+CLOSE,

@@ -1,0 +1,19 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's media-play.svg: Lucide (ISC), lucide.dev icon "play" (filled), converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 3.3, 4.3,
+QUADRATIC_TO, 3.3, 2.447, 4.906, 1.525,
+QUADRATIC_TO, 6.513, 0.602, 8.113, 1.535,
+LINE_TO, 21.309, 9.233,
+QUADRATIC_TO, 22.9, 10.156, 22.901, 11.997,
+QUADRATIC_TO, 22.903, 13.838, 21.312, 14.765,
+LINE_TO, 8.113, 22.465,
+QUADRATIC_TO, 6.513, 23.398, 4.906, 22.475,
+QUADRATIC_TO, 3.299, 21.552, 3.3, 19.7,
+CLOSE,

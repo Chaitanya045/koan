@@ -1,0 +1,162 @@
+# zen-name  set  icon  [fill]
+sidebar lucide panel-left
+sidebar-right lucide panel-right
+expand-sidebar lucide panel-left-open
+sidebars-right lucide panel-right-open
+back lucide arrow-left
+forward lucide arrow-right
+arrow-left lucide arrow-left
+arrow-right lucide arrow-right
+arrow-up lucide arrow-up
+arrow-down lucide arrow-down
+arrow-corner-down-right lucide corner-down-right
+arrows-collapse lucide minimize-2
+arrows-expand lucide maximize-2
+reload lucide rotate-cw
+arrow-rotate-anticlockwise lucide rotate-ccw
+close lucide x
+close-filled-round lucide circle-x
+plus lucide plus
+menu lucide ellipsis
+check lucide check
+chevron lucide chevron-down
+dart-down lucide chevron-down
+search-glass lucide search
+search-page lucide file-search
+settings lucide settings
+settings-fill lucide settings
+sliders lucide sliders-horizontal
+downloads lucide download
+history lucide history
+bookmark-hollow lucide bookmark
+bookmark lucide bookmark fill
+bookmark-star-on-tray lucide book-marked
+info lucide info
+security lucide lock
+security-fill lucide lock fill
+security-broken lucide lock-open
+security-broken-fill lucide lock-open fill
+security-warning lucide triangle-alert
+tracking-protection lucide shield
+tracking-protection-fill lucide shield fill
+extension lucide puzzle
+extension-fill lucide puzzle fill
+extension-blocked lucide puzzle
+page-portrait lucide file
+link lucide link
+share lucide share
+reader-mode lucide book-open
+permissions lucide settings-2
+permissions-fill lucide settings-2
+tab lucide app-window
+new-tab-image lucide square-plus
+window lucide app-window
+private-window lucide venetian-mask
+private-window-small lucide venetian-mask
+privateBrowsing lucide venetian-mask
+forget lucide flame
+passwords lucide key-round
+print lucide printer
+save lucide file-down
+fullscreen lucide maximize
+fullscreen-exit lucide minimize
+zoom-out lucide zoom-out
+help lucide circle-question-mark
+split lucide columns-2
+duplicate-tab lucide copy
+edit-copy lucide copy
+edit-cut lucide scissors
+edit-paste lucide clipboard-paste
+edit-delete lucide delete
+trash lucide trash-2
+u-turn-to-left lucide undo-2
+unpin lucide minus
+pin lucide pin
+essential-add lucide star
+essential-remove lucide star-off
+folder lucide folder
+open lucide square-arrow-out-up-right
+drag-indicator lucide grip-vertical
+send-to-device lucide monitor-smartphone
+screenshot lucide scan
+camera lucide camera
+camera-fill lucide camera
+camera-blocked lucide camera-off
+microphone lucide mic
+microphone-fill lucide mic fill
+microphone-blocked lucide mic-off
+microphone-blocked-fill lucide mic-off
+video-fill lucide video
+video-blocked-fill lucide video-off
+geo lucide map-pin
+geo-fill lucide map-pin fill
+geo-blocked lucide map-pin-off
+desktop-notification lucide bell
+desktop-notification-fill lucide bell fill
+desktop-notification-blocked lucide bell-off
+popup lucide app-window
+popup-fill lucide app-window
+autoplay-media lucide circle-play
+autoplay-media-fill lucide circle-play
+autoplay-media-blocked lucide circle-pause
+canvas lucide frame
+canvas-blocked lucide frame
+midi lucide piano
+persistent-storage lucide database
+persistent-storage-fill lucide database
+persistent-storage-blocked lucide database
+xr lucide glasses
+xr-fill lucide glasses
+xr-blocked lucide glasses
+screen lucide monitor
+screen-blocked lucide monitor-off
+cookies-fill lucide cookie
+developer lucide code-xml
+tool-profiler lucide gauge
+translations lucide languages
+spell-check lucide spell-check
+signature lucide signature
+lightbulb lucide lightbulb
+mail lucide mail
+home lucide house
+manage lucide wrench
+customize lucide paintbrush
+media-play lucide play fill
+media-pause lucide pause fill
+media-next lucide skip-forward fill
+media-previous lucide skip-back fill
+media-mute lucide volume-x
+media-unmute lucide volume-2
+tab-audio-playing-small lucide volume-2
+tab-audio-muted-small lucide volume-x
+tab-audio-blocked-small lucide volume-off
+face-sun lucide sun
+moon-stars lucide moon-star
+sparkles lucide sparkles
+algorithm lucide shuffle
+paintbrush lucide paintbrush
+paintbrush-fill lucide paintbrush
+palette lucide palette
+heart-circle-fill lucide heart fill
+wand-sparkle lucide wand-sparkles
+square-wand-sparkle lucide wand-sparkles
+edit-theme lucide paintbrush
+boost lucide zap
+bolt lucide zap
+eyedropper lucide pipette
+hammer lucide hammer
+brackets-curly lucide braces
+dice lucide dices
+block lucide ban
+blocked-element lucide ban
+text-lowercase lucide case-lower
+text-uppercase lucide case-upper
+text-title-case lucide case-sensitive
+text-size lucide a-large-small
+circle-bars-filter lucide list-filter
+move-cursor lucide move
+container-tab lucide box
+library zen library scale=1
+video lucide video
+video-blocked lucide video-off
+default-favicon lucide globe
