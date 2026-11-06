@@ -32,6 +32,25 @@ jobs:
           KOAN_CHROMIUM_FILE_CACHE: ${{ runner.temp }}/koan-chromium-files
         run: scripts/ci/check_patches.sh
 
+  patch-health:
+    name: Patch health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The whole history: the report compares with the PR's merge base.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch count, size, new and grown patches; a new patch needs a docs/REBASE.md row
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          args=(--summary "$GITHUB_STEP_SUMMARY")
+          if [[ -n $BASE_REF ]]; then
+            args+=(--base "$(git merge-base "origin/$BASE_REF" HEAD)")
+          fi
+          python3 -I scripts/ci/patch_report.py "${args[@]}"
+
   tests:
     name: Unit tests
     runs-on: ubuntu-latest
