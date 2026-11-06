@@ -112,14 +112,20 @@ void KoanWelcome::OnBrowserViewDestroying() {
 
 void KoanWelcome::SetPending(bool pending) {
   if (std::exchange(pending_, pending) != pending) {
-    SetWelcomeWindow(pending ? browser_view_->browser() : nullptr);
+    if (pending) {
+      SetWelcomeWindow(browser_view_->browser());
+    } else {
+      ClearWelcomeWindow(browser_view_->browser());
+    }
   }
 }
 
 bool KoanWelcome::ShouldShow() const {
   Profile* profile = browser_view_->GetProfile();
-  return !g_shown_this_session && features::IsWelcomeEnabled() &&
-         browser_view_->GetWidget() && !profile->IsOffTheRecord() &&
+  // (Not while another window has it pending: the first window gets it.)
+  return !g_shown_this_session && !IsWelcomePending() &&
+         features::IsWelcomeEnabled() && browser_view_->GetWidget() &&
+         !profile->IsOffTheRecord() &&
          browser_view_->browser()->GetType() ==
              BrowserWindowInterface::TYPE_NORMAL &&
          !profile->GetPrefs()->GetBoolean(prefs::kWelcomeScreenSeen) &&
@@ -127,7 +133,8 @@ bool KoanWelcome::ShouldShow() const {
 }
 
 void KoanWelcome::MaybeShow() {
-  if (!browser_view_->GetWidget() || IsWindowClosing()) {
+  if (g_shown_this_session || !browser_view_->GetWidget() ||
+      IsWindowClosing()) {
     SetPending(false);
     return;
   }

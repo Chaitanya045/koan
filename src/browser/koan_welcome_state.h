@@ -11,8 +11,11 @@ namespace koan {
 
 // Which window Koan's welcome screen (KoanWelcome) is about to show in or
 // shows in: at most one, for the browser session. Kept apart from the views
-// code so that upstream hooks can ask it cheaply.
+// code so that upstream hooks can ask it cheaply. SetWelcomeWindow() marks
+// `browser`; ClearWelcomeWindow() unmarks it, and only it (another window's
+// mark stays).
 void SetWelcomeWindow(const BrowserWindowInterface* browser);
+void ClearWelcomeWindow(const BrowserWindowInterface* browser);
 
 // Hook for SearchEngineChoiceDialogService::ComputeDialogConditions() (a
 // hook patch): whether the welcome is pending or showing, in any window. Its
