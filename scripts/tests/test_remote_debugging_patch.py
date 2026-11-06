@@ -57,8 +57,17 @@ class RemoteDebuggingPatchTest(unittest.TestCase):
     self.assertIn('remote_debugging_server.cc', rebase)
     self.assertIn(KNOB, rebase)
     self.assertIn('scripts/mac/remote_debugging.sh', rebase)
-    self.assertIn('non-default data directory',
-                  (ROOT / 'SECURITY.md').read_text())
+    security = (ROOT / 'SECURITY.md').read_text()
+    self.assertIn('non-default data directory', security)
+    self.assertIn('already running', security)
+    self.assertIn('case-insensitive', security)
+    self.assertNotIn('read its cookies', security)
+
+  def test_mac_script_keeps_the_pipe_fds_open_and_the_real_home_out(self):
+    script = (ROOT / 'scripts/mac/remote_debugging.sh').read_text()
+    self.assertIn('3</dev/null 4>/dev/null', script)
+    self.assertNotIn('3<&-', script)
+    self.assertIn('HOME="$fake_home"', script)
 
 
 if __name__ == '__main__':

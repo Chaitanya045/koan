@@ -28,10 +28,17 @@ Example: `MODE=old PREFS="$(cat scripts/e2e/prefs/vertical_tabs_old_profile.json
 
 Behaviour test of `patches/chrome/browser/devtools/remote_debugging_server.cc.patch` (Chrome's refusal of
 `--remote-debugging-port` / `--remote-debugging-pipe` on the default user data directory, on in Koan too). It runs
-on the Mac itself and starts Koan with `--no-startup-window`, so nothing is drawn. Leg A (always): a fresh
-`--user-data-dir` still gets its server. Leg B (only with `KOAN_DEFAULT_DIR_OK=1`, because it starts Koan on the real
-profile, so run it when the maintainer says the Mac is free and Koan is not running): the default directory must refuse
-both switches with the stderr message and leave 127.0.0.1:9222 silent. It prints one PASS/FAIL/SKIP line per leg.
+on the Mac itself and starts Koan with `--no-startup-window`, so nothing is drawn.
+
+* Leg A: a fresh `--user-data-dir` still gets its server (`DevToolsActivePort` and `/json/version`).
+* Leg B: the **default directory** under a **throw-away `HOME`**, so the real default directory is never touched. It
+  first probes that CoreFoundation honours the `HOME` override (and SKIPs rather than run on the real profile if not),
+  then checks after each run that the throw-away default dir was the one used and that the real profile's `Local State` is
+  unchanged. `--remote-debugging-port=9222` and `--remote-debugging-pipe` (started with fds 3 and 4 open, which the
+  browser requires) must both be refused with the stderr message, and nothing may answer on 9222. Runs by default; the Mac
+  loop runs it once per build.
+* Leg C (INFO only): the default dir spelled in lower case, to report whether the case-insensitive-APFS gap
+  (see `SECURITY.md`) is present.
 
 ## Rules the drivers follow (do not remove)
 

@@ -696,7 +696,7 @@ classic, always-visible scrollbars start Koan with
 ## Remote debugging
 
 For scripts and tools that drive Koan over the DevTools protocol, start it
-with its own profile:
+with its own profile (a throwaway directory is fine):
 
 ```sh
 /Applications/Koan.app/Contents/MacOS/Koan --user-data-dir=/tmp/koan-test --remote-debugging-port=9222
