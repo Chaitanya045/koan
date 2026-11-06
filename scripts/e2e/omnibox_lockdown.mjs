@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import {
   CDP_PORT, CTRL, check, clickView, finish, front, key, pages, readPref,
-  shownViews, sleep, views, viewTree, typeInto, waitFor, browserCall,
+  shownViews, sleep, views, viewTree, typeInto, visiblePage, waitFor, browserCall,
 } from './lib/koan.mjs';
 
 const VK = { T: 84, L: 76, ESC: 27 };
@@ -49,14 +49,43 @@ check('Cmd+L with the bar open in the pill floats it', await waitFor(floating),
 await key(page, VK.ESC, 0, 'Escape');
 await sleep(500);
 
-// O8: Cmd+T lists open tabs at once.
-await key(page, VK.T, CTRL, 't');
-await sleep(1000);
-const tabRows = shownViews(await views(), 'OmniboxResultView');
-check('Cmd+T with an empty box lists open tabs (and top sites), local only',
-      tabRows.length >= 1, `${tabRows.length} row(s)`);
-await key(page, VK.ESC, 0, 'Escape');
+// O8, O9: Cmd+T lists the other open tabs at once (the active tab is not one
+// to switch to, and a fresh profile has no top sites), each with Switch to
+// Tab, and Enter on one switches to it instead of opening a duplicate.
+const second = (await browserCall('Target.createTarget',
+    { url: 'https://example.com/?omnibox-two' })).result.targetId;
+await waitFor(async () => (await pages()).some(p => p.id === second && p.title));
+await browserCall('Target.activateTarget', { targetId: page.id });
 await sleep(500);
+const tabCount = (await pages()).length;
+const secondTitle = (await pages()).find(p => p.id === second)?.title ?? '';
+await key(page, VK.T, CTRL, 't');
+const tabRows = await waitFor(async () => {
+  const rs = shownViews(await views(), 'OmniboxResultView');
+  return rs.length >= 1 && rs;
+});
+const texts = (await views()).filter(v => v.cls === 'OmniboxTextView' && v.shown)
+    .map(v => v.props?.Text ?? '');
+console.log(`INFO  Cmd+T rows: ${texts.join(' | ')}`);
+check('Cmd+T with an empty box lists the other open tab, local only',
+      !!tabRows && texts.some(t => secondTitle && t.includes(secondTitle)),
+      `title ${JSON.stringify(secondTitle)}; ${texts.join(' | ')}`);
+const buttons = (await views()).filter(v => v.shown && /Button/.test(v.cls) &&
+    v.path.some(c => c === 'OmniboxResultView'));
+console.log(`INFO  buttons in the rows: ${buttons.map(v => v.cls).join(' ')}`);
+check('...with a Switch to Tab button', buttons.length >= 1,
+      buttons.map(v => v.cls).join(' '));
+// Enter on the first row (the second tab's): it switches, no duplicate.
+await key(page, 40, 0, 'ArrowDown');
+await key(page, 13, 0, 'Enter');
+await sleep(1000);
+check('Enter on the open tab\'s row switches to it: no new tab, that tab is active',
+      (await pages()).length === tabCount && (await visiblePage())?.id === second,
+      `${(await pages()).length} tab(s), was ${tabCount}`);
+await browserCall('Target.closeTarget', { targetId: second });
+await sleep(500);
+[page] = await pages();
+await front(page);
 
 // O6: no @gemini / @aimode shortcuts (the filter runs after the search engines
 // load, off the notification: inside it, the browser died at startup).

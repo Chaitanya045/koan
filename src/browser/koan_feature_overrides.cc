@@ -130,9 +130,9 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // starting still gets one line in the log, "Attempting to show IPH ...;
   // IPH will not be shown": BrowserUserEducationInterfaceImpl logs that
   // before it looks at whether the feature is on. So these switch off what
-  // is shown, not that line.) The features: tab groups' focus mode (Spaces),
-  // vertical tabs (the sidebar), split view, side panels, and Google's AI entry
-  // points.
+  // is shown, not that line.) The features: vertical tabs (the sidebar), split
+  // view, side panels, and Google's AI entry points. (The tab groups' ones,
+  // for focus mode, are with Spaces above.)
   namespace fe = feature_engagement;
   for (const base::Feature* iph : {
            &fe::kIPHVerticalTabsExpandOnHoverFeature,

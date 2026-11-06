@@ -43,6 +43,7 @@
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
+#include "components/omnibox/browser/page_classification_functions.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/vector_icons/vector_icons.h"
@@ -550,8 +551,12 @@ int KoanCommandPalette::FuzzyScore(std::u16string_view target,
   return matched == query.size() ? score : 0;
 }
 
-bool UsesLocalZeroSuggestSection() {
-  return features::IsUrlBarEnabled();
+bool UsesLocalZeroSuggestSection(
+    metrics::OmniboxEventProto::PageClassification classification) {
+  return features::IsUrlBarEnabled() &&
+         (omnibox::IsOtherWebPage(classification) ||
+          omnibox::IsSearchResultsPage(classification) ||
+          omnibox::IsNtpOmnibox(classification));
 }
 
 void AddAutocompleteProviders(

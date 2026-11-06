@@ -12,20 +12,25 @@
 
 class BrowserWindowInterface;
 
+class GURL;
+
 namespace views {
 class View;
 }
 
 namespace koan {
 
-// While the URL bar is open in place of a new tab (Ctrl+T or the sidebar's
-// new-tab button with Zen's zen.urlbar.replace-newtab), whatever the user
-// opens from it goes to a new foreground tab: turns the kCurrentTab
-// disposition into kNewForegroundTab, or kSwitchToTab for an open tab's row
-// (`is_open_tab_match`). Called from
+// What the URL bar opens from its rows. An open tab's row (`is_open_tab_match`,
+// its "Switch to Tab") switches to the tab, wherever the bar was opened from
+// (Zen's rows always do), unless that tab is gone: then, like any other row,
+// it opens in the current tab, or in a new one while the URL bar is open in
+// place of a new tab (Ctrl+T or the sidebar's new-tab button with Zen's
+// zen.urlbar.replace-newtab). Turns the kCurrentTab disposition into
+// kSwitchToTab or kNewForegroundTab. Called from
 // ChromeOmniboxClient::OnAutocompleteAccept().
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
                                    bool is_open_tab_match,
+                                   const GURL& destination_url,
                                    WindowOpenDisposition* disposition);
 
 // Whether a new tab page must not focus the URL bar by itself, as Chromium
