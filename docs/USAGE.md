@@ -188,9 +188,12 @@ toolbar is hidden) don't change that.
 Like Zen's, the URL bar is a card centred over the window (two thirds of
 its width, at most 750 px, larger text, a soft shadow over the page) with
 the suggestions under it. **Ctrl+L and Ctrl+T (⌘L, ⌘T)** open it at once,
-with no animation; **clicking the pill** edits the address in the pill, which
-grows over the page as you type, and never floats (Zen's behaviour; Behavior
-"Normal" does that for the keyboard too). On an empty box, **Tab** enters the
+with no animation; **clicking the pill** edits the address in the pill until
+the first keystroke lifts it into the card (Behavior "Normal" never does, for
+the keyboard either). The box is empty after Ctrl+T, and an empty box lists
+your open tabs (most recent first, each with **Switch to Tab**; Enter
+switches to it) and then your most visited sites, all from the browser itself
+with no request to a search engine. On an empty box, **Tab** enters the
 command palette (the ">" mode). The pill is empty meanwhile. Esc, a click
 outside the card or opening a result (or running an action) closes it;
 switching to another window and back leaves it as it was. In compact mode,
