@@ -91,7 +91,6 @@ void KoanWelcome::OnAddedToWidget() {
   if (!ShouldShow()) {
     return;
   }
-  g_shown_this_session = true;
   // Pending from now: Chromium's search engine choice dialog, which the
   // startup tab's first load could open, waits for it.
   SetPending(true);
@@ -132,6 +131,8 @@ void KoanWelcome::MaybeShow() {
     SetPending(false);
     return;
   }
+  // (Not before: a window closed before this leaves it to the next one.)
+  g_shown_this_session = true;
   Show();
 }
 
