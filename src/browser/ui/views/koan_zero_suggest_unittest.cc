@@ -118,14 +118,22 @@ TEST_F(KoanZeroSuggestTest, AtMostFiveTabs) {
   EXPECT_EQ(5u, Run(Input()).size());
 }
 
-TEST_F(KoanZeroSuggestTest, OnlyWebPagesAndEachOnce) {
+TEST_F(KoanZeroSuggestTest, AnyPageButBlankAndNewTabPagesAndEachOnce) {
   AddTab(u"A", "https://a.example/", 1);
   AddTab(u"A again", "https://a.example/", 2);
   AddTab(u"Settings", "chrome://settings/", 3);
-  AddTab(u"Blank", "about:blank", 4);
+  AddTab(u"Data page", "data:text/html,<title>x</title>y", 4);
+  AddTab(u"File", "file:///tmp/a.html", 5);
+  AddTab(u"Blank", "about:blank", 6);
+  AddTab(u"New Tab", "chrome://newtab/", 7);
+  AddTab(u"Koan new tab", "chrome://koan-newtab/", 8);
+  AddTab(u"Chromium new tab", "chrome://new-tab-page/", 9);
   const ACMatches& matches = Run(Input());
-  ASSERT_EQ(1u, matches.size());
+  ASSERT_EQ(4u, matches.size());
   EXPECT_EQ(u"A", matches[0].description);
+  EXPECT_EQ(u"Settings", matches[1].description);
+  EXPECT_EQ(u"Data page", matches[2].description);
+  EXPECT_EQ(u"File", matches[3].description);
 }
 
 TEST_F(KoanZeroSuggestTest, NotTheTabBeingLeftNorACopyOfIt) {
