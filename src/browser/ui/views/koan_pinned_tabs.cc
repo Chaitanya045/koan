@@ -69,6 +69,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_tab_hooks.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tab_views.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
@@ -741,6 +742,12 @@ void KoanPinnedTabController::ScheduleNormalize(tabs::TabInterface* tab) {
                          &KoanPinnedTabController::Normalize);
 }
 
+bool KoanPinnedTabController::IsDraggingHere() const {
+  // TabDragController is one per process: this window's strip is the one
+  // being dragged in.
+  return TabDragController::IsActive() && !browser_view_->IsTabStripEditable();
+}
+
 void KoanPinnedTabController::Normalize() {
   // Not during a tab drag (in any window: TabDragController is one per
   // process; the user may pause over a place as long as they like), nor while
@@ -771,10 +778,12 @@ void KoanPinnedTabController::Normalize() {
     KoanTabState& state = GetOrCreateTabState(tab->GetContents());
     bool was_essential = false;
     bool changed_group = false;
+    bool dragged = false;
     for (tabs::TabInterface* each : unit) {
       KoanTabState& each_state = GetOrCreateTabState(each->GetContents());
       was_essential |= std::exchange(each_state.was_essential, false);
       changed_group |= std::exchange(each_state.changed_group, false);
+      dragged |= std::exchange(each_state.dragged, false);
     }
     if (tab->IsPinned()) {
       // Dragged into the tiles, or duplicated from one, past Zen's limit:
@@ -803,21 +812,35 @@ void KoanPinnedTabController::Normalize() {
       }
       continue;
     }
-    if (changed_group && IsPinnedInSpace(tab)) {
-      // Moved to another Space, or restored: still pinned, and at the end of
-      // that Space's pinned tabs if it isn't among them.
+    if (changed_group && !dragged && IsPinnedInSpace(tab)) {
+      // Moved to another Space, put back into one, or restored: still pinned,
+      // and at the end of that Space's pinned tabs if it isn't among them. (A
+      // drag is decided by where it dropped.)
       MoveIntoPinnedTabs(tab);
       continue;
     }
-    // Zen's drop rules for a drag within the Space.
+    // Zen's drop rules for a drag within the Space. Any other move (the
+    // keyboard, an extension's tabs.move) keeps the tab in its section, as
+    // Zen's moveTabTo does: it is never pinned or unpinned by it.
     if (IsPinnedInSpace(tab) && !InPinnedRun(first)) {
-      for (tabs::TabInterface* each : unit) {
-        ClearPinnedState(each);
+      if (dragged) {
+        for (tabs::TabInterface* each : unit) {
+          ClearPinnedState(each);
+        }
+      } else {
+        MoveIntoPinnedTabs(tab);
       }
     } else if (!IsPinnedForUser(tab) && AbovePinnedTab(last)) {
-      PinInSpace(tab);
+      if (dragged) {
+        PinInSpace(tab);
+      } else {
+        MoveAfterPinnedTabs(tab);
+      }
     }
   }
+  // Folders' tabs stay together in the pinned section: the same pass, once
+  // things have settled (koan_folder_controller.h).
+  KoanBrowserViewController::From(browser_view_)->folders()->ArrangeFolders();
 }
 
 void KoanPinnedTabController::ClearPinnedState(tabs::TabInterface* tab) {
@@ -1217,6 +1240,14 @@ void KoanPinnedTabController::OnTabStripModelChanged(
       std::vector<tabs::TabHandle> added;
       for (const auto& inserted : change.GetInsert()->contents) {
         tabs::TabInterface* tab = inserted.tab;
+        // Dragged in from another window: decided where it drops. (Also
+        // forgets a drag that left this window's check behind.)
+        if (IsDraggingHere()) {
+          GetOrCreateTabState(tab->GetContents()).dragged = true;
+          ScheduleNormalize(tab);
+        } else if (KoanTabState* state = GetTabState(tab)) {
+          state->dragged = false;
+        }
         if (tab->IsPinned()) {
           KoanTabState& state = GetOrCreateTabState(tab->GetContents());
           // Saved once the session knows the tab (OnTabsAdded()).
@@ -1245,6 +1276,10 @@ void KoanPinnedTabController::OnTabStripModelChanged(
       break;
     }
     case TabStripModelChange::kMoved:
+      if (IsDraggingHere()) {
+        GetOrCreateTabState(change.GetMove()->tab->GetContents()).dragged =
+            true;
+      }
       ScheduleNormalize(change.GetMove()->tab);
       break;
     case TabStripModelChange::kReplaced: {
@@ -1350,8 +1385,18 @@ void KoanPinnedTabController::TabGroupedStateChanged(
     std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {
-  if (new_group && old_group && IsPinnedInSpace(tab)) {
-    GetOrCreateTabState(tab->GetContents()).changed_group = true;
+  // Also a tab put back into a Space (Spaces regroup a tab that upstream or
+  // an extension ungrouped for a moment): still pinned, among the pinned
+  // tabs.
+  if (new_group && IsPinnedInSpace(tab)) {
+    // A drag that takes the tab out of its Space and back on the way (past
+    // the Space's end, over the Essentials) is decided where it drops.
+    KoanTabState& state = GetOrCreateTabState(tab->GetContents());
+    if (IsDraggingHere()) {
+      state.dragged = true;
+    } else {
+      state.changed_group = true;
+    }
     ScheduleNormalize(tab);
   }
 }

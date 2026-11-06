@@ -37,6 +37,7 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_essentials.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
@@ -119,10 +120,14 @@ void PaintSeparatorLine(gfx::Canvas* canvas,
       flags);
 }
 
-// Whether `view`, a child of a Space's tab group view, is one of the Space's
-// pinned tabs: a pinned tab's row, or a split view of pinned tabs (a split
-// view's tabs are pinned together).
+// Whether `view`, a child of a Space's tab group view, is in the Space's
+// pinned section: a pinned tab's row, a split view of pinned tabs (a split
+// view's tabs are pinned together), or a folder's row (folder tabs are
+// pinned, koan_folders.h).
 bool IsInPinnedSection(const views::View* view) {
+  if (IsFolderRowView(view)) {
+    return true;
+  }
   if (const auto* tab_view = views::AsViewClass<TabView>(view)) {
     return IsPinnedForUser(tab_view->GetTabInterface());
   }

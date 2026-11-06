@@ -48,6 +48,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kPinnedTabCloseShortcutBehavior,
                                "reset-unload-switch");
   registry->RegisterBooleanPref(kPinnedTabRestoreToPinnedUrl, false);
+  registry->RegisterListPref(kFolderList);
   registry->RegisterStringPref(kLibraryLastSection, "history");
   registry->RegisterBooleanPref(kLibraryHistoryClosedTabs, false);
   registry->RegisterBooleanPref(kMediaControlsEnabled, true);

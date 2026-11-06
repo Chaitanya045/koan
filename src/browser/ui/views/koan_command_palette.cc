@@ -460,6 +460,7 @@ KoanCommandPalette::KoanCommandPalette(KoanBrowserViewController* controller)
     : controller_(controller) {
   AddGlobalCommands(registry_, *controller);
   AddWorkspaceCommands(registry_, *controller);
+  AddFolderCommands(registry_, *controller);
 }
 
 KoanCommandPalette::~KoanCommandPalette() {

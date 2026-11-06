@@ -214,6 +214,10 @@ KoanCreateMenu::KoanCreateMenu(KoanWorkspaceController* controller)
       } else {
         model_.AddItem(command_id, entry.label);
       }
+      if (entry.element_id) {
+        model_.SetElementIdentifierAt(model_.GetItemCount() - 1,
+                                      entry.element_id);
+      }
     }
   }
 }

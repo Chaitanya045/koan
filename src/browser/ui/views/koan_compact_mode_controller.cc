@@ -40,6 +40,7 @@
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_empty_tab.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
@@ -1447,13 +1448,18 @@ void KoanCompactModeController::ReconcileBubbleHold() {
   }
   views::View* top_container = browser_view_->top_container();
   const KoanSidebarNavView* nav = sidebar_nav();
+  const views::View* strip = browser_view_->tab_strip_view();
   bool on_toolbar = false;
   bool on_peeked_sidebar = false;
   std::vector<views::Widget*> bubbles;
   for (const auto& [widget, anchor] : OpenBubbles(browser_view_)) {
     const bool toolbar =
         can_reveal_toolbar() && top_container->Contains(anchor);
-    const bool sidebar = hides_sidebar() && nav && nav->Contains(anchor);
+    // The pill, or a folder's row in the tab list (its search popup).
+    const bool sidebar =
+        hides_sidebar() &&
+        ((nav && nav->Contains(anchor)) ||
+         (strip && strip->Contains(anchor) && IsFolderRowView(anchor)));
     if (!toolbar && !sidebar) {
       continue;
     }
@@ -1484,7 +1490,7 @@ void KoanCompactModeController::ReconcileBubbleHold() {
       }
     }
   }
-  // The peeked sidebar stays out as long as a bubble points at its pill (Zen
+  // The peeked sidebar stays out as long as a bubble points into it (Zen
   // holds it with the bubble's has-popup-menu).
   if (on_peeked_sidebar) {
     if (!bubble_lock_) {

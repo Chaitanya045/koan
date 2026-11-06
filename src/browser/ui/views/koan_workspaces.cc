@@ -780,23 +780,32 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
                                           const std::u16string& icon,
                                           const SpaceTheme& theme) {
   TabStripModel* model = tab_strip_model();
-  // Zen puts a new Space right after the active one. (Creating a group
-  // leaves focus mode, so remember which one that is.)
-  const std::optional<tab_groups::TabGroupId> active = GetActiveSpace();
   content::WebContents* contents = chrome::AddAndReturnTabAt(
-      browser_view_->browser(), GURL(), InsertionIndexAfter(active),
+      browser_view_->browser(), GURL(), InsertionIndexAfter(GetActiveSpace()),
       /*foreground=*/false);
   const int index = model->GetIndexOfWebContents(contents);
   if (index == TabStripModel::kNoTab) {
     return;
   }
-  const tabs::TabHandle tab = model->GetTabAtIndex(index)->GetHandle();
-  const tab_groups::TabGroupId space = NewSpaceGroup({index});
-  WriteSpace(space, {.name = name.empty() ? kDefaultSpaceName : name,
-                     .icon = icon,
-                     .theme = theme});
-  // The tab opened in the active Space, and grouping it may have moved it
-  // past the next one.
+  CreateSpaceFromTabs({index}, {.name = name, .icon = icon, .theme = theme});
+}
+
+tab_groups::TabGroupId KoanWorkspaceController::CreateSpaceFromTabs(
+    const std::vector<int>& indices,
+    const SpaceData& data) {
+  TabStripModel* model = tab_strip_model();
+  // Zen puts a new Space right after the active one. (Creating a group
+  // leaves focus mode, so remember which one that is.)
+  const std::optional<tab_groups::TabGroupId> active = GetActiveSpace();
+  const tabs::TabHandle tab = model->GetTabAtIndex(indices.back())->GetHandle();
+  const tab_groups::TabGroupId space = NewSpaceGroup(indices);
+  SpaceData stored = data;
+  if (stored.name.empty()) {
+    stored.name = kDefaultSpaceName;
+  }
+  WriteSpace(space, stored);
+  // The tabs were in the active Space, or a new one opened there, and
+  // grouping them may have moved them past the next one.
   if (active && GetSpace(*active)) {
     const int after_active = InsertionIndexAfter(active);
     if (static_cast<int>(
@@ -807,6 +816,7 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
   }
   last_active_tabs_[space] = tab;
   SwitchTo(space);
+  return space;
 }
 
 tab_groups::TabGroupId KoanWorkspaceController::CreateBackgroundSpace(
@@ -1143,7 +1153,7 @@ void KoanWorkspaceController::AddDefaultCreateMenuEntries() {
   create_space.run = base::BindRepeating(
       &KoanWorkspaceController::ShowCreateForm, base::Unretained(this));
   AddCreateMenuEntry(std::move(create_space));
-  // (Folders add "New Folder" here.)
+  // (Folders add "Create Folder" after it: KoanFolderController.)
   const auto command = [&](std::u16string label, const gfx::VectorIcon& icon,
                            int id) {
     CreateMenuEntry entry;

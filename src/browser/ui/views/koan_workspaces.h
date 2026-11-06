@@ -32,6 +32,7 @@
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget_observer.h"
@@ -141,6 +142,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
     // Null: always enabled.
     base::RepeatingCallback<bool()> is_enabled;
     base::RepeatingClosure run;
+    // Names the item for UI DevTools (e2e tests), if set.
+    ui::ElementIdentifier element_id;
   };
 
   explicit KoanWorkspaceController(BrowserView* browser_view);
@@ -193,6 +196,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // koan/browser/containers/koan_agent_containers.h).
   tab_groups::TabGroupId CreateBackgroundSpace(int index,
                                                const SpaceData& data);
+  // Makes a Space of the tabs at `indices` (sorted), right after the active
+  // Space, and shows it on the last of them (folders' "Convert folder to
+  // Space").
+  tab_groups::TabGroupId CreateSpaceFromTabs(const std::vector<int>& indices,
+                                             const SpaceData& data);
   void RenameSpace(const tab_groups::TabGroupId& space,
                    const std::u16string& name);
   // `icon` empty removes the icon.

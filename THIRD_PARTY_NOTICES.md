@@ -55,12 +55,14 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_zen_compact_strings.h` | `zen-general.ftl` (the sidebar button's label and tooltip) |
 | `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |
 | `src/browser/ui/views/koan_swipe_tracker.{h,cc}`, `koan_swipe_tracker_unittest.cc` | `ZenSpacesSwipe.mjs` (success threshold, velocity weight, resistance), Gecko's `SwipeTracker.cpp` units as Zen patches it |
+| `src/browser/ui/views/koan_folder_zen_assets.{h,cc}` | `ZenFolder.mjs` (folder icon), `ZenFolders.mjs` (`formatRelativeTime`), `zen-folders.ftl`, `zen-workspaces.ftl`, `zen-vertical-tabs.ftl` (strings) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).
 
-The comparison screenshots `docs/screenshots/*-zen-vs-koan*.png` show Zen
-Browser's interface, for comparison only.
+The comparison screenshots `docs/screenshots/*-zen-vs-koan*.png` and
+`docs/screenshots/zen-folders-*.png` show Zen Browser's interface, for
+comparison only.
 
 ## shadcn/ui (MIT)
 
