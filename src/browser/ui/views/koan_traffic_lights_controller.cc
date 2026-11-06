@@ -35,21 +35,13 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
   const bool fullscreen = IsWindowFullscreen(browser_view_);
   if (fullscreen != was_fullscreen_) {
     was_fullscreen_ = fullscreen;
-#if BUILDFLAG(IS_MAC)
-    if (!fullscreen) {
-      // The title bar comes back to the window with its lights.
-      RestoreFullscreenTitlebar(browser_view_);
-    }
-#endif
     applied_height_.reset();
     on_changed_.Run();
   }
   if (fullscreen) {
 #if BUILDFLAG(IS_MAC)
-    // Nothing of AppKit's title bar shows at the top edge but the menu bar.
-    if (HidesFullscreenTopChrome(browser_view_)) {
-      HideFullscreenTitlebar(browser_view_);
-    }
+    // AppKit's title bar slides in with the menu bar, with the lights.
+    ShowFullscreenTitlebar(browser_view_);
 #endif
     return;
   }

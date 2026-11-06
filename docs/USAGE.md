@@ -157,13 +157,14 @@ the left.)
 On macOS the window buttons (traffic lights) are AppKit's and stay at the
 top left. With the sidebar there they are in its top row; with tabs on the
 right they stay at the left, in a strip above the page; with the sidebar
-hidden (compact mode) and the toolbar hidden, they hide too and come back
-with the sidebar, the toolbar, or the strip that opens when the pointer
-reaches the top edge.
+hidden (compact mode) they hide too and come back with the sidebar. The
+pointer at the top edge shows nothing and moves nothing in the window, as
+in Zen.
 
-**Fullscreen on macOS** keeps the same layout, as in Zen: nothing is shown
-from the top edge but the menu bar (no toolbar, no bookmarks bar, no title
-bar strip). The sidebar's top row has the sidebar toggle and back / forward
+**Fullscreen on macOS** keeps the same layout, as in Zen: with the pointer
+at the top edge the menu bar comes down with AppKit's title bar strip (about
+32 pt, with the traffic lights), compact mode on or off; no Koan toolbar and
+no bookmarks bar. The sidebar's top row has the sidebar toggle and back / forward
 / reload; Ctrl+L or the pill edits the address over the page.
 
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page

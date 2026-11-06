@@ -58,11 +58,10 @@ void ClearTitlebar(const BrowserView* browser_view) {
 
 namespace {
 
-// AppKit draws the strip itself (a grey bar under the menu bar, about 32pt)
-// with the title bar view that holds the traffic lights, however transparent
-// the window says its title bar is. Fades that view (the ancestor of the
+// The title bar view that holds the traffic lights (the ancestor of the
 // lights with that class name; it moves between the window's frame and
-// AppKit's fullscreen window, so look for it from the lights each time).
+// AppKit's fullscreen window, so look for it from the lights each time): its
+// opacity, 1 as AppKit leaves it.
 void SetTitlebarContainerOpacity(NSWindow* window, CGFloat alpha) {
   for (NSView* view =
            [window standardWindowButton:NSWindowCloseButton].superview;
@@ -76,26 +75,15 @@ void SetTitlebarContainerOpacity(NSWindow* window, CGFloat alpha) {
 
 }  // namespace
 
-void HideFullscreenTitlebar(const BrowserView* browser_view) {
+void ShowFullscreenTitlebar(const BrowserView* browser_view) {
   const views::Widget* widget = browser_view->GetWidget();
   NSWindow* window =
       widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
   if (!window) {
     return;
   }
-  window.titlebarAppearsTransparent = YES;
-  window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
-  SetTrafficLightsShown(browser_view, false);
-  SetTitlebarContainerOpacity(window, 0);
-}
-
-void RestoreFullscreenTitlebar(const BrowserView* browser_view) {
-  const views::Widget* widget = browser_view->GetWidget();
-  NSWindow* window =
-      widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
-  if (window) {
-    SetTitlebarContainerOpacity(window, 1);
-  }
+  SetTitlebarContainerOpacity(window, 1);
+  SetTrafficLightsShown(browser_view, true);
 }
 
 }  // namespace koan
