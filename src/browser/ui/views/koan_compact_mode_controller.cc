@@ -497,9 +497,7 @@ void KoanCompactModeController::OnSidebarCollapseSettled() {
   // The pointer is at the edge: on the hot zone, or, in fullscreen, where the
   // hot zone has no width and CheckFullscreenEdges() tells (only when it
   // changes, so a refused lock would never be asked for again).
-  if (!hover_lock_ &&
-      (edge_sidebar_hovered_ ||
-       (sidebar_hot_zone_ && sidebar_hot_zone_->IsMouseHovered()))) {
+  if (!hover_lock_ && IsPointerAtSidebarEdge()) {
     hover_lock_ = TakeExpandedLock();
     // The hot zone may never have been told of this hover: it appears under a
     // pointer that doesn't move (the pointer rests at the edge as compact mode
@@ -518,15 +516,27 @@ void KoanCompactModeController::CheckHoverLock() {
     hover_poll_timer_.Stop();
     return;
   }
-  if (edge_sidebar_hovered_ ||
-      (sidebar_hot_zone_ && sidebar_hot_zone_->IsMouseHovered())) {
+  if (IsPointerAtSidebarEdge()) {
     return;
   }
   // Left, as the hot zone would have told: the lock goes after the keep-hover
   // time, and upstream's hover tracking keeps the sidebar out while the
-  // pointer is on it.
+  // pointer is on it. (Not again if the hot zone told already: its keep-hover
+  // timer would start over.)
   hover_poll_timer_.Stop();
-  OnSidebarHotZoneHovered(false);
+  if (!hover_release_timer_.IsRunning()) {
+    OnSidebarHotZoneHovered(false);
+  }
+}
+
+bool KoanCompactModeController::IsPointerAtSidebarEdge() const {
+  // On the hot zone, and over this window: a pointer resting over another
+  // app's window above the hot zone's place doesn't count (as in
+  // CheckFullscreenEdges()). Or, in fullscreen, where the hot zone has no
+  // width, the edge CheckFullscreenEdges() tells of.
+  return edge_sidebar_hovered_ ||
+         (sidebar_hot_zone_ && sidebar_hot_zone_->IsMouseHovered() &&
+          IsPointerOverWindow(browser_view_));
 }
 
 std::unique_ptr<ExpandOnHoverLock>
