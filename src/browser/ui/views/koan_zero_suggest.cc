@@ -66,7 +66,7 @@ bool IsListableTab(const GURL& url) {
     return false;
   }
   if (url.SchemeIs(content::kChromeUIScheme)) {
-    const std::string& host = url.host();
+    const std::string_view host = url.host();
     return host != chrome::kChromeUINewTabHost &&
            host != chrome::kChromeUINewTabPageHost &&
            host != chrome::kChromeUINewTabPageThirdPartyHost &&
