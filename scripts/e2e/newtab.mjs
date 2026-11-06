@@ -88,4 +88,17 @@ tab = await openNewTab();
 check('Choosing Blank page again brings Koan\'s back', tab.href === koan, tab.href);
 await tab.close();
 
+// What the browser logged while new tabs opened and closed: nothing about a
+// refused chrome://newtab/, in-product help for Spaces, or the on-device
+// model service.
+const log = process.env.KOAN_LOG ? fs.readFileSync(process.env.KOAN_LOG, 'utf8') : '';
+for (const [what, pattern] of [
+    ['a refused chrome://newtab/ load', /incorrect profile type/],
+    ['in-product help for tab groups', /IPH_TabGroups/],
+    ['the on-device model service', /on_device_model/]]) {
+  const lines = log.split('\n').filter(l => pattern.test(l));
+  check(`The browser's log has nothing about ${what}`,
+        process.env.KOAN_LOG && lines.length === 0, lines.slice(0, 2).join(' | '));
+}
+
 finish();
