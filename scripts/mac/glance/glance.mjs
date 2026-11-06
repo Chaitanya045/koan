@@ -590,9 +590,13 @@ const steps = {
     await glance('child');
     await key(K.M, 'c');
     await sleep(1200);
+    // AppKit's own state (CDP's windowState isn't reliable here: it reports
+    // a zoomed window as 'maximized' throughout).
+    const minimized = () => mac(`osascript -e 'tell application "System Events" to tell ` +
+        `(first process whose unix id is ${PID}) to get value of attribute "AXMinimized" of windows'`);
+    const states = minimized();
+    await check('18 ⌘M in a Glance minimises the window', /true/.test(states), `AXMinimized: ${states}`);
     const win = await browserCall('Browser.getWindowForTarget', { targetId: parent.id });
-    const state = win.result?.bounds?.windowState;
-    await check('18 ⌘M in a Glance minimises the window', state === 'minimized', `windowState ${state}`);
     if (win.result?.windowId) {
       await browserCall('Browser.setWindowBounds',
                         { windowId: win.result.windowId, bounds: { windowState: 'normal' } });
