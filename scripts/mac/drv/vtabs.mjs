@@ -129,6 +129,18 @@ if (MODE === 'pinrev') {
   const kp = (code, flags) => `${M}/tmp/keypress2 ${PID} ${code} '${flags}'`;
   const ptr = (x, y, ms = 50) => `${M}/tmp/ptr move ${x} ${y} ${ms}`;
   const timings = [[0, 150], [50, 150], [100, 120], [150, 150], [200, 100], [250, 180], [300, 150], [350, 150], [400, 150], [120, 250]];
+  // Every failure carries the end of koan.log (lock taken / refused / let go, hot zone, settled, compact mode on / off lines).
+  const logTail = (n = 40) => { try { return mac(`tail -n ${n} ${LOG}`); } catch { return ''; } };
+  const needLog = (cond, msg) => { if (!cond) throw new Error(`${msg}\n--- koan.log tail ---\n${logTail()}`); };
+  const compactEvents = () => Number(mac(`grep -a -c 'Koan: compact mode \\(on\\|off\\)' ${LOG} || true`));
+  // One compact key press; the log must show that it toggled compact mode (a key that a focused field swallows would shift the parity
+  // of the whole step, and the sidebar's width alone can't tell: it is out with compact mode off and with a held lock).
+  const toggle = async (what) => {
+    const before = compactEvents();
+    mac(kp(K.S, COMPACT), 30000);
+    await sleep(1500);
+    needLog(compactEvents() === before + 1, `${what}: the compact key did not toggle compact mode`);
+  };
   await prime();
   for (const park of [false, true]) {
     await step(`T27: compact on, pin at +d1 ms, pin again at +d2 ms (reversal), compact off; pointer ${park ? 'at the left edge, wiggled during the collapse' : 'away'}`, async () => {
@@ -141,19 +153,19 @@ if (MODE === 'pinrev') {
           const wiggle = park ? `${ptr(4, 400, 16)}; ` : '';
           mac(`${kp(K.S, COMPACT)}; sleep ${d1 / 1000}; ${wiggle}${kp(K.S, PIN)}; sleep ${d2 / 1000}; ${kp(K.S, PIN)}; sleep 1.2`, 30000);
           n++;
-          need(alive(), `Koan died in round ${n} (compact on, pin at +${d1} ms, again +${d2} ms, pointer ${park ? 'at the edge' : 'away'})`);
+          needLog(alive(), `Koan died in round ${n} (compact on, pin at +${d1} ms, again +${d2} ms, pointer ${park ? 'at the edge' : 'away'})`);
           if (park) {
-            need((await sidebarW()) >= 163, `round ${n}: the pointer is at the edge but the sidebar is not out (${await sidebarW()} wide)`);
+            needLog((await sidebarW()) >= 163, `round ${n}: the pointer is at the edge but the sidebar is not out (${await sidebarW()} wide)`);
             mac(ptr(700, 400), 30000);
             await sleep(900);
           }
-          need((await sidebarW()) === 0, `round ${n}: the sidebar is not hidden after the pin was toggled twice and the pointer left (${await sidebarW()} wide): a lock leaked`);
+          needLog((await sidebarW()) === 0, `round ${n}: the sidebar is not hidden after the pin was toggled twice and the pointer left (${await sidebarW()} wide): a lock leaked`);
           mac(`${kp(K.S, COMPACT)}; sleep 1.0`, 30000);
-          need(alive(), `Koan died turning compact off in round ${n}`);
-          need((await sidebarW()) >= 163, `round ${n}: compact off, the sidebar is ${await sidebarW()} wide`);
+          needLog(alive(), `Koan died turning compact off in round ${n}`);
+          needLog((await sidebarW()) >= 163, `round ${n}: compact off, the sidebar is ${await sidebarW()} wide`);
         }
       }
-      need(Number(mac(`grep -a -c 'Check failed: current_motion_' ${LOG} || true`)) === 0, 'CHECK(current_motion_) in the log');
+      needLog(Number(mac(`grep -a -c 'Check failed: current_motion_' ${LOG} || true`)) === 0, 'CHECK(current_motion_) in the log');
       return `${n} rounds, alive`;
     });
   }
@@ -161,24 +173,32 @@ if (MODE === 'pinrev') {
   // goes off and on again (the form only closes with Esc or Create); the collapse then ends with the lock held.
   await step('T28: Create-a-Space form open from the pinned sidebar, compact off and on twice, then Esc', async () => {
     for (let round = 0; round < 5; round++) {
+      const r = `round ${round + 1}`;
       mac(ptr(700, 400), 30000);
+      await toggle(`${r}: compact on`);
+      mac(`${kp(K.S, PIN)}; sleep 0.8`, 30000);
       // Create a Space is Ctrl+Opt+N on the Mac whatever the keyset (koan_shortcut_table.cc), not Cmd+Opt+N.
-      mac(`${kp(K.S, COMPACT)}; sleep 1.3; ${kp(K.S, PIN)}; sleep 0.8; ${kp(K.N, 'ka')}; sleep 0.8`, 60000);
-      need(alive(), `Koan died opening the form in round ${round + 1}`);
+      mac(`${kp(K.N, 'ka')}; sleep 0.8`, 30000);
+      needLog(alive(), `${r}: Koan died opening the form`);
       // No form, no lock, and the step would pass without the fix.
-      need((await fviews()).some(v => v.cls === 'KoanSpaceCreationView' && v.shown), `round ${round + 1}: the Create-a-Space form is not shown (Ctrl+Opt+N did not open it): no lock is held`);
+      needLog((await fviews()).some(v => v.cls === 'KoanSpaceCreationView' && v.shown), `${r}: the Create-a-Space form is not shown (Ctrl+Opt+N did not open it): no lock is held`);
       // Compact off (the strip expands, the form's lock stays), on (the collapse ends with the lock held), off, on.
-      mac(`${kp(K.S, COMPACT)}; sleep 1.0; ${kp(K.S, COMPACT)}; sleep 1.5`, 60000);
-      need(alive(), `Koan died in round ${round + 1} (the form's lock held across a collapse)`);
-      need((await sidebarW()) >= 163, `round ${round + 1}: the form's lock is held, so the collapsed sidebar must stay out over the page, but it is ${await sidebarW()} wide`);
-      mac(`${kp(K.S, COMPACT)}; sleep 1.0; ${kp(K.S, COMPACT)}; sleep 1.5`, 60000);
-      need(alive(), `Koan died in round ${round + 1} (second collapse with the form open)`);
-      need((await sidebarW()) >= 163, `round ${round + 1}: after the second compact-on the sidebar is ${await sidebarW()} wide with the form open`);
-      mac(`${kp(K.ESC, '')}; sleep 0.6; ${kp(K.S, COMPACT)}; sleep 1.2`, 30000);
-      need(alive(), `Koan died closing the form in round ${round + 1}`);
-      need((await sidebarW()) >= 163, `round ${round + 1}: the sidebar is ${await sidebarW()} wide after compact off`);
+      await toggle(`${r}: compact off`);
+      needLog((await sidebarW()) >= 163, `${r}: compact off, the sidebar is ${await sidebarW()} wide`);
+      await toggle(`${r}: compact on (the collapse ends with the form's lock held)`);
+      needLog(alive(), `${r}: Koan died when the collapse ended with the form's lock held`);
+      needLog((await sidebarW()) >= 163, `${r}: the form's lock is held, so the collapsed sidebar must stay out over the page, but it is ${await sidebarW()} wide`);
+      await toggle(`${r}: compact off`);
+      await toggle(`${r}: compact on (second collapse with the form open)`);
+      needLog(alive(), `${r}: Koan died in the second collapse with the form open`);
+      needLog((await sidebarW()) >= 163, `${r}: after the second compact-on the sidebar is ${await sidebarW()} wide with the form open`);
+      // Esc closes the form (its lock goes: the sidebar hides), then compact off.
+      mac(`${kp(K.ESC, '')}; sleep 0.8`, 30000);
+      needLog(alive(), `${r}: Koan died closing the form`);
+      await toggle(`${r}: compact off`);
+      needLog((await sidebarW()) >= 163, `${r}: compact off at the end, the sidebar is ${await sidebarW()} wide`);
     }
-    need(Number(mac(`grep -a -c 'Check failed: current_motion_' ${LOG} || true`)) === 0, 'CHECK(current_motion_) in the log');
+    needLog(Number(mac(`grep -a -c 'Check failed: current_motion_' ${LOG} || true`)) === 0, 'CHECK(current_motion_) in the log');
     return '5 rounds, alive';
   });
   // Fullscreen (#171): the pointer at the left edge while compact goes on: the sidebar slides out at the end of the collapse, with no
@@ -190,11 +210,11 @@ if (MODE === 'pinrev') {
       mac(ptr(700, 400), 30000);
       // The edge zone is 2 px wide: the pointer goes to x=1 (the compact mode sees it there), and wiggles to x=0 during the collapse.
       mac(`${ptr(1, 400, 50)}; ${kp(K.S, COMPACT)}; sleep 0.15; ${ptr(0, 400, 16)}; sleep 1.5`, 30000);
-      need(alive(), `Koan died in fullscreen round ${round + 1}`);
-      need((await sidebarW()) >= 163, `fullscreen round ${round + 1}: the pointer is at the edge but the sidebar is not out (${await sidebarW()} wide)`);
+      needLog(alive(), `Koan died in fullscreen round ${round + 1}`);
+      needLog((await sidebarW()) >= 163, `fullscreen round ${round + 1}: the pointer is at the edge but the sidebar is not out (${await sidebarW()} wide)`);
       mac(ptr(700, 400), 30000);
       await sleep(1200);
-      need((await sidebarW()) === 0, `fullscreen round ${round + 1}: the sidebar stays out with the pointer away (${await sidebarW()} wide)`);
+      needLog((await sidebarW()) === 0, `fullscreen round ${round + 1}: the sidebar stays out with the pointer away (${await sidebarW()} wide)`);
       mac(`${kp(K.S, COMPACT)}; sleep 1.2`, 30000);
     }
     await key(K.F, 'ck');

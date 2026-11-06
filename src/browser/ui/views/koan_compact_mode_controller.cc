@@ -461,6 +461,9 @@ void KoanCompactModeController::OnSidebarCollapseSettled() {
   if (!hides_sidebar() || !state || !state->IsCollapsed()) {
     return;
   }
+  VLOG(1) << "Koan: sidebar settled collapsed (peek requested: "
+          << peek_requested_ << ", hover lock: " << !!hover_lock_
+          << ", edge hovered: " << edge_sidebar_hovered_ << ")";
   if (!bubble_lock_) {
     ReconcileBubbleHold();
   }
@@ -500,8 +503,10 @@ KoanCompactModeController::TakeExpandedLock() {
       tabs::VerticalTabStripStateController::From(browser_view_->browser());
   auto* tab_strip = browser_view_->tab_strip_view();
   if (IsClosing() || !state || !state->IsCollapsed() || !tab_strip) {
+    VLOG(1) << "Koan: sidebar lock refused (collapsing or closing)";
     return nullptr;
   }
+  VLOG(1) << "Koan: sidebar lock taken";
   return tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
 }
 
@@ -540,6 +545,9 @@ void KoanCompactModeController::EndFlash() {
 
 void KoanCompactModeController::ReleaseLock(
     std::unique_ptr<ExpandOnHoverLock>& lock) {
+  if (lock) {
+    VLOG(1) << "Koan: sidebar lock let go" << (IsClosing() ? " (closing)" : "");
+  }
   if (IsClosing()) {
     ReleaseExpandOnHoverLockSoon(lock);
     return;
