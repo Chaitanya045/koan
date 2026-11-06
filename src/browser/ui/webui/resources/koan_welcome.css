@@ -18,6 +18,11 @@
   box-sizing: border-box;
 }
 
+/* (Over the components' own display.) */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -168,6 +173,11 @@ kbd {
   background: var(--card);
   color: var(--card-foreground);
   box-shadow: var(--shadow-xs);
+}
+
+/* (Until the page's data has come.) */
+#welcome-card:empty {
+  display: none;
 }
 
 #welcome-card[entering] {

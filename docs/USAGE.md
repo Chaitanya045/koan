@@ -686,13 +686,18 @@ Drag the empty space around the card to move the window.
 
   Your choice is saved as your own keys in Settings > Keyboard Shortcuts,
   where you can change any of them later.
-- **Import**: pick a browser, then Next, and Chromium's import dialog opens
-  once the setup is over, where you choose what to bring. "Start fresh" (the
-  first choice) imports nothing, even if you picked a browser before and came
-  back. Koan lists what Chromium can import from on your Mac: Safari, Firefox
-  and a bookmarks file (Chrome, Brave and Arc are not supported yet).
+- **Import**: the browsers Koan can import from on your Mac and finds there
+  (Safari, Firefox, or a bookmarks file; Chrome, Brave and Arc are not
+  supported yet), or, if it finds none, "Import from another browser…". Pick
+  one, then Next, and Chromium's import dialog opens once the setup is over,
+  where you choose what to bring. "Start fresh" (the first choice) or the
+  step's Skip imports nothing, even if you picked a browser before.
 - **Search engine**: Brave Search is chosen; pick another if you like. It
-  applies on Next, and Chromium doesn't ask again.
+  applies on Next. In the European Economic Area (and the other regions where
+  Chromium shows a search engine choice screen) the step *is* that choice
+  screen: Chromium's list in its order, with nothing chosen for you, and Next
+  records your choice so Chromium doesn't ask again. If you skip the step
+  there, Chromium asks later.
 
 ## Translucent window (macOS)
 

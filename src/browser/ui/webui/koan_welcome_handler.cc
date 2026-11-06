@@ -16,13 +16,13 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/regional_capabilities/regional_capabilities_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/prefs/pref_service.h"
+#include "components/regional_capabilities/regional_capabilities_service.h"
 #include "components/search_engines/choice_made_location.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/template_url.h"
-#include "components/search_engines/template_url_data.h"
-#include "components/search_engines/template_url_data_util.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/browser/web_contents.h"
@@ -47,17 +47,6 @@ bool IsExcludedEngine(const std::u16string& name) {
 // Chromium's (prepopulated_engines.json), in most regions' lists already.
 const TemplateURLPrepopulateData::PrepopulatedEngine& BraveEngine() {
   return TemplateURLPrepopulateData::brave;
-}
-
-// The service's engine with `prepopulate_id`, or null.
-TemplateURL* FindEngine(TemplateURLService& service, int prepopulate_id) {
-  for (TemplateURL* engine : service.GetTemplateURLs()) {
-    if (engine->prepopulate_id() == prepopulate_id &&
-        engine->type() == TemplateURL::NORMAL) {
-      return engine;
-    }
-  }
-  return nullptr;
 }
 
 const KoanWelcomeHost* GetHost(content::WebUI* web_ui) {
@@ -159,14 +148,20 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
   }
 
   base::ListValue engines = SearchEngines();
+  // In a choice screen region nothing is chosen for the user (the EEA's
+  // rules for a choice screen); elsewhere Brave is, until the user picks
+  // another.
+  const bool choice_screen = IsChoiceScreenRegion();
   ResolveJavascriptCallback(
-      callback_id, base::DictValue()
-                       .Set("isMac", static_cast<bool>(BUILDFLAG(IS_MAC)))
-                       .Set("shortcutRows", std::move(rows))
-                       .Set("importSources", std::move(sources))
-                       .Set("engines", std::move(engines))
-                       // Brave is chosen until the user picks another.
-                       .Set("defaultEngine", BraveEngine().id));
+      callback_id,
+      base::DictValue()
+          .Set("isMac", static_cast<bool>(BUILDFLAG(IS_MAC)))
+          .Set("shortcutRows", std::move(rows))
+          .Set("importSources", std::move(sources))
+          .Set("engines", std::move(engines))
+          .Set("choiceScreen", choice_screen)
+          .Set("defaultEngine",
+               choice_screen ? base::Value() : base::Value(BraveEngine().id)));
 }
 
 TemplateURLService* KoanWelcomeHandler::GetTemplateURLService(
@@ -182,13 +177,33 @@ TemplateURLService* KoanWelcomeHandler::GetTemplateURLService(
   return service;
 }
 
+bool KoanWelcomeHandler::IsChoiceScreenRegion() const {
+  regional_capabilities::RegionalCapabilitiesService* regional =
+      regional_capabilities::RegionalCapabilitiesServiceFactory::GetForProfile(
+          profile_);
+  return regional && regional->IsInSearchEngineChoiceScreenRegion();
+}
+
 base::ListValue KoanWelcomeHandler::SearchEngines() const {
   base::ListValue engines;
   TemplateURLService* service = GetTemplateURLService(/*editable=*/true);
   if (!service) {
     return engines;
   }
-  // Brave first, whether or not the region lists it (it is added if chosen).
+  if (IsChoiceScreenRegion()) {
+    // Chromium's own choice screen list, in its order, as it is.
+    for (const std::unique_ptr<TemplateURL>& engine :
+         service->GetChoiceScreenData()->search_engines()) {
+      if (engine->prepopulate_id() > 0) {
+        engines.Append(base::DictValue()
+                           .Set("id", engine->prepopulate_id())
+                           .Set("name", engine->short_name()));
+      }
+    }
+    return engines;
+  }
+  // Brave first, whether or not the region lists it (upstream's setter
+  // resolves it from the full list).
   engines.Append(base::DictValue()
                      .Set("id", BraveEngine().id)
                      .Set("name", BraveEngine().name));
@@ -248,24 +263,19 @@ void KoanWelcomeHandler::HandleSetSearchEngine(const base::ListValue& args) {
       })) {
     return;
   }
-  TemplateURL* engine = FindEngine(*service, id);
-  if (!engine && id == BraveEngine().id) {
-    // Not in this region's list: Chromium's own definition of it.
-    engine = service->Add(std::make_unique<TemplateURL>(
-        *TemplateURLDataFromPrepopulatedEngine(BraveEngine())));
-  }
-  if (!engine) {
-    return;
-  }
-  // Recorded as a choice made, as Chromium's own choice screen does (where
-  // the region has one, it then never shows): once, and not over an earlier
-  // record, which Chromium doesn't expect from a choice screen.
+  // In a choice screen region the step is that choice screen (Chromium's
+  // list, nothing preselected): recorded as a choice made, so Chromium's
+  // dialog never shows; once, and not over an earlier record, which Chromium
+  // doesn't expect from a choice screen. Elsewhere a plain user choice.
   const bool record =
+      IsChoiceScreenRegion() &&
       !search_engines::GetChoiceCompletionMetadata(*profile_->GetPrefs())
            .has_value();
-  service->SetUserSelectedDefaultSearchProvider(
-      engine, record ? search_engines::ChoiceMadeLocation::kChoiceScreen
-                     : search_engines::ChoiceMadeLocation::kOther);
+  // Upstream's setter: the existing engine, or the region's variant of it
+  // from the full prepopulated list (Brave where the region lacks it).
+  service->SetUserSelectedDefaultSearchProviderByPrepopulateId(
+      id, record ? search_engines::ChoiceMadeLocation::kChoiceScreen
+                 : search_engines::ChoiceMadeLocation::kOther);
 }
 
 void KoanWelcomeHandler::HandleFinish(const base::ListValue& args) {

@@ -63,10 +63,6 @@ function initialTile(name) {
             (name.trim()[0] ?? '?').toUpperCase());
 }
 
-function checkedValue(group) {
-  return document.querySelector(`input[name='${group}']:checked`)?.value;
-}
-
 // ---- The steps.
 
 // What the user picked, kept across Back and Next.
@@ -184,6 +180,8 @@ function importStep(data) {
         mark: el('span', {className: 'tile', 'aria-hidden': true},
                  icon('sparkles')),
       }));
+      // Only what Chromium's importer found (on macOS Safari, Firefox and a
+      // bookmarks file); with nothing found, the import dialog itself.
       data.importSources.forEach((source, index) => {
         list.appendChild(choice({
           group: 'import',
@@ -194,15 +192,26 @@ function importStep(data) {
           mark: initialTile(source.name),
         }));
       });
+      if (!data.importSources.length) {
+        list.appendChild(choice({
+          group: 'import',
+          value: 'dialog',
+          checked: gChoices.importSource === 'dialog',
+          title: 'Import from another browser…',
+          detail: 'Opens the import window after setup.',
+          mark: el('span', {className: 'tile', 'aria-hidden': true},
+                   icon('hard-drive-download')),
+        }));
+      }
       list.addEventListener('change', event => {
         gChoices.importSource = event.target.value;
       });
-      body.append(
-          list,
-          el('p', {className: 'step-note'},
-             data.importSources.length ?
-                 'Only the browsers Koan can read are listed.' :
-                 'Koan didn\'t find a browser it can import from.'));
+      body.appendChild(list);
+    },
+    // Skip: nothing to import, whatever an earlier Next said.
+    onSkip() {
+      gChoices.importSource = 'none';
+      chrome.send('import', [false]);
     },
     // Every Next says what is picked: a browser, then Back and "Start fresh",
     // imports nothing.
@@ -217,8 +226,11 @@ function searchStep(data) {
     id: 'search',
     icon: 'search',
     title: 'Choose your search engine',
-    description: 'It answers what you type in the address bar. You can ' +
-        'change it later in Settings.',
+    description: data.choiceScreen ?
+        'Pick the engine that answers what you type in the address bar. ' +
+            'You can change it later in Settings.' :
+        'It answers what you type in the address bar. You can change it ' +
+            'later in Settings.',
     // Skipped when a policy sets the engine (no engines then).
     skip: () => !data.engines.length,
     render(body) {
@@ -241,8 +253,10 @@ function searchStep(data) {
       });
       body.appendChild(list);
     },
-    // Set on Next, which also records the choice (Chromium's own choice
-    // dialog, where the region has one, then never shows).
+    // Set on Next. In a choice screen region (the EEA) the list is
+    // Chromium's, in its order, with nothing preselected, and Next records
+    // the choice (Chromium's own dialog then never shows); elsewhere Brave
+    // is preselected.
     commit() {
       if (gChoices.engine !== null) {
         chrome.send('setSearchEngine', [gChoices.engine]);
@@ -277,17 +291,12 @@ function getSteps(data) {
 class Welcome {
   #steps;
   #index = 0;
-  #finished = false;
-
   constructor(steps) {
     this.#steps = steps;
     const list = document.getElementById('welcome-steps');
     for (const step of steps) {
       list.appendChild(el('li', {'data-step': step.id, 'aria-label': step.title}));
     }
-    document.getElementById('welcome-skip')
-        .addEventListener('click', () => this.skip());
-    document.getElementById('welcome').hidden = false;
     this.#render();
   }
 
@@ -304,22 +313,20 @@ class Welcome {
     this.#go(-1);
   }
 
-  // Leaves the setup: what Next already applied stays.
+  // Leaves the setup: what Next already applied stays. On the last step it
+  // is the same as Start browsing (a chosen import opens).
   skip() {
-    this.#end('skip');
+    endSetup(this.#index === this.#steps.length - 1 ? 'finish' : 'skip');
   }
 
   finish() {
-    this.#end('finish');
+    endSetup('finish');
   }
 
-  // Once: a double click or a held Enter doesn't send twice.
-  #end(message) {
-    if (this.#finished) {
-      return;
-    }
-    this.#finished = true;
-    chrome.send(message);
+  // A step's own Skip: nothing of it applies.
+  skipStep() {
+    this.#step.onSkip?.();
+    this.#go(1);
   }
 
   #go(direction) {
@@ -377,7 +384,7 @@ class Welcome {
       foot.append(
           button('Back', {iconBefore: 'arrow-left', onClick: () => this.back()}),
           el('span', {className: 'spacer'}),
-          button('Skip', {onClick: () => this.#go(1)}),
+          button('Skip', {onClick: () => this.skipStep()}),
           button('Next', {
             primary: true,
             iconAfter: 'arrow-right',
@@ -420,6 +427,34 @@ document.addEventListener('mouseup', () => {
 // Browser chrome, not a page: no Back / Reload / Inspect menu.
 document.addEventListener('contextmenu', event => event.preventDefault());
 
+// Ends the setup, once (a double click or a held Enter doesn't send twice).
+let gEnded = false;
+function endSetup(message) {
+  if (gEnded) {
+    return;
+  }
+  gEnded = true;
+  chrome.send(message);
+}
+
+// Skip setup and Esc work from the first frame, before the page's data.
+let gWelcome = null;
+function skipSetup() {
+  if (gWelcome) {
+    gWelcome.skip();
+  } else {
+    endSetup('skip');
+  }
+}
+document.getElementById('welcome-skip').addEventListener('click', skipSetup);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    skipSetup();
+  }
+});
+document.getElementById('welcome').hidden = false;
+
 async function start() {
   const data = await sendWithPromise('getWelcomeData');
   if (!data) {
@@ -432,13 +467,7 @@ async function start() {
     gChoices.shortcuts[row.id] = row.chosen;
   }
   gChoices.engine = data.defaultEngine;
-  const welcome = new Welcome(getSteps(data));
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      welcome.skip();
-    }
-  });
+  gWelcome = new Welcome(getSteps(data));
 }
 
 start();
