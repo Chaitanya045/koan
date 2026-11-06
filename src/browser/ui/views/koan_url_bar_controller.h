@@ -192,6 +192,9 @@ class KoanUrlBarController : public views::ViewObserver,
   // list.
   void ScheduleNewTabZeroSuggestRetry(int retries_left);
   void RetryNewTabZeroSuggest(int retries_left);
+  // Posted when the text is deleted back to empty: asks for the open tabs and
+  // top sites again (OnOmniboxChanged()).
+  void ListOnEmptyInput();
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
 

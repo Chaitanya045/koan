@@ -75,6 +75,16 @@ const buttons = (await views()).filter(v => v.shown && /Button/.test(v.cls) &&
 console.log(`INFO  buttons in the rows: ${buttons.map(v => v.cls).join(' ')}`);
 check('...with a Switch to Tab button', buttons.length >= 1,
       buttons.map(v => v.cls).join(' '));
+// Typing a character and deleting it again: the list is back (Zen shows the
+// default list for an empty box, however it got empty).
+const emptied = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown);
+await typeInto(emptied, 'x', /*Backspace*/ 8);
+const againRows = await waitFor(async () => {
+  const rs = shownViews(await views(), 'OmniboxResultView');
+  return rs.length >= 1 && rs;
+});
+check('Typing a character and deleting it lists the open tabs again',
+      !!againRows, `${shownViews(await views(), 'OmniboxResultView').length} row(s)`);
 // Enter on the first row (the second tab's): it switches, no duplicate.
 await key(page, 40, 0, 'ArrowDown');
 await key(page, 13, 0, 'Enter');
