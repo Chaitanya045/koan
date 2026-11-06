@@ -105,14 +105,14 @@ function mac(cmd) {
 // macOS virtual key codes.
 const K = { W: 13, R: 15, F: 3, L: 37, LBRACKET: 33, RBRACKET: 30, EQUAL: 24,
             MINUS: 27, ZERO: 29, C: 8, ESC: 53, RIGHT: 124, LEFT: 123, TWO: 19,
-            RETURN: 36, T: 17, M: 46, Y: 16, N: 45 };
+            RETURN: 36, T: 17, M: 46, Y: 16, P: 35 };
 // CDP fallback: Windows key codes and names for the same keys.
 const CDP_KEYS = { 13: [87, 'w'], 15: [82, 'r'], 3: [70, 'f'], 37: [76, 'l'],
                    33: [219, '['], 30: [221, ']'], 24: [187, '='], 27: [189, '-'],
                    29: [48, '0'], 8: [67, 'c'], 53: [27, 'Escape'],
                    124: [39, 'ArrowRight'], 123: [37, 'ArrowLeft'], 19: [50, '2'],
                    36: [13, 'Enter'], 17: [84, 't'], 46: [77, 'm'],
-                   16: [89, 'y'], 45: [78, 'n'] };
+                   16: [89, 'y'], 35: [80, 'p'] };
 
 let cdpKeysUsed = false;
 // A key press; `flags` as keypress2's: c ⌘, s ⇧, k ⌃, a ⌥.
@@ -204,14 +204,15 @@ async function visibleTab() {
 }
 
 // The parent page's target, without bringing it to front (no focus change).
-const parentTarget = async () => (await tabPages()).find(t => t.url.startsWith(PARENT));
+// (Exactly PARENT: the steps open PARENT#... tabs of their own.)
+const parentTarget = async () => (await tabPages()).find(t => t.url === PARENT);
 
 // The parent page, as the active tab (opened if needed).
 async function parentTab() {
-  let page = (await tabPages()).find(t => t.url.startsWith(PARENT));
+  let page = (await tabPages()).find(t => t.url === PARENT);
   if (!page) {
     await browserCall('Target.createTarget', { url: PARENT });
-    page = await waitFor(async () => (await tabPages()).find(t => t.url.startsWith(PARENT)));
+    page = await waitFor(async () => (await tabPages()).find(t => t.url === PARENT));
   }
   await onPage(page, c => c.send('Page.bringToFront'));
   await sleep(500);
@@ -502,24 +503,36 @@ const steps = {
                 alive && gone && parentLeft);
     console.log('INFO  13 ⌘Q with a Glance open, then relaunch: run by hand (scripts/mac/steps/glance.md step 13)');
   },
-  // ⌘⌥→ in a Glance does what it does in a plain tab (review 3/4): Koan's
-  // next Space when there is one (its shortcut comes before Chrome's), and
-  // Chrome's next tab when Koan declines (one Space). The plain tab first,
-  // then the same from a Glance: the same tab must show.
+  // ⌘⌥→ in a Glance does what it does in a plain tab. With Spaces on, Koan's
+  // next-Space shortcut always takes it (one Space: nothing happens, Zen's
+  // zen-workspace-forward too); with Spaces off, it is Chrome's next tab. A
+  // plain-tab control first, then the Glance.
   async 16() {
+    const spaces = await shown('KoanSpaceBarView');
     const other = await openBackgroundTab(`${PARENT}#other-${Date.now()}`);
     const parent = await parentTab();
     await key(K.RIGHT, 'ca');
     await sleep(800);
     const expected = await visibleTab();
+    const plainSwitched = !!expected && expected.id !== parent.id;
+    console.log(`INFO  16 Spaces ${spaces ? 'on' : 'off'}; in a plain tab ⌘⌥→ ` +
+                `${plainSwitched ? 'switched to ' + expected.url : 'changed nothing'}`);
+    await check('16 the plain-tab control: with Spaces on ⌘⌥→ changes nothing, off it switches',
+                spaces ? !plainSwitched : plainSwitched);
     await parentTab();
     await glance('child');
     await key(K.RIGHT, 'ca');
     await sleep(800);
     const active = await visibleTab();
-    await check('16 ⌘⌥→ in a Glance does what it does in a plain tab',
-                !!active && !!expected && active.id === expected.id,
-                `plain tab -> ${expected?.url}; Glance -> ${active?.url}`);
+    if (spaces) {
+      await check('16 Spaces on: ⌘⌥→ in a Glance changes nothing (the card stays)',
+                  (await cardOpen()) && !!active && active.id === parent.id,
+                  active ? active.url : 'no visible tab');
+    } else {
+      await check('16 Spaces off: ⌘⌥→ in a Glance is the next tab, as in a plain tab',
+                  !!active && !!expected && active.id === expected.id,
+                  `plain tab -> ${expected?.url}; Glance -> ${active?.url}`);
+    }
     await closeCard();
     if (other) await browserCall('Target.closeTarget', { targetId: other.id });
     await onPage(parent, c => c.send('Page.bringToFront'));
@@ -557,15 +570,23 @@ const steps = {
   },
   // A Koan shortcut that declines its key passes it on (review 4): in a
   // private window Koan has no Library, so ⌘Y in a Glance is Chrome's
-  // History, as in a private tab. A real private window (⌘⇧N), whose new tab
-  // is sent to the fixture page.
+  // History, as in a private tab. A real private window (⌘⇧P: Koan's ⌘⇧N is
+  // Zen's New Window), whose new tab is sent to the fixture page.
   async 20() {
     if (!PID) return console.log('SKIP  20 (needs the Mac)');
     const before = new Set((await targets()).map(t => t.id));
-    await key(K.N, 'cs');  // ⌘⇧N: New Incognito Window
+    await key(K.P, 'cs');  // ⌘⇧P: New Private Window (Zen's key)
     const fresh = await waitFor(async () =>
         (await targets()).find(t => !before.has(t.id)), 4000);
-    if (!fresh) return await check('20 ⌘⇧N opens a private window', false);
+    if (!fresh) return await check('20 ⌘⇧P opens a window', false);
+    // Off the record: another browser context than the test window's.
+    const contexts = (await browserCall('Target.getTargets')).result?.targetInfos ?? [];
+    const contextOf = id => contexts.find(t => t.targetId === id)?.browserContextId;
+    const fixture = await parentTarget();
+    const isPrivate = !!contextOf(fresh.id) && contextOf(fresh.id) !== contextOf(fixture?.id);
+    await check('20 ⌘⇧P opens a private window (another browser context)', isPrivate,
+                `context ${contextOf(fresh.id)} vs ${contextOf(fixture?.id)}`);
+    if (!isPrivate) return;
     const url = `${PARENT}#private-${Date.now()}`;
     await onPage(fresh, c => c.send('Page.navigate', { url }));
     const page = await waitFor(async () => (await targets()).find(t => t.url === url));

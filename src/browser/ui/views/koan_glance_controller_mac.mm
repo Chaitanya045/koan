@@ -50,16 +50,11 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
 
 namespace {
 
-// The menu bar's item with `action`, searched depth-first.
-NSMenuItem* MenuItemWithAction(NSMenu* menu, SEL action) {
-  for (NSMenuItem* item in menu.itemArray) {
+// The Window menu's item with `action` (Minimize and Zoom live there).
+NSMenuItem* WindowMenuItemWithAction(SEL action) {
+  for (NSMenuItem* item in NSApp.windowsMenu.itemArray) {
     if (item.action == action) {
       return item;
-    }
-    if (item.hasSubmenu) {
-      if (NSMenuItem* found = MenuItemWithAction(item.submenu, action)) {
-        return found;
-      }
     }
   }
   return nil;
@@ -97,16 +92,21 @@ bool PerformWindowMenuKey(views::Widget* browser,
   if (!ns_event || ns_event.type != NSEventTypeKeyDown || !window) {
     return false;
   }
-  NSMenu* main_menu = [NSApp mainMenu];
-  if (IsKeyEquivalentOf(
-          MenuItemWithAction(main_menu, @selector(performMiniaturize:)),
-          ns_event)) {
-    [window performMiniaturize:nil];
-    return true;
-  }
-  if (IsKeyEquivalentOf(MenuItemWithAction(main_menu, @selector(performZoom:)),
-                        ns_event)) {
-    [window performZoom:nil];
+  // The item as the browser window sees it: matched by its key equivalent
+  // (it validates against the card's window, and is disabled, while that is
+  // key), and enabled for the browser window (not in native fullscreen, for
+  // instance, where Minimize is off).
+  for (SEL action : {@selector(performMiniaturize:), @selector(performZoom:)}) {
+    NSMenuItem* item = WindowMenuItemWithAction(action);
+    if (!IsKeyEquivalentOf(item, ns_event) ||
+        ![window validateUserInterfaceItem:item]) {
+      continue;
+    }
+    if (action == @selector(performMiniaturize:)) {
+      [window performMiniaturize:nil];
+    } else {
+      [window performZoom:nil];
+    }
     return true;
   }
   return false;
