@@ -1,0 +1,6 @@
+# GN files are formatted with `gn format` (scripts/ci/check_gn_format.sh), never with
+# clang-format, which reads them as C++ and corrupts their comments.
+**/*.gn
+**/*.gni
+*.gn
+*.gni

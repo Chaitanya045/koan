@@ -38,14 +38,19 @@ std::optional<std::vector<uint8_t>> EncodeFrame(
   return frame;
 }
 
+FrameDecoder::FrameDecoder() : max_payload_(kMaxPreAuthPayload) {}
+
 FrameDecoder::FrameDecoder(size_t max_payload)
-    : max_payload_(std::min(max_payload, kMaxPayload)) {}
+    : max_payload_(std::min(max_payload, kMaxPayload)), authenticated_(true) {}
 
 FrameDecoder::~FrameDecoder() = default;
 
 bool FrameDecoder::OnAuthenticated() {
   if (failed()) {
     return false;
+  }
+  if (authenticated_) {
+    return true;
   }
   if (buffered_bytes() > 0) {
     Fail(Error::kPipelinedBeforeAuth);

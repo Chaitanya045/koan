@@ -23,9 +23,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   using koan::agent::FrameDecoder;
 
   FuzzedDataProvider provider(data, size);
-  FrameDecoder decoder(provider.ConsumeIntegral<size_t>());
+  // Either the gateway's decoder (unauthenticated) or one with an explicit
+  // limit (authenticated from the start).
+  const bool explicit_limit = provider.ConsumeBool();
+  FrameDecoder decoder = explicit_limit
+                             ? FrameDecoder(provider.ConsumeIntegral<size_t>())
+                             : FrameDecoder();
   int frames_before_auth = 0;
-  bool authenticated = false;
+  bool authenticated = explicit_limit;
   bool failed = false;
 
   while (provider.remaining_bytes() > 0) {

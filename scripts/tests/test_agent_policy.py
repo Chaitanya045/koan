@@ -275,6 +275,7 @@ class PolicyTableTest(unittest.TestCase):
         'Runtime.evaluate': 'RuntimeContext',
         'Runtime.callFunctionOn': 'RuntimeContext',
         'Runtime.addBinding': 'RuntimeContext',
+        'DOM.resolveNode': 'RuntimeContext',
         'Page.captureScreenshot': 'Screenshot',
         'Network.enable': 'NetworkEnable',
         'IO.read': 'OwnStream',

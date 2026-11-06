@@ -231,6 +231,38 @@ TEST(KoanAgentFrameTest, AnAuthenticatedPeerIsNotCountedOut) {
   }
 }
 
+TEST(KoanAgentFrameTest,
+     ADecoderWithAnExplicitLimitIsAuthenticatedFromTheStart) {
+  // The CLI reading replies: more than kMaxPreAuthFrames frames, no
+  // OnAuthenticated() call.
+  FrameDecoder decoder(kMaxPayload);
+  for (int i = 0; i < 10 * kMaxPreAuthFrames; ++i) {
+    ASSERT_TRUE(
+        decoder.Append(*EncodeFrame(Bytes("{\"id\":1,\"result\":{}}"))));
+    ASSERT_TRUE(decoder.TakeFrame().has_value()) << i;
+  }
+  // Calling it anyway changes nothing, even with bytes unread.
+  ASSERT_TRUE(decoder.Append(*EncodeFrame(Bytes("x"))));
+  EXPECT_TRUE(decoder.OnAuthenticated());
+  EXPECT_EQ(decoder.max_payload(), kMaxPayload);
+  EXPECT_FALSE(decoder.failed());
+  EXPECT_TRUE(decoder.TakeFrame().has_value());
+}
+
+TEST(KoanAgentFrameTest, ADefaultDecoderIsForAPeerThatMustAuthenticate) {
+  FrameDecoder decoder;
+  EXPECT_EQ(decoder.max_payload(), kMaxPreAuthPayload);
+  // It is cut off after kMaxPreAuthFrames, which is why a reader that never
+  // authenticates must use the explicit-limit constructor.
+  for (int i = 0; i < kMaxPreAuthFrames; ++i) {
+    ASSERT_TRUE(decoder.Append(*EncodeFrame(Bytes("{}"))));
+    ASSERT_TRUE(decoder.TakeFrame().has_value());
+  }
+  ASSERT_TRUE(decoder.Append(*EncodeFrame(Bytes("{}"))));
+  EXPECT_FALSE(decoder.TakeFrame().has_value());
+  EXPECT_EQ(decoder.error(), FrameDecoder::Error::kTooManyPreAuthFrames);
+}
+
 TEST(KoanAgentFrameTest, TheLimitCannotBeSetAboveTheMaximum) {
   FrameDecoder decoder(SIZE_MAX);
   EXPECT_EQ(decoder.max_payload(), kMaxPayload);

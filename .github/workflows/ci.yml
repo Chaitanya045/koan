@@ -89,5 +89,7 @@ jobs:
         run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
       - name: Node scripts parse
         run: for f in scripts/*.mjs scripts/e2e/*.mjs; do node --check "$f"; done
+      - name: GN files are gn-format clean
+        run: scripts/ci/check_gn_format.sh
       - name: Python compiles
         run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/agent/*.py scripts/tests/*.py

@@ -185,6 +185,7 @@ TEST(KoanAgentPolicyTest, TheRowsThatNeedAFilterCarryIt) {
       {"Runtime.evaluate", ParamFilter::kRuntimeContext},
       {"Runtime.callFunctionOn", ParamFilter::kRuntimeContext},
       {"Runtime.addBinding", ParamFilter::kRuntimeContext},
+      {"DOM.resolveNode", ParamFilter::kRuntimeContext},
       {"Page.captureScreenshot", ParamFilter::kScreenshot},
       {"Network.enable", ParamFilter::kNetworkEnable},
       {"IO.read", ParamFilter::kOwnStream},
@@ -254,32 +255,102 @@ TEST(KoanAgentPolicyTest, OnlyHttpHttpsAndAboutBlankMayBeNavigatedTo) {
        {"http://example.com/", "https://example.com/a?b=c#d",
         "HTTPS://EXAMPLE.COM/", "https://user:pw@example.com:8443/x",
         "http://127.0.0.1:9222/", "http://localhost/", "about:blank",
-        "about:blank#frag", "about:blank?x"}) {
+        "about:blank#frag", "about:blank?x", "about:blank/"}) {
     EXPECT_TRUE(IsAllowedNavigationUrl(GURL(url))) << url;
   }
-  for (const char* url :
-       {"javascript:alert(1)",
-        "JavaScript:alert(1)",
-        "file:///etc/hosts",
-        "chrome://settings",
-        "chrome://version/",
-        "chrome-untrusted://x/",
-        "chrome-extension://abcdefghijklmnopabcdefghijklmnop/page.html",
-        "view-source:https://example.com/",
-        "data:text/html,<b>x</b>",
-        "blob:https://example.com/0a1b",
-        "filesystem:https://example.com/t/x",
-        "devtools://devtools/bundled/inspector.html",
-        "ws://example.com/",
-        "wss://example.com/",
-        "ftp://example.com/",
-        "about:srcdoc",
-        "about:config",
-        "about:blank@evil.com",
-        "isolated-app://x",
-        ""}) {
+  for (const char* url : {
+           "javascript:alert(1)",
+           "JavaScript:alert(1)",
+           "file:///etc/hosts",
+           "chrome://settings",
+           "chrome://version/",
+           "chrome-untrusted://x/",
+           "chrome-extension://abcdefghijklmnopabcdefghijklmnop/page.html",
+           "view-source:https://example.com/",
+           "data:text/html,<b>x</b>",
+           "blob:https://example.com/0a1b",
+           "filesystem:https://example.com/t/x",
+           "devtools://devtools/bundled/inspector.html",
+           "ws://example.com/",
+           "wss://example.com/",
+           "ftp://example.com/",
+           "about:srcdoc",
+           "about:config",
+           "about:blank@evil.com",
+           "isolated-app://x",
+           "",
+       }) {
     EXPECT_FALSE(IsAllowedNavigationUrl(GURL(url))) << url;
   }
+}
+
+// GURL strips tabs and newlines inside the scheme and C0 controls and spaces
+// around the URL before it reads the scheme, so these come out as the
+// javascript: scheme (or as no URL), and either way are refused.
+TEST(KoanAgentPolicyTest, CanonicalisationTricksDoNotGetAScriptSchemeThrough) {
+  for (const char* url : {"java\nscript:alert(1)", "java\tscript:alert(1)",
+                          "java\r\nscript:alert(1)", " javascript:alert(1)",
+                          "\x01javascript:alert(1)", "\x1f javascript:alert(1)",
+                          "\tjavascript:alert(1)", "javascript\n:alert(1)",
+                          "JAVA\nSCRIPT:alert(1)"}) {
+    EXPECT_FALSE(IsAllowedNavigationUrl(GURL(url))) << url;
+  }
+}
+
+TEST(KoanAgentPolicyTest, AboutFormsOtherThanAboutBlankAreRefused) {
+  for (const char* url :
+       {"about://blank", "about:blank:80", "about:blank@host",
+        "about:blank.html", "about:/blank", "about:blank//x", "about:blankx"}) {
+    EXPECT_FALSE(IsAllowedNavigationUrl(GURL(url))) << url;
+  }
+}
+
+TEST(KoanAgentPolicyTest, OtherSchemesABrowserKnowsAreRefused) {
+  for (const char* url :
+       {"mailto:x@y", "tel:1", "sms:1", "chrome-error://chromewebdata/",
+        "chrome-search://x", "chrome-native://x", "chrome-distiller://x",
+        "chrome-extension-resource://x", "magnet:?xt=urn:btih:x",
+        "itms-apps://x", "x-apple.systempreferences:"}) {
+    EXPECT_FALSE(IsAllowedNavigationUrl(GURL(url))) << url;
+  }
+}
+
+TEST(KoanAgentPolicyTest, LookAlikeSchemesAreRefused) {
+  // A fullwidth h, a letter with a cedilla and a Cyrillic h make no http(s)
+  // scheme: GURL calls them no URL or another scheme.
+  for (const char* url :
+       {"\xef\xbd\x88ttps://example.com/", "ht\xc5\xa3ps://example.com/",
+        "\xd2\xbbttps://example.com/", "https\xef\xbc\x9a//example.com/"}) {
+    EXPECT_FALSE(IsAllowedNavigationUrl(GURL(url))) << url;
+  }
+}
+
+TEST(KoanAgentPolicyTest, AMultiMegabyteUrlIsInvalidAndRefused) {
+  // Over the parser's limit (2 MB), so GURL calls it invalid.
+  const std::string big =
+      "https://example.com/" + std::string(3 * 1024 * 1024, 'a');
+  const GURL url(big);
+  EXPECT_FALSE(url.is_valid());
+  EXPECT_FALSE(IsAllowedNavigationUrl(url));
+  EXPECT_EQ(DisallowedNavigationScheme(url), "(invalid)");
+  // Just under the limit is a valid http URL and is allowed.
+  EXPECT_TRUE(IsAllowedNavigationUrl(
+      GURL("https://example.com/" + std::string(1024 * 1024, 'a'))));
+}
+
+// GURL is what decides, so the filter is only as good as the string it was
+// given: the gateway builds the GURL from the exact wire string and navigates
+// that same string. These document what GURL makes of near misses.
+TEST(KoanAgentPolicyTest,
+     WhatGurlMakesOfNearMissesIsWhatContentWillNavigateTo) {
+  EXPECT_TRUE(IsAllowedNavigationUrl(GURL("http:example.com")));
+  EXPECT_EQ(GURL("http:example.com").spec(), "http://example.com/");
+  // The backslash is a slash for http(s): the host is example.com, and the
+  // allowed scheme is what the filter looks at.
+  EXPECT_TRUE(IsAllowedNavigationUrl(GURL("https://example.com\\@evil.com")));
+  EXPECT_EQ(GURL("https://example.com\\@evil.com").host(), "example.com");
+  // Leading and trailing spaces are dropped by GURL.
+  EXPECT_TRUE(IsAllowedNavigationUrl(GURL(" https://example.com/ ")));
 }
 
 TEST(KoanAgentPolicyTest, TheErrorNamesTheScheme) {

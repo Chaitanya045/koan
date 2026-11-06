@@ -78,9 +78,18 @@ class FrameDecoder {
     kPipelinedBeforeAuth,
   };
 
-  // `max_payload` is clamped to kMaxPayload. The default is the limit for a
-  // peer that has not authenticated; tests and trusted pipes pass more.
-  explicit FrameDecoder(size_t max_payload = kMaxPreAuthPayload);
+  // A decoder for a peer that has not authenticated: 4 KB frames, at most
+  // kMaxPreAuthFrames of them, until OnAuthenticated(). This is the one the
+  // gateway uses for every accepted connection.
+  FrameDecoder();
+
+  // A decoder for a stream whose peer needs no authentication, with this
+  // payload limit (clamped to kMaxPayload): the `koan` CLI reading the
+  // browser's replies, and tests. It counts as authenticated from the start,
+  // so it never runs out of frames and OnAuthenticated() has nothing to do.
+  // A decoder that a CLI or test builds with the default constructor and then
+  // never authenticates would be cut off after kMaxPreAuthFrames replies.
+  explicit FrameDecoder(size_t max_payload);
 
   FrameDecoder(const FrameDecoder&) = delete;
   FrameDecoder& operator=(const FrameDecoder&) = delete;
@@ -90,7 +99,8 @@ class FrameDecoder {
   // Called once, when the peer has authenticated: raises the limit to
   // kMaxPayload and stops counting pre-auth frames. Returns false, and fails
   // the decoder, if bytes are still unread (kPipelinedBeforeAuth). The limit
-  // can only go up.
+  // can only go up. On a decoder that was authenticated from the start (the
+  // explicit-limit constructor) it changes nothing and returns true.
   bool OnAuthenticated();
 
   // Adds bytes from the socket. Returns false, and fails the decoder, if the

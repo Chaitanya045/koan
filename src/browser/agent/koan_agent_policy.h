@@ -66,7 +66,13 @@ enum class ParamFilter {
   // (Page.createIsolatedWorld).
   kIsolatedWorld,
   // contextId, uniqueContextId and executionContextId must name the main
-  // world or a world the agent created (design section 4.4).
+  // world or a world the agent created (design section 4.4): Runtime.evaluate,
+  // callFunctionOn and addBinding, and DOM.resolveNode, whose
+  // executionContextId would otherwise hand back an object of another world.
+  // The other methods that take an id (objectId, frameId, targetId) need no
+  // filter of their own: an objectId is one this session was given, and a
+  // frame outside the tab's process (cross-origin, an extension's) needs an
+  // attach of its own, which design section 4.4 refuses.
   kRuntimeContext,
   // fromSurface:false is refused; clip, captureBeyondViewport and emulation
   // only on agent-owned tabs.
