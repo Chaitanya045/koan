@@ -51,10 +51,10 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_omnibox_disposition.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
-#include "koan/browser/ui/views/koan_omnibox_disposition.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
 #include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -553,6 +553,18 @@ void KoanUrlBarController::EndEditing() {
 }
 
 void KoanUrlBarController::OnOmniboxChanged(bool user_input_in_progress) {
+  // The text was deleted back to nothing: Zen lists the open tabs and top
+  // sites again. Chromium asks for zero-prefix suggestions only when the user
+  // *starts* editing with an empty box (OmniboxEditModel::UpdateInput()); text
+  // deleted to empty is an ordinary empty input with no suggestions, which
+  // the zero-prefix provider (koan_zero_suggest.h) does not answer.
+  if ((is_open() || new_tab_) && features::IsUrlBarEnabled() &&
+      location_bar() && location_bar()->omnibox_view() &&
+      location_bar()->omnibox_view()->GetText().empty()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanUrlBarController::ListOnEmptyInput,
+                                  weak_factory_.GetWeakPtr()));
+  }
   if ((!is_open() && !new_tab_) ||
       user_input_in_progress == user_input_in_progress_) {
     return;
@@ -562,6 +574,23 @@ void KoanUrlBarController::OnOmniboxChanged(bool user_input_in_progress) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanUrlBarController::FloatOnType,
                                 weak_factory_.GetWeakPtr()));
+}
+
+void KoanUrlBarController::ListOnEmptyInput() {
+  LocationBarView* bar = location_bar();
+  if ((!is_open() && !new_tab_) || !bar || !bar->omnibox_view() ||
+      !bar->omnibox_view()->HasFocus() ||
+      !bar->omnibox_view()->GetText().empty()) {
+    return;
+  }
+  OmniboxController* omnibox_controller = bar->GetOmniboxController();
+  // The list is up already (the bar just opened empty).
+  if (omnibox_controller->IsPopupOpen()) {
+    return;
+  }
+  omnibox_controller->StopAutocomplete(/*clear_result=*/true);
+  omnibox_controller->edit_model()->StartZeroSuggestRequest(
+      /*user_clobbered_permanent_text=*/true);
 }
 
 void KoanUrlBarController::FloatOnType() {
