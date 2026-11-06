@@ -152,7 +152,7 @@ How agent control compares with Chrome's approval mode:
 | T2 | Another local user connects | 0700 directory + 0600 socket + uid check on accept; the relay's secret path |
 | T3 | An unpaired same-uid process drives the browser | The first connection from an unknown client gets **only** `Koan.pair`; the user sees a native prompt whose headline is the **verified executable** (audit token → path, code-signing identity, ancestors), with the client's own label shown as "calls itself". Unanswered prompts time out (60 s); 3 attempts per minute per peer. **Client records are encrypted and MACed with Keychain-bound `os_crypt` storage** (§5.4), so editing plaintext Local State while Koan is not running cannot add a client |
 | T4 | A stolen credential is replayed | There is no shared secret in the browser: clients hold an Ed25519 private key and sign a single-use nonce bound to the peer's identity digest (§5.2). Paired identity is **pinned** (path, signature, ancestors) and a change re-prompts (§5.5). Credentials expire (30 days) and are revocable (flushed before returning, §5.4). **Residual**: a same-uid process that reads `~/.koan/clients/<id>/key` and runs from the same chain is the paired client (§3.5), which is why `observe` is off and `drive` is per tab |
-| T5 | The agent exfiltrates cookies, storage or credentials | Layered: (1) `Storage.*`, `DOMStorage.*`, `IndexedDB.*`, `CacheStorage.*`, `Network.{getCookies,getAllCookies,setCookie,setCookies,deleteCookies,clearBrowserCookies,clearBrowserCache,loadNetworkResource}` and everything unlisted are **denied** by name (§4.3); `Browser.*` and `SystemInfo.*` do not exist for an untrusted client. (2) **`Network.enable` is required by agent-browser and, upstream, leaks cookies including HttpOnly values and `Authorization` through `requestWillBeSentExtraInfo`/`responseReceivedExtraInfo`** (`network_handler.cc:1113-1135, 4033-4058`; review finding 1): the facade rewrites those events and passes only an allowlist of Network events (§4.5), tested by T-sec-4. (3) `getResponseBody` and `setExtraHTTPHeaders` need capability `network` (not offered in v1). **Honest limit**: the agent can run JS in a page, so it can read what that page's JS can read (`document.cookie` minus HttpOnly, that origin's localStorage, the DOM). It cannot read HttpOnly cookies, other origins' data, the password store or the jar |
+| T5 | The agent exfiltrates cookies, storage or credentials | Layered: (1) `Storage.*`, `DOMStorage.*`, `IndexedDB.*`, `CacheStorage.*`, `Network.{getCookies,getAllCookies,setCookie,setCookies,deleteCookies,clearBrowserCookies,clearBrowserCache,loadNetworkResource}` and everything unlisted are **denied** by name (§4.3); `Browser.*` and `SystemInfo.*` do not exist for an untrusted client. (2) **`Network.enable` is required by agent-browser and, upstream, leaks cookies including HttpOnly values and `Authorization` through `requestWillBeSentExtraInfo`/`responseReceivedExtraInfo`** (`network_handler.cc:1113-1135, 4033-4058`; review finding 1): the facade rewrites those events and passes only an allowlist of Network events (§4.5), tested by T-sec-4. (3) `getResponseBody` and `setExtraHTTPHeaders` need capability `network` (not offered in v1). **Honest limit**: the agent can run JS in a page, so it can read what that page's JS can read (`document.cookie` minus HttpOnly, that origin's localStorage, the DOM). It is **not limited to the origin it started on**: it can navigate its tab to any site you are logged into and read that page, which is the shared-login point of decision 15. It cannot read HttpOnly cookies, the password store or the cookie jar |
 | T6 | The agent reads passwords / autofill | The `Autofill`, `Security`, `Browser` domains are absent for untrusted clients. Risk: password-manager autofill into a form the agent drives, then JS reads the value. Chrome hides autofilled passwords from script until a user gesture; a CDP-injected click may count as one (UNVERIFIED, test T-sec-1, §15). Mitigation if it does: disable password/autofill UI in agent-owned tabs (`ContentAutofillClient`/`PasswordManagerClient` per WebContents) |
 | T7 | The agent reaches privileged or sensitive pages and worlds: `chrome://`, Koan settings, DevTools, `file://`, the Agent-control page, **extension frames injected into ordinary pages and extension content-script worlds** | A strict Koan-only allowlist (§4.4): a frame is reachable only if http(s)/`about:blank`/the unreachable-error URL, non-WebUI, non-privileged, non-guest, non-PDF/MimeHandler, with every ancestor and the embedder passing the same; `chrome-extension://` frames are not attached; execution contexts other than the main world or the agent's own isolated worlds are dropped and their `contextId`s rejected. `MayReadLocalFiles=false` blocks `file://`, `DOM.setFileInputFiles` and `Network.loadNetworkResource`. Network-error pages do not detach the tab (the original draft would have) |
 | T8 | The agent raises windows, switches tabs, quits, resizes, loads extensions | `Page.bringToFront`/`Target.activateTarget` → no-op success + log; `Browser.*`, `Extensions.*`, `SystemInfo.*` absent; `Target.createBrowserContext`/`disposeBrowserContext`/`attachToBrowserTarget` denied; window bounds denied |
@@ -166,7 +166,7 @@ How agent control compares with Chrome's approval mode:
 | T16 | Upgrade drift: a Chromium roll changes which domains or methods an untrusted client gets | The protocol-coverage unit test of §4.3 fails on any unclassified CDP method; REBASE rows name the symbols and the behaviours; a Mac test per denied domain (§14, §15) |
 | T17 | The agent reads or writes the OS clipboard (`Input.dispatchKeyEvent {commands:["paste"]}` pastes whatever the user last copied, such as passwords or 2FA codes) | `commands` is stripped from every key event (§4.5); no `clipboard` capability in v1; T-sec-10 |
 | T18 | A page the agent drives takes the user's attention or focus: `window.open`/`target=_blank`/popups (CDP clicks carry a user gesture), a `<select>` native menu, a file chooser sheet, HTTP auth, client-cert picker, external-protocol launch, print, permission bubbles | Page-opened tabs open in the background in the agent Space (hook #2, §14); `ForbidExternalPopupMenus()` in the lease; file chooser interception forced on; the others become **`userNeeded` approval prompts** that pause the tab and ask the user, never a silent native sheet (§9.4); T-focus-3..7 |
-| T19 | Agent browsing leaks into the user's own surfaces: history, omnibox suggestions, Recently Closed, saved tab groups and sync, session restore | Off by default: agent-visited URLs are not added to history or the omnibox (decision 18, a setting); agent groups are excluded from saved-group sync, recently closed and session restore (§7); T-hist-1, T-sync-1 |
+| T19 | Agent browsing leaks into the user's own surfaces: history, omnibox suggestions, Recently Closed, saved tab groups and sync, session restore, session files | Required, with the mechanism per surface in §7.1: agent-visited URLs are not added to history or the omnibox (decision 18, a setting); agent groups never become saved or synced groups (the existing `SavesTabGroups` hooks; agent control needs Spaces on); a restore-side hook blanks and sweeps agent tabs; conditional write-side hooks keep them out of Recently Closed and the session files; T-hist-1, T-sync-1, T-sync-2 |
 | T20 | Audit-log tampering or secret leakage through the log | Best-effort integrity (hash-chained records, chain key Keychain-bound), size-capped, URL paths redacted by default, nothing typed or evaluated stored (§6.3). A same-uid attacker can still delete it; the log is evidence for the user, not a security boundary |
 
 ### 3.4 Controls the maintainer asked for, mapped
@@ -270,6 +270,13 @@ allowlist and a scrubber, not the reverse.
 | no-op success + audit | `Page.bringToFront`, `Target.activateTarget` (agent-browser's `tab switch` calls them and ignores errors, D§4; agent tabs are never raised) |
 | everything else | **deny**: `Storage.*`, `DOMStorage.*`, `IndexedDB.*`, `CacheStorage.*`, `Security.*`, `Autofill.*`, `Extensions.*`, `SystemInfo.*`, `Debugger.*`, `Profiler.*`, `HeapProfiler.*`, `Tracing.*`, `Memory.*`, `Overlay.*`, `CSS.*`, `Audits.*`, `WebAuthn.*`, `ServiceWorker.*`, `DeviceOrientation.*`, `Page.setDownloadBehavior`, `Page.setWebLifecycleState`, `Page.setBypassCSP`, `Page.getResourceContent`, and every method not named above |
 
+**URL scheme filter.** `Page.navigate`, `Page.navigateToHistoryEntry`'s target, `Target.createTarget`, `Koan.openTab` and
+`Koan.run`'s `go` step accept only `http:`, `https:` and `about:blank`. Every other URL (`javascript:`, `file:`, `chrome:`,
+`chrome-untrusted:`, `chrome-extension:`, `view-source:`, `data:`, `blob:`, `filesystem:`, `devtools:`, `ws:`, `ftp:`)
+is refused **before dispatch** with the CDP error `Koan.urlNotAllowed {scheme}` and an audit line, so a denial is an error the
+agent can read and not a surprise force-detach of the tab. `MayAttachToURL` (§4.4) stays as defence in depth for
+navigations the agent did not start (redirects, links). Test: T-sec-4 navigates to each scheme.
+
 `Page.captureScreenshot` filters: `fromSurface:false` refused (trusted-only upstream, and it needs a really on-screen
 window); `clip`, `captureBeyondViewport` and any emulation allowed only on agent-owned tabs (they resize the real
 NSView, B§1); on the user's own tab a plain viewport capture only.
@@ -301,7 +308,7 @@ them would break rule 4):
 `Network.requestWillBeSent`, `requestWillBeSentExtraInfo` (carries `associatedCookies`, with values and the
 HttpOnly flag, and raw request headers), `responseReceived`, `responseReceivedExtraInfo` (raw `Set-Cookie`)
 (`network_handler.cc:1113-1135, 4033-4058`, nothing trust-gated). The facade therefore **rewrites** those events:
-drop `associatedCookies`, `blockedCookies`, `cookiePartitionKey`; remove the headers `Cookie`, `Set-Cookie`,
+drop `associatedCookies`, `blockedCookies`, `cookiePartitionKey` and, from `Network.requestWillBeSent`, the **request body**: `request.postData`, `request.hasPostData` and `request.postDataEntries` (a login form's password travels in the body, not in a header); remove the headers `Cookie`, `Set-Cookie`,
 `Set-Cookie2`, `Authorization`, `Proxy-Authorization` from request and response header maps (case-insensitive) and
 from `headersText`; drop `Network.dataReceived` payload fields if present; pass only an **allowlist of Network
 events** (`requestWillBeSent`, `responseReceived`, `loadingFinished`, `loadingFailed`, `requestServedFromCache`,
@@ -459,12 +466,11 @@ changes (`kShowWindowInactive` is what `Target.createTarget {background:true}` a
 profile; with no window, Koan creates one ordered back/inactive (Mac test T-win-2). Limits: `max_tabs` per client,
 never Essentials (pinned across Spaces), never another Space's tabs.
 
-**Kept out of the user's other surfaces** (review finding 15, decision 18): an agent Space is ephemeral and never
-enters saved tab groups or tab-group sync, Recently Closed, session restore or the user's window-restore data;
-`open_tab_provider.cc` (an existing Koan patch) skips agent-Space tabs so `@tabs` does not list them; agent-visited
-URLs are **not added to history or the omnibox by default** (a setting; the mechanism is open item O2, §14 #3). The
-Space's copy says plainly that **it shares your logins and cookies** (decision 15), as ego's own engineering doc says
-of theirs, instead of implying isolation.
+**Kept out of the user's other surfaces** (review finding 15, decision 18): §7.1 gives the mechanism per surface. In
+short: an agent Space is ephemeral and never enters saved tab groups or tab-group sync, session restore or Recently Closed;
+`open_tab_provider.cc` (an existing Koan patch) skips agent-Space tabs so `@tabs` does not list them; agent-visited URLs are
+**not added to history or the omnibox by default** (a setting). The Space's copy says plainly that **it shares your logins
+and cookies** (decision 15), as ego's own engineering doc says of theirs, instead of implying isolation.
 
 **Hand-over of a user tab** (ego: "your tabs stay untouched unless you explicitly hand one over"): tab context menu
 *Hand to agent ▸ [Claude Code]* (visible only while a client with `drive` is connected) and a palette command. Two
@@ -476,10 +482,39 @@ modes:
   *Take back* returns it. Refused for Essentials and pinned tabs (drive in place instead). If the user closes it, the
   agent gets `Target.detachedFromTarget`.
 
+### 7.1 Keeping agent groups out of the user's other surfaces (open item O2, designed)
+
+An agent Space is a tab group, so it meets every place Chromium persists or surfaces groups. The audit of Koan's existing hooks
+and pristine 158 gives one mechanism per surface, and shows that **most of it already exists**:
+
+| Surface | Mechanism | New upstream patch? |
+|---|---|---|
+| **Saved tab groups and tab-group sync** | Koan already has `koan::SavesTabGroups(context)` = `!IsWorkspacesEnabled() \|\| context->IsOffTheRecord()` (`koan_tab_hooks.cc:79`), wired into the three places a group becomes a saved group (`saved_tab_group_model_listener.cc` `OnTabGroupAdded`, `session_restore.cc` `ProcessSavedGroup`, `browser_live_tab_context.cc` `AddRestoredTab`'s `SaveGroup`; REBASE row "Spaces aren't saved groups"). With Spaces on, **no group** becomes a saved group, so an agent Space (a Space) is never saved or synced. **Precondition: agent control requires Spaces to be enabled**; with Spaces off (the flag) `Koan.openTab` returns `Koan.unavailable {reason:"spaces-disabled"}` rather than let an agent group be saved or synced (T-sync-2) | none |
+| **Session restore** (restart, crash, reopen window) | Persist a marker `koan.agent_tab` in the tab's session extra data with the existing `SetTabSessionData` (`koan_session_data.h`; written by `BuildCommandsForTab`, carried by `GetExtraDataForTab`). A `TabRestoreHook` for that key replaces the restored tab's `entries` with one `about:blank` entry, and an `AgentSpaceSweeper` closes the flagged tabs and the emptied agent groups when the restore completes (the point at which `DropStartupSpaceAfterRestore` already acts). After a restart no agent page loads or shows. This also covers **reopening a closed window**, where `TabRestoreService` returns the window's tabs through `AddRestoredTab` with the same extra data | none |
+| **Recently Closed** (reopen closed tab/group) | The two funnels are `BrowserTabStripModelDelegate::CreateHistoricalTab` and `CreateHistoricalGroup` (`browser_tab_strip_model_delegate.cc:227,247`, called from `tab_strip_model.cc:953`). A one-line early return for agent-owned contents/groups keeps them out of the list. Whole-window entries (`BrowserClosing`) are covered by the restore-side hook above | **conditional, §14 #5**: needed to keep agent tabs out of the *list*; without it they appear there but reopen blank and are swept |
+| **Session files on disk** | The session files can contain agent-visited URLs until they are next rewritten, even though restore drops the pages. The write side is `SessionServiceBase::BuildCommandsForTab` and the incremental `UpdateTabNavigation`; a tab-level `koan::PersistsInSession(contents)` early return there removes them | **conditional, §14 #6**: decided by T-sync-1, which greps the profile's `Sessions/` files for agent-visited URLs |
+| **History and omnibox** | `HistoryTabHelper::DidFinishNavigation` decides on `navigation_handle->ShouldUpdateHistory()` (`history_tab_helper.cc:532`); a hook `koan::SuppressesHistory(web_contents())` ahead of it keeps agent tabs out of History and therefore out of history-based omnibox suggestions. The setting `koan.agent_control.agent_history` turns it off. There is no per-tab knob upstream (searched `HistoryTabHelper`) | **§14 #3** (certain, no longer conditional) |
+| **`@tabs` / open-tab suggestions** | the existing `open_tab_provider.cc` Koan patch gains one exclusion | none (existing patch) |
+
+So the new upstream touches for O2 are #3 (history, certain) and #5, #6 (conditional, write-side). Everything restore-side is
+`//koan` plus hooks that exist.
+
 ## 8. Per-tab keep-alive (the lease)
 
 `AgentTabLease : content::WebContentsUserData`, created when a client attaches to a tab, released on detach, tab close,
-revoke, or when idle (below). **No upstream patch is needed for it** (review finding 12): freezing, discarding and
+revoke, or when idle (below). **Two lifetimes**: everything that is *cheap* is held for the **whole attachment**, from
+attach to detach, tab close or revoke, and is never dropped by the hold-off; only the **capturer** (the
+visible-compositor cost) follows the hold-off.
+
+| Held for the whole attachment | Follows the hold-off (below) |
+|---|---|
+| the `SetIsPinnedTab` composition (no freeze, no discard) | the visible `IncrementCapturerCount` capturer |
+| the `SetGlicActuationState` vote (renderer priority) | |
+| the `ForbidExternalPopupMenus()` `ScopedClosureRunner` | |
+| `SetAudioMuted`; the app-suspension blocker while a command is in flight | |
+
+Dropping the first two with the hold-off would let an agent tab be frozen or discarded while the model is thinking, and
+the next command would hit a frozen renderer. **No upstream patch is needed for it** (review finding 12): freezing, discarding and
 process priority are all driven by public Performance Manager setters Koan already uses.
 
 | Part | Call | Why (audit) |
@@ -487,11 +522,11 @@ process priority are all driven by public Performance Manager setters Koan alrea
 | Render + scheduler | `contents->IncrementCapturerCount(gfx::Size(), /*stay_hidden=*/false, /*stay_awake=*/false, /*is_activity=*/false)`, keep the `ScopedClosureRunner` | RWH stays shown, own compositor on a detached tab, rAF/CSS animations run, Blink treats the page as visible (no 1 s / 1-per-minute timer throttling), explicit freeze cleared (A§7, B§4). Visible rather than hidden-but-painting (decision 7): it unfreezes, and compositor animations are verified only on that path. Cost: `document.visibilityState == "visible"`, so autoplay and ad-viewability logic treat the agent tab as seen |
 | Freezing and discarding | `PageLiveStateDecorator::SetIsPinnedTab(contents, IsPinnedForUser(tab) \|\| IsAgentLeased(tab))` inside Koan's existing `UpdateFreezingExemption` (`koan_pinned_tabs.cc:268`) | Koan's own `kPinnedTab` freezing reason and upstream's discard `kPinnedTab` (`discard_eligibility_policy.cc:412`) both read this bit; the only other consumer outside PM is `restartability_monitor.cc`. **Replaces** the freezer patch, the discard patch and the new `CannotFreezeReason` of the first draft. The lease must **compose** with the user-pin value there, never write the bit itself |
 | Process priority | `PageLiveStateDecorator::SetGlicActuationState(contents, GlicActuationState::kActuatingOnBackgroundTab)` (public, `page_live_state_decorator.h:111`; reset to `kNone` on release) | Casts the `kUserVisible` PM vote (A§5) so the renderer is not put in the App-Nap-style `kBestEffort` class on macOS; Chromium's Glic helper merely forwards to this setter, so there is **no `//chrome/browser/glic` dependency and no content patch**. The voter is gated by `kGlicActuationPriorityVoter` (on by default; recheck on each roll) |
-| Native popups | `contents->ForbidExternalPopupMenus()` (Mac) | Chrome's own actor does this (`actor_task.cc:988-992`); otherwise a click on a `<select>` opens a native NSMenu over the user's work (§9.4) |
+| Native popups | `contents->ForbidExternalPopupMenus()`, **Mac only**: it exists only under `#if BUILDFLAG(IS_MAC) && BUILDFLAG(USE_EXTERNAL_POPUP_MENU)` (`web_contents.h:940`) and returns a `[[nodiscard]] base::ScopedClosureRunner` | The lease **stores that runner for the whole attachment** (nested calls are allowed; dropping it re-enables native popups). Chrome's own actor takes it behind `kGlicActorInternalPopups` (`actor_task.cc:988-992`); Koan takes it unconditionally. Without it a click on a `<select>` opens a native NSMenu over the user's work (§9.4). The same switch applies to a **user tab driven in place**: while it is driven its `<select>`s render in-page, and the runner is released on hand-back |
 | Audible/muted | `SetAudioMuted(true)` on agent tabs unless the task opts in | ego mutes agent tabs (§19.4) |
 | `stay_awake` | off | a display-sleep assertion only, never a keep-alive; opt-in `keep-awake` for unattended runs. Separately Koan holds an **app-suspension blocker** (idle-sleep prevention, not display sleep) while a task has a command in flight (T-power-1). System sleep and lid-close are **not** prevented |
 
-Pinned-bit side effects to check (T-keep-5, 6, 8, plus T-keep-12): Koan's other code that reads `IsPinnedTab` must not
+Pinned-bit side effects to check (T-keep-5, 5b, 6, 8, plus T-keep-12): Koan's other code that reads `IsPinnedTab` must not
 treat an agent tab as a user-pinned one (it reads `koan::IsPinnedForUser`, not the PM bit; the PM bit is for freezing
 and discard only).
 
@@ -500,14 +535,15 @@ vsync, which on battery is not free, so the lease is **not held while the agent 
 
 | Setting | Default | Why |
 |---|---|---|
-| Hold-off after the last command on a tab | **3 s** (release then re-acquire transparently on the next command) | an LLM turn is 3-20 s; holding through it burns power for nothing |
+| Hold-off of the **capturer** after the last command on a tab | **3 s** (release then re-acquire transparently on the next command); the pin bit and the priority vote stay | an LLM turn is 3-20 s; holding the compositor through it burns power for nothing |
 | Held for the whole of | a `wait`/program in flight, an open screencast, `Koan.keepAlive {tab, seconds}` (≤ 10 min), an active `record`/`stream` | so waiting for an animation or a timer-driven page works |
 | Concurrent leased tabs | **4** (a fifth waits for a release; commands queue rather than fail) | a MacBook Air has 8-16 GB and 4-8 cores |
 | Open tabs per task / per client / total | **8 / 12 / 16** | ego's page budget is 8 (§19) |
 | `live: always` (opt-in, per client) | off | hold the lease for as long as a client is attached, for pages that must run between commands |
 
-Consequence, stated plainly: between commands a default-mode agent tab is a normal hidden tab (timers throttled to 1 s,
-no rAF). "Animations and timers keep running" holds while the agent acts, observes or waits, and always under
+Consequence, stated plainly: between commands a default-mode agent tab is a normal hidden tab as far as rendering goes
+(timers throttled to 1 s, no rAF), **but it is not frozen, not discarded and keeps its renderer at foreground priority**
+for the whole attachment, so the next command answers at once. "Animations and timers keep running" holds while the agent acts, observes or waits, and always under
 `live: always`; the first frame after re-acquire must be fast (T-keep-10: ≤ 100 ms), and a **never-shown** background
 tab (`did_first_set_visible_` false) must produce its first paint under the lease (T-keep-11). A page that needs to
 progress while the agent is thinking must say so (`keepAlive`).
@@ -697,15 +733,17 @@ incognito windows, `ShowsSpaceHeader`). A later capability would be per tab, wit
 
 ## 14. Hook patches (for docs/REBASE.md)
 
-After the review (finding 12) the feature itself needs **at most two upstream touches**, one of them conditional;
-everything else is `//koan` plus public setters Koan already calls.
+After the review (finding 12) the feature itself needs **two upstream touches (#2, #3) and two conditional ones (#5, #6)**;
+everything else is `//koan` plus public setters Koan already calls. (Rows 5 and 6 are conditional write-side hooks for §7.1; the restore side needs none.)
 
 | # | File | Change | Needed for | Status |
 |---|---|---|---|---|
 | 1 | `chrome/browser/devtools/remote_debugging_server.cc` | the default of `g_enable_default_user_data_dir_check_for_chromium_branding_for_testing` becomes `true` | refuse `--remote-debugging-port`/`-pipe` on the default profile (§3.2) | **its own PR, #186** |
 | 2 | `chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc` (the existing Koan patch; `AddNewContents`) | for a tab owned by an agent lease, a page-opened tab (`window.open`, `target=_blank`, a popup) is opened **in the background, in the same agent Space, never activated, never raising a window** (§9.4) | page-initiated focus (review finding 9) | phase 2c, a few lines in a patch that exists |
-| 3 | **conditional** `chrome/browser/history/history_tab_helper.cc` (the `ShouldUpdateHistory()` decision in `DidFinishNavigation`) | skip history for agent-owned tabs | decision 18: agent-visited URLs are not added to history or the omnibox by default (a setting) | phase 2c; first check whether an existing per-tab knob does it (open item O2) |
+| 3 | `chrome/browser/history/history_tab_helper.cc` (the `ShouldUpdateHistory()` decision in `DidFinishNavigation`, line 532): `if (koan::SuppressesHistory(web_contents())) return;` ahead of it | skip history, and so history-based omnibox suggestions, for agent-owned tabs | decision 18 (a setting) | phase 2c. **Certain**: §7.1 found no per-tab knob upstream |
 | 4 | `chrome/browser/BUILD.gn` / `chrome/browser/ui/BUILD.gn` | deps on `//koan/browser/agent` | build only | phase 2b |
+| 5 | **conditional** `chrome/browser/ui/browser_tab_strip_model_delegate.cc` (`CreateHistoricalTab`, `CreateHistoricalGroup`): early return for agent-owned contents and groups | keep agent tabs out of Recently Closed | §7.1; only the *list* needs it, restore already blanks and sweeps | phase 2c; decided by T-sync-1 |
+| 6 | **conditional** `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`, `UpdateTabNavigation`; the existing Koan patch): `koan::PersistsInSession(contents)` early return | keep agent-visited URLs out of the session files | §7.1; the pages are already dropped at restore | phase 2c; decided by the `Sessions/` grep in T-sync-1 |
 
 **Dropped from the first draft** (all replaced by `PageLiveStateDecorator::SetIsPinnedTab` and
 `SetGlicActuationState`, §8): the freezer hook, the discard-eligibility reason, the new
@@ -740,6 +778,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-keep-3 | `Page.captureScreenshot` of an animating page in each state of T-keep-2; pixels differ between two shots 500 ms apart | animation advances |
 | T-keep-4 | `Page.startScreencast` on the same, with and without the lease | frames only with the lease |
 | T-keep-5 | freezing: enable infinite-tabs freezing, 7 tabs; agent tab leased (`keepAlive`) and idle for 3 min; then released and idle again | not frozen while leased (via the `SetIsPinnedTab` composition); a normal tab again after release; others frozen as before (compare `chrome://discards`); the user's own pinned tabs unaffected |
+| T-keep-5b | **default mode**: attach, issue a command, let the 3 s hold-off pass, then leave the tab idle for 3 minutes with infinite-tabs freezing and Memory Saver (1 min for the test) on; then send a command | the tab is not frozen and not discarded during the idle time (`chrome://discards`, process state), the renderer is not in the background priority class, the command answers at once, and the time to the first frame after re-acquire is within T-keep-10's bound |
 | T-keep-6 | discard: Memory Saver at 1 min for the test; agent tab attached / detached | not discarded while leased |
 | T-keep-7 | other tabs unchanged: a normal background tab still throttles and freezes | `power.mjs`-style numbers unchanged |
 | T-keep-8 | priority: renderer process `taskpolicy`/`ps` state with and without the Glic vote | not background |
@@ -747,6 +786,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-keep-10 | time to first frame after a re-acquire, on a hidden tab, 20 runs | median and p95 ≤ 100 ms and ≤ 250 ms (else lengthen the hold-off) |
 | T-keep-11 | a **new, never-shown** background tab (`did_first_set_visible_` false) under the lease | produces its first paint and answers a screenshot |
 | T-keep-12 | lease and pin composition: a user-pinned or Essential tab taken over and released; an agent tab the user pins meanwhile | the PM pinned bit is `user || lease` at every step; Koan's own `IsPinnedForUser` never reads the lease; nothing is left exempt after release |
+| T-keep-13 | the popup-menu runner: click a `<select>` in an agent tab while attached, also after a hold-off; then hand a user tab back | no native NSMenu while attached; native popups return after hand-back |
 | T-power-1 | battery cost of 4 leased tabs vs 4 normal background tabs for 10 min (`powermetrics` where permitted, otherwise CPU time), and the app-suspension blocker while a task runs | recorded; the blocker is released when the task ends; Mac idle sleep resumes |
 | **Focus and creation** | | |
 | T-focus-1 | `Koan.openTab` while the user types in another tab | active tab, focus, caret and typed text unchanged (frontmost pid check per `koan-input-grant-and-front-pid`) |
@@ -762,7 +802,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-sec-1 | password manager: saved login, agent clicks the username field, reads the password field via `Runtime.evaluate` | value not readable (else disable autofill in agent tabs) |
 | T-sec-2 | socket perms: dir 0700, socket 0600; a second uid and an unpaired same-uid client | other uid refused; unpaired gets only `Koan.pair` |
 | T-sec-3 | web page attack: page JS `fetch('http://127.0.0.1:*')`, DNS-rebinding page against the relay, `Origin`-bearing WebSocket | no connection |
-| T-sec-4 | denied methods: call every row of the §4.3 deny list and `Storage.*`, `Network.{getAllCookies,getCookies,setCookie,deleteCookies,clearBrowserCache,loadNetworkResource}`, `Browser.close`, `Extensions.loadUnpacked`, `SystemInfo.getInfo`, `Page.navigate file:///etc/hosts`, `chrome://settings`, `DOM.setFileInputFiles`, `DOM.getFileInfo`; navigation to `chrome-extension://`; **and log in to a test site (HttpOnly Set-Cookie, an Authorization header) with `Network.enable` on** | each denied call returns the expected error; no cookie value, `associatedCookies`, `Set-Cookie`, `Authorization` or `Proxy-Authorization` appears in any frame the client receives; audit entries present |
+| T-sec-4 | denied methods: call every row of the §4.3 deny list and `Storage.*`, `Network.{getAllCookies,getCookies,setCookie,deleteCookies,clearBrowserCache,loadNetworkResource}`, `Browser.close`, `Extensions.loadUnpacked`, `SystemInfo.getInfo`, `Page.navigate` to `file:///etc/hosts`, `javascript:`, `view-source:`, `data:` and `chrome://settings` (each must be `Koan.urlNotAllowed`, not a detach), `DOM.setFileInputFiles`, `DOM.getFileInfo`; navigation to `chrome-extension://`; **and log in to a test site (HttpOnly Set-Cookie, an Authorization header, a POST body carrying a password) with `Network.enable` on** | each denied call returns the expected error; no cookie value, `associatedCookies`, `Set-Cookie`, `Authorization`, `Proxy-Authorization`, `postData` or `postDataEntries` (the POSTed password) appears in any frame the client receives; audit entries present |
 | T-sec-5 | incognito: open an incognito window with a tab | absent from `Koan.listTabs` and `Target.getTargets`; `attachToTarget` by guessed id refused; `Koan.takeOver` refused |
 | T-sec-6 | pairing: a spoofed `--label` (including `../..`), deny, timeout, rate limit, a changed executable path or signature, a new ancestor chain, revoke while connected, revoke then crash, revoke all, feature off while connected | the dialog headline is the verified executable and the label is "calls itself"; a changed pinned identity re-prompts; a revoked client does not return after a crash (flushed); revoke closes sockets and releases leases |
 | T-sec-7 | policy: `RemoteDebuggingAllowed=false`, `DeveloperToolsAvailability=2` | gateway stops / attach refused |
@@ -789,7 +829,8 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-ab-4 | agent-browser CLI exits; its daemon keeps its connection; the daemon later reconnects; the relay's idle timeout passes | the relay is still up while the daemon is; reconnect works or fails fast; a stale daemon fails and restarts cleanly (decides open item O4) |
 | T-ab-5 | the relay's secret never appears in the agent's tool output, `koan` stdout or the audit log; a second simultaneous connection is refused | pass |
 | T-hist-1 | an agent tab visits pages | not in History or the omnibox suggestions; `@tabs` does not list agent-Space tabs; with the setting on they appear |
-| T-sync-1 | an agent Space with tabs; quit and restart; Recently Closed; (if sync is on) saved tab groups | nothing restored or synced |
+| T-sync-1 | an agent Space with tabs; quit and restart; Recently Closed; reopen the closed window; (if sync is on) saved tab groups; grep the profile's `Sessions/` files for the agent-visited URLs | after restart no agent page loads (blank tabs are swept before the window settles); Recently Closed lists nothing (or, without §14 #5, entries that reopen blank and are swept); nothing synced; the grep result decides §14 #6 |
+| T-sync-2 | agent control with the Spaces flag off | `Koan.openTab` returns `Koan.unavailable {spaces-disabled}`; no agent group is created, saved or synced |
 | T-cdp-1 | Puppeteer `connect({browserWSEndpoint})` through the relay | attaches; limitations documented |
 | T-cdp-3 | `Accessibility.getFullAXTree` from an untrusted client, incl. OOPIF and shadow DOM (the domain itself is not trust-gated: review correction) | iframes and shadow roots present, or the facade proxies child targets |
 | T-cdp-4 | `Page.captureScreenshot` with `clip`/`captureBeyondViewport` on the user's visible tab | refused or no relayout flicker |
@@ -802,23 +843,32 @@ Every run also fails on a Koan log `:FATAL:`, a crash report, or a leaked lease 
 
 ## 16. Phasing
 
-* **2a (now, separate PR #186):** the default-profile remote-debugging fix.
-* **2b:** the benchmark harness skeleton with the **baseline runs** (stock Chrome + agent-browser, scripted and LLM
-  mode, §20.7), then the gateway, framing, peer identity, keypair pairing and the encrypted client store, the registry
-  and strict frame/world vetting, the per-method policy tables and the protocol-coverage test, event scrubbing, audit
-  log, indicator and settings. Mac: T-sec-*.
-* **2c:** agent Space and `Koan.openTab`, the lease, `koan` and `koan-relay` (C++ in GN), the skill file, page-initiated
-  focus hook and prompts. Mac: T-keep-*, T-focus-*.
-* **2d:** take-over/hand-back, pause, `userNeeded`, the agent-browser relay and its tests. Mac: T-take-*, T-ab-*.
+Implementation is **small PRs, each reviewed and then taken by the Mac loop**, in the maintainer's order (2026-11-07):
+the gateway and auth first, then keep-alive, then the relay and agent-browser, then the in-browser snapshot/act/run. Mac
+time goes to Zen-parity candidates first, so each PR keeps its build small and batchable (one Mac request per PR, with
+its tests listed).
+
+* **2a (done, PR #186):** the default-profile remote-debugging fix.
+* **2b, gateway and auth:** the benchmark harness skeleton with the **baseline runs** (stock Chrome + agent-browser,
+  scripted and LLM mode, §20.7) as a separate docs/scripts PR; then, in small PRs: the shared frame codec and the policy
+  tables with the protocol-coverage test (pure logic, Linux-runnable); the gateway, framing, peer identity, keypair
+  pairing and the encrypted client store; the registry and frame/world vetting, event scrubbing and the audit log; the
+  indicator and settings. Mac: T-sec-*.
+* **2c, keep-alive:** the lease (the whole-attachment part and the capturer hold-off), agent Space and `Koan.openTab`, the
+  history/restore/Recently-Closed hooks of §7.1, `koan` (C++ in GN), the skill file, page-initiated focus hook and
+  prompts. Mac: T-keep-*, T-focus-*, T-sync-*, T-hist-*.
+* **2d, relay and agent-browser:** `koan-relay`, the session-scoped relay and `koan agent-browser`, then take-over/hand-back,
+  pause and `userNeeded`. Mac: T-ab-*, T-take-*.
   **2a-2d ship security and background capability. They do not ship a speed advantage**: through agent-browser the
   call pattern is the same CDP as stock plus a facade hop and a relay (review finding 16). No copy, README or release note
   says "faster" until the phase-3 numbers exist.
-* **3, the speed phase:** `Koan.snapshot` / `act` / `run` in the browser (with an `eval` step, §20.2), incremental
+* **3, the speed phase, last:** `Koan.snapshot` / `act` / `run` in the browser (with an `eval` step, §20.2), incremental
   diffs, the event-driven wait signals, text-first results; re-run the benchmark, including **the ego(lite) run
   (mandatory for the headline)**. The headline is `< 1.0×` ego on the suite, not parity.
 * **Later:** `network`/`cookies`/`clipboard` capabilities, Keychain-bound client keys, Touch ID strict mode, O2 window mode.
 
-Phase 2 starts after the 24 Nov parity merges unless reprioritized (issue #180). 2a does not wait for anything.
+Phase 2 may start now, after #186 (maintainer, 2026-11-07); it is no longer gated on the 24 Nov parity merges, but Zen-parity
+candidates keep the Mac first.
 
 ## 17. Decisions
 
@@ -836,7 +886,7 @@ Phase 2 starts after the 24 Nov parity merges unless reprioritized (issue #180).
 | 8, 9 | No freezer, discard or Glic patch: keep-alive via `SetIsPinnedTab` and `SetGlicActuationState` | §8, §14 |
 | 10 | Skill installed from settings only | §12 |
 | 11 | No `cookies` or `network` capability in v1 (and the leaks that made "without" false are closed, §4.5) | §4.3, §5.3 |
-| 12 | CLI built with the Chromium tree's toolchain. **My choice: C++** (two GN targets, `koan` and `koan-relay`; rationale in §12) | §12 |
+| 12 | **Maintainer:** build the CLI with the Chromium tree's own toolchain (C++, or Rust via GN) so friends need no extra installs (#113). **Design author's choice, not a maintainer decision: C++** (two GN targets, `koan` and `koan-relay`; rationale in §12), open to override | §12 |
 | 13 | `eval`/script step early, not only a DSL | §20.2 |
 | 14 | Ghost cursor and progress line, muted agent tabs, an app-suspension blocker (not display sleep) | §8, §19.4 |
 | 15 | Say plainly that the agent Space shares the profile's logins | §7, §19.4 |
@@ -852,7 +902,7 @@ Phase 2 starts after the 24 Nov parity merges unless reprioritized (issue #180).
 | # | Question | Proposal |
 |---|---|---|
 | O1 | The power numbers for a MacBook Air: hold-off 3 s, 4 concurrent leases, 8/12/16 tabs per task/client/total | §8 proposes; confirm or change after T-keep-9, 10, 12 |
-| O2 | The history/omnibox/saved-group mechanism: is there a per-tab knob in `HistoryTabHelper`, and what keeps an agent tab group out of tab-group sync, recently-closed and session restore? | audit in 2c; §14 #3 is the fallback hook |
+| O2 | *(resolved in design, §7.1)* The history/omnibox/saved-group/session mechanism | saved groups: already excluded by `SavesTabGroups` when Spaces are on (agent control requires Spaces on); session restore: marker + `TabRestoreHook` + sweeper (no patch); history: §14 #3; Recently Closed and session files: conditional §14 #5, #6, decided by T-sync-1 |
 | O3 | How strict ancestor pinning is (soft re-prompt on a new chain, once per launch) | §5.5 proposes; revisit after the first week of use |
 | O4 | Whether agent-browser's daemon reconnects with the same relay path after a dropped connection | T-ab-4 tests it; decides single-use vs session-lifetime secret (§11.1) |
 | O5 | Keychain-ACL-bound client key (the CLI inside Koan.app) | later hardening; UNVERIFIED feasibility (C§5) |
@@ -1123,7 +1173,7 @@ and teardown, and the environment variables.
 | `agent-browser` | agent-browser launching its own Chrome | what most agents use today |
 | `ego` | ego(lite) + its published `ego-browser` skill, **unmodified** | **mandatory for the headline claim** (decision 20; the user has consented; zen-ref runs it). Mac only. **Contained**: ego's CLI starts its GUI app through LaunchServices, which `sandbox-exec` does not confine, and in the first teardown attempt it wrote outside any sandbox (shell config, agent skill and rule directories, `~/.local/bin`, a keychain item). So: a dedicated macOS user account or VM, a before/after snapshot of those paths, black-box only (its Terms forbid reverse engineering and limit use to personal, non-commercial use), and nothing deleted or edited in the owner's real home without their say-so. Its login-reuse needs an import, recorded as a deviation |
 
-**Task suite (≈16, fixed, versioned).** A local deterministic test site (`site/`, Node, no network) on two origins
+**Task suite (16 local + 5 live-web, fixed, versioned).** A local deterministic test site (`site/`, Node, no network) on two origins
 (`127.0.0.1:A` and `localhost:B`, so frames across them are genuinely cross-origin) records every form submission
 and click server-side; **success is decided by the site's recorded state, never by the agent's claim**. Categories and
 tasks:
@@ -1140,7 +1190,7 @@ tasks:
 | 14 | infinite scroll | load until a target entry appears | scroll + wait |
 | 15 | dialogs and popups | `confirm`, a new window, a file-less download trigger | edge handling |
 | 16 | **background run** | any of the above run while the browser window is **covered by another app / unfocused / the tab is not active** | keep-alive; screenshots and animation tasks must still pass |
-| opt. | live web | 3-5 pinned public pages (docs search, a wiki infobox), off by default | realism |
+| 17-21 | live web (**part of the headline**) | 5 pinned public pages run in the same interleaved blocks as the local tasks: a docs search, a wiki infobox extraction, a form that is filled but not submitted, a paginated list, a page with an embedded iframe widget. Needs network access; the pinned URLs and expected values live in `tasks/live/` and are re-verified before each run | real network time, real third-party scripts |
 
 Each task is a JSON spec: goal text, start URL/state (seeded cookies, tabs), verifier endpoint, limits
 (`maxToolCalls`, `maxSeconds`, `maxTokens`).
@@ -1155,12 +1205,13 @@ Each task is a JSON spec: goal text, start URL/state (seeded cookies, tabs), ver
    target-specific skill file, a hard budget. Headless Claude Code (`claude -p` with the skill) or an SDK loop, 5 runs
    per task per target, randomized order, cold browser state per run. Reads usage from the API for exact tokens.
 
-**Metrics (per run, then median + IQR per task and overall):** wall time (total; of which LLM, tool, wait), number of
+**Metrics (recorded per run; every run is kept):** wall time (total; of which LLM, tool, wait), number of
 tool calls (and turns), input/output/cached tokens, tool-result bytes and estimated tokens, **success** (site-verified)
 with a failure taxonomy (wrong result, gave up, budget exhausted, stuck on a stall, policy-denied), screenshots taken,
 retries, time-to-first-progress, plus environment (versions, machine, power state, window state: foreground vs
 covered). Also a **micro layer** over 100 iterations each: connect+auth, `snapshot` (ms, bytes, tokens) on 10 saved real
 pages, `click`+settle, `wait nav`, in a foreground and a covered window.
+The **summary statistic is the paired difference with a bootstrap 95 % CI** (Method, below); medians and IQRs are printed for context only and never decide a verdict.
 
 **External baselines (zen-ref's ego(lite) numbers, and any other hand-measured target).** Not every target can be
 driven by an adapter (ego needs the Mac and the user's consent; the Mac thread measures it black-box). The harness
@@ -1215,7 +1266,7 @@ vendor-reported on an undisclosed task set; they are listed as claims, never as 
 * **Skill text is a confound** (length, quality): record the skill's token count per target and run ego's published skill
   unmodified; Koan's own skill is written from Koan's command set (§12).
 * **Tokens**: record cached and uncached input tokens and output tokens from the API usage, and the cost.
-* **The live-web slice is part of the headline**, not optional: the local site has near-zero network time and
+* **The live-web slice (tasks 17-21) is part of the headline**, not optional, and the task table says so: the local site has near-zero network time and
   overweights tool-side wins. 5 pinned public pages (docs search, a wiki infobox, a form that does not submit, a paginated
   list, a site with an iframe widget), run in the same blocks as the local tasks.
 * **Headed vs headless is specified**: every target runs **headed** for the headline (`agent-browser --headed`, headed
@@ -1223,7 +1274,7 @@ vendor-reported on an undisclosed task set; they are listed as claims, never as 
 * **Time at the harness boundary**: a monotonic clock around the whole agent process (LLM latency included, split using
   the API's reported timings), not each tool's self-reported time.
 * **Power**: record browser CPU time per process group and, where permitted, `powermetrics` energy, because the lease costs power.
-* **Budget**: 16 tasks × 5 targets × 5 runs ≈ **400 agent runs** for the full suite; run a 3-run pilot first, then the full
+* **Budget**: 21 tasks × 5 targets × 5 runs ≈ **525 agent runs** for the full suite; run a 3-run pilot first, then the full
   suite once per phase-3 candidate, and say what it cost.
 
 **Ordering.** (1) phase 2b: harness + site + oracle mode + `chrome-cdp` and `agent-browser` baselines, and zen-ref's
@@ -1249,7 +1300,7 @@ then LLM mode with ego in the blocks; (4) the claim, or the report of which leve
 | 12 keep-alive without patches | §8, §14 (freezer, discard and Glic patches dropped); T-keep-5/6/8/12 |
 | 13 patch #3 hook location | #186 patches the knob's initial value |
 | 14 UI-thread and power cost | §4.1 workers, §8 lighter lease and numbers; T-keep-10/11, T-power-1 |
-| 15 agent groups vs sync/history/session | §7, §14 #3, T19; T-hist-1, T-sync-1; open item O2 |
+| 15 agent groups vs sync/history/session | §7.1, §14 #3/#5/#6, T19; T-hist-1, T-sync-1, T-sync-2 |
 | 16 the plan contradicts itself on what ships | §16 (speed is phase 3), §10, §20 intro |
 | 17 DSL vs JavaScript | §20.2 `eval` step; CLI-side runner in phase 3 |
 | 18 strawman lever table | §20 table and intro |

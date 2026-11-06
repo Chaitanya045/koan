@@ -8,7 +8,8 @@ layout it commits to. Phase 2 builds it, before the features it judges.
 README.md          this file
 site/              local deterministic test site on two origins (127.0.0.1:A, localhost:B); records every
                    submission server-side, so success is decided by the site, never by the agent's claim
-tasks/*.json       ~16 versioned task specs: goal text, start state, verifier, limits
+tasks/*.json       16 local task specs (+ tasks/live/: 5 pinned live-web tasks, which need network access and are
+                   part of the headline): goal text, start state, verifier, limits
 fixtures/          saved static pages for the micro layer (our own pages; never a vendor's files)
 adapters/<target>/ koan, koan-ab, chrome-cdp, agent-browser, ego (external, opt-in)
 runner/            spawns a target, runs scripted-oracle or LLM-agent mode, collects metrics
