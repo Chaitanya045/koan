@@ -201,6 +201,13 @@ const KoanIconEntry kEntries[] = {
     // Zen's reset button on a pinned tab ("Unload and switch to tab", #150).
     {&kRemoveIcon, &kKoanUnpinIcon},
     {&kRemoveOldIcon, &kKoanUnpinIcon},
+    // picture-in-picture
+    {&vector_icons::kPictureInPictureAltIcon, &kKoanPictureInPictureIcon},
+    {&vector_icons::kPictureInPictureAltOldIcon, &kKoanPictureInPictureIcon},
+    {&vector_icons::kPictureInPictureIcon, &kKoanPictureInPictureIcon},
+    {&vector_icons::kPictureInPictureOldIcon, &kKoanPictureInPictureIcon},
+    {&kPictureInPictureAltIcon, &kKoanPictureInPictureIcon},
+    {&kPictureInPictureAltOldIcon, &kKoanPictureInPictureIcon},
     // persistent-storage
     {&vector_icons::kDatabaseIcon, &kKoanPersistentStorageIcon},
     {&vector_icons::kDatabaseOldIcon, &kKoanPersistentStorageIcon},

@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Zen's zen-icons/common/library/library.svg (its resting state, third_party/icons/zen),
+// Zen's zen-icons/common/library/library.svg (its resting state), third_party/icons/zen,
 // converted by scripts/gen_koan_icons.py. See THIRD_PARTY_NOTICES.md.
 
 CANVAS_DIMENSIONS, 18,

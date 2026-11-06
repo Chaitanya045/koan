@@ -121,6 +121,120 @@ Chromium's icons.
 - Zen's `signature.svg` and `check.svg` in its "Nucleo" folder are Lucide's own
   paths; Koan's come from Lucide.
 
+## Surfaces swept (every icon of Koan's UI)
+
+Swept on develop aa2ef917 + #110. Every `k...Icon` that a file in `src/` asks
+for is either a Koan icon already or in the registry's table (a unit-tested
+list: no Koan code asks for a Chromium icon the table lacks). **Koan's own
+views:**
+
+| Surface | Where | Icon asked for | Painted as |
+| --- | --- | --- | --- |
+| Compact mode toast | `koan_compact_mode_controller.cc:630` | `kTabIcon` | `kKoanTabIcon` |
+| Download animation | `koan_download_animation.cc:135` | `kKoanLibraryIcon` | same (Koan icon chosen directly) |
+| Download animation | `koan_download_animation.cc:107` | `kDownloadIcon` | `kKoanDownloadsIcon` |
+| Emoji picker | `koan_emoji_picker.cc:446` | `kDeleteIcon` | `kKoanTrashIcon` |
+| Floating URL bar (⌘L / ⌘T) | `koan_url_bar_controller.cc:213` | `kKoanUrlbarSearchGlassIcon` | same (Koan icon chosen directly) |
+| Glance | `koan_glance_controller.cc:334` | `kSplitSceneIcon` | `kKoanSplitIcon` |
+| Glance | `koan_glance_controller.cc:330` | `kCloseIcon` | `kKoanCloseIcon` |
+| Glance | `koan_glance_controller.cc:332` | `kKoanFullscreenIcon` | same (Koan icon chosen directly) |
+| Library button | `koan_library_controller.cc:113` | `kKoanLibraryIcon` | same (Koan icon chosen directly) |
+| Library panel | `koan_library_view.cc:629` | `kSearchIcon` | `kKoanSearchGlassIcon` |
+| Library panel | `koan_library_view.cc:983` | `kArrowForwardIcon` | `kKoanForwardIcon` |
+| Library panel | `koan_library_view.cc:893` | `kArrowBackIcon` | `kKoanBackIcon` |
+| Library panel | `koan_library_view.cc:699` | `kKoanCircleBarsFilterIcon` | same (Koan icon chosen directly) |
+| Library: Downloads | `koan_library_downloads.cc:119` | `kSearchIcon` | `kKoanSearchGlassIcon` |
+| Library: Downloads | `koan_library_downloads.cc:718` | `kCloseIcon` | `kKoanCloseIcon` |
+| Library: Downloads | `koan_library_downloads.cc:723` | `kReloadChromeRefreshOldIcon` | `kKoanReloadIcon` |
+| Library: Downloads | `koan_library_downloads.cc:375` | `kDownloadIcon` | `kKoanDownloadsIcon` |
+| Library: Downloads | `koan_library_downloads.cc:125` | `kFolderOpenIcon` | `kKoanFolderIcon` |
+| Library: Downloads | `koan_library_downloads.cc:399` | `kInsertDriveFileOutlineOldIcon` | `kKoanPagePortraitIcon` |
+| Library: Downloads | `koan_library_downloads.cc:730` | `kMoreHorizIcon` | `kKoanMenuIcon` |
+| Library: History | `koan_library_history.cc:589` | `kUndoIcon` | `kKoanUTurnToLeftIcon` |
+| Library: History | `koan_library_history.cc:583` | `kDeleteIcon` | `kKoanTrashIcon` |
+| Library: History | `koan_library_history.cc:577` | `kGlobeIcon` | `kKoanDefaultFaviconIcon` |
+| Library: Spaces | `koan_library_spaces.cc:721` | `kMoreHorizIcon` | `kKoanMenuIcon` |
+| Library: Spaces | `koan_library_spaces.cc:700` | `kGlobeIcon` | `kKoanDefaultFaviconIcon` |
+| Library: Spaces | `koan_library_spaces.cc:675` | `kKoanPaintbrushFillIcon` | same (Koan icon chosen directly) |
+| Library: Spaces | `koan_library_spaces.cc:869` | `kKoanMoveCursorIcon` | same (Koan icon chosen directly) |
+| Media controller | `koan_media_controller.cc:430` | `kCloseIcon` | `kKoanCloseIcon` |
+| Media controller | `koan_media_controller.cc:475` | `kGlobeIcon` | `kKoanDefaultFaviconIcon` |
+| Media controller | `koan_media_controller.cc:399` | `kSkipPreviousIcon` | `kKoanMediaPreviousIcon` |
+| Media controller | `koan_media_controller.cc:403` | `kPlayArrowIcon` | `kKoanMediaPlayIcon` |
+| Media controller | `koan_media_controller.cc:406` | `kSkipNextIcon` | `kKoanMediaNextIcon` |
+| Media controller | `koan_media_controller.cc:409` | `kVolumeUpIcon` | `kKoanMediaUnmuteIcon` |
+| Media controller | `koan_media_controller.cc:427` | `kPictureInPictureAltIcon` | `kKoanPictureInPictureIcon` |
+| Media controller | `koan_media_controller.cc:493` | `kPauseIcon` | `kKoanMediaPauseIcon` |
+| Media controller | `koan_media_controller.cc:501` | `kVolumeOffIcon` | `kKoanMediaMuteIcon` |
+| Pinned tab reset button | `koan_pinned_tab_views.cc:319` | `kRemoveIcon` | `kKoanUnpinIcon` |
+| Sidebar tab list (New Tab row, Clear) | `koan_sidebar_tabs.cc:232` | `kAdd2Icon` | `kKoanPlusIcon` |
+| Sidebar tab list (New Tab row, Clear) | `koan_sidebar_tabs.cc:332` | `kKoanDartDownIcon` | same (Koan icon chosen directly) |
+| Sidebar top row, URL pill | `koan_sidebar_nav_view.cc:180` | `kReloadChromeRefreshOldIcon` | `kKoanReloadIcon` |
+| Sidebar top row, URL pill | `koan_sidebar_nav_view.cc:176` | `kBackArrowChromeRefreshOldIcon` | `kKoanBackIcon` |
+| Sidebar top row, URL pill | `koan_sidebar_nav_view.cc:178` | `kForwardArrowChromeRefreshOldIcon` | `kKoanForwardIcon` |
+| Sidebar top row, URL pill | `koan_sidebar_nav_view.cc:308` | `kKoanUrlbarSearchGlassIcon` | same (Koan icon chosen directly) |
+| Sidebar top row, URL pill | `koan_sidebar_nav_view.cc:336` | `kKoanLinkIcon` | same (Koan icon chosen directly) |
+| Space header | `koan_space_header.cc:96` | `kMoreHorizIcon` | `kKoanMenuIcon` |
+| Spaces bottom bar | `koan_space_bar.cc:227` | `kAddIcon` | `kKoanPlusIcon` |
+| Spaces: Create menu | `koan_workspaces.cc:1154` | `kSplitSceneIcon` | `kKoanSplitIcon` |
+| Spaces: Create menu | `koan_workspaces.cc:1155` | `kAddIcon` | `kKoanPlusIcon` |
+| Spaces: Create menu | `koan_workspaces.cc:1132` | `kKoanPlusIcon` | same (Koan icon chosen directly) |
+| Welcome | `koan_welcome.cc:270` | `kArrowForwardIcon` | `kKoanForwardIcon` |
+| Welcome | `koan_welcome.cc:300` | `kArrowBackIcon` | `kKoanBackIcon` |
+| ⌘T overlay (commands) | `koan_command_palette.cc:231` | `kSearchIcon` | `kKoanSearchGlassIcon` |
+| ⌘T overlay (commands) | `koan_command_palette.cc:232` | `kSearchChromeRefreshOldIcon` | `kKoanSearchGlassIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:219` | `kDockToLeftIcon` | `kKoanSidebarIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:222` | `kKoanLibraryIcon` | same (Koan icon chosen directly) |
+| ⌘T overlay and palette commands | `koan_commands.cc:225` | `kSplitSceneIcon` | `kKoanSplitIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:231` | `kLinkIcon` | `kKoanLinkIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:234` | `kSettingsIcon` | `kKoanSettingsIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:238` | `kIncognitoIcon` | `kKoanPrivateWindowIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:241` | `kNewWindowIcon` | `kKoanWindowIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:243` | `kKeepIcon` | `kKoanPinIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:245` | `kKeepOffIcon` | `kKoanUnpinIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:248` | `kCloseIcon` | `kKoanCloseIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:251` | `kHistoryIcon` | `kKoanHistoryIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:254` | `kContentCopyIcon` | `kKoanEditCopyIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:261` | `kUndoIcon` | `kKoanUTurnToLeftIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:265` | `kReloadChromeRefreshOldIcon` | `kKoanReloadIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:273` | `kArrowForwardIcon` | `kKoanForwardIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:276` | `kArrowBackIcon` | `kKoanBackIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:279` | `kScreenshotRegionIcon` | `kKoanScreenshotIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:288` | `kKoanEssentialAddIcon` | same (Koan icon chosen directly) |
+| ⌘T overlay and palette commands | `koan_commands.cc:296` | `kKoanEssentialRemoveIcon` | same (Koan icon chosen directly) |
+| ⌘T overlay and palette commands | `koan_commands.cc:304` | `kFindInPageIcon` | `kKoanSearchPageIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:308` | `kChromeExtensionIcon` | `kKoanExtensionIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:314` | `kKoanSparklesIcon` | same (Koan icon chosen directly) |
+| ⌘T overlay and palette commands | `koan_commands.cc:317` | `kKoanFaceSunIcon` | same (Koan icon chosen directly) |
+| ⌘T overlay and palette commands | `koan_commands.cc:320` | `kKoanMoonStarsIcon` | same (Koan icon chosen directly) |
+| ⌘T overlay and palette commands | `koan_commands.cc:322` | `kPrintIcon` | `kKoanPrintIcon` |
+| ⌘T overlay and palette commands | `koan_commands.cc:333` | `kAddIcon` | `kKoanPlusIcon` |
+
+**Upstream-owned surfaces** (no Koan code; painted through the gfx hook, all
+in the table): the tab close button and favicon fallback (`kCloseIcon`,
+`kGlobeIcon`), tab audio / mute indicators (`kVolumeUpIcon`, `kVolumeOffIcon`,
+`kSpeakerIcon`), the location bar's page actions (bookmark star, share,
+site info `kTuneIcon`, lock / not secure, extensions `kExtensionIcon`) and
+permission chips (location, camera, microphone, notifications, cookies,
+MIDI, storage), the download bubble and toolbar button, the omnibox rows
+(tab `kTabIcon`, history, bookmark, search `kSearchIcon`), the sidebar toggle
+(`kMenuCloseCustomIcon` / `kMenuOpenIcon`), the app menu (`kBrowserTools...`).
+
+**Zen-derived, drawn rather than vector icons** (kept): the Library rail's
+History / Downloads / Spaces glyphs (`koan_library_icons.cc`, from Zen's
+sprites), Space and tab emoji, the download arc.
+
+**Left as Chromium's, because Zen has no such icon:** omnibox answers
+(calculator, weather, finance, dictionary), Drive and enterprise rows, the
+offline dino, sync / sign-in, cast, Google Lens / AI. None is reachable in a
+default Koan window (AI Mode is being removed, #178).
+
+**The URL bar magnifier** is Firefox's own `search-glass.svg` (MPL-2.0), as Zen
+draws it in the identity box: a 16 pt box, 14 pt of glyph (1.0 to 15.0),
+half opaque (an `alpha` of 128 in the icon file, Zen's `fill-opacity: .5`),
+in the floating bar (`kFloatingUrlBarMagnifierSize`) and in the sidebar pill on
+an empty tab. It is not Lucide's `search` (14.6 pt at 16).
+
 ## Table
 
 Zen icon -> Lucide glyph -> Koan id, the inventory sections where the icon is

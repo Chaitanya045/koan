@@ -76,6 +76,9 @@ TEST(KoanIconsTest, ChromiumIconsAreSwappedForTheirKoanIcon) {
             &kKoanReloadIcon);
   EXPECT_EQ(&KoanIconFor(vector_icons::kAdd2Icon), &kKoanPlusIcon);
   EXPECT_EQ(&KoanIconFor(vector_icons::kCloseIcon), &kKoanCloseIcon);
+  // The media card's picture-in-picture button.
+  EXPECT_EQ(&KoanIconFor(vector_icons::kPictureInPictureAltIcon),
+            &kKoanPictureInPictureIcon);
   // Zen's unpin: a dash (the reset button of a pinned tab).
   EXPECT_EQ(&KoanIconFor(kRemoveIcon), &kKoanUnpinIcon);
   // The sidebar toggle, expanded and collapsed.
@@ -90,6 +93,19 @@ TEST(KoanIconsTest, KoanIconsAndUnmappedIconsAreLeftAlone) {
   // Nothing in Zen's vocabulary: Chromium's own.
   EXPECT_EQ(&KoanIconFor(vector_icons::kCloudOffIcon),
             &vector_icons::kCloudOffIcon);
+}
+
+// The magnifier of the URL bar is Firefox's own glyph (Zen's identity icon):
+// a 16 unit box, and half opaque.
+TEST(KoanIconsTest, UrlBarMagnifierIsFirefoxsAtHalfOpacity) {
+  const base::span<const gfx::PathElement> path =
+      kKoanUrlbarSearchGlassIcon.reps[0].path;
+  ASSERT_GT(path.size(), 5u);
+  EXPECT_EQ(path[0].command, gfx::CANVAS_DIMENSIONS);
+  EXPECT_EQ(path[1].arg, 16.f);
+  EXPECT_EQ(path[2].command, gfx::FILL_RULE_NONZERO);
+  EXPECT_EQ(path[3].command, gfx::PATH_COLOR_ALPHA);
+  EXPECT_EQ(path[4].arg, 128.f);
 }
 
 // Zen's icon sizes (.agent/notes/zen-icons-inventory.md, "Render size").

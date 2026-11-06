@@ -68,6 +68,7 @@ expectIcon('Space header actions', 'kMoreHorizIcon', 'kKoanMenuIcon', 16);
 expectKoan('Clear button', 'kKoanDartDownIcon', 10);
 expectKoan('URL pill Copy URL', 'kKoanLinkIcon', 16);
 expectIcon('URL pill site information', 'kTuneIcon', 'kKoanPermissionsIcon', 16);
+expectKoan('URL pill magnifier (empty tab)', 'kKoanUrlbarSearchGlassIcon', 16);
 expectKoan('Library button', 'kKoanLibraryIcon', 19);
 
 const closes = [...icons].filter(([name]) => /^k(Tab)?Close/.test(name));
