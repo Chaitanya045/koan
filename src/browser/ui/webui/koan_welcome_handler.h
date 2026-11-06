@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -14,17 +15,17 @@
 
 class ImporterList;
 class Profile;
+class TemplateURLService;
 
 namespace koan {
 
-// chrome://koan-welcome's messages: what Zen's welcome asks of Firefox.
-// - getWelcomeData: the browsers to import from (Chromium's ImporterList),
-//   the colours, the search engines and the default one.
-// - import, setColor, setColorScheme, setSearchEngine, setDefaultBrowser: the
-//   pages' choices.
-// - finish (the Essentials to pin), skip: close the screen (KoanWelcomeHost).
-// - startWindowDrag, endWindowDrag, showThemePicker, closeThemePicker: the
-//   window around the page.
+// chrome://koan-welcome's messages (onboarding v2, #181):
+// - getWelcomeData: the shortcut rows with the user's side of each, the
+//   browsers to import from (Chromium's ImporterList), the search engines
+//   (Brave first and chosen) and whether this is macOS.
+// - setShortcuts, import, setSearchEngine: a step's choice, on its Next.
+// - finish, skip: close the screen (KoanWelcomeHost).
+// - startWindowDrag, endWindowDrag: the window around the page.
 // Only for the first-run screen (a page with a KoanWelcomeHost): the page
 // typed into a tab gets no data and changes nothing.
 class KoanWelcomeHandler : public content::WebUIMessageHandler {
@@ -41,22 +42,27 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
  private:
   void HandleGetWelcomeData(const base::ListValue& args);
   void OnImportSourcesLoaded(base::Value callback_id);
+  void ResolveWelcomeData(base::Value callback_id);
+  void HandleSetShortcuts(const base::ListValue& args);
   void HandleImport(const base::ListValue& args);
-  void HandleSetColor(const base::ListValue& args);
-  void HandleSetColorScheme(const base::ListValue& args);
   void HandleSetSearchEngine(const base::ListValue& args);
-  void HandleSetDefaultBrowser(const base::ListValue& args);
   void HandleFinish(const base::ListValue& args);
   void HandleSkip(const base::ListValue& args);
   void HandleStartWindowDrag(const base::ListValue& args);
   void HandleEndWindowDrag(const base::ListValue& args);
-  void HandleShowThemePicker(const base::ListValue& args);
-  void HandleCloseThemePicker(const base::ListValue& args);
 
+  // The engines the page offers: Brave Search first, then the region's
+  // prepopulated engines but Wikipedia and eBay (as Zen's list). None when a
+  // policy sets the engine.
   base::ListValue SearchEngines() const;
+  // The service, or null; with `editable`, null too when a policy sets the
+  // engine.
+  TemplateURLService* GetTemplateURLService(bool editable) const;
 
   const raw_ptr<Profile> profile_;
   std::unique_ptr<ImporterList> importer_list_;
+  // Waits for the search engines to load (first run: maybe not yet).
+  base::CallbackListSubscription engines_loaded_;
 
   base::WeakPtrFactory<KoanWelcomeHandler> weak_factory_{this};
 };

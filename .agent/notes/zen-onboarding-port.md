@@ -1,5 +1,12 @@
 # Porting Zen's welcome to a Chromium WebUI (`chrome://koan-welcome`)
 
+**Superseded, 2026-11-06 (user decision, #181):** Koan's welcome is its own
+optional setup in shadcn's look (welcome, shortcuts, import, search engine
+with Brave chosen, done), not a port of Zen's. This plan stays for its
+analysis of Zen's welcome; the WebUI scaffolding it describes is what #174
+reuses. Current behaviour: docs/USAGE.md "Welcome", the audit
+`upstream/welcome.md`, the Mac steps `scripts/mac/steps/welcome.md`.
+
 Status: plan, 2026-11-03. Reference: **Zen 1.24b** (macOS arm64, `Zen.app`, build
 ID 20261029123729), read from the installed app's `omni.ja` /
 `browser/omni.ja`, and watched running in a fresh profile. What it looks like

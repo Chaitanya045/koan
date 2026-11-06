@@ -204,11 +204,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool IsCommandIdChecked(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
 
-  // Fades the frame's caption buttons in or out with the strip. On macOS the
-  // traffic lights stay hidden while the welcome screen shows (KoanWelcome
-  // calls this when it closes).
-  void UpdateCaptionButtons();
-
  private:
   // The original profile's prefs (off the record windows share them).
   PrefService* GetPrefs() const;
@@ -323,8 +318,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnCaptionHotZoneHovered(bool hovered);
   void SetCaptionStripRevealed(bool revealed);
   void CheckCaptionStripHide();
-  // Whether the welcome screen (KoanWelcome) covers the window.
-  bool IsWelcomeShowing() const;
+  // Fades the frame's caption buttons in or out with the strip.
+  void UpdateCaptionButtons();
   // Whether `button` (a frame child) sits above the sidebar's top row, which
   // keeps room for it.
   bool IsCaptionButtonBesideSidebar(const views::View* button) const;

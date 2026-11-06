@@ -665,24 +665,34 @@ dragging.
 
 ## Welcome
 
-The first time Koan starts with a new profile it shows Zen's welcome
-screen: "Welcome to a calmer internet", then a few pages to import from
-another browser, give your Space a colour, choose the search engine and your
-Essentials, and make Koan the default browser. Every page can be skipped
-with Next. It shows once (start Koan with `--force-first-run` and a new user
-data directory to see it again). As in Zen, the window opens at 1200 x 720
-(less on a smaller screen), centred, and keeps that size until the welcome
-ends; the window buttons come back then. Drag the green background or the
-space around the card to move the window.
+The first time Koan starts with a new profile it offers a short, optional
+setup over the first window: "Welcome to a calmer internet", then four
+steps. Every step has Skip, and **Skip setup** (top right) or Esc leaves at
+any point; nothing changes until a step's Next. It shows once (start Koan
+with `--force-first-run` and a new user data directory to see it again).
+Drag the empty space around the card to move the window.
 
-- Import: pick a browser, then Next, and Chromium's import dialog opens once
-  the welcome is over. "NO, start fresh." (the first choice) imports nothing,
-  even if you picked a browser before and came back.
-- The search engine changes as soon as you pick one.
-- Essentials: the apps you pick become Essentials when you press "Dive in!"; each loads the first time you open it.
-- Keyboard: each list of choices is one Tab stop; the arrow keys move in it,
-  Enter or Space picks, and typing a letter jumps to the choice starting with
-  it (G for Google, Y for YES). Esc skips the rest.
+- **Shortcuts** (macOS): Koan uses Zen's keys, which give a few of Chrome's
+  keys another job. Keep Zen's, take Chrome's, or pick per key:
+
+  | Key | Zen's shortcuts (default) | Chrome's shortcuts |
+  |---|---|---|
+  | ⌘S | Compact mode | Save page (compact mode moves to ⌃⌘S) |
+  | Inspect | ⌥⌘L | ⌥⌘C |
+  | Downloads | ⌘J | ⇧⌘J |
+  | Private window | ⇧⌘P | ⇧⌘N |
+  | ⌥⌘← → | Switch Space | Switch tab |
+  | ⇧⌘D | Pin tab | Bookmark all tabs |
+
+  Your choice is saved as your own keys in Settings > Keyboard Shortcuts,
+  where you can change any of them later.
+- **Import**: pick a browser, then Next, and Chromium's import dialog opens
+  once the setup is over, where you choose what to bring. "Start fresh" (the
+  first choice) imports nothing, even if you picked a browser before and came
+  back. Koan lists what Chromium can import from on your Mac: Safari, Firefox
+  and a bookmarks file (Chrome, Brave and Arc are not supported yet).
+- **Search engine**: Brave Search is chosen; pick another if you like. It
+  applies on Next, and Chromium doesn't ask again.
 
 ## Translucent window (macOS)
 
