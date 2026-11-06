@@ -385,6 +385,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
+  // The monitor sees all the application's windows (fullscreen), not just the
+  // browser window's.
+  bool pointer_monitor_is_application_wide_ = false;
 
   // The sidebar's context menu.
   std::unique_ptr<KoanSidebarContextMenuController> context_menu_controller_;

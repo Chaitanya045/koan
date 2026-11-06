@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
@@ -328,6 +329,9 @@ void KoanCompactModeController::OnBrowserViewLayout() {
   InstallContextMenu();
   if (mode_ != Mode::kNone) {
     LayoutHotZones();
+    // Every fullscreen transition lays out: the pointer monitor follows (this
+    // window's or the whole application's, see UpdatePointerMonitor()).
+    UpdatePointerMonitor();
     // The top container's height may have changed (e.g. bookmarks bar).
     if (hides_toolbar() && !toolbar_revealed_) {
       ApplyToolbarTransform(/*animate=*/false);
@@ -735,6 +739,11 @@ bool KoanCompactModeController::is_toolbar_away() const {
 }
 
 void KoanCompactModeController::OnEvent(const ui::Event& event) {
+  // (The application-wide monitor hears the other windows too, and a window
+  // that is closing is torn down by the browser's own tasks.)
+  if (IsClosing()) {
+    return;
+  }
   CheckRevealedHides();
   CheckFullscreenEdges();
 }
@@ -747,26 +756,53 @@ bool KoanCompactModeController::WantsFullscreenEdges() const {
 
 void KoanCompactModeController::CheckFullscreenEdges() {
   if (!WantsFullscreenEdges()) {
-    edge_sidebar_hovered_ = false;
+    if (std::exchange(edge_sidebar_hovered_, false)) {
+      OnSidebarHotZoneHovered(false);
+    }
     return;
   }
-  gfx::Point pointer = display::Screen::Get()->GetCursorScreenPoint();
+  // The monitor hears the whole application (see UpdatePointerMonitor()):
+  // only a pointer over this window counts, not one on another display or
+  // over another window of ours.
+  const gfx::Point screen_pointer =
+      display::Screen::Get()->GetCursorScreenPoint();
+  if (!browser_view_->GetBoundsInScreen().Contains(screen_pointer)) {
+    // (The hover lock is let go of, not just forgotten: the pointer can leave
+    // for another display straight from the edge.)
+    if (std::exchange(edge_sidebar_hovered_, false)) {
+      OnSidebarHotZoneHovered(false);
+    }
+    return;
+  }
+  gfx::Point pointer = screen_pointer;
   views::View::ConvertPointFromScreen(browser_view_, &pointer);
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
+  // Nothing slides in under a menu or a tab drag in progress.
+  const bool busy = TabDragController::IsActive() ||
+                    views::MenuController::GetForOwnerWidget(
+                        browser_view_->GetWidget()) != nullptr;
   if (sidebar_hot_zone_) {
     const bool at_edge =
         IsSidebarOnRight(browser_view_)
             ? pointer.x() >= bounds.right() - kFullscreenEdgeSize
             : pointer.x() < bounds.x() + kFullscreenEdgeSize;
-    const bool hovered =
-        at_edge && pointer.y() >= bounds.y() && pointer.y() < bounds.bottom();
+    // (Only when it would change: the window under the pointer is looked up
+    // for that.)
+    const bool hovered = at_edge && !busy && pointer.y() >= bounds.y() &&
+                         pointer.y() < bounds.bottom() &&
+                         IsPointerOverWindow(browser_view_);
     if (hovered != edge_sidebar_hovered_) {
+      VLOG(1) << "Koan: fullscreen sidebar edge "
+              << (hovered ? "hovered" : "left") << " at " << pointer.x() << ","
+              << pointer.y();
       edge_sidebar_hovered_ = hovered;
       OnSidebarHotZoneHovered(hovered);
     }
   }
-  if (toolbar_hot_zone_ && pointer.y() < bounds.y() + kFullscreenEdgeSize &&
-      pointer.x() >= bounds.x() && pointer.x() < bounds.right()) {
+  if (toolbar_hot_zone_ && !busy && pointer.y() >= bounds.y() &&
+      pointer.y() < bounds.y() + kFullscreenEdgeSize &&
+      pointer.x() >= bounds.x() && pointer.x() < bounds.right() &&
+      IsPointerOverWindow(browser_view_)) {
     OnToolbarHotZoneHovered(true);
   }
 }
@@ -1546,15 +1582,34 @@ void KoanCompactModeController::UpdatePointerMonitor() {
       (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges());
   views::Widget* widget = browser_view_->GetWidget();
   if (!wanted || !widget) {
+    if (pointer_monitor_) {
+      VLOG(1) << "Koan: pointer monitor off";
+    }
     pointer_monitor_.reset();
     return;
   }
-  if (!pointer_monitor_) {
-    pointer_monitor_ = views::EventMonitor::CreateWindowMonitor(
-        this, widget->GetNativeWindow(),
-        {ui::EventType::kMouseMoved, ui::EventType::kMouseDragged,
-         ui::EventType::kMouseEntered, ui::EventType::kMouseExited});
+  // At the screen's edge in native fullscreen the event goes to the window
+  // that is under the pointer, which is not always the browser window's
+  // (another window of the application can be there, as an invisible bubble's
+  // or the immersive overlay's), and a monitor of one window then never sees
+  // it: watch the whole application there, and decide by the pointer's place
+  // (CheckFullscreenEdges()).
+  const bool application_wide = WantsFullscreenEdges();
+  if (pointer_monitor_ &&
+      pointer_monitor_is_application_wide_ == application_wide) {
+    return;
   }
+  const std::set<ui::EventType> types = {
+      ui::EventType::kMouseMoved, ui::EventType::kMouseDragged,
+      ui::EventType::kMouseEntered, ui::EventType::kMouseExited};
+  pointer_monitor_is_application_wide_ = application_wide;
+  pointer_monitor_ = application_wide
+                         ? views::EventMonitor::CreateApplicationMonitor(
+                               this, widget->GetNativeWindow(), types)
+                         : views::EventMonitor::CreateWindowMonitor(
+                               this, widget->GetNativeWindow(), types);
+  VLOG(1) << "Koan: pointer monitor on ("
+          << (application_wide ? "application wide" : "this window") << ")";
 }
 
 void KoanCompactModeController::CheckRevealedHides() {
@@ -1564,8 +1619,12 @@ void KoanCompactModeController::CheckRevealedHides() {
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   if (mode_ == Mode::kNone || IsContentFullscreen(browser_view_)) {
+    VLOG(1) << "Koan: sidebar hot zone ignored (mode "
+            << static_cast<int>(mode_) << ")";
     return;
   }
+  VLOG(1) << "Koan: sidebar hot zone " << (hovered ? "hovered" : "left")
+          << (hover_lock_ ? ", holding" : "");
   if (hovered) {
     hover_release_timer_.Stop();
     if (!hover_lock_) {

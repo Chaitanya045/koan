@@ -47,6 +47,14 @@ bool OwnsTitlebar(const BrowserView* browser_view);
 // sidebar) while the pointer is on them (Zen's ZenCompactMode.mjs, onLeave).
 bool IsPointerOverTrafficLights(const BrowserView* browser_view);
 
+// Whether the pointer, at its place on the screen now, is over this window or
+// one of its own (a bubble, a menu): the topmost window there, on the Space
+// that is showing. The edge reveal of the sidebar and toolbar in fullscreen
+// watches every pointer event of the application and asks this, so that a
+// pointer over another Koan window, another Space or another application
+// reveals nothing. True off macOS.
+bool IsPointerOverWindow(const BrowserView* browser_view);
+
 #if BUILDFLAG(IS_MAC)
 // Shows or hides the window's traffic lights.
 void SetTrafficLightsShown(const BrowserView* browser_view, bool shown);

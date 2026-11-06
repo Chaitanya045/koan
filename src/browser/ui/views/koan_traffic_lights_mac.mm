@@ -24,6 +24,26 @@ void SetTrafficLightsShown(const BrowserView* browser_view, bool shown) {
   }
 }
 
+bool IsPointerOverWindow(const BrowserView* browser_view) {
+  const views::Widget* widget = browser_view->GetWidget();
+  NSWindow* window =
+      widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
+  if (!window || !window.isOnActiveSpace) {
+    return false;
+  }
+  // The topmost window of the screen at the pointer (windows that are not
+  // on screen are not listed), this one or one that hangs from it.
+  const NSInteger number = [NSWindow windowNumberAtPoint:NSEvent.mouseLocation
+                             belowWindowWithWindowNumber:0];
+  for (NSWindow* under = [NSApp windowWithWindowNumber:number]; under;
+       under = under.parentWindow) {
+    if (under == window) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void ClearTitlebar(const BrowserView* browser_view) {
   const views::Widget* widget = browser_view->GetWidget();
   NSWindow* window =
