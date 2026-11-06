@@ -11,7 +11,7 @@ session comes back silently (once, like Firefox's `max_resumed_crashes=1`).
 |---|---|---|
 | NT1 | First launch | One browser window with Koan's welcome. No Chromium sign-in intro or profile-picker window, no infobar, no system prompt. |
 | NT3 | Finish the welcome, quit (⌘Q), relaunch twice | One window each time, no welcome, no infobar of any kind (session-restore, default-browser, pin, PDF), no bubble. |
-| NT4 | `--search-engine-choice-country=DE`, fresh profile, then relaunch | No Chromium search-engine choice page or modal, first run or later. |
+| NT4 | `--search-engine-choice-country=DE`, **fresh profile with the welcome showing**, then finish it and relaunch | No Chromium search-engine choice page or modal over the welcome. **Needs #174** (its `search_engine_choice_dialog_service.cc` patch suppresses the dialog while the welcome shows and records the choice from the welcome's search page); #169 alone does not suppress it, so run NT4 on a build with both, or expect the dialog without #174. After finishing the welcome: no dialog at relaunch. |
 | NT6 | On the welcome's default-browser page pick "NO, still exploring", relaunch three times | No default-browser, pin or PDF infobar each time. |
 
 ## Crash restore (NT5), profile with 3 Spaces and 6 tabs
