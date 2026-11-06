@@ -31,7 +31,9 @@ The five decisions the design stands on:
    visible indicator, incognito excluded, no cookie/storage CDP, an audit log, and any user input in a driven tab
    pauses the agent. We also close a gap Chrome 136 closed and Koan currently has open (§3.2).
 
-Open decisions for the maintainer are collected in §17.
+Open decisions for the maintainer are collected in §17. §19 records how ego(lite) works from public sources and
+decides, technique by technique, what Koan adopts, improves or rejects; §20 is the plan to be faster than it, with a
+benchmark harness spec that can also import externally measured baselines.
 
 ## 1. Requirements and how they are met
 
@@ -602,6 +604,10 @@ Phase 2 starts after the 24 Nov parity merges unless reprioritized (issue #180).
 11. **`cookies` / `network` capabilities**: ship v1 without them (recommended; agent-browser's `state`/`cookies`/`network route` then fail by design), or ship site-scoped versions?
 12. **Where the CLI is written** (Rust vs Go) and whether it lives in this repo.
 
+13. **Scripting**: declarative batch programs only in v1 (recommended; every step is gated), or also a CLI-side script runner (§10 S3) soon after?
+14. **Agent affordances beyond the indicator**: a labelled ghost cursor and a one-line progress text (§19.4, improves "watch"), muted agent tabs, and an app-suspension blocker while a task runs (not display sleep)? Recommend yes to all three.
+15. **Space copy**: say plainly in the UI that the agent Space shares the profile's logins and cookies (recommended; ego's own engineering doc says the same of theirs).
+
 ## 18. Notes and discrepancies found while auditing
 
 * `docs/PERFORMANCE.md` says energy saver "caps frame rates"; the audit found no frame-rate cap code in `cc/`,
@@ -611,3 +617,332 @@ Phase 2 starts after the 24 Nov parity merges unless reprioritized (issue #180).
   best reference for phase 2 and is not otherwise linked into Koan.
 * ego(lite) is closed source; only its public page and quick-start were read (2026-11-07). Its Space/hand-over and
   engine-snapshot ideas are adopted as options above; nothing else is assumed about its implementation.
+
+## 19. How ego(lite) works (public sources, 2026-11-07)
+
+Full record, with quotes and paths: `.agent/notes/upstream/ego-lite-public-research.md`. Hands-on, black-box
+findings from the Mac (transport, isolation, real snapshots, baseline timings): zen-ref's
+`.agent/notes/ego-lite-teardown.md` (pending; §19.6 says what it will settle). Labels: **C** = confirmed in a public
+source, **I** = inferred. Rules: the vendor's Terms forbid reverse engineering, so no binary was analysed; Koan
+copies none of their code, scripts, prompts, skill text or snapshot syntax; it is designed independently from the
+requirements in this note.
+
+### 19.1 Facts
+
+| Topic | What is published | |
+|---|---|---|
+| What is open | `github.com/citrolabs/ego-lite` (MIT): the agent-side runtime (`package/ego-browser`) and the skill package. The browser is closed. The `globalThis.ego` bindings come from the app | C |
+| Skill | Two layers. The installed entry skill is ~1.7 KB and only says to run `ego-browser skill`, which prints the real ~24 KB guide from the installed app, so the guide always matches the app version. The app copies the entry skill to `~/.agents/skills/ego-browser` (if missing) and, per onboarding, to `~/.claude/skills/` | C |
+| Agent interface | `ego-browser nodejs <<'EOF' … EOF`: **arbitrary ESM JavaScript** run in a Node.js (v24) built into the app, with `taskSpace()`, `Page` objects and `ego` bindings in scope. Other subcommands: `skill`, `upgrade`, `import`, `help`. The launcher is a native helper in the app bundle. The script does not inherit the shell cwd or environment | C |
+| Per-run model | Every invocation is a fresh script run; task spaces, tabs and permanent page labels (`p1`, `p2`…) persist in the browser and on disk (`~/.ego-browser/state`); JS variables do not. Guidance: do the planned actions, wait for the end state, print `page.snapshot()` last so the next round starts from it | C |
+| API | A small custom Page/TaskSpace API ("not Playwright"): `goto`, `click`, `fill`, `press`, `waitFor*`, `snapshot`, `screenshot`, `evaluate`, `cdp`, mouse/keyboard, dialogs, file chooser; locators `@N`, `text=`, `loc=css/role/href`, `xpath=`, CSS, which must match exactly one element | C |
+| CDP | Raw CDP goes through native bindings (`ego.sendCDPMessage` / `onCDPMessage`) to a browser-side client. The task must be selected and **owned by the agent**, checked on each send. A custom domain `egoAutomated` hides console messages from the page. A "CDP bridge" blocks `Target.createTarget` | C |
+| Transport from the launcher to the browser | **Not published** (socket, pipe, XPC, HTTP unknown). No authentication between CLI and app is described anywhere. The only gate documented is the host agent's own permission mode: the Claude Code guide tells users to enable Bypass permissions | C (absence) |
+| Snapshots | Built "inside the modified Chromium engine, not with a script added to the page"; AX-tree derived; include OOPIFs and open shadow roots (e2e test). Format (from the repo's tests, synthetic): indented tree, `role "name" [ref=N, loc=…, url=…]`, `iframe` with nested `root`, a trailing "more content below" marker, subtree scope, **no diffs** (`diff:true` throws). Refs are SDK-assigned per frame/document/backend node and invalidated on navigation | C/I |
+| Waits | Action timeout 3 s with a 50 ms re-check; a missing target is abandoned once the page shows no DOM mutation and no network for 500 ms; `waitForSelector` 10 s; `goto` 15 s; CDP request 15 s; page budget 8. Guidance: avoid fixed delays | C |
+| Spaces | Product pages: a Space is "one isolated BrowserContext per task, with its own cookies and storage", "not a new window or profile". The vendor's own `clearing-state.md` says a task space's profile cookie jar and cache are **shared with the user's tabs and every other task space on the profile**. Spaces are user-visible objects (overview, pinned, restore); they belong to a profile; a task is created with a profile id. Changelog hints at hidden windows for task tabs. How a Space is rendered is unknown | C/I |
+| Hand-over | `ownership` is `agent` or `user`. Browser prompts (location, camera, USB, notifications, …) move the Space to the user with a reason key; `handOff()`, `waitForControl()`, `takeOverTaskSpace()`; claiming a user-owned Space needs the user's approval; page-authored `alert/confirm/prompt` stay with the agent. While an agent controls a Space: read-only address bar, control overlay and glow, labelled agent cursor, tabs muted, the system kept awake, file pickers/credential dialogs/protocol handlers suppressed, auto-close after 30 min idle | C |
+| App | Chromium 156.0.8078.74 (changelog), bundle id `com.citrolabs.ego.lite`, a Node helper app, a separate bundled `local-ego-daemon` with its own web UI, an updater fork. Hosted skill/ToS: personal, non-commercial use, no reverse engineering | C |
+
+### 19.2 What stands out
+
+* Their agent API is a **script** (a Node process) that talks to the browser through a native channel, not a wire
+  protocol that any program can speak. Agents get one round trip per script, which is where "fewer round trips" comes
+  from; the cost is that arbitrary agent JavaScript runs inside a helper process of the browser app.
+* **No security layer is published**: no pairing, no per-client prompt, no capabilities, no audit log, no incognito
+  rule that we found. Their model is "the agent can always reach your real logins and tabs" (FAQ). That is the
+  largest place Koan can differ on purpose (§3).
+* **Their Space is not a cookie boundary** in the default case, whatever the marketing page says. Ours also shares the
+  user's profile (that is the requirement); we should say so plainly in the UI and docs rather than imply isolation.
+* The snapshot has **no incremental mode**, and its token claim ("200 to 400 tokens for a typical page") is
+  unmeasured. Diffs are an open lane.
+* Waiting is event-driven in spirit (mutation/network idle) but with long defaults (3 s action budget).
+
+### 19.3 Unknowns (not guessed)
+
+The launcher→browser transport and any authentication; whether a remote-debugging port exists; the launcher's
+language and IPC names; what "Aperitif" is; the engine mechanism of snapshots (which Blink/AX code, browser vs
+renderer, closed shadow roots); how a Space is windowed; whether two agent Spaces on one profile are isolated at all;
+the full CLI flag list; the published npm package name; a real captured snapshot (all public examples are fixtures).
+Binary-level questions are off the table because of the Terms.
+
+### 19.4 Technique by technique: adopt, improve, reject
+
+| ego technique | Decision | Koan's version, and why |
+|---|---|---|
+| Agent works in its own Space; user tabs untouched unless handed over | **Adopt** | §7 agent Space. Same promise, built on Koan's tab-group Spaces. Honest copy: it shares the profile's logins |
+| One Space per task, named, resumable by name | **Adopt** | `Koan.createTask {name}`; resuming by name returns the same Space and its page labels |
+| Stable permanent page labels (`p1`, `p2`) across runs | **Adopt** | per-task tab labels persisted with the session; used by every command (`koan click p2 @12`) |
+| Page budget (8) and 30-min idle auto-close | **Adopt, tunable** | per-task page cap (default 8), per-client cap (20), idle end of task with the Space left for the user to dismiss (§8 lease idle is separate) |
+| Visible agent affordances: control overlay, glow, read-only address bar, labelled agent cursor, short progress line | **Adopt** | §6.2 indicator + banner; plus an optional per-action label shown beside a ghost cursor and a one-line progress text, because "watch" is a requirement |
+| Hand-over on browser permission prompts (location, camera, USB…) with a reason key | **Adopt** | pause the agent's tab, anchor the normal permission bubble, event `Koan.userNeeded {reason}`; same pause machinery as §9 |
+| Page-authored dialogs stay with the agent | **Adopt** | `Page.handleJavaScriptDialog` allowed; `beforeunload` handled explicitly (they note it is not) |
+| Suppress file pickers, credential dialogs and protocol handlers while the agent drives | **Adopt, but surface them** | do not suppress silently: treat them as `userNeeded` events so a task never hangs without telling anyone |
+| System kept awake during an agent task | **Adopt, narrower** | hold an app-suspension (idle-sleep) blocker while a command or task is active; **not** a display-sleep assertion (§8 `stay_awake`). Chromium wake-lock type mapping on macOS to confirm (T-power-1) |
+| Tabs muted by default for agent tasks | **Adopt** | `SetAudioMuted` on agent tabs unless the task opts in |
+| Agent API = arbitrary JS in a Node process inside the browser app | **Reject for v1** | arbitrary code in a browser-hosted process defeats per-method policy, audit and pause. Use declarative batch programs (§20.2) whose every step is gated. If scripting is wanted later: run it in the **CLI process** (S3) and make each call over the authenticated socket |
+| "Fresh process per run, state persists in the browser" | **Adopt** | §20.1 session state in the browser; stateless CLI |
+| `ego-browser skill` prints the guide from the installed app (never stale) | **Adopt, independently** | `koan skill` prints a guide generated from the installed version; the installed entry skill stays a few lines. Our text is written from our own command set |
+| Auto-install the skill into `~/.agents` and `~/.claude` on first launch | **Reject** | a browser should not write instructions into other tools' directories unprompted. Install on a settings click (§12) |
+| Tell users to run the agent in "bypass permissions" mode | **Reject** | `koan` is one command prefix a user can allow-list; the skill documents that |
+| `egoAutomated`: hide page console messages from CDP so sites cannot detect automation | **Improve (different goal)** | we do not build a stealth layer. We avoid needing `Runtime.enable` for ordinary flows (so the console-serialization side effect that makes DevTools detectable is not triggered by default) and say in the docs that agent traffic is not hidden from sites |
+| `Target.createTarget` blocked in the CDP bridge | **Adopt** | same reason as §4.3: tabs are created by Koan code, in the agent Space |
+| Ownership checked on every CDP message | **Adopt, generalise** | per-message check of client, task, capability, tab state and pause (§4, §9) |
+| Snapshot built in the engine from the AX tree, OOPIF/shadow included | **Adopt the idea, build with public API** | `RequestAXTreeSnapshot(kAll)` (§20.3). We cannot fork Blink; the benchmark shows whether that suffices |
+| `@N` refs unique across frames, stale-ref errors | **Adopt** | §20.3, with re-binding when the same role+name node is re-rendered |
+| `loc=` stable locators only when unique | **Adopt** | locator hints in snapshot lines only when they resolve uniquely |
+| Snapshot is not a diff; one full snapshot per round | **Improve** | incremental diff since the last snapshot and diff-as-action-result (§20.3) |
+| Waits: 3 s action budget, 500 ms idle give-up, 50 ms re-check | **Improve** | event-driven signals first (§20.4), their numbers used as the starting defaults to beat in the benchmark |
+| One heredoc per round: act, wait, print the final snapshot | **Improve** | `koan run` batches with conditionals and returns the diff itself, so the agent does not have to remember to print it |
+| `evaluate()` and `cdp()` escape hatches | **Adopt, gated** | `Runtime.evaluate` allowed under the policy table; `cdp` passes only allowlisted methods (§4.3) |
+| Space = profile-scoped, shared cookies | **Adopt as a stated fact** | same profile is required; copy in settings says so; no isolation promised |
+| No pairing, no per-client approval, no capabilities, no audit log, no incognito rule found | **Do better** | §3 and §5 |
+
+### 19.5 Where Koan should win, stated as testable claims
+
+(1) fewer LLM turns per task (batches + diffs as results); (2) fewer tokens per turn (compact snapshot, diffs); (3) no
+fixed or generous waits; (4) agent tabs genuinely alive in the background (§8) with screenshots on demand; (5) security
+the user can inspect: approval, capabilities, indicator, audit, incognito excluded. §20.7 turns 1-4 into measurements.
+
+### 19.6 What the hands-on teardown must settle before these decisions are final
+
+zen-ref's note is expected to cover: the launcher→browser transport and whether it needs auth; how a Space is rendered
+(window, group, hidden); isolation in practice (do two Spaces see each other's cookies?); a real captured snapshot
+(size in tokens on a set of pages, cross-origin iframe, closed shadow root, fidelity); and baseline timings for the
+task suite in §20.7. Rows above that depend on it are marked in a follow-up commit; none of them is a build-time
+dependency, because Koan's design does not rely on ego's internals.
+
+## 20. Faster than ego(lite), and a benchmark that proves it (maintainer, 2026-11-07)
+
+**Premise.** In an agent loop, wall time is `Σ (LLM turn + tool time + waiting)`. A turn costs seconds and grows with the
+tokens in context; a browser primitive costs milliseconds; a fixed `sleep(2)` costs 2 s every time it is used. So the
+design goal is **fewer turns, fewer tokens per turn, zero idle waiting**. Anything below that does not shorten the
+loop is not worth building first. Every claim in this section is a hypothesis the harness (§20.7) tests; none is
+measured yet.
+
+| Cost in the loop | Typical stock-CDP behaviour | Koan lever | § |
+|---|---|---|---|
+| New process + connect + auth per command | 20-100 ms × N calls | session state lives in the browser; stateless CLI over a warm socket; optional long-lived stdin mode | 20.1 |
+| One action per LLM turn | N turns for an N-step form | batched programs with conditionals in one call | 20.2 |
+| Re-reading the whole page every turn | 3-30 k tokens per snapshot | compact snapshot + incremental diff + action results that carry their own diff | 20.3 |
+| `sleep`/polling to wait | 1-3 s per step, flaky | event-driven waits (navigation, network quiet, frame-quiet, ref present) | 20.4 |
+| Screenshots as the default observation | 1-2 k tokens each + vision latency | text first, screenshots on request, small and annotated | 20.5 |
+| One agent, one tab, serial | serial wall time | parallel agent Spaces, each with its own lease | 20.5 |
+| Background tab stalls, so the agent retries or foregrounds it | lost turns, flaky screenshots | keep-alive lease (§8) | 8 |
+
+### 20.1 Persistent connection and session state in the browser
+
+* The gateway already is the daemon: Koan stays running, the socket is warm, and a native CLI start plus `connect()`
+  plus HMAC is a few milliseconds, not a node/python cold start. **No separate CLI daemon is needed.**
+* Per-client **session state is held in the browser**, keyed by `KOAN_SESSION` (env) or `--session`: current tab,
+  the ref table, the last snapshot (for diffs), the active task. Consecutive `koan` invocations are therefore
+  stateless processes over warm state, which is what a shell-based agent produces anyway. Sessions expire after idle.
+* For agents that can hold a process open: `koan shell` (JSON lines on stdin/stdout over one connection; also what the
+  agent-browser relay and the benchmark's scripted mode use) and `koan watch`.
+* The agent-browser relay (§11) already has its own long-lived per-run connection; agent-browser's own daemon keeps
+  its CDP socket, so it pays no per-command connect either.
+
+### 20.2 Batched actions with conditional waits (one round trip)
+
+`koan run` (and `Koan.run` over the wire) takes a small **program** and executes it in the browser process, one pass:
+
+```json
+{"tab":"t3","steps":[
+  {"go":"https://shop.example/search?q=usb+hub"},
+  {"wait":{"any":[{"ref":{"role":"link","name":"~/USB hub/"}},{"text":"No results"}],"timeout":8000}},
+  {"if":{"text":"No results"},"then":[{"return":"empty"}]},
+  {"click":{"role":"link","name":"~/USB hub/","nth":0}},
+  {"wait":{"nav":true}},
+  {"extract":{"price":{"role":"text","name":"~/\\$\\d+/"},"title":{"role":"heading","level":1}}}
+],"return":"diff","maxSteps":40}
+```
+
+* Steps: `go`, `click`, `fill`, `type`, `press`, `select`, `hover`, `scroll`, `wait`, `if/then/else`, `repeat/until`,
+  `extract`, `snapshot`, `screenshot`, `tab` (open/switch/close inside the task), `return`. Targets are refs (`@12`),
+  or role+name locators resolved by the browser against the current tree (a locator survives a re-render; a ref may
+  not, §20.3).
+* **Every step passes the same gates as a single call**: method policy, URL scope, capability checks, the
+  pause check (a user keystroke between two steps stops the program with `Koan.paused` and a partial result), rate
+  limits, one audit line per step. Batching must not be a policy bypass.
+* Result: per-step status, extracted values, and either the final snapshot, the **diff since the program started**
+  (default), or nothing. On a failed step the result carries the failing step, the reason ("covered by dialog
+  'Cookie settings'"), and the diff, so the agent can recover in the *same* turn it learns of the failure.
+* Bounded: max steps, max wall time, and no unbounded loops (`repeat` needs `until` and a count). Arbitrary agent
+  scripting (ego runs agent JavaScript in a Node process inside the app, §19) is not in v1; if ever added it runs in
+  the **CLI process** and calls the same gated methods over the socket (§10 S3, §19.4).
+
+### 20.3 Compact snapshots built in the browser, with refs and diffs
+
+Built on `WebContents::RequestAXTreeSnapshot(callback, ax_mode, max_nodes, timeout, AXTreeSnapshotPolicy::kAll)`:
+public, **does not change the tab's accessibility mode**, and `kAll` includes out-of-process (cross-origin) iframes
+(`web_contents.h:633-652`, verified in source). Shadow DOM is part of the AX tree (UNVERIFIED for closed roots; test
+T-snap-3). No script is injected into the page.
+
+* **Format** (text, one node per line, indentation = depth; this is the proposal, the benchmark tunes it):
+  ```
+  page "Cart (2) - Shop" https://shop.example/cart  @1
+    nav "Main" @2
+      link "Home" @3   link "Search" @4
+    main
+      heading 1 "Your cart" @9
+      list 2 items
+        item @12: link "USB hub 7-port" @13  text "$24.99"  spinbutton "Qty" =1 @14  button "Remove" @15
+        item @16: link "HDMI cable" @17  text "$9.00"  spinbutton "Qty" =1 @18  button "Remove" @19
+      button "Checkout" @21 [primary]
+    frame "Payments" (cross-origin pay.example) @30
+      textbox "Card number" @31 [required]
+  ```
+* **What is dropped**: nodes with no name, role or action that only wrap others (flattened), duplicate static text,
+  decorative images, nodes outside the viewport collapsed into `… 37 more below` (with a count and a `--scroll`
+  hint) unless `--full`; per-node text capped (~80 chars); long lists elided after N with a count; **password-field
+  values never returned**; hidden/`aria-hidden` nodes omitted. Interactive nodes always keep a ref; non-interactive
+  context stays unreferenced.
+* **Stable refs**: a ref is a per-session integer bound to (frame token, backend DOM node id), never reused within
+  a session. If the node is replaced but the same role+name sits in the same place, it is re-bound to the old ref
+  (cheap heuristic, tested in T-snap-2). A stale ref returns a typed error plus a fresh nearby candidate, not a
+  silent mis-click.
+* **Incremental diff**: `koan snapshot --since` (and every action's default result) returns only
+  `+`/`-`/`~` lines with enough parent context to place them, plus `unchanged: 143 nodes`. This is what keeps context
+  small across 20 steps and keeps the prompt prefix stable (good for model prompt caching). A full snapshot is one
+  flag away.
+* **Actions by ref in the browser** (`Koan.act`): resolve bounds → scroll into view → hit-test the click point (if
+  another node covers it, fail with its name rather than click it) → inject input through the browser-side input path
+  (marked as injected so the pause logic ignores it, §9) → wait per §20.4 → return the diff. One call replaces
+  `snapshot → click → wait → snapshot`.
+* Budget targets, to be proven or dropped by the benchmark: p50 snapshot of an average page ≤ 1,500 tokens; p95
+  ≤ 6,000; a typical click's result ≤ 200 tokens; snapshot latency ≤ 150 ms for 5,000 AX nodes.
+* Fallback and parity: S1 (agent-browser's client-side AX snapshot through the CDP facade) stays supported; the
+  benchmark compares S1 and S2 on the same pages, which is also how §10's decision gets made with data.
+
+### 20.4 Event-driven waits (no sleeps)
+
+Every action and `wait` ends on a **condition**, not a delay. Signals, with what is verified:
+
+| Signal | Source | Status |
+|---|---|---|
+| navigation committed / failed | `WebContentsObserver::DidFinishNavigation` | verified API |
+| document ready / load | `DOMContentLoaded`, `DidFinishLoad`, `DidStopLoading` | verified API (`web_contents_observer.h:422,495-520`) |
+| network quiet | Blink lifecycle events `networkAlmostIdle`/`networkIdle` via an internal `Page.setLifecycleEventsEnabled` on the tab's own client; `ResourceLoadComplete` only reports completions (`:537`), so it cannot alone count in-flight requests | to verify (T-wait-1) |
+| frame-quiet ("DOM settled") | no new compositor frame for *Q* ms while the lease is held (a page that changes also produces frames), plus network quiet | to verify which observer exposes frame submission (T-wait-2); not `AccessibilityEventReceived`, which needs `AXMode::kWebContents` on (`:883`) |
+| ref/text/role present or gone | re-resolve against a fresh AX snapshot **when a frame was produced or a load event fired**, not on a timer | by construction |
+| URL matches, new tab opened, dialog opened, download started | tab/dialog/download observers | verified APIs exist; wiring in phase 2 |
+
+Defaults after an action: wait for any navigation it started, then network quiet, then frame-quiet (*Q* = 120 ms,
+tunable), capped at 5 s; the cap expiring returns the diff and a `settled:false` flag instead of an error. Fixed sleeps
+exist only as an explicit `sleep` step.
+
+### 20.5 Keep-alive, parallelism, text-first
+
+* The lease (§8) keeps agent tabs at full frame rate, so frame-quiet and screenshots are reliable and a tab never has to
+  be foregrounded.
+* **Parallel tasks**: several agent Spaces at once (§7), each with its own lease and session; `koan run` calls are
+  independent, so an agent that can run shell commands in parallel (or several agents) overlaps its page loads and
+  its LLM turns. Gateway limits: per-client max tabs, a CPU-friendly cap on simultaneous leases (default 8).
+* **Text-first**: every command returns text/JSON by default. `--shot` adds a viewport JPEG (default max 1024 px on
+  the long edge, quality 60, ≤ 150 KB) and `--marks` draws ref numbers on it (set-of-marks) for vision models. Full-page
+  and `clip` captures are explicit, and never on the user's visible tab (§9.3).
+
+### 20.6 What we expect not to beat ego on, and what ego can do that we cannot yet
+
+* An engine fork can add Blink/AX hooks that a hook-patch browser should not carry; we use only public `content::`
+  APIs plus 1-3 tiny patches, which caps how deep our snapshot can go (e.g. a Blink-internal "is clickable" bit).
+* ego imports the user's whole Chrome (extensions, passwords). Koan is already the user's browser; no import step.
+* §19 lists what the research could and could not confirm; claims about ego are labelled CONFIRMED or INFERRED there.
+
+### 20.7 Benchmark harness: `scripts/agent-bench/` (design; no code in this PR)
+
+**Purpose.** Prove or disprove "faster" with numbers on identical tasks across tools, so decisions (S1 vs S2, batching
+shape, diff format, wait defaults) are made on data. It is built before the features it judges: phase 2 begins with
+the harness and a baseline run against stock Chrome + agent-browser.
+
+**Targets (adapters).** Each adapter provides: how the agent is told to use the tool (a skill/instructions file), setup
+and teardown, and the environment variables.
+
+| Target | What runs | Notes |
+|---|---|---|
+| `koan` | Koan + `koan` CLI + skill (S2 snapshots, batches, diffs) | the subject |
+| `koan-ab` | Koan + `koan agent-browser` relay (S1 client-side snapshots) | compatibility path, §11 |
+| `chrome-cdp` | stock Chrome with `--remote-debugging-port` on a **fresh non-default** profile (Chrome 136+ rule, §3.2) + a thin CDP CLI | upper bound for "stock CDP"; no real logins |
+| `agent-browser` | agent-browser launching its own Chrome | what most agents use today |
+| `ego` | ego(lite) + its `ego-browser` skill | **optional**: Mac only, needs the user's consent to install and run, and its login-reuse needs an import; the harness treats it as an *external adapter* that is skipped unless `--target ego` and `EGO_APPROVED=1`. Nothing downloads or runs it by default |
+
+**Task suite (≈16, fixed, versioned).** A local deterministic test site (`site/`, Node, no network) on two origins
+(`127.0.0.1:A` and `localhost:B`, so frames across them are genuinely cross-origin) records every form submission
+and click server-side; **success is decided by the site's recorded state, never by the agent's claim**. Categories and
+tasks:
+
+| # | Category | Task (agent is given only the natural-language goal) | Stress |
+|---|---|---|---|
+| 1-3 | search and extract | find the cheapest in-stock item among 3 pages; extract a table into JSON; follow pagination to find an entry | snapshot size, diffs, extraction |
+| 4-5 | form fill | multi-step signup with validation errors; address form with dependent selects | batching, conditional steps |
+| 6-7 | multi-tab compare | open 3 product pages in separate tabs, compare, pick one; collect values from 2 tabs into a third | parallel Spaces, tab handling |
+| 8 | login-reuse | the profile already holds a session cookie for the site; open the account page and read the balance without logging in | shared profile |
+| 9-10 | iframe widget | a cross-origin payment-like iframe with its own inputs; a nested iframe | cross-origin snapshot/actions |
+| 11 | shadow DOM | a web component whose controls sit in open and closed shadow roots | snapshot reach |
+| 12-13 | async content | content appears after a 1.5 s timer and an XHR; a button enabled only after a CSS transition ends | waits, animations |
+| 14 | infinite scroll | load until a target entry appears | scroll + wait |
+| 15 | dialogs and popups | `confirm`, a new window, a file-less download trigger | edge handling |
+| 16 | **background run** | any of the above run while the browser window is **covered by another app / unfocused / the tab is not active** | keep-alive; screenshots and animation tasks must still pass |
+| opt. | live web | 3-5 pinned public pages (docs search, a wiki infobox), off by default | realism |
+
+Each task is a JSON spec: goal text, start URL/state (seeded cookies, tabs), verifier endpoint, limits
+(`maxToolCalls`, `maxSeconds`, `maxTokens`).
+
+**Two modes.**
+
+1. **Scripted-oracle (no LLM; deterministic; cheap).** A canonical minimal plan per task is expressed once in a tool-neutral
+   step list and compiled per target to the *calls that target needs* (for `agent-browser`: snapshot, click, wait, snapshot…;
+   for `koan`: one `run`). Measures tool-side time, calls required, bytes and estimated tokens returned, and success. This
+   isolates **tool efficiency** from model noise, and runs in CI-like fashion on the Mac.
+2. **LLM-agent (the real loop).** A fixed agent: the same model id, temperature 0, same system prompt, same task text,
+   target-specific skill file, a hard budget. Headless Claude Code (`claude -p` with the skill) or an SDK loop, 5 runs
+   per task per target, randomized order, cold browser state per run. Reads usage from the API for exact tokens.
+
+**Metrics (per run, then median + IQR per task and overall):** wall time (total; of which LLM, tool, wait), number of
+tool calls (and turns), input/output/cached tokens, tool-result bytes and estimated tokens, **success** (site-verified)
+with a failure taxonomy (wrong result, gave up, budget exhausted, stuck on a stall, policy-denied), screenshots taken,
+retries, time-to-first-progress, plus environment (versions, machine, power state, window state: foreground vs
+covered). Also a **micro layer** over 100 iterations each: connect+auth, `snapshot` (ms, bytes, tokens) on 10 saved real
+pages, `click`+settle, `wait nav`, in a foreground and a covered window.
+
+**External baselines (zen-ref's ego(lite) numbers, and any other hand-measured target).** Not every target can be
+driven by an adapter (ego needs the Mac and the user's consent; the Mac thread measures it black-box). The harness
+therefore accepts a **baseline file** per target, `baselines/<target>-<date>.json`, written by whoever measured it:
+
+```
+{ "target": "ego-lite", "version": "0.6.2.9", "measuredBy": "zen-ref", "date": "...",
+  "machine": {"model": "...", "os": "...", "power": "ac", "window": "foreground|covered"},
+  "method": "black-box | scripted-oracle | llm-agent", "model": "<model id, if llm>",
+  "suite": "agent-bench-v1",
+  "tasks": { "t04-signup": { "runs": 5, "success": 5, "wallMs": [..], "toolCalls": [..],
+             "inputTokens": [..], "outputTokens": [..], "resultBytes": [..], "notes": "" } },
+  "micro": { "snapshotMs": [..], "snapshotBytes": {"pageId": n}, "waitNavMs": [..] } }
+```
+
+`report/` merges adapter runs and baseline files into one table and marks each cell **measured here** or
+**imported (by whom, when)**; imported cells are never mixed into a pass/fail verdict unless the task spec, the model
+and the machine match (the report prints the mismatches). The micro layer reuses the same fixture pages as the Mac
+thread's measurements, so zen-ref's page set (saved to `scripts/agent-bench/fixtures/` as static pages, never the
+vendor's files) is comparable byte for byte. Vendor claims (e.g. "47-63 % faster on 31 tasks") are listed as
+claims, not data.
+
+**Fairness rules.** Same tasks, site, model, budgets and machine; ego and anything on the Mac run only with the user's
+OK; no target gets task hints beyond its own skill; login-reuse seeds the same cookie for all (ego via its import
+step is recorded as a deviation); the raw transcripts, tool logs and the verifier's records are saved with the report;
+a target that cannot do a task (e.g. `chrome-cdp` on #8, or any target on #16 without a keep-alive) is scored as a
+failure, not skipped.
+
+**Layout** (all created in phase 2): `scripts/agent-bench/README.md`, `site/`, `tasks/*.json`, `adapters/<target>/`,
+`runner/` (spawns target, runs mode 1 or 2, collects metrics), `report/` (CSV + a markdown table + per-task charts),
+`results/` (git-ignored). `README.md` is committed with this design as the spec; nothing else.
+
+**Pass bar for the claim "faster than ego / agent-browser"** (set now so the result cannot be fitted later): on the
+LLM-agent suite at equal or better success rate, median wall time ≤ 0.8× `agent-browser` and ≤ 1.0× `ego`
+(if measured), median tool calls ≤ 0.6× `agent-browser`, tokens sent to the model ≤ 0.5× `agent-browser`, and task 16
+passes where `agent-browser` on stock Chrome fails or degrades. If a threshold is missed, the report says which
+lever (§20.1-20.5) underperformed. ego's published figures (398 s mean per task, 93.5 % success, $1.64 per task)
+are vendor-reported on an undisclosed task set and are **not** comparable until measured on this suite.
+
+**Phase-2 ordering.** (1) harness + site + oracle mode + `chrome-cdp` and `agent-browser` baselines; (2) gateway/lease/CLI
+(§16 2b-2c); (3) S1 numbers through `koan-ab`; (4) `Koan.snapshot/act/run` and wait signals, re-measured; (5) LLM
+mode; (6) optional ego run, if approved.
