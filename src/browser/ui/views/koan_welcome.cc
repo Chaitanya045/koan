@@ -138,7 +138,11 @@ void KoanWelcome::MaybeShow() {
     SetPending(false);
     return;
   }
-  // (Not before: a window closed before this leaves it to the next one.)
+  // Set only now that it shows. If the window that had it pending closed
+  // before this, a window opened after the close can still take it; one
+  // opened while it was pending skipped it (ShouldShow) and never gets it,
+  // and the next launch is no longer a first run, so it is lost. That needs
+  // two first-run windows within one task of each other.
   g_shown_this_session = true;
   Show();
 }
