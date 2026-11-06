@@ -187,14 +187,12 @@ class KoanUrlBarController : public views::ViewObserver,
   // Posted after the omnibox got focus: an invisible focus closes the bar
   // again.
   void CloseIfFocusInvisible();
-  // Posted after a new-tab session opened empty: asks for the open tabs and
-  // top sites again, `retries_left` times, while the first request found no
-  // list.
-  void ScheduleNewTabZeroSuggestRetry(int retries_left);
-  void RetryNewTabZeroSuggest(int retries_left);
-  // Posted when the text is deleted back to empty: asks for the open tabs and
-  // top sites again (OnOmniboxChanged()).
-  void ListOnEmptyInput();
+  // Asks for the open tabs and top sites again, up to `retries_left` times,
+  // while the first request found no list (upstream drops it while the page
+  // has no entry or the popup is closing); after a new-tab session opened
+  // empty, and when the text goes back to empty (OnOmniboxChanged()).
+  void ScheduleEmptyListRetry(int retries_left);
+  void RetryEmptyList(int retries_left);
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
 
@@ -208,6 +206,10 @@ class KoanUrlBarController : public views::ViewObserver,
   bool edit_in_pill_ = false;
 
   bool new_tab_ = false;
+  // Whether the omnibox text was empty at the last change: the empty list is
+  // asked for on the change from text to none only.
+  bool text_was_empty_ = false;
+  bool empty_list_retry_running_ = false;
   // Zen's zen.urlbar.wait-to-clear: what was typed into a new-tab bar that
   // closed without opening anything, offered again for a while.
   std::u16string last_search_;

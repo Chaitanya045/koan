@@ -520,39 +520,54 @@ bool KoanUrlBarController::OpenForNewTab() {
     // Upstream drops that request while the page has no entry yet (a window's
     // first tab, still starting) or the popup is still closing: ask again
     // until the list is up.
-    ScheduleNewTabZeroSuggestRetry(kZeroSuggestRetries);
+    text_was_empty_ = true;
+    ScheduleEmptyListRetry(kZeroSuggestRetries);
   } else {
+    text_was_empty_ = false;
     bar->omnibox_view()->SetUserText(text, /*update_popup=*/true);
   }
   return true;
 }
 
-void KoanUrlBarController::ScheduleNewTabZeroSuggestRetry(int retries_left) {
+void KoanUrlBarController::ScheduleEmptyListRetry(int retries_left) {
+  // One chain at a time, however often the text goes empty meanwhile.
+  if (retries_left == kZeroSuggestRetries) {
+    if (empty_list_retry_running_) {
+      return;
+    }
+    empty_list_retry_running_ = true;
+  }
   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&KoanUrlBarController::RetryNewTabZeroSuggest,
+      base::BindOnce(&KoanUrlBarController::RetryEmptyList,
                      weak_factory_.GetWeakPtr(), retries_left),
       kZeroSuggestRetryDelay);
 }
 
-void KoanUrlBarController::RetryNewTabZeroSuggest(int retries_left) {
+void KoanUrlBarController::RetryEmptyList(int retries_left) {
   LocationBarView* bar = location_bar();
-  if (!new_tab_ || !bar || !bar->omnibox_view() ||
+  if ((!new_tab_ && !is_open()) || !bar || !bar->omnibox_view() ||
       !bar->omnibox_view()->HasFocus() ||
       !bar->omnibox_view()->GetText().empty()) {
+    empty_list_retry_running_ = false;
     return;
   }
   OmniboxController* omnibox_controller = bar->GetOmniboxController();
-  if (omnibox_controller->IsPopupOpen()) {
+  if (omnibox_controller->IsPopupOpen() ||
+      omnibox_controller->edit_model()->is_keyword_selected()) {
+    empty_list_retry_running_ = false;
     return;
   }
-  // Still running (the top sites are on their way): wait for it.
+  // Not while a request is running (the top sites are on their way): that
+  // would drop its answer. Ask again once it is done.
   if (omnibox_controller->autocomplete_controller()->done()) {
     omnibox_controller->edit_model()->StartZeroSuggestRequest(
         /*user_clobbered_permanent_text=*/true);
   }
   if (retries_left > 1) {
-    ScheduleNewTabZeroSuggestRetry(retries_left - 1);
+    ScheduleEmptyListRetry(retries_left - 1);
+  } else {
+    empty_list_retry_running_ = false;
   }
 }
 
@@ -678,6 +693,7 @@ void KoanUrlBarController::FocusLocationInPill() {
 
 void KoanUrlBarController::EndEditing() {
   edit_in_pill_ = false;
+  text_was_empty_ = false;
   SetPlacement(Placement::kNone);
   floated_ = false;
   user_input_in_progress_ = false;
@@ -688,13 +704,21 @@ void KoanUrlBarController::OnOmniboxChanged(bool user_input_in_progress) {
   // sites again. Chromium asks for zero-prefix suggestions only when the user
   // *starts* editing with an empty box (OmniboxEditModel::UpdateInput()); text
   // deleted to empty is an ordinary empty input with no suggestions, which
-  // the zero-prefix provider (koan_zero_suggest.h) does not answer.
+  // the zero-prefix provider (koan_zero_suggest.h) does not answer. Only on
+  // the change from text to none: asking again makes this run again (the
+  // first pass of a request always reports a change), so every later empty
+  // call would ask once more, for ever when there is nothing to list.
   if ((is_open() || new_tab_) && features::IsUrlBarEnabled() &&
-      location_bar() && location_bar()->omnibox_view() &&
-      location_bar()->omnibox_view()->GetText().empty()) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&KoanUrlBarController::ListOnEmptyInput,
-                                  weak_factory_.GetWeakPtr()));
+      location_bar() && location_bar()->omnibox_view()) {
+    const bool empty = location_bar()->omnibox_view()->GetText().empty() &&
+                       !location_bar()
+                            ->GetOmniboxController()
+                            ->edit_model()
+                            ->is_keyword_selected();
+    if (empty && !text_was_empty_) {
+      ScheduleEmptyListRetry(kZeroSuggestRetries);
+    }
+    text_was_empty_ = empty;
   }
   if ((!is_open() && !new_tab_) ||
       user_input_in_progress == user_input_in_progress_) {
@@ -705,23 +729,6 @@ void KoanUrlBarController::OnOmniboxChanged(bool user_input_in_progress) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanUrlBarController::FloatOnType,
                                 weak_factory_.GetWeakPtr()));
-}
-
-void KoanUrlBarController::ListOnEmptyInput() {
-  LocationBarView* bar = location_bar();
-  if ((!is_open() && !new_tab_) || !bar || !bar->omnibox_view() ||
-      !bar->omnibox_view()->HasFocus() ||
-      !bar->omnibox_view()->GetText().empty()) {
-    return;
-  }
-  OmniboxController* omnibox_controller = bar->GetOmniboxController();
-  // The list is up already (the bar just opened empty).
-  if (omnibox_controller->IsPopupOpen()) {
-    return;
-  }
-  omnibox_controller->StopAutocomplete(/*clear_result=*/true);
-  omnibox_controller->edit_model()->StartZeroSuggestRequest(
-      /*user_clobbered_permanent_text=*/true);
 }
 
 void KoanUrlBarController::FloatOnType() {
@@ -746,6 +753,7 @@ void KoanUrlBarController::EndNewTabSession(bool committed) {
     return;
   }
   new_tab_ = false;
+  text_was_empty_ = false;
   UpdateKeyHandler();
   LocationBarView* bar = location_bar();
   if (!committed && user_input_in_progress_ && bar && bar->omnibox_view()) {

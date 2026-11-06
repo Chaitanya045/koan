@@ -3,8 +3,6 @@
 // found in the LICENSE file.
 
 #include "koan/browser/ui/views/koan_zero_suggest.h"
-#include "chrome/common/webui_url_constants.h"
-#include "content/public/common/url_constants.h"
 
 #include <algorithm>
 #include <set>
@@ -20,6 +18,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/escape.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/common/webui_url_constants.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/omnibox/browser/actions/tab_switch_action.h"
@@ -31,10 +30,13 @@
 #include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/tab_matcher.h"
 #include "components/url_formatter/url_formatter.h"
+#include "content/public/common/content_constants.h"
+#include "content/public/common/url_constants.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/omnibox/koan_omnibox_hooks.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace koan {
 
@@ -58,11 +60,30 @@ constexpr size_t kMaxSuggestions = 8;
 constexpr int kOpenTabRelevance = 1500;
 constexpr int kTopSiteRelevance = 1000;
 
+// The URL as shown in a row and put in the box: a data: URL (a page can be
+// megabytes) as "data:<type>,..." and any other past the display cap cut
+// there, as the address bar does. Never used to navigate.
+std::string DisplaySpec(const GURL& url) {
+  if (url.SchemeIs(url::kDataScheme)) {
+    const std::string& spec = url.spec();
+    const size_t comma = spec.find(',');
+    if (comma == std::string::npos || comma > 256) {
+      return "data:...";
+    }
+    return spec.substr(0, comma + 1) + "...";
+  }
+  const std::string& spec = url.spec();
+  return spec.size() > content::kMaxURLDisplayChars
+             ? spec.substr(0, content::kMaxURLDisplayChars)
+             : spec;
+}
+
 // Whether an open tab's page is worth a row: any page (a web page, a local
 // file, a data: page, chrome://settings ...), not a blank one or a new tab
 // page (Firefox lists neither as a tab to switch to).
 bool IsListableTab(const GURL& url) {
-  if (!url.is_valid() || url.IsAboutBlank() || url.SchemeIs("devtools")) {
+  if (!url.is_valid() || url.IsAboutBlank() ||
+      url.SchemeIs(content::kChromeDevToolsScheme)) {
     return false;
   }
   if (url.SchemeIs(content::kChromeUIScheme)) {
@@ -70,7 +91,7 @@ bool IsListableTab(const GURL& url) {
     return host != chrome::kChromeUINewTabHost &&
            host != chrome::kChromeUINewTabPageHost &&
            host != chrome::kChromeUINewTabPageThirdPartyHost &&
-           host != "koan-newtab";  // Koan's own (koan_url_constants.h).
+           host != "koan-newtab";  // Koan's own new tab page (#96).
   }
   return true;
 }
@@ -115,16 +136,19 @@ AutocompleteMatch KoanZeroSuggestProvider::MakeMatch(
     omnibox::AutocompleteMatchType type) {
   AutocompleteMatch match(this, relevance, /*deletable=*/false, type);
   match.destination_url = url;
-  match.fill_into_edit = base::UTF8ToUTF16(url.spec());
+  match.fill_into_edit = base::UTF8ToUTF16(DisplaySpec(url));
   // Zen shows the title, then the site: what the user knows, without the
   // scheme or "www".
   // Sanitized, as Chromium's providers do: a URL ending in "%20" formats to
   // contents with a trailing space, which AppendMatches() DCHECKs (#166).
-  match.contents = AutocompleteMatch::SanitizeString(url_formatter::FormatUrl(
-      url,
-      AutocompleteMatch::GetFormatTypes(/*preserve_scheme=*/false,
-                                        /*preserve_subdomain=*/false),
-      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+  match.contents = AutocompleteMatch::SanitizeString(
+      url.SchemeIs(url::kDataScheme)
+          ? base::UTF8ToUTF16(DisplaySpec(url))
+          : url_formatter::FormatUrl(
+                url,
+                AutocompleteMatch::GetFormatTypes(/*preserve_scheme=*/false,
+                                                  /*preserve_subdomain=*/false),
+                base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
   match.contents_class = {ACMatchClassification(0, ACMatchClassification::URL)};
   // Sanitized like the contents (a title can end in a non-ASCII space), and
   // classified only when there is one: an empty text takes no classification.
