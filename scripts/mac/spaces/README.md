@@ -38,6 +38,8 @@ Quit with ⌘Q, then launch without the flag. Expected:
 
 ## Test 11: saved groups (G8)
 
+Note: closing a saved group's last *tab* deletes the saved group on desktop. To keep one as a closed saved group, close its *window* instead (this is how `seed11` closes Saved B).
+
 `test11-saved-groups` is seeded the same way, with `run('seed11')`. With Spaces off, upstream saves every new group. "Saved A" stays open; "Saved B" is closed but still saved.
 
 Quit, then launch without the flag. Expected:

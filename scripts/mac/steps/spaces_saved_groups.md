@@ -4,6 +4,8 @@ For the Mac loop and the hands-on tester. This is seeded test 11 of `scripts/mac
 
 **The crash these steps guard against.** Koan disconnects a Space from an old profile's saved group (`KoanWorkspaceController::DisconnectSavedGroups()`), and the group's upstream `LocalTabGroupListener` is then dropped (`saved_tab_group_model_listener.cc.patch`). If the listener stayed, upstream would hit a **release** `CHECK(saved_group)` (`local_tab_group_listener.cc:163`) on the next tab move in that Space. Run these on a release build as well as a DCHECK build.
 
+Note: closing a saved group's last *tab* deletes the saved group on desktop. To keep one as a closed saved group, close its *window* instead (this is how `seed11` closes Saved B).
+
 **Setup.**
 1. Run `python3 scripts/mac/spaces/seed_profiles.py <dir>`.
 2. Do the printed seeding run for test 11.

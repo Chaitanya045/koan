@@ -60,7 +60,13 @@ async function seed11() {
   await chrome.tabGroups.update(b, {title: 'Saved B', color: 'yellow'});
   // Let the saved-groups service write them before one closes.
   await sleep(3000);
-  await chrome.tabs.remove(b1.id);
+  // B is closed by closing its window: closing a saved group's last TAB
+  // deletes the saved group on desktop, closing its window keeps it, closed.
+  const w2 = await chrome.windows.create({url: 'about:blank'});
+  await chrome.tabGroups.move(b, {windowId: w2.id, index: -1});
+  await sleep(2500);
+  await chrome.windows.remove(w2.id);
+  await sleep(4000);
   return {open: (await chrome.tabGroups.query({windowId: win.id})).map(g => g.title)};
 }
 
