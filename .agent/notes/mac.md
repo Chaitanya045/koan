@@ -29,7 +29,7 @@ are allowed over SSH: `ls`, `cat`, `grep`, `sw_vers`, `which`,
   ImageMagick don't, and aren't needed: the PNGs the Mac uses are rendered
   on Linux and committed (`branding/mac/rendered/`, refreshed with
   `apply_branding.sh --render-mac` after an SVG changes).
-- SSH: `ssh -i ~/.ssh/koan_mac_ed25519 chaitanya@chaitanyas-macbook-air`.
+- SSH: `ssh -i ~/.ssh/<ssh-key> <user>@<mac-host>`.
 
 ## One folder
 

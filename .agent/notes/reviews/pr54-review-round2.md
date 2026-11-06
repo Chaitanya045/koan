@@ -5,7 +5,7 @@ Branch `feat/zen-glance-split` at `af7a373`, after `git fetch origin`, diffed ag
 **What I checked it against:**
 - Pristine Chromium 158 (`~/work/koan/chromium/src`, `git show HEAD:<path>`).
 - Round 1 (`pr54-review.md`) and the author's per-finding reply.
-- The Mac could not be reached: `chaitanyas-macbook-air` timed out and `192.168.0.104` gave "no route to host". The Mac checks below were done against the Mac sources in the shared Chromium 158 tree.
+- The Mac could not be reached: `<mac-host>` timed out and `<mac-ip>` gave "no route to host". The Mac checks below were done against the Mac sources in the shared Chromium 158 tree.
 
 **The author's test run:** it was on `3cd47a2`. The only difference from `af7a373` is the order of two `#include` lines in `koan_settings_rows.cc`, so the passing Linux build and e2e run still stand for this head. No Mac build has been done.
 

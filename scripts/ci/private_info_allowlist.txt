@@ -1,0 +1,5 @@
+# Files check_private_info.py does not scan (fnmatch globs, one per line).
+# A line can also opt out with koan-allow-private in it. Placeholders such as
+# <mac-host>, <mac-ip>, <user> and <ssh-key> never need either.
+scripts/tests/test_check_private_info.py
+scripts/ci/check_private_info.py

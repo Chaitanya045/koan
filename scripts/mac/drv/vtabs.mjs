@@ -6,8 +6,28 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { sleep, pages, browserCall, waitFor } from './lib/koan.mjs';
 import { fviews } from './fv.mjs';
 const { BUILD = 'build', APP_PATH, KEYSET = 'base' } = process.env; const OVERRIDE_USER_AWAY = '';  // the presence check can no longer be switched off  // KEYSET=base: Ctrl+S compact, Ctrl+Shift+P private (plain develop); KEYSET=cmd: Cmd+S, Cmd+Shift+P (#90 and later)
-const M = '/Users/chaitanya/work/koan-mac';
-const SSH = ['ssh', '-i', process.env.HOME + '/.ssh/koan_mac_ed25519', '-o', 'BatchMode=yes', '-o', 'ControlPath=/tmp/koan-cm.sock', 'chaitanya@chaitanyas-macbook-air'];
+// Where the Mac is: KOAN_MAC_HOST, KOAN_MAC_USER, KOAN_MAC_KEY from the environment or scripts/mac/local.env
+// (see local.env.example). Nothing about the Mac is kept in the repo.
+const localEnv = (() => {
+  try {
+    return Object.fromEntries(readFileSync(new URL('../local.env', import.meta.url), 'utf8').split('\n')
+        .map(l => l.replace(/\s+#.*$/, '').trim()).filter(l => /^KOAN_MAC_\w+=/.test(l))
+        .map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
+  } catch { return {}; }
+})();
+const macSetting = k => {
+  const v = process.env[k] || localEnv[k];
+  if (!v) {
+    console.error(`vtabs.mjs: ${k} is not set. Set KOAN_MAC_HOST, KOAN_MAC_USER and KOAN_MAC_KEY in the environment or in scripts/mac/local.env (copy local.env.example).`);
+    process.exit(2);
+  }
+  return v;
+};
+const MAC_TARGET = `${macSetting('KOAN_MAC_USER')}@${macSetting('KOAN_MAC_HOST')}`;
+const MAC_KEY = macSetting('KOAN_MAC_KEY').replace(/^~/, process.env.HOME);
+const MAC_HOME = `/Users/${macSetting('KOAN_MAC_USER')}`;
+const M = `${MAC_HOME}/work/koan-mac`;
+const SSH = ['ssh', '-i', MAC_KEY, '-o', 'BatchMode=yes', '-o', 'ControlPath=/tmp/koan-cm.sock', MAC_TARGET];
 const rawMac = (cmd, t = 90000) => execSync([...SSH, JSON.stringify(cmd)].join(' '), { timeout: t }).toString().trim();
 // Input guard (after the 15:12 collision with the tester): activate/unmin need the tester's grant (tmp/screen-granted, written by me on an explicit "screen free", removed on "testing"); keypress2/ptr also need MY Koan pid to be the frontmost app. Otherwise the run ends at once (cleanup removes only my own pass- Koans).
 const mac = (cmd, t = 90000) => {
@@ -15,8 +35,8 @@ const mac = (cmd, t = 90000) => {
   // Every check that applies, not the first: a line with a pointer move and key presses needs the grant and the frontmost check.
   const needGrant = /\/tmp\/(activate|unmin)\b/.test(cmd) || /\/tmp\/ptr (move|pos)\b/.test(cmd);  // a pure move (also the final cursor restore, after my Koan is gone) needs the grant but not the frontmost check
   const needFront = /\/tmp\/keypress2\b/.test(cmd) || /\/tmp\/ptr (?!move\b|pos\b)/.test(cmd);
-  if (needGrant) pre += `${'/Users/chaitanya/work/koan-mac'}/tmp/grantok.sh || exit 7; `;
-  if (needFront) { let p = 0; try { p = PID; } catch {} pre += `${'/Users/chaitanya/work/koan-mac'}/tmp/inputok.sh ${p || 0} || exit 8; `; }
+  if (needGrant) pre += `${M}/tmp/grantok.sh || exit 7; `;
+  if (needFront) { let p = 0; try { p = PID; } catch {} pre += `${M}/tmp/inputok.sh ${p || 0} || exit 8; `; }
   try { return rawMac(pre + cmd, t); }
   catch (e) { if (pre && (e.status === 7 || e.status === 8)) { console.log(`STOP  input refused (${e.status === 7 ? 'the screen is not granted' : 'my Koan is not the frontmost app'}): no key or pointer event was sent. Ending the run.`); process.exit(4); } throw e; }
 };
@@ -27,14 +47,14 @@ const idle = () => Number(mac(`${M}/tmp/idle.sh`));
 const sinceUser = () => Number(mac(`${M}/tmp/usergate.sh`));
 const gate0 = sinceUser();
 if (gate0 < 600) { console.log(`REFUSED: user input ${gate0}s ago (not mine); a run starts after 600 s without user input`); process.exit(3); }
-try { rawMac('/Users/chaitanya/work/koan-mac/tmp/grantok.sh'); } catch { console.log('REFUSED: the tester has not granted the screen (no "screen free" yet)'); process.exit(3); }
+try { rawMac(`${M}/tmp/grantok.sh`); } catch { console.log('REFUSED: the tester has not granted the screen (no "screen free" yet)'); process.exit(3); }
 const RUN_START = Number(mac('date +%s'));
 // start: the user is away today (the maintainer's word); the mid-run check below compares idle with my own last input
-mac(`mkdir -p ${RD}; touch ${M}/tmp/regress-start.mark; ls /Users/chaitanya/Library/Logs/DiagnosticReports | grep -i '^Koan' | sort > ${RD}/ips-before.txt`);
+mac(`mkdir -p ${RD}; touch ${M}/tmp/regress-start.mark; ls ${MAC_HOME}/Library/Logs/DiagnosticReports | grep -i '^Koan' | sort > ${RD}/ips-before.txt`);
 let PID; const steps = [];
 process.on('exit', () => { try { mac(`${M}/tmp/cleanup.sh`, 120000); } catch {} });
 const alive = () => { try { return mac(`ps -p ${PID} -o pid=`) !== ''; } catch { return false; } };
-const newIps = () => mac(`ls /Users/chaitanya/Library/Logs/DiagnosticReports | grep -i '^Koan' | sort | comm -13 ${RD}/ips-before.txt - || true`).split('\n').filter(Boolean);
+const newIps = () => mac(`ls ${MAC_HOME}/Library/Logs/DiagnosticReports | grep -i '^Koan' | sort | comm -13 ${RD}/ips-before.txt - || true`).split('\n').filter(Boolean);
 const front = () => mac(`${M}/tmp/front.sh`);
 let aborted = false, lastAct = Date.now();
 // Posted key events reset HIDIdleTime too (measured: Cmd+L -> idle 1 s), so "the user is back" means: idle is lower than the time since my own last key.
@@ -70,7 +90,7 @@ async function step(name, fn, settle = 1500) {
   const s = { name, ok: ok && a && ips.length === 0 && !aborted, alive: a, newIps: ips, note, ms: Date.now() - t0 }; steps.push(s);
   console.log(`${s.ok ? 'PASS' : 'FAIL'}  ${name}  alive=${a} newIps=${ips.length}${note ? '  ' + note : ''}`);
 }
-const waitMine = async () => { for (let i = 0; i < 60; i++) { const n = Number(mac(`ps -Ao command | grep -c '[M]acOS/Koan -.*user-data-dir=/Users/chaitanya/work/koan-mac/tmp/pass-' || true`)); if (n === 0) return; await sleep(1500); } };
+const waitMine = async () => { for (let i = 0; i < 60; i++) { const n = Number(mac(`ps -Ao command | grep -c '[M]acOS/Koan -.*user-data-dir=${M}/tmp/pass-' || true`)); if (n === 0) return; await sleep(1500); } };
 await waitMine(); await sleep(1500);
 const { MODE = 'main', FLAGS = '', PREFS = '' } = process.env;
 if (PREFS) { const b64 = Buffer.from(PREFS).toString('base64'); mac(`rm -rf ${M}/tmp/pass-R-profile; mkdir -p ${M}/tmp/pass-R-profile/Default; echo ${b64} | base64 -D > ${M}/tmp/pass-R-profile/Default/Preferences`); }
@@ -245,7 +265,7 @@ const prevF = `${process.env.HOME}/work/koan/.cache/mac-review/regress/last-${BU
 const prev = existsSync(prevF) ? JSON.parse(readFileSync(prevF, 'utf8')) : null;
 writeFileSync(`${LOCAL}/steps.json`, JSON.stringify({ build: BUILD, app: APP_PATH, log: LOG, counts, steps }, null, 1)); writeFileSync(`${LOCAL}/scan.txt`, scan);
 mac(`cp ${LOG} ${RD}/koan.log; cp ${M}/tmp/regress-start.mark ${RD}/ 2>/dev/null; true`);
-execSync(`scp -q -r -i ~/.ssh/koan_mac_ed25519 -o ControlPath=/tmp/koan-cm.sock "chaitanya@chaitanyas-macbook-air:${RD}/*" ${LOCAL}/ 2>/dev/null || true`);
+execSync(`scp -q -r -i ${MAC_KEY} -o ControlPath=/tmp/koan-cm.sock "${MAC_TARGET}:${RD}/*" ${LOCAL}/ 2>/dev/null || true`);
 writeFileSync(prevF, JSON.stringify(counts));
 if (aborted && !stopReason) console.log('== RUN ABORTED: the user came back; results are incomplete');
 console.log(`\n== ${BUILD}: ${steps.filter(s => s.ok).length} passed, ${counts.failed} failed, ${steps.filter(s => s.skipped).length} skipped`);

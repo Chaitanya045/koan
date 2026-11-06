@@ -7,6 +7,17 @@ and read the view tree through UI DevTools (`--enable-ui-devtools=9340`) and the
 side through CDP (`--remote-debugging-port=9341`), both forwarded by an ssh ControlMaster
 (`/tmp/koan-cm.sock`, see `vtabs.sh`).
 
+## Where the Mac is (not in the repo)
+
+`vtabs.sh` and `drv/vtabs.mjs` read `KOAN_MAC_HOST`, `KOAN_MAC_USER` and
+`KOAN_MAC_KEY` (the ssh private key's path) from the environment or from the
+git-ignored `scripts/mac/local.env` (copy `local.env.example`; the environment
+wins). If one is missing they stop with a message. Nothing about the Mac (host
+name, address, user name, key file) may be committed: CI's "Private details"
+check (`scripts/ci/check_private_info.py`) fails on a `.local` host name, a
+private-range IP address or an ssh key path in any tracked text file; notes use
+`<mac-host>`, `<mac-ip>`, `<user>` and `<ssh-key>`.
+
 ## `vtabs.sh <label> <app>`: the vertical-tabs lockdown checks (#154, #155)
 
 | env | meaning |
