@@ -738,16 +738,19 @@ void KoanUrlBarController::SetLocationIconHidden(bool hidden) {
     return;
   }
   if (hidden) {
+    // The ink drop first: off, it takes away the layers views gave the icon
+    // for it (hover, the open page info bubble), and SetPaintToLayer() below
+    // would trip View::DestroyLayerImpl()'s DCHECK on them. The ink drop is
+    // drawn beside the icon's layer, so it could not be hidden by opacity.
+    views::InkDrop::Get(icon)->SetMode(views::InkDropHost::InkDropMode::OFF);
     // Hidden by opacity, not visibility: the layout is unchanged, and the
-    // icon's chip goes with it. The layer is explicit, so it outlives the one
-    // views gives the icon while its ink drop is there (hover, the open page
-    // info bubble) and destroys afterwards, which would show the icon again.
+    // icon's chip goes with it. The layer is explicit, so no ink drop's layer
+    // coming and going takes it away.
     icon->SetPaintToLayer();
     icon->layer()->SetFillsBoundsOpaquely(false);
     icon->layer()->SetOpacity(0.0f);
-    // The ink drop is drawn beside the icon's layer: off, not hidden. Nothing
-    // of the icon can be reached either: no focus, no click, no screen reader.
-    views::InkDrop::Get(icon)->SetMode(views::InkDropHost::InkDropMode::OFF);
+    // Nothing of the icon can be reached either: no focus, no click, no screen
+    // reader.
     icon->SetFocusBehavior(views::View::FocusBehavior::NEVER);
     icon->SetCanProcessEventsWithinSubtree(false);
     icon->GetViewAccessibility().SetIsIgnored(true);
@@ -755,10 +758,16 @@ void KoanUrlBarController::SetLocationIconHidden(bool hidden) {
     // Upstream never gives this view a layer of its own; views keeps the ink
     // drop's.
     icon->DestroyLayer();
-    views::InkDrop::Get(icon)->SetMode(views::InkDropHost::InkDropMode::ON);
-    icon->SetFocusBehavior(views::PlatformStyle::kDefaultFocusBehavior);
     icon->SetCanProcessEventsWithinSubtree(true);
     icon->GetViewAccessibility().SetIsIgnored(false);
+    // Chromium's own state: the icon is inert (no highlight, no focus) while
+    // the omnibox is editing or empty (LocationIconView::Update()).
+    const bool inert = bar->IsEditingOrEmpty();
+    views::InkDrop::Get(icon)->SetMode(
+        inert ? views::InkDropHost::InkDropMode::OFF
+              : views::InkDropHost::InkDropMode::ON);
+    icon->SetFocusBehavior(inert ? views::View::FocusBehavior::NEVER
+                                 : views::PlatformStyle::kDefaultFocusBehavior);
   }
 }
 
