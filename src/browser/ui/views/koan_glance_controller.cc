@@ -1104,6 +1104,8 @@ bool KoanGlanceController::TakeKeyEquivalent(
   }
   // 2. Window > Minimize and Zoom: the browser window's, as in Zen.
   if (PerformWindowMenuKey(browser_view_->GetWidget(), event)) {
+    VLOG(1) << "Koan Glance: key " << event.windows_key_code
+            << " is Window > Minimize / Zoom";
     return true;
   }
   // 3. The reserved commands.
@@ -1113,6 +1115,8 @@ bool KoanGlanceController::TakeKeyEquivalent(
     return true;
   }
   if (command) {
+    VLOG(1) << "Koan Glance: key " << event.windows_key_code
+            << " is reserved browser command " << command;
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&KoanGlanceController::RunBrowserCommand,
                                   weak_factory_.GetWeakPtr(), command));
@@ -1124,9 +1128,12 @@ bool KoanGlanceController::TakeKeyEquivalent(
 void KoanGlanceController::ProcessPriorityKey(
     const input::NativeWebKeyboardEvent& event) {
   views::FocusManager* focus_manager = browser_view_->GetFocusManager();
-  if (focus_manager &&
-      focus_manager->ProcessAccelerator(
-          ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
+  const bool handled = focus_manager &&
+                       focus_manager->ProcessAccelerator(
+                           ui::GetAcceleratorFromNativeWebKeyboardEvent(event));
+  VLOG(1) << "Koan Glance: the high-priority shortcut for key "
+          << event.windows_key_code << (handled ? " took it" : " declined");
+  if (handled) {
     return;
   }
   // Koan's shortcut declined the key: what a tab would do with it next
@@ -1373,6 +1380,8 @@ KoanGlanceController::PreHandleKeyboardEvent(
     if (focus_manager && !focus_manager->shortcut_handling_suspended() &&
         focus_manager->HasPriorityHandler(
             ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
+      VLOG(1) << "Koan Glance: key " << event.windows_key_code
+              << " has a high-priority browser shortcut";
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&KoanGlanceController::ProcessPriorityKey,
                                     weak_factory_.GetWeakPtr(), event));
