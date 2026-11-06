@@ -1183,7 +1183,9 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
   }
   // AppKit's own title bar slides in with the menu bar, with the traffic
   // lights, as in Zen (even where compact mode hid them in the window).
-  ShowFullscreenTitlebar(browser_view_);
+  if (!IsClosing()) {
+    ShowFullscreenTitlebar(browser_view_);
+  }
   // The toolbar style: "none" while Koan hides its toolbar, else the user's.
   if (BrowserWidget* widget = browser_view_->browser_widget()) {
     if (BrowserFrameView* frame = widget->GetFrameView()) {

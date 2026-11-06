@@ -157,9 +157,11 @@ the left.)
 On macOS the window buttons (traffic lights) are AppKit's and stay at the
 top left. With the sidebar there they are in its top row; with tabs on the
 right they stay at the left, in a strip above the page; with the sidebar
-hidden (compact mode) they hide too and come back with the sidebar. The
-pointer at the top edge shows nothing and moves nothing in the window, as
-in Zen.
+hidden (compact mode) they hide too and come back with the sidebar. With
+the toolbar on single toolbar (the default) the pointer at the top edge
+shows nothing and moves nothing in the window, as in Zen; where compact mode
+hides the toolbar without single toolbar, the top edge still slides the
+toolbar in, and the lights with it.
 
 **Fullscreen on macOS** keeps the same layout, as in Zen: with the pointer
 at the top edge the menu bar comes down with AppKit's title bar strip (about

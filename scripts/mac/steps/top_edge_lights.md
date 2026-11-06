@@ -18,6 +18,9 @@ Pointer move used below: ramp to y=3, then y=0 at the same x (x=400), 2.2 s each
 | 8 | Windowed, compact mode on, tabs on the **right**; pointer move at x=400 | As before this change: the strip with the lights opens (44 pt) and the page card moves to y=44 (known difference from Zen, `docs/ZEN_PARITY.md`, window buttons row). |
 | 9 | Windowed, compact mode off, sidebar shown | Lights in the sidebar's top row always; pointer at the top edge changes nothing. |
 | 10 | Enter fullscreen from 6 (lights hidden in the window), then leave it | In fullscreen the strip has the lights (1/2). After leaving, the lights are hidden again (compact, sidebar hidden). |
+| 11 | Fullscreen, compact on with the toolbar hidden but **not** single toolbar (Ctrl+Alt+B off), toolbar revealed by the pointer at y=0; keep the pointer going to the strip and onto the red light | The strip is down over the top of the revealed toolbar; the toolbar stays (no hide after the delay) while the pointer is on the strip or the lights. Moving away from the top edge hides both as before. |
+| 12 | Fullscreen, compact on, sidebar peeked (pointer at x=0); move up to y=0 and onto the red light (x about 16) | The sidebar stays peeked while the pointer is on the strip and the lights; it slides away 150 ms after the pointer leaves it (to the page). |
+| 13 | Fullscreen, compact on: pointer at the left edge x=0, then up the edge to the strip | The 2 px left-edge reveal (#171) still fires and holds at the top corner. |
 
-Report: for 1, 2 and 5 a capture at the top edge (the strip's height, colour and the lights' centres); for 6 the card's y
+Report: for 1, 2 and 5 a capture at the top edge (the strip's height, **its colour next to Zen's dark strip (~#232323), AppKit's default is grey** and the lights' centres); for 6 the card's y
 before and after the pointer move.

@@ -7,6 +7,7 @@
 #import <AppKit/AppKit.h>
 
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/remote_cocoa/app_shim/immersive_mode_controller_cocoa.h"
 #include "ui/views/widget/widget.h"
 
 namespace koan {
@@ -32,12 +33,21 @@ bool IsPointerOverWindow(const BrowserView* browser_view) {
     return false;
   }
   // The topmost window of the screen at the pointer (windows that are not
-  // on screen are not listed), this one or one that hangs from it.
+  // on screen are not listed), this one or one that hangs from it. In native
+  // fullscreen, AppKit's title strip with the traffic lights (below the menu
+  // bar, over the top of the window) is a window of its own: the pointer on it
+  // is still on this window, as far as Koan's reveals are concerned (it is
+  // also over this screen's one fullscreen window).
   const NSInteger number = [NSWindow windowNumberAtPoint:NSEvent.mouseLocation
                              belowWindowWithWindowNumber:0];
   for (NSWindow* under = [NSApp windowWithWindowNumber:number]; under;
        under = under.parentWindow) {
     if (under == window) {
+      return true;
+    }
+    if (window.styleMask & NSWindowStyleMaskFullScreen &&
+        remote_cocoa::IsNSToolbarFullScreenWindow(under) &&
+        under.screen == window.screen) {
       return true;
     }
   }
@@ -56,34 +66,18 @@ void ClearTitlebar(const BrowserView* browser_view) {
   window.styleMask |= NSWindowStyleMaskFullSizeContentView;
 }
 
-namespace {
-
-// The title bar view that holds the traffic lights (the ancestor of the
-// lights with that class name; it moves between the window's frame and
-// AppKit's fullscreen window, so look for it from the lights each time): its
-// opacity, 1 as AppKit leaves it.
-void SetTitlebarContainerOpacity(NSWindow* window, CGFloat alpha) {
-  for (NSView* view =
-           [window standardWindowButton:NSWindowCloseButton].superview;
-       view; view = view.superview) {
-    if ([NSStringFromClass([view class])
-            isEqualToString:@"NSTitlebarContainerView"]) {
-      view.alphaValue = alpha;
-    }
-  }
-}
-
-}  // namespace
-
 void ShowFullscreenTitlebar(const BrowserView* browser_view) {
   const views::Widget* widget = browser_view->GetWidget();
-  NSWindow* window =
-      widget ? widget->GetNativeWindow().GetNativeNSWindow() : nil;
+  NSWindow* window = widget && !widget->IsClosed()
+                         ? widget->GetNativeWindow().GetNativeNSWindow()
+                         : nil;
   if (!window) {
     return;
   }
-  SetTitlebarContainerOpacity(window, 1);
-  SetTrafficLightsShown(browser_view, true);
+  // (Only where AppKit's buttons are hidden: this runs on every layout.)
+  if ([window standardWindowButton:NSWindowCloseButton].hidden) {
+    SetTrafficLightsShown(browser_view, true);
+  }
 }
 
 }  // namespace koan
