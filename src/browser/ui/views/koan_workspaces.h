@@ -162,6 +162,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The window's last tab closed and an empty tab is on its way (see
   // KeepWindowOnLastTabClosed()): keep the closed Space's data meanwhile.
   void ExpectEmptyTab() { expect_empty_tab_ = true; }
+  // The empty tab KeepWindowOnLastTabClosed() added: this very tab is the
+  // Space's empty tab (not one found by its URL, which a new tab page set by
+  // policy would not show, nor some other blank tab).
+  void AdoptEmptyTab(tabs::TabHandle tab) { empty_tab_ = tab; }
+  // Whether the tabs that left the strip last were closed (and not moved to
+  // another window, which Zen follows by closing this one).
+  bool LastTabsWereClosed() const { return last_removal_closed_; }
 
   // The Spaces in sidebar order, and the active one.
   std::vector<SpaceInfo> GetSpaces() const;
@@ -475,6 +482,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // before it.
   bool started_ = false;
   bool expect_empty_tab_ = false;
+  tabs::TabHandle empty_tab_;
+  bool last_removal_closed_ = false;
   tabs::TabHandle startup_essential_;
   // Each Space's last active tab (switching back restores it).
   std::map<tab_groups::TabGroupId, tabs::TabHandle> last_active_tabs_;

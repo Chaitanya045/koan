@@ -95,6 +95,12 @@ class KoanUrlBarController : public views::ViewObserver,
   // scope (Chromium's "@tabs"). False if the bar can't open now (the caller
   // falls back to focusing the omnibox).
   bool OpenForTabSearch();
+
+  // Called by KoanBrowserViewController once the window is in its widget.
+  // Zen's zen.urlbar.open-on-startup (true): a window that starts on the
+  // empty tab (a new window, the first launch; not a session restore) opens
+  // the New Tab bar at once.
+  void OnAddedToWidget();
   // Closes the omnibox without opening anything: the page gets focus back.
   void Close();
   // The user is about to edit by clicking the sidebar's URL pill: it edits in
@@ -195,6 +201,7 @@ class KoanUrlBarController : public views::ViewObserver,
   // empty, and when the text goes back to empty (OnOmniboxChanged()).
   void ScheduleEmptyListRetry(int retries_left);
   void RetryEmptyList(int retries_left);
+  void OpenOnStartup();
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
   // Zen draws the "+ New Tab" row as selected during a new-tab session.

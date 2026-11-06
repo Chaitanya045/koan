@@ -1,7 +1,9 @@
 // End-to-end test of the new tab page against a real build: chrome://newtab
-// shows Koan's page, an empty page in shadcn's near-black background that loads nothing
-// else and runs no script (like Zen's), chrome://koan-settings lets the user
-// choose Chromium's own page instead. (Ctrl+T opening the floating URL bar
+// shows Koan's page, an empty page in the look's background (shadcn's
+// near-black in the dark shadcn look; the theme's new tab page colour in the
+// default Zen look) that loads nothing else and runs no script (like Zen's),
+// follows the window's look, and is right after another new tab page closed;
+// chrome://koan-settings lets the user choose Chromium's own page instead. (Ctrl+T opening the floating URL bar
 // rather than a tab is urlbar's; newtab_custom checks that a new tab page set
 // by policy wins.)
 //
@@ -48,13 +50,44 @@ check('The page is empty: no content, script or extra requests',
       facts && facts.children === 0 && facts.text === '' && facts.scripts === 0 &&
       facts.images === 0 && facts.links === 0 && facts.resources === 0,
       JSON.stringify(facts));
-check('...in shadcn\'s near-black background (#09090b)',
-      facts?.background === 'rgb(9, 9, 11)', facts?.background);
-check('...in dark mode', facts?.scheme === 'dark', facts?.scheme);
+// The default look is Zen: an opaque theme colour (Partial against Zen's
+// window gradient, docs/ZEN_PARITY.md).
+check('...in the Zen look\'s opaque new tab page colour',
+      /^rgb\(\d+, \d+, \d+\)$/.test(facts?.background ?? ''), facts?.background);
 if (process.env.SHOTS) {
   const r = await onPage(tab.page, c => c.send('Page.captureScreenshot', { format: 'png' }));
   fs.writeFileSync(`${process.env.SHOTS}/newtab.png`, Buffer.from(r.result.data, 'base64'));
 }
+await tab.close();
+
+// The colour comes from the tab that asks: a second new tab page, closed
+// again, leaves the first one right when it reloads (a page serving a colour
+// remembered from the last request would be empty and white).
+tab = await openNewTab();
+const other = await openNewTab();
+const colour = async t => evalIn(t.page,
+    'getComputedStyle(document.documentElement).backgroundColor');
+const before = await colour(tab);
+await other.close();
+await evalIn(tab.page, 'location.reload()');
+await sleep(1500);
+check('A new tab page reloaded after another one closed keeps its colour',
+      await colour(tab) === before && before !== 'rgba(0, 0, 0, 0)', await colour(tab));
+
+// It follows the window's look, live: shadcn dark is #09090b, shadcn light
+// bright, and the open page loads again with the change.
+await setKoanPref('koan.look.style', 'shadcn');
+await setKoanPref('koan.look.mode', 'dark');
+check('...follows a change of look to shadcn dark (#09090b) without a reload by hand',
+      await waitFor(async () => await colour(tab) === 'rgb(9, 9, 11)'), await colour(tab));
+await setKoanPref('koan.look.mode', 'light');
+check('...and to shadcn light (bright)',
+      await waitFor(async () => {
+        const m = /rgb\((\d+), (\d+), (\d+)\)/.exec(await colour(tab) ?? '');
+        return m && +m[1] > 240 && +m[2] > 240 && +m[3] > 240;
+      }), await colour(tab));
+await setKoanPref('koan.look.mode', 'dark');
+await setKoanPref('koan.look.style', 'zen');
 await tab.close();
 
 // Chromium's own page, chosen in Koan's settings.

@@ -241,6 +241,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     media_->OnAddedToWidget();
     download_animation_->OnAddedToWidget();
     welcome_->OnAddedToWidget();
+    url_bar_->OnAddedToWidget();
   }
 }
 

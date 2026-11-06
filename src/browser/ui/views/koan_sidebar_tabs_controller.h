@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 
 #include "base/callback_list.h"
@@ -103,6 +104,9 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   bool started_ = false;
   // The vertical tab strip region; its pointer enter/exit reveals Clear.
   raw_ptr<views::View> region_ = nullptr;
+  // The tabs (by handle) that were the empty tab at their last change: what
+  // decides whether a change needs a layout (OnTabChangedAt()).
+  std::set<int32_t> empty_tab_ids_;
   raw_ptr<KoanSidebarTabRowsView> rows_ = nullptr;
   bool rows_host_update_pending_ = false;
   base::ScopedObservation<views::View, views::ViewObserver> rows_observation_{

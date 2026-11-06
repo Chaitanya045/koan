@@ -7,7 +7,7 @@
 //   scripts/e2e/run.sh empty_tab
 import {
   CTRL, check, finish, front, key, pages, shownViews, sleep, typeInto, viewTree,
-  views, waitFor, browserCall,
+  views, waitFor, browserCall, onPage, evalIn,
 } from './lib/koan.mjs';
 
 const VK = { T: 84, RETURN: 13 };
@@ -56,6 +56,24 @@ await key(after.find(p => p.url.includes('?opened')), 87, CTRL, 'w');
 await sleep(1000);
 check('Closing it shows the empty state again, with no row',
       await tabRows() === 0, String(await tabRows()));
+// The empty tab that navigates in place (a bookmark, the Library, a dropped
+// link, chrome.tabs.update) is an ordinary tab then: Back into the new tab
+// page does not make it the empty tab again (no vanishing row, and Cmd+W
+// closes the tab, not the whole window).
+const emptyPage = (await pages())[0];
+await onPage(emptyPage, c => c.send('Page.navigate', { url: 'https://example.com/?inplace' }));
+await waitFor(async () => (await pages())[0]?.url.includes('?inplace'), 8000);
+await evalIn((await pages())[0], 'history.back()');
+await waitFor(async () => (await pages())[0]?.url.startsWith('chrome://'), 8000);
+await sleep(800);
+check('Back into the once-empty tab: it has its row (it is a tab now)',
+      await tabRows() === 1, String(await tabRows()));
+await key((await pages())[0], 87, CTRL, 'w');
+await sleep(1500);
+check('...and Cmd+W closes that tab only: the window stays, with the empty tab',
+      (await pages()).length === 1 && await tabRows() === 0,
+      `${(await pages()).length} page(s), ${await tabRows()} row(s)`);
+
 const windowsBefore = (await pages()).length;
 await key((await pages())[0], 87, CTRL, 'w');
 await sleep(1500);

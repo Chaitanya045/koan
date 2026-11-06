@@ -626,14 +626,18 @@ void KoanCompactModeController::OnTabStripModelChanged(
   if (change.type() == TabStripModelChange::kInserted) {
     MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
   }
-  if (selection.active_tab_changed()) {
+  if (selection.active_tab_changed() ||
+      change.type() != TabStripModelChange::kSelectionOnly) {
     UpdateEmptyTabLock();
   }
 }
 
 void KoanCompactModeController::OnTabChangedAt(tabs::TabInterface* tab,
                                                TabChangeType change_type) {
-  if (change_type == TabChangeType::kAll) {
+  // The empty tab navigating away (or the active tab back to it) changes
+  // whether the lock is wanted.
+  if (change_type == TabChangeType::kAll &&
+      tab == browser_view_->browser()->GetActiveTabInterface()) {
     UpdateEmptyTabLock();
   }
 }
@@ -660,6 +664,8 @@ void KoanCompactModeController::UpdateEmptyTabLock(bool snap_reveal) {
     if (snap_reveal && !empty_tab_lock_) {
       SnapNextSidebarReveal(browser_view_, false);
     }
+  } else if (!wanted) {
+    ReleaseLock(empty_tab_lock_);
   }
 }
 
@@ -1193,6 +1199,8 @@ void KoanCompactModeController::Activate(Mode mode) {
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+  // Turning compact mode on while the empty tab is selected keeps the sidebar.
+  UpdateEmptyTabLock();
 }
 
 void KoanCompactModeController::ParkTopContainer() {

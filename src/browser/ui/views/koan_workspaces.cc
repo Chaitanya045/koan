@@ -34,6 +34,7 @@
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+#include "chrome/browser/tab_list/tab_removed_reason.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -54,6 +55,7 @@
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/groups/tab_group_editor_bubble_view.h"
 #include "chrome/browser/ui/views/tabs/shared/tab_strip_types.h"
 #include "chrome/common/webui_url_constants.h"
@@ -1400,14 +1402,27 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     // tab closed) becomes the Space's tab, not a second one; else a new tab.
     std::vector<int> indices = ReclaimUngroupedTabs(closed.id);
     if (indices.empty()) {
+      // The tab KeepWindowOnLastTabClosed() added, exactly; else an empty
+      // page already there (the window's fallback tab, which upstream adds
+      // when a Space with every tab closes).
       int new_index = TabStripModel::kNoTab;
-      for (int i = 0; i < model->count(); ++i) {
+      if (tabs::TabInterface* adopted = empty_tab_.Get()) {
+        new_index = model->GetIndexOfTab(adopted);
+        if (new_index != TabStripModel::kNoTab &&
+            (model->IsTabPinned(new_index) ||
+             model->GetTabGroupForTab(new_index))) {
+          new_index = TabStripModel::kNoTab;
+        }
+      }
+      for (int i = 0; new_index == TabStripModel::kNoTab && !empty_tab_.Get() &&
+                      i < model->count();
+           ++i) {
         if (!model->IsTabPinned(i) && !model->GetTabGroupForTab(i) &&
             IsEmptyPageUrl(model->GetWebContentsAt(i)->GetVisibleURL())) {
           new_index = i;
-          break;
         }
       }
+      empty_tab_ = tabs::TabHandle();
       if (new_index != TabStripModel::kNoTab) {
         const int target =
             std::min(index > new_index ? index - 1 : index, model->count() - 1);
@@ -2161,6 +2176,16 @@ void KoanWorkspaceController::OnTabStripModelChanged(
       containers::OnTabInserted(inserted.contents);
     }
   }
+  if (change.type() == TabStripModelChange::kRemoved) {
+    // Closed, or moved to another window (a drag, "Move to another window",
+    // chrome.tabs.move): only a close keeps the window (see
+    // KeepWindowOnLastTabClosed(); TabStripEmpty() fires for both).
+    last_removal_closed_ = std::ranges::all_of(
+        change.GetRemove()->contents, [](const auto& removed) {
+          return TabRemoveReasonUtils::WillDeleteWebContents(
+              removed.remove_reason);
+        });
+  }
   if (change.type() != TabStripModelChange::kSelectionOnly) {
     ScheduleUpdate();
   }
@@ -2415,11 +2440,24 @@ bool IsEmptyTab(const tabs::TabInterface* tab) {
          !GetTabSessionData(contents, kEmptyTabKey).empty();
 }
 
+void ClearEmptyTabMarkIfNavigated(tabs::TabInterface* tab) {
+  content::WebContents* contents = tab ? tab->GetContents() : nullptr;
+  if (contents && !IsEmptyPageUrl(contents->GetVisibleURL()) &&
+      !GetTabSessionData(contents, kEmptyTabKey).empty()) {
+    SetTabSessionData(contents, kEmptyTabKey, std::string());
+  }
+}
+
 bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   if (!features::IsWorkspacesEnabled() ||
       browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
       browser->GetProfile()->IsOffTheRecord() || browser->IsDeleteScheduled() ||
       browser->GetTabStripModel()->closing_all()) {
+    return false;
+  }
+  // The tab strip also empties when its last tab moves to another window. A
+  // tab drag hides this window and relies on the empty strip closing it.
+  if (TabDragController::IsActive()) {
     return false;
   }
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
@@ -2428,17 +2466,30 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   if (!controller || !controller->workspaces()->IsEnabled()) {
     return false;
   }
+  if (!controller->workspaces()->LastTabsWereClosed()) {
+    return false;
+  }
   controller->workspaces()->ExpectEmptyTab();
   // Not from inside the tab strip's close: it can't be modified there.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
-                     [](base::WeakPtr<BrowserWindowInterface> window) {
-                       if (window && window->GetTabStripModel()->empty()) {
-                         chrome::AddTabAt(window.get(), GURL(), -1,
-                                          /*foreground=*/true);
+                     [](base::WeakPtr<BrowserWindowInterface> window,
+                        base::WeakPtr<KoanBrowserViewController> controller) {
+                       if (!window || !controller ||
+                           !window->GetTabStripModel()->empty()) {
+                         return;
+                       }
+                       content::WebContents* contents =
+                           chrome::AddAndReturnTabAt(window.get(), GURL(), -1,
+                                                     /*foreground=*/true);
+                       TabStripModel* model = window->GetTabStripModel();
+                       const int index = model->GetIndexOfWebContents(contents);
+                       if (index != TabStripModel::kNoTab) {
+                         controller->workspaces()->AdoptEmptyTab(
+                             model->GetTabAtIndex(index)->GetHandle());
                        }
                      },
-                     browser->GetWeakPtr()));
+                     browser->GetWeakPtr(), controller->GetWeakPtr()));
   return true;
 }
 
