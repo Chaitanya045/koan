@@ -457,6 +457,10 @@ void KoanUrlBarController::OpenOnStartup() {
     return;
   }
   content::WebContents* contents = model->GetWebContentsAt(0);
+  // (Relies on this task running before the first navigation commits, which a
+  // tab made with the window has not by then; a tab that already committed
+  // pages is an adopted one. If the order ever changes the bar just does not
+  // open on startup.)
   // The window's own first tab, not one adopted from another window (a tab
   // dragged out, "Move to new window", chrome.windows.create({tabId})): that
   // one has committed pages already, where a tab made with the window is
@@ -611,11 +615,11 @@ void KoanUrlBarController::OnOmniboxChanged(bool user_input_in_progress) {
   user_input_in_progress_ = user_input_in_progress;
   // Called from LocationBarView::OnChanged(): move the bar afterwards.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&KoanUrlBarController::FloatOnType,
+      FROM_HERE, base::BindOnce(&KoanUrlBarController::UpdatePlacementOnInput,
                                 weak_factory_.GetWeakPtr()));
 }
 
-void KoanUrlBarController::FloatOnType() {
+void KoanUrlBarController::UpdatePlacementOnInput() {
   if (!is_open()) {
     return;
   }

@@ -5,14 +5,13 @@
 #include "koan/browser/ui/webui/koan_new_tab_ui.h"
 
 #include <algorithm>
-#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/no_destructor.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
@@ -24,6 +23,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_user_data.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/url_constants.h"
 #include "koan/common/koan_url_constants.h"
@@ -50,14 +50,27 @@ SkColor PageColor(const ui::ColorProvider& provider) {
   return provider.GetColor(kColorNewTabPageBackground);
 }
 
-// The colour each tab's page was last served in (UI thread; the key is only
-// compared, and the page's controller drops its entry), so the page can tell
-// when the window's colour moved on while it was loading.
-std::map<const content::WebContents*, SkColor>& ServedColors() {
-  static base::NoDestructor<std::map<const content::WebContents*, SkColor>>
-      colors;
-  return *colors;
-}
+// What the page of a tab remembers across loads. Chromium 158 makes a new
+// frame, WebUI and KoanNewTabUI for every reload, and destroys the old
+// controller after the new request: so this belongs to the tab, not to a
+// controller (whose destructor would erase what the new request recorded).
+class TabState : public content::WebContentsUserData<TabState> {
+ public:
+  ~TabState() override = default;
+
+  // The colour the page was last served in (UI thread), so the page can tell
+  // when the window's colour moved on while it was loading.
+  std::optional<SkColor> served_color;
+  // When the page last reloaded for a change of colour.
+  base::TimeTicks last_reload;
+
+ private:
+  friend class content::WebContentsUserData<TabState>;
+  explicit TabState(content::WebContents* contents)
+      : content::WebContentsUserData<TabState>(*contents) {}
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+WEB_CONTENTS_USER_DATA_KEY_IMPL(TabState);
 
 std::string BuildPage(SkColor background) {
   const bool dark = color_utils::IsDark(background);
@@ -84,7 +97,7 @@ class KoanNewTabSource : public content::URLDataSource {
     std::string page;
     if (content::WebContents* contents = wc_getter.Run()) {
       const SkColor background = PageColor(contents->GetColorProvider());
-      ServedColors()[contents] = background;
+      TabState::GetOrCreateForWebContents(contents)->served_color = background;
       page = BuildPage(background);
     }
     std::move(callback).Run(
@@ -122,9 +135,7 @@ KoanNewTabUI::KoanNewTabUI(content::WebUI* web_ui)
                               std::make_unique<KoanNewTabSource>());
 }
 
-KoanNewTabUI::~KoanNewTabUI() {
-  ServedColors().erase(web_contents());
-}
+KoanNewTabUI::~KoanNewTabUI() = default;
 
 void KoanNewTabUI::OnColorProviderChanged() {
   ScheduleCheck();
@@ -151,9 +162,11 @@ void KoanNewTabUI::ScheduleCheck() {
   }
   check_scheduled_ = true;
   base::TimeDelta delay;
-  if (!last_reload_.is_null()) {
-    delay = std::max(base::TimeDelta(), last_reload_ + kMinReloadInterval -
-                                            base::TimeTicks::Now());
+  const TabState* state = TabState::FromWebContents(web_contents());
+  if (state && !state->last_reload.is_null()) {
+    delay =
+        std::max(base::TimeDelta(), state->last_reload + kMinReloadInterval -
+                                        base::TimeTicks::Now());
   }
   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
@@ -173,12 +186,12 @@ void KoanNewTabUI::ReloadIfStale() {
     return;
   }
   // (No record: nothing was served to this tab that is known; leave it.)
-  const auto served = ServedColors().find(web_contents());
-  if (served == ServedColors().end() ||
-      served->second == PageColor(web_contents()->GetColorProvider())) {
+  TabState* state = TabState::FromWebContents(web_contents());
+  if (!state || !state->served_color ||
+      *state->served_color == PageColor(web_contents()->GetColorProvider())) {
     return;
   }
-  last_reload_ = base::TimeTicks::Now();
+  state->last_reload = base::TimeTicks::Now();
   controller.Reload(content::ReloadType::NORMAL, /*check_for_repost=*/false);
 }
 

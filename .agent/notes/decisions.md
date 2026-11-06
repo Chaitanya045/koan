@@ -86,8 +86,10 @@
   second omnibox, so everything Chrome's omnibox does keeps working; the
   popup anchors to the location bar by itself. #36 moved it into
   `KoanUrlBarController` and added Zen's behaviours: the omnibox edits over
-  the pill and floats on the first keystroke (hook in
-  `LocationBarView::OnChanged`).
+  the pill after a click and floats when opened with the keyboard (hook in
+  `LocationBarView::OnChanged`). A pill click never floats it, typing
+  included (Zen's `#openPopover` decides once, when the bar opens), which
+  reverses #36's "floats on the first keystroke" (#96).
 - **Ctrl+T without a tab (#36)**: no hook in `chrome::NewTab()` (its callers,
   e.g. `CreateNewTabGroup`, use the tab it returns). Ctrl+T is a Koan
   accelerator, the new-tab button's `kActionNewTab` callback is swapped per

@@ -48,7 +48,6 @@ class KoanNewTabUI : public content::WebUIController,
   void ReloadIfStale();
 
   bool check_scheduled_ = false;
-  base::TimeTicks last_reload_;
   base::WeakPtrFactory<KoanNewTabUI> weak_factory_{this};
 };
 
