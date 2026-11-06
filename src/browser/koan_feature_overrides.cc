@@ -16,6 +16,7 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/lens/lens_features.h"
 #include "components/omnibox/browser/aim_eligibility_service_features.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/performance_manager/public/features.h"
 #include "components/search/ntp_features.h"
@@ -110,6 +111,11 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // model service never starts (its GPU probe logs "Unable to get gpu
   // adapter").
   overrides.DisableFeature(omnibox::kAimEnabled);
+  // Belt and braces for what kAimEnabled already gates: the @aimode starter
+  // pack and the third-party AI Mode entry point (the AI Mode row of the "@"
+  // list, a chip or button in the bar or its suggestions).
+  overrides.DisableFeature(omnibox::kAiModeStartPack);
+  overrides.DisableFeature(omnibox::kAim3pEntrypoint);
   overrides.DisableFeature(lens::features::kLensOverlay);
   overrides.DisableFeature(lens::features::kLensOverlayOmniboxEntryPoint);
   overrides.DisableFeature(::features::kGlic);
