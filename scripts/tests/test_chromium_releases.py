@@ -164,7 +164,7 @@ class MarkerTest(unittest.TestCase):
         marker))
 
 
-class MainTest(unittest.TestCase):
+class MainTestBase(unittest.TestCase):
   """main() with chromiumdash, git, the patch check and gh replaced."""
 
   def issue_for(self, releases, checks=None, patches='tree1', pin='158.0.8127.2'):
@@ -174,21 +174,27 @@ class MainTest(unittest.TestCase):
     marker = cr.marker_of(cr.state_of(pin, targets, patches), checks)
     return {'number': 7, 'body': cr.render_body(pin, targets, checks, marker)}
 
-  def run_main(self, releases, issue=None, check=(2, []), pin='158.0.8127.2'):
+  def run_main(self, releases, issue=None, check=(2, []), pin='158.0.8127.2',
+               next_issue=None):
     calls = []
+    issues = {cr.LABEL: issue, cr.NEXT_LABEL: next_issue}
 
     def fake_gh(*args, dry_run=False, stdin=None):
       calls.append((args, stdin))
       return ''
 
     with mock.patch.object(cr, 'fetch_releases', return_value=releases), \
-        mock.patch.object(cr, 'find_issue', return_value=issue), \
+        mock.patch.object(cr, 'find_issue',
+                          side_effect=lambda dry, label=cr.LABEL: issues[label]), \
         mock.patch.object(cr, 'git_output', return_value='tree1'), \
         mock.patch.object(cr, 'run_check', return_value=check), \
         mock.patch.object(cr.time, 'sleep'), \
         mock.patch.object(cr, 'gh', side_effect=fake_gh):
       cr.main(['--pin', pin])
     return calls
+
+
+class MainTest(MainTestBase):
 
   def test_opens_an_issue_for_a_new_point_release(self):
     calls = self.run_main([rel('158.0.8127.9', 'Beta')])
@@ -250,6 +256,97 @@ class MainTest(unittest.TestCase):
       self.run_main([], issue)
     with self.assertRaises(SystemExit):  # nothing of our milestone
       self.run_main([rel('156.0.8078.80')], issue)
+
+
+class NextBetaTest(unittest.TestCase):
+
+  def test_picks_the_newest_beta_of_the_first_milestone_that_is_not_stable(self):
+    releases = [rel('158.0.8127.18'), rel('159.0.8200.1', 'Beta'),
+                rel('159.0.8200.7', 'Beta'), rel('160.0.8300.0', 'Beta')]
+    self.assertEqual(
+        cr.pick_next_beta('158.0.8127.2', releases).version, '159.0.8200.7')
+
+  def test_none_while_the_beta_is_our_own_or_already_stable(self):
+    self.assertIsNone(cr.pick_next_beta(
+        '158.0.8127.2', [rel('158.0.8127.18', 'Beta'), rel('157.0.8103.39')]))
+    # M159 is at Stable: the pin issue handles it, the next Beta is M160.
+    releases = [rel('159.0.8200.7'), rel('159.0.8200.9', 'Beta'),
+                rel('160.0.8300.1', 'Beta')]
+    self.assertEqual(
+        cr.pick_next_beta('158.0.8127.2', releases).version, '160.0.8300.1')
+    self.assertIsNone(cr.pick_next_beta('159.0.8200.7', releases[:2]))
+
+  def test_body_is_report_only(self):
+    beta = rel('159.0.8200.1', 'Beta')
+    marker = cr.next_beta_marker(beta, 'abc', (3, [('CONFLICT', 'a/b.cc')]))
+    body = cr.render_next_beta_body('158.0.8127.2', beta, (3, [('CONFLICT', 'a/b.cc')]),
+                                    marker)
+    self.assertIn('Report only', body)
+    self.assertIn('1 of 3 patches fail', body)
+    self.assertNotIn('Due', body)
+    self.assertEqual(cr.marker_state(body, 'chromium-next-beta'), marker)
+    self.assertIsNone(cr.marker_state(body))  # not the pin issue's marker
+
+
+class NextBetaMainTest(MainTestBase):
+
+  BETA = [rel('158.0.8127.9'), rel('159.0.8200.1', 'Beta')]
+
+  def next_issue(self, version='159.0.8200.1', check=(2, []), patches='tree1'):
+    beta = rel(version, 'Beta')
+    marker = cr.next_beta_marker(beta, patches, check)
+    return {'number': 9, 'body': cr.render_next_beta_body(
+        '158.0.8127.2', beta, check, marker)}
+
+  def verbs(self, calls):
+    return [args[:2] for args, _ in calls]
+
+  def test_opens_its_own_issue_with_its_own_label(self):
+    calls = self.run_main(self.BETA, issue=self.issue_for(self.BETA[:1]))
+    self.assertEqual(self.verbs(calls), [('label', 'create'), ('issue', 'create')])
+    self.assertIn(cr.NEXT_LABEL, calls[0][0])
+    self.assertIn(cr.NEXT_LABEL, calls[1][0])
+    self.assertIn('M159 Beta early warning: 159.0.8200.1', calls[1][0][3])
+    self.assertIn('all 2 patches apply', calls[1][1])
+
+  def test_does_nothing_when_nothing_changed(self):
+    calls = self.run_main(self.BETA, issue=self.issue_for(self.BETA[:1]),
+                          next_issue=self.next_issue())
+    self.assertEqual(calls, [])
+
+  def test_a_newer_beta_edits_quietly_unless_a_conflict_appears_or_goes(self):
+    old = self.next_issue('159.0.8200.0')
+    calls = self.run_main(self.BETA, issue=self.issue_for(self.BETA[:1]),
+                          next_issue=old)
+    self.assertEqual(self.verbs(calls), [('issue', 'edit')])
+    calls = self.run_main(self.BETA, issue=self.issue_for(self.BETA[:1]),
+                          next_issue=old, check=(2, [('CONFLICT', 'a.cc')]))
+    self.assertEqual(self.verbs(calls), [('issue', 'edit'), ('issue', 'comment')])
+    self.assertIn('`a.cc`', calls[1][0][-1])
+
+  def test_unfinished_check_is_repeated(self):
+    old = self.next_issue(check=None)
+    calls = self.run_main(self.BETA, issue=self.issue_for(self.BETA[:1]),
+                          next_issue=old)
+    self.assertEqual(self.verbs(calls), [('issue', 'edit')])
+
+  def test_closes_when_the_milestone_reaches_stable_but_not_on_a_gap(self):
+    old = self.next_issue()
+    stable = [rel('158.0.8127.9'), rel('159.0.8200.5')]
+    calls = self.run_main(stable, issue=self.issue_for(stable), next_issue=old)
+    self.assertEqual(self.verbs(calls), [('issue', 'close')])
+    # M159 neither listed as Beta nor Stable: leave the issue alone.
+    calls = self.run_main([rel('158.0.8127.9')],
+                          issue=self.issue_for([rel('158.0.8127.9')]),
+                          next_issue=old)
+    self.assertEqual(calls, [])
+
+  def test_one_issue_failing_does_not_hide_the_other(self):
+    with mock.patch.object(cr, 'update_pin_issue', side_effect=RuntimeError('x')), \
+        mock.patch.object(cr, 'update_next_beta_issue') as nxt, \
+        mock.patch.object(cr, 'fetch_releases', return_value=self.BETA):
+      self.assertEqual(cr.main(['--pin', '158.0.8127.2']), 1)
+    nxt.assert_called_once()
 
 
 class FetchTest(unittest.TestCase):

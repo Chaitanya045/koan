@@ -61,6 +61,15 @@ up, and says nothing while nothing changed. Run it by hand from the Actions
 tab ("Run workflow", with *dry run* to only print), or locally with
 `python3 scripts/ci/chromium_releases.py --dry-run`.
 
+The same run keeps an early warning, report only: the newest Beta of the first
+milestone that is neither ours nor at Stable yet is checked the same way, and
+ONE other issue, labelled `chromium-next-beta`, says whether the patches still
+apply (title "M159 Beta early warning: 159.0.8200.5, 1 of 114 patches fail").
+It has no due date and asks for no pin change. It stays open: when M159
+reaches Stable the issue is retitled to the next milestone's Beta (M160), and
+it closes only when no later Beta exists. A comment is posted only when the
+set of failing patches changes. See "Rehearsing the next milestone".
+
 ### Point release
 
 Rarely touches the hooks.
@@ -98,6 +107,70 @@ As above, and a milestone rebases more:
 3. `scripts/update_chromium.sh <tag>`, build, and the audit and smoke tests
    below.
 4. Update the tables and prose here that name moved files.
+
+### Rehearsing the next milestone
+
+A new milestone's Beta comes about 4 weeks before it is Stable. Rehearse it
+then, so that when it reaches Stable the 2-week window is a pin bump and not a
+port. The rehearsal never moves the pin on `develop`, and never merges its
+ports early: they target the new milestone and don't apply to the pin.
+
+1. **Start.** The watcher opens an issue labelled `chromium-next-beta`
+   ("M159 Beta early warning: ...") with the patch check against the newest
+   Beta of the next milestone. Run it yourself any time:
+   `scripts/ci/check_patches.sh 159.0.8200.5`. No conflicts is good news, not
+   the end: go on to 3.
+2. **Patches.** Branch `rehearsal/m159` from `develop`. Port every `CONFLICT`
+   and `MISSING` on it (see "Procedure"), keeping each patch a call into
+   `//koan` (rules in `.agent/notes/agent-brief.md`, "Upgrade-safe code").
+   Open PRs that add patches need the same port (list them with
+   `gh pr diff <n> --name-only | grep ^patches/`). `python3
+   scripts/ci/patch_report.py --base origin/develop` shows what the ports cost.
+   Rebase the branch on `develop` weekly, and re-run the check when the Beta
+   changes (the issue updates itself).
+3. **Compile.** On the branch set **both lines** of `CHROMIUM_VERSION`: the
+   Beta's tag, then the commit it points to (`check_patches.sh` stops if they
+   disagree; `scripts/update_chromium.sh <tag>` writes both, but it moves the
+   checkout under its own `$ROOT/chromium/src`). So use a **second Koan
+   clone with its own `chromium/`** (the daily clone keeps its objects; a new
+   milestone changes the compiler and rebuilds everything, plan for an
+   overnight build). Build there through the Mac loop, the first
+   time with `autoninja -C out/Koan -k 0 chrome` (`scripts/build.sh` has no
+   pass-through) so one pass lists every compile error. For M158 that found
+   one failing step in about 58,000: `PopupBlockerTabHelper` had become a
+   per-tab helper. Fix `src/` on the branch: same code on every milestone
+   (rule 5), so an API rename is fixed at rebase time, not behind an `#if`.
+4. **Regression.** Run the Mac checks against the new build and against the
+   pin's build, and compare: the `scripts/mac` drivers (`vtabs.sh` modes) and
+   `steps/*.md`, and every guard in
+   `.agent/notes/upstream/behaviour-guards.md` that is runnable. A guard that
+   fails is an upstream behaviour that changed: fix the hook, or update the
+   guard and the REBASE row. Rows with no guard ("none") are where a break is
+   silent: look at those by hand.
+5. **Record.** Write `.agent/notes/upstream/rehearsal-m159.md`: the patch
+   table, the compile errors and their fixes, the guards that failed, the
+   hours spent. When the milestone reaches Stable and the `chromium-update`
+   issue opens, rebase the branch on `develop`, set the Stable tag (a point
+   release of the same branch: re-run the patch check and the build), open the
+   PR, and delete the branch.
+
+What the rehearsal does not touch: the pin and the patches on `develop`, and
+the daily Chromium checkout.
+
+### Keeping the next rebase mechanical
+
+The rules every change follows are in `.agent/notes/agent-brief.md`
+("Upgrade-safe code"). What enforces and measures them:
+
+- `scripts/ci/patch_report.py` runs on every PR (job "Patch health"): the
+  patch count, changed upstream lines, new and grown patches, and it fails a
+  new patch without a row in the hook table below.
+- Every row names the upstream **behaviour** the hook assumes, and
+  `.agent/notes/upstream/behaviour-guards.md` says which test fails when it
+  changes (and which rows have none).
+- `.agent/notes/upstream/patch-audit.md` lists what the current patches get
+  wrong against the rules, with a fix for each; work through it when a file is
+  open anyway.
 
 ## Procedure
 
@@ -180,7 +253,10 @@ to Folder" from 3002, inside split view's range, to 3300+).
 
 `update_chromium.sh` prints every `koan::` call site in `chromium/src`.
 For each, check the surrounding upstream code still means what the hook
-assumes:
+assumes. A new patch needs a row here (CI fails without one): what it hooks,
+why no extension point fits, and the upstream **behaviour** it assumes, with
+the test that fails if that changes (see
+`.agent/notes/upstream/behaviour-guards.md` for the existing ones):
 
 | Hook | File | Assumption to re-check |
 |---|---|---|
@@ -229,14 +305,15 @@ assumes:
 | Download started animation | `chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc` (`ShowPendingDownloadStartedAnimation`, + `chrome/browser/ui/views/download/BUILD.gn`: `//koan/browser/ui/views`) | still the one place Chrome's "download started" animation starts for a window; Koan skips it while its own (Zen's) plays |
 | Media cards mount (no patch) | `VerticalTabStripRegionView` ctor | as for the Spaces bottom bar: the content area is a `FlexLayoutView` child; the cards go just above `KoanSpaceBarView` |
 | Window drag from the page (no patch) | `RenderWidgetHost::AddMouseEventCallback`; `-[NSWindow performWindowDragWithEvent:]` (macOS, AppKit), `ui::WmMoveResizeHandler` (Linux) | callbacks still see every mouse event forwarded to the page and can swallow it; on macOS the native drag (`koan_native_window_move_mac.mm`, from Zen's `nsZenNativeWindowMove.mm`) is AppKit's, not `Widget::RunMoveLoop` (`NativeWidgetNSWindowBridge::RunMoveLoop` has release CHECKs: no capture, no other move loop; Koan must not call it from a page event again) and needs an `NSWindow` from `GetNativeWindow().GetNativeNSWindow()` that is visible (a PWA's is an invisible placeholder). The swallowed release is sent to the window with `[window sendEvent:]` (`EndNativeWindowMove()`) so `RenderWidgetHostViewCocoa` drops `_hasOpenMouseDown`; the tiled check reads `NSWindow`'s private `_tilingStateController` ivar (Zen's `WindowIsTiled`; if it goes, tiled windows just use the 4 px threshold); on Linux `DispatchHostWindowDragMovement(HTCAPTION, ...)` still starts a native move, as `WindowEventFilterLinux` does for the title bar |
-| Glance trigger | `chrome/browser/ui/browser_web_contents_delegate/...cc` (`OpenURLFromTab`) | the activation click still arrives as renderer-initiated `kNewPopup` (the `WindowOpenDisposition` values were `NEW_POPUP` etc. before M158); a click Glance declines is reopened through `OpenURLFromTab` with its fallback disposition (no loop: the fallback is never `kNewPopup`) |
+| Glance trigger | `chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc` (`OpenURLFromTab`, + its `BUILD.gn`: `//koan/browser/ui/views`) | the activation click still arrives as renderer-initiated `kNewPopup` (the `WindowOpenDisposition` values were `NEW_POPUP` etc. before M158); a click Glance declines is reopened through `OpenURLFromTab` with its fallback disposition (no loop: the fallback is never `kNewPopup`) |
 | Renderer switches | `chrome/browser/chrome_content_browser_client.cc` (`AppendExtraCommandLineSwitches`, + `chrome/browser/BUILD.gn` `core`) | the renderer branch still has the `RenderProcessHost` for `child_process_id` |
-| Glance activation | `third_party/blink/renderer/core/loader/navigation_policy.cc` | `NavigationPolicyFromEventModifiers` still maps modifier clicks to policies; the popup policy is still never produced by link clicks |
+| Glance activation | `third_party/blink/renderer/core/loader/navigation_policy.cc` (+ `third_party/blink/renderer/core/BUILD.gn`: `//koan/browser:features`) | `NavigationPolicyFromEventModifiers` still maps modifier clicks to policies; the popup policy is still never produced by link clicks |
 | Link context menu | `chrome/browser/renderer_context_menu/render_view_context_menu.cc` (+ its `BUILD.gn`) | `AppendLinkItems()`'s split-view block unchanged; `ExecuteCommand` still records metrics for every id first (Koan's id 55000 runs before); id 55000 still unused in `chrome_command_ids.h` |
 | Tab context menu (see "Shared hooks" above) | `chrome/browser/ui/tabs/tab_menu_model.cc` (one hook, `koan::AddKoanTabMenuItems`, at the end of `Build`), `tab_menu_model.h` (`koan_submenus_`), `tab_strip_model.cc` (`IsContextMenuCommandEnabled`, `ExecuteContextMenuCommand`) (+ `ui/tabs/BUILD.gn`) | the menu still has `CommandAddToSplit`, `CommandArrangeSplit`, `CommandTogglePinned`, `CommandCloseTab`, `CommandCloseOtherTabs` and `CommandCloseTabsToRight` items, which Koan relabels, tags or inserts around; the views controller still hands every command id to `TabStripModel` (Koan's ids are 3000-3399, see `koan_tab_menu.h`); `CommandTogglePinned` still reaches `ExecuteContextMenuCommand`; Spaces (`kSpaces`) still find the tab group items `CommandToggleFocusGroup` / `CommandAddToExistingGroup` / `CommandAddToNewGroup` / `CommandRemoveFromGroup` by command id and swap them for Move To |
 | Sidebar tab rows | `chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc` (`CalculateVerticalLayout`), `tab_strip_view.cc` (`IsPositionInWindowCaption`) | the vertical layout still places pinned container, separator, unpinned container top to bottom with a running `y`; without a Space Koan's rows view is a direct `TabStripView` child |
 | Sidebar tab rows after a Space's pinned tabs | `chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc` (`CalculateProposedLayout`: `koan::PlaceSpaceTabRows()` before each child and after the last) | with a Space the rows view is a child of the focused `TabGroupView` (in the unpinned scroll contents), so it scrolls with the tabs. The group's layout still lays children out top to bottom in model order with a running `height` and `kTabVerticalPadding` after each; drag targeting and link drops still skip children without a collection node (`GetCollectionNodeFromView()`, `collection_node_->children()`), as for the group header and line; `TabGroupView::ShouldAnimateOpacityForAddAndRemove()` still animates `TabView`s only, and `TabCollectionAnimatingLayoutManager` still tolerates a child that leaves its layout (Koan moves the rows between Spaces with `RemoveChildViewT`, never while the widget is closed, then calls the group's `ResetViewsToTargetLayout({})` so its raw_ptr-keyed layout maps drop them; at teardown it leaves them to their parent) |
 | Sidebar tab rows snap into a Space | `chrome/browser/ui/views/tabs/common/tab_group_view.cc` (`ShouldSnapToTarget`) | the animating layout manager still grows a child missing from its starting layout from height 0 unless the delegate's `ShouldSnapToTarget()` says otherwise |
+| Scrollbars (Linux only) | `ui/native_theme/features/native_theme_features.cc` (`kOverlayScrollbar`) | overlay scrollbars are still a feature with a `mode` option (`kScrollbarModeOptions`) whose default Koan sets to `kOverlay` on Linux and enables there. Linux is the test harness only (Zen's thin overlay scrollbars on macOS are Chromium's own default), so this patch exists for the e2e screenshots |
 | Look: system and core colours | `ui/color/color_mixers.{h,cc}` (`SetCoreColorMixerOverride`) | `AddColorMixers` still builds Ref, Sys, core default, native core, then `ui_color_mixer`: Koan's early mixer must sit after `AddNativeCoreColorMixer` and before `AddUiColorMixer`. A recipe's input colours (the ids it names: `{kColorX}`, `SetAlpha(kColorX, …)`) are resolved against the provider's last mixer (`ColorMixer::input_mixer_getter_`), not against the mixers before it, so a late mixer's value for `kColorX` is what every earlier recipe reads too. That makes a Koan colour that follows another colour of Koan's (or Chromium's) a cycle risk across mixers (a recipe in one mixer reading an id whose recipe in another reads it back): Koan's colours that follow others are computed values (`FloatingUrlBarCardColor`, `AddZenSuggestionColors`), and the unit test builds every look's provider. Only the id's *own* previous value (an override that keeps part of it) comes from the mixer before. The early mixer sits before `ui_color_mixer` so that the core and system colours it replaces are the ones the mixers above derive their own values from; if Chromium adds a mixer that sets core ids before `AddUiColorMixer`, move the call after it |
 | Look: colour mode | `chrome/browser/themes/theme_service.cc` (`GetColorProviderKey`, + `themes/BUILD.gn`: `//koan/browser/ui/views`) | the key's `color_mode` is still what picks dark/light for every Views surface and, on macOS, the NSWindow appearance (`NativeWidgetNSWindowBridge::SetColorMode`); the hook runs last and the first call also installs the early mixer and loads the look |
 | Look: shape | `chrome/browser/ui/views/chrome_layout_provider.cc` (`GetCornerRadiusMetric`, + `chrome/browser/ui/views/BUILD.gn` `layout_provider_impl`: `//koan/browser/ui/views`), `chrome/browser/ui/layout_constants.cc` | every `ShapeContextToken` in `ShapeStep` (`koan_look_controller.cc`) still exists (new ones fall back to Chromium's radius); vertical tab radius still comes from `kVerticalTabCornerRadius` |
@@ -260,7 +337,7 @@ assumes:
 | Toolbar hidden in macOS fullscreen | `chrome/browser/ui/browser_ui_prefs.cc` (`RegisterBrowserUserPrefs`, the macOS block) | `prefs::kShowFullscreenToolbar` is still registered there and `fullscreen_utils::IsAlwaysShowToolbarEnabled()` (`fullscreen_util_mac.cc`) and `BrowserFrameViewMac::UpdateFullscreenTopUI()` still map it to the toolbar's visibility style (`kAlways` / `kAutohide`). Koan registers it false (Chromium: true), so fullscreen shows only the top-edge reveal, as Zen does. Where Koan hides its toolbar (single toolbar, the default) there is no reveal at all: `browser_frame_view_mac.mm` patch makes `UpdateFullscreenTopUI()` use `TOOLBAR_NONE` (`koan::HidesFullscreenTopChrome()`), and `browser_view.cc` patches `GetWidgetForAnchoring()` and `FullscreenStateChanged()` to anchor to the window then; `browser_native_widget_mac.mm` disables View > Always Show Toolbar in Full Screen (`ValidateUserInterfaceItem`, `IDC_TOGGLE_FULLSCREEN_TOOLBAR`) while Koan's toolbar is hidden; `frame/BUILD.gn` adds `//koan/browser/ui/views` to `browser_frame_view_mac`. Check that `ImmersiveModeControllerCocoa::UpdateToolbarVisibility(kNone)` still keeps no toolbar or title bar content (Koan hides the lights and makes AppKit's title bar transparent itself, `HideFullscreenTitlebar()`; the thin title bar controller, `UpdateThinControllerVisibility()`, stays) |
 | Bookmarks bar off | `chrome/browser/ui/bookmarks/bookmark_bar_controller.cc` (`BookmarkBarController` ctor, `ShouldShowBookmarkBar`) | the pref observers are still registered in the ctor, `ShouldShowBookmarkBar()` still starts with the guest check and decides `should_show_bar` before the fullscreen / force-show / new-tab-page logic. Koan returns false unless its own pref `koan.bookmarks_bar.show` (`koan::prefs::kBookmarksBarShow`, the name is repeated in the patch) is on, and then shows the bar on every page: an import (`ProfileWriter::AddBookmarks` → `ShowBookmarkBar()`) or Chromium's own setting no longer turns it on, and Chromium's "Show bookmarks bar" setting and View menu item do nothing |
 | Freezing exemptions | `components/performance_manager/freezing/freezing_policy.{h,cc}`, `.../public/freezing/cannot_freeze_reason.h`, `.../freezing/cannot_freeze_reason.cc` | **Not a call into `//koan`** (a component can't depend on `//koan/browser`): these four patches carry logic (two enum values, a timer, ~30 lines) and must be re-ported by hand when they conflict. Check that `CannotFreezeReasonsForType()` still decides which reasons block which freezing type, that `FreezingPolicy` is still a `PageLiveStateObserver` (pinned state) and still sees `OnIsAudibleChanged` / `OnMainFrameDocumentChanged`, and that `CannotFreezeReason` is still not recorded in a histogram, UKM or mojom enum (Koan's values, appended at the end, would be out of range) |
-| Restore tabs on demand | `chrome/browser/performance_manager/policies/background_tab_loading_policy.cc` (ctor) | `min_tabs_to_load_` / `max_tabs_to_load_` still gate restored-tab loads in `ShouldLoad()`, and a restored tab still loads when shown |
+| Restore tabs on demand | `chrome/browser/performance_manager/policies/background_tab_loading_policy.cc` (ctor, + `chrome/browser/performance_manager/BUILD.gn`: `//koan/browser:features`) | `min_tabs_to_load_` / `max_tabs_to_load_` still gate restored-tab loads in `ShouldLoad()`, and a restored tab still loads when shown |
 | Prefs | `chrome/browser/ui/tabs/tab_strip_prefs.cc` | vertical-tabs pref name and registration |
 | Startup, infobar, paths, desktop id | `session_startup_pref.cc`, `infobar_utils.cc`, `chrome_paths_linux.cc`, `chrome_paths_mac.mm`, `channel_info_posix.cc`, `shell_integration_linux.cc` | one-line value swaps |
 | Flags | `chrome/browser/about_flags.cc` | `kFeatureEntries` end marker |
