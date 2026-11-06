@@ -105,6 +105,10 @@ class KoanLibraryController : public TabStripModelObserver,
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
 
+  // Its widget while it shows, for the window's colours
+  // (KoanThemeController::AdjustChildColorKey()).
+  const views::Widget* widget() const { return widget_.get(); }
+
  private:
   void CreateWidget();
   void DestroyWidget();

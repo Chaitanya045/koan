@@ -27,11 +27,14 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_glass_state.h"
+#include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_space_background.h"
 #include "koan/browser/ui/views/koan_system_accent.h"
 #include "koan/browser/ui/views/koan_theme_picker.h"
 #include "koan/browser/ui/views/koan_theme_platform.h"
+#include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_widget_color_key.h"
 #include "koan/browser/ui/views/koan_window_background.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -392,18 +395,29 @@ void KoanThemeController::AdjustChildColorKey(const views::Widget* child,
   // (zen-theme.css), and the accent reaches them all. The window's own
   // chrome in other widgets keeps the Space's: macOS's fullscreen overlay
   // with the sidebar and toolbar, Glance and the Library (zen-glance.css,
-  // zen-library.css: --toolbar-color-scheme).
-  if (!applied_mode_ || child->GetName() == "KoanGlance" ||
-      child->GetName() == "KoanLibrary") {
+  // zen-library.css: --toolbar-color-scheme), and the toast (inside
+  // #browser; on the window's scheme only for the default theme, where no
+  // mode is applied). A panel anchored in one of those (a bubble in the
+  // fullscreen overlay, in Glance) is back on the window's scheme.
+  if (!applied_mode_ || IsWindowChrome(child)) {
     return;
   }
+  key->color_mode = window_mode_;
+}
+
+bool KoanThemeController::IsWindowChrome(const views::Widget* child) const {
 #if BUILDFLAG(IS_MAC)
   if (child == browser_view_->overlay_widget() ||
       child == browser_view_->tab_overlay_widget()) {
-    return;
+    return true;
   }
 #endif
-  key->color_mode = window_mode_;
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return controller &&
+         ((controller->glance() && child == controller->glance()->widget()) ||
+          (controller->library() && child == controller->library()->widget()) ||
+          (controller->toast() && child == controller->toast()->widget()));
 }
 
 bool KoanThemeController::SetWindowColors() {
@@ -438,10 +452,19 @@ bool KoanThemeController::SetWindowColors() {
   // Its child widgets take the colours through their parent's key but aren't
   // told (upstream re-themes them only with kThemeChangeOptimization): on
   // macOS the fullscreen overlay with the sidebar and toolbar, Glance, the
-  // floating URL bar, the bubbles.
+  // floating URL bar, the bubbles. (Weak pointers: a child's ThemeChanged()
+  // may close another. Off macOS, desktop Aura's bubbles aren't among the
+  // child widgets and keep the old accent until reopened; not a product
+  // platform.)
+  std::vector<base::WeakPtr<views::Widget>> children;
   for (views::Widget* child :
        views::Widget::GetAllChildWidgets(widget->GetNativeView())) {
-    if (child != widget && !child->IsClosed()) {
+    if (child != widget) {
+      children.push_back(child->GetWeakPtr());
+    }
+  }
+  for (const base::WeakPtr<views::Widget>& child : children) {
+    if (child && !child->IsClosed()) {
       child->ThemeChanged();
     }
   }
@@ -811,10 +834,8 @@ void KoanThemeController::AnimationEnded(const gfx::Animation* animation) {
   InvalidateBackground();
 }
 
-void AdjustWindowColorKey(const BrowserWindowInterface* browser,
+void AdjustWindowColorKey(const BrowserView* browser_view,
                           ui::ColorProviderKey* key) {
-  const BrowserView* browser_view =
-      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
   const KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   if (controller) {
@@ -827,15 +848,19 @@ namespace {
 void AdjustChildColorKey(const views::Widget* parent,
                          const views::Widget* child,
                          ui::ColorProviderKey* key) {
-  // Only a browser window's own children.
-  BrowserView* browser_view =
-      BrowserView::GetBrowserViewForNativeWindow(parent->GetNativeWindow());
-  const KoanBrowserViewController* controller =
-      browser_view && browser_view->GetWidget() == parent
-          ? KoanBrowserViewController::From(browser_view)
-          : nullptr;
-  if (controller) {
-    controller->theme()->AdjustChildColorKey(child, key);
+  // The browser window `child` is in, at any depth (a bubble anchored in the
+  // fullscreen overlay, in Glance).
+  for (const views::Widget* widget = parent; widget;
+       widget = widget->parent()) {
+    BrowserView* browser_view =
+        BrowserView::GetBrowserViewForNativeWindow(widget->GetNativeWindow());
+    if (browser_view && browser_view->GetWidget() == widget) {
+      if (const KoanBrowserViewController* controller =
+              KoanBrowserViewController::From(browser_view)) {
+        controller->theme()->AdjustChildColorKey(child, key);
+      }
+      return;
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/browser_widget.cc b/chrome/browser/ui/views/frame/browser_widget.cc
-index df70a8b38c53cbd6ecc03f54f264dd54b268ae92..e9d7bd281968cd2f6533e7fee3a84cdfd7d6696f 100644
+index df70a8b38c53cbd6ecc03f54f264dd54b268ae92..e1a20a1d29697051f412c0f366e5f6fbb8a93e30 100644
 --- a/chrome/browser/ui/views/frame/browser_widget.cc
 +++ b/chrome/browser/ui/views/frame/browser_widget.cc
 @@ -34,6 +34,7 @@
@@ -37,7 +37,7 @@ index df70a8b38c53cbd6ecc03f54f264dd54b268ae92..e9d7bd281968cd2f6533e7fee3a84cdf
    }
 +  // Koan: the window's Space theme sets its colour mode and accent
 +  // (koan_window_background.h).
-+  koan::AdjustWindowColorKey(browser_view_->browser(), &key);
++  koan::AdjustWindowColorKey(browser_view_, &key);
  
    // Apply BrowserWidget overrides:
    if (auto* app_controller =

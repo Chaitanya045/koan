@@ -103,6 +103,9 @@ class KoanThemeController : public TabStripModelObserver,
   // window's own scheme, unless it is the window's chrome.
   void AdjustChildColorKey(const views::Widget* child,
                            ui::ColorProviderKey* key) const;
+  // Whether `child` is the window's own chrome in another widget, which
+  // keeps the Space's mode.
+  bool IsWindowChrome(const views::Widget* child) const;
 
   // Paints the window's background (the active Space's gradient and grain)
   // behind `view`, aligned to the window.
