@@ -105,14 +105,14 @@ function mac(cmd) {
 // macOS virtual key codes.
 const K = { W: 13, R: 15, F: 3, L: 37, LBRACKET: 33, RBRACKET: 30, EQUAL: 24,
             MINUS: 27, ZERO: 29, C: 8, ESC: 53, RIGHT: 124, LEFT: 123, TWO: 19,
-            RETURN: 36, T: 17, M: 46, Y: 16 };
+            RETURN: 36, T: 17, M: 46, Y: 16, N: 45 };
 // CDP fallback: Windows key codes and names for the same keys.
 const CDP_KEYS = { 13: [87, 'w'], 15: [82, 'r'], 3: [70, 'f'], 37: [76, 'l'],
                    33: [219, '['], 30: [221, ']'], 24: [187, '='], 27: [189, '-'],
                    29: [48, '0'], 8: [67, 'c'], 53: [27, 'Escape'],
                    124: [39, 'ArrowRight'], 123: [37, 'ArrowLeft'], 19: [50, '2'],
                    36: [13, 'Enter'], 17: [84, 't'], 46: [77, 'm'],
-                   16: [89, 'y'] };
+                   16: [89, 'y'], 45: [78, 'n'] };
 
 let cdpKeysUsed = false;
 // A key press; `flags` as keypress2's: c ⌘, s ⇧, k ⌃, a ⌥.
@@ -502,21 +502,27 @@ const steps = {
                 alive && gone && parentLeft);
     console.log('INFO  13 ⌘Q with a Glance open, then relaunch: run by hand (scripts/mac/steps/glance.md step 13)');
   },
-  // Koan's high-priority shortcuts before Chrome's reserved keys: ⌘⌥→ is
-  // Koan's next Space, not Chrome's next tab. With one Space (a fresh
-  // profile) it changes nothing: the card and the parent tab stay.
+  // ⌘⌥→ in a Glance does what it does in a plain tab (review 3/4): Koan's
+  // next Space when there is one (its shortcut comes before Chrome's), and
+  // Chrome's next tab when Koan declines (one Space). The plain tab first,
+  // then the same from a Glance: the same tab must show.
   async 16() {
     const other = await openBackgroundTab(`${PARENT}#other-${Date.now()}`);
+    const parent = await parentTab();
+    await key(K.RIGHT, 'ca');
+    await sleep(800);
+    const expected = await visibleTab();
+    await parentTab();
     await glance('child');
     await key(K.RIGHT, 'ca');
     await sleep(800);
     const active = await visibleTab();
-    await check("16 ⌘⌥→ in a Glance isn't Chrome's next tab (one Space: nothing)",
-                (await cardOpen()) && !!active && active.url.startsWith(PARENT) &&
-                    active.id !== other?.id,
-                active ? active.url : 'no visible tab');
+    await check('16 ⌘⌥→ in a Glance does what it does in a plain tab',
+                !!active && !!expected && active.id === expected.id,
+                `plain tab -> ${expected?.url}; Glance -> ${active?.url}`);
     await closeCard();
     if (other) await browserCall('Target.closeTarget', { targetId: other.id });
+    await onPage(parent, c => c.send('Page.bringToFront'));
   },
   // Reserved commands that switch tabs close the card from inside its own
   // key handling (they are posted): no crash.
@@ -551,15 +557,19 @@ const steps = {
   },
   // A Koan shortcut that declines its key passes it on (review 4): in a
   // private window Koan has no Library, so ⌘Y in a Glance is Chrome's
-  // History, as in a private tab. (A CDP browser context is an off-the-record
-  // profile: a private window.)
+  // History, as in a private tab. A real private window (⌘⇧N), whose new tab
+  // is sent to the fixture page.
   async 20() {
     if (!PID) return console.log('SKIP  20 (needs the Mac)');
-    const ctx = (await browserCall('Target.createBrowserContext')).result?.browserContextId;
+    const before = new Set((await targets()).map(t => t.id));
+    await key(K.N, 'cs');  // ⌘⇧N: New Incognito Window
+    const fresh = await waitFor(async () =>
+        (await targets()).find(t => !before.has(t.id)), 4000);
+    if (!fresh) return await check('20 ⌘⇧N opens a private window', false);
     const url = `${PARENT}#private-${Date.now()}`;
-    await browserCall('Target.createTarget', { url, browserContextId: ctx, newWindow: true });
+    await onPage(fresh, c => c.send('Page.navigate', { url }));
     const page = await waitFor(async () => (await targets()).find(t => t.url === url));
-    if (!page) return await check('20 a private window opens', false);
+    if (!page) return await check('20 the private window loads the fixture', false);
     await onPage(page, c => c.send('Page.bringToFront'));
     await sleep(800);
     await glance('child', page);
@@ -569,7 +579,8 @@ const steps = {
     await check('20 ⌘Y in a private-window Glance opens History', !!history,
                 history ? history.url : 'no History page');
     if (history) await browserCall('Target.closeTarget', { targetId: history.id });
-    if (ctx) await browserCall('Target.disposeBrowserContext', { browserContextId: ctx });
+    await browserCall('Target.closeTarget', { targetId: page.id });
+    await sleep(800);
   },
   // ⌘M (Window > Minimize) in a Glance minimises the window, as in Zen.
   // Last: the window is restored over CDP, and no key is sent after it.

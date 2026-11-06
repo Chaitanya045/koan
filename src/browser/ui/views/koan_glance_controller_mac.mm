@@ -11,7 +11,6 @@
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#import "ui/base/cocoa/nsmenu_additions.h"
 #include "ui/gfx/native_ui_types.h"
 #include "ui/views/widget/widget.h"
 
@@ -49,6 +48,47 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
              : 0;
 }
 
+namespace {
+
+// The menu bar's item with `action`, searched depth-first.
+NSMenuItem* MenuItemWithAction(NSMenu* menu, SEL action) {
+  for (NSMenuItem* item in menu.itemArray) {
+    if (item.action == action) {
+      return item;
+    }
+    if (item.hasSubmenu) {
+      if (NSMenuItem* found = MenuItemWithAction(item.submenu, action)) {
+        return found;
+      }
+    }
+  }
+  return nil;
+}
+
+// Whether `event` is `item`'s key equivalent, whether or not the item is
+// enabled: while the card's window is key, Window > Minimize and Zoom
+// validate against it (borderless, not miniaturizable) and are disabled, so
+// cr_firesForKeyEquivalentEvent: (which needs an enabled item) never fires.
+bool IsKeyEquivalentOf(NSMenuItem* item, NSEvent* event) {
+  NSString* key = item.keyEquivalent;
+  if (key.length == 0) {
+    return false;
+  }
+  constexpr NSEventModifierFlags kRelevant =
+      NSEventModifierFlagCommand | NSEventModifierFlagOption |
+      NSEventModifierFlagControl | NSEventModifierFlagShift;
+  NSEventModifierFlags mask = item.keyEquivalentModifierMask;
+  // An upper-case key equivalent means Shift.
+  if (![key isEqualToString:key.lowercaseString]) {
+    mask |= NSEventModifierFlagShift;
+  }
+  return (event.modifierFlags & kRelevant) == (mask & kRelevant) &&
+         [key.lowercaseString
+             isEqualToString:event.charactersIgnoringModifiers.lowercaseString];
+}
+
+}  // namespace
+
 bool PerformWindowMenuKey(views::Widget* browser,
                           const input::NativeWebKeyboardEvent& event) {
   NSEvent* ns_event = event.os_event.Get();
@@ -57,13 +97,15 @@ bool PerformWindowMenuKey(views::Widget* browser,
   if (!ns_event || ns_event.type != NSEventTypeKeyDown || !window) {
     return false;
   }
-  NSMenuItem* item =
-      [[NSApp mainMenu] cr_menuItemForKeyEquivalentEvent:ns_event];
-  if (item.action == @selector(performMiniaturize:)) {
+  NSMenu* main_menu = [NSApp mainMenu];
+  if (IsKeyEquivalentOf(
+          MenuItemWithAction(main_menu, @selector(performMiniaturize:)),
+          ns_event)) {
     [window performMiniaturize:nil];
     return true;
   }
-  if (item.action == @selector(performZoom:)) {
+  if (IsKeyEquivalentOf(MenuItemWithAction(main_menu, @selector(performZoom:)),
+                        ns_event)) {
     [window performZoom:nil];
     return true;
   }
