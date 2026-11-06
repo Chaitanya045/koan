@@ -196,6 +196,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
 
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
@@ -367,6 +369,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   std::unique_ptr<ExpandOnHoverLock> flash_lock_;
   // Held while the empty tab is selected (the sidebar can't hide).
   std::unique_ptr<ExpandOnHoverLock> empty_tab_lock_;
+  // Takes or releases empty_tab_lock_ for the active tab and the mode.
+  void UpdateEmptyTabLock();
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;

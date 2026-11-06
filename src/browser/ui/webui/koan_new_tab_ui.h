@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_WEBUI_KOAN_NEW_TAB_UI_H_
 #define KOAN_BROWSER_UI_WEBUI_KOAN_NEW_TAB_UI_H_
 
+#include "base/memory/weak_ptr.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/webui_config.h"
 
@@ -13,23 +15,33 @@ namespace koan {
 class KoanNewTabUI;
 
 // chrome://koan-newtab: Koan's new tab page. Like Zen's, an empty page in the
-// theme's background colour, with no content, no script and no requests
-// beyond the page itself. Reached through chrome://newtab (see
-// koan_new_tab_page.h). Registered from
+// colour of the window's look (shadcn's `--background`, or the theme's new tab
+// page colour in the Zen look), with no content, no script and no requests
+// beyond the page itself. It loads again when the window's colours change.
+// Reached through chrome://newtab (see koan_new_tab_page.h). Registered from
 // chrome/browser/ui/webui/chrome_web_ui_configs.cc.
 class KoanNewTabUIConfig : public content::DefaultWebUIConfig<KoanNewTabUI> {
  public:
   KoanNewTabUIConfig();
 };
 
-class KoanNewTabUI : public content::WebUIController {
+class KoanNewTabUI : public content::WebUIController,
+                     public content::WebContentsObserver {
  public:
   explicit KoanNewTabUI(content::WebUI* web_ui);
   KoanNewTabUI(const KoanNewTabUI&) = delete;
   KoanNewTabUI& operator=(const KoanNewTabUI&) = delete;
   ~KoanNewTabUI() override;
 
+  // content::WebContentsObserver:
+  void OnColorProviderChanged() override;
+
   WEB_UI_CONTROLLER_TYPE_DECL();
+
+ private:
+  void Reload();
+
+  base::WeakPtrFactory<KoanNewTabUI> weak_factory_{this};
 };
 
 }  // namespace koan

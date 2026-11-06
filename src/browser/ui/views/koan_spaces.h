@@ -65,6 +65,12 @@ bool IsInSpaceForm(const views::View* tab_strip_view,
 // Spaces are off.
 bool IsEmptyTab(const tabs::TabInterface* tab);
 
+// The empty tab stops being one when it navigates in place (a bookmark, the
+// Library, a dropped link, chrome.tabs.update): its mark goes, so that Back
+// into the new tab page later is an ordinary tab with a row, and Cmd+W
+// closes the tab, not the window. Called on every change of the tab.
+void ClearEmptyTabMarkIfNavigated(tabs::TabInterface* tab);
+
 // TabGroupViewVerticalLayout: whether `view` is a tab row to hide (see
 // IsEmptyTab()).
 bool IsEmptyTabView(const views::View* view);

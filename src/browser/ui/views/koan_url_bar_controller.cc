@@ -11,6 +11,9 @@
 // licence.
 
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "chrome/browser/sessions/session_restore.h"
+#include "chrome/common/webui_url_constants.h"
+#include "content/public/common/url_constants.h"
 
 #include <algorithm>
 #include <utility>
@@ -51,13 +54,15 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_omnibox_disposition.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
-#include "koan/browser/ui/views/koan_omnibox_disposition.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
+#include "koan/browser/ui/views/koan_welcome.h"
+#include "koan/common/koan_url_constants.h"
 #include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -420,6 +425,43 @@ void KoanUrlBarController::RetryNewTabZeroSuggest(int retries_left) {
   }
   if (retries_left > 1) {
     ScheduleNewTabZeroSuggestRetry(retries_left - 1);
+  }
+}
+
+void KoanUrlBarController::OnAddedToWidget() {
+  // After the window has been laid out and shown (and the welcome has had its
+  // say).
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KoanUrlBarController::OpenOnStartup,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KoanUrlBarController::OpenOnStartup() {
+  Profile* profile = browser_view_->GetProfile();
+  BrowserWindowInterface* browser = browser_view_->browser();
+  const KoanWelcome* welcome =
+      KoanBrowserViewController::From(browser_view_)->welcome();
+  if (!features::IsUrlBarEnabled() || profile->IsOffTheRecord() ||
+      browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
+      !profile->GetPrefs()->GetBoolean(prefs::kUrlBarReplaceNewTab) ||
+      (welcome && welcome->is_showing()) ||
+      SessionRestore::IsRestoring(profile) || !browser_view_->GetWidget()) {
+    return;
+  }
+  // Only a window that starts on a new tab page: its only tab, on the empty
+  // page, and not one the user has already used.
+  const TabStripModel* model = browser->GetTabStripModel();
+  if (model->count() != 1) {
+    return;
+  }
+  content::WebContents* contents = model->GetWebContentsAt(0);
+  const GURL& url = contents->GetVisibleURL();
+  const bool empty_page =
+      url.IsAboutBlank() || (url.SchemeIs(content::kChromeUIScheme) &&
+                             (url.host() == chrome::kChromeUINewTabHost ||
+                              url.host() == kNewTabHost));
+  if (empty_page && !is_open()) {
+    OpenForNewTab();
   }
 }
 
@@ -987,9 +1029,10 @@ void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
   constexpr int kModifiers = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
                              ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
   // Zen: Tab on an empty input enters commands mode, the command palette
-  // (its ">" mode here).
+  // (its ">" mode here; Tab keeps its meaning with the palette off).
   LocationBarView* bar = location_bar();
-  if (event->type() == ui::EventType::kKeyPressed &&
+  if (features::IsCommandPaletteEnabled() &&
+      event->type() == ui::EventType::kKeyPressed &&
       event->key_code() == ui::VKEY_TAB && (event->flags() & kModifiers) == 0 &&
       (is_open() || new_tab_) && bar && bar->omnibox_view() &&
       bar->omnibox_view()->GetText().empty()) {

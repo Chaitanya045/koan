@@ -511,21 +511,35 @@ void KoanCompactModeController::OnTabStripModelChanged(
   if (change.type() == TabStripModelChange::kInserted) {
     MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
   }
-  // Zen: the sidebar cannot hide while the empty tab is selected
-  // (zen-has-empty-tab), so there is always a way to open a page.
   if (selection.active_tab_changed() ||
       change.type() != TabStripModelChange::kSelectionOnly) {
-    const bool wanted =
-        hides_sidebar() &&
-        IsEmptyTab(browser_view_->browser()->GetActiveTabInterface());
-    if (wanted && !empty_tab_lock_) {
-      if (auto* tab_strip = browser_view_->tab_strip_view()) {
-        empty_tab_lock_ = tab_strip->GetExpandOnHoverLock(
-            ExpandOnHoverLockType::kKeepExpanded);
-      }
-    } else if (!wanted) {
-      ReleaseLock(empty_tab_lock_);
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::OnTabChangedAt(tabs::TabInterface* tab,
+                                               TabChangeType change_type) {
+  // The empty tab navigating away (or the active tab back to it) changes
+  // whether the lock is wanted.
+  if (change_type == TabChangeType::kAll &&
+      tab == browser_view_->browser()->GetActiveTabInterface()) {
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::UpdateEmptyTabLock() {
+  // Zen: the sidebar cannot hide while the empty tab is selected
+  // (zen-has-empty-tab), so there is always a way to open a page.
+  const bool wanted =
+      hides_sidebar() &&
+      IsEmptyTab(browser_view_->browser()->GetActiveTabInterface());
+  if (wanted && !empty_tab_lock_) {
+    if (auto* tab_strip = browser_view_->tab_strip_view()) {
+      empty_tab_lock_ =
+          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
     }
+  } else if (!wanted) {
+    ReleaseLock(empty_tab_lock_);
   }
 }
 
@@ -997,6 +1011,8 @@ void KoanCompactModeController::Activate(Mode mode) {
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+  // Turning compact mode on while the empty tab is selected keeps the sidebar.
+  UpdateEmptyTabLock();
 }
 
 void KoanCompactModeController::ParkTopContainer() {

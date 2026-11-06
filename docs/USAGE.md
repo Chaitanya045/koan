@@ -231,9 +231,13 @@ it in one press.
 Like Zen (`browser.tabs.closeWindowWithLastTab` is off there), closing a
 window's last tab keeps the window. It shows the **empty tab**: a blank page
 that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
-empty), is skipped by Ctrl+Tab and never navigates. Open something from the URL bar
-(⌘T, ⌘L) and it opens in a **new** tab; close that tab and the empty tab is
-back. **⌘W on the empty tab closes the window.** With Essentials, closing the
+empty) and never navigates: what you open from the URL bar (⌘T, ⌘L) opens in
+a **new** tab; close that tab and the empty tab is back. (An empty tab that is
+navigated in place anyway, from a bookmark or the Library, becomes an ordinary
+tab.) It is still reached by Ctrl+Tab, ⌘1-9, tab search and extensions, which
+Zen's cycling skips: not done yet. Only a **close** keeps the window: moving
+the last tab to another window (a drag, "Move to another window") closes it, as
+in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
 last unpinned tab leaves the Essential selected, not the empty tab. In compact
 mode the sidebar stays shown while the empty tab is selected.
 
@@ -241,14 +245,22 @@ mode the sidebar stays shown while the empty tab is selected.
 
 A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
 horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
-above off) is an empty page in the look's background colour, like Zen's (near black, #09090b, in the default shadcn look):
-no Google logo, search box or shortcut tiles, and nothing to load, so it
+above off) is an empty page in the window's look, like Zen's: near black (#09090b) in the
+dark shadcn look, white in the light one, and in the default Zen look Chromium's
+theme colour for the page (Zen's empty tab shows its window gradient or glass
+there: not matched yet). It follows the window: a change of look or theme loads
+it again with the new colour. No Google logo, search box or shortcut tiles, and nothing to load, so it
 shows at once. It is `chrome://koan-newtab`, a page with no content and no
-script. Ctrl+T (⌘T) still opens the URL bar instead of a tab.
+script. Ctrl+T (⌘T) still opens the URL bar instead of a tab. A new window that
+starts on the empty page opens the New Tab bar at once (Zen's
+`zen.urlbar.open-on-startup`), except the first-run welcome and a restored
+session.
 
 Koan's settings (Ctrl+,), Look and Feel > New tab page > New tabs, choose
 between **Blank page** (Koan's, the default; pref `koan.newtab.page`) and
-**Chromium's new tab page**. A new tab page set by your administrator
+**Chromium's new tab page** (with a search engine other than Google's, that is
+the engine's own remote new tab page, which Chromium loads from the web). A new
+tab page set by your administrator
 (Chromium's `NewTabPageLocation` policy) or by an extension is shown
 instead of either, as in Chromium. Private windows keep Chromium's private
 browsing page. `chrome://flags/#koan-new-tab` turns Koan's page off.

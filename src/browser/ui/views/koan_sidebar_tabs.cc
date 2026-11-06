@@ -928,8 +928,18 @@ void KoanSidebarTabsController::OnTabChangedAt(tabs::TabInterface* tab,
     // order.
     ScheduleUpdateRowsHost();
     // A Space's only tab showing a page, or an empty one, shows or hides its
-    // row (IsEmptyTab()); the layouts are not told by the tab's URL.
-    if (region_) {
+    // row (IsEmptyTab()); the layouts are not told by the tab's URL. Only
+    // when that changes: this runs for every title, icon and load change of
+    // every tab.
+    ClearEmptyTabMarkIfNavigated(tab);
+    const bool empty = IsEmptyTab(tab);
+    const int32_t id = tab->GetHandle().raw_value();
+    if (empty != empty_tab_ids_.contains(id) && region_) {
+      if (empty) {
+        empty_tab_ids_.insert(id);
+      } else {
+        empty_tab_ids_.erase(id);
+      }
       const auto relayout = [](auto& self, views::View* view) -> void {
         view->InvalidateLayout();
         for (views::View* child : view->children()) {
