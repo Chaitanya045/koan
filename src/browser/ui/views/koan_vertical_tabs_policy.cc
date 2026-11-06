@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -128,52 +127,32 @@ actions::ActionItem* KoanVerticalTabsPolicy::FindAction(int action_id) const {
 }
 
 void KoanVerticalTabsPolicy::InstallActions() {
-  // Commands that would change the strip's mode or hover: nothing, and not
-  // offered (an action that is not visible has no menu item in the glow-up
-  // menus; one that is not enabled is greyed in the others).
+  // What these actions run is the command policy's (koan_command_policy.cc,
+  // the kSidebar rows: installed where Koan owns the sidebar, and hidden
+  // there). This keeps the rest of their state Koan's.
+
+  // Commands that would change the strip's mode or hover do nothing; not
+  // enabled either, so the menus that show them grey them out.
   for (int action_id :
        {kActionToggleVerticalTabs, kActionToggleVerticalTabsExpandOnHover,
         kActionVerticalTabsSendFeedback}) {
     if (actions::ActionItem* item = FindAction(action_id)) {
-      item->SetInvokeActionCallback(base::DoNothing());
-      item->SetVisible(false);
       item->SetEnabled(false);
     }
   }
 
   // The sidebar button (and its menu item and Shift+Cmd+L): in Zen the
-  // sidebar button toggles compact mode. Chromium's collapse to an icon rail,
-  // with its tab group and tab search buttons and its toolbar, is not
-  // something Zen has.
+  // sidebar button toggles compact mode (OnSidebarButtonAction(), from the
+  // policy). Chromium's collapse to an icon rail, with its tab group and tab
+  // search buttons and its toolbar, is not something Zen has.
   if (actions::ActionItem* toggle = FindAction(kActionToggleCollapseVertical)) {
-    toggle->SetInvokeActionCallback(base::BindRepeating(
-        [](base::WeakPtr<KoanVerticalTabsPolicy> policy,
-           actions::ActionItem* item, actions::ActionInvocationContext) {
-          if (policy) {
-            policy->OnSidebarButtonAction();
-          }
-        },
-        weak_factory_.GetWeakPtr()));
     // Shift+Cmd+L is Koan's inspector on macOS (Zen's key_inspectorMac, see
     // koan_shortcut_table.cc), not the sidebar button's: the action keeps no
     // key, so it can't compete with it (the compact mode key is Cmd+S).
     toggle->SetAccelerator(ui::Accelerator());
   }
   UpdateSidebarButtonText();
-
-  // Shift+Cmd+A: Chromium's tab search bubble hangs off the header's tab
-  // search button, which Koan removes. Koan's URL bar is where tabs are
-  // searched.
-  if (actions::ActionItem* search = FindAction(kActionTabSearch)) {
-    search->SetInvokeActionCallback(base::BindRepeating(
-        [](base::WeakPtr<KoanVerticalTabsPolicy> policy,
-           actions::ActionItem* item, actions::ActionInvocationContext) {
-          if (policy) {
-            policy->OnTabSearchAction();
-          }
-        },
-        weak_factory_.GetWeakPtr()));
-  }
+  // (Shift+Cmd+A, tab search, is the URL bar's: the policy's row.)
 }
 
 void KoanVerticalTabsPolicy::OnSidebarButtonAction() {
@@ -186,10 +165,6 @@ void KoanVerticalTabsPolicy::OnSidebarButtonAction() {
           KoanBrowserViewController::From(browser_view_)) {
     controller->compact_mode()->ToggleCompactMode();
   }
-}
-
-void KoanVerticalTabsPolicy::OnTabSearchAction() {
-  chrome::ExecuteCommand(browser_view_->browser(), IDC_FOCUS_LOCATION);
 }
 
 void KoanVerticalTabsPolicy::UpdateSidebarButtonText() {

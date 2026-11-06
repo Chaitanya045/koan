@@ -1,12 +1,12 @@
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..58afea15f9de5625be44da387c2f46590a553d1f 100644
+index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..64a0abf50f27db5c81de21aacec7ff9ad624046d 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 @@ -65,6 +65,8 @@
  #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
  #include "components/viz/common/frame_timing_details.h"
  #include "components/web_modal/web_contents_modal_dialog_host.h"
-+#include "koan/browser/ui/views/koan_spaces.h"
++#include "koan/browser/ui/views/koan_command_policy.h"
 +#include "koan/browser/ui/views/koan_traffic_lights.h"
  #include "ui/accessibility/platform/ax_platform_node.h"
  #include "ui/actions/actions.h"
@@ -29,7 +29,7 @@ index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..58afea15f9de5625be44da387c2f4659
    }
 +
 +  // Koan: items upstream offers that have no place in this window, Koan's one
-+  // table (koan::HidesMenuCommand(), koan_spaces.h): View > Show Tabs
++  // table (koan::HidesMenuCommand(), koan_command_policy.h): View > Show Tabs
 +  // Vertically while Koan owns the sidebar, View > Always Show Toolbar in Full
 +  // Screen while Koan's toolbar is hidden, the Tab menu's group items in a
 +  // Spaces window. The menu bar is shared by the windows, so this shows them

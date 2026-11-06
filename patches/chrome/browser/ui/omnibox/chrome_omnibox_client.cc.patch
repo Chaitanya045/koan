@@ -1,3 +1,5 @@
+diff --git a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
+index 83d474959c614edfc4bd253328559e8172d1b4b1..759e283b7f3c38bbfe4e94d1ba7ce009ec7b7c6f 100644
 --- a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 +++ b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 @@ -114,6 +114,7 @@
@@ -8,12 +10,18 @@
  #include "net/traffic_annotation/network_traffic_annotation.h"
  #include "services/metrics/public/cpp/ukm_builders.h"
  #include "services/metrics/public/cpp/ukm_recorder.h"
-@@ -964,6 +965,9 @@
+@@ -966,6 +967,15 @@ void ChromeOmniboxClient::OnAutocompleteAccept(
                      {header.first, ": ", header.second, "\r\n"});
    }
  
 +  // Koan: the URL bar opened in place of a new tab opens a new tab.
 +  koan::MaybeAdjustOmniboxDisposition(browser_, &disposition);
++  // Koan: the URL bar opened over a Glance (⌘L) loads the Glance page.
++  if (koan::MaybeOpenOmniboxMatchInGlance(browser_, destination_url,
++                                          transition, disposition,
++                                          extra_headers)) {
++    return;
++  }
 +
    // Store the details necessary to open the omnibox match via browser commands.
    location_bar_->set_navigation_params(LocationBar::NavigationParams(

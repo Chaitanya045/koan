@@ -1,0 +1,12 @@
+<!doctype html>
+<title>Glance child</title>
+<body style="font: 20px sans-serif; margin: 40px">
+  <p>Glance child page. <a id="next" href="child2.html">next page (history)</a></p>
+  <p><input id="field" placeholder="type here (Esc asks first)"></p>
+  <p id="loads"></p>
+  <script>
+    const n = Number(sessionStorage.getItem('loads') || 0) + 1;
+    sessionStorage.setItem('loads', n);
+    document.getElementById('loads').textContent = 'child loads: ' + n;
+  </script>
+</body>

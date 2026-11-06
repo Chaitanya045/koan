@@ -11,6 +11,7 @@ import("//testing/test.gni")
 source_set("views") {
   sources = [
     "koan_browser_view_hooks.h",
+    "koan_command_policy.h",
     "koan_compact_mode.h",
     "koan_glance.h",
     "koan_look_hooks.h",
@@ -103,6 +104,7 @@ source_set("impl") {
     "koan_browser_view_hooks.cc",
     "koan_command_palette.cc",
     "koan_command_palette.h",
+    "koan_command_policy.cc",
     "koan_command_registry.cc",
     "koan_command_registry.h",
     "koan_commands.cc",
@@ -193,6 +195,7 @@ source_set("impl") {
   ]
   if (is_mac) {
     sources += [
+      "koan_glance_controller_mac.mm",
       "koan_native_window_move_mac.mm",
       "koan_traffic_lights_mac.mm",
       "koan_workspaces_mac.mm",
@@ -316,6 +319,7 @@ source_set("impl") {
     "//components/blocked_content",
     "//components/javascript_dialogs",
     "//components/user_prefs",
+    "//components/zoom",
     "//ui/accessibility",
     "//koan/browser/omnibox:hooks",
     "//koan/browser/ui/vector_icons",
@@ -325,6 +329,7 @@ source_set("impl") {
     "//ui/base/clipboard",
     "//ui/base/metadata",
     "//ui/compositor",
+    "//ui/content_accelerators",
     "//ui/events",
     "//skia",
     "//ui/gfx",
@@ -338,8 +343,18 @@ source_set("impl") {
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
     ]
-    # Content (page) fullscreen: koan::IsContentFullscreen().
-    deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
+    deps += [
+      # Glance: the browser's reserved keys in the card's window
+      # (CommandForKeyEvent, koan_glance_controller_mac.mm).
+      "//chrome/browser:global_keyboard_shortcuts_mac",
+
+      # The command policy's fullscreen-toolbar row
+      # (chrome::ToggleAlwaysShowToolbarInFullscreen).
+      "//chrome/browser/ui:browser_commands_mac",
+
+      # Content (page) fullscreen: koan::IsContentFullscreen().
+      "//chrome/browser/ui:fullscreen_util_mac",
+    ]
     frameworks = [ "AppKit.framework" ]
   } else {
     sources += [

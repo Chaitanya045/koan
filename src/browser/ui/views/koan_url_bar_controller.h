@@ -23,6 +23,7 @@
 #include "ui/views/view_tracker.h"
 
 class BrowserView;
+class GURL;
 class LocationBarView;
 
 namespace ui {
@@ -84,7 +85,19 @@ class KoanUrlBarController : public views::ViewObserver,
   // closes it if it is already open for one, like Zen. Returns false if the
   // window should open a tab as usual (replace-newtab off, ...).
   bool OpenForNewTab();
-  // Closes the omnibox without opening anything: the page gets focus back.
+  // ⌘L over a Glance card: opens the omnibox with the Glance page's `url`,
+  // selected, to edit in place (Zen: the Glance is the selected tab). What
+  // the user opens from it loads in the Glance page
+  // (MaybeOpenOmniboxMatchInGlance()). Returns false if the omnibox can't
+  // open here (content fullscreen, no location bar).
+  bool OpenForGlance(const GURL& url);
+  // Whether the omnibox is open over a Glance (OpenForGlance()).
+  bool is_glance_edit() const { return glance_edit_; }
+  // Whether what the user opens now should load in the Glance page; ends the
+  // Glance session if so.
+  bool TakeGlanceEdit();
+  // Closes the omnibox without opening anything: the page (or the Glance
+  // page it was opened over) gets focus back.
   void Close();
 
   // Called by KoanCompactModeController.
@@ -125,11 +138,6 @@ class KoanUrlBarController : public views::ViewObserver,
   void OnKeyEvent(ui::KeyEvent* event) override;
 
  private:
-  // Routes the window's "New tab" action (the sidebar's new-tab button, the
-  // app menu) through OpenForNewTab().
-  void InstallNewTabAction();
-  void OnNewTabAction();
-
   Placement DesiredPlacement() const;
   void SetPlacement(Placement placement);
   bool IsPillAvailable() const;
@@ -157,6 +165,8 @@ class KoanUrlBarController : public views::ViewObserver,
   bool user_input_in_progress_ = false;
 
   bool new_tab_ = false;
+  // Open over a Glance card (OpenForGlance()).
+  bool glance_edit_ = false;
   // Zen's zen.urlbar.wait-to-clear: what was typed into a new-tab bar that
   // closed without opening anything, offered again for a while.
   std::u16string last_search_;
