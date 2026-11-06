@@ -156,6 +156,9 @@ class KoanUrlBarController : public views::ViewObserver,
   // the views over the fill clear (the location bar, the toolbar and the top
   // container), with no colour provider rebuilt and no other window touched.
   void UpdateGlassCard();
+  // Hides the location bar's own icon (its chip, its ink drop) in the floating
+  // card, where Koan draws its magnifier instead, or shows it again.
+  void SetLocationIconHidden(bool hidden);
   void Layout();
   gfx::Rect CardBounds() const;
   void HideToolbarSiblings();
@@ -190,6 +193,8 @@ class KoanUrlBarController : public views::ViewObserver,
   bool laying_out_ = false;
   // See IsGlassCard(); kept in step by UpdateGlassCard(), per window.
   bool glass_card_ = false;
+  // Whether SetLocationIconHidden() gave the location icon its layer.
+  bool icon_layer_created_ = false;
   PrefChangeRegistrar prefs_registrar_;
   base::CallbackListSubscription paint_as_active_subscription_;
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
