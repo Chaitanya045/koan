@@ -13,26 +13,37 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/history/core/browser/history_service.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
+#include "components/sessions/core/serialized_user_agent_override.h"
 #include "components/tab_groups/tab_group_color.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_welcome_state.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_system_accent.h"
-#include "koan/browser/ui/views/koan_welcome_mac.h"
+#include "koan/browser/ui/views/koan_traffic_lights.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
 #include "koan/common/koan_url_constants.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/display/screen.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
@@ -77,6 +88,13 @@ KoanWelcome::KoanWelcome(BrowserView* browser_view)
 KoanWelcome::~KoanWelcome() = default;
 
 void KoanWelcome::OnAddedToWidget() {
+  if (!ShouldShow()) {
+    return;
+  }
+  g_shown_this_session = true;
+  // Pending from now: Chromium's search engine choice dialog, which the
+  // startup tab's first load could open, waits for it.
+  SetPending(true);
   // After the window has been laid out and shown.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
@@ -90,20 +108,30 @@ void KoanWelcome::OnBrowserViewLayout() {
 void KoanWelcome::OnBrowserViewDestroying() {
   // The window is going: nothing of it to restore.
   Close(/*restore_window=*/false);
+  SetPending(false);
+}
+
+void KoanWelcome::SetPending(bool pending) {
+  if (std::exchange(pending_, pending) != pending) {
+    SetWelcomeWindow(pending ? browser_view_->browser() : nullptr);
+  }
+}
+
+bool KoanWelcome::ShouldShow() const {
+  Profile* profile = browser_view_->GetProfile();
+  return !g_shown_this_session && features::IsWelcomeEnabled() &&
+         browser_view_->GetWidget() && !profile->IsOffTheRecord() &&
+         browser_view_->browser()->GetType() ==
+             BrowserWindowInterface::TYPE_NORMAL &&
+         !profile->GetPrefs()->GetBoolean(prefs::kWelcomeScreenSeen) &&
+         first_run::IsChromeFirstRun();
 }
 
 void KoanWelcome::MaybeShow() {
-  Profile* profile = browser_view_->GetProfile();
-  PrefService* prefs = profile->GetPrefs();
-  if (g_shown_this_session || !features::IsWelcomeEnabled() ||
-      !browser_view_->GetWidget() || profile->IsOffTheRecord() ||
-      browser_view_->browser()->GetType() !=
-          BrowserWindowInterface::TYPE_NORMAL ||
-      prefs->GetBoolean(prefs::kWelcomeScreenSeen) ||
-      !first_run::IsChromeFirstRun()) {
+  if (!browser_view_->GetWidget() || IsWindowClosing()) {
+    SetPending(false);
     return;
   }
-  g_shown_this_session = true;
   Show();
 }
 
@@ -124,8 +152,11 @@ void KoanWelcome::Show() {
   }
   window->SetBounds(bounds);
   LockWindow(true);
-  // No window buttons while it shows, as in Zen.
-  SetWindowButtonsHidden(window, true);
+#if BUILDFLAG(IS_MAC)
+  // No window buttons while it shows, as in Zen (compact mode leaves them so
+  // until it closes).
+  SetTrafficLightsShown(browser_view_, false);
+#endif
 
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
@@ -146,9 +177,9 @@ void KoanWelcome::Show() {
   };
   KoanWelcomeHost::Callbacks callbacks;
   callbacks.import = base::BindRepeating(
-      [](base::WeakPtr<KoanWelcome> welcome) {
+      [](base::WeakPtr<KoanWelcome> welcome, bool import) {
         if (welcome) {
-          welcome->import_ = true;
+          welcome->import_ = import;
         }
       },
       weak_factory_.GetWeakPtr());
@@ -207,6 +238,8 @@ void KoanWelcome::Show() {
       },
       weak_factory_.GetWeakPtr());
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
+  // A crashed page would leave the window locked under a dead screen.
+  Observe(contents);
   web_view->LoadInitialURL(GURL(kWelcomeURL));
   web_view_ = widget_->SetContentsView(std::move(web_view));
   LayoutWidget();
@@ -254,18 +287,74 @@ void KoanWelcome::Finish(std::vector<GURL> essentials) {
               return;
             }
             const bool import = welcome->import_;
-            welcome->Close();
-            BrowserWindowInterface* browser = welcome->browser_view_->browser();
-            for (const GURL& url : essentials) {
-              chrome::AddTabAt(browser, url, -1, /*foreground=*/false,
-                               std::nullopt, /*pinned=*/true);
+            // ⌘W or ⌘Q during the page's fade: nothing to restore or add to
+            // a window that is going.
+            const bool closing = welcome->IsWindowClosing();
+            welcome->Close(/*restore_window=*/!closing);
+            if (closing) {
+              return;
             }
+            welcome->AddEssentials(essentials);
             welcome->FocusBrowser();
             if (import) {
-              chrome::ExecuteCommand(browser, IDC_IMPORT_SETTINGS);
+              chrome::ExecuteCommand(welcome->browser_view_->browser(),
+                                     IDC_IMPORT_SETTINGS);
             }
           },
           weak_factory_.GetWeakPtr(), std::move(essentials)));
+}
+
+bool KoanWelcome::IsWindowClosing() const {
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return !controller || controller->vertical_tabs()->IsClosing();
+}
+
+void KoanWelcome::AddEssentials(const std::vector<GURL>& urls) {
+  // Zen's #pinEssentials: each app a typed visit in history (so the URL bar
+  // suggests it), a background tab that is not loaded until it is selected
+  // (Zen's lazy browser; here the way tab restore adds one), and an Essential.
+  BrowserWindowInterface* browser = browser_view_->browser();
+  Profile* profile = browser_view_->GetProfile();
+  history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  KoanPinnedTabController* pinned =
+      controller ? controller->pinned_tabs() : nullptr;
+  TabStripModel* tab_strip = browser->GetTabStripModel();
+  for (const GURL& url : urls) {
+    const WelcomeEssential* essential = FindWelcomeEssential(url);
+    if (!essential) {
+      continue;
+    }
+    if (history) {
+      history->AddPage(url, base::Time::Now(), /*context_id=*/0,
+                       /*nav_entry_id=*/0, GURL(), history::RedirectList(),
+                       ui::PAGE_TRANSITION_TYPED, history::SOURCE_BROWSED,
+                       history::VisitResponseCodeCategory::kNot404,
+                       /*did_replace_entry=*/false);
+    }
+    sessions::SerializedNavigationEntry entry;
+    entry.set_index(0);
+    entry.set_virtual_url(url);
+    entry.set_title(essential->name);
+    entry.set_transition_type(ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+    entry.set_timestamp(base::Time::Now());
+    const bool as_essential = pinned && pinned->CanAddToEssentials();
+    content::WebContents* contents = chrome::AddRestoredTab(
+        browser, base::span_from_ref(entry), tab_strip->count(),
+        /*selected_navigation=*/0, /*extension_app_id=*/std::string(),
+        /*group=*/std::nullopt, /*select=*/false, /*pin=*/!as_essential,
+        base::TimeTicks(), base::Time(), /*storage_namespace=*/nullptr,
+        sessions::SerializedUserAgentOverride(), /*extra_data=*/{},
+        /*from_session_restore=*/true, /*is_active_browser=*/std::nullopt);
+    if (tabs::TabInterface* tab =
+            contents ? tabs::TabInterface::GetFromContents(contents) : nullptr;
+        tab && as_essential) {
+      pinned->AddToEssentials(tab);
+    }
+  }
 }
 
 void KoanWelcome::Skip() {
@@ -273,7 +362,8 @@ void KoanWelcome::Skip() {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
                      [](base::WeakPtr<KoanWelcome> welcome) {
-                       if (welcome) {
+                       // (A renderer gone at quit: the window is going.)
+                       if (welcome && !welcome->IsWindowClosing()) {
                          welcome->Close();
                          welcome->FocusBrowser();
                        }
@@ -360,12 +450,14 @@ void KoanWelcome::Close(bool restore_window) {
   if (!widget_) {
     return;
   }
+  SetPending(false);
   // The theme picker the colours page opened goes with the screen (with the
   // window, the theme controller closes it).
   if (restore_window) {
     CloseThemePicker();
   }
   theme_picker_open_ = false;
+  Observe(nullptr);
   web_view_ = nullptr;
   if (!widget_->IsClosed()) {
     widget_->CloseNow();
@@ -375,10 +467,21 @@ void KoanWelcome::Close(bool restore_window) {
     window_locked_ = false;
     return;
   }
-  if (views::Widget* window = browser_view_->GetWidget()) {
-    SetWindowButtonsHidden(window, false);
-  }
   LockWindow(false);
+#if BUILDFLAG(IS_MAC)
+  // The traffic lights as compact mode wants them now.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->compact_mode()->UpdateCaptionButtons();
+  }
+#endif
+}
+
+void KoanWelcome::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
+  // The page crashed or was killed: end the welcome (it was seen) rather than
+  // leave a dead page over a locked window without its buttons.
+  Skip();
 }
 
 void KoanWelcome::LayoutWidget() {

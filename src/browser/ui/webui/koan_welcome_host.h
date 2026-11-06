@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_WEBUI_KOAN_WELCOME_HOST_H_
 #define KOAN_BROWSER_UI_WEBUI_KOAN_WELCOME_HOST_H_
 
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -16,6 +17,28 @@
 #include "url/gurl.h"
 
 namespace koan {
+
+// Zen's nine Essentials on the welcome's Essentials page (ZenWelcome.mjs
+// kEssentialApps; koan_welcome.js has the same list with their icons): the
+// only sites "Dive in!" pins.
+struct WelcomeEssential {
+  const char* url;
+  const char16_t* name;
+};
+inline constexpr auto kWelcomeEssentials = std::to_array<WelcomeEssential>({
+    {"https://obsidian.md", u"Obsidian"},
+    {"https://discord.com", u"Discord"},
+    {"https://trello.com", u"Trello"},
+    {"https://slack.com", u"Slack"},
+    {"https://github.com", u"GitHub"},
+    {"https://app.tuta.com/", u"Tuta"},
+    {"https://notion.com", u"Notion"},
+    {"https://calendar.google.com", u"Calendar"},
+    {"https://figma.com", u"Figma"},
+});
+
+// The welcome's Essential at `url`, or null.
+const WelcomeEssential* FindWelcomeEssential(const GURL& url);
 
 // What chrome://koan-welcome asks of the window it is shown over: the
 // welcome screen (KoanWelcome) attaches this to the page's WebContents. A
@@ -29,9 +52,10 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
     Callbacks& operator=(Callbacks&&);
     ~Callbacks();
 
-    // The import page picked a browser: Chromium's import dialog opens once
-    // the screen has closed (over the screen it would be hidden).
-    base::RepeatingClosure import;
+    // The import page's choice on Next: a browser (Chromium's import dialog
+    // opens once the screen has closed; over it, it would be hidden), or
+    // "NO, start fresh." (nothing opens, whatever was picked before).
+    base::RepeatingCallback<void(bool import)> import;
     // The colours page: the active Space's colour (a tab group colour).
     base::RepeatingCallback<void(int color_id)> space_color;
     // The colours page with Koan's theme picker (#41), as Zen opens its own
@@ -42,7 +66,8 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
     base::RepeatingClosure close_theme_picker;
     // The system's accent colour (Zen's AccentColor), if it has one.
     base::RepeatingCallback<std::optional<SkColor>()> system_accent;
-    // "Dive in!": pin `essentials` and close the screen.
+    // "Dive in!": close the screen and add `essentials` (some of
+    // kWelcomeEssentials) as Essentials.
     base::RepeatingCallback<void(std::vector<GURL> essentials)> finish;
     // A press outside the card: the window follows the pointer while the
     // button is down. Then, at the first move without it, `window_drag_end`

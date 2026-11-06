@@ -8,6 +8,15 @@
 
 namespace koan {
 
+const WelcomeEssential* FindWelcomeEssential(const GURL& url) {
+  for (const WelcomeEssential& essential : kWelcomeEssentials) {
+    if (GURL(essential.url) == url) {
+      return &essential;
+    }
+  }
+  return nullptr;
+}
+
 KoanWelcomeHost::Callbacks::Callbacks() = default;
 KoanWelcomeHost::Callbacks::Callbacks(Callbacks&&) = default;
 KoanWelcomeHost::Callbacks& KoanWelcomeHost::Callbacks::operator=(Callbacks&&) =

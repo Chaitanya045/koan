@@ -78,8 +78,9 @@ async function guardBefore(name) {
   try {
     if (/UserNotificationCenter/.test(mac(`${M}/tmp/winall`))) prob.push('a system dialog (UserNotificationCenter) is on screen');
     for (let i = 0; i < 3; i++) { try { mac(`${M}/tmp/activate ${PID}`); } catch {} await sleep(500); if (/Koan/.test(front())) break; if (i === 2) prob.push(`Koan is not frontmost (${front().slice(0, 24)})`); }
+    // The welcome (chrome://koan-welcome) is a WebView in its own widget over the window.
     const vs = await fviews().catch(() => null);
-    if (vs && process.env.ONBOARD !== '1' && vs.some(v => v.shown && /^KoanWelcome/.test(v.cls))) prob.push('the onboarding overlay is on screen');
+    if (vs && process.env.ONBOARD !== '1' && vs.some(v => v.shown && v.cls === 'WebView' && v.path.length <= 2)) prob.push('the onboarding overlay is on screen');
     mac(`mkdir -p ${RD}/look; ${M}/tmp/cap.sh ${RD}/look/${String(n).padStart(2, '0')}-before-${name.replace(/\W+/g, '-').slice(0, 24)}.png`);
   } catch (e) { prob.push(`look failed: ${String(e.message ?? e).slice(0, 80)}`); }
   if (prob.length) { aborted = true; stopReason = prob.join('; '); console.log(`STOP  before "${name}": ${stopReason}`); console.log(cleanupAll()); return stopReason; }

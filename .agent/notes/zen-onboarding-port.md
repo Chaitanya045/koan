@@ -138,12 +138,12 @@ can't render. Plan:
 
 ## 6. Strings
 
-`zen-welcome.ftl` has 20 strings. Chromium WebUI has no Fluent. Put them in
-`koan_welcome_strings.js` (same ids, `{ -brand-short-name }` -> "Koan",
-`<strong>` kept and rendered with `innerHTML` from a trusted table). Keep
-the ids so the next sync of Zen's text is a diff. They are MPL: the JS file
-carries the MPL header and a THIRD_PARTY_NOTICES row (Koan already does this
-for `koan_zen_welcome.h`).
+`zen-welcome.ftl` has 20 strings. Chromium WebUI has no Fluent. They are the
+`kStrings` table in `koan_welcome.js` (same ids, `{ -brand-short-name }` ->
+"Koan"; `<strong>` kept and built as an element, not with `innerHTML`, which
+Trusted Types blocks). Keep the ids so the next sync of Zen's text is a diff.
+They are MPL: the JS file carries the MPL header and a THIRD_PARTY_NOTICES
+row.
 
 ## 7. The background video
 
