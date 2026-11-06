@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95dc9d2b1bf 100644
+index 485aa1faf322a7cab9f33c029986c373caccaf8a..45e8b937d25ee77f5ca94f42c1d2a2543e929ca3 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 @@ -24,6 +24,7 @@
@@ -20,7 +20,21 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
    combo_button_->SetOrientation(
        combo_button_orientation_ = state_controller->IsCollapsed()
                                        ? views::LayoutOrientation::kVertical
-@@ -163,14 +167,17 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -115,8 +119,11 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+           ? host_size.width()
+           : parent()->GetAvailableSize(this).width().value_or(0);
+ 
+-  const bool is_collapsed =
+-      state_controller_ && state_controller_->IsCollapsed();
++  // Koan: compact mode's sidebar is collapsed in upstream's terms, but when it
++  // shows (revealed over the page) it has its expanded header: one row.
++  const bool is_collapsed = state_controller_ &&
++                            state_controller_->IsCollapsed() &&
++                            !koan::ShowsExpandedSidebarHeader(this);
+   const bool is_collapsing =
+       state_controller_ && state_controller_->GetCollapseState() ==
+                                tabs::VerticalTabStripCollapseState::kCollapsing;
+@@ -163,14 +170,17 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
                    ? 0
                    : std::max(0, (host_size.width() - pref_size.width()) / 2);
        gfx::Rect bounds(x, current_y, pref_size.width(), pref_size.height());
@@ -39,7 +53,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
        // In the case that neither of the combo button components are visible, we
        // do not want to add any extra padding to the top container.
        bool start_button_visible = combo_button_->start_button() &&
-@@ -264,6 +271,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -264,6 +274,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        gfx::Rect bounds(left_alignment,
                         std::max(0, y_baseline - pref_size.height() / 2),
                         pref_size.width(), pref_size.height());
@@ -47,7 +61,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
        layout.child_layouts.emplace_back(collapse_button_.get(),
                                          /*visible=*/true, bounds);
        current_y =
-@@ -295,7 +303,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -295,7 +306,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
          (is_collapsing || (is_collapsed && available_width <= collapsed_width));
  
      if (segmented_control_) {
@@ -57,7 +71,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
        gfx::Rect bounds;
        if (visible) {
          const gfx::Size pref_size = segmented_control_->GetPreferredSize();
-@@ -310,8 +319,9 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -310,8 +322,9 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        layout.child_layouts.emplace_back(segmented_control_.get(), visible,
                                          bounds);
      }
@@ -69,7 +83,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
        gfx::Rect bounds;
        if (visible) {
          const gfx::Size pref_size =
-@@ -327,7 +337,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -327,7 +340,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        }
        layout.child_layouts.emplace_back(combo_button_.get(), visible, bounds);
      }
@@ -80,7 +94,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
  
    layout.host_size = host_size;
  
-@@ -384,6 +397,12 @@ void VerticalTabStripTopContainer::ShowContextMenuForViewImpl(
+@@ -384,6 +400,12 @@ void VerticalTabStripTopContainer::ShowContextMenuForViewImpl(
      views::View* source,
      const gfx::Point& point,
      ui::mojom::MenuSourceType source_type) {
@@ -93,7 +107,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
    if (source == collapse_button_) {
      BrowserUserEducationInterface::From(browser_)
          ->NotifyFeaturePromoFeatureUsed(
-@@ -523,7 +542,7 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
+@@ -523,7 +545,7 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
    if (show_segmented_control && segmented_control_) {
      return segmented_control_->GetPreferredSize();
    }
@@ -102,7 +116,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..f271da7fd488bb660a2e0bd65e45b95d
      return combo_button_->GetPreferredSizeForOrientation(
          views::LayoutOrientation::kHorizontal);
    }
-@@ -533,12 +552,15 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
+@@ -533,12 +555,15 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
  int VerticalTabStripTopContainer::GetPreferredWidth(
      bool show_segmented_control) const {
    int total_width =

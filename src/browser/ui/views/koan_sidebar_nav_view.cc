@@ -124,6 +124,13 @@ void LayoutSidebarHeaderTrailingViews(const views::View* host,
   }
 }
 
+bool ShowsExpandedSidebarHeader(const views::View* host) {
+  const views::Widget* widget = host->GetWidget();
+  const BrowserView* browser_view =
+      widget ? views::AsViewClass<BrowserView>(widget->client_view()) : nullptr;
+  return browser_view && IsCompactModeActive(browser_view);
+}
+
 int GetSidebarHeaderTrailingWidth(const views::View* host) {
   int width = 0;
   for (const views::View* child : host->children()) {
