@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "url/gurl.h"
 
 class BrowserView;
@@ -37,12 +38,12 @@ class KoanThemeController;
 // sets zen.welcome-screen.seen at the start) and only on Chromium's first
 // run, i.e. of a new user data directory (not for each profile in it), so
 // --no-first-run skips it and --force-first-run brings it back.
-class KoanWelcome {
+class KoanWelcome : public content::WebContentsObserver {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
   KoanWelcome(const KoanWelcome&) = delete;
   KoanWelcome& operator=(const KoanWelcome&) = delete;
-  ~KoanWelcome();
+  ~KoanWelcome() override;
 
   bool is_showing() const { return widget_ != nullptr; }
 
@@ -52,6 +53,15 @@ class KoanWelcome {
   void OnBrowserViewDestroying();
 
  private:
+  // content::WebContentsObserver (the page):
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
+
+  // Whether this window shows the welcome: the first normal window of a
+  // regular profile on Chromium's first run, if it hasn't been seen.
+  bool ShouldShow() const;
+  // The welcome is pending or showing in this window (koan_welcome_state.h).
+  void SetPending(bool pending);
   void MaybeShow();
   void Show();
   // Zen's window while the welcome shows: the size it was given, locked
@@ -60,7 +70,12 @@ class KoanWelcome {
   // "Dive in!": the page has faded out; it closes, then the Essentials are
   // pinned and, if the import page picked a browser, the import dialog opens.
   void Finish(std::vector<GURL> essentials);
-  // Esc: closes the screen, applying nothing more.
+  // Whether the window is closing or destroyed.
+  bool IsWindowClosing() const;
+  // Zen's Essentials from the welcome (some of kWelcomeEssentials).
+  void AddEssentials(const std::vector<GURL>& urls);
+  // Esc, or the page's renderer gone: closes the screen, applying nothing
+  // more.
   void Skip();
   // `restore_window`: the window's buttons and size lock as they were (not
   // while the window is being destroyed).
@@ -85,6 +100,7 @@ class KoanWelcome {
   bool could_resize_ = true;
   bool could_maximize_ = true;
   bool window_locked_ = false;
+  bool pending_ = false;
   // The import page picked a browser: its import opens after the screen.
   bool import_ = false;
   // Finish() ran: its choices apply once.

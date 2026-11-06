@@ -138,7 +138,6 @@ source_set("impl") {
     "koan_space_menu.cc",
     "koan_space_menu.h",
     "koan_welcome.cc",
-    "koan_welcome_mac.h",
     "koan_welcome.h",
     "koan_space_swipe.cc",
     "koan_space_swipe.h",
@@ -202,6 +201,7 @@ source_set("impl") {
     ":lights_geometry",
     ":sidebar_curve",
     ":swipe_tracker",
+    "//koan/browser:welcome_state",
     "//koan/browser/ui/webui",
     ":views",
     "//base:i18n",
@@ -241,6 +241,7 @@ source_set("impl") {
     "//third_party/icu",
     "//ui/views/controls/webview",
     "//ui/views/window/vector_icons",
+    "//chrome/browser/ui:browser_tabrestore",
     "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/color:color_headers",
@@ -364,25 +365,5 @@ source_set("impl") {
       "//ui/platform_window",
       "//ui/platform_window/wm",
     ]
-  }
-  if (is_mac) {
-    deps += [ ":welcome_mac" ]
-  }
-}
-
-if (is_mac) {
-  # The welcome screen hides the traffic lights, as Zen's does. A target of
-  # its own, so that its frameworks don't meet the other macOS files'.
-  source_set("welcome_mac") {
-    sources = [
-      "koan_welcome_mac.h",
-      "koan_welcome_mac.mm",
-    ]
-    deps = [
-      "//base",
-      "//ui/gfx",
-      "//ui/views",
-    ]
-    frameworks = [ "AppKit.framework" ]
   }
 }

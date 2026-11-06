@@ -670,9 +670,10 @@ ends; the window buttons come back then. Drag the green background or the
 space around the card to move the window.
 
 - Import: pick a browser, then Next, and Chromium's import dialog opens once
-  the welcome is over. "NO, start fresh." (the first choice) imports nothing.
+  the welcome is over. "NO, start fresh." (the first choice) imports nothing,
+  even if you picked a browser before and came back.
 - The search engine changes as soon as you pick one.
-- Essentials: the apps you pick are pinned when you press "Dive in!".
+- Essentials: the apps you pick become Essentials when you press "Dive in!"; each loads the first time you open it.
 - Keyboard: each list of choices is one Tab stop; the arrow keys move in it,
   Enter or Space picks, and typing a letter jumps to the choice starting with
   it (G for Google, Y for YES). Esc skips the rest.

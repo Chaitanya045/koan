@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/search_engine_choice/search_engine_choice_dialog_service.cc b/chrome/browser/search_engine_choice/search_engine_choice_dialog_service.cc
+index 5eb8e7c..fbd4f15 100644
+--- a/chrome/browser/search_engine_choice/search_engine_choice_dialog_service.cc
++++ b/chrome/browser/search_engine_choice/search_engine_choice_dialog_service.cc
+@@ -40,6 +40,7 @@
+ #include "components/search_engines/template_url_prepopulate_data.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "components/search_engines/util.h"
++#include "koan/browser/koan_welcome_state.h"
+ #include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+@@ -414,6 +415,12 @@
+     return SearchEngineChoiceScreenConditions::kBrowserWindowTooSmall;
+   }
+ 
++  // Koan: the welcome screen's search page is the choice screen; nothing over
++  // it, and its Next records the choice.
++  if (koan::IsWelcomeShowing(browser)) {
++    return SearchEngineChoiceScreenConditions::kSuppressedByOtherDialog;
++  }
++
+   // To avoid conflict, the dialog should not be shown if a sign-in dialog is
+   // currently displayed or is about to be displayed.
+   bool signin_dialog_displayed_or_pending =

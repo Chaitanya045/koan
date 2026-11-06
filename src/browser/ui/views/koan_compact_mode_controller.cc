@@ -1187,7 +1187,9 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
     HideFullscreenTitlebar(browser_view_);
   } else {
     RestoreFullscreenTitlebar(browser_view_);
-    SetTrafficLightsShown(browser_view_, true);
+    if (!IsWelcomeShowing()) {
+      SetTrafficLightsShown(browser_view_, true);
+    }
   }
   // The toolbar style: "none" while Koan hides its toolbar, else the user's.
   if (BrowserWidget* widget = browser_view_->browser_widget()) {
@@ -1837,6 +1839,13 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
   return false;
 }
 
+bool KoanCompactModeController::IsWelcomeShowing() const {
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return controller && controller->welcome() &&
+         controller->welcome()->is_showing();
+}
+
 void KoanCompactModeController::UpdateCaptionButtons() {
   if (IsClosing()) {
     // The window is going away: nothing to show or hide.
@@ -1845,8 +1854,8 @@ void KoanCompactModeController::UpdateCaptionButtons() {
 #if BUILDFLAG(IS_MAC)
   if (traffic_lights_) {
     // AppKit shows the lights by itself in fullscreen, with the menu bar;
-    // they are laid out again when it ends.
-    if (IsWindowFullscreen(browser_view_)) {
+    // they are laid out again when it ends. Zen's welcome shows none.
+    if (IsWindowFullscreen(browser_view_) || IsWelcomeShowing()) {
       return;
     }
     // The traffic lights are AppKit's: shown or hidden, as the other

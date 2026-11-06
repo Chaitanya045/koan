@@ -697,16 +697,11 @@ function getWelcomePages(data) {
       commit(content) {
         const checked =
             content.querySelector('input[name=\'zen-welcome-import\']:checked');
+        // Every Next says: a browser picked, or "NO, start fresh." (so a
+        // browser picked, Back, then NO imports nothing). Chromium's import
+        // dialog, after the screen, asks for the browser and profile again.
         const source = content.importSources?.[checked?.dataset.sourceIndex];
-        if (!source) {
-          return;
-        }
-        const profileIndex =
-            checked.closest('.zen-welcome-import-source')
-                .querySelector('input[type=\'radio\'][value]:checked')
-                ?.value ??
-            0;
-        chrome.send('import', [source.key, Number(profileIndex)]);
+        chrome.send('import', [!!source]);
       },
     },
     {
@@ -903,6 +898,13 @@ async function animateInitialStage(data) {
       `${kStrings['zen-welcome-title-line1']} ${
           kStrings['zen-welcome-title-line2']}`);
   const chars = titleElement.querySelectorAll('.zen-welcome-char');
+  await animate(chars, {opacity: [0, 1], y: [50, 0]}, {
+    delay: stagger(0.035, {startDelay: 0.8}),
+    type: 'spring',
+    bounce: 0.3,
+    visualDuration: 0.45,
+  });
+  // As in Zen, Start works once the title is in (not while it is invisible).
   const button = document.getElementById('zen-welcome-start-button');
   button.focus({preventScroll: true});
   button.addEventListener('click', async () => {
@@ -912,12 +914,6 @@ async function animateInitialStage(data) {
         {duration: 0.3, ease: 'easeIn', delay: stagger(0.012)});
     new KoanWelcomePages(getWelcomePages(data));
   }, {once: true});
-  await animate(chars, {opacity: [0, 1], y: [50, 0]}, {
-    delay: stagger(0.035, {startDelay: 0.8}),
-    type: 'spring',
-    bounce: 0.3,
-    visualDuration: 0.45,
-  });
   await animate(
       button, {opacity: [0, 1], y: [20, 0], filter: ['blur(2px)', 'blur(0px)']},
       {delay: 0.1, type: 'spring', stiffness: 300, damping: 20, mass: 1.8});

@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -59,6 +60,12 @@ const KoanWelcomeHost* GetHost(content::WebUI* web_ui) {
 KoanWelcomeHandler::KoanWelcomeHandler(Profile* profile) : profile_(profile) {}
 
 KoanWelcomeHandler::~KoanWelcomeHandler() = default;
+
+void KoanWelcomeHandler::OnJavascriptDisallowed() {
+  // The page's renderer is gone or reloading: no answer to its old request.
+  weak_factory_.InvalidateWeakPtrs();
+  importer_list_.reset();
+}
 
 void KoanWelcomeHandler::RegisterMessages() {
   const auto add = [this](const char* name, auto method) {
@@ -213,10 +220,14 @@ base::ListValue KoanWelcomeHandler::SearchEngines() const {
 }
 
 void KoanWelcomeHandler::HandleImport(const base::ListValue& args) {
-  // Chromium's import dialog, where the user picks what to bring along.
+  // [whether a browser is picked]: Chromium's import dialog after the screen,
+  // where the user picks what to bring along.
+  if (args.empty() || !args[0].is_bool()) {
+    return;
+  }
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().import) {
-    host->callbacks().import.Run();
+    host->callbacks().import.Run(args[0].GetBool());
   }
 }
 
@@ -255,8 +266,13 @@ void KoanWelcomeHandler::HandleSetSearchEngine(const base::ListValue& args) {
   TemplateURLService* service =
       TemplateURLServiceFactory::GetForProfile(profile_);
   // (With a policy's engine there is no page; Chromium CHECKs a user's pick
-  // over it when the engines failed to load.)
-  if (!service || !service->CanDefaultSearchProviderBeModifiedByUser()) {
+  // over it when the engines failed to load.) Only an engine the page was
+  // given: the setter CHECKs others.
+  const int id = args[0].GetInt();
+  if (!service || !service->CanDefaultSearchProviderBeModifiedByUser() ||
+      !std::ranges::any_of(SearchEngines(), [id](const base::Value& engine) {
+        return engine.GetDict().FindInt("id") == id;
+      })) {
     return;
   }
   // Zen sets it as it is picked. Next records the choice as made, as
@@ -268,9 +284,8 @@ void KoanWelcomeHandler::HandleSetSearchEngine(const base::ListValue& args) {
       !search_engines::GetChoiceCompletionMetadata(*profile_->GetPrefs())
            .has_value();
   service->SetUserSelectedDefaultSearchProviderByPrepopulateId(
-      args[0].GetInt(), record
-                            ? search_engines::ChoiceMadeLocation::kChoiceScreen
-                            : search_engines::ChoiceMadeLocation::kOther);
+      id, record ? search_engines::ChoiceMadeLocation::kChoiceScreen
+                 : search_engines::ChoiceMadeLocation::kOther);
 }
 
 void KoanWelcomeHandler::HandleSetDefaultBrowser(const base::ListValue& args) {
@@ -284,14 +299,17 @@ void KoanWelcomeHandler::HandleSetDefaultBrowser(const base::ListValue& args) {
 }
 
 void KoanWelcomeHandler::HandleFinish(const base::ListValue& args) {
+  // Only the page's own Essentials, each once.
   std::vector<GURL> essentials;
   if (!args.empty() && args[0].is_list()) {
     for (const base::Value& url : args[0].GetList()) {
-      if (url.is_string()) {
-        GURL gurl(url.GetString());
-        if (gurl.SchemeIsHTTPOrHTTPS()) {
-          essentials.push_back(std::move(gurl));
-        }
+      if (!url.is_string()) {
+        continue;
+      }
+      GURL gurl(url.GetString());
+      if (FindWelcomeEssential(gurl) &&
+          std::ranges::find(essentials, gurl) == essentials.end()) {
+        essentials.push_back(std::move(gurl));
       }
     }
   }
@@ -322,10 +340,10 @@ void KoanWelcomeHandler::HandleShowThemePicker(const base::ListValue& args) {
       })) {
     return;
   }
-  const gfx::Rect anchor(static_cast<int>(args[0].GetDouble()),
-                         static_cast<int>(args[1].GetDouble()),
-                         static_cast<int>(args[2].GetDouble()),
-                         static_cast<int>(args[3].GetDouble()));
+  const gfx::Rect anchor(base::ClampRound(args[0].GetDouble()),
+                         base::ClampRound(args[1].GetDouble()),
+                         base::ClampRound(args[2].GetDouble()),
+                         base::ClampRound(args[3].GetDouble()));
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().show_theme_picker) {
     host->callbacks().show_theme_picker.Run(anchor);

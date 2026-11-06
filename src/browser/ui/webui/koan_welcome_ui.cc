@@ -72,7 +72,10 @@ void ServeResource(const std::string& path,
   } else if (path.starts_with("favicons/") && IsSvg(path)) {
     data = std::string(Favicon(std::string_view(path).substr(
         9, path.size() - 9 - std::string_view(".svg").size())));
-  } else {
+  } else if (!path.ends_with(".js") && !path.ends_with(".css") &&
+             !path.ends_with(".png") && !path.ends_with(".svg")) {
+    // The page itself, at any other path; an unknown file is empty, not the
+    // page served as a script or an image.
     data = kKoanWelcomeHtml;
   }
   std::move(callback).Run(

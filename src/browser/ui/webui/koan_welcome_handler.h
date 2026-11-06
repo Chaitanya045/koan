@@ -36,6 +36,7 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
 
   // content::WebUIMessageHandler:
   void RegisterMessages() override;
+  void OnJavascriptDisallowed() override;
 
  private:
   void HandleGetWelcomeData(const base::ListValue& args);
