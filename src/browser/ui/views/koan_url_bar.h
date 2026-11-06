@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/color/color_id.h"
 
@@ -103,6 +104,17 @@ bool HidesPageActionIcons(const views::View* location_bar);
 // rows take Zen's styling (koan_omnibox_rows.h). False for any other omnibox
 // popup, in either look.
 bool ShowsZenCardRows(const views::View* view);
+
+// The colour the location bar of `location_bar` (a LocationBarView) paints and
+// gives its omnibox as its background: clear, while a glass URL bar card (Zen's
+// acrylic-urlbar) is open in its window, over the card's translucent fill;
+// else `color`. Called from LocationBarView::RefreshBackground().
+SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color);
+
+// Whether `browser_view`'s floating URL bar is open as a glass card: the
+// toolbar and the top container behind it paint nothing, so the fill is the
+// card's only colour. Called from koan::OnGlassLayout().
+bool IsGlassUrlBarOpen(const views::View* browser_view);
 
 }  // namespace koan
 

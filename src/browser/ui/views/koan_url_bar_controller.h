@@ -9,16 +9,20 @@
 #include <optional>
 #include <string>
 
+#include "base/callback_list.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/native_theme/native_theme.h"
+#include "ui/native_theme/native_theme_observer.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 
@@ -63,7 +67,8 @@ class KoanUrlBarCardFill;
 // In the multiple-toolbars layout the omnibox stays in the toolbar; only the
 // new-tab behaviour applies.
 class KoanUrlBarController : public views::ViewObserver,
-                             public ui::EventHandler {
+                             public ui::EventHandler,
+                             public ui::NativeThemeObserver {
  public:
   enum class Placement { kNone, kInPill, kFloating };
 
@@ -105,12 +110,13 @@ class KoanUrlBarController : public views::ViewObserver,
   bool IsCommandCard() const;
   // Whether it is Zen's (not shadcn's) card: 62pt tall.
   bool IsFloatingZenCard() const;
-  // The card layer's opacity: 1, or the glass fill's alpha for a glass card.
-  float CardOpacity() const;
-  // The card's layer while it is open, null otherwise: the one a glass look
-  // blurs behind (Layer::SetBackgroundBlur), with the translucent
-  // kColorKoanFloatingUrlBarBackground. It is clipped to the card's rounded
-  // corners.
+  // Whether the open card is a glass pane (Zen's acrylic-urlbar, see
+  // UpdateGlassCard()).
+  bool IsGlassCard() const { return glass_card_; }
+  // The card's layer while it is open, null otherwise: the one a glass card
+  // blurs behind (Layer::SetBackgroundBlur), over a fill of
+  // kColorKoanFloatingUrlBarGlass (the layer itself stays at full opacity). It
+  // is clipped to the card's rounded corners.
   ui::Layer* card_layer() const;
   // Whether what the user opens now should go to a new tab; ends the new-tab
   // session if so.
@@ -126,6 +132,10 @@ class KoanUrlBarController : public views::ViewObserver,
   // ui::EventHandler (the omnibox's keys while the bar is open):
   void OnKeyEvent(ui::KeyEvent* event) override;
 
+  // ui::NativeThemeObserver (Reduce Transparency changes with the system's
+  // settings):
+  void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
+
  private:
   // Routes the window's "New tab" action (the sidebar's new-tab button, the
   // app menu) through OpenForNewTab().
@@ -139,6 +149,13 @@ class KoanUrlBarController : public views::ViewObserver,
   LocationBarView* location_bar() const;
 
   void ApplyCardStyle();
+  // Makes the open card a glass pane or not, live: Zen's acrylic-urlbar (a
+  // pref), not with macOS's Reduce Transparency on, in an active window
+  // (zen-omnibox.css: `prefers-reduced-transparency`, `:-moz-window-inactive`).
+  // It is the window's own state: a translucent fill, the blur behind it, and
+  // the views over the fill clear (the location bar, the toolbar and the top
+  // container), with no colour provider rebuilt and no other window touched.
+  void UpdateGlassCard();
   void Layout();
   gfx::Rect CardBounds() const;
   void HideToolbarSiblings();
@@ -171,10 +188,12 @@ class KoanUrlBarController : public views::ViewObserver,
       sibling_observation_{this};
   bool changing_toolbar_visibility_ = false;
   bool laying_out_ = false;
-  // Whether the open card is a glass pane: Zen's acrylic-urlbar setting, and
-  // not with macOS's Reduce Transparency on or in an inactive window. Per
-  // window; kept in step by ApplyCardStyle().
+  // See IsGlassCard(); kept in step by UpdateGlassCard(), per window.
   bool glass_card_ = false;
+  PrefChangeRegistrar prefs_registrar_;
+  base::CallbackListSubscription paint_as_active_subscription_;
+  base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
+      theme_observation_{this};
   base::ScopedObservation<views::View, views::ViewObserver>
       top_container_observation_{this};
   base::ScopedObservation<views::View, views::ViewObserver>

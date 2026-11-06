@@ -75,6 +75,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/focus_ring.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
@@ -183,11 +184,25 @@ class KoanUrlBarCardFill : public views::View {
     GetViewAccessibility().SetIsIgnored(true);
   }
 
+  // A glass card's fill is translucent (Zen's acrylic-urlbar fill over the
+  // blurred page).
+  void SetGlass(bool glass) {
+    if (glass_ != glass) {
+      glass_ = glass;
+      SchedulePaint();
+    }
+  }
+
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
-    canvas->FillRect(GetLocalBounds(), GetColorProvider()->GetColor(
-                                           kColorKoanFloatingUrlBarBackground));
+    canvas->FillRect(GetLocalBounds(),
+                     GetColorProvider()->GetColor(
+                         glass_ ? kColorKoanFloatingUrlBarGlass
+                                : kColorKoanFloatingUrlBarBackground));
   }
+
+ private:
+  bool glass_ = false;
 };
 
 BEGIN_METADATA(KoanUrlBarCardFill)
@@ -209,6 +224,15 @@ class KoanUrlBarCardDecoration : public views::View {
     layer()->SetFillsBoundsOpaquely(false);
   }
 
+  // With a glass card the fill under the location bar is already translucent:
+  // the icon's own opaque patch would show as a block.
+  void SetGlass(bool glass) {
+    if (glass_ != glass) {
+      glass_ = glass;
+      SchedulePaint();
+    }
+  }
+
   // `icon` is the location icon's bounds in this view.
   void SetIconBounds(const gfx::Rect& icon) {
     if (icon_ != icon) {
@@ -222,8 +246,10 @@ class KoanUrlBarCardDecoration : public views::View {
     const ui::ColorProvider* colors = GetColorProvider();
     if (!icon_.IsEmpty()) {
       // A plain, muted magnifier: nothing of the icon's own chip shows.
-      canvas->FillRect(icon_,
-                       colors->GetColor(kColorKoanFloatingUrlBarBackground));
+      if (!glass_) {
+        canvas->FillRect(icon_,
+                         colors->GetColor(kColorKoanFloatingUrlBarBackground));
+      }
       const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
           vector_icons::kSearchIcon, kFloatingUrlBarMagnifierSize,
           colors->GetColor(ui::kColorIcon));
@@ -240,6 +266,7 @@ class KoanUrlBarCardDecoration : public views::View {
 
  private:
   gfx::Rect icon_;
+  bool glass_ = false;
 };
 
 BEGIN_METADATA(KoanUrlBarCardDecoration)
@@ -250,6 +277,16 @@ KoanUrlBarController::KoanUrlBarController(
     KoanCompactModeController* compact_mode)
     : browser_view_(browser_view), compact_mode_(compact_mode) {
   InstallNewTabAction();
+  // The glass card follows its setting and Reduce Transparency live (the
+  // window's activity is subscribed once it has a widget).
+  if (g_browser_process && g_browser_process->local_state()) {
+    prefs_registrar_.Init(g_browser_process->local_state());
+    prefs_registrar_.Add(
+        prefs::kLookAcrylicUrlBar,
+        base::BindRepeating(&KoanUrlBarController::UpdateGlassCard,
+                            base::Unretained(this)));
+  }
+  theme_observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
 }
 
 KoanUrlBarController::~KoanUrlBarController() {
@@ -590,7 +627,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     views::AnimationBuilder()
         .Once()
         .SetDuration(kFadeDuration)
-        .SetOpacity(top_container, CardOpacity(), gfx::Tween::EASE_OUT);
+        .SetOpacity(top_container, 1.0f, gfx::Tween::EASE_OUT);
   }
 }
 
@@ -684,23 +721,13 @@ void KoanUrlBarController::ApplyCardStyle() {
     omnibox->InstallPlaceholderText();
   }
 
-  // Zen's acrylic-urlbar: the card is a glass pane, with the page blurred
-  // behind it (zen-omnibox.css: backdrop-filter blur(40px)), while the setting
-  // is on, Reduce Transparency is off and the window is active.
-  const views::Widget* widget = browser_view_->GetWidget();
-  glass_card_ =
-      is_open() && IsCommandCard() && IsWindowGlassAllowed() && widget &&
-      widget->ShouldPaintAsActive() &&
-      g_browser_process->local_state()->GetBoolean(prefs::kLookAcrylicUrlBar);
-  if (ui::Layer* card = top_container->layer()) {
-    card->SetBackgroundBlur(glass_card_ ? kFloatingUrlBarBlurRadius : 0.0f);
-    // The translucent fill is the card's opacity, not other colours: this
-    // window only (no colour provider is rebuilt, no other window repaints),
-    // and the card keeps its opaque children (the field, the text).
-    if (!card->GetAnimator()->is_animating()) {
-      card->SetOpacity(CardOpacity());
-    }
+  if (!paint_as_active_subscription_ && browser_view_->GetWidget()) {
+    paint_as_active_subscription_ =
+        browser_view_->GetWidget()->RegisterPaintAsActiveChangedCallback(
+            base::BindRepeating(&KoanUrlBarController::UpdateGlassCard,
+                                base::Unretained(this)));
   }
+  UpdateGlassCard();
 
   if (!is_open()) {
     return;
@@ -712,15 +739,64 @@ void KoanUrlBarController::ApplyCardStyle() {
   layer->SetMasksToBounds(true);
 }
 
-float KoanUrlBarController::CardOpacity() const {
-  if (!glass_card_) {
-    return 1.0f;
+namespace {
+
+// A glass card's labels (the keyword chip, ...) sit on a translucent fill: no
+// subpixel text there (views::Label's DCHECK that its background is opaque).
+void SetLabelsSubpixelRendering(views::View* view, bool enabled) {
+  if (views::Label* label = views::AsViewClass<views::Label>(view)) {
+    label->SetSubpixelRenderingEnabled(enabled);
   }
-  // Zen's fill: white at 93%, rgb(20, 20, 20) at 92% (the shadcn look's
-  // popover at 90%), over the blurred page.
-  return SkColorGetA(browser_view_->GetColorProvider()->GetColor(
-             kColorKoanFloatingUrlBarGlass)) /
-         255.0f;
+  for (views::View* child : view->children()) {
+    SetLabelsSubpixelRendering(child, enabled);
+  }
+}
+
+}  // namespace
+
+void KoanUrlBarController::UpdateGlassCard() {
+  const views::Widget* widget = browser_view_->GetWidget();
+  const bool glass =
+      widget && is_open() && IsCommandCard() && IsWindowGlassAllowed() &&
+      widget->ShouldPaintAsActive() && g_browser_process &&
+      g_browser_process->local_state()->GetBoolean(prefs::kLookAcrylicUrlBar);
+  LocationBarView* bar = location_bar();
+  if (glass && bar) {
+    // Labels that appeared since (the keyword chip).
+    SetLabelsSubpixelRendering(bar, false);
+  }
+  if (glass == glass_card_) {
+    return;
+  }
+  glass_card_ = glass;
+  // Zen's acrylic-urlbar (zen-omnibox.css): the page blurred behind a card
+  // filled rgba(20, 20, 20, .92) / rgba(255, 255, 255, .93), at full opacity
+  // itself, so its text stays crisp.
+  if (ui::Layer* card = browser_view_->top_container()->layer()) {
+    card->SetBackgroundBlur(glass ? kFloatingUrlBarBlurRadius : 0.0f);
+  }
+  if (fill_) {
+    fill_->SetGlass(glass);
+  }
+  if (decoration_) {
+    decoration_->SetGlass(glass);
+  }
+  if (bar) {
+    SetLabelsSubpixelRendering(bar, !glass);
+  }
+  // The location bar and its omnibox take the clear background through
+  // AdjustLocationBarBackground(), and the toolbar and top container through
+  // OnGlassLayout(): this window's colours only, so no colour provider is
+  // rebuilt.
+  if (views::Widget* top_level = browser_view_->GetWidget()) {
+    top_level->ThemeChanged();
+  }
+  browser_view_->InvalidateLayout();
+}
+
+void KoanUrlBarController::OnNativeThemeUpdated(
+    ui::NativeTheme* observed_theme) {
+  UpdateGlassCard();
 }
 
 bool KoanUrlBarController::IsFloatingZenCard() const {
@@ -1032,6 +1108,19 @@ void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
 bool HidesPageActionIcons(const views::View* location_bar) {
   const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
   return url_bar && url_bar->is_open();
+}
+
+SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color) {
+  const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
+  return url_bar && url_bar->IsGlassCard() ? SK_ColorTRANSPARENT : color;
+}
+
+bool IsGlassUrlBarOpen(const views::View* browser_view) {
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(
+                         static_cast<const BrowserView*>(browser_view))
+                   : nullptr;
+  return controller && controller->url_bar()->IsGlassCard();
 }
 
 bool ShowsZenCardRows(const views::View* view) {
