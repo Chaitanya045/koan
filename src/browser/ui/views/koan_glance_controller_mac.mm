@@ -70,6 +70,13 @@ bool PerformWindowMenuKey(views::Widget* browser,
   return false;
 }
 
+void PerformMainMenuKey(const input::NativeWebKeyboardEvent& event) {
+  NSEvent* ns_event = event.os_event.Get();
+  if (ns_event && ns_event.type == NSEventTypeKeyDown) {
+    [[NSApp mainMenu] performKeyEquivalent:ns_event];
+  }
+}
+
 void PrepareCardWindow(views::Widget* card) {
   NSWindow* window = card->GetNativeWindow().GetNativeNSWindow();
   // VoiceOver names the card's window (the page's dialog is inside it).

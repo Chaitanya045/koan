@@ -32,10 +32,6 @@ namespace actions {
 class ActionItem;
 }
 
-namespace ui {
-class Accelerator;
-}
-
 namespace koan {
 
 class KoanGlanceView;
@@ -58,6 +54,9 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
 // equivalent of one of them, and if so, does it to `browser`'s window.
 bool PerformWindowMenuKey(views::Widget* browser,
                           const input::NativeWebKeyboardEvent& event);
+// A key equivalent nothing else took: the menu bar's item for it, as after
+// the page (koan_glance_controller.cc ProcessPriorityKey()).
+void PerformMainMenuKey(const input::NativeWebKeyboardEvent& event);
 // The card's window is a top-level one (Open()): titled "Glance" for
 // VoiceOver, kept out of the Window menu.
 void PrepareCardWindow(views::Widget* card);
@@ -229,8 +228,15 @@ class KoanGlanceController : public content::WebContentsDelegate,
   // A key in the Glance page the browser takes (PreHandleKeyboardEvent()),
   // run after the key's dispatch: it may switch tabs, which closes the
   // card's window, whose key handling is on the stack then.
-  void ProcessBrowserAccelerator(const ui::Accelerator& accelerator);
   void RunBrowserCommand(int command_id);
+#if BUILDFLAG(IS_MAC)
+  // Steps 2 and 3 of PreHandleKeyboardEvent() (Window > Minimize / Zoom,
+  // the reserved commands) for a key equivalent: whether they took it.
+  bool TakeKeyEquivalent(const input::NativeWebKeyboardEvent& event);
+  // Step 1, after the key's dispatch: the browser window's high-priority
+  // shortcut, or if it declines, steps 2 and 3, then the menu bar's item.
+  void ProcessPriorityKey(const input::NativeWebKeyboardEvent& event);
+#endif
 
   // While the card is open, the enabled state of Back, Forward, Stop, zoom
   // and Find (kHeldCommands) follows the Glance page, as it follows the
