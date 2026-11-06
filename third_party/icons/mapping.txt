@@ -160,3 +160,5 @@ library zen library scale=1
 video lucide video
 video-blocked lucide video-off
 default-favicon lucide globe
+picture-in-picture lucide picture-in-picture-2
+urlbar-search-glass firefox search-glass scale=1 alpha=0.5

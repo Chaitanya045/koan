@@ -310,14 +310,14 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
       ThemeServiceOf(controller)->GetBrowserColorScheme();
   add_if(scheme != ColorScheme::kSystem,
          AppearanceCommand("switch-to-automatic-appearance",
-                           u"Switch to Automatic Appearance",
-                           kAutomaticAppearanceIcon, ColorScheme::kSystem));
+                           u"Switch to Automatic Appearance", kKoanSparklesIcon,
+                           ColorScheme::kSystem));
   add_if(scheme != ColorScheme::kLight,
          AppearanceCommand("switch-to-light-mode", u"Switch to Light Mode",
-                           kLightModeIcon, ColorScheme::kLight));
+                           kKoanFaceSunIcon, ColorScheme::kLight));
   add_if(scheme != ColorScheme::kDark,
          AppearanceCommand("switch-to-dark-mode", u"Switch to Dark Mode",
-                           kDarkModeIcon, ColorScheme::kDark));
+                           kKoanMoonStarsIcon, ColorScheme::kDark));
   add_if(IsEnabled(controller, IDC_PRINT),
          ChromeCommand(controller, "print", u"Print", kPrintIcon, IDC_PRINT));
 }

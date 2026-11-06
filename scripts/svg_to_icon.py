@@ -196,7 +196,7 @@ def fit_to_canvas(path, size):
     return fitted
 
 
-def convert(svg_text, force_fill=False, scale=ZEN_FIT, fit=True):
+def convert(svg_text, force_fill=False, scale=ZEN_FIT, fit=True, alpha=None):
     root = ET.fromstring(svg_text)
     view_box = [float(v) for v in root.get('viewBox').split()]
     assert view_box[2] == view_box[3]
@@ -231,7 +231,11 @@ def convert(svg_text, force_fill=False, scale=ZEN_FIT, fit=True):
         result = fit_to_canvas(result, view_box[2])
     pen = IconPen()
     result.draw(pen)
-    return int(view_box[2]), pen.lines
+    lines = pen.lines
+    if alpha is not None:
+        # The icon's own opacity (the caller's colour keeps its hue).
+        lines = ['PATH_COLOR_ALPHA, %d,' % round(alpha * 255)] + lines
+    return int(view_box[2]), lines
 
 
 def main():

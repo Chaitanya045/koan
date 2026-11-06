@@ -44,12 +44,12 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
-#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -248,7 +248,7 @@ class KoanUrlBarCardDecoration : public views::View {
       // (KoanUrlBarController::SetLocationIconHidden()), not painted over, so
       // nothing of its chip or its ink drop shows, glass or not.
       const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
-          vector_icons::kSearchIcon, kFloatingUrlBarMagnifierSize,
+          kKoanUrlbarSearchGlassIcon, kFloatingUrlBarMagnifierSize,
           colors->GetColor(ui::kColorIcon));
       canvas->DrawImageInt(
           magnifier, icon_.x() + (icon_.width() - magnifier.width()) / 2,

@@ -130,7 +130,9 @@ inline constexpr int kFloatingUrlBarShadowBlur = 140;
 inline constexpr int kFloatingUrlBarShadowSpread = -15;
 // shadcn's softer shadow (shadow-lg: 0 10px 15px -3px) and text size
 // (text-base: 16px).
-// The shadcn card's magnifier (lucide's search, 16px).
+// The floating bar's magnifier and the pill's on an empty tab: Firefox's
+// search-glass.svg as Zen draws it in the identity box, a 16px box with a
+// 14px glyph at half opacity (kKoanUrlbarSearchGlassIcon).
 inline constexpr int kFloatingUrlBarMagnifierSize = 16;
 // The divider under the input stops short of the card's edges (Zen's input row
 // padding).

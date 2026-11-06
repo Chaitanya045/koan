@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_VECTOR_ICONS_KOAN_ICONS_H_
 
 #include "base/containers/span.h"
+#include "base/memory/raw_ptr_exclusion.h"
 
 namespace gfx {
 struct VectorIcon;
@@ -26,9 +27,11 @@ namespace koan {
 // and colours stay the caller's.
 
 // One row of the table: a Chromium icon and the Koan icon painted for it.
+// Both are global constants, so the pointers can't dangle (and the table is
+// constant-initialized, which a raw_ptr wouldn't allow).
 struct KoanIconEntry {
-  const gfx::VectorIcon* chromium;
-  const gfx::VectorIcon* koan;
+  RAW_PTR_EXCLUSION const gfx::VectorIcon* chromium;
+  RAW_PTR_EXCLUSION const gfx::VectorIcon* koan;
 };
 
 // The whole table, for tests.

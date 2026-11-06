@@ -305,7 +305,7 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   site_button_ =
       pill_button(base::BindRepeating(&KoanSidebarNavView::OnSiteButtonPressed,
                                       base::Unretained(this)),
-                  vector_icons::kSearchIcon, u"Site information");
+                  kKoanUrlbarSearchGlassIcon, u"Site information");
 
   // Something is in use (camera, microphone ...): see UpdateInUse().
   in_use_ = url_pill_->AddChildView(std::make_unique<views::ImageView>());
@@ -521,7 +521,7 @@ void KoanSidebarNavView::UpdateUrl() {
       views::Button::STATE_NORMAL,
       !favicon.IsEmpty() ? favicon
                          : ui::ImageModel::FromVectorIcon(
-                               vector_icons::kSearchIcon,
+                               kKoanUrlbarSearchGlassIcon,
                                kColorKoanUrlPillForeground, kUrlPillIconSize));
   const std::u16string site_name =
       has_page ? u"Site information" : u"Search or enter address";

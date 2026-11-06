@@ -87,13 +87,13 @@ icons and are **not** used or shipped by Koan.
 | Koan file | From |
 | --- | --- |
 | `third_party/icons/lucide/*.svg`, `src/browser/ui/vector_icons/koan_*.icon` | Lucide (ISC) |
+| `third_party/icons/firefox/search-glass.svg`, `src/browser/ui/vector_icons/koan_urlbar_search_glass.icon` | Firefox `toolkit/themes/shared/icons/search-glass.svg` (MPL-2.0; header kept; Proton variant, as Zen's URL bar shows it) |
 | `third_party/icons/zen/library.svg`, `src/browser/ui/vector_icons/koan_library.icon` | Zen Browser 1.24b `zen-icons/common/library/library.svg` (MPL-2.0; header kept; Zen's own glyph, not Nucleo) |
 
 ## Chromium-derived files
 
-`src/browser/ui/vector_icons/*.template` and
-`src/browser/ui/vector_icons/{light_mode,automatic_appearance}.icon` are
-adapted from Chromium and stay under Chromium's BSD-style license.
+`src/browser/ui/vector_icons/*.template` are adapted from Chromium and stay
+under Chromium's BSD-style license.
 
 ## Not affiliated
 

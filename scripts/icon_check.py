@@ -31,11 +31,11 @@ import svg_to_icon
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICON_DIR = os.path.join(ROOT, 'src', 'browser', 'ui', 'vector_icons')
 SIZES = (16, 17, 18, 20)
-ARGS = {'MOVE_TO': 2, 'LINE_TO': 2, 'CUBIC_TO': 6, 'QUADRATIC_TO': 4}
+ARGS = {'PATH_COLOR_ALPHA': 1, 'MOVE_TO': 2, 'LINE_TO': 2, 'CUBIC_TO': 6, 'QUADRATIC_TO': 4}
 
 
-def icon_text(svg, filled, scale, fit=True):
-    size, lines = svg_to_icon.convert(open(svg).read(), filled, scale, fit)
+def icon_text(svg, filled, scale, fit=True, alpha=None):
+    size, lines = svg_to_icon.convert(open(svg).read(), filled, scale, fit, alpha)
     return 'CANVAS_DIMENSIONS, %d,\nFILL_RULE_NONZERO,\n' % size + '\n'.join(lines)
 
 
@@ -47,7 +47,9 @@ def points(text):
     while i < len(toks):
         t = toks[i]
         i += 1
-        if t in ARGS:
+        if t == 'PATH_COLOR_ALPHA':
+            i += 1
+        elif t in ARGS:
             out += [float(v) for v in toks[i:i + ARGS[t]]]
             i += ARGS[t]
         elif t == 'CANVAS_DIMENSIONS':
@@ -80,6 +82,8 @@ def render_icon(text, px, margin=0):
             ctx.close_path()
         elif t == 'NEW_PATH':
             ctx.fill(); ctx.new_path()
+        elif t == 'PATH_COLOR_ALPHA':
+            i += 1  # The preview is opaque, like the SVG it is compared with.
         elif t in ARGS:
             a = [float(v) for v in toks[i:i + ARGS[t]]]
             i += ARGS[t]
@@ -129,20 +133,23 @@ def main():
         if args.names and p[0] not in args.names:
             continue
         scale = svg_to_icon.ZEN_FIT
+        alpha = None
         for option in p[3:]:
             if option.startswith('scale='):
                 scale = float(option[len('scale='):])
+            if option.startswith('alpha='):
+                alpha = float(option[len('alpha='):])
         rows.append((p[0], os.path.join(ICON_DIR, 'koan_%s.icon' % p[0].replace('-', '_').lower()),
                      os.path.join(ROOT, 'third_party', 'icons', p[1], p[2] + '.svg'),
-                     'fill' in p[3:], scale))
+                     'fill' in p[3:], scale, alpha))
     worst = []
-    stale = [zen for zen, icon, svg, filled, scale in rows
+    stale = [zen for zen, icon, svg, filled, scale, alpha in rows
              if re.sub(r'//.*', '', open(icon).read()).split() !=
-             icon_text(svg, filled, scale).split()]
+             icon_text(svg, filled, scale, alpha=alpha).split()]
     if stale:
         sys.exit('stale .icon files, rerun gen_koan_icons.py: %s' % stale)
     clipped = []
-    for zen, icon, svg, filled, scale in rows:
+    for zen, icon, svg, filled, scale, alpha in rows:
         # Nothing may reach the canvas edge: every point of the outline is
         # inside it, and rendering with a margin (what the canvas would clip)
         # draws nothing there.
@@ -164,7 +171,7 @@ def main():
                 break
     if clipped:
         sys.exit('icons reaching past the canvas: %s' % ', '.join(clipped))
-    for zen, icon, svg, filled, scale in rows:
+    for zen, icon, svg, filled, scale, alpha in rows:
         if filled:
             continue  # The SVG has no fill to compare against.
         # Converter fidelity: the unscaled .icon against the SVG itself.
@@ -181,7 +188,7 @@ def main():
         cell, cols = 40, 16
         sheet_rows = (len(rows) + cols - 1) // cols
         sheet = Image.new('RGBA', (cols * cell, sheet_rows * cell * 2), 'white')
-        for n, (zen, icon, svg, filled, scale) in enumerate(rows):
+        for n, (zen, icon, svg, filled, scale, alpha) in enumerate(rows):
             x, y = (n % cols) * cell, (n // cols) * cell * 2
             sheet.alpha_composite(render_icon(open(icon).read(), 34), (x + 3, y + 3))
             if not filled:

@@ -26,7 +26,11 @@ import svg_to_icon  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS = os.path.join(ROOT, 'third_party', 'icons')
 OUT = os.path.join(ROOT, 'src', 'browser', 'ui', 'vector_icons')
-SOURCES = {'lucide': 'Lucide (ISC), lucide.dev', 'zen': 'Zen Browser (MPL-2.0)'}
+SOURCES = {'lucide': 'Lucide (ISC), lucide.dev', 'zen': 'Zen Browser (MPL-2.0)',
+           'firefox': 'Firefox (MPL-2.0)'}
+# Where the MPL sets' files come from, for the header.
+MPL_ORIGIN = {'zen': "Zen's zen-icons/common/library/%s.svg (its resting state)",
+              'firefox': "Firefox's chrome://global/skin/icons/%s.svg"}
 MPL = ['// This Source Code Form is subject to the terms of the Mozilla Public',
        '// License, v. 2.0. If a copy of the MPL was not distributed with this',
        '// file, You can obtain one at http://mozilla.org/MPL/2.0/.']
@@ -39,11 +43,14 @@ def read_mapping():
         if line and not line.startswith('#'):
             parts = line.split()
             scale = svg_to_icon.ZEN_FIT
+            alpha = None
             for option in parts[3:]:
                 if option.startswith('scale='):
                     scale = float(option[len('scale='):])
+                if option.startswith('alpha='):
+                    alpha = float(option[len('alpha='):])
             rows.append((parts[0], parts[1], parts[2], 'fill' in parts[3:],
-                         scale))
+                         scale, alpha))
     return rows
 
 
@@ -52,16 +59,16 @@ def main():
     ap.add_argument('--lucide')
     args = ap.parse_args()
     names = []
-    for zen, set_name, icon, fill, scale in read_mapping():
+    for zen, set_name, icon, fill, scale, alpha in read_mapping():
         dest = os.path.join(ICONS, set_name, icon + '.svg')
         if args.lucide and set_name == 'lucide':
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             shutil.copy(os.path.join(args.lucide, icon + '.svg'), dest)
-        size, lines = svg_to_icon.convert(open(dest).read(), fill, scale)
-        if set_name == 'zen':
+        size, lines = svg_to_icon.convert(open(dest).read(), fill, scale, alpha=alpha)
+        if set_name in MPL_ORIGIN:
             header = MPL + ['//',
-                            "// Zen's zen-icons/common/library/%s.svg (its resting state, "
-                            'third_party/icons/zen),' % icon,
+                            '// %s, third_party/icons/%s,' %
+                            (MPL_ORIGIN[set_name] % icon, set_name),
                             '// converted by scripts/gen_koan_icons.py. See THIRD_PARTY_NOTICES.md.',
                             '']
         else:
