@@ -11,6 +11,16 @@ for heading levels; the summary table is mine, and I spot-checked the load-beari
 (`IncrementCapturerCount` semantics, `Freezer::MaybeFreezePageNode`, the `GOOGLE_CHROME_BRANDING` gate, the Glic
 perf-traits tracker, `EnableDefaultUserDataDirCheckForTesting`).
 
+**Corrections from the #185 review (2026-11-07), applied in the design, not to the parts below:** `Accessibility.*`
+is a renderer-side domain and is not trust-gated, so it is reachable by an untrusted client (only OOPIF behaviour needs
+the test); the Glic dependency in A§10 is moot, because `PageLiveStateDecorator::SetGlicActuationState` and
+`SetIsPinnedTab` are public setters and replace the freezer, discard and Glic patches (A§6, A§10 and C-row 7 are
+superseded by design §8); `Network.enable` leaks cookies and `Authorization` through the `*ExtraInfo` events and
+`Network.loadNetworkResource` / `deleteCookies` / `clearBrowserCache` are ungated (C§3c understated this; design
+§4.3, §4.5); `Input.dispatchKeyEvent {commands}` can paste the clipboard (design §4.5); `chrome.debugger`-style frame
+vetting is stricter than `MayAttachToURL` (design §4.4). On macOS `UnixDomainServerSocket::Credentials` carries only
+uid/gid and `net::HttpServer` hides the descriptor, so the peer audit token needs Koan's own accept loop (design §4.1).
+
 ## 0. What the audit decides (one table)
 
 | # | Question | Finding | Verdict | Where |

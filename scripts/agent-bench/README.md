@@ -17,6 +17,8 @@ baselines/         externally measured numbers (for example the Mac thread's ego
 results/           git-ignored raw runs, transcripts and verifier records
 ```
 
-Rules: ego(lite) runs only with `--target ego` and `EGO_APPROVED=1` (it is Mac-only and needs the user's consent);
-nothing downloads or runs it by default. No vendor code, scripts, prompts or skill text are copied into this
+Rules: the ego(lite) run is **mandatory for the "beats ego" headline** (the user has consented; zen-ref runs it on the
+Mac, in a dedicated macOS user account or VM with a before/after snapshot of the paths its CLI touches, black-box only).
+It runs only with `--target ego` and `EGO_APPROVED=1`, and nothing downloads or runs it by default. Every target runs
+headed; targets run interleaved within each task block and the report shows paired differences with bootstrap CIs. No vendor code, scripts, prompts or skill text are copied into this
 directory.
