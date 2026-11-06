@@ -63,7 +63,7 @@ DCHECK build. Each row with a themed Space (a preset with 3 dots) **and** with t
 
 Develop has no glass (`kGlassFrame` is off), so blocks A–C never take the Space theme's translucent path (Zen's maths for
 a transparent window, the translucent layers, the inactive grey). Run this block on **macOS 26, Apple Silicon**, on a
-stack of develop + #159 + **#103** (`feat/mac-glass` 2195e235, Koan's glass for every window) + #62, as agreed with the
+stack of develop + #159 + **#103** (`feat/mac-glass` 80161c6a or later, Koan's glass for every window) + #62, as agreed with the
 glass thread. Upstream's `--enable-features=GlassFrame` alone is not what Koan ships: its expand-on-hover blur backdrop,
 its one-window cap and its missing Reduce Transparency rule are #103's to change, so crashes there don't count against
 #62. `glass_frame.enabled` defaults on with the feature on Apple Silicon; nothing to tick. Same pass criteria as C, plus
