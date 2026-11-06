@@ -60,6 +60,27 @@ constexpr size_t kMaxSuggestions = 8;
 constexpr int kOpenTabRelevance = 1500;
 constexpr int kTopSiteRelevance = 1000;
 
+// The host of Koan's own new tab page (koan/common/koan_url_constants.h,
+// which comes with that page).
+constexpr char kKoanNewTabHost[] = "koan-newtab";
+
+// The most of a page's title a row holds (the row elides it to its width
+// anyway; a page can set a title of any length).
+constexpr size_t kMaxTitleChars = 1024;
+
+// `text` cut to `max` UTF-16 units, not between the halves of a surrogate pair.
+std::u16string CapText(std::u16string text, size_t max) {
+  if (text.size() <= max) {
+    return text;
+  }
+  text.resize(max);
+  // (A high surrogate: 0xD800-0xDBFF.)
+  if ((text.back() & 0xfc00) == 0xd800) {
+    text.pop_back();
+  }
+  return text;
+}
+
 // The URL as shown in a row and put in the box: a data: URL (a page can be
 // megabytes) as "data:<type>,..." and any other past the display cap cut
 // there, as the address bar does. Never used to navigate.
@@ -91,7 +112,7 @@ bool IsListableTab(const GURL& url) {
     return host != chrome::kChromeUINewTabHost &&
            host != chrome::kChromeUINewTabPageHost &&
            host != chrome::kChromeUINewTabPageThirdPartyHost &&
-           host != "koan-newtab";  // Koan's own new tab page (#96).
+           host != kKoanNewTabHost;
   }
   return true;
 }
@@ -141,18 +162,21 @@ AutocompleteMatch KoanZeroSuggestProvider::MakeMatch(
   // scheme or "www".
   // Sanitized, as Chromium's providers do: a URL ending in "%20" formats to
   // contents with a trailing space, which AppendMatches() DCHECKs (#166).
-  match.contents = AutocompleteMatch::SanitizeString(
+  // Capped, then sanitized (the cut can end in a space).
+  match.contents = AutocompleteMatch::SanitizeString(CapText(
       url.SchemeIs(url::kDataScheme)
           ? base::UTF8ToUTF16(DisplaySpec(url))
           : url_formatter::FormatUrl(
                 url,
                 AutocompleteMatch::GetFormatTypes(/*preserve_scheme=*/false,
                                                   /*preserve_subdomain=*/false),
-                base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+                base::UnescapeRule::SPACES, nullptr, nullptr, nullptr),
+      content::kMaxURLDisplayChars));
   match.contents_class = {ACMatchClassification(0, ACMatchClassification::URL)};
   // Sanitized like the contents (a title can end in a non-ASCII space), and
   // classified only when there is one: an empty text takes no classification.
-  match.description = AutocompleteMatch::SanitizeString(title);
+  match.description =
+      AutocompleteMatch::SanitizeString(CapText(title, kMaxTitleChars));
   if (!match.description.empty()) {
     match.description_class = {
         ACMatchClassification(0, ACMatchClassification::NONE)};
