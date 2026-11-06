@@ -8,7 +8,7 @@ is empty, Koan is still running and there is no new `.ips`.
 | # | Do | Expect |
 |---|---|---|
 | 1 | Open a window over the busy backdrop (dark mode) | The sidebar, the top row and the 8 pt gutter show the backdrop **blurred**, darkened by a black 40% tint. The page card is opaque. Light mode: bright blur, no tint. |
-| 2 | Click another app (Finder), then back | While inactive: flat, no blur, no tint. Back: glass returns, no white flash, no black sidebar. ×10. |
+| 2 | Click another app (Finder), then back | While inactive: flat, no blur, no tint. **Compare the inactive grey side by side with Zen, dark and light** (Zen paints `InactiveCaption` there, `#181717` / `#e5e5e5`; ours is the material's own inactive fill). If it differs: the fallback is a token tint at alpha 1 while inactive. Back: glass returns, no white flash, no black sidebar. ×10. |
 | 3 | System Settings > Accessibility > Display > Reduce transparency on, then off, with Koan running | Opaque within about a second, glass back after. No crash. Repeat with compact mode on. |
 | 4 | Enter and leave native fullscreen (Ctrl+⌘+F) ×10, with compact mode on and off | Opaque in fullscreen with **no one-frame desktop flash** on entry or exit; glass is back after. No CHECK, no black panel. |
 | 5 | ⌘S (compact mode) on, hover the left edge and the top edge | The floating sidebar and toolbar have a **solid backing**, not see-through. Compact with the sidebar hidden but its header (traffic lights) kept: **no solid block behind the traffic lights**. |
@@ -19,4 +19,5 @@ is empty, Koan is still running and there is no new `.ips`.
 | 10 | Install a Web Store theme, then remove it | Note what glass does (Chromium turns it off with an extension theme). |
 | 11 | Share the window in a Meet tab (window capture) | Glass off during the capture, back after, no crash. |
 | 12 | DCHECK build: hover every sidebar row, open the URL bar, a toast, the Library and the welcome | No `Label` subpixel DCHECK, no `CustomCornersBackground` CHECK. |
-| 13 | Energy (GT8): 3 glass windows, a video in the front one, 5 min, on battery with Battery Saver on | Compare Activity Monitor "Energy Impact" and WindowServer CPU with "Translucent window" off. Record both. If it is much worse, keep glass on the key window only. |
+| 13 | Energy (GT8). Same 3 windows, a video playing in the front one, 5 minutes each, Activity Monitor "Energy Impact" and WindowServer CPU, in these configurations: (a) "Translucent window" off; (b) on, plugged in; (c) on, on battery with **Chromium's Battery Saver on** (Koan ignores it for glass: Zen has no such rule); (d) on, with macOS Low Power Mode; (e) upstream's one-window cap (develop with `--enable-features=GlassFrame` alone); (f) Zen with the same windows | Record all numbers in the PR. If (b)-(d) are much worse than (a), keep "key window only" as the fallback: glass on the active window, the others flat (Zen's inactive windows are flat anyway). |
+| 14 | Inactive windows: 3 windows, one active, in dark and light | WindowServer CPU with the 2 inactive windows: confirm `FollowsWindowActiveState` stops their blur (no cost for flat windows). |

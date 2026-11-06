@@ -62,7 +62,9 @@ small hook patches (docs/REBASE.md):
    upstream colour is skipped, not set and undone on every layout); in compact
    mode the floating sidebar, toolbar and top container keep their colours as
    a backing;
-5. no `opaque_background_view_` (it would sit under the whole-window blur).
+5. the `opaque_background_view_` stays, hidden, as a marker (it would sit under
+   the whole-window blur if shown): AppKit finds it by its identifier, for the
+   subview sorting and for whether a non-opaque window can occlude others. The marker view makes a glass window count as occluding (as upstream's glass window does): windows behind it can stop painting while they show through the blur. That only matters where manual occlusion is on, and it is off by default on macOS 26 (`kShutoffMacOS26Entirely`), which glass requires; if it is turned on, a video behind a Koan window freezes behind the blur.
    Going from glass to opaque (fullscreen, Reduce Transparency, setting off,
    capture) still waits for the compositor's first opaque frame before the
    blur view goes (`RemoveGlassBackground`, unpatched).
