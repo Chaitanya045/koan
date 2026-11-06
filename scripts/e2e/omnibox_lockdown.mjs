@@ -12,10 +12,11 @@
 import fs from 'node:fs';
 import {
   CDP_PORT, CTRL, check, clickView, finish, front, key, pages, readPref,
-  shownViews, sleep, views, viewTree, typeInto, visiblePage, waitFor, browserCall,
+  shownViews, sleep, views, viewTree, typeInto, visiblePage, waitFor, browserCall, evalIn,
 } from './lib/koan.mjs';
 
 const VK = { T: 84, L: 76, ESC: 27 };
+const MOD_SHIFT = 8;
 
 // Every DevTools target, also the browser's own WebUI (the popup is one).
 const targets = async () =>
@@ -126,6 +127,50 @@ check('Typing @ lists no Gemini or AI Mode shortcut',
       atRows.join(' | '));
 await key(page, VK.ESC, 0, 'Escape');
 await sleep(500);
+
+// O5, issue #178: no AI Mode on any surface the user sees. (1) The floating
+// bar / New Tab overlay: no chip, button, hint or tooltip for it.
+await key(page, VK.T, CTRL, 't');
+await waitFor(floating);
+await sleep(500);
+const aiText = v => `${v.props?.Text ?? ''} ${v.props?.TooltipText ?? ''} ` +
+                    `${v.props?.AccessibleName ?? ''} ${v.props?.PlaceholderText ?? ''}`;
+const aiViews = (await views()).filter(
+    v => v.shown && (/AiMode|AIM|Gemini/i.test(v.cls) ||
+                     /AI Mode|Ask AI|Gemini/i.test(aiText(v))));
+check('The New Tab overlay has no AI Mode chip, button, hint or tooltip',
+      aiViews.length === 0,
+      aiViews.map(v => `${v.cls}:${aiText(v).trim()}`).join(' | '));
+await key(page, VK.ESC, 0, 'Escape');
+await sleep(500);
+
+// (2) Search Tabs (Shift+Cmd+A on macOS, Shift+Ctrl+A elsewhere): the tab
+// search bubble is a WebUI page; none of its text mentions AI Mode.
+await key(page, 65, MOD_SHIFT | CTRL, 'a');
+const tabSearch = await waitFor(async () => (await pages()).find(
+    p => p.url.startsWith('chrome://tab-search')));
+if (tabSearch) {
+  await sleep(800);
+  const text = await evalIn(tabSearch, `(() => {
+      const out = [];
+      const walk = n => {
+        if (n.nodeType === Node.TEXT_NODE) out.push(n.textContent);
+        if (n.shadowRoot) walk(n.shadowRoot);
+        for (const c of n.childNodes ?? []) walk(c);
+        if (n.getAttribute) for (const a of ['aria-label', 'title', 'placeholder']) {
+          const v = n.getAttribute(a); if (v) out.push(v);
+        }
+      };
+      walk(document.documentElement);
+      return out.join(' ');
+    })()`);
+  check('Search Tabs (Shift+Cmd+A) shows no AI Mode', !/AI Mode|Ask AI|Gemini/i.test(text ?? ''),
+        (text ?? '').match(/.{0,30}(AI Mode|Ask AI|Gemini).{0,30}/i)?.[0] ?? '');
+  await key(page, VK.ESC, 0, 'Escape');
+  await sleep(500);
+} else {
+  console.log('INFO  no chrome://tab-search target found (the bubble is a popup; check by hand)');
+}
 
 // O3: a new tab page doesn't open the bar by itself.
 const before = (await pages()).length;
