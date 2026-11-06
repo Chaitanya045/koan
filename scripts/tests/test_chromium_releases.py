@@ -164,7 +164,7 @@ class MarkerTest(unittest.TestCase):
         marker))
 
 
-class MainTest(unittest.TestCase):
+class MainTestBase(unittest.TestCase):
   """main() with chromiumdash, git, the patch check and gh replaced."""
 
   def issue_for(self, releases, checks=None, patches='tree1', pin='158.0.8127.2'):
@@ -192,6 +192,9 @@ class MainTest(unittest.TestCase):
         mock.patch.object(cr, 'gh', side_effect=fake_gh):
       cr.main(['--pin', pin])
     return calls
+
+
+class MainTest(MainTestBase):
 
   def test_opens_an_issue_for_a_new_point_release(self):
     calls = self.run_main([rel('158.0.8127.9', 'Beta')])
@@ -285,7 +288,7 @@ class NextBetaTest(unittest.TestCase):
     self.assertIsNone(cr.marker_state(body))  # not the pin issue's marker
 
 
-class NextBetaMainTest(MainTest):
+class NextBetaMainTest(MainTestBase):
 
   BETA = [rel('158.0.8127.9'), rel('159.0.8200.1', 'Beta')]
 
