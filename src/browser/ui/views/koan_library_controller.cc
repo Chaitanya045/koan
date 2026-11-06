@@ -108,9 +108,10 @@ class KoanLibraryButton : public views::ImageButton {
                                 base::Unretained(library),
                                 std::optional<LibrarySection>())),
         browser_view_(library->browser_view()) {
-    SetImageModel(STATE_NORMAL, ui::ImageModel::FromVectorIcon(
-                                    kLibraryIcon, kColorKoanLibraryForeground,
-                                    library::kLibraryButtonIconSize));
+    SetImageModel(STATE_NORMAL,
+                  ui::ImageModel::FromVectorIcon(
+                      kKoanLibraryIcon, kColorKoanLibraryForeground,
+                      library::kLibraryButtonIconSize));
     SetImageHorizontalAlignment(ALIGN_CENTER);
     SetImageVerticalAlignment(ALIGN_MIDDLE);
     SetPreferredSize(

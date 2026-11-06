@@ -77,7 +77,8 @@ inline constexpr int kSmallButtonPadding = 6;
 // The Library button in the sidebar's footer, the size of the workspace
 // buttons beside it.
 inline constexpr int kLibraryButtonSize = 24;
-inline constexpr int kLibraryButtonIconSize = 18;
+// Zen draws library-sprite.svg's 18 px frame at 1.08x: 19.4 px.
+inline constexpr int kLibraryButtonIconSize = 19;
 
 // How much of a Space's colour tints its card.
 inline constexpr float kSpaceCardTint = 0.22f;

@@ -72,6 +72,21 @@ https://github.com/shadcn-ui/ui (MIT, Copyright (c) 2023 shadcn).
 2023 Vercel, in collaboration with basement.studio, under the SIL Open Font
 License 1.1 (`src/browser/ui/fonts/geist/OFL.txt`).
 
+## Icons: Lucide (ISC)
+
+`third_party/icons/lucide/*.svg` are icons from [Lucide](https://lucide.dev)
+(`lucide-static` 1.67.0), ISC licensed, Copyright (c) Lucide Icons and
+Contributors; some derive from Feather (MIT, Copyright (c) Cole Bemis). The
+full notice is in `third_party/icons/LICENSE-lucide`. Koan converts the ones it
+uses to `src/browser/ui/vector_icons/koan_*.icon` (`scripts/gen_koan_icons.py`)
+to give its UI Zen's icon vocabulary and weight. Zen's own icons are Nucleo
+icons and are **not** used or shipped by Koan.
+
+| Koan file | From |
+| --- | --- |
+| `third_party/icons/lucide/*.svg`, `src/browser/ui/vector_icons/koan_*.icon` | Lucide (ISC) |
+| `third_party/icons/zen/library.svg`, `src/browser/ui/vector_icons/koan_library.icon` | Zen Browser 1.24b `zen-icons/common/library/library.svg` (MPL-2.0; header kept; Zen's own glyph, not Nucleo) |
+
 ## Chromium-derived files
 
 `src/browser/ui/vector_icons/*.template` and

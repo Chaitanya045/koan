@@ -672,6 +672,19 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Icons
+
+Icons have Zen's look: the same vocabulary (back, reload, sidebar, +, close,
+...), sizes (17 pt toolbar, 16 pt favicon and close, 18 pt menus, 20 pt
+bottom-bar +), weight and rounded caps, in monochrome that takes the text
+colour. Zen's own icons can't be redistributed (Nucleo), so Koan draws them
+from [Lucide](https://lucide.dev) (ISC); see `.agent/notes/koan-icons.md`
+for the table. Icons that Chromium's UI asks for in its Material style
+(toolbar, tabs, location bar, menus, permission chips, download bubble) are
+swapped for them. Web pages of Chromium (Settings, History, New Tab) keep their
+own icons. In builds with DCHECKs, `--koan-icon-trace=<file>` writes the icons the UI
+asked for (and their sizes), for debugging.
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"): Koan

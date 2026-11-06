@@ -68,6 +68,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
@@ -1128,7 +1129,7 @@ void KoanWorkspaceController::AddDefaultCreateMenuEntries() {
   BrowserWindowInterface* browser = browser_view_->browser();
   CreateMenuEntry create_space;
   create_space.label = u"Create Space";
-  create_space.icon = &vector_icons::kContentCopyIcon;
+  create_space.icon = &kKoanPlusIcon;
   create_space.run = base::BindRepeating(
       &KoanWorkspaceController::ShowCreateForm, base::Unretained(this));
   AddCreateMenuEntry(std::move(create_space));

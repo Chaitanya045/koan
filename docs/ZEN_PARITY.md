@@ -12,6 +12,7 @@ point of Koan.
 
 | Zen | Koan | Notes |
 |---|---|---|
+| Icons: Zen's vocabulary, sizes and weight, tinted by the text colour | Different | Zen's are Nucleo icons, which can't be redistributed; Koan uses Lucide (ISC) glyphs in the same names, grid and weight (`.agent/notes/koan-icons.md`), swapped in for Chromium's Material icons everywhere in the native UI (one hook in `gfx::CreateVectorIcon`). Zen's own library sprites, the 87 Space icons and web pages' icons aren't ported yet. |
 | Vertical tabs in a sidebar | Same | Upstream Chromium vertical tabs, on by default. |
 | Page as a floating rounded card | Same | |
 | Sidebar and toolbar on one surface | Same | |

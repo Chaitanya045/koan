@@ -250,7 +250,7 @@ inline constexpr int kDownloadTileSize = 42;
 inline int DownloadTileCornerRadius() {
   return look::ScaleRadius(12);
 }
-inline constexpr int kDownloadTileIconSize = 24;
+inline constexpr int kDownloadTileIconSize = 18;
 inline constexpr int kDownloadTileShadowBlur = 6;
 inline constexpr int kDownloadTileEdge = 24;
 inline constexpr int kDownloadTileOvershoot = 34;
@@ -267,7 +267,7 @@ inline constexpr float kWelcomeTitleLineHeight = 1.05f;
 inline constexpr float kWelcomeTitleLetterSpacing = -0.03f;
 inline constexpr int kWelcomeStartButtonWidth = 100;
 inline constexpr int kWelcomeStartButtonHeight = 48;
-inline constexpr int kWelcomeStartButtonIconSize = 18;
+inline constexpr int kWelcomeStartButtonIconSize = 17;
 inline constexpr int kWelcomeStartButtonGap = 28;
 // On macOS the screen leaves the title bar row with the traffic lights
 // uncovered: Chromium places them in the top 38px (BrowserFrameViewMac::

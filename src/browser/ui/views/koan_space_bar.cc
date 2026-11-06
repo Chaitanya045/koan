@@ -13,6 +13,8 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
+#include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -222,7 +224,7 @@ KoanSpaceBarView::KoanSpaceBarView(KoanWorkspaceController* controller)
   // In the shadcn style the + is `muted-foreground`, `foreground` on hover.
   const bool shadcn = look::IsShadcnStyle();
   auto create = views::CreateVectorImageButtonWithNativeTheme(
-      views::Button::PressedCallback(), kAddIcon, /*dip_size=*/16,
+      views::Button::PressedCallback(), kAddIcon, kCreateIconSize,
       shadcn ? ui::ColorId(kColorKoanSpaceDot) : ui::kColorIcon,
       ui::kColorIconDisabled,
       shadcn ? ui::ColorId(kColorKoanSpaceForeground) : ui::kColorIconHovered);
