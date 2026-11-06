@@ -29,6 +29,7 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/widget/widget.h"
 
 namespace koan {
 
@@ -399,7 +400,16 @@ void KoanSpaceBarView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   }
 }
 
+int KoanSpaceBarView::GetWindowTint() const {
+  const views::Widget* widget =
+      GetWidget() ? GetWidget()->GetTopLevelWidget() : nullptr;
+  return widget && widget->user_color_override()
+             ? static_cast<int>(*widget->user_color_override())
+             : 0;
+}
+
 BEGIN_METADATA(KoanSpaceBarView)
+ADD_READONLY_PROPERTY_METADATA(int, WindowTint)
 END_METADATA
 
 }  // namespace koan

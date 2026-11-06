@@ -195,6 +195,7 @@ source_set("impl") {
     sources += [
       "koan_native_window_move_mac.mm",
       "koan_traffic_lights_mac.mm",
+      "koan_workspaces_mac.mm",
     ]
   }
   deps = [
@@ -273,6 +274,10 @@ source_set("impl") {
     "//chrome/browser/ui/views/tabs/common:impl",
     "//chrome/browser/ui/views/tabs/shared",
     "//chrome/browser/ui/views/tabs/dragging",
+    "//chrome/browser/tab_group_sync:factories",
+    "//chrome/browser/ui/views/tabs/groups",
+    "//components/saved_tab_groups/public",
+    "//components/bookmarks/common",
     "//chrome/browser/ui/views/tabs/tab",
     "//components/favicon/core",
     "//components/favicon_base",

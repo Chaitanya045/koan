@@ -22,6 +22,14 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // Workspaces are tab groups shown one at a time: upstream's group focus
   // mode hides every other group and scopes tab cycling to the focused one.
   overrides.EnableFeature(features::kTabGroupsFocusing);
+  // Upstream's tab group promos have no place with Spaces: "Focus" and
+  // "Unfocus" a group (Koan hides the group header and the Unfocus pill they
+  // point at), and saving groups (Spaces aren't saved groups).
+  overrides.DisableFeature(feature_engagement::kIPHTabGroupsFocusingFeature);
+  overrides.DisableFeature(feature_engagement::kIPHTabGroupsUnfocusingFeature);
+  overrides.DisableFeature(feature_engagement::kIPHTabGroupsSaveV2IntroFeature);
+  overrides.DisableFeature(
+      feature_engagement::kIPHTabGroupsSaveV2CloseGroupFeature);
   // Zen closes a tab with no history on Back and returns to its opener;
   // upstream's back-to-opener does exactly that. Switched by
   // prefs::kCloseOnBackWithNoHistory (koan_tab_hooks.h).
@@ -29,8 +37,9 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
 
   // The sidebar is Koan's (KoanVerticalTabsPolicy): the commands that reach
   // upstream's vertical tab strip state run the window's actions, which Koan
-  // re-points, so the legacy command switch (which would not go through
-  // them) must not be what runs. On by default upstream; set here so that a
+  // re-points (also the Spaces' tab group commands and the URL bar's new
+  // tab), so the legacy command switch (which would not go through them)
+  // must not be what runs. On by default upstream; set here so that a
   // study can't turn it off. (A command-line switch still can; the state
   // controller's hook keeps the mode and collapse state safe then.)
   overrides.EnableFeature(features::kUseActionsForBrowserCommands);

@@ -464,6 +464,15 @@ export async function createSpace(page, name) {
   await typeInto(field, name, 13);
 }
 
+// Each window's Space tint (its user colour override, an ARGB number; 0 for
+// none: Zen's default theme or the tint off), in viewTree() order, read from
+// KoanSpaceBarView's WindowTint property. A Space's colour never becomes the
+// profile's (`browser.theme.user_color2` stays the user's).
+export async function windowTints() {
+  return (await viewTree()).filter(v => v.cls === 'KoanSpaceBarView')
+      .map(v => Number(v.props.WindowTint ?? 0));
+}
+
 let failures = 0;
 export function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);

@@ -8,6 +8,7 @@
 #include <optional>
 
 class BrowserView;
+class BrowserWindowInterface;
 class TabStripModel;
 
 namespace tab_groups {
@@ -83,14 +84,46 @@ bool WrapsSpaces(TabStripModel* tab_strip);
 // "Unfocus" pill). Not in windows without Spaces (e.g. Incognito).
 bool ShowsSpaceHeader(const views::View* tab_group_view);
 
-// BrowserNativeWidgetMac::ValidateUserInterfaceItem() (the Mac menu bar), after
-// upstream's own validation: whether the menu item for `command_id` is hidden
-// in the window of `browser_view`; nullopt leaves it as upstream has it. The
-// one table of Koan's hides (the menu bar is shared by the windows, so each
-// window's validation sets the item both ways): Koan owns the sidebar, so
-// View > "Show Tabs Vertically" has no place (#154). "Collapse Vertical Tabs"
-// stays, as the menu item of Shift+Cmd+L: AppKit doesn't fire a hidden item's
-// key equivalent.
+// Whether `tab_strip`'s window has Spaces (koan_tab_menu.cc swallows
+// upstream's tab group commands there).
+bool HasSpaces(TabStripModel* tab_strip);
+
+// BrowserCommandController::HandleCommandWithDisposition(), first: runs
+// upstream's tab group command `command_id` the way a Spaces window does
+// (KoanWorkspaceController::RunGroupCommand()) and returns true, or returns
+// false (another command, or no Spaces). Only reached without
+// kUseActionsForBrowserCommands; with it the window's ActionItems do the same.
+bool HandleSpacesCommand(BrowserWindowInterface* browser, int command_id);
+
+// TabStripCollectionController::UpdateFocusModeTheme(): upstream gives a
+// focused group's window the group's colour (a per-window user colour
+// override, which also suppresses the profile's theme). In a Spaces window
+// Koan sets the override instead (KoanWorkspaceController): the Space
+// theme's colour, or none for Zen's default theme, so the user's colour and
+// theme show. Returns false where upstream decides (no Spaces).
+bool ApplySpaceColor(TabStripModel* tab_strip);
+
+// TabView::UpdateFocusFreezing(): whether `tab`'s window has Spaces, whose
+// other Spaces' tabs upstream's focus mode must not freeze (Koan's
+// background-tab policy decides, docs/PERFORMANCE.md; Zen freezes nothing
+// per Space).
+bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab);
+
+// BrowserNativeWidgetMac::ValidateUserInterfaceItem() (the Mac menu bar),
+// after upstream's own validation: Koan's one table of the menu bar items it
+// hides per window. For an item Koan decides, whether it is hidden (and
+// disabled) in `browser_view`'s window, or shown; nullopt for every other item
+// (upstream's state stands). The menu bar is shared by the windows, so each
+// window's validation sets an owned item both ways. Today:
+// - View > "Show Tabs Vertically", hidden while Koan owns the sidebar (#154).
+//   "Collapse Vertical Tabs" stays, as the menu item of Shift+Cmd+L: AppKit
+//   doesn't fire a hidden item's key equivalent.
+// - View > Always Show Toolbar in Full Screen, hidden while Koan's toolbar is
+//   hidden.
+// - The Tab menu's Group Tab and its Option alternate, hidden in a Spaces
+//   window.
+// Other features add their items here rather than set the hidden state
+// themselves.
 std::optional<bool> HidesMenuCommand(BrowserView* browser_view, int command_id);
 
 }  // namespace koan

@@ -25,6 +25,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
+  registry->RegisterListPref(kWorkspaceList);
   registry->RegisterBooleanPref(kGlanceEnabled, true);
   registry->RegisterStringPref(kGlanceActivationMethod, "alt");
   registry->RegisterDictionaryPref(kShortcuts);
