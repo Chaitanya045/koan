@@ -453,14 +453,32 @@ void KoanCompactModeController::OnSidebarCollapseSettled() {
     return;
   }
   // The locks that were refused while the sidebar collapsed (see
-  // TakeExpandedLock()) are taken now.
-  ReconcileBubbleHold();
+  // TakeExpandedLock()) are taken now. (Only the sidebar's: this also runs for
+  // the width changes of a resize drag and for expanded states, and
+  // ReconcileBubbleHold() has the toolbar's logic in it.)
+  const auto* state =
+      tabs::VerticalTabStripStateController::From(browser_view_->browser());
+  if (!hides_sidebar() || !state || !state->IsCollapsed()) {
+    return;
+  }
+  if (!bubble_lock_) {
+    ReconcileBubbleHold();
+  }
   if (peek_requested_ && !peek_lock_) {
     peek_requested_ = false;
     peek_lock_ = TakeExpandedLock();
   }
-  if (!hover_lock_ && sidebar_hot_zone_ &&
-      sidebar_hot_zone_->IsMouseHovered()) {
+  // A flash asked for during the collapse (a tab selected right after compact
+  // mode went on) shows now, for what is left of its time.
+  if (!flash_lock_ && flash_timer_.IsRunning()) {
+    flash_lock_ = TakeExpandedLock();
+  }
+  // The pointer is at the edge: on the hot zone, or, in fullscreen, where the
+  // hot zone has no width and CheckFullscreenEdges() tells (only when it
+  // changes, so a refused lock would never be asked for again).
+  if (!hover_lock_ &&
+      (edge_sidebar_hovered_ ||
+       (sidebar_hot_zone_ && sidebar_hot_zone_->IsMouseHovered()))) {
     hover_lock_ = TakeExpandedLock();
   }
 }
@@ -1380,6 +1398,8 @@ void KoanCompactModeController::Deactivate() {
   hover_release_timer_.Stop();
   ReleaseLock(hover_lock_);
   ReleaseLock(peek_lock_);
+  // (Zen drops `zen-user-show` when compact mode turns off.)
+  peek_requested_ = false;
   pointer_monitor_.reset();
   edge_sidebar_hovered_ = false;
   bubble_widgets_.RemoveAllObservations();
