@@ -24,6 +24,15 @@ Chromium `ToolbarView` drawn. Every run also fails on a "Koan: the vertical tab 
 
 Example: `MODE=old PREFS="$(cat scripts/e2e/prefs/vertical_tabs_old_profile.json)" scripts/mac/vtabs.sh build1 '/Users/me/work/koan-mac/apps/KoanCheck-x.app'`.
 
+## `remote_debugging.sh <app>`: the default-profile remote-debugging block
+
+Behaviour test of `patches/chrome/browser/devtools/remote_debugging_server.cc.patch` (Chrome's refusal of
+`--remote-debugging-port` / `--remote-debugging-pipe` on the default user data directory, on in Koan too). It runs
+on the Mac itself and starts Koan with `--no-startup-window`, so nothing is drawn. Leg A (always): a fresh
+`--user-data-dir` still gets its server. Leg B (only with `KOAN_DEFAULT_DIR_OK=1`, because it starts Koan on the real
+profile, so run it when the maintainer says the Mac is free and Koan is not running): the default directory must refuse
+both switches with the stderr message and leave 127.0.0.1:9222 silent. It prints one PASS/FAIL/SKIP line per leg.
+
 ## Rules the drivers follow (do not remove)
 
 * A run starts only after the hands-on tester granted the screen (`tmp/screen-granted`,

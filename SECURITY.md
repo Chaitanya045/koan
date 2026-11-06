@@ -34,6 +34,22 @@ You can expect an acknowledgement within a few days. We'll keep you
 informed while we investigate and fix it, and we'll credit you in the
 advisory unless you'd rather stay anonymous.
 
+## Remote debugging
+
+Koan, like Chrome, refuses `--remote-debugging-port` and
+`--remote-debugging-pipe` when it runs on its default user data directory
+(`~/Library/Application Support/Koan`); it prints "DevTools remote debugging
+requires a non-default data directory" and starts no server. Without that,
+any local process could launch Koan with a debugging port against your real
+profile and drive it or read its cookies. Pass a different `--user-data-dir`
+for debugging and automation (a separate, empty profile).
+
+This is a speed bump, not a boundary: a process running as you can still
+copy the profile, or start Koan with another `--user-data-dir`. It stops the
+silent, one-flag attack, not malware that already runs as you. Chrome's
+`chrome://inspect#remote-debugging` switch (a prompt for each connection)
+works as in Chromium.
+
 ## Koan or Chromium?
 
 Koan adds its own UI and features on top of Chromium. If a vulnerability is
