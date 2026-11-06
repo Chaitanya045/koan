@@ -73,8 +73,8 @@
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
-#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_session_data.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
@@ -1398,8 +1398,8 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
         }
       }
       if (new_index != TabStripModel::kNoTab) {
-        const int target = std::min(index > new_index ? index - 1 : index,
-                                    model->count() - 1);
+        const int target =
+            std::min(index > new_index ? index - 1 : index, model->count() - 1);
         if (target != new_index) {
           model->MoveWebContentsAt(new_index, target,
                                    /*select_after_move=*/false);
@@ -1413,9 +1413,9 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
           continue;
         }
       }
+      MarkEmptyTab(model->GetWebContentsAt(new_index));
       indices = {new_index};
     }
-    MarkEmptyTab(model->GetWebContentsAt(new_index));
     // Same id, so whatever refers to the Space still does.
     model->AddToGroupForRestore(indices, closed.id);
     WriteSpace(closed.id, closed.data);
