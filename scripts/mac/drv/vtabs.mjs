@@ -3,7 +3,7 @@
 //        Incognito / Spaces (create, switch) / small window / theme picker (not automated yet) / quit. Then scan the log and compare with the previous run.
 import { execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { sleep, pages, browserCall, waitFor, visiblePage, evalIn } from './lib/koan.mjs';
+import { sleep, pages, browserCall, waitFor, evalIn } from './lib/koan.mjs';
 import { fviews } from './fv.mjs';
 const { BUILD = 'build', APP_PATH, KEYSET = 'base' } = process.env; const OVERRIDE_USER_AWAY = '';  // the presence check can no longer be switched off  // KEYSET=base: Ctrl+S compact, Ctrl+Shift+P private (plain develop); KEYSET=cmd: Cmd+S, Cmd+Shift+P (#90 and later)
 const M = '/Users/chaitanya/work/koan-mac';
@@ -105,18 +105,30 @@ if (MODE === 'main') {
   // Shift+Cmd+L is Koan's inspector (Zen's key_inspectorMac, #90), not the sidebar button's: it must open the inspector and leave the sidebar as it is, never the rail.
   await step('T13b: Shift+Cmd+L opens the inspector and leaves the sidebar alone, no rail', async () => { const a = await inv('before', { hidden: false }); if (!(await key(37, 'cs'))) return 'key skipped'; await settle(); const b = await inv('after Shift+Cmd+L', { hidden: false }); await key(37, 'cs'); await settle(); return a + ' | ' + b; });
   await step('T14: Shift+Cmd+A opens the URL bar in the tabs mode (the Tabs chip, empty input), typing a title word and Enter switches to that tab', async () => {
-    // A second tab whose title has a word (tqz) that the first one's doesn't; back to the first.
-    // The tab showing in the front window: a new tab (newWindow: false) opens in the front window, not in the first one of the target list.
-    const first = (await visiblePage()) ?? (await pages()).find(p => p.type === 'page');
+    // Independent of visiblePage(): the tab this step creates is recorded by its target id, and its window found with
+    // Browser.getWindowForTarget. A page target with no window (background, prerender, a discarded tab) is not a tab in a window.
     const windowOf = async id => (await browserCall('Browser.getWindowForTarget', { targetId: id })).result?.windowId;
-    const firstWindow = await windowOf(first.id);
+    const windowed = async () => {
+      const out = [];
+      for (const p of await pages()) {
+        const w = p.type === 'page' ? await windowOf(p.id) : undefined;
+        if (w !== undefined) out.push({ page: p, window: w });
+      }
+      return out;
+    };
+    const brief = list => list.map(t => `${t.page.title?.slice(0, 20)}@${t.page.url.slice(0, 30)}#${t.page.id.slice(0, 6)}w${t.window}`).join(' | ');
+    // A second tab whose title has a word (tqz) that the others don't; it opens in the front window.
     const other = (await browserCall('Target.createTarget', { url: 'data:text/html,<title>tqz page</title>other tab', newWindow: false })).result.targetId;
+    let first, otherWindow;
     try {
       await sleep(1500);
-      // In the first window, as a tab: a tab of a window of its own would be closed with its window below.
-      need((await windowOf(other)) === firstWindow, `the extra tab opened in another window (windows: ${JSON.stringify(await Promise.all((await pages()).map(async p => [p.id.slice(0, 6), await windowOf(p.id)])))}, front: ${firstWindow})`);
+      otherWindow = await windowOf(other);
+      need(otherWindow !== undefined, 'the extra tab has no window (Browser.getWindowForTarget)');
+      // Another tab of the same window: back to it, so the extra tab is the one to switch to.
+      first = (await windowed()).find(t => t.window === otherWindow && t.page.id !== other)?.page;
+      need(!!first, `the extra tab is alone in its window (windowed tabs: ${brief(await windowed())})`);
       await browserCall('Target.activateTarget', { targetId: first.id }); await sleep(800);
-      const known = new Set((await pages()).map(p => p.id));
+      const known = new Set((await windowed()).map(t => t.page.id));
       const count = known.size;
       if (!(await key(0, 'cs'))) return 'key skipped';
       await sleep(1200);
@@ -134,24 +146,27 @@ if (MODE === 'main') {
       for (const code of [17, 12, 6]) { await key(code, ''); }  // t q z
       await sleep(900);
       await key(K.RETURN); await sleep(1500);
-      const visible = await visiblePage();
-      const title = visible ? await evalIn(visible, 'document.title') : null;
-      const now = await pages();
-      const brief = ps => ps.map(p => `${p.title?.slice(0, 20)}@${p.url.slice(0, 30)}`).join(' | ');
-      const lost = (await Promise.resolve([...known])).filter(id => !now.some(p => p.id === id));
-      console.log(`T14 targets before: ${count}, after: ${now.length}, gone: ${lost.length}; now: ${brief(now)}`);
-      need(title === 'tqz page', `Enter on a match did not switch to the tab (visible tab: ${JSON.stringify(title)})`);
+      const now = await windowed();
+      const otherNow = now.find(t => t.page.id === other)?.page;
+      const shown = otherNow ? await evalIn(otherNow, 'document.visibilityState') : null;
+      const title = otherNow ? await evalIn(otherNow, 'document.title') : null;
+      const lost = [...known].filter(id => !now.some(t => t.page.id === id));
+      console.log(`T14 tabs before: ${count}, after: ${now.length}, gone: ${lost.length}; now: ${brief(now)}`);
+      need(otherNow && shown === 'visible' && title === 'tqz page', `Enter on a match did not switch to the tab (the tqz tab: ${otherNow ? `${shown}, ${JSON.stringify(title)}` : 'gone'})`);
       // Enter must switch, not open a tab (a web search for "@tabs tqz" would). Tabs of other Spaces may be unloaded by a switch of
       // Space and leave the target list, so the count isn't asserted, only that nothing new appeared.
-      const opened = now.filter(p => !known.has(p.id));
-      need(opened.length === 0, `Enter opened ${opened.length} new tab(s): ${opened.map(p => p.url).join(', ')}`);
-      return `URL bar view shown: ${bar}, Tabs chip, switched to the tqz tab, targets ${count} -> ${now.length}`;
+      const opened = now.filter(t => !known.has(t.page.id));
+      need(opened.length === 0, `Enter opened ${opened.length} new tab(s): ${opened.map(t => t.page.url).join(', ')}`);
+      return `URL bar view shown: ${bar}, Tabs chip, switched to the tqz tab, tabs ${count} -> ${now.length}`;
     } finally {
       // Whatever failed: no URL bar left open and no extra tab left behind for the steps after this one.
       try { await key(K.ESC); await sleep(400); } catch {}
-      // Only a tab of the first window: never the window with its last tab.
-      try { if ((await windowOf(other)) === firstWindow) { await browserCall('Target.closeTarget', { targetId: other }); await sleep(600); } } catch {}
-      try { await browserCall('Target.activateTarget', { targetId: first.id }); } catch {}
+      // Only if it shares its window with another tab: never close a window with its last tab.
+      try {
+        const tabs = await windowed();
+        if (tabs.filter(t => t.window === otherWindow).length > 1) { await browserCall('Target.closeTarget', { targetId: other }); await sleep(600); }
+      } catch {}
+      try { if (first) await browserCall('Target.activateTarget', { targetId: first.id }); } catch {}
     }
   });
   await step('T21a: compact toggled twice within ~250 ms ends expanded (Zen width)', async () => { await prime(); rapid(2, 60); await settle(2200); return inv('after 2 quick toggles'); });
