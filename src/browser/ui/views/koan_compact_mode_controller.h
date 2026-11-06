@@ -329,6 +329,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnContentCardChanged();
 
   void OnSidebarHotZoneHovered(bool hovered);
+  void CheckHoverLock();
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
 
@@ -381,6 +382,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   base::OneShotTimer flash_timer_;
   // Keeps the sidebar out for a moment after the pointer leaves its hot zone.
   base::OneShotTimer hover_release_timer_;
+  // Watches the pointer while a hover lock was taken for a hover the hot zone
+  // never reported (CheckHoverLock()).
+  base::RepeatingTimer hover_poll_timer_;
   std::optional<base::TimeTicks> toolbar_unwanted_since_;
   bool edge_sidebar_hovered_ = false;
   // Bubbles that hold the toolbar or the sidebar out (see

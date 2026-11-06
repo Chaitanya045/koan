@@ -104,6 +104,10 @@ constexpr int kFullscreenEdgeSize = 2;
 // Zen's flash popup (zen.view.compact.toolbar-flash-popup.duration).
 constexpr base::TimeDelta kFlashDuration = base::Milliseconds(800);
 
+// How often to look at where the pointer is while a hover lock was taken for a
+// hover the hot zone never reported (CheckHoverLock()). Koan's own.
+constexpr base::TimeDelta kHoverPollInterval = base::Milliseconds(100);
+
 // Zen's toolbar context menu (zen-vertical-tabs.ftl).
 enum ContextMenuCommand {
   kCommandCompactModeToggle = 1,
@@ -483,7 +487,32 @@ void KoanCompactModeController::OnSidebarCollapseSettled() {
       (edge_sidebar_hovered_ ||
        (sidebar_hot_zone_ && sidebar_hot_zone_->IsMouseHovered()))) {
     hover_lock_ = TakeExpandedLock();
+    // The hot zone may never have been told of this hover: it appears under a
+    // pointer that doesn't move (the pointer rests at the edge as compact mode
+    // goes on), and views sends an enter only with a move. Its "left" would
+    // never come either, and the lock would stay. So the pointer's place is
+    // watched until it has left.
+    if (hover_lock_) {
+      hover_poll_timer_.Start(FROM_HERE, kHoverPollInterval, this,
+                              &KoanCompactModeController::CheckHoverLock);
+    }
   }
+}
+
+void KoanCompactModeController::CheckHoverLock() {
+  if (!hover_lock_ || IsClosing()) {
+    hover_poll_timer_.Stop();
+    return;
+  }
+  if (edge_sidebar_hovered_ ||
+      (sidebar_hot_zone_ && sidebar_hot_zone_->IsMouseHovered())) {
+    return;
+  }
+  // Left, as the hot zone would have told: the lock goes after the keep-hover
+  // time, and upstream's hover tracking keeps the sidebar out while the
+  // pointer is on it.
+  hover_poll_timer_.Stop();
+  OnSidebarHotZoneHovered(false);
 }
 
 std::unique_ptr<ExpandOnHoverLock>
@@ -1406,6 +1435,7 @@ void KoanCompactModeController::Deactivate() {
   toolbar_unwanted_since_.reset();
   EndFlash();
   hover_release_timer_.Stop();
+  hover_poll_timer_.Stop();
   ReleaseLock(hover_lock_);
   ReleaseLock(peek_lock_);
   // (Zen drops `zen-user-show` when compact mode turns off.)
