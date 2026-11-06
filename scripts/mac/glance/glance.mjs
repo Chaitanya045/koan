@@ -16,8 +16,8 @@
 // CDP keys don't take the menu bar's key equivalents, and step 3 needs real
 // keys. Menu steps are then skipped.
 //
-// Steps run: 1-10, 13, 16, 17, 20, 18 (default: all of these; 18 minimises
-// the window, so it goes last). Steps 11, 12 (discards), 14 (context menu), 15
+// Steps run: 1-10, 13, 16, 17, 20, 21, 18 (default: all of these; 18
+// minimises the window, so it goes last). Steps 11, 12 (discards), 14 (context menu), 15
 // and 19 are manual: see scripts/mac/steps/glance.md.
 import { execSync } from 'node:child_process';
 
@@ -574,6 +574,8 @@ const steps = {
   // Zen's New Window), whose new tab is sent to the fixture page.
   async 20() {
     if (!PID) return console.log('SKIP  20 (needs the Mac)');
+    // The test window first: its context is what the new one must differ from.
+    const fixture = await parentTab();
     const before = new Set((await targets()).map(t => t.id));
     await key(K.P, 'cs');  // ⌘⇧P: New Private Window (Zen's key)
     const fresh = await waitFor(async () =>
@@ -582,8 +584,8 @@ const steps = {
     // Off the record: another browser context than the test window's.
     const contexts = (await browserCall('Target.getTargets')).result?.targetInfos ?? [];
     const contextOf = id => contexts.find(t => t.targetId === id)?.browserContextId;
-    const fixture = await parentTarget();
-    const isPrivate = !!contextOf(fresh.id) && contextOf(fresh.id) !== contextOf(fixture?.id);
+    const isPrivate = !!fixture && !!contextOf(fresh.id) && !!contextOf(fixture.id) &&
+                      contextOf(fresh.id) !== contextOf(fixture.id);
     await check('20 ⌘⇧P opens a private window (another browser context)', isPrivate,
                 `context ${contextOf(fresh.id)} vs ${contextOf(fixture?.id)}`);
     if (!isPrivate) return;
@@ -603,6 +605,23 @@ const steps = {
     await browserCall('Target.closeTarget', { targetId: page.id });
     await sleep(800);
   },
+  // ⌘M in a Glance in native fullscreen: Minimize is off for a fullscreen
+  // window, so nothing minimises (the key falls through, review c).
+  async 21() {
+    if (!PID) return console.log('SKIP  21 (needs the Mac)');
+    await parentTab();
+    await key(K.F, 'ck');  // ⌃⌘F: native fullscreen
+    await sleep(2500);
+    await glance('child');
+    await key(K.M, 'c');
+    await sleep(1200);
+    const states = parentWindowMinimized();
+    await check('21 ⌘M in a Glance in native fullscreen minimises nothing', states === 'false',
+                `AXMinimized: ${states}`);
+    await closeCard();
+    await key(K.F, 'ck');  // leave fullscreen
+    await sleep(2500);
+  },
   // ⌘M (Window > Minimize) in a Glance minimises the window, as in Zen.
   // Last: the window is restored over CDP, and no key is sent after it.
   async 18() {
@@ -613,10 +632,9 @@ const steps = {
     await sleep(1200);
     // AppKit's own state (CDP's windowState isn't reliable here: it reports
     // a zoomed window as 'maximized' throughout).
-    const minimized = () => mac(`osascript -e 'tell application "System Events" to tell ` +
-        `(first process whose unix id is ${PID}) to get value of attribute "AXMinimized" of windows'`);
-    const states = minimized();
-    await check('18 ⌘M in a Glance minimises the window', /true/.test(states), `AXMinimized: ${states}`);
+    const states = parentWindowMinimized();
+    await check("18 ⌘M in a Glance minimises the Glance's window", states === 'true',
+                `AXMinimized: ${states}`);
     const win = await browserCall('Browser.getWindowForTarget', { targetId: parent.id });
     if (win.result?.windowId) {
       await browserCall('Browser.setWindowBounds',
@@ -626,6 +644,14 @@ const steps = {
   },
 };
 
+// AppKit's AXMinimized of the test window (titled by the fixture page, "Glance
+// parent"), as osascript prints it ("true" / "false").
+function parentWindowMinimized() {
+  return mac(`osascript -e 'tell application "System Events" to tell ` +
+      `(first process whose unix id is ${PID}) to get value of attribute "AXMinimized" ` +
+      `of (first window whose name is "Glance parent")'`);
+}
+
 // A new tab in the background (no activation), once its target is there.
 async function openBackgroundTab(url) {
   await browserCall('Target.createTarget', { url, background: true });
@@ -634,7 +660,8 @@ async function openBackgroundTab(url) {
 
 const wanted = process.argv.slice(2).length
     ? process.argv.slice(2)
-    : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '13', '16', '17', '20', '18'];
+    : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '13', '16', '17', '20', '21',
+       '18'];
 if (!PID) console.log('NOTE  no PID: keys go through CDP (not conclusive on macOS), menu steps skipped');
 for (const s of wanted) {
   try {
