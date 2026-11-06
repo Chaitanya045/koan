@@ -252,6 +252,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // none, both go as they would. Not from inside layout.
   void ScheduleBubbleCheck();
   void ReconcileBubbleHold();
+  // One check now, one after 150 ms and one after 600 ms (the bubble may open
+  // a moment after its anchor was asked for), whatever the number of asks.
+  void RunBubbleCheck();
   void CheckToolbarHide();
 
   // While the toolbar, the caption strip or a peeked sidebar is out, watches
@@ -374,6 +377,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
       bubble_widgets_{this};
   std::unique_ptr<ExpandOnHoverLock> bubble_lock_;
+  base::OneShotTimer bubble_check_timer_;
+  int bubble_check_step_ = 0;
   // A point at the window's top that is always on screen while Koan hides the
   // toolbar: where bubbles point when neither the pill nor the header is.
   raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
