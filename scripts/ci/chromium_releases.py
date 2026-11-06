@@ -21,9 +21,10 @@ It also gives an early warning, report only: the newest Beta of the next
 milestone (the first one that is neither ours nor at Stable yet) is checked
 the same way, about 4 weeks before that milestone reaches Stable, and ONE
 other issue (label `chromium-next-beta`) says whether the patches still
-apply. It has no due date and asks for no pin change; it closes when that
-milestone reaches Stable (the `chromium-update` issue takes over) or the pin
-has moved past it.
+apply. It has no due date and asks for no pin change. When that milestone
+reaches Stable (the `chromium-update` issue takes it over) the same issue is
+retitled to the next milestone's Beta; it closes only when no later Beta
+exists.
 
   chromium_releases.py [--dry-run] [--pin VERSION]
 
@@ -295,8 +296,8 @@ def render_next_beta_body(pin, beta, check, marker, run_url=''):
     ]
   if run_url:
     lines.append('Updated by [this run](%s). Maintained by the workflow; it '
-                 'closes when M%d reaches Stable or the pin moves past it.' %
-                 (run_url, beta.milestone))
+                 'when M%d reaches Stable it moves on to the next Beta, and it '
+                 'closes when there is none.' % (run_url, beta.milestone))
   if not marker.get('complete'):
     lines.append('The check could not be completed; the next run tries '
                  'again.')
@@ -471,8 +472,9 @@ def update_next_beta_issue(args, pin, releases):
     if issue and old and old.get('milestone') is not None and (
         old['milestone'] <= max(milestone(pin), stable_top)):
       gh('issue', 'close', str(issue['number']), '--comment',
-         'M%d is at Stable or behind the pin now; the `chromium-update` issue '
-         'takes it from here.' % old['milestone'], dry_run=args.dry_run)
+         'M%d is at Stable or behind the pin now and no later Beta exists; '
+         'the `chromium-update` issue takes it from here.' % old['milestone'],
+         dry_run=args.dry_run)
     return
 
   print('next-milestone Beta: %s' % beta.version)

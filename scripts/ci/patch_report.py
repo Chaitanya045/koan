@@ -15,8 +15,10 @@ tree against a base revision (the PR's merge base):
 It fails (exit 1) if a NEW patch has no row in docs/REBASE.md: a row in the
 hook table says what the patch hooks, why, and what to re-check at a rebase
 (rule 2 of "Upgrade-safe code" in .agent/notes/agent-brief.md). A row is a
-table line (starting with `|`) that names the patch's file: by its path, or
-its file name; for a BUILD.gn/.gni by its path or, as the rows mention them
+table line (starting with `|`) with a backticked name of the patch's file: its
+whole path, a trailing part of it from a directory on (`tabs/common/tab_view.cc`,
+`.../` allowed), or its bare file name, never part of a name (`foo.cc` is not
+`tab_foo.cc`); for a BUILD.gn/.gni its path or, as the rows mention them
 ("+ its BUILD.gn"), when another patch in the same directory has a row.
 
   patch_report.py [--base REF] [--summary FILE]
@@ -26,7 +28,6 @@ to FILE (GITHUB_STEP_SUMMARY); it is always printed.
 """
 
 import argparse
-import os
 import pathlib
 import re
 import subprocess
@@ -86,27 +87,42 @@ def sizes_on_disk():
 
 
 def table_rows(markdown):
-  """The table lines of REBASE.md, joined: only they count as rows. A
-  `name.{h,cc}` also counts as `name.h` and `name.cc`."""
-  rows = '\n'.join(
-      l for l in markdown.splitlines() if l.lstrip().startswith('|'))
-  expanded = [
-      '%s.%s' % (base, ext)
-      for base, exts in re.findall(r'([\w./-]+)\.\{([\w,]+)\}', rows)
-      for ext in exts.split(',')
-  ]
-  return rows + '\n' + '\n'.join(expanded)
+  """The names the hook table's rows mention: every backticked span of a table
+  line (starting with `|`), a leading `.../` stripped, `name.{h,cc}` expanded
+  to `name.h` and `name.cc`. A set, so that a name matches whole or not at
+  all (`foo.cc` is not `tab_foo.cc`)."""
+  tokens = set()
+  for line in markdown.splitlines():
+    if not line.lstrip().startswith('|'):
+      continue
+    for span in re.findall(r'`([^`]+)`', line):
+      span = span.strip()
+      while span.startswith('.../') or span.startswith('./'):
+        span = span.split('/', 1)[1]
+      match = re.fullmatch(r'(.+)\.\{([\w,]+)\}', span)
+      if match:
+        tokens.update('%s.%s' % (match.group(1), ext)
+                      for ext in match.group(2).split(','))
+      else:
+        tokens.add(span)
+  return tokens
+
+
+def names(path, tokens):
+  """Does a token name this file: by its whole path, a trailing part of it
+  starting at a directory (`tabs/common/tab_view.cc`), or its bare name?"""
+  return any(path == t or path.endswith('/' + t) for t in tokens)
 
 
 def has_row(path, rows, covered_dirs):
-  """Does a hook-table row name this patch's file?"""
+  """Does a hook-table row name this patch's file? `rows` is table_rows()."""
   name = path.rsplit('/', 1)[-1]
   directory = path.rsplit('/', 1)[0] if '/' in path else ''
-  if path in rows:
-    return True
   if name in BUILD_FILES:
-    return directory in covered_dirs
-  return name in rows
+    # A bare `BUILD.gn` names every build file: only a path counts, or a
+    # sibling patch in the directory having a row ("+ its BUILD.gn").
+    return names(path, {t for t in rows if '/' in t}) or directory in covered_dirs
+  return names(path, rows)
 
 
 def missing_rows(new_paths, all_paths, rows):

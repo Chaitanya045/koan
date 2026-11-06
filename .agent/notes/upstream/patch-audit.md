@@ -175,8 +175,10 @@ reappear. Proposal: a settings e2e step that loads
 `native_theme_features.cc` (14), `channel_info_posix.cc` (3),
 `chrome_paths_linux.cc` (3), `shell_integration_linux.cc` (3). Koan is a Mac
 product and Linux builds are disabled, so these only cost rebase work (the
-first of them has a `#if BUILDFLAG(IS_LINUX)` with a changed default). Delete
-them with the Linux e2e harness, together with their REBASE rows.
+first of them has a `#if BUILDFLAG(IS_LINUX)` with a changed default). The
+scrollbar patch is kept on purpose, for the Linux e2e screenshots (its
+REBASE row says so), so it goes when that harness goes; the other three have
+no such reason and can go now. Delete each with its REBASE row.
 `session_startup_pref.cc` (4) is cross-platform and stays.
 
 ## Rule 3: strings where symbols exist

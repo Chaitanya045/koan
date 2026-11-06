@@ -55,6 +55,15 @@ class RowTest(unittest.TestCase):
   def test_only_table_lines_count(self):
     self.assertNotIn('other_file.cc', self.rows())
 
+  def test_a_name_matches_whole_not_as_part_of_another(self):
+    rows = pr.table_rows('| x | `tab_foo.cc` | `chrome/a/baz.cc` |')
+    self.assertEqual(pr.missing_rows(['chrome/b/foo.cc'], ['chrome/b/foo.cc'], rows),
+                     ['chrome/b/foo.cc'])
+    self.assertEqual(pr.missing_rows(['chrome/b/tab_foo.cc'], [], rows), [])
+    # ...nor in prose or unquoted in a table.
+    rows = pr.table_rows('| x | foo.cc is here |\nfoo.cc `bar.cc`')
+    self.assertEqual(pr.missing_rows(['x/foo.cc'], ['x/foo.cc'], rows), ['x/foo.cc'])
+
   def test_path_name_brace_and_shorthand_match(self):
     paths = [
         'chrome/browser/ui/tabs/tab_menu_model.cc', 'ui/color/color_mixers.h',
@@ -73,8 +82,11 @@ class RowTest(unittest.TestCase):
     everything = [tabs, other, 'chrome/browser/ui/tabs/tab_menu_model.cc']
     self.assertEqual(pr.missing_rows([tabs, other], everything, self.rows()),
                      [other])
+    # A bare `BUILD.gn` in a row names no build file.
+    bare = pr.table_rows('| x | `BUILD.gn` |')
+    self.assertEqual(pr.missing_rows([other], [other], bare), [other])
     # ...or by naming its path.
-    rows = self.rows() + '\n| x | `chrome/other/BUILD.gn` | y |'
+    rows = pr.table_rows(ROWS + '| x | `chrome/other/BUILD.gn` | y |')
     self.assertEqual(pr.missing_rows([other], everything, rows), [])
 
 
@@ -93,24 +105,25 @@ class CompareTest(unittest.TestCase):
 class RenderTest(unittest.TestCase):
 
   def test_without_a_base_only_totals(self):
-    report, missing = pr.render({'a': (5, 1)}, None, '', None)
+    report, missing = pr.render({'a': (5, 1)}, None, set(), None)
     self.assertIn('1 patches, 5 changed upstream lines', report)
     self.assertEqual(missing, [])
 
   def test_fails_for_a_new_patch_without_a_row_not_for_old_ones(self):
     base = {'old/no_row.cc': (3, 1)}
     head = {'old/no_row.cc': (3, 1), 'new/hook.cc': (6, 1)}
-    report, missing = pr.render(head, base, '| x | `hook.cc` | y |', 'origin/develop')
+    report, missing = pr.render(head, base, pr.table_rows('| x | `hook.cc` | y |'),
+                                'origin/develop')
     self.assertEqual(missing, [])  # new/hook.cc has a row by file name
     self.assertIn('+1', report)
-    report, missing = pr.render(head, base, '', 'origin/develop')
+    report, missing = pr.render(head, base, pr.table_rows(''), 'origin/develop')
     self.assertEqual(missing, ['new/hook.cc'])
     self.assertIn('FAIL', report)
     self.assertIn('`new/hook.cc`: 6 lines', report)
 
   def test_large_patches_are_listed_but_do_not_fail(self):
     head = {'a/big.cc': (pr.LARGE_LINES, 3)}
-    report, missing = pr.render(head, dict(head), '', 'b')
+    report, missing = pr.render(head, dict(head), set(), 'b')
     self.assertIn('Large patches', report)
     self.assertEqual(missing, [])
 

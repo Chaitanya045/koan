@@ -61,6 +61,15 @@ up, and says nothing while nothing changed. Run it by hand from the Actions
 tab ("Run workflow", with *dry run* to only print), or locally with
 `python3 scripts/ci/chromium_releases.py --dry-run`.
 
+The same run keeps an early warning, report only: the newest Beta of the first
+milestone that is neither ours nor at Stable yet is checked the same way, and
+ONE other issue, labelled `chromium-next-beta`, says whether the patches still
+apply (title "M159 Beta early warning: 159.0.8200.5, 1 of 114 patches fail").
+It has no due date and asks for no pin change. It stays open: when M159
+reaches Stable the issue is retitled to the next milestone's Beta (M160), and
+it closes only when no later Beta exists. A comment is posted only when the
+set of failing patches changes. See "Rehearsing the next milestone".
+
 ### Point release
 
 Rarely touches the hooks.
@@ -119,11 +128,13 @@ ports early: they target the new milestone and don't apply to the pin.
    scripts/ci/patch_report.py --base origin/develop` shows what the ports cost.
    Rebase the branch on `develop` weekly, and re-run the check when the Beta
    changes (the issue updates itself).
-3. **Compile.** On the branch set `CHROMIUM_VERSION` to the Beta's tag and
-   commit (`scripts/update_chromium.sh` writes them, but it moves a
-   checkout: do it in a **second** Chromium checkout, so the daily one keeps
-   its objects; a new milestone changes the compiler and rebuilds everything,
-   plan for an overnight build). Build there through the Mac loop, the first
+3. **Compile.** On the branch set **both lines** of `CHROMIUM_VERSION`: the
+   Beta's tag, then the commit it points to (`check_patches.sh` stops if they
+   disagree; `scripts/update_chromium.sh <tag>` writes both, but it moves the
+   checkout under its own `$ROOT/chromium/src`). So use a **second Koan
+   clone with its own `chromium/`** (the daily clone keeps its objects; a new
+   milestone changes the compiler and rebuilds everything, plan for an
+   overnight build). Build there through the Mac loop, the first
    time with `autoninja -C out/Koan -k 0 chrome` (`scripts/build.sh` has no
    pass-through) so one pass lists every compile error. For M158 that found
    one failing step in about 58,000: `PopupBlockerTabHelper` had become a
