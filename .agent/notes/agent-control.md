@@ -783,7 +783,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-keep-7 | other tabs unchanged: a normal background tab still throttles and freezes | `power.mjs`-style numbers unchanged |
 | T-keep-8 | priority: renderer process `taskpolicy`/`ps` state with and without the Glic vote | not background |
 | T-keep-9 | hold-off: no command for 3 s, then a command | lease released after 3 s (tab hidden again, `Koan.status` shows it), re-acquired transparently by the next command; held through a `wait`, an open screencast and `keepAlive` |
-| T-keep-10 | time to first frame after a re-acquire, on a hidden tab, 20 runs | median and p95 ≤ 100 ms and ≤ 250 ms (else lengthen the hold-off) |
+| T-keep-10 | time to first frame after a re-acquire, on a hidden tab, 20 runs | the 20 samples' median ≤ 100 ms and p95 ≤ 250 ms (else lengthen the hold-off); a latency check on this test, not a benchmark verdict |
 | T-keep-11 | a **new, never-shown** background tab (`did_first_set_visible_` false) under the lease | produces its first paint and answers a screenshot |
 | T-keep-12 | lease and pin composition: a user-pinned or Essential tab taken over and released; an agent tab the user pins meanwhile | the PM pinned bit is `user || lease` at every step; Koan's own `IsPinnedForUser` never reads the lease; nothing is left exempt after release |
 | T-keep-13 | the popup-menu runner: click a `<select>` in an agent tab while attached, also after a hold-off; then hand a user tab back | no native NSMenu while attached; native popups return after hand-back |
@@ -864,7 +864,7 @@ its tests listed).
   says "faster" until the phase-3 numbers exist.
 * **3, the speed phase, last:** `Koan.snapshot` / `act` / `run` in the browser (with an `eval` step, §20.2), incremental
   diffs, the event-driven wait signals, text-first results; re-run the benchmark, including **the ego(lite) run
-  (mandatory for the headline)**. The headline is `< 1.0×` ego on the suite, not parity.
+  (mandatory for the headline)**. The headline is the upper 95 % bound of the paired wall-time ratio Koan / ego being `< 1.0` on the suite (§20.7), not parity.
 * **Later:** `network`/`cookies`/`clipboard` capabilities, Keychain-bound client keys, Touch ID strict mode, O2 window mode.
 
 Phase 2 may start now, after #186 (maintainer, 2026-11-07); it is no longer gated on the 24 Nov parity merges, but Zen-parity
@@ -1211,7 +1211,7 @@ with a failure taxonomy (wrong result, gave up, budget exhausted, stuck on a sta
 retries, time-to-first-progress, plus environment (versions, machine, power state, window state: foreground vs
 covered). Also a **micro layer** over 100 iterations each: connect+auth, `snapshot` (ms, bytes, tokens) on 10 saved real
 pages, `click`+settle, `wait nav`, in a foreground and a covered window.
-The **summary statistic is the paired difference with a bootstrap 95 % CI** (Method, below); medians and IQRs are printed for context only and never decide a verdict.
+The **summary statistic is the paired ratio with a bootstrap 95 % CI** (defined under "The one statistic", below); medians and IQRs are printed for context only and never decide a verdict.
 
 **External baselines (zen-ref's ego(lite) numbers, and any other hand-measured target).** Not every target can be
 driven by an adapter (ego needs the Mac and the user's consent; the Mac thread measures it black-box). The harness
@@ -1244,13 +1244,30 @@ failure, not skipped.
 `runner/` (spawns target, runs mode 1 or 2, collects metrics), `report/` (CSV + a markdown table + per-task charts),
 `results/` (git-ignored). `README.md` is committed with this design as the spec; nothing else.
 
-**Pass bar for the claim "faster than ego"** (set now so the result cannot be fitted later). The unit is the *paired
-difference within a task block* (§ "Method" below), with a bootstrap 95 % CI over tasks × runs. The claim holds when, on the
-LLM-agent suite including the live-web slice and with success not lower than ego's (CI):
+**The one statistic.** Every bar below uses the same quantity, so nothing in the report can decide a verdict by a
+different one:
 
-* **headline: the upper 95 % bound of the median wall-time ratio Koan / ego is `< 1.0`** (target 0.8×; the bar is "beats",
-  not parity), with ego's run in the same interleaved blocks;
-* against `agent-browser` on stock Chrome: median wall time ≤ 0.8×, tool calls ≤ 0.6×, tokens sent to the model ≤ 0.5×;
+* **The unit** is a *block*: one task run once by every target back to back in random order (Method, below). For two
+  targets and a metric (wall time, tool calls, or tokens sent to the model) each block gives a **paired ratio**
+  `r = metric(Koan) / metric(other)`.
+* **The summary** is the **geometric mean of the paired ratios** over all blocks (the mean of `log r`, exponentiated), so a
+  ratio of 0.5 and one of 2.0 cancel instead of averaging to 1.25.
+* **The interval** is a **bootstrap 95 % CI**, percentile method, 10 000 resamples, resampling **tasks first and blocks
+  within a task second** (blocks of one task are not independent), with the seed written into the report.
+* **A bar is met when the upper bound of that CI is below the bar.** A point estimate under the bar with an interval that
+  crosses it is "not shown".
+* **Failed and timed-out runs** count at the task's time/call/token budget for the ratio (a failure cannot make a target
+  faster), and success is compared separately: the CI of the paired success difference (Koan − other) must not lie entirely
+  below zero.
+* Medians and IQRs may be printed for context. They never decide a verdict.
+
+**Pass bar for the claim "faster than ego"** (set now so the result cannot be fitted later). The claim holds when, on the
+LLM-agent suite including the live-web slice, with ego's run in the same interleaved blocks:
+
+* **headline: the upper 95 % bound of the paired wall-time ratio Koan / ego is `< 1.0`** (the point estimate should be near
+  0.8×; the bar is "beats", not parity), and the success difference does not lie entirely below zero;
+* **against `agent-browser` on stock Chrome:** the upper 95 % bound of the paired ratio is `< 0.8` for wall time, `< 0.6` for
+  tool calls and `< 0.5` for tokens sent to the model, with the same success condition;
 * task 16 (the covered/unfocused window) passes for Koan and fails or degrades for `agent-browser`/`chrome-cdp`.
 
 If a threshold is missed, the report names the lever (§20.1-20.5) that underperformed and the claim is not made.
@@ -1260,7 +1277,7 @@ vendor-reported on an undisclosed task set; they are listed as claims, never as 
 **Method (review finding 19).**
 
 * **Interleaved blocks, paired differences, bootstrap CIs.** For each task, all targets run back to back in a random
-  order, repeated; the report shows paired differences with bootstrap CIs, not medians of five. Temperature 0 does not make
+  order, repeated; the report shows the paired ratios with bootstrap CIs (the statistic defined above), not medians of five. Temperature 0 does not make
   agent runs deterministic, so n is not 1.
 * **Scripted-oracle plans are an upper bound** (authored per target by the Koan team): label them so; claims rest on LLM mode.
 * **Skill text is a confound** (length, quality): record the skill's token count per target and run ego's published skill
