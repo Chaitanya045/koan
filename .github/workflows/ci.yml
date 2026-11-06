@@ -51,6 +51,17 @@ jobs:
           fi
           python3 -I scripts/ci/patch_report.py "${args[@]}"
 
+  private-details:
+    name: Private details
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # The repository is public: no .local host name, private IP address or
+      # ssh key path of the Mac bench in a tracked text file (scripts/mac/README.md).
+      - name: No private host names, addresses or key paths
+        run: python3 -I scripts/ci/check_private_info.py
+
   tests:
     name: Unit tests
     runs-on: ubuntu-latest

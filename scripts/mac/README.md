@@ -7,6 +7,17 @@ and read the view tree through UI DevTools (`--enable-ui-devtools=9340`) and the
 side through CDP (`--remote-debugging-port=9341`), both forwarded by an ssh ControlMaster
 (`/tmp/koan-cm.sock`, see `vtabs.sh`).
 
+## Where the Mac is (not in the repo)
+
+`vtabs.sh` and `drv/vtabs.mjs` read `KOAN_MAC_HOST`, `KOAN_MAC_USER` and
+`KOAN_MAC_KEY` (the ssh private key's path) from the environment or from the
+git-ignored `scripts/mac/local.env` (copy `local.env.example`; the environment
+wins). If one is missing they stop with a message. Nothing about the Mac (host
+name, address, user name, key file) may be committed: CI's "Private details"
+check (`scripts/ci/check_private_info.py`) fails on a `.local` host name, a
+private-range IP address or an ssh key path in any tracked text file; notes use
+`<mac-host>`, `<mac-ip>`, `<user>` and `<ssh-key>`.
+
 ## `vtabs.sh <label> <app>`: the vertical-tabs lockdown checks (#154, #155)
 
 | env | meaning |
@@ -22,7 +33,7 @@ The shared invariant is `scripts/e2e/lib/vertical_tabs.mjs` `checkKoanSidebar()`
 Chromium `ToolbarView` drawn. Every run also fails on a "Koan: the vertical tab strip" log line, a
 `:FATAL:` line or a `Spaces:` line.
 
-Example: `MODE=old PREFS="$(cat scripts/e2e/prefs/vertical_tabs_old_profile.json)" scripts/mac/vtabs.sh build1 '/Users/me/work/koan-mac/apps/KoanCheck-x.app'`.
+Example: `MODE=old PREFS="$(cat scripts/e2e/prefs/vertical_tabs_old_profile.json)" scripts/mac/vtabs.sh build1 '/Users/<user>/work/koan-mac/apps/KoanCheck-x.app'`.
 
 ## Rules the drivers follow (do not remove)
 

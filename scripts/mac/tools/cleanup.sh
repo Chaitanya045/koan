@@ -1,7 +1,7 @@
 #!/bin/bash
 # cleanup.sh: after a run (or on a stop), leave nothing of mine on screen.
 # 1. quit my own test Koans by exact pid (only those whose profile is under ~/work/koan-mac/tmp/pass-); 2. dismiss the crash dialogs that name Koan; 3. verify.
-M=/Users/chaitanya/work/koan-mac
+M="${KOAN_MAC_ROOT:-$HOME/work/koan-mac}"
 for pid in $(ps -Ao pid,command | grep "[M]acOS/Koan -" | grep "user-data-dir=$M/tmp/pass-" | awk '{print $1}'); do $M/tmp/killkoan.sh $pid; done
 for i in 1 2 3 4 5 6 7 8; do ps -Ao command | grep "[M]acOS/Koan -" | grep -q "user-data-dir=$M/tmp/pass-" || break; sleep 1; done
 sleep 2; for i in 1 2 3 4 5 6; do out=$($M/tmp/crashdlg dismiss | tail -1); echo "$out"; case "$out" in "0 Koan"*) break;; esac; sleep 1.5; done
