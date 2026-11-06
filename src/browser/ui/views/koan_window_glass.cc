@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/frame/custom_corners_background.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_glass_tint.h"
+#include "koan/browser/ui/views/koan_url_bar.h"
 #include "ui/base/ui_base_features.h"
 
 namespace koan {
@@ -32,7 +33,10 @@ void OnGlassLayout(const views::View* browser_view,
                    CustomCornersBackground* top_container_background) {
   const CustomCorners::ColorChoiceWithAlpha transparent{
       CustomCorners::ToolbarTheme(), 0.0f};
-  if (ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view))) {
+  // A glass URL bar card is see-through too: its fill is the card's only
+  // colour.
+  if (ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view)) ||
+      IsGlassUrlBarOpen(browser_view)) {
     toolbar_background->SetPrimaryColor(transparent);
     top_container_background->SetPrimaryColor(transparent);
     return;
@@ -49,7 +53,8 @@ void OnGlassLayout(const views::View* browser_view,
 
 bool KeepsTopContainerClear(bool in_glass_mode,
                             const views::View* browser_view) {
-  return ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view));
+  return ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view)) ||
+         IsGlassUrlBarOpen(browser_view);
 }
 
 float SidebarGlassOpacity(const views::View* browser_view) {
