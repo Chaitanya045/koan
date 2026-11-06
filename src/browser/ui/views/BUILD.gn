@@ -121,6 +121,7 @@ test("koan_omnibox_unittests") {
     "//koan/browser/omnibox:hooks",
     "//testing/gtest",
     "//third_party/metrics_proto",
+    "//ui/base",
     "//ui/base:types",
     "//url",
   ]

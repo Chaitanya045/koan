@@ -19,6 +19,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -38,7 +39,26 @@ class TabsClient : public FakeAutocompleteProviderClient {
 
 class KoanZeroSuggestTest : public testing::Test {
  protected:
-  void SetUp() override { provider_ = CreateZeroSuggestProvider(&client_); }
+  void SetUp() override {
+    // TabSwitchAction asks for localised strings (the Switch to Tab labels),
+    // which needs a ResourceBundle. This suite's launcher has none. With no
+    // locale pak (this test ships none) the bundle answers with empty
+    // strings, which is all these tests need.
+    if (!ui::ResourceBundle::HasSharedInstance()) {
+      ui::ResourceBundle::InitSharedInstanceWithLocale(
+          "en-US", /*delegate=*/nullptr,
+          ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+      owns_resource_bundle_ = true;
+    }
+    provider_ = CreateZeroSuggestProvider(&client_);
+  }
+
+  void TearDown() override {
+    provider_.reset();
+    if (owns_resource_bundle_) {
+      ui::ResourceBundle::CleanupSharedInstance();
+    }
+  }
 
   // `age` minutes since the tab was last shown.
   void AddTab(const std::u16string& title, const std::string& url, int age) {
@@ -68,6 +88,7 @@ class KoanZeroSuggestTest : public testing::Test {
   TestSchemeClassifier scheme_classifier_;
   TabsClient client_;
   scoped_refptr<AutocompleteProvider> provider_;
+  bool owns_resource_bundle_ = false;
 };
 
 TEST_F(KoanZeroSuggestTest, ListsOpenTabsMostRecentlyUsedFirst) {
