@@ -16,8 +16,8 @@
 // CDP keys don't take the menu bar's key equivalents, and step 3 needs real
 // keys. Menu steps are then skipped.
 //
-// Steps run: 1-10, 13, 16, 17, 18 (default: all of these; 18 minimises the
-// window, so it goes last). Steps 11, 12 (discards), 14 (context menu), 15
+// Steps run: 1-10, 13, 16, 17, 20, 18 (default: all of these; 18 minimises
+// the window, so it goes last). Steps 11, 12 (discards), 14 (context menu), 15
 // and 19 are manual: see scripts/mac/steps/glance.md.
 import { execSync } from 'node:child_process';
 
@@ -105,13 +105,14 @@ function mac(cmd) {
 // macOS virtual key codes.
 const K = { W: 13, R: 15, F: 3, L: 37, LBRACKET: 33, RBRACKET: 30, EQUAL: 24,
             MINUS: 27, ZERO: 29, C: 8, ESC: 53, RIGHT: 124, LEFT: 123, TWO: 19,
-            RETURN: 36, T: 17, M: 46 };
+            RETURN: 36, T: 17, M: 46, Y: 16 };
 // CDP fallback: Windows key codes and names for the same keys.
 const CDP_KEYS = { 13: [87, 'w'], 15: [82, 'r'], 3: [70, 'f'], 37: [76, 'l'],
                    33: [219, '['], 30: [221, ']'], 24: [187, '='], 27: [189, '-'],
                    29: [48, '0'], 8: [67, 'c'], 53: [27, 'Escape'],
                    124: [39, 'ArrowRight'], 123: [37, 'ArrowLeft'], 19: [50, '2'],
-                   36: [13, 'Enter'], 17: [84, 't'], 46: [77, 'm'] };
+                   36: [13, 'Enter'], 17: [84, 't'], 46: [77, 'm'],
+                   16: [89, 'y'] };
 
 let cdpKeysUsed = false;
 // A key press; `flags` as keypress2's: c ⌘, s ⇧, k ⌃, a ⌥.
@@ -218,8 +219,8 @@ async function parentTab() {
 }
 
 // ⌥-clicks `#id` on the parent page (CDP mouse events are trusted input).
-async function glance(id) {
-  const page = await parentTab();
+async function glance(id, parent = null) {
+  const page = parent ?? await parentTab();
   const box = await evalIn(page,
       `(() => { const r = document.getElementById('${id}').getBoundingClientRect();
                 return { x: r.x + 20, y: r.y + r.height / 2 }; })()`);
@@ -538,6 +539,28 @@ const steps = {
     const back = (await tabPages()).find(t => t.url === closedUrl);
     if (back) await browserCall('Target.closeTarget', { targetId: back.id });
   },
+  // A Koan shortcut that declines its key passes it on (review 4): in a
+  // private window Koan has no Library, so ⌘Y in a Glance is Chrome's
+  // History, as in a private tab. (A CDP browser context is an off-the-record
+  // profile: a private window.)
+  async 20() {
+    if (!PID) return console.log('SKIP  20 (needs the Mac)');
+    const ctx = (await browserCall('Target.createBrowserContext')).result?.browserContextId;
+    const url = `${PARENT}#private-${Date.now()}`;
+    await browserCall('Target.createTarget', { url, browserContextId: ctx, newWindow: true });
+    const page = await waitFor(async () => (await targets()).find(t => t.url === url));
+    if (!page) return await check('20 a private window opens', false);
+    await onPage(page, c => c.send('Page.bringToFront'));
+    await sleep(800);
+    await glance('child', page);
+    await key(K.Y, 'c');
+    const history = await waitFor(async () =>
+        (await targets()).find(t => t.url.startsWith('chrome://history')), 4000);
+    await check('20 ⌘Y in a private-window Glance opens History', !!history,
+                history ? history.url : 'no History page');
+    if (history) await browserCall('Target.closeTarget', { targetId: history.id });
+    if (ctx) await browserCall('Target.disposeBrowserContext', { browserContextId: ctx });
+  },
   // ⌘M (Window > Minimize) in a Glance minimises the window, as in Zen.
   // Last: the window is restored over CDP, and no key is sent after it.
   async 18() {
@@ -565,7 +588,7 @@ async function openBackgroundTab(url) {
 
 const wanted = process.argv.slice(2).length
     ? process.argv.slice(2)
-    : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '13', '16', '17', '18'];
+    : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '13', '16', '17', '20', '18'];
 if (!PID) console.log('NOTE  no PID: keys go through CDP (not conclusive on macOS), menu steps skipped');
 for (const s of wanted) {
   try {

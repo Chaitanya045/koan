@@ -1103,12 +1103,52 @@ void KoanGlanceController::ReleaseCommands(bool restore) {
   }
 }
 
-void KoanGlanceController::ProcessBrowserAccelerator(
-    const ui::Accelerator& accelerator) {
-  if (views::FocusManager* focus_manager = browser_view_->GetFocusManager()) {
-    focus_manager->ProcessAccelerator(accelerator);
+#if BUILDFLAG(IS_MAC)
+bool KoanGlanceController::TakeKeyEquivalent(
+    const input::NativeWebKeyboardEvent& event) {
+  // Both look the key up in the menu bar: only for key equivalents, not for
+  // typing.
+  constexpr int kEquivalentModifiers =
+      blink::WebInputEvent::kMetaKey | blink::WebInputEvent::kControlKey;
+  if (!(event.GetModifiers() & kEquivalentModifiers) &&
+      !(event.windows_key_code >= ui::VKEY_F1 &&
+        event.windows_key_code <= ui::VKEY_F24)) {
+    return false;
+  }
+  // 2. Window > Minimize and Zoom: the browser window's, as in Zen.
+  if (PerformWindowMenuKey(browser_view_->GetWidget(), event)) {
+    return true;
+  }
+  // 3. The reserved commands.
+  const int command =
+      ReservedCommandForKeyEvent(browser_view_->browser(), event);
+  if (command == kDropKeyEvent) {
+    return true;
+  }
+  if (command) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanGlanceController::RunBrowserCommand,
+                                  weak_factory_.GetWeakPtr(), command));
+    return true;
+  }
+  return false;
+}
+
+void KoanGlanceController::ProcessPriorityKey(
+    const input::NativeWebKeyboardEvent& event) {
+  views::FocusManager* focus_manager = browser_view_->GetFocusManager();
+  if (focus_manager &&
+      focus_manager->ProcessAccelerator(
+          ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
+    return;
+  }
+  // Koan's shortcut declined the key: what a tab would do with it next
+  // (the page has passed it by now, a small difference from a tab).
+  if (!TakeKeyEquivalent(event)) {
+    PerformMainMenuKey(event);
   }
 }
+#endif
 
 void KoanGlanceController::RunBrowserCommand(int command_id) {
   chrome::ExecuteCommand(browser_view_->browser(), command_id);
@@ -1339,32 +1379,20 @@ KoanGlanceController::PreHandleKeyboardEvent(
   if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) {
     // 1. The browser window's high-priority shortcuts first: Koan's keys
     // that sit on Chrome's reserved ones (⌘⌥ arrows switch Spaces, not tabs;
-    // koan_shortcut_table.cc).
+    // koan_shortcut_table.cc). With a copy of the key: a shortcut may decline
+    // it when it runs (no Library in a private window, no Spaces), and the
+    // rest of the chain runs then.
     views::FocusManager* focus_manager = browser_view_->GetFocusManager();
-    const ui::Accelerator accelerator =
-        ui::GetAcceleratorFromNativeWebKeyboardEvent(event);
     if (focus_manager && !focus_manager->shortcut_handling_suspended() &&
-        focus_manager->HasPriorityHandler(accelerator)) {
+        focus_manager->HasPriorityHandler(
+            ui::GetAcceleratorFromNativeWebKeyboardEvent(event))) {
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(&KoanGlanceController::ProcessBrowserAccelerator,
-                         weak_factory_.GetWeakPtr(), accelerator));
+          FROM_HERE, base::BindOnce(&KoanGlanceController::ProcessPriorityKey,
+                                    weak_factory_.GetWeakPtr(), event));
       return content::KeyboardEventProcessingResult::HANDLED;
     }
-    // 2. Window > Minimize and Zoom: the browser window's, as in Zen.
-    if (PerformWindowMenuKey(browser_view_->GetWidget(), event)) {
-      return content::KeyboardEventProcessingResult::HANDLED;
-    }
-    // 3. The reserved commands.
-    const int command =
-        ReservedCommandForKeyEvent(browser_view_->browser(), event);
-    if (command == kDropKeyEvent) {
-      return content::KeyboardEventProcessingResult::HANDLED;
-    }
-    if (command) {
-      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE, base::BindOnce(&KoanGlanceController::RunBrowserCommand,
-                                    weak_factory_.GetWeakPtr(), command));
+    // 2 and 3: Window > Minimize / Zoom, the reserved commands.
+    if (TakeKeyEquivalent(event)) {
       return content::KeyboardEventProcessingResult::HANDLED;
     }
   }
