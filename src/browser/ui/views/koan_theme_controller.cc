@@ -843,6 +843,12 @@ void AdjustWindowColorKey(const BrowserView* browser_view,
   }
 }
 
+bool WindowSchemeIsDark(const BrowserView* browser_view, bool fallback) {
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller ? controller->theme()->window_scheme_is_dark() : fallback;
+}
+
 namespace {
 
 void AdjustChildColorKey(const views::Widget* parent,

@@ -94,6 +94,10 @@ class KoanThemeController : public TabStripModelObserver,
   // detector, KoanWorkspaceController::CheckSpaces()): this controller sets
   // the colours in the window's key instead.
   bool HasAppliedWindowColors() const;
+  // Whether the window's own scheme (before the Space's mode) is dark.
+  bool window_scheme_is_dark() const {
+    return window_mode_ == ui::ColorProviderKey::ColorMode::kDark;
+  }
   // The accent the Space theme puts in the window's colour key, if any.
   std::optional<SkColor> window_accent() const { return applied_color_; }
   // From BrowserWidget::GetColorProviderKey() (koan::AdjustWindowColorKey()):

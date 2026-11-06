@@ -1,15 +1,17 @@
 diff --git a/chrome/browser/ui/views/frame/glass_frame_service.cc b/chrome/browser/ui/views/frame/glass_frame_service.cc
+index 8936f80f446dc8b21378d403e55d25ed80906322..403e9e14ddcd100e26acef2aba982c533c33f0c0 100644
 --- a/chrome/browser/ui/views/frame/glass_frame_service.cc
 +++ b/chrome/browser/ui/views/frame/glass_frame_service.cc
-@@ -34,6 +34,7 @@
+@@ -34,6 +34,8 @@
  #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
  #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
  #include "chrome/common/pref_names.h"
++#include "koan/browser/ui/views/koan_window_background.h"
 +#include "koan/browser/ui/views/koan_window_glass.h"
  #include "components/feature_engagement/public/feature_constants.h"
  #include "components/metrics/daily_event.h"
  #include "components/prefs/pref_registry_simple.h"
-@@ -155,9 +156,8 @@
+@@ -155,9 +157,8 @@ GlassFrameService::GlassFrameService(BrowserProcess& process)
    browser_collection->ForEach(
        [this](BrowserWindowInterface* browser) {
          MaybeTrackBrowser(browser);
@@ -21,7 +23,7 @@ diff --git a/chrome/browser/ui/views/frame/glass_frame_service.cc b/chrome/brows
            eligible_browsers_.insert(browser);
          }
          return true;
-@@ -196,8 +196,10 @@
+@@ -196,8 +197,10 @@ bool GlassFrameService::HasMultipleOpenProfiles() const {
  }
  
  bool GlassFrameService::IsGlassFrameAllowed() {
@@ -34,7 +36,7 @@ diff --git a/chrome/browser/ui/views/frame/glass_frame_service.cc b/chrome/brows
  }
  
  void GlassFrameService::OnBrowserCreated(BrowserWindowInterface* browser) {
-@@ -205,6 +207,10 @@
+@@ -205,6 +208,10 @@ void GlassFrameService::OnBrowserCreated(BrowserWindowInterface* browser) {
      return;
    }
    UpdateHasMultipleOpenProfiles();
@@ -45,7 +47,19 @@ diff --git a/chrome/browser/ui/views/frame/glass_frame_service.cc b/chrome/brows
  }
  
  void GlassFrameService::OnBrowserActivated(BrowserWindowInterface* browser) {
-@@ -303,14 +309,11 @@
+@@ -284,7 +291,10 @@ bool GlassFrameService::IsBrowserEligibleForGlass(
+     return false;
+   }
+   // Skip windows using an extension theme, which disables glass.
+-  if (SafeInvoke(ThemeServiceFactory::GetForProfile(browser->GetProfile()))
++  // Koan: unless the window locks the theme out (koan_window_background.h),
++  // as Zen disables lightweight themes.
++  if (!koan::LocksExtensionTheme(browser) &&
++      SafeInvoke(ThemeServiceFactory::GetForProfile(browser->GetProfile()))
+           .Then(&ThemeService::UsingExtensionTheme)
+           .value_or(false)) {
+     return false;
+@@ -303,14 +313,11 @@ GlassFrameService::GetEligibleBrowserWindowInterfaces() {
    GlobalBrowserCollection::GetInstance()->ForEach(
        [&activation_ordered_eligible_browsers,
         this](BrowserWindowInterface* browser) {

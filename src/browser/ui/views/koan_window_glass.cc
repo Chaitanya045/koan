@@ -15,9 +15,11 @@
 #include "koan/browser/ui/views/koan_window_glass.h"
 
 #include "build/build_config.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/custom_corners_background.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_glass_tint.h"
+#include "koan/browser/ui/views/koan_window_background.h"
 #include "ui/base/ui_base_features.h"
 
 namespace koan {
@@ -32,7 +34,11 @@ void OnGlassLayout(const views::View* browser_view,
                    CustomCornersBackground* top_container_background) {
   const CustomCorners::ColorChoiceWithAlpha transparent{
       CustomCorners::ToolbarTheme(), 0.0f};
-  if (ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view))) {
+  // Where the Space's theme paints the window (koan_window_background.h),
+  // the toolbar and the top container keep upstream's theme colour, which
+  // its ThemedBackground hook paints translucent.
+  if (!PaintsWindowBackground(static_cast<const BrowserView*>(browser_view)) &&
+      ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view))) {
     toolbar_background->SetPrimaryColor(transparent);
     top_container_background->SetPrimaryColor(transparent);
     return;
@@ -49,7 +55,11 @@ void OnGlassLayout(const views::View* browser_view,
 
 bool KeepsTopContainerClear(bool in_glass_mode,
                             const views::View* browser_view) {
-  return ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view));
+  // As OnGlassLayout(): where the Space's theme paints the window, the top
+  // container keeps upstream's theme colour (its translucent gradient).
+  return !PaintsWindowBackground(
+             static_cast<const BrowserView*>(browser_view)) &&
+         ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view));
 }
 
 float SidebarGlassOpacity(const views::View* browser_view) {

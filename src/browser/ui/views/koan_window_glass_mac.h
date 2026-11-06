@@ -26,6 +26,8 @@ class ColorProvider;
 
 // Objective-C++ only: what BrowserNativeWidgetMac's glass frame calls (see
 // koan_window_glass.h).
+class BrowserView;
+
 namespace koan {
 
 // The view under a window's contents that shows the blurred desktop: an
@@ -41,7 +43,14 @@ NSView* CreateGlassBackgroundView(NSRect frame);
 // `color_mode` is the window's (Widget::GetColorMode()): it picks the dark or
 // light system window background for the inactive state, whatever colour a
 // theme gives the frame.
-SkColor GetGlassTint(const ui::ColorProvider& colors,
+//
+// Where the Space's theme paints `browser_view`'s window
+// (koan::PaintsWindowBackground()): no tint (the theme paints its own
+// version of it), and while inactive only the opaque window background, in
+// the window's own scheme (Zen's wash is on #zen-main-app-wrapper, outside
+// the Space's #browser), which the theme paints over.
+SkColor GetGlassTint(const BrowserView* browser_view,
+                     const ui::ColorProvider& colors,
                      ui::ColorProviderKey::ColorMode color_mode,
                      bool window_active);
 

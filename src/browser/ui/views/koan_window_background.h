@@ -59,6 +59,11 @@ bool LocksExtensionTheme(const BrowserWindowInterface* browser);
 void AdjustWindowColorKey(const BrowserView* browser_view,
                           ui::ColorProviderKey* key);
 
+// Whether `browser_view`'s window's own scheme is dark: its colour mode
+// before the Space's (AdjustWindowColorKey()), which its panels keep and
+// glass's inactive wash follows. `fallback` where Koan has no say.
+bool WindowSchemeIsDark(const BrowserView* browser_view, bool fallback);
+
 // From MultiContentsBackgroundView::OnThemeChanged(), right after it re-creates
 // its layer (a textured one where Koan paints the window, opaque by default):
 // translucent where Koan's paint is (koan::MakeTranslucentLayer()), before it

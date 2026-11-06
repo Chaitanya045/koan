@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/views/frame/glass_frame_service.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_glass_tint.h"
+#include "koan/browser/ui/views/koan_window_background.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/color/color_provider.h"
@@ -91,12 +92,18 @@ SkColor InactiveWash(bool dark) {
 
 }  // namespace
 
-SkColor GetGlassTint(const ui::ColorProvider& colors,
+SkColor GetGlassTint(const BrowserView* browser_view,
+                     const ui::ColorProvider& colors,
                      ui::ColorProviderKey::ColorMode color_mode,
                      bool window_active) {
-  return ResolveGlassTint(
-      colors.GetColor(kColorKoanGlassTint), window_active,
-      InactiveWash(color_mode == ui::ColorProviderKey::ColorMode::kDark));
+  const bool dark = color_mode == ui::ColorProviderKey::ColorMode::kDark;
+  if (PaintsWindowBackground(browser_view)) {
+    return ResolveGlassTint(
+        SK_ColorTRANSPARENT, window_active,
+        InactiveWash(WindowSchemeIsDark(browser_view, dark)));
+  }
+  return ResolveGlassTint(colors.GetColor(kColorKoanGlassTint), window_active,
+                          InactiveWash(dark));
 }
 
 void StartWindowGlass() {
