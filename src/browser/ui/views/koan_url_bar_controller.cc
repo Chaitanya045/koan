@@ -230,15 +230,6 @@ class KoanUrlBarCardDecoration : public views::View {
     layer()->SetFillsBoundsOpaquely(false);
   }
 
-  // With a glass card the fill under the location bar is already translucent:
-  // the icon's own opaque patch would show as a block.
-  void SetGlass(bool glass) {
-    if (glass_ != glass) {
-      glass_ = glass;
-      SchedulePaint();
-    }
-  }
-
   // `icon` is the location icon's bounds in this view.
   void SetIconBounds(const gfx::Rect& icon) {
     if (icon_ != icon) {
@@ -251,11 +242,9 @@ class KoanUrlBarCardDecoration : public views::View {
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();
     if (!icon_.IsEmpty()) {
-      // A plain, muted magnifier: nothing of the icon's own chip shows.
-      if (!glass_) {
-        canvas->FillRect(icon_,
-                         colors->GetColor(kColorKoanFloatingUrlBarBackground));
-      }
+      // A plain, muted magnifier: the location icon under it is hidden
+      // (KoanUrlBarController::SetLocationIconHidden()), not painted over, so
+      // nothing of its chip or its ink drop shows, glass or not.
       const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
           vector_icons::kSearchIcon, kFloatingUrlBarMagnifierSize,
           colors->GetColor(ui::kColorIcon));
@@ -272,7 +261,6 @@ class KoanUrlBarCardDecoration : public views::View {
 
  private:
   gfx::Rect icon_;
-  bool glass_ = false;
 };
 
 BEGIN_METADATA(KoanUrlBarCardDecoration)
@@ -759,7 +747,9 @@ void KoanUrlBarController::ApplyCardStyle() {
     fill_ = toolbar->AddChildViewAt(std::make_unique<KoanUrlBarCardFill>(), 0);
     decoration_ = top_container->AddChildView(
         std::make_unique<KoanUrlBarCardDecoration>());
+    SetLocationIconHidden(true);
   } else if (!IsCommandCard() && decoration_) {
+    SetLocationIconHidden(false);
     top_container->RemoveChildViewT(std::exchange(decoration_, nullptr));
     toolbar->RemoveChildViewT(std::exchange(fill_, nullptr));
   }
@@ -794,6 +784,29 @@ void KoanUrlBarController::ApplyCardStyle() {
   layer->SetMasksToBounds(true);
 }
 
+void KoanUrlBarController::SetLocationIconHidden(bool hidden) {
+  LocationBarView* bar = location_bar();
+  LocationIconView* icon = bar ? bar->location_icon_view() : nullptr;
+  if (!icon) {
+    return;
+  }
+  if (hidden) {
+    // Hidden by opacity, not visibility: the layout is unchanged, and the
+    // icon's chip and ink drop go with it. Koan's magnifier replaces it.
+    if (!icon->layer()) {
+      icon->SetPaintToLayer();
+      icon_layer_created_ = true;
+    }
+    icon->layer()->SetFillsBoundsOpaquely(false);
+    icon->layer()->SetOpacity(0.0f);
+  } else if (icon->layer()) {
+    icon->layer()->SetOpacity(1.0f);
+    if (std::exchange(icon_layer_created_, false)) {
+      icon->DestroyLayer();
+    }
+  }
+}
+
 namespace {
 
 // A glass card's labels (the keyword chip, ...) sit on a translucent fill: no
@@ -814,10 +827,12 @@ void KoanUrlBarController::UpdateGlassCard() {
   const bool glass =
       widget && is_open() && IsCommandCard() && IsWindowGlassAllowed() &&
       widget->ShouldPaintAsActive() && g_browser_process &&
+      g_browser_process->local_state() &&
       g_browser_process->local_state()->GetBoolean(prefs::kLookAcrylicUrlBar);
   LocationBarView* bar = location_bar();
   if (glass && bar) {
-    // Labels that appeared since (the keyword chip).
+    // Also labels built since (the lazily created ones of the location bar's
+    // chips).
     SetLabelsSubpixelRendering(bar, false);
   }
   if (glass == glass_card_) {
@@ -833,18 +848,16 @@ void KoanUrlBarController::UpdateGlassCard() {
   if (fill_) {
     fill_->SetGlass(glass);
   }
-  if (decoration_) {
-    decoration_->SetGlass(glass);
-  }
   if (bar) {
     SetLabelsSubpixelRendering(bar, !glass);
   }
   // The location bar and its omnibox take the clear background through
-  // AdjustLocationBarBackground(), and the toolbar and top container through
-  // OnGlassLayout(): this window's colours only, so no colour provider is
-  // rebuilt.
-  if (views::Widget* top_level = browser_view_->GetWidget()) {
-    top_level->ThemeChanged();
+  // AdjustLocationBarBackground() (the location bar refreshes itself; it is in
+  // whatever widget the top container is in), and the toolbar and top
+  // container through OnGlassLayout(): this window's colours only, so no
+  // colour provider is rebuilt and no other view re-themed.
+  if (bar) {
+    bar->OnThemeChanged();
   }
   browser_view_->InvalidateLayout();
 }

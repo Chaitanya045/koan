@@ -16,3 +16,6 @@ default: rows 1 and 2 check that, the rest turn it on. Judge the blur and the fi
 | 7 | Turn Reduce transparency on, ⌘T | The card is opaque. Off again: glass. |
 | 8 | Open the bar from the sidebar pill (typing in it) | The pill stays opaque; only the floating card is glass. |
 | 9 | Cost of the 40 px blur on a rounded card | Frame time while the bar fades in and while typing; compare with the setting off. |
+| 10 | With glass on: ⌘L on an https page, then on an http page ("Not secure"); then ⌘T and type a few letters | **Only Koan's magnifier** at the card's left, nothing under it: no lock / tune / "Not secure" chip, no search-engine or globe icon, no ink drop. **Take a screenshot of each** (the real screen: a window capture shows the blur flat) and attach them to the PR. |
+| 11 | Same with glass off | Only the magnifier too (the location icon is hidden in the card either way). |
+| 12 | Native fullscreen (Ctrl+⌘+F), ⌘T | The card opens and is glass: the field is clear, no solid block in it (the location bar refreshes itself, whatever widget the top container is in). |
