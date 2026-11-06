@@ -193,8 +193,6 @@ class KoanUrlBarController : public views::ViewObserver,
   bool laying_out_ = false;
   // See IsGlassCard(); kept in step by UpdateGlassCard(), per window.
   bool glass_card_ = false;
-  // Whether SetLocationIconHidden() gave the location icon its layer.
-  bool icon_layer_created_ = false;
   PrefChangeRegistrar prefs_registrar_;
   base::CallbackListSubscription paint_as_active_subscription_;
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>

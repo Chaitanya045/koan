@@ -74,10 +74,12 @@
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
@@ -737,18 +739,26 @@ void KoanUrlBarController::SetLocationIconHidden(bool hidden) {
   }
   if (hidden) {
     // Hidden by opacity, not visibility: the layout is unchanged, and the
-    // icon's chip and ink drop go with it. Koan's magnifier replaces it.
-    if (!icon->layer()) {
-      icon->SetPaintToLayer();
-      icon_layer_created_ = true;
-    }
+    // icon's chip goes with it. The layer is explicit, so it outlives the one
+    // views gives the icon while its ink drop is there (hover, the open page
+    // info bubble) and destroys afterwards, which would show the icon again.
+    icon->SetPaintToLayer();
     icon->layer()->SetFillsBoundsOpaquely(false);
     icon->layer()->SetOpacity(0.0f);
-  } else if (icon->layer()) {
-    icon->layer()->SetOpacity(1.0f);
-    if (std::exchange(icon_layer_created_, false)) {
-      icon->DestroyLayer();
-    }
+    // The ink drop is drawn beside the icon's layer: off, not hidden. Nothing
+    // of the icon can be reached either: no focus, no click, no screen reader.
+    views::InkDrop::Get(icon)->SetMode(views::InkDropHost::InkDropMode::OFF);
+    icon->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    icon->SetCanProcessEventsWithinSubtree(false);
+    icon->GetViewAccessibility().SetIsIgnored(true);
+  } else {
+    // Upstream never gives this view a layer of its own; views keeps the ink
+    // drop's.
+    icon->DestroyLayer();
+    views::InkDrop::Get(icon)->SetMode(views::InkDropHost::InkDropMode::ON);
+    icon->SetFocusBehavior(views::PlatformStyle::kDefaultFocusBehavior);
+    icon->SetCanProcessEventsWithinSubtree(true);
+    icon->GetViewAccessibility().SetIsIgnored(false);
   }
 }
 
