@@ -537,11 +537,14 @@ void KoanUrlBarController::ScheduleEmptyListRetry(int retries_left) {
     }
     empty_list_retry_running_ = true;
   }
+  // The first attempt in the next task (the list is back at once when the
+  // previous request is done); the retries after a pause.
   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&KoanUrlBarController::RetryEmptyList,
                      weak_factory_.GetWeakPtr(), retries_left),
-      kZeroSuggestRetryDelay);
+      retries_left == kZeroSuggestRetries ? base::TimeDelta()
+                                          : kZeroSuggestRetryDelay);
 }
 
 void KoanUrlBarController::RetryEmptyList(int retries_left) {

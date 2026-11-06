@@ -16,6 +16,7 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/lens/lens_features.h"
 #include "components/omnibox/browser/aim_eligibility_service_features.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/performance_manager/public/features.h"
@@ -138,6 +139,12 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // pack and the third-party AI Mode entry point (the AI Mode row of the "@"
   // list, a chip or button in the bar or its suggestions).
   overrides.DisableFeature(omnibox::kAiModeStartPack);
+  // "Ask Google about this page": the contextual-search provider's Lens entry
+  // point row on a focused, empty box. It was already out of reach with
+  // kLensOverlay off (no Lens controller, IsLensEnabled() false); off here
+  // too, so it does not depend on that.
+  overrides.DisableFeature(omnibox_feature_configs::ContextualSearch::
+                               kOmniboxContextualSearchOnFocusSuggestions);
   overrides.DisableFeature(omnibox::kAim3pEntrypoint);
   overrides.DisableFeature(lens::features::kLensOverlay);
   overrides.DisableFeature(lens::features::kLensOverlayOmniboxEntryPoint);

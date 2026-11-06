@@ -156,6 +156,18 @@ TEST_F(KoanZeroSuggestTest, LongDataUrlsAreCutInTheRowNotWhereTheyGo) {
   EXPECT_TRUE(matches[0].description.empty());
 }
 
+TEST_F(KoanZeroSuggestTest, LongHttpUrlsAndTitlesAreCapped) {
+  const std::string url = "https://example.com/" + std::string(100000, 'p');
+  AddTab(std::u16string(5000, u't'), url, 1);
+  const ACMatches& matches = Run(Input());
+  ASSERT_EQ(1u, matches.size());
+  EXPECT_EQ(GURL(url), matches[0].destination_url);
+  EXPECT_LE(matches[0].contents.size(), 32768u);
+  EXPECT_LE(matches[0].fill_into_edit.size(), 32768u);
+  EXPECT_LE(matches[0].description.size(), 1024u);
+  EXPECT_FALSE(matches[0].description.empty());
+}
+
 TEST_F(KoanZeroSuggestTest, NotTheTabBeingLeftNorACopyOfIt) {
   // Navigate()'s switch would find the active tab first and do nothing.
   AddTab(u"Copy of the current page", "https://current.example/#frag", 1);
