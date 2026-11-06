@@ -442,6 +442,7 @@ int KoanFolderController::CreateFolder(
   folder.space = space;
   const int id = folder.id;
   folders_.push_back(std::move(folder));
+  had_folders_ = true;
   // Like Zen, expand the parents so the new folder shows.
   for (KoanFolder* p = GetMutableFolder(parent); p;
        p = GetMutableFolder(p->parent)) {
@@ -1583,11 +1584,15 @@ void KoanFolderController::OnSpacesChanged() {
 std::vector<tab_groups::TabGroupId> KoanFolderController::StoredSpaceOrder()
     const {
   // Spaces' own list (no ephemeral groups), as #159 stores the Spaces.
+  // (None while the window's controllers go away.)
   std::vector<tab_groups::TabGroupId> spaces;
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  if (!controller) {
+    return spaces;
+  }
   for (const KoanWorkspaceController::SpaceInfo& space :
-       KoanBrowserViewController::From(browser_view_)
-           ->workspaces()
-           ->GetSpaces()) {
+       controller->workspaces()->GetSpaces()) {
     spaces.push_back(space.id);
   }
   return spaces;
@@ -1638,7 +1643,6 @@ void KoanFolderController::StoreFolders() {
     return;
   }
   Profile* profile = browser_view_->GetProfile();
-  had_folders_ |= !folders_.empty();
   base::ListValue list = StoredFolders();
   // After a crash the session may still be restored (into this window): the
   // stored folders stay until this window's change.
@@ -1748,6 +1752,7 @@ void KoanFolderController::RecreateStoredFolders() {
     }
     tab_lists.emplace_back(*token, dict->FindList("tabs"));
     folders_.push_back(std::move(folder));
+    had_folders_ = true;
   }
   // Their tabs, unloaded (restored tabs load when shown) and pinned to the
   // Space, with their pinned URL, label and icon.
@@ -1969,6 +1974,7 @@ void KoanFolderController::Restore(const std::string& data) {
     }
     restored_spaces_[folder.id] = dict->FindInt("space").value_or(-1);
     folders_.push_back(std::move(folder));
+    had_folders_ = true;
   }
 }
 

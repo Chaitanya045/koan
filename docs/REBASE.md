@@ -169,12 +169,14 @@ features plug into it in `src/` rather than patching upstream again:
   Saver exemptions get these tabs through the page's pinned state, which
   Koan sets for them.
 
-Features that adopt these (Spaces, folders) drop their own copies of the
-same files: `koan_tab_menu.{h,cc}`, `koan_session_data.{h,cc}`, and the
-`tab_menu_model.{h,cc}`, `tab_strip_model.cc`, `sessions/BUILD.gn` and
-`session_service_base.cc` patches, adding their entries in `src/` instead.
-Their menu ids move into their `TabMenuFeatureId` range (e.g. folders' "Move
-to Folder" from 3002, inside split view's range, to 3300+).
+Folders use them: "Move to Folder" is in folders' range (3300+), and the
+window's folders and each tab's folder are session data under
+"koan.folders", with a `WindowRestoreHook`. Features that adopt them later
+(Spaces) drop their own copies of the same files: `koan_tab_menu.{h,cc}`,
+`koan_session_data.{h,cc}`, and the `tab_menu_model.{h,cc}`,
+`tab_strip_model.cc`, `sessions/BUILD.gn` and `session_service_base.cc`
+patches, adding their entries in `src/` instead. Their menu ids move into
+their `TabMenuFeatureId` range.
 
 ## After every rebase, re-audit the hooks
 

@@ -340,7 +340,8 @@ class KoanFolderController : public TabStripModelObserver,
   bool restored_from_session_ = false;
   bool recreate_checked_ = false;
   bool stores_folders_ = false;
-  // The window has had a folder (only then may it store an empty list).
+  // The window has had a folder (only then may it store an empty list): set
+  // wherever one is added.
   bool had_folders_ = false;
   // After a crash (the session may still be restored), the stored folders
   // this window didn't bring back: kept in what it writes.
