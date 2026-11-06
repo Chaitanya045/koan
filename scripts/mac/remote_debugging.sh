@@ -89,6 +89,15 @@ rm -f "$fake_home/Library/Preferences/$probe.plist"
 real_dir="$real_home/Library/Application Support/Koan"
 fake_dir="$fake_home/Library/Application Support/Koan"
 
+# Did Koan work under the throw-away HOME? Its default dir is created when the
+# path is first resolved, before the debugging switches are looked at; but
+# rather than depend on that, any entry named Koan under the fake Library
+# (Application Support, Caches, Logs, crash reports) counts.
+used_fake_home() {
+  [[ -d "$fake_dir" ]] ||
+    [[ -n "$(find "$fake_home/Library" -maxdepth 3 -iname 'Koan*' -print -quit 2>/dev/null)" ]]
+}
+
 # Runs Koan once under the fake HOME with the given arguments and file-descriptor setup.
 #   run_default <label> <stderr file> <fd mode: pipe|none> <args...>
 run_default() {
@@ -125,8 +134,8 @@ else
     listening=""
     if curl -s --max-time 2 "http://127.0.0.1:9222/json/version" >/dev/null 2>&1; then listening=1; fi
     stop_koan
-    if [[ ! -d "$fake_dir" ]]; then
-      report FAIL "$name" "the throw-away default dir was not used ($fake_dir missing): the run may have hit the real profile"
+    if ! used_fake_home; then
+      report FAIL "$name" "nothing named Koan appeared under the throw-away HOME: the run may have hit the real profile"
     elif [[ "$(mtime "$real_dir/Local State")" != "$real_before" ]]; then
       report FAIL "$name" "the real default profile changed during the run"
     elif [[ -z "$seen" ]]; then

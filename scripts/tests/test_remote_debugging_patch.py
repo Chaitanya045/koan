@@ -68,6 +68,7 @@ class RemoteDebuggingPatchTest(unittest.TestCase):
     self.assertIn('3</dev/null 4>/dev/null', script)
     self.assertNotIn('3<&-', script)
     self.assertIn('HOME="$fake_home"', script)
+    self.assertIn('used_fake_home', script)
 
 
 if __name__ == '__main__':
