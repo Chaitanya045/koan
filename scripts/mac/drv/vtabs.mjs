@@ -108,30 +108,38 @@ if (MODE === 'main') {
     // A second tab whose title has a word (tqz) that the first one's doesn't; back to the first.
     const first = (await pages()).find(p => p.type === 'page');
     const other = (await browserCall('Target.createTarget', { url: 'data:text/html,<title>tqz page</title>other tab' })).result.targetId;
-    await sleep(1500);
-    await browserCall('Target.activateTarget', { targetId: first.id }); await sleep(800);
-    const count = (await pages()).length;
-    if (!(await key(0, 'cs'))) return 'key skipped';
-    await sleep(1200);
-    const vs = await fviews();
-    need(!vs.some(v => v.shown && /TabSearch/.test(v.cls) && v.cls !== 'TabSearchButton'), 'Chromium tab search bubble shown');
-    const bar = vs.some(v => v.shown && /UrlBar/.test(v.cls));
-    // Zen's search tabs: the omnibox in the @tabs keyword mode, i.e. the "Tabs" chip (SelectedKeywordView) and an empty input, not the literal text.
-    need(vs.some(v => v.shown && v.cls === 'SelectedKeywordView'), 'no Tabs chip (SelectedKeywordView): the @tabs keyword mode was not entered');
-    const omnibox = vs.find(v => v.shown && v.cls === 'OmniboxViewViews');
-    const text = omnibox?.props?.Text ?? omnibox?.props?.text;  // UI DevTools may not expose it
-    need(text === undefined || text === '' || text === '""', `the omnibox text is not empty: ${JSON.stringify(text)}`);
-    // Typing a word of the other tab's title and Enter switches to it, without opening a tab.
-    for (const code of [17, 12, 6]) { await key(code, ''); }  // t q z
-    await sleep(900);
-    await key(K.RETURN); await sleep(1500);
-    const visible = await visiblePage();
-    const title = visible ? await evalIn(visible, 'document.title') : null;
-    const after = (await pages()).length;
-    need(title === 'tqz page', `Enter on a match did not switch to the tab (visible tab: ${JSON.stringify(title)})`);
-    need(after === count, `the tab count changed: ${count} -> ${after}`);
-    await browserCall('Target.closeTarget', { targetId: other }); await sleep(600);
-    return `URL bar view shown: ${bar}, Tabs chip, switched to the tqz tab, ${after} tabs`;
+    try {
+      await sleep(1500);
+      await browserCall('Target.activateTarget', { targetId: first.id }); await sleep(800);
+      const count = (await pages()).length;
+      if (!(await key(0, 'cs'))) return 'key skipped';
+      await sleep(1200);
+      const vs = await fviews();
+      need(!vs.some(v => v.shown && /TabSearch/.test(v.cls) && v.cls !== 'TabSearchButton'), 'Chromium tab search bubble shown');
+      const bar = vs.some(v => v.shown && /UrlBar/.test(v.cls));
+      // Zen's search tabs: the omnibox in the @tabs keyword mode, i.e. the "Tabs" chip (SelectedKeywordView) and an empty input, not the literal text.
+      need(vs.some(v => v.shown && v.cls === 'SelectedKeywordView'), 'no Tabs chip (SelectedKeywordView): the @tabs keyword mode was not entered');
+      const omnibox = vs.find(v => v.shown && v.cls === 'OmniboxViewViews');
+      need(!!omnibox, 'no shown OmniboxViewViews to read the input from');
+      const text = omnibox.props?.Text ?? omnibox.props?.text;
+      need(text !== undefined, `UI DevTools doesn't expose the omnibox text (props: ${Object.keys(omnibox.props || {}).join(', ')}): the empty-input check can't run`);
+      need(text === '' || text === '""', `the omnibox text is not empty: ${JSON.stringify(text)}`);
+      // Typing a word of the other tab's title and Enter switches to it, without opening a tab.
+      for (const code of [17, 12, 6]) { await key(code, ''); }  // t q z
+      await sleep(900);
+      await key(K.RETURN); await sleep(1500);
+      const visible = await visiblePage();
+      const title = visible ? await evalIn(visible, 'document.title') : null;
+      const after = (await pages()).length;
+      need(title === 'tqz page', `Enter on a match did not switch to the tab (visible tab: ${JSON.stringify(title)})`);
+      need(after === count, `the tab count changed: ${count} -> ${after}`);
+      return `URL bar view shown: ${bar}, Tabs chip, switched to the tqz tab, ${after} tabs`;
+    } finally {
+      // Whatever failed: no URL bar left open and no extra tab left behind for the steps after this one.
+      try { await key(K.ESC); await sleep(400); } catch {}
+      try { await browserCall('Target.closeTarget', { targetId: other }); await sleep(600); } catch {}
+      try { await browserCall('Target.activateTarget', { targetId: first.id }); } catch {}
+    }
   });
   await step('T21a: compact toggled twice within ~250 ms ends expanded (Zen width)', async () => { await prime(); rapid(2, 60); await settle(2200); return inv('after 2 quick toggles'); });
   await step('T21b: compact toggled 3 times within ~250 ms ends hidden (width 0)', async () => { await prime(); rapid(3, 60); await settle(2200); const r = await inv('after 3 quick toggles', { hidden: true }); await key(K.S, COMPACT); await settle(); return r + ' | ' + await inv('back', { hidden: false }); });
