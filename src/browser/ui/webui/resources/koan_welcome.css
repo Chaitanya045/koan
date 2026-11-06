@@ -1,921 +1,504 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
- *
- * Contains material ported from Zen Browser, Copyright the Zen Browser
- * contributors (https://github.com/zen-browser/desktop), MPL-2.0:
- *   zen-welcome.css
- *   zen-buttons.css
- *   zen-theme.css (the defaults the welcome screen uses)
- * Koan's changes, Copyright 2026 The Koan Authors, are under the same
- * licence. */
+/* Copyright 2026 The Koan Authors
+ * Use of this source code is governed by the MIT license that can be
+ * found in the LICENSE file. */
 
-/* chrome://koan-welcome: Zen 1.24b's welcome screen with Zen's own look.
- * What Firefox gives Zen's page is here: its window (the system font, light
- * or dark with the system), Zen's accent and window background
- * (zen-theme.css), its big accent and footer buttons (zen-buttons.css). */
+/* Koan's welcome (onboarding v2, #181) in shadcn/ui's look: the tokens come
+ * from koan_tokens.css (koan::look, shadcn style), the sizes from shadcn's
+ * components (card, button, radio group, toggle group). */
 
 :root {
-  color-scheme: light dark;
-  /* zen-theme.css; koan_welcome.js then sets it from the system's accent
-   * as ZenGradientGenerator.mjs does for the default theme. */
-  --zen-primary-color: AccentColor;
-  --zen-main-browser-background: light-dark(rgb(235, 235, 235), #1b1b1b);
-  /* zen-buttons.css */
-  --zen-accent-button-color: light-dark(
-    oklch(from var(--zen-primary-color) clamp(0.35, l, 0.6) c h),
-    oklch(from var(--zen-primary-color) clamp(0.7, l, 0.85) c h)
-  );
-  --zen-accent-button-background: light-dark(
-    oklch(from var(--zen-primary-color) clamp(0.35, l, 0.6) c h),
-    oklch(from var(--zen-primary-color) clamp(0.55, l, 0.7) c h)
-  );
+  --r-sm: calc(var(--radius) - 4px);
+  --r-md: calc(var(--radius) - 2px);
+  --r-lg: var(--radius);
+  --r-xl: calc(var(--radius) + 4px);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 html,
 body {
   margin: 0;
-  width: 100%;
   height: 100%;
   overflow: hidden;
-  /* Zen's window behind the page once the video has gone. */
-  background: var(--zen-main-browser-background);
-  /* Firefox's chrome: the system font at 11px, which Zen's rem sizes are
-   * of (measured on the Mac: the title 5.2rem = 57.2px). */
-  font-family: -apple-system, system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 400;
-  /* Firefox's text colour, which Zen's chrome inherits (the design tokens'
-   * --text-color: gray-100 / gray-05). */
-  color: light-dark(#15141a, #fbfbfe);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Geist', Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-html {
-  font-size: 11px;
-}
-
-button {
+button,
+input {
   font: inherit;
+  color: inherit;
 }
 
-/* zen-buttons.css */
-.zen-big-accent-button {
-  appearance: none;
-  border: none;
-  border-radius: 12px;
-  padding: 1.2rem 1rem;
-  background: transparent;
-  color: var(--zen-accent-button-color);
-  font: inherit;
-  font-size: 1.2rem;
-  font-weight: 600;
-  cursor: pointer;
-  will-change: transform;
-  transition: scale 0.15s ease-out;
-
-  &:hover {
-    scale: 1.03;
-    filter: brightness(1.1);
-  }
-
-  &:active:hover {
-    scale: 1;
-    color: color-mix(in srgb, var(--zen-accent-button-color) 80%, transparent);
-  }
-
-  &.primary {
-    background: var(--zen-accent-button-background);
-    color: white;
-
-    &:hover {
-      filter: brightness(1.1);
-    }
-
-    &:active:hover {
-      color: rgba(255, 255, 255, 0.8);
-    }
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--zen-accent-button-color);
-    outline-offset: 2px;
-  }
+kbd {
+  font-family: 'Geist Mono', ui-monospace, monospace;
 }
 
-/* zen-buttons.css: the footer button, the start button's shape; Firefox's
- * list-style-image arrow is an SVG here. */
-.footer-button {
-  appearance: none;
-  border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  cursor: pointer;
+/* A Lucide icon (welcome_icons/), drawn in the text colour. */
+.icon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  mask: var(--icon) center / contain no-repeat;
+}
+
+.icon[data-icon='sparkles'] {
+  --icon: url(icons/sparkles.svg);
+}
+
+.icon[data-icon='keyboard'] {
+  --icon: url(icons/keyboard.svg);
+}
+
+.icon[data-icon='hard-drive-download'] {
+  --icon: url(icons/hard-drive-download.svg);
+}
+
+.icon[data-icon='search'] {
+  --icon: url(icons/search.svg);
+}
+
+.icon[data-icon='circle-check-big'] {
+  --icon: url(icons/circle-check-big.svg);
+}
+
+.icon[data-icon='arrow-left'] {
+  --icon: url(icons/arrow-left.svg);
+}
+
+.icon[data-icon='arrow-right'] {
+  --icon: url(icons/arrow-right.svg);
+}
+
+.icon[data-icon='x'] {
+  --icon: url(icons/x.svg);
+}
+
+.icon[data-icon='check'] {
+  --icon: url(icons/check.svg);
+}
+
+#welcome {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: scale 0.2s;
-
-  &:active {
-    scale: 0.98;
-  }
-
-  &::before {
-    content: "";
-    width: 16px;
-    height: 16px;
-    background: currentColor;
-    mask: url(/forward.svg) center / contain no-repeat;
-  }
-
-  &:focus-visible {
-    outline: 2px solid white;
-    outline-offset: 2px;
-  }
-}
-
-#zen-welcome,
-#zen-welcome-start,
-#zen-welcome-pages {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  app-region: drag;
-}
-
-#zen-welcome {
-  position: relative;
-  isolation: isolate;
-}
-
-#zen-welcome-video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  pointer-events: none;
-  will-change: opacity;
-}
-
-:root[zen-welcome-stage] {
-  min-width: 875px;
-  min-height: 560px;
-}
-
-#zen-welcome {
-  --zen-welcome-accent: var(--zen-accent-button-color);
-  --zen-welcome-sidebar-bg: light-dark(#ffffff, #1c1c1e);
-  --zen-welcome-content-bg: light-dark(#f6f6f8f5, #2b2b30ed);
-  --zen-welcome-surface-bg: light-dark(#ffffff, #1c1c1e);
-  --zen-welcome-tile-bg: light-dark(#ececee, #333338);
-  --zen-welcome-border: light-dark(
-    rgba(0, 0, 0, 0.14),
-    rgba(255, 255, 255, 0.16)
-  );
-  --zen-welcome-text-secondary: light-dark(
-    rgba(0, 0, 0, 0.6),
-    rgba(255, 255, 255, 0.6)
-  );
-}
-
-#zen-welcome-start {
   flex-direction: column;
-  app-region: drag;
-
-  color: white;
-
-  #zen-welcome-start-button {
-    opacity: 0;
-    
-    padding: 1em !important;
-    min-width: 100px;
-    background: rgb(62, 115, 62) !important;
-    fill: white !important;
-
-    will-change: transform;
-    transition: scale 0.15s ease-out;
-
-    &:hover {
-      scale: 1.03;
-      filter: brightness(1.1);
-    }
-
-    &:active {
-      scale: 1;
-      transform: none;
-    }
-  }
-
-  #zen-welcome-title {
-    text-align: center;
-    font-size: 5.2rem;
-    font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-    max-width: 50%;
-    white-space: nowrap;
-    /* Layered (transformed) glyphs are drawn with grayscale AA on macOS;
-     * use it for the whole title so animating characters don't look bolder. */
-    -webkit-font-smoothing: antialiased;
-    transform: translateY(-5%);
-
-    & > span {
-      display: block;
-    }
-
-    .zen-welcome-char {
-      display: inline-block;
-      opacity: 0;
-      will-change: transform;
-    }
-  }
+  height: 100%;
 }
 
-#zen-welcome-pages {
-  app-region: no-drag;
-  opacity: 0;
+#welcome[hidden] {
   display: none;
-  justify-content: start;
-  align-items: stretch;
-  background: var(--zen-welcome-content-bg);
-  color: light-dark(#111111, #ffffff);
-  border-radius: 1.4rem;
-  position: relative;
-  width: 86%;
-  height: 82%;
-  box-shadow: 0 3px 8px rgba(0,0,0,.05);
-  overflow: hidden;
-
-  @media (max-width: 1000px) {
-    width: 100%;
-    height: 100%;
-    border-radius: 0;
-  }
-
-  #zen-welcome-page-sidebar {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    width: 38%;
-    height: 100%;
-    padding: 4rem 3.8rem 3.6rem;
-    box-sizing: border-box;
-    overflow: hidden;
-    background: var(--zen-welcome-sidebar-bg);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
-  }
-
-  #zen-welcome-back {
-    align-self: flex-start;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0 0 2.2rem;
-    padding: 0;
-    appearance: none;
-    border: none;
-    background: none;
-    font: inherit;
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--zen-welcome-accent);
-
-    &::before {
-      content: "";
-      width: 16px;
-      height: 16px;
-      background: currentColor;
-      mask: url(/back.svg) center / contain no-repeat;
-            fill: currentColor;
-    }
-
-    &[disabled] {
-      visibility: hidden;
-    }
-  }
-
-  #zen-welcome-page-sidebar-content {
-    flex: 1;
-    position: relative;
-  }
-
-  .zen-welcome-text {
-    position: absolute;
-    inset: 0;
-
-    & > * {
-      opacity: 0;
-      will-change: transform, opacity;
-    }
-
-    & h1 {
-      margin: 0 0 2.4rem;
-      font-size: 3rem;
-      font-weight: 700;
-      line-height: 1.1;
-      letter-spacing: -0.02em;
-    }
-
-    & p {
-      margin: 0 0 1.2rem;
-      font-size: 1.25rem;
-      line-height: 1.6;
-      color: var(--zen-welcome-text-secondary);
-    }
-  }
-
-  #zen-welcome-page-sidebar-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  #zen-welcome-page-content {
-    flex: 1;
-    position: relative;
-    height: 100%;
-    overflow: hidden;
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      background-image: url(/grain-bg.png);
-      opacity: 0.3;
-      mix-blend-mode: overlay;
-      pointer-events: none;
-    }
-  }
-
-  .zen-welcome-page {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 2.5rem;
-    padding: 3rem 4rem;
-    box-sizing: border-box;
-
-    &[exiting] {
-      pointer-events: none;
-    }
-
-    &[page="essentials"] {
-      justify-content: flex-end;
-      align-items: flex-end;
-      padding: 3rem 0 0 6rem;
-    }
-
-    &[page="search"],
-    &[page="import"] {
-      justify-content: safe center;
-      overflow-y: auto;
-      padding-top: 6rem;
-      padding-bottom: 6rem;
-      scrollbar-width: none;
-
-      mask-image: linear-gradient(
-        transparent,
-        black 6rem,
-        black calc(100% - 6rem),
-        transparent
-      );
-
-      .zen-welcome-option {
-        max-width: 24rem;
-        min-height: 7.5rem;
-        padding: 0 0 0 1.8rem;
-        overflow: hidden;
-        font-weight: 600;
-      }
-
-      .engine-icon-wrapper {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        align-self: stretch;
-        flex-shrink: 0;
-        width: 34%;
-        margin-left: auto;
-        overflow: hidden;
-        background: var(--zen-welcome-tile-bg);
-      }
-
-      .engine-icon-backdrop {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        scale: 3;
-        filter: blur(30px) saturate(1.8);
-        opacity: 0.2;
-      }
-
-      .engine-icon {
-        position: relative;
-        width: 26px;
-        height: 26px;
-        border-radius: 10px;
-      }
-
-      .zen-welcome-option-label {
-        order: -1;
-        padding-right: 1rem;
-      }
-
-      .zen-welcome-option-radio {
-        order: -2;
-      }
-    }
-
-    &[page="import"] {
-      .zen-welcome-option {
-        gap: 2rem;
-        min-height: 9rem;
-        padding: 0 0 0 2.5rem;
-        border-radius: 24px;
-      }
-
-      .zen-welcome-import-source {
-        display: flex;
-        flex-direction: column;
-        width: 100%;
-        max-width: 24rem;
-
-        .zen-welcome-option {
-          max-width: none;
-        }
-      }
-
-      .zen-welcome-import-profiles {
-        display: grid;
-        grid-template-rows: 0fr;
-        overflow: hidden;
-        transition: grid-template-rows 0.3s cubic-bezier(0.34, 1.2, 0.64, 1);
-      }
-
-      .zen-welcome-import-source[expanded] .zen-welcome-import-profiles {
-        grid-template-rows: 1fr;
-      }
-
-      .zen-welcome-import-profiles-list {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        overflow: hidden;
-        margin: 0 0.6rem;
-        border-radius: 0 0 18px 18px;
-        background: var(--zen-welcome-surface-bg);
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-      }
-
-      .zen-welcome-import-profile {
-        display: flex;
-        align-items: center;
-        gap: 0.9rem;
-        padding: 1rem 1.3rem;
-        font-size: 1.05rem;
-        font-weight: 500;
-        cursor: pointer;
-
-        &:not(:last-child) {
-          border-bottom: 1px solid var(--zen-welcome-border);
-        }
-
-        & input {
-          position: absolute;
-          opacity: 0;
-          width: 1px;
-          height: 1px;
-          margin: 0;
-          pointer-events: none;
-        }
-
-        .zen-welcome-import-profile-name {
-          overflow: hidden;
-          white-space: nowrap;
-          text-overflow: ellipsis;
-        }
-
-        .zen-welcome-import-profile-check {
-          position: relative;
-          flex-shrink: 0;
-          width: 22px;
-          height: 22px;
-          box-sizing: border-box;
-          border-radius: 50%;
-          border: 1.5px solid
-            light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.4));
-
-          &::after {
-            content: "";
-            position: absolute;
-            left: 6px;
-            top: 3px;
-            width: 5px;
-            height: 10px;
-            border: solid white;
-            border-width: 0 2px 2px 0;
-            transform: rotate(45deg);
-            opacity: 0;
-          }
-        }
-
-        /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector */
-        &:has(:checked) .zen-welcome-import-profile-check {
-          background: var(--zen-welcome-accent);
-          border-color: var(--zen-welcome-accent);
-
-          &::after {
-            opacity: 1;
-          }
-        }
-      }
-
-      .engine-icon-wrapper {
-        width: 40%;
-      }
-
-      .engine-icon {
-        width: 42px;
-        height: 42px;
-      }
-    }
-  }
-
-  .zen-welcome-option {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    width: 100%;
-    max-width: 30rem;
-    padding: 1.8rem 1.9rem;
-    font-size: 1.3rem;
-    box-sizing: border-box;
-    border-radius: 20px;
-    border: 1px solid var(--zen-welcome-border);
-    background: var(--zen-welcome-surface-bg);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    cursor: pointer;
-    will-change: transform;
-    transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-
-    &:hover {
-      scale: 1.03;
-    }
-
-    & input {
-      position: absolute;
-      opacity: 0;
-      width: 1px;
-      height: 1px;
-      margin: 0;
-      pointer-events: none;
-    }
-
-    &:has(input:focus-visible) {
-      outline: 2px solid var(--zen-welcome-accent);
-      outline-offset: 2px;
-    }
-
-    & strong {
-      font-weight: 700;
-    }
-
-    & .engine-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-    }
-
-    .zen-welcome-option-radio {
-      position: relative;
-      flex-shrink: 0;
-      width: 22px;
-      height: 22px;
-      box-sizing: border-box;
-      border-radius: 50%;
-      border: 1px solid
-        light-dark(rgba(0, 0, 0, 0.45), rgba(255, 255, 255, 0.5));
-
-      &::after {
-        content: "";
-        position: absolute;
-        inset: 3px;
-        border-radius: 50%;
-        background: currentColor;
-        opacity: 0;
-      }
-    }
-
-    /* stylelint-disable-next-line stylelint-plugin-mozilla/no-has-selector */
-    &:has(:checked) {
-      scale: 1.03;
-      border-color: var(--zen-welcome-accent);
-      color: var(--zen-welcome-accent);
-
-      .zen-welcome-option-radio {
-        border-color: currentColor;
-
-        &::after {
-          opacity: 1;
-        }
-      }
-    }
-  }
-
-  #zen-welcome-workspace-colors-anchor {
-    width: 1px;
-    height: 1px;
-  }
-
-  .zen-welcome-mock-browser {
-    width: 92%;
-    height: 100%;
-    border-top-left-radius: 2.4rem;
-    background: light-dark(#e3e3e5, #232326);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
-    overflow: hidden;
-
-    .zen-welcome-mock-browser-sidebar {
-      display: flex;
-      flex-direction: column;
-      gap: 1.6rem;
-      width: 80%;
-      height: 100%;
-      padding: 2.6rem 2.4rem;
-      box-sizing: border-box;
-      background: var(--zen-welcome-surface-bg);
-    }
-
-    .zen-welcome-mock-browser-dots {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 0.6rem;
-
-      & > div {
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        background: var(--zen-welcome-tile-bg);
-      }
-    }
-
-    #zen-welcome-essentials {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1.5rem;
-    }
-
-    .zen-welcome-essential {
-      appearance: none;
-      aspect-ratio: 1;
-      padding: 0;
-      border-radius: 2rem;
-      border: 3px solid transparent;
-      background: var(--zen-welcome-tile-bg) var(--zen-welcome-app-icon)
-        center / 35% no-repeat;
-      cursor: pointer;
-      will-change: transform;
-      transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-
-      &:hover,
-      &[selected] {
-        scale: 1.04;
-      }
-
-      &[selected] {
-        background-color: color-mix(
-          in srgb,
-          var(--zen-welcome-app-color) 22%,
-          var(--zen-welcome-surface-bg)
-        );
-        border-color: color-mix(
-          in srgb,
-          var(--zen-welcome-app-color) 60%,
-          transparent
-        );
-      }
-    }
-
-    .zen-welcome-mock-tab {
-      flex-shrink: 0;
-      height: 4.5rem;
-      border-radius: 1.6rem;
-      background: var(--zen-welcome-tile-bg);
-    }
-  }
 }
 
-/* Koan's additions. */
-
-/* A search engine or browser without a bundled logo: its initial on a
- * neutral tile (Chromium bundles engine logos only in Google Chrome). */
-.engine-icon-letter {
+/* The top row: the steps, Skip. Empty space here drags the window; on macOS
+ * it leaves the traffic lights their corner. */
+#welcome-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--zen-welcome-surface-bg);
-  color: var(--zen-welcome-text-secondary);
-  font-weight: 700;
-  font-size: 14px;
+  position: relative;
+  flex-shrink: 0;
+  height: 52px;
+  padding: 0 16px;
 }
 
-/* The colours page: where Zen opens its theme picker (zen-gradient-
- * generator.css: a 380px panel, 10px padding, its dot pad as tall as the
- * panel is wide) over the right pane, in the anchor's place: centred, at
- * the page's top padding (measured: 360 x 524.4 at 140, 33 in the pane). */
-.zen-welcome-page[page="colors"] {
-  justify-content: flex-start;
+:root[data-mac] #welcome-header {
+  padding-left: 88px;
 }
 
-.zen-welcome-theme-picker {
+#welcome-steps {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#welcome-steps li {
+  width: 24px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--muted);
+  transition: background-color 0.2s ease, width 0.2s ease;
+}
+
+#welcome-steps li[done] {
+  background: color-mix(in srgb, var(--primary) 45%, var(--muted));
+}
+
+#welcome-steps li[current] {
+  width: 36px;
+  background: var(--primary);
+}
+
+#welcome-skip {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+}
+
+#welcome-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 8px 24px 32px;
+  overflow-y: auto;
+}
+
+/* The step: shadcn's card. */
+#welcome-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 380px;
-  height: 514px;
-  padding: 10px;
-  box-sizing: border-box;
-  border-radius: 16px;
-  background: light-dark(#ffffff, rgb(43, 42, 51));
-  border: 1px solid var(--zen-welcome-border);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: var(--shadow-xs);
 }
 
-.zen-theme-picker-gradient {
-  position: relative;
-  flex: 1;
-  border-radius: 12px;
-  background: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.03));
-  overflow: hidden;
+#welcome-card[entering] {
+  animation: welcome-enter 0.2s ease-out;
 }
 
-.zen-theme-picker-click-to-add {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  white-space: nowrap;
-  font-weight: 600;
-  font-size: 12px;
-  opacity: 0.6;
-}
-
-.zen-theme-picker-scheme {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 999px;
-  background: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
-
-  & label {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 26px;
-    border-radius: 999px;
-    cursor: pointer;
-    color: var(--zen-welcome-text-secondary);
-
-    &:has(:checked) {
-      background: light-dark(#ffffff, rgba(255, 255, 255, 0.14));
-      color: light-dark(#111111, #ffffff);
-    }
-
-    &:has(input:focus-visible) {
-      outline: 2px solid var(--zen-welcome-accent);
-    }
-  }
-
-  & svg {
-    width: 15px;
-    height: 15px;
-  }
-
-  & input {
-    position: absolute;
+@keyframes welcome-enter {
+  from {
     opacity: 0;
-    width: 1px;
-    height: 1px;
-    margin: 0;
-  }
-}
-
-.zen-theme-picker-colors {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 8px 8px;
-}
-
-.zen-theme-picker-colors .zen-welcome-color {
-  width: 30px;
-  height: 30px;
-
-  &::before {
-    inset: 3px;
-  }
-}
-
-.zen-welcome-color {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  cursor: pointer;
-
-  &::before {
-    content: "";
-    position: absolute;
-    inset: 6px;
-    border-radius: 50%;
-    background: var(--zen-welcome-swatch);
-  }
-
-  &:hover::after,
-  &:has(:checked)::after {
-    content: "";
-    position: absolute;
-    inset: 1px;
-    border-radius: 50%;
-    border: 2.5px solid color-mix(in srgb, var(--zen-welcome-swatch) 50%, transparent);
-  }
-
-  &:has(:checked)::after {
-    border-color: light-dark(#111111, #ffffff);
-  }
-
-  &:has(input:focus-visible) {
-    outline: 2px solid var(--zen-welcome-accent);
-    outline-offset: 2px;
-  }
-
-  & input {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
-    margin: 0;
-  }
-}
-
-.zen-welcome-color-name {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-}
-
-.zen-welcome-essential:focus-visible {
-  outline: 2px solid var(--zen-welcome-accent);
-  outline-offset: 2px;
-}
-
-/* Zen plays welcome-background.mp4 here, a slowly drifting light-green and
- * white gradient. Koan draws it: the video's colours (sampled from it) in
- * soft blobs that drift on its 12s loop. */
-#zen-welcome-video {
-  background:
-    radial-gradient(60% 70% at 70% 25%, rgb(120, 190, 85) 0%, transparent 70%),
-    radial-gradient(55% 60% at 20% 80%, rgb(150, 195, 110) 0%, transparent 70%),
-    radial-gradient(50% 55% at 15% 15%, rgb(205, 215, 185) 0%, transparent 70%),
-    radial-gradient(60% 60% at 85% 85%, rgb(190, 208, 160) 0%, transparent 70%),
-    rgb(165, 196, 130);
-  background-size: 140% 140%;
-  animation: zen-welcome-drift 12s ease-in-out infinite alternate;
-}
-
-@keyframes zen-welcome-drift {
-  0% {
-    background-position: 0% 0%, 100% 100%, 0% 100%, 100% 0%, 0 0;
-  }
-  50% {
-    background-position: 60% 30%, 40% 70%, 30% 40%, 70% 60%, 0 0;
-  }
-  100% {
-    background-position: 100% 60%, 0% 40%, 60% 0%, 20% 100%, 0 0;
+    transform: translateY(8px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #zen-welcome-video {
+  #welcome-card[entering] {
     animation: none;
   }
+}
+
+.step-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 10px;
+  border-radius: var(--r-lg);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.step-badge .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.step-head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.step-head p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+/* The welcome step: larger, centred. */
+#welcome-card[step='welcome'],
+#welcome-card[step='done'] {
+  align-items: center;
+  text-align: center;
+  padding: 40px 32px 32px;
+}
+
+#welcome-card[step='welcome'] .step-head,
+#welcome-card[step='done'] .step-head {
+  align-items: center;
+}
+
+#welcome-card[step='welcome'] h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.step-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.step-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-foot .spacer {
+  flex: 1;
+}
+
+#welcome-card[step='welcome'] .step-foot,
+#welcome-card[step='done'] .step-foot {
+  flex-direction: column;
+  align-self: stretch;
+}
+
+#welcome-card[step='welcome'] .step-foot .button,
+#welcome-card[step='done'] .step-foot .button {
+  width: 100%;
+}
+
+/* shadcn's button: default (primary), outline and ghost, size default. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.button.primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.button.primary:hover {
+  background: color-mix(in srgb, var(--primary) 90%, transparent);
+}
+
+.button.outline {
+  border-color: var(--border);
+  background: var(--background);
+  box-shadow: var(--shadow-xs);
+}
+
+.button.outline:hover,
+.button.ghost:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.button.ghost {
+  height: 32px;
+  padding: 0 10px;
+  color: var(--muted-foreground);
+}
+
+.button:focus-visible,
+.choice:has(input:focus-visible),
+.segment:has(input:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+  border-color: var(--ring);
+}
+
+/* A choice: shadcn's radio group item as a card. */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--background);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.choice:hover {
+  background: var(--accent);
+}
+
+.choice:has(input:checked) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--background));
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.choice-title {
+  font-weight: 500;
+}
+
+.choice-detail {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+/* The radio circle, then its dot. */
+.radio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--input);
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+}
+
+.choice:has(input:checked) .radio {
+  border-color: var(--primary);
+}
+
+.choice:has(input:checked) .radio::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+/* A browser's or an engine's mark: its initial on a muted tile (Chromium
+ * ships engine logos only in Google Chrome builds; nothing is fetched). */
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.tile .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+/* The shortcuts: a key per row, its two meanings as a toggle group. */
+.key-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.key-row + .key-row {
+  border-top: 1px solid var(--border);
+}
+
+.key-row-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.segments {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--muted);
+}
+
+.segment {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 108px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.segment:has(input:checked) {
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.segment input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segment kbd {
+  font-size: 11px;
 }

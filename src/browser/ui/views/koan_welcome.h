@@ -6,12 +6,10 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WELCOME_H_
 
 #include <memory>
-#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "url/gurl.h"
 
 class BrowserView;
 
@@ -22,22 +20,19 @@ class Widget;
 
 namespace koan {
 
-class KoanThemeController;
-
-// Zen's welcome (ZenWelcome.mjs, zen-welcome.css, zen-welcome.ftl) on
-// Chromium's first run: chrome://koan-welcome (koan_welcome_ui.h) fills the
-// first window, which it sizes to Zen's 1200 x 720 at most, centres and
-// locks while it shows, with the traffic lights hidden. "Welcome to a calmer
-// internet", then pages to import from another browser, colour the Space,
-// pick the search engine, choose Essentials and make Koan the default
-// browser. Zen's ad blocker page is left out (see ZEN_PARITY.md).
+// Koan's welcome on Chromium's first run (onboarding v2, #181; a deliberate
+// divergence from Zen's welcome): chrome://koan-welcome (koan_welcome_ui.h)
+// over the whole first window, in shadcn's look. "Welcome to a calmer
+// internet", then the shortcut set, import from another browser and the
+// search engine (Brave Search chosen); every step can be skipped, and Skip
+// setup or Esc leaves at any point.
 //
-// The page is a WebView in a child widget over the whole window; this object
-// is its KoanWelcomeHost (what the page asks of the window). It shows once
-// (pref koan.welcome_screen.seen, set once the screen is on screen, as Zen
-// sets zen.welcome-screen.seen at the start) and only on Chromium's first
-// run, i.e. of a new user data directory (not for each profile in it), so
-// --no-first-run skips it and --force-first-run brings it back.
+// The page is a WebView in a child widget over the window; this object is
+// its KoanWelcomeHost (what the page asks of the window). It shows once
+// (pref koan.welcome_screen.seen, set once the screen is on screen) and only
+// on Chromium's first run, i.e. of a new user data directory (not for each
+// profile in it), so --no-first-run skips it and --force-first-run brings
+// it back.
 class KoanWelcome : public content::WebContentsObserver {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
@@ -58,55 +53,38 @@ class KoanWelcome : public content::WebContentsObserver {
       base::TerminationStatus status) override;
 
   // Whether this window shows the welcome: the first normal window of a
-  // regular profile on Chromium's first run, if it hasn't been seen.
+  // regular profile on Chromium's first run, if it hasn't been seen and no
+  // other window has it pending.
   bool ShouldShow() const;
   // The welcome is pending or showing in this window (koan_welcome_state.h).
   void SetPending(bool pending);
   void MaybeShow();
   void Show();
-  // Zen's window while the welcome shows: the size it was given, locked
-  // (`locked`), or as it was before (`!locked`).
-  void LockWindow(bool locked);
-  // "Dive in!": the page has faded out; it closes, then the Essentials are
-  // pinned and, if the import page picked a browser, the import dialog opens.
-  void Finish(std::vector<GURL> essentials);
+  // "Start browsing": closes the screen, then opens the import dialog if the
+  // import step picked a browser.
+  void Finish();
+  // Skip setup, Esc, or the page's renderer gone: closes the screen,
+  // applying nothing more.
+  void Skip();
+  void Close();
   // Whether the window is closing or destroyed.
   bool IsWindowClosing() const;
-  // Zen's Essentials from the welcome (some of kWelcomeEssentials).
-  void AddEssentials(const std::vector<GURL>& urls);
-  // Esc, or the page's renderer gone: closes the screen, applying nothing
-  // more.
-  void Skip();
-  // `restore_window`: the window's buttons and size lock as they were (not
-  // while the window is being destroyed).
-  void Close(bool restore_window = true);
   // After the screen closes: the window active, the keyboard on its page.
   void FocusBrowser();
-  // The surface outside the card drags the window (Zen's
-  // -moz-window-dragging: drag); EndWindowDrag() after AppKit's drag.
+  // The space around the card drags the window, as a title bar would;
+  // EndWindowDrag() after AppKit's drag.
   void StartWindowDrag();
   void EndWindowDrag();
-  // Closes the theme picker the colours page opened, if it did (#41).
-  void CloseThemePicker();
-#if __has_include("koan/browser/ui/views/koan_theme_controller.h")
-  KoanThemeController* ThemeController() const;
-#endif
   void LayoutWidget();
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<views::WebView> web_view_ = nullptr;
-  // The window's resize and maximize before LockWindow(true).
-  bool could_resize_ = true;
-  bool could_maximize_ = true;
-  bool window_locked_ = false;
   bool pending_ = false;
-  // The import page picked a browser: its import opens after the screen.
+  // The import step picked a browser: its import opens after the screen.
   bool import_ = false;
-  // Finish() ran: its choices apply once.
+  // Finish() ran: it applies once.
   bool finishing_ = false;
-  // The colours page opened the theme picker (#41) over itself.
-  bool theme_picker_open_ = false;
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

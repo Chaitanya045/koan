@@ -9,40 +9,69 @@
 #include <string_view>
 #include <utility>
 
-#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_util.h"
-#include "base/strings/string_view_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/url_constants.h"
+#include "koan/browser/ui/color/koan_look.h"
+#include "koan/browser/ui/color/koan_tokens.h"
+#include "koan/browser/ui/fonts/koan_fonts.h"
 #include "koan/browser/ui/webui/koan_welcome_handler.h"
-#include "koan/browser/ui/webui/koan_welcome_media.h"
 #include "koan/browser/ui/webui/koan_welcome_resources.h"
 #include "koan/common/koan_url_constants.h"
-#include "services/network/public/mojom/content_security_policy.mojom.h"
 
 namespace koan {
 
 namespace {
 
-// Zen's favicons for the Essentials (welcome_favicons/).
-std::string_view Favicon(std::string_view name) {
-  static constexpr std::pair<std::string_view, std::string_view> kFavicons[] = {
-      {"calendar", kKoanWelcomeFaviconCalendar},
-      {"discord", kKoanWelcomeFaviconDiscord},
-      {"figma", kKoanWelcomeFaviconFigma},
-      {"github", kKoanWelcomeFaviconGithub},
-      {"notion", kKoanWelcomeFaviconNotion},
-      {"obsidian", kKoanWelcomeFaviconObsidian},
-      {"slack", kKoanWelcomeFaviconSlack},
-      {"trello", kKoanWelcomeFaviconTrello},
-      {"tuta", kKoanWelcomeFaviconTuta},
+// The welcome is always in shadcn's look (#181), whichever style the browser
+// uses: the user's look with the shadcn style, light, dark or following the
+// system as the look's mode says.
+std::string TokensStylesheet() {
+  look::Look look = look::CurrentLook();
+  look.style = look::Style::kShadcn;
+  const auto block = [&look](bool dark) {
+    return base::StrCat(
+        {":root {\n  color-scheme: ", dark ? "dark" : "light", ";\n",
+         look::TokensToCss(look::ResolveTokens(look, dark)), "}\n"});
   };
-  for (const auto& [key, svg] : kFavicons) {
+  std::string css = base::StrCat(
+      {"@font-face { font-family: 'Geist'; src: url(/geist.woff2) "
+       "format('woff2'); font-weight: 100 900; font-display: swap; }\n"
+       "@font-face { font-family: 'Geist Mono'; src: url(/geist-mono.woff2) "
+       "format('woff2'); font-display: swap; }\n"});
+  switch (look.mode) {
+    case look::Mode::kDark:
+      css += block(true);
+      break;
+    case look::Mode::kLight:
+      css += block(false);
+      break;
+    case look::Mode::kAuto:
+      css += block(false);
+      css += "@media (prefers-color-scheme: dark) {\n" + block(true) + "}\n";
+      break;
+  }
+  return css;
+}
+
+// The Lucide icons (welcome_icons/, ISC), by name.
+std::string_view Icon(std::string_view name) {
+  static constexpr std::pair<std::string_view, std::string_view> kIcons[] = {
+      {"arrow-left", kKoanWelcomeIconArrowLeft},
+      {"arrow-right", kKoanWelcomeIconArrowRight},
+      {"check", kKoanWelcomeIconCheck},
+      {"circle-check-big", kKoanWelcomeIconCircleCheckBig},
+      {"hard-drive-download", kKoanWelcomeIconHardDriveDownload},
+      {"keyboard", kKoanWelcomeIconKeyboard},
+      {"search", kKoanWelcomeIconSearch},
+      {"sparkles", kKoanWelcomeIconSparkles},
+      {"x", kKoanWelcomeIconX},
+  };
+  for (const auto& [key, svg] : kIcons) {
     if (key == name) {
       return svg;
     }
@@ -50,30 +79,26 @@ std::string_view Favicon(std::string_view name) {
   return std::string_view();
 }
 
-bool IsSvg(const std::string& path) {
-  return base::EndsWith(path, ".svg");
-}
-
 void ServeResource(const std::string& path,
                    content::WebUIDataSource::GotDataCallback callback) {
   std::string data;
+  constexpr std::string_view kIconsDir = "icons/";
+  constexpr std::string_view kSvg = ".svg";
   if (path == "koan_welcome.css") {
     data = kKoanWelcomeCss;
   } else if (path == "koan_welcome.js") {
     data = kKoanWelcomeJs;
-  } else if (path == "back.svg") {
-    data = kKoanWelcomeBackSvg;
-  } else if (path == "forward.svg") {
-    data = kKoanWelcomeForwardSvg;
-  } else if (path == "grain-bg.png") {
-    data = std::string(base::as_string_view(welcome_media::kGrainBg));
-  } else if (path == "motion.min.js") {
-    data = kKoanWelcomeMotionJs;
-  } else if (path.starts_with("favicons/") && IsSvg(path)) {
-    data = std::string(Favicon(std::string_view(path).substr(
-        9, path.size() - 9 - std::string_view(".svg").size())));
+  } else if (path == "koan_tokens.css") {
+    data = TokensStylesheet();
+  } else if (path == "geist.woff2") {
+    data = std::string(fonts::SansWoff2());
+  } else if (path == "geist-mono.woff2") {
+    data = std::string(fonts::MonoWoff2());
+  } else if (path.starts_with(kIconsDir) && path.ends_with(kSvg)) {
+    data = std::string(Icon(std::string_view(path).substr(
+        kIconsDir.size(), path.size() - kIconsDir.size() - kSvg.size())));
   } else if (!path.ends_with(".js") && !path.ends_with(".css") &&
-             !path.ends_with(".png") && !path.ends_with(".svg")) {
+             !path.ends_with(".svg") && !path.ends_with(".woff2")) {
     // The page itself, at any other path; an unknown file is empty, not the
     // page served as a script or an image.
     data = kKoanWelcomeHtml;
@@ -95,10 +120,6 @@ KoanWelcomeUI::KoanWelcomeUI(content::WebUI* web_ui)
   source->SetRequestFilter(
       base::BindRepeating([](const std::string&) { return true; }),
       base::BindRepeating(&ServeResource));
-  // The engines' logos where a build bundles them (chrome://theme).
-  source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::ImgSrc,
-      "img-src chrome://theme 'self' data:;");
   web_ui->AddMessageHandler(std::make_unique<KoanWelcomeHandler>(profile));
 }
 
