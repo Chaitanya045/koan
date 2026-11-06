@@ -606,15 +606,13 @@ void KoanUrlBarController::OpenOnStartup() {
     return;
   }
   content::WebContents* contents = model->GetWebContentsAt(0);
-  // (Relies on this task running before the first navigation commits, which a
-  // tab made with the window has not by then; a tab that already committed
-  // pages is an adopted one. If the order ever changes the bar just does not
-  // open on startup.)
   // The window's own first tab, not one adopted from another window (a tab
   // dragged out, "Move to new window", chrome.windows.create({tabId})): that
   // one has committed pages already, where a tab made with the window is
   // still on its initial navigation. Zen opens the bar only on its own empty
-  // tab. (Not during a tab drag either.)
+  // tab. This relies on the task running before the first navigation commits;
+  // if that order ever changes the bar just does not open on startup. (Not
+  // during a tab drag either.)
   if (TabDragController::IsActive() ||
       !contents->GetController().IsInitialBlankNavigation()) {
     return;
