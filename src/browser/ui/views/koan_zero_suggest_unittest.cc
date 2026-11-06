@@ -136,6 +136,26 @@ TEST_F(KoanZeroSuggestTest, AnyPageButBlankAndNewTabPagesAndEachOnce) {
   EXPECT_EQ(u"File", matches[3].description);
 }
 
+TEST_F(KoanZeroSuggestTest, NothingToListIsDoneAtOnce) {
+  // An incognito window with one tab, a profile with no top sites: no rows,
+  // and no request left running (the controller asks again only while one is
+  // not done).
+  EXPECT_TRUE(Run(Input()).empty());
+  EXPECT_TRUE(provider_->done());
+}
+
+TEST_F(KoanZeroSuggestTest, LongDataUrlsAreCutInTheRowNotWhereTheyGo) {
+  const std::string url =
+      "data:text/html;charset=utf-8," + std::string(100000, 'a');
+  AddTab(u"", url, 1);
+  const ACMatches& matches = Run(Input());
+  ASSERT_EQ(1u, matches.size());
+  EXPECT_EQ(GURL(url), matches[0].destination_url);
+  EXPECT_LT(matches[0].contents.size(), 100u);
+  EXPECT_LT(matches[0].fill_into_edit.size(), 100u);
+  EXPECT_TRUE(matches[0].description.empty());
+}
+
 TEST_F(KoanZeroSuggestTest, NotTheTabBeingLeftNorACopyOfIt) {
   // Navigate()'s switch would find the active tab first and do nothing.
   AddTab(u"Copy of the current page", "https://current.example/#frag", 1);
