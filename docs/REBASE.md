@@ -249,6 +249,23 @@ same files: `koan_tab_menu.{h,cc}`, `koan_session_data.{h,cc}`, and the
 Their menu ids move into their `TabMenuFeatureId` range (e.g. folders' "Move
 to Folder" from 3002, inside split view's range, to 3300+).
 
+## Agent control: the method policy
+
+Agent control (`.agent/notes/agent-control.md`, issue #180) lets a local agent drive tabs over a filtered DevTools
+protocol. What it may call is a per-method table, **unlisted = deny**, in `src/browser/agent/koan_agent_policy.cc`. A roll
+that adds a protocol method must not make it reachable, so after every roll:
+
+```sh
+scripts/agent/check_policy_coverage.py                 # against chromium/src, or --chromium-src DIR
+scripts/agent/check_policy_coverage.py --list          # kDeny rows for the new methods of listed domains
+```
+
+It fails if a domain is neither fully listed nor in the denied domains, if a listed domain has a method without a rule
+(new methods start as `kDeny`; allowing one is a review decision), or if a rule names a method that no longer exists. The
+other things to re-check on a roll (the untrusted-client domain list, the `DevToolsAgentHostClient` flag defaults, the
+`PageLiveStateDecorator` setters the keep-alive uses) are listed in the design's section 14 and become REBASE rows with
+the PRs that add them.
+
 ## After every rebase, re-audit the hooks
 
 `update_chromium.sh` prints every `koan::` call site in `chromium/src`.

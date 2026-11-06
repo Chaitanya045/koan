@@ -86,4 +86,4 @@ jobs:
       - name: Node scripts parse
         run: for f in scripts/*.mjs scripts/e2e/*.mjs; do node --check "$f"; done
       - name: Python compiles
-        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/tests/*.py
+        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/agent/*.py scripts/tests/*.py
