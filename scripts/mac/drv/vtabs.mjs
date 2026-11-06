@@ -107,11 +107,16 @@ if (MODE === 'main') {
   await step('T14: Shift+Cmd+A opens the URL bar in the tabs mode (the Tabs chip, empty input), typing a title word and Enter switches to that tab', async () => {
     // A second tab whose title has a word (tqz) that the first one's doesn't; back to the first.
     const first = (await pages()).find(p => p.type === 'page');
-    const other = (await browserCall('Target.createTarget', { url: 'data:text/html,<title>tqz page</title>other tab' })).result.targetId;
+    const windowOf = async id => (await browserCall('Browser.getWindowForTarget', { targetId: id })).result?.windowId;
+    const firstWindow = await windowOf(first.id);
+    const other = (await browserCall('Target.createTarget', { url: 'data:text/html,<title>tqz page</title>other tab', newWindow: false })).result.targetId;
     try {
       await sleep(1500);
+      // In the first window, as a tab: a tab of a window of its own would be closed with its window below.
+      need((await windowOf(other)) === firstWindow, 'the extra tab opened in another window');
       await browserCall('Target.activateTarget', { targetId: first.id }); await sleep(800);
-      const count = (await pages()).length;
+      const known = new Set((await pages()).map(p => p.id));
+      const count = known.size;
       if (!(await key(0, 'cs'))) return 'key skipped';
       await sleep(1200);
       const vs = await fviews();
@@ -130,14 +135,21 @@ if (MODE === 'main') {
       await key(K.RETURN); await sleep(1500);
       const visible = await visiblePage();
       const title = visible ? await evalIn(visible, 'document.title') : null;
-      const after = (await pages()).length;
+      const now = await pages();
+      const brief = ps => ps.map(p => `${p.title?.slice(0, 20)}@${p.url.slice(0, 30)}`).join(' | ');
+      const lost = (await Promise.resolve([...known])).filter(id => !now.some(p => p.id === id));
+      console.log(`T14 targets before: ${count}, after: ${now.length}, gone: ${lost.length}; now: ${brief(now)}`);
       need(title === 'tqz page', `Enter on a match did not switch to the tab (visible tab: ${JSON.stringify(title)})`);
-      need(after === count, `the tab count changed: ${count} -> ${after}`);
-      return `URL bar view shown: ${bar}, Tabs chip, switched to the tqz tab, ${after} tabs`;
+      // Enter must switch, not open a tab (a web search for "@tabs tqz" would). Tabs of other Spaces may be unloaded by a switch of
+      // Space and leave the target list, so the count isn't asserted, only that nothing new appeared.
+      const opened = now.filter(p => !known.has(p.id));
+      need(opened.length === 0, `Enter opened ${opened.length} new tab(s): ${opened.map(p => p.url).join(', ')}`);
+      return `URL bar view shown: ${bar}, Tabs chip, switched to the tqz tab, targets ${count} -> ${now.length}`;
     } finally {
       // Whatever failed: no URL bar left open and no extra tab left behind for the steps after this one.
       try { await key(K.ESC); await sleep(400); } catch {}
-      try { await browserCall('Target.closeTarget', { targetId: other }); await sleep(600); } catch {}
+      // Only a tab of the first window: never the window with its last tab.
+      try { if ((await windowOf(other)) === firstWindow) { await browserCall('Target.closeTarget', { targetId: other }); await sleep(600); } } catch {}
       try { await browserCall('Target.activateTarget', { targetId: first.id }); } catch {}
     }
   });
