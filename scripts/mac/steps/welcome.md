@@ -35,7 +35,7 @@ launch for the intro, 1.5 s after each Next). Audit: `.agent/notes/upstream/welc
 |---|---|---|
 | W-12 | Esc on any page | The screen closes, nothing more applies, the window is resizable and has its buttons. |
 | W-13 | ⌘W, then ⌘Q, during the welcome (a fresh profile each) | No crash, no CHECK. After ⌘W: no window left, Dock click opens a normal window without the welcome. |
-| W-14 | ⌘T, ⌘L, ⌘N, ⌘, and the menu bar's File and View items during the welcome | No crash. Record what each does (W25: the welcome doesn't block them, as in Zen); report anything that shows over the screen. |
+| W-14 | ⌘T, ⌘L, ⌘N, ⌘, and the menu bar's File and View items during the welcome | No crash. They are not blocked, as in Zen (W25): record what each does (e.g. ⌘T's URL bar over or under the screen, ⌘N's second window without a welcome) and attach a capture of anything that shows over the screen. |
 | W-15 | ⌃⌘F during the welcome, then ⌃⌘F again | The screen covers the fullscreen window and goes back with it; no crash (W6). |
 | W-16 | A 1280 x 800 display, and a display smaller than 1200 x 720 if one is available (or a scaled resolution) | The window is the screen's work area at most, centred; the card fits. |
 | W-17 | Right-click on the page and on the card | No context menu (W12). |

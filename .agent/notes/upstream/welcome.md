@@ -35,7 +35,7 @@ the startup infobars, the crash bubble) is PR #169's; this file only adds the we
 | W22 | `ThemeService::SetBrowserColorScheme` | auto / light / dark | **reuse** (the picker's scheme buttons) | handler |
 | W23 | The active Space's colour (Koan's Spaces) | | **reuse**; with #41/#62's picker the picker edits the Space itself | `space_color` |
 | W24 | Pinned tabs (`chrome::AddTabAt(..., pinned)`) | the Essentials | **reuse**, at "Dive in!" only; they are saved with the session | `Finish` |
-| W25 | Browser shortcuts and the menu bar while it shows (⌘T, ⌘L, ⌘N, ⌘W, ⌘Q, File/View items) | act on the window under the screen | **reuse** for now: Zen's welcome doesn't block them either (it hides the window's contents). *Mac test* records what each does; a follow-up decides if any must be blocked | — |
+| W25 | Browser shortcuts and the menu bar while it shows (⌘T, ⌘L, ⌘N, ⌘W, ⌘Q, File/View items) | act on the window under the screen | **reuse** (maintainer, 2026-11-06): not blocked, as in Zen, whose welcome only hides the window's contents. *Mac test* W-14 records what each does | — |
 | W26 | Incognito, guest, a second profile, a PWA window | | **lock**: OTR and non-normal windows never show it; a second profile in the same user data dir has no first run | `MaybeShow` |
 | W27 | Closing the window or quitting during the welcome | | **reuse**: nothing applies but what was committed (the search engine, the default browser, the colours), as in Zen | — |
 | W28 | Session restore after a crash in the welcome | #169 restores silently | **reuse**: the welcome doesn't come back (W3) | — |
