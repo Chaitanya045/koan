@@ -763,8 +763,13 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   PrepareCardWindow(widget_.get());
   key_dispatcher_ = std::make_unique<CardKeyDispatcher>(
       widget_.get(),
-      base::BindRepeating(&KoanGlanceController::OnCardKeyEquivalent,
-                          weak_factory_.GetWeakPtr()));
+      base::BindRepeating(
+          [](base::WeakPtr<KoanGlanceController> controller,
+             const input::NativeWebKeyboardEvent& event) {
+            return controller ? controller->OnCardKeyEquivalent(event)
+                              : CardKeyResult::kUnhandled;
+          },
+          weak_factory_.GetWeakPtr()));
 #endif
   view_ = widget_->SetContentsView(
       std::make_unique<KoanGlanceView>(this, contents_.get()));
@@ -1128,14 +1133,12 @@ CardKeyResult KoanGlanceController::OnCardKeyEquivalent(
       return CardKeyResult::kHandled;
     }
     // 2 and 3: Window > Minimize / Zoom, the reserved commands.
-    if (TakeKeyEquivalent(event)) {
-      return CardKeyResult::kHandled;
-    }
+    return TakeKeyEquivalent(event);
   }
   return CardKeyResult::kUnhandled;
 }
 
-bool KoanGlanceController::TakeKeyEquivalent(
+CardKeyResult KoanGlanceController::TakeKeyEquivalent(
     const input::NativeWebKeyboardEvent& event) {
   // Both look the key up in the menu bar: only for key equivalents, not for
   // typing.
@@ -1144,19 +1147,19 @@ bool KoanGlanceController::TakeKeyEquivalent(
   if (!(event.GetModifiers() & kEquivalentModifiers) &&
       !(event.windows_key_code >= ui::VKEY_F1 &&
         event.windows_key_code <= ui::VKEY_F24)) {
-    return false;
+    return CardKeyResult::kUnhandled;
   }
   // 2. Window > Minimize and Zoom: the browser window's, as in Zen.
   if (PerformWindowMenuKey(browser_view_->GetWidget(), event)) {
     VLOG(1) << "Koan Glance: key " << event.windows_key_code
             << " is Window > Minimize / Zoom";
-    return true;
+    return CardKeyResult::kHandled;
   }
   // 3. The reserved commands.
   const int command =
       ReservedCommandForKeyEvent(browser_view_->browser(), event);
   if (command == kDropKeyEvent) {
-    return true;
+    return CardKeyResult::kDrop;
   }
   if (command) {
     VLOG(1) << "Koan Glance: key " << event.windows_key_code
@@ -1164,9 +1167,9 @@ bool KoanGlanceController::TakeKeyEquivalent(
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&KoanGlanceController::RunBrowserCommand,
                                   weak_factory_.GetWeakPtr(), command));
-    return true;
+    return CardKeyResult::kHandled;
   }
-  return false;
+  return CardKeyResult::kUnhandled;
 }
 
 void KoanGlanceController::ProcessPriorityKey(
@@ -1182,7 +1185,7 @@ void KoanGlanceController::ProcessPriorityKey(
   }
   // Koan's shortcut declined the key: what a tab would do with it next
   // (the page has passed it by now, a small difference from a tab).
-  if (!TakeKeyEquivalent(event)) {
+  if (TakeKeyEquivalent(event) == CardKeyResult::kUnhandled) {
     PerformMainMenuKey(event);
   }
 }

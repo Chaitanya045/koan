@@ -36,18 +36,37 @@
 
 - (ui::PerformKeyEquivalentResult)prePerformKeyEquivalent:(NSEvent*)event
                                                    window:(NSWindow*)window {
-  if (event.type != NSEventTypeKeyDown) {
+  // As DefaultCommandDispatcherDelegate, which this replaces: a page holding
+  // the keyboard (Keyboard Lock) gets its keys.
+  NSResponder* responder = window.firstResponder;
+  if ([responder respondsToSelector:@selector(isKeyLocked:)] &&
+      [(id)responder isKeyLocked:event]) {
     return ui::PerformKeyEquivalentResult::kUnhandled;
   }
-  switch (_handler.Run(
-      input::NativeWebKeyboardEvent(base::apple::OwnedNSEvent(event)))) {
-    case koan::CardKeyResult::kHandled:
-      return ui::PerformKeyEquivalentResult::kHandled;
-    case koan::CardKeyResult::kDrop:
-      return ui::PerformKeyEquivalentResult::kDrop;
-    case koan::CardKeyResult::kUnhandled:
-      return ui::PerformKeyEquivalentResult::kUnhandled;
+  // The card's steps, with the browser window's FocusManager. (The parent's
+  // ChromeCommandDispatcherDelegate looks for accelerators on the FocusManager
+  // of the event's window, the card's, which has none of Koan's.)
+  if (event.type == NSEventTypeKeyDown) {
+    switch (_handler.Run(
+        input::NativeWebKeyboardEvent(base::apple::OwnedNSEvent(event)))) {
+      case koan::CardKeyResult::kHandled:
+        return ui::PerformKeyEquivalentResult::kHandled;
+      case koan::CardKeyResult::kDrop:
+        return ui::PerformKeyEquivalentResult::kDrop;
+      case koan::CardKeyResult::kUnhandled:
+        break;
+    }
   }
+  // Otherwise as DefaultCommandDispatcherDelegate: the parent window's
+  // delegate (extension commands and the rest of the browser's steps).
+  if (![window conformsToProtocol:@protocol(CommandDispatchingWindow)]) {
+    return ui::PerformKeyEquivalentResult::kUnhandled;
+  }
+  NSWindow<CommandDispatchingWindow>* parent =
+      static_cast<NSWindow<CommandDispatchingWindow>*>(window)
+          .commandDispatchParent;
+  return [[parent commandDispatcher].delegate prePerformKeyEquivalent:event
+                                                               window:parent];
 }
 
 - (ui::PerformKeyEquivalentResult)postPerformKeyEquivalent:(NSEvent*)event

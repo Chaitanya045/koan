@@ -260,8 +260,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
   // browser window's steps, as PreHandleKeyboardEvent() has them.
   CardKeyResult OnCardKeyEquivalent(const input::NativeWebKeyboardEvent& event);
   // Steps 2 and 3 of PreHandleKeyboardEvent() (Window > Minimize / Zoom,
-  // the reserved commands) for a key equivalent: whether they took it.
-  bool TakeKeyEquivalent(const input::NativeWebKeyboardEvent& event);
+  // the reserved commands) for a key equivalent: whether they took it (or
+  // drop it: a repeating ⌘T / ⌘N).
+  CardKeyResult TakeKeyEquivalent(const input::NativeWebKeyboardEvent& event);
   // Step 1, after the key's dispatch: the browser window's high-priority
   // shortcut, or if it declines, steps 2 and 3, then the menu bar's item.
   void ProcessPriorityKey(const input::NativeWebKeyboardEvent& event);
