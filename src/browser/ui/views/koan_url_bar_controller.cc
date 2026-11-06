@@ -318,6 +318,20 @@ bool KoanUrlBarController::OpenForTabSearch() {
   if (!CanOpenBar()) {
     return false;
   }
+  // The scope first: Zen's "search tabs" is the URL bar in its tabs search
+  // mode: a "Tabs" chip and an empty input, with Enter on a match switching to
+  // that tab. Chromium's is the @tabs keyword mode. Without it (the starter
+  // pack is off, or the TemplateURLService isn't loaded yet) nothing is done
+  // here, and the caller focuses the omnibox as Chromium's shortcut does.
+  TemplateURLService* service =
+      TemplateURLServiceFactory::GetForProfile(browser_view_->GetProfile());
+  const TemplateURL* tabs =
+      service ? service->FindStarterPackTemplateURL(
+                    template_url_starter_pack_data::StarterPackId::kTabs)
+              : nullptr;
+  if (!tabs || !tabs->CanBeUsedForKeywordMatching()) {
+    return false;
+  }
   // A new-tab bar that is open is not this one (its Enter would open a tab).
   if (new_tab_) {
     EndNewTabSession(/*committed=*/false);
@@ -332,24 +346,10 @@ bool KoanUrlBarController::OpenForTabSearch() {
   if (is_open()) {
     SetPlacement(DesiredPlacement());
   }
-  // Zen's "search tabs" (Browser:SearchTabs) is the URL bar in its tabs
-  // search mode: a "Tabs" chip and an empty input, with Enter on a match
-  // switching to that tab. Chromium's is the @tabs keyword mode. It has to be
-  // entered explicitly: SetUserText() clears keyword mode, and only typing the
-  // space after the keyword turns it on, so setting "@tabs " as text would be
-  // a plain web search.
+  // The keyword mode has to be entered explicitly: SetUserText() clears it, and
+  // only typing the space after the keyword turns it on, so setting "@tabs "
+  // as text would be a plain web search.
   OmniboxView* view = bar->omnibox_view();
-  TemplateURLService* service =
-      TemplateURLServiceFactory::GetForProfile(browser_view_->GetProfile());
-  const TemplateURL* tabs =
-      service ? service->FindStarterPackTemplateURL(
-                    template_url_starter_pack_data::StarterPackId::kTabs)
-              : nullptr;
-  if (!tabs || !tabs->CanBeUsedForKeywordMatching()) {
-    // No scope (the starter pack is off or the service isn't loaded): the
-    // caller focuses the omnibox as Chromium's shortcut does.
-    return false;
-  }
   view->SetUserText(std::u16string(), /*update_popup=*/false);
   bar->GetOmniboxController()->edit_model()->EnterKeywordMode(
       metrics::OmniboxEventProto::KEYBOARD_SHORTCUT, tabs,

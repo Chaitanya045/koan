@@ -3,7 +3,7 @@
 //        Incognito / Spaces (create, switch) / small window / theme picker (not automated yet) / quit. Then scan the log and compare with the previous run.
 import { execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { sleep, pages, browserCall, waitFor } from './lib/koan.mjs';
+import { sleep, pages, browserCall, waitFor, visiblePage, evalIn } from './lib/koan.mjs';
 import { fviews } from './fv.mjs';
 const { BUILD = 'build', APP_PATH, KEYSET = 'base' } = process.env; const OVERRIDE_USER_AWAY = '';  // the presence check can no longer be switched off  // KEYSET=base: Ctrl+S compact, Ctrl+Shift+P private (plain develop); KEYSET=cmd: Cmd+S, Cmd+Shift+P (#90 and later)
 const M = '/Users/chaitanya/work/koan-mac';
@@ -104,7 +104,35 @@ if (MODE === 'main') {
   await step('T13: the compact key (Cmd+S) x6 toggles compact mode, never a rail', async () => { let o = []; for (let i = 0; i < 6; i++) { if (!(await key(K.S, COMPACT))) return 'key skipped'; await settle(); o.push(await inv(`press ${i + 1}`, { hidden: i % 2 === 0 })); } return o.join(' | '); });
   // Shift+Cmd+L is Koan's inspector (Zen's key_inspectorMac, #90), not the sidebar button's: it must open the inspector and leave the sidebar as it is, never the rail.
   await step('T13b: Shift+Cmd+L opens the inspector and leaves the sidebar alone, no rail', async () => { const a = await inv('before', { hidden: false }); if (!(await key(37, 'cs'))) return 'key skipped'; await settle(); const b = await inv('after Shift+Cmd+L', { hidden: false }); await key(37, 'cs'); await settle(); return a + ' | ' + b; });
-  await step('T14: Shift+Cmd+A opens the URL bar, not Chromium tab search', async () => { if (!(await key(0, 'cs'))) return 'key skipped'; await sleep(1200); const vs = await fviews(); need(!vs.some(v => v.shown && /TabSearch/.test(v.cls) && v.cls !== 'TabSearchButton'), 'Chromium tab search bubble shown'); const bar = vs.some(v => v.shown && /UrlBar/.test(v.cls)); /* Zen's search tabs: the omnibox in the @tabs keyword mode, i.e. the "Tabs" chip (SelectedKeywordView) and an empty input, not the literal text. */ const chip = vs.some(v => v.shown && v.cls === 'SelectedKeywordView'); need(chip, 'no Tabs chip (SelectedKeywordView): the @tabs keyword mode was not entered'); await key(K.ESC); await sleep(600); return `URL bar view shown: ${bar}, Tabs chip: ${chip}`; });
+  await step('T14: Shift+Cmd+A opens the URL bar in the tabs mode (the Tabs chip, empty input), typing a title word and Enter switches to that tab', async () => {
+    // A second tab whose title has a word (tqz) that the first one's doesn't; back to the first.
+    const first = (await pages()).find(p => p.type === 'page');
+    const other = (await browserCall('Target.createTarget', { url: 'data:text/html,<title>tqz page</title>other tab' })).result.targetId;
+    await sleep(1500);
+    await browserCall('Target.activateTarget', { targetId: first.id }); await sleep(800);
+    const count = (await pages()).length;
+    if (!(await key(0, 'cs'))) return 'key skipped';
+    await sleep(1200);
+    const vs = await fviews();
+    need(!vs.some(v => v.shown && /TabSearch/.test(v.cls) && v.cls !== 'TabSearchButton'), 'Chromium tab search bubble shown');
+    const bar = vs.some(v => v.shown && /UrlBar/.test(v.cls));
+    // Zen's search tabs: the omnibox in the @tabs keyword mode, i.e. the "Tabs" chip (SelectedKeywordView) and an empty input, not the literal text.
+    need(vs.some(v => v.shown && v.cls === 'SelectedKeywordView'), 'no Tabs chip (SelectedKeywordView): the @tabs keyword mode was not entered');
+    const omnibox = vs.find(v => v.shown && v.cls === 'OmniboxViewViews');
+    const text = omnibox?.props?.Text ?? omnibox?.props?.text;  // UI DevTools may not expose it
+    need(text === undefined || text === '' || text === '""', `the omnibox text is not empty: ${JSON.stringify(text)}`);
+    // Typing a word of the other tab's title and Enter switches to it, without opening a tab.
+    for (const code of [17, 12, 6]) { await key(code, ''); }  // t q z
+    await sleep(900);
+    await key(K.RETURN); await sleep(1500);
+    const visible = await visiblePage();
+    const title = visible ? await evalIn(visible, 'document.title') : null;
+    const after = (await pages()).length;
+    need(title === 'tqz page', `Enter on a match did not switch to the tab (visible tab: ${JSON.stringify(title)})`);
+    need(after === count, `the tab count changed: ${count} -> ${after}`);
+    await browserCall('Target.closeTarget', { targetId: other }); await sleep(600);
+    return `URL bar view shown: ${bar}, Tabs chip, switched to the tqz tab, ${after} tabs`;
+  });
   await step('T21a: compact toggled twice within ~250 ms ends expanded (Zen width)', async () => { await prime(); rapid(2, 60); await settle(2200); return inv('after 2 quick toggles'); });
   await step('T21b: compact toggled 3 times within ~250 ms ends hidden (width 0)', async () => { await prime(); rapid(3, 60); await settle(2200); const r = await inv('after 3 quick toggles', { hidden: true }); await key(K.S, COMPACT); await settle(); return r + ' | ' + await inv('back', { hidden: false }); });
   await step('T21c: compact toggled 20 times in 10 s ends expanded, no rail', async () => { await prime(); rapid(20, 450); await settle(2500); return inv('after 20 toggles'); });
