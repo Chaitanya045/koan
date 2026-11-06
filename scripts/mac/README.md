@@ -13,6 +13,7 @@ side through CDP (`--remote-debugging-port=9341`), both forwarded by an ssh Cont
 |---|---|
 | `MODE=main` | T13 the compact key x6 (Cmd+S with KEYSET=cmd, Ctrl+S otherwise), T13b Shift+Cmd+L opens the inspector and leaves the sidebar alone (#90 owns that key), T14 Shift+Cmd+A, T21 rapid compact toggles (2 / 3 / 20 within 250 ms .. 10 s, then close mid-animation), T22 fullscreen in/out with compact off and on, T24 log greps |
 | `MODE=old` | T1/T2/T6: start from a seeded old-Chrome profile (`PREFS=<json>`, e.g. `scripts/e2e/prefs/vertical_tabs_old_profile.json`), check the start state, then quit gracefully and read the three prefs back |
+| `MODE=pinrev` | T27: compact on, the pin key during and after the collapse, again 100-250 ms later (reversal), compact off; 30 rounds with the pointer away and 30 parked on the sidebar hot zone; fails if Koan dies or `Check failed: current_motion_` is in the log (the animation-controller crash fixed with `TakeExpandedLock()`) |
 | `MODE=nocompact` | T20: `FLAGS='--disable-features=MacAppCodeSignClone,KoanWelcome,KoanCompactMode'` (a later `--disable-features` replaces the launcher's own list, so pass all of it); Ctrl+S and Shift+Cmd+L must do nothing |
 
 On a base without #90 the compact key is Ctrl+S (`COMPACT` = flags `k`, key code 1); with #90 it is Cmd+S.

@@ -113,6 +113,33 @@ if (MODE === 'main') {
 if (MODE === 'nocompact') {
   await step('T20: with KoanCompactMode disabled, Ctrl+S and Shift+Cmd+L do nothing; no rail', async () => { const a = await inv('start'); await key(K.S, COMPACT); await settle(); await key(37, 'cs'); await settle(); return a + ' | ' + await inv('after the keys'); });
 }
+if (MODE === 'pinrev') {
+  // Crash: BrowserAnimationController::GroupData::UpdateCurrentValues, CHECK(current_motion_), an intermittent crash ~375 ms after
+  // "compact mode on, sidebar hidden" in the crash-path step "compact reveal/hide by pin, then reversed half-way" (c165r). Cause: a
+  // keep-expanded lock taken while the sidebar was still collapsing (the pin key, the hot zone under a parked pointer, a bubble hold)
+  // makes upstream start its expand animation from inside the collapse's ended notification, which then clears the new motion.
+  // Rounds: compact on; the pin key d1 ms later (0..400: before, during and after the collapse); the pin key again d2 ms later (the
+  // reversal, mid-reveal); compact off. With the pointer parked on the sidebar's hot zone (an earlier step leaves it there) or away.
+  const PIN = KEYSET === 'cmd' ? 'ca' : 'ka';
+  const kp = (code, flags) => `${M}/tmp/keypress2 ${PID} ${code} '${flags}'`;
+  const timings = [[0, 150], [50, 150], [100, 120], [150, 150], [200, 100], [250, 180], [300, 150], [350, 150], [400, 150], [120, 250]];
+  await prime();
+  for (const park of [false, true]) {
+    await step(`T27: compact on, pin at +d1 ms, pin again at +d2 ms (reversal), compact off; pointer ${park ? 'parked on the sidebar hot zone' : 'away'}`, async () => {
+      let n = 0;
+      for (let round = 0; round < 3; round++) {
+        for (const [d1, d2] of timings) {
+          const move = park ? `${M}/tmp/ptr pos 3 400; ` : `${M}/tmp/ptr pos 700 400; `;
+          mac(`${move}${kp(K.S, COMPACT)}; sleep ${d1 / 1000}; ${kp(K.S, PIN)}; sleep ${d2 / 1000}; ${kp(K.S, PIN)}; sleep 0.8; ${kp(K.S, COMPACT)}; sleep 0.9`, 30000);
+          n++;
+          need(alive(), `Koan died in round ${n} (compact on, pin at +${d1} ms, again +${d2} ms, pointer ${park ? 'parked' : 'away'})`);
+        }
+      }
+      need(Number(mac(`grep -a -c 'Check failed: current_motion_' ${LOG} || true`)) === 0, 'CHECK(current_motion_) in the log');
+      return `${n} rounds, alive`;
+    });
+  }
+}
 // T24: the leak detector stays silent
 await step('T24: no "Koan: the vertical tab strip" line, no FATAL, no "Spaces:" in the log', async () => { const n = k => Number(mac(`grep -a -c '${k}' ${LOG} || true`)); const v = n('Koan: the vertical tab strip'), f = n(':FATAL:'), sp = n('Spaces:'); need(v === 0 && f === 0 && sp === 0, `vertical-tab lines ${v}, FATAL ${f}, Spaces: ${sp}`); return 'clean'; });
 if (MODE === 'old') {

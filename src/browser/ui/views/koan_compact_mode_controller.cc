@@ -448,31 +448,66 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
   OnContentCardChanged();
 }
 
+void KoanCompactModeController::OnSidebarCollapseSettled() {
+  if (IsClosing()) {
+    return;
+  }
+  // The locks that were refused while the sidebar collapsed (see
+  // TakeExpandedLock()) are taken now.
+  ReconcileBubbleHold();
+  if (peek_requested_ && !peek_lock_) {
+    peek_requested_ = false;
+    peek_lock_ = TakeExpandedLock();
+  }
+  if (!hover_lock_ && sidebar_hot_zone_ &&
+      sidebar_hot_zone_->IsMouseHovered()) {
+    hover_lock_ = TakeExpandedLock();
+  }
+}
+
+std::unique_ptr<ExpandOnHoverLock>
+KoanCompactModeController::TakeExpandedLock() {
+  // Upstream starts its expand-on-hover animation as soon as such a lock is
+  // held. While the sidebar is still collapsing, that happens from inside the
+  // collapse animation's own ended notification (it is the one that marks the
+  // sidebar collapsed: the region view's UpdateExpandOnHoverState() runs from
+  // it). BrowserAnimationController::GroupData::OnAnimationEnded() then clears
+  // its current motion after notifying, which is the motion the new animation
+  // has just started: when that animation steps,
+  // UpdateCurrentValues() fails CHECK(current_motion_). So the lock waits until
+  // the sidebar is collapsed, and callers retry once it is
+  // (OnSidebarCollapseSettled()). Not in a closing window either: the
+  // browser's animation controller may be gone.
+  const auto* state =
+      tabs::VerticalTabStripStateController::From(browser_view_->browser());
+  auto* tab_strip = browser_view_->tab_strip_view();
+  if (IsClosing() || !state || !state->IsCollapsed() || !tab_strip) {
+    return nullptr;
+  }
+  return tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+}
+
 bool KoanCompactModeController::PeekSidebar() {
   if (!hides_sidebar()) {
     return false;
   }
   // Zen's cmd_zenCompactModeShowSidebar toggles `zen-user-show`: the sidebar
   // stays out, wherever the pointer is, until the shortcut is used again.
-  if (peek_lock_) {
-    peek_lock_.reset();
+  if (peek_lock_ || peek_requested_) {
+    peek_requested_ = false;
+    ReleaseLock(peek_lock_);
     return true;
   }
-  if (auto* tab_strip = browser_view_->tab_strip_view()) {
-    peek_lock_ =
-        tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
-  }
+  peek_lock_ = TakeExpandedLock();
+  // Refused while the sidebar collapses: taken once it has (the shortcut was
+  // used, so the next use unpins).
+  peek_requested_ = !peek_lock_ && !IsClosing();
   return true;
 }
 
 void KoanCompactModeController::FlashSidebar() {
-  auto* tab_strip = browser_view_->tab_strip_view();
-  if (!tab_strip) {
-    return;
-  }
   if (!flash_lock_) {
-    flash_lock_ =
-        tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    flash_lock_ = TakeExpandedLock();
   }
   // Once it ends, upstream's hover tracking keeps the sidebar open while the
   // pointer is over it.
@@ -1197,11 +1232,10 @@ void KoanCompactModeController::HoldSidebarForBubble() {
   if (IsClosing() || !hides_sidebar()) {
     return;
   }
+  // (Not while the sidebar collapses: OnSidebarCollapseSettled() reconciles
+  // again when it has.)
   if (!bubble_lock_) {
-    if (auto* tab_strip = browser_view_->tab_strip_view()) {
-      bubble_lock_ =
-          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
-    }
+    bubble_lock_ = TakeExpandedLock();
   }
   // The bubble is open when the checks run, and the lock goes when it closes.
   ScheduleBubbleCheck();
@@ -1279,10 +1313,7 @@ void KoanCompactModeController::ReconcileBubbleHold() {
   // holds it with the bubble's has-popup-menu).
   if (on_peeked_sidebar) {
     if (!bubble_lock_) {
-      if (auto* tab_strip = browser_view_->tab_strip_view()) {
-        bubble_lock_ = tab_strip->GetExpandOnHoverLock(
-            ExpandOnHoverLockType::kKeepExpanded);
-      }
+      bubble_lock_ = TakeExpandedLock();
     }
   } else if (bubble_lock_) {
     ReleaseLock(bubble_lock_);
@@ -1628,10 +1659,7 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   if (hovered) {
     hover_release_timer_.Stop();
     if (!hover_lock_) {
-      if (auto* tab_strip = browser_view_->tab_strip_view()) {
-        hover_lock_ = tab_strip->GetExpandOnHoverLock(
-            ExpandOnHoverLockType::kKeepExpanded);
-      }
+      hover_lock_ = TakeExpandedLock();
     }
     return;
   }
