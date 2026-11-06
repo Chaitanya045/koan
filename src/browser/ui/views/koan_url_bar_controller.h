@@ -50,9 +50,11 @@ class KoanUrlBarCardFill;
 //   the page). Clicking outside closes it.
 //
 // Where it opens follows koan.urlbar.behavior (Zen's zen.urlbar.behavior):
-// "normal" edits in the pill, "floating-on-type" (the default) edits in the
-// pill and floats on the first keystroke, "float" floats right away. Without
-// a pill to edit in (compact mode with the sidebar hidden) it floats.
+// "normal" edits in the pill; "floating-on-type" (the default) floats when
+// the bar is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill
+// after a click on it; "float" floats right away
+// (UrlbarInputBase-mjs.patch, #openPopover). Without a pill to edit in
+// (compact mode with the sidebar hidden) it floats.
 //
 // With koan.urlbar.replace_newtab (Zen's zen.urlbar.replace-newtab), Ctrl+T
 // and the sidebar's new-tab button open the bar empty instead of a tab;
@@ -84,8 +86,22 @@ class KoanUrlBarController : public views::ViewObserver,
   // closes it if it is already open for one, like Zen. Returns false if the
   // window should open a tab as usual (replace-newtab off, ...).
   bool OpenForNewTab();
+
+  // Called by KoanBrowserViewController once the window is in its widget.
+  // Zen's zen.urlbar.open-on-startup (true): a window that starts on the
+  // empty tab (a new window, the first launch; not a session restore) opens
+  // the New Tab bar at once.
+  void OnAddedToWidget();
   // Closes the omnibox without opening anything: the page gets focus back.
   void Close();
+  // The user is about to edit by clicking the sidebar's URL pill: it edits in
+  // the pill, not floating (Zen: a mouse press never floats the bar at once).
+  // Any other way in (Cmd+L, Cmd+T) opens the floating card.
+  void NoteEditInPill();
+  // NoteEditInPill() and focus the omnibox, undone if the focus fails.
+  void FocusLocationInPill();
+  // Cmd+L (chrome::FocusLocationBar()), before the focus moves: it floats.
+  void OnFocusLocationCommand();
 
   // Called by KoanCompactModeController.
   void OnBrowserViewLayout();
@@ -146,8 +162,20 @@ class KoanUrlBarController : public views::ViewObserver,
   // Handles the omnibox's keys (Esc) while the bar is open or open for a new
   // tab.
   void UpdateKeyHandler();
-  void FloatOnType();
+  void UpdatePlacementOnInput();
+  // Posted after the omnibox got focus: an invisible focus closes the bar
+  // again.
+  void CloseIfFocusInvisible();
+  // Posted after a new-tab session opened empty: asks for the open tabs and
+  // top sites again, `retries_left` times, while the first request found no
+  // list.
+  void ScheduleNewTabZeroSuggestRetry(int retries_left);
+  void RetryNewTabZeroSuggest(int retries_left);
+  void OpenOnStartup();
+  void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
+  // Zen draws the "+ New Tab" row as selected during a new-tab session.
+  void SetNewTabRowSelected(bool selected);
 
   const raw_ptr<BrowserView> browser_view_;
   const raw_ptr<KoanCompactModeController> compact_mode_;
@@ -155,6 +183,8 @@ class KoanUrlBarController : public views::ViewObserver,
   // Once floating, the bar stays floating until it closes, like Zen's.
   bool floated_ = false;
   bool user_input_in_progress_ = false;
+  // The editing started with a click on the pill.
+  bool edit_in_pill_ = false;
 
   bool new_tab_ = false;
   // Zen's zen.urlbar.wait-to-clear: what was typed into a new-tab bar that

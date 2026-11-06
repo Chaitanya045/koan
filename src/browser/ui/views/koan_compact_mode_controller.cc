@@ -43,6 +43,7 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "koan/browser/ui/views/koan_traffic_lights_controller.h"
@@ -509,6 +510,36 @@ void KoanCompactModeController::OnTabStripModelChanged(
   }
   if (change.type() == TabStripModelChange::kInserted) {
     MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
+  }
+  if (selection.active_tab_changed() ||
+      change.type() != TabStripModelChange::kSelectionOnly) {
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::OnTabChangedAt(tabs::TabInterface* tab,
+                                               TabChangeType change_type) {
+  // The empty tab navigating away (or the active tab back to it) changes
+  // whether the lock is wanted.
+  if (change_type == TabChangeType::kAll &&
+      tab == browser_view_->browser()->GetActiveTabInterface()) {
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::UpdateEmptyTabLock() {
+  // Zen: the sidebar cannot hide while the empty tab is selected
+  // (zen-has-empty-tab), so there is always a way to open a page.
+  const bool wanted =
+      hides_sidebar() &&
+      IsEmptyTab(browser_view_->browser()->GetActiveTabInterface());
+  if (wanted && !empty_tab_lock_) {
+    if (auto* tab_strip = browser_view_->tab_strip_view()) {
+      empty_tab_lock_ =
+          tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    }
+  } else if (!wanted) {
+    ReleaseLock(empty_tab_lock_);
   }
 }
 
@@ -980,6 +1011,8 @@ void KoanCompactModeController::Activate(Mode mode) {
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+  // Turning compact mode on while the empty tab is selected keeps the sidebar.
+  UpdateEmptyTabLock();
 }
 
 void KoanCompactModeController::ParkTopContainer() {
@@ -1349,6 +1382,7 @@ void KoanCompactModeController::Deactivate() {
   hover_release_timer_.Stop();
   ReleaseLock(hover_lock_);
   ReleaseLock(peek_lock_);
+  ReleaseLock(empty_tab_lock_);
   pointer_monitor_.reset();
   edge_sidebar_hovered_ = false;
   bubble_widgets_.RemoveAllObservations();

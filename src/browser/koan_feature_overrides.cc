@@ -6,10 +6,19 @@
 
 #include "base/command_line.h"
 #include "build/build_config.h"
+#include "chrome/browser/ui/omnibox/omnibox_next_features.h"
 #include "chrome/browser/ui/tabs/features.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/webui/new_tab_page/composebox/variations/composebox_fieldtrial.h"
+#include "chrome/common/chrome_features.h"
+#include "components/compose/core/browser/compose_features.h"
+#include "components/contextual_tasks/public/features.h"
 #include "components/feature_engagement/public/feature_constants.h"
+#include "components/lens/lens_features.h"
+#include "components/omnibox/browser/aim_eligibility_service_features.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/performance_manager/public/features.h"
+#include "components/search/ntp_features.h"
 #include "components/variations/feature_overrides.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -80,6 +89,67 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
     overrides.DisableFeature(features::kOSCryptAsyncAvailabilityInfoBar);
   }
 #endif
+  // The omnibox lockdown (.agent/notes/upstream/tab-groups-omnibox-
+  // fullscreen.md, section 2). Koan's builds have no field trials, so every
+  // upstream omnibox feature runs at its default unless it is set here.
+  //
+  // O1: the suggestions popup is Chromium's classic Views one, which Koan's
+  // row hooks style (koan_omnibox_rows.h). M158 defaults to a WebUI popup
+  // that they never reach, with Google's AI Mode chip, entity thumbnails and
+  // an "add context" button. omnibox_popup state: see O15 in
+  // KoanUrlBarController.
+  overrides.DisableFeature(omnibox::internal::kWebUIOmniboxPopup);
+  overrides.DisableFeature(omnibox::internal::kWebUIOmniboxAimPopup);
+  overrides.DisableFeature(omnibox::internal::kWebUIOmniboxFullPopup);
+  overrides.DisableFeature(omnibox::internal::kWebUIOmniboxSimplification);
+
+  // O5: Zen has no Google AI. kAimEnabled is the switch the omnibox's AI Mode
+  // eligibility checks (the page action, the chip, the starter pack, the NTP's
+  // composebox); Lens, Gemini (Glic), contextual tasks and the NTP's AI
+  // features go with it, and with model execution off Chromium's on-device
+  // model service never starts (its GPU probe logs "Unable to get gpu
+  // adapter").
+  overrides.DisableFeature(omnibox::kAimEnabled);
+  overrides.DisableFeature(lens::features::kLensOverlay);
+  overrides.DisableFeature(lens::features::kLensOverlayOmniboxEntryPoint);
+  overrides.DisableFeature(::features::kGlic);
+  overrides.DisableFeature(::features::kGlicRollout);
+  overrides.DisableFeature(contextual_tasks::kContextualTasks);
+  overrides.DisableFeature(ntp_features::kNtpNextFeatures);
+  overrides.DisableFeature(ntp_composebox::kNtpComposebox);
+  // No side panel that opens by itself on a new tab page.
+  overrides.DisableFeature(ntp_features::kNtpCustomizeChromeAutoOpen);
+  overrides.DisableFeature(
+      optimization_guide::features::kOptimizationGuideModelExecution);
+  // Z36: "Help me write" (Compose) in the context menu of text fields, off
+  // directly, not only through the model execution above.
+  overrides.DisableFeature(compose::features::kEnableCompose);
+
+  // O13: Zen has no in-product help, and none for the features Koan
+  // repurposes. (Code that asks for a promo before the browser has finished
+  // starting still gets one line in the log, "Attempting to show IPH ...;
+  // IPH will not be shown": BrowserUserEducationInterfaceImpl logs that
+  // before it looks at whether the feature is on. So these switch off what
+  // is shown, not that line.) The features: vertical tabs (the sidebar), split
+  // view, side panels, and Google's AI entry points. (The tab groups' ones,
+  // for focus mode, are with Spaces above.)
+  namespace fe = feature_engagement;
+  for (const base::Feature* iph : {
+           &fe::kIPHVerticalTabsExpandOnHoverFeature,
+           &fe::kIPHVerticalTabstripTutorialFeature,
+           &fe::kIPHSplitViewHorizontalIndirectAccessFeature,
+           &fe::kIPHSidePanelGenericPinnableFeature,
+           &fe::kIPHSidePanelLensOverlayPinnableFeature,
+           &fe::kIPHSidePanelLensOverlayPinnableFollowupFeature,
+           &fe::kIPHSidePanelContextualTasksPinnableFeature,
+           &fe::kIPHGlicPromoFeature,
+           &fe::kIPHLensOverlayFeature,
+           &fe::kIPHOmniboxAskGLensIconFeature,
+           &fe::kIPHOmniboxEverywhereLensPromoFeature,
+           &fe::kIPHExtensionsZeroStatePromoFeature,
+       }) {
+    overrides.DisableFeature(*iph);
+  }
 }
 
 }  // namespace koan

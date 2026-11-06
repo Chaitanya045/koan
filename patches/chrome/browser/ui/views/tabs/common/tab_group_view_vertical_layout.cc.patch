@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
-index e720d5df8109d6df205b4e87ab026c5772d826d5..98ad30c9a3babd7255024ff06e8b9322badae47f 100644
+index e720d5df8109d6df205b4e87ab026c5772d826d5..e26bc5387517b33326c12d945045de50290b838d 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_group_view_vertical_layout.cc
 @@ -12,6 +12,8 @@
@@ -49,7 +49,7 @@ index e720d5df8109d6df205b4e87ab026c5772d826d5..98ad30c9a3babd7255024ff06e8b9322
    width = std::max(width, header_bounds.width() + header_bounds.x());
  
    // If the tab strip is not collapsed then the group line is below and left
-@@ -109,7 +122,14 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+@@ -109,7 +122,19 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
  
    // Layout children in order. Children will have their preferred height and
    // fill available width.
@@ -61,10 +61,15 @@ index e720d5df8109d6df205b4e87ab026c5772d826d5..98ad30c9a3babd7255024ff06e8b9322
 +    height += koan::PlaceSpaceTabRows(&TabGroupView(), child, koan_collapsed,
 +                                      height, size_bounds, kTabVerticalPadding,
 +                                      layouts);
++    // Koan: an empty Space's only tab, Zen's empty tab, has no row.
++    if (koan::IsEmptyTabView(child)) {
++      layouts.child_layouts.emplace_back(child, false, gfx::Rect());
++      continue;
++    }
      gfx::Rect bounds = gfx::Rect(child->GetPreferredSize(size_bounds));
  
      auto drag_data = TabGroupView().GetVisualDataForDraggedView(*child);
-@@ -136,6 +156,9 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
+@@ -136,6 +161,9 @@ views::ProposedLayout TabGroupViewVerticalLayout::CalculateProposedLayout(
      height += bounds.height() + kTabVerticalPadding;
      width = std::max(width, bounds.width() + bounds.x());
    }

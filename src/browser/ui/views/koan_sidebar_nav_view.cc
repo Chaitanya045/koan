@@ -530,9 +530,9 @@ void KoanSidebarNavView::OnSiteButtonPressed() {
 }
 
 void KoanSidebarNavView::FocusOmnibox() {
-  if (LocationBarView* location_bar = browser_view_->GetLocationBarView()) {
-    location_bar->FocusLocation(/*is_user_initiated=*/true,
-                                /*clear_focus_if_failed=*/false);
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->url_bar()->FocusLocationInPill();
   }
 }
 

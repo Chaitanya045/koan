@@ -11,6 +11,10 @@ namespace koan {
 inline constexpr char kSettingsHost[] = "koan-settings";
 inline constexpr char kSettingsURL[] = "chrome://koan-settings/";
 
+// Koan's new tab page, which chrome://newtab shows instead of Chromium's.
+inline constexpr char kNewTabHost[] = "koan-newtab";
+inline constexpr char kNewTabURL[] = "chrome://koan-newtab/";
+
 }  // namespace koan
 
 #endif  // KOAN_COMMON_KOAN_URL_CONSTANTS_H_
