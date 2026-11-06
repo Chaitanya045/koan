@@ -10,12 +10,23 @@
 //
 //   scripts/e2e/run.sh spaces
 import {
-  ALT, CTRL, SHIFT, browserCall, check, evalIn, finish, key as pageKey,
-  menuMouse, openMenus, pages as pageTargets, readPref, sleep, typeInto,
-  viewEvent, viewMouse, viewTree, visiblePage, waitFor, windowTints,
+  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish,
+  key as pageKey, menuMouse, openMenus, pages as pageTargets, readPref, sleep,
+  typeInto, viewEvent, viewMouse, viewTree, visiblePage, waitFor, windowTints,
 } from './lib/koan.mjs';
 
 const views = viewTree;
+// The node of the view tagged with element identifier `id`, if one shows.
+async function elementNodeId(id) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('DOM.getDocument', { depth: -1 });
+  const search = (await ui.send('DOM.performSearch', { query: `id:${id}` })).result;
+  const [nodeId] = search?.resultCount ? (await ui.send('DOM.getSearchResults',
+      { searchId: search.searchId, fromIndex: 0, toIndex: 1 })).result.nodeIds : [];
+  ui.close();
+  return nodeId;
+}
 const shown = (vs, cls) => vs.filter(v => v.cls === cls && v.shown);
 const one = (vs, cls) => shown(vs, cls)[0];
 const mouse = viewMouse;
@@ -89,11 +100,11 @@ check('No tab group header or Unfocus pill in the Space',
       shown(s.vs, 'TabGroupHeaderView').every(v => v.h === 0 || v.w === 0) &&
       shown(s.vs, 'TabGroupUnfocusButton').length === 0);
 
-// ---- "+": Zen's Create menu (Create Space | New Split, New Tab; features
-// add theirs).
+// ---- "+": Zen's Create menu (Create Space, Create Folder | New Split, New
+// Tab; folders add Create Folder).
 await click(s.create);
 let plus = menus(await views())[0];
-check('"+" opens the Create menu', plus?.items.length === 3,
+check('"+" opens the Create menu', plus?.items.length === 4,
       `${plus?.items.length} item(s)`);
 if (plus) {
   await chooseMenuItem(plus, plus.items[0]);
@@ -351,11 +362,15 @@ await sleep(1500);
 const tabMenu = menus(await views())[0];
 let moveTo = null;
 // Hovering an item opens its submenu: Move To is the one listing the two
-// other Spaces.
+// other Spaces. Folders' "Move to Folder" (just above it) is skipped: once
+// its submenu is open, it covers the next item here, so hovers can't reach
+// Move To.
+const moveToFolder = await elementNodeId('kKoanMoveToFolderItem');
 for (const item of tabMenu?.items ?? []) {
+  if (item.nodeId === moveToFolder) continue;
   await menuMouse(tabMenu, item, ['mouseMoved']);
   await sleep(700);
-  moveTo = menus(await views()).find(m => m.root !== tabMenu.root && m.items.length === 2);
+  moveTo = menus(await views()).find(m => m.items.length === 2);
   if (moveTo) break;
 }
 check('The tab context menu has Move To with the other Spaces', !!moveTo);
