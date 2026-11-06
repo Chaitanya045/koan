@@ -346,6 +346,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   void OnSidebarHotZoneHovered(bool hovered);
   void CheckHoverLock();
+  bool IsPointerAtSidebarEdge() const;
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
 
