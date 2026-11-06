@@ -99,6 +99,8 @@ class KoanUrlBarController : public views::ViewObserver,
   // the pill, not floating (Zen: a mouse press never floats the bar at once).
   // Any other way in (Cmd+L, Cmd+T) opens the floating card.
   void NoteEditInPill();
+  // NoteEditInPill() and focus the omnibox, undone if the focus fails.
+  void FocusLocationInPill();
   // Cmd+L (chrome::FocusLocationBar()), before the focus moves: it floats.
   void OnFocusLocationCommand();
 
@@ -186,8 +188,10 @@ class KoanUrlBarController : public views::ViewObserver,
   // again.
   void CloseIfFocusInvisible();
   // Posted after a new-tab session opened empty: asks for the open tabs and
-  // top sites again if the first request found no list.
-  void RetryNewTabZeroSuggest();
+  // top sites again, `retries_left` times, while the first request found no
+  // list.
+  void ScheduleNewTabZeroSuggestRetry(int retries_left);
+  void RetryNewTabZeroSuggest(int retries_left);
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
 

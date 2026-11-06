@@ -27,6 +27,7 @@
 #include "components/omnibox/browser/tab_matcher.h"
 #include "components/url_formatter/url_formatter.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/omnibox/koan_omnibox_hooks.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "url/gurl.h"
 
@@ -42,6 +43,9 @@ constexpr size_t kMaxSuggestions = 8;
 // Relevance of the two groups; tabs come first, each group in order.
 constexpr int kOpenTabRelevance = 1500;
 constexpr int kTopSiteRelevance = 1000;
+
+// The additional-info key that marks a match as this provider's.
+constexpr char kMatchMark[] = "koan zero suggest";
 
 class KoanZeroSuggestProvider : public AutocompleteProvider {
  public:
@@ -92,9 +96,15 @@ AutocompleteMatch KoanZeroSuggestProvider::MakeMatch(
                                         /*preserve_subdomain=*/false),
       base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
   match.contents_class = {ACMatchClassification(0, ACMatchClassification::URL)};
-  match.description = title;
-  match.description_class = {
-      ACMatchClassification(0, ACMatchClassification::NONE)};
+  // Sanitized like the contents (a title can end in a non-ASCII space), and
+  // classified only when there is one: an empty text takes no classification.
+  match.description = AutocompleteMatch::SanitizeString(title);
+  if (!match.description.empty()) {
+    match.description_class = {
+        ACMatchClassification(0, ACMatchClassification::NONE)};
+  }
+  // SortAndCull()'s Koan section takes only these (IsLocalZeroSuggestMatch()).
+  match.RecordAdditionalInfo(kMatchMark, "1");
   return match;
 }
 
@@ -103,12 +113,12 @@ void KoanZeroSuggestProvider::Start(const AutocompleteInput& input,
   matches_.clear();
   done_ = true;
   weak_factory_.InvalidateWeakPtrs();
-  // Only an empty box that was just opened or clicked, not the page's address
-  // pre-filled (Ctrl+L): that keeps Chromium's suggestions.
-  if (!features::IsUrlBarEnabled() || !input.IsZeroSuggest() ||
-      !input.text().empty() || input.omit_asynchronous_matches() ||
-      input.current_page_classification() ==
-          metrics::OmniboxEventProto::NTP_REALBOX) {
+  // Only a box that was just opened or clicked (empty, or with the page's
+  // address selected: Ctrl+L; Zen lists the same then), not one the user is
+  // typing in, and only in the omnibox (not the NTP's realbox, a composebox
+  // or Lens).
+  if (!UsesLocalZeroSuggestSection(input.current_page_classification()) ||
+      !input.IsZeroSuggest() || input.omit_asynchronous_matches()) {
     return;
   }
 
@@ -171,6 +181,10 @@ void KoanZeroSuggestProvider::OnTopSites(
 }
 
 }  // namespace
+
+bool IsLocalZeroSuggestMatch(const AutocompleteMatch& match) {
+  return match.GetAdditionalInfoForDebugging(kMatchMark) == "1";
+}
 
 scoped_refptr<AutocompleteProvider> CreateZeroSuggestProvider(
     AutocompleteProviderClient* client) {

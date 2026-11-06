@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_controller.h"
@@ -96,10 +97,34 @@
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
+#include "url/gurl.h"
 
 namespace koan {
 
 namespace {
+
+// A new-tab session's empty list is asked for again every 150 ms, up to ten
+// times, if it has not come up.
+constexpr int kZeroSuggestRetries = 10;
+constexpr base::TimeDelta kZeroSuggestRetryDelay = base::Milliseconds(150);
+
+// Whether a tab of this profile is on `url` (ignoring the fragment), which is
+// what Navigate()'s kSwitchToTab looks for.
+bool HasOpenTabWithUrl(BrowserWindowInterface* browser, const GURL& url) {
+  for (BrowserWindowInterface* other : GetAllBrowserWindowInterfaces()) {
+    if (other->GetProfile() != browser->GetProfile()) {
+      continue;
+    }
+    const TabStripModel* model = other->GetTabStripModel();
+    for (int i = 0; i < model->count(); ++i) {
+      if (model->GetWebContentsAt(i)->GetLastCommittedURL().EqualsIgnoringRef(
+              url)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 // Zen fades the bar in where it opens. The sizes are in
 // koan_sidebar_metrics.h.
@@ -311,12 +336,12 @@ KoanUrlBarController::KoanUrlBarController(
     : browser_view_(browser_view), compact_mode_(compact_mode) {
   // Audit O15, the leak detector: Koan's card and its row styling are for
   // Chromium's Views suggestions popup; koan_feature_overrides.cc turns the
-  // WebUI one off. Something turning it back on (a roll, a flag) fails here in
-  // DCHECK builds, and says so in the log elsewhere.
+  // WebUI one off. Something turning it back on (a roll, the chrome://flags
+  // entry) says so in the log, which the Mac harness and omnibox_lockdown
+  // grep for: not a crash, a user can flip that flag.
   if (omnibox::IsWebUIOmniboxPopupEnabled()) {
     LOG(ERROR) << "Koan: Chromium's WebUI omnibox popup is on; the URL bar's "
                   "suggestions are not Zen's";
-    DCHECK(false);
   }
   InstallNewTabAction();
   // The glass card follows its setting and Reduce Transparency live (the
@@ -492,20 +517,24 @@ bool KoanUrlBarController::OpenForNewTab() {
     omnibox_controller->edit_model()->StartZeroSuggestRequest(
         /*user_clobbered_permanent_text=*/true);
     // Upstream drops that request while the page has no entry yet (a window's
-    // first tab, still starting) or the popup is still closing: ask again once
-    // the focus has settled, if the list never came up.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&KoanUrlBarController::RetryNewTabZeroSuggest,
-                       weak_factory_.GetWeakPtr()),
-        base::Milliseconds(150));
+    // first tab, still starting) or the popup is still closing: ask again
+    // until the list is up.
+    ScheduleNewTabZeroSuggestRetry(kZeroSuggestRetries);
   } else {
     bar->omnibox_view()->SetUserText(text, /*update_popup=*/true);
   }
   return true;
 }
 
-void KoanUrlBarController::RetryNewTabZeroSuggest() {
+void KoanUrlBarController::ScheduleNewTabZeroSuggestRetry(int retries_left) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&KoanUrlBarController::RetryNewTabZeroSuggest,
+                     weak_factory_.GetWeakPtr(), retries_left),
+      kZeroSuggestRetryDelay);
+}
+
+void KoanUrlBarController::RetryNewTabZeroSuggest(int retries_left) {
   LocationBarView* bar = location_bar();
   if (!new_tab_ || !bar || !bar->omnibox_view() ||
       !bar->omnibox_view()->HasFocus() ||
@@ -513,12 +542,17 @@ void KoanUrlBarController::RetryNewTabZeroSuggest() {
     return;
   }
   OmniboxController* omnibox_controller = bar->GetOmniboxController();
-  if (omnibox_controller->IsPopupOpen() ||
-      !omnibox_controller->autocomplete_controller()->done()) {
+  if (omnibox_controller->IsPopupOpen()) {
     return;
   }
-  omnibox_controller->edit_model()->StartZeroSuggestRequest(
-      /*user_clobbered_permanent_text=*/true);
+  // Still running (the top sites are on their way): wait for it.
+  if (omnibox_controller->autocomplete_controller()->done()) {
+    omnibox_controller->edit_model()->StartZeroSuggestRequest(
+        /*user_clobbered_permanent_text=*/true);
+  }
+  if (retries_left > 1) {
+    ScheduleNewTabZeroSuggestRetry(retries_left - 1);
+  }
 }
 
 void KoanUrlBarController::Close() {
@@ -598,7 +632,11 @@ void KoanUrlBarController::CloseIfFocusInvisible() {
           OMNIBOX_FOCUS_INVISIBLE) {
     return;
   }
-  EndEditing();
+  // Not just EndEditing(): the omnibox would keep its hidden focus, and a
+  // click on the pill, Cmd+L (no focus change) and typing would do nothing
+  // visible. The page gets the focus; a page that wants the omnibox for its
+  // own box (a fakebox) asks again.
+  Close();
 }
 
 void KoanUrlBarController::OnFocusLocationCommand() {
@@ -620,6 +658,21 @@ void KoanUrlBarController::FloatIfOpenInPill() {
 
 void KoanUrlBarController::NoteEditInPill() {
   edit_in_pill_ = true;
+}
+
+void KoanUrlBarController::FocusLocationInPill() {
+  LocationBarView* bar = location_bar();
+  if (!bar) {
+    return;
+  }
+  edit_in_pill_ = true;
+  bar->FocusLocation(/*is_user_initiated=*/true,
+                     /*clear_focus_if_failed=*/false);
+  // A focus that failed (content fullscreen, no omnibox) must not leave the
+  // next keyboard-only focus (Ctrl+K, F6) editing in the pill.
+  if (!bar->omnibox_view() || !bar->omnibox_view()->HasFocus()) {
+    edit_in_pill_ = false;
+  }
 }
 
 void KoanUrlBarController::EndEditing() {
@@ -770,7 +823,6 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     // that covers the location bar) must not be reachable in a Koan window.
     if (omnibox::IsAimPopupEnabled(browser_view_->GetProfile())) {
       LOG(ERROR) << "Koan: Chromium's AI Mode omnibox popup is available";
-      DCHECK(false);
     }
     if (KoanSidebarNavView* nav = compact_mode_->sidebar_nav()) {
       nav->SetEditing(true);
@@ -1249,21 +1301,26 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
   if (!browser || *disposition != WindowOpenDisposition::kCurrentTab) {
     return;
   }
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  KoanBrowserViewController* controller =
-      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
-  if (controller && controller->url_bar()->TakeNewTabDisposition()) {
-    // An open tab's row (its "Switch to Tab") switches to the tab; anything
-    // else opens a new one.
-    *disposition = is_open_tab_match ? WindowOpenDisposition::kSwitchToTab
-                                     : WindowOpenDisposition::kNewForegroundTab;
-    return;
+  if (features::IsUrlBarEnabled()) {
+    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+    KoanBrowserViewController* controller =
+        browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+    // (Also ends the new-tab session, whichever row was taken.)
+    const bool new_tab_session =
+        controller && controller->url_bar()->TakeNewTabDisposition();
+    if (is_open_tab_match && HasOpenTabWithUrl(browser, destination_url)) {
+      *disposition = WindowOpenDisposition::kSwitchToTab;
+      return;
+    }
+    if (new_tab_session) {
+      *disposition = WindowOpenDisposition::kNewForegroundTab;
+      return;
+    }
   }
-  // A pinned tab or Essential keeps its site (Zen's getOpenUILinkWhere); an
-  // open tab's row switches to that tab as usual.
+  // A pinned tab or Essential keeps its site (Zen's getOpenUILinkWhere).
   content::WebContents* active =
       browser->GetTabStripModel()->GetActiveWebContents();
-  if (!is_open_tab_match && active && IsPinnedForUser(active) &&
+  if (active && IsPinnedForUser(active) &&
       browser->GetProfile()->GetPrefs()->GetBoolean(
           prefs::kOpenPinnedInNewTab) &&
       !StaysOnPinnedSite(active->GetLastCommittedURL(), destination_url)) {

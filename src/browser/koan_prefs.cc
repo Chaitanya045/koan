@@ -74,8 +74,9 @@ bool AgentReadyByDefault() {
          user_data_dir == default_dir;
 }
 
-// Registers Koan's local-state prefs, and sets Koan's defaults for upstream
-// ones.
+// Sets Koan's defaults for upstream profile prefs (Zen's search suggestion
+// and AI settings). Must run after the owning components registered them, at
+// the end of chrome::RegisterProfilePrefs() (crash note 8).
 void OverrideUpstreamProfilePrefDefaults(
     user_prefs::PrefRegistrySyncable* registry) {
   // chrome/common/pref_names.h kSearchSuggestEnabled,
@@ -88,6 +89,8 @@ void OverrideUpstreamProfilePrefDefaults(
   registry->SetDefaultPrefValue("omnibox.ai_mode_settings", base::Value(1));
 }
 
+// Registers Koan's local-state prefs, and sets Koan's defaults for upstream
+// ones.
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookStyle, "zen");
   registry->RegisterStringPref(kLookMode, "dark");

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
-index 83d474959c614edfc4bd253328559e8172d1b4b1..943294d8bc0baaf4948fd43fa301be472ba2f006 100644
+index 83d474959c614edfc4bd253328559e8172d1b4b1..958a62aad49efc531c20637a2e84b7d4b4252c6a 100644
 --- a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 +++ b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 @@ -114,6 +114,7 @@
@@ -14,8 +14,8 @@ index 83d474959c614edfc4bd253328559e8172d1b4b1..943294d8bc0baaf4948fd43fa301be47
                      {header.first, ": ", header.second, "\r\n"});
    }
  
-+  // Koan: the URL bar opened in place of a new tab opens a new tab (or
-+  // switches to an open tab's), and so does another site from a pinned tab.
++  // Koan: an open tab's row switches to its tab; the URL bar opened in place
++  // of a new tab opens a new tab, and so does another site from a pinned tab.
 +  koan::MaybeAdjustOmniboxDisposition(
 +      browser_, match_type == omnibox::AutocompleteMatchType::kOpenTab,
 +      destination_url, &disposition);

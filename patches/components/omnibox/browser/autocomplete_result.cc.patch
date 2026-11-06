@@ -1,5 +1,5 @@
 diff --git a/components/omnibox/browser/autocomplete_result.cc b/components/omnibox/browser/autocomplete_result.cc
-index 0b24734e66f96e4568d6f989d54a82c81b1ee740..e354fd854eee8d1598aa334b1209d27cac34ea9b 100644
+index 0b24734e66f96e4568d6f989d54a82c81b1ee740..07a4cd416731b1ddb50a1286251c059eb4d4c547 100644
 --- a/components/omnibox/browser/autocomplete_result.cc
 +++ b/components/omnibox/browser/autocomplete_result.cc
 @@ -58,6 +58,7 @@
@@ -10,7 +10,7 @@ index 0b24734e66f96e4568d6f989d54a82c81b1ee740..e354fd854eee8d1598aa334b1209d27c
  #include "omnibox_triggered_feature_service.h"
  #include "third_party/metrics_proto/omnibox_event.pb.h"
  #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
-@@ -730,6 +731,16 @@ void AutocompleteResult::SortAndCull(
+@@ -730,6 +731,20 @@ void AutocompleteResult::SortAndCull(
              std::make_unique<IOSWebZpsSection>(suggestion_groups_map_));
        }
      }
@@ -18,8 +18,12 @@ index 0b24734e66f96e4568d6f989d54a82c81b1ee740..e354fd854eee8d1598aa334b1209d27c
 +    // sections above takes them (Google's: tabs from other devices, trending
 +    // and personalized searches, most-visited tiles with a zero limit), so
 +    // Koan's provider's matches (koan/browser/ui/views/koan_zero_suggest.h)
-+    // get one of their own.
-+    if (koan::UsesLocalZeroSuggestSection()) {
++    // get one of their own, and no other navigation joins them.
++    if (koan::UsesLocalZeroSuggestSection(input.current_page_classification())) {
++      std::erase_if(matches_, [](const AutocompleteMatch& match) {
++        return match.suggestion_group_id == omnibox::GROUP_OTHER_NAVS &&
++               !koan::IsLocalZeroSuggestMatch(match);
++      });
 +      sections.push_back(std::make_unique<ZpsSection>(
 +          8u, Groups{Group(8u, {{omnibox::GROUP_OTHER_NAVS, 8u}})},
 +          suggestion_groups_map_));
