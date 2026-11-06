@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_WEBUI_KOAN_NEW_TAB_UI_H_
 
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/webui_config.h"
@@ -35,12 +36,19 @@ class KoanNewTabUI : public content::WebUIController,
 
   // content::WebContentsObserver:
   void OnColorProviderChanged() override;
+  void DidFinishNavigation(content::NavigationHandle* handle) override;
+  void DidStopLoading() override;
 
   WEB_UI_CONTROLLER_TYPE_DECL();
 
  private:
-  void Reload();
+  // Loads the page again when its colour is no longer the window's, once
+  // nothing is loading (see the .cc).
+  void ScheduleCheck();
+  void ReloadIfStale();
 
+  bool check_scheduled_ = false;
+  base::TimeTicks last_reload_;
   base::WeakPtrFactory<KoanNewTabUI> weak_factory_{this};
 };
 
