@@ -51,9 +51,13 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
   void HandleStartWindowDrag(const base::ListValue& args);
   void HandleEndWindowDrag(const base::ListValue& args);
 
-  // The engines the page offers: Brave Search first, then the region's
-  // prepopulated engines but Wikipedia and eBay (as Zen's list). None when a
-  // policy sets the engine.
+  // Whether the profile is in a search engine choice screen region (the
+  // EEA): the step is then a choice screen.
+  bool IsChoiceScreenRegion() const;
+  // The engines the page offers. In a choice screen region Chromium's choice
+  // screen list, in its order; elsewhere Brave Search first, then the
+  // region's prepopulated engines but Wikipedia and eBay (as Zen's list).
+  // None when a policy sets the engine.
   base::ListValue SearchEngines() const;
   // The service, or null; with `editable`, null too when a policy sets the
   // engine.

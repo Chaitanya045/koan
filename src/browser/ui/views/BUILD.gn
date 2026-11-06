@@ -241,7 +241,6 @@ source_set("impl") {
     "//third_party/icu",
     "//ui/views/controls/webview",
     "//ui/views/window/vector_icons",
-    "//chrome/browser/ui:browser_tabrestore",
     "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/color:color_headers",
