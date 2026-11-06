@@ -106,14 +106,15 @@ if (MODE === 'main') {
   await step('T13b: Shift+Cmd+L opens the inspector and leaves the sidebar alone, no rail', async () => { const a = await inv('before', { hidden: false }); if (!(await key(37, 'cs'))) return 'key skipped'; await settle(); const b = await inv('after Shift+Cmd+L', { hidden: false }); await key(37, 'cs'); await settle(); return a + ' | ' + b; });
   await step('T14: Shift+Cmd+A opens the URL bar in the tabs mode (the Tabs chip, empty input), typing a title word and Enter switches to that tab', async () => {
     // A second tab whose title has a word (tqz) that the first one's doesn't; back to the first.
-    const first = (await pages()).find(p => p.type === 'page');
+    // The tab showing in the front window: a new tab (newWindow: false) opens in the front window, not in the first one of the target list.
+    const first = (await visiblePage()) ?? (await pages()).find(p => p.type === 'page');
     const windowOf = async id => (await browserCall('Browser.getWindowForTarget', { targetId: id })).result?.windowId;
     const firstWindow = await windowOf(first.id);
     const other = (await browserCall('Target.createTarget', { url: 'data:text/html,<title>tqz page</title>other tab', newWindow: false })).result.targetId;
     try {
       await sleep(1500);
       // In the first window, as a tab: a tab of a window of its own would be closed with its window below.
-      need((await windowOf(other)) === firstWindow, 'the extra tab opened in another window');
+      need((await windowOf(other)) === firstWindow, `the extra tab opened in another window (windows: ${JSON.stringify(await Promise.all((await pages()).map(async p => [p.id.slice(0, 6), await windowOf(p.id)])))}, front: ${firstWindow})`);
       await browserCall('Target.activateTarget', { targetId: first.id }); await sleep(800);
       const known = new Set((await pages()).map(p => p.id));
       const count = known.size;
