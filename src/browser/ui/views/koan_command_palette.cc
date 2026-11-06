@@ -551,14 +551,6 @@ int KoanCommandPalette::FuzzyScore(std::u16string_view target,
   return matched == query.size() ? score : 0;
 }
 
-bool UsesLocalZeroSuggestSection(
-    metrics::OmniboxEventProto::PageClassification classification) {
-  return features::IsUrlBarEnabled() &&
-         (omnibox::IsOtherWebPage(classification) ||
-          omnibox::IsSearchResultsPage(classification) ||
-          omnibox::IsNtpOmnibox(classification));
-}
-
 void AddAutocompleteProviders(
     AutocompleteController* controller,
     int provider_types,
