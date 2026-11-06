@@ -889,10 +889,15 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
   }
   // Leaving the window gives the toolbar Zen's longer fallback delay; the
   // first move back over the window hides it at once.
-  if (event.type() == ui::EventType::kMouseExited) {
-    pointer_left_window_ = true;
+  if (pointer_monitor_is_application_wide_) {
+    // Native fullscreen's monitor hears every window of the application (a
+    // bubble, the immersive overlay, another Koan window, another display): a
+    // kMouseExited there is not a leave through this window's edge, and a move
+    // over another window is not a return. The pointer's place tells.
+    pointer_left_window_ = !browser_view_->GetBoundsInScreen().Contains(
+        display::Screen::Get()->GetCursorScreenPoint());
   } else {
-    pointer_left_window_ = false;
+    pointer_left_window_ = event.type() == ui::EventType::kMouseExited;
   }
   CheckRevealedHides();
   CheckFullscreenEdges();

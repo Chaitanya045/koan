@@ -4,6 +4,8 @@
 
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 
+#include <utility>
+
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
@@ -102,16 +104,16 @@ class SidebarReveal {
   }
 
   void SetTarget(double target) {
+    // The one-shot snap is for the next reveal only: any call spends it, so a
+    // snap armed for a lock taken with the strip already out (no SetTarget(1)
+    // follows) doesn't make a later hover reveal jump.
+    const bool snap = std::exchange(snap_next_, false) && target == 1.0;
     if (target == target_) {
       return;
     }
     const double from = CurrentValue();
     target_ = target;
     ++generation_;
-    const bool snap = snap_next_ && target == 1.0;
-    if (target == 1.0) {
-      snap_next_ = false;
-    }
     if (snap || !gfx::Animation::ShouldRenderRichAnimation()) {
       animating_ = false;
       value_ = target;
