@@ -4,6 +4,7 @@
 
 #include "koan/browser/agent/koan_agent_policy.h"
 
+#include <map>
 #include <set>
 #include <string>
 #include <string_view>
@@ -171,6 +172,83 @@ TEST(KoanAgentPolicyTest, NoCookieOrStorageMethodIsEverAllowed) {
   }
 }
 
+// The rows that need a parameter filter before they are forwarded. A new
+// allowed row that needs one must be added here, with its filter, in the same
+// change that adds the filter: this list is what stops a gateway from treating
+// kAllow as "forward unchanged".
+TEST(KoanAgentPolicyTest, TheRowsThatNeedAFilterCarryIt) {
+  const std::map<std::string, ParamFilter> expected = {
+      {"Page.navigate", ParamFilter::kNavigationUrl},
+      {"Target.createTarget", ParamFilter::kNavigationUrl},
+      {"Input.dispatchKeyEvent", ParamFilter::kStripKeyCommands},
+      {"Page.createIsolatedWorld", ParamFilter::kIsolatedWorld},
+      {"Runtime.evaluate", ParamFilter::kRuntimeContext},
+      {"Runtime.callFunctionOn", ParamFilter::kRuntimeContext},
+      {"Runtime.addBinding", ParamFilter::kRuntimeContext},
+      {"Page.captureScreenshot", ParamFilter::kScreenshot},
+      {"Network.enable", ParamFilter::kNetworkEnable},
+      {"IO.read", ParamFilter::kOwnStream},
+      {"IO.close", ParamFilter::kOwnStream},
+      {"Emulation.clearDeviceMetricsOverride", ParamFilter::kOwnTabOnly},
+      {"Emulation.clearGeolocationOverride", ParamFilter::kOwnTabOnly},
+      {"Emulation.setDefaultBackgroundColorOverride", ParamFilter::kOwnTabOnly},
+      {"Emulation.setDeviceMetricsOverride", ParamFilter::kOwnTabOnly},
+      {"Emulation.setEmulatedMedia", ParamFilter::kOwnTabOnly},
+      {"Emulation.setGeolocationOverride", ParamFilter::kOwnTabOnly},
+      {"Emulation.setLocaleOverride", ParamFilter::kOwnTabOnly},
+      {"Emulation.setScrollbarsHidden", ParamFilter::kOwnTabOnly},
+      {"Emulation.setTimezoneOverride", ParamFilter::kOwnTabOnly},
+      {"Emulation.setTouchEmulationEnabled", ParamFilter::kOwnTabOnly},
+      {"Emulation.setUserAgentOverride", ParamFilter::kOwnTabOnly},
+  };
+  std::map<std::string, ParamFilter> actual;
+  for (const MethodRule& rule : MethodRules()) {
+    if (rule.filter != ParamFilter::kNone) {
+      actual[std::string(rule.method)] = rule.filter;
+      // A filter only makes sense on a row that is forwarded or answered by
+      // the facade.
+      EXPECT_TRUE(rule.verdict == Verdict::kAllow ||
+                  rule.verdict == Verdict::kFacade)
+          << rule.method;
+    }
+  }
+  EXPECT_EQ(actual, expected);
+  // And Classify() hands the filter to the caller.
+  EXPECT_EQ(Classify("Input.dispatchKeyEvent").filter,
+            ParamFilter::kStripKeyCommands);
+  EXPECT_EQ(Classify("Page.createIsolatedWorld").filter,
+            ParamFilter::kIsolatedWorld);
+  EXPECT_EQ(Classify("Page.enable").filter, ParamFilter::kNone);
+  EXPECT_EQ(Classify("Page.noSuchMethod").filter, ParamFilter::kNone);
+}
+
+TEST(KoanAgentPolicyTest, KoanMethodsBelongToTheGatewayNotToThisTable) {
+  for (std::string_view method :
+       {"Koan.pair", "Koan.authenticate", "Koan.listTabs", "Koan.openTab",
+        "Koan.run"}) {
+    EXPECT_EQ(Classify(method).verdict, Verdict::kDeny) << method;
+  }
+}
+
+TEST(KoanAgentPolicyTest, LookAlikesAndHighBitBytesAreDenied) {
+  // U+0131 (dotless i), a fullwidth P, a Cyrillic a, a high-bit byte.
+  for (const char* method :
+       {"Page.navig\xc4\xb1te", "\xef\xbc\xb0\x61ge.navigate",
+        "P\xd0\xb0ge.navigate", "Page.navigate\x80", "\xffPage.navigate"}) {
+    EXPECT_EQ(Classify(method).verdict, Verdict::kDeny) << method;
+  }
+}
+
+TEST(KoanAgentPolicyTest, NothingInADeniedDomainIsReachable) {
+  for (std::string_view domain : DeniedDomains()) {
+    for (const char* method : {"enable", "disable", "anything", ""}) {
+      EXPECT_EQ(Classify(std::string(domain) + "." + method).verdict,
+                Verdict::kDeny)
+          << domain;
+    }
+  }
+}
+
 TEST(KoanAgentPolicyTest, OnlyHttpHttpsAndAboutBlankMayBeNavigatedTo) {
   for (const char* url :
        {"http://example.com/", "https://example.com/a?b=c#d",
@@ -209,8 +287,27 @@ TEST(KoanAgentPolicyTest, TheErrorNamesTheScheme) {
             "javascript");
   EXPECT_EQ(DisallowedNavigationScheme(GURL("file:///etc/hosts")), "file");
   EXPECT_EQ(DisallowedNavigationScheme(GURL("chrome://settings")), "chrome");
-  EXPECT_EQ(DisallowedNavigationScheme(GURL("not a url")), "invalid");
-  EXPECT_EQ(DisallowedNavigationScheme(GURL()), "invalid");
+  EXPECT_EQ(DisallowedNavigationScheme(GURL("not a url")), "(invalid)");
+  EXPECT_EQ(DisallowedNavigationScheme(GURL()), "(invalid)");
+  // "(invalid)" cannot be mistaken for a scheme named invalid.
+  EXPECT_EQ(DisallowedNavigationScheme(GURL("invalid:x")), "invalid");
+}
+
+TEST(KoanAgentPolicyTest, ALongSchemeIsTruncatedInTheError) {
+  // Whether GURL accepts a 100000-character scheme or calls the URL invalid,
+  // the error text stays short.
+  const GURL long_scheme(std::string(100000, 'a') + ":payload");
+  const std::string reported = DisallowedNavigationScheme(long_scheme);
+  EXPECT_LE(reported.size(), 35u);
+  if (long_scheme.is_valid()) {
+    EXPECT_EQ(reported.substr(reported.size() - 3), "...");
+  } else {
+    EXPECT_EQ(reported, "(invalid)");
+  }
+  const GURL exact(std::string(32, 'b') + ":x");
+  if (exact.is_valid()) {
+    EXPECT_EQ(DisallowedNavigationScheme(exact), std::string(32, 'b'));
+  }
 }
 
 }  // namespace koan::agent

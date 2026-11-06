@@ -2,10 +2,14 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
 # Agent control (.agent/notes/agent-control.md): the pieces that are pure logic
 # and depend on //base and //url only, so they build and test on their own.
+#
+# Nothing in the browser depends on this directory yet. GN loads it because
+# //koan/browser:agent_unit_tests names the test below.
 
 # The wire format of the unix socket: length-prefixed frames, with a decoder
 # built for hostile input. Shared by the gateway in the browser and the `koan`
@@ -32,7 +36,7 @@ source_set("policy") {
 }
 
 # Build and run:
-#   autoninja -C out/Koan koan/browser/agent:koan_agent_unittests
+#   autoninja -C out/Koan koan/browser:agent_unit_tests
 #   out/Koan/koan_agent_unittests
 # The policy table is also checked against the protocol of a Chromium checkout
 # by scripts/agent/check_policy_coverage.py.
@@ -48,6 +52,26 @@ test("koan_agent_unittests") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
+    "//url",
+  ]
+}
+
+# Fuzzers for the two parsers that face a hostile peer. Like Chromium's own
+# fuzzer_test targets, these build only with a fuzzing engine (use_libfuzzer),
+# and are a no-op otherwise.
+fuzzer_test("koan_agent_frame_fuzzer") {
+  sources = [ "koan_agent_frame_fuzzer.cc" ]
+  deps = [
+    ":frame",
+    "//base",
+  ]
+}
+
+fuzzer_test("koan_agent_url_fuzzer") {
+  sources = [ "koan_agent_url_fuzzer.cc" ]
+  deps = [
+    ":policy",
+    "//base",
     "//url",
   ]
 }

@@ -76,6 +76,16 @@ echo "==> Chromium $old -> $version ($commit)"
   exit 1
 }
 
+# Agent control's method policy against the new protocol, also before anything
+# changes: a new method, parameter or event in what an agent can reach is a
+# review (docs/REBASE.md, "Agent control: the method policy"), done on a branch.
+"$ROOT/scripts/ci/check_agent_policy.sh" "$commit" || {
+  echo "The agent policy needs review for $version. Update" >&2
+  echo "src/browser/agent/koan_agent_policy.cc and scripts/agent/policy_baseline.json" >&2
+  echo "on a branch (docs/REBASE.md), then run this again." >&2
+  exit 1
+}
+
 "$ROOT/scripts/apply_branding.sh" --revert
 # Un-patch. What is applied in the checkout may be an older patch set than
 # this branch's patches/ (the usual case on a rebase: the hooks were just
