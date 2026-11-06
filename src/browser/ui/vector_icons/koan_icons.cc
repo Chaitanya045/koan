@@ -24,6 +24,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/thread_annotations.h"
+#include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
@@ -393,9 +394,16 @@ const KoanIconEntry kEntries[] = {
     // share
     {&omnibox::kShareIcon, &kKoanShareIcon},
     {&omnibox::kShareChromeRefreshOldIcon, &kKoanShareIcon},
-    {&omnibox::kShareLinuxChromeRefreshOldIcon, &kKoanShareIcon},
-    {&vector_icons::kSendIcon, &kKoanShareIcon},
+// The location bar's share icon, per platform (omnibox's BUILD.gn lists
+// them under is_mac / is_linux).
+#if BUILDFLAG(IS_MAC)
+    {&omnibox::kIosShareIcon, &kKoanShareIcon},
+    {&omnibox::kShareMacChromeRefreshOldIcon, &kKoanShareIcon},
+#elif BUILDFLAG(IS_LINUX)
     {&omnibox::kSendIcon, &kKoanShareIcon},
+    {&omnibox::kShareLinuxChromeRefreshOldIcon, &kKoanShareIcon},
+#endif
+    {&vector_icons::kSendIcon, &kKoanShareIcon},
     {&vector_icons::kSendOldIcon, &kKoanShareIcon},
     // bookmark-hollow
     {&kStarIcon, &kKoanBookmarkHollowIcon},

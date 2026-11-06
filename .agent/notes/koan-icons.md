@@ -92,6 +92,9 @@ Chromium's icons.
      hook: a Chromium icon paints pixel-equal to its Koan icon through both
      `CreateVectorIcon` and `PaintVectorIcon`). Not in CI: the Mac loop builds
      and runs it (`scripts/build.sh koan_icons_unittests`).
+   - `scripts/check_icon_table.py`: every Chromium icon in the table has an icon
+     file on macOS (omnibox's `send.icon` is Linux-only, `ios_share.icon`
+     macOS-only; a Linux build's generated headers hide the difference).
    - `scripts/e2e/icons.mjs`: the live window paints Koan icons, at the sizes
      above, for Back/Forward/Reload, the New Tab row, the bottom bar's "+", the
      Space actions, Clear, Copy URL, site information, Library and the tab close
