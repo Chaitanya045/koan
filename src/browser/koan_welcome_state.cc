@@ -17,6 +17,12 @@ void SetWelcomeWindow(const BrowserWindowInterface* browser) {
   g_welcome_window = browser;
 }
 
+void ClearWelcomeWindow(const BrowserWindowInterface* browser) {
+  if (g_welcome_window == browser) {
+    g_welcome_window = nullptr;
+  }
+}
+
 bool IsWelcomePending() {
   return g_welcome_window != nullptr;
 }
