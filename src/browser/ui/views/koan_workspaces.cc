@@ -2373,10 +2373,10 @@ std::optional<bool> HidesMenuCommand(BrowserView* browser_view,
     // vertical (#154). Upstream's validation sets this item's hidden state
     // itself (hidden only in immersive fullscreen), so a hide at menu build
     // time doesn't hold.
-    // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: it stays, titled "Toggle Sidebar's
-    // Width" by the menu bar, and runs compact mode; its check mark follows the
-    // collapse state, i.e. compact mode hiding the sidebar. It has no key: the
-    // sidebar action keeps none, Shift+Cmd+L is Koan's inspector.)
+    // (Not IDC_TOGGLE_VERTICAL_TABS_COLLAPSE: it stays, titled "Toggle
+    // Sidebar's Width" by the menu bar, and runs compact mode; its check mark
+    // follows the collapse state, i.e. compact mode hiding the sidebar. It has
+    // no key: the sidebar action keeps none, Shift+Cmd+L is Koan's inspector.)
     case IDC_TOGGLE_VERTICAL_TABS:
       // With Koan's sidebar off nothing here overrides upstream's own state
       // (nullopt, not false).
