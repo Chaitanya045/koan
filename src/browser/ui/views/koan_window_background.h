@@ -56,7 +56,7 @@ bool LocksExtensionTheme(const BrowserWindowInterface* browser);
 // the mode (Zen applies it to #browser only; panels, menus and the open URL
 // bar keep zen.view.window.scheme), all but the window's own chrome (the
 // fullscreen overlay, Glance, the Library): koan_widget_color_key.h.
-void AdjustWindowColorKey(const BrowserWindowInterface* browser,
+void AdjustWindowColorKey(const BrowserView* browser_view,
                           ui::ColorProviderKey* key);
 
 // From MultiContentsBackgroundView::OnThemeChanged(), right after it re-creates
