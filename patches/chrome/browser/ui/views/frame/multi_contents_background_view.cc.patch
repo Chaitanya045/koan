@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/ui/views/frame/multi_contents_background_view.cc b/chrome/browser/ui/views/frame/multi_contents_background_view.cc
+index 56e57faa10148b44cba0993aed5eaed74adedb0b..df9b57ed2bfab5f4c824f2da32c4e54dccc76521 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_background_view.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_background_view.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/views/frame/multi_contents_background_view.h"
+ 
+ #include "chrome/browser/ui/views/frame/themed_background.h"
++#include "koan/browser/ui/views/koan_window_background.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/compositor/layer_solid_color.h"
+ #include "ui/gfx/geometry/rounded_corners_f.h"
+@@ -32,6 +33,8 @@ void MultiContentsBackgroundView::OnThemeChanged() {
+   views::View::OnThemeChanged();
+   if (auto new_type = CalculateLayerType(); new_type != layer()->type()) {
+     SetPaintToLayer(new_type);
++    // Koan: translucent where the Space theme paints over the glass.
++    koan::OnWindowBackgroundLayerCreated(this, browser_view_);
+   }
+ 
+   if (layer()->AsSolidColor()) {

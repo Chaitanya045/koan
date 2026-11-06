@@ -28,6 +28,7 @@ source_set("views") {
     "koan_url_bar.h",
     "koan_spaces.h",
     "koan_traffic_lights.h",
+    "koan_window_background.h",
   ]
   public_deps = [
     "//base",
@@ -75,6 +76,20 @@ source_set("lights_geometry") {
   public_deps = [ "//ui/gfx/geometry" ]
 }
 
+# Zen's Space theme model and colour maths; no views, so the colour mixer
+# can use it too.
+source_set("space_theme") {
+  sources = [
+    "koan_space_theme.cc",
+    "koan_space_theme.h",
+  ]
+  public_deps = [
+    "//base",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
@@ -96,6 +111,20 @@ test("koan_views_unittests") {
   ]
 }
 
+# Zen's grain texture (grain-bg.png, MPL-2.0; see THIRD_PARTY_NOTICES.md),
+# compiled in as a byte array.
+action("grain_png") {
+  script = "resources/embed_file.py"
+  inputs = [ "resources/grain-bg.png" ]
+  outputs = [ "$target_gen_dir/koan_grain_png.h" ]
+  args = [
+    rebase_path("resources/grain-bg.png", root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+    "kGrainPng",
+    "KOAN_BROWSER_UI_VIEWS_KOAN_GRAIN_PNG_H_",
+  ]
+}
+
 source_set("impl") {
   sources = [
     "koan_browser_view_controller.cc",
@@ -114,6 +143,9 @@ source_set("impl") {
     "koan_emoji_picker.cc",
     "koan_emoji_picker.h",
     "koan_glance_controller.cc",
+    "koan_glass_state.cc",
+    "koan_glass_state.h",
+    "koan_haptics.h",
     "koan_look_controller.cc",
     "koan_omnibox_rows.cc",
     "koan_move_to_space.cc",
@@ -173,11 +205,19 @@ source_set("impl") {
     "koan_tab_activation.h",
     "koan_toast.cc",
     "koan_toast.h",
+    "koan_space_background.cc",
+    "koan_space_background.h",
     "koan_system_accent.h",
     "koan_system_accent_observer.h",
+    "koan_theme_controller.cc",
+    "koan_theme_controller.h",
+    "koan_theme_picker.cc",
+    "koan_theme_picker.h",
+    "koan_theme_platform.h",
     "koan_traffic_lights.cc",
     "koan_traffic_lights_controller.cc",
     "koan_traffic_lights_controller.h",
+    "koan_widget_color_key.h",
     "koan_workspaces.cc",
     "koan_workspaces.h",
     "koan_zen_download_animation.cc",
@@ -198,10 +238,13 @@ source_set("impl") {
       "koan_workspaces_mac.mm",
     ]
   }
+  sources += get_target_outputs(":grain_png")
+  public_deps = [ ":space_theme" ]
   deps = [
     ":lights_geometry",
     ":sidebar_curve",
     ":swipe_tracker",
+    ":grain_png",
     ":views",
     "//base:i18n",
     "//cc/paint",
@@ -257,6 +300,7 @@ source_set("impl") {
     "//chrome/browser/ui/views/frame:browser_view_layout_params",
     "//chrome/browser/ui/views/frame:browser_widget",
     "//chrome/browser/ui/views/frame:contents_container_view",
+    "//chrome/browser/ui/views/frame:glass_frame_service",
     "//chrome/browser/ui/views/frame:multi_contents_view",
     "//chrome/browser/ui/views/frame:top_container_view",
     "//chrome/browser/ui/views/frame:vertical_tab_strip_region_view",
@@ -335,16 +379,20 @@ source_set("impl") {
   ]
   if (is_mac) {
     sources += [
+      "koan_haptics_mac.mm",
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
+      "koan_theme_platform_mac.mm",
     ]
     # Content (page) fullscreen: koan::IsContentFullscreen().
     deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
     frameworks = [ "AppKit.framework" ]
   } else {
     sources += [
+      "koan_haptics.cc",
       "koan_system_accent.cc",
       "koan_system_accent_observer.cc",
+      "koan_theme_platform.cc",
     ]
   }
   if (is_mac) {

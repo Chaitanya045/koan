@@ -34,6 +34,7 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
@@ -66,6 +67,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
                                                       compact_mode_.get())),
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
       pinned_tabs_(std::make_unique<KoanPinnedTabController>(browser_view)),
+      theme_(std::make_unique<KoanThemeController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       library_(std::make_unique<KoanLibraryController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(
@@ -115,6 +117,7 @@ void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
     controller->sidebar_tabs_->OnBrowserViewDestroying();
     controller->workspaces_->OnBrowserViewDestroying();
     controller->pinned_tabs_->OnBrowserViewDestroying();
+    controller->theme_->OnBrowserViewDestroying();
     controller->glance_->OnBrowserViewDestroying();
     controller->library_->OnBrowserViewDestroying();
     controller->toast_->Close();
@@ -145,6 +148,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     compact_mode_->OnAddedToWidget();
     sidebar_tabs_->OnAddedToWidget();
     workspaces_->OnAddedToWidget();
+    theme_->OnAddedToWidget();
     shortcuts_->OnAddedToWidget();
     command_palette_->OnAddedToWidget();
     // After the workspace switcher: the media cards go above it.

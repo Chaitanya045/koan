@@ -92,34 +92,6 @@ class KoanCreateMenu : public ui::SimpleMenuModel::Delegate {
   std::unique_ptr<views::MenuRunner> runner_;
 };
 
-// Edit Theme...: the theme a Space can take in Koan (Default, which keeps the
-// browser's colour, or one of the tab group colours).
-class KoanThemeMenu : public ui::SimpleMenuModel::Delegate {
- public:
-  using PickedCallback =
-      base::RepeatingCallback<void(const KoanWorkspaceController::SpaceTheme&)>;
-
-  KoanThemeMenu(const KoanWorkspaceController::SpaceTheme& current,
-                PickedCallback on_pick);
-  KoanThemeMenu(const KoanThemeMenu&) = delete;
-  KoanThemeMenu& operator=(const KoanThemeMenu&) = delete;
-  ~KoanThemeMenu() override;
-
-  void RunMenuAt(views::View* anchor);
-
-  // ui::SimpleMenuModel::Delegate:
-  void ExecuteCommand(int command_id, int event_flags) override;
-  bool IsCommandIdChecked(int command_id) const override;
-
- private:
-  KoanWorkspaceController::SpaceTheme ThemeFor(int command_id) const;
-
-  const KoanWorkspaceController::SpaceTheme current_;
-  const PickedCallback on_pick_;
-  ui::SimpleMenuModel model_{this};
-  std::unique_ptr<views::MenuRunner> runner_;
-};
-
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_MENU_H_
