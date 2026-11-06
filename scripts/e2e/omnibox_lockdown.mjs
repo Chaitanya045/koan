@@ -23,6 +23,16 @@ const targets = async () =>
     (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json());
 const floating = async () => shownViews(await views(), 'KoanUrlBarBackdrop').length > 0;
 
+const aiText = v => `${v.props?.Text ?? ''} ${v.props?.TooltipText ?? ''} ` +
+                    `${v.props?.AccessibleName ?? ''} ${v.props?.PlaceholderText ?? ''}`;
+// What must not be on any surface: AI Mode (chip, button, hint, row), the
+// "Ask Google about this page" row (Lens / contextual search entry point) and
+// the "+" button that adds context to AI Mode.
+const AI_PATTERN = /AI Mode|Ask AI|Ask Google about this page|Gemini|Add (context|file|image)/i;
+const aiOnScreen = async () => (await views()).filter(
+    v => v.shown && (/AiMode|AIM|Gemini|AddContext|Composebox/i.test(v.cls) ||
+                     AI_PATTERN.test(aiText(v))));
+
 let [page] = await pages();
 await front(page);
 
@@ -43,6 +53,10 @@ check('Esc closes it', !(await floating()));
 await clickView('KoanUrlPill');
 await sleep(800);
 check('A click on the pill edits in the pill: not floating', !(await floating()));
+const aiAfterClick = await aiOnScreen();
+check('A click on the sidebar URL bar shows no AI Mode, "Ask Google about this page" or "+" either',
+      aiAfterClick.length === 0,
+      aiAfterClick.map(v => `${v.cls}:${aiText(v).trim()}`).join(' | '));
 // O2: Cmd+L while the bar is open in the pill floats it.
 await key(page, VK.L, CTRL, 'l');
 check('Cmd+L with the bar open in the pill floats it', await waitFor(floating),
@@ -133,12 +147,8 @@ await sleep(500);
 await key(page, VK.T, CTRL, 't');
 await waitFor(floating);
 await sleep(500);
-const aiText = v => `${v.props?.Text ?? ''} ${v.props?.TooltipText ?? ''} ` +
-                    `${v.props?.AccessibleName ?? ''} ${v.props?.PlaceholderText ?? ''}`;
-const aiViews = (await views()).filter(
-    v => v.shown && (/AiMode|AIM|Gemini/i.test(v.cls) ||
-                     /AI Mode|Ask AI|Gemini/i.test(aiText(v))));
-check('The New Tab overlay has no AI Mode chip, button, hint or tooltip',
+const aiViews = await aiOnScreen();
+check('The New Tab overlay has no AI Mode chip, button, hint or tooltip, and no "Ask Google about this page" row or "+" button',
       aiViews.length === 0,
       aiViews.map(v => `${v.cls}:${aiText(v).trim()}`).join(' | '));
 await key(page, VK.ESC, 0, 'Escape');
