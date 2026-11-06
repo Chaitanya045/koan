@@ -251,7 +251,11 @@ Two namespaces on one connection:
 Rules: (1) no domain wildcards; a method is allowed only by name; (2) the table is data, in one file, and a unit
 test (T-ui-3) **enumerates every method of the 158 protocol JSON and fails if any is not classified** allow, gated,
 no-op or deny, so a Chromium roll that adds a method cannot slip through; (3) every denial is an explicit CDP error
-(never a silent drop) plus an audit entry; (4) param filters are part of the entry; (5) events pass through an
+(never a silent drop) plus an audit entry; (4) param filters are part of the entry: the
+table has a **`ParamFilter` column** naming the filter each forwarded row needs (`NavigationUrl`, `StripKeyCommands`,
+`IsolatedWorld`, `RuntimeContext`, `Screenshot`, `NetworkEnable`, `OwnStream`, `OwnTabOnly`); `kAllow` means "forward after the
+filter", never "forward unchanged"; a unit test pins exactly which rows carry which filter, and nothing routes client traffic
+through the table until the filters exist; (5) events pass through an
 allowlist and a scrubber, not the reverse.
 
 | Domain | Allowed by name (initial; each verified against the 158 protocol JSON in phase 2) |
@@ -293,6 +297,12 @@ them would break rule 4):
   satisfy the same**; the check covers the last-committed URL and the pending navigation's SiteInstance;
 * `chrome-extension://` frames injected into ordinary pages (password managers) are **not attached**: auto-attach
   skips them and the facade never lists them;
+* **isolated worlds are never given universal access.** `Page.createIsolatedWorld` has a parameter `grantUniveralAccess`
+  (upstream's spelling, `Page.pdl:640`: "a powerful option") that lets the new world bypass the same-origin policy and CORS,
+  so an agent that sets it can read any frame and any origin's responses from that world. The `IsolatedWorld` filter **forces it
+  to false** (and drops a supplied `contentSecurityPolicy` that would weaken the page's, if the schema allows one), and
+  registers the new world with the execution-context rule below. A roll that adds another privilege parameter to this method
+  is caught by the parameter baseline (`scripts/agent/policy_baseline.json`, REBASE.md); T-sec-16;
 * **execution contexts**: the facade drops every `Runtime.executionContextCreated` that is not the main world or a
   world created by the agent's own `Page.createIsolatedWorld`, and rejects `contextId`/`uniqueContextId` values it did
   not hand out. This closes the content-script route (an extension's isolated world could otherwise be driven with
@@ -814,6 +824,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-sec-13 | pre-auth abuse: a 1 GB length prefix, 100 half-open connections, malformed JSON, a second `Koan.authenticate`, slow-loris | closed within the limits, browser memory flat, UI thread unaffected |
 | T-sec-14 | `chrome.debugger` interplay: an extension attaches to an agent tab, then detaches | `Koan.contested` event; a second `Emulation` writer refused; the lease survives |
 | T-sec-15 | the protocol-coverage unit test (Linux-runnable): every CDP method in the 158 protocol JSON is classified | fails on any unclassified method |
+| T-sec-16 | `Page.createIsolatedWorld {grantUniveralAccess:true}` on a page with a cross-origin iframe, then `Runtime.evaluate` in that world to `fetch` and read the iframe's origin | the world has no universal access (the call succeeds with it forced off; reading the cross-origin frame or response fails) |
 | **Take-over** | | |
 | T-take-1 | agent drives the user's active tab (approved); user types/clicks in the page | `Koan.paused`; mutating calls rejected; reads allowed; banner shows; no further injected input |
 | T-take-1b | as T-take-1 with the input in a **cross-origin iframe** (payment widget) and as a wheel scroll | pauses for both; the in-flight batch step is the documented detect-after-delivery case |
@@ -1323,4 +1334,5 @@ then LLM mode with ego in the blocks; (4) the claim, or the report of which leve
 | 18 strawman lever table | §20 table and intro |
 | 19 benchmark gaps | §20.7 method, ego mandatory, `< 1.0×`, interleaving, CIs, headed, live slice |
 | 20 agent-browser facade details | §4.2, §11.1 |
+| #188 review F2: `ParamFilter` column, `Page.createIsolatedWorld` `grantUniveralAccess` forced false | §4.3 rule 4, §4.4; T-sec-16 |
 | Corrections: Accessibility reachable; Glic dependency moot | §4.3, §8 |
