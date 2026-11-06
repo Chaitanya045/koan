@@ -42,6 +42,8 @@ BASE_DECLARE_FEATURE(kKoanPinnedTabs);
 BASE_DECLARE_FEATURE(kKoanUrlBar);
 
 BASE_DECLARE_FEATURE(kKoanLibrary);
+// Zen's tab folders at the top of each Space in the sidebar.
+BASE_DECLARE_FEATURE(kKoanFolders);
 
 // Zen's smaller pieces: the media controller in the sidebar, the download
 // animation, dragging the window from the top of the page, and the welcome
@@ -65,6 +67,7 @@ bool IsMediaControlsEnabled();
 bool IsDownloadAnimationEnabled();
 bool IsWindowDragEnabled();
 bool IsWelcomeEnabled();
+bool IsFoldersEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read

@@ -26,6 +26,7 @@ BASE_FEATURE(kKoanMediaControls, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanDownloadAnimation, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWindowDrag, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWelcome, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanFolders, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kKoanSidebar);
@@ -106,6 +107,10 @@ bool IsPinnedTabsEnabled() {
 
 bool IsLibraryEnabled() {
   return base::FeatureList::IsEnabled(kKoanLibrary);
+}
+
+bool IsFoldersEnabled() {
+  return base::FeatureList::IsEnabled(kKoanFolders);
 }
 
 }  // namespace koan::features
