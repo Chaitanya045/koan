@@ -20,3 +20,5 @@ DCHECK build. The provider is `koan_zero_suggest.cc`; the controller asks again 
 | A2 | In ⌘T and ⌘L type `@` | Only @history, @bookmarks, @tabs (no @aimode, no @gemini). |
 | A3 | ⇧⌘A (Search Tabs) | The bubble lists tabs only: no AI Mode / Ask AI / Gemini entry, button or footer. (If anything shows, send a screenshot: it may be a surface the static audit didn't find.) |
 | A4 | Settings > Search engine / the address bar section | No AI Mode toggle or @aimode shortcut offered. |
+| A5 | Click the URL pill in the sidebar on a website (example.com) | The panel has no AI Mode chip, no "Ask Google about this page" row and no "+" button; the list is the ⌘T one (open tabs, top sites). (Its size and position, and the trailing slash of the URL, are the follow-up PR for #178: Zen's breakout is 440 x 270 pt at (7, 40).) |
+| A6 | ⇧⌘A | Whatever it opens (Koan opens the URL-bar panel until #173's Search Tabs mode lands): no AI Mode chip. |
