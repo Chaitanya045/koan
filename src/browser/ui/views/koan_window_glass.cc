@@ -28,17 +28,23 @@ bool IsWindowGlassSupported() {
   return ::features::IsGlassFrameEnabled();
 }
 
+namespace {
+
+// Whether the Space's theme paints the window (koan_window_background.h).
+bool IsThemed(const views::View* browser_view) {
+  return PaintsWindowBackground(static_cast<const BrowserView*>(browser_view));
+}
+
+}  // namespace
+
 void OnGlassLayout(const views::View* browser_view,
                    bool in_glass_mode,
                    CustomCornersBackground* toolbar_background,
                    CustomCornersBackground* top_container_background) {
   const CustomCorners::ColorChoiceWithAlpha transparent{
       CustomCorners::ToolbarTheme(), 0.0f};
-  // Where the Space's theme paints the window (koan_window_background.h),
-  // the toolbar and the top container keep upstream's theme colour, which
-  // its ThemedBackground hook paints translucent.
-  if (!PaintsWindowBackground(static_cast<const BrowserView*>(browser_view)) &&
-      ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view))) {
+  if (ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view),
+                     IsThemed(browser_view))) {
     toolbar_background->SetPrimaryColor(transparent);
     top_container_background->SetPrimaryColor(transparent);
     return;
@@ -55,11 +61,9 @@ void OnGlassLayout(const views::View* browser_view,
 
 bool KeepsTopContainerClear(bool in_glass_mode,
                             const views::View* browser_view) {
-  // As OnGlassLayout(): where the Space's theme paints the window, the top
-  // container keeps upstream's theme colour (its translucent gradient).
-  return !PaintsWindowBackground(
-             static_cast<const BrowserView*>(browser_view)) &&
-         ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view));
+  // The same rule as OnGlassLayout().
+  return ToolbarIsClear(in_glass_mode, IsCompactModeActive(browser_view),
+                        IsThemed(browser_view));
 }
 
 float SidebarGlassOpacity(const views::View* browser_view) {

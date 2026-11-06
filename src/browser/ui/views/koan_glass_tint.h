@@ -35,8 +35,10 @@ SkColor ResolveGlassTint(SkColor tint,
 
 // Whether the toolbar and the top container paint nothing: in glass mode,
 // except in compact mode, where they float over the page and keep their
-// colours as a backing.
-bool ToolbarIsClear(bool in_glass_mode, bool compact_mode);
+// colours as a backing, and except where the Space's theme paints the window
+// (`themed`, koan::PaintsWindowBackground()): they keep upstream's theme
+// colour, which the theme's ThemedBackground hook paints translucent.
+bool ToolbarIsClear(bool in_glass_mode, bool compact_mode, bool themed);
 
 // The opacity of the sidebar region's colour in glass mode: 0, or 1 in compact
 // mode, where the sidebar floats over the page and needs a backing.

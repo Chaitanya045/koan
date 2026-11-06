@@ -41,8 +41,8 @@ SkColor ResolveGlassTint(SkColor tint,
       Over(SkColorGetB(tint), SkColorGetB(inactive_wash), alpha));
 }
 
-bool ToolbarIsClear(bool in_glass_mode, bool compact_mode) {
-  return in_glass_mode && !compact_mode;
+bool ToolbarIsClear(bool in_glass_mode, bool compact_mode, bool themed) {
+  return in_glass_mode && !compact_mode && !themed;
 }
 
 float SidebarBackingOpacity(bool compact_mode) {

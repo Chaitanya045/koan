@@ -43,12 +43,21 @@ TEST(KoanGlassTintTest, InactiveWindowWithoutATintIsTheWash) {
 }
 
 TEST(KoanGlassTintTest, ToolbarIsClearOnlyInGlassModeAndNotInCompactMode) {
-  EXPECT_TRUE(ToolbarIsClear(/*in_glass_mode=*/true, /*compact_mode=*/false));
+  EXPECT_TRUE(ToolbarIsClear(/*in_glass_mode=*/true, /*compact_mode=*/false,
+                             /*themed=*/false));
   // Floating over the page in compact mode: it keeps its colour as a backing.
-  EXPECT_FALSE(ToolbarIsClear(true, /*compact_mode=*/true));
+  EXPECT_FALSE(ToolbarIsClear(true, /*compact_mode=*/true, false));
   // Without glass, upstream's colours stay.
-  EXPECT_FALSE(ToolbarIsClear(false, false));
-  EXPECT_FALSE(ToolbarIsClear(false, true));
+  EXPECT_FALSE(ToolbarIsClear(false, false, false));
+  EXPECT_FALSE(ToolbarIsClear(false, true, false));
+}
+
+TEST(KoanGlassTintTest, ToolbarKeepsItsColourWhereTheSpaceThemePaints) {
+  // The Space theme's gradient reaches the toolbar through its colour.
+  EXPECT_FALSE(ToolbarIsClear(/*in_glass_mode=*/true, /*compact_mode=*/false,
+                              /*themed=*/true));
+  EXPECT_FALSE(ToolbarIsClear(true, true, true));
+  EXPECT_FALSE(ToolbarIsClear(false, false, true));
 }
 
 TEST(KoanGlassTintTest, SidebarHasABackingOnlyInCompactMode) {
