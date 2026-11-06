@@ -17,8 +17,8 @@ void SetWelcomeWindow(const BrowserWindowInterface* browser) {
   g_welcome_window = browser;
 }
 
-bool IsWelcomeShowing(const BrowserWindowInterface& browser) {
-  return g_welcome_window && g_welcome_window == &browser;
+bool IsWelcomePending() {
+  return g_welcome_window != nullptr;
 }
 
 }  // namespace koan

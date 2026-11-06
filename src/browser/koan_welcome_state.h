@@ -15,10 +15,11 @@ namespace koan {
 void SetWelcomeWindow(const BrowserWindowInterface* browser);
 
 // Hook for SearchEngineChoiceDialogService::ComputeDialogConditions() (a
-// hook patch): whether the welcome is pending or showing in `browser`. Its
+// hook patch): whether the welcome is pending or showing, in any window. Its
 // search engine page is Zen's choice screen, so Chromium's own dialog waits
-// (and once Next there has recorded the choice, never shows).
-bool IsWelcomeShowing(const BrowserWindowInterface& browser);
+// in every window, a second one opened with Cmd+N too (and once Next there
+// has recorded the choice, never shows).
+bool IsWelcomePending();
 
 }  // namespace koan
 

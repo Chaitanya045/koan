@@ -344,7 +344,7 @@ DCHECK build, so the Label DCHECK fires.
   4. the location;
   5. the account.
 
-  `--force-search-engine-choice-screen` wipes the choice (`:1021`). The dialog itself comes from `SearchEngineChoiceDialogService` in the browser window. Koan's welcome (`chrome://koan-welcome`, `koan_welcome_handler.cc`) sets the DSE via `SetUserSelectedDefaultSearchProviderByPrepopulateId`, and Next on its search page records the choice (`ChoiceMadeLocation::kChoiceScreen`, O10); Chromium's dialog waits while the welcome is pending or showing (`koan::IsWelcomeShowing`, `upstream/welcome.md` W14).
+  `--force-search-engine-choice-screen` wipes the choice (`:1021`). The dialog itself comes from `SearchEngineChoiceDialogService` in the browser window. Koan's welcome (`chrome://koan-welcome`, `koan_welcome_handler.cc`) sets the DSE via `SetUserSelectedDefaultSearchProviderByPrepopulateId`, and Next on its search page records the choice (`ChoiceMadeLocation::kChoiceScreen`, O10); Chromium's dialog waits while the welcome is pending or showing (`koan::IsWelcomePending`, `upstream/welcome.md` W14).
 - **Startup infobars and bubbles** (`AddInfoBarsIfNecessary`, `infobar_utils.cc:160-364`), in order:
   1. bad flags;
   2. automation;
