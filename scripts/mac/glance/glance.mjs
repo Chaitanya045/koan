@@ -483,13 +483,23 @@ const steps = {
   },
   async 13() {
     if (!PID) return console.log('SKIP  13 (needs the Mac)');
-    await glance('child');
+    // In a window of its own, which ⌘⇧W closes: the test window stays for the
+    // steps after this one (CDP can't open a target with no window left).
+    const url = `${PARENT}#window-${Date.now()}`;
+    await browserCall('Target.createTarget', { url, newWindow: true });
+    const page = await waitFor(async () => (await tabPages()).find(t => t.url === url));
+    if (!page) return await check('13 a second window opens', false);
+    await onPage(page, c => c.send('Page.bringToFront'));
+    await sleep(800);
+    await glance('child', page);
     await key(K.W, 'cs');  // ⌘⇧W: close the window
     await sleep(2000);
     let alive = true;
     try { mac(`kill -0 ${PID}`); } catch { alive = false; }
-    // (A macOS app stays running without windows.)
-    await check('13 ⌘⇧W with a Glance open: no crash', alive);
+    const gone = !(await tabPages()).some(t => t.url === url);
+    const parentLeft = !!(await parentTarget());
+    await check('13 ⌘⇧W with a Glance open: no crash, that window closes, the other stays',
+                alive && gone && parentLeft);
     console.log('INFO  13 ⌘Q with a Glance open, then relaunch: run by hand (scripts/mac/steps/glance.md step 13)');
   },
   // Koan's high-priority shortcuts before Chrome's reserved keys: ⌘⌥→ is
