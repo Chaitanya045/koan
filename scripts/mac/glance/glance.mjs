@@ -577,33 +577,40 @@ const steps = {
     // The test window first: its context is what the new one must differ from.
     const fixture = await parentTab();
     const before = new Set((await targets()).map(t => t.id));
-    await key(K.P, 'cs');  // ⌘⇧P: New Private Window (Zen's key)
-    const fresh = await waitFor(async () =>
-        (await targets()).find(t => !before.has(t.id)), 4000);
-    if (!fresh) return await check('20 ⌘⇧P opens a window', false);
-    // Off the record: another browser context than the test window's.
-    const contexts = (await browserCall('Target.getTargets')).result?.targetInfos ?? [];
-    const contextOf = id => contexts.find(t => t.targetId === id)?.browserContextId;
-    const isPrivate = !!fixture && !!contextOf(fresh.id) && !!contextOf(fixture.id) &&
-                      contextOf(fresh.id) !== contextOf(fixture.id);
-    await check('20 ⌘⇧P opens a private window (another browser context)', isPrivate,
-                `context ${contextOf(fresh.id)} vs ${contextOf(fixture?.id)}`);
-    if (!isPrivate) return;
-    const url = `${PARENT}#private-${Date.now()}`;
-    await onPage(fresh, c => c.send('Page.navigate', { url }));
-    const page = await waitFor(async () => (await targets()).find(t => t.url === url));
-    if (!page) return await check('20 the private window loads the fixture', false);
-    await onPage(page, c => c.send('Page.bringToFront'));
-    await sleep(800);
-    await glance('child', page);
-    await key(K.Y, 'c');
-    const history = await waitFor(async () =>
-        (await targets()).find(t => t.url.startsWith('chrome://history')), 4000);
-    await check('20 ⌘Y in a private-window Glance opens History', !!history,
-                history ? history.url : 'no History page');
-    if (history) await browserCall('Target.closeTarget', { targetId: history.id });
-    await browserCall('Target.closeTarget', { targetId: page.id });
-    await sleep(800);
+    // Whatever the step opens is closed in the end, also when it throws: the
+    // private window shows the fixture too ("Glance parent"), which steps 18
+    // and 21 look windows up by.
+    const opened = () => targets().then(list => list.filter(t => !before.has(t.id)));
+    try {
+      await key(K.P, 'cs');  // ⌘⇧P: New Private Window (Zen's key)
+      const fresh = await waitFor(async () => (await opened())[0], 4000);
+      if (!fresh) return await check('20 ⌘⇧P opens a window', false);
+      // Off the record: another browser context than the test window's.
+      const contexts = (await browserCall('Target.getTargets')).result?.targetInfos ?? [];
+      const contextOf = id => contexts.find(t => t.targetId === id)?.browserContextId;
+      const isPrivate = !!fixture && !!contextOf(fresh.id) && !!contextOf(fixture.id) &&
+                        contextOf(fresh.id) !== contextOf(fixture.id);
+      await check('20 ⌘⇧P opens a private window (another browser context)', isPrivate,
+                  `context ${contextOf(fresh.id)} vs ${contextOf(fixture?.id)}`);
+      if (!isPrivate) return;
+      const url = `${PARENT}#private-${Date.now()}`;
+      await onPage(fresh, c => c.send('Page.navigate', { url }));
+      const page = await waitFor(async () => (await targets()).find(t => t.url === url));
+      if (!page) return await check('20 the private window loads the fixture', false);
+      await onPage(page, c => c.send('Page.bringToFront'));
+      await sleep(800);
+      await glance('child', page);
+      await key(K.Y, 'c');
+      const history = await waitFor(async () =>
+          (await targets()).find(t => t.url.startsWith('chrome://history')), 4000);
+      await check('20 ⌘Y in a private-window Glance opens History', !!history,
+                  history ? history.url : 'no History page');
+    } finally {
+      for (const t of await opened().catch(() => [])) {
+        await browserCall('Target.closeTarget', { targetId: t.id }).catch(() => {});
+      }
+      await sleep(800);
+    }
   },
   // ⌘M in a Glance in native fullscreen: Minimize is off for a fullscreen
   // window, so nothing minimises (the key falls through, review c).
@@ -611,16 +618,20 @@ const steps = {
     if (!PID) return console.log('SKIP  21 (needs the Mac)');
     await parentTab();
     await key(K.F, 'ck');  // ⌃⌘F: native fullscreen
-    await sleep(2500);
-    await glance('child');
-    await key(K.M, 'c');
-    await sleep(1200);
-    const states = parentWindowMinimized();
-    await check('21 ⌘M in a Glance in native fullscreen minimises nothing', states === 'false',
-                `AXMinimized: ${states}`);
-    await closeCard();
-    await key(K.F, 'ck');  // leave fullscreen
-    await sleep(2500);
+    try {
+      await sleep(2500);
+      await glance('child');
+      await key(K.M, 'c');
+      await sleep(1200);
+      const states = parentWindowMinimized();
+      await check('21 ⌘M in a Glance in native fullscreen minimises nothing',
+                  states === 'false', `AXMinimized: ${states}`);
+    } finally {
+      // Out of fullscreen whatever happened: step 18 needs a normal window.
+      await closeCard().catch(() => {});
+      await key(K.F, 'ck');  // leave fullscreen
+      await sleep(2500);
+    }
   },
   // ⌘M (Window > Minimize) in a Glance minimises the window, as in Zen.
   // Last: the window is restored over CDP, and no key is sent after it.
