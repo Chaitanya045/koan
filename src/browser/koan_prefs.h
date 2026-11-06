@@ -75,8 +75,10 @@ inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
 
 // How the URL bar opens when the address is edited (Zen's
 // zen.urlbar.behavior): "normal" edits it in place (in the sidebar's URL
-// pill), "floating-on-type" (Zen's default) starts there too and floats over
-// the page on the first keystroke, "float" floats over the page right away.
+// pill), "floating-on-type" (Zen's default) floats over the page when the bar
+// is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill after a
+// click on it (typing then never floats it), "float" floats over the page
+// right away.
 inline constexpr char kUrlBarBehavior[] = "koan.urlbar.behavior";
 inline constexpr char kUrlBarBehaviorNormal[] = "normal";
 inline constexpr char kUrlBarBehaviorFloatingOnType[] = "floating-on-type";

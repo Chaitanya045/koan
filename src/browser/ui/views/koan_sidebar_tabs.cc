@@ -919,6 +919,13 @@ void KoanSidebarTabsController::OnTabStripModelChanged(
     for (const auto& removed : change.GetRemove()->contents) {
       empty_tab_by_id_.erase(removed.tab->GetHandle().raw_value());
     }
+  } else if (change.type() == TabStripModelChange::kInserted) {
+    // Seeded here too, so a tab that never gets a full change (a restored,
+    // never loaded one) has a state to compare with.
+    for (const auto& inserted : change.GetInsert()->contents) {
+      empty_tab_by_id_[inserted.tab->GetHandle().raw_value()] =
+          IsEmptyTab(inserted.tab);
+    }
   }
 }
 

@@ -62,10 +62,16 @@ const css = await (async () => {
   await browserCall('Target.closeTarget', { targetId: id });
   return text;
 })();
-const hex = css?.match(/--color-new-tab-page-background:\s*#([0-9a-fA-F]{6})/)?.[1];
-const wanted = hex && `rgb(${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4), 16)})`;
+// #rrggbb, or #rrggbbaa (opaque in practice; an alpha below ff reads as rgba).
+const hex = css?.match(/--color-new-tab-page-background:\s*#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?/);
+const [r, g, b] = hex ? [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16)) : [];
+const alpha = hex?.[2] ? parseInt(hex[2], 16) : 255;
+const wanted = hex && (alpha === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b},`);
+// (The target opens in the window the user is in, as the new tab pages above
+// do, so the colour is that window's.)
 check('...in the Zen look\'s new tab page colour (the window provider\'s)',
-      wanted ? facts?.background === wanted
+      wanted ? (alpha === 255 ? facts?.background === wanted
+                              : facts?.background?.startsWith(wanted))
              : /^rgb\(\d+, \d+, \d+\)$/.test(facts?.background ?? ''),
       `${facts?.background} vs ${wanted ?? css?.slice(0, 80)}`);
 if (process.env.SHOTS) {
@@ -100,8 +106,13 @@ check('...and to shadcn light (bright)',
         const m = /rgb\((\d+), (\d+), (\d+)\)/.exec(await colour(tab) ?? '');
         return m && +m[1] > 240 && +m[2] > 240 && +m[3] > 240;
       }), await colour(tab));
+// And a third change, after two: the follow works every time, not once (each
+// reload makes a new page and controller, which must keep what the last one
+// knew).
 await setKoanPref('koan.look.mode', 'dark');
 await setKoanPref('koan.look.style', 'zen');
+check('...and back to the Zen look\'s colour, the third change in a row',
+      await waitFor(async () => await colour(tab) === before), await colour(tab));
 await tab.close();
 
 // Chromium's own page, chosen in Koan's settings.

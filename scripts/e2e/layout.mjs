@@ -1,7 +1,7 @@
 // End-to-end test of Zen's default layout against a real build: single
 // toolbar (no top toolbar; navigation buttons and a URL pill in the
-// sidebar), the URL bar (Ctrl+L or a click on the pill; it floats on the
-// first keystroke, see urlbar.mjs for the rest), and
+// sidebar), the URL bar (Ctrl+L floats; a click on the pill edits in the
+// pill, see urlbar.mjs for the rest), and
 // switching to the multiple-toolbars layout (Ctrl+Alt+B).
 //
 //   scripts/e2e/run.sh layout
@@ -139,9 +139,8 @@ check('...with a hot zone for the window buttons along the top edge',
 await key(VK.L, CTRL, 'l');
 vs = await views();
 let bar = find(vs, 'TopContainerView');
-const urlPill = find(vs, 'KoanUrlPill');
-check('Ctrl+L edits the address in the URL pill (Zen: floating on type)',
-      bar?.x === urlPill?.x && bar?.w === urlPill?.w,
+check('Ctrl+L opens the floating URL bar, centred and Zen-sized (Zen: the keyboard floats)',
+      bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
       `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
 const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown);
 check('...showing just the location bar',
@@ -154,7 +153,7 @@ await uiEvent(omnibox, 'DOM.dispatchKeyEvent',
 await sleep(1000);
 vs = await views();
 bar = find(vs, 'TopContainerView');
-check('...and typing floats it, centred and Zen-sized',
+check('...and typing keeps it so',
       bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
       `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
 await windowKey(VK.ESC);
@@ -164,11 +163,20 @@ check('Esc closes the URL bar', bar?.w === WINDOW_WIDTH, `width ${bar?.w}`);
 check('...and the toolbar is back to normal',
       vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown).length > 1);
 
+const urlPill = find(vs, 'KoanUrlPill');
 await click(find(vs, 'KoanUrlPill'));
 vs = await views();
 bar = find(vs, 'TopContainerView');
-check('Clicking the URL pill opens the URL bar there', bar?.x === urlPill?.x &&
-      bar?.w === urlPill?.w, `${bar?.w} at ${bar?.x}`);
+check('Clicking the URL pill opens the URL bar there (Zen: a click never floats it)',
+      bar?.x === urlPill?.x && bar?.w === urlPill?.w, `${bar?.w} at ${bar?.x}`);
+await uiEvent(find(vs, 'OmniboxViewViews'), 'DOM.dispatchKeyEvent',
+              { type: 'keyPressed', keyCode: 0, code: 0, flags: 0, key: 'w'.codePointAt(0), isChar: true });
+await sleep(1000);
+vs = await views();
+bar = find(vs, 'TopContainerView');
+check('...and typing keeps it in place, not floating',
+      bar?.x === urlPill?.x && bar?.x !== (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
+      `${bar?.w} at ${bar?.x}`);
 await windowKey(VK.ESC);
 
 await key(VK.B, CTRL | ALT, 'b');

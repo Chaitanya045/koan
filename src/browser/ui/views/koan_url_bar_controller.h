@@ -191,7 +191,7 @@ class KoanUrlBarController : public views::ViewObserver,
   // Handles the omnibox's keys (Esc) while the bar is open or open for a new
   // tab.
   void UpdateKeyHandler();
-  void FloatOnType();
+  void UpdatePlacementOnInput();
   // Posted after the omnibox got focus: an invisible focus closes the bar
   // again.
   void CloseIfFocusInvisible();
