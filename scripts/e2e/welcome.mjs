@@ -33,7 +33,7 @@ const next = () => click('#welcome-card .step-foot .button.primary');
 
 await sleep(1500);
 let vs = await views();
-const overlay = vs.find(v => v.cls === 'WebView' && v.path.length <= 2);
+const overlay = vs.find(v => v.cls === 'WebView' && v.path.at(-1) === 'BrowserView');
 const frame = vs.find(v => v.cls === 'BrowserView');
 check('...over the whole window', overlay && frame && overlay.w === frame.w && overlay.h === frame.h,
       `${overlay?.w}x${overlay?.h} of ${frame?.w}x${frame?.h}`);
@@ -54,5 +54,5 @@ check('Next: done', await step() === 'done', await step());
 await next();
 await sleep(1000);
 vs = await views();
-check('"Start browsing" closes the welcome', !vs.some(v => v.cls === 'WebView' && v.path.length <= 2 && v.w === frame.w));
+check('"Start browsing" closes the welcome', !vs.some(v => v.cls === 'WebView' && v.path.at(-1) === 'BrowserView' && v.w === frame.w));
 finish();

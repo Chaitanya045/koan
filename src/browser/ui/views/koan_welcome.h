@@ -5,19 +5,16 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_WELCOME_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WELCOME_H_
 
-#include <memory>
-
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observation.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "ui/views/widget/widget.h"
-#include "ui/views/widget/widget_observer.h"
+#include "ui/base/accelerators/accelerator.h"
 
 class BrowserView;
 
 namespace views {
+class FocusManager;
 class WebView;
 }  // namespace views
 
@@ -30,22 +27,24 @@ namespace koan {
 // search engine (Brave Search chosen); every step can be skipped, and Skip
 // setup or Esc leaves at any point.
 //
-// The page is a WebView in a child widget over the window (on macOS a child
-// NSWindow, made key so that the page has the keyboard); this object is its
-// KoanWelcomeHost (what the page asks of the window). It shows once
-// (pref koan.welcome_screen.seen, set once the screen is on screen) and only
-// on Chromium's first run, i.e. of a new user data directory (not for each
-// profile in it), so --no-first-run skips it and --force-first-run brings
-// it back.
+// The page is a WebView, the last child of the BrowserView over everything
+// else in the window (in the window itself, not a child widget: on macOS a
+// child widget is a child NSWindow, which never gets the keyboard, and as
+// the key window takes no clicks either). This object is the page's
+// KoanWelcomeHost (what the page asks of the window). It shows once (pref
+// koan.welcome_screen.seen, set once the screen is on screen) and only on
+// Chromium's first run, i.e. of a new user data directory (not for each
+// profile in it), so --no-first-run skips it and --force-first-run brings it
+// back.
 class KoanWelcome : public content::WebContentsObserver,
-                    public views::WidgetObserver {
+                    public ui::AcceleratorTarget {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
   KoanWelcome(const KoanWelcome&) = delete;
   KoanWelcome& operator=(const KoanWelcome&) = delete;
   ~KoanWelcome() override;
 
-  bool is_showing() const { return widget_ != nullptr; }
+  bool is_showing() const { return web_view_ != nullptr; }
 
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
@@ -61,9 +60,10 @@ class KoanWelcome : public content::WebContentsObserver,
                    const GURL& validated_url,
                    int error_code) override;
 
-  // views::WidgetObserver (the screen's widget): closed by something else
-  // than Close(), e.g. Cmd+W or Close Window while it is the key window.
-  void OnWidgetClosing(views::Widget* widget) override;
+  // ui::AcceleratorTarget: Esc when the keyboard isn't in the page (the page
+  // handles its own).
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+  bool CanHandleAccelerators() const override;
 
   // Whether this window shows the welcome: the first normal window of a
   // regular profile on Chromium's first run, if it hasn't been seen and no
@@ -79,18 +79,25 @@ class KoanWelcome : public content::WebContentsObserver,
   // Skip setup, Esc, the page's renderer gone or the page never loading:
   // closes the screen, applying nothing more.
   void Skip();
-  void Close();
+  // `remove_page`: take the page out of the window (not while the window is
+  // being destroyed, which takes it along).
+  void Close(bool remove_page = true);
   // Whether the window is closing or destroyed.
   bool IsWindowClosing() const;
-  // After the screen closes: the window active, the keyboard on its page.
-  // Only if the screen was the active window (`was_active`): a crash or a
-  // timeout while another app is in front doesn't take the focus.
-  void FocusBrowser(bool was_active);
-  void LayoutWidget();
+  // After the screen closes: the keyboard on the window's page, if the window
+  // is the active one (a crash or a timeout while another app is in front
+  // doesn't take the focus).
+  void FocusBrowser();
+  // The space around the card drags the window, as a title bar would;
+  // EndWindowDrag() after AppKit's drag.
+  void StartWindowDrag();
+  void EndWindowDrag();
+  void LayoutWebView();
 
   const raw_ptr<BrowserView> browser_view_;
-  std::unique_ptr<views::Widget> widget_;
   raw_ptr<views::WebView> web_view_ = nullptr;
+  // Where Esc is registered while the screen shows.
+  raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   bool pending_ = false;
   // The import step picked a browser: its import opens after the screen.
   bool import_ = false;
@@ -98,8 +105,6 @@ class KoanWelcome : public content::WebContentsObserver,
   bool finishing_ = false;
   // Gives up on a page that never asks for its data.
   base::OneShotTimer load_timer_;
-  base::ScopedObservation<views::Widget, views::WidgetObserver>
-      widget_observation_{this};
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

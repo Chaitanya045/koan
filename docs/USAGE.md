@@ -664,7 +664,8 @@ setup over the first window: "Welcome to a calmer internet", then four
 steps. Every step has Skip, and **Skip setup** (top right) or Esc leaves at
 any point; nothing changes until a step's Next. It shows once (start Koan
 with `--force-first-run` and a new user data directory to see it again).
-It covers the whole window, the window buttons too, until it ends.
+It covers the whole window; the window buttons stay usable, and the empty
+space around the card drags the window.
 
 - **Shortcuts** (macOS): Koan uses Zen's keys, which give a few of Chrome's
   keys another job. Keep Zen's, take Chrome's, or pick per key:
