@@ -116,8 +116,9 @@ bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab);
 // (upstream's state stands). The menu bar is shared by the windows, so each
 // window's validation sets an owned item both ways. Today:
 // - View > "Show Tabs Vertically", hidden while Koan owns the sidebar (#154).
-//   "Collapse Vertical Tabs" stays, as the menu item of Shift+Cmd+L: AppKit
-//   doesn't fire a hidden item's key equivalent.
+//   "Collapse Vertical Tabs" stays (titled "Toggle Sidebar's Width", it runs
+//   compact mode and has no key): AppKit doesn't fire a hidden item's key
+//   equivalent, so it isn't hidden.
 // - View > Always Show Toolbar in Full Screen, hidden while Koan's toolbar is
 //   hidden.
 // - The Tab menu's Group Tab and its Option alternate, hidden in a Spaces
