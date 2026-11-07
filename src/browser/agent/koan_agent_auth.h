@@ -76,11 +76,18 @@ enum class IdentityChange {
   // The agent that was paired is not among the ancestors any more.
   kChainChanged,
 };
+// A pin with no agent in it means the chain was unknown when the client paired
+// (an orphaned process, an unreadable chain); a connection that has an agent
+// now is a chain change, so an empty pin never switches the chain check off.
 IdentityChange CompareIdentity(const PinnedIdentity& pinned,
                                const PeerIdentity& peer);
 
 // A key for rate limits: the same executable by the same user.
 std::string PeerKey(const PeerIdentity& peer);
+
+// A key for limits an attacker must not be able to dodge by changing the path
+// of the program it runs: the user.
+std::string UidKey(const PeerIdentity& peer);
 
 // A digest of the ancestors, for remembering that the user accepted a chain.
 std::string ChainDigest(const PeerIdentity& peer);
@@ -172,8 +179,21 @@ class InMemoryClientStore final : public ClientStore {
 std::vector<uint8_t> ProofMessage(std::string_view client_id,
                                   base::span<const uint8_t> nonce);
 
+// Whether `public_key` may be paired: 32 bytes that are not one of the points
+// of small order, for which anyone can forge a signature.
+bool IsAcceptablePublicKey(base::span<const uint8_t> public_key);
+
+// What a client signs when it pairs, to show it holds the key it offers:
+// "koan-agent-v1-pair", a NUL, the 32-byte public key, a NUL, the label.
+std::vector<uint8_t> PairingMessage(base::span<const uint8_t> public_key,
+                                    std::string_view label);
+bool VerifyPairingProof(base::span<const uint8_t> public_key,
+                        std::string_view label,
+                        base::span<const uint8_t> signature);
+
 // Whether `signature` (64 bytes) is `public_key`'s Ed25519 signature of
-// ProofMessage(client_id, nonce).
+// ProofMessage(client_id, nonce). False for a key IsAcceptablePublicKey()
+// refuses.
 bool VerifyProof(base::span<const uint8_t> public_key,
                  std::string_view client_id,
                  base::span<const uint8_t> nonce,
@@ -182,14 +202,22 @@ bool VerifyProof(base::span<const uint8_t> public_key,
 // --- Limits on guessing
 // --------------------------------------------------------
 
-// Failed authentications and pairing attempts, per peer key. A peer with
-// kMaxFailures failures is blocked for kBlockDuration, and may start
-// kMaxPairingsPerMinute pairings a minute. Time comes from the caller.
+// Failed authentications per peer key, and the prompts shown to the user. A
+// peer with kMaxFailures failures within kFailureWindow is blocked for
+// kBlockDuration. A failure older than the window is forgotten. Prompts of
+// every kind are limited per user (the key passed in is UidKey(), not
+// something an attacker can vary), globally, and to one open at a time. Time
+// comes from the caller. The table is bounded: when it is full the least
+// recently active entry (an unblocked one first) is dropped, so it cannot be
+// filled to deny service to a legitimate client.
 class RateLimiter {
  public:
   static constexpr int kMaxFailures = 5;
   static constexpr base::TimeDelta kBlockDuration = base::Seconds(60);
-  static constexpr int kMaxPairingsPerMinute = 3;
+  static constexpr base::TimeDelta kFailureWindow = base::Minutes(5);
+  static constexpr int kMaxPromptsPerMinute = 3;
+  static constexpr int kMaxPromptsPerMinuteInTotal = 6;
+  static constexpr int kMaxOpenPrompts = 1;
 
   RateLimiter();
   ~RateLimiter();
@@ -198,19 +226,29 @@ class RateLimiter {
   // Counts a failure; returns true if it blocks the peer.
   bool RecordFailure(const std::string& key, base::TimeTicks now);
   void RecordSuccess(const std::string& key);
-  // Counts a pairing attempt; false if the peer has made too many.
-  bool AllowPairing(const std::string& key, base::TimeTicks now);
+  // Starts a prompt for `key` (a UidKey()); false, and nothing counted, if one
+  // is already open, if the user has had too many in the last minute or if too
+  // many have been shown in all. Every true needs an EndPrompt().
+  bool TryBeginPrompt(const std::string& key, base::TimeTicks now);
+  void EndPrompt();
 
  private:
   struct Entry {
     int failures = 0;
+    base::TimeTicks last_failure;
     base::TimeTicks blocked_until;
-    std::vector<base::TimeTicks> pairings;
+    base::TimeTicks last_activity;
   };
-  // The entry for a peer, or null if the table is full of active peers.
-  Entry* EntryFor(const std::string& key, base::TimeTicks now);
+  // The entry for a key; makes room by dropping the least recently active one.
+  Entry& EntryFor(const std::string& key, base::TimeTicks now);
 
   std::map<std::string, Entry> entries_;
+  // Prompts shown, in all and per user. Kept apart from the failure table: a
+  // process cannot push a user's count out by making the table churn, and the
+  // keys are users, which it cannot invent.
+  std::vector<base::TimeTicks> prompts_;
+  std::map<std::string, std::vector<base::TimeTicks>> user_prompts_;
+  int open_prompts_ = 0;
 };
 
 }  // namespace koan::agent

@@ -61,6 +61,7 @@ source_set("session") {
     ":frame",
     "//base",
   ]
+  deps = [ "//third_party/icu" ]
 }
 
 # What an agent client may receive: the event allowlist, and the scrubber that

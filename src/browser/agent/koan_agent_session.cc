@@ -4,7 +4,9 @@
 
 #include "koan/browser/agent/koan_agent_session.h"
 
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <memory>
 #include <utility>
 
@@ -13,24 +15,62 @@
 #include "base/json/json_writer.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversion_utils.h"
+#include "third_party/icu/source/common/unicode/uchar.h"
 
 namespace koan::agent {
 
 namespace {
 
-constexpr size_t kMaxLabelLength = 64;
+constexpr size_t kMaxLabelCharacters = 64;
+// Four bytes per character at most.
+constexpr size_t kMaxLabelBytes = 4 * kMaxLabelCharacters;
+
+// How often an authenticated session refreshes the client's last use.
+constexpr base::TimeDelta kTouchInterval = base::Hours(1);
+
+// Approval ids are unique in the process, not per session.
+std::atomic<uint64_t> g_next_approval_id{1};
+
+bool IsExpired(const ClientRecord& record, base::Time now) {
+  const base::Time last_used =
+      record.last_used.is_null() ? record.created : record.last_used;
+  return now - last_used > kClientExpiry;
+}
 
 // The error code of a JSON-RPC style "server error"; the Koan code is in
 // `data`.
 constexpr int kServerError = -32000;
 
+// The label is shown in the pairing dialog next to the verified program and
+// written to a log. Valid UTF-8, 1 to 64 characters, and none that can hide or
+// reorder text around it: controls (Cc, which includes U+0085), format
+// characters (Cf: bidi overrides and isolates, zero-width), the line and
+// paragraph separators (Zl, Zp). No leading space and no run of spaces.
 bool IsValidLabel(const std::string& label) {
-  if (label.empty() || label.size() > kMaxLabelLength) {
+  if (label.empty() || label.size() > kMaxLabelBytes) {
     return false;
   }
-  // No control characters: the label is shown in a dialog and written to a log.
-  return std::ranges::none_of(
-      label, [](unsigned char c) { return c < 0x20 || c == 0x7f; });
+  size_t characters = 0;
+  bool previous_space = false;
+  for (size_t i = 0; i < label.size(); ++i) {
+    base_icu::UChar32 character = 0;
+    if (!base::ReadUnicodeCharacter(label, &i, &character)) {
+      return false;
+    }
+    ++characters;
+    const int8_t type = u_charType(character);
+    if (type == U_CONTROL_CHAR || type == U_FORMAT_CHAR ||
+        type == U_LINE_SEPARATOR || type == U_PARAGRAPH_SEPARATOR) {
+      return false;
+    }
+    const bool space = type == U_SPACE_SEPARATOR;
+    if (space && (characters == 1 || previous_space)) {
+      return false;
+    }
+    previous_space = space;
+  }
+  return characters <= kMaxLabelCharacters && !previous_space;
 }
 
 base::ListValue ToList(const std::vector<std::string>& names) {
@@ -77,7 +117,9 @@ Session::Session(PeerIdentity peer,
       env_(std::move(environment)),
       delegate_(delegate) {}
 
-Session::~Session() = default;
+Session::~Session() {
+  ReleasePrompt();
+}
 
 base::TimeTicks Session::Now() const {
   return env_.tick_clock->NowTicks();
@@ -159,10 +201,15 @@ void Session::HandleFrame(base::span<const uint8_t> payload) {
 void Session::HandleUnauthenticated(int id,
                                     const std::string& method,
                                     const base::DictValue& params) {
-  if (method == "Koan.pair") {
-    HandlePair(id, params);
-  } else if (method == "Koan.authenticate") {
-    HandleAuthenticate(id, params);
+  if (method == "Koan.pair" || method == "Koan.authenticate") {
+    if (!CheckPeer()) {
+      return;
+    }
+    if (method == "Koan.pair") {
+      HandlePair(id, params);
+    } else {
+      HandleAuthenticate(id, params);
+    }
   } else {
     // Before authentication nothing else is parsed or answered.
     ReplyError(id, "Koan.notAuthenticated",
@@ -171,16 +218,29 @@ void Session::HandleUnauthenticated(int id,
   }
 }
 
-void Session::HandlePair(int id, const base::DictValue& params) {
-  if (!env_.limiter->AllowPairing(peer_key_, Now())) {
-    ReplyError(id, "Koan.rateLimited", "too many pairing attempts");
-    return;
+bool Session::CheckPeer() {
+  // The socket layer fills the identity in from the OS. If it could not (a
+  // process that is gone, a failed lookup) it is not a peer to pair or to
+  // match against a pin, and a peer of another user is not ours to serve.
+  if (!env_.browser_uid || peer_.uid != *env_.browser_uid ||
+      peer_.process.path.empty()) {
+    Close(CloseReason::kUnknownPeer);
+    return false;
   }
+  return true;
+}
+
+void Session::HandlePair(int id, const base::DictValue& params) {
   const std::string* encoded_key = params.FindString("publicKey");
   const std::string* label = params.FindString("label");
+  const std::string* encoded_proof = params.FindString("proof");
   std::optional<std::vector<uint8_t>> key;
   if (encoded_key) {
     key = base::Base64Decode(*encoded_key);
+  }
+  std::optional<std::vector<uint8_t>> proof;
+  if (encoded_proof) {
+    proof = base::Base64Decode(*encoded_proof);
   }
   std::vector<std::string> names;
   if (const base::Value* value = params.Find("capabilities")) {
@@ -199,10 +259,16 @@ void Session::HandlePair(int id, const base::DictValue& params) {
   }
   const std::optional<ClientCapabilities> requested = ParseCapabilities(names);
   if (!key || key->size() != kPublicKeySize || !label ||
-      !IsValidLabel(*label) || !requested) {
+      !IsValidLabel(*label) || !requested || !proof) {
     Fail(id, "Koan.invalidParams",
          "publicKey must be 32 bytes in base64, label 1 to 64 printable "
-         "characters, capabilities known names");
+         "characters, capabilities known names, proof a signature");
+    return;
+  }
+  // The client shows that it holds the private key before the user is asked
+  // about it, and a key that anyone could sign for is not a key.
+  if (!VerifyPairingProof(*key, *label, *proof)) {
+    Fail(id, "Koan.invalidProof", "the pairing proof did not verify");
     return;
   }
   ApprovalRequest request;
@@ -216,7 +282,7 @@ void Session::HandlePair(int id, const base::DictValue& params) {
   pending.public_key = std::move(*key);
   pending.label = *label;
   pending.requested = *requested;
-  Ask(std::move(request), std::move(pending));
+  Ask(id, std::move(request), std::move(pending));
 }
 
 void Session::HandleAuthenticate(int id, const base::DictValue& params) {
@@ -229,43 +295,16 @@ void Session::HandleAuthenticate(int id, const base::DictValue& params) {
     FinishProof(id, params);
     return;
   }
-  const std::optional<ClientRecord> record = env_.store->Find(*client_id);
-  if (!record) {
-    Fail(id, "Koan.unknownClient", "this client is not paired");
-    return;
-  }
-  const base::Time last_used =
-      record->last_used.is_null() ? record->created : record->last_used;
-  if (env_.clock->Now() - last_used > kClientExpiry) {
-    Fail(id, "Koan.clientExpired", "this pairing has expired; pair again");
-    return;
-  }
-  const IdentityChange change = CompareIdentity(record->pinned, peer_);
-  const std::string chain_key = record->id + "|" + ChainDigest(peer_);
-  if (change == IdentityChange::kProcessChanged ||
-      (change == IdentityChange::kChainChanged &&
-       !env_.accepted_chains->contains(chain_key))) {
-    ApprovalRequest request;
-    request.kind = change == IdentityChange::kProcessChanged
-                       ? ApprovalKind::kPeerChanged
-                       : ApprovalKind::kChainChanged;
-    request.peer = peer_;
-    request.client_id = record->id;
-    request.previous = record->pinned;
-    Pending pending;
-    pending.kind = request.kind;
-    pending.message_id = id;
-    pending.record = *record;
-    Ask(std::move(request), std::move(pending));
-    return;
-  }
-  BeginProof(id, *record);
+  // A nonce for any well-formed id, known or not, paired or expired: what
+  // happens to the id is decided at the proof, with one answer for every way
+  // it can fail.
+  BeginProof(id, *client_id);
 }
 
-void Session::BeginProof(int id, const ClientRecord& record) {
+void Session::BeginProof(int id, const std::string& client_id) {
   nonce_.assign(kNonceSize, 0);
   env_.random_bytes.Run(nonce_);
-  nonce_client_id_ = record.id;
+  nonce_client_id_ = client_id;
   nonce_deadline_ = Now() + kNonceLifetime;
   state_ = State::kAwaitingProof;
   base::DictValue result;
@@ -292,12 +331,42 @@ void Session::FinishProof(int id, const base::DictValue& params) {
   std::optional<ClientRecord> record;
   if (fresh && client_id && *client_id == expected_client) {
     record = env_.store->Find(*client_id);
+    if (record && IsExpired(*record, env_.clock->Now())) {
+      record.reset();
+    }
   }
   if (!record || !signature ||
       !VerifyProof(record->public_key, record->id, nonce, *signature)) {
     Fail(id, "Koan.authFailed", "the proof did not verify");
     return;
   }
+
+  // Only now, with the key proved, is the user asked about a program or a
+  // chain that is not the one that paired. Nothing is pinned until they say
+  // yes.
+  const IdentityChange change = CompareIdentity(record->pinned, peer_);
+  const std::string chain_key = record->id + "|" + ChainDigest(peer_);
+  if (change == IdentityChange::kProcessChanged ||
+      (change == IdentityChange::kChainChanged &&
+       !env_.accepted_chains->contains(chain_key))) {
+    ApprovalRequest request;
+    request.kind = change == IdentityChange::kProcessChanged
+                       ? ApprovalKind::kPeerChanged
+                       : ApprovalKind::kChainChanged;
+    request.peer = peer_;
+    request.client_id = record->id;
+    request.previous = record->pinned;
+    Pending pending;
+    pending.kind = request.kind;
+    pending.message_id = id;
+    pending.record = *record;
+    Ask(id, std::move(request), std::move(pending));
+    return;
+  }
+  CompleteAuthentication(id, *record);
+}
+
+void Session::CompleteAuthentication(int id, const ClientRecord& record) {
   // Nothing received before this point may be handled as authenticated: a peer
   // that pipelined a command behind its proof is cut off.
   if (!decoder_.OnAuthenticated()) {
@@ -305,9 +374,9 @@ void Session::FinishProof(int id, const base::DictValue& params) {
     return;
   }
   env_.limiter->RecordSuccess(peer_key_);
-  env_.store->Touch(record->id, env_.clock->Now());
-  client_id_ = record->id;
-  capabilities_ = record->capabilities;
+  env_.store->Touch(record.id, env_.clock->Now());
+  client_id_ = record.id;
+  capabilities_ = record.capabilities;
   state_ = State::kAuthenticated;
   base::DictValue result;
   result.Set("authenticated", true);
@@ -316,7 +385,41 @@ void Session::FinishProof(int id, const base::DictValue& params) {
   Reply(id, std::move(result));
 }
 
+bool Session::StillPaired() {
+  const std::optional<ClientRecord> record = env_.store->Find(client_id_);
+  if (!record) {
+    Close(CloseReason::kRevoked);
+    return false;
+  }
+  const base::Time now = env_.clock->Now();
+  if (IsExpired(*record, now)) {
+    Close(CloseReason::kExpired);
+    return false;
+  }
+  // What the user allows now, not what they allowed when this connected.
+  capabilities_ = record->capabilities;
+  // A session that stays connected keeps its pairing alive.
+  const base::Time last_used =
+      record->last_used.is_null() ? record->created : record->last_used;
+  if (now - last_used > kTouchInterval) {
+    env_.store->Touch(record->id, now);
+  }
+  return true;
+}
+
+void Session::OnClientRevoked(std::string_view client_id) {
+  if (state_ == State::kAuthenticated && client_id_ == client_id) {
+    Close(CloseReason::kRevoked);
+  } else if (state_ == State::kAwaitingApproval && pending_ &&
+             pending_->record.id == client_id) {
+    Close(CloseReason::kRevoked);
+  }
+}
+
 void Session::HandleAuthenticated(int id, const std::string& method) {
+  if (!StillPaired()) {
+    return;
+  }
   if (method == "Koan.status") {
     base::DictValue result;
     result.Set("clientId", client_id_);
@@ -331,13 +434,35 @@ void Session::HandleAuthenticated(int id, const std::string& method) {
   }
 }
 
-void Session::Ask(ApprovalRequest request, Pending pending) {
-  pending.approval_id = next_approval_id_++;
+bool Session::Ask(int id, ApprovalRequest request, Pending pending) {
+  // At most one prompt is open in the whole browser, and the user is not asked
+  // more than a few times a minute, whatever the peer's path says.
+  if (!env_.limiter->TryBeginPrompt(UidKey(peer_), Now())) {
+    ReplyError(id, "Koan.rateLimited", "too many requests for approval");
+    return false;
+  }
+  holds_prompt_ = true;
+  pending.approval_id = g_next_approval_id.fetch_add(1);
   pending.deadline = Now() + kApprovalTimeout;
   request.id = pending.approval_id;
   state_ = State::kAwaitingApproval;
   pending_ = std::make_unique<Pending>(std::move(pending));
   delegate_->RequestApproval(request);
+  return true;
+}
+
+void Session::ReleasePrompt() {
+  if (holds_prompt_) {
+    holds_prompt_ = false;
+    env_.limiter->EndPrompt();
+  }
+}
+
+void Session::CountDenial() {
+  // A refusal or a prompt left unanswered costs the peer a failure like a
+  // wrong proof does, so asking the user over and over wears the peer out, not
+  // the user.
+  env_.limiter->RecordFailure(peer_key_, Now());
 }
 
 void Session::OnApprovalDecision(uint64_t request_id,
@@ -348,9 +473,11 @@ void Session::OnApprovalDecision(uint64_t request_id,
   }
   std::unique_ptr<Pending> pending = std::move(pending_);
   state_ = State::kUnauthenticated;
+  ReleasePrompt();
   if (!decision.approved) {
     ReplyError(pending->message_id, "Koan.pairingDenied",
                "the user did not approve");
+    CountDenial();
     Close(CloseReason::kPairingDenied);
     return;
   }
@@ -373,25 +500,35 @@ void Session::OnApprovalDecision(uint64_t request_id,
       Reply(pending->message_id, std::move(result));
     }
   } else {
+    // The proof was verified before the question was asked; the client may have
+    // been revoked while the dialog was open.
+    std::optional<ClientRecord> record = env_.store->Find(pending->record.id);
+    if (!record || IsExpired(*record, env_.clock->Now())) {
+      Fail(pending->message_id, "Koan.authFailed", "the proof did not verify");
+      Drain();
+      return;
+    }
     if (pending->kind == ApprovalKind::kPeerChanged) {
-      if (!env_.store->UpdatePinned(pending->record.id, PinPeer(peer_))) {
+      if (!env_.store->UpdatePinned(record->id, PinPeer(peer_))) {
         ReplyError(pending->message_id, "Koan.storeFailed",
                    "the new identity could not be saved");
         Drain();
         return;
       }
-      pending->record.pinned = PinPeer(peer_);
+      record->pinned = PinPeer(peer_);
     } else {
-      env_.accepted_chains->insert(pending->record.id + "|" +
-                                   ChainDigest(peer_));
+      env_.accepted_chains->insert(record->id + "|" + ChainDigest(peer_));
     }
-    BeginProof(pending->message_id, pending->record);
+    CompleteAuthentication(pending->message_id, *record);
   }
   Drain();
 }
 
 void Session::CheckTimeouts() {
   if (state_ == State::kClosed) {
+    return;
+  }
+  if (state_ == State::kAuthenticated && !StillPaired()) {
     return;
   }
   const base::TimeTicks now = Now();
@@ -404,10 +541,12 @@ void Session::CheckTimeouts() {
       now > pending_->deadline) {
     ReplyError(pending_->message_id, "Koan.pairingTimeout",
                "the user did not answer in time");
+    CountDenial();
     Close(CloseReason::kTimeout);
     return;
   }
   if (!partial_since_.is_null() && now - partial_since_ > kFrameTimeout) {
+    CountDenial();
     Close(CloseReason::kTimeout);
   }
 }
@@ -467,6 +606,7 @@ void Session::Close(CloseReason reason) {
   state_ = State::kClosed;
   nonce_.clear();
   pending_.reset();
+  ReleasePrompt();
   delegate_->Close(reason);
 }
 
