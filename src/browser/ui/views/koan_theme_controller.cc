@@ -122,11 +122,6 @@ void KoanThemeController::OnAddedToWidget() {
   observing_look_ = true;
   // The blur behind the window comes and goes (the setting, Reduce
   // Transparency, fullscreen): Zen's transparent or opaque maths.
-  // An inactive translucent window is greyed out (PaintBackground()).
-  paint_as_active_subscription_ =
-      browser_view_->GetWidget()->RegisterPaintAsActiveChangedCallback(
-          base::BindRepeating(&KoanThemeController::InvalidateBackground,
-                              base::Unretained(this)));
   glass_subscription_ = AddWindowGlassObserver(
       browser_view_,
       base::BindRepeating(&KoanThemeController::Update, base::Unretained(this),
@@ -160,7 +155,6 @@ void KoanThemeController::OnBrowserViewDestroying() {
     observing_look_ = false;
   }
   glass_subscription_ = {};
-  paint_as_active_subscription_ = {};
   pref_change_registrar_.RemoveAll();
   theme_observation_.Reset();
   native_theme_observation_.Reset();
@@ -567,22 +561,8 @@ void KoanThemeController::PaintBackground(gfx::Canvas* canvas,
   box.Offset(root_origin.x() - origin.x(), root_origin.y() - origin.y());
 
   const theme::Background& now = current_->background;
-  // Zen greys an inactive translucent window out
-  // (zen.view.grey-out-inactive-windows): flat and opaque, no blur and no
-  // theme. The blur goes flat by itself.
-  if (SkColorGetA(now.base) < SK_AlphaOPAQUE &&
-      !widget->ShouldPaintAsActive()) {
-    // InactiveCaption: macOS's window background colour in the window's
-    // appearance (nsLookAndFeel.mm), Zen 1.24b's measured grey elsewhere
-    // (only the test glass gets here off macOS).
-    const ui::ColorProvider* colors = view->GetColorProvider();
-    const bool dark =
-        color_utils::IsDark(colors->GetColor(kColorKoanThemeWindow));
-    theme::PaintBase(canvas, box,
-                     GetInactiveCaptionColor(dark).value_or(
-                         colors->GetColor(kColorKoanThemeInactiveWindow)));
-    return;
-  }
+  // (An inactive translucent window keeps its theme, as Zen's: the glass
+  // lays the opaque InactiveCaption wash under it, koan_window_glass_mac.h.)
   const double progress = SwitchProgress();
   // Zen fades the old gradient out while the new one fades in, over the
   // window's own background (none on a translucent window: the blur).

@@ -56,7 +56,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_swipe_tracker.{h,cc}`, `koan_swipe_tracker_unittest.cc` | `ZenSpacesSwipe.mjs` (success threshold, velocity weight, resistance), Gecko's `SwipeTracker.cpp` units as Zen patches it |
 | `src/browser/ui/views/koan_space_theme.h`, `koan_space_theme.cc` | `ZenGradientGenerator.mjs` (colour maths, harmonies, preset swatches, opacity wave), `browser.xhtml` (preset swatch data) |
 | `src/browser/ui/views/koan_theme_picker.cc` | `zen-gradient-generator.css` (panel sizes), `zen-workspaces.ftl` (strings) |
-| `src/browser/ui/views/koan_theme_platform.h`, `koan_theme_platform.cc`, `koan_theme_platform_mac.mm` | `zen-browser-ui.css` (InactiveCaption), `prefs/zen/macos.yaml` (native popovers); Firefox `widget/cocoa/nsLookAndFeel.mm`, `toolkit/themes/shared/global-shared.css` |
+| `src/browser/ui/views/koan_theme_platform.h`, `koan_theme_platform.cc`, `koan_theme_platform_mac.mm` | `prefs/zen/macos.yaml` (native popovers); Firefox `toolkit/themes/shared/global-shared.css` |
 | `src/browser/ui/views/koan_haptics.h`, `koan_haptics.cc`, `koan_haptics_mac.mm` | `ZenCommonUtils.h`, `cocoa/ZenHapticFeedback.mm` (haptic feedback) |
 | `src/browser/ui/views/resources/grain-bg.png` | `zen-images/grain-bg.png` (unmodified) |
 

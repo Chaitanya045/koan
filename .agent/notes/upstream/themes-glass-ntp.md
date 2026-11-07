@@ -480,7 +480,7 @@ From Zen 1.24b source (patches, `prefs/*.yaml`, CSS, JS overrides), with effecti
 | Opaque window / sidebar-only vibrancy | `ZenWindowMaterialView : NSVisualEffectView`, behind-window, `appearance=nil` (`nsCocoaWindow-mm.patch:21-127`) | `GlassFrameService` + `BrowserNativeWidgetMac` glass (`NSGlassEffectView`) | **PR #103** |
 | Material choice | `zen.widget.macos.window-material=1` (HUD; 2-7 others) | `NSVisualEffectMaterial` | **PR #103** (HUD fixed; no pref) |
 | Vibrancy master switch | `zen.widget.macos.window-vibrancy=true`, live | `glass_frame.enabled` local state | **PR #103** (reuse) |
-| Inactive greying | `zen.view.grey-out-inactive-windows=true` (`VibrancyManager-mm.patch:18`; `zen-browser-ui.css:130-140`) | effect-view `FollowsWindowActiveState`; Chromium tint inactive | **PR #103** + **PR #62** (InactiveCaption paint) |
+| Inactive greying | `zen.view.grey-out-inactive-windows=true` (`VibrancyManager-mm.patch:18`; `zen-browser-ui.css:130-140`) | effect-view `FollowsWindowActiveState`; Chromium tint inactive | **PR #103** (the opaque InactiveCaption wash under the tint); #62's theme keeps painting over it, as Zen's `.zen-browser-generic-background` |
 | Legacy sidebar blend pref migration | `ZenUIMigration` v7 | — | n/a |
 | Firefox's own vertical-tab sidebar | `sidebar.revamp=false`, `sidebar.verticalTabs=false` locked | Chromium vertical tab strip | done via the vertical-tabs audit (A-layer, **PR #155**) |
 | Transparent chrome document | `zen-theme.css:309-320`, `zen-browser-ui.css:7-15` | frame/toolbar/top container alpha 0 | **PR #103** (`OnGlassLayout`) |

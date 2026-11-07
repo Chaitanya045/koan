@@ -187,9 +187,6 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanThemeWindow,
   kColorKoanThemeDefaultBackground,
   kColorKoanThemeTintBase,
-  // An inactive translucent window, greyed out (Zen's
-  // zen.view.grey-out-inactive-windows: InactiveCaption, flat and opaque).
-  kColorKoanThemeInactiveWindow,
 
   // Zen's theme picker (koan_theme_picker.cc, zen-gradient-generator.css), in
   // the window's light or dark scheme: the panel and its text, the colour

@@ -65,7 +65,7 @@ DCHECK build. Each row with a themed Space (a preset with 3 dots) **and** with t
 ## C (glass). The translucent path
 
 Develop has no glass (`kGlassFrame` is off), so blocks A–C never take the Space theme's translucent path (Zen's maths for
-a transparent window, the translucent layers, the inactive grey). Run this block on **macOS 26, Apple Silicon**, on a
+a transparent window, the translucent layers, the inactive window). Run this block on **macOS 26, Apple Silicon**, on a
 stack of develop + #159 + **#103** (`feat/mac-glass`, its current head; Koan's glass for every window) + #62, as agreed with the
 glass thread. Upstream's `--enable-features=GlassFrame` alone is not what Koan ships: its expand-on-hover blur backdrop,
 its one-window cap and its missing Reduce Transparency rule are #103's to change, so crashes there don't count against
@@ -78,7 +78,7 @@ no `paints a translucent theme on an opaque layer` DCHECK.
 | CG2 | System Settings > Accessibility > Display > Reduce transparency on, then off, with the themed window open (and once with the picker open) | Opaque within 1 s, translucent again after; no CHECK, no black panel. |
 | CG3 | Fullscreen (⌃⌘F) in and out 5 times, compact mode on and off | Opaque in fullscreen (not eligible), translucent after; no CHECK. |
 | CG4 | A 3-dot preset; the opacity slider at 0.3, then at 1.0 | 0.3: the colours over the blur; 1.0: the opaque paint covers the blur (Koan's opaque end above Zen's 0.80). |
-| CG5 | Click another app, then back | Inactive: flat, opaque, macOS's window background colour (Zen's `InactiveCaption`), no theme. Active: the theme over the blur again. |
+| CG5 | Click another app, then back | Inactive: no blur, opaque: #103's wash (macOS's window background colour, Zen's `InactiveCaption`) with the Space's theme still painted over it, as Zen's. Active: the theme over the blur again. A default-theme window: the wash plus Zen's tint. |
 | CG6 | With a themed window active, open a second window (⌘N) | Both windows glass; each keeps its own Space's theme; no CHECK. |
 | CG7 | Three themed windows, ⌘Q, relaunch (session restore) | All three are glass and themed without clicking each; no CHECK. |
 

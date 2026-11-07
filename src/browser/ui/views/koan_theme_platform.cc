@@ -9,10 +9,6 @@
 
 namespace koan {
 
-std::optional<SkColor> GetInactiveCaptionColor(bool dark) {
-  return std::nullopt;
-}
-
 bool UsesNativePopoverMaterial() {
   return false;
 }

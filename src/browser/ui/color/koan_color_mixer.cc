@@ -282,12 +282,6 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
       dark ? SkColorSetRGB(0x13, 0x13, 0x13) : SkColorSetRGB(0xe9, 0xe9, 0xe9)};
   mixer[kColorKoanThemeTintBase] = {dark ? SkColorSetRGB(23, 23, 26)
                                          : SkColorSetRGB(240, 240, 244)};
-  // An inactive translucent window (Zen's zen.view.grey-out-inactive-windows:
-  // InactiveCaption, flat and opaque). On macOS the controller paints the
-  // system's window background colour instead (koan_theme_platform.h); this
-  // is what that gave in Zen 1.24b on macOS 26, for the test glass.
-  mixer[kColorKoanThemeInactiveWindow] = {
-      dark ? SkColorSetRGB(0x18, 0x17, 0x17) : SkColorSetRGB(0xe5, 0xe5, 0xe5)};
 
   // The theme picker, with zen-gradient-generator.css's light-dark() values;
   // the panel is Firefox's --arrowpanel-background.

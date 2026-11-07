@@ -232,7 +232,6 @@ class KoanThemeController : public TabStripModelObserver,
   bool observing_tab_strip_ = false;
   bool observing_look_ = false;
   base::CallbackListSubscription glass_subscription_;
-  base::CallbackListSubscription paint_as_active_subscription_;
 
   // What the window shows: `current_` fading in over the backgrounds in
   // `fading_` (weighted by `opacity`) while the animation runs.

@@ -9,7 +9,6 @@
 
 #import <AppKit/AppKit.h>
 
-#include "skia/ext/skia_utils_mac.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
 
@@ -51,21 +50,6 @@ NSImage* RoundedMask(CGFloat radius) {
 }
 
 }  // namespace
-
-std::optional<SkColor> GetInactiveCaptionColor(bool dark) {
-  __block SkColor color = SK_ColorTRANSPARENT;
-  [AppearanceFor(dark) performAsCurrentDrawingAppearance:^{
-    NSColor* device = [NSColor.windowBackgroundColor
-        colorUsingColorSpace:NSColorSpace.deviceRGBColorSpace];
-    if (device) {
-      color = skia::NSDeviceColorToSkColor(device);
-    }
-  }];
-  if (SkColorGetA(color) == SK_AlphaTRANSPARENT) {
-    return std::nullopt;
-  }
-  return SkColorSetA(color, SK_AlphaOPAQUE);
-}
 
 bool UsesNativePopoverMaterial() {
   return true;
