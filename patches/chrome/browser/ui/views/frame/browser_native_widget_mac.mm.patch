@@ -121,21 +121,22 @@ index fd4cc9a121..a0e6b71062 100644
  
    int glass_x = 0;
    int glass_y = 0;
-@@ -1200,9 +1210,10 @@ void BrowserNativeWidgetMac::UpdateBackg
+@@ -1200,9 +1210,11 @@ void BrowserNativeWidgetMac::UpdateBackg
      return;
    }
  
 -  const bool is_active = GetWidget()->ShouldPaintAsActive();
 -  const SkColor theme_color = browser_view_->GetColorProvider()->GetColor(
 -      is_active ? ui::kColorFrameActive : ui::kColorFrameInactive);
-+  // Koan: Zen's tint over the blur, none while the window is inactive.
++  // Koan: Zen's tint over the blur; while the window is inactive, that tint
++  // over the opaque system window background (Zen's InactiveCaption).
 +  const SkColor theme_color =
 +      koan::GetGlassTint(*browser_view_->GetColorProvider(),
 +                         GetWidget()->ShouldPaintAsActive());
  
    const bool is_vertical_tabs = browser_view_->ShouldDrawVerticalTabStrip();
  
-@@ -1222,9 +1233,7 @@ void BrowserNativeWidgetMac::UpdateBackg
+@@ -1222,9 +1234,7 @@ void BrowserNativeWidgetMac::UpdateBackg
    last_is_vertical_tabs_ = is_vertical_tabs;
    has_multiple_profiles_open_ = are_multiple_profiles_open;
  

@@ -18,7 +18,10 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_glass_tint.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
+#include "skia/ext/skia_utils_mac.h"
+#include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/gfx/color_utils.h"
 
 // Clicks go to the views above, not to the blur.
 @interface KoanGlassBackgroundView : NSVisualEffectView
@@ -67,8 +70,28 @@ bool IsWindowGlassAllowed() {
       accessibilityDisplayShouldReduceTransparency];
 }
 
+namespace {
+
+// Zen's InactiveCaption on macOS (Gecko's nsLookAndFeel): the system's window
+// background, as it looks in the UI's colour scheme.
+SkColor InactiveWash(bool dark) {
+  NSAppearance* appearance = [NSAppearance
+      appearanceNamed:dark ? NSAppearanceNameDarkAqua : NSAppearanceNameAqua];
+  __block SkColor wash = SK_ColorBLACK;
+  [appearance performAsCurrentDrawingAppearance:^{
+    NSColor* color = [NSColor.windowBackgroundColor
+        colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    wash = SkColorSetA(skia::CGColorRefToSkColor(color.CGColor), 0xff);
+  }];
+  return wash;
+}
+
+}  // namespace
+
 SkColor GetGlassTint(const ui::ColorProvider& colors, bool window_active) {
-  return ResolveGlassTint(colors.GetColor(kColorKoanGlassTint), window_active);
+  return ResolveGlassTint(colors.GetColor(kColorKoanGlassTint), window_active,
+                          InactiveWash(color_utils::IsDark(
+                              colors.GetColor(ui::kColorFrameActive))));
 }
 
 void StartWindowGlass() {

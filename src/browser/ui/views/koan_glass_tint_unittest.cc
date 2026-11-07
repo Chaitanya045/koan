@@ -21,16 +21,25 @@ namespace koan {
 namespace {
 // Zen's dark default theme: rgba(0, 0, 0, 0.4).
 constexpr SkColor kDarkTint = SkColorSetARGB(0x66, 0, 0, 0);
+// An opaque window background.
+constexpr SkColor kWash = SkColorSetRGB(30, 30, 30);
 }  // namespace
 
 TEST(KoanGlassTintTest, ActiveWindowKeepsTheTint) {
-  EXPECT_EQ(kDarkTint, ResolveGlassTint(kDarkTint, true));
+  EXPECT_EQ(kDarkTint, ResolveGlassTint(kDarkTint, true, kWash));
   // Light mode's default theme has none.
-  EXPECT_EQ(SK_ColorTRANSPARENT, ResolveGlassTint(SK_ColorTRANSPARENT, true));
+  EXPECT_EQ(SK_ColorTRANSPARENT,
+            ResolveGlassTint(SK_ColorTRANSPARENT, true, kWash));
 }
 
-TEST(KoanGlassTintTest, InactiveWindowIsFlat) {
-  EXPECT_EQ(SK_ColorTRANSPARENT, ResolveGlassTint(kDarkTint, false));
+TEST(KoanGlassTintTest, InactiveWindowIsTheTintOverTheOpaqueWash) {
+  // 40% black over 30: 30 * 0.6 = 18, opaque.
+  EXPECT_EQ(SkColorSetRGB(18, 18, 18),
+            ResolveGlassTint(kDarkTint, false, kWash));
+}
+
+TEST(KoanGlassTintTest, InactiveWindowWithoutATintIsTheWash) {
+  EXPECT_EQ(kWash, ResolveGlassTint(SK_ColorTRANSPARENT, false, kWash));
 }
 
 TEST(KoanGlassTintTest, ToolbarIsClearOnlyInGlassModeAndNotInCompactMode) {

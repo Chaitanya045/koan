@@ -14,10 +14,31 @@
 
 #include "koan/browser/ui/views/koan_glass_tint.h"
 
+#include <stdint.h>
+
 namespace koan {
 
-SkColor ResolveGlassTint(SkColor tint, bool window_active) {
-  return window_active ? tint : SK_ColorTRANSPARENT;
+namespace {
+
+// `top` over the opaque `bottom`, rounded to nearest.
+uint8_t Over(uint8_t top, uint8_t bottom, uint8_t alpha) {
+  return static_cast<uint8_t>((top * alpha + bottom * (255 - alpha) + 127) /
+                              255);
+}
+
+}  // namespace
+
+SkColor ResolveGlassTint(SkColor tint,
+                         bool window_active,
+                         SkColor inactive_wash) {
+  if (window_active) {
+    return tint;
+  }
+  const uint8_t alpha = SkColorGetA(tint);
+  return SkColorSetRGB(
+      Over(SkColorGetR(tint), SkColorGetR(inactive_wash), alpha),
+      Over(SkColorGetG(tint), SkColorGetG(inactive_wash), alpha),
+      Over(SkColorGetB(tint), SkColorGetB(inactive_wash), alpha));
 }
 
 bool ToolbarIsClear(bool in_glass_mode, bool compact_mode) {

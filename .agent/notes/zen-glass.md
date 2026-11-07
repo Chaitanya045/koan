@@ -104,7 +104,7 @@ because nothing called it yet.
 - `zen.view.grey-out-inactive-windows` (default true): an inactive window's
   wrapper is painted `InactiveCaption`; the captures are of inactive windows
   (hence flat grey, no blur). Koan: the effect view follows the window's
-  active state (`NSVisualEffectStateFollowsWindowActive`). #80 has the rest
+  active state (`NSVisualEffectStateFollowsWindowActive`) and the opaque wash on top, as above. #80 has the rest
   of the greying (traffic lights etc.).
 - (Reverted after review: `--toolbar-background-color` is Firefox's generic
   toolbar variable; Zen's `#nav-bar` and toolbox are `background:
@@ -151,8 +151,15 @@ Data: `~/work/koan/.cache/zen-ref/raw/` (`prefs-glass-theme.json`,
   rgb(24,24,24) by default.
 - Tint: dark no theme `rgba(0,0,0,.4)`; light none; colour `c*0.92+white*0.08`
   at the theme opacity (0.5; slider 0.30-0.80).
-- Inactive: flat, no blur, no tint, opaque dark grey (so the Space theme's
-  paint must not draw while the window is inactive).
+- Inactive: flat, opaque, no blur. `#zen-main-app-wrapper:-moz-window-inactive`
+  is `background: InactiveCaption` (zen-browser-ui.css), which Gecko's macOS
+  nsLookAndFeel resolves to `NSColor.windowBackgroundColor`; the theme's
+  tint (`.zen-browser-generic-background`, a child of the wrapper, painted in
+  every state) stays over it. So inactive = the tint over the opaque window
+  background (dark default: 40% black over it; measured on the Mac rgb(13-24)
+  against 40,39,39 for the bare material). `ResolveGlassTint` does that; a
+  Space theme's own paint is #62's, and stays drawn when inactive (the
+  earlier "must not draw" note was wrong).
 - Reduce Transparency: Zen's CSS only gates the acrylic URL bar; the window is
   the system's behaviour.
 

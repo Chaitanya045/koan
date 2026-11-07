@@ -33,8 +33,9 @@ namespace koan {
 // greyed-out inactive windows.
 NSView* CreateGlassBackgroundView(NSRect frame);
 
-// The tint laid over the blur, with alpha (koan_glass_tint.h): the default
-// theme's, kColorKoanGlassTint.
+// The colour laid over the blur, with alpha (koan_glass_tint.h): the default
+// theme's tint, kColorKoanGlassTint, and while the window is inactive that
+// tint over the system's window background, opaque (Zen's InactiveCaption).
 SkColor GetGlassTint(const ui::ColorProvider& colors, bool window_active);
 
 }  // namespace koan

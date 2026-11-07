@@ -21,11 +21,17 @@
 // unit-tested.
 namespace koan {
 
-// The tint over a translucent window's blur: `tint` (kColorKoanGlassTint,
-// Zen's default theme: dark black at 40%, light none) while the window is
-// active, and clear while it isn't (Zen's inactive window is flat: no blur,
-// no tint).
-SkColor ResolveGlassTint(SkColor tint, bool window_active);
+// The colour laid over a translucent window's blur: `tint`
+// (kColorKoanGlassTint, Zen's default theme: dark black at 40%, light none)
+// while the window is active. While it isn't, Zen's window is flat: its
+// wrapper is painted the opaque system colour InactiveCaption
+// (`#zen-main-app-wrapper:-moz-window-inactive`, zen-browser-ui.css; on macOS
+// NSColor.windowBackgroundColor), and the theme's tint, a child of the
+// wrapper, still paints over it. So inactive, the result is `tint` composited
+// over the opaque `inactive_wash`: opaque, no blur.
+SkColor ResolveGlassTint(SkColor tint,
+                         bool window_active,
+                         SkColor inactive_wash);
 
 // Whether the toolbar and the top container paint nothing: in glass mode,
 // except in compact mode, where they float over the page and keep their
