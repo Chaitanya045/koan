@@ -27,8 +27,9 @@ namespace koan {
 // search engine (Brave Search chosen); every step can be skipped, and Skip
 // setup or Esc leaves at any point.
 //
-// The page is a WebView in a child widget over the window; this object is
-// its KoanWelcomeHost (what the page asks of the window). It shows once
+// The page is a WebView in a child widget over the window (on macOS a child
+// NSWindow, made key so that the page has the keyboard); this object is its
+// KoanWelcomeHost (what the page asks of the window). It shows once
 // (pref koan.welcome_screen.seen, set once the screen is on screen) and only
 // on Chromium's first run, i.e. of a new user data directory (not for each
 // profile in it), so --no-first-run skips it and --force-first-run brings
@@ -71,10 +72,6 @@ class KoanWelcome : public content::WebContentsObserver {
   bool IsWindowClosing() const;
   // After the screen closes: the window active, the keyboard on its page.
   void FocusBrowser();
-  // The space around the card drags the window, as a title bar would;
-  // EndWindowDrag() after AppKit's drag.
-  void StartWindowDrag();
-  void EndWindowDrag();
   void LayoutWidget();
 
   const raw_ptr<BrowserView> browser_view_;

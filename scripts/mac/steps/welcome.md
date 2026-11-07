@@ -17,9 +17,9 @@ light and dark; not Zen's colours, no glass. Audit: `.agent/notes/upstream/welco
 | # | Do | Expect |
 |---|---|---|
 | W-1a | Launch on a slow first run (or watch the first 200 ms) | Skip setup (top right) and Esc work before the card appears. |
-| W-1 | Launch | The window opens as usual (not resized), covered by the setup on a shadcn `background`: the steps bar at the top, **Skip setup** top right, the traffic lights top left and usable, the card "Welcome to a calmer internet" with **Get started** and **Skip setup**. No Chromium intro window, no infobar, no white frame first (W10). Capture light and dark appearance. |
+| W-1 | Launch | The window opens as usual (not resized), covered by the setup on a shadcn `background` (the window buttons too): the steps bar at the top, **Skip setup** top right, the card "Welcome to a calmer internet" with **Get started** and **Skip setup**. No Chromium intro window, no infobar, no white frame first (W10). Capture light and dark appearance. |
 | W-2 | Get started, then Next through every step | Shortcuts, Import, Search engine, "You're all set" with **Start browsing**. Back on each returns; **Skip** on each moves on without applying it. Every icon is a Lucide icon (sparkles, keyboard, drive, search, check, arrows, x). |
-| W-3 | Press on the empty space around the card (and in the top bar between the steps and Skip), move 200 px, release | The window follows and stays (W6). Repeat 10 times fast: no crash, no stuck window. Clicks in the card still work. |
+| W-3 | Press on the empty space around the card and move | Nothing moves (no window drag from the setup, W6); clicks in the card work. After Skip setup the window drags as usual. |
 | W-4 | Shortcuts: keep "Zen's shortcuts", Next … Start browsing | ⌘S toggles compact mode; ⌥⌘L inspects; Settings > Keyboard Shortcuts shows no custom keys. |
 | W-5 | Shortcuts: "Chrome's shortcuts", Next … Start browsing | ⌘S opens Save Page (compact mode on ⌃⌘S), ⌥⌘C inspects, ⇧⌘J opens Downloads, ⇧⌘N a private window, ⌥⌘← → switch tabs, ⇧⌘D bookmarks all tabs. The menu bar shows those keys. Settings > Keyboard Shortcuts shows them as custom (W15). |
 | W-6 | Shortcuts: Zen's, then switch only the ⌘S row to Chrome's; the preset shows neither choice | Only ⌘S is Save Page; the rest are Zen's. |
@@ -35,7 +35,7 @@ light and dark; not Zen's colours, no glass. Audit: `.agent/notes/upstream/welco
 
 | # | Do | Expect |
 |---|---|---|
-| W-11 | Esc on each step, and **Skip setup** on each | The setup closes at once, the keyboard is on the page, nothing of a later step applies (what earlier Nexts applied stays). |
+| W-11 | Without clicking anything first, Esc; then on each step, Esc, and **Skip setup** on each | The setup closes at once, the keyboard is on the page, nothing of a later step applies (what earlier Nexts applied stays). |
 | W-12 | Import: pick Safari (or any listed browser), Next, Back, pick "Start fresh", Next … Start browsing. Again with Back then the import step's **Skip** | **No** import dialog opens either time (W17). |
 | W-12b | Import, on a Mac with no Safari or Firefox data (or a fresh macOS user) | Only "Start fresh" and "Import from another browser…"; no browser it can't import is listed (W16). |
 | W-12c | Import: pick a browser, Next … on the last step press **Skip setup** or Esc | Same as Start browsing: the import dialog opens (then Cancel). |
