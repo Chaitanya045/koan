@@ -274,6 +274,9 @@ touches the checkout. It fails when:
   method's `ParamFilter` covers it;
 - a listed domain gained or lost an **event** (a new `Network` event could carry cookies: the event allowlist and the
   scrubber decide);
+- an event in the **event allowlist** (`src/browser/agent/koan_agent_events.cc`) no longer exists, is unsorted, is in a denied
+  domain, or a Network event is not marked for the scrubber (the allowlist is explicit: an event that is not listed is dropped,
+  so a new event is never delivered until it is added on purpose);
 - a row between the markers did not parse.
 
 A review that changes the outcome updates the table and the baseline in one change. The other things to re-check on a roll

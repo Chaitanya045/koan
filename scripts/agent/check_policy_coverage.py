@@ -24,6 +24,9 @@ that a Chromium roll cannot change what an agent can reach unnoticed:
     not changed since scripts/agent/policy_baseline.json was written: a roll that
     adds a parameter to Page.createIsolatedWorld (like grantUniveralAccess) or to
     Input.dispatchKeyEvent (like commands) must be reviewed, not inherited;
+  * every event in the allowlist (src/browser/agent/koan_agent_events.cc) exists,
+    is sorted and unique, is not in a denied domain, and every Network event goes
+    through the scrubber;
   * the events of every listed domain have not changed: a new Network event
     could carry cookies, and the event allowlist and scrubber must decide.
 
@@ -46,12 +49,15 @@ import pdl  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 POLICY = ROOT / 'src/browser/agent/koan_agent_policy.cc'
+EVENTS = ROOT / 'src/browser/agent/koan_agent_events.cc'
 BASELINE = pathlib.Path(__file__).resolve().parent / 'policy_baseline.json'
 
 _RULE = re.compile(
     r'\{"([A-Za-z0-9]+\.[A-Za-z0-9]+)",\s*Verdict::k(\w+),\s*'
     r'Capability::k(\w+),\s*ParamFilter::k(\w+)\}')
 _STRING = re.compile(r'"([A-Za-z0-9]+)"')
+_EVENT_RULE = re.compile(
+    r'\{"([A-Za-z0-9]+\.[A-Za-z0-9]+)",\s*EventAction::k(\w+)\}')
 
 
 def _between(text, begin, end):
@@ -72,6 +78,38 @@ def parse_policy(text):
   denied = _STRING.findall(
       _between(text, '// BEGIN DENIED DOMAINS', '// END DENIED DOMAINS'))
   return rules, denied
+
+
+def parse_events(text):
+  """[(event, action), ...] from the event allowlist in the C++.
+
+  Raises ValueError if a row between the markers did not parse."""
+  region = _between(text, '// BEGIN EVENTS', '// END EVENTS')
+  events = _EVENT_RULE.findall(region)
+  rows = region.count('{"')
+  if rows != len(events):
+    raise ValueError(f'{rows} event rows between the markers, {len(events)} '
+                     f'parsed: a row is malformed')
+  return events
+
+
+def check_events(details, events, denied):
+  """Problems with the event allowlist: sorted, real, and sane."""
+  problems = []
+  names = [e for e, _ in events]
+  if names != sorted(names) or len(set(names)) != len(names):
+    problems.append('the event allowlist is not sorted or has duplicates')
+  for name, action in events:
+    domain, event = name.split('.')
+    if domain in denied:
+      problems.append(f'event {name} is in a denied domain')
+    elif event not in details.get(domain, {}).get('events', {}):
+      problems.append(f'event {name} is in the allowlist but not in the '
+                      f'protocol')
+    if (domain == 'Network') != (action == 'ScrubNetwork'):
+      problems.append(f'event {name}: every Network event, and only those, '
+                      f'goes through the Network scrubber')
+  return problems
 
 
 def check(protocol, rules, denied):
@@ -182,8 +220,9 @@ def main(argv):
   protocol = {d: sorted(p['commands']) for d, p in details.items()}
   try:
     rules, denied = parse_policy(POLICY.read_text())
+    events = parse_events(EVENTS.read_text())
   except ValueError as error:
-    print(f'{POLICY.relative_to(ROOT)}: {error}')
+    print(error)
     return 1
   if args.list:
     print('\n'.join(unclassified_rows(protocol, rules, denied)))
@@ -195,6 +234,7 @@ def main(argv):
           f'forwarded methods, events of {len(current["events"])} domains')
     return 0
   problems = check(protocol, rules, denied)
+  problems += check_events(details, events, denied)
   if BASELINE.exists():
     problems += check_baseline(current, json.loads(BASELINE.read_text()))
   else:
@@ -202,15 +242,15 @@ def main(argv):
                     f'(--update-baseline)')
   if problems:
     print('\n'.join(problems))
-    print(f'\n{len(problems)} problem(s). Fix {POLICY.relative_to(ROOT)} or '
+    print(f'\n{len(problems)} problem(s). Fix {POLICY.relative_to(ROOT)}, {EVENTS.relative_to(ROOT)} or '
           f'review and --update-baseline.')
     return 1
   commands = sum(len(c) for c in protocol.values())
   print(f'ok: {len(protocol)} domains, {commands} methods; {len(rules)} rules '
         f'in {len({r[0].split(".")[0] for r in rules})} domains, '
-        f'{len(denied)} domains denied; {len(current["params"])} forwarded '
-        f'methods and the events of {len(current["events"])} domains match the '
-        f'baseline')
+        f'{len(denied)} domains denied; {len(events)} events allowed; '
+        f'{len(current["params"])} forwarded methods and the events of '
+        f'{len(current["events"])} domains match the baseline')
   return 0
 
 

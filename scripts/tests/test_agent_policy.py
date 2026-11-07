@@ -195,6 +195,83 @@ class ParseTest(unittest.TestCase):
       cov.parse_policy(bad)
 
 
+EVENTS_CC = """
+  // BEGIN EVENTS
+  {"Network.requestWillBeSent", EventAction::kScrubNetwork},
+  {"Page.frameNavigated", EventAction::kPass},
+  // END EVENTS
+"""
+
+EVENT_DETAILS = {
+    'Network': {'events': {'requestWillBeSent': 'h'}, 'commands': {}},
+    'Page': {'events': {'frameNavigated': 'h'}, 'commands': {}},
+}
+
+
+class EventTableTest(unittest.TestCase):
+
+  def test_parses_and_accepts_a_good_table(self):
+    events = cov.parse_events(EVENTS_CC)
+    self.assertEqual(events, [('Network.requestWillBeSent', 'ScrubNetwork'),
+                              ('Page.frameNavigated', 'Pass')])
+    self.assertEqual(cov.check_events(EVENT_DETAILS, events, []), [])
+
+  def test_a_malformed_row_is_an_error(self):
+    with self.assertRaises(ValueError):
+      cov.parse_events(EVENTS_CC.replace('EventAction::kPass}', 'Pass}'))
+
+  def test_a_network_event_must_be_scrubbed_and_only_those(self):
+    events = [('Network.requestWillBeSent', 'Pass'),
+              ('Page.frameNavigated', 'ScrubNetwork')]
+    problems = cov.check_events(EVENT_DETAILS, events, [])
+    self.assertEqual(len(problems), 2)
+
+  def test_unknown_unsorted_or_denied_events_are_reported(self):
+    events = [('Page.frameNavigated', 'Pass'), ('Page.nope', 'Pass'),
+              ('Network.requestWillBeSent', 'ScrubNetwork')]
+    problems = cov.check_events(EVENT_DETAILS, events, ['Page'])
+    self.assertTrue(any('not sorted' in p for p in problems))
+    self.assertTrue(any('not in the protocol' in p or 'denied domain' in p
+                        for p in problems))
+
+
+class RealEventTableTest(unittest.TestCase):
+
+  @classmethod
+  def setUpClass(cls):
+    cls.events = cov.parse_events(cov.EVENTS.read_text())
+
+  def test_it_is_sorted_and_every_network_event_is_scrubbed(self):
+    names = [e for e, _ in self.events]
+    self.assertEqual(names, sorted(names))
+    self.assertGreater(len(names), 30)
+    for name, action in self.events:
+      self.assertEqual(name.startswith('Network.'), action == 'ScrubNetwork', name)
+
+  def test_no_event_of_a_denied_domain_is_allowed(self):
+    _, denied = cov.parse_policy(cov.POLICY.read_text())
+    for name, _ in self.events:
+      self.assertNotIn(name.split('.')[0], denied, name)
+
+  def test_the_events_that_would_leak_are_not_in_the_list(self):
+    names = {e for e, _ in self.events}
+    for leaky in ('Network.dataReceived', 'Network.responseReceivedEarlyHints',
+                  'Network.webSocketWillSendHandshakeRequest',
+                  'Network.webSocketHandshakeResponseReceived',
+                  'Network.eventSourceMessageReceived',
+                  'Network.requestIntercepted', 'Fetch.requestPaused',
+                  'Storage.cookieListItemAdded', 'Page.fileChooserOpened',
+                  'Page.downloadWillBegin'):
+      self.assertNotIn(leaky, names)
+
+  def test_execution_contexts_wait_for_the_tracker(self):
+    actions = dict(self.events)
+    for name in ('Runtime.executionContextCreated',
+                 'Runtime.executionContextDestroyed',
+                 'Runtime.executionContextsCleared'):
+      self.assertEqual(actions[name], 'NeedsContextTracker')
+
+
 class PolicyTableTest(unittest.TestCase):
 
   @classmethod
