@@ -31,6 +31,10 @@ jobs:
         env:
           KOAN_CHROMIUM_FILE_CACHE: ${{ runner.temp }}/koan-chromium-files
         run: scripts/ci/check_patches.sh
+      - name: Check agent control's method policy against the pinned protocol
+        env:
+          KOAN_CHROMIUM_FILE_CACHE: ${{ runner.temp }}/koan-chromium-files
+        run: scripts/ci/check_agent_policy.sh
 
   patch-health:
     name: Patch health
@@ -96,5 +100,7 @@ jobs:
         run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
       - name: Node scripts parse
         run: for f in scripts/*.mjs scripts/e2e/*.mjs; do node --check "$f"; done
+      - name: GN files are gn-format clean
+        run: scripts/ci/check_gn_format.sh
       - name: Python compiles
-        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/tests/*.py
+        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/agent/*.py scripts/tests/*.py

@@ -75,6 +75,19 @@ test("koan_shortcut_unittests") {
   ]
 }
 
+# Agent control's unit tests (src/browser/agent). Nothing else depends on that
+# directory yet, and GN reads a BUILD.gn only when some target names a label in
+# its directory, so this group is what makes the tests buildable:
+#   autoninja -C out/Koan koan/browser:agent_unit_tests
+group("agent_unit_tests") {
+  testonly = true
+  deps = [
+    "//koan/browser/agent:koan_agent_frame_fuzzer",
+    "//koan/browser/agent:koan_agent_unittests",
+    "//koan/browser/agent:koan_agent_url_fuzzer",
+  ]
+}
+
 # Zen's tab behaviours, called from upstream tab code (tab_strip_model.cc,
 # back_to_opener_controller.cc). No tab strip deps, so those can use it.
 source_set("tab_hooks") {

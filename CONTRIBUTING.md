@@ -189,6 +189,9 @@ version stays cheap.
   Koan patterns over new abstractions.
 - Format C++ with clang-format 22.1.8 and the repository's `.clang-format`:
   `git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file -i`.
+- Format GN files (`BUILD.gn`, `*.gni`) with `gn format`, never with clang-format (it reads them as C++ and corrupts
+  the comments; `.clang-format-ignore` stops it). `scripts/ci/check_gn_format.sh` checks them; files that predate it are
+  listed in `scripts/ci/gn_format_exceptions.txt`.
 - New files start with Koan's license header:
 
   ```cpp
