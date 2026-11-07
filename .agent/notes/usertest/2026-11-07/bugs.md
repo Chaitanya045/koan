@@ -458,3 +458,20 @@ NOT DONE: 2 (inactive grey vs Zen: my Zen covered Koan and window-ID captures we
 PASS: 1 — default ⌘T card opaque (s48-r1); 2 — "Glass URL bar" unchecked by default (s48-r2); 3/4 — on: the card's input row is translucent with the page faintly behind it, the suggestions list stays opaque (s48-r3-r4); 10 — the card shows only Koan's magnifier: ⌘T on an https page, typed "wik", ⌘T on the neverssl page (s48-r10); 12 — ⌘T in native fullscreen: glass card, clear field, only the magnifier (s48-r12-fs). No FATAL/dump.
 Note: ⌘L on this base edits in the sidebar pill (not floating), so row 10's ⌘L case shows the pill's own globe/lock (no #158 here). A true "Not secure" page wasn't possible: neverssl.com timed out and got https-upgraded.
 NOT DONE: 5/9 (Quartz Debug, frame times), 6 (live inactive switch: needs a second app window of mine), 7 (Reduce transparency), 8, 11, 13 (scripted by the loop).
+
+## Session 49–50 (09:41–09:46 IST): #169+#174 welcome v2, KoanCheck-c174d (1c833e206da3), true first runs
+PASS W-1 (dark): the setup covers the window on shadcn black, steps bar at the top, the "Welcome to a calmer internet" card with Get started + Skip setup, Lucide sparkles icon; no infobar, no Chromium intro (s49-W1). (Note: the traffic lights are hidden during the setup — the new spec says "top left and usable": FAIL vs W-1's text.)
+PASS W-2: Get started → Shortcuts (Zen's chosen, Recommended; per-key rows) → Import ("Start fresh" chosen; Safari, Bookmarks HTML File) → Search (Brave first and chosen) → "You're all set" → Start browsing; Back and Skip on each (s49-002..005). Minor: Import and Search rows use letter tiles (S, B, G, M, Y, D) instead of icons.
+PASS W-7: after Start browsing the new tab is Brave's page; chrome://settings/search shows "Brave (Default)" (s49-007).
+PASS W-11 Skip: Skip setup on the first step closes it, normal window with traffic lights, nothing of later steps applied (engine stays Google) (s50-004).
+FAIL W-11 Esc (major): **Esc does nothing** on the welcome step and on the shortcuts step (also after clicking the page). The page's JS has a document keydown Escape handler (koan_welcome.js:450) → the key never reaches the renderer (the browser eats Esc). s50-001/002/003.
+No Check failed / FATAL in any log.
+More welcome rows (09:44–09:50 IST):
+PASS W-8 (DE): Chromium's EEA list in its order (Perplexity, Bing, Ecosia, Brave, Startpage, DuckDuckGo, Google, Yahoo), nothing chosen, EEA wording; DuckDuckGo picked → Start browsing → its page; 2 relaunches: no choice dialog, settings "DuckDuckGo (Default)" (s50-W8-relaunch).
+PASS W-8b: ⌘N during the DE setup: normal new tab after 5 s, no choice dialog (s50-020-W8b). PASS W-8c: Skip setup on step 1 (DE) then a navigation: no dialog over anything (s50-030-W8c).
+PASS W-5: Chrome's shortcuts preset selects every right-hand key (s50-040); after Start browsing ⌘S opens Save Page (cancelled), ⌃⌘S toggles compact, File menu shows Save Page As ⌘S / New Private Window ⇧⌘N (s50-W5-file-menu). Minor: File > "New tab" shows no ⌘T.
+PASS W-13: ⌘W during the setup closes the window, app stays, ⌘N opens a normal window without the setup; ⌘Q during the setup quits; no crash.
+PASS W-12: Safari picked, Back, "Start fresh", Start browsing: no import dialog. PASS W-IMP: Safari picked → Start browsing → Chromium's import dialog with Safari; **Cancel pressed**, nothing imported (no Bookmarks file).
+BLOCKED W-12c: the last step ("You're all set") has no Skip setup and Esc is broken (see W-11), so its way out doesn't exist.
+No Check failed/FATAL/signal in any of 11 launches; no dump/.ips.
+NOT DONE: W-1a, W-3, W-4, W-6, W-7b, W-9, W-10, W-14–W-20, light-mode screenshots; W-12b (needs a Mac with no browser data); W-CR (the loop's).
