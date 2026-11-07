@@ -48,8 +48,9 @@ bool IsToolbarHidden(const views::View* browser_view);
 
 // macOS: whether the window is in native fullscreen with Koan's toolbar
 // hidden (single toolbar, or compact mode hiding the toolbar). Like Zen,
-// nothing of the top chrome is revealed from the top edge then (Chromium's
-// toolbar, bookmarks bar and title bar strip): Koan's own layout stays, with
+// none of Chromium's top chrome is revealed from the top edge then (its
+// toolbar, bookmarks bar; AppKit's thin title bar with the traffic lights
+// still slides in with the menu bar, as in Zen): Koan's own layout stays, with
 // the sidebar's header and the URL pill, or in compact mode the toolbar's
 // own slide. Called from the BrowserView and BrowserFrameViewMac hooks, so
 // that Chromium's fullscreen toolbar style is "none" and its dialogs anchor

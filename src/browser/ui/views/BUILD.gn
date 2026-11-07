@@ -340,6 +340,9 @@ source_set("impl") {
     ]
     # Content (page) fullscreen: koan::IsContentFullscreen().
     deps += [ "//chrome/browser/ui:fullscreen_util_mac" ]
+    # IsPointerOverWindow(): AppKit's fullscreen title strip is a window of its
+    # own (remote_cocoa::IsNSToolbarFullScreenWindow()).
+    deps += [ "//components/remote_cocoa/app_shim" ]
     frameworks = [ "AppKit.framework" ]
   } else {
     sources += [

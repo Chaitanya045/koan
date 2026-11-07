@@ -1181,13 +1181,10 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
                                 : browser_view_->overlay_widget();
     contents->SetProperty(views::kWidgetForAnchoringKey, anchor);
   }
-  // AppKit's own title bar: nothing of it at the top edge but the menu bar
-  // while Koan hides its toolbar, else it has the lights, as usual.
-  if (HidesFullscreenTopChrome(browser_view_)) {
-    HideFullscreenTitlebar(browser_view_);
-  } else {
-    RestoreFullscreenTitlebar(browser_view_);
-    SetTrafficLightsShown(browser_view_, true);
+  // AppKit's own title bar slides in with the menu bar, with the traffic
+  // lights, as in Zen (even where compact mode hid them in the window).
+  if (!IsClosing()) {
+    ShowFullscreenTitlebar(browser_view_);
   }
   // The toolbar style: "none" while Koan hides its toolbar, else the user's.
   if (BrowserWidget* widget = browser_view_->browser_widget()) {
@@ -1818,10 +1815,13 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
   if (IsWindowFullscreen(browser_view_)) {
     return false;
   }
-  // The traffic lights are at the window's leading edge: over the page where
-  // the sidebar is hidden or on the right.
+  // The traffic lights are at the window's leading edge. With the sidebar on
+  // the left they are in its top row: they go and come with the sidebar, and
+  // the top edge reveals nothing (Zen: a hidden sidebar hides them, and the
+  // pointer at the top shows nothing and moves nothing). With it on the right
+  // they are over the page.
   if (traffic_lights_) {
-    return hides_sidebar() || IsSidebarOnRight(browser_view_);
+    return IsSidebarOnRight(browser_view_);
   }
   const BrowserWidget* widget = browser_view_->browser_widget();
   const BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
