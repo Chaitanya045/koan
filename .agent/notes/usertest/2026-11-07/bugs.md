@@ -480,3 +480,8 @@ NOT DONE: W-1a, W-3, W-4, W-6, W-7b, W-9, W-10, W-14–W-20, light-mode screensh
 Stage Manager is on (one app's windows per stage), so a true side-by-side with a third app frontmost isn't possible without a system setting. Method: same-app inactive — in each browser a second window placed to the right, so the first window (same spot, same wallpaper) is not key; full-screen region captures.
 Result: Koan's inactive sidebar is flat rgb(40,39,39) with grey traffic lights; Zen's inactive sidebar is rgb(13–24), darker (s51-r2-side-by-side). Koan's inactive grey is noticeably lighter than Zen's.
 Tester slip: `open -a Finder` (to make Finder frontmost) opened a Finder "Recents" window; closed it with the maintainer's OK (one click on its Stage Manager thumbnail, then ⌘W); nothing else touched in Finder.
+
+## Session 52 (11:23–11:26 IST): #174 KoanCheck-c174f (59689ea0, f9670437b77f) — BLOCKER
+### B50. The setup takes no input at all: Get started, Skip setup, Tab/Enter and Esc all do nothing — blocker (c174f)
+Two fresh first-run profiles: the setup shows, but hover, clicks on "Get started" and "Skip setup", Tab+Enter and Esc (before any click, and after) change nothing (s52-c174f-no-input). The setup is a separate untitled window (1200x879 at 221,45) over the browser window; Koan is frontmost. The only way out is ⌘W, which closes the whole window (app stays); ⌘N then opens a normal window without the setup (s52-c174f-skip-cmdW). No Check failed/FATAL, no crash. c174d (the previous head) took clicks fine; this is a regression in 59689ea0 (the Cmd+W/focus changes).
+All of the c174f list (W-11, W-12c, W-3, W-13, W-13b, W-14, W-19) is blocked by this.
