@@ -1,0 +1,167 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+
+#ifndef KOAN_BROWSER_AGENT_KOAN_AGENT_GATEWAY_H_
+#define KOAN_BROWSER_AGENT_KOAN_AGENT_GATEWAY_H_
+
+#include <stdint.h>
+#include <sys/types.h>
+
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <string_view>
+
+#include "base/files/file_path.h"
+#include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
+#include "base/time/clock.h"
+#include "base/time/tick_clock.h"
+#include "base/timer/timer.h"
+#include "koan/browser/agent/koan_agent_admission.h"
+#include "koan/browser/agent/koan_agent_auth.h"
+#include "koan/browser/agent/koan_agent_peer.h"
+#include "koan/browser/agent/koan_agent_session.h"
+
+namespace net {
+class UnixDomainServerSocket;
+}
+
+// The unix socket the agent CLI connects to (.agent/notes/agent-control.md
+// section 4.1): Koan's own accept loop, a Session for every connection, and the
+// limits that keep a process that only connects from using up the browser.
+//
+// **It forwards nothing and nothing starts it.** Like Session, an authenticated
+// connection answers Koan.status and refuses everything else; and no browser
+// code creates a Gateway yet (no preference, no window hook), so this changes
+// nothing a user can see. Starting it belongs to the settings change.
+//
+// What it does, in the order a connection meets it:
+//   1. The listening socket is in a 0700 directory, 0600, and refuses every uid
+//      but the browser's before the connection is accepted.
+//   2. ConnectionAdmission: at most 8 connections, 4 of them unauthenticated.
+//      A connection over the limit is closed without being read.
+//   3. The peer's audit token is read at once (PeerResolver::TokenForSocket)
+//   and
+//      resolved to a process, a signing identity and ancestors off the
+//      sequence. No byte is read from the connection until that has succeeded
+//      (5 s), and it fails closed: no token, no process, another uid, or a peer
+//      that is blocked means the connection is closed.
+//   4. A Session reads and writes the connection. The session asks the gateway
+//      to look at the peer again (PeerResolver::Unchanged) before it verifies a
+//      proof and before it applies the user's approval.
+//   5. Once a second every connection is checked: the session's own timeouts,
+//      the pre-authentication deadline (30 s, not counting a prompt) and, for a
+//      connection that is closing, how long it may take to flush.
+//
+// Everything runs on one sequence (the IO thread in production). The user's
+// answer to a prompt must come back on that sequence.
+namespace koan::agent {
+
+// Shows the user an ApprovalRequest (the native dialog; a fake in tests) and
+// reports the answer through `answer`, on the gateway's sequence. Cancel() is
+// called when the connection goes away with the prompt open, so the dialog can
+// be dismissed.
+class ApprovalPresenter {
+ public:
+  virtual ~ApprovalPresenter();
+
+  virtual void Show(const ApprovalRequest& request,
+                    base::OnceCallback<void(ApprovalDecision)> answer) = 0;
+  virtual void Cancel(uint64_t request_id) = 0;
+};
+
+struct GatewayOptions {
+  base::FilePath socket_path;
+  // The user the browser runs as: the only user whose connections are served.
+  uid_t uid = 0;
+};
+
+class Gateway {
+ public:
+  enum class StartResult {
+    kOk,
+    kAlreadyStarted,
+    // No way to find out who a peer is on this platform.
+    kNoPeerResolver,
+    kUnsafePath,
+    kInUse,
+    kBindFailed,
+  };
+
+  // How long a connection may take to be resolved, and a closing connection to
+  // flush what it still has to send.
+  static constexpr base::TimeDelta kResolveDeadline = base::Seconds(5);
+  static constexpr base::TimeDelta kFlushDeadline = base::Seconds(2);
+  // The most a connection may have queued to send: tight before it has proved
+  // who it is, generous after (a screenshot is a few MB).
+  static constexpr size_t kMaxQueuedBytesPreAuth = 64 * 1024;
+  static constexpr size_t kMaxQueuedBytesAuthenticated = 64 * 1024 * 1024;
+
+  // The pointers must outlive the gateway. `resolver` is shared because its
+  // Resolve() runs on thread-pool tasks that may outlast a Stop().
+  Gateway(GatewayOptions options,
+          std::shared_ptr<const PeerResolver> resolver,
+          ClientStore* store,
+          ApprovalPresenter* presenter,
+          const base::TickClock* tick_clock,
+          const base::Clock* clock);
+  Gateway(const Gateway&) = delete;
+  Gateway& operator=(const Gateway&) = delete;
+  ~Gateway();
+
+  StartResult Start();
+  // Closes the listener and every connection, and removes the socket file.
+  void Stop();
+  bool started() const { return server_ != nullptr; }
+
+  // The store removed this client: its live connections close at once.
+  void OnClientRevoked(std::string_view client_id);
+
+  // Run by a once-a-second timer; public so that tests can drive the clock.
+  void CheckTimeouts();
+
+  size_t connection_count() const { return connections_.size(); }
+  RateLimiter& limiter_for_testing() { return limiter_; }
+
+ private:
+  class Connection;
+
+  void DoAccept();
+  void OnAcceptComplete(int result);
+  // Returns whether to keep accepting.
+  bool HandleAccepted(int result);
+  void AddConnection(int fd);
+  void ScheduleRemoval(ConnectionAdmission::Id id);
+  void Remove(ConnectionAdmission::Id id);
+  SessionEnvironment SessionEnv();
+  base::TimeTicks Now() const { return tick_clock_->NowTicks(); }
+
+  const GatewayOptions options_;
+  const std::shared_ptr<const PeerResolver> resolver_;
+  const raw_ptr<ClientStore> store_;
+  const raw_ptr<ApprovalPresenter> presenter_;
+  const raw_ptr<const base::TickClock> tick_clock_;
+  const raw_ptr<const base::Clock> clock_;
+
+  RateLimiter limiter_;
+  std::set<std::string> accepted_chains_;
+  ConnectionAdmission admission_;
+
+  std::unique_ptr<net::UnixDomainServerSocket> server_;
+  // Where AcceptSocketDescriptor() writes while an accept is pending.
+  int accepted_fd_ = -1;
+  base::RepeatingTimer timer_;
+  std::map<ConnectionAdmission::Id, std::unique_ptr<Connection>> connections_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
+  base::WeakPtrFactory<Gateway> weak_factory_{this};
+};
+
+}  // namespace koan::agent
+
+#endif  // KOAN_BROWSER_AGENT_KOAN_AGENT_GATEWAY_H_

@@ -64,6 +64,67 @@ source_set("session") {
   deps = [ "//third_party/icu" ]
 }
 
+# How many connections the gateway keeps open.
+source_set("admission") {
+  sources = [
+    "koan_agent_admission.cc",
+    "koan_agent_admission.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+if (is_posix) {
+  # Where the gateway's unix socket lives and the checks that keep it safe.
+  source_set("socket") {
+    sources = [
+      "koan_agent_socket.cc",
+      "koan_agent_socket.h",
+    ]
+    public_deps = [ "//base" ]
+    deps = [
+      "//crypto",
+      "//net",
+    ]
+  }
+
+  # Who is on the other end of a connection, from the OS (macOS only; elsewhere
+  # there is no resolver and the gateway does not start).
+  source_set("peer") {
+    sources = [
+      "koan_agent_peer.cc",
+      "koan_agent_peer.h",
+    ]
+    public_deps = [
+      ":auth",
+      "//base",
+    ]
+    if (is_mac) {
+      frameworks = [
+        "CoreFoundation.framework",
+        "Security.framework",
+      ]
+    }
+  }
+
+  # The unix socket the agent CLI connects to: accept loop, a session per
+  # connection and the limits on connections. Nothing in the browser starts it.
+  source_set("gateway") {
+    sources = [
+      "koan_agent_gateway.cc",
+      "koan_agent_gateway.h",
+    ]
+    public_deps = [
+      ":admission",
+      ":auth",
+      ":peer",
+      ":session",
+      "//base",
+      "//net",
+    ]
+    deps = [ ":socket" ]
+  }
+}
+
 # What an agent client may receive: the event allowlist, and the scrubber that
 # takes cookies, credentials and request bodies out of Network events.
 source_set("events") {
@@ -94,6 +155,7 @@ source_set("filters") {
 # by scripts/agent/check_policy_coverage.py.
 test("koan_agent_unittests") {
   sources = [
+    "koan_agent_admission_unittest.cc",
     "koan_agent_auth_unittest.cc",
     "koan_agent_events_unittest.cc",
     "koan_agent_filters_unittest.cc",
@@ -102,6 +164,7 @@ test("koan_agent_unittests") {
     "koan_agent_session_unittest.cc",
   ]
   deps = [
+    ":admission",
     ":auth",
     ":events",
     ":filters",
@@ -115,6 +178,20 @@ test("koan_agent_unittests") {
     "//third_party/boringssl",
     "//url",
   ]
+  if (is_posix) {
+    sources += [
+      "koan_agent_gateway_unittest.cc",
+      "koan_agent_peer_unittest.cc",
+      "koan_agent_socket_unittest.cc",
+    ]
+    deps += [
+      ":gateway",
+      ":peer",
+      ":socket",
+      "//net",
+      "//net:test_support",
+    ]
+  }
 }
 
 # Fuzzers for the two parsers that face a hostile peer. Like Chromium's own
