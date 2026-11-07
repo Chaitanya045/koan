@@ -475,3 +475,8 @@ PASS W-12: Safari picked, Back, "Start fresh", Start browsing: no import dialog.
 BLOCKED W-12c: the last step ("You're all set") has no Skip setup and Esc is broken (see W-11), so its way out doesn't exist.
 No Check failed/FATAL/signal in any of 11 launches; no dump/.ips.
 NOT DONE: W-1a, W-3, W-4, W-6, W-7b, W-9, W-10, W-14–W-20, light-mode screenshots; W-12b (needs a Mac with no browser data); W-CR (the loop's).
+
+## Session 51 (10:32–11:15 IST): #103 row 2 retry, KoanCheck-c103y vs Zen 1.24b
+Stage Manager is on (one app's windows per stage), so a true side-by-side with a third app frontmost isn't possible without a system setting. Method: same-app inactive — in each browser a second window placed to the right, so the first window (same spot, same wallpaper) is not key; full-screen region captures.
+Result: Koan's inactive sidebar is flat rgb(40,39,39) with grey traffic lights; Zen's inactive sidebar is rgb(13–24), darker (s51-r2-side-by-side). Koan's inactive grey is noticeably lighter than Zen's.
+Tester slip: `open -a Finder` (to make Finder frontmost) opened a Finder "Recents" window; closed it with the maintainer's OK (one click on its Stage Manager thumbnail, then ⌘W); nothing else touched in Finder.
