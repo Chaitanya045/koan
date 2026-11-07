@@ -18,14 +18,19 @@
 #include <algorithm>
 #include <array>
 #include <iterator>
+#include <map>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 #include "base/apple/scoped_cftyperef.h"
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
+#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/synchronization/lock.h"
+#include "base/timer/elapsed_timer.h"
 #endif
 
 namespace koan::agent {
@@ -37,6 +42,11 @@ PeerResolver::~PeerResolver() = default;
 namespace {
 
 constexpr int kMaxAncestors = 12;
+// Entries kept of what an ancestor's signature said, per (path, process).
+constexpr size_t kMaxCachedAncestors = 256;
+// A lookup that takes this long is logged, so that a slow one can be told from
+// one that failed (the gateway gives up on a connection after 5 s).
+constexpr base::TimeDelta kSlowLookup = base::Seconds(1);
 
 // What Unchanged() compares: the audit token the peer was found by, and what
 // the kernel says about that process incarnation. p_uniqueid is per fork; the
@@ -86,10 +96,13 @@ base::apple::ScopedCFTypeRef<SecCodeRef> GuestCode(CFDictionaryRef attributes) {
 // "apple" for a platform binary, "team:<id>" for a developer-signed one,
 // "cdhash:<hex>" for one that is signed without a team (ad hoc), "" for one
 // that is not signed at all. nullopt if it is signed and does not verify: a
-// process whose signature is broken is not one to name.
-std::optional<std::string> SigningIdentity(SecCodeRef code) {
-  const OSStatus validity =
-      SecCodeCheckValidity(code, kSecCSDefaultFlags, nullptr);
+// process whose signature is broken is not one to name. `flags` are for
+// SecCodeCheckValidity: the default checks every resource of the bundle, which
+// is minutes of work for a large app (an editor, a browser), so ancestors are
+// checked with kSecCSBasicValidateOnly (the code directory and the signature,
+// not the resources) and the peer itself, a small tool, in full.
+std::optional<std::string> SigningIdentity(SecCodeRef code, SecCSFlags flags) {
+  const OSStatus validity = SecCodeCheckValidity(code, flags, nullptr);
   if (validity == errSecCSUnsigned) {
     return std::string();
   }
@@ -139,7 +152,7 @@ std::optional<std::string> SigningIdentityOfPid(pid_t pid) {
   if (!code) {
     return std::nullopt;
   }
-  return SigningIdentity(code.get());
+  return SigningIdentity(code.get(), kSecCSBasicValidateOnly);
 }
 
 class MacPeerResolver final : public PeerResolver {
@@ -156,16 +169,24 @@ class MacPeerResolver final : public PeerResolver {
   }
 
   std::optional<ResolvedPeer> Resolve(const PeerToken& bytes) const override {
+    base::ElapsedTimer timer;
+    // Every way out says why: a connection that is dropped here is dropped
+    // without a word to the client, so the log is where it can be found.
+    const auto refuse = [&](const char* reason) -> std::optional<ResolvedPeer> {
+      LOG(WARNING) << "agent peer: not resolved (" << reason << ") after "
+                   << timer.Elapsed().InMilliseconds() << " ms";
+      return std::nullopt;
+    };
     Handle handle = {};
     if (bytes.size() != sizeof(handle.token)) {
-      return std::nullopt;
+      return refuse("not an audit token");
     }
     base::byte_span_from_ref(handle.token).copy_from(bytes);
     const pid_t pid = audit_token_to_pid(handle.token);
 
     proc_uniqidentifierinfo before;
     if (pid <= 0 || !UniqueInfo(pid, &before)) {
-      return std::nullopt;
+      return refuse("the process has exited");
     }
     // The audit token names one incarnation of the pid: if the process has
     // exec'd or the pid was reused since the connect, this finds nothing.
@@ -176,15 +197,21 @@ class MacPeerResolver final : public PeerResolver {
         AttributeDictionary(kSecGuestAttributeAudit, token_data.get());
     auto code = GuestCode(attributes.get());
     if (!code) {
-      return std::nullopt;
+      return refuse("no process for the audit token");
     }
-    std::optional<std::string> signing = SigningIdentity(code.get());
+    std::optional<std::string> signing =
+        SigningIdentity(code.get(), kSecCSDefaultFlags);
+    if (!signing) {
+      return refuse("the signature does not verify");
+    }
     const std::string path = ExecutablePath(pid);
     proc_uniqidentifierinfo after;
-    if (!signing || path.empty() || !UniqueInfo(pid, &after) ||
-        after.p_uniqueid != before.p_uniqueid ||
+    if (path.empty()) {
+      return refuse("no executable path");
+    }
+    if (!UniqueInfo(pid, &after) || after.p_uniqueid != before.p_uniqueid ||
         uuid_compare(after.p_uuid, before.p_uuid) != 0) {
-      return std::nullopt;
+      return refuse("the process changed while it was looked at");
     }
 
     handle.unique_id = after.p_uniqueid;
@@ -195,6 +222,11 @@ class MacPeerResolver final : public PeerResolver {
     peer.identity.ancestors = Ancestors(pid);
     const auto handle_bytes = base::byte_span_from_ref(handle);
     peer.handle.assign(handle_bytes.begin(), handle_bytes.end());
+    if (timer.Elapsed() > kSlowLookup) {
+      LOG(WARNING) << "agent peer: slow lookup of " << path << ": "
+                   << timer.Elapsed().InMilliseconds() << " ms, "
+                   << peer.identity.ancestors.size() << " ancestors";
+    }
     return peer;
   }
 
@@ -215,8 +247,10 @@ class MacPeerResolver final : public PeerResolver {
  private:
   // The parents, nearest first, without launchd. A parent that exits while it
   // is looked at is recorded as unverified rather than dropped, so a chain
-  // never silently gets shorter.
-  static std::vector<ProcessInfo> Ancestors(pid_t pid) {
+  // never silently gets shorter. What an ancestor's signature said is kept for
+  // the life of that process (a shell or an editor is the parent of many
+  // connections), keyed by its path and the kernel's unique id.
+  std::vector<ProcessInfo> Ancestors(pid_t pid) const {
     std::vector<ProcessInfo> chain;
     pid_t current = pid;
     for (int depth = 0; depth < kMaxAncestors; ++depth) {
@@ -231,13 +265,42 @@ class MacPeerResolver final : public PeerResolver {
       }
       ProcessInfo ancestor;
       ancestor.path = ExecutablePath(parent);
-      ancestor.signing_identity =
-          SigningIdentityOfPid(parent).value_or("unverified");
+      ancestor.signing_identity = AncestorIdentity(parent, ancestor.path);
       chain.push_back(std::move(ancestor));
       current = parent;
     }
     return chain;
   }
+
+  std::string AncestorIdentity(pid_t pid, const std::string& path) const {
+    proc_uniqidentifierinfo info;
+    const bool keyed = !path.empty() && UniqueInfo(pid, &info);
+    const std::pair<std::string, uint64_t> key(path,
+                                               keyed ? info.p_uniqueid : 0);
+    if (keyed) {
+      base::AutoLock lock(cache_lock_);
+      const auto it = ancestor_cache_.find(key);
+      if (it != ancestor_cache_.end()) {
+        return it->second;
+      }
+    }
+    std::optional<std::string> identity = SigningIdentityOfPid(pid);
+    if (!identity) {
+      return "unverified";
+    }
+    if (keyed) {
+      base::AutoLock lock(cache_lock_);
+      if (ancestor_cache_.size() >= kMaxCachedAncestors) {
+        ancestor_cache_.clear();
+      }
+      ancestor_cache_[key] = *identity;
+    }
+    return *identity;
+  }
+
+  mutable base::Lock cache_lock_;
+  mutable std::map<std::pair<std::string, uint64_t>, std::string>
+      ancestor_cache_;
 };
 
 }  // namespace

@@ -4,19 +4,24 @@
 
 #include "koan/browser/agent/koan_agent_gateway.h"
 
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include <deque>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "koan/browser/agent/koan_agent_socket.h"
+#include "base/values.h"
+#include "koan/browser/agent/koan_agent_frame.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/sockaddr_storage.h"
@@ -49,9 +54,18 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 
 constexpr int kListenBacklog = 8;
 constexpr int kReadSize = 64 * 1024;
+// A loop that reads or accepts without waiting hands the thread back after this
+// many turns, so that one busy peer cannot hold the IO thread.
+constexpr int kMaxTurnsBeforeYielding = 8;
+// How long to wait before accepting again after an error. Running out of
+// descriptors does not fix itself in a moment; anything else is retried soon.
+constexpr base::TimeDelta kAcceptRetryAfterResourceError = base::Seconds(1);
+constexpr base::TimeDelta kAcceptRetryAfterError = base::Milliseconds(100);
 
 // The kernel already refuses other users' connections to a socket in a 0700
 // directory; this closes the accepted socket of any that gets through anyway.
+// (UnixDomainServerSocket accepts the next connection by itself when this
+// says no: a refused peer never reaches the gateway.)
 bool AllowUser(uid_t uid, const net::UnixDomainServerSocket::Credentials& who) {
   return who.user_id == uid;
 }
@@ -64,9 +78,37 @@ std::optional<ResolvedPeer> ResolveOnWorker(
   return resolver->Resolve(token);
 }
 
+// Says why a connection is being closed, in a frame without an id (nothing has
+// been read from the peer, so there is no request to answer), so that a client
+// finds out and can try again. Best effort, never waits: a fresh socket has
+// room for this.
+void WriteRefusal(int fd, std::string_view code, std::string_view message) {
+  base::DictValue error;
+  error.Set("code", -32000);
+  error.Set("message", message);
+  error.Set("data", code);
+  base::DictValue root;
+  root.Set("error", std::move(error));
+  const std::optional<std::string> json = base::WriteJson(root);
+  if (!json) {
+    return;
+  }
+  const std::optional<std::vector<uint8_t>> frame =
+      EncodeFrame(base::as_byte_span(*json));
+  if (frame) {
+    // Not checked: the peer may be gone already.
+    (void)send(fd, frame->data(), frame->size(), MSG_DONTWAIT);
+  }
+}
+
 }  // namespace
 
 ApprovalPresenter::~ApprovalPresenter() = default;
+
+struct PreparedSocket {
+  SocketPrepareResult result = SocketPrepareResult::kError;
+  base::ScopedFD lock;
+};
 
 // One accepted connection: the socket, the peer it was resolved to and the
 // Session that speaks for it. A Connection never destroys itself: Drop() closes
@@ -95,7 +137,9 @@ class Gateway::Connection final : public SessionDelegate {
     std::optional<PeerToken> token =
         gateway_->resolver_->TokenForSocket(socket_->socket_fd());
     if (!token) {
-      Drop();
+      LOG(WARNING) << "agent gateway: no audit token for a connection";
+      Refuse("Koan.peerUnresolved",
+             "the connecting program could not be found");
       return;
     }
     base::ThreadPool::PostTaskAndReplyWithResult(
@@ -114,7 +158,10 @@ class Gateway::Connection final : public SessionDelegate {
     const base::TimeTicks now = gateway_->Now();
     if (!session_) {
       if (now - created_ > kResolveDeadline) {
-        Drop();
+        LOG(WARNING) << "agent gateway: a connection was not resolved in "
+                     << kResolveDeadline.InSeconds() << " s; closing it";
+        Refuse("Koan.peerUnresolved",
+               "looking up the connecting program took too long");
       }
       return;
     }
@@ -137,20 +184,16 @@ class Gateway::Connection final : public SessionDelegate {
   // SessionDelegate:
   void Send(std::vector<uint8_t> frame) override { Enqueue(std::move(frame)); }
 
-  void Close(CloseReason) override {
-    // What was queued (the error that explains the close) is sent first.
-    close_after_flush_ = true;
-    flush_deadline_ = gateway_->Now() + kFlushDeadline;
-    if (queue_.empty()) {
-      Drop();
-    }
-  }
+  void Close(CloseReason) override { CloseAfterFlush(); }
 
   void RequestApproval(const ApprovalRequest& request) override {
     open_approval_ = request.id;
+    // The dialog is not on this sequence: whoever answers, the answer is posted
+    // back here, and does nothing if this connection has gone by then.
     gateway_->presenter_->Show(
-        request, base::BindOnce(&Connection::OnDecision,
-                                weak_factory_.GetWeakPtr(), request.id));
+        request,
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &Connection::OnDecision, weak_factory_.GetWeakPtr(), request.id)));
   }
 
   bool PeerUnchanged() override {
@@ -162,13 +205,29 @@ class Gateway::Connection final : public SessionDelegate {
     if (dropped_) {
       return;
     }
-    // Fail closed: nobody found, a process of another user, or no executable to
-    // name, or a peer that has used up its failures.
-    if (!peer || peer->identity.uid != gateway_->options_.uid ||
+    if (!peer) {
+      LOG(WARNING) << "agent gateway: a connecting program could not be "
+                      "resolved; closing the connection";
+      Refuse("Koan.peerUnresolved",
+             "the connecting program could not be found");
+      return;
+    }
+    // Fail closed: a process of another user, or no executable to name, or a
+    // peer that has used up its failures. None of these is told anything.
+    if (peer->identity.uid != gateway_->options_.uid ||
         peer->identity.process.path.empty() ||
         gateway_->limiter_.IsBlocked(PeerKey(peer->identity),
                                      gateway_->Now())) {
       Drop();
+      return;
+    }
+    // One program may not hold every slot reserved for connections that have
+    // not authenticated.
+    if (!gateway_->admission_.AssignPeer(id_, PeerKey(peer->identity))) {
+      LOG(WARNING) << "agent gateway: too many unauthenticated connections "
+                      "from "
+                   << peer->identity.process.path;
+      Refuse("Koan.busy", "too many connections from this program; retry");
       return;
     }
     peer_ = std::move(*peer);
@@ -179,11 +238,24 @@ class Gateway::Connection final : public SessionDelegate {
   }
 
   void StartReading() {
-    while (!dropped_ && !close_after_flush_) {
+    for (int turn = 0; !dropped_ && !close_after_flush_; ++turn) {
+      if (turn == kMaxTurnsBeforeYielding) {
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE, base::BindOnce(&Connection::StartReading,
+                                      weak_factory_.GetWeakPtr()));
+        return;
+      }
       const int result = socket_->ReadIfReady(
           read_buffer_.get(), kReadSize,
           base::BindOnce(&Connection::OnReadReady, weak_factory_.GetWeakPtr()));
       if (result == net::ERR_IO_PENDING) {
+        return;
+      }
+      if (result == 0 && !queue_.empty() && open_approval_ == 0) {
+        // The peer is done sending but has not got everything it was sent (it
+        // half-closed after a request): let the reply go out, then close. With
+        // a prompt open nobody is left to answer it.
+        CloseAfterFlush();
         return;
       }
       if (result <= 0) {  // end of stream, or an error
@@ -278,6 +350,19 @@ class Gateway::Connection final : public SessionDelegate {
     return true;
   }
 
+  // What was queued (the error that explains the close) is sent first, and
+  // nothing more is read.
+  void CloseAfterFlush() {
+    if (dropped_ || close_after_flush_) {
+      return;
+    }
+    close_after_flush_ = true;
+    flush_deadline_ = gateway_->Now() + kFlushDeadline;
+    if (queue_.empty()) {
+      Drop();
+    }
+  }
+
   // A connection that has proved who it is stops counting against the limit on
   // connections that have not.
   void UpdateAdmission() {
@@ -286,6 +371,15 @@ class Gateway::Connection final : public SessionDelegate {
       authenticated_ = true;
       gateway_->admission_.MarkAuthenticated(id_);
     }
+  }
+
+  // Tells the peer why, once, and closes.
+  void Refuse(std::string_view code, std::string_view message) {
+    if (dropped_) {
+      return;
+    }
+    WriteRefusal(socket_->socket_fd(), code, message);
+    Drop();
   }
 
   void Drop() {
@@ -319,6 +413,17 @@ class Gateway::Connection final : public SessionDelegate {
   base::WeakPtrFactory<Connection> weak_factory_{this};
 };
 
+namespace {
+
+// On a thread that may block.
+PreparedSocket PrepareOnWorker(base::FilePath socket_path, uid_t uid) {
+  PreparedSocket prepared;
+  prepared.result = PrepareSocketPath(socket_path, uid, &prepared.lock);
+  return prepared;
+}
+
+}  // namespace
+
 Gateway::Gateway(GatewayOptions options,
                  std::shared_ptr<const PeerResolver> resolver,
                  ClientStore* store,
@@ -330,62 +435,112 @@ Gateway::Gateway(GatewayOptions options,
       store_(store),
       presenter_(presenter),
       tick_clock_(tick_clock),
-      clock_(clock) {}
+      clock_(clock) {
+  // Created anywhere, used and destroyed on one sequence.
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+}
 
 Gateway::~Gateway() {
+  // A destroyed gateway does not report back.
+  start_done_.Reset();
   Stop();
 }
 
-Gateway::StartResult Gateway::Start() {
+void Gateway::Start(base::OnceCallback<void(StartResult)> done) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (server_) {
-    return StartResult::kAlreadyStarted;
+  if (state_ != State::kStopped) {
+    std::move(done).Run(StartResult::kAlreadyStarted);
+    return;
   }
   if (!resolver_) {
-    return StartResult::kNoPeerResolver;
+    std::move(done).Run(StartResult::kNoPeerResolver);
+    return;
   }
-  switch (PrepareSocketPath(options_.socket_path, options_.uid)) {
+  state_ = State::kStarting;
+  start_done_ = std::move(done);
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&PrepareOnWorker, options_.socket_path, options_.uid),
+      base::BindOnce(&Gateway::OnPrepared, weak_factory_.GetWeakPtr()));
+}
+
+void Gateway::OnPrepared(PreparedSocket prepared) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(state_, State::kStarting);
+  switch (prepared.result) {
     case SocketPrepareResult::kOk:
       break;
     case SocketPrepareResult::kInUse:
-      return StartResult::kInUse;
+      return FinishStart(StartResult::kInUse);
     case SocketPrepareResult::kDirectoryUnsafe:
     case SocketPrepareResult::kNotOurs:
-      return StartResult::kUnsafePath;
+      return FinishStart(StartResult::kUnsafePath);
     case SocketPrepareResult::kError:
-      return StartResult::kBindFailed;
+      return FinishStart(StartResult::kBindFailed);
   }
+  // The lock is ours: nothing else is bound here, and a bind that fails leaves
+  // nothing of ours at the path, so nothing is removed on that path.
   auto server = std::make_unique<net::UnixDomainServerSocket>(
-      base::BindRepeating(&AllowUser, options_.uid),
+      base::BindRepeating(
+          &AllowUser, options_.kernel_uid_for_testing.value_or(options_.uid)),
       /*use_abstract_namespace=*/false);
   if (server->BindAndListen(options_.socket_path.value(), kListenBacklog) !=
-          net::OK ||
+      net::OK) {
+    return FinishStart(StartResult::kBindFailed);
+  }
+  const std::optional<SocketIdentity> identity =
+      SocketIdentityOf(options_.socket_path, options_.uid);
+  if (!identity ||
       !RestrictSocketPermissions(options_.socket_path, options_.uid)) {
-    server.reset();
-    base::DeleteFile(options_.socket_path);
-    return StartResult::kBindFailed;
+    if (identity) {
+      RemoveSocketIfSame(options_.socket_path, *identity);
+    }
+    return FinishStart(StartResult::kBindFailed);
   }
   server_ = std::move(server);
+  lock_ = std::move(prepared.lock);
+  socket_identity_ = identity;
+  state_ = State::kStarted;
   timer_.Start(FROM_HERE, base::Seconds(1), this, &Gateway::CheckTimeouts);
   DoAccept();
-  return StartResult::kOk;
+  FinishStart(StartResult::kOk);
+}
+
+void Gateway::FinishStart(StartResult result) {
+  if (result != StartResult::kOk) {
+    state_ = State::kStopped;
+  }
+  if (start_done_) {
+    std::move(start_done_).Run(result);
+  }
 }
 
 void Gateway::Stop() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   timer_.Stop();
   weak_factory_.InvalidateWeakPtrs();
-  if (!server_) {
-    return;
-  }
-  server_.reset();
+  const State was = state_;
+  state_ = State::kStopped;
   connections_.clear();
   admission_ = ConnectionAdmission();
+  server_.reset();
   if (accepted_fd_ >= 0) {
     close(accepted_fd_);
     accepted_fd_ = -1;
   }
-  base::DeleteFile(options_.socket_path);
+  // Only the socket this gateway bound, and only if it is still the file at the
+  // path: after a crash and a restart, or a race, the path may be another
+  // browser's.
+  if (socket_identity_) {
+    RemoveSocketIfSame(options_.socket_path, *socket_identity_);
+    socket_identity_.reset();
+  }
+  lock_.reset();
+  if (was == State::kStarting && start_done_) {
+    std::move(start_done_).Run(StartResult::kStopped);
+  }
 }
 
 void Gateway::OnClientRevoked(std::string_view client_id) {
@@ -403,7 +558,13 @@ void Gateway::CheckTimeouts() {
 }
 
 void Gateway::DoAccept() {
-  while (server_) {
+  for (int turn = 0; server_; ++turn) {
+    if (turn == kMaxTurnsBeforeYielding) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&Gateway::DoAccept, weak_factory_.GetWeakPtr()));
+      return;
+    }
     const int result = server_->AcceptSocketDescriptor(
         &accepted_fd_,
         base::BindOnce(&Gateway::OnAcceptComplete, weak_factory_.GetWeakPtr()));
@@ -425,13 +586,17 @@ void Gateway::OnAcceptComplete(int result) {
 
 bool Gateway::HandleAccepted(int result) {
   if (result != net::OK) {
-    // Out of descriptors or the like: try again later, not in a tight loop.
     LOG(WARNING) << "agent gateway: accept failed: "
                  << net::ErrorToString(result);
+    // Out of descriptors or memory: try again later, not in a tight loop. Any
+    // other error is not going to be fixed by waiting, but is not a reason to
+    // spin either.
+    const bool resources = result == net::ERR_INSUFFICIENT_RESOURCES ||
+                           result == net::ERR_OUT_OF_MEMORY;
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&Gateway::DoAccept, weak_factory_.GetWeakPtr()),
-        base::Seconds(1));
+        resources ? kAcceptRetryAfterResourceError : kAcceptRetryAfterError);
     return false;
   }
   const int fd = accepted_fd_;
@@ -442,8 +607,14 @@ bool Gateway::HandleAccepted(int result) {
 
 void Gateway::AddConnection(int fd) {
   base::ScopedFD owned(fd);
+  // A descriptor that a program we start would inherit is a way to the socket.
+  if (!base::SetCloseOnExec(owned.get())) {
+    return;
+  }
   const ConnectionAdmission::Id id = admission_.TryAdmit();
   if (id == ConnectionAdmission::kRefused) {
+    LOG(WARNING) << "agent gateway: too many connections; refusing one";
+    WriteRefusal(owned.get(), "Koan.busy", "too many connections; retry");
     return;  // closed unread by `owned`
   }
   auto socket = std::make_unique<net::SocketPosix>();

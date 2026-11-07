@@ -10,11 +10,13 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
 
 #include "base/files/file_path.h"
+#include "base/files/scoped_file.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -26,6 +28,7 @@
 #include "koan/browser/agent/koan_agent_auth.h"
 #include "koan/browser/agent/koan_agent_peer.h"
 #include "koan/browser/agent/koan_agent_session.h"
+#include "koan/browser/agent/koan_agent_socket.h"
 
 namespace net {
 class UnixDomainServerSocket;
@@ -41,16 +44,19 @@ class UnixDomainServerSocket;
 // nothing a user can see. Starting it belongs to the settings change.
 //
 // What it does, in the order a connection meets it:
-//   1. The listening socket is in a 0700 directory, 0600, and refuses every uid
-//      but the browser's before the connection is accepted.
+//   1. The listening socket is in a 0700 directory, 0600, behind a lock file
+//      (whoever holds the lock owns the path), and refuses every uid but the
+//      browser's before the connection is accepted.
 //   2. ConnectionAdmission: at most 8 connections, 4 of them unauthenticated.
-//      A connection over the limit is closed without being read.
+//      A connection over the limit is told Koan.busy and closed, unread.
 //   3. The peer's audit token is read at once (PeerResolver::TokenForSocket)
-//   and
-//      resolved to a process, a signing identity and ancestors off the
+//      and resolved to a process, a signing identity and ancestors off the
 //      sequence. No byte is read from the connection until that has succeeded
-//      (5 s), and it fails closed: no token, no process, another uid, or a peer
-//      that is blocked means the connection is closed.
+//      (5 s), and it fails closed: no token or no process (told
+//      Koan.peerUnresolved, and logged), another uid or a peer that is
+//      blocked (told nothing) means the connection is closed. Once the peer is
+//      known, one program may hold only two of the unauthenticated slots
+//      (Koan.busy for the third).
 //   4. A Session reads and writes the connection. The session asks the gateway
 //      to look at the peer again (PeerResolver::Unchanged) before it verifies a
 //      proof and before it applies the user's approval.
@@ -58,14 +64,25 @@ class UnixDomainServerSocket;
 //      the pre-authentication deadline (30 s, not counting a prompt) and, for a
 //      connection that is closing, how long it may take to flush.
 //
-// Everything runs on one sequence (the IO thread in production). The user's
-// answer to a prompt must come back on that sequence.
+// Threads. A Gateway is created on any thread and then used, and destroyed, on
+// one sequence (the IO thread in production; destroy it with DeleteSoon there).
+// Everything it does on that sequence is non-blocking: the file-system work of
+// starting (making the directory, taking the lock, removing a dead socket) runs
+// on a thread-pool task that may block, a peer's signature is checked on
+// another, and stopping is two cheap system calls (an lstat and an unlink of
+// the one socket this gateway bound). The ClientStore is called on the sequence
+// for every request and once a second per authenticated connection, so it must
+// not block either (the production store keeps its records in memory and
+// writes behind).
 namespace koan::agent {
 
 // Shows the user an ApprovalRequest (the native dialog; a fake in tests) and
-// reports the answer through `answer`, on the gateway's sequence. Cancel() is
+// reports the answer through `answer`. Show() and Cancel() are called on the
+// gateway's sequence; `answer` may be run from any thread (it posts itself back
+// to the gateway's sequence, and does nothing if the connection or the gateway
+// is gone), so a dialog on the UI thread can run it directly. Cancel() is
 // called when the connection goes away with the prompt open, so the dialog can
-// be dismissed.
+// be dismissed; the presenter must post that to its own thread.
 class ApprovalPresenter {
  public:
   virtual ~ApprovalPresenter();
@@ -79,7 +96,14 @@ struct GatewayOptions {
   base::FilePath socket_path;
   // The user the browser runs as: the only user whose connections are served.
   uid_t uid = 0;
+  // Tests only: the uid the listening socket lets through, to see a connection
+  // it refuses (the kernel's check, which runs before the gateway hears of the
+  // connection). Unset: `uid`.
+  std::optional<uid_t> kernel_uid_for_testing;
 };
+
+// What starting prepares off the sequence.
+struct PreparedSocket;
 
 class Gateway {
  public:
@@ -89,8 +113,11 @@ class Gateway {
     // No way to find out who a peer is on this platform.
     kNoPeerResolver,
     kUnsafePath,
+    // Another browser holds the lock on the socket path.
     kInUse,
     kBindFailed,
+    // Stop() came first.
+    kStopped,
   };
 
   // How long a connection may take to be resolved, and a closing connection to
@@ -114,10 +141,16 @@ class Gateway {
   Gateway& operator=(const Gateway&) = delete;
   ~Gateway();
 
-  StartResult Start();
-  // Closes the listener and every connection, and removes the socket file.
+  // Starts listening and reports the result, once. Making the directory, taking
+  // the lock and removing a dead socket happen off the sequence; the bind and
+  // the first accept are back on it. `done` runs with kStopped if Stop() comes
+  // first, and does not run if the Gateway is destroyed first.
+  void Start(base::OnceCallback<void(StartResult)> done);
+  // Closes the listener and every connection, releases the lock, and removes
+  // the socket file if it is still the one this gateway bound (never another
+  // browser's).
   void Stop();
-  bool started() const { return server_ != nullptr; }
+  bool started() const { return state_ == State::kStarted; }
 
   // The store removed this client: its live connections close at once.
   void OnClientRevoked(std::string_view client_id);
@@ -131,6 +164,10 @@ class Gateway {
  private:
   class Connection;
 
+  enum class State { kStopped, kStarting, kStarted };
+
+  void OnPrepared(PreparedSocket prepared);
+  void FinishStart(StartResult result);
   void DoAccept();
   void OnAcceptComplete(int result);
   // Returns whether to keep accepting.
@@ -152,7 +189,13 @@ class Gateway {
   std::set<std::string> accepted_chains_;
   ConnectionAdmission admission_;
 
+  State state_ = State::kStopped;
+  base::OnceCallback<void(StartResult)> start_done_;
   std::unique_ptr<net::UnixDomainServerSocket> server_;
+  // Held for as long as the socket is: whoever holds it owns the path.
+  base::ScopedFD lock_;
+  // The file this gateway bound, so that only that file is removed.
+  std::optional<SocketIdentity> socket_identity_;
   // Where AcceptSocketDescriptor() writes while an accept is pending.
   int accepted_fd_ = -1;
   base::RepeatingTimer timer_;

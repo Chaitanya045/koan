@@ -17,6 +17,7 @@
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -121,7 +122,10 @@ class SessionDelegate {
   // for. The session asks before it verifies a proof and before it applies the
   // user's approval; a socket survives an exec (and a fork) of its peer, so the
   // identity taken at accept is not good for ever. False, or a lookup that
-  // failed, ends the session (kUnknownPeer): this must fail closed.
+  // failed, ends the session (kUnknownPeer): this must fail closed. It is also
+  // asked before a dialog is built, so that the user is not shown a program the
+  // peer no longer is. After authentication it is not asked again: the client
+  // holds a key, and a client that exec'd another program still holds it.
   virtual bool PeerUnchanged() = 0;
 };
 
@@ -254,6 +258,10 @@ class Session {
   base::TimeTicks created_;
   base::TimeTicks prompt_open_since_;
   base::TimeDelta prompt_total_;
+
+  // Everything runs on the sequence that made the session. A user's answer from
+  // another thread is the owner's to post (the gateway does).
+  SEQUENCE_CHECKER(sequence_checker_);
 
   std::string client_id_;
   ClientCapabilities capabilities_;

@@ -9,6 +9,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -16,7 +17,11 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/logging.h"
 #include "base/path_service.h"
+#include "base/process/launch.h"
+#include "base/process/process.h"
+#include "base/timer/elapsed_timer.h"
 #include "net/base/sockaddr_storage.h"
 #include "net/base/sockaddr_util_posix.h"
 #endif
@@ -82,6 +87,62 @@ TEST(KoanAgentPeerTest, TheProcessThatConnectedIsResolvedFromItsAuditToken) {
     EXPECT_FALSE(ancestor.signing_identity.empty() && ancestor.path.empty());
   }
   EXPECT_TRUE(resolver->Unchanged(*peer));
+}
+
+TEST(KoanAgentPeerTest, ARealChildIsResolvedAndIsGoneWhenItExits) {
+  const std::unique_ptr<PeerResolver> resolver = CreatePlatformPeerResolver();
+  ASSERT_TRUE(resolver);
+  base::ScopedTempDir dir;
+  ASSERT_TRUE(dir.CreateUniqueTempDirUnderPath(base::FilePath("/tmp")));
+  const base::FilePath path = dir.GetPath().Append("s");
+  net::SockaddrStorage address;
+  ASSERT_TRUE(net::FillUnixAddress(path.value(), false, &address));
+  base::ScopedFD listener(socket(AF_UNIX, SOCK_STREAM, 0));
+  ASSERT_EQ(bind(listener.get(), address.addr(), address.addr_len), 0);
+  ASSERT_EQ(listen(listener.get(), 1), 0);
+
+  // A program that is not this test connects: nc, which does not read its
+  // standard input with -d and stays connected until the server closes.
+  base::Process child = base::LaunchProcess(
+      std::vector<std::string>{"/usr/bin/nc", "-d", "-U", path.value()},
+      base::LaunchOptions());
+  ASSERT_TRUE(child.IsValid());
+  pollfd wait = {listener.get(), POLLIN, 0};
+  ASSERT_EQ(poll(&wait, 1, 10000), 1) << "the child did not connect";
+  base::ScopedFD accepted(accept(listener.get(), nullptr, nullptr));
+  ASSERT_TRUE(accepted.is_valid());
+
+  const std::optional<PeerToken> token =
+      resolver->TokenForSocket(accepted.get());
+  ASSERT_TRUE(token);
+  base::ElapsedTimer timer;
+  const std::optional<ResolvedPeer> peer = resolver->Resolve(*token);
+  const base::TimeDelta took = timer.Elapsed();
+  ASSERT_TRUE(peer);
+  LOG(INFO) << "resolving a real child took " << took.InMilliseconds()
+            << " ms; signing identity '"
+            << peer->identity.process.signing_identity << "', "
+            << peer->identity.ancestors.size() << " ancestors";
+  // Well inside the gateway's 5 s for the whole lookup.
+  EXPECT_LT(took, base::Seconds(2));
+
+  EXPECT_EQ(peer->identity.uid, geteuid());
+  EXPECT_EQ(
+      base::MakeAbsoluteFilePath(base::FilePath(peer->identity.process.path)),
+      base::MakeAbsoluteFilePath(base::FilePath("/usr/bin/nc")));
+  // Its parent is this test.
+  ASSERT_FALSE(peer->identity.ancestors.empty());
+  base::FilePath exe;
+  ASSERT_TRUE(base::PathService::Get(base::FILE_EXE, &exe));
+  EXPECT_EQ(base::MakeAbsoluteFilePath(
+                base::FilePath(peer->identity.ancestors[0].path)),
+            base::MakeAbsoluteFilePath(exe));
+  EXPECT_TRUE(resolver->Unchanged(*peer));
+
+  // Once it is gone it is not the peer any more, and cannot be looked up.
+  ASSERT_TRUE(child.Terminate(0, /*wait=*/true));
+  EXPECT_FALSE(resolver->Unchanged(*peer));
+  EXPECT_FALSE(resolver->Resolve(*token));
 }
 
 TEST(KoanAgentPeerTest, AHandleThatIsNotThePeersIsNotUnchanged) {

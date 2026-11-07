@@ -17,14 +17,27 @@ ConnectionAdmission::Id ConnectionAdmission::TryAdmit() {
     return kRefused;
   }
   const Id id = next_id_++;
-  connections_[id] = false;
+  connections_[id] = Connection();
   return id;
+}
+
+bool ConnectionAdmission::AssignPeer(Id id, const std::string& peer_key) {
+  const auto it = connections_.find(id);
+  if (it == connections_.end()) {
+    return true;
+  }
+  // Counted without this connection, which has no peer yet.
+  if (unauthenticated_for_peer(peer_key) >= kMaxUnauthenticatedPerPeer) {
+    return false;
+  }
+  it->second.peer_key = peer_key;
+  return true;
 }
 
 void ConnectionAdmission::MarkAuthenticated(Id id) {
   const auto it = connections_.find(id);
   if (it != connections_.end()) {
-    it->second = true;
+    it->second.authenticated = true;
   }
 }
 
@@ -34,7 +47,17 @@ void ConnectionAdmission::Release(Id id) {
 
 size_t ConnectionAdmission::unauthenticated() const {
   return static_cast<size_t>(std::ranges::count_if(
-      connections_, [](const auto& connection) { return !connection.second; }));
+      connections_,
+      [](const auto& connection) { return !connection.second.authenticated; }));
+}
+
+size_t ConnectionAdmission::unauthenticated_for_peer(
+    const std::string& peer_key) const {
+  return static_cast<size_t>(
+      std::ranges::count_if(connections_, [&](const auto& connection) {
+        return !connection.second.authenticated &&
+               connection.second.peer_key == peer_key;
+      }));
 }
 
 }  // namespace koan::agent

@@ -228,10 +228,17 @@ browser process.
   indistinguishable from the process that connected (it is the connector's decision to share it, and the connector is
   what the user was shown and the pin names), and the token is fixed at connect time, so "again" means the same pid's
   current state, not a fresh read of the socket.
-* **Socket hygiene** (verified, C§2a, C§5): `bind()` leaves a stale file and a 0777-minus-umask mode, so Koan probes
-  with `connect()`, `unlink()`s a dead socket, and `chmod`s 0600 inside the 0700 directory. `sun_path` allows 103
-  characters, so a long `--user-data-dir` falls back to `/tmp/koan-<uid>/<hash>.sock` after `lstat` checks (owner,
-  not a symlink). A discovery file `AgentControl/agent.json` (0600: socket path, pid, version, profile) lets the CLI
+* **Socket hygiene** (verified, C§2a, C§5): `bind()` leaves a stale file and a 0777-minus-umask mode. Whoever holds an
+  exclusive `flock` on `AgentControl/agent.lock` owns the path, and the kernel drops it when that browser crashes, so a
+  socket found while the lock is free is dead and is `unlink()`ed, and one found while it is held is left alone. (A
+  `connect()` probe was the first design and is wrong: a full backlog is `ECONNREFUSED` on macOS, so a busy live gateway
+  would look dead, and the probe makes a live gateway accept a connection.) The directory is made with `mkdir(0700)`
+  and then only reached through a descriptor opened with `O_NOFOLLOW|O_DIRECTORY` (`fstat` for the owner, `fchmod` to
+  tighten), so a symlink swapped in cannot redirect a check or a `chmod`; the socket is `chmod`ed 0600 after `bind()`,
+  and `Stop()` unlinks only the file whose device and inode it recorded after the bind, never whatever is at the path.
+  `sun_path` allows 103 characters, so a long `--user-data-dir` falls back to `<per-user temp dir>/koan-<uid>/<hash>.sock`
+  (`confstr(_CS_DARWIN_USER_TEMP_DIR)`, a 0700 directory, rather than a shared `/tmp` where another user can create
+  `koan-<uid>` first), then `/tmp`. Making the directory and taking the lock run on a thread that may block. A discovery file `AgentControl/agent.json` (0600: socket path, pid, version, profile) lets the CLI
   find it; the CLI validates the pid and a `connect()` before trusting it.
 * **Threads**: socket I/O on the IO thread; **parsing, scrubbing and serialising of large CDP traffic on a worker
   thread**, with only decisions (attach, dispatch, lease) on the UI thread, because all `DevToolsAgentHost` calls are
@@ -417,8 +424,13 @@ every other protocol violation before authentication count as a failure against 
 or unanswered prompt and the deadline already did). After authentication a stalled frame or a violation is not a
 guessing failure. The session asks the gateway to look at the peer again before it verifies a proof and before it
 applies the user's approval (`SessionDelegate::PeerUnchanged`); a "yes" given after the peer changed is answered
-`Koan.peerChanged`, closes the connection and stores nothing. Nothing starts the gateway yet (no preference, no window
-hook): that is the settings change.
+`Koan.peerChanged`, closes the connection and stores nothing. Per program, at most two of the four unauthenticated slots (`Koan.busy` for the third: the CLI retries with a short
+back-off). A connection the gateway closes for its own reasons says why in one frame with no id (`Koan.busy`,
+`Koan.peerUnresolved`; nothing is said to a foreign user or a blocked peer) and logs it, so that a lookup that is too
+slow is a log line and an error, not silence. Memory: 32 MB frames and a 64 MB reply queue per connection times eight
+is fine while only `Koan.status` exists; the forwarding PR adds a gateway-wide byte budget and stops reading from a
+connection whose queue is high. The dialog's answer may come from any thread (it is posted back to the gateway's
+sequence). Nothing starts the gateway yet (no preference, no window hook): that is the settings change.
 
 ### 5.3 Capabilities (per client, editable in settings)
 

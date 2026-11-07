@@ -138,6 +138,13 @@ bool IsValidClientId(std::string_view id);
 // Where paired clients are kept. The production store encrypts and
 // authenticates the records with os_crypt (a later change); this is the
 // contract the session needs.
+//
+// **Find(), Touch() and UpdatePinned() must not block**: the session calls
+// them on the gateway's IO sequence for every request and once a second per
+// authenticated connection. The production store keeps the decrypted records
+// in memory and writes behind. Add() and Remove() also run there; Remove() must
+// be durable before it returns, so it hands the write to a thread that may
+// block and returns once that has been flushed (a revoke is rare).
 class ClientStore {
  public:
   virtual ~ClientStore();

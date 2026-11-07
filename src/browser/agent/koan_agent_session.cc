@@ -152,6 +152,7 @@ base::TimeTicks Session::Now() const {
 }
 
 void Session::OnBytesReceived(base::span<const uint8_t> bytes) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ == State::kClosed) {
     return;
   }
@@ -250,6 +251,12 @@ bool Session::CheckPeer() {
   // match against a pin, and a peer of another user is not ours to serve.
   if (!env_.browser_uid || peer_.uid != *env_.browser_uid ||
       peer_.process.path.empty()) {
+    Close(CloseReason::kUnknownPeer);
+    return false;
+  }
+  // And it must still be that peer: a dialog built for a program that exec'd
+  // another since it connected would show the user the wrong one.
+  if (!delegate_->PeerUnchanged()) {
     Close(CloseReason::kUnknownPeer);
     return false;
   }
@@ -440,6 +447,7 @@ bool Session::StillPaired() {
 }
 
 void Session::OnClientRevoked(std::string_view client_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ == State::kAuthenticated && client_id_ == client_id) {
     Close(CloseReason::kRevoked);
   } else if (state_ == State::kAwaitingApproval && pending_ &&
@@ -500,6 +508,7 @@ void Session::CountDenial() {
 
 void Session::OnApprovalDecision(uint64_t request_id,
                                  ApprovalDecision decision) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ != State::kAwaitingApproval || !pending_ ||
       pending_->approval_id != request_id) {
     return;
@@ -570,6 +579,7 @@ void Session::OnApprovalDecision(uint64_t request_id,
 }
 
 void Session::CheckTimeouts() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ == State::kClosed) {
     return;
   }

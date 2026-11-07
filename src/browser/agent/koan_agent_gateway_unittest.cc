@@ -18,13 +18,16 @@
 #include "base/base64.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/thread_pool.h"
 #include "base/test/run_until.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_frame.h"
@@ -32,6 +35,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
 #include "net/socket/unix_domain_client_socket_posix.h"
+#include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/boringssl/src/include/openssl/curve25519.h"
@@ -217,7 +221,21 @@ class KoanAgentGatewayTest : public testing::Test {
     options.uid = getuid();
     gateway_ = std::make_unique<Gateway>(options, resolver_, &store_,
                                          &presenter_, &ticks_, &wall_);
-    ASSERT_EQ(gateway_->Start(), Gateway::StartResult::kOk);
+    ASSERT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kOk);
+  }
+
+  static Gateway::StartResult StartAndWait(Gateway& gateway) {
+    base::test::TestFuture<Gateway::StartResult> result;
+    gateway.Start(result.GetCallback());
+    return result.Get();
+  }
+
+  // A resolver answer naming a program at `path`, for tests that need several
+  // programs (one program may hold only two unauthenticated slots).
+  void SetProgram(const std::string& path) {
+    PeerIdentity identity = resolver_->identity();
+    identity.process.path = path;
+    resolver_->SetIdentity(identity);
   }
 
   std::unique_ptr<TestClient> Connect() {
@@ -227,8 +245,12 @@ class KoanAgentGatewayTest : public testing::Test {
   }
 
   // A connection the server has resolved and is serving: it answers. (A nonce
-  // for an id is asked for, which is not a failure.)
-  std::unique_ptr<TestClient> LiveConnection() {
+  // for an id is asked for, which is not a failure.) `program` is the
+  // executable the fake OS reports for it.
+  std::unique_ptr<TestClient> LiveConnection(const std::string& program = "") {
+    if (!program.empty()) {
+      SetProgram(program);
+    }
     auto client = Connect();
     client->Send(AuthenticateFrame(std::string(32, 'a')));
     auto reply = client->Read();
@@ -340,13 +362,16 @@ TEST_F(KoanAgentGatewayTest, AConnectionOfAnotherUserIsClosedUnread) {
   EXPECT_TRUE(WaitForConnections(0));
 }
 
-TEST_F(KoanAgentGatewayTest, APeerThatCannotBeFoundIsClosedUnread) {
+TEST_F(KoanAgentGatewayTest, APeerThatCannotBeFoundIsToldAndClosedUnread) {
   for (const bool no_token : {true, false}) {
     resolver_->no_token = no_token;
     resolver_->fail_resolve = !no_token;
     auto client = Connect();
     client->Send(R"({"id":1,"method":"Koan.status"})");
-    EXPECT_FALSE(client->Read()) << "token: " << no_token;
+    // The client learns why (with no id: nothing of its was read), then EOF.
+    EXPECT_EQ(ErrorCode(client->Read()), "Koan.peerUnresolved")
+        << "token: " << no_token;
+    EXPECT_FALSE(client->Read());
     EXPECT_TRUE(WaitForConnections(0));
   }
 }
@@ -362,33 +387,50 @@ TEST_F(KoanAgentGatewayTest, APeerWithNoExecutablePathIsClosed) {
 TEST_F(KoanAgentGatewayTest, OnlyFourConnectionsMaySayNothing) {
   std::vector<std::unique_ptr<TestClient>> held;
   for (size_t i = 0; i < ConnectionAdmission::kMaxUnauthenticated; ++i) {
-    held.push_back(LiveConnection());
+    held.push_back(LiveConnection("/tmp/program" + std::to_string(i)));
   }
-  // The fifth is accepted by the kernel and closed by the gateway at once.
+  // The fifth is accepted by the kernel and told to come back by the gateway.
   auto fifth = Connect();
-  EXPECT_TRUE(fifth->WaitForClose());
+  EXPECT_EQ(ErrorCode(fifth->Read()), "Koan.busy");
+  EXPECT_FALSE(fifth->Read());
   EXPECT_TRUE(WaitForConnections(ConnectionAdmission::kMaxUnauthenticated));
   // A slot comes back when a connection goes.
   held.pop_back();
   ASSERT_TRUE(WaitForConnections(ConnectionAdmission::kMaxUnauthenticated - 1));
-  auto again = LiveConnection();
+  auto again = LiveConnection("/tmp/another");
   EXPECT_EQ(gateway_->connection_count(),
             ConnectionAdmission::kMaxUnauthenticated);
+}
+
+TEST_F(KoanAgentGatewayTest, OneProgramCannotTakeEveryUnauthenticatedSlot) {
+  auto first = LiveConnection("/tmp/greedy");
+  auto second = LiveConnection("/tmp/greedy");
+  // The third from the same program is told so, once it is known who it is.
+  SetProgram("/tmp/greedy");
+  auto third = Connect();
+  EXPECT_EQ(ErrorCode(third->Read()), "Koan.busy");
+  EXPECT_FALSE(third->Read());
+  ASSERT_TRUE(WaitForConnections(2));
+  // Another program still gets in, and the first two are unharmed.
+  auto other = LiveConnection("/tmp/polite");
+  first->Send(AuthenticateFrame(std::string(32, 'b')));
+  EXPECT_TRUE(first->Read());
 }
 
 TEST_F(KoanAgentGatewayTest, AuthenticatedConnectionsDoNotCountAsSilentOnes) {
   Key key;
   const std::string id = Pair(key);
   std::vector<std::unique_ptr<TestClient>> held;
+  // Four authenticated from one program: they do not count against its two.
   for (size_t i = 0; i < ConnectionAdmission::kMaxUnauthenticated; ++i) {
     held.push_back(Authenticated(key, id));
   }
   // Four authenticated, and four more unauthenticated still fit (8 in all).
   for (size_t i = 0; i < ConnectionAdmission::kMaxUnauthenticated; ++i) {
-    held.push_back(LiveConnection());
+    held.push_back(LiveConnection("/tmp/silent" + std::to_string(i)));
   }
   auto ninth = Connect();
-  EXPECT_TRUE(ninth->WaitForClose());
+  EXPECT_EQ(ErrorCode(ninth->Read()), "Koan.busy");
 }
 
 TEST_F(KoanAgentGatewayTest, ASilentConnectionIsClosedAfterTheDeadline) {
@@ -406,7 +448,9 @@ TEST_F(KoanAgentGatewayTest,
   ASSERT_TRUE(WaitForConnections(1));
   ticks_.Advance(Gateway::kResolveDeadline + base::Seconds(1));
   gateway_->CheckTimeouts();
-  EXPECT_TRUE(client->WaitForClose());
+  // Told why, rather than left to wonder.
+  EXPECT_EQ(ErrorCode(client->Read()), "Koan.peerUnresolved");
+  EXPECT_FALSE(client->Read());
   EXPECT_TRUE(WaitForConnections(0));
   resolver_->Release();  // the lookup finally returns, to nobody
 }
@@ -521,13 +565,17 @@ TEST_F(KoanAgentGatewayTest, StartRefusesWhatItShouldNot) {
   options.socket_path = path_;
   options.uid = getuid();
   Gateway second(options, resolver_, &store_, &presenter_, &ticks_, &wall_);
-  EXPECT_EQ(second.Start(), Gateway::StartResult::kInUse);
+  EXPECT_EQ(StartAndWait(second), Gateway::StartResult::kInUse);
   EXPECT_TRUE(base::PathExists(path_));  // the first one's socket is untouched
+  // A refused gateway that is stopped or destroyed leaves it alone as well.
+  second.Stop();
+  EXPECT_TRUE(base::PathExists(path_));
+  auto client = LiveConnection();  // and the first still serves
   // No way to find out who connects.
   Gateway blind(options, nullptr, &store_, &presenter_, &ticks_, &wall_);
-  EXPECT_EQ(blind.Start(), Gateway::StartResult::kNoPeerResolver);
+  EXPECT_EQ(StartAndWait(blind), Gateway::StartResult::kNoPeerResolver);
   // Starting twice.
-  EXPECT_EQ(gateway_->Start(), Gateway::StartResult::kAlreadyStarted);
+  EXPECT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kAlreadyStarted);
   // A directory that is a symlink.
   const base::FilePath real = dir_.GetPath().Append("real");
   const base::FilePath link = dir_.GetPath().Append("link");
@@ -535,7 +583,148 @@ TEST_F(KoanAgentGatewayTest, StartRefusesWhatItShouldNot) {
   ASSERT_TRUE(base::CreateSymbolicLink(real, link));
   options.socket_path = link.Append("agent.sock");
   Gateway linked(options, resolver_, &store_, &presenter_, &ticks_, &wall_);
-  EXPECT_EQ(linked.Start(), Gateway::StartResult::kUnsafePath);
+  EXPECT_EQ(StartAndWait(linked), Gateway::StartResult::kUnsafePath);
+}
+
+TEST_F(KoanAgentGatewayTest, TwoGatewaysStartingTogetherLetOneWin) {
+  gateway_->Stop();
+  GatewayOptions options;
+  options.socket_path = path_;
+  options.uid = getuid();
+  Gateway a(options, resolver_, &store_, &presenter_, &ticks_, &wall_);
+  Gateway b(options, resolver_, &store_, &presenter_, &ticks_, &wall_);
+  base::test::TestFuture<Gateway::StartResult> first, second;
+  a.Start(first.GetCallback());
+  b.Start(second.GetCallback());
+  const Gateway::StartResult ra = first.Get();
+  const Gateway::StartResult rb = second.Get();
+  EXPECT_TRUE(
+      (ra == Gateway::StartResult::kOk && rb == Gateway::StartResult::kInUse) ||
+      (rb == Gateway::StartResult::kOk && ra == Gateway::StartResult::kInUse))
+      << static_cast<int>(ra) << " " << static_cast<int>(rb);
+  // And the one that won is reachable.
+  auto client = std::make_unique<TestClient>(path_);
+  EXPECT_TRUE(client->Connect());
+}
+
+TEST_F(KoanAgentGatewayTest, StoppingLeavesAnotherBrowsersSocketAlone) {
+  // The path now names a different socket (another browser's, after this one
+  // lost its lock in some way nobody foresaw): stopping must not remove it.
+  const base::FilePath moved = dir_.GetPath().Append("moved.sock");
+  ASSERT_EQ(rename(path_.value().c_str(), moved.value().c_str()), 0);
+  net::UnixDomainServerSocket other(
+      base::BindRepeating(
+          [](const net::UnixDomainServerSocket::Credentials&) { return true; }),
+      false);
+  ASSERT_EQ(other.BindAndListen(path_.value(), 1), net::OK);
+  gateway_->Stop();
+  EXPECT_TRUE(base::PathExists(path_));
+}
+
+TEST_F(KoanAgentGatewayTest, StoppingBeforeTheStartHasFinishedReportsStopped) {
+  gateway_->Stop();
+  base::test::TestFuture<Gateway::StartResult> result;
+  gateway_->Start(result.GetCallback());
+  gateway_->Stop();
+  EXPECT_EQ(result.Get(), Gateway::StartResult::kStopped);
+  EXPECT_FALSE(gateway_->started());
+  // The abandoned preparation lets go of its lock once it has run; only then
+  // is a new start sure to find the path free.
+  task_environment_.RunUntilIdle();
+  // And it can be started again afterwards.
+  EXPECT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kOk);
+  auto client = LiveConnection();
+}
+
+TEST_F(KoanAgentGatewayTest, StoppingWhileALookupIsInFlightIsSafe) {
+  resolver_->block = true;
+  auto client = Connect();
+  ASSERT_TRUE(WaitForConnections(1));
+  gateway_->Stop();
+  EXPECT_EQ(gateway_->connection_count(), 0u);
+  EXPECT_TRUE(client->WaitForClose());
+  resolver_->Release();  // the worker finishes; its answer finds nobody
+  task_environment_.RunUntilIdle();
+}
+
+TEST_F(KoanAgentGatewayTest, AnAnswerFromAnotherThreadReachesTheConnection) {
+  Key key;
+  auto client = Connect();
+  client->Send(PairFrame(key));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !presenter_.answers.empty(); }));
+  // The dialog is on another thread and answers from there.
+  ApprovalDecision decision;
+  decision.approved = true;
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(presenter_.answers.back()), decision));
+  presenter_.answers.pop_back();
+  auto reply = client->Read();
+  ASSERT_TRUE(reply);
+  EXPECT_TRUE(reply->FindDict("result")->FindString("clientId"));
+  EXPECT_EQ(store_.size(), 1u);
+}
+
+TEST_F(KoanAgentGatewayTest, AnAnswerAfterTheGatewayIsGoneDoesNothing) {
+  Key key;
+  auto client = Connect();
+  client->Send(PairFrame(key));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !presenter_.answers.empty(); }));
+  auto late = std::move(presenter_.answers.back());
+  presenter_.answers.pop_back();
+  gateway_->Stop();
+  ApprovalDecision decision;
+  decision.approved = true;
+  std::move(late).Run(decision);
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(store_.size(), 0u);
+}
+
+TEST_F(KoanAgentGatewayTest,
+       AConnectionTheKernelRefusesNeverReachesTheGateway) {
+  // A second gateway whose listener lets a different user through: this
+  // process is refused by the kernel's check, which accepts the next connection
+  // by itself.
+  GatewayOptions options;
+  options.socket_path = dir_.GetPath().Append("other").Append("agent.sock");
+  options.uid = getuid();
+  options.kernel_uid_for_testing = getuid() + 1;
+  Gateway refusing(options, resolver_, &store_, &presenter_, &ticks_, &wall_);
+  ASSERT_EQ(StartAndWait(refusing), Gateway::StartResult::kOk);
+  for (int i = 0; i < 3; ++i) {
+    TestClient client(options.socket_path);
+    ASSERT_TRUE(client.Connect());
+    client.Send(R"({"id":1,"method":"Koan.status"})");
+    EXPECT_FALSE(client.Read()) << i;  // closed, nothing said
+  }
+  EXPECT_EQ(refusing.connection_count(), 0u);
+}
+
+TEST_F(KoanAgentGatewayTest, APeerThatLeavesInTheMiddleOfAFrameFreesItsSlot) {
+  for (const size_t sent :
+       {size_t{2}, size_t{6}}) {  // half a header, half a frame
+    {
+      auto client = LiveConnection();
+      const std::vector<uint8_t> frame = *EncodeFrame(base::as_byte_span(
+          std::string(R"({"id":2,"method":"Koan.status"})")));
+      client->SendBytes(base::span(frame).first(sent));
+    }  // gone
+    EXPECT_TRUE(WaitForConnections(0)) << sent;
+  }
+}
+
+TEST_F(KoanAgentGatewayTest, APeerThatLeavesWithAPromptOpenFreesThePromptSlot) {
+  Key key;
+  {
+    auto client = Connect();
+    client->Send(PairFrame(key));
+    ASSERT_TRUE(
+        base::test::RunUntil([&] { return !presenter_.requests.empty(); }));
+  }
+  ASSERT_TRUE(WaitForConnections(0));
+  EXPECT_EQ(presenter_.cancelled.size(), 1u);
 }
 
 }  // namespace koan::agent

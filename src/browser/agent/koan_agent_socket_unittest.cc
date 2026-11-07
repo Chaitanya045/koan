@@ -57,7 +57,7 @@ TEST_F(KoanAgentSocketTest, TheSocketLivesInTheProfileWhenThePathFits) {
 
 TEST_F(KoanAgentSocketTest, ALongProfilePathFallsBackToAHashedPath) {
   const base::FilePath deep(
-      "/Users/someone/Library/Application Support/Koan/a/very/long/path/"
+      "/home/example/Library/Application Support/Koan/a/very/long/path/"
       "to/a/profile/directory/that/does/not/fit/in/sun_path");
   const base::FilePath other = deep.Append("2");
   const base::FilePath tmp("/tmp");
@@ -72,6 +72,20 @@ TEST_F(KoanAgentSocketTest, ALongProfilePathFallsBackToAHashedPath) {
   EXPECT_NE(*ChooseSocketPath(deep, 502, tmp), *chosen);
 }
 
+TEST_F(KoanAgentSocketTest, WithoutARootThePerUserTemporaryDirectoryIsUsed) {
+  const base::FilePath root = UserTempRoot();
+  EXPECT_TRUE(root.IsAbsolute());
+  EXPECT_EQ(root, root.StripTrailingSeparators());
+  const base::FilePath deep(std::string("/") + std::string(150, 'a'));
+  const auto chosen = ChooseSocketPath(deep, 501);
+  ASSERT_TRUE(chosen);
+  EXPECT_LE(chosen->value().size(), kMaxSocketPathLength);
+  EXPECT_EQ(chosen->DirName().BaseName().value(), "koan-501");
+  // Under the per-user directory when it is short enough, else /tmp.
+  const base::FilePath parent = chosen->DirName().DirName();
+  EXPECT_TRUE(parent == root || parent == base::FilePath("/tmp")) << parent;
+}
+
 TEST_F(KoanAgentSocketTest, NothingFitsMeansNoPath) {
   const base::FilePath deep(std::string("/") + std::string(200, 'a'));
   EXPECT_FALSE(
@@ -81,8 +95,12 @@ TEST_F(KoanAgentSocketTest, NothingFitsMeansNoPath) {
 TEST_F(KoanAgentSocketTest, ADirectoryIsMadePrivate) {
   const base::FilePath root = ShortRoot();
   const base::FilePath socket = root.Append("AgentControl").Append("a.sock");
-  ASSERT_EQ(PrepareSocketPath(socket, getuid()), SocketPrepareResult::kOk);
+  base::ScopedFD lock;
+  ASSERT_EQ(PrepareSocketPath(socket, getuid(), &lock),
+            SocketPrepareResult::kOk);
+  EXPECT_TRUE(lock.is_valid());
   EXPECT_EQ(ModeOf(socket.DirName()), 0700u);
+  EXPECT_EQ(ModeOf(socket.DirName().Append("agent.lock")), 0600u);
 }
 
 TEST_F(KoanAgentSocketTest, ALooseDirectoryOfOursIsTightened) {
@@ -90,7 +108,8 @@ TEST_F(KoanAgentSocketTest, ALooseDirectoryOfOursIsTightened) {
   const base::FilePath directory = root.Append("d");
   ASSERT_TRUE(base::CreateDirectory(directory));
   ASSERT_EQ(chmod(directory.value().c_str(), 0755), 0);
-  ASSERT_EQ(PrepareSocketPath(directory.Append("a.sock"), getuid()),
+  base::ScopedFD lock;
+  ASSERT_EQ(PrepareSocketPath(directory.Append("a.sock"), getuid(), &lock),
             SocketPrepareResult::kOk);
   EXPECT_EQ(ModeOf(directory), 0700u);
 }
@@ -100,11 +119,15 @@ TEST_F(KoanAgentSocketTest, ASymlinkInPlaceOfTheDirectoryIsRefused) {
   const base::FilePath real = root.Append("real");
   const base::FilePath link = root.Append("link");
   ASSERT_TRUE(base::CreateDirectory(real));
+  ASSERT_EQ(chmod(real.value().c_str(), 0755), 0);
   ASSERT_TRUE(base::CreateSymbolicLink(real, link));
-  EXPECT_EQ(PrepareSocketPath(link.Append("a.sock"), getuid()),
+  base::ScopedFD lock;
+  EXPECT_EQ(PrepareSocketPath(link.Append("a.sock"), getuid(), &lock),
             SocketPrepareResult::kDirectoryUnsafe);
-  // And nothing was written through it.
+  // Nothing was written through it, and its mode was not touched.
   EXPECT_TRUE(base::IsDirectoryEmpty(real));
+  EXPECT_EQ(ModeOf(real), 0755u);
+  EXPECT_FALSE(lock.is_valid());
 }
 
 TEST_F(KoanAgentSocketTest, ADirectoryOfAnotherUserIsRefused) {
@@ -112,7 +135,20 @@ TEST_F(KoanAgentSocketTest, ADirectoryOfAnotherUserIsRefused) {
   const base::FilePath directory = root.Append("d");
   ASSERT_TRUE(base::CreateDirectory(directory));
   // As if `uid` were someone else: our directory is not theirs.
-  EXPECT_EQ(PrepareSocketPath(directory.Append("a.sock"), getuid() + 1),
+  base::ScopedFD lock;
+  EXPECT_EQ(PrepareSocketPath(directory.Append("a.sock"), getuid() + 1, &lock),
+            SocketPrepareResult::kDirectoryUnsafe);
+}
+
+TEST_F(KoanAgentSocketTest, ASymlinkInPlaceOfTheLockFileIsRefused) {
+  const base::FilePath root = ShortRoot();
+  const base::FilePath directory = root.Append("d");
+  ASSERT_TRUE(base::CreateDirectory(directory));
+  const base::FilePath target = root.Append("target");
+  ASSERT_TRUE(base::WriteFile(target, "x"));
+  ASSERT_TRUE(base::CreateSymbolicLink(target, directory.Append("agent.lock")));
+  base::ScopedFD lock;
+  EXPECT_EQ(PrepareSocketPath(directory.Append("a.sock"), getuid(), &lock),
             SocketPrepareResult::kDirectoryUnsafe);
 }
 
@@ -120,25 +156,50 @@ TEST_F(KoanAgentSocketTest, ARegularFileAtThePathIsLeftAlone) {
   const base::FilePath root = ShortRoot();
   const base::FilePath path = root.Append("a.sock");
   ASSERT_TRUE(base::WriteFile(path, "precious"));
-  EXPECT_EQ(PrepareSocketPath(path, getuid()), SocketPrepareResult::kNotOurs);
+  base::ScopedFD lock;
+  EXPECT_EQ(PrepareSocketPath(path, getuid(), &lock),
+            SocketPrepareResult::kNotOurs);
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(path, &contents));
   EXPECT_EQ(contents, "precious");
 }
 
-TEST_F(KoanAgentSocketTest, ADeadSocketIsRemovedAndALiveOneIsNot) {
+TEST_F(KoanAgentSocketTest, WhoeverHoldsTheLockOwnsThePath) {
   const base::FilePath root = ShortRoot();
   const base::FilePath path = root.Append("a.sock");
+  base::ScopedFD first_lock;
+  ASSERT_EQ(PrepareSocketPath(path, getuid(), &first_lock),
+            SocketPrepareResult::kOk);
+  net::UnixDomainServerSocket server(base::BindRepeating(&AllowAll), false);
+  ASSERT_EQ(server.BindAndListen(path.value(), 1), net::OK);
+  const auto identity = SocketIdentityOf(path, getuid());
+  ASSERT_TRUE(identity);
+
+  // A second browser finds the path taken, and leaves the live socket alone,
+  // however busy that socket is.
+  base::ScopedFD second_lock;
+  EXPECT_EQ(PrepareSocketPath(path, getuid(), &second_lock),
+            SocketPrepareResult::kInUse);
+  EXPECT_FALSE(second_lock.is_valid());
+  EXPECT_EQ(SocketIdentityOf(path, getuid()), identity);
+}
+
+TEST_F(KoanAgentSocketTest, ADeadSocketIsRemovedOnceTheLockIsFree) {
+  const base::FilePath root = ShortRoot();
+  const base::FilePath path = root.Append("a.sock");
+  base::ScopedFD lock;
+  ASSERT_EQ(PrepareSocketPath(path, getuid(), &lock), SocketPrepareResult::kOk);
   {
     net::UnixDomainServerSocket server(base::BindRepeating(&AllowAll), false);
     ASSERT_EQ(server.BindAndListen(path.value(), 1), net::OK);
-    // A browser is listening: its socket is not ours to remove.
-    EXPECT_EQ(PrepareSocketPath(path, getuid()), SocketPrepareResult::kInUse);
-    EXPECT_TRUE(base::PathExists(path));
   }
-  // The listener is gone but bind() left the file: that is a stale socket.
+  // The listener is gone but bind() left the file; the browser that bound it
+  // crashed, which released its lock.
   ASSERT_TRUE(base::PathExists(path));
-  EXPECT_EQ(PrepareSocketPath(path, getuid()), SocketPrepareResult::kOk);
+  lock.reset();
+  base::ScopedFD next_lock;
+  EXPECT_EQ(PrepareSocketPath(path, getuid(), &next_lock),
+            SocketPrepareResult::kOk);
   EXPECT_FALSE(base::PathExists(path));
 }
 
@@ -150,13 +211,44 @@ TEST_F(KoanAgentSocketTest, ABoundSocketIsRestrictedToItsOwner) {
   ASSERT_TRUE(RestrictSocketPermissions(path, getuid()));
   EXPECT_EQ(ModeOf(path), 0600u);
   EXPECT_FALSE(RestrictSocketPermissions(path, getuid() + 1));
+  EXPECT_TRUE(SocketIdentityOf(path, getuid()));
+  EXPECT_FALSE(SocketIdentityOf(path, getuid() + 1));
+  EXPECT_FALSE(SocketIdentityOf(root.Append("missing"), getuid()));
+}
+
+TEST_F(KoanAgentSocketTest, OnlyTheSocketThatWasBoundIsRemoved) {
+  const base::FilePath root = ShortRoot();
+  const base::FilePath path = root.Append("a.sock");
+  const base::FilePath moved = root.Append("b.sock");
+
+  net::UnixDomainServerSocket first(base::BindRepeating(&AllowAll), false);
+  ASSERT_EQ(first.BindAndListen(path.value(), 1), net::OK);
+  const auto first_identity = SocketIdentityOf(path, getuid());
+  ASSERT_TRUE(first_identity);
+
+  // Another browser's socket is now at the path (the first file is kept under
+  // another name so that its inode cannot be reused for the new one).
+  ASSERT_EQ(rename(path.value().c_str(), moved.value().c_str()), 0);
+  net::UnixDomainServerSocket second(base::BindRepeating(&AllowAll), false);
+  ASSERT_EQ(second.BindAndListen(path.value(), 1), net::OK);
+  const auto second_identity = SocketIdentityOf(path, getuid());
+  ASSERT_TRUE(second_identity);
+  ASSERT_NE(*first_identity, *second_identity);
+
+  EXPECT_FALSE(RemoveSocketIfSame(path, *first_identity));
+  EXPECT_TRUE(base::PathExists(path));
+  EXPECT_TRUE(RemoveSocketIfSame(path, *second_identity));
+  EXPECT_FALSE(base::PathExists(path));
+  EXPECT_FALSE(RemoveSocketIfSame(path, *second_identity));  // already gone
 }
 
 TEST_F(KoanAgentSocketTest, ALongPathIsRefusedNotTruncated) {
   const base::FilePath root = ShortRoot();
   const base::FilePath path =
       root.Append(std::string(120, 'x')).Append("a.sock");
-  EXPECT_EQ(PrepareSocketPath(path, getuid()), SocketPrepareResult::kError);
+  base::ScopedFD lock;
+  EXPECT_EQ(PrepareSocketPath(path, getuid(), &lock),
+            SocketPrepareResult::kError);
 }
 
 }  // namespace koan::agent

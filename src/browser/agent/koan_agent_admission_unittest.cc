@@ -76,4 +76,28 @@ TEST(KoanAgentAdmissionTest, IdsAreNeverReusedAndUnknownIdsAreIgnored) {
   EXPECT_EQ(admission.unauthenticated(), 1u);
 }
 
+TEST(KoanAgentAdmissionTest, OneProgramMayHoldOnlyTwoUnauthenticatedSlots) {
+  ConnectionAdmission admission;
+  std::vector<ConnectionAdmission::Id> ids;
+  for (size_t i = 0; i < ConnectionAdmission::kMaxUnauthenticated; ++i) {
+    ids.push_back(admission.TryAdmit());
+  }
+  EXPECT_TRUE(admission.AssignPeer(ids[0], "a"));
+  EXPECT_TRUE(admission.AssignPeer(ids[1], "a"));
+  // The third from the same program is refused, and does not count.
+  EXPECT_FALSE(admission.AssignPeer(ids[2], "a"));
+  EXPECT_EQ(admission.unauthenticated_for_peer("a"), 2u);
+  // Another program is not affected.
+  EXPECT_TRUE(admission.AssignPeer(ids[3], "b"));
+  // A slot comes back when the program authenticates or closes one.
+  admission.Release(ids[2]);
+  admission.MarkAuthenticated(ids[0]);
+  const auto next = admission.TryAdmit();
+  ASSERT_NE(next, ConnectionAdmission::kRefused);
+  EXPECT_TRUE(admission.AssignPeer(next, "a"));
+  EXPECT_EQ(admission.unauthenticated_for_peer("a"), 2u);
+  // An unknown id is ignored.
+  EXPECT_TRUE(admission.AssignPeer(9999, "a"));
+}
+
 }  // namespace koan::agent

@@ -1508,6 +1508,35 @@ TEST_F(KoanAgentSessionTest, ADenialDoesNotNeedTheSecondLook) {
   EXPECT_EQ(delegate().closed, CloseReason::kPairingDenied);
 }
 
+TEST_F(KoanAgentSessionTest, NoDialogIsBuiltForAPeerThatIsNoLongerThere) {
+  Client client;
+  const std::string id = Pair(client);
+  auto session = NewSession();
+  delegate().peer_unchanged = false;  // it exec'd after connecting
+  Send(*session, PairFrame(client));
+  EXPECT_EQ(delegate().closed, CloseReason::kUnknownPeer);
+  EXPECT_TRUE(delegate().approvals.empty());
+  EXPECT_TRUE(delegate().replies.empty());
+  // Nor is a nonce given to it.
+  auto other = NewSession();
+  delegate().peer_unchanged = false;
+  Send(*other, AuthenticateFrame(id));
+  EXPECT_EQ(delegate().closed, CloseReason::kUnknownPeer);
+  EXPECT_TRUE(delegate().replies.empty());
+}
+
+TEST_F(KoanAgentSessionTest, AnAuthenticatedSessionIsNotLookedAtAgain) {
+  Client client;
+  const std::string id = Pair(client);
+  auto session = NewSession();
+  ASSERT_TRUE(Authenticate(*session, client, id));
+  const int rechecks = delegate().rechecks;
+  delegate().peer_unchanged = false;
+  Send(*session, R"({"id":20,"method":"Koan.status"})");
+  EXPECT_EQ(delegate().rechecks, rechecks);
+  EXPECT_NE(session->state(), Session::State::kClosed);
+}
+
 TEST_F(KoanAgentSessionTest,
        AFrameOverTheLimitClosesTheConnectionBeforeItIsRead) {
   auto session = NewSession();
