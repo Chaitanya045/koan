@@ -36,6 +36,9 @@ inline constexpr char kLookMode[] = "koan.look.mode";
 inline constexpr char kLookBase[] = "koan.look.base";
 inline constexpr char kLookAccent[] = "koan.look.accent";
 inline constexpr char kLookCustomCss[] = "koan.look.custom_css";
+// Zen's zen.theme.acrylic-urlbar (default off): the floating URL bar is a
+// glass pane, translucent with the page blurred behind it. Both styles.
+inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
 
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
