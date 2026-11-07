@@ -554,9 +554,9 @@ TEST_F(KoanAgentGatewayTest, TheSocketIsPrivate) {
   struct stat info;
   ASSERT_EQ(lstat(path_.value().c_str(), &info), 0);
   EXPECT_TRUE(S_ISSOCK(info.st_mode));
-  EXPECT_EQ(info.st_mode & 0777, 0600u);
+  EXPECT_EQ(static_cast<unsigned>(info.st_mode & 0777), 0600u);
   ASSERT_EQ(lstat(path_.DirName().value().c_str(), &info), 0);
-  EXPECT_EQ(info.st_mode & 0777, 0700u);
+  EXPECT_EQ(static_cast<unsigned>(info.st_mode & 0777), 0700u);
 }
 
 TEST_F(KoanAgentGatewayTest, StartRefusesWhatItShouldNot) {

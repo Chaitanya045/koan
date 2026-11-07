@@ -221,8 +221,10 @@ browser process.
   signing identity is `apple` for a platform binary, `team:<id>`, `cdhash:<hex>` for an ad hoc signature (so a rebuilt
   unsigned tool is "changed"), or empty for unsigned; a signature that does not verify is refused. The lookup fails
   closed. The connection is also refused at accept when the cap is full (below), the uid is not the browser's, the peer
-  has no executable path, or the peer is blocked. **Looking again** (`Unchanged`, cheap: the kernel's unique id and
-  executable uuid of the pid, and its path) happens before a proof is verified and before the user's approval is
+  has no executable path, or the peer is blocked. **Looking again** (`Unchanged`, cheap: the pid's start time from
+  `proc_bsdinfo`, which tells a reused pid from the process, and its executable path, which an exec of another program
+  changes; the audit token's pid version, which would say "has it exec'd" directly, can only be checked through the
+  Security framework, so it is used once, at lookup. Apple's `proc_uniqidentifierinfo` is private and was not usable) happens before a proof is verified and before the user's approval is
   applied, so an `exec` after connecting, or during the 60 s dialog, ends the session (`kUnknownPeer`).
   *What this does not tell:* `LOCAL_PEERTOKEN` is the connector's token. A child that inherited the descriptor is
   indistinguishable from the process that connected (it is the connector's decision to share it, and the connector is

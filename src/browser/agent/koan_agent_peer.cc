@@ -13,7 +13,6 @@
 #include <libproc.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <uuid/uuid.h>
 
 #include <algorithm>
 #include <array>
@@ -48,13 +47,22 @@ constexpr size_t kMaxCachedAncestors = 256;
 // one that failed (the gateway gives up on a connection after 5 s).
 constexpr base::TimeDelta kSlowLookup = base::Seconds(1);
 
-// What Unchanged() compares: the audit token the peer was found by, and what
-// the kernel says about that process incarnation. p_uniqueid is per fork; the
-// executable's uuid changes with an exec.
+// When a process started, as the kernel records it (public API: proc_bsdinfo).
+// A pid that was reused is a process that started later, so (pid, start time)
+// names one process for as long as it lives. (The audit token's pid version
+// would say more, in particular that the process has exec'd, but there is no
+// public call that reads the current one; the executable's path stands in for
+// that, below.)
+struct StartTime {
+  uint64_t seconds;
+  uint64_t microseconds;
+};
+
+// What Unchanged() compares: the audit token the peer was found by, and when
+// that process started.
 struct Handle {
   audit_token_t token;
-  uint64_t unique_id;
-  uuid_t executable_uuid;
+  StartTime started;
 };
 static_assert(std::is_trivially_copyable_v<Handle>);
 static_assert(std::has_unique_object_representations_v<Handle>);
@@ -68,9 +76,19 @@ std::string ExecutablePath(pid_t pid) {
   return std::string(path.begin(), std::next(path.begin(), length));
 }
 
-bool UniqueInfo(pid_t pid, proc_uniqidentifierinfo* info) {
-  return proc_pidinfo(pid, PROC_PIDUNIQIDENTIFIERINFO, 0, info,
-                      sizeof(*info)) == static_cast<int>(sizeof(*info));
+bool ProcessStart(pid_t pid, StartTime* started) {
+  proc_bsdinfo info;
+  if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) !=
+      static_cast<int>(sizeof(info))) {
+    return false;
+  }
+  started->seconds = info.pbi_start_tvsec;
+  started->microseconds = info.pbi_start_tvusec;
+  return true;
+}
+
+bool SameStart(const StartTime& a, const StartTime& b) {
+  return a.seconds == b.seconds && a.microseconds == b.microseconds;
 }
 
 base::apple::ScopedCFTypeRef<CFDictionaryRef> AttributeDictionary(
@@ -192,8 +210,8 @@ class MacPeerResolver final : public PeerResolver {
     base::byte_span_from_ref(handle.token).copy_from(bytes);
     const pid_t pid = audit_token_to_pid(handle.token);
 
-    proc_uniqidentifierinfo before;
-    if (pid <= 0 || !UniqueInfo(pid, &before)) {
+    StartTime before;
+    if (pid <= 0 || !ProcessStart(pid, &before)) {
       return refuse("the process has exited");
     }
     // The audit token names one incarnation of the pid: if the process has
@@ -212,17 +230,15 @@ class MacPeerResolver final : public PeerResolver {
       return refuse("the signature does not verify");
     }
     const std::string path = ExecutablePath(pid);
-    proc_uniqidentifierinfo after;
+    StartTime after;
     if (path.empty()) {
       return refuse("no executable path");
     }
-    if (!UniqueInfo(pid, &after) || after.p_uniqueid != before.p_uniqueid ||
-        uuid_compare(after.p_uuid, before.p_uuid) != 0) {
+    if (!ProcessStart(pid, &after) || !SameStart(after, before)) {
       return refuse("the process changed while it was looked at");
     }
 
-    handle.unique_id = after.p_uniqueid;
-    uuid_copy(handle.executable_uuid, after.p_uuid);
+    handle.started = after;
     ResolvedPeer peer;
     peer.identity.uid = audit_token_to_euid(handle.token);
     peer.identity.process = ProcessInfo{path, *signing};
@@ -244,10 +260,11 @@ class MacPeerResolver final : public PeerResolver {
     }
     base::byte_span_from_ref(handle).copy_from(peer.handle);
     const pid_t pid = audit_token_to_pid(handle.token);
-    proc_uniqidentifierinfo now;
-    return pid > 0 && UniqueInfo(pid, &now) &&
-           now.p_uniqueid == handle.unique_id &&
-           uuid_compare(now.p_uuid, handle.executable_uuid) == 0 &&
+    // The same process (it started when it did) still running the same
+    // executable (an exec of another program changes the path).
+    StartTime now;
+    return pid > 0 && ProcessStart(pid, &now) &&
+           SameStart(now, handle.started) &&
            ExecutablePath(pid) == peer.identity.process.path;
   }
 
@@ -256,7 +273,7 @@ class MacPeerResolver final : public PeerResolver {
   // is looked at is recorded as unverified rather than dropped, so a chain
   // never silently gets shorter. What an ancestor's signature said is kept for
   // the life of that process (a shell or an editor is the parent of many
-  // connections), keyed by its path and the kernel's unique id.
+  // connections), keyed by its path and when it started.
   std::vector<ProcessInfo> Ancestors(pid_t pid) const {
     std::vector<ProcessInfo> chain;
     pid_t current = pid;
@@ -280,10 +297,10 @@ class MacPeerResolver final : public PeerResolver {
   }
 
   std::string AncestorIdentity(pid_t pid, const std::string& path) const {
-    proc_uniqidentifierinfo info;
-    const bool keyed = !path.empty() && UniqueInfo(pid, &info);
-    const std::pair<std::string, uint64_t> key(path,
-                                               keyed ? info.p_uniqueid : 0);
+    StartTime started = {};
+    const bool keyed = !path.empty() && ProcessStart(pid, &started);
+    const std::pair<std::string, uint64_t> key(
+        path, keyed ? started.seconds * 1000000 + started.microseconds : 0);
     if (keyed) {
       base::AutoLock lock(cache_lock_);
       const auto it = ancestor_cache_.find(key);

@@ -29,10 +29,13 @@
 //     and not the descriptor on purpose: the descriptor may be closed, and its
 //     number reused by another socket, while this runs.
 //   Unchanged: cheap, on the sequence: is that process still the same
-//     incarnation running the same executable? The socket survives an exec of
-//     its peer and is shared with children that inherit it, so the identity
-//     taken at accept is looked at again before a proof is verified and before
-//     the user's approval is applied (Session::OnApprovalDecision).
+//     one (same pid, started at the same time) running the same executable?
+//     (The audit token's pid version would say "has it exec'd" directly, but
+//     only the Security framework checks it, so it is used once, at Resolve;
+//     later the executable's path stands in for it.) The socket survives an
+//     exec of its peer and is shared with children that inherit it, so the
+//     identity taken at accept is looked at again before a proof is verified
+//     and before the user's approval is applied (Session::OnApprovalDecision).
 //
 // All of them fail closed: nullopt / false means "do not serve this peer".
 // What the socket cannot tell: a child that inherited the descriptor is

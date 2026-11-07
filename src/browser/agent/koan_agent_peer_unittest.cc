@@ -165,10 +165,10 @@ TEST(KoanAgentPeerTest, AHandleThatIsNotThePeersIsNotUnchanged) {
   ASSERT_TRUE(peer);
 
   ResolvedPeer tampered = *peer;
-  tampered.handle[sizeof(audit_token_t)] ^= 1;  // another incarnation
+  tampered.handle[sizeof(audit_token_t)] ^= 1;  // started at another time
   EXPECT_FALSE(resolver->Unchanged(tampered));
   tampered = *peer;
-  tampered.handle.back() ^= 1;  // another executable
+  tampered.handle.back() ^= 1;  // started at another time (microseconds)
   EXPECT_FALSE(resolver->Unchanged(tampered));
   tampered = *peer;
   tampered.identity.process.path = "/bin/ls";  // another path

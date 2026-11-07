@@ -300,8 +300,8 @@ descriptors as `ERR_INSUFFICIENT_RESOURCES` (the accept loop backs off for a sec
 `net::SocketPosix::AdoptConnectedSocket` makes the descriptor non-blocking, `ReadIfReady` returns 0 at end of stream
 and `Close()` cancels a pending read or write; `getsockopt(LOCAL_PEERTOKEN)` is the connector's audit token, fixed at
 connect time; `SecCodeCopyGuestWithAttributes` with an audit token finds nothing once the process has exec'd or the pid
-was reused; `kSecCSBasicValidateOnly` skips the resources of a bundle; `proc_pidinfo(PROC_PIDUNIQIDENTIFIERINFO)` has a
-per-process `p_uniqueid` and an executable `p_uuid` that changes with an exec; `confstr(_CS_DARWIN_USER_TEMP_DIR)` is a
+was reused; `kSecCSBasicValidateOnly` skips the resources of a bundle; `proc_pidinfo(PROC_PIDTBSDINFO)` has a start
+time (`pbi_start_tvsec`, `pbi_start_tvusec`) and a parent pid (`pbi_ppid`) in public headers, and `proc_pidpath` follows an exec; `confstr(_CS_DARWIN_USER_TEMP_DIR)` is a
 0700 per-user directory. The traffic annotation `koan_agent_gateway` is defined in the gateway; Koan does not run
 Chromium's annotation auditor, so a change to the fields `net::DefineNetworkTrafficAnnotation` requires shows up as a
 compile error, not as a failed audit; re-check it then.
