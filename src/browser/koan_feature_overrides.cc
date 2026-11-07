@@ -123,6 +123,12 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   overrides.DisableFeature(omnibox_feature_configs::ContextualSearch::
                                kOmniboxContextualSearchOnFocusSuggestions);
   overrides.DisableFeature(omnibox::kAim3pEntrypoint);
+  // The Gemini starter pack (@gemini): Settings > Search engines lists it
+  // (SearchEnginesHandler::GetCategorizedTemplateUrls() hides it only without
+  // this feature or with browser.gemini_settings = 1), and the omnibox's "@"
+  // list offers it (AutocompleteProviderClient::IsGeminiStarterPackEnabled()).
+  // The feature does nothing else.
+  overrides.DisableFeature(omnibox::kStarterPackExpansion);
   overrides.DisableFeature(lens::features::kLensOverlay);
   overrides.DisableFeature(lens::features::kLensOverlayOmniboxEntryPoint);
   overrides.DisableFeature(::features::kGlic);
