@@ -82,6 +82,8 @@ test("koan_shortcut_unittests") {
 group("agent_unit_tests") {
   testonly = true
   deps = [
+    "//koan/browser/agent:koan_agent_events_fuzzer",
+    "//koan/browser/agent:koan_agent_filters_fuzzer",
     "//koan/browser/agent:koan_agent_frame_fuzzer",
     "//koan/browser/agent:koan_agent_unittests",
     "//koan/browser/agent:koan_agent_url_fuzzer",

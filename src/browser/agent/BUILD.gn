@@ -35,6 +35,29 @@ source_set("policy") {
   ]
 }
 
+# What an agent client may receive: the event allowlist, and the scrubber that
+# takes cookies, credentials and request bodies out of Network events.
+source_set("events") {
+  sources = [
+    "koan_agent_events.cc",
+    "koan_agent_events.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# The parameter filters of the policy table, and the session's stream registry.
+source_set("filters") {
+  sources = [
+    "koan_agent_filters.cc",
+    "koan_agent_filters.h",
+  ]
+  public_deps = [
+    ":policy",
+    "//base",
+    "//url",
+  ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser:agent_unit_tests
 #   out/Koan/koan_agent_unittests
@@ -42,10 +65,14 @@ source_set("policy") {
 # by scripts/agent/check_policy_coverage.py.
 test("koan_agent_unittests") {
   sources = [
+    "koan_agent_events_unittest.cc",
+    "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
     "koan_agent_policy_unittest.cc",
   ]
   deps = [
+    ":events",
+    ":filters",
     ":frame",
     ":policy",
     "//base",
@@ -71,6 +98,23 @@ fuzzer_test("koan_agent_url_fuzzer") {
   sources = [ "koan_agent_url_fuzzer.cc" ]
   deps = [
     ":policy",
+    "//base",
+    "//url",
+  ]
+}
+
+fuzzer_test("koan_agent_events_fuzzer") {
+  sources = [ "koan_agent_events_fuzzer.cc" ]
+  deps = [
+    ":events",
+    "//base",
+  ]
+}
+
+fuzzer_test("koan_agent_filters_fuzzer") {
+  sources = [ "koan_agent_filters_fuzzer.cc" ]
+  deps = [
+    ":filters",
     "//base",
     "//url",
   ]

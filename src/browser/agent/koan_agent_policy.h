@@ -83,7 +83,8 @@ enum class ParamFilter {
   kNetworkEnable,
   // The stream handle must be one this session created (IO.read, IO.close).
   kOwnStream,
-  // Only on tabs the agent owns, and only one writer per tab (Emulation.*).
+  // Only on tabs the agent owns (Emulation.*). Keeping a single writer per tab
+  // is the gateway's job, not this filter's.
   kOwnTabOnly,
 };
 

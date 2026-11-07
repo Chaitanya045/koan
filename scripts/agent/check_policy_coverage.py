@@ -24,6 +24,9 @@ that a Chromium roll cannot change what an agent can reach unnoticed:
     not changed since scripts/agent/policy_baseline.json was written: a roll that
     adds a parameter to Page.createIsolatedWorld (like grantUniveralAccess) or to
     Input.dispatchKeyEvent (like commands) must be reviewed, not inherited;
+  * every event in the allowlist (src/browser/agent/koan_agent_events.cc) exists,
+    is sorted and unique, is not in a denied domain, and every Network event goes
+    through the scrubber;
   * the events of every listed domain have not changed: a new Network event
     could carry cookies, and the event allowlist and scrubber must decide.
 
@@ -46,12 +49,15 @@ import pdl  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 POLICY = ROOT / 'src/browser/agent/koan_agent_policy.cc'
+EVENTS = ROOT / 'src/browser/agent/koan_agent_events.cc'
 BASELINE = pathlib.Path(__file__).resolve().parent / 'policy_baseline.json'
 
 _RULE = re.compile(
     r'\{"([A-Za-z0-9]+\.[A-Za-z0-9]+)",\s*Verdict::k(\w+),\s*'
     r'Capability::k(\w+),\s*ParamFilter::k(\w+)\}')
 _STRING = re.compile(r'"([A-Za-z0-9]+)"')
+_EVENT_RULE = re.compile(
+    r'\{"([A-Za-z0-9]+\.[A-Za-z0-9]+)",\s*EventAction::k(\w+)\}')
 
 
 def _between(text, begin, end):
@@ -74,6 +80,68 @@ def parse_policy(text):
   return rules, denied
 
 
+def parse_events(text):
+  """[(event, action), ...] from the event allowlist in the C++.
+
+  Raises ValueError if a row between the markers did not parse."""
+  region = _between(text, '// BEGIN EVENTS', '// END EVENTS')
+  events = _EVENT_RULE.findall(region)
+  rows = region.count('{"')
+  if rows != len(events):
+    raise ValueError(f'{rows} event rows between the markers, {len(events)} '
+                     f'parsed: a row is malformed')
+  return events
+
+
+# What the Network scrubber removes by name (koan_agent_events.cc).
+def scrubber_removes(name):
+  lower = name.lower()
+  return ('cookie' in lower or 'postdata' in lower or
+          lower.endswith('headerstext'))
+
+
+# Types whose presence in an event that is delivered unscrubbed is a leak, and
+# fields that tie an event to an execution context.
+SECRET_TYPES = {'Headers', 'Cookie', 'CookieParam', 'CookiePartitionKey',
+                'HeaderEntry', 'ExecutionContextId', 'ExecutionContextUniqueId'}
+
+
+def leaks_in_pass_event(schema, event):
+  """Reachable fields of an event delivered as it is that name a secret, a
+  header map, or an execution context."""
+  found = []
+  for owner, field, ref in pdl.closure_fields(schema, event):
+    lower = field.lower()
+    if (scrubber_removes(field) or 'executioncontext' in lower or
+        (ref and ref.split('.')[-1] in SECRET_TYPES)):
+      found.append(f'{owner}.{field}')
+  return found
+
+
+def check_events(details, events, denied, schema=None):
+  """Problems with the event allowlist: sorted, real, and sane."""
+  problems = []
+  names = [e for e, _ in events]
+  if names != sorted(names) or len(set(names)) != len(names):
+    problems.append('the event allowlist is not sorted or has duplicates')
+  for name, action in events:
+    domain, event = name.split('.')
+    if domain in denied:
+      problems.append(f'event {name} is in a denied domain')
+    elif event not in details.get(domain, {}).get('events', {}):
+      problems.append(f'event {name} is in the allowlist but not in the '
+                      f'protocol')
+    if (domain == 'Network') != (action == 'ScrubNetwork'):
+      problems.append(f'event {name}: every Network event, and only those, '
+                      f'goes through the Network scrubber')
+    if schema is not None and action == 'Pass':
+      for leak in leaks_in_pass_event(schema, name):
+        problems.append(f'event {name} is delivered unscrubbed but reaches '
+                        f'{leak} (a secret, a header map or an execution '
+                        f'context): scrub it or hold it for the tracker')
+  return problems
+
+
 def check(protocol, rules, denied):
   """Problems found, as a list of strings. `protocol` is {domain: [command]}."""
   problems = []
@@ -89,7 +157,8 @@ def check(protocol, rules, denied):
     rule_domains.setdefault(domain, set()).add(command)
 
   for domain in sorted(set(rule_domains) & set(denied)):
-    problems.append(f'{domain} is both listed in the rules and denied as a domain')
+    problems.append(f'{domain} is both listed in the rules and denied '
+                    f'as a domain')
   for domain in sorted(set(protocol) - set(rule_domains) - set(denied)):
     problems.append(f'domain {domain} is not classified (add it to the denied '
                     f'domains or list its methods)')
@@ -103,13 +172,16 @@ def check(protocol, rules, denied):
     for command in sorted(known - rule_domains[domain]):
       problems.append(f'{domain}.{command} is in the protocol but has no rule')
     for command in sorted(rule_domains[domain] - known):
-      problems.append(f'{domain}.{command} has a rule but is not in the protocol')
+      problems.append(f'{domain}.{command} has a rule but is not in the '
+                      f'protocol')
   return problems
 
 
-def snapshot(details, rules):
-  """What the baseline records: schema hashes of the forwarded methods, and
-  the event names of every listed domain."""
+def snapshot(details, rules, schema=None, events=()):
+  """What the baseline records: schema hashes of the forwarded methods, the
+  event names of every listed domain, and, with `schema`, a hash of each
+  allowlisted event with every type it reaches, and the fields the Network
+  scrubber leaves in the Network events."""
   listed = {r[0].split('.')[0] for r in rules}
   params = {}
   for method, verdict, _, _ in rules:
@@ -117,8 +189,25 @@ def snapshot(details, rules):
       continue
     domain, command = method.split('.')
     params[method] = details.get(domain, {}).get('commands', {}).get(command, '')
-  events = {d: sorted(details.get(d, {}).get('events', {})) for d in sorted(listed)}
-  return {'params': dict(sorted(params.items())), 'events': events}
+  events_list = list(events)
+  events = {
+      d: sorted(details.get(d, {}).get('events', {})) for d in sorted(listed)
+  }
+  snap = {'params': dict(sorted(params.items())), 'events': events}
+  if schema is not None:
+    snap['event_schemas'] = {
+        name: pdl.closure_hash(schema, name) for name, _ in sorted(events_list)
+    }
+    kept = set()
+    for name, action in events_list:
+      if action == 'ScrubNetwork':
+        # What is left once the scrubber has run: removed fields, and the
+        # types only they lead to, are gone.
+        for owner, field, _ in pdl.closure_fields(schema, name,
+                                                  drop=scrubber_removes):
+          kept.add(f'{owner}.{field}')
+    snap['network_event_fields'] = sorted(kept)
+  return snap
 
 
 def check_baseline(current, baseline):
@@ -135,6 +224,27 @@ def check_baseline(current, baseline):
     elif old != new:
       problems.append(f'the parameters or results of {method} changed: review '
                       f'the filter it needs, then --update-baseline')
+  old_schemas = baseline.get('event_schemas', {})
+  new_schemas = current.get('event_schemas', {})
+  for name in sorted(set(old_schemas) | set(new_schemas)):
+    if name not in old_schemas:
+      problems.append(f'event {name} is allowlisted but not in the baseline '
+                      f'(review it, then --update-baseline)')
+    elif name not in new_schemas:
+      problems.append(f'event {name} is in the baseline but no longer '
+                      f'allowlisted (--update-baseline)')
+    elif old_schemas[name] != new_schemas[name]:
+      problems.append(f'the schema of event {name}, or of a type it reaches, '
+                      f'changed: check what the scrubber and the allowlist '
+                      f'let through, then --update-baseline')
+  old_fields = set(baseline.get('network_event_fields', []))
+  new_fields = set(current.get('network_event_fields', []))
+  for field in sorted(new_fields - old_fields):
+    problems.append(f'a Network event now reaches field {field}, which the '
+                    f'scrubber does not remove: is it safe to deliver?')
+  for field in sorted(old_fields - new_fields):
+    problems.append(f'Network field {field} is no longer reachable '
+                    f'(--update-baseline)')
   for domain in sorted(set(current['events']) | set(baseline['events'])):
     old = set(baseline['events'].get(domain, []))
     new = set(current['events'].get(domain, []))
@@ -179,22 +289,25 @@ def main(argv):
           f'KOAN_CHROMIUM_SRC)', file=sys.stderr)
     return 2
   details = pdl.load_details(src)
+  schema = pdl.load_schema(src)
   protocol = {d: sorted(p['commands']) for d, p in details.items()}
   try:
     rules, denied = parse_policy(POLICY.read_text())
+    events = parse_events(EVENTS.read_text())
   except ValueError as error:
-    print(f'{POLICY.relative_to(ROOT)}: {error}')
+    print(error)
     return 1
   if args.list:
     print('\n'.join(unclassified_rows(protocol, rules, denied)))
     return 0
-  current = snapshot(details, rules)
+  current = snapshot(details, rules, schema, events)
   if args.update_baseline:
     BASELINE.write_text(json.dumps(current, indent=1, sort_keys=True) + '\n')
     print(f'wrote {BASELINE.relative_to(ROOT)}: {len(current["params"])} '
           f'forwarded methods, events of {len(current["events"])} domains')
     return 0
   problems = check(protocol, rules, denied)
+  problems += check_events(details, events, denied, schema)
   if BASELINE.exists():
     problems += check_baseline(current, json.loads(BASELINE.read_text()))
   else:
@@ -202,15 +315,16 @@ def main(argv):
                     f'(--update-baseline)')
   if problems:
     print('\n'.join(problems))
-    print(f'\n{len(problems)} problem(s). Fix {POLICY.relative_to(ROOT)} or '
+    print(f'\n{len(problems)} problem(s). Fix {POLICY.relative_to(ROOT)}, '
+          f'{EVENTS.relative_to(ROOT)} or '
           f'review and --update-baseline.')
     return 1
   commands = sum(len(c) for c in protocol.values())
   print(f'ok: {len(protocol)} domains, {commands} methods; {len(rules)} rules '
         f'in {len({r[0].split(".")[0] for r in rules})} domains, '
-        f'{len(denied)} domains denied; {len(current["params"])} forwarded '
-        f'methods and the events of {len(current["events"])} domains match the '
-        f'baseline')
+        f'{len(denied)} domains denied; {len(events)} events allowed; '
+        f'{len(current["params"])} forwarded methods and the events of '
+        f'{len(current["events"])} domains match the baseline')
   return 0
 
 
