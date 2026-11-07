@@ -117,6 +117,12 @@ class SessionDelegate {
   // Session::OnApprovalDecision() with the same id, or never (the session times
   // the request out).
   virtual void RequestApproval(const ApprovalRequest& request) = 0;
+  // Whether the process on the other end is still the one the session was made
+  // for. The session asks before it verifies a proof and before it applies the
+  // user's approval; a socket survives an exec (and a fork) of its peer, so the
+  // identity taken at accept is not good for ever. False, or a lookup that
+  // failed, ends the session (kUnknownPeer): this must fail closed.
+  virtual bool PeerUnchanged() = 0;
 };
 
 struct SessionEnvironment {
@@ -156,6 +162,11 @@ class Session {
   static constexpr base::TimeDelta kNonceLifetime = base::Seconds(10);
   static constexpr base::TimeDelta kApprovalTimeout = base::Seconds(60);
   static constexpr base::TimeDelta kFrameTimeout = base::Seconds(10);
+  // How long a connection may take to authenticate, from when it was made, not
+  // counting the time a prompt to the user was open. Whatever it does in the
+  // meantime: a peer that keeps a connection busy without finishing is closed
+  // like one that is idle.
+  static constexpr base::TimeDelta kPreAuthDeadline = base::Seconds(30);
 
   Session(PeerIdentity peer,
           SessionEnvironment environment,
@@ -239,6 +250,10 @@ class Session {
   base::TimeTicks nonce_deadline_;
 
   base::TimeTicks partial_since_;
+  // For the pre-authentication deadline.
+  base::TimeTicks created_;
+  base::TimeTicks prompt_open_since_;
+  base::TimeDelta prompt_total_;
 
   std::string client_id_;
   ClientCapabilities capabilities_;

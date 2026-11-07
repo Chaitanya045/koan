@@ -70,6 +70,10 @@ class FakeDelegate final : public SessionDelegate {
   void RequestApproval(const ApprovalRequest& request) override {
     approvals.push_back(request);
   }
+  bool PeerUnchanged() override {
+    ++rechecks;
+    return peer_unchanged;
+  }
 
   const base::DictValue& Last() const { return replies.back(); }
   // The Koan error code of the last reply, or "".
@@ -84,6 +88,9 @@ class FakeDelegate final : public SessionDelegate {
   std::vector<base::DictValue> replies;
   std::vector<ApprovalRequest> approvals;
   std::optional<CloseReason> closed;
+  // What the gateway's second look at the peer finds, and how often it looked.
+  bool peer_unchanged = true;
+  int rechecks = 0;
 
  private:
   FrameDecoder decoder_{kMaxPayload};
@@ -1218,7 +1225,8 @@ TEST_F(KoanAgentSessionTest, AFinishedFrameDoesNotLeaveTheTimerRunning) {
       Frame(R"({"id":1,"method":"Koan.status"})");
   session->OnBytesReceived(base::span(frame).first(6u));
   session->OnBytesReceived(base::span(frame).subspan(6u));
-  ticks_.Advance(base::Minutes(5));
+  // Twice the frame timeout, still inside the deadline for authenticating.
+  ticks_.Advance(Session::kFrameTimeout * 2);
   session->CheckTimeouts();
   EXPECT_FALSE(delegate().closed);
 }
@@ -1331,10 +1339,173 @@ TEST_F(KoanAgentSessionTest, MalformedMessagesCloseTheConnection) {
         R"({"id":"1","method":"Koan.status"})", R"({"id":1,"method":5})",
         R"({"id":1,"method":"Koan.status","params":5})",
         R"({"id":1,"method":"Koan.status","params":[]})"}) {
+    ticks_.Advance(base::Seconds(61));  // each is judged on its own
     auto session = NewSession();
     Send(*session, json);
     EXPECT_EQ(delegate().closed, CloseReason::kProtocolViolation) << json;
   }
+}
+
+TEST_F(KoanAgentSessionTest,
+       MalformedClosesCountAsFailuresBeforeAuthentication) {
+  // Reconnecting after garbage is not free: five of them block the peer.
+  for (int i = 0; i < RateLimiter::kMaxFailures; ++i) {
+    auto session = NewSession();
+    Send(*session, "not json");
+    EXPECT_EQ(delegate().closed, CloseReason::kProtocolViolation) << i;
+  }
+  auto next = NewSession();
+  Send(*next, R"({"id":1,"method":"Koan.status"})");
+  EXPECT_EQ(delegate().closed, CloseReason::kBlocked);
+  // An oversize announcement is the same.
+  ticks_.Advance(RateLimiter::kBlockDuration + base::Seconds(1));
+  for (int i = 0; i < RateLimiter::kMaxFailures; ++i) {
+    auto session = NewSession();
+    session->OnBytesReceived(std::vector<uint8_t>{0, 0, 0x20, 0});
+    EXPECT_EQ(delegate().closed, CloseReason::kProtocolViolation) << i;
+  }
+  EXPECT_TRUE(limiter_.IsBlocked(PeerKey(Peer()), ticks_.NowTicks()));
+}
+
+TEST_F(KoanAgentSessionTest,
+       AViolationAfterAuthenticationIsNotAGuessingFailure) {
+  Client client;
+  const std::string id = Pair(client);
+  for (int i = 0; i < RateLimiter::kMaxFailures + 1; ++i) {
+    auto session = NewSession();
+    ASSERT_TRUE(Authenticate(*session, client, id)) << i;
+    Send(*session, R"({"id":30,"method":"Koan.pair"})");
+    EXPECT_EQ(delegate().closed, CloseReason::kProtocolViolation) << i;
+  }
+  EXPECT_FALSE(limiter_.IsBlocked(PeerKey(Peer()), ticks_.NowTicks()));
+}
+
+TEST_F(KoanAgentSessionTest,
+       AConnectionThatDoesNotAuthenticateIsClosedAfter30Seconds) {
+  auto session = NewSession();
+  ticks_.Advance(Session::kPreAuthDeadline - base::Seconds(1));
+  session->CheckTimeouts();
+  EXPECT_FALSE(delegate().closed);
+  ticks_.Advance(base::Seconds(2));
+  session->CheckTimeouts();
+  EXPECT_EQ(delegate().closed, CloseReason::kTimeout);
+}
+
+TEST_F(KoanAgentSessionTest, KeepingTheConnectionBusyDoesNotExtendTheDeadline) {
+  Client client;
+  const std::string id = Pair(client);
+  auto session = NewSession();
+  // A nonce every few seconds, never a proof: each frame is valid, none is
+  // progress. (A nonce expires after 10 s, so it asks again.)
+  for (int i = 0; i < 4 && !delegate().closed; ++i) {
+    Send(*session, AuthenticateFrame(id, i));
+    ticks_.Advance(base::Seconds(9));
+    session->CheckTimeouts();
+  }
+  EXPECT_EQ(delegate().closed, CloseReason::kTimeout);
+}
+
+TEST_F(KoanAgentSessionTest,
+       TheTimeAPromptIsOpenDoesNotCountAgainstTheDeadline) {
+  Client client;
+  auto session = NewSession();
+  ticks_.Advance(base::Seconds(5));
+  Send(*session, PairFrame(client));
+  ASSERT_EQ(session->state(), Session::State::kAwaitingApproval);
+  ticks_.Advance(base::Seconds(50));  // the user takes a while
+  session->CheckTimeouts();
+  EXPECT_FALSE(delegate().closed);
+  session->OnApprovalDecision(delegate().approvals[0].id, Yes());
+  ASSERT_FALSE(delegate().closed);
+  // 55 s since the connection was made, 50 of them in the prompt: 5 s used.
+  ticks_.Advance(base::Seconds(24));
+  session->CheckTimeouts();
+  EXPECT_FALSE(delegate().closed);  // 29 s
+  ticks_.Advance(base::Seconds(2));
+  session->CheckTimeouts();
+  EXPECT_EQ(delegate().closed, CloseReason::kTimeout);  // 31 s
+}
+
+TEST_F(KoanAgentSessionTest,
+       TheDeadlineCountsAsAFailureAndNeverAppliesAfterAuthentication) {
+  Client client;
+  const std::string id = Pair(client);
+  auto idle = NewSession();
+  ticks_.Advance(Session::kPreAuthDeadline + base::Seconds(1));
+  idle->CheckTimeouts();
+  EXPECT_EQ(delegate().closed, CloseReason::kTimeout);
+  // The failure was counted against the peer.
+  for (int i = 1; i < RateLimiter::kMaxFailures; ++i) {
+    auto more = NewSession();
+    ticks_.Advance(Session::kPreAuthDeadline + base::Seconds(1));
+    more->CheckTimeouts();
+  }
+  EXPECT_TRUE(limiter_.IsBlocked(PeerKey(Peer()), ticks_.NowTicks()));
+  // An authenticated session is not subject to it.
+  ticks_.Advance(base::Minutes(10));
+  auto session = NewSession();
+  ASSERT_TRUE(Authenticate(*session, client, id));
+  ticks_.Advance(base::Hours(2));
+  session->CheckTimeouts();
+  EXPECT_NE(session->state(), Session::State::kClosed);
+}
+
+TEST_F(KoanAgentSessionTest, ThePeerIsLookedAtAgainBeforeAProofIsVerified) {
+  Client client;
+  const std::string id = Pair(client);
+  auto session = NewSession();
+  Send(*session, AuthenticateFrame(id));
+  ASSERT_EQ(session->state(), Session::State::kAwaitingProof);
+  const std::vector<uint8_t> nonce =
+      *base::Base64Decode(*delegate().LastResult().FindString("nonce"));
+  delegate().peer_unchanged = false;  // the peer exec'd another program
+  const size_t replies = delegate().replies.size();
+  Send(*session, R"({"id":11,"method":"Koan.authenticate","params":)"
+                 R"({"clientId":")" +
+                     id + R"(","signature":")" + client.Sign(id, nonce) +
+                     R"("}})");
+  EXPECT_EQ(delegate().closed, CloseReason::kUnknownPeer);
+  EXPECT_EQ(delegate().replies.size(), replies);
+  EXPECT_NE(session->state(), Session::State::kAuthenticated);
+  EXPECT_GE(delegate().rechecks, 1);
+}
+
+TEST_F(KoanAgentSessionTest, ThePeerIsLookedAtAgainBeforeAPairingIsStored) {
+  Client client;
+  auto session = NewSession();
+  Send(*session, PairFrame(client));
+  ASSERT_EQ(session->state(), Session::State::kAwaitingApproval);
+  delegate().peer_unchanged = false;  // another program while the dialog is up
+  session->OnApprovalDecision(delegate().approvals[0].id, Yes());
+  EXPECT_EQ(delegate().LastError(), "Koan.peerChanged");
+  EXPECT_EQ(delegate().closed, CloseReason::kUnknownPeer);
+  EXPECT_EQ(store_.size(), 0u);  // the "yes" was for the program that asked
+}
+
+TEST_F(KoanAgentSessionTest, ThePeerIsLookedAtAgainBeforeAChangeIsPinned) {
+  Client client;
+  const std::string id = Pair(client);
+  PeerIdentity moved = Peer();
+  moved.process.path = "/tmp/koan";
+  auto session = NewSession(moved);
+  ASSERT_TRUE(SendProof(*session, client, id));
+  ASSERT_EQ(session->state(), Session::State::kAwaitingApproval);
+  delegate().peer_unchanged = false;
+  session->OnApprovalDecision(delegate().approvals[0].id, Yes());
+  EXPECT_EQ(delegate().closed, CloseReason::kUnknownPeer);
+  EXPECT_EQ(store_.Find(id)->pinned, PinPeer(Peer()));
+  EXPECT_NE(session->state(), Session::State::kAuthenticated);
+  // A chain accepted this way is not remembered either.
+  EXPECT_TRUE(chains_.empty());
+}
+
+TEST_F(KoanAgentSessionTest, ADenialDoesNotNeedTheSecondLook) {
+  Client client;
+  auto session = NewSession();
+  Send(*session, PairFrame(client));
+  delegate().peer_unchanged = false;
+  session->OnApprovalDecision(delegate().approvals[0].id, ApprovalDecision());
+  EXPECT_EQ(delegate().closed, CloseReason::kPairingDenied);
 }
 
 TEST_F(KoanAgentSessionTest,
