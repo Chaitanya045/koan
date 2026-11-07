@@ -59,12 +59,12 @@ constexpr auto kEvents = std::to_array<EventRule>({
     {"Page.navigatedWithinDocument", EventAction::kPass},
     {"Page.screencastFrame", EventAction::kPass},
     {"Page.screencastVisibilityChanged", EventAction::kPass},
-    {"Runtime.bindingCalled", EventAction::kPass},
-    {"Runtime.consoleAPICalled", EventAction::kPass},
-    {"Runtime.exceptionThrown", EventAction::kPass},
-    {"Runtime.executionContextCreated", EventAction::kNeedsContextTracker},
-    {"Runtime.executionContextDestroyed", EventAction::kNeedsContextTracker},
-    {"Runtime.executionContextsCleared", EventAction::kNeedsContextTracker},
+    {"Runtime.bindingCalled", EventAction::kHoldForContextTracker},
+    {"Runtime.consoleAPICalled", EventAction::kHoldForContextTracker},
+    {"Runtime.exceptionThrown", EventAction::kHoldForContextTracker},
+    {"Runtime.executionContextCreated", EventAction::kHoldForContextTracker},
+    {"Runtime.executionContextDestroyed", EventAction::kHoldForContextTracker},
+    {"Runtime.executionContextsCleared", EventAction::kHoldForContextTracker},
 });
 // END EVENTS
 
@@ -102,6 +102,17 @@ bool IsSecretKey(std::string_view name) {
 
 bool ScrubDict(base::DictValue& dict, int depth, bool is_headers);
 
+// Whether `value` is a {name, value} entry naming a secret header, as in
+// Fetch.requestPaused.responseHeaders.
+bool IsSecretHeaderEntry(const base::Value& value) {
+  const base::DictValue* dict = value.GetIfDict();
+  if (!dict) {
+    return false;
+  }
+  const std::string* name = dict->FindString("name");
+  return name && IsSecretHeader(*name);
+}
+
 bool ScrubValue(base::Value& value, int depth) {
   if (base::DictValue* dict = value.GetIfDict()) {
     return ScrubDict(*dict, depth, /*is_headers=*/false);
@@ -110,6 +121,7 @@ bool ScrubValue(base::Value& value, int depth) {
     if (depth > kMaxScrubDepth) {
       return false;
     }
+    list->EraseIf(IsSecretHeaderEntry);
     for (base::Value& element : *list) {
       if (!ScrubValue(element, depth + 1)) {
         return false;
@@ -166,8 +178,8 @@ EventVerdict FilterEvent(std::string_view method, base::DictValue& params) {
     case EventAction::kScrubNetwork:
       return ScrubNetworkParams(params) ? EventVerdict::kDeliver
                                         : EventVerdict::kDrop;
-    case EventAction::kNeedsContextTracker:
-      return EventVerdict::kNeedsContextTracker;
+    case EventAction::kHoldForContextTracker:
+      return EventVerdict::kHoldForContextTracker;
   }
   return EventVerdict::kDrop;
 }

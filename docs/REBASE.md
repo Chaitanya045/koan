@@ -274,10 +274,22 @@ touches the checkout. It fails when:
   method's `ParamFilter` covers it;
 - a listed domain gained or lost an **event** (a new `Network` event could carry cookies: the event allowlist and the
   scrubber decide);
+- the **schema of an allowlisted event, or of a type it reaches**, changed (the baseline holds one hash per event over the
+  event and every type it refers to, and the list of fields left in the Network events after the scrubber); or an event
+  delivered unscrubbed reaches a field named like a secret, a header map or an execution context;
 - an event in the **event allowlist** (`src/browser/agent/koan_agent_events.cc`) no longer exists, is unsorted, is in a denied
   domain, or a Network event is not marked for the scrubber (the allowlist is explicit: an event that is not listed is dropped,
   so a new event is never delivered until it is added on purpose);
 - a row between the markers did not parse.
+
+Things the policy relies on upstream doing, which the code cannot check and a roll can change; re-read them in the new
+source when the gate fires or the milestone moves: `Network.enable`'s `maxPostDataSize` unset means bodies are not inlined
+into `requestWillBeSent`; the DevTools protocol dispatcher ignores unknown parameters and matches names case-sensitively
+(so `Commands` is not `commands`); `Input.dispatchKeyEvent`'s `commands` is the only route from a key event to the clipboard
+(Blink's editing behaviour has no Copy/Paste key entries); `Page.captureScreenshot` sizes its bitmap from `clip`, and from
+the whole page (up to 128K a side) with `captureBeyondViewport`; `Page.createIsolatedWorld`'s `grantUniveralAccess` is the
+only way a world gets universal access; a header map is always an object named `*headers` and raw header text is always
+`*headersText`, and `Runtime.enable` reports every world of a tab's frames, extension content-script worlds included.
 
 A review that changes the outcome updates the table and the baseline in one change. The other things to re-check on a roll
 (the untrusted-client domain list, the `DevToolsAgentHostClient` flag defaults, the `PageLiveStateDecorator` setters the

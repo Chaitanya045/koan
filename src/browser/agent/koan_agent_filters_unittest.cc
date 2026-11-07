@@ -78,6 +78,26 @@ TEST(KoanAgentFiltersTest, NavigationNeedsAStringUrl) {
   }
 }
 
+TEST(KoanAgentFiltersTest, UnreviewedParametersNeverReachTheTab) {
+  // The three rewriting filters keep only the parameters they were written for.
+  base::DictValue key = Dict(R"({"type":"keyDown","key":"a","newThing":true,
+                                "Commands":["paste"],"commands":["copy"]})");
+  EXPECT_FALSE(Apply(ParamFilter::kStripKeyCommands, key).has_value());
+  EXPECT_EQ(key, Dict(R"({"type":"keyDown","key":"a"})"));
+
+  base::DictValue world = Dict(R"({"frameId":"F","worldName":"w","newPower":1,
+               "contentSecurityPolicy":"default-src 'none'"})");
+  EXPECT_FALSE(Apply(ParamFilter::kIsolatedWorld, world).has_value());
+  EXPECT_FALSE(world.contains("newPower"));
+  EXPECT_EQ(*world.FindString("worldName"), "w");
+  EXPECT_TRUE(world.contains("contentSecurityPolicy"));
+
+  base::DictValue network =
+      Dict(R"({"maxTotalBufferSize":1,"newOption":true})");
+  EXPECT_FALSE(Apply(ParamFilter::kNetworkEnable, network).has_value());
+  EXPECT_FALSE(network.contains("newOption"));
+}
+
 TEST(KoanAgentFiltersTest, KeyEventsLoseTheirCommands) {
   base::DictValue params = Dict(
       R"({"type":"keyDown","key":"v","modifiers":4,"commands":["paste"]})");
@@ -118,8 +138,10 @@ TEST(KoanAgentFiltersTest, ScreenshotsNeverUseTheRealWindowSurface) {
 TEST(KoanAgentFiltersTest, ClipAndBeyondViewportOnlyOnAgentOwnedTabs) {
   const char* kClip =
       R"({"clip":{"x":0,"y":0,"width":10,"height":10,"scale":1}})";
-  const char* kBeyond = R"({"captureBeyondViewport":true})";
-  for (const char* json : {kClip, kBeyond}) {
+  const char* kBoth =
+      R"({"captureBeyondViewport":true,)"
+      R"("clip":{"x":0,"y":0,"width":10,"height":10,"scale":1}})";
+  for (const char* json : {kClip, kBoth}) {
     base::DictValue owned = Dict(json);
     EXPECT_FALSE(Apply(ParamFilter::kScreenshot, owned, true).has_value())
         << json;
@@ -135,6 +157,88 @@ TEST(KoanAgentFiltersTest, ClipAndBeyondViewportOnlyOnAgentOwnedTabs) {
     base::DictValue params = Dict(json);
     EXPECT_FALSE(Apply(ParamFilter::kScreenshot, params, false).has_value())
         << json;
+  }
+}
+
+TEST(KoanAgentFiltersTest, CaptureBeyondTheViewportNeedsAClipThatBoundsIt) {
+  // Without a clip the whole page is rendered (up to 128K pixels a side).
+  for (const char* json :
+       {R"({"captureBeyondViewport":true})",
+        R"({"captureBeyondViewport":true,"format":"png"})"}) {
+    base::DictValue params = Dict(json);
+    const auto error = Apply(ParamFilter::kScreenshot, params, true);
+    ASSERT_TRUE(error.has_value()) << json;
+    EXPECT_EQ(error->code, "Koan.notPermitted") << json;
+  }
+  base::DictValue not_a_bool = Dict(R"({"captureBeyondViewport":"yes"})");
+  EXPECT_EQ(Apply(ParamFilter::kScreenshot, not_a_bool, true)->code,
+            "Koan.invalidParams");
+}
+
+TEST(KoanAgentFiltersTest, AClipIsBoundedInEveryDirection) {
+  const auto clip = [](const char* fields) {
+    return std::string(R"({"clip":{)") + fields + "}}";
+  };
+  const char* kGood = R"("x":1,"y":2,"width":16384,"height":2000,"scale":1)";
+  base::DictValue good = Dict(clip(kGood));
+  EXPECT_FALSE(Apply(ParamFilter::kScreenshot, good, true).has_value());
+
+  for (const char* bad : {
+           // too big
+           R"("x":0,"y":0,"width":1e9,"height":1e9,"scale":10)",
+           R"("x":0,"y":0,"width":16385,"height":10,"scale":1)",
+           R"("x":0,"y":0,"width":10,"height":16385,"scale":1)",
+           R"("x":0,"y":0,"width":10,"height":10,"scale":4.01)",
+           R"("x":1000001,"y":0,"width":10,"height":10,"scale":1)",
+           // 16384 x 16384 x 1 = 268 Mpx, over the 64 Mpx cap
+           R"("x":0,"y":0,"width":16384,"height":16384,"scale":1)",
+           // 8000 x 8000 x 4 x 4 is over the cap although each is in range
+           R"("x":0,"y":0,"width":8000,"height":8000,"scale":4)",
+           // zero, negative
+           R"("x":0,"y":0,"width":0,"height":10,"scale":1)",
+           R"("x":0,"y":0,"width":10,"height":0,"scale":1)",
+           R"("x":0,"y":0,"width":-10,"height":10,"scale":1)",
+           R"("x":0,"y":0,"width":10,"height":10,"scale":0)",
+           R"("x":0,"y":0,"width":10,"height":10,"scale":-1)",
+           R"("x":-1,"y":0,"width":10,"height":10,"scale":1)",
+           // missing, or not numbers
+           R"("x":0,"y":0,"width":10,"height":10)",
+           R"("y":0,"width":10,"height":10,"scale":1)",
+           R"("x":"0","y":0,"width":10,"height":10,"scale":1)",
+           R"("x":0,"y":0,"width":null,"height":10,"scale":1)",
+           R"("x":0,"y":0,"width":true,"height":10,"scale":1)",
+       }) {
+    base::DictValue params = Dict(clip(bad));
+    const auto error = Apply(ParamFilter::kScreenshot, params, true);
+    ASSERT_TRUE(error.has_value()) << bad;
+    EXPECT_EQ(error->code, "Koan.invalidParams") << bad;
+  }
+  // The clip itself must be an object.
+  for (const char* json : {R"({"clip":"big"})", R"({"clip":[1,2,3,4,5]})",
+                           R"({"clip":null})", R"({"clip":5})"}) {
+    base::DictValue params = Dict(json);
+    const auto error = Apply(ParamFilter::kScreenshot, params, true);
+    ASSERT_TRUE(error.has_value()) << json;
+    EXPECT_EQ(error->code, "Koan.invalidParams") << json;
+  }
+}
+
+TEST(KoanAgentFiltersTest, FormatAndQualityAreChecked) {
+  for (const char* json :
+       {R"({"format":"png"})", R"({"format":"jpeg","quality":0})",
+        R"({"format":"webp","quality":100})"}) {
+    base::DictValue params = Dict(json);
+    EXPECT_FALSE(Apply(ParamFilter::kScreenshot, params, false).has_value())
+        << json;
+  }
+  for (const char* json :
+       {R"({"format":"gif"})", R"({"format":"PNG"})", R"({"format":5})",
+        R"({"quality":101})", R"({"quality":-1})", R"({"quality":50.5})",
+        R"({"quality":"50"})"}) {
+    base::DictValue params = Dict(json);
+    const auto error = Apply(ParamFilter::kScreenshot, params, false);
+    ASSERT_TRUE(error.has_value()) << json;
+    EXPECT_EQ(error->code, "Koan.invalidParams") << json;
   }
 }
 

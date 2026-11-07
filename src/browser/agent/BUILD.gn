@@ -110,3 +110,12 @@ fuzzer_test("koan_agent_events_fuzzer") {
     "//base",
   ]
 }
+
+fuzzer_test("koan_agent_filters_fuzzer") {
+  sources = [ "koan_agent_filters_fuzzer.cc" ]
+  deps = [
+    ":filters",
+    "//base",
+    "//url",
+  ]
+}

@@ -161,3 +161,140 @@ def load_details(chromium_src):
       merged['commands'].update(parts['commands'])
       merged['events'].update(parts['events'])
   return details
+
+
+# --- Schemas: the types an event or command refers to ------------------------
+#
+# A field added three types down in Network.Request is as reachable by an agent
+# as one added to the event itself, so the drift gate hashes an event with every
+# type it refers to, and walks the same closure for secret-looking fields.
+
+_BUILTIN_TYPES = {'string', 'integer', 'number', 'boolean', 'object', 'any',
+                  'binary', 'enum'}
+_FIELD_MODIFIERS = {'optional', 'experimental', 'deprecated'}
+_DEFINITION = re.compile(r'^  ' + _MODIFIERS + r'(type|command|event)\s+(\w+)\b')
+
+
+def _parse_field(line):
+  """(name, type reference or None) of a PDL field line, or None if the line is
+  not a field (an enum value, a keyword such as `properties`)."""
+  tokens = [t for t in line.split() if t not in _FIELD_MODIFIERS]
+  if len(tokens) < 2:
+    return None
+  if tokens[0] == 'array' and len(tokens) >= 4 and tokens[1] == 'of':
+    base = tokens[2]
+  else:
+    base = tokens[0]
+  return tokens[-1], (None if base in _BUILTIN_TYPES else base)
+
+
+def parse_schema_text(text):
+  """{'Domain.Name': {'kind': 'type'|'command'|'event', 'hash': h,
+  'fields': [(name, 'Domain.Type' or None), ...]}} for one PDL file's text.
+  A type reference without a domain is qualified with the domain it is in."""
+  blocks = {}
+  domain = None
+  current = None  # (kind, name, body lines)
+
+  def flush():
+    if current and domain:
+      kind, name, body = current
+      fields = []
+      for line in body:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(' '))
+        if not stripped or stripped.startswith('#') or indent != 6:
+          continue
+        parsed = _parse_field(stripped)
+        if parsed:
+          field, ref = parsed
+          if ref and '.' not in ref:
+            ref = f'{domain}.{ref}'
+          fields.append((field, ref))
+      blocks[f'{domain}.{name}'] = {'kind': kind, 'hash': _block_hash(body),
+                                    'fields': fields}
+
+  for line in text.splitlines():
+    m = _DOMAIN.match(line)
+    if m:
+      flush()
+      current = None
+      domain = m.group(1)
+      continue
+    m = _DEFINITION.match(line)
+    if m and domain:
+      flush()
+      current = (m.group(1), m.group(2), [])
+      continue
+    if current:
+      indent = len(line) - len(line.lstrip(' '))
+      if line.strip() and indent <= 2:
+        flush()
+        current = None
+      else:
+        current[2].append(line)
+  flush()
+  return blocks
+
+
+def parse_schema_file(path, seen=None):
+  path = pathlib.Path(path)
+  seen = set() if seen is None else seen
+  if path in seen:
+    return {}
+  seen.add(path)
+  result = {}
+  text = path.read_text()
+  for line in text.splitlines():
+    m = _INCLUDE.match(line)
+    if m:
+      result.update(parse_schema_file(path.parent / m.group(1), seen))
+  result.update(parse_schema_text(text))
+  return result
+
+
+def load_schema(chromium_src):
+  src = pathlib.Path(chromium_src)
+  schema = {}
+  for rel in PROTOCOL_FILES:
+    schema.update(parse_schema_file(src / rel))
+  return schema
+
+
+def closure(schema, root, drop=None):
+  """The root definition ('Domain.event') and every type it refers to,
+  transitively, as a sorted list of keys. Unknown references are kept (and
+  flagged by the caller) rather than skipped. `drop(field name)`, if given,
+  says that a field is removed before delivery: its type is not followed (a
+  type that is only reachable through removed fields is not reachable)."""
+  seen = []
+  todo = [root]
+  while todo:
+    key = todo.pop()
+    if key in seen:
+      continue
+    seen.append(key)
+    for name, ref in schema.get(key, {}).get('fields', []):
+      if ref and not (drop and drop(name)):
+        todo.append(ref)
+  return sorted(seen)
+
+
+def closure_hash(schema, root):
+  """One hash for a definition and everything it refers to."""
+  parts = []
+  for key in closure(schema, root):
+    block = schema.get(key)
+    parts.append(f'{key}:{block["hash"] if block else "MISSING"}')
+  return hashlib.sha256('\n'.join(parts).encode()).hexdigest()
+
+
+def closure_fields(schema, root, drop=None):
+  """[(owner, field, type reference or None)] for every field reachable from
+  the root, sorted; fields `drop` names are left out."""
+  fields = []
+  for key in closure(schema, root, drop):
+    for name, ref in schema.get(key, {}).get('fields', []):
+      if not (drop and drop(name)):
+        fields.append((key, name, ref))
+  return sorted(fields, key=lambda f: (f[0], f[1]))

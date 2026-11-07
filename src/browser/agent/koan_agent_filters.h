@@ -79,18 +79,35 @@ struct FilterError {
 // place). Returns nullopt if the command may be forwarded with the params as
 // they are now, or the error to answer with.
 //
+// The gateway must forward the dict this function leaves, re-serialised, never
+// the bytes the agent sent: the JSON parser has already resolved duplicate keys
+// and case, and the filter judged that dict.
+//
 //  kNone             nothing.
 //  kNavigationUrl    `url` must be a string that passes
-//  IsAllowedNavigationUrl(). kStripKeyCommands removes `commands`.
-//  kIsolatedWorld    sets `grantUniveralAccess` to false (and removes the
-//                    correctly spelled variant, in case upstream fixes it).
-//  kScreenshot       refuses `fromSurface: false`; `clip` and
-//                    `captureBeyondViewport: true` only on agent-owned tabs.
-//  kNetworkEnable    removes `maxPostDataSize`, caps the two buffer sizes
-//                    (setting them if absent), removes the options that open
-//                    more traffic.
+//  IsAllowedNavigationUrl(). kStripKeyCommands keeps only the parameters of
+//  Input.dispatchKeyEvent that
+//                    were reviewed, which drops `commands`.
+//  kIsolatedWorld    keeps frameId, worldName and contentSecurityPolicy, and
+//                    sets `grantUniveralAccess` to false (the upstream
+//                    spelling; a correctly spelled variant is dropped with the
+//                    other unknown parameters). The new world must also be
+//                    registered with the execution context rule from the
+//                    command's result (its `executionContextId`); that is the
+//                    next PR's result hook, like
+//                    StreamRegistry::RecordResult().
+//  kScreenshot       refuses `fromSurface: false`; checks `format` and
+//                    `quality`; `clip` (finite numbers, x and y in [0, 1e6],
+//                    width and height in (0, 16384], scale in (0, 4], at most
+//                    64 million pixels) and `captureBeyondViewport: true` only
+//                    on agent-owned tabs, and the latter only with a valid
+//                    clip.
+//  kNetworkEnable    keeps only the two buffer sizes, capping them at
+//                    kMaxNetworkTotalBufferSize / kMaxNetworkResourceBufferSize
+//                    (and setting them if absent): no inline bodies.
 //  kOwnStream        `handle` must be a stream in context.streams.
-//  kOwnTabOnly       only on agent-owned tabs.
+//  kOwnTabOnly       only on agent-owned tabs. That only one client writes
+//                    Emulation state on a tab is the gateway's to enforce.
 //  kRuntimeContext   not implemented yet (it needs the session's execution
 //                    context tracker): refuses.
 std::optional<FilterError> ApplyParamFilter(ParamFilter filter,

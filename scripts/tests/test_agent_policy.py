@@ -235,11 +235,131 @@ class EventTableTest(unittest.TestCase):
                         for p in problems))
 
 
+SCHEMA_PDL = """\
+domain Net
+  type Headers extends object
+
+  type Thing extends object
+    properties
+      string url
+      # comment
+      Headers headers
+      optional array of Inner inners
+
+  type Inner extends object
+    properties
+      string label
+
+  event seen
+    parameters
+      Thing thing
+      string id
+
+domain Runtime
+  type ExecutionContextId extends integer
+
+  event noisy
+    parameters
+      ExecutionContextId executionContextId
+      string text
+
+  event quiet
+    parameters
+      string text
+"""
+
+
+class SchemaTest(unittest.TestCase):
+
+  def setUp(self):
+    self.schema = pdl.parse_schema_text(SCHEMA_PDL)
+
+  def test_blocks_and_fields_are_found_with_qualified_references(self):
+    seen = self.schema['Net.seen']
+    self.assertEqual(seen['kind'], 'event')
+    self.assertEqual(seen['fields'], [('thing', 'Net.Thing'), ('id', None)])
+    self.assertEqual(self.schema['Net.Thing']['fields'],
+                     [('url', None), ('headers', 'Net.Headers'),
+                      ('inners', 'Net.Inner')])
+
+  def test_the_closure_follows_references(self):
+    self.assertEqual(pdl.closure(self.schema, 'Net.seen'),
+                     ['Net.Headers', 'Net.Inner', 'Net.Thing', 'Net.seen'])
+    names = {f for _, f, _ in pdl.closure_fields(self.schema, 'Net.seen')}
+    self.assertEqual(names, {'thing', 'id', 'url', 'headers', 'inners', 'label'})
+
+  def test_dropped_fields_are_not_followed(self):
+    fields = pdl.closure_fields(self.schema, 'Net.seen',
+                                drop=lambda n: n == 'inners')
+    self.assertNotIn('label', {f for _, f, _ in fields})
+    self.assertNotIn('inners', {f for _, f, _ in fields})
+
+  def test_a_field_added_three_types_down_changes_the_event_hash(self):
+    before = pdl.closure_hash(self.schema, 'Net.seen')
+    deeper = pdl.parse_schema_text(SCHEMA_PDL.replace(
+        '      string label\n', '      string label\n      string authToken\n'))
+    self.assertNotEqual(before, pdl.closure_hash(deeper, 'Net.seen'))
+    # but rewording a comment does not
+    reworded = pdl.parse_schema_text(SCHEMA_PDL.replace('# comment', '# other'))
+    self.assertEqual(before, pdl.closure_hash(reworded, 'Net.seen'))
+
+  def test_the_drift_is_reported_by_the_baseline_check(self):
+    events = [('Net.seen', 'Pass')]
+    rules = [('Net.enable', 'Allow', 'None', 'None')]
+    details = pdl.parse_details_text(SCHEMA_PDL)
+    old = cov.snapshot(details, rules, self.schema, events)
+    deeper = pdl.parse_schema_text(SCHEMA_PDL.replace(
+        '      string label\n', '      string label\n      string authToken\n'))
+    new = cov.snapshot(details, rules, deeper, events)
+    problems = cov.check_baseline(new, old)
+    self.assertTrue(any('schema of event Net.seen' in p for p in problems))
+
+  def test_a_scrubbed_event_listing_shows_a_new_field_that_survives(self):
+    events = [('Net.seen', 'ScrubNetwork')]
+    details = pdl.parse_details_text(SCHEMA_PDL)
+    old = cov.snapshot(details, [], self.schema, events)
+    deeper = pdl.parse_schema_text(SCHEMA_PDL.replace(
+        '      string label\n', '      string label\n      string authToken\n'))
+    new = cov.snapshot(details, [], deeper, events)
+    problems = cov.check_baseline(new, old)
+    self.assertTrue(any('Net.Inner.authToken' in p for p in problems))
+    # a new cookie-named field is removed by the scrubber and not listed
+    cookie = pdl.parse_schema_text(SCHEMA_PDL.replace(
+        '      string label\n', '      string label\n      string sessionCookie\n'))
+    kept = cov.snapshot(details, [], cookie, events)['network_event_fields']
+    self.assertNotIn('Net.Inner.sessionCookie', kept)
+
+  def test_an_unscrubbed_event_may_not_reach_a_header_map_or_a_context(self):
+    details = {'Net': {'events': {'seen': 'h'}, 'commands': {}},
+               'Runtime': {'events': {'noisy': 'h', 'quiet': 'h'},
+                           'commands': {}}}
+    ok = cov.check_events(details, [('Runtime.quiet', 'Pass')], [], self.schema)
+    self.assertEqual(ok, [])
+    leaks = cov.check_events(details, [('Net.seen', 'Pass')], [], self.schema)
+    self.assertTrue(any('Net.Thing.headers' in p for p in leaks), leaks)
+    ctx = cov.check_events(details, [('Runtime.noisy', 'Pass')], [], self.schema)
+    self.assertTrue(any('executionContextId' in p for p in ctx), ctx)
+    held = cov.check_events(details, [('Runtime.noisy', 'HoldForContextTracker')],
+                            [], self.schema)
+    self.assertEqual(held, [])
+
+
 class RealEventTableTest(unittest.TestCase):
 
   @classmethod
   def setUpClass(cls):
     cls.events = cov.parse_events(cov.EVENTS.read_text())
+
+  def test_no_event_delivered_as_it_is_reaches_a_secret_or_a_context(self):
+    import pdl as _pdl
+    schema = _pdl.load_schema(cov.ROOT / 'chromium/src') if (
+        cov.ROOT / 'chromium/src').exists() else None
+    if schema is None:
+      self.skipTest('no Chromium checkout (scripts/ci/check_agent_policy.sh '
+                    'runs this check against the pinned protocol)')
+    for name, action in self.events:
+      if action == 'Pass':
+        self.assertEqual(cov.leaks_in_pass_event(schema, name), [], name)
 
   def test_it_is_sorted_and_every_network_event_is_scrubbed(self):
     names = [e for e, _ in self.events]
@@ -269,7 +389,15 @@ class RealEventTableTest(unittest.TestCase):
     for name in ('Runtime.executionContextCreated',
                  'Runtime.executionContextDestroyed',
                  'Runtime.executionContextsCleared'):
-      self.assertEqual(actions[name], 'NeedsContextTracker')
+      self.assertEqual(actions[name], 'HoldForContextTracker')
+
+  def test_console_exceptions_and_bindings_wait_too(self):
+    # They carry executionContextId: an extension's content script would
+    # otherwise reach the agent through its console output.
+    actions = dict(self.events)
+    for name in ('Runtime.consoleAPICalled', 'Runtime.exceptionThrown',
+                 'Runtime.bindingCalled'):
+      self.assertEqual(actions[name], 'HoldForContextTracker', name)
 
 
 class PolicyTableTest(unittest.TestCase):

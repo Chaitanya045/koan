@@ -2,6 +2,11 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
+// The oracle below restates the scrubber's name rules, so this finds traversal
+// and depth bugs (something missed, something crashed), not a wrong rule; the
+// rules themselves are checked against the protocol by
+// scripts/agent/check_policy_coverage.py.
+//
 // Feeds arbitrary JSON to the event filter as the params of each listed
 // Network event and checks the scrubber's promise: whatever the shape, what is
 // delivered has no entry whose name mentions cookies or a request body, no raw
@@ -10,8 +15,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "base/check.h"
 #include "base/json/json_reader.h"

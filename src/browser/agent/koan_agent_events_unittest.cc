@@ -77,23 +77,55 @@ TEST(KoanAgentEventsTest, ListedNonNetworkEventsAreDeliveredUnchanged) {
       R"({"frame":{"id":"F","url":"https://example.com/","cookie":"kept"},)"
       R"("postData":"kept","headers":{"Cookie":"kept"}})";
   for (std::string_view method :
-       {"Page.frameNavigated", "Page.lifecycleEvent",
-        "Runtime.consoleAPICalled", "Log.entryAdded", "DOM.documentUpdated",
-        "Inspector.detached"}) {
+       {"Page.frameNavigated", "Page.lifecycleEvent", "Log.entryAdded",
+        "DOM.documentUpdated", "Inspector.detached"}) {
     base::DictValue params = Dict(kParams);
     EXPECT_EQ(FilterEvent(method, params), EventVerdict::kDeliver) << method;
     EXPECT_EQ(params, Dict(kParams)) << method;
   }
 }
 
-TEST(KoanAgentEventsTest, ExecutionContextEventsWaitForTheContextTracker) {
+// An extension's content script runs in an isolated world of the tab, and with
+// Runtime.enable the tab reports that world's console output and exceptions
+// too. Anything tied to an execution context waits for the tracker, which lets
+// through the main world and the worlds the agent created; until it exists
+// nothing of the kind is delivered.
+TEST(KoanAgentEventsTest, EventsTiedToAnExecutionContextWaitForTheTracker) {
   for (std::string_view method :
        {"Runtime.executionContextCreated", "Runtime.executionContextDestroyed",
-        "Runtime.executionContextsCleared"}) {
-    base::DictValue params = Dict("{}");
-    EXPECT_EQ(FilterEvent(method, params), EventVerdict::kNeedsContextTracker)
+        "Runtime.executionContextsCleared", "Runtime.consoleAPICalled",
+        "Runtime.exceptionThrown", "Runtime.bindingCalled"}) {
+    base::DictValue params = Dict(R"({"executionContextId":7})");
+    EXPECT_EQ(FilterEvent(method, params), EventVerdict::kHoldForContextTracker)
         << method;
   }
+}
+
+TEST(KoanAgentEventsTest, OnlyKDeliverDelivers) {
+  for (const EventRule& rule : EventRules()) {
+    base::DictValue params = Dict("{}");
+    const EventVerdict verdict = FilterEvent(rule.method, params);
+    EXPECT_EQ(verdict == EventVerdict::kDeliver,
+              rule.action != EventAction::kHoldForContextTracker)
+        << rule.method;
+  }
+}
+
+// Fetch.requestPaused.responseHeaders is an array of {name, value}, not a map.
+TEST(KoanAgentEventsTest, HeaderEntryArraysLoseTheirSecretEntries) {
+  base::DictValue params = Dict(R"({
+    "responseHeaders": [{"name": "Content-Type", "value": "text/html"},
+                        {"name": "Set-Cookie", "value": "sid=SECRET"},
+                        {"name": "AUTHORIZATION", "value": "SECRET"},
+                        {"name": "x-ok", "value": "1"}],
+    "nested": {"list": [[{"name": "cookie", "value": "SECRET"}]]}
+  })");
+  ASSERT_TRUE(ScrubNetworkParams(params));
+  EXPECT_FALSE(Mentions(params, "SECRET"));
+  const base::ListValue& headers = *params.FindList("responseHeaders");
+  ASSERT_EQ(headers.size(), 2u);
+  EXPECT_EQ(*headers[0].GetDict().FindString("name"), "Content-Type");
+  EXPECT_EQ(*headers[1].GetDict().FindString("name"), "x-ok");
 }
 
 TEST(KoanAgentEventsTest,
