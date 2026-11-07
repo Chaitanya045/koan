@@ -35,6 +35,34 @@ source_set("policy") {
   ]
 }
 
+# Who a peer is, what a paired client is, the proof it signs and the limits on
+# guessing (agent control's authentication, without a socket, keychain or UI).
+source_set("auth") {
+  sources = [
+    "koan_agent_auth.cc",
+    "koan_agent_auth.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    "//crypto",
+    "//third_party/boringssl",
+  ]
+}
+
+# One connection's authentication as a state machine over frames: pairing and
+# proving a client. It forwards nothing.
+source_set("session") {
+  sources = [
+    "koan_agent_session.cc",
+    "koan_agent_session.h",
+  ]
+  public_deps = [
+    ":auth",
+    ":frame",
+    "//base",
+  ]
+}
+
 # What an agent client may receive: the event allowlist, and the scrubber that
 # takes cookies, credentials and request bodies out of Network events.
 source_set("events") {
@@ -65,20 +93,25 @@ source_set("filters") {
 # by scripts/agent/check_policy_coverage.py.
 test("koan_agent_unittests") {
   sources = [
+    "koan_agent_auth_unittest.cc",
     "koan_agent_events_unittest.cc",
     "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
     "koan_agent_policy_unittest.cc",
+    "koan_agent_session_unittest.cc",
   ]
   deps = [
+    ":auth",
     ":events",
     ":filters",
     ":frame",
     ":policy",
+    ":session",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
+    "//third_party/boringssl",
     "//url",
   ]
 }
@@ -117,5 +150,15 @@ fuzzer_test("koan_agent_filters_fuzzer") {
     ":filters",
     "//base",
     "//url",
+  ]
+}
+
+fuzzer_test("koan_agent_session_fuzzer") {
+  sources = [ "koan_agent_session_fuzzer.cc" ]
+  deps = [
+    ":session",
+    "//base",
+    "//base/test:test_support",
+    "//third_party/boringssl",
   ]
 }
