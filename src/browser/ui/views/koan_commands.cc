@@ -219,7 +219,7 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
                       kDockToLeftIcon, Action::kToggleCompactMode));
   add_if(controller.library()->IsAvailable(),
          ShortcutCommand(controller, "open-library", u"Open Library",
-                         kLibraryIcon, Action::kLibrary));
+                         kKoanLibraryIcon, Action::kLibrary));
   add_if(IsEnabled(controller, IDC_NEW_SPLIT_TAB),
          ShortcutCommand(controller, "new-split-view", u"New Split View",
                          kSplitSceneIcon, Action::kNewEmptySplit));
@@ -283,20 +283,21 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
                            controller.pinned_tabs()->CanAddToEssentials(
                                tab->IsSplit() ? 2 : 1)
                      : tab && !pinned,
-         pinned_tabs ? PinnedTabCommand(
-                           "add-to-essentials", u"Add to Essentials", kStarIcon,
-                           &KoanPinnedTabController::AddToEssentials)
-                     : ShortcutCommand(controller, "add-to-essentials",
-                                       u"Add to Essentials", kStarIcon,
-                                       Action::kTogglePinTab));
+         pinned_tabs
+             ? PinnedTabCommand("add-to-essentials", u"Add to Essentials",
+                                kKoanEssentialAddIcon,
+                                &KoanPinnedTabController::AddToEssentials)
+             : ShortcutCommand(controller, "add-to-essentials",
+                               u"Add to Essentials", kKoanEssentialAddIcon,
+                               Action::kTogglePinTab));
   add_if(pinned_tabs ? essential : pinned,
          pinned_tabs ? PinnedTabCommand(
                            "remove-from-essentials", u"Remove from Essentials",
-                           vector_icons::kStarFilledIcon,
+                           kKoanEssentialRemoveIcon,
                            &KoanPinnedTabController::RemoveFromEssentials)
                      : ShortcutCommand(controller, "remove-from-essentials",
                                        u"Remove from Essentials",
-                                       vector_icons::kStarFilledIcon,
+                                       kKoanEssentialRemoveIcon,
                                        Action::kTogglePinTab));
   add_if(IsEnabled(controller, IDC_FIND),
          ChromeCommand(controller, "find-in-page", u"Find in Page",
@@ -309,14 +310,14 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
       ThemeServiceOf(controller)->GetBrowserColorScheme();
   add_if(scheme != ColorScheme::kSystem,
          AppearanceCommand("switch-to-automatic-appearance",
-                           u"Switch to Automatic Appearance",
-                           kAutomaticAppearanceIcon, ColorScheme::kSystem));
+                           u"Switch to Automatic Appearance", kKoanSparklesIcon,
+                           ColorScheme::kSystem));
   add_if(scheme != ColorScheme::kLight,
          AppearanceCommand("switch-to-light-mode", u"Switch to Light Mode",
-                           kLightModeIcon, ColorScheme::kLight));
+                           kKoanFaceSunIcon, ColorScheme::kLight));
   add_if(scheme != ColorScheme::kDark,
          AppearanceCommand("switch-to-dark-mode", u"Switch to Dark Mode",
-                           kDarkModeIcon, ColorScheme::kDark));
+                           kKoanMoonStarsIcon, ColorScheme::kDark));
   add_if(IsEnabled(controller, IDC_PRINT),
          ChromeCommand(controller, "print", u"Print", kPrintIcon, IDC_PRINT));
 }

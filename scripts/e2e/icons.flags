@@ -1,0 +1,2 @@
+# Every icon the UI asks for, and whether Koan's icon was painted for it.
+--koan-icon-trace={dump}/icon-trace.txt

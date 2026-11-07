@@ -672,7 +672,7 @@ class KoanLibrarySpacesSection : public KoanLibrarySection,
     views::View* theme = header->AddChildView(library::CreateIconButton(
         base::BindRepeating(&KoanLibrarySpacesSection::EditTheme,
                             base::Unretained(this), id),
-        kBrushFilledIcon, u"Change theme"));
+        kKoanPaintbrushFillIcon, u"Change theme"));
 
     // Body: the space's tabs.
     auto* scroll = card->AddChildView(std::make_unique<views::ScrollView>(
@@ -865,9 +865,10 @@ MoveHandle::MoveHandle(KoanLibrarySpacesSection* section, int index)
     : views::ImageButton(views::Button::PressedCallback()),
       section_(section),
       index_(index) {
-  SetImageModel(STATE_NORMAL, ui::ImageModel::FromVectorIcon(
-                                  kMoveIcon, kColorKoanLibraryForeground,
-                                  library::kSmallButtonIconSize));
+  SetImageModel(STATE_NORMAL,
+                ui::ImageModel::FromVectorIcon(kKoanMoveCursorIcon,
+                                               kColorKoanLibraryForeground,
+                                               library::kSmallButtonIconSize));
   SetImageHorizontalAlignment(ALIGN_CENTER);
   SetImageVerticalAlignment(ALIGN_MIDDLE);
   constexpr int kSize =

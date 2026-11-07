@@ -1,0 +1,29 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+// Firefox's chrome://global/skin/icons/search-glass.svg, third_party/icons/firefox,
+// converted by scripts/gen_koan_icons.py. See THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 16,
+FILL_RULE_NONZERO,
+PATH_COLOR_ALPHA, 128,
+MOVE_TO, 10.089, 10.973,
+LINE_TO, 9.687, 10.978,
+CUBIC_TO, 8.788, 11.62, 7.689, 12, 6.5, 12,
+CUBIC_TO, 3.462, 12, 1, 9.538, 1, 6.5,
+CUBIC_TO, 0.998, 4.125, 2.521, 2.017, 4.776, 1.272,
+CUBIC_TO, 7.031, 0.528, 9.51, 1.315, 10.922, 3.225,
+CUBIC_TO, 12.334, 5.134, 12.361, 7.735, 10.989, 9.673,
+LINE_TO, 10.983, 10.1,
+LINE_TO, 14.816, 13.932,
+CUBIC_TO, 15.06, 14.176, 15.061, 14.572, 14.817, 14.816,
+CUBIC_TO, 14.701, 14.934, 14.542, 15.001, 14.376, 15.001,
+CUBIC_TO, 14.21, 15.001, 14.051, 14.935, 13.934, 14.817,
+CLOSE,
+MOVE_TO, 6.5, 10.75,
+CUBIC_TO, 8.843, 10.75, 10.75, 8.843, 10.75, 6.5,
+CUBIC_TO, 10.75, 4.157, 8.843, 2.25, 6.5, 2.25,
+CUBIC_TO, 4.157, 2.25, 2.25, 4.157, 2.25, 6.5,
+CUBIC_TO, 2.25, 8.843, 4.157, 10.75, 6.5, 10.75,
+CLOSE,

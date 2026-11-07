@@ -130,7 +130,9 @@ inline constexpr int kFloatingUrlBarShadowBlur = 140;
 inline constexpr int kFloatingUrlBarShadowSpread = -15;
 // shadcn's softer shadow (shadow-lg: 0 10px 15px -3px) and text size
 // (text-base: 16px).
-// The shadcn card's magnifier (lucide's search, 16px).
+// The floating bar's magnifier and the pill's on an empty tab: Firefox's
+// search-glass.svg as Zen draws it in the identity box, a 16px box with a
+// 14px glyph at half opacity (kKoanUrlbarSearchGlassIcon).
 inline constexpr int kFloatingUrlBarMagnifierSize = 16;
 // The divider under the input stops short of the card's edges (Zen's input row
 // padding).
@@ -250,7 +252,7 @@ inline constexpr int kDownloadTileSize = 42;
 inline int DownloadTileCornerRadius() {
   return look::ScaleRadius(12);
 }
-inline constexpr int kDownloadTileIconSize = 24;
+inline constexpr int kDownloadTileIconSize = 18;
 inline constexpr int kDownloadTileShadowBlur = 6;
 inline constexpr int kDownloadTileEdge = 24;
 inline constexpr int kDownloadTileOvershoot = 34;
@@ -267,7 +269,7 @@ inline constexpr float kWelcomeTitleLineHeight = 1.05f;
 inline constexpr float kWelcomeTitleLetterSpacing = -0.03f;
 inline constexpr int kWelcomeStartButtonWidth = 100;
 inline constexpr int kWelcomeStartButtonHeight = 48;
-inline constexpr int kWelcomeStartButtonIconSize = 18;
+inline constexpr int kWelcomeStartButtonIconSize = 17;
 inline constexpr int kWelcomeStartButtonGap = 28;
 // On macOS the screen leaves the title bar row with the traffic lights
 // uncovered: Chromium places them in the top 38px (BrowserFrameViewMac::
