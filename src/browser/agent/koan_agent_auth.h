@@ -206,17 +206,27 @@ bool VerifyProof(base::span<const uint8_t> public_key,
 // peer with kMaxFailures failures within kFailureWindow is blocked for
 // kBlockDuration. A failure older than the window is forgotten. Prompts of
 // every kind are limited per user (the key passed in is UidKey(), not
-// something an attacker can vary), globally, and to one open at a time. Time
-// comes from the caller. The table is bounded: when it is full the least
-// recently active entry (an unblocked one first) is dropped, so it cannot be
-// filled to deny service to a legitimate client.
+// something an attacker can vary) and to one open at a time. There is no
+// separate cap over all users: sessions of other users are refused before they
+// can ask (Session::CheckPeer), so every prompt is the browser's own user's and
+// the per-user cap is the global one. Time comes from the caller. The table is
+// bounded: when it is full the least recently active entry (an unblocked one
+// first) is dropped, so it cannot be filled to deny service to a legitimate
+// client.
+//
+// Accepted risk: a process of the browser's own user can use up the prompt
+// budget (one open, three a minute) with pairing offers it signs itself, which
+// delays or rate-limits a legitimate client's prompt and shows the user
+// nuisance dialogs. It gains no access by it: every prompt names the verified
+// program, every refusal and timeout counts against that program, and nothing
+// is granted without the user. Without the budget the same process could ask as
+// often as it likes, which is the worse case.
 class RateLimiter {
  public:
   static constexpr int kMaxFailures = 5;
   static constexpr base::TimeDelta kBlockDuration = base::Seconds(60);
   static constexpr base::TimeDelta kFailureWindow = base::Minutes(5);
   static constexpr int kMaxPromptsPerMinute = 3;
-  static constexpr int kMaxPromptsPerMinuteInTotal = 6;
   static constexpr int kMaxOpenPrompts = 1;
 
   RateLimiter();
@@ -227,8 +237,8 @@ class RateLimiter {
   bool RecordFailure(const std::string& key, base::TimeTicks now);
   void RecordSuccess(const std::string& key);
   // Starts a prompt for `key` (a UidKey()); false, and nothing counted, if one
-  // is already open, if the user has had too many in the last minute or if too
-  // many have been shown in all. Every true needs an EndPrompt().
+  // is already open or if the user has had too many in the last minute. Every
+  // true needs an EndPrompt().
   bool TryBeginPrompt(const std::string& key, base::TimeTicks now);
   void EndPrompt();
 
@@ -243,10 +253,9 @@ class RateLimiter {
   Entry& EntryFor(const std::string& key, base::TimeTicks now);
 
   std::map<std::string, Entry> entries_;
-  // Prompts shown, in all and per user. Kept apart from the failure table: a
+  // Prompts shown, per user. Kept apart from the failure table: a
   // process cannot push a user's count out by making the table churn, and the
   // keys are users, which it cannot invent.
-  std::vector<base::TimeTicks> prompts_;
   std::map<std::string, std::vector<base::TimeTicks>> user_prompts_;
   int open_prompts_ = 0;
 };

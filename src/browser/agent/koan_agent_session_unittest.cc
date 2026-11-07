@@ -522,11 +522,42 @@ TEST_F(KoanAgentSessionTest, LabelsThatCouldSpoofTheDialogAreRefused) {
       "a\xE2\x80\xA8"
       "b",  // U+2028 line separator
       "a\xE2\x80\xA9"
-      "b",                    // U+2029 paragraph separator
-      "a\tb",                 // control
-      " Claude",              // leading space
-      "Claude ",              // trailing space
-      "Claude  Code",         // a run of spaces
+      "b",     // U+2029 paragraph separator
+      "a\tb",  // control
+      "a\x7f"
+      "b",          // DEL
+      "e\xCC\x81",  // U+0301 combining acute accent
+      "a\xE0\xA4\x82"
+      "b",  // U+0902 a spacing/nonspacing mark
+      "a\xE3\x85\xA4"
+      "b",  // U+3164 Hangul filler
+      "a\xE1\x85\x9F"
+      "b",  // U+115F Hangul choseong filler
+      "a\xE1\x85\xA0"
+      "b",  // U+1160 Hangul jungseong filler
+      "a\xEF\xBE\xA0"
+      "b",  // U+FFA0 halfwidth Hangul filler
+      "a\xE2\xA0\x80"
+      "b",  // U+2800 braille pattern blank
+      "a\xEE\x80\x80"
+      "b",  // U+E000 private use
+      "a\xF3\xB0\x80\x80"
+      "b",  // U+F0000 supplementary private use
+      "a\xEF\xB8\x8F"
+      "b",  // U+FE0F variation selector
+      "a\xF3\xA0\x80\x81"
+      "b",  // U+E0001 language tag (Cf)
+      "a\xE2\x98\x95"
+      "b",  // U+2615 a symbol (hot beverage)
+      "a\xE2\x80\xA6"
+      "b",             // U+2026 punctuation beyond ASCII
+      " Claude",       // leading space
+      "Claude ",       // trailing space
+      "Claude  Code",  // a run of spaces
+      "Claude\xC2\xA0"
+      "Code",  // no-break space
+      "Claude\xE3\x80\x80"
+      "Code",                 // ideographic space
       "Claude\xC2\xA0 Code",  // no-break space then space
       "\xC2\xA0"
       "Claude",                           // leading no-break space
@@ -553,14 +584,93 @@ TEST_F(KoanAgentSessionTest, OrdinaryLabelsAreAccepted) {
     accents += "\xC3\xA9";
   }
   for (const std::string& label :
-       {std::string("Claude Code"), std::string("Caf\xC3\xA9 \xE2\x98\x95"),
+       {std::string("Claude Code"), std::string("Caf\xC3\xA9"),
         std::string("\xE3\x82\xAF\xE3\x83\xAD\xE3\x83\xBC\xE3\x83\x89"),
-        accents, std::string(64, 'a'), std::string("../../etc/passwd")}) {
+        std::string(
+            "\xD0\x9A\xD0\xBB\xD0\xBE\xD0\xB4 2"),  // Cyrillic and a digit
+        std::string(
+            "\xED\x81\xB4\xEB\xA1\x9C\xEB\x93\x9C"),  // Hangul syllables
+        accents, std::string(64, 'a'), std::string("../../etc/passwd"),
+        std::string("Claude Code (work) #2 - v1.0_beta, \"x\" & 'y'")}) {
     ticks_.Advance(base::Seconds(61));
     auto session = NewSession();
     Send(*session, PairFrame(client, label));
     EXPECT_EQ(session->state(), Session::State::kAwaitingApproval) << label;
   }
+}
+
+TEST_F(KoanAgentSessionTest, ChangedProgramPromptsAreRateLimitedToo) {
+  Client client;
+  const std::string id = Pair(client);  // one prompt of the three
+  // Two connections from other places, each proved and each asked about.
+  for (const char* path : {"/tmp/a/koan", "/tmp/b/koan"}) {
+    PeerIdentity moved = Peer();
+    moved.process.path = path;
+    auto session = NewSession(moved);
+    ASSERT_TRUE(SendProof(*session, client, id));
+    ASSERT_EQ(session->state(), Session::State::kAwaitingApproval) << path;
+    EXPECT_EQ(delegate().approvals.back().kind, ApprovalKind::kPeerChanged);
+    session->OnApprovalDecision(delegate().approvals.back().id, Yes());
+    EXPECT_EQ(session->state(), Session::State::kAuthenticated);
+  }
+  // The third is within the same minute: the proof verifies, the user is not
+  // asked, nothing is pinned, and the connection is not authenticated.
+  PeerIdentity third = Peer();
+  third.process.path = "/tmp/c/koan";
+  auto session = NewSession(third);
+  ASSERT_TRUE(SendProof(*session, client, id));
+  EXPECT_EQ(delegate().LastError(), "Koan.rateLimited");
+  EXPECT_TRUE(delegate().approvals.empty());
+  EXPECT_NE(session->state(), Session::State::kAuthenticated);
+  EXPECT_NE(session->state(), Session::State::kAwaitingApproval);
+  PeerIdentity b = Peer();
+  b.process.path = "/tmp/b/koan";
+  EXPECT_EQ(store_.Find(id)->pinned, PinPeer(b));
+  // A minute later it can be asked.
+  ticks_.Advance(base::Seconds(61));
+  auto later = NewSession(third);
+  ASSERT_TRUE(SendProof(*later, client, id));
+  EXPECT_EQ(later->state(), Session::State::kAwaitingApproval);
+}
+
+TEST_F(KoanAgentSessionTest, ChangedChainPromptsAreRateLimitedToo) {
+  Client client;
+  const std::string id = Pair(client);  // one prompt of the three
+  int asked = 0;
+  for (const char* agent :
+       {"/tmp/a/claude", "/tmp/b/claude", "/tmp/c/claude"}) {
+    PeerIdentity other_chain = Peer();
+    other_chain.ancestors[1] = Process(agent, "ANTHROPIC");
+    auto session = NewSession(other_chain);
+    ASSERT_TRUE(SendProof(*session, client, id));
+    if (!delegate().approvals.empty()) {
+      ++asked;
+      EXPECT_EQ(delegate().approvals.back().kind, ApprovalKind::kChainChanged);
+      session->OnApprovalDecision(delegate().approvals.back().id, Yes());
+    } else {
+      EXPECT_EQ(delegate().LastError(), "Koan.rateLimited") << agent;
+      EXPECT_NE(session->state(), Session::State::kAuthenticated);
+    }
+  }
+  EXPECT_EQ(asked, 2);
+  EXPECT_EQ(chains_.size(), 2u);  // the refused chain is not remembered
+}
+
+TEST_F(KoanAgentSessionTest, AStalledFrameAfterAuthenticationIsNotAFailure) {
+  Client client;
+  const std::string id = Pair(client);
+  const std::vector<uint8_t> frame =
+      Frame(R"({"id":1,"method":"Koan.status"})");
+  for (int i = 0; i < RateLimiter::kMaxFailures + 1; ++i) {
+    auto session = NewSession();
+    ASSERT_TRUE(Authenticate(*session, client, id)) << i;
+    session->OnBytesReceived(base::span(frame).first(6u));
+    ticks_.Advance(Session::kFrameTimeout + base::Seconds(1));
+    session->CheckTimeouts();
+    EXPECT_EQ(delegate().closed, CloseReason::kTimeout) << i;
+  }
+  // Six stalls and the peer is still not blocked.
+  EXPECT_FALSE(limiter_.IsBlocked(PeerKey(Peer()), ticks_.NowTicks()));
 }
 
 TEST_F(KoanAgentSessionTest, APairedClientAuthenticatesWithItsKey) {

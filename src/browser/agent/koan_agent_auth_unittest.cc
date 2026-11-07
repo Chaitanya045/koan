@@ -359,17 +359,6 @@ TEST(KoanAgentAuthTest, OnlyOnePromptIsOpenAtATime) {
   EXPECT_FALSE(limiter.TryBeginPrompt("uid:1", now));  // that was three
 }
 
-TEST(KoanAgentAuthTest, SixPromptsAMinuteInAll) {
-  RateLimiter limiter;
-  const base::TimeTicks now = base::TimeTicks() + base::Seconds(1);
-  for (int i = 0; i < RateLimiter::kMaxPromptsPerMinuteInTotal; ++i) {
-    ASSERT_TRUE(limiter.TryBeginPrompt("uid:" + std::to_string(i), now)) << i;
-    limiter.EndPrompt();
-  }
-  EXPECT_FALSE(limiter.TryBeginPrompt("uid:99", now + base::Seconds(10)));
-  EXPECT_TRUE(limiter.TryBeginPrompt("uid:99", now + base::Seconds(61)));
-}
-
 TEST(KoanAgentAuthTest, FailuresOlderThanTheWindowAreForgotten) {
   RateLimiter limiter;
   base::TimeTicks now = base::TimeTicks() + base::Seconds(100);

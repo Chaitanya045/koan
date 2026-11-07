@@ -42,11 +42,39 @@ bool IsExpired(const ClientRecord& record, base::Time now) {
 // `data`.
 constexpr int kServerError = -32000;
 
+// What a label may be made of: printable ASCII, and beyond ASCII only letters
+// (L*) and decimal digits (Nd). That leaves out everything that can hide,
+// reorder or blank out text around it: controls (Cc, U+0085 included), format
+// characters (Cf: bidi overrides and isolates, zero-width), line and paragraph
+// separators, other spaces (the no-break space), combining marks (M*), private
+// use (Co) and symbols (So), which takes in the braille blank U+2800. The
+// Hangul fillers are letters, so the default-ignorable code points are refused
+// first. (Look-alike letters from another script are not caught: the label is
+// only ever shown as "calls itself", after the verified program.)
+bool IsAllowedLabelCharacter(base_icu::UChar32 character) {
+  if (character < 0x80) {
+    return character > 0x20 && character < 0x7f;  // space is handled apart
+  }
+  if (u_hasBinaryProperty(character, UCHAR_DEFAULT_IGNORABLE_CODE_POINT)) {
+    return false;
+  }
+  switch (u_charType(character)) {
+    case U_UPPERCASE_LETTER:
+    case U_LOWERCASE_LETTER:
+    case U_TITLECASE_LETTER:
+    case U_MODIFIER_LETTER:
+    case U_OTHER_LETTER:
+    case U_DECIMAL_DIGIT_NUMBER:
+      return true;
+    default:
+      return false;
+  }
+}
+
 // The label is shown in the pairing dialog next to the verified program and
-// written to a log. Valid UTF-8, 1 to 64 characters, and none that can hide or
-// reorder text around it: controls (Cc, which includes U+0085), format
-// characters (Cf: bidi overrides and isolates, zero-width), the line and
-// paragraph separators (Zl, Zp). No leading space and no run of spaces.
+// written to a log. Valid UTF-8, 1 to 64 characters of
+// IsAllowedLabelCharacter() or an ASCII space, no leading or trailing space and
+// no run of spaces.
 bool IsValidLabel(const std::string& label) {
   if (label.empty() || label.size() > kMaxLabelBytes) {
     return false;
@@ -59,13 +87,9 @@ bool IsValidLabel(const std::string& label) {
       return false;
     }
     ++characters;
-    const int8_t type = u_charType(character);
-    if (type == U_CONTROL_CHAR || type == U_FORMAT_CHAR ||
-        type == U_LINE_SEPARATOR || type == U_PARAGRAPH_SEPARATOR) {
-      return false;
-    }
-    const bool space = type == U_SPACE_SEPARATOR;
-    if (space && (characters == 1 || previous_space)) {
+    const bool space = character == ' ';
+    if (space ? (characters == 1 || previous_space)
+              : !IsAllowedLabelCharacter(character)) {
       return false;
     }
     previous_space = space;
@@ -546,7 +570,11 @@ void Session::CheckTimeouts() {
     return;
   }
   if (!partial_since_.is_null() && now - partial_since_ > kFrameTimeout) {
-    CountDenial();
+    // A stall is a failure of a peer that has not shown it is anyone yet. After
+    // the proof it is the client's own slow connection, not guessing.
+    if (state_ != State::kAuthenticated) {
+      CountDenial();
+    }
     Close(CloseReason::kTimeout);
   }
 }

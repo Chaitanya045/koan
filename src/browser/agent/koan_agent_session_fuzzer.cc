@@ -4,13 +4,21 @@
 
 // Drives a Session with arbitrary bytes, prompt answers, clock jumps and
 // revocations, next to a client that holds a real key and signs (sometimes
-// correctly, sometimes not), and checks what must hold whatever arrives:
-//   - the session is only ever authenticated as the paired client after that
-//     client's key signed the nonce this connection was given (single use);
-//   - a prompt about a changed program or chain is never open before a proof
-//     has verified, and the pin never changes without an approval;
-//   - nothing is sent after the session was closed, and it never closes twice;
-//   - nothing is forwarded.
+// correctly, sometimes over a changed nonce), and checks what is checked here,
+// and no more:
+//   - the session is authenticated only as the paired client, and only after
+//     the fuzzer has sent at least one correct signature of a nonce while the
+//     session was waiting for a proof (a counter, not a match of that
+//     signature to this nonce: the unit tests do the matching);
+//   - a prompt about a changed program or chain is never requested before such
+//     a signature has been sent (a prompt for a new client is not held to it);
+//   - the paired client's pin changes only after some approval was given (any
+//     approval, not the matching one);
+//   - nothing is sent after the session was closed, it never closes twice, and
+//     the session reports closed once the delegate was told;
+//   - an authenticated session ends authenticated or closed.
+// It does not check what an authenticated session answers (the unit tests
+// check that nothing is forwarded), nor limits, timeouts or replies.
 
 #include <stddef.h>
 #include <stdint.h>
@@ -104,7 +112,8 @@ class FuzzDelegate final : public koan::agent::SessionDelegate {
   void RequestApproval(const ApprovalRequest& request) override {
     CHECK(!closed);
     pending.push_back(request.id);
-    // A question about a changed program or chain only follows a proof.
+    // A question about a changed program or chain only follows a correct
+    // signature (the count is of signatures sent, see the header).
     if (request.kind != koan::agent::ApprovalKind::kNewClient) {
       CHECK_GT(*valid_proofs, 0);
     }
@@ -338,9 +347,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
     if (session.state() == Session::State::kAuthenticated) {
       was_authenticated = true;
-      // Only the paired client's key, having signed a nonce this connection was
-      // given, gets here (a client paired through the fuzzed prompt cannot
-      // authenticate: its key was never used to sign a login).
+      // Only the paired client gets here, and only after a correct signature
+      // was sent (a client paired through the fuzzed prompt is another id, and
+      // its key never signs a login, so it cannot authenticate).
       CHECK_EQ(session.client_id(), std::string(kClientId));
       CHECK_GT(valid_proofs, 0);
     }
@@ -354,8 +363,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       }
     }
   }
-  // A session cannot have authenticated and then come back to be
-  // unauthenticated.
+  // An authenticated session ends authenticated or closed.
   if (was_authenticated) {
     CHECK(session.state() == Session::State::kAuthenticated ||
           session.state() == Session::State::kClosed);

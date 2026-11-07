@@ -355,9 +355,7 @@ bool RateLimiter::TryBeginPrompt(const std::string& key, base::TimeTicks now) {
   const auto old = [now](base::TimeTicks time) {
     return now - time >= base::Minutes(1);
   };
-  std::erase_if(prompts_, old);
-  if (open_prompts_ >= kMaxOpenPrompts ||
-      static_cast<int>(prompts_.size()) >= kMaxPromptsPerMinuteInTotal) {
+  if (open_prompts_ >= kMaxOpenPrompts) {
     return false;
   }
   for (auto& item : user_prompts_) {
@@ -374,7 +372,6 @@ bool RateLimiter::TryBeginPrompt(const std::string& key, base::TimeTicks now) {
     return false;
   }
   times.push_back(now);
-  prompts_.push_back(now);
   ++open_prompts_;
   return true;
 }

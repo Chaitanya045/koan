@@ -168,7 +168,10 @@ class Session {
   void OnBytesReceived(base::span<const uint8_t> bytes);
 
   // The user's answer to an ApprovalRequest. Ignored if `request_id` is not the
-  // pending one.
+  // pending one. The peer's identity is fixed when the session is made; the
+  // gateway must take it again when the user answers (the dialog can stay open
+  // for a minute and the peer can exec another program meanwhile) and pass a
+  // denial instead of the approval if it is not the one the dialog described.
   void OnApprovalDecision(uint64_t request_id, ApprovalDecision decision);
 
   // Called by the gateway about once a second: expires a nonce, a prompt and an
