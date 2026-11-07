@@ -85,6 +85,7 @@ group("agent_unit_tests") {
     "//koan/browser/agent:koan_agent_events_fuzzer",
     "//koan/browser/agent:koan_agent_filters_fuzzer",
     "//koan/browser/agent:koan_agent_frame_fuzzer",
+    "//koan/browser/agent:koan_agent_session_fuzzer",
     "//koan/browser/agent:koan_agent_unittests",
     "//koan/browser/agent:koan_agent_url_fuzzer",
   ]

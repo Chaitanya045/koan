@@ -151,7 +151,7 @@ How agent control compares with Chrome's approval mode:
 | T1 | A web page reaches the endpoint (loopback port, DNS rebinding, `Origin`-less WebSocket) | The browser listens on **no TCP port** and parses **no HTTP or WebSocket**; a browser cannot dial a unix socket. The relay (§11) is a separate process: ephemeral 127.0.0.1 port, one path `/cdp/<128-bit secret>`, any request with an `Origin` header refused, `Host == 127.0.0.1:<port>` required (the stock guard is `devtools_http_handler.cc:129-137,478-484`), a second simultaneous connection refused, session-scoped lifetime, killed on revoke |
 | T2 | Another local user connects | 0700 directory + 0600 socket + uid check on accept; the relay's secret path |
 | T3 | An unpaired same-uid process drives the browser | The first connection from an unknown client gets **only** `Koan.pair`; the user sees a native prompt whose headline is the **verified executable** (audit token → path, code-signing identity, ancestors), with the client's own label shown as "calls itself". Unanswered prompts time out (60 s); 3 attempts per minute per peer. **Client records are encrypted and MACed with Keychain-bound `os_crypt` storage** (§5.4), so editing plaintext Local State while Koan is not running cannot add a client |
-| T4 | A stolen credential is replayed | There is no shared secret in the browser: clients hold an Ed25519 private key and sign a single-use nonce bound to the peer's identity digest (§5.2). Paired identity is **pinned** (path, signature, ancestors) and a change re-prompts (§5.5). Credentials expire (30 days) and are revocable (flushed before returning, §5.4). **Residual**: a same-uid process that reads `~/.koan/clients/<id>/key` and runs from the same chain is the paired client (§3.5), which is why `observe` is off and `drive` is per tab |
+| T4 | A stolen credential is replayed | There is no shared secret in the browser: clients hold an Ed25519 private key and sign a single-use nonce (§5.2). Paired identity is **pinned** (path, signature, ancestors) and a change re-prompts (§5.5). Credentials expire (30 days) and are revocable (flushed before returning, §5.4). **Residual**: a same-uid process that reads `~/.koan/clients/<id>/key` and runs from the same chain is the paired client (§3.5), which is why `observe` is off and `drive` is per tab |
 | T5 | The agent exfiltrates cookies, storage or credentials | Layered: (1) `Storage.*`, `DOMStorage.*`, `IndexedDB.*`, `CacheStorage.*`, `Network.{getCookies,getAllCookies,setCookie,setCookies,deleteCookies,clearBrowserCookies,clearBrowserCache,loadNetworkResource}` and everything unlisted are **denied** by name (§4.3); `Browser.*` and `SystemInfo.*` do not exist for an untrusted client. (2) **`Network.enable` is required by agent-browser and, upstream, leaks cookies including HttpOnly values and `Authorization` through `requestWillBeSentExtraInfo`/`responseReceivedExtraInfo`** (`network_handler.cc:1113-1135, 4033-4058`; review finding 1): the facade rewrites those events and passes only an allowlist of Network events (§4.5), tested by T-sec-4. (3) `getResponseBody` and `setExtraHTTPHeaders` need capability `network` (not offered in v1). **Honest limit**: the agent can run JS in a page, so it can read what that page's JS can read (`document.cookie` minus HttpOnly, that origin's localStorage, the DOM). It is **not limited to the origin it started on**: it can navigate its tab to any site you are logged into and read that page, which is the shared-login point of decision 15. It cannot read HttpOnly cookies, the password store or the cookie jar |
 | T6 | The agent reads passwords / autofill | The `Autofill`, `Security`, `Browser` domains are absent for untrusted clients. Risk: password-manager autofill into a form the agent drives, then JS reads the value. Chrome hides autofilled passwords from script until a user gesture; a CDP-injected click may count as one (UNVERIFIED, test T-sec-1, §15). Mitigation if it does: disable password/autofill UI in agent-owned tabs (`ContentAutofillClient`/`PasswordManagerClient` per WebContents) |
 | T7 | The agent reaches privileged or sensitive pages and worlds: `chrome://`, Koan settings, DevTools, `file://`, the Agent-control page, **extension frames injected into ordinary pages and extension content-script worlds** | A strict Koan-only allowlist (§4.4): a frame is reachable only if http(s)/`about:blank`/the unreachable-error URL, non-WebUI, non-privileged, non-guest, non-PDF/MimeHandler, with every ancestor and the embedder passing the same; `chrome-extension://` frames are not attached; execution contexts other than the main world or the agent's own isolated worlds are dropped and their `contextId`s rejected. `MayReadLocalFiles=false` blocks `file://`, `DOM.setFileInputFiles` and `Network.loadNetworkResource`. Network-error pages do not detach the tab (the original draft would have) |
@@ -342,7 +342,24 @@ received by the client.
    the verified executable**, not a name the client chose: "*`koan` (signed by <team / 'unsigned'>) started by
    `claude` (signed by Anthropic …), run from `zsh`*", with full paths on expansion, and the client's own label
    shown as "calls itself *Claude Code*". Switches for the requested capabilities (§5.3). Buttons: *Allow*, *Deny*; no
-   default button; Esc denies. Unanswered after 60 s: denied; 3 attempts per minute per peer.
+   default button; Esc denies. Unanswered after 60 s: denied. The limits are on the **user**, not the program's path (a
+   same-user process can run copies from any number of paths): at most one prompt open in the whole browser and 3 prompts
+   a minute per user (a connection from another user is refused before it can ask, so that is also the cap over all
+   users), and a denial or a timeout counts as a failure against the peer (5 in 5 minutes block it for 60 s).
+   **Accepted risk:** a process of the user's own account can use up that budget with pairing offers it signs itself,
+   which delays a legitimate client's prompt (the client gets `Koan.rateLimited` and retries) and shows the user
+   nuisance dialogs. It gains no access by it: each dialog names the verified program, each refusal counts against
+   that program, and nothing is granted without the user. Without the budget it could ask without end, which is
+   worse.
+   The offer comes with a **proof of possession**: the client signs `"koan-agent-v1-pair" NUL publicKey NUL label`
+   with the key it offers, and the browser checks it **before** any prompt. A key of small order (the identity point and
+   the other seven torsion points, in their canonical and non-canonical encodings) is refused too, since a signature for
+   it can be forged by anyone and a proof of possession does not help. The label is an **allowlist**: valid UTF-8, 1 to
+   64 characters, each printable ASCII, an ASCII space, or beyond ASCII a letter (L*) or decimal digit (Nd) that is not
+   a default-ignorable code point (which takes in the Hangul fillers). That leaves out controls, format characters (bidi
+   overrides and isolates, zero-width, tags), line and paragraph separators, other spaces, combining marks, private use
+   and symbols (the braille blank among them). No leading, trailing or repeated spaces. Look-alike letters from another
+   script are not caught; the label is only shown as "calls itself" after the verified program.
 3. On Allow the browser stores the **public key** (Ed25519, generated by the CLI), a random 128-bit **client id**,
    the display label, the capabilities, created/last-seen, and the **pinned identity** (§5.5). It stores no shared
    secret, so there is nothing in the browser's data that lets a process authenticate.
@@ -350,13 +367,40 @@ received by the client.
 ### 5.2 Every connection: signature, not shared secret
 
 `Koan.authenticate {clientId}` → server nonce (32 random bytes, single use, 10 s) → client signs
-`"koan-agent-v1" ‖ nonce ‖ audit-token identity digest` with its private key → the browser verifies with the stored
-public key. Five failures close the connection and block the peer for 60 s. The private key lives with the client, in
+`"koan-agent-v1" NUL clientId NUL nonce` with its private key → the browser verifies with the stored public key. (The
+first draft also put an "audit-token identity digest" in the signed bytes. A client cannot know how the browser sees it,
+so it cannot sign it; the browser checks the peer's identity from the OS instead, §5.5, and the proof binds the client
+id and the connection's nonce. Implemented in `src/browser/agent/koan_agent_auth.cc`.) Five failures close the connection and block the peer for 60 s. The private key lives with the client, in
 `~/.koan/clients/<client-id>/key` (0600, the directory is the random id, never the label, which also closes the
 `--name ../..` and silent-overwrite holes of review finding 5). A Keychain-held key with an ACL naming the signed CLI
 is the later hardening (UNVERIFIED that Koan.app's ACL can list a second binary, C§5). Credentials expire after 30 days
 without use. Connections are bound to a browser launch; **strict mode** (off by default) re-prompts on every
 connection, optionally behind Touch ID.
+
+**Order: verify, then ask, then pin** (PR 3 review, finding 1). A client id is not a secret (it is a directory name
+the same user can read), so a prompt about a changed program or chain is shown only after the signature has verified;
+the pin and the accepted-chain list are written only after the user has said yes to it. A same-user process that has
+read an id but not the key gets the one error `Koan.authFailed` and no prompt. For the same reason **the nonce is
+handed to any well-formed id**, and an unknown id, an expired pairing, a revoked client and a wrong signature all
+fail at the proof with the same answer. An authenticated session is **not** a one-time check: every request and the
+gateway's one-second tick look the client up again, so a revoked client, an expired pairing or a reduced capability
+reaches live sessions at once (`OnClientRevoked` closes immediately), and a session in use keeps its pairing from
+expiring.
+
+A peer whose executable path the OS could not name, or whose uid is not the browser's, is refused before anything else
+(`kUnknownPeer`). A pin with no agent in it means the chain was unknown at pairing; a connection that has an agent in
+its chain is then a chain change, so an empty pin never switches the chain check off.
+
+*What the transcript does not give.* There is no server identity in it, and the client cannot know one: a same-user
+process that holds the socket path first can relay a client's nonce to the real browser. What stops it is the pin (the
+relay's executable is not the paired one) and the socket's directory permissions; both are the gateway's. Also the
+gateway's, with the socket (next PR): a deadline for the whole pre-auth phase, a cap on open unauthenticated
+connections (per user and in all), counting protocol violations as failures, and taking the peer's identity once at
+accept from the audit token (`LOCAL_PEERTOKEN`, with its pid version, not the pid), checking it again at the proof
+(the fd survives `exec` and `fork`), and failing closed if either lookup fails. The identity is also taken **again when
+the user answers a prompt**: the dialog may stay open for 60 s, and the peer can `exec` another program in that time, so
+an approval only applies if the peer is still the one the dialog described (`OnApprovalDecision` is where it is
+checked; this PR's `Session` has the identity fixed at construction and leaves the re-check to the gateway).
 
 ### 5.3 Capabilities (per client, editable in settings)
 
