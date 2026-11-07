@@ -31,6 +31,11 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
     // The page has loaded and asked for its data (KoanWelcome gives up on a
     // page that never does).
     base::RepeatingClosure page_ready;
+    // A press on the empty space around the card: the window follows the
+    // pointer while the button is down. Then, at the first move without it,
+    // `window_drag_end` (macOS: AppKit's drag swallowed the page's release).
+    base::RepeatingClosure window_drag;
+    base::RepeatingClosure window_drag_end;
     // Skip setup, Esc: close the screen, applying nothing more.
     base::RepeatingClosure skip;
   };

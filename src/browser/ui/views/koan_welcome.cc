@@ -8,6 +8,7 @@
 
 #include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,12 +26,17 @@
 #include "koan/browser/ui/color/koan_tokens.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
+#include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
 #include "koan/common/koan_url_constants.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/display/screen.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/focus/focus_manager.h"
+#include "ui/views/widget/widget.h"
 
 namespace koan {
 
@@ -56,6 +62,10 @@ SkColor PageBackground() {
   return look::ResolveTokens(look, dark)[look::Token::kBackground];
 }
 
+ui::Accelerator EscapeAccelerator() {
+  return ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE);
+}
+
 }  // namespace
 
 KoanWelcome::KoanWelcome(BrowserView* browser_view)
@@ -77,11 +87,12 @@ void KoanWelcome::OnAddedToWidget() {
 }
 
 void KoanWelcome::OnBrowserViewLayout() {
-  LayoutWidget();
+  LayoutWebView();
 }
 
 void KoanWelcome::OnBrowserViewDestroying() {
-  Close();
+  // The window takes the page along.
+  Close(/*remove_page=*/false);
   SetPending(false);
 }
 
@@ -124,21 +135,6 @@ void KoanWelcome::MaybeShow() {
 }
 
 void KoanWelcome::Show() {
-  views::Widget* window = browser_view_->GetWidget();
-  views::Widget::InitParams params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
-      views::Widget::InitParams::TYPE_CONTROL);
-  params.parent = window->GetNativeView();
-  params.name = "KoanWelcome";
-  // On macOS a child widget is a child NSWindow, shown inactive: it must
-  // become the key window, or the keyboard (Esc, Tab, the arrows) stays with
-  // the browser window under it. It covers the whole window, title bar and
-  // traffic lights included; Skip setup and Esc are the way out.
-  params.activatable = views::Widget::InitParams::Activatable::kYes;
-  widget_ = std::make_unique<views::Widget>();
-  widget_->Init(std::move(params));
-  widget_observation_.Observe(widget_.get());
-
   auto web_view = std::make_unique<views::WebView>(browser_view_->GetProfile());
   content::WebContents* contents = web_view->GetWebContents();
   // Until the page paints: its background, not a white frame.
@@ -166,31 +162,39 @@ void KoanWelcome::Show() {
         }
       },
       weak_factory_.GetWeakPtr());
+  callbacks.window_drag = bind(&KoanWelcome::StartWindowDrag);
+  callbacks.window_drag_end = bind(&KoanWelcome::EndWindowDrag);
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
-  // A crashed page would leave a dead screen over the window.
+  // A crashed or failed page would leave a dead screen over the window.
   Observe(contents);
   web_view->LoadInitialURL(GURL(kWelcomeURL));
   load_timer_.Start(
       FROM_HERE, kLoadTimeout,
       base::BindOnce(&KoanWelcome::Skip, weak_factory_.GetWeakPtr()));
-  web_view_ = widget_->SetContentsView(std::move(web_view));
-  LayoutWidget();
-  widget_->Show();
-  widget_->LayoutRootViewIfNecessary();
-  // The keyboard goes to the page (its first button has the focus).
-  widget_->Activate();
+
+  // The last child, over everything else: macOS stacks the window's native
+  // views (the tab's page, this page) in the views' order
+  // (NativeWidgetMacNSWindowHost::ReorderChildViews), the traffic lights
+  // above them all.
+  web_view_ = browser_view_->AddChildView(std::move(web_view));
+  LayoutWebView();
+  // The keyboard goes to the page (its first button has the focus); Esc
+  // anywhere else in the window still leaves.
   web_view_->RequestFocus();
   contents->Focus();
-  // Seen once it is actually on screen (not merely decided on); a crash in
-  // the middle doesn't bring it back.
-  if (widget_->IsVisible()) {
-    browser_view_->GetProfile()->GetPrefs()->SetBoolean(
-        prefs::kWelcomeScreenSeen, true);
+  focus_manager_ = browser_view_->GetFocusManager();
+  if (focus_manager_) {
+    focus_manager_->RegisterAccelerator(
+        EscapeAccelerator(), ui::AcceleratorManager::kNormalPriority, this);
   }
+  // Seen once it is on screen (not merely decided on); a crash in the middle
+  // doesn't bring it back.
+  browser_view_->GetProfile()->GetPrefs()->SetBoolean(prefs::kWelcomeScreenSeen,
+                                                      true);
 }
 
 void KoanWelcome::Finish() {
-  if (!widget_ || std::exchange(finishing_, true)) {
+  if (!web_view_ || std::exchange(finishing_, true)) {
     return;
   }
   // Not from inside the page's own message: closing destroys it.
@@ -203,10 +207,8 @@ void KoanWelcome::Finish() {
                          return;
                        }
                        const bool import = welcome->import_;
-                       const bool was_active =
-                           welcome->widget_ && welcome->widget_->IsActive();
                        welcome->Close();
-                       welcome->FocusBrowser(was_active);
+                       welcome->FocusBrowser();
                        if (import) {
                          chrome::ExecuteCommand(
                              welcome->browser_view_->browser(),
@@ -223,10 +225,9 @@ void KoanWelcome::Skip() {
       base::BindOnce(
           [](base::WeakPtr<KoanWelcome> welcome) {
             // (A renderer gone at quit: the window is going.)
-            if (welcome && welcome->widget_ && !welcome->IsWindowClosing()) {
-              const bool was_active = welcome->widget_->IsActive();
+            if (welcome && welcome->web_view_ && !welcome->IsWindowClosing()) {
               welcome->Close();
-              welcome->FocusBrowser(was_active);
+              welcome->FocusBrowser();
             }
           },
           weak_factory_.GetWeakPtr()));
@@ -238,13 +239,13 @@ bool KoanWelcome::IsWindowClosing() const {
   return !controller || controller->vertical_tabs()->IsClosing();
 }
 
-void KoanWelcome::FocusBrowser(bool was_active) {
-  // The keyboard goes back to the window: to its page, as after a start.
+void KoanWelcome::FocusBrowser() {
+  // The keyboard goes back to the window's page, as after a start; only in
+  // the active window (not from behind another app).
   views::Widget* window = browser_view_->GetWidget();
-  if (!window || !was_active) {
+  if (!window || !window->IsActive()) {
     return;
   }
-  window->Activate();
   if (content::WebContents* contents = browser_view_->browser()
                                            ->GetTabStripModel()
                                            ->GetActiveWebContents()) {
@@ -252,41 +253,83 @@ void KoanWelcome::FocusBrowser(bool was_active) {
   }
 }
 
-void KoanWelcome::Close() {
-  if (!widget_) {
+bool KoanWelcome::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  if (accelerator != EscapeAccelerator() || !web_view_) {
+    return false;
+  }
+  Skip();
+  return true;
+}
+
+bool KoanWelcome::CanHandleAccelerators() const {
+  return web_view_ != nullptr;
+}
+
+void KoanWelcome::StartWindowDrag() {
+  views::Widget* window = browser_view_->GetWidget();
+  if (!window || !web_view_) {
+    return;
+  }
+#if BUILDFLAG(IS_MAC)
+  // AppKit moves the window while the button is down, as for a page dragged
+  // from its top (koan_window_drag.cc; the page is in the window, so its
+  // view gets the release afterwards): edge tiling and the drag to another
+  // Space work, and nothing of Chromium's move loop. It does nothing if the
+  // button is up already.
+  StartNativeWindowMove(browser_view_);
+#else
+  if (!window->IsMoveLoopSupported()) {
+    return;
+  }
+  const gfx::Vector2d offset = display::Screen::Get()->GetCursorScreenPoint() -
+                               window->GetWindowBoundsInScreen().origin();
+  // After the page's message has returned.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<views::Widget> window, gfx::Vector2d offset) {
+            if (window) {
+              window->RunMoveLoop(
+                  offset, views::Widget::MoveLoopSource::kMouse,
+                  views::Widget::MoveLoopEscapeBehavior::kDontHide);
+            }
+          },
+          window->GetWeakPtr(), offset));
+#endif
+}
+
+void KoanWelcome::EndWindowDrag() {
+#if BUILDFLAG(IS_MAC)
+  // The page's view never got the release AppKit's drag took.
+  if (browser_view_->GetWidget()) {
+    EndNativeWindowMove(browser_view_);
+  }
+#endif
+}
+
+void KoanWelcome::Close(bool remove_page) {
+  if (!web_view_) {
     return;
   }
   SetPending(false);
   load_timer_.Stop();
   Observe(nullptr);
-  widget_observation_.Reset();
-  web_view_ = nullptr;
-  if (!widget_->IsClosed()) {
-    widget_->CloseNow();
+  if (focus_manager_) {
+    focus_manager_->UnregisterAccelerator(EscapeAccelerator(), this);
+    focus_manager_ = nullptr;
   }
-  widget_.reset();
+  views::WebView* web_view = std::exchange(web_view_, nullptr);
+  if (remove_page) {
+    // Destroys the page (and its KoanWelcomeHost).
+    browser_view_->RemoveChildViewT(web_view);
+  }
 }
 
-void KoanWelcome::OnWidgetClosing(views::Widget* widget) {
-  // Closed from outside (Close() stops observing first). The welcome is over:
-  // nothing pending any more (Chromium's search engine choice dialog may
-  // show), and the rest goes after this notification.
-  SetPending(false);
-  load_timer_.Stop();
-  Observe(nullptr);
-  widget_observation_.Reset();
-  web_view_ = nullptr;
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](base::WeakPtr<KoanWelcome> welcome) {
-                       // (The browser window closing took it along: nothing
-                       // to give the focus to.)
-                       if (welcome && !welcome->IsWindowClosing()) {
-                         welcome->Close();
-                         welcome->FocusBrowser(/*was_active=*/true);
-                       }
-                     },
-                     weak_factory_.GetWeakPtr()));
+void KoanWelcome::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
+  // The page crashed or was killed: end the welcome (it was seen) rather than
+  // leave a dead page over the window.
+  Skip();
 }
 
 void KoanWelcome::DidFailLoad(content::RenderFrameHost* render_frame_host,
@@ -298,20 +341,12 @@ void KoanWelcome::DidFailLoad(content::RenderFrameHost* render_frame_host,
   }
 }
 
-void KoanWelcome::PrimaryMainFrameRenderProcessGone(
-    base::TerminationStatus status) {
-  // The page crashed or was killed: end the welcome (it was seen) rather than
-  // leave a dead page over the window.
-  Skip();
-}
-
-void KoanWelcome::LayoutWidget() {
-  if (!widget_) {
+void KoanWelcome::LayoutWebView() {
+  if (!web_view_) {
     return;
   }
   // All of the window.
-  widget_->SetBounds(
-      browser_view_->ConvertRectToWidget(browser_view_->GetLocalBounds()));
+  web_view_->SetBoundsRect(browser_view_->GetLocalBounds());
 }
 
 }  // namespace koan

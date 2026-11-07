@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/profiles/profile.h"
@@ -76,6 +77,8 @@ void KoanWelcomeHandler::RegisterMessages() {
   add("setSearchEngine", &KoanWelcomeHandler::HandleSetSearchEngine);
   add("finish", &KoanWelcomeHandler::HandleFinish);
   add("skip", &KoanWelcomeHandler::HandleSkip);
+  add("startWindowDrag", &KoanWelcomeHandler::HandleStartWindowDrag);
+  add("endWindowDrag", &KoanWelcomeHandler::HandleEndWindowDrag);
 }
 
 void KoanWelcomeHandler::HandleGetWelcomeData(const base::ListValue& args) {
@@ -156,6 +159,7 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
   ResolveJavascriptCallback(
       callback_id,
       base::DictValue()
+          .Set("isMac", static_cast<bool>(BUILDFLAG(IS_MAC)))
           .Set("shortcutRows", std::move(rows))
           .Set("importSources", std::move(sources))
           .Set("engines", std::move(engines))
@@ -289,6 +293,20 @@ void KoanWelcomeHandler::HandleSkip(const base::ListValue& args) {
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().skip) {
     host->callbacks().skip.Run();
+  }
+}
+
+void KoanWelcomeHandler::HandleStartWindowDrag(const base::ListValue& args) {
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().window_drag) {
+    host->callbacks().window_drag.Run();
+  }
+}
+
+void KoanWelcomeHandler::HandleEndWindowDrag(const base::ListValue& args) {
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().window_drag_end) {
+    host->callbacks().window_drag_end.Run();
   }
 }
 
