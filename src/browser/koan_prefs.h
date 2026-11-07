@@ -203,6 +203,16 @@ inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
+// Changes the defaults of upstream profile prefs to Zen's: no remote search
+// suggestions (Zen's browser.search.suggest.enabled is off, which also stops
+// Chromium's remote zero-prefix suggestions, Google's trending searches), no
+// AI Mode button in the omnibox, and AI Mode switched off by its policy pref.
+// A value the user sets still wins. Called from
+// chrome/browser/prefs/browser_prefs.cc at the end of RegisterProfilePrefs(),
+// after upstream registered them.
+void OverrideUpstreamProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry);
+
 // Registers Koan's local-state prefs (the look), and changes the defaults of
 // upstream local-state prefs for Koan's memory behaviour (see
 // docs/PERFORMANCE.md); a value the user sets in Settings > Performance
