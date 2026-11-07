@@ -15,6 +15,9 @@
 #   (KOAN_MAC; see .agent/notes/mac.md). Needs a full Xcode: DEVELOPER_DIR
 #   (default /Applications/Xcode.app/Contents/Developer), not xcode-select.
 #
+# scripts/build.sh --gen runs only gn gen (CI uses it to check the build
+# files before the long build).
+#
 # JOBS (parallel compile jobs) defaults to 2, 4 or 6 depending on the memory
 # available right now, so a build fits next to other apps in 16 GB of RAM.
 set -euo pipefail
@@ -47,7 +50,26 @@ echo "$JOBS compile jobs (set JOBS to change)"
 cd "$ROOT/chromium/src"
 mkdir -p "$OUT"
 cp "$ARGS" "$OUT/args.gn"
+if [[ $OS == mac ]]; then
+  # ANGLE compiles Metal shaders. Since Xcode 26 the Metal toolchain is a
+  # separate component (xcodebuild -downloadComponent MetalToolchain), and
+  # xcrun finds it through `xcodebuild -find`, which fails ("'metallib' not
+  # found") under the CFFIXED_USER_HOME that koan_require_mac_env sets. So
+  # ANGLE runs the toolchain directly, through a link in the out dir that
+  # stays put when the toolchain's mount point changes (on every boot).
+  metal="$(env -u CFFIXED_USER_HOME xcrun -f metal 2>/dev/null || true)"
+  if [[ ! -x $metal ]]; then
+    echo "no Metal toolchain: run xcodebuild -downloadComponent MetalToolchain" >&2
+    exit 1
+  fi
+  ln -sfn "$(dirname "$metal")" "$OUT/metal-toolchain"
+  echo "angle_metal_toolchain_dir = \"$PWD/$OUT/metal-toolchain\"" >> "$OUT/args.gn"
+fi
 gn gen "$OUT"
+if [[ $TARGET == --gen ]]; then
+  echo "generated $PWD/$OUT"
+  exit 0
+fi
 autoninja -C "$OUT" -j "$JOBS" "$TARGET"
 
 if [[ $TARGET == chrome ]]; then

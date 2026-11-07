@@ -81,6 +81,8 @@ edges. You need:
 
 - An Apple Silicon Mac with the full **Xcode** (not only the Command Line
   Tools). The scripts use `DEVELOPER_DIR`, not `xcode-select`.
+  Install its Metal toolchain too (a separate download since Xcode 26,
+  needed for ANGLE's shaders): `xcodebuild -downloadComponent MetalToolchain`.
 - About **60 GB** of free disk: roughly 30 GB for the checkout and the rest
   for `out/Koan`. `build/koan-mac.gn` builds without debug symbols to keep
   it small.
@@ -141,6 +143,46 @@ signature, so macOS asks again for access to the keychain item.
 `install_desktop.sh` and the off-screen test tools (`scripts/e2e/`,
 `shot_ui.sh`, ...) use Linux's headless Ozone platform, so test behaviour on
 Linux.
+
+### macOS nightly build
+
+[`.github/workflows/macos.yml`](.github/workflows/macos.yml) builds
+`Koan.app` on GitHub's free macOS runners every night from `develop`, and
+publishes `Koan-<version>-<sha>-arm64.dmg` as a run artifact and as the
+rolling `nightly` pre-release (see
+[Installing the macOS build](docs/USAGE.md#installing-the-macos-build)).
+It is the only place the Mac code is compiled without the maintainer's
+Mac, so it catches Mac-only build errors.
+
+- It uses the same scripts as above (`bootstrap.sh`, `apply_patches.sh`,
+  `apply_branding.sh`, `build.sh` with `build/koan-mac.gn`), with
+  `scripts/ci/mac_env.sh` as the runner's `env.sh`.
+- A first build takes much longer than GitHub's 6-hour job limit, so it
+  runs as a chain: a fetch job, then build jobs that each build for about
+  5 hours and hand `out/Koan` on to the next as an artifact, then a
+  packaging step and the release. A whole run takes about 16 hours
+  (4 build jobs).
+- **It never runs on pushes.** A run is a full build of about 16 hours,
+  so it runs only nightly or when asked for. To build a branch or pull
+  request with Mac-specific code (a compile check plus a .dmg to try):
+  - add the **`macos-build` label** to the pull request (builds its head
+    once; remove and add the label again for another run), or
+  - `gh workflow run macos.yml -f ref=<branch>` (or
+    `-f ref=refs/pull/<n>/head`), or "Run workflow" on the Actions tab.
+
+  Pull requests from forks are never built automatically. On every pull
+  request, `ci.yml` lints the workflows (actionlint) and scripts
+  (shellcheck), which is the cheap check for changes to the Mac build.
+- The nightly is skipped when nothing that goes into the app (`src/`,
+  `patches/`, `branding/`, `build/`, `scripts/`, `CHROMIUM_VERSION`, the
+  macOS workflows) changed since the commit the `nightly` release was built
+  from. Manual runs always build.
+- **If a job fails** for a reason outside the code (a network error, a
+  runner problem), use "Re-run failed jobs": the run carries on from the
+  last job that finished, with the same commit (the build artifacts are
+  kept for 2 days). A fix in the code needs a new run.
+
+How it works and what was measured: [.agent/notes/macos-ci.md](.agent/notes/macos-ci.md).
 
 ### Repository layout
 
@@ -241,6 +283,9 @@ scripts/ci/check_patches.sh
 python3 -m unittest discover -s scripts/tests
 git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file --dry-run --Werror
 ```
+
+The macOS build runs separately, every night and on demand
+([macOS nightly build](#macos-nightly-build)).
 
 Browser behaviour is tested against a real build, off-screen, so nothing
 opens on your desktop:
