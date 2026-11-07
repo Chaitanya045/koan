@@ -113,9 +113,9 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   `components/os_crypt/common/keychain_password_mac.mm`). Never rename it
   once a profile exists: its cookies and passwords would stop decrypting.
 - Each build gets a new ad-hoc signature, so macOS asks again for the
-  keychain item after every rebuild. Signing `Koan.app` with a stable local
-  identity after each build (`codesign --force --deep -s <identity>`) would
-  make "Always Allow" stick; not set up yet.
+  keychain item after every rebuild. `scripts/mac_signing_identity.sh create`
+  once, and `scripts/build.sh` signs every build with one local identity
+  (below, "Signing builds with one identity (#141)").
 
 ## What differs from Linux in the code
 
@@ -178,19 +178,145 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   card stays, see `UseContentCard()`); see the entry above for the top
   container.
 
-## "Relaunch ... to keep it encrypted" infobar (#141)
+## Signing builds with one identity (#141)
 
-`MaybeShowOSCryptAsyncAvailabilityInfoBar` (`infobar_utils.cc`, feature
-`kOSCryptAsyncAvailabilityInfoBar`, on by default on macOS) shows it when the
-async `Encryptor` has no key. With `--use-mock-keychain` (what
-`scripts/run_mac.sh` and test launches pass) the async key provider
-(`KeychainKeyProvider`) asks a `FakeKeychainV2`, which refuses an item without
-its access group (`errSecMissingEntitlement`), so `KeychainPassword::GetPassword()`
-is empty and encryption is "unavailable" on every launch. Koan switches the
-infobar off in that case (`koan_feature_overrides.cc`). Without the flag the
-login keychain item "Koan Safe Storage" is created by the first launch with no
-prompt; an ad-hoc signed build whose signature changed since the item was
-created gets a keychain access prompt ("Always Allow" doesn't stick across
-builds): if that is denied the bar is the correct warning. A stable local
-signing identity would stop the prompts (not set up).
+**Symptom.** Chromium's "Relaunch the browser to load your profile data and
+keep it encrypted" infobar: `MaybeShowOSCryptAsyncAvailabilityInfoBar`
+(`infobar_utils.cc`, feature `kOSCryptAsyncAvailabilityInfoBar`, on by
+default on macOS) shows it when the async `Encryptor` has no key, i.e. when
+`KeychainPassword::GetPassword()` returned an empty string for the login
+keychain item "Koan Safe Storage".
 
+**Under `--use-mock-keychain`** (`scripts/run_mac.sh`, the Mac harness, tests)
+the async key provider asks a `FakeKeychainV2`, which refuses an item without
+its access group (`errSecMissingEntitlement`), so encryption is "unavailable"
+on every launch and the bar says nothing true. Koan switches it off in that
+case only (`koan_feature_overrides.cc`). The harness keeps
+`--use-mock-keychain` everywhere and never touches the real keychain.
+
+**Mechanism for a real launch (from how the Keychain works; not yet observed
+on a Mac).** A keychain item's access control lists the apps allowed to read
+it by their code requirement. A build without a certificate is signed ad hoc
+by the linker, and an ad-hoc signature is the CDHash of the code, which
+changes with every build. After a rebuild the saved item's ACL no longer
+matches: macOS prompts ("Koan wants to use your confidential information
+stored in 'Koan Safe Storage'") and, if the prompt is dismissed or denied,
+the read returns nothing: the bar shows, and cookies and passwords can't be
+decrypted. Nothing should hide the bar then: it is true.
+
+**The fix: one signing identity.** `scripts/mac_signing_identity.sh create`
+makes a self-signed code-signing certificate "Koan Local Signing" in a
+keychain file of its own, `$KOAN_MAC/keychains/koan-signing.keychain-db`
+(not the login keychain, not trusted system-wide). `security create-keychain`
+adds the new keychain to the user's keychain search list; `create` records
+`security list-keychains -d user` first and restores it exactly (it refuses
+to run if the list can't be read), so afterwards the list is what it was.
+`scripts/mac_sign.sh Koan.app` signs with it, and `scripts/build.sh` calls
+that after every Mac build (`KOAN_SIGN=0` skips). The designated
+requirement is then `identifier "dev.koan.Koan" and certificate leaf =
+H"<hash>"` on every rebuild, so the saved item keeps matching.
+
+The commands (what the scripts run, with `KC=$KOAN_MAC/keychains/koan-signing.keychain-db`):
+
+```sh
+security list-keychains -d user                 # recorded, restored at the end
+# openssl.cnf: [req] distinguished_name=dn, prompt=no, x509_extensions=ext;
+# [dn] CN=Koan Local Signing; [ext] basicConstraints=critical,CA:false,
+# keyUsage=critical,digitalSignature, extendedKeyUsage=critical,codeSigning
+# (a config file: macOS's LibreSSL may not have -addext; umask 077 for the key)
+/usr/bin/openssl req -x509 -new -newkey rsa:2048 -nodes -sha256 -days 3650 \
+  -config openssl.cnf -keyout key.pem -out cert.pem
+/usr/bin/openssl pkcs12 -export -inkey key.pem -in cert.pem \
+  -name "Koan Local Signing" -out identity.p12 -passout pass:koan-local-signing \
+  -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
+security create-keychain -p koan-local-signing "$KC"
+security set-keychain-settings "$KC"            # never auto-lock
+security unlock-keychain -p koan-local-signing "$KC"
+security import identity.p12 -k "$KC" -P koan-local-signing -T /usr/bin/codesign
+security set-key-partition-list -S apple-tool:,apple: -s -k koan-local-signing "$KC"
+security list-keychains -d user -s <the recorded list>
+codesign --force --deep --sign <SHA-1 of the certificate> --keychain "$KC" \
+  --timestamp=none Koan.app
+codesign --verify --deep --strict Koan.app
+codesign -d -r- Koan.app                        # the designated requirement
+```
+
+If signing or the checks after it fail, `mac_sign.sh` signs the whole app ad
+hoc again (never a half-signed bundle: `--deep` signs the nested code first)
+and warns loudly; the build still succeeds. If `create` fails after making
+the keychain file it removes that file and restores the search list, so it
+can be run again; a keychain file left with no certificate (an older run) is
+also fine to rerun on. The key and certificate are written with umask 077
+into a temp dir that is removed on exit.
+
+**What a friend sees.** Run `scripts/mac_signing_identity.sh create` once.
+It makes the keychain file and the certificate; there is normally no
+dialog (the keychain is the script's own and unlocked with a fixed password,
+`koan-local-signing`, public on purpose: it protects only a key which signs
+local builds on this Mac). If macOS asks whether `codesign` may use the key,
+choose "Always Allow". The first launch of a build signed this way can still
+prompt once for "Koan Safe Storage" if the item was created by an ad-hoc
+build before. That prompt asks for **your login keychain password** (not
+only a button); type it and choose "Always Allow", which is meant to stick
+for every later rebuild (see "Not proven" below). A rebuilt, re-signed Koan
+also asks once more for camera, microphone and screen-recording access it had
+been granted, because its requirement changed from the CDHash to the
+certificate. Each build re-signs about 1 GB with `--deep`: a few seconds;
+`KOAN_SIGN=0` skips it (use it for runs that only use `--use-mock-keychain`).
+
+**Run real-keychain checks from Finder or `open`**, not through
+`scripts/run_mac.sh`: `env.sh` redirects `HOME` and `CFFIXED_USER_HOME` into
+`$KOAN_MAC`, so a Koan started that way may not use your login keychain.
+
+**Undo it.** Delete `$KOAN_MAC/keychains/koan-signing.keychain-db` by hand
+(and, if you ever added it to the search list yourself, remove it in Keychain
+Access or `security list-keychains -d user -s ...`). Nothing else changed.
+Two Koan folders (two `KOAN_MAC`s) make two certificates with the same name
+and different hashes; switching folders makes the saved item stop matching
+once. One folder, one identity.
+
+**Apple Development identity (an option, not the default).** With a free
+Apple ID in Xcode you get an "Apple Development: ..." certificate with a Team
+ID. List it read-only with
+`security find-identity -v -p codesigning | grep "Apple Development"` and sign
+with `codesign --force --deep --sign <its hash> Koan.app`. Its requirement is
+certificate- and team-based (`anchor apple generic and ... subject.OU =
+<team>`), which also gives the keychain item a `teamid:` partition. Prefer it
+if the self-signed identity does not stop the prompt (see below).
+
+**If they decline** (never run `create`): builds stay ad-hoc signed;
+`scripts/mac_sign.sh` says so on each build. Saved logins and cookies may
+need re-entering after a rebuild, and the bar can show; nothing else breaks.
+
+**What it never does.** It never deletes or edits an existing keychain,
+keychain item or certificate (no `delete-*`, no `set-*-partition-list` on
+another keychain), never touches the login keychain, and never runs under
+`--use-mock-keychain` tests. Changing the identity (a different certificate)
+changes the designated requirement, so the existing item would stop matching
+once: don't regenerate it without a reason.
+
+**Static proof (touches no existing keychain item; the Mac loop can run it).**
+`scripts/mac_signing_check.sh selftest` makes a throw-away keychain in
+`$TMPDIR` (search list restored, directory removed), signs two dummy apps
+(`dev.koan.Koan`, different executables, like two rebuilds) the way
+`mac_sign.sh` does, prints `codesign -d -r-` for both (must be identical and
+`certificate leaf = H"..."`, not `cdhash`), checks the second against the
+first's requirement with `codesign --verify -R "=<requirement>"`, and as a
+negative control shows that two ad-hoc rebuilds do not satisfy each other.
+`scripts/mac_signing_check.sh X.app Y.app` does the same on two real signed
+builds. This proves the ACL's trusted-application requirement stays valid
+across rebuilds.
+
+**Not proven: the login keychain's partition list.** Since macOS 10.12 an
+item also has a partition list; an item created by an app without a Team ID
+gets a code-hash partition, and a self-signed certificate has no Team ID. If
+that makes each rebuild a new partition, the prompt comes back despite the
+stable requirement. Only a real item can show it (E1 was cancelled to keep
+the maintainer's real item safe). If the validation below shows the prompt
+again, use an Apple Development identity (above) and update this section.
+
+**Validation (by hand, with consent, on the maintainer's Mac).** Build and
+sign X, log in somewhere, quit; rebuild (Y), sign again; launch Y on the same
+profile: no keychain prompt, no infobar, the login is still there. Compare
+`codesign -d -r- X.app` and `Y.app`: the same requirement. The Mac harness
+does not run this.

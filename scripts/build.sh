@@ -14,6 +14,8 @@
 #   One optimised build, Koan.app. Run with the folder's env.sh sourced
 #   (KOAN_MAC; see .agent/notes/mac.md). Needs a full Xcode: DEVELOPER_DIR
 #   (default /Applications/Xcode.app/Contents/Developer), not xcode-select.
+#   The app is then signed with the local identity if you created one
+#   (scripts/mac_signing_identity.sh create); KOAN_SIGN=0 skips that.
 #
 # JOBS (parallel compile jobs) defaults to 2, 4 or 6 depending on the memory
 # available right now, so a build fits next to other apps in 16 GB of RAM.
@@ -56,6 +58,11 @@ if [[ $TARGET == chrome ]]; then
     # (Koan once scripts/apply_branding.sh has run, Chromium before).
     name="$(sed -n 's/^PRODUCT_FULLNAME=//p' chrome/app/theme/chromium/BRANDING)"
     echo "built $PWD/$OUT/$name.app"
+    # Same signature on every build, so the saved Keychain item (the key for
+    # cookies and passwords) keeps matching; see scripts/mac_sign.sh.
+    if [[ ${KOAN_SIGN:-1} != 0 ]]; then
+      "$ROOT/scripts/mac_sign.sh" "$PWD/$OUT/$name.app"
+    fi
     echo "test: scripts/run_mac.sh (profile inside \$KOAN_MAC)"
   else
     echo "built $PWD/$OUT/chrome"
