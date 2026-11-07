@@ -22,10 +22,9 @@ namespace koan {
 // chrome://koan-welcome's messages (onboarding v2, #181):
 // - getWelcomeData: the shortcut rows with the user's side of each, the
 //   browsers to import from (Chromium's ImporterList), the search engines
-//   (Brave first and chosen) and whether this is macOS.
+//   (Brave first and chosen; in a choice screen region Chromium's list).
 // - setShortcuts, import, setSearchEngine: a step's choice, on its Next.
 // - finish, skip: close the screen (KoanWelcomeHost).
-// - startWindowDrag, endWindowDrag: the window around the page.
 // Only for the first-run screen (a page with a KoanWelcomeHost): the page
 // typed into a tab gets no data and changes nothing.
 class KoanWelcomeHandler : public content::WebUIMessageHandler {
@@ -48,8 +47,6 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
   void HandleSetSearchEngine(const base::ListValue& args);
   void HandleFinish(const base::ListValue& args);
   void HandleSkip(const base::ListValue& args);
-  void HandleStartWindowDrag(const base::ListValue& args);
-  void HandleEndWindowDrag(const base::ListValue& args);
 
   // Whether the profile is in a search engine choice screen region (the
   // EEA): the step is then a choice screen.

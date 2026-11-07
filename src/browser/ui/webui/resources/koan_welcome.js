@@ -402,28 +402,6 @@ class Welcome {
 
 // ---- The window around the page.
 
-// Empty space (not the card, not a control) drags the window, as a title bar.
-let gWindowDragging = false;
-document.addEventListener('mousedown', event => {
-  if (event.button !== 0 ||
-      event.target.closest('#welcome-card, button, input, label, a')) {
-    return;
-  }
-  gWindowDragging = true;
-  chrome.send('startWindowDrag');
-});
-// The drag ends with the button: the first move without it (on macOS the
-// window server took the release, so the page never saw a mouseup).
-document.addEventListener('mousemove', event => {
-  if (gWindowDragging && !(event.buttons & 1)) {
-    gWindowDragging = false;
-    chrome.send('endWindowDrag');
-  }
-});
-document.addEventListener('mouseup', () => {
-  gWindowDragging = false;
-});
-
 // Browser chrome, not a page: no Back / Reload / Inspect menu.
 document.addEventListener('contextmenu', event => event.preventDefault());
 
@@ -462,7 +440,6 @@ async function start() {
     document.body.replaceChildren();
     return;
   }
-  document.documentElement.toggleAttribute('data-mac', data.isMac);
   for (const row of data.shortcutRows) {
     gChoices.shortcuts[row.id] = row.chosen;
   }

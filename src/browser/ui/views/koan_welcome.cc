@@ -8,7 +8,6 @@
 
 #include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
-#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,11 +24,9 @@
 #include "koan/browser/ui/color/koan_tokens.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
-#include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
 #include "koan/common/koan_url_constants.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/display/screen.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
@@ -129,6 +126,11 @@ void KoanWelcome::Show() {
       views::Widget::InitParams::TYPE_CONTROL);
   params.parent = window->GetNativeView();
   params.name = "KoanWelcome";
+  // On macOS a child widget is a child NSWindow, shown inactive: it must
+  // become the key window, or the keyboard (Esc, Tab, the arrows) stays with
+  // the browser window under it. It covers the whole window, title bar and
+  // traffic lights included; Skip setup and Esc are the way out.
+  params.activatable = views::Widget::InitParams::Activatable::kYes;
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
 
@@ -152,8 +154,6 @@ void KoanWelcome::Show() {
       weak_factory_.GetWeakPtr());
   callbacks.finish = bind(&KoanWelcome::Finish);
   callbacks.skip = bind(&KoanWelcome::Skip);
-  callbacks.window_drag = bind(&KoanWelcome::StartWindowDrag);
-  callbacks.window_drag_end = bind(&KoanWelcome::EndWindowDrag);
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
   // A crashed page would leave a dead screen over the window.
   Observe(contents);
@@ -163,6 +163,7 @@ void KoanWelcome::Show() {
   widget_->Show();
   widget_->LayoutRootViewIfNecessary();
   // The keyboard goes to the page (its first button has the focus).
+  widget_->Activate();
   web_view_->RequestFocus();
   contents->Focus();
   // Seen once it is actually on screen (not merely decided on); a crash in
@@ -232,48 +233,6 @@ void KoanWelcome::FocusBrowser() {
   }
 }
 
-void KoanWelcome::StartWindowDrag() {
-  views::Widget* window = browser_view_->GetWidget();
-  if (!window || !widget_) {
-    return;
-  }
-#if BUILDFLAG(IS_MAC)
-  // AppKit moves the window while the button is down, as for a page dragged
-  // from its top (koan_window_drag.cc): edge tiling and the drag to another
-  // Space work, and nothing of Chromium's move loop (whose release CHECKs a
-  // capture taken in between would trip). It does nothing if the button is
-  // up already.
-  StartNativeWindowMove(browser_view_);
-#else
-  if (!window->IsMoveLoopSupported()) {
-    return;
-  }
-  const gfx::Vector2d offset = display::Screen::Get()->GetCursorScreenPoint() -
-                               window->GetWindowBoundsInScreen().origin();
-  // After the page's message has returned.
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          [](base::WeakPtr<views::Widget> window, gfx::Vector2d offset) {
-            if (window) {
-              window->RunMoveLoop(
-                  offset, views::Widget::MoveLoopSource::kMouse,
-                  views::Widget::MoveLoopEscapeBehavior::kDontHide);
-            }
-          },
-          window->GetWeakPtr(), offset));
-#endif
-}
-
-void KoanWelcome::EndWindowDrag() {
-#if BUILDFLAG(IS_MAC)
-  // The page's view never got the release AppKit's drag took.
-  if (browser_view_->GetWidget()) {
-    EndNativeWindowMove(browser_view_);
-  }
-#endif
-}
-
 void KoanWelcome::Close() {
   if (!widget_) {
     return;
@@ -298,7 +257,7 @@ void KoanWelcome::LayoutWidget() {
   if (!widget_) {
     return;
   }
-  // All of the window; on macOS the traffic lights stay above it, usable.
+  // All of the window.
   widget_->SetBounds(
       browser_view_->ConvertRectToWidget(browser_view_->GetLocalBounds()));
 }

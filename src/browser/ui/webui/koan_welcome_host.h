@@ -28,11 +28,6 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
     base::RepeatingCallback<void(bool import)> import;
     // "Start browsing": close the screen.
     base::RepeatingClosure finish;
-    // A press on the empty space around the card: the window follows the
-    // pointer while the button is down. Then, at the first move without it,
-    // `window_drag_end` (macOS: AppKit's drag swallowed the page's release).
-    base::RepeatingClosure window_drag;
-    base::RepeatingClosure window_drag_end;
     // Skip setup, Esc: close the screen, applying nothing more.
     base::RepeatingClosure skip;
   };

@@ -102,8 +102,7 @@ kbd {
   display: none;
 }
 
-/* The top row: the steps, Skip. Empty space here drags the window; on macOS
- * it leaves the traffic lights their corner. */
+/* The top row: the steps, Skip setup. */
 #welcome-header {
   display: flex;
   align-items: center;
@@ -112,10 +111,6 @@ kbd {
   flex-shrink: 0;
   height: 52px;
   padding: 0 16px;
-}
-
-:root[data-mac] #welcome-header {
-  padding-left: 88px;
 }
 
 #welcome-steps {
