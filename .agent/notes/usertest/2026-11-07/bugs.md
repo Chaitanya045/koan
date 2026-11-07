@@ -485,3 +485,7 @@ Tester slip: `open -a Finder` (to make Finder frontmost) opened a Finder "Recent
 ### B50. The setup takes no input at all: Get started, Skip setup, Tab/Enter and Esc all do nothing — blocker (c174f)
 Two fresh first-run profiles: the setup shows, but hover, clicks on "Get started" and "Skip setup", Tab+Enter and Esc (before any click, and after) change nothing (s52-c174f-no-input). The setup is a separate untitled window (1200x879 at 221,45) over the browser window; Koan is frontmost. The only way out is ⌘W, which closes the whole window (app stays); ⌘N then opens a normal window without the setup (s52-c174f-skip-cmdW). No Check failed/FATAL, no crash. c174d (the previous head) took clicks fine; this is a regression in 59689ea0 (the Cmd+W/focus changes).
 All of the c174f list (W-11, W-12c, W-3, W-13, W-13b, W-14, W-19) is blocked by this.
+
+## Session 53 (11:26–11:28 IST): #110 icons, KoanCheck-c110c (c6ca1e460f10) vs Zen 1.24b, same window size and pages
+Close: back/forward arrows, "+ New Tab", the bottom bar's Library cauldron (~10 pt) and "+" (s53-bottom-bar), the floating bar's magnifier (s53-floating-magnifier).
+Differences (s53-icons-koan-vs-zen): the sidebar toggle is a heavy "panel-left" square vs Zen's thin sidebar glyph with lines; the reload arrow is thicker/rounder than Zen's; the URL pill shows the site favicon (GitHub mark) where Zen shows only the host text; Koan's cauldron a touch brighter than Zen's.
