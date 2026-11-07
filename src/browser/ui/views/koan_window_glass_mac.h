@@ -20,14 +20,14 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/color/color_provider_key.h"
 
+class BrowserView;
+
 namespace ui {
 class ColorProvider;
 }
 
 // Objective-C++ only: what BrowserNativeWidgetMac's glass frame calls (see
 // koan_window_glass.h).
-class BrowserView;
-
 namespace koan {
 
 // The view under a window's contents that shows the blurred desktop: an
