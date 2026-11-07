@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
@@ -30,11 +31,14 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
-#include "ui/views/widget/widget.h"
 
 namespace koan {
 
 namespace {
+
+// How long the page may take to load and ask for its data before the welcome
+// gives up (a hung or broken page would otherwise sit over the window).
+constexpr base::TimeDelta kLoadTimeout = base::Seconds(10);
 
 // Shown at most once per browser session, in the first window.
 bool g_shown_this_session = false;
@@ -133,6 +137,7 @@ void KoanWelcome::Show() {
   params.activatable = views::Widget::InitParams::Activatable::kYes;
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
+  widget_observation_.Observe(widget_.get());
 
   auto web_view = std::make_unique<views::WebView>(browser_view_->GetProfile());
   content::WebContents* contents = web_view->GetWebContents();
@@ -154,10 +159,20 @@ void KoanWelcome::Show() {
       weak_factory_.GetWeakPtr());
   callbacks.finish = bind(&KoanWelcome::Finish);
   callbacks.skip = bind(&KoanWelcome::Skip);
+  callbacks.page_ready = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome) {
+        if (welcome) {
+          welcome->load_timer_.Stop();
+        }
+      },
+      weak_factory_.GetWeakPtr());
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
   // A crashed page would leave a dead screen over the window.
   Observe(contents);
   web_view->LoadInitialURL(GURL(kWelcomeURL));
+  load_timer_.Start(
+      FROM_HERE, kLoadTimeout,
+      base::BindOnce(&KoanWelcome::Skip, weak_factory_.GetWeakPtr()));
   web_view_ = widget_->SetContentsView(std::move(web_view));
   LayoutWidget();
   widget_->Show();
@@ -188,8 +203,10 @@ void KoanWelcome::Finish() {
                          return;
                        }
                        const bool import = welcome->import_;
+                       const bool was_active =
+                           welcome->widget_ && welcome->widget_->IsActive();
                        welcome->Close();
-                       welcome->FocusBrowser();
+                       welcome->FocusBrowser(was_active);
                        if (import) {
                          chrome::ExecuteCommand(
                              welcome->browser_view_->browser(),
@@ -202,15 +219,17 @@ void KoanWelcome::Finish() {
 void KoanWelcome::Skip() {
   // From the page's own message: close once it has returned.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](base::WeakPtr<KoanWelcome> welcome) {
-                       // (A renderer gone at quit: the window is going.)
-                       if (welcome && !welcome->IsWindowClosing()) {
-                         welcome->Close();
-                         welcome->FocusBrowser();
-                       }
-                     },
-                     weak_factory_.GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<KoanWelcome> welcome) {
+            // (A renderer gone at quit: the window is going.)
+            if (welcome && welcome->widget_ && !welcome->IsWindowClosing()) {
+              const bool was_active = welcome->widget_->IsActive();
+              welcome->Close();
+              welcome->FocusBrowser(was_active);
+            }
+          },
+          weak_factory_.GetWeakPtr()));
 }
 
 bool KoanWelcome::IsWindowClosing() const {
@@ -219,10 +238,10 @@ bool KoanWelcome::IsWindowClosing() const {
   return !controller || controller->vertical_tabs()->IsClosing();
 }
 
-void KoanWelcome::FocusBrowser() {
+void KoanWelcome::FocusBrowser(bool was_active) {
   // The keyboard goes back to the window: to its page, as after a start.
   views::Widget* window = browser_view_->GetWidget();
-  if (!window) {
+  if (!window || !was_active) {
     return;
   }
   window->Activate();
@@ -238,12 +257,45 @@ void KoanWelcome::Close() {
     return;
   }
   SetPending(false);
+  load_timer_.Stop();
   Observe(nullptr);
+  widget_observation_.Reset();
   web_view_ = nullptr;
   if (!widget_->IsClosed()) {
     widget_->CloseNow();
   }
   widget_.reset();
+}
+
+void KoanWelcome::OnWidgetClosing(views::Widget* widget) {
+  // Closed from outside (Close() stops observing first). The welcome is over:
+  // nothing pending any more (Chromium's search engine choice dialog may
+  // show), and the rest goes after this notification.
+  SetPending(false);
+  load_timer_.Stop();
+  Observe(nullptr);
+  widget_observation_.Reset();
+  web_view_ = nullptr;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<KoanWelcome> welcome) {
+                       // (The browser window closing took it along: nothing
+                       // to give the focus to.)
+                       if (welcome && !welcome->IsWindowClosing()) {
+                         welcome->Close();
+                         welcome->FocusBrowser(/*was_active=*/true);
+                       }
+                     },
+                     weak_factory_.GetWeakPtr()));
+}
+
+void KoanWelcome::DidFailLoad(content::RenderFrameHost* render_frame_host,
+                              const GURL& validated_url,
+                              int error_code) {
+  // The page itself didn't load: nothing to show, no way out on it.
+  if (render_frame_host->IsInPrimaryMainFrame()) {
+    Skip();
+  }
 }
 
 void KoanWelcome::PrimaryMainFrameRenderProcessGone(

@@ -28,6 +28,9 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
     base::RepeatingCallback<void(bool import)> import;
     // "Start browsing": close the screen.
     base::RepeatingClosure finish;
+    // The page has loaded and asked for its data (KoanWelcome gives up on a
+    // page that never does).
+    base::RepeatingClosure page_ready;
     // Skip setup, Esc: close the screen, applying nothing more.
     base::RepeatingClosure skip;
   };
