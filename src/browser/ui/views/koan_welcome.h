@@ -5,82 +5,106 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_WELCOME_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WELCOME_H_
 
-#include <memory>
-#include <vector>
-
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "url/gurl.h"
+#include "base/timer/timer.h"
+#include "content/public/browser/web_contents_observer.h"
+#include "ui/base/accelerators/accelerator.h"
 
 class BrowserView;
 
 namespace views {
-class Widget;
-}
+class FocusManager;
+class WebView;
+}  // namespace views
 
 namespace koan {
 
-// What the user chose on the welcome pages that applies once they close.
-struct KoanWelcomeChoices {
-  KoanWelcomeChoices();
-  KoanWelcomeChoices(const KoanWelcomeChoices&);
-  KoanWelcomeChoices& operator=(const KoanWelcomeChoices&);
-  ~KoanWelcomeChoices();
-
-  bool import = false;
-  // Sites to pin as Essentials.
-  std::vector<GURL> essentials;
-};
-
-// Zen's welcome screen (ZenWelcome.mjs, zen-welcome.ftl), shown over the
-// first window on Chromium's first run: "Welcome to a calmer
-// internet", then pages to import from another browser, give the browser a
-// colour, pick the search engine, choose Essentials and make Koan the
-// default browser. Zen's ad blocker page is left out (see ZEN_PARITY.md).
+// Koan's welcome on Chromium's first run (onboarding v2, #181; a deliberate
+// divergence from Zen's welcome): chrome://koan-welcome (koan_welcome_ui.h)
+// over the whole first window, in shadcn's look. "Welcome to a calmer
+// internet", then the shortcut set, import from another browser and the
+// search engine (Brave Search chosen); every step can be skipped, and Skip
+// setup or Esc leaves at any point.
 //
-// The screen is a child widget over the window, below the window's controls
-// (so the window still moves and closes), and takes the keyboard: Tab moves
-// between its buttons, arrows between choices, Esc skips it. It shows once
-// (pref koan.welcome_screen.seen, set once the screen is on screen) and only
-// on Chromium's first run, i.e. of a new user data directory (not for each
-// profile in it), so --no-first-run skips it and --force-first-run brings
-// it back.
-class KoanWelcome {
+// The page is a WebView, the last child of the BrowserView over everything
+// else in the window (in the window itself, not a child widget: on macOS a
+// child widget is a child NSWindow, which never gets the keyboard, and as
+// the key window takes no clicks either). This object is the page's
+// KoanWelcomeHost (what the page asks of the window). It shows once (pref
+// koan.welcome_screen.seen, set once the screen is on screen) and only on
+// Chromium's first run, i.e. of a new user data directory (not for each
+// profile in it), so --no-first-run skips it and --force-first-run brings it
+// back.
+class KoanWelcome : public content::WebContentsObserver,
+                    public ui::AcceleratorTarget {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
   KoanWelcome(const KoanWelcome&) = delete;
   KoanWelcome& operator=(const KoanWelcome&) = delete;
-  ~KoanWelcome();
+  ~KoanWelcome() override;
 
-  bool is_showing() const { return widget_ != nullptr; }
+  bool is_showing() const { return web_view_ != nullptr; }
 
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
   void OnBrowserViewLayout();
   void OnBrowserViewDestroying();
 
-  // Called by the screen when the user is done: closes it (with a fade) and
-  // applies `choices`, once (a second "Dive in!" during the fade does
-  // nothing).
-  void Finish(const KoanWelcomeChoices& choices);
-
-  // Called when the user leaves the screen with Esc: closes it, applying
-  // nothing more.
-  void Skip();
-
-  BrowserView* browser_view() const { return browser_view_; }
-
  private:
+  // content::WebContentsObserver (the page): its renderer gone, or its load
+  // failed.
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
+  void DidFailLoad(content::RenderFrameHost* render_frame_host,
+                   const GURL& validated_url,
+                   int error_code) override;
+
+  // ui::AcceleratorTarget: Esc when the keyboard isn't in the page (the page
+  // handles its own).
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+  bool CanHandleAccelerators() const override;
+
+  // Whether this window shows the welcome: the first normal window of a
+  // regular profile on Chromium's first run, if it hasn't been seen and no
+  // other window has it pending.
+  bool ShouldShow() const;
+  // The welcome is pending or showing in this window (koan_welcome_state.h).
+  void SetPending(bool pending);
   void MaybeShow();
   void Show();
-  void Close();
-  void LayoutWidget();
-  void Apply(const KoanWelcomeChoices& choices);
+  // "Start browsing": closes the screen, then opens the import dialog if the
+  // import step picked a browser.
+  void Finish();
+  // Skip setup, Esc, the page's renderer gone or the page never loading:
+  // closes the screen, applying nothing more.
+  void Skip();
+  // `remove_page`: take the page out of the window (not while the window is
+  // being destroyed, which takes it along).
+  void Close(bool remove_page = true);
+  // Whether the window is closing or destroyed.
+  bool IsWindowClosing() const;
+  // After the screen closes: the keyboard on the window's page, if the window
+  // is the active one (a crash or a timeout while another app is in front
+  // doesn't take the focus).
+  void FocusBrowser();
+  // The space around the card drags the window, as a title bar would;
+  // EndWindowDrag() after AppKit's drag.
+  void StartWindowDrag();
+  void EndWindowDrag();
+  void LayoutWebView();
 
   const raw_ptr<BrowserView> browser_view_;
-  std::unique_ptr<views::Widget> widget_;
-  // Finish() ran: the screen is fading out, its choices about to apply.
+  raw_ptr<views::WebView> web_view_ = nullptr;
+  // Where Esc is registered while the screen shows.
+  raw_ptr<views::FocusManager> focus_manager_ = nullptr;
+  bool pending_ = false;
+  // The import step picked a browser: its import opens after the screen.
+  bool import_ = false;
+  // Finish() ran: it applies once.
   bool finishing_ = false;
+  // Gives up on a page that never asks for its data.
+  base::OneShotTimer load_timer_;
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

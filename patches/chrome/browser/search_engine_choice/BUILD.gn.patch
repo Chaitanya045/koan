@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/search_engine_choice/BUILD.gn b/chrome/browser/search_engine_choice/BUILD.gn
+index b659387..ed856b2 100644
+--- a/chrome/browser/search_engine_choice/BUILD.gn
++++ b/chrome/browser/search_engine_choice/BUILD.gn
+@@ -70,6 +70,7 @@
+       "//chrome/browser/ui/webui/ntp",
+       "//chrome/common:non_code_constants",
+       "//components/country_codes",
++      "//koan/browser:welcome_state",
+     ]
+ 
+     if (is_chromeos) {

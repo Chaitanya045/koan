@@ -508,30 +508,6 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanDownloadTileIcon] = {t[Token::kPrimaryForeground]};
   mixer[kColorKoanDownloadTileShadow] = ui::SetAlpha(
       ui::kColorShadowBase, static_cast<SkAlpha>(t.dark() ? 0x66 : 0x1a));
-
-  // The welcome screen: shadcn pages on `background`.
-  mixer[kColorKoanWelcomeBackdropTop] = {t[Token::kSidebar]};
-  mixer[kColorKoanWelcomeBackdropBottom] = {t[Token::kBackground]};
-  mixer[kColorKoanWelcomeTitle] = {t[Token::kForeground]};
-  mixer[kColorKoanWelcomeStartButton] = {t[Token::kPrimary]};
-  mixer[kColorKoanWelcomeStartButtonHovered] = {
-      t.Over(Token::kPrimary, Token::kBackground, 0.9f)};
-  mixer[kColorKoanWelcomeStartButtonIcon] = {t[Token::kPrimaryForeground]};
-  mixer[kColorKoanWelcomeSidebar] = {t[Token::kSidebar]};
-  mixer[kColorKoanWelcomeContent] = {t[Token::kBackground]};
-  mixer[kColorKoanWelcomeSurface] = {t[Token::kCard]};
-  mixer[kColorKoanWelcomeTile] = {t[Token::kMuted]};
-  mixer[kColorKoanWelcomeMockWindow] = {t[Token::kCard]};
-  mixer[kColorKoanWelcomeBorder] = {t[Token::kBorder]};
-  mixer[kColorKoanWelcomeShadow] = ui::SetAlpha(
-      ui::kColorShadowBase, static_cast<SkAlpha>(t.dark() ? 0x40 : 0x0d));
-  mixer[kColorKoanWelcomeText] = {t[Token::kForeground]};
-  mixer[kColorKoanWelcomeTextSecondary] = {t[Token::kMutedForeground]};
-  mixer[kColorKoanWelcomeRadio] = {t[Token::kMutedForeground]};
-  mixer[kColorKoanWelcomeAccent] = {t[Token::kPrimary]};
-  mixer[kColorKoanWelcomeAccentHovered] = {
-      t.Over(Token::kPrimary, Token::kBackground, 0.9f)};
-  mixer[kColorKoanWelcomeOnAccent] = {t[Token::kPrimaryForeground]};
 }
 
 }  // namespace koan

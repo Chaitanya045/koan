@@ -659,18 +659,40 @@ dragging.
 
 ## Welcome
 
-The first time Koan starts with a new profile it shows Zen's welcome
-screen: "Welcome to a calmer internet", then a few pages to import from
-another browser, pick a colour, choose the search engine and your
-Essentials, and make Koan the default browser. Every page can be skipped
-with Next. It shows once (start Koan with `--force-first-run` and a new user data
-directory to see it again). Tab moves between its buttons, the arrow keys
-between choices, Enter or Space picks, and Esc skips the rest. The window's
-own buttons stay usable above it.
+The first time Koan starts with a new profile it offers a short, optional
+setup over the first window: "Welcome to a calmer internet", then four
+steps. Every step has Skip, and **Skip setup** (top right) or Esc leaves at
+any point; nothing changes until a step's Next. It shows once (start Koan
+with `--force-first-run` and a new user data directory to see it again).
+It covers the whole window; the window buttons stay usable, and the empty
+space around the card drags the window.
 
-| | |
-|---|---|
-| ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
+- **Shortcuts** (macOS): Koan uses Zen's keys, which give a few of Chrome's
+  keys another job. Keep Zen's, take Chrome's, or pick per key:
+
+  | Key | Zen's shortcuts (default) | Chrome's shortcuts |
+  |---|---|---|
+  | ⌘S | Compact mode | Save page (compact mode moves to ⌃⌘S) |
+  | Inspect | ⌥⌘L | ⌥⌘C |
+  | Downloads | ⌘J | ⇧⌘J |
+  | Private window | ⇧⌘P | ⇧⌘N |
+  | ⌥⌘← → | Switch Space | Switch tab |
+  | ⇧⌘D | Pin tab | Bookmark all tabs |
+
+  Your choice is saved as your own keys in Settings > Keyboard Shortcuts,
+  where you can change any of them later.
+- **Import**: the browsers Koan can import from on your Mac and finds there
+  (Safari, Firefox, or a bookmarks file; Chrome, Brave and Arc are not
+  supported yet), or, if it finds none, "Import from another browser…". Pick
+  one, then Next, and Chromium's import dialog opens once the setup is over,
+  where you choose what to bring. "Start fresh" (the first choice) or the
+  step's Skip imports nothing, even if you picked a browser before.
+- **Search engine**: Brave Search is chosen; pick another if you like. It
+  applies on Next. In the European Economic Area (and the other regions where
+  Chromium shows a search engine choice screen) the step *is* that choice
+  screen: Chromium's list in its order, with nothing chosen for you, and Next
+  records your choice so Chromium doesn't ask again. If you skip the step
+  there, Chromium asks later.
 
 ## Turning things off
 

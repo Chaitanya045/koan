@@ -12,6 +12,12 @@ source_set("webui") {
     "koan_settings_rows.h",
     "koan_settings_ui.cc",
     "koan_settings_ui.h",
+    "koan_welcome_handler.cc",
+    "koan_welcome_handler.h",
+    "koan_welcome_host.cc",
+    "koan_welcome_host.h",
+    "koan_welcome_ui.cc",
+    "koan_welcome_ui.h",
   ]
   public_deps = [
     "//content/public/browser",
@@ -19,7 +25,22 @@ source_set("webui") {
   ]
   deps = [
     ":resources",
+    ":welcome_resources",
     "//base",
+    "//chrome/browser:shell_integration",
+    "//chrome/common:constants",
+    "//chrome/browser/importer",
+    "//chrome/browser/regional_capabilities",
+    "//chrome/browser/search_engines",
+    "//chrome/browser/themes",
+    "//chrome/browser/ui/tabs",
+    "//components/regional_capabilities",
+    "//components/search_engines",
+    "//components/tab_groups",
+    "//components/user_data_importer/common",
+    "//services/network/public/mojom",
+    "//ui/gfx/geometry",
+    "//url",
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui:accelerator_table",
@@ -57,5 +78,53 @@ action("resources") {
         rebase_path("resources/koan_settings.css", root_build_dir),
     "kKoanSettingsJs=" +
         rebase_path("resources/koan_settings.js", root_build_dir),
+  ]
+}
+
+# chrome://koan-welcome's files as C++ strings (koan_welcome_resources.h):
+# the page and its Lucide icons (ISC, see THIRD_PARTY_NOTICES.md).
+action("welcome_resources") {
+  script = "embed_resources.py"
+  sources = [
+    "resources/koan_welcome.css",
+    "resources/koan_welcome.html",
+    "resources/koan_welcome.js",
+    "resources/welcome_icons/arrow-left.svg",
+    "resources/welcome_icons/arrow-right.svg",
+    "resources/welcome_icons/check.svg",
+    "resources/welcome_icons/circle-check-big.svg",
+    "resources/welcome_icons/hard-drive-download.svg",
+    "resources/welcome_icons/keyboard.svg",
+    "resources/welcome_icons/search.svg",
+    "resources/welcome_icons/sparkles.svg",
+    "resources/welcome_icons/x.svg",
+  ]
+  outputs = [ "$target_gen_dir/koan_welcome_resources.h" ]
+  args = [
+    rebase_path(outputs[0], root_build_dir),
+    "kKoanWelcomeHtml=" +
+        rebase_path("resources/koan_welcome.html", root_build_dir),
+    "kKoanWelcomeCss=" +
+        rebase_path("resources/koan_welcome.css", root_build_dir),
+    "kKoanWelcomeJs=" +
+        rebase_path("resources/koan_welcome.js", root_build_dir),
+    "kKoanWelcomeIconArrowLeft=" +
+        rebase_path("resources/welcome_icons/arrow-left.svg", root_build_dir),
+    "kKoanWelcomeIconArrowRight=" +
+        rebase_path("resources/welcome_icons/arrow-right.svg", root_build_dir),
+    "kKoanWelcomeIconCheck=" +
+        rebase_path("resources/welcome_icons/check.svg", root_build_dir),
+    "kKoanWelcomeIconCircleCheckBig=" +
+        rebase_path("resources/welcome_icons/circle-check-big.svg", root_build_dir),
+    "kKoanWelcomeIconHardDriveDownload=" +
+        rebase_path("resources/welcome_icons/hard-drive-download.svg", root_build_dir),
+    "kKoanWelcomeIconKeyboard=" +
+        rebase_path("resources/welcome_icons/keyboard.svg", root_build_dir),
+    "kKoanWelcomeIconSearch=" +
+        rebase_path("resources/welcome_icons/search.svg", root_build_dir),
+    "kKoanWelcomeIconSparkles=" +
+        rebase_path("resources/welcome_icons/sparkles.svg", root_build_dir),
+    "kKoanWelcomeIconX=" +
+        rebase_path("resources/welcome_icons/x.svg", root_build_dir),
   ]
 }

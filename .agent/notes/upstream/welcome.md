@@ -1,0 +1,56 @@
+# Upstream audit: the welcome screen (chrome://koan-welcome)
+
+Scope: Koan's optional first-run setup (onboarding v2, #181, a deliberate divergence from Zen's welcome): welcome,
+shortcuts, import, search engine (Brave Search chosen), done, in shadcn's look. What it sits on in Chromium 158, what
+each upstream piece does on the Mac, and the decision for each (**lock**, **override**, **redirect**, **reuse**).
+Builds on [themes-glass-ntp.md](themes-glass-ntp.md) §3 (first run, the search choice, startup prompts) and
+[zen-firefox-overrides.md](zen-firefox-overrides.md) (Z4, Z9). The first-run lockdown (Chromium's intro window, the
+startup infobars, the crash bubble) is PR #169's; this file only adds the welcome's own pieces. Pristine source:
+`git -C ~/work/koan/chromium/src show HEAD:<path>`.
+
+## 1. Map
+
+| # | Upstream piece | What it does (Mac) | Decision | Koan |
+|---|---|---|---|---|
+| W1 | `first_run::IsChromeFirstRun()` (`chrome/browser/first_run/first_run.cc`) | sentinel absent, or `--force-first-run`; false with `--no-first-run` | **reuse**: the welcome shows only then, in the first normal window of a non-OTR profile, once per session | `KoanWelcome::ShouldShow` |
+| W2 | DICE first-run window (`FirstRunService::OpenFirstRunIfNeeded`) | Chromium's sign-in intro before any window | **lock** (#169: `kFirstRunFinished` registered true) | #169 |
+| W3 | `koan.welcome_screen.seen` | | **reuse**: set once the screen is on screen, before any choice (a crash mid-setup doesn't bring it back) | done |
+| W4 | The window; where the page lives | | **reuse**: the window is neither resized nor locked (#181 drops Zen's 1200 x 720 lock); the page covers all of it and lays out for any size. **override**: the page is a `views::WebView` that is the BrowserView's last child, in the window itself, so it has the window's keyboard and clicks, and macOS stacks it over the tab's page (`NativeWidgetMacNSWindowHost::ReorderChildViews` orders native views in views order), with the traffic lights above it, usable. Not a child widget: on macOS that is a child NSWindow, which never had the keyboard (c174d: Esc dead) and, made key, took no clicks either (c174e/f: no input at all). An Esc accelerator in the window's focus manager leaves too when the keyboard is elsewhere in the window | `KoanWelcome::Show`, `koan_welcome.css` |
+| W5 | Native fullscreen, ⌃⌘F | | **reuse**: the page covers the fullscreen window too | — |
+| W6 | Window drag | | **override**: a press on the empty space around the card hands the window to AppKit (`performWindowDragWithEvent:`, #162's `StartNativeWindowMove`), and the first move without the button sends the page's view its release (`EndNativeWindowMove`, the window's first responder: the page, in the window). No `RunMoveLoop` on the Mac (its release CHECKs) | `StartWindowDrag` |
+| W7 | `chrome://koan-welcome` typed into a tab, a bookmark, `chrome.tabs.create` | an ordinary WebUI tab | **lock**: without a `KoanWelcomeHost` the page gets no data, shows nothing and every message changes nothing | `KoanWelcomeHandler` |
+| W8 | Unregistered `chrome.send` (`WebUIImpl::ProcessWebUIMessage`) | `DUMP_WILL_BE_NOTREACHED` (a DCHECK) | **lock**: every message the page sends is registered | handler |
+| W9 | Page context menu (`RenderViewContextMenu`: Back, Reload, Save as, Print, Inspect) | | **lock**: the page cancels `contextmenu` | `koan_welcome.js` |
+| W10 | The WebView's first frame | white until the page paints | **override**: the WebView and the page's base background are the page's shadcn `--background` | `PageBackground()` |
+| W11 | Search engine choice screen (EEA; `SearchEngineChoiceService`; `SearchEngineChoiceTabHelper` opens it on a tab's load, `ComputeDialogConditions`) | a modal on first run in choice regions | **redirect**: `ComputeDialogConditions` returns `kSuppressedByOtherDialog` while the welcome is pending or showing, in every window, a ⌘N one too (`koan::IsWelcomePending`, a hook patch; pending from the welcome window's creation, before the startup tab loads). In a choice screen region (`RegionalCapabilitiesService::IsInSearchEngineChoiceScreenRegion`, maintainer's decision) the step is that choice screen: Chromium's list (`TemplateURLService::GetChoiceScreenData()`) in its order, nothing preselected, and Next records the choice (`ChoiceMadeLocation::kChoiceScreen`), once and never over an earlier record (`RecordChoiceMade` CHECKs a second choice-screen record, `NotFatalUntil::M161`); after that the dialog never shows. Skipping the step leaves the choice to Chromium's dialog at the next navigation (the EEA requires one). Elsewhere a pick is `kOther` | handler, `koan_welcome_state.cc` |
+| W12 | A policy's default engine (`DefaultSearchProvider*`) | `CanDefaultSearchProviderBeModifiedByUser()` false | **lock**: no engines, the step is skipped, and the handler refuses a pick (upstream `CHECK`s a `kOther` pick over a managed engine when the keyword data failed to load) | handler, `skip()` |
+| W13 | Brave Search (`prepopulated_engines.json` `brave`, id 109; in 131 of the 134 regions' lists) | | **override** outside choice screen regions: listed first and chosen. **reuse** upstream to set it: `SetUserSelectedDefaultSearchProviderByPrepopulateId`, which takes the existing engine or resolves the region's variant from the full prepopulated list (`GetEngineFromFullList`), so it works where the region's list lacks Brave | handler |
+| W14 | The search engines not loaded yet on a first run (`TemplateURLService::loaded()`) | an empty list | **override**: the page's data waits for `RegisterOnLoadedCallback` (and `Load()`) | handler |
+| W15 | Keyboard shortcuts (`prefs::kShortcuts`, `koan::shortcuts::Bindings`; the menu bar's keys, `koan_main_menu_mac.mm`) | | **reuse**: the shortcut step writes the same user keys the settings page does; `KoanShortcutController` and the menu bar follow the pref live. Zen's side removes the row's keys (the defaults); Chrome's side writes Chrome's keys (Save Page ⌘S and compact mode ⌃⌘S, Inspect ⌥⌘C, Downloads ⇧⌘J, private window ⇧⌘N) or clears Koan's (⌥⌘←→, ⇧⌘D), so Chrome's own commands run there. Off macOS there are no rows and no step | `koan_welcome_shortcuts.cc` |
+| W16 | `ImporterList::DetectSourceProfiles` (Safari, Firefox, a bookmarks file on the Mac) | the import dialog's list | **reuse**: only what it finds is listed (no browser it can't import); with nothing found, one "Import from another browser…" row that opens the dialog. Chrome/Brave/Arc/Dia import is Z9, a later PR | handler, `koan_welcome.js` |
+| W17 | `IDC_IMPORT_SETTINGS` (chrome://settings/importData) | the import dialog in a settings tab | **redirect**: opened after the screen closes (over it, it would be hidden). Every Next on the import step sends its choice, and the step's Skip sends "nothing", so a browser picked, Back, then "Start fresh" or Skip opens nothing; Skip setup on the last step is Start browsing. Nothing is imported without a browser picked plus Next, and then only from the dialog | `Finish` |
+| W18 | Import turns the bookmarks bar on | | **lock** (done: Koan ignores it, `kBookmarksBarShow`) | done |
+| W19 | The default-browser question | Chromium's infobars from the second launch | **open question**: #181 has no default-browser step, and #169 turns Chromium's prompts off because Zen's welcome asked once. Together, Koan never asks (Settings still has the button). Decide: a step back in the welcome, or #169 keeps Chromium's prompt | #169, #181 |
+| W20 | Browser shortcuts and the menu bar while it shows (⌘T, ⌘L, ⌘N, ⌘W, ⌘Q, File/View items) | act on the window under the screen | **reuse** (maintainer, 2026-11-06): not blocked | — |
+| W21 | Incognito, guest, a second profile, a PWA window | | **lock**: OTR and non-normal windows never show it; a second profile in the same user data dir has no first run | `ShouldShow` |
+| W22 | Two first-run windows before the welcome shows | | **lock**: the first window owns the pending welcome; another doesn't take it while it is pending, and a closing window clears only its own mark | `SetPending`, `koan_welcome_state.cc` |
+| W23 | Closing the window or quitting during the setup | | **reuse**: nothing applies but what earlier Nexts applied (shortcuts, search engine); "Start browsing" opens nothing in a closing window | `Finish` |
+| W24 | Session restore after a crash in the setup | #169 restores silently | **reuse**: the welcome doesn't come back (W3) | — |
+| W25 | The page's renderer crashing or killed (`WebContentsObserver::PrimaryMainFrameRenderProcessGone`) | a sad page over the window | **override**: the welcome ends, as Skip setup. The handler stops answering a page that is gone (`OnJavascriptDisallowed`: a pending import list or engine load would otherwise reach `ResolveJavascriptCallback`, which CHECKs) | `KoanWelcome`, handler |
+| W26 | What the page sends (`chrome.send` arguments) | a compromised renderer can send anything | **lock**: only an engine the page was given, only known shortcut rows with "zen" or "chrome", a bool for import; an unknown file path is served empty | handler, `koan_welcome_ui.cc` |
+| W27 | ⌘W / ⇧⌘W / ⌘Q during the setup | | **reuse**: they act on the window as usual (it is the key window): ⌘W closes its tab (the window with its last tab), and the setup goes with the window (`OnBrowserViewDestroying` clears the pending mark). With another tab open, the setup stays over the window | `OnBrowserViewDestroying` |
+| W28 | The page failing to load, or hanging before it asks for its data | a page with no way out | **lock**: `DidFailLoad` on its main frame, or 10 s without `getWelcomeData`, ends the welcome as Skip setup. Skip setup and Esc work from the page's first frame | `KoanWelcome` |
+| W29 | Focus after the setup closes by itself (a crash, the timeout) | | **lock**: the keyboard goes back to the tab's page only if the window is the active one (no focus taken from another app) | `FocusBrowser` |
+
+## 2. What Zen suppresses in Firefox, for the welcome
+
+| Firefox | Zen | Chromium equivalent | Koan |
+|---|---|---|---|
+| about:welcome, pre-onboarding, UITour | prefs off | DICE intro, IPH | #169 (W2), feature overrides |
+| The default-browser prompt | asked once in its welcome | startup infobars | #169; Koan's welcome no longer asks (W19) |
+| The search engine choice | its welcome's page | the EEA choice screen | W11 |
+| Its migration wizard's own entry points | its welcome opens it for one browser and profile | the import dialog | W17; preselecting the browser is Z9 |
+
+## 3. Tests
+
+Mac steps: [scripts/mac/steps/welcome.md](../../../scripts/mac/steps/welcome.md). Each decision above has a step.
