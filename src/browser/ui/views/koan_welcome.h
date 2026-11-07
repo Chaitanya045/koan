@@ -9,13 +9,16 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "base/timer/timer.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 
 namespace views {
 class WebView;
-class Widget;
 }  // namespace views
 
 namespace koan {
@@ -34,7 +37,8 @@ namespace koan {
 // on Chromium's first run, i.e. of a new user data directory (not for each
 // profile in it), so --no-first-run skips it and --force-first-run brings
 // it back.
-class KoanWelcome : public content::WebContentsObserver {
+class KoanWelcome : public content::WebContentsObserver,
+                    public views::WidgetObserver {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
   KoanWelcome(const KoanWelcome&) = delete;
@@ -49,9 +53,17 @@ class KoanWelcome : public content::WebContentsObserver {
   void OnBrowserViewDestroying();
 
  private:
-  // content::WebContentsObserver (the page):
+  // content::WebContentsObserver (the page): its renderer gone, or its load
+  // failed.
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
+  void DidFailLoad(content::RenderFrameHost* render_frame_host,
+                   const GURL& validated_url,
+                   int error_code) override;
+
+  // views::WidgetObserver (the screen's widget): closed by something else
+  // than Close(), e.g. Cmd+W or Close Window while it is the key window.
+  void OnWidgetClosing(views::Widget* widget) override;
 
   // Whether this window shows the welcome: the first normal window of a
   // regular profile on Chromium's first run, if it hasn't been seen and no
@@ -64,14 +76,16 @@ class KoanWelcome : public content::WebContentsObserver {
   // "Start browsing": closes the screen, then opens the import dialog if the
   // import step picked a browser.
   void Finish();
-  // Skip setup, Esc, or the page's renderer gone: closes the screen,
-  // applying nothing more.
+  // Skip setup, Esc, the page's renderer gone or the page never loading:
+  // closes the screen, applying nothing more.
   void Skip();
   void Close();
   // Whether the window is closing or destroyed.
   bool IsWindowClosing() const;
   // After the screen closes: the window active, the keyboard on its page.
-  void FocusBrowser();
+  // Only if the screen was the active window (`was_active`): a crash or a
+  // timeout while another app is in front doesn't take the focus.
+  void FocusBrowser(bool was_active);
   void LayoutWidget();
 
   const raw_ptr<BrowserView> browser_view_;
@@ -82,6 +96,10 @@ class KoanWelcome : public content::WebContentsObserver {
   bool import_ = false;
   // Finish() ran: it applies once.
   bool finishing_ = false;
+  // Gives up on a page that never asks for its data.
+  base::OneShotTimer load_timer_;
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

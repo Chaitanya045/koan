@@ -83,10 +83,14 @@ void KoanWelcomeHandler::HandleGetWelcomeData(const base::ListValue& args) {
   if (args.empty()) {
     return;
   }
-  if (!GetHost(web_ui())) {
+  const KoanWelcomeHost* host = GetHost(web_ui());
+  if (!host) {
     // Not the first-run screen: the page shows nothing.
     ResolveJavascriptCallback(args[0], base::Value());
     return;
+  }
+  if (host->callbacks().page_ready) {
+    host->callbacks().page_ready.Run();
   }
   // The browsers to import from first (Chromium's import dialog's list).
   importer_list_ = std::make_unique<ImporterList>();

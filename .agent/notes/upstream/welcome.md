@@ -38,6 +38,9 @@ startup infobars, the crash bubble) is PR #169's; this file only adds the welcom
 | W24 | Session restore after a crash in the setup | #169 restores silently | **reuse**: the welcome doesn't come back (W3) | — |
 | W25 | The page's renderer crashing or killed (`WebContentsObserver::PrimaryMainFrameRenderProcessGone`) | a sad page over the window | **override**: the welcome ends, as Skip setup. The handler stops answering a page that is gone (`OnJavascriptDisallowed`: a pending import list or engine load would otherwise reach `ResolveJavascriptCallback`, which CHECKs) | `KoanWelcome`, handler |
 | W26 | What the page sends (`chrome.send` arguments) | a compromised renderer can send anything | **lock**: only an engine the page was given, only known shortcut rows with "zen" or "chrome", a bool for import; an unknown file path is served empty | handler, `koan_welcome_ui.cc` |
+| W27 | The setup's widget closed from outside (it is the key window: ⌘W / ⇧⌘W / File > Close Window may close it) | | **lock**: `WidgetObserver::OnWidgetClosing` ends the welcome as Skip setup: the pending mark is cleared (so `IsWelcomePending()` never stays set for the session), the page is let go, and the keyboard goes back to the browser window | `KoanWelcome::OnWidgetClosing` |
+| W28 | The page failing to load, or hanging before it asks for its data | a page with no way out | **lock**: `DidFailLoad` on its main frame, or 10 s without `getWelcomeData`, ends the welcome as Skip setup. Skip setup and Esc work from the page's first frame | `KoanWelcome` |
+| W29 | Focus after the setup closes by itself (a crash, the timeout) | | **lock**: the browser window is activated only if the setup was the active window (no focus stolen from another app) | `FocusBrowser` |
 
 ## 2. What Zen suppresses in Firefox, for the welcome
 
