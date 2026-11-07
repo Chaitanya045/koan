@@ -1,0 +1,64 @@
+diff --git a/chrome/browser/ui/views/frame/glass_frame_service.cc b/chrome/browser/ui/views/frame/glass_frame_service.cc
+--- a/chrome/browser/ui/views/frame/glass_frame_service.cc
++++ b/chrome/browser/ui/views/frame/glass_frame_service.cc
+@@ -34,6 +34,7 @@
+ #include "chrome/browser/ui/user_education/browser_user_education_interface.h"
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+ #include "chrome/common/pref_names.h"
++#include "koan/browser/ui/views/koan_window_glass.h"
+ #include "components/feature_engagement/public/feature_constants.h"
+ #include "components/metrics/daily_event.h"
+ #include "components/prefs/pref_registry_simple.h"
+@@ -155,9 +156,8 @@
+   browser_collection->ForEach(
+       [this](BrowserWindowInterface* browser) {
+         MaybeTrackBrowser(browser);
+-        if (IsGlassFrameAllowed() &&
+-            eligible_browsers_.size() < kMaxGlassWindows &&
+-            IsBrowserEligibleForGlass(browser)) {
++        // Koan: every window is glass, not one.
++        if (IsGlassFrameAllowed() && IsBrowserEligibleForGlass(browser)) {
+           eligible_browsers_.insert(browser);
+         }
+         return true;
+@@ -196,8 +196,10 @@
+ }
+ 
+ bool GlassFrameService::IsGlassFrameAllowed() {
+-  return is_glass_frame_enabled_ && !is_battery_saver_mode_active_ &&
+-         window_capturing_web_contents_.empty();
++  // Koan: not off with Battery Saver (Zen's window doesn't care), but off
++  // with macOS's Reduce Transparency on.
++  return is_glass_frame_enabled_ && window_capturing_web_contents_.empty() &&
++         koan::IsWindowGlassAllowed();
+ }
+ 
+ void GlassFrameService::OnBrowserCreated(BrowserWindowInterface* browser) {
+@@ -205,6 +207,10 @@
+     return;
+   }
+   UpdateHasMultipleOpenProfiles();
++  // Koan: a window is glass from its creation, like Zen's, not from its first
++  // activation (a restored background window would open opaque).
++  MaybeTrackBrowser(browser);
++  OnEligibleStateChanged();
+ }
+ 
+ void GlassFrameService::OnBrowserActivated(BrowserWindowInterface* browser) {
+@@ -303,14 +309,11 @@
+   GlobalBrowserCollection::GetInstance()->ForEach(
+       [&activation_ordered_eligible_browsers,
+        this](BrowserWindowInterface* browser) {
+-        // Stop iterating once the maximum number of glass windows is reached.
+-        if (activation_ordered_eligible_browsers.size() >= kMaxGlassWindows) {
+-          return false;
+-        }
++        // Koan: every window is glass, not one.
+         if (IsBrowserEligibleForGlass(browser)) {
+           activation_ordered_eligible_browsers.insert(browser);
+         }
+-        return activation_ordered_eligible_browsers.size() < kMaxGlassWindows;
++        return true;
+       },
+       BrowserCollection::Order::kActivation);
+   return activation_ordered_eligible_browsers;

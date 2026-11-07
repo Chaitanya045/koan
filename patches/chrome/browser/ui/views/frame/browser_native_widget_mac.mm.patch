@@ -1,8 +1,16 @@
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..58afea15f9de5625be44da387c2f46590a553d1f 100644
+index fd4cc9a121..a0e6b71062 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-@@ -65,6 +65,8 @@
+@@ -47,6 +47,7 @@
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+ #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_utils.h"
++#include "koan/browser/ui/views/koan_window_glass_mac.h"
+ #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+ #include "chrome/common/pref_names.h"
+ #include "chrome/grit/generated_resources.h"
+@@ -65,6 +66,8 @@
  #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
  #include "components/viz/common/frame_timing_details.h"
  #include "components/web_modal/web_contents_modal_dialog_host.h"
@@ -11,7 +19,32 @@ index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..58afea15f9de5625be44da387c2f4659
  #include "ui/accessibility/platform/ax_platform_node.h"
  #include "ui/actions/actions.h"
  #include "ui/base/accelerators/global_accelerator_listener/global_accelerator_listener.h"
-@@ -288,6 +290,11 @@ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
+@@ -111,24 +114,6 @@ bool ShouldHandleKeyboardEvent(const inp
+   return event.os_event && event.os_event.Get().type == NSEventTypeKeyDown;
+ }
+ 
+-double GetGlassFrameTintOpacity(bool is_dark_mode,
+-                                bool is_vertical_tabs,
+-                                bool are_multiple_profiles_open) {
+-  // Default opacities mapped by [is_vertical_tabs][is_dark_mode]:
+-  // Values updated after discussion with UX.
+-  static constexpr std::array<std::array<double, 2>, 2> kDefaultOpacities = {{
+-      {0.55, 0.80},  // Horizontal: light, dark
+-      {0.65, 0.80},  // Vertical: light, dark
+-  }};
+-
+-  double opacity = kDefaultOpacities[is_vertical_tabs][is_dark_mode];
+-  if (are_multiple_profiles_open) {
+-    const double multiple_open_profiles_opacity_increase = 0.05;
+-    opacity += multiple_open_profiles_opacity_increase;
+-  }
+-  return std::clamp(opacity, 0.0, 1.0);
+-}
+-
+ bool IsCommandTriggeredFromMacMenu(NSInteger parent_menu_tag, int command_id) {
+   NSEvent* current_event = [NSApp currentEvent];
+   const bool is_mouse_click =
+@@ -288,6 +273,11 @@ void BrowserNativeWidgetMac::GetWindowFr
      if (!browser_view_->ShouldDrawTabStrip()) {
        *titlebar_height += kWebAppMenuMargin * 2;
      }
@@ -23,7 +56,7 @@ index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..58afea15f9de5625be44da387c2f4659
    } else {
      *override_titlebar_height = false;
      *titlebar_height = 0;
-@@ -614,6 +621,21 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
+@@ -614,6 +604,21 @@ void BrowserNativeWidgetMac::ValidateUse
        break;
      }
    }
@@ -45,3 +78,73 @@ index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..58afea15f9de5625be44da387c2f4659
  }
  
  bool BrowserNativeWidgetMac::WillExecuteCommand(
+@@ -1081,13 +1086,10 @@ void BrowserNativeWidgetMac::UpdateGlass
+     if (!glass_background_view_) {
+       NSView* const content_view = [ns_window contentView];
+ 
+-      NSGlassEffectView* const glass_view =
+-          [[GlassFrameBackgroundView alloc] initWithFrame:content_view.bounds];
+-      glass_view.wantsLayer = YES;
++      // Koan: Zen's blur (koan_window_glass.h) over the whole window.
++      NSView* const glass_view =
++          koan::CreateGlassBackgroundView(content_view.bounds);
+       glass_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+-      glass_view.style = NSGlassEffectViewStyleRegular;
+-
+-      glass_view.tintColor = [NSColor clearColor];
+ 
+       NSView* tint_view = [[NSView alloc] initWithFrame:glass_view.bounds];
+       tint_view.wantsLayer = YES;
+@@ -1107,6 +1109,12 @@ void BrowserNativeWidgetMac::UpdateGlass
+           remote_cocoa::kOpaqueFrameBackgroundViewIdentifier;
+       opaque_view.wantsLayer = YES;
+       opaque_view.layer.opaque = YES;
++      // Koan: the glass covers the whole window, so this one must not (it
++      // would sit under the blur). It stays as the marker AppKit looks for by
++      // its identifier: the subview sorting (IsBackgroundEffectView) and the
++      // check that a non-opaque window can occlude the ones beneath it
++      // (web_contents_occlusion_checker_mac.mm).
++      opaque_view.hidden = YES;
+       opaque_background_view_ = opaque_view;
+       [content_view addSubview:opaque_background_view_
+                     positioned:NSWindowBelow
+@@ -1133,8 +1141,10 @@ void BrowserNativeWidgetMac::UpdateBackg
+   const int content_width = static_cast<int>(content_view.bounds.size.width);
+   const int content_height = static_cast<int>(content_view.bounds.size.height);
+ 
+-  const std::optional<int> target_width = GetGlassFrameWidth();
+-  const std::optional<int> target_height = GetGlassFrameHeight();
++  // Koan: the blur covers the whole window. Not const, or the branches on
++  // them are dead code to -Wunreachable-code.
++  std::optional<int> target_width = std::nullopt;
++  std::optional<int> target_height = std::nullopt;
+ 
+   int glass_x = 0;
+   int glass_y = 0;
+@@ -1200,9 +1210,12 @@ void BrowserNativeWidgetMac::UpdateBackg
+     return;
+   }
+ 
+-  const bool is_active = GetWidget()->ShouldPaintAsActive();
+-  const SkColor theme_color = browser_view_->GetColorProvider()->GetColor(
+-      is_active ? ui::kColorFrameActive : ui::kColorFrameInactive);
++  // Koan: Zen's tint over the blur; while the window is inactive, that tint
++  // over the opaque system window background (Zen's InactiveCaption).
++  const SkColor theme_color =
++      koan::GetGlassTint(*browser_view_->GetColorProvider(),
++                         GetWidget()->GetColorMode(),
++                         GetWidget()->ShouldPaintAsActive());
+ 
+   const bool is_vertical_tabs = browser_view_->ShouldDrawVerticalTabStrip();
+ 
+@@ -1222,9 +1235,7 @@ void BrowserNativeWidgetMac::UpdateBackg
+   last_is_vertical_tabs_ = is_vertical_tabs;
+   has_multiple_profiles_open_ = are_multiple_profiles_open;
+ 
+-  const double tint_opacity =
+-      GetGlassFrameTintOpacity(color_utils::IsDark(theme_color),
+-                               is_vertical_tabs, has_multiple_profiles_open_);
++  const double tint_opacity = SkColorGetA(theme_color) / 255.0;
+ 
+   const CGFloat r = SkColorGetR(theme_color) / 255.0;
+   const CGFloat g = SkColorGetG(theme_color) / 255.0;

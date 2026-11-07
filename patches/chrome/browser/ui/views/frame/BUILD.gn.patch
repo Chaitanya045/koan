@@ -1,8 +1,7 @@
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb36867031d27a 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
-@@ -566,6 +566,7 @@ source_set("vertical_tab_strip_region_view") {
+@@ -566,6 +566,7 @@
      "//chrome/browser/ui/views/tabs/common:impl",
      "//chrome/browser/ui/views/tabs/organizer",
      "//chrome/browser/ui/web_applications",
@@ -10,7 +9,15 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//ui/base/dragdrop:types",
      "//ui/compositor",
      "//ui/display",
-@@ -959,6 +960,7 @@ source_set("browser_view") {
+@@ -629,6 +630,7 @@
+     "//components/feature_engagement/public:feature_constants",
+     "//components/metrics",
+     "//components/prefs",
++    "//koan/browser/ui/views",
+     "//media",
+     "//ui/base:features",
+     "//ui/base/unowned_user_data",
+@@ -959,6 +961,7 @@
      "//content/public/browser",
      "//content/public/common",
      "//extensions/common",
@@ -18,7 +25,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//media/capture:capture_switches",
      "//third_party/blink/public/common:headers",
      "//ui/accessibility",
-@@ -1958,6 +1960,7 @@ if (is_mac) {
+@@ -1958,6 +1961,7 @@
        "//chrome/browser/ui/window_feature_controller",
        "//chrome/common:constants",
        "//components/remote_cocoa/common:mojo",
@@ -26,7 +33,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
        "//ui/base",
        "//ui/base:features",
        "//ui/compositor",
-@@ -2023,6 +2026,7 @@ if (is_mac) {
+@@ -2023,6 +2027,7 @@
        "//components/remote_cocoa/app_shim",
        "//components/remote_cocoa/common:mojo",
        "//components/web_modal",
@@ -34,7 +41,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
        "//skia",
        "//ui/accessibility",
        "//ui/actions",
-@@ -2953,6 +2957,7 @@ source_set("browser_view_layout_impl") {
+@@ -2953,6 +2958,7 @@
      "//build:buildflag_header_h",
      "//chrome/browser/ui/immersive:immersive_mode_controller",
      "//chrome/browser/ui/views/bookmarks",
@@ -42,7 +49,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//ui/base:features",
    ]
  }
-@@ -3012,6 +3017,7 @@ source_set("browser_view_tabbed_layout_impl") {
+@@ -3012,6 +3018,7 @@
      "//ui/views",
    ]
    deps = [
@@ -50,7 +57,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      ":custom_corners",
      ":custom_corners_background",
      ":custom_floating_corner",
-@@ -3229,6 +3235,7 @@ source_set("multi_contents_view_impl") {
+@@ -3229,6 +3236,7 @@
      "//components/tabs:public",
      "//content/public/browser",
      "//content/public/common",

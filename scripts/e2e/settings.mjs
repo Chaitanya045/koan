@@ -138,6 +138,13 @@ check('Tab Management has the tint, Zen\'s tab and pinned tab settings and the '
       rowLabels.some(l => l.startsWith('Freeze background tabs')),
       JSON.stringify(rowLabels));
 
+// The translucent window's settings exist on macOS only (the window glass is
+// a macOS feature), so this build, off macOS, has no such rows.
+check('No glass settings off macOS',
+      !rowLabels.some(l => l.startsWith('Translucent window') ||
+                           l.startsWith('Window tint')),
+      JSON.stringify(rowLabels));
+
 // The freeze switch is Chromium's own (local-state) pref: on by default,
 // and the page can turn it off and back on.
 const freeze = `document.querySelector('[data-pref="performance_tuning.tab_freezing.enabled"] input')`;

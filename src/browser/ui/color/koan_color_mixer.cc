@@ -306,6 +306,13 @@ void AddKoanColorMixer(ui::ColorProvider* provider,
   // Koan's own views have their values per look.
   AddShadcnChromiumColors(mixer, key);
   AddSpaceTintColors(mixer);
+  // Zen's default theme over a translucent window's blur
+  // (ZenGradientGenerator.mjs getBrowserBg() on macOS): black at 40% in dark
+  // mode, none in light mode.
+  mixer[kColorKoanGlassTint] = {key.color_mode ==
+                                        ui::ColorProviderKey::ColorMode::kDark
+                                    ? SkColorSetARGB(0x66, 0, 0, 0)
+                                    : SK_ColorTRANSPARENT};
   if (look::IsShadcnStyle()) {
     AddShadcnKoanColors(mixer, key);
   } else {
