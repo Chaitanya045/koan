@@ -18,6 +18,7 @@
 #import <AppKit/AppKit.h>
 
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/color/color_provider_key.h"
 
 namespace ui {
 class ColorProvider;
@@ -36,7 +37,13 @@ NSView* CreateGlassBackgroundView(NSRect frame);
 // The colour laid over the blur, with alpha (koan_glass_tint.h): the default
 // theme's tint, kColorKoanGlassTint, and while the window is inactive that
 // tint over the system's window background, opaque (Zen's InactiveCaption).
-SkColor GetGlassTint(const ui::ColorProvider& colors, bool window_active);
+//
+// `color_mode` is the window's (Widget::GetColorMode()): it picks the dark or
+// light system window background for the inactive state, whatever colour a
+// theme gives the frame.
+SkColor GetGlassTint(const ui::ColorProvider& colors,
+                     ui::ColorProviderKey::ColorMode color_mode,
+                     bool window_active);
 
 }  // namespace koan
 
