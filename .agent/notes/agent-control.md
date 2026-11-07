@@ -214,11 +214,33 @@ browser process.
 * **Peer check on accept**: `uid == geteuid()`; then the audit token → `SecCodeCopyGuestWithAttributes` → code-signing
   identity and executable path (`proc_pidpath`), and the ancestor chain, pid-reuse-proof because the audit token
   carries the pid version (a bare `LOCAL_PEERPID` is racy, review finding 5). These facts feed pairing (§5), pinning
-  and the audit log.
-* **Socket hygiene** (verified, C§2a, C§5): `bind()` leaves a stale file and a 0777-minus-umask mode, so Koan probes
-  with `connect()`, `unlink()`s a dead socket, and `chmod`s 0600 inside the 0700 directory. `sun_path` allows 103
-  characters, so a long `--user-data-dir` falls back to `/tmp/koan-<uid>/<hash>.sock` after `lstat` checks (owner,
-  not a symlink). A discovery file `AgentControl/agent.json` (0600: socket path, pid, version, profile) lets the CLI
+  and the audit log. **Built (PR 4, `koan_agent_peer.*`, `koan_agent_gateway.*`):** the token is read with
+  `getsockopt(LOCAL_PEERTOKEN)` at accept, on the owning sequence (the descriptor could be closed and its number reused
+  while a worker runs, so the worker gets the token, not the descriptor). The lookup (signing identity, ancestors)
+  runs on a thread-pool task, and **no byte is read from the connection until it has succeeded** (5 s deadline). The
+  signing identity is `apple` for a platform binary, `team:<id>`, `cdhash:<hex>` for an ad hoc signature (so a rebuilt
+  unsigned tool is "changed"), or empty for unsigned; a signature that does not verify is refused. The lookup fails
+  closed. The connection is also refused at accept when the cap is full (below), the uid is not the browser's, the peer
+  has no executable path, or the peer is blocked. **Looking again** (`Unchanged`, cheap: the pid's start time from
+  `proc_bsdinfo`, which tells a reused pid from the process, and its executable path, which an exec of another program
+  changes; the audit token's pid version, which would say "has it exec'd" directly, can only be checked through the
+  Security framework, so it is used once, at lookup. Apple's `proc_uniqidentifierinfo` is private and was not usable) happens before a proof is verified and before the user's approval is
+  applied, so an `exec` after connecting, or during the 60 s dialog, ends the session (`kUnknownPeer`).
+  *What this does not tell:* `LOCAL_PEERTOKEN` is the connector's token. A child that inherited the descriptor is
+  indistinguishable from the process that connected (it is the connector's decision to share it, and the connector is
+  what the user was shown and the pin names), and the token is fixed at connect time, so "again" means the same pid's
+  current state, not a fresh read of the socket.
+* **Socket hygiene** (verified, C§2a, C§5): `bind()` leaves a stale file and a 0777-minus-umask mode. Whoever holds an
+  exclusive `flock` on a lock file named after the socket (`agent.sock.lock`, `<hash>.sock.lock`: one per socket, since the fallback directory is shared by every long-path profile) owns the path, and the kernel drops it when that browser crashes, so a
+  socket found while the lock is free is dead and is `unlink()`ed, and one found while it is held is left alone. (A
+  `connect()` probe was the first design and is wrong: a full backlog is `ECONNREFUSED` on macOS, so a busy live gateway
+  would look dead, and the probe makes a live gateway accept a connection.) The directory is made with `mkdir(0700)`
+  and then only reached through a descriptor opened with `O_NOFOLLOW|O_DIRECTORY` (`fstat` for the owner, `fchmod` to
+  tighten), so a symlink swapped in cannot redirect a check or a `chmod`; the socket is `chmod`ed 0600 after `bind()`,
+  and `Stop()` unlinks only the file whose device and inode it recorded after the bind, never whatever is at the path.
+  `sun_path` allows 103 characters, so a long `--user-data-dir` falls back to `<per-user temp dir>/koan-<uid>/<hash>.sock`
+  (`confstr(_CS_DARWIN_USER_TEMP_DIR)`, a 0700 directory, rather than a shared `/tmp` where another user can create
+  `koan-<uid>` first), then `/tmp`. Making the directory and taking the lock run on a thread that may block. A discovery file `AgentControl/agent.json` (0600: socket path, pid, version, profile) lets the CLI
   find it; the CLI validates the pid and a `connect()` before trusting it.
 * **Threads**: socket I/O on the IO thread; **parsing, scrubbing and serialising of large CDP traffic on a worker
   thread**, with only decisions (attach, dispatch, lease) on the UI thread, because all `DevToolsAgentHost` calls are
@@ -393,14 +415,24 @@ its chain is then a chain change, so an empty pin never switches the chain check
 
 *What the transcript does not give.* There is no server identity in it, and the client cannot know one: a same-user
 process that holds the socket path first can relay a client's nonce to the real browser. What stops it is the pin (the
-relay's executable is not the paired one) and the socket's directory permissions; both are the gateway's. Also the
-gateway's, with the socket (next PR): a deadline for the whole pre-auth phase, a cap on open unauthenticated
-connections (per user and in all), counting protocol violations as failures, and taking the peer's identity once at
-accept from the audit token (`LOCAL_PEERTOKEN`, with its pid version, not the pid), checking it again at the proof
-(the fd survives `exec` and `fork`), and failing closed if either lookup fails. The identity is also taken **again when
-the user answers a prompt**: the dialog may stay open for 60 s, and the peer can `exec` another program in that time, so
-an approval only applies if the peer is still the one the dialog described (`OnApprovalDecision` is where it is
-checked; this PR's `Session` has the identity fixed at construction and leaves the re-check to the gateway).
+relay's executable is not the paired one) and the socket's directory permissions; both are the gateway's (PR 4).
+
+**Limits on connections (PR 4, review findings 6 and 11).** The gateway admits at most 8 connections, 4 of them not
+yet authenticated (`ConnectionAdmission`); the listener refuses every uid but the browser's, so the total is also the
+per-user cap. A connection has 30 s from being made to authenticate, whatever it sends, not counting the time a prompt
+to the user was open (`Session::kPreAuthDeadline`); a closing connection has 2 s to flush its last reply; a queue of
+replies is capped at 64 KB before authentication and 64 MB after. Malformed JSON, an oversize or pipelined frame, and
+every other protocol violation before authentication count as a failure against the peer (a stalled frame, a denied
+or unanswered prompt and the deadline already did). After authentication a stalled frame or a violation is not a
+guessing failure. The session asks the gateway to look at the peer again before it verifies a proof and before it
+applies the user's approval (`SessionDelegate::PeerUnchanged`); a "yes" given after the peer changed is answered
+`Koan.peerChanged`, closes the connection and stores nothing. Per program, at most two of the four unauthenticated slots (`Koan.busy` for the third: the CLI retries with a short
+back-off). A connection the gateway closes for its own reasons says why in one frame with no id (`Koan.busy`,
+`Koan.peerUnresolved`; nothing is said to a foreign user or a blocked peer) and logs it, so that a lookup that is too
+slow is a log line and an error, not silence. Memory: 32 MB frames and a 64 MB reply queue per connection times eight
+is fine while only `Koan.status` exists; the forwarding PR adds a gateway-wide byte budget and stops reading from a
+connection whose queue is high. The dialog's answer may come from any thread (it is posted back to the gateway's
+sequence). Nothing starts the gateway yet (no preference, no window hook): that is the settings change.
 
 ### 5.3 Capabilities (per client, editable in settings)
 

@@ -17,6 +17,7 @@
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -117,6 +118,15 @@ class SessionDelegate {
   // Session::OnApprovalDecision() with the same id, or never (the session times
   // the request out).
   virtual void RequestApproval(const ApprovalRequest& request) = 0;
+  // Whether the process on the other end is still the one the session was made
+  // for. The session asks before it verifies a proof and before it applies the
+  // user's approval; a socket survives an exec (and a fork) of its peer, so the
+  // identity taken at accept is not good for ever. False, or a lookup that
+  // failed, ends the session (kUnknownPeer): this must fail closed. It is also
+  // asked before a dialog is built, so that the user is not shown a program the
+  // peer no longer is. After authentication it is not asked again: the client
+  // holds a key, and a client that exec'd another program still holds it.
+  virtual bool PeerUnchanged() = 0;
 };
 
 struct SessionEnvironment {
@@ -156,6 +166,11 @@ class Session {
   static constexpr base::TimeDelta kNonceLifetime = base::Seconds(10);
   static constexpr base::TimeDelta kApprovalTimeout = base::Seconds(60);
   static constexpr base::TimeDelta kFrameTimeout = base::Seconds(10);
+  // How long a connection may take to authenticate, from when it was made, not
+  // counting the time a prompt to the user was open. Whatever it does in the
+  // meantime: a peer that keeps a connection busy without finishing is closed
+  // like one that is idle.
+  static constexpr base::TimeDelta kPreAuthDeadline = base::Seconds(30);
 
   Session(PeerIdentity peer,
           SessionEnvironment environment,
@@ -239,6 +254,14 @@ class Session {
   base::TimeTicks nonce_deadline_;
 
   base::TimeTicks partial_since_;
+  // For the pre-authentication deadline.
+  base::TimeTicks created_;
+  base::TimeTicks prompt_open_since_;
+  base::TimeDelta prompt_total_;
+
+  // Everything runs on the sequence that made the session. A user's answer from
+  // another thread is the owner's to post (the gateway does).
+  SEQUENCE_CHECKER(sequence_checker_);
 
   std::string client_id_;
   ClientCapabilities capabilities_;
