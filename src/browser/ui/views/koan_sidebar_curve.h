@@ -21,6 +21,12 @@ inline constexpr base::TimeDelta kSidebarRevealDuration =
     base::Milliseconds(250);
 inline constexpr base::TimeDelta kSidebarHideDuration = base::Milliseconds(150);
 
+// `zen.view.compact.sidebar-keep-hover.duration`: how long the revealed
+// sidebar stays after the pointer leaves it or the menu it opened closes
+// (measured live: it collapses 150-185 ms after the pointer leaves).
+inline constexpr base::TimeDelta kSidebarKeepHoverDuration =
+    base::Milliseconds(150);
+
 // Zen's `--zen-compact-mode-func`: the `translate` easing of the revealed
 // sidebar, a spring-shaped `linear()` curve. `t` is the fraction of the time
 // (clamped to 0..1); the result is 0 at the start, overshoots 1 by about 1%

@@ -135,7 +135,7 @@ void KoanSpaceMenu::RunMenuAt(views::View* anchor,
       views::MenuAnchorPosition::kTopLeft, ui::mojom::MenuSourceType::kMouse);
   // No menu, or it ran to its end (macOS).
   if (!runner_->IsRunning()) {
-    hold_.reset();
+    OnMenuClosed();
   }
 }
 
@@ -229,7 +229,7 @@ void KoanCreateMenu::RunMenuAt(views::View* anchor) {
                           base::Unretained(this)));
   RunBelow(runner_.get(), anchor);
   if (!runner_->IsRunning()) {
-    hold_.reset();
+    OnMenuClosed();
   }
 }
 

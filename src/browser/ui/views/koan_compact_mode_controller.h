@@ -17,6 +17,7 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/events/event_observer.h"
 #include "ui/menus/simple_menu_model.h"
@@ -200,6 +201,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
 
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
+
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
@@ -303,6 +307,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   // Zen's flash popup: the hidden sidebar pops up for a moment.
   void FlashSidebar();
+  // Zen's `zen-has-empty-tab`: while the selected tab is empty (a blank
+  // page), the sidebar is out and can't hide.
+  void UpdateEmptyTabLock(bool snap_reveal = false);
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert);
   void EndFlash();
@@ -330,6 +337,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   void OnSidebarHotZoneHovered(bool hovered);
   void CheckHoverLock();
+  bool IsPointerAtSidebarEdge() const;
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
 
@@ -377,6 +385,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // lock: taken once it has (OnSidebarCollapseSettled()).
   bool peek_requested_ = false;
   std::unique_ptr<ExpandOnHoverLock> flash_lock_;
+  std::unique_ptr<ExpandOnHoverLock> empty_tab_lock_;
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;
@@ -399,6 +408,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
+  // The pointer left the window (through an edge) and hasn't come back.
+  bool pointer_left_window_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
   // The monitor sees all the application's windows (fullscreen), not just the
   // browser window's.
@@ -412,7 +423,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Declared after the models it shows, so it goes first.
   std::unique_ptr<views::MenuRunner> menu_runner_;
   // Keeps the sidebar out while its menu is open.
-  std::unique_ptr<ExpandOnHoverLock> menu_lock_;
+  std::unique_ptr<SidebarHold> menu_hold_;
 
   base::WeakPtrFactory<KoanCompactModeController> weak_factory_{this};
 };
