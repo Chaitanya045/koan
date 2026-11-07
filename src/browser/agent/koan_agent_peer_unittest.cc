@@ -65,8 +65,17 @@ TEST(KoanAgentPeerTest, TheProcessThatConnectedIsResolvedFromItsAuditToken) {
   const std::optional<PeerToken> token =
       resolver->TokenForSocket(pair.accepted.get());
   ASSERT_TRUE(token);
+  base::ElapsedTimer timer;
   const std::optional<ResolvedPeer> peer = resolver->Resolve(*token);
+  const base::TimeDelta took = timer.Elapsed();
   ASSERT_TRUE(peer);
+  // This test binary is tens of megabytes. The lookup validates the code
+  // directory and the signature, not every resource, so it is far inside the
+  // gateway's 5 s for the whole lookup (Gateway::kResolveDeadline); a change
+  // back to full validation of a large bundle is what this guards.
+  LOG(INFO) << "resolving the test binary took " << took.InMilliseconds()
+            << " ms";
+  EXPECT_LT(took, base::Seconds(2));
 
   EXPECT_EQ(peer->identity.uid, geteuid());
   base::FilePath exe;

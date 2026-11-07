@@ -166,7 +166,8 @@ class Gateway {
 
   enum class State { kStopped, kStarting, kStarted };
 
-  void OnPrepared(PreparedSocket prepared);
+  void BeginPrepare();
+  void OnPrepared(uint64_t generation, PreparedSocket prepared);
   void FinishStart(StartResult result);
   void DoAccept();
   void OnAcceptComplete(int result);
@@ -201,8 +202,22 @@ class Gateway {
   base::RepeatingTimer timer_;
   std::map<ConnectionAdmission::Id, std::unique_ptr<Connection>> connections_;
 
+  // Starting prepares the socket path on a worker, and takes the lock there.
+  // Stop() can come before that reply: the reply is then stale, and it is the
+  // reply's arrival, not Stop(), that releases the lock it carries. A Start()
+  // right after must not prepare while one is outstanding, or it would flock a
+  // second description of the same file and lose to the first (a settings
+  // toggle off and on again would see kInUse for no reason), so it waits for
+  // the stale one to come back and then prepares.
+  uint64_t generation_ = 0;
+  int outstanding_preparations_ = 0;
+  bool start_waiting_ = false;
+
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<Gateway> weak_factory_{this};
+  // Not invalidated by Stop(): see above. Only destroying the Gateway cancels
+  // it.
+  base::WeakPtrFactory<Gateway> prepare_weak_factory_{this};
 };
 
 }  // namespace koan::agent

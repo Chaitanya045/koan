@@ -22,7 +22,12 @@ namespace koan::agent {
 
 namespace {
 
-constexpr char kLockFileName[] = "agent.lock";
+// One lock per socket, named after it: in the fallback layout every long-path
+// profile of a user shares one directory, and a lock per directory would make a
+// second profile look like a second browser on the first one's path.
+std::string LockFileName(const base::FilePath& socket_path) {
+  return socket_path.BaseName().value() + ".lock";
+}
 
 bool Fits(const base::FilePath& path) {
   return path.value().size() <= kMaxSocketPathLength;
@@ -114,9 +119,9 @@ SocketPrepareResult PrepareSocketPath(const base::FilePath& socket_path,
   }
 
   // The lock: whoever holds it owns the socket path.
-  base::ScopedFD lock_fd(openat(directory_fd.get(), kLockFileName,
-                                O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC,
-                                0600));
+  base::ScopedFD lock_fd(
+      openat(directory_fd.get(), LockFileName(socket_path).c_str(),
+             O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600));
   if (!lock_fd.is_valid()) {
     return errno == ELOOP ? SocketPrepareResult::kDirectoryUnsafe
                           : SocketPrepareResult::kError;

@@ -55,7 +55,8 @@ enum class SocketPrepareResult {
 
 // Makes the directory of `socket_path` (0700, owned by `uid`, not a symlink;
 // one that is ours but looser is tightened), takes an exclusive lock on
-// `agent.lock` in it, and removes a socket at the path.
+// `<socket file name>.lock` beside the socket (one lock per socket, not per
+// directory), and removes a socket at the path.
 //
 // The lock is what says whether a socket is dead: whoever holds it is the
 // browser that owns the path, and the kernel drops it when that browser

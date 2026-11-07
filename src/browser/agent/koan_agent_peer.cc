@@ -96,13 +96,21 @@ base::apple::ScopedCFTypeRef<SecCodeRef> GuestCode(CFDictionaryRef attributes) {
 // "apple" for a platform binary, "team:<id>" for a developer-signed one,
 // "cdhash:<hex>" for one that is signed without a team (ad hoc), "" for one
 // that is not signed at all. nullopt if it is signed and does not verify: a
-// process whose signature is broken is not one to name. `flags` are for
-// SecCodeCheckValidity: the default checks every resource of the bundle, which
-// is minutes of work for a large app (an editor, a browser), so ancestors are
-// checked with kSecCSBasicValidateOnly (the code directory and the signature,
-// not the resources) and the peer itself, a small tool, in full.
-std::optional<std::string> SigningIdentity(SecCodeRef code, SecCSFlags flags) {
-  const OSStatus validity = SecCodeCheckValidity(code, flags, nullptr);
+// process whose signature is broken is not one to name.
+//
+// The check is kSecCSBasicValidateOnly for the peer and for every ancestor: the
+// code directory and the signature (and with them the team id and the cdhash,
+// which are what the identity is made of), not every resource of the bundle.
+// The default would hash all of a large app (an editor, a browser, an agent
+// shipped as an Electron app) and take many seconds, and the gateway gives up
+// on a connection after 5. The running process is held to what the kernel
+// enforces (its code signing status), which the guest lookup by audit token has
+// already established; a resource swapped on disk after launch is not the
+// question here. kSecCSCheckAllArchitectures and a designated-requirement
+// evaluation are left out for the same reason.
+std::optional<std::string> SigningIdentity(SecCodeRef code) {
+  const OSStatus validity =
+      SecCodeCheckValidity(code, kSecCSBasicValidateOnly, nullptr);
   if (validity == errSecCSUnsigned) {
     return std::string();
   }
@@ -152,7 +160,7 @@ std::optional<std::string> SigningIdentityOfPid(pid_t pid) {
   if (!code) {
     return std::nullopt;
   }
-  return SigningIdentity(code.get(), kSecCSBasicValidateOnly);
+  return SigningIdentity(code.get());
 }
 
 class MacPeerResolver final : public PeerResolver {
@@ -199,8 +207,7 @@ class MacPeerResolver final : public PeerResolver {
     if (!code) {
       return refuse("no process for the audit token");
     }
-    std::optional<std::string> signing =
-        SigningIdentity(code.get(), kSecCSDefaultFlags);
+    std::optional<std::string> signing = SigningIdentity(code.get());
     if (!signing) {
       return refuse("the signature does not verify");
     }

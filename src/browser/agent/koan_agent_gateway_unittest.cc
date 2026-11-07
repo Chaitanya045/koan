@@ -628,12 +628,37 @@ TEST_F(KoanAgentGatewayTest, StoppingBeforeTheStartHasFinishedReportsStopped) {
   gateway_->Stop();
   EXPECT_EQ(result.Get(), Gateway::StartResult::kStopped);
   EXPECT_FALSE(gateway_->started());
-  // The abandoned preparation lets go of its lock once it has run; only then
-  // is a new start sure to find the path free.
-  task_environment_.RunUntilIdle();
-  // And it can be started again afterwards.
+  // Started again at once, while the abandoned preparation may still hold its
+  // lock: the new start waits for it instead of losing to it.
   EXPECT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kOk);
   auto client = LiveConnection();
+}
+
+TEST_F(KoanAgentGatewayTest, OffAndOnAgainInQuickSuccessionNeverReportsInUse) {
+  // The settings toggle, turned off and on, over and over, with nothing waited
+  // for in between.
+  for (int i = 0; i < 25; ++i) {
+    gateway_->Stop();
+    base::test::TestFuture<Gateway::StartResult> abandoned;
+    gateway_->Start(abandoned.GetCallback());
+    gateway_->Stop();
+    EXPECT_EQ(abandoned.Get(), Gateway::StartResult::kStopped) << i;
+    ASSERT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kOk) << i;
+  }
+  auto client = LiveConnection();
+}
+
+TEST_F(KoanAgentGatewayTest, AStartThatWaitsForAnAbandonedOneCanBeStoppedToo) {
+  gateway_->Stop();
+  base::test::TestFuture<Gateway::StartResult> first, second;
+  gateway_->Start(first.GetCallback());
+  gateway_->Stop();                       // the first is abandoned
+  gateway_->Start(second.GetCallback());  // waits for it
+  gateway_->Stop();                       // and is stopped before it begins
+  EXPECT_EQ(first.Get(), Gateway::StartResult::kStopped);
+  EXPECT_EQ(second.Get(), Gateway::StartResult::kStopped);
+  EXPECT_FALSE(gateway_->started());
+  EXPECT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kOk);
 }
 
 TEST_F(KoanAgentGatewayTest, StoppingWhileALookupIsInFlightIsSafe) {

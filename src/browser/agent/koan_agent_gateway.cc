@@ -458,17 +458,37 @@ void Gateway::Start(base::OnceCallback<void(StartResult)> done) {
   }
   state_ = State::kStarting;
   start_done_ = std::move(done);
+  if (outstanding_preparations_ > 0) {
+    // An abandoned preparation still holds the lock: wait for it to come back.
+    start_waiting_ = true;
+    return;
+  }
+  BeginPrepare();
+}
+
+void Gateway::BeginPrepare() {
+  ++outstanding_preparations_;
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&PrepareOnWorker, options_.socket_path, options_.uid),
-      base::BindOnce(&Gateway::OnPrepared, weak_factory_.GetWeakPtr()));
+      base::BindOnce(&Gateway::OnPrepared, prepare_weak_factory_.GetWeakPtr(),
+                     generation_));
 }
 
-void Gateway::OnPrepared(PreparedSocket prepared) {
+void Gateway::OnPrepared(uint64_t generation, PreparedSocket prepared) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(state_, State::kStarting);
+  --outstanding_preparations_;
+  if (generation != generation_ || state_ != State::kStarting) {
+    // Abandoned by a Stop(): `prepared` goes out of scope here and lets go of
+    // its lock; a Start() that came in meanwhile has been waiting for that.
+    if (start_waiting_ && outstanding_preparations_ == 0) {
+      start_waiting_ = false;
+      BeginPrepare();
+    }
+    return;
+  }
   switch (prepared.result) {
     case SocketPrepareResult::kOk:
       break;
@@ -521,6 +541,8 @@ void Gateway::Stop() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   timer_.Stop();
   weak_factory_.InvalidateWeakPtrs();
+  ++generation_;
+  start_waiting_ = false;
   const State was = state_;
   state_ = State::kStopped;
   connections_.clear();

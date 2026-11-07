@@ -100,7 +100,7 @@ TEST_F(KoanAgentSocketTest, ADirectoryIsMadePrivate) {
             SocketPrepareResult::kOk);
   EXPECT_TRUE(lock.is_valid());
   EXPECT_EQ(ModeOf(socket.DirName()), 0700u);
-  EXPECT_EQ(ModeOf(socket.DirName().Append("agent.lock")), 0600u);
+  EXPECT_EQ(ModeOf(socket.DirName().Append("a.sock.lock")), 0600u);
 }
 
 TEST_F(KoanAgentSocketTest, ALooseDirectoryOfOursIsTightened) {
@@ -146,7 +146,8 @@ TEST_F(KoanAgentSocketTest, ASymlinkInPlaceOfTheLockFileIsRefused) {
   ASSERT_TRUE(base::CreateDirectory(directory));
   const base::FilePath target = root.Append("target");
   ASSERT_TRUE(base::WriteFile(target, "x"));
-  ASSERT_TRUE(base::CreateSymbolicLink(target, directory.Append("agent.lock")));
+  ASSERT_TRUE(
+      base::CreateSymbolicLink(target, directory.Append("a.sock.lock")));
   base::ScopedFD lock;
   EXPECT_EQ(PrepareSocketPath(directory.Append("a.sock"), getuid(), &lock),
             SocketPrepareResult::kDirectoryUnsafe);
@@ -162,6 +163,22 @@ TEST_F(KoanAgentSocketTest, ARegularFileAtThePathIsLeftAlone) {
   std::string contents;
   ASSERT_TRUE(base::ReadFileToString(path, &contents));
   EXPECT_EQ(contents, "precious");
+}
+
+TEST_F(KoanAgentSocketTest, TwoSocketsInOneDirectoryDoNotShareALock) {
+  // The fallback layout puts every long-path profile of a user in one
+  // directory.
+  const base::FilePath root = ShortRoot();
+  base::ScopedFD first, second, again;
+  ASSERT_EQ(PrepareSocketPath(root.Append("a.sock"), getuid(), &first),
+            SocketPrepareResult::kOk);
+  EXPECT_EQ(PrepareSocketPath(root.Append("b.sock"), getuid(), &second),
+            SocketPrepareResult::kOk);
+  // The same socket is still one browser's.
+  EXPECT_EQ(PrepareSocketPath(root.Append("a.sock"), getuid(), &again),
+            SocketPrepareResult::kInUse);
+  EXPECT_TRUE(base::PathExists(root.Append("a.sock.lock")));
+  EXPECT_TRUE(base::PathExists(root.Append("b.sock.lock")));
 }
 
 TEST_F(KoanAgentSocketTest, WhoeverHoldsTheLockOwnsThePath) {

@@ -229,7 +229,7 @@ browser process.
   what the user was shown and the pin names), and the token is fixed at connect time, so "again" means the same pid's
   current state, not a fresh read of the socket.
 * **Socket hygiene** (verified, C§2a, C§5): `bind()` leaves a stale file and a 0777-minus-umask mode. Whoever holds an
-  exclusive `flock` on `AgentControl/agent.lock` owns the path, and the kernel drops it when that browser crashes, so a
+  exclusive `flock` on a lock file named after the socket (`agent.sock.lock`, `<hash>.sock.lock`: one per socket, since the fallback directory is shared by every long-path profile) owns the path, and the kernel drops it when that browser crashes, so a
   socket found while the lock is free is dead and is `unlink()`ed, and one found while it is held is left alone. (A
   `connect()` probe was the first design and is wrong: a full backlog is `ECONNREFUSED` on macOS, so a busy live gateway
   would look dead, and the probe makes a live gateway accept a connection.) The directory is made with `mkdir(0700)`
