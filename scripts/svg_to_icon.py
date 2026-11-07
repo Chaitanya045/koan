@@ -15,7 +15,8 @@ paints identically at any size and does not depend on STROKE commands
 (Chromium's stroker can't do round joins).
 
 --fill also fills closed shapes (for the "-fill" variants of an icon).
---scale sets the fit to Zen's glyph size (default ZEN_FIT); an icon that would
+--ink WxH fits the glyph to that outer size (canvas units, strokes included),
+each axis on its own; --scale sets the fit to Zen's glyph size (default ZEN_FIT); an icon that would
 then come within EDGE_PAD of the canvas edge is shrunk, strokes with it, to fit.
 --source puts a line into the header comment (set, licence).
 
@@ -196,7 +197,30 @@ def fit_to_canvas(path, size):
     return fitted
 
 
-def convert(svg_text, force_fill=False, scale=ZEN_FIT, fit=True, alpha=None):
+def fit_ink(shapes, ink, size):
+    """Scales the shapes' geometry about the canvas centre, each axis on its own,
+    so that geometry plus the widest stroke measures ink = (width, height) in
+    canvas units: icons whose box in Zen has another aspect than Lucide's."""
+    boxes = [path.bounds for path, _ in shapes]
+    x0, y0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    x1, y1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
+    stroke = max([float(st['stroke-width']) for _, st in shapes
+                  if st['stroke'] != 'none'] or [0.0])
+    sx = (ink[0] - stroke) / (x1 - x0)
+    sy = (ink[1] - stroke) / (y1 - y0)
+    c = size / 2
+    matrix = (sx, 0, 0, sy, c - sx * (x0 + x1) / 2, c - sy * (y0 + y1) / 2)
+    out = []
+    for path, st in shapes:
+        moved = pathops.Path()
+        path.draw(TransformPen(moved.getPen(), matrix))
+        moved.fillType = pathops.FillType.WINDING
+        out.append((moved, st))
+    return out
+
+
+def convert(svg_text, force_fill=False, scale=ZEN_FIT, fit=True, alpha=None,
+            ink=None):
     root = ET.fromstring(svg_text)
     view_box = [float(v) for v in root.get('viewBox').split()]
     assert view_box[2] == view_box[3]
@@ -204,6 +228,8 @@ def convert(svg_text, force_fill=False, scale=ZEN_FIT, fit=True, alpha=None):
     shapes = []
     collect(root, {'fill': 'black', 'stroke': 'none', 'stroke-width': '1'},
             shapes, (scale, view_box[2], (view_box[0], view_box[1])), clips)
+    if ink:
+        shapes = fit_ink(shapes, ink, view_box[2])
     parts = []
     for path, style in shapes:
         fill = style['fill'] != 'none' or force_fill

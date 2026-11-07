@@ -1,10 +1,10 @@
 # zen-name  set  icon  [fill]
-sidebar lucide panel-left
+sidebar lucide panel-left ink=21.3x18.7
 sidebar-right lucide panel-right
 expand-sidebar lucide panel-left-open
 sidebars-right lucide panel-right-open
-back lucide arrow-left
-forward lucide arrow-right
+back lucide arrow-left ink=18.7x16
+forward lucide arrow-right ink=18.7x16
 arrow-left lucide arrow-left
 arrow-right lucide arrow-right
 arrow-up lucide arrow-up
@@ -12,7 +12,7 @@ arrow-down lucide arrow-down
 arrow-corner-down-right lucide corner-down-right
 arrows-collapse lucide minimize-2
 arrows-expand lucide maximize-2
-reload lucide rotate-cw
+reload lucide rotate-cw ink=21.3x21.3
 arrow-rotate-anticlockwise lucide rotate-ccw
 close lucide x
 close-filled-round lucide circle-x

@@ -47,6 +47,21 @@ icons end up a few percent below 1.1 (the worst, `passwords`, at 0.81). The
 canvas stays 24, so every call site's `dip_size` still means what it did for
 Chromium's icons.
 
+## Zen's top-row glyphs: fitted to its box
+
+Measured on Zen 1.24b's own files (the rendered ink of `sidebar.svg`,
+`back.svg`, `forward.svg`, `reload.svg` on their 18-unit grid, nothing copied):
+sidebar 16 x 14, back / forward 14 x 12, reload 16 x 16, all with a 1.5 unit
+stroke; at `--zen-toolbar-button-size` 17 px (a unit is 0.944 pt) that is
+15.1 x 13.2, 13.2 x 11.3 and 15.1 x 15.1 pt with a 1.42 pt stroke. Lucide's
+panel-left and arrows are square, so `mapping.txt` has `ink=WxH` for these
+four (the outer size in canvas units, strokes included: `21.3x18.7`,
+`18.7x16`, `21.3x21.3`): each axis is scaled on its own and the stroke keeps
+Lucide's 2 units (1.42 pt at 17). The sidebar toggle was drawn at 20 pt, not
+17 (Chromium's `kVerticalTabStripButtonIconSize`, now 17 in the layout
+constants hook), which made its glyph 36 x 36 px against Zen's 30 x 24 and its
+stroke 1.67 pt.
+
 ## How it works
 
 1. `third_party/icons/mapping.txt`: Zen name -> Lucide icon (+ `fill` for

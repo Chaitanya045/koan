@@ -37,20 +37,23 @@ MPL = ['// This Source Code Form is subject to the terms of the Mozilla Public',
 
 
 def read_mapping():
+    """(zen name, set, icon, filled, convert() options) for each mapping.txt row."""
     rows = []
     for line in open(os.path.join(ICONS, 'mapping.txt')):
         line = line.strip()
         if line and not line.startswith('#'):
             parts = line.split()
-            scale = svg_to_icon.ZEN_FIT
-            alpha = None
+            options = {}
             for option in parts[3:]:
                 if option.startswith('scale='):
-                    scale = float(option[len('scale='):])
-                if option.startswith('alpha='):
-                    alpha = float(option[len('alpha='):])
+                    options['scale'] = float(option[len('scale='):])
+                elif option.startswith('alpha='):
+                    options['alpha'] = float(option[len('alpha='):])
+                elif option.startswith('ink='):
+                    options['ink'] = tuple(
+                        float(v) for v in option[len('ink='):].split('x'))
             rows.append((parts[0], parts[1], parts[2], 'fill' in parts[3:],
-                         scale, alpha))
+                         options))
     return rows
 
 
@@ -59,12 +62,12 @@ def main():
     ap.add_argument('--lucide')
     args = ap.parse_args()
     names = []
-    for zen, set_name, icon, fill, scale, alpha in read_mapping():
+    for zen, set_name, icon, fill, options in read_mapping():
         dest = os.path.join(ICONS, set_name, icon + '.svg')
         if args.lucide and set_name == 'lucide':
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             shutil.copy(os.path.join(args.lucide, icon + '.svg'), dest)
-        size, lines = svg_to_icon.convert(open(dest).read(), fill, scale, alpha=alpha)
+        size, lines = svg_to_icon.convert(open(dest).read(), fill, **options)
         if set_name in MPL_ORIGIN:
             header = MPL + ['//',
                             '// %s, third_party/icons/%s,' %
