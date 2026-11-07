@@ -102,10 +102,12 @@ base::apple::ScopedCFTypeRef<CFDictionaryRef> AttributeDictionary(
 }
 
 // The running process the attributes name, or null.
-base::apple::ScopedCFTypeRef<SecCodeRef> GuestCode(CFDictionaryRef attributes) {
+base::apple::ScopedCFTypeRef<SecCodeRef> GuestCode(CFDictionaryRef attributes,
+                                                   OSStatus* status) {
   base::apple::ScopedCFTypeRef<SecCodeRef> code;
-  if (SecCodeCopyGuestWithAttributes(nullptr, attributes, kSecCSDefaultFlags,
-                                     code.InitializeInto()) != errSecSuccess) {
+  *status = SecCodeCopyGuestWithAttributes(
+      nullptr, attributes, kSecCSDefaultFlags, code.InitializeInto());
+  if (*status != errSecSuccess) {
     return base::apple::ScopedCFTypeRef<SecCodeRef>();
   }
   return code;
@@ -116,34 +118,50 @@ base::apple::ScopedCFTypeRef<SecCodeRef> GuestCode(CFDictionaryRef attributes) {
 // that is not signed at all. nullopt if it is signed and does not verify: a
 // process whose signature is broken is not one to name.
 //
-// The check is kSecCSBasicValidateOnly for the peer and for every ancestor: the
-// code directory and the signature (and with them the team id and the cdhash,
-// which are what the identity is made of), not every resource of the bundle.
-// The default would hash all of a large app (an editor, a browser, an agent
-// shipped as an Electron app) and take many seconds, and the gateway gives up
-// on a connection after 5. The running process is held to what the kernel
-// enforces (its code signing status), which the guest lookup by audit token has
-// already established; a resource swapped on disk after launch is not the
-// question here. kSecCSCheckAllArchitectures and a designated-requirement
-// evaluation are left out for the same reason.
-std::optional<std::string> SigningIdentity(SecCodeRef code) {
-  const OSStatus validity =
-      SecCodeCheckValidity(code, kSecCSBasicValidateOnly, nullptr);
+// This is the *dynamic* check (SecCodeCheckValidity on the running process,
+// with no flags: kSecCSBasicValidateOnly belongs to the static check, and with
+// it the first Mac run refused every peer): the code directory and the kernel's
+// code signing status, not every resource of a bundle (that is
+// SecStaticCodeCheckValidity, which is never called, because it would hash all
+// of a large app and take many seconds where the gateway gives up after 5). The
+// team id and the cdhash that the identity is made of come from the code
+// directory. A designated-requirement evaluation is left out for the same
+// reason. On failure `*why` says which call failed with which OSStatus.
+std::optional<std::string> SigningIdentity(SecCodeRef code, std::string* why) {
+  const auto fail = [&](const char* call, OSStatus status) {
+    if (why) {
+      *why = std::string(call) + " " + base::NumberToString(status);
+    }
+    return std::optional<std::string>();
+  };
+  base::apple::ScopedCFTypeRef<CFErrorRef> error;
+  const OSStatus validity = SecCodeCheckValidityWithErrors(
+      code, kSecCSDefaultFlags, nullptr, error.InitializeInto());
   if (validity == errSecCSUnsigned) {
     return std::string();
   }
   if (validity != errSecSuccess) {
-    return std::nullopt;
+    std::string call = "SecCodeCheckValidityWithErrors";
+    if (error) {
+      base::apple::ScopedCFTypeRef<CFStringRef> text(
+          CFErrorCopyDescription(error.get()));
+      if (text) {
+        call += " (" + base::SysCFStringRefToUTF8(text.get()) + ")";
+      }
+    }
+    return fail(call.c_str(), validity);
   }
   base::apple::ScopedCFTypeRef<SecStaticCodeRef> static_code;
-  if (SecCodeCopyStaticCode(code, kSecCSDefaultFlags,
-                            static_code.InitializeInto()) != errSecSuccess) {
-    return std::nullopt;
+  OSStatus status = SecCodeCopyStaticCode(code, kSecCSDefaultFlags,
+                                          static_code.InitializeInto());
+  if (status != errSecSuccess) {
+    return fail("SecCodeCopyStaticCode", status);
   }
   base::apple::ScopedCFTypeRef<CFDictionaryRef> info;
-  if (SecCodeCopySigningInformation(static_code.get(), kSecCSSigningInformation,
-                                    info.InitializeInto()) != errSecSuccess) {
-    return std::nullopt;
+  status = SecCodeCopySigningInformation(
+      static_code.get(), kSecCSSigningInformation, info.InitializeInto());
+  if (status != errSecSuccess) {
+    return fail("SecCodeCopySigningInformation", status);
   }
   const void* platform =
       CFDictionaryGetValue(info.get(), kSecCodeInfoPlatformIdentifier);
@@ -174,11 +192,18 @@ std::optional<std::string> SigningIdentityOfPid(pid_t pid) {
   base::apple::ScopedCFTypeRef<CFNumberRef> number(
       CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &value));
   auto attributes = AttributeDictionary(kSecGuestAttributePid, number.get());
-  auto code = GuestCode(attributes.get());
+  OSStatus status = errSecSuccess;
+  auto code = GuestCode(attributes.get(), &status);
   if (!code) {
+    VLOG(1) << "agent peer: no code for ancestor " << pid << ": " << status;
     return std::nullopt;
   }
-  return SigningIdentity(code.get());
+  std::string why;
+  std::optional<std::string> identity = SigningIdentity(code.get(), &why);
+  if (!identity) {
+    VLOG(1) << "agent peer: ancestor " << pid << ": " << why;
+  }
+  return identity;
 }
 
 class MacPeerResolver final : public PeerResolver {
@@ -198,7 +223,8 @@ class MacPeerResolver final : public PeerResolver {
     base::ElapsedTimer timer;
     // Every way out says why: a connection that is dropped here is dropped
     // without a word to the client, so the log is where it can be found.
-    const auto refuse = [&](const char* reason) -> std::optional<ResolvedPeer> {
+    const auto refuse =
+        [&](const std::string& reason) -> std::optional<ResolvedPeer> {
       LOG(WARNING) << "agent peer: not resolved (" << reason << ") after "
                    << timer.Elapsed().InMilliseconds() << " ms";
       return std::nullopt;
@@ -221,13 +247,18 @@ class MacPeerResolver final : public PeerResolver {
         sizeof(handle.token)));
     auto attributes =
         AttributeDictionary(kSecGuestAttributeAudit, token_data.get());
-    auto code = GuestCode(attributes.get());
+    OSStatus guest_status = errSecSuccess;
+    auto code = GuestCode(attributes.get(), &guest_status);
     if (!code) {
-      return refuse("no process for the audit token");
+      return refuse(
+          "no process for the audit token: "
+          "SecCodeCopyGuestWithAttributes " +
+          base::NumberToString(guest_status));
     }
-    std::optional<std::string> signing = SigningIdentity(code.get());
+    std::string why;
+    std::optional<std::string> signing = SigningIdentity(code.get(), &why);
     if (!signing) {
-      return refuse("the signature does not verify");
+      return refuse("the signature does not verify: " + why);
     }
     const std::string path = ExecutablePath(pid);
     StartTime after;
