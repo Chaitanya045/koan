@@ -11,7 +11,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +33,14 @@ using koan::agent::ParamFilter;
 bool IsInt(const base::DictValue& d, std::string_view key, int lo, int hi) {
   const base::Value* v = d.Find(key);
   return v && v->is_int() && v->GetInt() >= lo && v->GetInt() <= hi;
+}
+
+// A parameter that is not on the list reviewed for the method must be gone.
+void CheckOnlyKnownKeys(const base::DictValue& params,
+                        std::initializer_list<std::string_view> known) {
+  for (const auto [key, value] : params) {
+    CHECK(std::ranges::find(known, key) != known.end()) << key;
+  }
 }
 
 void CheckClipWithinLimits(const base::DictValue& params) {
@@ -67,10 +77,18 @@ void CheckForwardable(ParamFilter filter,
     }
     case ParamFilter::kStripKeyCommands:
       CHECK(!params.contains("commands"));
+      CheckOnlyKnownKeys(
+          params, {"type", "modifiers", "timestamp", "text", "unmodifiedText",
+                   "keyIdentifier", "code", "key", "windowsVirtualKeyCode",
+                   "nativeVirtualKeyCode", "autoRepeat", "isKeypad",
+                   "isSystemKey", "location"});
       break;
     case ParamFilter::kIsolatedWorld:
       CHECK(params.FindBool("grantUniveralAccess") == false);
       CHECK(!params.contains("grantUniversalAccess"));
+      CheckOnlyKnownKeys(params,
+                         {"frameId", "worldName", "contentSecurityPolicy",
+                          "grantUniveralAccess"});
       break;
     case ParamFilter::kScreenshot: {
       const base::Value* from_surface = params.Find("fromSurface");
@@ -81,7 +99,12 @@ void CheckForwardable(ParamFilter filter,
             (format->is_string() &&
              (format->GetString() == "png" || format->GetString() == "jpeg" ||
               format->GetString() == "webp")));
-      CHECK(!params.contains("quality") || IsInt(params, "quality", 0, 100));
+      if (params.contains("quality")) {
+        const std::optional<double> quality = params.FindDouble("quality");
+        CHECK(quality);
+        CHECK(*quality >= 0 && *quality <= 100 &&
+              *quality == std::floor(*quality));
+      }
       const base::Value* beyond = params.Find("captureBeyondViewport");
       CHECK(!beyond || beyond->is_bool());
       const bool wants_beyond = beyond && beyond->GetBool();
@@ -101,6 +124,8 @@ void CheckForwardable(ParamFilter filter,
       CHECK(!params.contains("maxPostDataSize"));
       CHECK(!params.contains("reportDirectSocketTraffic"));
       CHECK(!params.contains("enableDurableMessages"));
+      CheckOnlyKnownKeys(params,
+                         {"maxTotalBufferSize", "maxResourceBufferSize"});
       CHECK(IsInt(params, "maxTotalBufferSize", 0,
                   koan::agent::kMaxNetworkTotalBufferSize));
       CHECK(IsInt(params, "maxResourceBufferSize", 0,

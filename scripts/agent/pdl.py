@@ -172,6 +172,8 @@ def load_details(chromium_src):
 _BUILTIN_TYPES = {'string', 'integer', 'number', 'boolean', 'object', 'any',
                   'binary', 'enum'}
 _FIELD_MODIFIERS = {'optional', 'experimental', 'deprecated'}
+# `type X extends T` and `type X extends array of T`: the type T refers to.
+_EXTENDS = re.compile(r'\bextends\s+(?:array\s+of\s+)?(\S+)\s*$')
 _DEFINITION = re.compile(r'^  ' + _MODIFIERS + r'(type|command|event)\s+(\w+)\b')
 
 
@@ -200,7 +202,11 @@ def parse_schema_text(text):
     if current and domain:
       kind, name, body = current
       fields = []
-      for line in body:
+      extends = _EXTENDS.search(body[0])
+      if extends and extends.group(1) not in _BUILTIN_TYPES:
+        ref = extends.group(1)
+        fields.append(('<extends>', ref if '.' in ref else f'{domain}.{ref}'))
+      for line in body[1:]:
         stripped = line.strip()
         indent = len(line) - len(line.lstrip(' '))
         if not stripped or stripped.startswith('#') or indent != 6:
@@ -224,7 +230,9 @@ def parse_schema_text(text):
     m = _DEFINITION.match(line)
     if m and domain:
       flush()
-      current = (m.group(1), m.group(2), [])
+      # The header line is part of the definition: `type X extends string`
+      # retargeted to `extends array of Network.Cookie` changes what X is.
+      current = (m.group(1), m.group(2), [line])
       continue
     if current:
       indent = len(line) - len(line.lstrip(' '))

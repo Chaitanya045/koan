@@ -303,6 +303,38 @@ class SchemaTest(unittest.TestCase):
     reworded = pdl.parse_schema_text(SCHEMA_PDL.replace('# comment', '# other'))
     self.assertEqual(before, pdl.closure_hash(reworded, 'Net.seen'))
 
+  def test_the_header_line_of_a_type_is_part_of_it(self):
+    # `type X extends string` retargeted to `extends array of Cookie` changes
+    # what X is, though no field line changed.
+    before = pdl.closure_hash(self.schema, 'Net.seen')
+    retargeted = pdl.parse_schema_text(
+        SCHEMA_PDL.replace('type Inner extends object',
+                           'type Inner extends array of Net.Headers'))
+    self.assertNotEqual(before, pdl.closure_hash(retargeted, 'Net.seen'))
+
+  def test_extends_is_followed_into_the_closure(self):
+    text = SCHEMA_PDL + """
+domain Net2
+  type Wrapper extends array of Net.Headers
+
+  event wrapped
+    parameters
+      Wrapper w
+"""
+    schema = pdl.parse_schema_text(text)
+    self.assertEqual(schema['Net2.Wrapper']['fields'],
+                     [('<extends>', 'Net.Headers')])
+    self.assertIn('Net.Headers', pdl.closure(schema, 'Net2.wrapped'))
+    # a builtin base adds nothing
+    self.assertEqual(self.schema['Net.Headers']['fields'], [])
+    # and a Pass event that reaches a header map through extends is a leak
+    leaks = cov.leaks_in_pass_event(schema, 'Net2.wrapped')
+    self.assertTrue(any('<extends>' in leak for leak in leaks), leaks)
+
+  def test_execution_context_types_are_secret_for_unscrubbed_events(self):
+    self.assertIn('ExecutionContextId', cov.SECRET_TYPES)
+    self.assertIn('ExecutionContextUniqueId', cov.SECRET_TYPES)
+
   def test_the_drift_is_reported_by_the_baseline_check(self):
     events = [('Net.seen', 'Pass')]
     rules = [('Net.enable', 'Allow', 'None', 'None')]

@@ -226,7 +226,8 @@ TEST(KoanAgentFiltersTest, AClipIsBoundedInEveryDirection) {
 TEST(KoanAgentFiltersTest, FormatAndQualityAreChecked) {
   for (const char* json :
        {R"({"format":"png"})", R"({"format":"jpeg","quality":0})",
-        R"({"format":"webp","quality":100})"}) {
+        R"({"format":"webp","quality":100})", R"({"quality":80.0})",
+        R"({"quality":0.0})"}) {
     base::DictValue params = Dict(json);
     EXPECT_FALSE(Apply(ParamFilter::kScreenshot, params, false).has_value())
         << json;

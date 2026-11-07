@@ -103,7 +103,7 @@ def scrubber_removes(name):
 # Types whose presence in an event that is delivered unscrubbed is a leak, and
 # fields that tie an event to an execution context.
 SECRET_TYPES = {'Headers', 'Cookie', 'CookieParam', 'CookiePartitionKey',
-                'HeaderEntry'}
+                'HeaderEntry', 'ExecutionContextId', 'ExecutionContextUniqueId'}
 
 
 def leaks_in_pass_event(schema, event):

@@ -145,8 +145,11 @@ std::optional<FilterError> FilterScreenshot(base::DictValue& params,
     }
   }
   if (const base::Value* quality = params.Find("quality")) {
-    if (!quality->is_int() || quality->GetInt() < 0 ||
-        quality->GetInt() > 100) {
+    // An integer, or a number with no fractional part (JSON writers often emit
+    // 80.0 for 80).
+    const std::optional<double> number = quality->GetIfDouble();
+    if (!number || !std::isfinite(*number) || *number != std::floor(*number) ||
+        *number < 0 || *number > 100) {
       return Error("Koan.invalidParams", "quality must be an integer 0 to 100");
     }
   }
