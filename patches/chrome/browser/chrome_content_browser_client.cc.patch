@@ -1,11 +1,12 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf10111757ed6251c 100644
+index 03111c8cb7cd0786314a448d01c358ae1b06a858..483280d740f30e73fce9bbce301877aa35917343 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -410,6 +410,10 @@
+@@ -410,6 +410,11 @@
  #include "google_apis/google_api_keys.h"
  #include "gpu/config/gpu_switches.h"
  #include "ipc/ipc_channel_proxy.h"
++#include "koan/browser/agent/koan_agent_tab_hooks.h"
 +#include "koan/browser/koan_renderer_switches.h"
 +#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_glance.h"
@@ -13,7 +14,7 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf1011175
  #include "media/base/media_switches.h"
  #include "media/media_buildflags.h"
  #include "media/mojo/buildflags.h"
-@@ -3161,6 +3165,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3161,6 +3166,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -22,7 +23,7 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf1011175
      }
  
  #if BUILDFLAG(IS_CHROMEOS)
-@@ -4126,6 +4132,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+@@ -4126,6 +4133,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
                                         ui::ColorProviderKey::ColorMode::kLight
                                     ? blink::mojom::PreferredColorScheme::kLight
                                     : blink::mojom::PreferredColorScheme::kDark;
@@ -37,7 +38,7 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf1011175
      }
      const auto effective_page_colors =
          PageColorsController::GetEffectivePageColors(*profile.GetPrefs());
-@@ -4142,6 +4156,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+@@ -4142,6 +4157,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
            web_contents->GetColorProvider().GetColor(kColorToolbar))
            ? blink::mojom::PreferredColorScheme::kDark
            : blink::mojom::PreferredColorScheme::kLight;
@@ -52,7 +53,7 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf1011175
  #endif
  
  #if BUILDFLAG(ENABLE_GUEST_VIEW)
-@@ -4636,6 +4658,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
+@@ -4636,6 +4659,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
    }
  #endif  // !BUILDFLAG(IS_ANDROID)
  
@@ -66,7 +67,7 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf1011175
    const BlockedWindowParams blocked_params(
        target_url, opener->GetGlobalFrameToken(), source_origin,
        opener->GetSiteInstance(), referrer, frame_name, disposition, features,
-@@ -7338,6 +7367,11 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
+@@ -7338,6 +7368,11 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
  bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
      content::RenderFrameHost* rfh,
      const url::Origin& caller_origin) {
@@ -78,3 +79,33 @@ index 03111c8cb7cd0786314a448d01c358ae1b06a858..3199c2f4faa7663e236f3eccf1011175
    const Profile* profile =
        Profile::FromBrowserContext(rfh->GetBrowserContext());
    if (profile->GetPrefs()->GetBoolean(
+@@ -7514,6 +7549,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
+   }
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
++  // Koan: in a tab an agent holds, the sign-in waits for the user in the agent
++  // indicator (koan/browser/agent/koan_agent_tab_hooks.h).
++  if (koan::agent::ShouldHoldHttpAuthForAgent(web_contents, guest,
++                                              do_not_prompt_for_login)) {
++    return koan::agent::HoldHttpAuthForAgent(
++        web_contents, browser_context, auth_info, request_id,
++        is_request_for_primary_main_frame_navigation, is_request_for_navigation,
++        url, response_headers, std::move(auth_required_callback));
++  }
+   if (!http_auth_coordinator_) {
+     http_auth_coordinator_ = CreateHttpAuthCoordinator();
+   }
+@@ -7594,6 +7638,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
+     // applications.
+     return false;
+   }
++  // Koan: in a tab an agent holds, the launch waits for the user in the agent
++  // indicator (koan/browser/agent/koan_agent_tab_hooks.h).
++  if (koan::agent::HoldExternalProtocolForAgent(
++          web_contents, url, page_transition, has_user_gesture,
++          is_in_fenced_frame_tree, initiating_origin, initiator_document)) {
++    return false;
++  }
+ #endif  //! BUILDFLAG(IS_ANDROID)
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)

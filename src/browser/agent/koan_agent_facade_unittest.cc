@@ -452,6 +452,23 @@ TEST_F(KoanAgentFacadeTest, NothingButReadsReachASecurityInterstitial) {
   EXPECT_EQ(backend_.sent.size(), 2u);
 }
 
+TEST_F(KoanAgentFacadeTest, TellsOnlyItsOwnClientWhatAPageWaitsToShow) {
+  // Design section 9.4: a page's dialog in the client's tab waits for the
+  // user; the client hears that it waits and when it no longer does.
+  facade_.OnUserNeeded("T1", "dialog", /*needed=*/true);
+  facade_.OnUserNeeded("T1", "dialog", /*needed=*/false);
+  // Not another client's tab.
+  facade_.OnUserNeeded("T2", "print", /*needed=*/true);
+  ASSERT_EQ(Events("Koan.userNeeded").size(), 1u);
+  EXPECT_EQ(
+      *Events("Koan.userNeeded")[0]->FindStringByDottedPath("params.targetId"),
+      "T1");
+  EXPECT_EQ(
+      *Events("Koan.userNeeded")[0]->FindStringByDottedPath("params.reason"),
+      "dialog");
+  ASSERT_EQ(Events("Koan.userNeededDone").size(), 1u);
+}
+
 TEST_F(KoanAgentFacadeTest, ClosesOnlyItsOwnAgentTabs) {
   registry_.GrantUserTab("U1", "alice", TabState::kDriven);
   Send(1, "Target.closeTarget", base::DictValue().Set("targetId", "U1"));

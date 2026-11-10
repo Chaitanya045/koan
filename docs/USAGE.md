@@ -997,6 +997,14 @@ a background window of that profile. It takes a moment longer to start, and
 the profile is deleted when the task ends. Hidden profiles never show in the
 profile menu or bring up the profile picker at launch.
 
+What a page asks of you while an agent works in its tab (its own tab, or one
+of yours it controls) never pops up over your work: a "Leave site?" dialog,
+an `alert`/`confirm`/`prompt`, a link that opens an app, a sign-in prompt,
+`window.print()` or a request for focus waits in the pill instead ("a.test
+asks you to sign in · Open · Dismiss"). **Open** switches to the tab and shows
+it as Chrome would; **Dismiss** says no (stay on the page, no sign-in, no
+print). The agent is told, and can still answer a dialog itself.
+
 ## Install in the app menu
 
 ```sh

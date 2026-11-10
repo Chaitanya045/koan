@@ -37,6 +37,7 @@
 #include "koan/browser/agent/koan_agent_gateway.h"
 #include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/agent/koan_agent_limits.h"
+#include "koan/browser/agent/koan_agent_page_surfaces.h"
 #include "koan/browser/agent/koan_agent_peer.h"
 #include "koan/browser/agent/koan_agent_socket.h"
 #include "koan/browser/koan_prefs.h"
@@ -342,6 +343,23 @@ void AgentControlService::HandBack(const std::string& target_id) {
 void AgentControlService::TakeBack(const std::string& target_id) {
   if (forwarder_) {
     forwarder_->TakeBack(target_id);
+  }
+}
+
+std::vector<HeldPrompt> AgentControlService::user_prompts() const {
+  return forwarder_ ? AgentPageSurfaces::Get().Prompts()
+                    : std::vector<HeldPrompt>();
+}
+
+void AgentControlService::OpenPrompt(uint64_t id) {
+  if (forwarder_) {
+    AgentPageSurfaces::Get().Open(id);
+  }
+}
+
+void AgentControlService::DismissPrompt(uint64_t id) {
+  if (forwarder_) {
+    AgentPageSurfaces::Get().Dismiss(id);
   }
 }
 
