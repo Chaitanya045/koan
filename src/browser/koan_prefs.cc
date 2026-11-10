@@ -55,6 +55,7 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookBase, "black");
   registry->RegisterStringPref(kLookAccent, "none");
   registry->RegisterStringPref(kLookCustomCss, "");
+  registry->RegisterBooleanPref(kLookAcrylicUrlBar, false);
   namespace pm = performance_manager::user_tuning::prefs;
   // Memory Saver: discard tabs that have been hidden for 4 hours (the
   // balanced setting) until they are opened again. Chromium ships it off.

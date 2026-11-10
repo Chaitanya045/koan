@@ -20,6 +20,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -56,7 +57,9 @@
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
+#include "koan/browser/ui/views/koan_window_glass.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -69,15 +72,20 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/focus_ring.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
@@ -137,8 +145,18 @@ class KoanUrlBarBackdrop : public views::View {
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorToolbar));
     flags.setLooper(gfx::CreateShadowDrawLooper(shadows));
-    canvas->DrawRoundRect(gfx::RectF(shape), FloatingUrlBarCornerRadius(),
-                          flags);
+    {
+      // Only the shadow, outside the card: a glass card blurs what is under
+      // it, which must be the page, not this shape.
+      gfx::ScopedCanvas scoped(canvas);
+      canvas->sk_canvas()->clipRRect(
+          SkRRect::MakeRectXY(gfx::RectToSkRect(card_),
+                              FloatingUrlBarCornerRadius(),
+                              FloatingUrlBarCornerRadius()),
+          SkClipOp::kDifference, /*doAntiAlias=*/true);
+      canvas->DrawRoundRect(gfx::RectF(shape), FloatingUrlBarCornerRadius(),
+                            flags);
+    }
     // shadcn's 1px `border` around the card, just outside it.
     cc::PaintFlags border;
     border.setAntiAlias(true);
@@ -174,11 +192,25 @@ class KoanUrlBarCardFill : public views::View {
     GetViewAccessibility().SetIsIgnored(true);
   }
 
+  // A glass card's fill is translucent (Zen's acrylic-urlbar fill over the
+  // blurred page).
+  void SetGlass(bool glass) {
+    if (glass_ != glass) {
+      glass_ = glass;
+      SchedulePaint();
+    }
+  }
+
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
-    canvas->FillRect(GetLocalBounds(), GetColorProvider()->GetColor(
-                                           kColorKoanFloatingUrlBarBackground));
+    canvas->FillRect(GetLocalBounds(),
+                     GetColorProvider()->GetColor(
+                         glass_ ? kColorKoanFloatingUrlBarGlass
+                                : kColorKoanFloatingUrlBarBackground));
   }
+
+ private:
+  bool glass_ = false;
 };
 
 BEGIN_METADATA(KoanUrlBarCardFill)
@@ -212,9 +244,9 @@ class KoanUrlBarCardDecoration : public views::View {
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();
     if (!icon_.IsEmpty()) {
-      // A plain, muted magnifier: nothing of the icon's own chip shows.
-      canvas->FillRect(icon_,
-                       colors->GetColor(kColorKoanFloatingUrlBarBackground));
+      // A plain, muted magnifier: the location icon under it is hidden
+      // (KoanUrlBarController::SetLocationIconHidden()), not painted over, so
+      // nothing of its chip or its ink drop shows, glass or not.
       const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
           vector_icons::kSearchIcon, kFloatingUrlBarMagnifierSize,
           colors->GetColor(ui::kColorIcon));
@@ -241,6 +273,16 @@ KoanUrlBarController::KoanUrlBarController(
     KoanCompactModeController* compact_mode)
     : browser_view_(browser_view), compact_mode_(compact_mode) {
   InstallNewTabAction();
+  // The glass card follows its setting and Reduce Transparency live (the
+  // window's activity is subscribed once it has a widget).
+  if (g_browser_process && g_browser_process->local_state()) {
+    prefs_registrar_.Init(g_browser_process->local_state());
+    prefs_registrar_.Add(
+        prefs::kLookAcrylicUrlBar,
+        base::BindRepeating(&KoanUrlBarController::UpdateGlassCard,
+                            base::Unretained(this)));
+  }
+  theme_observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
 }
 
 KoanUrlBarController::~KoanUrlBarController() {
@@ -707,7 +749,9 @@ void KoanUrlBarController::ApplyCardStyle() {
     fill_ = toolbar->AddChildViewAt(std::make_unique<KoanUrlBarCardFill>(), 0);
     decoration_ = top_container->AddChildView(
         std::make_unique<KoanUrlBarCardDecoration>());
+    SetLocationIconHidden(true);
   } else if (!IsCommandCard() && decoration_) {
+    SetLocationIconHidden(false);
     top_container->RemoveChildViewT(std::exchange(decoration_, nullptr));
     toolbar->RemoveChildViewT(std::exchange(fill_, nullptr));
   }
@@ -724,6 +768,14 @@ void KoanUrlBarController::ApplyCardStyle() {
     omnibox->InstallPlaceholderText();
   }
 
+  if (!paint_as_active_subscription_ && browser_view_->GetWidget()) {
+    paint_as_active_subscription_ =
+        browser_view_->GetWidget()->RegisterPaintAsActiveChangedCallback(
+            base::BindRepeating(&KoanUrlBarController::UpdateGlassCard,
+                                base::Unretained(this)));
+  }
+  UpdateGlassCard();
+
   if (!is_open()) {
     return;
   }
@@ -732,6 +784,106 @@ void KoanUrlBarController::ApplyCardStyle() {
       floating ? FloatingUrlBarCornerRadius() : UrlPillCornerRadius()));
   layer->SetIsFastRoundedCorner(true);
   layer->SetMasksToBounds(true);
+}
+
+void KoanUrlBarController::SetLocationIconHidden(bool hidden) {
+  LocationBarView* bar = location_bar();
+  LocationIconView* icon = bar ? bar->location_icon_view() : nullptr;
+  if (!icon) {
+    return;
+  }
+  if (hidden) {
+    // The ink drop first: off, it takes away the layers views gave the icon
+    // for it (hover, the open page info bubble), and SetPaintToLayer() below
+    // would trip View::DestroyLayerImpl()'s DCHECK on them. The ink drop is
+    // drawn beside the icon's layer, so it could not be hidden by opacity.
+    views::InkDrop::Get(icon)->SetMode(views::InkDropHost::InkDropMode::OFF);
+    // Hidden by opacity, not visibility: the layout is unchanged, and the
+    // icon's chip goes with it. The layer is explicit, so no ink drop's layer
+    // coming and going takes it away.
+    icon->SetPaintToLayer();
+    icon->layer()->SetFillsBoundsOpaquely(false);
+    icon->layer()->SetOpacity(0.0f);
+    // Nothing of the icon can be reached either: no focus, no click, no screen
+    // reader.
+    icon->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    icon->SetCanProcessEventsWithinSubtree(false);
+    icon->GetViewAccessibility().SetIsIgnored(true);
+  } else {
+    // Upstream never gives this view a layer of its own; views keeps the ink
+    // drop's.
+    icon->DestroyLayer();
+    icon->SetCanProcessEventsWithinSubtree(true);
+    icon->GetViewAccessibility().SetIsIgnored(false);
+    // Chromium's own state: the icon is inert (no highlight, no focus) while
+    // the omnibox is editing or empty (LocationIconView::Update()).
+    const bool inert = bar->IsEditingOrEmpty();
+    views::InkDrop::Get(icon)->SetMode(
+        inert ? views::InkDropHost::InkDropMode::OFF
+              : views::InkDropHost::InkDropMode::ON);
+    icon->SetFocusBehavior(inert ? views::View::FocusBehavior::NEVER
+                                 : views::PlatformStyle::kDefaultFocusBehavior);
+  }
+}
+
+namespace {
+
+// A glass card's labels (the keyword chip, ...) sit on a translucent fill: no
+// subpixel text there (views::Label's DCHECK that its background is opaque).
+void SetLabelsSubpixelRendering(views::View* view, bool enabled) {
+  if (views::Label* label = views::AsViewClass<views::Label>(view)) {
+    label->SetSubpixelRenderingEnabled(enabled);
+  }
+  for (views::View* child : view->children()) {
+    SetLabelsSubpixelRendering(child, enabled);
+  }
+}
+
+}  // namespace
+
+void KoanUrlBarController::UpdateGlassCard() {
+  const views::Widget* widget = browser_view_->GetWidget();
+  const bool glass =
+      widget && is_open() && IsCommandCard() && IsWindowGlassAllowed() &&
+      widget->ShouldPaintAsActive() && g_browser_process &&
+      g_browser_process->local_state() &&
+      g_browser_process->local_state()->GetBoolean(prefs::kLookAcrylicUrlBar);
+  LocationBarView* bar = location_bar();
+  if (glass && bar) {
+    // Also labels built since (the lazily created ones of the location bar's
+    // chips).
+    SetLabelsSubpixelRendering(bar, false);
+  }
+  if (glass == glass_card_) {
+    return;
+  }
+  glass_card_ = glass;
+  // Zen's acrylic-urlbar (zen-omnibox.css): the page blurred behind a card
+  // filled rgba(20, 20, 20, .92) / rgba(255, 255, 255, .93), at full opacity
+  // itself, so its text stays crisp.
+  if (ui::Layer* card = browser_view_->top_container()->layer()) {
+    card->SetBackgroundBlur(glass ? kFloatingUrlBarBlurRadius : 0.0f);
+  }
+  if (fill_) {
+    fill_->SetGlass(glass);
+  }
+  if (bar) {
+    SetLabelsSubpixelRendering(bar, !glass);
+  }
+  // The location bar and its omnibox take the clear background through
+  // AdjustLocationBarBackground() (the location bar refreshes itself; it is in
+  // whatever widget the top container is in), and the toolbar and top
+  // container through OnGlassLayout(): this window's colours only, so no
+  // colour provider is rebuilt and no other view re-themed.
+  if (bar) {
+    bar->OnThemeChanged();
+  }
+  browser_view_->InvalidateLayout();
+}
+
+void KoanUrlBarController::OnNativeThemeUpdated(
+    ui::NativeTheme* observed_theme) {
+  UpdateGlassCard();
 }
 
 bool KoanUrlBarController::IsFloatingZenCard() const {
@@ -1043,6 +1195,19 @@ void AdjustOmniboxPlaceholder(views::View* location_bar, std::u16string& text) {
 bool HidesPageActionIcons(const views::View* location_bar) {
   const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
   return url_bar && url_bar->is_open();
+}
+
+SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color) {
+  const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
+  return url_bar && url_bar->IsGlassCard() ? SK_ColorTRANSPARENT : color;
+}
+
+bool IsGlassUrlBarOpen(const views::View* browser_view) {
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(
+                         static_cast<const BrowserView*>(browser_view))
+                   : nullptr;
+  return controller && controller->url_bar()->IsGlassCard();
 }
 
 bool ShowsZenCardRows(const views::View* view) {

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
-index 972bd7bc04d240f23d4c527bdb6faa81272421e5..713619379b9dfcb2a2926c19691ee8b2d81fd6b4 100644
+index 972bd7bc04..3326e6b461 100644
 --- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
 +++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
 @@ -119,6 +119,7 @@
@@ -10,7 +10,7 @@ index 972bd7bc04d240f23d4c527bdb6faa81272421e5..713619379b9dfcb2a2926c19691ee8b2
  #include "services/device/public/cpp/device_features.h"
  #include "third_party/metrics_proto/omnibox_event.pb.h"
  #include "third_party/skia/include/core/SkColor.h"
-@@ -1132,6 +1133,13 @@ std::optional<bubble_anchor_util::AnchorConfiguration>
+@@ -1132,6 +1133,13 @@ std::optional<bubble_anchor_util::Anchor
  LocationBarView::GetChipAnchor() {
    auto* chip = GetChipController()->chip();
    if (chip->GetVisible()) {
@@ -38,7 +38,7 @@ index 972bd7bc04d240f23d4c527bdb6faa81272421e5..713619379b9dfcb2a2926c19691ee8b2
    return views::ElementTrackerViews::GetInstance()->GetElementForView(this);
  }
  
-@@ -1296,6 +1311,11 @@ bool LocationBarView::ShouldHidePageActionIcons() const {
+@@ -1296,6 +1311,11 @@ bool LocationBarView::ShouldHidePageActi
      return false;
    }
  
@@ -50,7 +50,17 @@ index 972bd7bc04d240f23d4c527bdb6faa81272421e5..713619379b9dfcb2a2926c19691ee8b2
    // When the user is typing in the omnibox, the page action icons are no longer
    // associated with the current omnibox text, so hide them.
    if (GetOmniboxController()->edit_model()->user_input_in_progress()) {
-@@ -2120,6 +2140,16 @@ void LocationBarView::OnChanged() {
+@@ -1416,6 +1436,9 @@ void LocationBarView::RefreshBackground(
+     background_color_ = gfx::Tween::ColorValueBetween(opacity, normal, hovered);
+   }
+ 
++  // Koan: a glass URL bar card's field is clear over the card's fill.
++  background_color_ = koan::AdjustLocationBarBackground(this, background_color_);
++
+   SkColor border_color = SK_ColorTRANSPARENT;
+   if (high_contrast) {
+     // High contrast schemes get a border stroke even on a rounded omnibox.
+@@ -2120,6 +2143,16 @@ void LocationBarView::OnChanged() {
    // user text has been entered into the omnibox, so refresh the icon on
    // changes.
    RefreshAiModePageAction();
