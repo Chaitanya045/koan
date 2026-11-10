@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_frame.h"
+#include "koan/cli/koan_cli_admission.h"
 #include "koan/cli/koan_cli_args.h"
 #include "koan/cli/koan_cli_io.h"
 #include "koan/cli/koan_cli_protocol.h"
@@ -184,6 +185,14 @@ TEST(KoanCliProtocolTest, ClientsAndChoosingOne) {
   ASSERT_TRUE(client);
   EXPECT_EQ(client->client_id, id);
   EXPECT_EQ(client->label, "Claude Code");
+  // The pin of the pairing goes there and back.
+  ClientInfo pinned{id, "Claude Code",
+                    agent::PinnedIdentity{{"/Applications/Koan.app/koan", "T1"},
+                                          {"/opt/claude", "ANTHROPIC"}}};
+  std::optional<ClientInfo> read = ParseClient(SerializeClient(pinned));
+  ASSERT_TRUE(read && read->pinned);
+  EXPECT_EQ(*read->pinned, *pinned.pinned);
+  EXPECT_FALSE(client->pinned);
   // A label never becomes a path: the id must be the browser's.
   EXPECT_FALSE(ParseClient(R"({"clientId":"../../etc"})"));
   EXPECT_FALSE(
@@ -265,6 +274,73 @@ TEST(KoanCliProtocolTest, PathsStayShort) {
   EXPECT_LT(HolderSocket(KoanHome(home), std::string(32, 'a')).value().size(),
             104u);
   EXPECT_EQ(DefaultUserDataDir(home, "/tmp/p").value(), "/tmp/p");
+}
+
+// --- Who may use the holder --------------------------------------------------
+
+class KoanCliAdmissionTest : public testing::Test {
+ protected:
+  // `koan` run by `agent` through a shell.
+  agent::PeerIdentity Peer(agent::ProcessInfo process,
+                           agent::ProcessInfo agent_process,
+                           uint32_t uid = 501) {
+    agent::PeerIdentity peer;
+    peer.uid = uid;
+    peer.process = std::move(process);
+    peer.ancestors = {{"/bin/zsh", "com.apple.zsh"},
+                      std::move(agent_process),
+                      {"/sbin/launchd", "com.apple.launchd"}};
+    return peer;
+  }
+
+  const agent::ProcessInfo koan_{
+      "/Applications/Koan.app/Contents/Resources/bin/koan", "ad-hoc:abc"};
+  const agent::ProcessInfo claude_{"/opt/claude/bin/claude", "ANTHROPIC"};
+};
+
+TEST_F(KoanCliAdmissionTest, OnlyThePairedAgentsKoan) {
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, Peer(koan_, claude_)),
+            LocalClientVerdict::kAllowed);
+  // Another program of the same user: a script, a copy of koan elsewhere,
+  // koan with another signature.
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+                              Peer({"/usr/bin/python3", ""}, claude_)),
+            LocalClientVerdict::kOtherProgram);
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+                              Peer({"/tmp/koan", "ad-hoc:abc"}, claude_)),
+            LocalClientVerdict::kOtherProgram);
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+                              Peer({koan_.path, "ad-hoc:evil"}, claude_)),
+            LocalClientVerdict::kOtherProgram);
+  // The right koan, run by something other than the paired agent.
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+                              Peer(koan_, {"/Applications/Other.app/o", "X"})),
+            LocalClientVerdict::kAgentMissing);
+  // Another user, or nobody the OS could name.
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, Peer(koan_, claude_, 502)),
+            LocalClientVerdict::kOtherUser);
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, std::nullopt),
+            LocalClientVerdict::kUnresolved);
+  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, Peer({"", ""}, claude_)),
+            LocalClientVerdict::kUnresolved);
+  // A holder that could not name itself serves nobody.
+  EXPECT_EQ(DecideLocalClient({"", ""}, claude_, 501, Peer(koan_, claude_)),
+            LocalClientVerdict::kUnresolved);
+}
+
+TEST_F(KoanCliAdmissionTest, AnUnknownChainAtPairingStaysUnknown) {
+  // As in the browser: a pairing with no agent in its chain does not let a
+  // koan that an agent runs in.
+  agent::PeerIdentity orphan;
+  orphan.uid = 501;
+  orphan.process = koan_;
+  // Only a shell: nothing that counts as an agent.
+  orphan.ancestors = {{"/bin/zsh", "com.apple.zsh"}};
+  EXPECT_EQ(DecideLocalClient(koan_, {}, 501, orphan),
+            LocalClientVerdict::kAllowed);
+  EXPECT_EQ(DecideLocalClient(koan_, {}, 501, Peer(koan_, claude_)),
+            LocalClientVerdict::kAgentMissing);
+  EXPECT_EQ(VerdictName(LocalClientVerdict::kAgentMissing), "agent-missing");
 }
 
 // --- The holder's routing ----------------------------------------------------

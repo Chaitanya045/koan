@@ -16,6 +16,8 @@ assert(is_posix)
 # outline, the holder's routing.
 source_set("cli_lib") {
   sources = [
+    "koan_cli_admission.cc",
+    "koan_cli_admission.h",
     "koan_cli_args.cc",
     "koan_cli_args.h",
     "koan_cli_io.cc",
@@ -29,6 +31,7 @@ source_set("cli_lib") {
   ]
   public_deps = [
     "//base",
+    "//koan/browser/agent:auth",
     "//koan/browser/agent:frame",
   ]
 }
@@ -40,6 +43,7 @@ executable("koan") {
     "//base",
     "//koan/browser/agent:auth",
     "//koan/browser/agent:frame",
+    "//koan/browser/agent:peer",
     "//third_party/boringssl",
   ]
 }

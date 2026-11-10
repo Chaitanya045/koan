@@ -1017,7 +1017,12 @@ koan revoke [id|--all]
 `snapshot`, `screenshot [-o f]`, `act <tab> click @ref | fill @ref text | press key | scroll px | navigate url`, `take-over [tab]`,
 `release` (alias `hand-back`), `end [--task T]`, `watch`, `skill`. **One connection for a task's life:** the first command that
 needs a task starts `koan __hold`, which authenticates (while the starting `koan` is still alive, so the agent is among its
-ancestors as at pairing), listens on `~/.koan/run/<id>.sock` (0700 dir, 0600 socket, same-uid peers only) and forwards every
+ancestors as at pairing), listens on `~/.koan/run/<id>.sock` (0700 dir, 0600 socket) and admits a command only as the browser
+admits `koan` (review F1): its peer is resolved with the gateway's own resolver (`LOCAL_PEERTOKEN` → executable, signature,
+ancestors, `koan_agent_peer`), and `DecideLocalClient()` (`koan_cli_admission.*`, `CompareIdentity`) requires the holder's
+own executable and signature and the agent the pairing recorded (`koan pair` resolves itself through a socket pair and stores
+`PinPeer()` in `client.json`) among its ancestors; `Unchanged()` is asked again before each of its requests. Anything else is
+closed unread and logged in `~/.koan/run/<id>.log`; with no resolver (not macOS) the holder does not start. It forwards every
 command over its one browser connection with ids of its own, sharing one flat session per tab and keeping the last 64 `Koan.*`
 events for `status`. `koan end` (or 30 minutes without a command) closes it, and with it every task. `snapshot` and `act` run on
 the CDP the facade allows (`Accessibility.getFullAXTree`, `DOM.getContentQuads`, `Input.*`, `Runtime.callFunctionOn` on a
@@ -1180,6 +1185,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-cli-4 | `koan end`; then `koan open` again; then wait 30 minutes idle | `end` closes the tabs and clears the throwaway container; a new holder starts; the idle holder exits and its tabs close |
 | T-cli-5 | `koan open --saved bot` with and without the grant in Settings, and while another task has it open | granted: the saved container's logins; not granted or in use: `Koan.notGranted`, no tab opens |
 | T-cli-6 | `koan take-over`, Allow; `koan act` on it; `koan release <id>` | the take-over prompt; the act works on the granted site only; release gives the tab back |
+| T-cli-7 | with a holder running for Claude Code: connect to `~/.koan/run/<id>.sock` from `python3` and `nc -U`; run a copy of `koan` from `/tmp`; run the bundled `koan tabs` from a plain Terminal (not under claude) | each is closed before any request reaches Koan, with a `refused other-program` / `agent-missing` line in `~/.koan/run/<id>.log`; `koan tabs` from Claude Code still works; `client.json` holds the pinned `koan` and `claude` |
 | T-win-1 | Koan on another display / Space, `Koan.openTab` | no Space switch, no window raise |
 | T-win-2 | no window open (windowless Mac app) then `Koan.openTab` | window appears inactive, does not take focus |
 | **Security** | | |

@@ -15,6 +15,7 @@
 
 #include "base/files/file_path.h"
 #include "base/values.h"
+#include "koan/browser/agent/koan_agent_auth.h"
 
 // What the `koan` tool says to the browser and keeps on disk, as pure
 // functions over JSON (.agent/notes/agent-control.md sections 4.2, 5 and 12).
@@ -48,6 +49,10 @@ base::FilePath HolderSocket(const base::FilePath& koan_home,
 struct ClientInfo {
   std::string client_id;
   std::string label;
+  // Who paired, as the OS said (the browser pins the same, section 5.5):
+  // `koan` and the agent that ran it. The holder serves only that agent's
+  // `koan` (koan_cli_admission.h). nullopt for a record without it.
+  std::optional<agent::PinnedIdentity> pinned;
 };
 std::string SerializeClient(const ClientInfo& client);
 std::optional<ClientInfo> ParseClient(std::string_view json);

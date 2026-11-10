@@ -123,10 +123,40 @@ base::FilePath HolderSocket(const base::FilePath& koan_home,
       base::StrCat({client_id.substr(0, 16), ".sock"}));
 }
 
+namespace {
+
+base::DictValue ProcessDict(const agent::ProcessInfo& process) {
+  base::DictValue dict;
+  dict.Set("path", process.path);
+  dict.Set("signingIdentity", process.signing_identity);
+  return dict;
+}
+
+agent::ProcessInfo ProcessFrom(const base::DictValue* dict) {
+  agent::ProcessInfo process;
+  if (dict) {
+    if (const std::string* path = dict->FindString("path")) {
+      process.path = *path;
+    }
+    if (const std::string* identity = dict->FindString("signingIdentity")) {
+      process.signing_identity = *identity;
+    }
+  }
+  return process;
+}
+
+}  // namespace
+
 std::string SerializeClient(const ClientInfo& client) {
   base::DictValue dict;
   dict.Set("clientId", client.client_id);
   dict.Set("label", client.label);
+  if (client.pinned) {
+    base::DictValue pinned;
+    pinned.Set("process", ProcessDict(client.pinned->process));
+    pinned.Set("agent", ProcessDict(client.pinned->agent));
+    dict.Set("pinned", std::move(pinned));
+  }
   return Write(dict);
 }
 
@@ -148,6 +178,11 @@ std::optional<ClientInfo> ParseClient(std::string_view json) {
   client.client_id = *id;
   if (const std::string* label = dict->FindString("label")) {
     client.label = *label;
+  }
+  if (const base::DictValue* pinned = dict->FindDict("pinned")) {
+    client.pinned =
+        agent::PinnedIdentity{ProcessFrom(pinned->FindDict("process")),
+                              ProcessFrom(pinned->FindDict("agent"))};
   }
   return client;
 }

@@ -99,19 +99,6 @@ base::ScopedFD ListenUnix(const std::string& path, std::string* error) {
   return fd;
 }
 
-bool PeerIsSameUser(int fd) {
-#if BUILDFLAG(IS_APPLE)
-  uid_t uid = 0;
-  gid_t gid = 0;
-  return getpeereid(fd, &uid, &gid) == 0 && uid == geteuid();
-#else
-  ucred credentials;
-  socklen_t length = sizeof(credentials);
-  return getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &credentials, &length) == 0 &&
-         credentials.uid == geteuid();
-#endif
-}
-
 FrameChannel::FrameChannel(base::ScopedFD fd, size_t max_payload)
     : fd_(std::move(fd)), decoder_(max_payload) {}
 

@@ -25,9 +25,6 @@ base::ScopedFD ConnectUnix(const std::string& path, std::string* error);
 // a socket left by a process that is gone is replaced; the socket is 0600.
 base::ScopedFD ListenUnix(const std::string& path, std::string* error);
 
-// Whether the process on the other end of `fd` runs as this user.
-bool PeerIsSameUser(int fd);
-
 // A framed connection over one socket.
 class FrameChannel {
  public:

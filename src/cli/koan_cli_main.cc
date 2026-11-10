@@ -45,6 +45,8 @@
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_auth.h"
 #include "koan/browser/agent/koan_agent_frame.h"
+#include "koan/browser/agent/koan_agent_peer.h"
+#include "koan/cli/koan_cli_admission.h"
 #include "koan/cli/koan_cli_args.h"
 #include "koan/cli/koan_cli_io.h"
 #include "koan/cli/koan_cli_protocol.h"
@@ -128,6 +130,35 @@ std::vector<std::string> PairedClients() {
   }
   std::sort(ids.begin(), ids.end());
   return ids;
+}
+
+std::optional<ClientInfo> LoadClient(const std::string& client_id) {
+  std::string json;
+  if (!base::ReadFileToString(
+          ClientDir(KoanDir(), client_id).Append("client.json"), &json)) {
+    return std::nullopt;
+  }
+  return ParseClient(json);
+}
+
+// This process as the OS describes it (its executable, signature and
+// ancestors), through the gateway's own resolver: the peer of one end of a
+// socket pair is the process that holds both ends.
+std::optional<agent::PeerIdentity> ResolveSelf(
+    const agent::PeerResolver& resolver) {
+  int fds[2];
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+    return std::nullopt;
+  }
+  base::ScopedFD a(fds[0]);
+  base::ScopedFD b(fds[1]);
+  std::optional<agent::PeerToken> token = resolver.TokenForSocket(a.get());
+  std::optional<agent::ResolvedPeer> peer =
+      token ? resolver.Resolve(*token) : std::nullopt;
+  if (!peer) {
+    return std::nullopt;
+  }
+  return peer->identity;
 }
 
 struct Key {
@@ -319,6 +350,39 @@ int RunHolder(const Command& command) {
     SayReady(ready_fd, "error ~/.koan/run is not a private directory");
     return kFailed;
   }
+  // Every command that connects is checked as the browser checks `koan`
+  // (koan_cli_admission.h): no resolver, or no identity of its own, and the
+  // holder serves nobody.
+  const std::unique_ptr<agent::PeerResolver> resolver =
+      agent::CreatePlatformPeerResolver();
+  const std::optional<agent::PeerIdentity> self =
+      resolver ? ResolveSelf(*resolver) : std::nullopt;
+  if (!self) {
+    SayReady(ready_fd,
+             "error this system cannot say which program connects to koan, "
+             "so koan cannot keep a connection open");
+    return kFailed;
+  }
+  // The agent the pairing recorded; a pairing by an older koan has none, and
+  // the agent that started this holder (which the browser just accepted)
+  // stands in.
+  const std::optional<ClientInfo> client = LoadClient(*client_id);
+  const agent::ProcessInfo paired_agent = client && client->pinned
+                                              ? client->pinned->agent
+                                              : agent::AgentAncestor(*self);
+  const base::FilePath log_path =
+      KoanDir().Append("run").Append(client_id->substr(0, 16) + ".log");
+  auto log = [&](const std::string& line) {
+    base::ScopedFD fd(HANDLE_EINTR(
+        open(log_path.value().c_str(),
+             O_WRONLY | O_CREAT | O_APPEND | O_NOFOLLOW | O_CLOEXEC, 0600)));
+    if (fd.is_valid()) {
+      base::WriteFileDescriptor(
+          fd.get(), base::NumberToString(
+                        base::Time::Now().InMillisecondsSinceUnixEpoch()) +
+                        " " + line + "\n");
+    }
+  };
   base::ScopedFD listener = ListenUnix(HolderPath(*client_id), &error);
   if (!listener.is_valid()) {
     SayReady(ready_fd, "error " + error);
@@ -329,6 +393,10 @@ int RunHolder(const Command& command) {
 
   Router router;
   std::map<Router::ConnectionId, std::unique_ptr<FrameChannel>> commands;
+  // Who each command is, to look at again before each request (a socket
+  // survives an exec of its peer).
+  std::map<Router::ConnectionId, agent::ResolvedPeer> peers;
+  constexpr size_t kMaxCommands = 16;
   Router::ConnectionId next_connection = 1;
   base::TimeTicks last_command = base::TimeTicks::Now();
   bool running = true;
@@ -339,6 +407,7 @@ int RunHolder(const Command& command) {
     if (it != commands.end() && !it->second->Write(json)) {
       router.RemoveConnection(id);
       commands.erase(it);
+      peers.erase(id);
     }
   };
 
@@ -374,13 +443,34 @@ int RunHolder(const Command& command) {
     }
     if (fds[1].revents & POLLIN) {
       base::ScopedFD fd(HANDLE_EINTR(accept(listener.get(), nullptr, nullptr)));
-      // Only this user's commands.
-      if (fd.is_valid() && PeerIsSameUser(fd.get())) {
+      std::optional<agent::ResolvedPeer> peer;
+      LocalClientVerdict verdict = LocalClientVerdict::kUnresolved;
+      if (fd.is_valid()) {
+        std::optional<agent::PeerToken> token =
+            resolver->TokenForSocket(fd.get());
+        peer = token ? resolver->Resolve(*token) : std::nullopt;
+        verdict = DecideLocalClient(
+            self->process, paired_agent, geteuid(),
+            peer ? std::optional<agent::PeerIdentity>(peer->identity)
+                 : std::nullopt);
+        if (verdict == LocalClientVerdict::kAllowed &&
+            commands.size() >= kMaxCommands) {
+          log("refused busy");
+          fd.reset();
+        } else if (verdict != LocalClientVerdict::kAllowed) {
+          // Not the paired agent's koan: it never reaches the connection.
+          log("refused " + std::string(VerdictName(verdict)) + " " +
+              (peer ? peer->identity.process.path : std::string("?")));
+          fd.reset();
+        }
+      }
+      if (fd.is_valid()) {
         fcntl(fd.get(), F_SETFD, FD_CLOEXEC);
         // A command that stops reading cannot stall the holder for long.
         timeval send_timeout = {2, 0};
         setsockopt(fd.get(), SOL_SOCKET, SO_SNDTIMEO, &send_timeout,
                    sizeof(send_timeout));
+        peers[next_connection] = std::move(*peer);
         commands[next_connection++] =
             std::make_unique<FrameChannel>(std::move(fd), agent::kMaxPayload);
       }
@@ -395,7 +485,15 @@ int RunHolder(const Command& command) {
         continue;
       }
       FrameChannel& channel = *it->second;
-      const bool open = channel.ReadAvailable();
+      bool open = channel.ReadAvailable();
+      // Still the process that was let in.
+      if (auto peer = peers.find(id);
+          open && (peer == peers.end() || !resolver->Unchanged(peer->second))) {
+        log("refused changed");
+        open = false;
+        while (channel.TakeFrame()) {
+        }
+      }
       while (std::optional<std::string> frame = channel.TakeFrame()) {
         last_command = base::TimeTicks::Now();
         std::optional<Message> message = ParseMessage(*frame);
@@ -439,6 +537,7 @@ int RunHolder(const Command& command) {
       if (!open) {
         router.RemoveConnection(id);
         commands.erase(id);
+        peers.erase(id);
       }
     }
   }
@@ -654,11 +753,19 @@ int Pair(const Command& command) {
   if (!client_id || !agent::IsValidClientId(*client_id)) {
     return result ? Fail("Koan answered without a client id") : exit_code;
   }
+  // Who paired, as the browser pinned it: the holder serves only this
+  // agent's koan.
+  ClientInfo record{*client_id, label, std::nullopt};
+  if (std::unique_ptr<agent::PeerResolver> resolver =
+          agent::CreatePlatformPeerResolver()) {
+    if (std::optional<agent::PeerIdentity> self = ResolveSelf(*resolver)) {
+      record.pinned = agent::PinPeer(*self);
+    }
+  }
   const base::FilePath dir = ClientDir(KoanDir(), *client_id);
   if (!PrivateDir(dir) ||
       !WritePrivateFile(dir.Append("key"), base::Base64Encode(seed)) ||
-      !WritePrivateFile(dir.Append("client.json"),
-                        SerializeClient({*client_id, label}))) {
+      !WritePrivateFile(dir.Append("client.json"), SerializeClient(record))) {
     return Fail("cannot write " + dir.value());
   }
   if (command.json) {
