@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "ui/events/event_handler.h"
 #include "ui/views/view.h"
@@ -95,6 +96,8 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   void OnCollapseChanged(tabs::VerticalTabStripCollapseState state);
   // Zen shows the separator only while the workspace has unpinned tabs.
   void UpdateClearRow();
+  // Zen's zen.tabs.show-newtab-vertical (koan_prefs.h kShowNewTabVertical).
+  void UpdateNewTabRow();
   void OpenNewTab();
   void ClearUnpinnedTabs();
   // "Close all unpinned tabs" with the user's shortcut for it.
@@ -114,6 +117,7 @@ class KoanSidebarTabsController : public TabStripModelObserver,
       this};
   base::CallbackListSubscription mode_subscription_;
   base::CallbackListSubscription collapse_subscription_;
+  PrefChangeRegistrar pref_change_registrar_;
 
   base::WeakPtrFactory<KoanSidebarTabsController> weak_factory_{this};
 };

@@ -294,10 +294,10 @@ bool KoanShortcutController::Run(Action action) {
       compact->ToggleSingleToolbar();
       return true;
     case Action::kWorkspaceForward:
-      workspaces->Cycle(/*forward=*/true);
+      workspaces->Navigate(/*forward=*/true);
       return true;
     case Action::kWorkspaceBackward:
-      workspaces->Cycle(/*forward=*/false);
+      workspaces->Navigate(/*forward=*/false);
       return true;
     case Action::kNewWorkspace:
       workspaces->ShowCreateForm();

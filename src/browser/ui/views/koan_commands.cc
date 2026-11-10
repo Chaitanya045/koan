@@ -36,6 +36,7 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
@@ -93,6 +94,7 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"next-tab", 26},
     {"previous-tab", 27},
     {"capture-screenshot", 28},
+    {"toggle-tabs-on-right", 29},
     {"add-to-essentials", 30},
     {"remove-from-essentials", 31},
     {"find-in-page", 32},
@@ -278,6 +280,18 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   add_if(IsEnabled(controller, IDC_SHARING_HUB_SCREENSHOT),
          ChromeCommand(controller, "capture-screenshot", u"Capture Screenshot",
                        kScreenshotRegionIcon, IDC_SHARING_HUB_SCREENSHOT));
+  // Zen's cmd_zenToggleTabsOnRight (no shortcut): the sidebar to the other
+  // side, like the setting.
+  if (features::IsSidebarEnabled()) {
+    KoanCommand command =
+        MakeCommand("toggle-tabs-on-right", u"Toggle Tabs on right",
+                    kKoanSidebarsRightIcon);
+    command.run =
+        base::BindRepeating([](KoanBrowserViewController& controller) {
+          controller.compact_mode()->ToggleTabsOnRight();
+        });
+    commands.push_back(std::move(command));
+  }
   // With Koan's pinned tabs off, its Essentials are just pinned tabs, so
   // these pin and unpin.
   add_if(pinned_tabs ? tab && !essential &&

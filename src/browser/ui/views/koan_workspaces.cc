@@ -79,6 +79,7 @@
 #include "koan/browser/ui/views/koan_space_creation.h"
 #include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_space_menu.h"
+#include "koan/browser/ui/views/koan_space_navigation.h"
 #include "koan/browser/ui/views/koan_space_swipe.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
@@ -235,9 +236,10 @@ void SetSpaceRowsVisible(TabStripView* tab_strip, bool visible) {
 }
 
 // Zen's mouse wheel over the sidebar (ZenSpaceManager's toolbox "wheel"
-// listener): a horizontal wheel, or a vertical one with Ctrl
-// (zen.workspaces.scroll-modifier-key), switches Space; on macOS also Zen's
-// two-finger swipe. Runs before upstream's swipe controller on the same view.
+// listener): a horizontal wheel, or a vertical one with the modifier of
+// zen.workspaces.scroll-modifier-key (Ctrl by default), switches Space; on
+// macOS also Zen's two-finger swipe. Runs before upstream's swipe controller on
+// the same view.
 class SpaceWheelHandler : public ui::EventHandler {
  public:
   explicit SpaceWheelHandler(KoanWorkspaceController* controller)
@@ -267,9 +269,10 @@ class SpaceWheelHandler : public ui::EventHandler {
     // which Zen leaves alone (only line scrolling switches).
 #else
     // A horizontal wheel (or touchpad scroll) is upstream's swipe, which
-    // switches Space too (through PickSpaceTab() and WrapsSpaces()); Ctrl
-    // with a vertical wheel is Zen's. Not touchpad scrolling.
-    if (!event->IsMouseWheelEvent() || !event->IsControlDown() ||
+    // switches Space too (through PickSpaceTab() and WrapsSpaces()); the
+    // modifier with a vertical wheel is Zen's. Not touchpad scrolling.
+    if (!event->IsMouseWheelEvent() ||
+        !controller_->IsSpaceScrollModifierDown(*event) ||
         (event->flags() & ui::EF_PRECISION_SCROLLING_DELTA)) {
       return;
     }
@@ -283,13 +286,14 @@ class SpaceWheelHandler : public ui::EventHandler {
     float delta = 0;
     if (x != 0 && y == 0) {
       delta = -x;
-    } else if (y != 0 && x == 0 && event->IsControlDown()) {
+    } else if (y != 0 && x == 0 &&
+               controller_->IsSpaceScrollModifierDown(*event)) {
       delta = -y;
     }
     if (delta == 0) {
       return;
     }
-    // Wheel down or right: the next Space (Zen's natural-scroll off).
+    // Wheel down or right: the next Space (unless natural scroll is on).
     controller_->OnSpaceWheel((delta > 0) != base::i18n::IsRTL());
     event->SetHandled();
     event->StopPropagation();
@@ -535,12 +539,12 @@ bool KoanWorkspaceController::RunGroupCommand(int command_id) {
         DeleteSpace(*active);
       }
       return true;
-    // ⌘⌃X / ⌘⌃Z: the next or previous Space, wrapping around.
+    // ⌘⌃X / ⌘⌃Z: the next or previous Space.
     case IDC_FOCUS_NEXT_TAB_GROUP:
-      Cycle(/*forward=*/true);
+      Navigate(/*forward=*/true);
       return true;
     case IDC_FOCUS_PREV_TAB_GROUP:
-      Cycle(/*forward=*/false);
+      Navigate(/*forward=*/false);
       return true;
     // ⌘⌃C "New tab in group": a new tab is always in the Space, so Koan's new
     // tab (the URL bar, as ⌘T).
@@ -673,10 +677,44 @@ void KoanWorkspaceController::Cycle(bool forward) {
   auto it = std::ranges::find(spaces, true, &SpaceInfo::active);
   const size_t index =
       it == spaces.end() ? 0 : static_cast<size_t>(it - spaces.begin());
-  // zen.workspaces.wrap-around-navigation (on by default).
   const size_t next = forward ? (index + 1) % spaces.size()
                               : (index + spaces.size() - 1) % spaces.size();
   SwitchTo(spaces[next].id);
+}
+
+bool KoanWorkspaceController::Navigate(bool forward) {
+  const std::vector<SpaceInfo> spaces = GetSpaces();
+  auto it = std::ranges::find(spaces, true, &SpaceInfo::active);
+  const size_t index =
+      it == spaces.end() ? 0 : static_cast<size_t>(it - spaces.begin());
+  const std::optional<size_t> next =
+      NextSpaceIndex(index, spaces.size(), forward, WrapsAround());
+  if (!next) {
+    return false;
+  }
+  SwitchTo(spaces[*next].id);
+  return true;
+}
+
+bool KoanWorkspaceController::WrapsAround() const {
+  return GetPrefs()->GetBoolean(prefs::kWorkspacesWrapAround);
+}
+
+bool KoanWorkspaceController::IsSpaceScrollModifierDown(
+    const ui::Event& event) const {
+  return koan::IsSpaceScrollModifierDown(
+      GetPrefs()->GetString(prefs::kWorkspacesScrollModifierKey),
+      event.IsControlDown(), event.IsAltDown(), event.IsShiftDown(),
+      event.IsCommandDown());
+}
+
+float KoanWorkspaceController::SwipeAmount(float amount) const {
+  return GetPrefs()->GetBoolean(prefs::kWorkspacesNaturalScroll) ? -amount
+                                                                 : amount;
+}
+
+PrefService* KoanWorkspaceController::GetPrefs() const {
+  return browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs();
 }
 
 void KoanWorkspaceController::CreateSpace(const std::u16string& name,
@@ -1190,7 +1228,8 @@ void KoanWorkspaceController::OnSpaceWheel(bool forward) {
   const base::TimeTicks now = base::TimeTicks::Now();
   if (now - last_wheel_switch_ >= kWheelSwitchCooldown) {
     last_wheel_switch_ = now;
-    Cycle(forward);
+    Navigate(forward !=
+             GetPrefs()->GetBoolean(prefs::kWorkspacesNaturalScroll));
   }
 }
 
@@ -1911,13 +1950,9 @@ void KoanWorkspaceController::PlaySwitchAnimation(
     return static_cast<int>(std::ranges::find(spaces, id, &SpaceInfo::id) -
                             spaces.begin());
   };
-  const int count = static_cast<int>(spaces.size());
-  int diff = index_of(to) - index_of(from);
-  if (diff > count / 2) {
-    diff -= count;
-  } else if (diff < -(count / 2)) {
-    diff += count;
-  }
+  const int diff =
+      SpaceSwitchSteps(index_of(from), index_of(to),
+                       static_cast<int>(spaces.size()), WrapsAround());
   // Moving forward, the new Space comes in from the right (in LTR).
   const float distance = static_cast<float>(tab_strip->width()) *
                          ((diff > 0) != base::i18n::IsRTL() ? 1.f : -1.f);
@@ -2010,7 +2045,7 @@ void KoanWorkspaceController::UpdateSwipe(float amount) {
     return;
   }
   const float width = static_cast<float>(header_->parent()->width());
-  const float offset = drag_.Update(amount, width);
+  const float offset = drag_.Update(SwipeAmount(amount), width);
   swipe_timer_.Start(FROM_HERE, kSwipeIdleTimeout, this,
                      &KoanWorkspaceController::OnSwipeTimeout);
   if (!gfx::Animation::ShouldRenderRichAnimation()) {
@@ -2034,11 +2069,14 @@ void KoanWorkspaceController::EndSwipe(float amount, float velocity) {
     drag_.Reset();
     return;
   }
-  if (SwipeSucceeds(amount, velocity)) {
-    // Fingers moving right (a negative amount) go to the next Space, the
-    // strip moving left, as Zen's does (ZenSpacesSwipe #handleSwipeEnd()).
-    // The slide takes the dragged offset (PlaySwitchAnimation()).
-    Cycle((amount < 0) != base::i18n::IsRTL());
+  amount = SwipeAmount(amount);
+  velocity = SwipeAmount(velocity);
+  // Fingers moving right (a negative amount) go to the next Space, the
+  // strip moving left, as Zen's does (ZenSpacesSwipe #handleSwipeEnd()).
+  // The slide takes the dragged offset (PlaySwitchAnimation()). Past the
+  // last or first Space without wrap-around, the drag springs back.
+  if (SwipeSucceeds(amount, velocity) &&
+      Navigate((amount < 0) != base::i18n::IsRTL())) {
     // If there was no slide (no animation, no other Space), the drag is over.
     drag_.Reset();
     DropSwitchLayers();

@@ -111,6 +111,12 @@ source_set("space_theme") {
   ]
 }
 
+# Which Space comes next, and the wheel's modifier (koan_space_navigation.h):
+# pure, so the unit tests need nothing else.
+source_set("space_navigation") {
+  sources = [ "koan_space_navigation.h" ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
@@ -120,6 +126,7 @@ test("koan_views_unittests") {
     "koan_lights_geometry_unittest.cc",
     "koan_pinned_site_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
+    "koan_space_navigation_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
   ]
   deps = [
@@ -127,6 +134,7 @@ test("koan_views_unittests") {
     ":lights_geometry",
     ":pinned_site",
     ":sidebar_curve",
+    ":space_navigation",
     ":swipe_tracker",
     "//base",
     "//base/test:run_all_unittests",
@@ -316,6 +324,7 @@ source_set("impl") {
     ":glass_tint",
     ":pinned_site",
     ":sidebar_curve",
+    ":space_navigation",
     ":swipe_tracker",
     ":grain_png",
     ":views",
