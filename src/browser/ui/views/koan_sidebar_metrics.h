@@ -134,6 +134,13 @@ inline constexpr int kFloatingUrlBarShadowSpread = -15;
 // search-glass.svg as Zen draws it in the identity box, a 16px box with a
 // 14px glyph at half opacity (kKoanUrlbarSearchGlassIcon).
 inline constexpr int kFloatingUrlBarMagnifierSize = 16;
+// Zen's input row on macOS (measured on Zen 1.24b, .agent/notes/
+// compare-2026-11-06.md section 4): the magnifier's glyph starts 19pt from the
+// card's left edge and the text 52pt from it (19.5pt after the glyph).
+inline constexpr int kFloatingUrlBarGlyphInset = 19;
+inline constexpr int kFloatingUrlBarTextInset = 52;
+// Where kKoanUrlbarSearchGlassIcon's glyph starts in its 16-unit canvas.
+inline constexpr float kSearchGlassGlyphStart = 1.f / 16.f;
 // The divider under the input stops short of the card's edges (Zen's input row
 // padding).
 inline constexpr int kFloatingUrlBarDividerInset = 20;
