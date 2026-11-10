@@ -213,9 +213,13 @@ creating anything; what you had typed comes back if you press Ctrl+T again
 within 45 seconds.
 
 Hover the pill (or Tab to it) for the **copy** button: it copies the page's
-URL and says so ("Copied current URL!"), as do Ctrl+Shift+C and
+URL, without tracking parameters (utm_*, fbclid ...: Firefox's list, as in
+Zen), and says so ("Copied current URL!", with a Share button on macOS), as
+do Ctrl+Shift+C and
 Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The site's icon at the start of the
-pill opens the site's panel (security, permissions, cookies and site settings);
+pill opens the site's panel: Zen's row of Share (macOS's share sheet),
+Screenshot, Reader Mode and Bookmark buttons on top, then security,
+permissions, cookies and site settings;
 on an empty tab it is a magnifier that edits the address. As in Zen, the pill
 and the URL bar show none of Chromium's page actions (site settings, install,
 bookmark star).

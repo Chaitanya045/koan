@@ -112,6 +112,17 @@ source_set("space_theme") {
   ]
 }
 
+# Zen's copy and share without tracking parameters (koan_strip_on_share.h,
+# Firefox's MPL-2.0 strip-on-share list): pure, for the unit tests.
+source_set("strip_on_share") {
+  sources = [
+    "koan_strip_on_share.cc",
+    "koan_strip_on_share.h",
+  ]
+  deps = [ "//base" ]
+  public_deps = [ "//url" ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
@@ -121,6 +132,7 @@ test("koan_views_unittests") {
     "koan_lights_geometry_unittest.cc",
     "koan_pinned_site_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
+    "koan_strip_on_share_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
   ]
   deps = [
@@ -128,6 +140,7 @@ test("koan_views_unittests") {
     ":lights_geometry",
     ":pinned_site",
     ":sidebar_curve",
+    ":strip_on_share",
     ":swipe_tracker",
     "//base",
     "//base/test:run_all_unittests",
@@ -226,6 +239,8 @@ source_set("impl") {
     "koan_sidebar_tabs_controller.h",
     "koan_url_bar_controller.cc",
     "koan_url_bar_controller.h",
+    "koan_site_panel_actions.cc",
+    "koan_site_panel_actions.h",
     "koan_space_bar.cc",
     "koan_space_bar.h",
     "koan_space_creation.cc",
@@ -319,6 +334,7 @@ source_set("impl") {
     ":glass_tint",
     ":pinned_site",
     ":sidebar_curve",
+    ":strip_on_share",
     ":swipe_tracker",
     ":grain_png",
     ":views",
@@ -356,6 +372,8 @@ source_set("impl") {
     "//components/split_tabs",
     "//components/vector_icons",
     "//content/public/browser",
+    "//chrome/browser/bookmarks",
+    "//components/bookmarks/browser",
     "//third_party/blink/public/common",
     "//third_party/icu",
     "//ui/views/controls/webview",
