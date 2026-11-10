@@ -27,9 +27,11 @@ class KoanAgentIndicator;
 class KoanCommandPalette;
 class KoanCompactModeController;
 class KoanDownloadAnimation;
+class KoanFolderController;
 class KoanGlanceController;
 class KoanPinnedTabController;
 class KoanLibraryController;
+class KoanLoadingIndicator;
 class KoanMediaController;
 class KoanShortcutController;
 class KoanSidebarTabsController;
@@ -84,6 +86,7 @@ class KoanBrowserViewController : public views::ViewObserver,
     return sidebar_tabs_.get();
   }
   KoanPinnedTabController* pinned_tabs() const { return pinned_tabs_.get(); }
+  KoanFolderController* folders() const { return folders_.get(); }
   KoanThemeController* theme() const { return theme_.get(); }
   KoanGlanceController* glance() const { return glance_.get(); }
   KoanLibraryController* library() const { return library_.get(); }
@@ -132,12 +135,14 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanUrlBarController> url_bar_;
   std::unique_ptr<KoanWorkspaceController> workspaces_;
   std::unique_ptr<KoanPinnedTabController> pinned_tabs_;
+  std::unique_ptr<KoanFolderController> folders_;
   std::unique_ptr<KoanThemeController> theme_;
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanLibraryController> library_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
   std::unique_ptr<KoanMediaController> media_;
   std::unique_ptr<KoanDownloadAnimation> download_animation_;
+  std::unique_ptr<KoanLoadingIndicator> loading_indicator_;
   std::unique_ptr<KoanWindowDragController> window_drag_;
   std::unique_ptr<KoanWelcome> welcome_;
   // Zen's window sync: after the Spaces and pinned tabs it reconciles.

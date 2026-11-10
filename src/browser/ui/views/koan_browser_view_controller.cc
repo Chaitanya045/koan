@@ -38,8 +38,10 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_download_animation.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_loading_indicator.h"
 #include "koan/browser/ui/views/koan_media_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
@@ -138,6 +140,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
                                                       compact_mode_.get())),
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
       pinned_tabs_(std::make_unique<KoanPinnedTabController>(browser_view)),
+      folders_(std::make_unique<KoanFolderController>(browser_view)),
       theme_(std::make_unique<KoanThemeController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       library_(std::make_unique<KoanLibraryController>(browser_view)),
@@ -146,6 +149,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       media_(std::make_unique<KoanMediaController>(browser_view)),
       download_animation_(
           std::make_unique<KoanDownloadAnimation>(browser_view)),
+      loading_indicator_(std::make_unique<KoanLoadingIndicator>(browser_view)),
       // Page presses are where downloads fly from. Unretained: the
       // animation outlives the drag controller (declared before it).
       window_drag_(std::make_unique<KoanWindowDragController>(
@@ -213,12 +217,14 @@ void KoanBrowserViewController::TearDown() {
   sidebar_tabs_->OnBrowserViewDestroying();
   workspaces_->OnBrowserViewDestroying();
   pinned_tabs_->OnBrowserViewDestroying();
+  folders_->OnBrowserViewDestroying();
   theme_->OnBrowserViewDestroying();
   glance_->OnBrowserViewDestroying();
   library_->OnBrowserViewDestroying();
   toast_->Close();
   media_->OnBrowserViewDestroying();
   download_animation_->OnBrowserViewDestroying();
+  loading_indicator_->OnBrowserViewDestroying();
   window_drag_->OnBrowserViewDestroying();
   welcome_->OnBrowserViewDestroying();
 }
@@ -246,6 +252,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     compact_mode_->OnAddedToWidget();
     sidebar_tabs_->OnAddedToWidget();
     workspaces_->OnAddedToWidget();
+    folders_->OnAddedToWidget();
     // Once the window's Spaces are set up.
     window_sync_->OnAddedToWidget();
     theme_->OnAddedToWidget();
@@ -254,6 +261,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     // After the workspace switcher: the media cards go above it.
     media_->OnAddedToWidget();
     download_animation_->OnAddedToWidget();
+    loading_indicator_->OnAddedToWidget();
     welcome_->OnAddedToWidget();
     // After the welcome: both post a task, and the URL bar's must run after
     // the welcome's (FIFO) so it sees whether the welcome is showing.
@@ -272,6 +280,7 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   toast_->OnBrowserViewLayout();
   media_->OnBrowserViewLayout();
   download_animation_->OnBrowserViewLayout();
+  loading_indicator_->OnBrowserViewLayout();
   welcome_->OnBrowserViewLayout();
   agent_indicator_->OnBrowserViewLayout();
 }

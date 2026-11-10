@@ -39,6 +39,12 @@ bool UseSingleReflowSidebarAnimation();
 // as it is, and the layer has no transform.
 double LayoutSidebarReveal(views::View* browser_view, double progress);
 
+// Compact mode has just hidden the docked sidebar (the page already takes its
+// place): the strip is shown out, over the page, and slides away in Zen's
+// 0.1 s (kSidebarToggleDuration), as Zen's animateCompactMode() does. Nothing
+// unless compact mode is active in the window.
+void SlideSidebarAway(views::View* browser_view);
+
 // The next time the sidebar is revealed (the strip going out) it just is out,
 // with no slide, once; `snap` false takes that back. For an empty tab holding
 // the sidebar as compact mode hides it: Zen applies that state without

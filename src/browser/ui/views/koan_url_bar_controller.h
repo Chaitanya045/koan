@@ -16,7 +16,9 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
@@ -69,9 +71,11 @@ class KoanUrlBarCardFill;
 //
 // In the multiple-toolbars layout the omnibox stays in the toolbar; only the
 // new-tab behaviour applies.
-class KoanUrlBarController : public views::ViewObserver,
-                             public ui::EventHandler,
-                             public ui::NativeThemeObserver {
+class KoanUrlBarController
+    : public views::ViewObserver,
+      public ui::EventHandler,
+      public ui::NativeThemeObserver,
+      public web_modal::WebContentsModalDialogManager::Observer {
  public:
   enum class Placement { kNone, kInPill, kFloating };
 
@@ -169,6 +173,12 @@ class KoanUrlBarController : public views::ViewObserver,
   // settings):
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
+  // web_modal::WebContentsModalDialogManager::Observer (the active tab's,
+  // while the bar is open): a tab-modal dialog (alert(), a sign-in prompt)
+  // hides the open bar until it closes, as Zen's popover blocker does
+  // (UrlbarInputBase-mjs.patch).
+  void OnWillShow() override;
+
  private:
   // Whether the floating bar can open now: the feature, a normal window with
   // tabs and an omnibox, not in a fullscreen that hides the toolbar's view.
@@ -203,6 +213,14 @@ class KoanUrlBarController : public views::ViewObserver,
   // Posted after the omnibox got focus: an invisible focus closes the bar
   // again.
   void CloseIfFocusInvisible();
+  // Z23: posted when the focus came back with the window: the suggestions
+  // for what is typed, which upstream closed on the blur.
+  void ReopenSuggestions();
+  // Z43: whether the active tab shows a tab-modal dialog; hiding the open bar
+  // for it, and showing it again.
+  bool IsTabModalDialogActive() const;
+  void SetYieldedToDialog(bool yielded);
+  void CheckDialogGone();
   // Asks for the open tabs and top sites again, up to `retries_left` times,
   // while the first request found no list (upstream drops it while the page
   // has no entry or the popup is closing); after a new-tab session opened
@@ -267,6 +285,18 @@ class KoanUrlBarController : public views::ViewObserver,
   gfx::Size card_size_;
   // The omnibox, while this handles its keys (Esc).
   views::ViewTracker key_target_;
+
+  // Z43: whether the open bar is hidden for a tab-modal dialog, and the check
+  // that shows it again once the dialog is gone (the manager says when one
+  // shows, not when it closes).
+  bool yielded_to_dialog_ = false;
+  base::RepeatingTimer dialog_gone_timer_;
+  base::ScopedObservation<web_modal::WebContentsModalDialogManager,
+                          web_modal::WebContentsModalDialogManager::Observer>
+      dialog_observation_{this};
+  // Z23: the focus left with the window while the bar was open (Zen's
+  // browser.urlbar.closeOnWindowBlur=false keeps its suggestions too).
+  bool left_with_window_ = false;
 
   base::WeakPtrFactory<KoanUrlBarController> weak_factory_{this};
 };

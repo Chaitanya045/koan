@@ -71,6 +71,12 @@ struct KoanTabState {
   // Moved to another Space, or restored: back at the end of its Space's
   // pinned tabs if it isn't among them.
   bool changed_group = false;
+  // Moved by a tab drag since the last check: Zen's drop rules apply. Other
+  // moves (the keyboard, an extension) stay in their section, as Zen keeps
+  // pinned and unpinned tabs apart (moveTabTo). (A move Koan didn't make
+  // while this window's drag is on, or one in the moments between a drop
+  // and the check, counts as dragged too: rare, and decided like a drop.)
+  bool dragged = false;
   // Got its pinned URL when it was added, before the session knew the tab.
   bool unsaved = false;
 
@@ -269,6 +275,8 @@ class KoanPinnedTabController : public TabStripModelObserver {
   // is pinned, an Essential dropped there keeps its pinned URL) and the
   // Essentials' limit.
   void ScheduleNormalize(tabs::TabInterface* tab);
+  // A tab drag is on in this window (moving, or dragged in, here).
+  bool IsDraggingHere() const;
   void Normalize();
   // Clears the tab's pinned state (it stays where it is).
   void ClearPinnedState(tabs::TabInterface* tab);

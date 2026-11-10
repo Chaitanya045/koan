@@ -37,9 +37,11 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_keyboard_state.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
@@ -432,7 +434,7 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
     return false;
   }
   if (mru) {
-    CycleToRecentTab(model);
+    CycleToRecentTab(model, key.forward);
     return true;
   }
   const bool forward = key.forward;
@@ -445,7 +447,7 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
   for (int step = 1; step < count; ++step) {
     const int i = (active + (forward ? step : count - step)) % count;
     tabs::TabInterface* tab = model->GetTabAtIndex(i);
-    if (model->IsTabCollapsed(i) ||
+    if (model->IsTabCollapsed(i) || IsEmptyTab(tab) ||
         (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
         (within_kind && tab->IsPinned() != active_pinned) ||
         (skip_pending && IsTabUnloaded(tab->GetContents()))) {
@@ -459,7 +461,9 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
   return true;
 }
 
-void KoanShortcutController::CycleToRecentTab(TabStripModel* model) {
+// static
+std::vector<tabs::TabHandle> KoanShortcutController::RecentTabs(
+    TabStripModel* model) {
   // Zen's recently-used list (browser-ctrlTab-js.patch) holds the tabs that
   // are shown, so this Space's and the Essentials, and never one that hasn't
   // loaded (zen.ctrlTab.show-pending-tabs, false). Chromium's
@@ -467,25 +471,79 @@ void KoanShortcutController::CycleToRecentTab(TabStripModel* model) {
   // another Space's collapsed group to show one.
   const std::optional<tab_groups::TabGroupId> workspace =
       model->GetFocusedGroup();
-  tabs::TabInterface* recent = nullptr;
+  std::vector<tabs::TabInterface*> tabs;
   for (int i = 0; i < model->count(); ++i) {
     tabs::TabInterface* tab = model->GetTabAtIndex(i);
-    content::WebContents* contents = tab->GetContents();
-    if (i == model->active_index() || model->IsTabCollapsed(i) ||
-        (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
-        IsTabUnloaded(contents)) {
+    if (i != model->active_index() &&
+        (model->IsTabCollapsed(i) ||
+         (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
+         IsTabUnloaded(tab->GetContents()))) {
       continue;
     }
-    if (!recent || contents->GetLastActiveTime() >
-                       recent->GetContents()->GetLastActiveTime()) {
-      recent = tab;
-    }
+    tabs.push_back(tab);
   }
-  if (recent) {
-    model->ActivateTabAt(
-        model->GetIndexOfTab(recent),
-        TabStripUserGestureDetails(
-            TabStripUserGestureDetails::GestureType::kKeyboard));
+  // (The active tab was shown last of all.)
+  tabs::TabInterface* active = model->GetActiveTab();
+  std::ranges::stable_sort(
+      tabs, [active](tabs::TabInterface* a, tabs::TabInterface* b) {
+        if (a == active || b == active) {
+          return a == active && b != active;
+        }
+        return a->GetContents()->GetLastActiveTime() >
+               b->GetContents()->GetLastActiveTime();
+      });
+  std::vector<tabs::TabHandle> handles;
+  for (tabs::TabInterface* tab : tabs) {
+    handles.push_back(tab->GetHandle());
+  }
+  return handles;
+}
+
+void KoanShortcutController::CycleToRecentTab(TabStripModel* model,
+                                              bool forward) {
+  tabs::TabInterface* active = model->GetActiveTab();
+  // A new walk, unless this press continues one: Ctrl still held since the
+  // last, and the tab it showed still the active one.
+  const bool continues =
+      !recent_walk_.empty() && IsControlKeyDown() && active &&
+      recent_walk_[recent_walk_index_] == active->GetHandle();
+  if (!continues) {
+    recent_walk_ = RecentTabs(model);
+    recent_walk_index_ = 0;
+    // The first press goes to the last tab shown, Shift or not (Firefox opens
+    // its all-tabs list on a first Ctrl+Shift+Tab instead).
+    forward = true;
+  }
+  const size_t count = recent_walk_.size();
+  // Firefox's advanceFocus(): on round the list, the active tab (its first)
+  // included; a tab that has gone since the walk began is passed over.
+  for (size_t step = 0; step + 1 < count; ++step) {
+    recent_walk_index_ =
+        (recent_walk_index_ + (forward ? 1 : count - 1)) % count;
+    tabs::TabInterface* tab = recent_walk_[recent_walk_index_].Get();
+    const int index = tab ? model->GetIndexOfTab(tab) : TabStripModel::kNoTab;
+    if (index == TabStripModel::kNoTab) {
+      continue;
+    }
+    if (tab != active) {
+      model->ActivateTabAt(
+          index, TabStripUserGestureDetails(
+                     TabStripUserGestureDetails::GestureType::kKeyboard));
+    }
+    break;
+  }
+  if (IsControlKeyDown()) {
+    control_release_timer_.Start(FROM_HERE, base::Milliseconds(50), this,
+                                 &KoanShortcutController::CheckControlReleased);
+  } else {
+    recent_walk_.clear();
+  }
+}
+
+void KoanShortcutController::CheckControlReleased() {
+  if (!IsControlKeyDown()) {
+    control_release_timer_.Stop();
+    recent_walk_.clear();
   }
 }
 

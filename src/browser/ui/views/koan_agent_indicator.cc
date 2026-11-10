@@ -16,6 +16,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/agent/koan_agent_forwarder.h"
+#include "koan/browser/agent/koan_agent_page_surfaces.h"
+#include "koan/browser/agent/koan_agent_prompts.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
@@ -36,6 +38,7 @@ namespace {
 using koan::agent::AgentControlService;
 using koan::agent::ConnectedClient;
 using koan::agent::ControlledTab;
+using koan::agent::HeldPrompt;
 using koan::agent::TabState;
 
 // The buttons act from a fresh task: what they do changes the pill, which
@@ -53,6 +56,18 @@ void Later(void (AgentControlService::*action)(const std::string&),
             }
           },
           action, target_id));
+}
+
+void PromptLater(void (AgentControlService::*action)(uint64_t), uint64_t id) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](void (AgentControlService::*act)(uint64_t), uint64_t prompt_id) {
+            if (AgentControlService* service = AgentControlService::Get()) {
+              (service->*act)(prompt_id);
+            }
+          },
+          action, id));
 }
 
 void StopAllLater() {
@@ -78,6 +93,16 @@ class KoanAgentIndicatorView : public views::View {
     label_->SetEnabledColor(kColorKoanToastForeground);
     // Hand back and Take back act on the tab they were shown for.
     const std::string target_id = content.target_id;
+    if (content.prompt_id) {
+      AddButton(
+          u"Open", u"Show what the page asks",
+          base::BindRepeating(&PromptLater, &AgentControlService::OpenPrompt,
+                              content.prompt_id));
+      AddButton(
+          u"Dismiss", u"Say no to what the page asks",
+          base::BindRepeating(&PromptLater, &AgentControlService::DismissPrompt,
+                              content.prompt_id));
+    }
     if (content.hand_back) {
       AddButton(u"Hand back", u"Let the agent continue in this tab",
                 base::BindRepeating(&Later, &AgentControlService::HandBack,
@@ -160,9 +185,25 @@ std::u16string KoanAgentIndicator::TextFor(
 // static
 KoanAgentIndicator::Content KoanAgentIndicator::ContentFor(
     const std::vector<ConnectedClient>& clients,
-    const std::vector<ControlledTab>& tabs_in_window) {
+    const std::vector<ControlledTab>& tabs_in_window,
+    const std::vector<HeldPrompt>& prompts) {
   Content content;
   content.text = TextFor(clients);
+  // A page waiting for the user first, oldest first: the rest follow as each
+  // is answered.
+  if (!prompts.empty() && !content.text.empty()) {
+    const koan::agent::UserPrompt& prompt = prompts.front().prompt;
+    content.prompt_id = prompt.id;
+    content.text =
+        base::StrCat({u"● ", koan::agent::PromptTextFor(
+                                 prompt.surface, prompt.host, prompt.detail)});
+    if (prompts.size() > 1) {
+      base::StrAppend(
+          &content.text,
+          {u" (+", base::NumberToString16(prompts.size() - 1), u")"});
+    }
+    return content;
+  }
   // A paused tab first: the user has something to decide.
   const ControlledTab* paused = nullptr;
   const ControlledTab* controlled = nullptr;
@@ -215,7 +256,8 @@ void KoanAgentIndicator::OnAgentControlChanged() {
       tabs.push_back(std::move(tab));
     }
   }
-  const Content content = ContentFor(service->clients(), tabs);
+  const Content content =
+      ContentFor(service->clients(), tabs, service->user_prompts());
   if (content.text.empty()) {
     Hide();
   } else {

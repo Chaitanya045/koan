@@ -4,6 +4,7 @@
 
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -14,6 +15,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
+#include "chrome/browser/ui/views/animations/common_animation_values.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "koan/browser/koan_features.h"
@@ -35,6 +37,11 @@
 #include "ui/views/widget/widget.h"
 
 namespace koan {
+
+// Upstream's sidebar expand fades the hover overlay out over its last
+// kFlyoutFadeMs (TabStripAnimations::GenerateAnimations()): Koan's shorter
+// expand (the hook there) must still have room for it.
+static_assert(kSidebarToggleDurationMs >= browser_animations::kFlyoutFadeMs);
 
 class SidebarReveal;
 
@@ -82,6 +89,17 @@ class SidebarReveal {
   // the sidebar out as compact mode hides it, and Zen doesn't animate that).
   void SnapNextReveal(bool snap) { snap_next_ = snap; }
 
+  // Compact mode has just hidden the docked sidebar: it is out, over the page
+  // that already fills its place, and slides away (Zen's animateCompactMode).
+  void SlideAway() {
+    snap_next_ = false;
+    ++generation_;
+    animating_ = false;
+    value_ = 1.0;
+    target_ = 1.0;
+    SetTarget(0.0, kSidebarToggleDuration);
+  }
+
   // Compact mode is off: the strip is where the layout puts it.
   void Reset() {
     snap_next_ = false;
@@ -103,7 +121,9 @@ class SidebarReveal {
     return SidebarSlideValue(from_, target_, t);
   }
 
-  void SetTarget(double target) {
+  // `duration`: the slide's, if not the reveal's or the hide's.
+  void SetTarget(double target,
+                 std::optional<base::TimeDelta> duration = std::nullopt) {
     // The one-shot snap is for the next reveal only: any call spends it, so a
     // snap armed for a lock taken with the strip already out (no SetTarget(1)
     // follows) doesn't make a later hover reveal jump.
@@ -127,8 +147,8 @@ class SidebarReveal {
     animating_ = true;
     value_ = from;
     slide_start_ = base::TimeTicks::Now();
-    slide_duration_ =
-        target > from ? kSidebarRevealDuration : kSidebarHideDuration;
+    slide_duration_ = duration.value_or(target > from ? kSidebarRevealDuration
+                                                      : kSidebarHideDuration);
     // Zen's spring is smooth: 25 segments follow it to within a fraction of
     // a pixel; the ease needs fewer.
     const int segments = target > from ? 25 : 10;
@@ -348,6 +368,24 @@ double LayoutSidebarReveal(views::View* browser_view, double progress) {
         std::make_unique<SidebarReveal>(browser_view, region));
   }
   return reveal->Update(progress);
+}
+
+void SlideSidebarAway(views::View* browser_view) {
+  auto* view = views::AsViewClass<BrowserView>(browser_view);
+  views::View* region = view ? view->tab_strip_view() : nullptr;
+  if (!region || region->GetClassName() != "VerticalTabStripRegionView" ||
+      !region->layer() || !IsCompactModeActive(browser_view)) {
+    return;
+  }
+  SidebarReveal* reveal = region->GetProperty(kSidebarRevealKey);
+  if (!reveal) {
+    reveal = region->SetProperty(
+        kSidebarRevealKey,
+        std::make_unique<SidebarReveal>(browser_view, region));
+  }
+  reveal->SlideAway();
+  // The layout keeps the strip out (over the page) while it slides.
+  browser_view->InvalidateLayout();
 }
 
 void SnapNextSidebarReveal(views::View* browser_view, bool snap) {
