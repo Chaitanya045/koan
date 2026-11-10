@@ -146,6 +146,22 @@ inline constexpr char kWorkspaceTintSavedVariant[] =
 // groups).
 inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 
+// Zen's window sync (zen.window-sync.enabled, ZenWindowSync.sys.mjs): every
+// normal window of the profile shows the same Spaces, Essentials and pinned
+// tabs (KoanWindowSync). Read when a window opens: a window open already
+// stays as it is.
+inline constexpr char kWindowSyncEnabled[] = "koan.window_sync.enabled";
+// Zen's zen.window-sync.sync-only-pinned-tabs: only Essentials and pinned
+// tabs sync, normal tabs stay in their window. Zen 1.24b's default is false
+// (every tab syncs); Koan's is true until normal tab sync exists, and false
+// changes nothing yet.
+inline constexpr char kWindowSyncOnlyPinned[] =
+    "koan.window_sync.sync_only_pinned";
+// The synced state itself (koan::window_sync::WindowSyncModel::ToValue()):
+// {"spaces": [...], "items": [...]}. A window that opens with nothing to
+// restore takes it, and a restored window is reconciled to it.
+inline constexpr char kWindowSyncState[] = "koan.window_sync.state";
+
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
 // whether Glance is on, and which modifier+click previews a link: "alt"
 // (Zen's default on every platform, Option on macOS), "ctrl", "shift" or

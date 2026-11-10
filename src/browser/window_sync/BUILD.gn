@@ -1,0 +1,15 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Zen's window sync: the profile's canonical Spaces, Essentials and pinned
+# tabs, and which window has a synced tab's page (koan_window_sync_model.h).
+# Pure logic over //base, unit tested in //koan/test:koan_unittests;
+# KoanWindowSync (//koan/browser/ui/views:impl) applies it to the windows.
+source_set("model") {
+  sources = [
+    "koan_window_sync_model.cc",
+    "koan_window_sync_model.h",
+  ]
+  public_deps = [ "//base" ]
+}
