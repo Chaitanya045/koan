@@ -1,17 +1,29 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..b8e8623fb372d96987e31251b032778435b4bffb 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -88,6 +88,8 @@
+@@ -88,6 +88,9 @@
  #include "content/public/common/drop_data.h"
  #include "content/public/common/url_constants.h"
  #include "content/public/common/window_container_type.mojom-shared.h"
 +#include "koan/browser/agent/koan_agent_tab_hooks.h"
++#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_glance.h"
  #include "extensions/browser/extension_registry.h"
  #include "extensions/browser/extension_system.h"
  #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
-@@ -579,6 +581,35 @@
+@@ -547,6 +550,11 @@
+ BrowserWebContentsDelegate::IsPrerender2Supported(
+     content::WebContents& web_contents,
+     content::PreloadingTriggerType trigger_type) {
++  // Koan: a prerendered page would be in the default partition, not the
++  // container's.
++  if (!koan::containers::AllowsPrerender(web_contents)) {
++    return content::PreloadingEligibility::kPreloadingDisabled;
++  }
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents.GetBrowserContext());
+   return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs());
+@@ -579,6 +587,35 @@
                                    std::move(navigation_handle_callback));
    }
  
@@ -47,7 +59,7 @@ index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..b8e8623fb372d96987e31251b0327784
    // If the source is already split, navigate the other pane instead of
    // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
    // sees new_contents == this and skips the DidOpenRequestedURL notification,
-@@ -719,6 +750,11 @@
+@@ -719,6 +756,11 @@
      }
    }
  

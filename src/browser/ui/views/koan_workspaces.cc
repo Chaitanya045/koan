@@ -65,6 +65,7 @@
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
@@ -362,6 +363,8 @@ KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
     : browser_view_(browser_view),
       swipe_(std::make_unique<KoanSpaceSwipe>(this)) {
   if (IsEnabled()) {
+    // Agent control opens agents' tabs in containers, in windows like this.
+    containers::InstallAgentTabOpener();
     tab_strip_model()->AddObserver(this);
     session_restored_subscription_ =
         SessionRestore::RegisterOnSessionRestoredCallback(
@@ -804,6 +807,14 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
   }
   last_active_tabs_[space] = tab;
   SwitchTo(space);
+}
+
+tab_groups::TabGroupId KoanWorkspaceController::CreateBackgroundSpace(
+    int index,
+    const SpaceData& data) {
+  const tab_groups::TabGroupId space = NewSpaceGroup({index});
+  WriteSpace(space, data);
+  return space;
 }
 
 tab_groups::TabGroupId KoanWorkspaceController::NewSpaceGroup(
@@ -2092,6 +2103,13 @@ void KoanWorkspaceController::OnTabStripModelChanged(
       last_active_tabs_[*old_space] = selection.old_tab->GetHandle();
     }
   }
+  // A container's tab carries its container in the session.
+  if (change.type() == TabStripModelChange::kInserted) {
+    for (const TabStripModelChange::ContentsWithIndex& inserted :
+         change.GetInsert()->contents) {
+      containers::OnTabInserted(inserted.contents);
+    }
+  }
   if (change.type() != TabStripModelChange::kSelectionOnly) {
     ScheduleUpdate();
   }
@@ -2341,6 +2359,19 @@ bool ApplySpaceColor(TabStripModel* tab_strip) {
 
 bool HasSpaces(TabStripModel* tab_strip) {
   return KoanWorkspaceController::FromTabStrip(tab_strip) != nullptr;
+}
+
+std::optional<tab_groups::TabGroupId> CreateBackgroundSpace(
+    TabStripModel* tab_strip,
+    int index,
+    const std::u16string& name,
+    const std::u16string& icon) {
+  KoanWorkspaceController* spaces =
+      KoanWorkspaceController::FromTabStrip(tab_strip);
+  if (!spaces || !spaces->IsEnabled()) {
+    return std::nullopt;
+  }
+  return spaces->CreateBackgroundSpace(index, {.name = name, .icon = icon});
 }
 
 bool HandleSpacesCommand(BrowserWindowInterface* browser, int command_id) {

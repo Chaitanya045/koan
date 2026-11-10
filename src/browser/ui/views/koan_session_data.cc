@@ -23,6 +23,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/koan_switches.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
@@ -37,6 +38,7 @@ constexpr std::string_view kKeyPrefix = "koan.";
 // The features that act on a tab or window while it is restored.
 constexpr TabRestoreHook kTabRestoreHooks[] = {
     {kPinnedTabSessionKey, &OnRestoringPinnedTab},
+    {containers::kContainerSessionKey, &containers::OnRestoringContainerTab},
 };
 // None yet; folders (#60) will be the first.
 constexpr std::array<WindowRestoreHook, 0> kWindowRestoreHooks = {};

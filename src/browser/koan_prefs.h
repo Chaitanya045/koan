@@ -242,6 +242,11 @@ inline constexpr char kAgentControlMaxAuthFailures[] =
 // user-data-dir, not --incognito, not --guest. Computed once, at registration.
 bool AgentReadyByDefault();
 
+// Agent control's saved containers (koan/browser/containers): their names
+// and container ids, {name: id}. A throwaway container is never listed.
+inline constexpr char kAgentSavedContainers[] =
+    "koan.agent_control.saved_containers";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

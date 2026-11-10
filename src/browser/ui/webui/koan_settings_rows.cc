@@ -76,7 +76,8 @@ constexpr Group kGroups[] = {
     {"agent-control", "agents", "Agents", "Agent ready",
      "Lets agents you approve open and work in background tabs. Tabs stay "
      "awake only while an agent is using them. Every new program asks you "
-     "first, naming the program. Agent tabs share your logins and cookies. "
+     "first, naming the program. Agent tabs are in containers of their own "
+     "and never get your logins or cookies. "
      "Turned off by your organisation's policy if remote debugging is."},
     {"agent-limits", "agents", "Agents", "Limits",
      "A change applies to new connections and new awake tabs; nothing running "

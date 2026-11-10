@@ -37,6 +37,7 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
+#include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -661,6 +662,12 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
   source_ = source;
 
   content::WebContents::CreateParams create_params(browser_view_->GetProfile());
+  // A Glance from a container's tab opens in that container (Zen: in the
+  // tab's container).
+  if (source) {
+    create_params.site_instance = containers::SiteInstanceForNewTab(
+        browser_view_->GetProfile(), source->GetSiteInstance(), params.url);
+  }
   contents_ = content::WebContents::Create(create_params);
   contents_->SetDelegate(this);
   contents_->SetUserData(kGlancePageKey, std::make_unique<GlancePage>(this));

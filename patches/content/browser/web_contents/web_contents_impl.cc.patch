@@ -1,0 +1,15 @@
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5783,6 +5783,11 @@
+       // as long as they preserve the guest's StoragePartition.
+       site_instance =
+           SiteInstance::CreateForGuest(GetBrowserContext(), partition_config);
++    } else if (source_site_instance->IsFixedStoragePartition()) {
++      // Koan: and so does a tab in a fixed StoragePartition (a Koan
++      // container, koan/browser/containers/koan_container_partition.h).
++      site_instance = SiteInstance::CreateForFixedStoragePartition(
++          GetBrowserContext(), params.target_url, partition_config);
+     } else {
+       site_instance = SiteInstance::Create(GetBrowserContext());
+     }

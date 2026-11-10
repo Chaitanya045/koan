@@ -188,6 +188,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void CreateSpace(const std::u16string& name,
                    const std::u16string& icon,
                    const SpaceTheme& theme);
+  // Makes the ungrouped tab at `index` a new Space with `data`, without
+  // showing it or changing the active tab (an agent container's Space,
+  // koan/browser/containers/koan_agent_containers.h).
+  tab_groups::TabGroupId CreateBackgroundSpace(int index,
+                                               const SpaceData& data);
   void RenameSpace(const tab_groups::TabGroupId& space,
                    const std::u16string& name);
   // `icon` empty removes the icon.
