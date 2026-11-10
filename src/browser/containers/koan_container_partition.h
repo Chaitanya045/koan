@@ -97,7 +97,16 @@ bool IsAgentPartition(const content::StoragePartitionConfig& config);
 // downloads, history and the omnibox, open-tab sync, WebAuthn.
 bool IsAgentProcess(content::RenderProcessHost* process);
 bool IsAgentFrame(content::RenderFrameHost* frame);
+// Also true for a user's own tab while an agent holds a lease on it (a
+// take-over, SetAgentLeased()): its password, autofill, history, downloads and
+// sync blocks apply there too, so the user's saved password is never filled
+// into a page the agent can read. (Permissions and extensions, keyed on the
+// process, stay the user's in their own tab.)
 bool IsAgentContents(const content::WebContents* contents);
+
+// Marks `contents`, a user's tab, as leased to an agent, or not. Called by
+// agent control's lease (koan_agent_lease.cc) for tabs the agent doesn't own.
+void SetAgentLeased(content::WebContents* contents, bool leased);
 
 // The container `contents` is in, or nullopt.
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents);
