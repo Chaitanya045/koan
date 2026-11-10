@@ -1,7 +1,7 @@
-diff --git a/a/chrome/browser/ui/views/BUILD.gn b/b/chrome/browser/ui/views/BUILD.gn
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
 index ccf57b0..4e98ac9 100644
---- a/a/chrome/browser/ui/views/BUILD.gn
-+++ b/b/chrome/browser/ui/views/BUILD.gn
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
 @@ -107,6 +107,7 @@ source_set("bubble_anchor_util_views_impl") {
      "//components/payments/core",
      "//components/tabs:public",
