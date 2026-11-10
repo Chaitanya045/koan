@@ -279,6 +279,15 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // instead of by the hot zones.
   bool WantsFullscreenEdges() const;
   void CheckFullscreenEdges();
+  // macOS: the traffic lights are shown in the revealed sidebar's top row
+  // (tabs on the left), so the pointer on them, which leaves the sidebar's
+  // views for AppKit's buttons, keeps it out, as Zen's onLeave does
+  // (ZenCompactMode.mjs). Let go of after the keep-hover time once the
+  // pointer is off them.
+  bool WantsLightsHold() const;
+  void CheckLightsHold();
+  // The sidebar came or went, or the lights were laid out again.
+  void OnTrafficLightsChanged();
 
   // Hides the toolbar (single toolbar, compact mode): moves the top
   // container, if it is not there already, into the overlay view of this
@@ -377,6 +386,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // lock: taken once it has (OnSidebarCollapseSettled()).
   bool peek_requested_ = false;
   std::unique_ptr<ExpandOnHoverLock> flash_lock_;
+  // Held while the pointer is on the traffic lights (CheckLightsHold()).
+  std::unique_ptr<ExpandOnHoverLock> lights_lock_;
+  base::OneShotTimer lights_release_timer_;
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;
