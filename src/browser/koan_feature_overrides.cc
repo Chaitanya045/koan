@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
 #include "chrome/browser/ui/tabs/features.h"
+#include "chrome/browser/ui/toasts/toast_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/new_tab_page/composebox/variations/composebox_fieldtrial.h"
 #include "chrome/common/chrome_features.h"
@@ -167,6 +168,16 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // Z36: "Help me write" (Compose) in the context menu of text fields, off
   // directly, not only through the model execution above.
   overrides.DisableFeature(compose::features::kEnableCompose);
+
+  // Z21: no "Link copied" / "Image copied" toast after the context menu's
+  // Copy Link Address, Copy Image, Copy Video Frame or Copy Link to
+  // Highlight, or upstream's Copy URL command: Firefox and Zen confirm none
+  // of these. (Koan's own Copy URL, Cmd+Shift+C, shows Zen's "Copied current
+  // URL!" toast; koan_url_bar_controller.cc.)
+  overrides.DisableFeature(toast_features::kLinkCopiedToast);
+  overrides.DisableFeature(toast_features::kImageCopiedToast);
+  overrides.DisableFeature(toast_features::kVideoFrameCopiedToast);
+  overrides.DisableFeature(toast_features::kLinkToHighlightCopiedToast);
 
   // O13: Zen has no in-product help, and none for the features Koan
   // repurposes. (Code that asks for a promo before the browser has finished
