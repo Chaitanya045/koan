@@ -589,7 +589,20 @@ void CdpFacade::OpenTab(const AgentMessage& message, bool cdp_shape) {
          "without newWindow or browserContextId");
     return;
   }
-  std::string task = kDefaultTask;
+  // A saved container the agent asks for by name (Koan.openTab and
+  // Target.createTarget): its task is named after it unless the agent names
+  // one, so that it never lands in the throwaway task.
+  std::string saved_container;
+  if (const base::Value* named = message.params.Find("savedContainer")) {
+    const std::string* name = named->GetIfString();
+    if (!name || name->empty() || name->size() > 64 ||
+        !base::IsStringUTF8(*name)) {
+      deny("Koan.invalidParams", "savedContainer must be 1 to 64 characters");
+      return;
+    }
+    saved_container = *name;
+  }
+  std::string task = saved_container.empty() ? kDefaultTask : saved_container;
   if (const std::string* named = message.params.FindString("task");
       !cdp_shape && named && !named->empty()) {
     if (named->size() > 64 || !base::IsStringUTF8(*named)) {
@@ -617,7 +630,7 @@ void CdpFacade::OpenTab(const AgentMessage& message, bool cdp_shape) {
   }
   const GURL url(*params.FindString("url"));
   backend_->OpenTab(
-      task, url,
+      task, saved_container, url,
       base::BindOnce(&CdpFacade::OnTabOpened, weak_factory_.GetWeakPtr(),
                      message.id, message.method, message.session_id,
                      tick_clock_->NowTicks(), summary));

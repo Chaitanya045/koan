@@ -1,0 +1,68 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+# The `koan` command-line tool (.agent/notes/agent-control.md section 12): an
+# agent's way into agent control. Small on purpose (//base, BoringSSL and the
+# frame codec and proofs it shares with the gateway; no //net), so that it
+# starts in a few milliseconds. On the Mac it is copied into
+# Koan.app/Contents/Resources/bin (the patch to chrome/BUILD.gn), so that it
+# is signed with the app.
+assert(is_posix)
+
+# What the tool decides, without I/O: arguments, messages, the snapshot
+# outline, the holder's routing.
+source_set("cli_lib") {
+  sources = [
+    "koan_cli_args.cc",
+    "koan_cli_args.h",
+    "koan_cli_io.cc",
+    "koan_cli_io.h",
+    "koan_cli_protocol.cc",
+    "koan_cli_protocol.h",
+    "koan_cli_router.cc",
+    "koan_cli_router.h",
+    "koan_cli_skill.cc",
+    "koan_cli_skill.h",
+  ]
+  public_deps = [
+    "//base",
+    "//koan/browser/agent:frame",
+  ]
+}
+
+executable("koan") {
+  sources = [ "koan_cli_main.cc" ]
+  deps = [
+    ":cli_lib",
+    "//base",
+    "//koan/browser/agent:auth",
+    "//koan/browser/agent:frame",
+    "//third_party/boringssl",
+  ]
+}
+
+if (is_mac) {
+  # Koan.app/Contents/Resources/bin/koan.
+  bundle_data("koan_bundle_data") {
+    sources = [ "$root_out_dir/koan" ]
+    outputs = [ "{{bundle_resources_dir}}/bin/{{source_file_part}}" ]
+    public_deps = [ ":koan" ]
+  }
+}
+
+# Build and run:
+#   autoninja -C out/Koan koan/cli:koan_cli_unittests
+#   out/Koan/koan_cli_unittests
+test("koan_cli_unittests") {
+  sources = [ "koan_cli_unittest.cc" ]
+  deps = [
+    ":cli_lib",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//koan/browser/agent:frame",
+    "//testing/gtest",
+  ]
+}

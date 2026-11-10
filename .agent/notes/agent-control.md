@@ -293,7 +293,7 @@ command is audited (denied ones at once, forwarded ones when answered, with the 
 succeeds and attaches nothing: child targets (OOPIFs, workers) are not proxied yet (T-cdp-3). Parsing and scrubbing run on the
 UI thread for now; moving them to a worker is the measurement of §4.1 (T-perf-1 in the PR's test plan). `Koan.openTab` and
 `Target.createTarget` call the `AgentTabOpener` the agent containers install (#202): every task gets a throwaway container,
-and the request carries only the client, the task's name and the URL, so nothing the agent sends can name a saved container. A
+unless the agent names a saved container the user granted it (#219, `savedContainer`; refused: `Koan.notGranted`). A
 null tab (no normal window with Spaces) is `Koan.noWindow`. `containers::EndAgentTask()` runs for a task on `Koan.endTask {task}`,
 and for each of a client's tasks when its last connection goes, on Stop all agents and on Agent ready off (not at quit: a throwaway
 container is in memory). A one-shot CLI command therefore ends its tasks when it disconnects: the CLI keeps one connection for a
@@ -1013,6 +1013,21 @@ koan log [--follow]              the audit log
 koan revoke [id|--all]
 ```
 
+**Built (CLI PR, `src/cli/`, `//koan/cli:koan`):** `pair`, `status`, `tabs`, `open [url] [--task T] [--saved NAME]`,
+`snapshot`, `screenshot [-o f]`, `act <tab> click @ref | fill @ref text | press key | scroll px | navigate url`, `take-over [tab]`,
+`release` (alias `hand-back`), `end [--task T]`, `watch`, `skill`. **One connection for a task's life:** the first command that
+needs a task starts `koan __hold`, which authenticates (while the starting `koan` is still alive, so the agent is among its
+ancestors as at pairing), listens on `~/.koan/run/<id>.sock` (0700 dir, 0600 socket, same-uid peers only) and forwards every
+command over its one browser connection with ids of its own, sharing one flat session per tab and keeping the last 64 `Koan.*`
+events for `status`. `koan end` (or 30 minutes without a command) closes it, and with it every task. `snapshot` and `act` run on
+the CDP the facade allows (`Accessibility.getFullAXTree`, `DOM.getContentQuads`, `Input.*`, `Runtime.callFunctionOn` on a
+resolved node); phase 3's in-browser `Koan.snapshot`/`act` replaces them. Keys: an Ed25519 seed in
+`~/.koan/clients/<id>/key` (0600), never the label as a path. Copied into `Koan.app/Contents/Resources/bin/` (a 3-line hook
+in `chrome/BUILD.gn`) and signed by `mac_package.sh`. **Saved containers (#219):** `Koan.openTab`/`Target.createTarget` take
+`savedContainer` (the task defaults to its name); a refused choice, or a task already open in another container, is
+`Koan.notGranted`, never a throwaway tab. Not built: `watch` filtering, `log`, `revoke`, `relay`/`agent-browser` (§11),
+and the settings button that installs `~/.local/bin/koan` and the skill.
+
 **Skill file** (ego's integration model: shell commands, no SDK, no remote-debugging setup). The installed entry skill
 is a few lines ("run `koan skill` and follow it"); `koan skill` prints the guide from the installed version so it is
 never stale, written from Koan's own command set. Koan writes `~/.claude/skills/koan-browser/SKILL.md` (and
@@ -1159,6 +1174,12 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-focus-6 | HTTP auth, client-certificate request, an external-protocol link, `window.print()`, `beforeunload` | each becomes a `userNeeded` approval prompt, none a silent native sheet |
 | T-focus-7 | all of the above while the user is typing in a different window | the frontmost pid and the user's text are unchanged |
 | T-focus-8 | in an agent tab and in a driven user tab: `alert`, `confirm`, `prompt`, `window.focus()` from a timer, a service worker's `clients.focus()`; then Open and Dismiss each prompt; answer one dialog with `Page.handleJavaScriptDialog` instead; release a tab with a prompt waiting | no dialog, sheet or focus change until Open; Open brings the tab forward and shows Chrome's own dialog; Dismiss cancels (`confirm` returns false, the page stays on `beforeunload`, the 401 body shows); the agent's answer removes the prompt (`Koan.userNeededDone`); on release the dialog shows in its tab as in Chrome and the focus request is dropped |
+| T-cli-1 | the packaged app: `Koan.app/Contents/Resources/bin/koan version`; `codesign -dv` on it | runs; signed (ad hoc in CI); `codesign --verify --deep --strict` on the app passes |
+| T-cli-2 | from Claude Code: `koan pair --label "Claude Code"`, approve; `koan status` | the dialog names `koan` started by `claude`; status says paired, Koan running, no connection |
+| T-cli-3 | `koan open https://example.com`, then `koan snapshot <id>`, `koan act <id> click @ref`, `koan screenshot <id>` as separate commands | one tab, still open between commands (one holder in `ps`); the outline has refs; the click lands; the PNG shows the page while Koan is in the background |
+| T-cli-4 | `koan end`; then `koan open` again; then wait 30 minutes idle | `end` closes the tabs and clears the throwaway container; a new holder starts; the idle holder exits and its tabs close |
+| T-cli-5 | `koan open --saved bot` with and without the grant in Settings, and while another task has it open | granted: the saved container's logins; not granted or in use: `Koan.notGranted`, no tab opens |
+| T-cli-6 | `koan take-over`, Allow; `koan act` on it; `koan release <id>` | the take-over prompt; the act works on the granted site only; release gives the tab back |
 | T-win-1 | Koan on another display / Space, `Koan.openTab` | no Space switch, no window raise |
 | T-win-2 | no window open (windowless Mac app) then `Koan.openTab` | window appears inactive, does not take focus |
 | **Security** | | |

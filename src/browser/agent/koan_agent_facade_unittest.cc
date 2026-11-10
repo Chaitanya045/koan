@@ -56,9 +56,11 @@ class FakeBackend : public FacadeBackend {
   }
   void CommandAnswered(const std::string& target_id) override { ++answered; }
   void OpenTab(const std::string& task,
+               const std::string& saved_container,
                const GURL& url,
                OpenTabCallback done) override {
     opened_urls.push_back(url);
+    opened_in.push_back(task + "|" + saved_container);
     std::move(done).Run(std::nullopt, "Koan.unavailable", "no containers");
   }
   void EndTask(const std::string& task) override { ended.push_back(task); }
@@ -103,6 +105,8 @@ class FakeBackend : public FacadeBackend {
   std::set<std::string> attached;
   std::vector<Sent> sent;
   std::vector<GURL> opened_urls;
+  // "task|saved container" of each OpenTab().
+  std::vector<std::string> opened_in;
   std::vector<std::string> closed;
   std::vector<std::string> user_needed;
   std::vector<std::string> ended;
@@ -411,6 +415,26 @@ TEST_F(KoanAgentFacadeTest, OpeningATabChecksTheUrlFirst) {
   Send(3, "Target.createTarget",
        base::DictValue().Set("url", "about:blank").Set("newWindow", true));
   EXPECT_EQ(ErrorCode(3), "Koan.notPermitted");
+}
+
+TEST_F(KoanAgentFacadeTest, ASavedContainerIsAskedForByName) {
+  Send(1, "Koan.openTab",
+       base::DictValue().Set("savedContainer", "GitHub bot"));
+  Send(2, "Koan.openTab",
+       base::DictValue().Set("savedContainer", "GitHub bot").Set("task", "t"));
+  Send(3, "Target.createTarget",
+       base::DictValue().Set("url", "about:blank").Set("savedContainer", "x"));
+  Send(4, "Koan.openTab");
+  EXPECT_EQ(
+      backend_.opened_in,
+      (std::vector<std::string>{"GitHub bot|GitHub bot", "t|GitHub bot", "x|x",
+                                std::string(CdpFacade::kDefaultTask) + "|"}));
+  // Not a name: refused before anything opens.
+  Send(5, "Koan.openTab", base::DictValue().Set("savedContainer", 5));
+  EXPECT_EQ(ErrorCode(5), "Koan.invalidParams");
+  Send(6, "Koan.openTab", base::DictValue().Set("savedContainer", ""));
+  EXPECT_EQ(ErrorCode(6), "Koan.invalidParams");
+  EXPECT_EQ(backend_.opened_in.size(), 4u);
 }
 
 TEST_F(KoanAgentFacadeTest, EndingATaskDefaultsToTheThrowawayTask) {
