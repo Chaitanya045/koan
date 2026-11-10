@@ -205,6 +205,10 @@ point of Koan.
 | Shortcut shown with each action | Same | In Zen's notation, as in the settings page ("Ctrl+Alt+⇧+C", "Ctrl+,"; "⌘ ⇧ C" on macOS), as the row's dimmed second part rather than a tag. It is the key in effect, so a shortcut changed in chrome://koan-settings shows. |
 | Learns the actions you use | Different | Used actions come first, and passed-over ones drop below the search suggestions (Zen's results learner). Zen also runs a used action on Enter for any text matching it; Koan only when you type its whole label, so typing the start of a site's address (`pri` for a site, after using Print) still opens the site. |
 | Actions mode: Tab in an empty URL bar lists every action | Different | Koan types `>` (you can type it too; a second Tab leaves it) instead of showing an "Actions" chip, and lists as many actions as Chromium's popup has rows (about eight) above a "> – search" row; type to filter. As in Zen, Enter runs the first action once two characters are typed. |
+| Spaces mode: `` ` `` in the URL bar lists the Spaces (Zen's `RESTRICT_TOKENS.WORKSPACE`) | Different | Typed, like `>`: every other Space's "Focus on" action, filtered by the Space's name; Enter runs the first once two characters are typed. No chip and no one-off button (Koan has no one-off row). Zen's folder results come with tab folders (#60). Not yet tried on a Mac. |
+| Copied link in the empty URL bar (`browser.urlbar.clipboard.featureGate`=true) | Same | An http(s) link on the clipboard (at most 2048 characters, no spaces) is the first row when the bar opens empty, twice per copied link, and not again once picked or removed (Firefox's `UrlbarProviderClipboard`). The row has the site's icon, not Firefox's clipboard icon. Not yet tried on a Mac. |
+| The URL bar keeps its suggestions when the window loses focus (`browser.urlbar.closeOnWindowBlur`=false) | Same | ⌘Tab away and back: the bar, the text and the list are back (Chromium closes the list on blur; Koan asks again). Not yet tried on a Mac. |
+| The URL bar yields to tab-modal dialogs (Zen's popover blocker) | Same | An `alert()`, `confirm()` or an HTTP sign-in prompt hides the open bar; it comes back with what was typed when the dialog closes. Not yet tried on a Mac. |
 | "Focus on" a Space | Same | Matched by the Space's name, which is shown beside "Focus on". |
 | Add to / Remove from Essentials | Same | As in the tab's context menu; Pin / Unpin Tab pin the tab to its Space. |
 | Open Theme Picker | Same | Opens the theme picker for the active Space. |
@@ -304,6 +308,8 @@ Details, measurements and the reasoning for each default: `PERFORMANCE.md`.
 
 | Zen | Koan | Notes |
 |---|---|---|
+| Global Privacy Control on (`privacy.globalprivacycontrol.enabled`=true) | Same | Requests send `Sec-GPC: 1` and `navigator.globalPrivacyControl` is true, with Chromium's switch for it in Settings > Privacy and security. Not yet tried on a Mac. |
+| No "Sign in to Koan?" bubble after a Google sign-in on the web | Same | Chromium's sign-in interception is off by default (`signin.interception_enabled`). Koan's builds have no Google OAuth client, so Chromium's browser sign-in is off anyway; this covers a build or environment that has one. Not yet tried on a Mac. |
 | Engine | Different | Chromium (Blink, V8) instead of Firefox (Gecko). |
 | Extensions | Different | Chrome extensions (Chrome Web Store), not Firefox add-ons. |
 | Sync | Missing | Koan ships without Google API keys, so Google sync isn't available. |

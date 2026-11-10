@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/profiles/BUILD.gn b/chrome/browser/profiles/BUILD.gn
+index a85eb86..e04d115 100644
+--- a/chrome/browser/profiles/BUILD.gn
++++ b/chrome/browser/profiles/BUILD.gn
+@@ -698,6 +698,7 @@ source_set("profile_util_impl") {
+     "//components/policy/core/common",
+     "//components/pref_registry",
+     "//components/prefs",
++    "//koan/browser:prefs",
+     "//components/profile_metrics",
+     "//components/signin/public/base",
+     "//components/signin/public/identity_manager",

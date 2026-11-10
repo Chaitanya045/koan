@@ -192,6 +192,8 @@ test("koan_omnibox_unittests") {
     "//third_party/metrics_proto",
     "//ui/base",
     "//ui/base:types",
+    "//ui/base/clipboard",
+    "//ui/base/clipboard:clipboard_test_support",
     "//url",
   ]
 }
@@ -448,6 +450,7 @@ source_set("impl") {
     "//components/url_formatter",
     "//components/user_prefs",
     "//components/vector_icons",
+    "//components/web_modal",
     "//components/zoom",
     "//content/public/browser",
     "//koan/browser:features",

@@ -303,11 +303,20 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 // suggestions (Zen's browser.search.suggest.enabled is off, which also stops
 // Chromium's remote zero-prefix suggestions, Google's trending searches), no
 // AI Mode button in the omnibox, AI Mode switched off by its policy pref, and
-// with Koan's sidebar, Zen's sidebar width (kSidebarDefaultWidth).
+// Global Privacy Control on, and with Koan's sidebar, Zen's sidebar width
+// (kSidebarDefaultWidth).
 // A value the user sets still wins. Called from
 // chrome/browser/prefs/browser_prefs.cc at the end of RegisterProfilePrefs(),
 // after upstream registered them.
 void OverrideUpstreamProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry);
+
+// The same for upstream profile prefs that keyed-service factories register,
+// which happens after chrome::RegisterProfilePrefs() (crash note 8): no
+// sign-in interception bubble. Called from
+// chrome/browser/profiles/pref_service_builder_utils.cc after
+// RegisterProfilePrefsForServices().
+void OverrideServiceProfilePrefDefaults(
     user_prefs::PrefRegistrySyncable* registry);
 
 // Registers Koan's local-state prefs (the look), and changes the defaults of
