@@ -854,6 +854,9 @@ void AdjustChildColorKey(const views::Widget* parent,
        widget = widget->parent()) {
     BrowserView* browser_view =
         BrowserView::GetBrowserViewForNativeWindow(widget->GetNativeWindow());
+    // Upstream puts the BrowserView key on the macOS fullscreen overlay too
+    // (OverlayWidgetMac), so stop only at the browser widget itself: the
+    // overlay is exempt chrome and would keep the Space's mode.
     if (browser_view && browser_view->GetWidget() == widget) {
       if (const KoanBrowserViewController* controller =
               KoanBrowserViewController::From(browser_view)) {
