@@ -37,6 +37,12 @@ enum class CommandKind {
   kSkill,
   // Internal: the process that holds the connection for a task's life.
   kHold,
+  // Runs agent-browser against Koan through the session's relay (section
+  // 11): pairs `koan-relay` once, starts it, hands it the URL.
+  kAgentBrowser,
+  // relay env | relay stop, for an agent-browser --session.
+  kRelayEnv,
+  kRelayStop,
 };
 
 enum class ActKind {
@@ -84,6 +90,10 @@ struct Command {
 
   // __hold: the fd to say "ready" on.
   int ready_fd = -1;
+
+  // agent-browser: its arguments, as given. relay: --session.
+  std::vector<std::string> passthrough;
+  std::string session;
 };
 
 struct ParseResult {

@@ -1127,6 +1127,13 @@ task lasts: `koan end`, or 30 minutes without a command, closes them.
 `koan open --saved <name>` uses a saved container you allowed that agent;
 otherwise it is refused, never opened in a throwaway one instead.
 
+An agent that uses Vercel's agent-browser runs `koan agent-browser <args>`.
+The first time, Koan asks you to approve **koan-relay** (started by the
+agent): it is a second client of its own, that carries agent-browser's
+connection to Koan over a private loopback address. After that it works like
+`koan`: the agent's own tabs only, and every rule of agent control. `koan relay
+stop` ends it; so do Stop and revoking it in Settings.
+
 ## Install in the app menu
 
 ```sh

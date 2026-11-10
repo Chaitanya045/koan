@@ -36,24 +36,78 @@ source_set("cli_lib") {
   ]
 }
 
+# A paired client's key, record, pairing and proof: shared by `koan` and
+# `koan-relay`, which each pair as themselves.
+source_set("client") {
+  sources = [
+    "koan_cli_client.cc",
+    "koan_cli_client.h",
+  ]
+  public_deps = [
+    ":cli_lib",
+    "//base",
+    "//koan/browser/agent:auth",
+    "//koan/browser/agent:peer",
+  ]
+  deps = [
+    "//koan/browser/agent:frame",
+    "//third_party/boringssl",
+  ]
+}
+
 executable("koan") {
   sources = [ "koan_cli_main.cc" ]
   deps = [
     ":cli_lib",
+    ":client",
+    ":relay_gate",
     "//base",
     "//koan/browser/agent:auth",
     "//koan/browser/agent:frame",
     "//koan/browser/agent:peer",
+  ]
+}
+
+# What `koan-relay` decides, without I/O: who may use its WebSocket, its
+# session names and files.
+source_set("relay_gate") {
+  sources = [
+    "koan_relay_gate.cc",
+    "koan_relay_gate.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [ "//crypto" ]
+}
+
+# The loopback WebSocket CDP endpoint for agent-browser (section 11): a
+# paired client of its own. It has //net (net::HttpServer) so that `koan`
+# does not.
+executable("koan-relay") {
+  sources = [ "koan_relay_main.cc" ]
+  deps = [
+    ":cli_lib",
+    ":client",
+    ":relay_gate",
+    "//base",
+    "//koan/browser/agent:frame",
+    "//koan/browser/agent:peer",
+    "//net",
     "//third_party/boringssl",
   ]
 }
 
 if (is_mac) {
-  # Koan.app/Contents/Resources/bin/koan.
+  # Koan.app/Contents/Resources/bin/koan and koan-relay.
   bundle_data("koan_bundle_data") {
-    sources = [ "$root_out_dir/koan" ]
+    sources = [
+      "$root_out_dir/koan",
+      "$root_out_dir/koan-relay",
+    ]
     outputs = [ "{{bundle_resources_dir}}/bin/{{source_file_part}}" ]
-    public_deps = [ ":koan" ]
+    public_deps = [
+      ":koan",
+      ":koan-relay",
+    ]
   }
 }
 
@@ -61,9 +115,13 @@ if (is_mac) {
 #   autoninja -C out/Koan koan/cli:koan_cli_unittests
 #   out/Koan/koan_cli_unittests
 test("koan_cli_unittests") {
-  sources = [ "koan_cli_unittest.cc" ]
+  sources = [
+    "koan_cli_unittest.cc",
+    "koan_relay_gate_unittest.cc",
+  ]
   deps = [
     ":cli_lib",
+    ":relay_gate",
     "//base",
     "//base/test:run_all_unittests",
     "//koan/browser/agent:frame",

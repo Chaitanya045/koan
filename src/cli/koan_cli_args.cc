@@ -36,6 +36,7 @@ const std::map<std::string_view, CommandKind>& Commands() {
       {"watch", CommandKind::kWatch},
       {"skill", CommandKind::kSkill},
       {"__hold", CommandKind::kHold},
+      {"relay", CommandKind::kRelayEnv},
   };
   return *commands;
 }
@@ -82,6 +83,15 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   std::vector<std::string> positional;
   for (size_t i = 0; i < args.size(); ++i) {
     const std::string& arg = args[i];
+    // Everything after `agent-browser` is agent-browser's, untouched.
+    if (arg == "agent-browser" && positional.empty()) {
+      command.kind = CommandKind::kAgentBrowser;
+      command.passthrough.assign(args.begin() + i + 1, args.end());
+      if (!command.task.empty() || !command.saved_container.empty()) {
+        return Error("--task and --saved are koan open's");
+      }
+      return {command, ""};
+    }
     // An option's value: the next argument, or after '='.
     auto value_of = [&](std::string_view name,
                         std::string* out) -> std::optional<bool> {
@@ -108,6 +118,7 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
              {"--task", &command.task},
              {"--saved", &command.saved_container},
              {"--output", &command.output},
+             {"--session", &command.session},
              {"-o", &command.output},
          }) {
       if (std::optional<bool> got = value_of(name, out)) {
@@ -208,6 +219,19 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
         return Error("koan __hold is started by koan itself");
       }
       break;
+    case CommandKind::kRelayEnv:
+    case CommandKind::kRelayStop:
+      if (!expect(1, 1) || (rest[0] != "env" && rest[0] != "stop")) {
+        return Error("usage: koan relay env|stop [--session S]");
+      }
+      command.kind =
+          rest[0] == "env" ? CommandKind::kRelayEnv : CommandKind::kRelayStop;
+      if (command.session.empty()) {
+        command.session = "default";
+      }
+      break;
+    case CommandKind::kAgentBrowser:
+      break;
     case CommandKind::kOpen:
       if (!expect(0, 1)) {
         return Error("usage: koan open [url] [--task T] [--saved NAME]");
@@ -295,6 +319,11 @@ std::string UsageText() {
   koan end [--task T]    end one task, or (no --task) every task: its tabs
                          close and its throwaway container is cleared
   koan watch             events as JSON lines (userNeeded, paused, ...)
+  koan agent-browser <args...>
+                         run agent-browser against Koan (its own relay,
+                         approved once in Koan as koan-relay)
+  koan relay env|stop [--session S]
+                         where the relay's env file is / stop the relay
   koan skill             the guide for agents
 
 Options: --json, --user-data-dir DIR, --client ID. <tab> is an id from

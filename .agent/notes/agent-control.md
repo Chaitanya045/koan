@@ -981,6 +981,22 @@ executable speaking `agent-browser.plugin.v1` on stdin/stdout can act as a `brow
 | `--auto-connect` | does not apply (reads Chrome's `DevToolsActivePort`); document `--cdp`/`--provider koan` |
 | `--profile` with `--cdp` | do not combine (UNVERIFIED effect, D§2) |
 
+**Built (relay PR, `src/cli/koan_relay_*`, `//koan/cli:koan-relay`; maintainer decision 2026-11-11):** `koan-relay` is **a paired
+client of its own**: its own key and record in `~/.koan/relay/clients/`, its own pin and its own approval prompt, which names
+`koan-relay` and the agent that started it (`koan` and `koan-relay` are wrappers to `AgentAncestor`); it never goes through the
+`koan` holder. `koan agent-browser <args>` takes the agent-browser session from `--session`, else `AGENT_BROWSER_SESSION`, else
+`default`; runs `koan-relay pair` once if the relay has no client; runs `koan-relay serve --session S` if no relay answers on that
+session's control socket; then execs `agent-browser <args>` with `AGENT_BROWSER_CDP` in its environment, read from the session's
+0600 env file (never on a command line, never printed). `serve` forks into the background, proves itself to the browser while
+`koan agent-browser` and the agent are still its ancestors, listens on `127.0.0.1:<random>` with `net::HttpServer`, and serves only
+`/cdp/<128-bit secret>` as a WebSocket (`RelayGate`): any `Origin` header is refused, `Host` must be `127.0.0.1:<port>`, one
+connection at a time, the first within 30 s, reconnects by the same daemon while the relay lives (O4's session-lifetime choice;
+T-ab-4 confirms agent-browser reconnects). Plain HTTP (`/json`, ...) is 404. Frames are carried verbatim both ways (up to 32 MB);
+the browser's facade does every check. It ends on the browser closing its connection (Stop, revoke, Agent ready off, quit), on
+`koan relay stop --session S` (a control socket in `~/.koan/relay/run/`, this user only), with no first connection in 30 s, or after
+15 minutes without a frame; then its env file goes. Refusals are logged (never the path) in `~/.koan/relay/run/<id>.log`. `koan
+relay env --session S` prints the env file's path. Both tools are bundled into `Resources/bin` and signed by `mac_package.sh`.
+
 ### 11.2 Is the `koan` CLI still needed? (decision 4)
 
 Yes, smaller. agent-browser does not do pairing, status, the Space/task model, take-over/hand-back, the audit log or
@@ -1240,6 +1256,9 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-ab-3 | agent-browser against a profile with 30 user tabs | it attaches to the agent Space tabs only |
 | T-ab-4 | agent-browser CLI exits; its daemon keeps its connection; the daemon later reconnects; the relay's idle timeout passes | the relay is still up while the daemon is; reconnect works or fails fast; a stale daemon fails and restarts cleanly (decides open item O4) |
 | T-ab-5 | the relay's secret never appears in the agent's tool output, `koan` stdout or the audit log; a second simultaneous connection is refused | pass |
+| T-ab-6 | first `koan agent-browser open https://example.com` from Claude Code | one approval prompt naming `koan-relay` started by `claude` (not `koan`); then the tab opens in the agent Space; a second call shows no prompt and reuses the relay (`ps`: one `koan-relay` per session) |
+| T-ab-7 | against the relay port: `curl http://127.0.0.1:P/json/version`; a WebSocket with the right path from a page (`new WebSocket(...)` in a tab, so with an Origin); with `Host: localhost:P`; with a wrong secret; 40 s after a fresh `koan-relay serve` with nothing connecting | all refused (404), each logged without the path; the unused relay exits after 30 s and its env file is gone |
+| T-ab-8 | `koan relay stop --session default`; Stop all agents in Koan; revoke the relay's client in Settings | each ends the relay and the agent's tabs; agent-browser then fails fast; the next `koan agent-browser` starts a new relay (and pairs again after a revoke) |
 | T-hist-1 | an agent tab visits pages | not in History or the omnibox suggestions; `@tabs` does not list agent-Space tabs; with the setting on they appear |
 | T-sync-1 | an agent Space with tabs; quit and restart; Recently Closed; reopen the closed window; (if sync is on) saved tab groups; grep the profile's `Sessions/` files for the agent-visited URLs | after restart no agent page loads (blank tabs are swept before the window settles); Recently Closed lists nothing (or, without §14 #5, entries that reopen blank and are swept); nothing synced; the grep result decides §14 #6 |
 | T-sync-2 | agent control with the Spaces flag off | `Koan.openTab` returns `Koan.unavailable {spaces-disabled}`; no agent group is created, saved or synced |
