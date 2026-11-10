@@ -101,7 +101,6 @@ group("agent_unit_tests") {
 group("agent_service_unittests") {
   testonly = true
   deps = [ "//koan/browser/containers:koan_agent_service_unittests" ]
-  ]
 }
 
 # Zen's fuzzy score for the command palette. Pure logic, //base only.
