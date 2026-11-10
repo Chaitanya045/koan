@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/predictors/loading_predictor_tab_helper.cc b/chrome/browser/predictors/loading_predictor_tab_helper.cc
+index 7179e87dd2c64071d3636e3688572dafe72d463d..a24f7087670c39a77e333d55f4ffa13e4e94c3a4 100644
+--- a/chrome/browser/predictors/loading_predictor_tab_helper.cc
++++ b/chrome/browser/predictors/loading_predictor_tab_helper.cc
+@@ -34,6 +34,7 @@
+ #include "content/public/browser/global_routing_id.h"
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "net/base/network_anonymization_key.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/cpp/constants.h"
+@@ -341,6 +342,11 @@ LoadingPredictorTabHelper::LoadingPredictorTabHelper(
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents->GetBrowserContext());
+   auto* predictor = LoadingPredictorFactory::GetForProfile(profile);
++  // Koan: a container's visits aren't learned, and its navigations don't
++  // preconnect or prewarm in the default partition.
++  if (koan::containers::IsContainerContents(web_contents)) {
++    predictor = nullptr;
++  }
+   if (predictor)
+     predictor_ = predictor->GetWeakPtr();
+   if (base::FeatureList::IsEnabled(

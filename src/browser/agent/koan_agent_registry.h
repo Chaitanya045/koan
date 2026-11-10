@@ -44,6 +44,9 @@ struct TargetEntry {
   std::string task;
   bool agent_owned = false;
   TabState state = TabState::kDriven;
+  // For a user tab the agent drives: the site (scheme and registrable domain)
+  // the user allowed. Leaving it ends write access (SetReadable()).
+  std::string site;
 };
 
 class TargetRegistry {
@@ -81,12 +84,16 @@ class TargetRegistry {
   // not count against the open-tab budgets: the agent did not open it.
   AddResult GrantUserTab(std::string target_id,
                          std::string client_id,
-                         TabState state);
+                         TabState state,
+                         std::string site = std::string());
 
   // The user typed or clicked in the tab. False if it is not in the registry.
   bool Pause(std::string_view target_id);
   // The user handed a paused tab back (the agent cannot do this itself).
   bool Resume(std::string_view target_id);
+  // A user tab left the site the user allowed: the agent may only read it
+  // now. False if it is not a user tab, or was readable already.
+  bool SetReadable(std::string_view target_id);
 
   // The tab closed, or was released or handed back to the user.
   bool Remove(std::string_view target_id);
@@ -105,7 +112,8 @@ class TargetRegistry {
   // Whether the client may send `method` to the tab now: a tab of another
   // client, or one not in the registry, never; a kDriven tab, anything the
   // method policy allows; a kReadable or kPaused tab, only the methods that
-  // change nothing (IsReadOnlyMethod()).
+  // change nothing (IsReadOnlyMethod()), and on a user's tab not
+  // Network.enable (the user's own traffic is not part of reading a tab).
   bool MaySend(std::string_view client_id,
                std::string_view target_id,
                std::string_view method) const;

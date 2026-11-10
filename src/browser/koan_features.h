@@ -53,6 +53,9 @@ BASE_DECLARE_FEATURE(kKoanDownloadAnimation);
 BASE_DECLARE_FEATURE(kKoanWindowDrag);
 BASE_DECLARE_FEATURE(kKoanWelcome);
 
+// Koan's blank new tab page, like Zen's, instead of Chromium's.
+BASE_DECLARE_FEATURE(kKoanNewTab);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsSidebarSingleReflowEnabled();
@@ -68,6 +71,7 @@ bool IsDownloadAnimationEnabled();
 bool IsWindowDragEnabled();
 bool IsWelcomeEnabled();
 bool IsFoldersEnabled();
+bool IsNewTabEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
 // trigger modifier (koan_switches.h, Alt by default) is the only one held. Read

@@ -5,11 +5,14 @@
 #include "koan/browser/containers/koan_container_partition.h"
 
 #include <iterator>
+#include <memory>
 
 #include "base/check.h"
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/supports_user_data.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/security_principal.h"
@@ -30,6 +33,8 @@ constexpr char kThrowawayMarker = 't';
 constexpr char kSavedMarker = 's';
 constexpr std::string_view kAgentSessionPrefix = "agent:";
 constexpr std::string_view kUserSessionPrefix = "user:";
+// The mark SetAgentLeased() puts on a user's tab while an agent leases it.
+const int kAgentLeasedKey = 0;
 
 std::string_view DomainPrefix(ContainerKind kind) {
   return kind == ContainerKind::kAgent ? kAgentPartitionDomainPrefix
@@ -42,6 +47,13 @@ const content::StoragePartitionConfig& ConfigOf(
       ->GetSiteInstance()
       ->GetSecurityPrincipal()
       .GetStoragePartitionConfig();
+}
+
+// Any container, and any domain that only looks like an agent's (fails
+// closed).
+bool IsContainerConfig(const content::StoragePartitionConfig& config) {
+  return ContainerFromPartitionConfig(config).has_value() ||
+         IsAgentPartition(config);
 }
 
 }  // namespace
@@ -109,10 +121,7 @@ std::optional<ContainerId> ContainerFromPartitionConfig(
 }
 
 bool IsAgentPartition(const content::StoragePartitionConfig& config) {
-  // Fails closed: any domain with the prefix is treated as an agent's, even
-  // one ContainerFromPartitionConfig() wouldn't parse.
-  return base::StartsWith(config.partition_domain(),
-                          kAgentPartitionDomainPrefix);
+  return IsAgentPartitionDomain(config.partition_domain());
 }
 
 bool IsAgentProcess(content::RenderProcessHost* process) {
@@ -127,7 +136,38 @@ bool IsAgentFrame(content::RenderFrameHost* frame) {
 }
 
 bool IsAgentContents(const content::WebContents* contents) {
+  return contents && (IsAgentPartition(ConfigOf(contents)) ||
+                      contents->GetUserData(&kAgentLeasedKey));
+}
+
+bool IsAgentContainerContents(const content::WebContents* contents) {
   return contents && IsAgentPartition(ConfigOf(contents));
+}
+
+void SetAgentLeased(content::WebContents* contents, bool leased) {
+  if (!contents) {
+    return;
+  }
+  if (leased) {
+    contents->SetUserData(&kAgentLeasedKey,
+                          std::make_unique<base::SupportsUserData::Data>());
+  } else {
+    contents->RemoveUserData(&kAgentLeasedKey);
+  }
+}
+
+bool IsContainerFrame(content::RenderFrameHost* frame) {
+  return frame && IsContainerSiteInstance(frame->GetSiteInstance());
+}
+
+bool IsContainerContents(const content::WebContents* contents) {
+  return contents && IsContainerConfig(ConfigOf(contents));
+}
+
+bool IsContainerSiteInstance(content::SiteInstance* site_instance) {
+  return site_instance &&
+         IsContainerConfig(
+             site_instance->GetSecurityPrincipal().GetStoragePartitionConfig());
 }
 
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents) {
@@ -178,7 +218,7 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
   }
   const content::StoragePartitionConfig& config =
       source->GetSecurityPrincipal().GetStoragePartitionConfig();
-  if (!ContainerFromPartitionConfig(config) && !IsAgentPartition(config)) {
+  if (!IsContainerConfig(config)) {
     return nullptr;
   }
   return content::SiteInstance::CreateForFixedStoragePartition(context, url,
@@ -188,16 +228,30 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
 scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
     content::WebContents* old_contents) {
   const content::StoragePartitionConfig& config = ConfigOf(old_contents);
-  if (!ContainerFromPartitionConfig(config) && !IsAgentPartition(config)) {
+  if (!IsContainerConfig(config)) {
     return nullptr;
   }
   return content::SiteInstance::CreateForFixedStoragePartition(
       old_contents->GetBrowserContext(), GURL(), config);
 }
 
+scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+    content::BrowserContext* context,
+    const std::map<std::string, std::string>& extra_data) {
+  auto it = extra_data.find(kContainerSessionKey);
+  if (!context || context->IsOffTheRecord() || it == extra_data.end()) {
+    return nullptr;
+  }
+  const std::optional<ContainerId> container = Parse(it->second);
+  if (!container || container->kind != ContainerKind::kUser ||
+      !container->persistent()) {
+    return nullptr;
+  }
+  return CreateSiteInstance(context, *container, GURL());
+}
+
 bool AllowsPrerender(const content::WebContents& contents) {
-  const content::StoragePartitionConfig& config = ConfigOf(&contents);
-  return !ContainerFromPartitionConfig(config) && !IsAgentPartition(config);
+  return !IsContainerContents(&contents);
 }
 
 base::FilePath AgentDownloadDirectory(const base::FilePath& download_dir) {

@@ -20,6 +20,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/buildflags.h"
 #include "koan/browser/agent/koan_agent_limits.h"
+#include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/koan_prefs.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -76,6 +77,11 @@ AgentTabLease::AgentTabLease(content::WebContents* contents,
     contents->SetAudioMuted(true);
     muted_by_lease_ = true;
   }
+  // A user's tab the agent may read or drive: the agent blocks for passwords,
+  // autofill, history, downloads and sync apply while it holds it.
+  if (!agent_owned_) {
+    containers::SetAgentLeased(contents, true);
+  }
 }
 
 AgentTabLease::~AgentTabLease() {
@@ -92,6 +98,9 @@ AgentTabLease::~AgentTabLease() {
       contents, g_user_pinned && g_user_pinned(contents));
   if (muted_by_lease_ && contents->IsAudioMuted()) {
     contents->SetAudioMuted(false);
+  }
+  if (!agent_owned_) {
+    containers::SetAgentLeased(contents, false);
   }
 }
 
@@ -315,10 +324,18 @@ void AgentLeaseManager::OnOpenedFromAgentTab(content::WebContents* source,
   if (!lease) {
     return;
   }
+  if (opened_tab_handler_) {
+    opened_tab_handler_.Run(source, opened);
+    return;
+  }
   // It belongs to the same agent and task. A tab a page opens from a user's
   // tab the agent drives in place is the agent's own: the user did not open
   // it.
   Attach(opened, lease->client_id(), lease->task(), /*agent_owned=*/true);
+}
+
+void AgentLeaseManager::SetOpenedTabHandler(OpenedTabHandler handler) {
+  opened_tab_handler_ = std::move(handler);
 }
 
 void AgentLeaseManager::OnBatteryPowerStatusChange(

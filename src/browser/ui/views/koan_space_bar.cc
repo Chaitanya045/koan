@@ -5,17 +5,23 @@
 #include "koan/browser/ui/views/koan_space_bar.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_haptics.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_space_drag_logic.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -40,6 +46,8 @@ namespace {
 // Inactive Spaces are grey and faded (filter: grayscale(1); opacity: 0.7),
 // changing over 200 ms.
 constexpr float kInactiveOpacity = 0.7f;
+// While a Space button is dragged to reorder it, the others (reorder-mode).
+constexpr float kReorderOtherOpacity = 0.2f;
 constexpr base::TimeDelta kTransitionDuration = base::Milliseconds(200);
 
 }  // namespace
@@ -114,7 +122,8 @@ class KoanSpaceButton : public views::Button,
     // The row's shrunk buttons have no hover background (Zen's
     // icons-overflow).
     if (!bar_->compact() &&
-        (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED)) {
+        (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED ||
+         bar_->IsReordered(this))) {
       flags.setColor(provider->GetColor(kColorKoanSpaceButtonHovered));
       canvas->DrawRoundRect(bounds, SpaceButtonCornerRadius(), flags);
     }
@@ -166,6 +175,33 @@ class KoanSpaceButton : public views::Button,
     UpdateLook(/*animate=*/false);
   }
 
+  // Zen's reorder (ZenSpaceIcons.mjs): a plain left press may become a drag
+  // along the bar.
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    if (event.IsOnlyLeftMouseButton() && !event.IsControlDown() &&
+        !event.IsShiftDown() && !event.IsAltDown()) {
+      bar_->StartReorder(this, InBar(event.location()));
+    }
+    return views::Button::OnMousePressed(event);
+  }
+
+  bool OnMouseDragged(const ui::MouseEvent& event) override {
+    const bool handled = views::Button::OnMouseDragged(event);
+    bar_->UpdateReorder(this, InBar(event.location()));
+    return handled;
+  }
+
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    // The order first; then the click, as in Zen (mouseup, then click).
+    bar_->EndReorder(this);
+    views::Button::OnMouseReleased(event);
+  }
+
+  void OnMouseCaptureLost() override {
+    bar_->CancelReorder();
+    views::Button::OnMouseCaptureLost();
+  }
+
   void OnFocus() override {
     views::Button::OnFocus();
     bar_->OnButtonStateChanged();
@@ -186,8 +222,17 @@ class KoanSpaceButton : public views::Button,
 
  private:
   bool IsLit() const {
+    if (bar_->IsReordering()) {
+      return bar_->IsReordered(this);
+    }
     return active_ || GetState() == STATE_HOVERED ||
            GetState() == STATE_PRESSED;
+  }
+
+  gfx::Point InBar(const gfx::Point& point) const {
+    gfx::Point in_bar = point;
+    views::View::ConvertPointToTarget(this, bar_, &in_bar);
+    return in_bar;
   }
 
   void UpdateLook(bool animate) {
@@ -196,6 +241,7 @@ class KoanSpaceButton : public views::Button,
     // vanish on a near-black sidebar.
     const bool dimmed =
         !lit && !(look::IsShadcnStyle() && (GetCollapsed() || icon_.empty()));
+    const bool reorder_faded = bar_->IsReordering() && !lit;
     std::unique_ptr<ui::ScopedLayerAnimationSettings> settings;
     if (animate) {
       settings = std::make_unique<ui::ScopedLayerAnimationSettings>(
@@ -203,7 +249,9 @@ class KoanSpaceButton : public views::Button,
       settings->SetTransitionDuration(kTransitionDuration);
     }
     layer()->SetLayerGrayscale(lit ? 0.f : 1.f);
-    layer()->SetOpacity(dimmed ? kInactiveOpacity : 1.f);
+    layer()->SetOpacity(reorder_faded ? kReorderOtherOpacity
+                        : dimmed      ? kInactiveOpacity
+                                      : 1.f);
   }
 
   const raw_ptr<KoanWorkspaceController> controller_;
@@ -277,6 +325,10 @@ void KoanSpaceBarView::Update(
   for (raw_ptr<KoanSpaceButton>& button : stale) {
     KoanSpaceButton* gone = button.get();
     button = nullptr;
+    if (gone == reorder_button_) {
+      reorder_button_ = nullptr;
+      reordering_ = false;
+    }
     RemoveChildViewT(gone);
   }
   ReorderChildView(create_button_, children().size());
@@ -300,6 +352,88 @@ void KoanSpaceBarView::OnButtonStateChanged() {
   }
   // The emoji it paints for them.
   SchedulePaint();
+}
+
+std::optional<tab_groups::TabGroupId> KoanSpaceBarView::SpaceAt(
+    const gfx::Point& point) const {
+  for (const KoanSpaceButton* button : buttons_) {
+    if (button->GetVisible() && button->bounds().Contains(point)) {
+      return button->space();
+    }
+  }
+  return std::nullopt;
+}
+
+void KoanSpaceBarView::StartReorder(KoanSpaceButton* button,
+                                    const gfx::Point& point) {
+  CancelReorder();
+  reorder_button_ = button;
+  // Along the bar: y in a column (Zen: the sidebar not expanded), else x.
+  reorder_start_ = compact_ ? point.x() : point.y();
+}
+
+void KoanSpaceBarView::UpdateReorder(KoanSpaceButton* button,
+                                     const gfx::Point& point) {
+  if (button != reorder_button_ || buttons_.size() < 2) {
+    return;
+  }
+  const int along = compact_ ? point.x() : point.y();
+  if (!reordering_) {
+    if (std::abs(along - reorder_start_) <= kSpaceReorderThreshold) {
+      return;
+    }
+    reordering_ = true;
+    OnButtonStateChanged();
+  }
+  // In the bar's logical order (a row is mirrored right-to-left).
+  std::vector<SpaceButtonSpan> spans;
+  for (const KoanSpaceButton* each : buttons_) {
+    const gfx::Rect bounds = each->GetMirroredBounds();
+    spans.push_back(compact_ ? SpaceButtonSpan{bounds.x(), bounds.right()}
+                             : SpaceButtonSpan{bounds.y(), bounds.bottom()});
+  }
+  const int pointer = compact_ ? GetMirroredXInView(point.x()) : point.y();
+  const auto it = std::ranges::find(buttons_, button);
+  const size_t from = static_cast<size_t>(it - buttons_.begin());
+  const size_t to = ReorderedSpaceIndex(spans, from, pointer);
+  if (to == from) {
+    return;
+  }
+  raw_ptr<KoanSpaceButton> moved = *it;
+  buttons_.erase(it);
+  buttons_.insert(buttons_.begin() + to, moved);
+  ReorderChildView(button, to + (leading_ ? 1 : 0));
+  InvalidateLayout();
+  PlayHapticFeedback();
+}
+
+void KoanSpaceBarView::EndReorder(KoanSpaceButton* button) {
+  if (button != reorder_button_) {
+    return;
+  }
+  const bool reordered = reordering_;
+  reorder_button_ = nullptr;
+  reordering_ = false;
+  if (!reordered) {
+    return;
+  }
+  OnButtonStateChanged();
+  const auto it = std::ranges::find(buttons_, button);
+  // Saved with the Spaces (Zen's reorderWorkspace()); the bar follows the
+  // new order through Update().
+  controller_->MoveSpace(button->space(),
+                         static_cast<int>(it - buttons_.begin()));
+}
+
+void KoanSpaceBarView::CancelReorder() {
+  const bool reordered = reordering_;
+  reorder_button_ = nullptr;
+  reordering_ = false;
+  if (reordered) {
+    // Back to the Spaces' order.
+    Update(controller_->GetSpaces());
+    OnButtonStateChanged();
+  }
 }
 
 void KoanSpaceBarView::OnPaint(gfx::Canvas* canvas) {
@@ -403,11 +537,19 @@ void KoanSpaceBarView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 }
 
 int KoanSpaceBarView::GetWindowTint() const {
+  // The accent the window's Space theme puts in its colour key
+  // (KoanThemeController), 0 for none.
   const views::Widget* widget =
       GetWidget() ? GetWidget()->GetTopLevelWidget() : nullptr;
-  return widget && widget->user_color_override()
-             ? static_cast<int>(*widget->user_color_override())
-             : 0;
+  BrowserView* browser_view = widget
+                                  ? BrowserView::GetBrowserViewForNativeWindow(
+                                        widget->GetNativeWindow())
+                                  : nullptr;
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  const std::optional<SkColor> accent =
+      controller ? controller->theme()->window_accent() : std::nullopt;
+  return accent ? static_cast<int>(*accent) : 0;
 }
 
 BEGIN_METADATA(KoanSpaceBarView)

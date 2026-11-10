@@ -8,6 +8,12 @@ import("//testing/test.gni")
 # (.agent/notes/agent-control.md section 7). Agent containers, and user
 # containers per Space (#111).
 
+# The partition domains, with no dependency at all, for the hooks in
+# //content/browser (which :partition depends on).
+source_set("domain") {
+  sources = [ "koan_partition_domain.h" ]
+}
+
 # What a container is, and the SiteInstances upstream's hooks put new tabs
 # in. Depends on //base and //content/public/browser only, so upstream
 # targets in components/ and extensions/ can depend on it.
@@ -16,11 +22,31 @@ source_set("partition") {
     "koan_container_partition.cc",
     "koan_container_partition.h",
   ]
-  public_deps = [ "//base" ]
+  public_deps = [
+    ":domain",
+    "//base",
+  ]
   deps = [
     "//content/public/browser",
     "//url",
   ]
+}
+
+# Which paired client may use which saved container (koan_container_grants.h).
+# //base only.
+source_set("grants") {
+  sources = [
+    "koan_container_grants.cc",
+    "koan_container_grants.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# The launch picker's profile count (koan_visible_profiles.h). Header-only, for
+# //chrome/browser/ui/profiles.
+source_set("visible_profiles") {
+  sources = [ "koan_visible_profiles.h" ]
+  public_deps = [ "//chrome/browser/profiles:profile_util" ]
 }
 
 # The core's hooks into the browser (koan_containers.h) and the API agent
@@ -33,6 +59,7 @@ source_set("containers") {
     "koan_containers.h",
   ]
   public_deps = [
+    ":grants",
     ":partition",
     "//base",
     "//url",
@@ -46,10 +73,18 @@ source_set("impl") {
   ]
   deps = [
     ":containers",
+    ":grants",
     ":partition",
     "//base",
+    "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/profiles:profile_manager",
+    "//chrome/browser/profiles:profile_util",
+    "//chrome/browser/profiles/keep_alive",
+    "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/browser_window:create_browser_window",
+    "//chrome/browser/ui/navigator",
     "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/ui/tabs:tab_strip",
     "//components/prefs",
@@ -72,8 +107,13 @@ source_set("impl") {
 #   autoninja -C out/Koan koan/browser/containers:koan_containers_unittests
 #   out/Koan/koan_containers_unittests
 test("koan_containers_unittests") {
-  sources = [ "koan_container_partition_unittest.cc" ]
+  sources = [
+    "koan_container_grants_unittest.cc",
+    "koan_container_partition_unittest.cc",
+    "koan_container_restore_unittest.cc",
+  ]
   deps = [
+    ":grants",
     ":partition",
     "//base",
     "//base/test:test_support",
@@ -81,6 +121,7 @@ test("koan_containers_unittests") {
     "//content/test:run_all_unittests",
     "//content/test:test_support",
     "//testing/gtest",
+    "//url",
   ]
 }
 
@@ -94,20 +135,26 @@ source_set("service_policy") {
   public_deps = [ "//base" ]
 }
 
-# The upgrade guard: every factory Chromium registers has a row. It links the
+# The upgrade guard: every factory Chromium registers has a row (and the launch
+# picker's profile count, koan_visible_profiles.h). It links the
 # browser (to build every factory), so it is its own target. Build and run:
 #   autoninja -C out/Koan koan/browser/containers:koan_agent_service_unittests
 #   out/Koan/koan_agent_service_unittests
 test("koan_agent_service_unittests") {
-  sources = [ "koan_agent_service_policy_unittest.cc" ]
+  sources = [
+    "koan_agent_service_policy_unittest.cc",
+    "koan_visible_profiles_unittest.cc",
+  ]
   deps = [
     ":service_policy",
+    ":visible_profiles",
     "//base",
     "//chrome/browser",
     "//chrome/browser/profiles:profiles_extra_parts",
     "//chrome/test:test_support_unit",
     "//components/keyed_service/content",
     "//components/keyed_service/core",
+    "//content/test:test_support",
     "//testing/gtest",
   ]
 }

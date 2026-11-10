@@ -41,6 +41,14 @@ TEST(AgentServicePolicyTest, EveryProfileServiceIsDecided) {
       << testing::PrintToString(undecided);
 }
 
+// Every gap is blocked at Chromium 158 (B10-B16); a roll that adds one pins
+// it in scripts/agent/check_agent_services.py and here.
+TEST(AgentServicePolicyTest, NoKnownGaps) {
+  for (const ServiceRule& rule : AgentServiceRules()) {
+    EXPECT_NE(rule.verdict, ServiceVerdict::kGap) << rule.name;
+  }
+}
+
 TEST(AgentServicePolicyTest, RulesAreSortedAndUnique) {
   base::span<const ServiceRule> rules = AgentServiceRules();
   for (size_t i = 1; i < rules.size(); ++i) {

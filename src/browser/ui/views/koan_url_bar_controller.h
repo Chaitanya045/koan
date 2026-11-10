@@ -16,7 +16,9 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
@@ -27,6 +29,7 @@
 #include "ui/views/view_tracker.h"
 
 class BrowserView;
+class GURL;
 class LocationBarView;
 
 namespace ui {
@@ -54,9 +57,11 @@ class KoanUrlBarCardFill;
 //   the page). Clicking outside closes it.
 //
 // Where it opens follows koan.urlbar.behavior (Zen's zen.urlbar.behavior):
-// "normal" edits in the pill, "floating-on-type" (the default) edits in the
-// pill and floats on the first keystroke, "float" floats right away. Without
-// a pill to edit in (compact mode with the sidebar hidden) it floats.
+// "normal" edits in the pill; "floating-on-type" (the default) floats when
+// the bar is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill
+// after a click on it; "float" floats right away
+// (UrlbarInputBase-mjs.patch, #openPopover). Without a pill to edit in
+// (compact mode with the sidebar hidden) it floats.
 //
 // With koan.urlbar.replace_newtab (Zen's zen.urlbar.replace-newtab), Ctrl+T
 // and the sidebar's new-tab button open the bar empty instead of a tab;
@@ -66,9 +71,11 @@ class KoanUrlBarCardFill;
 //
 // In the multiple-toolbars layout the omnibox stays in the toolbar; only the
 // new-tab behaviour applies.
-class KoanUrlBarController : public views::ViewObserver,
-                             public ui::EventHandler,
-                             public ui::NativeThemeObserver {
+class KoanUrlBarController
+    : public views::ViewObserver,
+      public ui::EventHandler,
+      public ui::NativeThemeObserver,
+      public web_modal::WebContentsModalDialogManager::Observer {
  public:
   enum class Placement { kNone, kInPill, kFloating };
 
@@ -93,7 +100,25 @@ class KoanUrlBarController : public views::ViewObserver,
   // scope (Chromium's "@tabs"). False if the bar can't open now (the caller
   // falls back to focusing the omnibox).
   bool OpenForTabSearch();
-  // Closes the omnibox without opening anything: the page gets focus back.
+  // ⌘L over a Glance card: opens the omnibox with the Glance page's `url`,
+  // selected, to edit in place (Zen: the Glance is the selected tab). What
+  // the user opens from it loads in the Glance page
+  // (MaybeOpenOmniboxMatchInGlance()). Returns false if the omnibox can't
+  // open here (content fullscreen, no location bar).
+  bool OpenForGlance(const GURL& url);
+  // Whether the omnibox is open over a Glance (OpenForGlance()).
+  bool is_glance_edit() const { return glance_edit_; }
+  // Whether what the user opens now should load in the Glance page; ends the
+  // Glance session if so.
+  bool TakeGlanceEdit();
+
+  // Called by KoanBrowserViewController once the window is in its widget.
+  // Zen's zen.urlbar.open-on-startup (true): a window that starts on the
+  // empty tab (a new window, the first launch; not a session restore) opens
+  // the New Tab bar at once.
+  void OnAddedToWidget();
+  // Closes the omnibox without opening anything: the page (or the Glance
+  // page it was opened over) gets focus back.
   void Close();
   // The user is about to edit by clicking the sidebar's URL pill: it edits in
   // the pill, not floating (Zen: a mouse press never floats the bar at once).
@@ -148,12 +173,13 @@ class KoanUrlBarController : public views::ViewObserver,
   // settings):
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
- private:
-  // Routes the window's "New tab" action (the sidebar's new-tab button, the
-  // app menu) through OpenForNewTab().
-  void InstallNewTabAction();
-  void OnNewTabAction();
+  // web_modal::WebContentsModalDialogManager::Observer (the active tab's,
+  // while the bar is open): a tab-modal dialog (alert(), a sign-in prompt)
+  // hides the open bar until it closes, as Zen's popover blocker does
+  // (UrlbarInputBase-mjs.patch).
+  void OnWillShow() override;
 
+ private:
   // Whether the floating bar can open now: the feature, a normal window with
   // tabs and an omnibox, not in a fullscreen that hides the toolbar's view.
   bool CanOpenBar() const;
@@ -183,18 +209,29 @@ class KoanUrlBarController : public views::ViewObserver,
   // Handles the omnibox's keys (Esc) while the bar is open or open for a new
   // tab.
   void UpdateKeyHandler();
-  void FloatOnType();
+  void UpdatePlacementOnInput();
   // Posted after the omnibox got focus: an invisible focus closes the bar
   // again.
   void CloseIfFocusInvisible();
+  // Z23: posted when the focus came back with the window: the suggestions
+  // for what is typed, which upstream closed on the blur.
+  void ReopenSuggestions();
+  // Z43: whether the active tab shows a tab-modal dialog; hiding the open bar
+  // for it, and showing it again.
+  bool IsTabModalDialogActive() const;
+  void SetYieldedToDialog(bool yielded);
+  void CheckDialogGone();
   // Asks for the open tabs and top sites again, up to `retries_left` times,
   // while the first request found no list (upstream drops it while the page
   // has no entry or the popup is closing); after a new-tab session opened
   // empty, and when the text goes back to empty (OnOmniboxChanged()).
   void ScheduleEmptyListRetry(int retries_left);
   void RetryEmptyList(int retries_left);
+  void OpenOnStartup();
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
+  // Zen draws the "+ New Tab" row as selected during a new-tab session.
+  void SetNewTabRowSelected(bool selected);
 
   const raw_ptr<BrowserView> browser_view_;
   const raw_ptr<KoanCompactModeController> compact_mode_;
@@ -210,6 +247,8 @@ class KoanUrlBarController : public views::ViewObserver,
   // asked for on the change from text to none only.
   bool text_was_empty_ = false;
   bool empty_list_retry_running_ = false;
+  // Open over a Glance card (OpenForGlance()).
+  bool glance_edit_ = false;
   // Zen's zen.urlbar.wait-to-clear: what was typed into a new-tab bar that
   // closed without opening anything, offered again for a while.
   std::u16string last_search_;
@@ -246,6 +285,18 @@ class KoanUrlBarController : public views::ViewObserver,
   gfx::Size card_size_;
   // The omnibox, while this handles its keys (Esc).
   views::ViewTracker key_target_;
+
+  // Z43: whether the open bar is hidden for a tab-modal dialog, and the check
+  // that shows it again once the dialog is gone (the manager says when one
+  // shows, not when it closes).
+  bool yielded_to_dialog_ = false;
+  base::RepeatingTimer dialog_gone_timer_;
+  base::ScopedObservation<web_modal::WebContentsModalDialogManager,
+                          web_modal::WebContentsModalDialogManager::Observer>
+      dialog_observation_{this};
+  // Z23: the focus left with the window while the bar was open (Zen's
+  // browser.urlbar.closeOnWindowBlur=false keeps its suggestions too).
+  bool left_with_window_ = false;
 
   base::WeakPtrFactory<KoanUrlBarController> weak_factory_{this};
 };

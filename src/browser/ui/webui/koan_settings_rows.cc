@@ -25,6 +25,11 @@ namespace koan::settings {
 
 namespace {
 
+// Haptic feedback is macOS's (koan::PlayHapticFeedback()).
+bool IsMacOS() {
+  return BUILDFLAG(IS_MAC);
+}
+
 constexpr Pane kPanes[] = {
     {"looks", "Look and Feel"},
     {"tabs", "Tab Management"},
@@ -60,10 +65,19 @@ constexpr Group kGroups[] = {
     {"window-drag", "looks", "Theme Settings", "Window dragging",
      "Move the window by dragging empty space at the top of websites, just "
      "like the titlebar."},
+    // Zen has the pref (zen.haptic-feedback.enabled) but no setting for it;
+    // #80 asks for one beside the other Look and Feel options.
+    {"haptics", "looks", "Theme Settings", "Haptic feedback",
+     "A light tick on the trackpad as you drag tabs and Spaces, and as the "
+     "theme picker's sliders pass a step"},
     {"glance", "looks", "Glance", "General settings for glance",
      "Get a quick overview of your links without opening them in a new tab"},
     {"urlbar", "looks", "URL Bar", "General settings for the URL bar",
      "Customize the URL bar to your liking"},
+    // Koan's own: Zen's extracted source has no setting for this (Firefox's
+    // about:preferences#home has one).
+    {"newtab", "looks", "New Tab Page", "New tabs",
+     "Choose what a new tab page shows"},
     {"workspaces", "tabs", "Workspaces", "General settings for workspaces",
      "With workspaces, you can have multiple browsing sessions at once!"},
     {"pinned-tabs", "tabs", "Pinned Tabs", "General settings for pinned tabs",
@@ -120,6 +134,13 @@ constexpr Option kCompactModeHides[] = {
     {prefs::kCompactModeHideBoth, "Hide Both"},
 };
 
+// Zen's dark theme styles (zen-preferences.ftl).
+constexpr Option kDarkThemeStyles[] = {
+    {"0", "Default Dark Theme"},
+    {"1", "Night Theme"},
+    {"2", "Colorful Dark Theme"},
+};
+
 // Zen's Glance trigger methods (zen-glance-trigger-*), in Zen's order. On
 // macOS Ctrl+click is a right-click, so it can't trigger anything.
 constexpr Option kGlanceTriggers[] = {
@@ -137,6 +158,16 @@ constexpr Option kUrlBarBehaviors[] = {
     {prefs::kUrlBarBehaviorFloatingOnType, "Floating only when typing"},
     {prefs::kUrlBarBehaviorFloat, "Always floating"},
 };
+
+// Like Firefox's "New tabs" choices: a blank page, which is what Zen shows,
+// or the browser's own page (here Chromium's).
+constexpr Option kNewTabPages[] = {
+    {prefs::kNewTabPageKoan, "Blank page"},
+    {prefs::kNewTabPageChromium, "Chromium's new tab page"},
+};
+constexpr char kNewTabPageNote[] =
+    "A new tab page set by your administrator or by an extension is shown "
+    "instead.";
 
 // Zen's close-shortcut behaviours for pinned tabs, in Zen's order.
 constexpr Option kPinnedTabCloseBehaviors[] = {
@@ -179,6 +210,22 @@ constexpr Option kAgentFailures[] = {
     {"9", "9"},           {"10", "10"}, {"11", "11"}, {"12", "12"},
     {"13", "13"},         {"14", "14"}, {"15", "15"}, {"16", "16"},
     {"17", "17"},         {"18", "18"}, {"19", "19"}, {"20", "20"},
+};
+
+// Zen's zen.workspaces.scroll-modifier-key values (ZenSpaceManager's
+// activationKeyMap).
+constexpr Option kSpaceScrollModifiers[] = {
+#if BUILDFLAG(IS_MAC)
+    {"ctrl", "Control"},
+    {"alt", "Option"},
+    {"shift", "Shift"},
+    {"meta", "Command"},
+#else
+    {"ctrl", "Ctrl"},
+    {"alt", "Alt"},
+    {"shift", "Shift"},
+    {"meta", "Meta"},
+#endif
 };
 
 // The shadcn look (koan::look names).
@@ -272,6 +319,12 @@ constexpr Row kRows[] = {
      .label = "Show the bookmarks bar"},
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
+     .pref = prefs::kShowNewTabVertical,
+     .label = "Show New Tab Button on Tab List",
+     .is_available = features::IsSidebarEnabled},
+    // Zen has no row for this (its palette and the sidebar's menu do).
+    {.group = "vertical-tabs",
+     .control = Control::kCheckbox,
      .pref = prefs::kTabsOnRight,
      .label = "Tabs on the right",
      .is_available = features::IsSidebarEnabled},
@@ -289,6 +342,19 @@ constexpr Row kRows[] = {
      .pref = prefs::kDragWindowFromContent,
      .label = "Allow dragging the window from web pages",
      .is_available = features::IsWindowDragEnabled},
+    {.group = "haptics",
+     .control = Control::kCheckbox,
+     .pref = prefs::kHapticFeedback,
+     .label = "Haptic feedback on the trackpad",
+     .is_available = IsMacOS,
+     .local_state = true},
+    {.group = "dark-theme",
+     .control = Control::kMenu,
+     .pref = prefs::kDarkThemeStyle,
+     .label = "Dark theme style",
+     .options = kDarkThemeStyles,
+     .depends_on = prefs::kWorkspaceTint,
+     .is_available = features::IsWorkspacesEnabled},
     {.group = "glance",
      .control = Control::kCheckbox,
      .pref = prefs::kGlanceEnabled,
@@ -352,11 +418,18 @@ constexpr Row kRows[] = {
      .local_state = true,
      .note = "Off while macOS's Reduce Transparency is on, and in a window "
              "that isn't active"},
+    {.group = "newtab",
+     .control = Control::kMenu,
+     .pref = prefs::kNewTabPage,
+     .label = "New tab page",
+     .options = kNewTabPages,
+     .is_available = features::IsNewTabEnabled,
+     .note = kNewTabPageNote},
     // Tab Management.
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kWorkspaceTint,
-     .label = "Tint the browser with the active Space's colour",
+     .label = "Show the active Space's theme",
      .is_available = features::IsWorkspacesEnabled},
     // Zen keeps its tab behaviours in the workspaces group too.
     {.group = "workspaces",
@@ -381,6 +454,27 @@ constexpr Row kRows[] = {
      .pref = prefs::kSelectRecentlyUsedOnClose,
      .label = "When closing a tab, switch to the most recently used tab "
               "instead of the next tab"},
+    // Zen's about:config prefs zen.workspaces.wrap-around-navigation (on),
+    // natural-scroll (off) and scroll-modifier-key (ctrl).
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kWorkspacesWrapAround,
+     .label = "Go from the last Space to the first (and back) when switching "
+              "Spaces",
+     .is_available = features::IsWorkspacesEnabled},
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kWorkspacesNaturalScroll,
+     .label = "Natural scrolling: the mouse wheel and the swipe over the "
+              "sidebar switch Spaces the other way",
+     .is_available = features::IsWorkspacesEnabled},
+    {.group = "workspaces",
+     .control = Control::kMenu,
+     .pref = prefs::kWorkspacesScrollModifierKey,
+     .label = "Key to hold to switch Spaces with the mouse wheel over the "
+              "sidebar (a sideways wheel needs none)",
+     .options = kSpaceScrollModifiers,
+     .is_available = features::IsWorkspacesEnabled},
     {.group = "pinned-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,
@@ -413,6 +507,14 @@ constexpr Row kRows[] = {
      .label = "Agent ready",
      .is_available = IsAgentControlAllowed,
      .local_state = true},
+    {.group = "agent-control",
+     .control = Control::kCheckbox,
+     .pref = prefs::kAgentControlStrict,
+     .label = "Strict: each task in a hidden profile of its own (slower to "
+              "start; shares none of your settings, extensions or "
+              "permissions)",
+     .is_available = IsAgentControlAllowed,
+     .indent = true},
     {.group = "agent-limits",
      .control = Control::kMenu,
      .pref = prefs::kAgentControlMaxLeasedTabs,

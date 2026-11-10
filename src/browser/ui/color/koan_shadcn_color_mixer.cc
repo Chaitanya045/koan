@@ -421,6 +421,13 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanEssentialsTileSelected] = {
       t.Over(Token::kSidebarForeground, Token::kSidebarAccent, 0.16f)};
 
+  // The Essentials promo: a sidebar accent drop zone with a primary ring.
+  mixer[kColorKoanEssentialsPromo] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanEssentialsPromoDragOver] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanEssentialsPromoBorder] = {t[Token::kPrimary]};
+  mixer[kColorKoanEssentialsPromoForeground] = {t[Token::kSidebarForeground]};
+  mixer[kColorKoanEssentialsPromoShadow] = {SK_ColorTRANSPARENT};
+
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.
   mixer[kColorKoanUrlPill] = {t.InputFill(Token::kSidebar)};
@@ -445,6 +452,18 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanToastKeyBackground] = {t[Token::kMuted]};
   mixer[kColorKoanToastButton] = {t[Token::kSecondary]};
   mixer[kColorKoanToastButtonIcon] = {t[Token::kSecondaryForeground]};
+  // The status bubble is a popover pill with a border, like a toast.
+  for (ui::ColorId id : std::initializer_list<ui::ColorId>{
+           kColorStatusBubbleBackgroundFrameActive,
+           kColorStatusBubbleBackgroundFrameInactive}) {
+    mixer[id] = {t[Token::kPopover]};
+  }
+  for (ui::ColorId id : std::initializer_list<ui::ColorId>{
+           kColorStatusBubbleForegroundFrameActive,
+           kColorStatusBubbleForegroundFrameInactive}) {
+    mixer[id] = {t[Token::kPopoverForeground]};
+  }
+  mixer[kColorStatusBubbleShadow] = {t.Opaque(Token::kBorder, Token::kPopover)};
 
   // Glance: shadcn's dialog overlay is `bg-black/50`.
   mixer[kColorKoanGlanceBackdrop] =
@@ -452,6 +471,9 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanGlanceCardShadow] = {
       ui::kColorShadowValueAmbientShadowElevationFour};
   mixer[kColorKoanGlanceButton] = {t[Token::kSecondary]};
+  // shadcn's secondary button: `hover:bg-secondary/80`.
+  mixer[kColorKoanGlanceButtonHover] = {color_utils::AlphaBlend(
+      t[Token::kSecondary], t[Token::kBackground], 0.8f)};
   mixer[kColorKoanGlanceButtonIcon] = {t[Token::kSecondaryForeground]};
   mixer[kColorKoanGlanceButtonConfirm] = {t[Token::kDestructive]};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {t.OnDestructive()};
@@ -513,6 +535,11 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanDownloadTileIcon] = {t[Token::kPrimaryForeground]};
   mixer[kColorKoanDownloadTileShadow] = ui::SetAlpha(
       ui::kColorShadowBase, static_cast<SkAlpha>(t.dark() ? 0x66 : 0x1a));
+
+  // The page-load progress bar: primary on secondary, like a shadcn
+  // Progress.
+  mixer[kColorKoanLoadingBar] = {t[Token::kPrimary]};
+  mixer[kColorKoanLoadingBarTrack] = {t[Token::kSecondary]};
 
   // The welcome screen: shadcn pages on `background`.
   mixer[kColorKoanWelcomeBackdropTop] = {t[Token::kSidebar]};

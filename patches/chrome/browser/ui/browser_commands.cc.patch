@@ -1,17 +1,49 @@
 diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
-index 224dc66bf6356c3adb96c7372ed977f2f1c289d2..a37471c25afda2cccc5e8e603a59ae718aff56e1 100644
+index 224dc66bf6356c3adb96c7372ed977f2f1c289d2..0c5d26fc2e9aff51ba1b3ad6856a7a5b1064ed9f 100644
 --- a/chrome/browser/ui/browser_commands.cc
 +++ b/chrome/browser/ui/browser_commands.cc
-@@ -207,6 +207,8 @@
+@@ -207,6 +207,9 @@
  #include "content/public/common/url_constants.h"
  #include "content/public/common/url_utils.h"
  #include "extensions/buildflags/buildflags.h"
 +#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
++#include "koan/browser/ui/views/koan_spaces.h"
 +#include "koan/browser/ui/views/koan_url_bar.h"
  #include "pdf/buildflags.h"
  #include "printing/buildflags/buildflags.h"
  #include "rlz/buildflags/buildflags.h"
-@@ -1461,6 +1463,10 @@ void CloseTab(BrowserWindowInterface* browser) {
+@@ -406,6 +409,8 @@ content::WebContents* DuplicateTabAt(BrowserWindowInterface* browser,
+     const auto old_group = tab_strip_model->GetTabGroupForTab(index);
+     tab_strip_model->InsertWebContentsAt(dst_index, std::move(contents_dupe),
+                                          add_types, old_group);
++    // Koan: Zen duplicates a pinned tab or Essential as a normal tab.
++    pinned = koan::OnTabDuplicated(contents, raw_contents_dupe);
+   } else {
+     CreateAndShowNewWindowWithContents(std::move(contents_dupe), browser);
+   }
+@@ -552,7 +557,8 @@ tabs::TabInterface* GetMruTab(BrowserWindowInterface* browser) {
+   base::Time max_time = base::Time::Min();
+ 
+   for (tabs::TabInterface* tab : *browser->GetTabStripModel()) {
+-    if (tab->IsActivated()) {
++    // Koan: nor Zen's hidden empty tab.
++    if (tab->IsActivated() || koan::IsEmptyTab(tab)) {
+       continue;
+     }
+     auto* lifecycle_unit =
+@@ -595,6 +601,11 @@ bool IsTabSelectable(
+     return false;
+   }
+ 
++  // Koan: nor Zen's hidden empty tab.
++  if (koan::IsEmptyTab(tab)) {
++    return false;
++  }
++
+   // Do not select the tab if it is not part of the focused state.
+   if (focused_group.has_value() &&
+       !tabs::TabStripModelSelectionState::IsTabValidInFocusedGroup(
+@@ -1461,6 +1472,10 @@ void CloseTab(BrowserWindowInterface* browser) {
    if (!active_tab) {
      return;
    }
@@ -22,7 +54,7 @@ index 224dc66bf6356c3adb96c7372ed977f2f1c289d2..a37471c25afda2cccc5e8e603a59ae71
  
    // If the selection model consists of only the indices of a single split tab,
    // decide if just the active tab in the split is closed instead of all tabs in
-@@ -2698,6 +2704,8 @@ void FocusToolbar(BrowserWindowInterface* browser) {
+@@ -2698,6 +2713,8 @@ void FocusToolbar(BrowserWindowInterface* browser) {
  
  void FocusLocationBar(BrowserWindowInterface* browser) {
    base::RecordAction(UserMetricsAction("FocusLocation"));

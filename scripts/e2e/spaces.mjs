@@ -229,7 +229,7 @@ async function headerMenu() {
   return menus(await views())[0];
 }
 let menu = await headerMenu();
-// Change Name..., Change Icon..., Edit Theme..., the Spaces, Unload Space,
+// Change Name..., Change Icon..., Theme..., the Spaces, Unload Space,
 // Unload All Other Spaces, Create Space, Delete Space.
 check('The header menu has Zen\'s entries and the Spaces',
       menu?.items.length === 9, `${menu?.items.length} item(s)`);

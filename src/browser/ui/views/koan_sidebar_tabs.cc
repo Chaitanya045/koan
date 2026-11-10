@@ -13,8 +13,10 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -26,25 +28,34 @@
 #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+#include "chrome/browser/ui/views/tabs/common/tab_group_header_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
 #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+#include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/vector_icons/vector_icons.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_essentials.h"
 #include "koan/browser/ui/views/koan_folders.h"
+#include "koan/browser/ui/views/koan_haptics.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -69,7 +80,9 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/resize_area.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/controls/scrollbar/scroll_bar.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_types.h"
@@ -210,6 +223,15 @@ class KoanNewTabRow : public views::Button {
                                                   SidebarRowCornerRadius());
   }
 
+  // Whether the row is drawn as the selected one, like Zen's while its URL
+  // bar is open instead of a new tab.
+  void SetSelected(bool selected) {
+    if (selected_ != selected) {
+      selected_ = selected;
+      SchedulePaint();
+    }
+  }
+
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
@@ -218,7 +240,12 @@ class KoanNewTabRow : public views::Button {
 
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
+    if (selected_) {
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setColor(provider->GetColor(kColorKoanSidebarTabSelected));
+      canvas->DrawRoundRect(GetLocalBounds(), SidebarRowCornerRadius(), flags);
+    } else if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
       flags.setColor(provider->GetColor(GetState() == STATE_PRESSED
@@ -227,7 +254,12 @@ class KoanNewTabRow : public views::Button {
       canvas->DrawRoundRect(GetLocalBounds(), SidebarRowCornerRadius(), flags);
     }
 
-    const SkColor color = provider->GetColor(kColorKoanSidebarNewTabForeground);
+    // Zen's [in-urlbar] row has the selected tab's text colour, not the 70%
+    // of the plain row (vertical-tabs.css).
+    const ui::ColorId color_id =
+        selected_ ? ui::ColorId(kColorToolbarText)
+                  : ui::ColorId(kColorKoanSidebarNewTabForeground);
+    const SkColor color = provider->GetColor(color_id);
     const bool expanded = width() >= kMinExpandedRowWidth;
     const gfx::Rect icon(
         expanded ? kNewTabIconX : (width() - kNewTabIconSize) / 2,
@@ -244,6 +276,9 @@ class KoanNewTabRow : public views::Button {
           LeadingTextAlignment());
     }
   }
+
+ private:
+  bool selected_ = false;
 };
 
 BEGIN_METADATA(KoanNewTabRow)
@@ -412,10 +447,12 @@ class KoanSidebarTabRowsView : public views::View {
                          base::RepeatingCallback<std::u16string()> tooltip) {
     clear_row_ = AddChildView(std::make_unique<KoanClearTabsRow>(
         std::move(clear), std::move(tooltip)));
-    AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
+    new_tab_row_ =
+        AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
   }
 
   KoanClearTabsRow* clear_row() { return clear_row_; }
+  KoanNewTabRow* new_tab_row() { return new_tab_row_; }
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -451,6 +488,7 @@ class KoanSidebarTabRowsView : public views::View {
 
  private:
   raw_ptr<KoanClearTabsRow> clear_row_ = nullptr;
+  raw_ptr<KoanNewTabRow> new_tab_row_ = nullptr;
 };
 
 BEGIN_METADATA(KoanSidebarTabRowsView)
@@ -516,6 +554,11 @@ int PlaceSpaceTabRows(const views::View* tab_group_view,
   return after_pinned ? height + tab_padding : height;
 }
 
+bool IsEmptyTabView(const views::View* view) {
+  const TabView* tab_view = views::AsViewClass<TabView>(view);
+  return tab_view && IsEmptyTab(tab_view->GetTabInterface());
+}
+
 bool IsSidebarTabRowsView(const views::View* view) {
   return views::IsViewClass<KoanSidebarTabRowsView>(view);
 }
@@ -529,6 +572,19 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
   const ui::ColorProvider* provider = tab.GetColorProvider();
   if (!features::IsSidebarEnabled() || !provider) {
     return false;
+  }
+  // Zen unselects the current tab while its URL bar is open for a new tab:
+  // the "+ New Tab" row is the selected one then.
+  if (selected && tab.GetWidget()) {
+    if (const BrowserView* browser_view =
+            BrowserView::GetBrowserViewForNativeWindow(
+                tab.GetWidget()->GetNativeWindow())) {
+      if (const KoanBrowserViewController* controller =
+              KoanBrowserViewController::From(browser_view);
+          controller && controller->url_bar()->is_new_tab()) {
+        selected = false;
+      }
+    }
   }
   if (pinned) {
     PaintEssentialsTile(canvas, tab, selected, hover, corner_radius);
@@ -554,6 +610,69 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
 
 bool ShowsTabHoverCards() {
   return !features::IsSidebarEnabled();
+}
+
+bool ShowsTabThrobber(content::BrowserContext* context) {
+  return !features::IsSidebarEnabled() || !context ||
+         !Profile::FromBrowserContext(context)
+              ->GetOriginalProfile()
+              ->GetPrefs()
+              ->GetBoolean(prefs::kHideTabThrobber);
+}
+
+bool IsSidebarEmptySpace(const views::View* tab_strip_view,
+                         const views::View* target) {
+  const auto* strip = views::AsViewClass<TabStripView>(tab_strip_view);
+  const views::ScrollView* scroll =
+      strip ? strip->unpinned_tabs_scroll_view() : nullptr;
+  if (!features::IsSidebarEnabled() || !scroll || !target) {
+    return false;
+  }
+  for (const views::View* view = target; view; view = view->parent()) {
+    if (view == scroll) {
+      return true;
+    }
+    if (views::IsViewClass<TabView>(view) ||
+        views::IsViewClass<SplitTabView>(view) ||
+        views::IsViewClass<TabGroupHeaderView>(view) ||
+        views::IsViewClass<KoanSpaceHeaderView>(view) ||
+        views::IsViewClass<views::Button>(view) ||
+        views::IsViewClass<views::ScrollBar>(view) ||
+        IsSidebarTabRowsView(view)) {
+      return false;
+    }
+  }
+  return false;
+}
+
+bool IsSidebarClientArea(const views::View* tab_strip_view,
+                         const views::View* region,
+                         const gfx::Point& point) {
+  if (IsInSpaceForm(tab_strip_view, region, point)) {
+    return true;
+  }
+#if BUILDFLAG(IS_MAC)
+  // Upstream makes the scroll view's empty part below its contents caption
+  // (TabStripView::IsPositionInWindowCaption()); the rest of it is client
+  // area already.
+  const auto* strip = views::AsViewClass<TabStripView>(tab_strip_view);
+  const views::ScrollView* scroll =
+      strip ? strip->unpinned_tabs_scroll_view() : nullptr;
+  if (!features::IsSidebarEnabled() || !scroll || !scroll->GetVisible()) {
+    return false;
+  }
+  const gfx::Point in_scroll =
+      views::View::ConvertPointToTarget(region, scroll, point);
+  if (!scroll->HitTestPoint(in_scroll)) {
+    return false;
+  }
+  const views::ScrollBar* bar = scroll->vertical_scroll_bar();
+  return !bar || !bar->GetVisible() ||
+         !bar->HitTestPoint(
+             views::View::ConvertPointToTarget(scroll, bar, in_scroll));
+#else
+  return false;
+#endif
 }
 
 int SidebarTabIconGap(int upstream_value) {
@@ -595,12 +714,20 @@ void KoanSidebarTabsController::OnAddedToWidget() {
         base::BindRepeating(&KoanSidebarTabsController::OnCollapseChanged,
                             base::Unretained(this)));
   }
+  // Zen's "Show New Tab Button on Tab List", from chrome://koan-settings.
+  pref_change_registrar_.Init(
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
+  pref_change_registrar_.Add(
+      prefs::kShowNewTabVertical,
+      base::BindRepeating(&KoanSidebarTabsController::UpdateNewTabRow,
+                          base::Unretained(this)));
   InstallRows();
 }
 
 void KoanSidebarTabsController::OnBrowserViewDestroying() {
   mode_subscription_ = {};
   collapse_subscription_ = {};
+  pref_change_registrar_.RemoveAll();
   if (started_) {
     browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
     started_ = false;
@@ -670,6 +797,7 @@ void KoanSidebarTabsController::InstallRows() {
   // group view.
   rows_observation_.Observe(rows_);
   UpdateClearRow();
+  UpdateNewTabRow();
   UpdateRowsHost();
 
   // The region outlives its tab strip. It notifies itself (not its children)
@@ -781,6 +909,7 @@ void KoanSidebarTabsController::UpdateClearRow() {
   bool listed = false;
   for (int i = 0; i < model->count() && !listed; ++i) {
     listed = !IsPinnedForUser(model->GetTabAtIndex(i)) &&
+             !IsEmptyTab(model->GetTabAtIndex(i)) &&
              (!workspace || model->GetTabGroupForTab(i) == workspace);
   }
   const auto* state =
@@ -792,6 +921,30 @@ void KoanSidebarTabsController::UpdateClearRow() {
   // closed or because none can (then it closes them all).
   rows_->clear_row()->button()->SetShowIcon(closable == unpinned.size() ||
                                             closable == 0);
+}
+
+void KoanSidebarTabsController::SetNewTabSelected(bool selected) {
+  if (rows_) {
+    rows_->new_tab_row()->SetSelected(selected);
+  }
+  // The current tab's pill goes (or comes back) with it. The tab rows are
+  // in the sidebar's region, each painting itself.
+  if (region_) {
+    const auto repaint = [](auto& self, views::View* view) -> void {
+      view->SchedulePaint();
+      for (views::View* child : view->children()) {
+        self(self, child);
+      }
+    };
+    repaint(repaint, region_);
+  }
+}
+
+void KoanSidebarTabsController::UpdateNewTabRow() {
+  if (rows_ && pref_change_registrar_.prefs()) {
+    rows_->new_tab_row()->SetVisible(
+        pref_change_registrar_.prefs()->GetBoolean(prefs::kShowNewTabVertical));
+  }
 }
 
 void KoanSidebarTabsController::OpenNewTab() {
@@ -855,6 +1008,23 @@ void KoanSidebarTabsController::OnTabStripModelChanged(
   UpdateClearRow();
   // A Space's group view comes and goes with its tabs.
   ScheduleUpdateRowsHost();
+  // Z50: a tab drag moving the tab to another slot ticks the trackpad.
+  if (change.type() == TabStripModelChange::kMoved &&
+      TabDragController::IsActive() && ++drag_moves_ > 1) {
+    PlayHapticFeedback();
+  }
+  if (change.type() == TabStripModelChange::kRemoved) {
+    for (const auto& removed : change.GetRemove()->contents) {
+      empty_tab_by_id_.erase(removed.tab->GetHandle().raw_value());
+    }
+  } else if (change.type() == TabStripModelChange::kInserted) {
+    // Seeded here too, so a tab that never gets a full change (a restored,
+    // never loaded one) has a state to compare with.
+    for (const auto& inserted : change.GetInsert()->contents) {
+      empty_tab_by_id_[inserted.tab->GetHandle().raw_value()] =
+          IsEmptyTab(inserted.tab);
+    }
+  }
 }
 
 void KoanSidebarTabsController::OnTabGroupFocusChanged(
@@ -876,6 +1046,26 @@ void KoanSidebarTabsController::OnTabChangedAt(tabs::TabInterface* tab,
     // So does pinning a tab in place, and it moves the rows in the focus
     // order.
     ScheduleUpdateRowsHost();
+    // A Space's only tab showing a page, or an empty one, shows or hides its
+    // row (IsEmptyTab()); the layouts are not told by the tab's URL. Only
+    // when that changes: this runs for every title, icon and load change of
+    // every tab.
+    // An unknown tab (never seen, e.g. restored without a load) is laid out
+    // once, so a row hidden for a mark that is gone shows.
+    const bool empty = IsEmptyTab(tab);
+    const int32_t id = tab->GetHandle().raw_value();
+    const auto known = empty_tab_by_id_.find(id);
+    if ((known == empty_tab_by_id_.end() || known->second != empty) &&
+        region_) {
+      empty_tab_by_id_[id] = empty;
+      const auto relayout = [](auto& self, views::View* view) -> void {
+        view->InvalidateLayout();
+        for (views::View* child : view->children()) {
+          self(self, child);
+        }
+      };
+      relayout(relayout, region_);
+    }
   }
 }
 
@@ -885,6 +1075,18 @@ void KoanSidebarTabsController::OnTabPinnedStateChanged(tabs::TabInterface* tab,
 }
 
 void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
+  if (event->type() == ui::EventType::kMousePressed) {
+    OnSidebarPressed(event);
+    return;
+  }
+  if (event->type() == ui::EventType::kMouseDragged &&
+      TabDragController::IsActive()) {
+    if (KoanBrowserViewController* controller =
+            KoanBrowserViewController::From(browser_view_)) {
+      controller->compact_mode()->HoldSidebarForTabDrag();
+    }
+    return;
+  }
   if (!rows_ || event->target() != region_.get()) {
     return;
   }
@@ -893,6 +1095,55 @@ void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
   } else if (event->type() == ui::EventType::kMouseExited) {
     rows_->clear_row()->button()->SetSidebarHovered(false);
   }
+}
+
+void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
+  // (A tab drag starts with a press.)
+  drag_moves_ = 0;
+  auto* region = views::AsViewClass<VerticalTabStripRegionView>(region_.get());
+  auto* target = static_cast<views::View*>(event->target());
+  if (!region || !target || !features::IsSidebarEnabled()) {
+    return;
+  }
+  const bool double_click =
+      event->IsOnlyLeftMouseButton() && event->GetClickCount() == 2;
+  // The splitter: back to Zen's default width (its dblclick on
+  // #zen-sidebar-splitter), through upstream's own resize, which saves it.
+  if (views::IsViewClass<views::ResizeArea>(target) &&
+      target->parent() == region) {
+    if (double_click) {
+      // (OnResize() turns the amount round for a sidebar on the right.)
+      const int widen = prefs::kSidebarDefaultWidth - region->width();
+      region->OnResize(IsSidebarOnRight(browser_view_) ? -widen : widen,
+                       /*done_resizing=*/true);
+      event->SetHandled();
+    }
+    return;
+  }
+  if (!IsSidebarEmptySpace(region->GetTabStripView(), target)) {
+    return;
+  }
+  if (double_click || event->IsOnlyMiddleMouseButton()) {
+    OpenNewTab();
+    event->SetHandled();
+    return;
+  }
+#if BUILDFLAG(IS_MAC)
+  // Zen's draggable sidebar: the empty space moves the window, as caption
+  // would. From a posted task, as Koan's page drag (koan_window_drag.cc):
+  // AppKit may run the move in a nested loop.
+  if (event->IsOnlyLeftMouseButton()) {
+    event->SetHandled();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<KoanSidebarTabsController> self) {
+                         if (self && self->browser_view_->GetWidget()) {
+                           StartNativeWindowMove(self->browser_view_);
+                         }
+                       },
+                       weak_factory_.GetWeakPtr()));
+  }
+#endif
 }
 
 void KoanSidebarTabsController::OnViewIsDeleting(views::View* observed_view) {

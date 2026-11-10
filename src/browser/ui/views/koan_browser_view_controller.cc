@@ -33,6 +33,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_agent_indicator.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
+#include "koan/browser/ui/views/koan_command_policy.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
@@ -40,6 +41,7 @@
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_loading_indicator.h"
 #include "koan/browser/ui/views/koan_media_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
@@ -47,6 +49,7 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
@@ -137,6 +140,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
       pinned_tabs_(std::make_unique<KoanPinnedTabController>(browser_view)),
       folders_(std::make_unique<KoanFolderController>(browser_view)),
+      theme_(std::make_unique<KoanThemeController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       library_(std::make_unique<KoanLibraryController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(
@@ -144,6 +148,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       media_(std::make_unique<KoanMediaController>(browser_view)),
       download_animation_(
           std::make_unique<KoanDownloadAnimation>(browser_view)),
+      loading_indicator_(std::make_unique<KoanLoadingIndicator>(browser_view)),
       // Page presses are where downloads fly from. Unretained: the
       // animation outlives the drag controller (declared before it).
       window_drag_(std::make_unique<KoanWindowDragController>(
@@ -178,6 +183,9 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
   browser_view->SetProperty(
       kKoanBrowserViewControllerKey,
       std::make_unique<KoanBrowserViewController>(browser_view));
+  // Once From() finds the controller: the policy's rows ask it which of
+  // them this window has (Spaces).
+  InstallCommandPolicy(browser_view);
 }
 
 // static
@@ -206,11 +214,13 @@ void KoanBrowserViewController::TearDown() {
   workspaces_->OnBrowserViewDestroying();
   pinned_tabs_->OnBrowserViewDestroying();
   folders_->OnBrowserViewDestroying();
+  theme_->OnBrowserViewDestroying();
   glance_->OnBrowserViewDestroying();
   library_->OnBrowserViewDestroying();
   toast_->Close();
   media_->OnBrowserViewDestroying();
   download_animation_->OnBrowserViewDestroying();
+  loading_indicator_->OnBrowserViewDestroying();
   window_drag_->OnBrowserViewDestroying();
   welcome_->OnBrowserViewDestroying();
 }
@@ -239,12 +249,17 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     sidebar_tabs_->OnAddedToWidget();
     workspaces_->OnAddedToWidget();
     folders_->OnAddedToWidget();
+    theme_->OnAddedToWidget();
     shortcuts_->OnAddedToWidget();
     command_palette_->OnAddedToWidget();
     // After the workspace switcher: the media cards go above it.
     media_->OnAddedToWidget();
     download_animation_->OnAddedToWidget();
+    loading_indicator_->OnAddedToWidget();
     welcome_->OnAddedToWidget();
+    // After the welcome: both post a task, and the URL bar's must run after
+    // the welcome's (FIFO) so it sees whether the welcome is showing.
+    url_bar_->OnAddedToWidget();
   }
 }
 
@@ -259,6 +274,7 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   toast_->OnBrowserViewLayout();
   media_->OnBrowserViewLayout();
   download_animation_->OnBrowserViewLayout();
+  loading_indicator_->OnBrowserViewLayout();
   welcome_->OnBrowserViewLayout();
   agent_indicator_->OnBrowserViewLayout();
 }

@@ -48,6 +48,13 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanEssentialsTile,
   kColorKoanEssentialsTileHovered,
   kColorKoanEssentialsTileSelected,
+  // Zen's Essentials drop promo (koan_essentials_promo.cc): its fill, lit
+  // while a tab is over it, border, text and outline, shadow.
+  kColorKoanEssentialsPromo,
+  kColorKoanEssentialsPromoDragOver,
+  kColorKoanEssentialsPromoBorder,
+  kColorKoanEssentialsPromoForeground,
+  kColorKoanEssentialsPromoShadow,
 
   // The URL bar (koan_sidebar_nav_view.cc, koan_url_bar_controller.cc): the
   // sidebar's URL pill (its fill, hovered fill and text) and the floating URL
@@ -88,13 +95,14 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceBackdrop,
   kColorKoanGlanceCardShadow,
   kColorKoanGlanceButton,
+  kColorKoanGlanceButtonHover,
   kColorKoanGlanceButtonIcon,
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
 
   // Spaces (koan_space_*.cc): the header's text and its hover background, a
   // bottom bar button's hover background, the dot of a Space without an
-  // icon, the Create-a-Space form's fields (and the Edit Theme button's
+  // icon, the Create-a-Space form's fields (and the Theme… button's
   // hover), its description and the dashed box of the icon, and an emoji's
   // hover background in the emoji picker.
   kColorKoanSpaceForeground,
@@ -125,25 +133,14 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanLibraryIcon,
   kColorKoanLibraryIconFill,
   kColorKoanLibraryProgressTrack,
-  // Spaces: a card (tinted with the space's colour on top) and its outline,
-  // an empty icon slot, and the add button with its "+".
+  // Spaces: a card (tinted with the space theme's primary colour on top)
+  // and its outline, an empty icon slot, and the add button with its "+".
   kColorKoanLibrarySpaceCard,
   kColorKoanLibrarySpaceCardBorder,
   kColorKoanLibrarySpaceIconEmpty,
   kColorKoanLibraryAddSpace,
   kColorKoanLibraryAddSpaceHovered,
   kColorKoanLibraryAddSpaceForeground,
-  // A Space theme's colour, as its card in the Library is tinted with (one
-  // per tab group colour, the colours a Space's theme can take).
-  kColorKoanLibrarySpaceTintGrey,
-  kColorKoanLibrarySpaceTintBlue,
-  kColorKoanLibrarySpaceTintRed,
-  kColorKoanLibrarySpaceTintYellow,
-  kColorKoanLibrarySpaceTintGreen,
-  kColorKoanLibrarySpaceTintPink,
-  kColorKoanLibrarySpaceTintPurple,
-  kColorKoanLibrarySpaceTintCyan,
-  kColorKoanLibrarySpaceTintOrange,
   // Folders (koan_folder_views.cc): Zen's folder icon (the folder behind,
   // its cover, their outline and dots), a collapsed folder's tab count, and
   // the highlighted tab in a folder's search popup.
@@ -199,6 +196,44 @@ enum KoanColorIds : ui::ColorId {
   // default theme (ZenGradientGenerator.mjs getBrowserBg()), black at 40% in
   // dark mode, none in light mode on macOS.
   kColorKoanGlassTint,
+
+  // Space themes (koan_theme_controller.cc, zen-theme.css): the window behind
+  // a theme's gradient, the window without a theme, and the surface a theme's
+  // colours are blended into. A theme family can supply its own.
+  kColorKoanThemeWindow,
+  kColorKoanThemeDefaultBackground,
+  kColorKoanThemeTintBase,
+  // An inactive translucent window, greyed out (Zen's
+  // zen.view.grey-out-inactive-windows: InactiveCaption, flat and opaque).
+  kColorKoanThemeInactiveWindow,
+
+  // Zen's theme picker (koan_theme_picker.cc, zen-gradient-generator.css), in
+  // the window's light or dark scheme: the panel and its text, the colour
+  // field and its dot grid, the icon buttons (icon, hover), the colour dots'
+  // border, the opacity slider's wave (up to the thumb and after it), track
+  // and thumb, the grain dial's step dots, handle, knob border and shine, and
+  // the preset swatches' shadow.
+  kColorKoanThemePickerBackground,
+  kColorKoanThemePickerForeground,
+  kColorKoanThemePickerField,
+  kColorKoanThemePickerFieldGrid,
+  kColorKoanThemePickerIcon,
+  kColorKoanThemePickerButtonHovered,
+  kColorKoanThemePickerDotBorder,
+  kColorKoanThemePickerWave,
+  kColorKoanThemePickerWaveDim,
+  kColorKoanThemePickerTrack,
+  kColorKoanThemePickerThumb,
+  kColorKoanThemePickerDialDot,
+  kColorKoanThemePickerDialHandle,
+  kColorKoanThemePickerDialBorder,
+  kColorKoanThemePickerDialShine,
+  kColorKoanThemePickerSwatchShadow,
+
+  // The page-load progress bar (koan_loading_indicator.cc): the bar (and the
+  // long load's sweep), and the long load's track.
+  kColorKoanLoadingBar,
+  kColorKoanLoadingBarTrack,
 
   kKoanColorsEnd,
 };

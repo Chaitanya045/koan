@@ -18,6 +18,7 @@
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/color/color_id.h"
@@ -39,27 +40,10 @@ enum SpaceMenuCommand {
   kUnloadOthers,
   kCreateSpace,
   kDelete,
+  kSpaceRouting,
   // The Spaces to switch to (opened from the header).
   kFirstSwitch = 100,
 };
-
-// Edit Theme... choices: Default, then the colours.
-struct ThemeChoice {
-  std::optional<tab_groups::TabGroupColorId> color;
-  const char16_t* name;
-};
-constexpr auto kThemes = std::to_array<ThemeChoice>({
-    {std::nullopt, u"Default"},
-    {tab_groups::TabGroupColorId::kBlue, u"Blue"},
-    {tab_groups::TabGroupColorId::kCyan, u"Cyan"},
-    {tab_groups::TabGroupColorId::kGreen, u"Green"},
-    {tab_groups::TabGroupColorId::kYellow, u"Yellow"},
-    {tab_groups::TabGroupColorId::kOrange, u"Orange"},
-    {tab_groups::TabGroupColorId::kRed, u"Red"},
-    {tab_groups::TabGroupColorId::kPink, u"Pink"},
-    {tab_groups::TabGroupColorId::kPurple, u"Purple"},
-});
-constexpr int kThemeRadioGroup = 1;
 
 constexpr int kMenuIconSize = 16;
 
@@ -94,7 +78,7 @@ KoanSpaceMenu::KoanSpaceMenu(KoanWorkspaceController* controller,
   }
   model_.AddItem(kChangeIcon, u"Change Icon\u2026");
   if (active) {
-    model_.AddItem(kEditTheme, u"Edit Theme\u2026");
+    model_.AddItem(kEditTheme, u"Theme\u2026");
   }
   model_.AddSeparator(ui::NORMAL_SEPARATOR);
   if (from_header_) {
@@ -115,6 +99,9 @@ KoanSpaceMenu::KoanSpaceMenu(KoanWorkspaceController* controller,
   model_.AddSeparator(ui::NORMAL_SEPARATOR);
   model_.AddItem(kCreateSpace, u"Create Space");
   model_.AddItem(kDelete, u"Delete Space");
+  model_.AddSeparator(ui::NORMAL_SEPARATOR);
+  // Zen's zen-space-routing-settings.
+  model_.AddItem(kSpaceRouting, u"Space Routing Settings");
 }
 
 KoanSpaceMenu::~KoanSpaceMenu() = default;
@@ -161,7 +148,7 @@ void KoanSpaceMenu::Execute(int command_id) {
       controller_->ShowIconPicker(space_, anchor);
       return;
     case kEditTheme:
-      controller_->EditSpaceTheme(space_, anchor);
+      controller_->EditSpaceTheme(space_);
       return;
     case kUnload:
       controller_->UnloadSpace(space_);
@@ -175,6 +162,9 @@ void KoanSpaceMenu::Execute(int command_id) {
     case kDelete:
       controller_->DeleteSpace(space_);
       return;
+    case kSpaceRouting:
+      controller_->space_routing()->ShowSettings();
+      return;
   }
 }
 
@@ -185,6 +175,9 @@ bool KoanSpaceMenu::IsCommandIdEnabled(int command_id) const {
   }
   if (command_id == kDelete) {
     return controller_->CanDeleteSpace();
+  }
+  if (command_id == kEditTheme) {
+    return controller_->CanEditSpaceTheme();
   }
   if (command_id == kUnloadOthers) {
     return controller_->GetSpaces().size() > 1;
@@ -248,37 +241,6 @@ bool KoanCreateMenu::IsCommandIdEnabled(int command_id) const {
   const KoanWorkspaceController::CreateMenuEntry& entry =
       entries_[command_id - 1];
   return entry.is_enabled.is_null() || entry.is_enabled.Run();
-}
-
-// KoanThemeMenu.
-
-KoanThemeMenu::KoanThemeMenu(const KoanWorkspaceController::SpaceTheme& current,
-                             PickedCallback on_pick)
-    : current_(current), on_pick_(std::move(on_pick)) {
-  for (size_t i = 0; i < kThemes.size(); ++i) {
-    model_.AddRadioItem(static_cast<int>(i), kThemes[i].name, kThemeRadioGroup);
-  }
-}
-
-KoanThemeMenu::~KoanThemeMenu() = default;
-
-void KoanThemeMenu::RunMenuAt(views::View* anchor) {
-  runner_ = std::make_unique<views::MenuRunner>(
-      &model_, views::MenuRunner::HAS_MNEMONICS);
-  RunBelow(runner_.get(), anchor);
-}
-
-KoanWorkspaceController::SpaceTheme KoanThemeMenu::ThemeFor(
-    int command_id) const {
-  return {.color = kThemes[command_id].color};
-}
-
-void KoanThemeMenu::ExecuteCommand(int command_id, int event_flags) {
-  on_pick_.Run(ThemeFor(command_id));
-}
-
-bool KoanThemeMenu::IsCommandIdChecked(int command_id) const {
-  return ThemeFor(command_id) == current_;
 }
 
 }  // namespace koan

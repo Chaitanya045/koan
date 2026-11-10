@@ -2,7 +2,7 @@ diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
 index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..314a59a217bcf0381d6c82773c72235eff9abe51 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -107,6 +107,7 @@ source_set("bubble_anchor_util_views_impl") {
+@@ -107,6 +107,7 @@ source_set("bubble_anchor_util_views_imp
      "//components/payments/core",
      "//components/tabs:public",
      "//content/public/browser",
@@ -18,3 +18,11 @@ index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..314a59a217bcf0381d6c82773c72235e
    ]
  }
  
+@@ -318,6 +320,7 @@ source_set("status_bubble") {
+     "//chrome/browser/ui:status_bubble",
+     "//chrome/browser/ui/color:color_headers",
+     "//components/url_formatter",
++    "//koan/browser/ui/views",
+     "//skia",
+     "//ui/base",
+     "//ui/display",

@@ -185,11 +185,16 @@ toolbar is hidden) don't change that.
 
 ## URL bar
 
-Like Zen's, the URL bar opens where you are and floats once you type:
-clicking the pill (or Ctrl+L) edits the address right in the pill; the
-first keystroke lifts it into a card centred over the window (two thirds
-of its width, at most 750 px, larger text, a soft shadow over the page)
-with the suggestions under it. The pill is empty meanwhile. Esc, a click
+Like Zen's, the URL bar is a card centred over the window (two thirds of
+its width, at most 750 px, larger text, a soft shadow over the page) with
+the suggestions under it. **Ctrl+L and Ctrl+T (⌘L, ⌘T)** open it at once,
+with no animation; **clicking the pill** edits the address in the pill, which
+grows over the page as you type and never floats (Behavior "Normal" does that
+for the keyboard too). The box is empty after Ctrl+T, and an empty box lists
+your open tabs (most recent first, each with **Switch to Tab**; Enter
+switches to it) and then your most visited sites, all from the browser itself
+with no request to a search engine. On an empty box, **Tab** enters the
+command palette (the ">" mode). The pill is empty meanwhile. Esc, a click
 outside the card or opening a result (or running an action) closes it;
 switching to another window and back leaves it as it was. In compact mode,
 with the sidebar hidden, it floats right away, also when you click the pill
@@ -208,12 +213,24 @@ creating anything; what you had typed comes back if you press Ctrl+T again
 within 45 seconds.
 
 Hover the pill (or Tab to it) for the **copy** button: it copies the page's
-URL and says so ("Copied current URL!"), as do Ctrl+Shift+C and
+URL, without tracking parameters (utm_*, fbclid ...: Firefox's list, as in
+Zen), and says so ("Copied current URL!", with a Share button on macOS), as
+do Ctrl+Shift+C and
 Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The site's icon at the start of the
-pill opens the site's panel (security, permissions, cookies and site settings);
+pill opens the site's panel: Zen's row of Share (macOS's share sheet),
+Screenshot, Reader Mode and Bookmark buttons on top, then security,
+permissions, cookies and site settings;
 on an empty tab it is a magnifier that edits the address. As in Zen, the pill
 and the URL bar show none of Chromium's page actions (site settings, install,
 bookmark star).
+
+**Extensions** pinned to the toolbar (the pin in the extensions menu) show as
+buttons at the end of the pill while the pointer is over the sidebar, as in
+Zen; a click opens the extension's popup there, a right-click its menu. They
+take at most 55 % of the pill; the others, and every extension with its access
+to the site and Manage Extensions, are under **Extensions** in the site's
+panel. An extension's keyboard shortcut opens its popup at its button, or at
+the site's icon. In compact mode the sidebar stays out while a popup is open.
 
 | "Normal": editing in place, widened | Copied |
 |---|---|
@@ -231,6 +248,45 @@ Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
 In the multiple-toolbars layout the address is edited in the toolbar, as
 in Chrome; Ctrl+T still opens it instead of a new-tab page, and Esc closes
 it in one press.
+
+## Closing the last tab
+
+Like Zen (`browser.tabs.closeWindowWithLastTab` is off there), closing a
+window's last tab keeps the window. It shows the **empty tab**: a blank page
+that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
+empty) and never navigates: what you open from the URL bar (⌘T, ⌘L) opens in
+a **new** tab; close that tab and the empty tab is back. (An empty tab that is
+navigated in place anyway, from a bookmark or the Library, becomes an ordinary
+tab.) Ctrl+Tab, ⌘1-9, tab search and extensions (`chrome.tabs.query`) skip
+it, as in Zen. Only a **close** keeps the window: moving
+the last tab to another window (a drag, "Move to another window") closes it, as
+in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
+last unpinned tab leaves the Essential selected, not the empty tab. In compact
+mode the sidebar stays shown while the empty tab is selected.
+
+## New tab page
+
+A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
+horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
+above off) is an empty page in the window's look, like Zen's: near black (#09090b) in the
+dark shadcn look, white in the light one, and in the default Zen look Chromium's
+theme colour for the page (Zen's empty tab shows its window gradient or glass
+there: not matched yet). It follows the window: a change of look or theme loads
+it again with the new colour. No Google logo, search box or shortcut tiles, and nothing to load, so it
+shows at once. It is `chrome://koan-newtab`, a page with no content and no
+script. Ctrl+T (⌘T) still opens the URL bar instead of a tab. A new window that
+starts on the empty page opens the New Tab bar at once (Zen's
+`zen.urlbar.open-on-startup`), except the first-run welcome and a restored
+session.
+
+Koan's settings (Ctrl+,), Look and Feel > New tab page > New tabs, choose
+between **Blank page** (Koan's, the default; pref `koan.newtab.page`) and
+**Chromium's new tab page** (with a search engine other than Google's, that is
+the engine's own remote new tab page, which Chromium loads from the web). A new
+tab page set by your administrator
+(Chromium's `NewTabPageLocation` policy) or by an extension is shown
+instead of either, as in Chromium. Private windows keep Chromium's private
+browsing page. `chrome://flags/#koan-new-tab` turns Koan's page off.
 
 ## Command palette
 
@@ -251,7 +307,8 @@ current view (unsplit), Copy Current URL, Settings, Open Private Window,
 Open New Window, Pin / Unpin Tab, Add to / Remove from Essentials, Close
 Tab, Reopen Closed Tab, Duplicate Current Tab, Reload Tab, Reload Tab
 Without Cache, Next / Previous Tab, Capture Screenshot, Find in Page, Manage
-Extensions, Switch to Automatic Appearance / Light Mode / Dark Mode, Print;
+Extensions, Toggle Tabs on right, Switch to Automatic Appearance / Light
+Mode / Dark Mode, Print;
 with workspaces also New Space, Next / Previous Space and "Focus on" each
 other Space (type its name); with folders New Folder and Collapse / Expand
 All Folders. Only the actions that apply are offered (Unpin
@@ -267,6 +324,11 @@ tab at the top of the Space's other tabs) and the other tabs. The pinned
 tabs, the line, New Tab and the tabs scroll together; the Essentials and
 the Space header stay put. A tab's close button shows while you point at
 it.
+
+While the selected tab loads, Zen's loading bar pulses at the top middle of
+the page (in the gap above it); after three seconds it turns into a wider
+track with a sweep. It isn't shown while a page is fullscreen. Tabs keep
+their favicon while loading, without Chromium's spinner, as in Zen.
 
 A pinned tab or Essential keeps its site, as in Zen: a URL on another site
 typed in its URL bar (or a search) opens in a new tab, and a link in it that
@@ -307,7 +369,9 @@ As in Zen there are two kinds of pinned tab:
   ("Unload and switch to tab") where other tabs have their close button.
 - **Essentials** are shared by all Spaces, up to 12 per window: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
-  Dragging a tab into the grid also makes it an Essential.
+  Dragging a tab into the grid also makes it an Essential. With no
+  Essentials yet, dragging a tab to the top of the sidebar shows Zen's
+  "Add to Essentials" drop target; drop it there.
 
 Both remember the URL they were pinned on, the **pinned URL**. When a pinned
 tab goes elsewhere, a slash appears after its icon: hover it to see the
@@ -331,7 +395,10 @@ tab among the pinned ones to pin it. With several pinned tabs selected,
 Ctrl+W does the same to each of them and closes none of the others.
 
 Any tab's context menu has "Change Label…" (edit the name in place; Enter
-keeps it, Esc cancels, an empty name goes back to the page title), "Change
+keeps it, Esc cancels, an empty name goes back to the page title, and "Tab
+has been successfully renamed!" confirms a new one). Double-clicking a tab's
+label in the sidebar does the same; Essentials have no label to rename, and
+neither do tabs in a sidebar collapsed to icons. "Change
 Icon…" (an emoji instead of the favicon) and "Unload" (free the tab's
 memory; it reloads when you select it). Pinned URLs, labels and icons are
 kept with the session.
@@ -345,30 +412,46 @@ belongs to a Space, and new tabs open in the active one.
 - **Create** a Space with **+ > Create Space** (or Ctrl+Alt+N): the sidebar
   shows Zen's Create-a-Space form (a collapsed sidebar expands over the
   page until you're done). Click the dashed box to pick an emoji
-  (search by keyword), type a name, Edit Theme… to pick its colour, then
+  (search by keyword), type a name, Theme… to pick its theme (see Space themes), then
   Create Space (or Enter); Escape or Cancel goes back.
 - **Rename**: double-click the Space's name in the header (or right-click
   the header > Change Name…) and type; Enter keeps it, Escape cancels.
   Double-click the icon (or Change Icon…) to pick another emoji, or none.
 - From the keyboard, the header takes focus (Tab through the sidebar):
   Enter or the menu key opens its menu, F2 renames the Space.
-- **Edit Theme…** (right-click the header) picks the Space's colour: the
-  window takes it while the Space is active, or keeps your colour and your
-  theme (also a Chrome Web Store theme) with Default. Each window shows
-  its own Space's colour, so two windows on different Spaces differ;
-  your own colour (Settings > Appearance) is never changed.
+- **Theme…** (right-click the header) opens Zen's theme picker for
+  the Space (see Space themes below).
 - **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
-  on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
+  on macOS; they wrap around unless you turn that off in Settings > Tab
+  Management > Workspaces), on macOS Ctrl+1…0 for Space 1 to 10, swipe
   horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
   fingers: moving them right goes to the next Space, and lifting them
   after enough travel, or a quick flick, switches Space), or turn the mouse wheel
-  there (horizontally, or vertically while holding Ctrl); the right-click
+  there (horizontally, or vertically while holding Ctrl; the key and
+  natural scrolling, which turns the wheel and the swipe round, are in
+  Settings > Tab Management > Workspaces); the right-click
   menu of the header also lists the Spaces. The old Space slides out and
   the new one in, as in Zen, and you land on the tab you left the Space on
   (also after a restart). Going straight to a tab of another Space (the
   address bar's "Switch to this tab", tab search) shows that tab.
 - **Move To**: right-click a tab > Move To moves it (and the other
-  selected tabs) to another Space and shows it.
+  selected tabs) to another Space and shows it. Or drag it: hold a dragged
+  tab at the sidebar's left or right edge for half a second to go to the
+  previous or next Space (again every half second while you stay), or over
+  a Space button in the bottom bar to go there at once; the tab comes along
+  and drops where you let go. Essentials only switch at the edges.
+- **Reorder** Spaces by dragging their buttons in the bottom bar (the
+  others fade while you do; on a Mac the trackpad ticks at each step).
+- **Space routing** (right-click the header > Space Routing Settings, or
+  "Open Space Routing" in the command palette): routes like "When the link
+  contains youtube.com, open it in Media" send new tabs for matching pages
+  to that Space, in the background, with a "New tab opened in Media" toast;
+  the first matching route wins. Match by Contains, Is Exactly (ignoring
+  http(s)://, www. and a final /) or RegEx. "Default route for external
+  links" picks the Space links from other apps open in when no route
+  matches. Right-click a tab > Add Route for Domain adds a route for its
+  site (one per selected tab's site) and opens the settings. Essentials and
+  pinned tabs are never routed.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -440,6 +523,56 @@ a reopened window. With startup set to open the New Tab page or other pages,
 the folders of the window you were in still come back, with their tabs
 (unloaded until you open them), as in Zen.
 
+## Space themes
+
+Every Space has its own gradient theme, as in Zen. Right-click the Space's
+header (or a Space in the bottom bar) and choose **Theme…**, or run
+**Open Theme Picker** from the command palette (for the active Space), to
+open Zen's theme picker beside the sidebar. In the Create-a-Space form,
+**Theme…** picks the new Space's theme; the window previews it until
+you create the Space or cancel.
+
+- **Colour field**: click to place a colour, drag the big dot to change it,
+  right-click it to remove it. Up to three colours.
+- **+ / − / harmony**: add or remove a colour; the third button cycles the
+  colour harmony (Complementary, Split, Analogous, Triadic, Floating) that
+  places the other dots around the big one.
+- **Presets**: five pages of Zen's preset swatches (arrows to page).
+- **Opacity**: the wave slider; a flatter wave is a lighter tint. On macOS,
+  over the glass (the blurred desktop behind the window), it sets how much
+  of the blur shows: to the left Zen's most transparent, to the right fully
+  opaque (no blur). It works without colours there too, and each Space keeps
+  its own value.
+- **Grain**: drag the handle around the dial for Zen's grain texture.
+- **Automatic / Light / Dark** (top of the field): the window scheme, which
+  websites follow too.
+
+From the keyboard: Tab to the field, Enter adds a colour, the arrow keys
+move the big dot (Shift for bigger steps), Delete removes it; the swatches
+are one Tab stop (arrows move between them, Space applies one); the opacity
+slider and the grain dial take the arrow keys, Home and End.
+
+Changes show on the window at once and are saved when the panel closes.
+A Space's theme is kept with its tabs in the session, so it comes back
+after a restart; a tab moved to another Space takes that Space's theme.
+The window's sidebar, toolbar and the margin around the page show the
+gradient; switching Spaces cross-fades to the next Space's gradient. A
+theme also decides whether the window's own colours are light or dark and
+sets their accent, like Zen; websites keep following the appearance setting.
+
+What websites use (Automatic, Light or Dark) is the picker's scheme
+buttons, and the palette's "Switch to ... Appearance / Mode".
+**Settings > Look and Feel > Dark Theme Styles** picks Default, Night (a
+black window) or Colorful (dark surfaces tinted with the accent); Night and
+Colorful are Koan's own (Zen has only the setting's name so far).
+**Settings > Tab Management > Workspaces** turns Space themes off. The
+custom colour list of Zen's picker is off by default, as in Zen; turn it on
+with the pref `koan.theme.gradient.show_custom_colors`.
+
+With a Chrome Web Store theme installed, the theme keeps the window's look
+and Space themes are off until you remove it (Settings > Appearance >
+Reset to default).
+
 ## Compact mode
 
 Ctrl+S hides the sidebar; the page fills the window with a thin margin.
@@ -474,6 +607,17 @@ current tab. As in Zen, while you type in the Glance page the first Esc
 only turns the close button red ("Press Esc again to close"); a second Esc
 within 3 seconds closes. A page that asks before you leave it ("Leave
 site?") gets to ask.
+
+While the card is open, the browser's page commands act on the Glance page,
+not the tab under it, from the keyboard, the menu bar or the toolbar, as in
+Zen: Close Tab (Ctrl+W; ⌘W) closes the card; Reload, Back and Forward, Stop
+and zoom act on the Glance page (the Back, Forward and Stop buttons follow
+it); Focus Location (Ctrl+L; ⌘L) opens the URL bar in the sidebar with the
+Glance page's address, and what you open from it loads in the Glance; Copy
+Current URL (Ctrl+Shift+C; ⌘⇧C) copies the Glance page's address. Find
+(Ctrl+F; ⌘F) is off in a Glance for now, and so is reloading a page that
+came from a form. Bookmark, Print, Save Page, DevTools and View Source still
+act on the tab under the card.
 
 On macOS, as in Zen (whose default trigger is `alt` on every platform):
 Alt is the Option key, so ⌥+click opens Glance, Meta is ⌘, and the split
@@ -585,7 +729,7 @@ from its sidebar.
 - **Look and Feel**: the look (see "Look" above), the browser layout (Only
   Sidebar / Sidebar and Top Toolbar), tabs on the right, compact mode, what
   it hides and its flash popup.
-- **Tab Management**: whether the active Space tints the browser,
+- **Tab Management**: whether windows show the active Space's theme,
   whether background tabs freeze (see "Memory and power"), and Zen's tab
   behaviours (Zen's defaults):
   - closing a tab switches to the **most recently used** tab rather than a
@@ -655,10 +799,10 @@ with three sections down its side, and opens on the one you used last:
   where you keep or delete it. While anything downloads, the Downloads tab
   shows a progress ring. Right-click the Downloads tab to clear the list or open
   `chrome://downloads`.
-- **Spaces**: a card per Space with its tabs, tinted with its theme. Click
-  the name to rename it, the icon for the Spaces' emoji picker, the brush
-  for Edit Theme; drag the arrows at the bottom to reorder the Spaces (the
-  bottom bar follows). **⋯** has Change Icon, Edit Theme, Unload Space,
+- **Spaces**: a card per Space with its tabs, tinted with its theme's main
+  colour. Click the name to rename it, the icon for the Spaces' emoji
+  picker, the brush for the theme picker; drag the arrows at the bottom to reorder the Spaces (the
+  bottom bar follows). **⋯** has Change Icon, Theme…, Unload Space,
   Unload All Other Spaces, Create Space and Delete Space (it asks, and not
   for the only Space). **+** after the last card, like Create Space, closes
   the Library and opens the Create-a-Space form. Click a tab to go there.
@@ -733,6 +877,13 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Haptic feedback (macOS)
+
+As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
+Space button passes another while you reorder them, and as the theme picker's
+sliders pass a step. Turn it off with "Haptic feedback on the trackpad" in
+`chrome://koan-settings` (Look and Feel, Theme Settings).
+
 ## Translucent window (macOS)
 
 Like Zen's, the window is glass: the sidebar, the toolbar and the gutter
@@ -775,7 +926,12 @@ folders.
 The media controller and the download animation are on by default; like
 Zen's (which keeps them in about:config), they have no setting yet, only
 the prefs `koan.media_controls.enabled` and
-`koan.downloads.download_animation`.
+`koan.downloads.download_animation`. The same goes for renaming tabs
+(`koan.tabs.rename_tabs`, Zen's `zen.tabs.rename-tabs`), the loading bar
+(`koan.view.loading_indicator`, `zen.view.enable-loading-indicator`) and
+hiding the tab spinner (`koan.theme.hide_tab_throbber`,
+`zen.theme.hide-tab-throbber`), all on by default. A change of the last one
+reaches each tab the next time it changes.
 
 In compact mode with the sidebar hidden, a tab a page opens in the
 background shows Zen's "New background tab opened!" toast; its button
@@ -871,6 +1027,20 @@ The limits are settings: awake agent tabs (4, halved on battery in Low Power
 Mode), approval requests per minute (3) and failed attempts before a 5-minute
 block (5). Approvals last until Koan quits for now. The command line tool and
 the tab features come next (see `.agent/notes/agent-control.md`).
+
+An agent's tabs open in a container of their own: a new, empty one for each
+task, cleared when the task ends. **Saved containers** (Settings > Agent
+Control) keep their logins between tasks, for an agent you sign in once
+("GitHub bot"). Add one by name and tick the agents that may use it; an agent
+gets it only if you ticked it **and** it asks for that container by name, and
+never while another task has it open. Delete removes its cookies and site data.
+The ticks last until Koan quits or you press Stop, like the approvals.
+
+**Strict** (Settings > Agent Control) goes further: each task gets a hidden
+profile of its own, with none of your settings, extensions or permissions, in
+a background window of that profile. It takes a moment longer to start, and
+the profile is deleted when the task ends. Hidden profiles never show in the
+profile menu or bring up the profile picker at launch.
 
 ## Install in the app menu
 

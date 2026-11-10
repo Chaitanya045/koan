@@ -41,8 +41,10 @@
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_empty_tab.h"
+#include "koan/browser/ui/views/koan_sidebar_extensions.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_site_panel_actions.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -328,6 +330,9 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   // The pill is named after the site already.
   url_label_->GetViewAccessibility().SetIsIgnored(true);
   pill_layout->SetFlexForView(url_label_, 1);
+  // Zen's extension buttons, before its page actions (#73).
+  extensions_ = url_pill_->AddChildView(
+      std::make_unique<KoanSidebarExtensionsView>(browser_view_));
   // Zen's #zen-copy-url-button ("Copy URL"), confirmed with Zen's toast.
   copy_button_ =
       pill_button(base::BindRepeating(&CopyCurrentUrl,
@@ -559,13 +564,19 @@ void KoanSidebarNavView::ShowSitePanel() {
           KoanBrowserViewController::From(browser_view_)) {
     controller->compact_mode()->HoldSidebarForBubble();
   }
-  PageInfoBubbleView::CreatePageInfoBubble(
-      PageInfoBubbleSpecification::Builder(
-          views::BubbleAnchor(site_button_.get()),
-          GetWidget()->GetNativeWindow(), contents, entry->GetVirtualURL())
-          .Build())
-      ->GetWidget()
-      ->Show();
+  PageInfoBubbleSpecification::Builder builder(
+      views::BubbleAnchor(site_button_.get()), GetWidget()->GetNativeWindow(),
+      contents, entry->GetVirtualURL());
+  // Zen's site panel lists the extensions (#73): page info's Extensions row
+  // opens Chromium's extensions menu at the site icon.
+  builder.SetOnExtensionsClickedCallback(
+      base::BindRepeating(&KoanSidebarExtensionsView::ShowExtensionsMenu,
+                          extensions_->GetWeakPtr()));
+  views::BubbleDialogDelegateView* bubble =
+      PageInfoBubbleView::CreatePageInfoBubble(builder.Build());
+  // Zen's site panel actions on top (#78).
+  AddSitePanelActions(bubble, browser_view_, contents);
+  bubble->GetWidget()->Show();
 }
 
 BEGIN_METADATA(KoanSidebarNavView)

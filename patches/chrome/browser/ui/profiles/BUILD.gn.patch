@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/profiles/BUILD.gn b/chrome/browser/ui/profiles/BUILD.gn
+index 623639a3ab9a2080397e6667a96049b84026a1e6..6e1e6f5cff8999403e777bc286a32fa43a3a36bf 100644
+--- a/chrome/browser/ui/profiles/BUILD.gn
++++ b/chrome/browser/ui/profiles/BUILD.gn
+@@ -98,6 +98,7 @@ source_set("impl") {
+     deps += [
+       "//chrome/browser/ui:ui_features",
+       "//chrome/browser/ui/startup",
++      "//koan/browser/containers:visible_profiles",
+     ]
+ 
+     if (enable_dice_support) {

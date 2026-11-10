@@ -29,8 +29,8 @@ index 338178e75c4cd0f82708153edf434945b2cd0c58..5daba736db4c96984f5e592270eb3164
      return false;
    }
  
-+  // Koan: the Create Space form is client area, wherever it sits.
-+  if (koan::IsInSpaceForm(GetTabStripView(), this, point)) {
++  // Koan: the Create Space form and the empty space are client area.
++  if (koan::IsSidebarClientArea(GetTabStripView(), this, point)) {
 +    return false;
 +  }
 +
@@ -70,7 +70,7 @@ index 338178e75c4cd0f82708153edf434945b2cd0c58..5daba736db4c96984f5e592270eb3164
    bool previously_collapsed = target_collapse_state_.collapsed;
    const int proposed_width = starting_width_on_resize_.value() + resize_amount;
    if (done_resizing) {
-@@ -754,13 +778,27 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
+@@ -754,14 +778,30 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
    }
  
    tabs::VerticalTabStripState new_state;
@@ -93,15 +93,19 @@ index 338178e75c4cd0f82708153edf434945b2cd0c58..5daba736db4c96984f5e592270eb3164
      new_state.uncollapsed_width =
 -        std::clamp(proposed_width, tabs::kVerticalTabStripUncollapsedMinWidth,
 -                   tabs::kVerticalTabStripUncollapsedMaxWidth);
+-    if (std::abs(new_state.uncollapsed_width -
 +        std::clamp(proposed_width,
 +                   koan::SidebarMinWidth(
 +                       tabs::kVerticalTabStripUncollapsedMinWidth),
 +                   koan::SidebarMaxWidth(
 +                       tabs::kVerticalTabStripUncollapsedMaxWidth));
-     if (std::abs(new_state.uncollapsed_width -
++    // Koan: no snap to upstream's default width (Zen's sidebar has none).
++    if (!koan::OwnsSidebar() &&
++        std::abs(new_state.uncollapsed_width -
                   tabs::kVerticalTabStripDefaultUncollapsedWidth) <
          kSnapDistance) {
-@@ -773,7 +811,11 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
+       new_state.uncollapsed_width =
+@@ -773,7 +813,11 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
        // collapse will cause a subsequent collapse button click to only expand
        // to the minimum expanded width, and not to the starting width of the
        // drag-to-collapse operation.
@@ -114,7 +118,7 @@ index 338178e75c4cd0f82708153edf434945b2cd0c58..5daba736db4c96984f5e592270eb3164
      }
    } else if (done_resizing) {
      // If we are done resizing while in collapsed state, update the target state
-@@ -795,13 +837,17 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
+@@ -795,13 +839,17 @@ void VerticalTabStripRegionView::OnResize(int resize_amount,
  
    target_collapse_state_ = new_state;
  

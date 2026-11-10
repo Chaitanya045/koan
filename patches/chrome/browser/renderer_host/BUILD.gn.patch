@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/renderer_host/BUILD.gn b/chrome/browser/renderer_host/BUILD.gn
+--- a/chrome/browser/renderer_host/BUILD.gn
++++ b/chrome/browser/renderer_host/BUILD.gn
+@@ -48,6 +48,7 @@ if (is_mac) {
+ 
+     deps = [
+       "//chrome/browser/ui/cocoa",
++      "//koan/browser/ui/cocoa:hooks",
+       "//third_party/blink/public/common:headers",
+     ]
+   }

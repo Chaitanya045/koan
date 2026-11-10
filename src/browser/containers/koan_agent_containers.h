@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback.h"
+#include "base/memory/weak_ptr.h"
 #include "base/types/expected.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "url/gurl.h"
@@ -28,13 +30,18 @@ class WebContents;
 // (.agent/notes/agent-control.md section 7): an agent container, shown as a
 // Space in the user's own sidebar, in the user's last active window.
 //
-//   auto container = koan::containers::StartAgentContainer(
-//       profile, {.mode = AgentMode::kThrowaway, .space_name = u"Claude
-//       Code"});
-//   content::WebContents* tab = koan::containers::OpenAgentTab(
-//       profile, *container, GURL("https://example.com"));
+//   koan::containers::StartAgentContainer(
+//       profile, {.space_name = u"Claude Code"},
+//       base::BindOnce([](AgentContainerResult container) {
+//         if (!container.has_value()) return;
+//         EnsureAgentWindow(container->profile.get(), base::BindOnce(...));
+//         // then:
+//         content::WebContents* tab = koan::containers::OpenAgentTab(
+//             container->profile.get(), container->id,
+//             GURL("https://example.com"));
+//       }));
 //   ...
-//   koan::containers::EndAgentContainer(profile, *container);
+//   koan::containers::EndAgentContainer(profile, id);
 //
 // Every tab opened here is in the background: the active tab, the focused
 // window and the frontmost app never change. Pages the agent opens from these
@@ -50,11 +57,16 @@ enum class AgentMode {
   // An in-memory container, new for this task and cleared when it ends. The
   // default.
   kThrowaway,
-  // A named container on disk that keeps its cookies between tasks. Another
-  // task gets it only if the user names it (`saved_name`).
+  // A named container on disk that keeps its cookies between tasks. The user
+  // makes it in Settings, and agent control hands it only to a client the
+  // user granted it to (koan_container_grants.h).
   kSaved,
-  // A separate hidden profile (not implemented yet: StartAgentContainer()
-  // returns kNotSupported).
+  // A throwaway agent container in a profile of its own: a new hidden one
+  // (ephemeral and omitted, so no profile list, picker or menu shows it),
+  // deleted when the task ends. Nothing of the user's profile is shared
+  // (settings, extensions, history, permissions). Settings > Agent Control >
+  // Strict (prefs::kAgentControlStrict) makes it the default for tasks that
+  // ask for no saved container.
   kStrict,
 };
 
@@ -72,17 +84,33 @@ enum class AgentContainerError {
   kNoSpaces,
   // An off-the-record, guest or system profile: agents never work there.
   kProfileNotAllowed,
-  // The mode is not available yet (kStrict).
-  kNotSupported,
+  // kStrict: the hidden profile could not be created.
+  kProfileFailed,
   // kSaved without a name.
   kInvalidName,
 };
 
-// Starts a container for an agent's task and its Space. The Space shows once
-// the first tab opens in it.
-base::expected<ContainerId, AgentContainerError> StartAgentContainer(
-    Profile* profile,
-    const AgentContainerOptions& options);
+// A started container and the profile it is in: `profile` itself, or for
+// kStrict the task's hidden profile (gone once the task ends).
+struct AgentContainer {
+  base::WeakPtr<Profile> profile;
+  ContainerId id;
+};
+using AgentContainerResult =
+    base::expected<AgentContainer, AgentContainerError>;
+
+// Starts a container for an agent's task, in `profile` (the user's) or, for
+// kStrict, in a new hidden profile, and runs `done` with it, always
+// asynchronously. The Space shows once the first tab opens in it.
+void StartAgentContainer(Profile* profile,
+                         const AgentContainerOptions& options,
+                         base::OnceCallback<void(AgentContainerResult)> done);
+
+// Makes sure `profile` has a normal window with Spaces for agents' tabs,
+// opening one in the background if not (never activated, behind the window
+// the user last used), then runs `ready`, always asynchronously. Requests
+// that come while a window is opening wait for the same one.
+void EnsureAgentWindow(Profile* profile, base::OnceClosure ready);
 
 // Opens `url` in a new background tab of `container`'s Space (creating the
 // Space with the container's first tab). Returns the tab, or null if
@@ -104,17 +132,26 @@ void EndAgentTask(const std::string& client_id, const std::string& task);
 
 // Ends the task: closes the container's tabs (its Space goes with its last
 // tab) and, for a throwaway container, clears all its data. A saved container
-// keeps its data for the next task that names it.
+// keeps its data for the next task that names it. A strict task's hidden
+// profile closes its windows and lets go of the profile, which Chromium then
+// deletes (an ephemeral profile goes with its last keep-alive; one left by a
+// crash goes at the next start).
 void EndAgentContainer(Profile* profile, const ContainerId& container);
 
-// The user's saved agent containers, by name (Settings > Agent control lists
-// them; deleting one clears its data and removes it from disk).
+// The user's saved agent containers, by name (Settings > Agent Control lists
+// them; deleting one clears its data, its grants
+// (koan_container_grants.h) and removes it from disk).
 struct SavedContainer {
   std::string name;
   ContainerId id;
 };
 std::vector<SavedContainer> GetSavedAgentContainers(Profile* profile);
 void DeleteSavedAgentContainer(Profile* profile, const std::string& name);
+
+// Settings > Agent Control's "Add": a new, empty saved container named
+// `name`. Only the user makes saved containers; an agent's request for an
+// unknown name opens nothing. False for an invalid or existing name.
+bool CreateSavedAgentContainer(Profile* profile, const std::string& name);
 
 }  // namespace koan::containers
 

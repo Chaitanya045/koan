@@ -33,12 +33,32 @@ source_set("prefs") {
     "koan_prefs.h",
   ]
   deps = [
+    ":features",
     "//base",
     "//chrome/common:constants",
     "//components/performance_manager",
     "//components/pref_registry",
     "//components/prefs",
+    "//components/universal_optout",
     "//koan/browser/agent:limits",
+  ]
+}
+
+# Which page chrome://newtab shows, called from chrome/browser/search/search.cc.
+source_set("new_tab_page") {
+  sources = [
+    "koan_new_tab_page.cc",
+    "koan_new_tab_page.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+  deps = [
+    ":features",
+    ":prefs",
+    "//components/prefs",
+    "//koan/common:url_constants",
   ]
 }
 
@@ -101,6 +121,38 @@ group("agent_unit_tests") {
 group("agent_service_unittests") {
   testonly = true
   deps = [ "//koan/browser/containers:koan_agent_service_unittests" ]
+}
+
+# Zen's fuzzy score for the command palette. Pure logic, //base only.
+source_set("fuzzy_score") {
+  sources = [
+    "koan_fuzzy_score.cc",
+    "koan_fuzzy_score.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# The Library's pure logic: URL and site formatting, Space card drag maths.
+source_set("library_logic") {
+  sources = [
+    "koan_library_logic.cc",
+    "koan_library_logic.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [ "//url" ]
+}
+
+# A Space's icon and name in its tab group title. Pure logic.
+source_set("space_title") {
+  sources = [
+    "koan_space_title.cc",
+    "koan_space_title.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    "//base:i18n",
+    "//third_party/icu",
+  ]
 }
 
 # Zen's tab behaviours, called from upstream tab code (tab_strip_model.cc,
@@ -166,6 +218,7 @@ source_set("feature_overrides") {
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/tabs:features",
+    "//chrome/browser/ui/toasts",
     "//chrome/browser/ui/webui/new_tab_page/composebox/variations",
     "//chrome/common:chrome_features",
     "//components/compose/core/browser:features",
@@ -177,11 +230,23 @@ source_set("feature_overrides") {
     "//components/optimization_guide/core:features",
     "//components/performance_manager",
     "//components/search",
+    "//components/universal_optout:features",
     "//components/variations",
     "//koan/browser/ui/vector_icons:koan_icons",
+    "//third_party/blink/public/common",
     "//ui/base:features",
   ]
   if (is_mac) {
     deps += [ "//components/os_crypt/common:switches" ]
   }
+}
+
+# Koan's tests, so `gn gen` generates them: build //koan/test:koan_unittests
+# and //koan/test:koan_browsertests (scripts/test_unit.sh, test_browser.sh).
+group("tests") {
+  testonly = true
+  deps = [
+    "//koan/test:koan_browsertests",
+    "//koan/test:koan_unittests",
+  ]
 }

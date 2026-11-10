@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7cd6f5f718 100644
+index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..2bdf77951d175fe9ee7cd561df94afd99fe0e8c6 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -88,6 +88,10 @@
@@ -25,10 +25,23 @@ index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7c
    Profile* profile =
        Profile::FromBrowserContext(web_contents.GetBrowserContext());
    return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs());
-@@ -579,6 +588,35 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
+@@ -579,6 +588,36 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
                                    std::move(navigation_handle_callback));
    }
  
++  // Koan agent control: what a page in an agent tab opens stays in the
++  // background (koan/browser/agent/koan_agent_tab_hooks.h). Before Glance, so
++  // that an agent's click never opens a card over the user's window.
++  if (WindowOpenDisposition koan_disposition = params.disposition;
++      koan::agent::OpensInBackgroundForAgent(source, &koan_disposition)) {
++    content::OpenURLParams background_params(params);
++    background_params.disposition = koan_disposition;
++    content::WebContents* opened = OpenURLFromTab(
++        source, background_params, std::move(navigation_handle_callback));
++    koan::agent::OnOpenedFromAgentTab(source, opened);
++    return opened;
++  }
++
 +  // Koan Glance: an activation click (Alt+click by default) opens the link
 +  // in a floating card; one Glance declines gets its modifier's usual
 +  // disposition (koan/browser/ui/views/koan_glance.h).
@@ -46,22 +59,10 @@ index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7c
 +      break;
 +  }
 +
-+  // Koan agent control: what a page in an agent tab opens stays in the
-+  // background (koan/browser/agent/koan_agent_tab_hooks.h).
-+  if (WindowOpenDisposition koan_disposition = params.disposition;
-+      koan::agent::OpensInBackgroundForAgent(source, &koan_disposition)) {
-+    content::OpenURLParams background_params(params);
-+    background_params.disposition = koan_disposition;
-+    content::WebContents* opened = OpenURLFromTab(
-+        source, background_params, std::move(navigation_handle_callback));
-+    koan::agent::OnOpenedFromAgentTab(source, opened);
-+    return opened;
-+  }
-+
    // If the source is already split, navigate the other pane instead of
    // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
    // sees new_contents == this and skips the DidOpenRequestedURL notification,
-@@ -719,6 +757,11 @@ content::WebContents* BrowserWebContentsDelegate::AddNewContents(
+@@ -719,6 +758,11 @@ content::WebContents* BrowserWebContentsDelegate::AddNewContents(
      }
    }
  
@@ -73,7 +74,7 @@ index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7c
    FullscreenController* fullscreen_controller =
        exclusive_access_manager_->fullscreen_controller();
  #if BUILDFLAG(IS_MAC)
-@@ -927,6 +970,11 @@ bool BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault(
+@@ -927,6 +971,11 @@ bool BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault(
      return false;
    }
  
@@ -85,7 +86,7 @@ index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7c
    // This should be based on the pending entry if there is one, so that
    // back/forward navigations to the NTP are handled.  The visible entry can't
    // be used here, since back/forward navigations are not treated as visible
-@@ -1172,6 +1220,11 @@ void BrowserWebContentsDelegate::RunFileChooser(
+@@ -1172,6 +1221,11 @@ void BrowserWebContentsDelegate::RunFileChooser(
      content::RenderFrameHost* render_frame_host,
      scoped_refptr<content::FileSelectListener> listener,
      const blink::mojom::FileChooserParams& params) {
@@ -97,7 +98,7 @@ index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7c
    FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
                                     params);
  }
-@@ -1180,6 +1233,10 @@ void BrowserWebContentsDelegate::EnumerateDirectory(
+@@ -1180,6 +1234,10 @@ void BrowserWebContentsDelegate::EnumerateDirectory(
      content::WebContents* web_contents,
      scoped_refptr<content::FileSelectListener> listener,
      const base::FilePath& path) {
@@ -108,3 +109,14 @@ index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..d849f75b5ccf05d887e8fca56539ba7c
    FileSelectHelper::EnumerateDirectory(web_contents, std::move(listener), path);
  }
  
+@@ -1367,6 +1425,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
+   if (context->IsOffTheRecord()) {
+     return;
+   }
++  // Koan: an agent container's pages never add protocol handlers.
++  if (koan::containers::IsAgentFrame(requesting_frame)) {
++    return;
++  }
+ 
+   auto* web_contents =
+       content::WebContents::FromRenderFrameHost(requesting_frame);

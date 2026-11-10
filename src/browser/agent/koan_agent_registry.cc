@@ -108,7 +108,8 @@ TargetRegistry::AddResult TargetRegistry::AddAgentTab(std::string target_id,
 
 TargetRegistry::AddResult TargetRegistry::GrantUserTab(std::string target_id,
                                                        std::string client_id,
-                                                       TabState state) {
+                                                       TabState state,
+                                                       std::string site) {
   if (target_id.empty() || client_id.empty() || state == TabState::kPaused) {
     return AddResult::kInvalid;
   }
@@ -121,11 +122,12 @@ TargetRegistry::AddResult TargetRegistry::GrantUserTab(std::string target_id,
     // The same client asking for more (readable to driven): the caller had the
     // user approve it.
     entry.state = state;
+    entry.site = std::move(site);
     return AddResult::kOk;
   }
   entries_.emplace(std::move(target_id),
                    TargetEntry{std::move(client_id), std::string(),
-                               /*agent_owned=*/false, state});
+                               /*agent_owned=*/false, state, std::move(site)});
   return AddResult::kOk;
 }
 
@@ -146,6 +148,17 @@ bool TargetRegistry::Resume(std::string_view target_id) {
     return false;
   }
   it->second.state = TabState::kDriven;
+  return true;
+}
+
+bool TargetRegistry::SetReadable(std::string_view target_id) {
+  auto it = entries_.find(target_id);
+  if (it == entries_.end() || it->second.agent_owned ||
+      it->second.state == TabState::kReadable) {
+    return false;
+  }
+  it->second.state = TabState::kReadable;
+  it->second.site.clear();
   return true;
 }
 
@@ -209,7 +222,16 @@ bool TargetRegistry::MaySend(std::string_view client_id,
   if (!entry || client_id.empty() || entry->client_id != client_id) {
     return false;
   }
-  return entry->state == TabState::kDriven || IsReadOnlyMethod(method);
+  if (entry->state == TabState::kDriven) {
+    return true;
+  }
+  // Network.enable changes nothing in the page, but on the user's own tab it
+  // would show the agent every request of their session (#196 review, N2):
+  // reading a user's tab is a screenshot and a snapshot, not their traffic.
+  if (!entry->agent_owned && method == "Network.enable") {
+    return false;
+  }
+  return IsReadOnlyMethod(method);
 }
 
 size_t TargetRegistry::CountFor(std::string_view client_id,

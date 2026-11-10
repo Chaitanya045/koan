@@ -21,10 +21,13 @@ from the pinned revision. It fails (exit 1) when:
     a roll must regenerate it (scripts/update_chromium.sh does);
   * a factory in the inventory has no row (a new upstream service);
   * a row between the markers doesn't parse, or the rows are unsorted or
-    duplicated.
+    duplicated;
+  * a row is a gap that PINNED_GAPS doesn't list, or PINNED_GAPS lists a
+    service that is no longer a gap (every gap is decided at Chromium 158, so
+    the list is empty: a roll may pin one, with the issue that will block it).
 
 Rows for factories the inventory doesn't have are reported (the runtime test
-may need them), and so are the known gaps.
+may need them), and so are the pinned gaps.
 """
 
 import argparse
@@ -40,6 +43,9 @@ VERSION = ROOT / 'CHROMIUM_VERSION'
 
 BEGIN = '// BEGIN AGENT SERVICE RULES'
 END = '// END AGENT SERVICE RULES'
+# Known gaps (ServiceVerdict::kGap), each with the issue that will block it.
+PINNED_GAPS = {}
+
 _ROW = re.compile(r'\{\s*"([^"\\]+)",\s*ServiceVerdict::k(Safe|Blocked|Gap),\s*'
                   r'"((?:[^"\\]|"\s*")*)"\s*\}')
 
@@ -60,7 +66,9 @@ def parse_policy(text):
   return rules, problems
 
 
-def check(rules, inventory, pinned_commit):
+def check(rules, inventory, pinned_commit, pinned_gaps=None):
+  if pinned_gaps is None:
+    pinned_gaps = PINNED_GAPS
   problems, notes = [], []
   if inventory.get('chromium_commit') != pinned_commit:
     problems.append(
@@ -82,7 +90,13 @@ def check(rules, inventory, pinned_commit):
                  'test): ' + ', '.join(extra))
   gaps = [r for r in rules if r[1] == 'Gap']
   for name, _, reason in gaps:
-    notes.append('known gap: %s: %s' % (name, reason))
+    if name in pinned_gaps:
+      notes.append('pinned gap: %s (%s): %s' % (name, pinned_gaps[name], reason))
+    else:
+      problems.append('gap %s is not in PINNED_GAPS: block it, or pin it with '
+                      'its issue' % name)
+  for name in sorted(set(pinned_gaps) - {r[0] for r in gaps}):
+    problems.append('PINNED_GAPS lists %s, which is not a gap: unpin it' % name)
   return problems, notes
 
 

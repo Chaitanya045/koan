@@ -25,6 +25,8 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/dialogs/browser_dialogs.h"
+#include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/web_contents.h"
 #include "koan/browser/agent/koan_agent_auth.h"
 #include "koan/browser/agent/koan_agent_service.h"
 #include "ui/base/base_window.h"
@@ -112,7 +114,87 @@ void Allow(uint64_t id, ClientCapabilities requested) {
   Answer(id, decision);
 }
 
+struct OpenTakeOver {
+  base::WeakPtr<views::Widget> widget;
+  base::OnceCallback<void(bool)> answer;
+};
+
+std::map<uint64_t, OpenTakeOver>& OpenTakeOvers() {
+  static base::NoDestructor<std::map<uint64_t, OpenTakeOver>> dialogs;
+  return *dialogs;
+}
+
+uint64_t g_next_take_over_id = 1;
+
+void AnswerTakeOver(uint64_t id, bool allowed) {
+  auto it = OpenTakeOvers().find(id);
+  if (it == OpenTakeOvers().end()) {
+    return;
+  }
+  OpenTakeOver dialog = std::move(it->second);
+  OpenTakeOvers().erase(it);
+  if (dialog.answer) {
+    std::move(dialog.answer).Run(allowed);
+  }
+  if (dialog.widget && !dialog.widget->IsClosed()) {
+    dialog.widget->Close();
+  }
+}
+
 }  // namespace
+
+uint64_t ShowTakeOverDialog(content::WebContents* contents,
+                            const std::string& label,
+                            const std::string& site,
+                            base::OnceCallback<void(bool)> answer) {
+  tabs::TabInterface* tab =
+      contents ? tabs::TabInterface::MaybeGetFromContents(contents) : nullptr;
+  BrowserWindowInterface* browser =
+      tab ? tab->GetBrowserWindowInterface() : nullptr;
+  const uint64_t id = g_next_take_over_id++;
+  if (!browser) {
+    std::move(answer).Run(false);
+    return id;
+  }
+  const std::u16string agent =
+      label.empty() ? u"An agent" : base::UTF8ToUTF16(label);
+  ui::DialogModel::Builder builder;
+  builder.SetTitle(base::StrCat({agent, u" wants to control a tab"}))
+      .AddParagraph(ui::DialogModelLabel(base::StrCat(
+          {u"“", contents->GetTitle(), u"” on ", base::UTF8ToUTF16(site)})))
+      .AddParagraph(ui::DialogModelLabel(
+          u"It can click and type in this tab while you are signed in, on "
+          u"this site only. Using the tab yourself pauses it; leaving the "
+          u"site ends its control."))
+      .AddOkButton(base::BindOnce(&AnswerTakeOver, id, true),
+                   ui::DialogModel::Button::Params().SetLabel(u"Allow"))
+      .AddCancelButton(base::BindOnce(&AnswerTakeOver, id, false),
+                       ui::DialogModel::Button::Params()
+                           .SetLabel(u"Don’t Allow")
+                           .SetId(kDenyButtonId))
+      .SetCloseActionCallback(base::BindOnce(&AnswerTakeOver, id, false))
+      .SetInitiallyFocusedField(kDenyButtonId)
+      .OverrideDefaultButton(ui::mojom::DialogButton::kNone);
+  OpenTakeOvers()[id] = OpenTakeOver{nullptr, std::move(answer)};
+  views::Widget* widget = chrome::ShowBrowserModal(browser, builder.Build());
+  auto it = OpenTakeOvers().find(id);
+  if (it != OpenTakeOvers().end() && widget) {
+    it->second.widget = widget->GetWeakPtr();
+  }
+  if (ui::BaseWindow* window = browser->GetWindow()) {
+    window->FlashFrame(true);
+  }
+  return id;
+}
+
+void CancelTakeOverDialog(uint64_t dialog_id) {
+  auto it = OpenTakeOvers().find(dialog_id);
+  if (it == OpenTakeOvers().end()) {
+    return;
+  }
+  it->second.answer.Reset();
+  AnswerTakeOver(dialog_id, false);
+}
 
 void ShowApprovalDialog(const ApprovalRequest& request,
                         base::OnceCallback<void(ApprovalDecision)> answer) {

@@ -69,6 +69,10 @@ class KoanToast {
   // Keeps the toast in the window's corner when the window is resized.
   void OnBrowserViewLayout();
 
+  // Its widget while it shows, for the window's colours
+  // (KoanThemeController::AdjustChildColorKey()).
+  const views::Widget* widget() const { return widget_.get(); }
+
  private:
   // Shows `view`, saying `announcement` to screen readers.
   void ShowView(std::unique_ptr<KoanToastView> view,

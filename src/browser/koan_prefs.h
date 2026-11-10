@@ -18,6 +18,11 @@ class PrefRegistrySyncable;
 // chrome://koan-settings.
 namespace koan::prefs {
 
+// The expanded sidebar's default width, and where a double-click on its edge
+// puts it back: Zen's kDefaultSidebarWidth on macOS (ZenCustomizableUI).
+// Chromium's is tabs::kVerticalTabStripDefaultUncollapsedWidth, 240.
+inline constexpr int kSidebarDefaultWidth = 230;
+
 // Koan's look (issue #48), local-state prefs because colours are mixed
 // per colour-provider key, which knows no profile. The style is shadcn/ui's
 // design system ("shadcn") or Zen's ("zen", the default); the mode, base
@@ -39,6 +44,12 @@ inline constexpr char kLookCustomCss[] = "koan.look.custom_css";
 // Zen's zen.theme.acrylic-urlbar (default off): the floating URL bar is a
 // glass pane, translucent with the page blurred behind it. Both styles.
 inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
+
+// Zen's zen.haptic-feedback.enabled (default on): the trackpad ticks as a
+// dragged tab or Space button moves a slot and as the theme picker's sliders
+// pass a step (koan::PlayHapticFeedback()). macOS only; a local-state pref, as
+// Zen's is the application's.
+inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
 
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
@@ -63,6 +74,10 @@ inline constexpr char kCompactModeToolbarFlashPopup[] =
 // on the right of the window, everything mirrored.
 inline constexpr char kTabsOnRight[] = "koan.tabs.on_right";
 
+// Zen's "Show New Tab Button on Tab List" (`zen.tabs.show-newtab-vertical`):
+// the "+ New Tab" row above the unpinned tabs. On by default, like Zen.
+inline constexpr char kShowNewTabVertical[] = "koan.tabs.show_newtab_vertical";
+
 // Whether the "Sidebar hidden!" toast was shown, after a drag of the
 // sidebar's edge hid the sidebar (`zen.view.compact.drag-collapse-hint-seen`).
 // Zen shows it once.
@@ -75,8 +90,10 @@ inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
 
 // How the URL bar opens when the address is edited (Zen's
 // zen.urlbar.behavior): "normal" edits it in place (in the sidebar's URL
-// pill), "floating-on-type" (Zen's default) starts there too and floats over
-// the page on the first keystroke, "float" floats over the page right away.
+// pill), "floating-on-type" (Zen's default) floats over the page when the bar
+// is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill after a
+// click on it (typing then never floats it), "float" floats over the page
+// right away.
 inline constexpr char kUrlBarBehavior[] = "koan.urlbar.behavior";
 inline constexpr char kUrlBarBehaviorNormal[] = "normal";
 inline constexpr char kUrlBarBehaviorFloatingOnType[] = "floating-on-type";
@@ -91,9 +108,34 @@ inline constexpr char kUrlBarReplaceNewTab[] = "koan.urlbar.replace_newtab";
 // sidebar's URL pill on hover. On by default, like Zen.
 inline constexpr char kUrlBarShowCopyUrl[] = "koan.urlbar.show_copy_url";
 
-// Whether the browser takes the active workspace's colour (Zen's
-// per-workspace themes).
+// Whether windows show their active Space's theme (Zen's per-Space
+// gradient themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
+
+// Zen's dark theme styles: 0 default, 1 night (AMOLED), 2 colorful.
+inline constexpr char kDarkThemeStyle[] = "koan.theme.dark_style";
+
+// Whether the theme picker shows the custom colour list
+// (zen.theme.gradient.show-custom-colors, off by default like Zen's).
+inline constexpr char kShowCustomColors[] =
+    "koan.theme.gradient.show_custom_colors";
+
+// How the user moves between Spaces (Zen's about:config prefs, with Zen's
+// defaults):
+// - kWorkspacesWrapAround: past the last Space comes the first, and the
+//   other way (zen.workspaces.wrap-around-navigation, on).
+// - kWorkspacesNaturalScroll: the wheel and the touchpad swipe go the other
+//   way round (zen.workspaces.natural-scroll, off).
+// - kWorkspacesScrollModifierKey: the key that makes a vertical wheel over
+//   the sidebar switch Space (zen.workspaces.scroll-modifier-key): "ctrl"
+//   (the default), "alt" (Option on macOS), "shift" or "meta" (Cmd on macOS).
+//   A horizontal wheel needs none.
+inline constexpr char kWorkspacesWrapAround[] =
+    "koan.workspaces.wrap_around_navigation";
+inline constexpr char kWorkspacesNaturalScroll[] =
+    "koan.workspaces.natural_scroll";
+inline constexpr char kWorkspacesScrollModifierKey[] =
+    "koan.workspaces.scroll_modifier_key";
 
 // Obsolete: until the tint became per window (a window's user colour
 // override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's
@@ -111,8 +153,11 @@ inline constexpr char kWorkspaceTintSavedVariant[] =
 // New Tab page or to pages; macOS's new window after the last one closed)
 // gets them back (KoanWorkspaceController::RecreateStoredSpaces()): a list of
 // {"title": "<icon> <name>", "color": tab_groups::TabGroupColorId,
-// "active": bool}, in order. The session holds the Spaces otherwise (their tab
-// groups).
+// "active": bool, "pinned": [koan::StoredTab]}, in order: "pinned" is the
+// Space's pinned tabs (not its folders' tabs, which kFolderList keeps), which
+// come back unloaded with it (Zen restores only the pinned tabs when it
+// doesn't resume the session). The session holds the Spaces otherwise (their
+// tab groups).
 inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
@@ -210,6 +255,24 @@ inline constexpr char kDownloadAnimation[] =
 inline constexpr char kDragWindowFromContent[] =
     "koan.view.drag_window_from_content";
 
+// Zen's Space routing (ZenSpaceRoutingManager.sys.mjs, its
+// zen-space-routing.jsonlz4): the routes, a list of {"reference", "match_type"
+// ("contains", "equal-to" or "regex"), "space" (a Space's name, "" for the
+// most recent one)} in order (koan_space_routes.h), and the Space links from
+// other apps open in when no route matches ("" for the most recent one).
+inline constexpr char kSpaceRoutes[] = "koan.space_routing.routes";
+inline constexpr char kSpaceRoutingExternalDefault[] =
+    "koan.space_routing.external_default";
+// Renaming any sidebar tab by double-clicking its label, and "Change Label…"
+// in its menu (zen.tabs.rename-tabs).
+inline constexpr char kRenameTabs[] = "koan.tabs.rename_tabs";
+// The page-load progress bar above the selected tab's page
+// (zen.view.enable-loading-indicator).
+inline constexpr char kLoadingIndicator[] = "koan.view.loading_indicator";
+// Whether sidebar tabs keep their favicon while loading instead of
+// Chromium's spinner (zen.theme.hide-tab-throbber).
+inline constexpr char kHideTabThrobber[] = "koan.theme.hide_tab_throbber";
+
 // Whether the bookmarks bar may show at all. Zen has none, so Koan's default
 // is no bar anywhere (also on the new tab page, and after an import, which
 // would turn Chromium's own setting on); Koan's settings turn it on. Gated in
@@ -217,6 +280,13 @@ inline constexpr char kDragWindowFromContent[] =
 // this pref by name: keep the name in
 // patches/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc.patch.
 inline constexpr char kBookmarksBarShow[] = "koan.bookmarks_bar.show";
+// What a new tab page shows: "koan" (the default) is Koan's blank page in the
+// theme's colours, like Zen's new tab; "chromium" is Chromium's own new tab
+// page. Koan's own setting. A new tab page set by policy or by an extension
+// wins over both.
+inline constexpr char kNewTabPage[] = "koan.newtab.page";
+inline constexpr char kNewTabPageKoan[] = "koan";
+inline constexpr char kNewTabPageChromium[] = "chromium";
 
 // Whether the welcome screen was shown (zen.welcome-screen.seen).
 inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
@@ -248,6 +318,11 @@ inline constexpr char kAgentControlMaxAuthFailures[] =
 // user-data-dir, not --incognito, not --guest. Computed once, at registration.
 bool AgentReadyByDefault();
 
+// Agent control's strict mode (koan/browser/containers): a task that asks for
+// no saved container runs in a hidden profile of its own, deleted when it
+// ends. Profile pref; off by default.
+inline constexpr char kAgentControlStrict[] = "koan.agent_control.strict";
+
 // Agent control's saved containers (koan/browser/containers): their names
 // and container ids, {name: id}. A throwaway container is never listed.
 inline constexpr char kAgentSavedContainers[] =
@@ -260,11 +335,21 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 // Changes the defaults of upstream profile prefs to Zen's: no remote search
 // suggestions (Zen's browser.search.suggest.enabled is off, which also stops
 // Chromium's remote zero-prefix suggestions, Google's trending searches), no
-// AI Mode button in the omnibox, and AI Mode switched off by its policy pref.
+// AI Mode button in the omnibox, AI Mode switched off by its policy pref, and
+// Global Privacy Control on, and with Koan's sidebar, Zen's sidebar width
+// (kSidebarDefaultWidth).
 // A value the user sets still wins. Called from
 // chrome/browser/prefs/browser_prefs.cc at the end of RegisterProfilePrefs(),
 // after upstream registered them.
 void OverrideUpstreamProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry);
+
+// The same for upstream profile prefs that keyed-service factories register,
+// which happens after chrome::RegisterProfilePrefs() (crash note 8): no
+// sign-in interception bubble. Called from
+// chrome/browser/profiles/pref_service_builder_utils.cc after
+// RegisterProfilePrefsForServices().
+void OverrideServiceProfilePrefDefaults(
     user_prefs::PrefRegistrySyncable* registry);
 
 // Registers Koan's local-state prefs (the look), and changes the defaults of

@@ -172,6 +172,17 @@ TEST_P(KoanLookProvidersTest, IconsStandOutFromTheirDiscs) {
   }
 }
 
+TEST_P(KoanLookProvidersTest, StatusBubbleTextIsReadable) {
+  Build();
+  // Koan sets the bubble's colours from the accent (Zen's look) or the
+  // tokens (shadcn's), so a light accent or a pasted theme must still give
+  // readable text. 4.5:1 is WCAG's minimum for text.
+  EXPECT_GE(color_utils::GetContrastRatio(
+                provider_.GetColor(kColorStatusBubbleForegroundFrameActive),
+                provider_.GetColor(kColorStatusBubbleBackgroundFrameActive)),
+            4.5f);
+}
+
 TEST_P(KoanLookProvidersTest, SidebarOffBuildsToo) {
   base::test::ScopedFeatureList features;
   features.InitAndDisableFeature(features::kKoanSidebar);

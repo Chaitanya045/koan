@@ -284,6 +284,21 @@ Two namespaces on one connection:
   **nothing else is listed**, which is what makes `agent-browser`, which attaches to every page target on connect
   (D§3), see only the agent's Space.
 
+**Built (CDP forwarding PR, `koan_agent_facade.*`, `koan_agent_forwarder.*`, `koan_agent_devtools_client.*`):** one facade per
+authenticated connection on the UI thread. A tab command passes `Classify()`, `TargetRegistry::MaySend()` and the row's
+`ApplyParamFilter()` (with the tab's `ContextTracker` and the session's `StreamRegistry`), is re-serialised with a facade id and
+sent through the lease's `RunCommand()`; its answer gets the client's id back after the result hooks (`createIsolatedWorld` →
+the tracker, `printToPDF` → the stream registry). Every event passes `FilterEvent()` and, for context events, the tracker. Every
+command is audited (denied ones at once, forwarded ones when answered, with the duration). `Target.setAutoAttach` inside a tab
+succeeds and attaches nothing: child targets (OOPIFs, workers) are not proxied yet (T-cdp-3). Parsing and scrubbing run on the
+UI thread for now; moving them to a worker is the measurement of §4.1 (T-perf-1 in the PR's test plan). `Koan.openTab` and
+`Target.createTarget` call the `AgentTabOpener` the agent containers install (#202): every task gets a throwaway container,
+and the request carries only the client, the task's name and the URL, so nothing the agent sends can name a saved container. A
+null tab (no normal window with Spaces) is `Koan.noWindow`. `containers::EndAgentTask()` runs for a task on `Koan.endTask {task}`,
+and for each of a client's tasks when its last connection goes, on Stop all agents and on Agent ready off (not at quit: a throwaway
+container is in memory). A one-shot CLI command therefore ends its tasks when it disconnects: the CLI keeps one connection for a
+task's life (`koan shell`, the relay).
+
 ### 4.3 Method policy: per-method tables, **unlisted = deny**
 
 Rules: (1) no domain wildcards; a method is allowed only by name; (2) the table is data, in one file, and a unit
@@ -603,9 +618,9 @@ change it or refuse the task.
 | Mode | What the agent gets | Data after the task | Status |
 |---|---|---|---|
 | **Throwaway** (default) | a new in-memory container for this task | cleared when the task ends (`StoragePartition::ClearData`, E§1); gone at quit at the latest | core PR |
-| **Saved** | a named container on disk that keeps its cookies between tasks ("GitHub bot") | kept; deleted from Settings. Another agent or task gets it **only if the user names it** in the prompt | core PR |
+| **Saved** | a named container on disk that keeps its cookies between tasks ("GitHub bot") | kept; made and deleted in Settings > Agent Control (never by an agent). A task gets it **only if the user granted it to that client** (Settings, per paired client, by its stable id; in memory, reset with the pairings) **and the agent asked for it by name** (`AgentTabRequest::saved_container`), and not while another task has it open (`ChooseContainer`, `koan_container_grants.h`) | core PR + grants PR |
 | **Your tab** | a lease on one of the user's own tabs, limited to that tab's site (§8, §9). Not a container: this is the only mode where the agent acts with the user's logins, and its prompt says so | n/a | another PR (lease + gateway) |
-| **Strict** | a separate hidden profile: nothing of the user's profile is shared (settings, extensions, history service, permissions), the strongest wall | as Throwaway or Saved, in that profile | seam designed now (`AgentMode::kStrict` returns "not supported"), built last |
+| **Strict** | a separate hidden profile per task (`CreateMultiProfileAsync(is_hidden)`: ephemeral and omitted, `SetIsOmitted` again explicitly), with a throwaway agent container inside it so every block of §7.2 still applies: nothing of the user's profile is shared (settings, extensions, history service, permissions), the strongest wall. Its tabs open in a background window of that profile (§7.1); Settings > Agent Control > Strict makes it the default for tasks that ask for no saved container | the profile is kept alive (`kRemoteDebugging` keep-alive) until the task ends; then its windows close and Chromium deletes it (an ephemeral profile goes with its last keep-alive, one left by a crash at the next start). The launch picker counts only visible profiles | strict PR |
 
 There is **no free run in the user's own jar**: an agent never gets the default partition except through a per-tab,
 per-site lease the user approved.
@@ -647,13 +662,18 @@ per-site lease the user approved.
   agent container's tab is **never restored**: a `TabRestoreHook` replaces its pages with one `about:blank` before
   `NavigationController::Restore` runs, and the blank tab is closed once it is in its window (kept, blank, if it is the
   window's only tab). So no agent page ever loads in the user's jar after a restart, a crash or Reopen Closed Tab, and a
-  Saved container's tabs do not come back either (its cookies do, for the next task that names it). User containers
-  (#111) will restore into their container with one more hook in `CreateRestoredTab` (`create_params.site_instance`);
-  until then they are blanked the same way. Brave encodes the partition into the URL so that an older build shows a
+  Saved container's tabs do not come back either (its cookies do, for the next task that names it). A saved user
+  container's tab (#111) restores into its container: `CreateRestoredTab` creates it with
+  `SiteInstanceForRestoredTab()` (`create_params.site_instance`), and the restore hook keeps its pages only when the
+  tab really is in the container its marker names; a throwaway user container's tab is blanked like an agent's. Brave encodes the partition into the URL so that an older build shows a
   blank page instead of loading in the default partition (`containers.md`, Brave); Koan keeps the marker in its session data, which needs
   Koan's restore hook to run, and the hook fails closed (an unknown or malformed marker blanks the tab too).
 * **Spaces.** An agent container's Space is a normal Koan Space (a tab group) in the user's last-active window,
-  created with the container's first tab **without switching to it**, named by the agent ("Claude Code · task"), with
+  created with the container's first tab **without switching to it**. With no normal window that has Spaces (only
+  Incognito or app windows, or none), agent control opens **one** normal window for every request waiting on it
+  (`CreateBrowserWindow`, then `ShowInactive()`), never activated, on the screen of the window the user last used so
+  that macOS orders it behind that one rather than fronting it and switching Spaces (`NativeWidgetNSWindowBridge::
+  SetVisibilityState`, `kShowInactive`); its active tab is the user's own new tab page, named by the agent ("Claude Code · task"), with
   the agent icon. Agent ownership is the **partition**, not Space membership: a tab the user opens in an agent Space
   (Cmd+T) is the user's own, in their jar; a container tab the user drags into one of their Spaces is still in the
   agent's jar and keeps its blocks (taking a tab over gives the user the controls, not their logins; to use their own
@@ -685,6 +705,16 @@ the upstream decision function calling `koan::containers::IsAgent*` (§14 B-rows
 | Downloads | to `~/Downloads/Koan Agent/`, never a Save As prompt, Safe Browsing as usual | `DownloadTargetDeterminer::DoGenerateTargetPath` (where the prompt and the target directory are decided) |
 | Sync | agent tabs are not synced as open tabs (history and passwords are already out) | `TabContentsSyncedTabDelegate::ShouldSync` |
 | Passkeys / WebAuthn / Touch ID | refused before any UI | `ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn` (the existing Koan patch) |
+| Preloading in the default partition (B10; both kinds of container) | `<link rel=prerender>` starts no NoStatePrefetch; the loading predictor neither learns from nor preconnects/prewarms for a container's tab | `NoStatePrefetchProcessorImpl::Start`; the `LoadingPredictorTabHelper` constructor |
+| Search engines (B11) | OSDD links and form submits never add search engines | `SearchEngineTabHelper::BindOpenSearchDescriptionDocumentHandler`, `GenerateKeywordIfNecessary` |
+| FedCM (B12) | no FedCM service (the page's calls fail), Set-Login headers ignored | `RenderFrameHostImpl::BindFederatedRequestServiceReceiver`, `webid::SetIdpSigninStatus` (content: `//koan/browser/containers:domain`, no deps) |
+| Protocol handlers (B13) | `registerProtocolHandler` dropped | `BrowserWebContentsDelegate::RegisterProtocolHandler` |
+| Web-app link capturing (B14; both kinds) | a container tab's links never move into an installed app's window (default partition) | `Navigate()` in `browser_navigator.cc`, after `MaybeHandleAppNavigation` |
+| Site state in the profile (B15) | app badges, Accept-CH, the Favicons DB (icons still show), the heavy-ad blocklist, media engagement, the site data DB, site engagement, ad-filter site metadata and interventions, page-language counts | `BadgeManager` binders, `PersistAcceptCH`, `CreateContentFaviconDriverForWebContents`, page-load-metrics init, `MediaEngagementService::CreateWebContentsObserver`, `SiteDataRecorder::SetPageNodeDataCache`, `SiteEngagementService::Handle*`, `ProfileInteractionManager`, `ChromeTranslateClient` |
+| User surfaces (B16) | Recently Closed and `chrome.sessions` never list agent tabs (nor a Space of only agent tabs; a split of an agent and a user tab is dropped whole), NTP tab resumption skips them, no webNavigation events | `ContentLiveTab::IsInitialBlankNavigation`, `DesktopTabModelURLVisitDataFetcher`, the `WebNavigationTabObserver` constructor |
+
+Two services stay safe by decision: **OriginTrials** (a persistent trial needs the site's own token, which it sends again on
+the user's own visit; blocking it needs three hooks in content) and **ReduceAcceptLanguage** (off by default at 158).
 
 **Every per-profile service is decided.** A container shares the profile's `KeyedService`s (that is what makes it
 cheap), so a new upstream service could reach agent tabs silently. A unit test lists every factory registered by
@@ -712,7 +742,7 @@ user is *taken over* (§9): the agent loses it, it keeps the agent jar and its b
 | **History, omnibox, `@tabs`** | §7.2 | B-rows |
 | **Session restore, Recently Closed, reopen a window** | the `koan.container` marker and the restore hook blank agent tabs (§7.1) | none |
 | **Session files on disk** | they can hold agent-visited URLs until next rewritten, though restore blanks the pages; a tab-level early return in `SessionServiceBase::BuildCommandsForTab` / `UpdateTabNavigation` removes them | **conditional, §14 #6**, decided by T-sync-1 |
-| **Recently Closed list** | agent tabs appear there but reopen blank and close; a one-line early return in `CreateHistoricalTab` keeps them out of the list | **conditional, §14 #5**, decided by T-sync-1 |
+| **Recently Closed list** | agent tabs are blank to `TabRestoreService` (`ContentLiveTab::IsInitialBlankNavigation`, B16), so they are never listed or written | B16 |
 | **Saved tab groups and tab-group sync** | `koan::SavesTabGroups(context)` already keeps every Space out of saved groups when Spaces are on; agent control requires Spaces (`kNoSpaces`) | none |
 | **The user's cookie jar, storage, cache, logins** | the container | C-rows |
 
@@ -838,6 +868,16 @@ Agent-Space tabs start `driven`.
   for `kFromDebugger`, false (and pause) otherwise; this also keeps the user's keystrokes out of the page for the
   few milliseconds an injected sequence runs (B§7; note the `ShouldIgnoreInputEvents` effect is Aura-only, so
   Mac relies on the callback).
+
+**Built (take-over PR):** `Koan.takeOver {targetId?}` (capability `drive`; the user's active tab by default) shows a browser-modal
+prompt in the tab's window, 60 s, default deny, and grants the tab `driven` **for its site only** (`net::SchemefulSite` at approval).
+The agent's own `Page.navigate` off that site is `Koan.offSite`; any committed navigation off it (a link, a redirect, the user) makes
+the tab `readable` (`Koan.siteLeft`), where DOM answers and events go through `RedactSecretInputs()` (#196 N1) and `Network.enable`
+is refused (N2). The user's own input (`DidGetUserInteraction` without `kFromDebugger`, plus wheel per widget) pauses any registry
+tab (`Koan.paused`); commands still waiting for the lease are answered `Koan.paused` instead of sent (`CdpFacade::MayDispatch()`).
+The indicator pill shows *Hand back* for a paused tab and *Take back* for a user tab; `Koan.resume` only marks the pill
+"asks to continue". `Koan.release` gives a user tab back. The prompt is browser-modal rather than the URL-pill bubble of the
+design: a bubble anchored to Koan's URL pill is a UI follow-up.
 
 ### 9.3 Seeing the user's tab (`read`)
 

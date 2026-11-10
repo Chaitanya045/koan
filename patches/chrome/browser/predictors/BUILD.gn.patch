@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/predictors/BUILD.gn b/chrome/browser/predictors/BUILD.gn
+index f16db3d8a46e1079346e89bfec9e34f7026e5734..09aaddde1bf43a2bfc529d3e5abbecf9778fc18f 100644
+--- a/chrome/browser/predictors/BUILD.gn
++++ b/chrome/browser/predictors/BUILD.gn
+@@ -113,6 +113,7 @@ source_set("impl") {
+     "//components/prefs",
+     "//components/variations/net",
+     "//extensions/buildflags",
++    "//koan/browser/containers:partition",
+     "//services/network/public/cpp",
+     "//sql",
+     "//third_party/blink/public/common:headers",

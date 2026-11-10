@@ -5,12 +5,14 @@
 #ifndef KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_PARTITION_H_
 #define KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_PARTITION_H_
 
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
 
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
+#include "koan/browser/containers/koan_partition_domain.h"
 
 class GURL;
 
@@ -45,11 +47,6 @@ class WebContents;
 // This file is the part of the core that needs nothing but content: the
 // identity, and the SiteInstances upstream hooks put new tabs in.
 namespace koan::containers {
-
-// StoragePartitionConfig domains are [a-z]* (storage_partition_config.h). With
-// a container id after them they can't be an extension id (32 letters a-p).
-inline constexpr char kAgentPartitionDomainPrefix[] = "koanagent";
-inline constexpr char kUserPartitionDomainPrefix[] = "koanuser";
 
 enum class ContainerKind {
   kUser,
@@ -97,7 +94,29 @@ bool IsAgentPartition(const content::StoragePartitionConfig& config);
 // downloads, history and the omnibox, open-tab sync, WebAuthn.
 bool IsAgentProcess(content::RenderProcessHost* process);
 bool IsAgentFrame(content::RenderFrameHost* frame);
+// Also true for a user's own tab while an agent holds a lease on it (a
+// take-over, SetAgentLeased()): its password, autofill, history, downloads and
+// sync blocks apply there too, so the user's saved password is never filled
+// into a page the agent can read. (Permissions and extensions, keyed on the
+// process, stay the user's in their own tab.)
 bool IsAgentContents(const content::WebContents* contents);
+
+// Whether `contents` itself is in an agent container: false for a user's tab
+// an agent leases. For surfaces that list the agent's own tabs (Recently
+// Closed, tab resumption), where a leased tab is still the user's.
+bool IsAgentContainerContents(const content::WebContents* contents);
+
+// Marks `contents`, a user's tab, as leased to an agent, or not. Called by
+// agent control's lease (koan_agent_lease.cc) for tabs the agent doesn't own.
+void SetAgentLeased(content::WebContents* contents, bool leased);
+
+// Whether the frame, tab or SiteInstance is in a container of either kind.
+// Paths that would load its pages in the default partition, with the user's
+// cookies, check this: NoStatePrefetch, the loading predictor's prewarming,
+// web-app navigation capturing. Null is not.
+bool IsContainerFrame(content::RenderFrameHost* frame);
+bool IsContainerContents(const content::WebContents* contents);
+bool IsContainerSiteInstance(content::SiteInstance* site_instance);
 
 // The container `contents` is in, or nullopt.
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents);
@@ -106,6 +125,10 @@ std::optional<ContainerId> ContainerOf(const content::WebContents* contents);
 // Parse() returns nullopt for anything else.
 std::string Serialize(const ContainerId& container);
 std::optional<ContainerId> Parse(std::string_view text);
+
+// The per-tab session data key (koan_session_data.h) of a container's tab: its
+// Serialize()d ContainerId.
+inline constexpr char kContainerSessionKey[] = "koan.container";
 
 // --- SiteInstances for new tabs ---
 
@@ -131,6 +154,15 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
 // null when it isn't in one.
 scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
     content::WebContents* old_contents);
+
+// CreateRestoredTab() in browser_tabrestore.cc, before it creates the tab:
+// for a saved user container's tab (`extra_data`'s kContainerSessionKey), a
+// SiteInstance fixed to that container, so that the tab restores into it
+// (#111); null for every other tab. An agent container's tab never comes back
+// in its container (OnRestoringContainerTab() in koan_containers.h blanks it).
+scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+    content::BrowserContext* context,
+    const std::map<std::string, std::string>& extra_data);
 
 // BrowserWebContentsDelegate::IsPrerender2Supported(): whether `contents` may
 // prerender. Not in a container: content builds a prerendered page in the

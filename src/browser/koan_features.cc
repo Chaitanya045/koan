@@ -27,6 +27,7 @@ BASE_FEATURE(kKoanDownloadAnimation, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWindowDrag, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWelcome, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanFolders, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanNewTab, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kKoanSidebar);
@@ -66,6 +67,10 @@ bool IsWindowDragEnabled() {
 
 bool IsWelcomeEnabled() {
   return base::FeatureList::IsEnabled(kKoanWelcome);
+}
+
+bool IsNewTabEnabled() {
+  return base::FeatureList::IsEnabled(kKoanNewTab);
 }
 
 bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta) {
