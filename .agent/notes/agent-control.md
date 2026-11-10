@@ -677,12 +677,12 @@ the upstream decision function calling `koan::containers::IsAgent*` (§14 B-rows
 | Surface | Block | Upstream decision point |
 |---|---|---|
 | Every permission (location, camera, microphone, notifications, clipboard, MIDI, sensors, storage access, ...) | denied, never prompted | `PermissionUtil::IsPermissionBlockedInPartition` (the one check `PermissionManager` makes for both requests and status, `permission_manager.cc`), true for agent partitions. Upstream already blocks *undelegated* permissions in any non-default partition; Brave overrides the same function the other way, to share (E§5). WebUSB, WebHID and Web Serial are already refused in non-default partitions upstream |
-| Choosers and pickers | file and directory pickers, Bluetooth chooser and scanning prompt, screen share (`getDisplayMedia`) cancelled, raising `Koan.userNeeded` (§9.4) instead of a native sheet | `BrowserWebContentsDelegate::RunFileChooser`, `EnumerateDirectory`, `RunBluetoothChooser`, `ShowBluetoothScanningPrompt`; `DisplayMediaAccessHandler` |
+| Choosers and pickers | file and directory pickers, File System Access pickers, Bluetooth chooser and scanning prompt, screen share (`getDisplayMedia`) cancelled (a `Koan.userNeeded` event for them is the gateway's, §9.4) instead of a native sheet | `BrowserWebContentsDelegate::RunFileChooser`, `EnumerateDirectory`; `ChromeFileSystemAccessPermissionContext::CanShowFilePicker`; `ChromeBluetoothDelegateImplClient::RunBluetoothChooser`, `ShowBluetoothScanningPrompt`; `DisplayMediaAccessHandler::HandleRequest` |
 | Extensions | no content scripts or extension APIs in agent processes; no webRequest or declarativeNetRequest on agent traffic; no `chrome.debugger` attach; extension APIs cannot address an agent tab by id | `RendererStartupHelper::OnRenderProcessHostCreated` / `OnRenderProcessLaunched` (precedent: `kInitialWebUIWithoutExtensions`), `WebRequestAPI::MaybeProxyURLLoaderFactory`, `ExtensionMayAttachToWebContents` (debugger), `ExtensionTabUtil::GetTabById`. `chrome.cookies` reads only the default jar |
 | Passwords | no fill, no save, no Credential Management API | `ChromePasswordManagerClient::IsFillingEnabled` (saving requires it) |
 | Autofill | no addresses, cards or autocomplete | `ChromeAutofillClient::IsAutofillEnabled`, `IsAutocompleteEnabled` |
-| History and omnibox | agent visits are not added to History, so not to history-based suggestions; `@tabs` does not list agent tabs | `HistoryTabHelper::DidFinishNavigation` (before `ShouldUpdateHistory()`); the existing `open_tab_provider.cc` patch |
-| Downloads | to `~/Downloads/Koan Agent/`, never a Save As prompt, Safe Browsing as usual | `ChromeDownloadManagerDelegate::DetermineDownloadTarget` |
+| History and omnibox | agent visits are not added to History, so not to history-based suggestions; `@tabs` and Switch to tab do not offer agent tabs | `HistoryTabHelper::DidFinishNavigation` (before `ShouldUpdateHistory()`); `TabMatcherDesktop::GetOpenWebContents` |
+| Downloads | to `~/Downloads/Koan Agent/`, never a Save As prompt, Safe Browsing as usual | `DownloadTargetDeterminer::DoGenerateTargetPath` (where the prompt and the target directory are decided) |
 | Sync | agent tabs are not synced as open tabs (history and passwords are already out) | `TabContentsSyncedTabDelegate::ShouldSync` |
 | Passkeys / WebAuthn / Touch ID | refused before any UI | `ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn` (the existing Koan patch) |
 
@@ -1001,12 +1001,12 @@ C1 (in `content/`, which cannot depend on `//koan`), whose logic is generic and 
 | **C4** | `browser_web_contents_delegate.cc` (`IsPrerender2Supported`, the existing patch) | `kPreloadingDisabled` for container tabs | prerender builds its page in the default partition | core PR |
 | **C5** | `chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc` (`DoGarbageCollection`) | `koan::containers::LoadSavedContainers(profile_)` before the allowlist is used (loaded partitions are never collected) | saved containers are not deleted from disk | core PR |
 | **B1** | `components/permissions/permission_util.cc` (`IsPermissionBlockedInPartition`) | true for agent partitions | every permission denied | blocks PR |
-| **B2** | `browser_web_contents_delegate.cc` (`RunFileChooser`, `EnumerateDirectory`, `RunBluetoothChooser`, `ShowBluetoothScanningPrompt`); `chrome/browser/media/webrtc/display_media_access_handler.cc` (`HandleRequest`) | cancel for agent tabs | pickers, choosers, screen share | blocks PR |
+| **B2** | `browser_web_contents_delegate.cc` (`RunFileChooser`, `EnumerateDirectory`); `chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc` (`CanShowFilePicker`); `chrome/browser/bluetooth/chrome_bluetooth_delegate_impl_client.cc` (`RunBluetoothChooser`, `ShowBluetoothScanningPrompt`); `chrome/browser/media/webrtc/display_media_access_handler.cc` (`HandleRequest`) | cancel for agent tabs | pickers, choosers, screen share | blocks PR |
 | **B3** | `extensions/browser/renderer_startup_helper.cc` (`OnRenderProcessHostCreated`, `OnRenderProcessLaunched`), `extensions/browser/api/web_request/web_request_api.cc` (`MaybeProxyURLLoaderFactory`), `chrome/browser/extensions/api/debugger/debugger_api.cc` (`ExtensionMayAttachToWebContents`), `chrome/browser/extensions/extension_tab_util.cc` (`GetTabById`) | skip / refuse for agent processes and tabs | extensions | blocks PR |
 | **B4** | `chrome/browser/password_manager/chrome_password_manager_client.cc` (`IsFillingEnabled`) | false for agent tabs | passwords | blocks PR |
 | **B5** | `chrome/browser/ui/autofill/chrome_autofill_client.cc` (`IsAutofillEnabled`, `IsAutocompleteEnabled`) | false | autofill | blocks PR |
-| **B6** | `chrome/browser/download/chrome_download_manager_delegate.cc` (`DetermineDownloadTarget`) | agent folder, no prompt | downloads | blocks PR |
-| **B7** | `chrome/browser/history/history_tab_helper.cc` (`DidFinishNavigation`, before `ShouldUpdateHistory()`); `components/omnibox/browser/open_tab_provider.cc` (existing patch) | skip agent tabs | history, omnibox, `@tabs` (decision 18) | blocks PR |
+| **B6** | `chrome/browser/download/download_target_determiner.cc` (`DoGenerateTargetPath`) | agent folder, no prompt | downloads | blocks PR |
+| **B7** | `chrome/browser/history/history_tab_helper.cc` (`DidFinishNavigation`, before `ShouldUpdateHistory()`); `chrome/browser/autocomplete/tab_matcher_desktop.cc` (`GetOpenWebContents`) | skip agent tabs | history, omnibox, `@tabs`, Switch to tab (decision 18) | blocks PR |
 | **B8** | `chrome/browser/ui/sync/tab_contents_synced_tab_delegate.cc` (`ShouldSync`) | false | open-tab sync | blocks PR |
 | **B9** | `chrome/browser/chrome_content_browser_client.cc` (`IsSecurityLevelAcceptableForWebAuthn`, the existing patch) | false for agent frames | passkeys, WebAuthn, Touch ID | blocks PR |
 
@@ -1173,8 +1173,11 @@ its tests listed).
   connected" state is visible**; PR #190 and #191 are code that nothing starts). Mac: T-sec-*, T-ready-*.
 * **2c, containers** (2026-11-10, in this order, each its own PR against `develop`):
   1. this design change (§7, §14, §16; `.agent/notes/upstream/containers.md`);
-  2. the container core: `ContainerId` and its partition, `koan::containers::StartAgentContainer` / `OpenAgentTab` /
-     `EndAgentContainer` (`src/browser/containers/koan_agent_containers.h`, the header the gateway calls), the Space,
+  2. the container core: `ContainerId` and its partition; the containers implement agent control's
+     `koan::agent::AgentTabOpener` (`koan_agent_tab_hooks.h`, #203) and register it with `SetAgentTabOpener()`, one
+     container per client and task; `koan_agent_containers.h` keeps the lifecycle (`EndAgentTask`) and the saved
+     containers for Settings; a tab a page opens from an agent tab (#203's `OnOpenedFromAgentTab`) inherits the
+     partition (C1, C2) and joins the container's Space; the approval dialog's copy says so; the Space,
      Throwaway vs Saved, links and popups (C1, C2), discard (C3), prerender (C4), the GC allowlist (C5), the Glance,
      and session restore (no patch). Mac: T-cont-1..8, 10;
   3. the agent blocks (B1-B9). Mac: T-block-*;
