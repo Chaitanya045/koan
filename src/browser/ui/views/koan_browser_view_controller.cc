@@ -53,6 +53,7 @@
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_drag.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
@@ -178,6 +179,8 @@ KoanBrowserViewController::~KoanBrowserViewController() {
 // static
 void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
   CHECK(!From(browser_view));
+  // Before the controllers, which ask whether the window has Spaces.
+  MarkBlankWindowIfRequested(browser_view);
   browser_view->SetProperty(
       kKoanBrowserViewControllerKey,
       std::make_unique<KoanBrowserViewController>(browser_view));

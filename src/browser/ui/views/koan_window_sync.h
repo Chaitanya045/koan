@@ -17,6 +17,7 @@
 #include "koan/browser/window_sync/koan_window_sync_model.h"
 
 class BrowserView;
+class Profile;
 
 namespace content {
 class WebContents;
@@ -164,6 +165,18 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   bool flush_scheduled_ = false;
   base::WeakPtrFactory<KoanWindowSync> weak_factory_{this};
 };
+
+// Zen's New Blank Window (cmd_zenNewNavigatorUnsynced, Accel+Shift+N): a
+// normal window of `profile`'s regular profile without Spaces and outside
+// the sync, like Zen's zen-unsynced-window (gZenWorkspaces.
+// privateWindowOrDisabled). Its tabs are a plain list.
+void OpenBlankWindow(Profile* profile);
+// Whether `browser_view`'s window is one.
+bool IsBlankWindow(const BrowserView* browser_view);
+// KoanBrowserViewController::CreateFor(), before the window's controllers
+// exist: marks the window blank if OpenBlankWindow() or a link
+// (koan_window_sync_hooks.h) is creating it.
+void MarkBlankWindowIfRequested(BrowserView* browser_view);
 
 }  // namespace koan
 

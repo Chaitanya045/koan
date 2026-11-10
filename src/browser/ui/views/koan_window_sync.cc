@@ -8,23 +8,31 @@
 #include <memory>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_window_sync_hooks.h"
+#include "ui/base/class_property.h"
 
 namespace koan {
 
 namespace {
 
 const void* const kWindowSyncKey = &kWindowSyncKey;
+
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kKoanBlankWindowKey, false)
+
+// The profile whose next window is a blank one, while it is being created.
+Profile* g_blank_window_profile = nullptr;
 
 }  // namespace
 
@@ -53,7 +61,7 @@ KoanWindowSync* KoanWindowSync::ForProfile(Profile* profile) {
 bool KoanWindowSync::ShouldSync(BrowserView* browser_view) {
   Profile* profile = browser_view->GetProfile();
   return browser_view->GetIsNormalType() && profile &&
-         !profile->IsOffTheRecord() &&
+         !profile->IsOffTheRecord() && !IsBlankWindow(browser_view) &&
          profile->GetPrefs()->GetBoolean(prefs::kWindowSyncEnabled);
 }
 
@@ -312,6 +320,44 @@ void KoanWindowSync::Flush() {
 
 void KoanWindowSync::Store() {
   profile_->GetPrefs()->SetDict(prefs::kWindowSyncState, model_.ToValue());
+}
+
+void OpenBlankWindow(Profile* profile) {
+  if (!profile) {
+    return;
+  }
+  // A private window's New Blank Window opens a regular one, as Zen's.
+  Profile* regular = profile->GetOriginalProfile();
+  base::AutoReset<Profile*> blank(&g_blank_window_profile, regular);
+  chrome::NewEmptyWindow(regular, /*should_trigger_session_restore=*/false);
+}
+
+bool IsBlankWindow(const BrowserView* browser_view) {
+  return browser_view && browser_view->GetProperty(kKoanBlankWindowKey);
+}
+
+void MarkBlankWindowIfRequested(BrowserView* browser_view) {
+  if (g_blank_window_profile &&
+      browser_view->GetProfile() == g_blank_window_profile &&
+      browser_view->GetIsNormalType()) {
+    browser_view->SetProperty(kKoanBlankWindowKey, true);
+    // One window per request.
+    g_blank_window_profile = nullptr;
+  }
+}
+
+base::ScopedClosureRunner WillOpenWindowForNavigation(Profile* profile) {
+  // Zen's zen.window-sync.open-link-in-new-unsynced-window: a link opened in
+  // a new window while synced windows exist opens a blank one.
+  KoanWindowSync* sync = KoanWindowSync::ForProfile(profile);
+  if (!sync || !sync->MostRecentWindow(nullptr) ||
+      !profile->GetPrefs()->GetBoolean(
+          prefs::kWindowSyncOpenLinksInBlankWindow)) {
+    return base::ScopedClosureRunner();
+  }
+  g_blank_window_profile = profile;
+  return base::ScopedClosureRunner(
+      base::BindOnce([] { g_blank_window_profile = nullptr; }));
 }
 
 void OnWindowClosing(BrowserWindowInterface* browser) {

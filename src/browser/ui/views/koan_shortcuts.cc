@@ -43,6 +43,7 @@
 #include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/common/koan_url_constants.h"
 #if BUILDFLAG(IS_MAC)
@@ -63,6 +64,7 @@ bool CreatesSomething(shortcuts::Action action) {
   switch (action) {
     case shortcuts::Action::kNewTab:
     case shortcuts::Action::kNewWindow:
+    case shortcuts::Action::kNewBlankWindow:
     case shortcuts::Action::kNewPrivateWindow:
     case shortcuts::Action::kNewWorkspace:
     case shortcuts::Action::kNewEmptySplit:
@@ -236,6 +238,7 @@ bool KoanShortcutController::CanRun(Action action) const {
     case Action::kInspect:
       return chrome::IsCommandEnabled(browser, IDC_DEV_TOOLS_INSPECT);
     case Action::kNewWindow:
+    case Action::kNewBlankWindow:
       return chrome::IsCommandEnabled(browser, IDC_NEW_WINDOW);
     case Action::kNewPrivateWindow:
       return chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW);
@@ -365,6 +368,9 @@ bool KoanShortcutController::Run(Action action) {
       return Command(IDC_DEV_TOOLS_INSPECT);
     case Action::kNewWindow:
       return Command(IDC_NEW_WINDOW);
+    case Action::kNewBlankWindow:
+      OpenBlankWindow(browser_view_->GetProfile());
+      return true;
     case Action::kNewPrivateWindow:
       return Command(IDC_NEW_INCOGNITO_WINDOW);
     case Action::kMuteSite:

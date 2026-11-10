@@ -161,6 +161,10 @@ inline constexpr char kWindowSyncOnlyPinned[] =
 // {"spaces": [...], "items": [...]}. A window that opens with nothing to
 // restore takes it, and a restored window is reconciled to it.
 inline constexpr char kWindowSyncState[] = "koan.window_sync.state";
+// Zen's zen.window-sync.open-link-in-new-unsynced-window: a link opened in a
+// new window (while synced windows are open) opens a New Blank Window.
+inline constexpr char kWindowSyncOpenLinksInBlankWindow[] =
+    "koan.window_sync.open_links_in_blank_window";
 
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
 // whether Glance is on, and which modifier+click previews a link: "alt"
