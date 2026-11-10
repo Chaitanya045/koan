@@ -36,11 +36,14 @@ dmg="$name-$version-${sha:0:7}-arm64.dmg"
 # frameworks, helper apps and libraries too, and --verify --deep --strict
 # fails if any nested code is unsigned or its seal doesn't match.
 echo "==> Signing $app (ad hoc)"
-# The agent's `koan` tool sits in Resources/bin, where --deep does not look
-# for code: it is signed on its own first, so the pairing dialog can name it.
-if [[ -f $app/Contents/Resources/bin/koan ]]; then
-  codesign --force --sign - --timestamp=none "$app/Contents/Resources/bin/koan"
-fi
+# The agent's `koan` and `koan-relay` sit in Resources/bin, where --deep does
+# not look for code: each is signed on its own first, so the pairing dialog
+# can name it.
+for tool in koan koan-relay; do
+  if [[ -f $app/Contents/Resources/bin/$tool ]]; then
+    codesign --force --sign - --timestamp=none "$app/Contents/Resources/bin/$tool"
+  fi
+done
 codesign --force --deep --sign - --timestamp=none "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 lipo -archs "$app/Contents/MacOS/$name"

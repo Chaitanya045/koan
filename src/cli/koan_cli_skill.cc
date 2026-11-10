@@ -27,6 +27,8 @@ not yours unless they give you one. Every command is `koan ...`.
    `koan act <tab> press Enter`, `koan act <tab> scroll 600`,
    `koan act <tab> navigate <url>`. Take a new snapshot after each change:
    refs belong to the page as it was.
+   With agent-browser installed, `koan agent-browser <its usual args>` runs
+   it against Koan instead (the first time, the user approves koan-relay).
 5. A tab of the user's: `koan take-over` asks them for the tab they are on
    (only its site); `koan release <tab>` gives it back when you are done.
 6. When you are done: `koan end` closes your tabs and clears what they

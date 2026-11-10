@@ -98,6 +98,28 @@ TEST(KoanCliArgsTest, Refusals) {
   EXPECT_EQ(Parse({"__hold", "--ready-fd", "3"}).ready_fd, 3);
 }
 
+TEST(KoanCliArgsTest, AgentBrowserTakesTheRestUntouched) {
+  Command command =
+      Parse({"--user-data-dir", "/p", "agent-browser", "--session", "work",
+             "open", "https://a.test", "--json"});
+  EXPECT_EQ(command.kind, CommandKind::kAgentBrowser);
+  EXPECT_EQ(command.user_data_dir, "/p");
+  // Its own options stay its own, --json included.
+  EXPECT_EQ(command.passthrough,
+            (std::vector<std::string>{"--session", "work", "open",
+                                      "https://a.test", "--json"}));
+  EXPECT_FALSE(command.json);
+  EXPECT_TRUE(Parse({"agent-browser"}).passthrough.empty());
+
+  EXPECT_EQ(Parse({"relay", "env"}).kind, CommandKind::kRelayEnv);
+  EXPECT_EQ(Parse({"relay", "env"}).session, "default");
+  Command stop = Parse({"relay", "stop", "--session", "work"});
+  EXPECT_EQ(stop.kind, CommandKind::kRelayStop);
+  EXPECT_EQ(stop.session, "work");
+  EXPECT_FALSE(ErrorOf({"relay"}).empty());
+  EXPECT_FALSE(ErrorOf({"relay", "start"}).empty());
+}
+
 TEST(KoanCliArgsTest, RefsAndTabPrefixes) {
   EXPECT_EQ(ParseRef("@42"), 42);
   EXPECT_FALSE(ParseRef("42"));

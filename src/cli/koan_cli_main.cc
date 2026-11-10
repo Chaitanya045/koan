@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -31,7 +32,6 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
-#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -48,20 +48,17 @@
 #include "koan/browser/agent/koan_agent_peer.h"
 #include "koan/cli/koan_cli_admission.h"
 #include "koan/cli/koan_cli_args.h"
+#include "koan/cli/koan_cli_client.h"
 #include "koan/cli/koan_cli_io.h"
 #include "koan/cli/koan_cli_protocol.h"
 #include "koan/cli/koan_cli_router.h"
 #include "koan/cli/koan_cli_skill.h"
-#include "third_party/boringssl/src/include/openssl/curve25519.h"
-#include "third_party/boringssl/src/include/openssl/rand.h"
+#include "koan/cli/koan_relay_gate.h"
 
 namespace koan::cli {
 namespace {
 
 constexpr char kVersion[] = "1";
-// The user may take a while over the approval dialog (60 s in the browser).
-constexpr base::TimeDelta kApprovalWait = base::Seconds(75);
-constexpr base::TimeDelta kAnswerWait = base::Seconds(30);
 // A holder with no command for this long ends its tasks and exits.
 constexpr base::TimeDelta kHolderIdle = base::Minutes(30);
 constexpr size_t kSnapshotLines = 1500;
@@ -76,240 +73,6 @@ enum Exit {
 int Fail(const std::string& text, int code = kFailed) {
   fprintf(stderr, "koan: %s\n", text.c_str());
   return code;
-}
-
-base::FilePath Home() {
-  const char* home = getenv("HOME");
-  return base::FilePath(home && *home ? home : "/");
-}
-
-base::FilePath KoanDir() {
-  return KoanHome(Home());
-}
-
-base::FilePath UserDataDir(const Command& command) {
-  return command.user_data_dir.empty()
-             ? DefaultUserDataDir(Home(), getenv("KOAN_USER_DATA_DIR"))
-             : base::FilePath(command.user_data_dir);
-}
-
-// A directory of the user's alone: made 0700 if missing, refused if it is a
-// link or another user's.
-bool PrivateDir(const base::FilePath& dir) {
-  if (mkdir(dir.value().c_str(), 0700) != 0 && errno != EEXIST) {
-    return false;
-  }
-  struct stat info;
-  return lstat(dir.value().c_str(), &info) == 0 && S_ISDIR(info.st_mode) &&
-         info.st_uid == geteuid() && chmod(dir.value().c_str(), 0700) == 0;
-}
-
-bool WritePrivateFile(const base::FilePath& path, const std::string& data) {
-  base::ScopedFD fd(HANDLE_EINTR(
-      open(path.value().c_str(),
-           O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0600)));
-  return fd.is_valid() && base::WriteFileDescriptor(fd.get(), data) &&
-         fchmod(fd.get(), 0600) == 0;
-}
-
-// --- Clients and keys ------------------------------------------------------
-
-std::vector<std::string> PairedClients() {
-  std::vector<std::string> ids;
-  base::FileEnumerator dirs(KoanDir().Append("clients"), false,
-                            base::FileEnumerator::DIRECTORIES);
-  for (base::FilePath dir = dirs.Next(); !dir.empty(); dir = dirs.Next()) {
-    std::string json;
-    if (!base::ReadFileToString(dir.Append("client.json"), &json)) {
-      continue;
-    }
-    if (std::optional<ClientInfo> client = ParseClient(json);
-        client && client->client_id == dir.BaseName().value()) {
-      ids.push_back(client->client_id);
-    }
-  }
-  std::sort(ids.begin(), ids.end());
-  return ids;
-}
-
-std::optional<ClientInfo> LoadClient(const std::string& client_id) {
-  std::string json;
-  if (!base::ReadFileToString(
-          ClientDir(KoanDir(), client_id).Append("client.json"), &json)) {
-    return std::nullopt;
-  }
-  return ParseClient(json);
-}
-
-// This process as the OS describes it (its executable, signature and
-// ancestors), through the gateway's own resolver: the peer of one end of a
-// socket pair is the process that holds both ends.
-std::optional<agent::PeerIdentity> ResolveSelf(
-    const agent::PeerResolver& resolver) {
-  int fds[2];
-  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
-    return std::nullopt;
-  }
-  base::ScopedFD a(fds[0]);
-  base::ScopedFD b(fds[1]);
-  std::optional<agent::PeerToken> token = resolver.TokenForSocket(a.get());
-  std::optional<agent::ResolvedPeer> peer =
-      token ? resolver.Resolve(*token) : std::nullopt;
-  if (!peer) {
-    return std::nullopt;
-  }
-  return peer->identity;
-}
-
-struct Key {
-  uint8_t public_key[ED25519_PUBLIC_KEY_LEN];
-  uint8_t private_key[ED25519_PRIVATE_KEY_LEN];
-};
-
-std::optional<Key> LoadKey(const std::string& client_id) {
-  std::string encoded;
-  if (!base::ReadFileToString(ClientDir(KoanDir(), client_id).Append("key"),
-                              &encoded)) {
-    return std::nullopt;
-  }
-  std::optional<std::vector<uint8_t>> seed = base::Base64Decode(
-      std::string(base::TrimWhitespaceASCII(encoded, base::TRIM_ALL)));
-  if (!seed || seed->size() != 32) {
-    return std::nullopt;
-  }
-  Key key;
-  ED25519_keypair_from_seed(key.public_key, key.private_key, seed->data());
-  return key;
-}
-
-std::string Sign(const Key& key, base::span<const uint8_t> message) {
-  uint8_t signature[ED25519_SIGNATURE_LEN];
-  ED25519_sign(signature, message.data(), message.size(), key.private_key);
-  return base::Base64Encode(signature);
-}
-
-// --- Talking to the browser or the holder -----------------------------------
-
-class Link {
- public:
-  explicit Link(std::unique_ptr<FrameChannel> channel)
-      : channel_(std::move(channel)) {}
-
-  FrameChannel& channel() { return *channel_; }
-
-  // Sends a request and waits for its answer; events that come meanwhile are
-  // passed to `on_event` if given.
-  std::optional<Message> Call(
-      std::string_view method,
-      base::DictValue params,
-      std::string_view session_id = {},
-      base::TimeDelta wait = kAnswerWait,
-      base::RepeatingCallback<void(const Message&)> on_event = {}) {
-    const int id = next_id_++;
-    if (!channel_->Write(Request(id, method, std::move(params), session_id))) {
-      return std::nullopt;
-    }
-    const base::TimeTicks deadline = base::TimeTicks::Now() + wait;
-    while (true) {
-      const base::TimeDelta left = deadline - base::TimeTicks::Now();
-      if (left <= base::TimeDelta()) {
-        return std::nullopt;
-      }
-      std::optional<std::string> frame = channel_->Read(left);
-      if (!frame) {
-        return std::nullopt;
-      }
-      std::optional<Message> message = ParseMessage(*frame);
-      if (!message) {
-        continue;
-      }
-      if (message->id == id) {
-        return message;
-      }
-      if (!message->id && on_event) {
-        on_event.Run(*message);
-      }
-    }
-  }
-
- private:
-  std::unique_ptr<FrameChannel> channel_;
-  int next_id_ = 1;
-};
-
-std::string Describe(const std::optional<Message>& answer) {
-  if (!answer) {
-    return "no answer (Koan quit, or it took too long)";
-  }
-  return answer->error_code + ": " + answer->error_message;
-}
-
-// Dials the browser's socket from its discovery file.
-std::unique_ptr<FrameChannel> DialBrowser(const Command& command,
-                                          std::string* error) {
-  const base::FilePath file = DiscoveryFile(UserDataDir(command));
-  std::string json;
-  if (!base::ReadFileToString(file, &json)) {
-    *error =
-        "Koan is not running, or Agent ready is off (Settings > Agent "
-        "Control); no " +
-        file.value();
-    return nullptr;
-  }
-  std::optional<Discovery> discovery = ParseDiscovery(json);
-  if (!discovery) {
-    *error = file.value() + " is not readable";
-    return nullptr;
-  }
-  // A discovery file left by a browser that is gone.
-  if (kill(discovery->pid, 0) != 0 && errno == ESRCH) {
-    *error = "Koan is not running (its discovery file is stale)";
-    return nullptr;
-  }
-  base::ScopedFD fd = ConnectUnix(discovery->socket, error);
-  if (!fd.is_valid()) {
-    return nullptr;
-  }
-  return std::make_unique<FrameChannel>(std::move(fd), agent::kMaxPayload);
-}
-
-// Proves the client to the browser (design section 5.2).
-bool Authenticate(Link& link,
-                  const std::string& client_id,
-                  std::string* error) {
-  std::optional<Key> key = LoadKey(client_id);
-  if (!key) {
-    *error = "the key of client " + client_id + " is missing or unreadable";
-    return false;
-  }
-  base::DictValue ask;
-  ask.Set("clientId", client_id);
-  std::optional<Message> nonce_answer =
-      link.Call("Koan.authenticate", std::move(ask));
-  const std::string* nonce_text =
-      nonce_answer && nonce_answer->result
-          ? nonce_answer->result->FindString("nonce")
-          : nullptr;
-  std::optional<std::vector<uint8_t>> nonce =
-      nonce_text ? base::Base64Decode(*nonce_text) : std::nullopt;
-  if (!nonce || nonce->size() != agent::kNonceSize) {
-    *error = "Koan did not start authentication: " + Describe(nonce_answer);
-    return false;
-  }
-  base::DictValue proof;
-  proof.Set("clientId", client_id);
-  proof.Set("signature", Sign(*key, agent::ProofMessage(client_id, *nonce)));
-  // A changed program or chain is asked about in Koan: wait for the user.
-  std::optional<Message> answer =
-      link.Call("Koan.authenticate", std::move(proof), {}, kApprovalWait);
-  if (!answer || answer->is_error() || !answer->result) {
-    *error = answer && answer->error_code == "Koan.authFailed"
-                 ? "Koan does not know this client any more: pair again "
-                   "(koan pair)"
-                 : "authentication failed: " + Describe(answer);
-    return false;
-  }
-  return true;
 }
 
 // --- The holder
@@ -328,7 +91,7 @@ void SayReady(int fd, const std::string& line) {
 
 int RunHolder(const Command& command) {
   std::string error;
-  const std::vector<std::string> paired = PairedClients();
+  const std::vector<std::string> paired = PairedClients(KoanDir());
   std::optional<std::string> client_id =
       ChooseClient(paired, command.client, &error);
   int ready_fd = command.ready_fd;
@@ -336,13 +99,14 @@ int RunHolder(const Command& command) {
     SayReady(ready_fd, "error " + error);
     return kNotConnected;
   }
-  std::unique_ptr<FrameChannel> browser = DialBrowser(command, &error);
+  std::unique_ptr<FrameChannel> browser =
+      DialBrowser(UserDataDir(command.user_data_dir), &error);
   if (!browser) {
     SayReady(ready_fd, "error " + error);
     return kNotConnected;
   }
   Link link(std::move(browser));
-  if (!Authenticate(link, *client_id, &error)) {
+  if (!Authenticate(link, KoanDir(), *client_id, &error)) {
     SayReady(ready_fd, "error " + error);
     return kNotConnected;
   }
@@ -366,7 +130,7 @@ int RunHolder(const Command& command) {
   // The agent the pairing recorded; a pairing by an older koan has none, and
   // the agent that started this holder (which the browser just accepted)
   // stands in.
-  const std::optional<ClientInfo> client = LoadClient(*client_id);
+  const std::optional<ClientInfo> client = LoadClient(KoanDir(), *client_id);
   const agent::ProcessInfo paired_agent = client && client->pinned
                                               ? client->pinned->agent
                                               : agent::AgentAncestor(*self);
@@ -633,7 +397,7 @@ std::unique_ptr<Link> Holder(const Command& command,
                              bool start,
                              std::string* error) {
   std::optional<std::string> client_id =
-      ChooseClient(PairedClients(), command.client, error);
+      ChooseClient(PairedClients(KoanDir()), command.client, error);
   if (!client_id) {
     return nullptr;
   }
@@ -720,58 +484,25 @@ std::optional<std::string> SessionFor(Link& link,
 // -----------------------------------------------------------------
 
 int Pair(const Command& command) {
-  if (!PrivateDir(KoanDir()) || !PrivateDir(KoanDir().Append("clients"))) {
-    return Fail("~/.koan is not a private directory");
-  }
   std::string error;
-  std::unique_ptr<FrameChannel> browser = DialBrowser(command, &error);
+  std::unique_ptr<FrameChannel> browser =
+      DialBrowser(UserDataDir(command.user_data_dir), &error);
   if (!browser) {
     return Fail(error, kNotConnected);
   }
   Link link(std::move(browser));
-  uint8_t seed[32];
-  RAND_bytes(seed, sizeof(seed));
-  Key key;
-  ED25519_keypair_from_seed(key.public_key, key.private_key, seed);
   const std::string label = command.label.empty() ? "koan" : command.label;
-  base::DictValue params;
-  params.Set("publicKey", base::Base64Encode(key.public_key));
-  params.Set("label", label);
-  base::ListValue capabilities;
-  for (const std::string& name : command.capabilities) {
-    capabilities.Append(name);
-  }
-  params.Set("capabilities", std::move(capabilities));
-  params.Set("proof", Sign(key, agent::PairingMessage(key.public_key, label)));
   fprintf(stderr, "koan: approve \"%s\" in Koan...\n", label.c_str());
-  std::optional<Message> answer =
-      link.Call("Koan.pair", std::move(params), {}, kApprovalWait);
-  int exit_code = kOk;
-  std::optional<base::DictValue> result = Expect(answer, &exit_code);
-  const std::string* client_id =
-      result ? result->FindString("clientId") : nullptr;
-  if (!client_id || !agent::IsValidClientId(*client_id)) {
-    return result ? Fail("Koan answered without a client id") : exit_code;
-  }
-  // Who paired, as the browser pinned it: the holder serves only this
-  // agent's koan.
-  ClientInfo record{*client_id, label, std::nullopt};
-  if (std::unique_ptr<agent::PeerResolver> resolver =
-          agent::CreatePlatformPeerResolver()) {
-    if (std::optional<agent::PeerIdentity> self = ResolveSelf(*resolver)) {
-      record.pinned = agent::PinPeer(*self);
-    }
-  }
-  const base::FilePath dir = ClientDir(KoanDir(), *client_id);
-  if (!PrivateDir(dir) ||
-      !WritePrivateFile(dir.Append("key"), base::Base64Encode(seed)) ||
-      !WritePrivateFile(dir.Append("client.json"), SerializeClient(record))) {
-    return Fail("cannot write " + dir.value());
+  std::optional<base::DictValue> result =
+      PairNewClient(link, KoanDir(), label, command.capabilities, &error);
+  if (!result) {
+    return Fail(error);
   }
   if (command.json) {
     PrintJson(*result);
   } else {
-    printf("paired as %s (%s)\n", client_id->c_str(), label.c_str());
+    printf("paired as %s (%s)\n", result->FindString("clientId")->c_str(),
+           label.c_str());
   }
   return kOk;
 }
@@ -779,10 +510,11 @@ int Pair(const Command& command) {
 int Status(const Command& command) {
   base::DictValue status;
   std::string error;
-  std::unique_ptr<FrameChannel> probe = DialBrowser(command, &error);
+  std::unique_ptr<FrameChannel> probe =
+      DialBrowser(UserDataDir(command.user_data_dir), &error);
   status.Set("koanRunning", static_cast<bool>(probe));
   probe.reset();
-  const std::vector<std::string> paired = PairedClients();
+  const std::vector<std::string> paired = PairedClients(KoanDir());
   status.Set("paired", !paired.empty());
   std::unique_ptr<Link> holder = Holder(command, /*start=*/false, &error);
   status.Set("connected", static_cast<bool>(holder));
@@ -972,6 +704,124 @@ int Act(Link& link, const Command& command, const std::string& session) {
   return kOk;
 }
 
+// --- agent-browser (design section 11) --------------------------------------
+
+// Runs `koan-relay <args>` (next to this executable) with this terminal, and
+// waits for it. Its exit code, or -1.
+int RunRelay(std::vector<std::string> args, const Command& command) {
+  base::FilePath self;
+  if (!base::PathService::Get(base::FILE_EXE, &self)) {
+    return -1;
+  }
+  args.insert(args.begin(), self.DirName().Append("koan-relay").value());
+  if (!command.user_data_dir.empty()) {
+    args.insert(args.end(), {"--user-data-dir", command.user_data_dir});
+  }
+  const pid_t pid = fork();
+  if (pid < 0) {
+    return -1;
+  }
+  if (pid == 0) {
+    std::vector<char*> argv;
+    for (std::string& arg : args) {
+      argv.push_back(arg.data());
+    }
+    argv.push_back(nullptr);
+    execv(argv[0], argv.data());
+    _exit(127);
+  }
+  int status = 0;
+  if (HANDLE_EINTR(waitpid(pid, &status, 0)) != pid || !WIFEXITED(status)) {
+    return -1;
+  }
+  return WEXITSTATUS(status);
+}
+
+bool RelayRuns(const std::string& session) {
+  std::string ignored;
+  return ConnectUnix(RelayControlSocket(RelayHome(KoanDir()), session).value(),
+                     &ignored)
+      .is_valid();
+}
+
+// `koan agent-browser <args>`: the relay of the args' agent-browser session,
+// paired once (its own approval, naming koan-relay and the agent) and started
+// if it does not run, then agent-browser with AGENT_BROWSER_CDP in its
+// environment: never on its command line and never printed.
+int AgentBrowser(const Command& command) {
+  std::string error;
+  std::optional<std::string> session = SessionFromArgs(
+      command.passthrough, getenv("AGENT_BROWSER_SESSION"), &error);
+  if (!session) {
+    return Fail(error, kUsage);
+  }
+  const base::FilePath relay_home = RelayHome(KoanDir());
+  if (PairedClients(relay_home).empty()) {
+    fprintf(stderr,
+            "koan: agent-browser needs koan-relay; approve it in Koan...\n");
+    if (RunRelay({"pair"}, command) != 0) {
+      return Fail("koan-relay was not paired", kNotConnected);
+    }
+  }
+  if (!RelayRuns(*session) &&
+      RunRelay({"serve", "--session", *session}, command) != 0) {
+    return Fail("the relay did not start (see above)", kNotConnected);
+  }
+  std::string env;
+  std::optional<std::string> url;
+  if (base::ReadFileToString(RelayEnvFile(relay_home, *session), &env)) {
+    url = ParseRelayEnv(env);
+  }
+  if (!url) {
+    return Fail(
+        "the relay's env file is missing; try koan relay stop --session " +
+        *session);
+  }
+  setenv("AGENT_BROWSER_CDP", url->c_str(), /*overwrite=*/1);
+  std::vector<std::string> args = command.passthrough;
+  args.insert(args.begin(), "agent-browser");
+  std::vector<char*> argv;
+  for (std::string& arg : args) {
+    argv.push_back(arg.data());
+  }
+  argv.push_back(nullptr);
+  execvp("agent-browser", argv.data());
+  return Fail("agent-browser is not installed (or not on PATH)");
+}
+
+int Relay(const Command& command) {
+  if (!IsValidSessionName(command.session)) {
+    return Fail("--session must be 1 to 64 letters, digits, . _ -", kUsage);
+  }
+  const base::FilePath relay_home = RelayHome(KoanDir());
+  if (command.kind == CommandKind::kRelayEnv) {
+    const base::FilePath env = RelayEnvFile(relay_home, command.session);
+    if (!RelayRuns(command.session) || !base::PathExists(env)) {
+      return Fail("no relay runs for session " + command.session);
+    }
+    // The file's path, never what it holds.
+    printf("%s\n", env.value().c_str());
+    return kOk;
+  }
+  std::string error;
+  base::ScopedFD fd = ConnectUnix(
+      RelayControlSocket(relay_home, command.session).value(), &error);
+  if (!fd.is_valid()) {
+    if (!command.json) {
+      printf("no relay runs for session %s\n", command.session.c_str());
+    }
+    return kOk;
+  }
+  Link link(
+      std::make_unique<FrameChannel>(std::move(fd), agent::kMaxPreAuthPayload));
+  std::optional<Message> answer =
+      link.Call("Relay.stop", base::DictValue(), {}, base::Seconds(5));
+  if (!answer || answer->is_error()) {
+    return Fail("the relay did not stop: " + Describe(answer));
+  }
+  return kOk;
+}
+
 int Run(const Command& command) {
   switch (command.kind) {
     case CommandKind::kHelp:
@@ -989,6 +839,11 @@ int Run(const Command& command) {
       return Status(command);
     case CommandKind::kHold:
       return RunHolder(command);
+    case CommandKind::kAgentBrowser:
+      return AgentBrowser(command);
+    case CommandKind::kRelayEnv:
+    case CommandKind::kRelayStop:
+      return Relay(command);
     default:
       break;
   }
