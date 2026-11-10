@@ -25,6 +25,11 @@ inline constexpr char kTestWindowData[] = "koan-test-window-data";
 // release): appends every icon the UI asks for, and whether it was swapped for
 // a Koan icon, to this file.
 inline constexpr char kIconTrace[] = "koan-icon-trace";
+// For tests off macOS: koan::IsWindowGlassEnabled()
+// is true in every window, so what paints the window's background draws it
+// translucent (over the headless window's plain backdrop; there is no blur to
+// see).
+inline constexpr char kTestWindowGlass[] = "koan-test-window-glass";
 
 }  // namespace koan::switches
 

@@ -29,6 +29,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kUrlBarReplaceNewTab, true);
   registry->RegisterBooleanPref(kUrlBarShowCopyUrl, true);
   registry->RegisterBooleanPref(kWorkspaceTint, true);
+  registry->RegisterIntegerPref(kDarkThemeStyle, 0);
+  registry->RegisterBooleanPref(kShowCustomColors, false);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
@@ -54,6 +56,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kDownloadAnimation, true);
   registry->RegisterBooleanPref(kDragWindowFromContent, true);
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
+  registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
   registry->RegisterIntegerPref(kResumedCrashes, 0);
   registry->RegisterTimePref(kLastResumedTime, base::Time());

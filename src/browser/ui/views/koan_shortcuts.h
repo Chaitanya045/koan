@@ -89,6 +89,9 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   bool Command(int command_id);
   // Zen's Ctrl+Tab settings; returns false (Chrome cycles) when both are off.
   bool CycleTabs(const shortcuts::CycleKey& key);
+  // Ctrl+Tab in recently used order: the tab shown last before the active
+  // one, of those Zen's list has.
+  void CycleToRecentTab(TabStripModel* model);
 
   // Koan's prefs (the regular profile's, also in incognito).
   PrefService* GetPrefs() const;

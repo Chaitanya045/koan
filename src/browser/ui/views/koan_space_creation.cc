@@ -110,7 +110,7 @@ BEGIN_METADATA(KoanSpaceIconField)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, Icon)
 END_METADATA
 
-// Edit Theme...: a tinted, rounded field, darker while hovered.
+// Theme...: a tinted, rounded field, darker while hovered.
 class KoanSpaceFormButton : public views::LabelButton {
   METADATA_HEADER(KoanSpaceFormButton, views::LabelButton)
 
@@ -195,7 +195,7 @@ KoanSpaceCreationView::KoanSpaceCreationView(
   theme_button_ = AddChildView(std::make_unique<KoanSpaceFormButton>(
       base::BindRepeating(&KoanSpaceCreationView::EditTheme,
                           base::Unretained(this)),
-      u"Edit Theme\u2026"));
+      u"Theme\u2026"));
 
   auto* spacer = AddChildView(std::make_unique<views::View>());
   layout->SetFlexForView(spacer, 1);
@@ -282,10 +282,10 @@ void KoanSpaceCreationView::SetIcon(const std::u16string& icon) {
 }
 
 void KoanSpaceCreationView::EditTheme() {
-  theme_menu_ = std::make_unique<KoanThemeMenu>(
-      theme_, base::BindRepeating(&KoanSpaceCreationView::SetTheme,
-                                  weak_factory_.GetWeakPtr()));
-  theme_menu_->RunMenuAt(theme_button_);
+  // Zen's theme picker for the Space to be; it previews on the window.
+  controller_->EditNewSpaceTheme(
+      theme_, base::BindOnce(&KoanSpaceCreationView::SetTheme,
+                             weak_factory_.GetWeakPtr()));
 }
 
 void KoanSpaceCreationView::SetTheme(

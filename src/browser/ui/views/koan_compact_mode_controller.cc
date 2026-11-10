@@ -45,6 +45,7 @@
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_curve.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "koan/browser/ui/views/koan_traffic_lights_controller.h"
@@ -124,6 +125,7 @@ enum ContextMenuCommand {
   kCommandCompactModeHideToolbar,
   kCommandCompactModeHideBoth,
   kCommandTabsOnRight,
+  kCommandThemePicker,
 };
 
 // Returns the BrowserView's top-container overlay view: a child of the
@@ -626,14 +628,18 @@ void KoanCompactModeController::OnTabStripModelChanged(
   if (change.type() == TabStripModelChange::kInserted) {
     MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
   }
-  if (selection.active_tab_changed()) {
+  if (selection.active_tab_changed() ||
+      change.type() != TabStripModelChange::kSelectionOnly) {
     UpdateEmptyTabLock();
   }
 }
 
 void KoanCompactModeController::OnTabChangedAt(tabs::TabInterface* tab,
                                                TabChangeType change_type) {
-  if (change_type == TabChangeType::kAll) {
+  // The empty tab navigating away (or the active tab back to it) changes
+  // whether the lock is wanted.
+  if (change_type == TabChangeType::kAll &&
+      tab == browser_view_->browser()->GetActiveTabInterface()) {
     UpdateEmptyTabLock();
   }
 }
@@ -660,6 +666,8 @@ void KoanCompactModeController::UpdateEmptyTabLock(bool snap_reveal) {
     if (snap_reveal && !empty_tab_lock_) {
       SnapNextSidebarReveal(browser_view_, false);
     }
+  } else if (!wanted) {
+    ReleaseLock(empty_tab_lock_);
   }
 }
 
@@ -746,6 +754,14 @@ void KoanCompactModeController::ShowContextMenu(
                                     compact_menu_model_.get());
   }
   context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+  // Zen's "Theme…" (ZenGradientGenerator.mjs initContextMenu()): the theme
+  // picker for the active Space, where Space themes are on.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_);
+      controller && controller->theme()->IsEnabled()) {
+    context_menu_model_->AddItem(kCommandThemePicker, u"Theme\u2026");
+    context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+  }
   context_menu_model_->AddCheckItem(kCommandTabsOnRight, u"Tabs on the right");
   // The sidebar stays out (it may be compact mode's overlay) while its menu
   // is open, as with upstream's menus on it.
@@ -807,6 +823,22 @@ void KoanCompactModeController::ExecuteCommand(int command_id,
       break;
     case kCommandTabsOnRight:
       ToggleTabsOnRight();
+      break;
+    case kCommandThemePicker:
+      // After the menu has closed, so the picker gets the focus.
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<KoanCompactModeController> self) {
+                if (self) {
+                  if (KoanBrowserViewController* controller =
+                          KoanBrowserViewController::From(
+                              self->browser_view_)) {
+                    controller->theme()->ShowThemePickerForActiveSpace();
+                  }
+                }
+              },
+              weak_factory_.GetWeakPtr()));
       break;
   }
 }
@@ -1193,6 +1225,8 @@ void KoanCompactModeController::Activate(Mode mode) {
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+  // Turning compact mode on while the empty tab is selected keeps the sidebar.
+  UpdateEmptyTabLock();
 }
 
 void KoanCompactModeController::ParkTopContainer() {

@@ -1,5 +1,4 @@
 diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
-index 224dc66bf6356c3adb96c7372ed977f2f1c289d2..a37471c25afda2cccc5e8e603a59ae718aff56e1 100644
 --- a/chrome/browser/ui/browser_commands.cc
 +++ b/chrome/browser/ui/browser_commands.cc
 @@ -207,6 +207,8 @@
@@ -11,7 +10,16 @@ index 224dc66bf6356c3adb96c7372ed977f2f1c289d2..a37471c25afda2cccc5e8e603a59ae71
  #include "pdf/buildflags.h"
  #include "printing/buildflags/buildflags.h"
  #include "rlz/buildflags/buildflags.h"
-@@ -1461,6 +1463,10 @@ void CloseTab(BrowserWindowInterface* browser) {
+@@ -406,6 +408,8 @@ content::WebContents* DuplicateTabAt(Bro
+     const auto old_group = tab_strip_model->GetTabGroupForTab(index);
+     tab_strip_model->InsertWebContentsAt(dst_index, std::move(contents_dupe),
+                                          add_types, old_group);
++    // Koan: Zen duplicates a pinned tab or Essential as a normal tab.
++    pinned = koan::OnTabDuplicated(contents, raw_contents_dupe);
+   } else {
+     CreateAndShowNewWindowWithContents(std::move(contents_dupe), browser);
+   }
+@@ -1461,6 +1465,10 @@ void CloseTab(BrowserWindowInterface* br
    if (!active_tab) {
      return;
    }
@@ -22,7 +30,7 @@ index 224dc66bf6356c3adb96c7372ed977f2f1c289d2..a37471c25afda2cccc5e8e603a59ae71
  
    // If the selection model consists of only the indices of a single split tab,
    // decide if just the active tab in the split is closed instead of all tabs in
-@@ -2698,6 +2704,8 @@ void FocusToolbar(BrowserWindowInterface* browser) {
+@@ -2698,6 +2706,8 @@ void FocusToolbar(BrowserWindowInterface
  
  void FocusLocationBar(BrowserWindowInterface* browser) {
    base::RecordAction(UserMetricsAction("FocusLocation"));

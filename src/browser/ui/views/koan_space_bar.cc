@@ -11,11 +11,14 @@
 #include "base/functional/bind.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -403,11 +406,19 @@ void KoanSpaceBarView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 }
 
 int KoanSpaceBarView::GetWindowTint() const {
+  // The accent the window's Space theme puts in its colour key
+  // (KoanThemeController), 0 for none.
   const views::Widget* widget =
       GetWidget() ? GetWidget()->GetTopLevelWidget() : nullptr;
-  return widget && widget->user_color_override()
-             ? static_cast<int>(*widget->user_color_override())
-             : 0;
+  BrowserView* browser_view = widget
+                                  ? BrowserView::GetBrowserViewForNativeWindow(
+                                        widget->GetNativeWindow())
+                                  : nullptr;
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  const std::optional<SkColor> accent =
+      controller ? controller->theme()->window_accent() : std::nullopt;
+  return accent ? static_cast<int>(*accent) : 0;
 }
 
 BEGIN_METADATA(KoanSpaceBarView)

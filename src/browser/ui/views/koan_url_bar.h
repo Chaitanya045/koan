@@ -105,10 +105,10 @@ bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
 views::View* GetBubbleAnchorView(const views::View* view);
 
 // The omnibox text of `location_bar` (a LocationBarView) changed;
-// `user_input_in_progress` is whether the user is typing. With Zen's
-// "floating-on-type" URL bar behaviour, the first keystroke lifts the bar
-// from the sidebar's URL pill to the floating card. Called from
-// LocationBarView::OnChanged().
+// `user_input_in_progress` is whether the user is typing. The bar is placed
+// again: a bar edited in the pill widens over the page as the text grows; a
+// pill click never lifts it to the floating card (Zen decides once, when it
+// opens). Called from LocationBarView::OnChanged().
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
 
 // The omnibox of `location_bar` (a LocationBarView) is installing its

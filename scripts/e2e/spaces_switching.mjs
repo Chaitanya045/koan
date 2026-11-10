@@ -14,7 +14,7 @@ import { spawn } from 'node:child_process';
 import { servePages } from '../perf/pages_server.mjs';
 import {
   CDP_PORT, CTRL, ALT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
-  key, menuMouse, onPage, openMenus, pages, readPref, sleep, tabMenuCommand,
+  key, menuMouse, onPage, openMenus, pages, sleep, tabMenuCommand,
   viewEvent,
   viewMouse, viewTree, visiblePage, waitFor, windowTints,
 } from './lib/koan.mjs';
@@ -82,6 +82,20 @@ async function wheel(direction, notches = 1) {
   ui.close();
   // Past upstream's gesture timeout (300 ms) and Zen's slide.
   await sleep(1500);
+}
+
+// The theme picker's dots ("r,g,b@x,y;…"), empty without a picker or
+// colours; Esc on one of its views closes it.
+async function pickerDots() {
+  const view = (await viewTree()).find(v => v.cls === 'KoanThemePickerView' && v.shown);
+  return view?.props.Dots?.replace(/^"(.*)"$/, '$1') ?? '';
+}
+async function closePicker(view) {
+  if (view) {
+    await viewEvent(view, 'DOM.dispatchKeyEvent', { type: 'keyPressed', keyCode: 27,
+      code: 0, flags: 0, key: 0, isChar: false });
+  }
+  await sleep(1000);
 }
 
 async function headerMenu() {
@@ -161,22 +175,25 @@ await click(emoji);
 await key(await find('b2'), 27, 0, 'Escape');  // close the picker
 await sleep(1000);
 menu = await headerMenu();
-await menuMouse(menu, menu.items[2]);  // Edit Theme...
-[menu] = openMenus(await viewTree());
-await menuMouse(menu, menu.items[1]);  // the first colour
-const seed = await waitFor(async () => (await windowTints())[0]);
+await menuMouse(menu, menu.items[2]);  // Theme...: the theme picker
+const swatch = await waitFor(async () => (await viewTree()).find(
+    v => v.cls === 'KoanThemeSwatch' && v.shown && v.props.Index === '3'));
+if (swatch) await click(swatch);
+const theme = await pickerDots();
+await closePicker(swatch);
 s = await sidebar();
 const icon = s.icon;
-check('B has an icon and a colour', icon === emoji?.props.Label && !!seed,
-      `${icon} / ${seed}`);
-// G1 (Spaces lockdown): the tint is the window's. A new window, in its
+check('B has an icon and a theme', icon === emoji?.props.Label && !!theme,
+      `${icon} / ${theme}`);
+// G1 (Spaces lockdown): the colour is the window's. A new window, in its
 // default-theme Space, has none while this one keeps B's.
+const seed = await waitFor(async () => (await windowTints())[0]);
 const second = (await browserCall('Target.createTarget',
                                   { url: 'about:blank', newWindow: true })).result.targetId;
 await sleep(2000);
 const tints = await windowTints();
 check('Two windows on different Spaces show different colours',
-      tints.includes(seed) && tints.includes(0), JSON.stringify(tints));
+      !!seed && tints.includes(seed) && tints.includes(0), JSON.stringify(tints));
 await browserCall('Target.closeTarget', { targetId: second });
 await sleep(1500);
 // Back with Ctrl+Alt+Left. (Right after the theme menu, with the emoji
@@ -232,7 +249,12 @@ await wheel('right');
 s = await sidebar();
 check('Swiping after a restart lands on the Space\'s last active tab',
       s.name === 'B' && await isShown('b2'), s.name);
-check('...and B keeps its colour',
+menu = await headerMenu();
+await menuMouse(menu, menu.items[2]);  // Theme...
+const restored = await waitFor(pickerDots);
+await closePicker((await viewTree()).find(v => v.cls === 'KoanThemeSwatch' && v.shown));
+check('...and B keeps its theme', !!theme && restored === theme, `${restored} vs ${theme}`);
+check('...and its colour',
       await waitFor(async () => (await windowTints())[0] === seed),
       `${(await windowTints())[0]} vs ${seed}`);
 await wheel('right');
