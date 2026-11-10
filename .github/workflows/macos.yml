@@ -1,0 +1,419 @@
+# Nightly macOS (Apple Silicon) build: Koan.app in an unsigned disk image,
+# Koan-<version>-<sha>-arm64.dmg, kept as an artifact of the run and, for
+# develop, as the rolling "nightly" pre-release.
+#
+# A first Chromium build takes far longer than GitHub's 6 h job limit on the
+# free macOS runners (3 M1 cores, 7 GB RAM), so the build is chained: the
+# fetch job checks out the pinned Chromium, applies Koan and uploads the
+# tree; then up to 16 build jobs (macos-build.yml) each build for ~5 h and
+# hand out/Koan on to the next as an artifact; the job that finishes makes
+# the .dmg; the release job publishes it. See .agent/notes/macos-ci.md.
+#
+# The plan job skips the whole chain for other labels, for forks, and for
+# a nightly when nothing that goes into the app changed since the commit
+# the "nightly" release was built from. Manual runs always build.
+#
+# Runs only when asked for: nightly, by hand from the Actions tab or with
+#   gh workflow run macos.yml [-f ref=<branch, tag, commit or refs/pull/N/head>]
+# or by adding the "macos-build" label to a pull request from this
+# repository (a PR's head; workflow_dispatch only works once a workflow is
+# on the default branch). Never on pushes: pull requests get only the cheap
+# lint in ci.yml (actionlint, shellcheck).
+name: macOS nightly
+
+on:
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build (empty for the branch you run it on)
+        required: false
+        default: ""
+  # The "macos-build" label on a pull request builds its head once.
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+# One build of a ref at a time: the nightly and a manual run of develop
+# share macos-develop, a pull request's label runs share macos-pr-<number>.
+# A run takes most of a day and is never cancelled; at most one more waits
+# (a newer one replaces it). Other labels get a group of their own, so they
+# never hold up or replace a build.
+concurrency:
+  group: >-
+    ${{ github.event_name != 'pull_request' && format('macos-{0}', inputs.ref || github.ref_name) ||
+    github.event.label.name == 'macos-build' && format('macos-pr-{0}', github.event.pull_request.number) ||
+    format('macos-label-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Decide whether to build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+    steps:
+      - name: Decide
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          LABEL: ${{ github.event.label.name }}
+          SHA: ${{ github.sha }}
+        run: |
+          build=true
+          if [[ $EVENT == pull_request && $LABEL != macos-build ]]; then
+            build=false
+          elif [[ $EVENT == pull_request && $HEAD_REPO != "$GH_REPO" ]]; then
+            # A fork's PR would run its own scripts on 16 x 6 h of macOS
+            # runners. A maintainer can build it by hand after review.
+            echo "Pull request from $HEAD_REPO: not building." >> "$GITHUB_STEP_SUMMARY"
+            build=false
+          elif [[ $EVENT == schedule ]]; then
+            # Skip when no file that goes into the app changed since the
+            # commit the nightly release was built from. CHROMIUM_VERSION
+            # is one of them, so a new Chromium pin always builds.
+            old=$(gh api "repos/$GH_REPO/git/ref/tags/nightly" --jq .object.sha 2>/dev/null || true)
+            if [[ -n $old ]] && cmp=$(gh api "repos/$GH_REPO/compare/$old...$SHA" \
+                --jq '[.status, (.files | length)] | @tsv'); then
+              read -r status count <<< "$cmp"
+              changed=$(gh api "repos/$GH_REPO/compare/$old...$SHA" --jq '.files[].filename' |
+                grep -E '^(src/|patches/|branding/|build/|scripts/|CHROMIUM_VERSION$|VERSION$|\.github/workflows/macos)' || true)
+              # The compare API lists at most 300 files: build then.
+              if [[ ($status == identical || $status == ahead) && $count -lt 300 && -z $changed ]]; then
+                echo "Nothing that goes into the app changed since the nightly (${old:0:7}): not building." >> "$GITHUB_STEP_SUMMARY"
+                build=false
+              fi
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+  fetch:
+    name: Fetch Chromium and apply Koan
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
+      chromium: ${{ steps.ref.outputs.chromium }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A labelled pull request builds its head, not the merge commit.
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Resolve the commit
+        id: ref
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "chromium=$(sed -n 1p CHROMIUM_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "Building Koan $sha on Chromium $(paste -sd' ' CHROMIUM_VERSION)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare the runner
+        run: scripts/ci/mac_runner_setup.sh
+
+      - name: Fetch Chromium, apply patches and branding, gn gen
+        run: scripts/ci/mac_fetch.sh
+
+      # Packaging only runs at the end of a run, a day or more later: check
+      # codesign and hdiutil on a dummy app now.
+      - name: Check the packaging
+        run: |
+          app="$RUNNER_TEMP/dummy/Koan.app"
+          mkdir -p "$app/Contents/MacOS"
+          cp /usr/bin/true "$app/Contents/MacOS/Koan"
+          plutil -create xml1 "$app/Contents/Info.plist"
+          plutil -insert CFBundleExecutable -string Koan "$app/Contents/Info.plist"
+          plutil -insert CFBundleIdentifier -string dev.koan.Koan.ci-check "$app/Contents/Info.plist"
+          plutil -insert CFBundlePackageType -string APPL "$app/Contents/Info.plist"
+          KOAN_CI_APP="$app" scripts/ci/mac_package.sh "$RUNNER_TEMP/dummy/dmg"
+          rm -rf "$RUNNER_TEMP/dummy"
+
+      - name: Pack the source
+        run: |
+          scripts/ci/mac_archive.sh pack-source "$RUNNER_TEMP/koan-mac-source.tar.zst"
+          df -h /
+
+      - name: Upload the source
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/koan-mac-source.tar.zst
+          archive: false
+          overwrite: true
+          retention-days: 3
+          if-no-files-found: error
+
+  build-01:
+    needs: [fetch]
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 1
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-02:
+    needs: [fetch, build-01]
+    if: needs.build-01.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 2
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-03:
+    needs: [fetch, build-02]
+    if: needs.build-02.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 3
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-04:
+    needs: [fetch, build-03]
+    if: needs.build-03.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 4
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-05:
+    needs: [fetch, build-04]
+    if: needs.build-04.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 5
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-06:
+    needs: [fetch, build-05]
+    if: needs.build-05.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 6
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-07:
+    needs: [fetch, build-06]
+    if: needs.build-06.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 7
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-08:
+    needs: [fetch, build-07]
+    if: needs.build-07.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 8
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-09:
+    needs: [fetch, build-08]
+    if: needs.build-08.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 9
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-10:
+    needs: [fetch, build-09]
+    if: needs.build-09.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 10
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-11:
+    needs: [fetch, build-10]
+    if: needs.build-10.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 11
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-12:
+    needs: [fetch, build-11]
+    if: needs.build-11.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 12
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-13:
+    needs: [fetch, build-12]
+    if: needs.build-12.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 13
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-14:
+    needs: [fetch, build-13]
+    if: needs.build-13.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 14
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-15:
+    needs: [fetch, build-14]
+    if: needs.build-14.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 15
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  build-16:
+    needs: [fetch, build-15]
+    if: needs.build-15.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 16
+      sha: ${{ needs.fetch.outputs.sha }}
+
+  # Fails the run when a build job failed or the last one ran out of time
+  # unfinished. Skipped with the chain (fork PRs, unchanged nightlies).
+  check:
+    name: Build finished
+    needs: [fetch, build-01, build-02, build-03, build-04, build-05, build-06, build-07, build-08, build-09, build-10, build-11, build-12, build-13, build-14, build-15, build-16]
+    if: ${{ !cancelled() && needs.fetch.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Check
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          FINISHED: ${{ contains(needs.*.outputs.status, 'finished') }}
+        run: |
+          if [[ $FAILED == true ]]; then
+            echo "a build job failed; re-run the failed jobs to carry on" >&2
+            exit 1
+          fi
+          if [[ $FINISHED != true ]]; then
+            echo "not finished after 16 build jobs; add jobs to macos.yml" >&2
+            exit 1
+          fi
+
+  # A run that finished doesn't need its source and out/Koan archives any
+  # more (a failed one keeps them, for "Re-run failed jobs", until they
+  # expire: source 3 days, out 2). The .dmg and the logs stay.
+  cleanup:
+    name: Delete build archives
+    needs: [check]
+    if: ${{ !cancelled() && needs.check.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN: ${{ github.run_id }}
+    steps:
+      - name: Delete
+        run: |
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN/artifacts" \
+            --jq '.artifacts[] | select(.name | test("^koan-mac-(source|out-)")) | "\(.id) \(.name)"' |
+            while read -r id name; do
+              echo "deleting $name"
+              gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+            done
+
+  release:
+    name: Update the nightly pre-release
+    needs: [check, fetch, build-01, build-02, build-03, build-04, build-05, build-06, build-07, build-08, build-09, build-10, build-11, build-12, build-13, build-14, build-15, build-16]
+    # develop only: nightly runs, and manual runs on develop.
+    if: >-
+      ${{ !cancelled() && needs.check.result == 'success' &&
+      github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' &&
+      (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Belt and braces: never two release updates at once.
+    concurrency:
+      group: macos-nightly-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ needs.fetch.outputs.sha }}
+      CHROMIUM: ${{ needs.fetch.outputs.chromium }}
+      DMG: ${{ join(needs.*.outputs.dmg, '') }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Download the disk image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.DMG }}
+          path: dist
+
+      - name: Publish
+        run: |
+          cd dist
+          shasum -a 256 "$DMG" > "$DMG.sha256"
+          cat > notes.md <<EOF
+          Koan for macOS on Apple Silicon, built from develop at $SHA
+          (Chromium $CHROMIUM) by [this run]($RUN_URL). Replaced by every
+          nightly build.
+
+          The app is not signed with a Developer ID or notarised, so macOS
+          blocks it the first time ("Apple could not verify 'Koan' is free
+          of malware"). After copying it to Applications, run
+          \`xattr -dr com.apple.quarantine /Applications/Koan.app\`, or
+          use System Settings → Privacy & Security → Open Anyway. See
+          [Installing the macOS build](https://github.com/$GH_REPO/blob/develop/docs/USAGE.md#installing-the-macos-build).
+
+          SHA-256: \`$(cut -d' ' -f1 "$DMG.sha256")\`
+          EOF
+          # A new tag each time: delete the old release and its tag, then
+          # make them again at this commit.
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly "$DMG" "$DMG.sha256" \
+            --target "$SHA" --prerelease --latest=false \
+            --title "Nightly ($(date -u +%Y-%m-%d), ${SHA:0:7})" --notes-file notes.md

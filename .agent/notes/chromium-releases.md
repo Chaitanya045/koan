@@ -216,9 +216,13 @@ In docs/REBASE.md: "Following Chromium releases". In short:
 - The workflow `.github/workflows/chromium-releases.yml` opens and keeps up
   to date one `chromium-update` issue with the version, the due date and the
   patch check; it closes it when the pin has caught up.
-- The Mac CI (#69; PR #70 is still open, so `macos.yml` isn't on develop
-  yet) will build whatever `CHROMIUM_VERSION`
-  pins through `scripts/bootstrap.sh`, so it follows the pin by itself.
+- The Mac CI (`macos.yml`, #69) builds whatever `CHROMIUM_VERSION` pins
+  through `scripts/bootstrap.sh`, so it follows the pin by itself; a new
+  pin makes the next nightly a full ~16 h build. Dependencies googlesource
+  can't serve are taken from `chromium-<pin>-lite.tar.xz`
+  (`scripts/ci/mac_check_deps.py`), and the prune list
+  (`scripts/ci/prune_chromium_source.py`) may need a path back if a new
+  milestone's build needs it. See [macos-ci.md](macos-ci.md).
 
 ## Lesson: a job that must outlive the agent's run needs its own systemd unit
 

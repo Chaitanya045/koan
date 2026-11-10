@@ -724,6 +724,61 @@ On Koan's default profile (`~/Library/Application Support/Koan`) the
 refused, as in Chrome, so another program can't take over your real
 browser by relaunching it. See [SECURITY.md](../SECURITY.md#remote-debugging).
 
+## Installing the macOS build
+
+A test build for Apple Silicon Macs (macOS 13 or later) is made every night
+from `develop`:
+
+- **Nightly pre-release:** the `nightly` release on the
+  [Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly),
+  `Koan-<version>-<commit>-arm64.dmg` and its `.sha256`. Each new nightly
+  replaces it.
+- **Any run** (also of a branch): open a run of the
+  [macOS nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/macos.yml)
+  and click the `Koan-….dmg` under "Artifacts" (you need to be signed in to
+  GitHub). The file is the .dmg itself, not a zip. From a terminal
+  (`gh run download` can't fetch it, because it expects a zip):
+
+  ```sh
+  run=<run id>
+  id=$(gh api repos/Chaitanya045/koan/actions/runs/$run/artifacts \
+    --jq '.artifacts[] | select(.name | endswith(".dmg")) | .id')
+  gh api repos/Chaitanya045/koan/actions/artifacts/$id/zip > Koan.dmg
+  ```
+
+Open the .dmg and drag Koan to Applications.
+
+The app isn't signed with an Apple Developer ID or notarised (it is only
+signed ad hoc, which Apple Silicon needs to run it). So the first time,
+macOS says "'Koan' Not Opened: Apple could not verify 'Koan' is free of
+malware", with only **Done** and **Move to Bin**. On current macOS,
+right-click → Open no longer gets past this. Allow it once:
+
+1. **In Terminal**, remove the quarantine flag that the download added
+   (simplest):
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Koan.app
+   ```
+
+2. Or click **Done**, then open **System Settings → Privacy & Security**,
+   scroll down to the message about Koan and click **Open Anyway** (and
+   confirm with your password).
+
+If macOS instead says Koan **"is damaged and can't be opened"**, sign it
+again on your Mac (ad hoc, with the `codesign` tool that comes with
+macOS), then open it:
+
+```sh
+codesign --force --deep -s - /Applications/Koan.app
+```
+
+After that it opens like any other app. Every new build has a new ad-hoc
+signature, so macOS asks again for access to the "Koan Safe Storage"
+keychain item (where saved passwords and cookies are encrypted) after you
+install a new nightly. Click **Always Allow**. The profile is in
+`~/Library/Application Support/Koan`.
+
 ## Install in the app menu
 
 ```sh

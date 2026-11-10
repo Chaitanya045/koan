@@ -72,7 +72,14 @@ fi
 
 if [[ $sync == 1 ]]; then
   echo "==> Syncing Chromium $VERSION @ $REV (shallow, no hooks)"
-  gclient sync --nohooks --no-history --revision "src@$REV"
+  # googlesource now and then answers a fetch with HTTP 500; gclient picks
+  # up where it stopped, so try again.
+  for attempt in 1 2 3; do
+    gclient sync --nohooks --no-history --revision "src@$REV" && break
+    if ((attempt == 3)); then exit 1; fi
+    echo "gclient sync failed (attempt $attempt of 3); retrying in a minute" >&2
+    sleep 60
+  done
   if [[ "$(git -C src rev-parse HEAD)" != "$REV" ]]; then
     echo "chromium/src is not at $REV after the sync (CHROMIUM_VERSION)" >&2
     exit 1
