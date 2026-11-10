@@ -122,11 +122,12 @@ void KoanWindowSync::ReportSpaces(
 }
 
 void KoanWindowSync::ReportItems(Window* window,
-                                 std::vector<window_sync::ItemRecord> items) {
+                                 std::vector<window_sync::ItemRecord> items,
+                                 const std::set<std::string>& closed) {
   if (!IsInSync(window) || !model_.seeded()) {
     return;
   }
-  if (model_.SetItems(std::move(items))) {
+  if (model_.SetItems(std::move(items), closed)) {
     MarkOthersOutOfDate(window, /*spaces=*/false, /*items=*/true);
   }
 }

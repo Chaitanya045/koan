@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -143,6 +144,8 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   base::CallbackListSubscription session_restored_subscription_;
   base::CallbackListSubscription spaces_changed_subscription_;
   std::map<tab_groups::TabGroupId, std::string> space_ids_;
+  // The synced tabs the user closed here since the last report.
+  std::set<std::string> closed_items_;
   base::OneShotTimer items_report_timer_;
   base::WeakPtrFactory<KoanWindowSyncClient> weak_factory_{this};
 };

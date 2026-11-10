@@ -177,6 +177,22 @@ TEST(WindowSyncModelTest, ClosingWindowHandsItsPagesOver) {
   EXPECT_EQ(2, model.LiveWindow("f"));
 }
 
+// Zen's TabClose: a closed synced tab closes in every window; one that was
+// unpinned (or left the Essentials) stays where its page is.
+TEST(WindowSyncModelTest, ClosedItemsAreToldApartFromUnpinnedOnes) {
+  WindowSyncModel model;
+  model.SetSpaces({Space("a")});
+  model.SetItems({Essential("e"), Essential("f"), Pinned("p", "a")});
+  // `closed` names only what the window closed, and only what left counts.
+  EXPECT_TRUE(model.SetItems({Pinned("p", "a")}, {"e", "p"}));
+  EXPECT_TRUE(model.WasClosed("e"));
+  EXPECT_FALSE(model.WasClosed("f"));
+  EXPECT_FALSE(model.WasClosed("p"));
+  // A reopened tab keeps its id: it is an item again, not closed.
+  EXPECT_TRUE(model.SetItems({Essential("e"), Pinned("p", "a")}));
+  EXPECT_FALSE(model.WasClosed("e"));
+}
+
 TEST(WindowSyncModelTest, RoundTripsThroughPrefs) {
   WindowSyncModel model;
   model.SetSpaces(
