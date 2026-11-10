@@ -233,6 +233,7 @@ source_set("impl") {
     "koan_glass_state.cc",
     "koan_glass_state.h",
     "koan_haptics.h",
+    "koan_keyboard_state.h",
     "koan_library.h",
     "koan_library_controller.cc",
     "koan_library_downloads.cc",
@@ -493,6 +494,7 @@ source_set("impl") {
   if (is_mac) {
     sources += [
       "koan_haptics_mac.mm",
+      "koan_keyboard_state_mac.mm",
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
       "koan_theme_platform_mac.mm",
@@ -519,6 +521,7 @@ source_set("impl") {
   } else {
     sources += [
       "koan_haptics.cc",
+      "koan_keyboard_state.cc",
       "koan_system_accent.cc",
       "koan_system_accent_observer.cc",
       "koan_theme_platform.cc",
