@@ -169,8 +169,7 @@ Profile* FindAgentProfile() {
 }
 
 // Agent control's way to open a tab (koan_agent_tab_hooks.h): each client's
-// task gets a container, a saved one if the task names one, a throwaway one
-// otherwise, and keeps it until EndAgentTask().
+// task gets its own throwaway container and keeps it until EndAgentTask().
 class ContainerTabOpener : public agent::AgentTabOpener {
  public:
   void OpenAgentTab(
@@ -195,15 +194,13 @@ class ContainerTabOpener : public agent::AgentTabOpener {
         started.names().contains(it->second.id)) {
       return it->second;
     }
+    // Always a throwaway container. A saved one holds logins, so a task never
+    // gets it by naming it (the task name is the agent's own string): only an
+    // explicit, user-approved grant to that client may hand one out, and
+    // there is none yet (maintainer review of #202).
     AgentContainerOptions options{
         .space_name = request.task.empty() ? std::u16string(kDefaultSpaceName)
                                            : base::UTF8ToUTF16(request.task)};
-    for (const SavedContainer& saved : GetSavedAgentContainers(profile)) {
-      if (saved.name == request.task) {
-        options.mode = AgentMode::kSaved;
-        options.saved_name = saved.name;
-      }
-    }
     auto container = StartAgentContainer(profile, options);
     if (!container.has_value()) {
       return std::nullopt;
