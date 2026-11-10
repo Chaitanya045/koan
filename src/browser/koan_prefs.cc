@@ -130,6 +130,7 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookAccent, "none");
   registry->RegisterStringPref(kLookCustomCss, "");
   registry->RegisterBooleanPref(kLookAcrylicUrlBar, false);
+  registry->RegisterBooleanPref(kHapticFeedback, true);
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);
