@@ -269,7 +269,7 @@ KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
 #if BUILDFLAG(IS_MAC)
   traffic_lights_ = std::make_unique<KoanTrafficLightsController>(
       browser_view_,
-      base::BindRepeating(&KoanCompactModeController::UpdateCaptionButtons,
+      base::BindRepeating(&KoanCompactModeController::OnTrafficLightsChanged,
                           base::Unretained(this)));
 #endif
 }
@@ -838,6 +838,50 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
   }
   CheckRevealedHides();
   CheckFullscreenEdges();
+  CheckLightsHold();
+}
+
+bool KoanCompactModeController::WantsLightsHold() const {
+  // (Out of fullscreen: there AppKit's lights come with the menu bar, over
+  // the page, and the sidebar is revealed at the screen's edge.)
+  return traffic_lights_ && hides_sidebar() &&
+         !IsWindowFullscreen(browser_view_) &&
+         !IsSidebarOnRight(browser_view_) && traffic_lights_->IsSidebarShown();
+}
+
+void KoanCompactModeController::CheckLightsHold() {
+  if (IsClosing()) {
+    return;
+  }
+  if (WantsLightsHold() && IsPointerOverTrafficLights(browser_view_)) {
+    lights_release_timer_.Stop();
+    // (Refused while the sidebar collapses; the next pointer event asks
+    // again.)
+    if (!lights_lock_) {
+      lights_lock_ = TakeExpandedLock();
+    }
+    return;
+  }
+  if (lights_lock_ && !lights_release_timer_.IsRunning()) {
+    // Back on the sidebar within that time, upstream's hover tracking keeps
+    // it out.
+    lights_release_timer_.Start(FROM_HERE, kSidebarKeepHover,
+                                base::BindOnce(
+                                    [](KoanCompactModeController* self) {
+                                      self->ReleaseLock(self->lights_lock_);
+                                    },
+                                    base::Unretained(this)));
+  }
+}
+
+void KoanCompactModeController::OnTrafficLightsChanged() {
+  UpdateCaptionButtons();
+  if (IsClosing()) {
+    return;
+  }
+  // The pointer is watched while the revealed sidebar shows the lights (its
+  // events take the hold: not from here, which may be inside layout).
+  UpdatePointerMonitor();
 }
 
 bool KoanCompactModeController::WantsFullscreenEdges() const {
@@ -1435,6 +1479,8 @@ void KoanCompactModeController::Deactivate() {
   hover_poll_timer_.Stop();
   ReleaseLock(hover_lock_);
   ReleaseLock(peek_lock_);
+  lights_release_timer_.Stop();
+  ReleaseLock(lights_lock_);
   // (Zen drops `zen-user-show` when compact mode turns off.)
   peek_requested_ = false;
   pointer_monitor_.reset();
@@ -1667,7 +1713,8 @@ void KoanCompactModeController::CheckToolbarHide() {
 void KoanCompactModeController::UpdatePointerMonitor() {
   const bool wanted =
       mode_ != Mode::kNone &&
-      (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges());
+      (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges() ||
+       WantsLightsHold() || lights_lock_);
   views::Widget* widget = browser_view_->GetWidget();
   if (!wanted || !widget) {
     if (pointer_monitor_) {
