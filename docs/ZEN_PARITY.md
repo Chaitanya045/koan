@@ -80,7 +80,7 @@ point of Koan.
 | Private window's new tab | Different | Chromium's private browsing page, not Koan's blank one. |
 | Copy-URL button in the pill on hover (`zen.urlbar.single-toolbar-show-copy-url`) | Same | `koan.urlbar.show_copy_url`. |
 | "Copied current URL!" toast | Partial | The same toast as "Tabs Closed!" (one `KoanToast` per window); the copy button, Ctrl+Shift+C and Ctrl+Shift+Alt+C (⌘⇧C, ⌘⇧⌥C on macOS; "Copied current URL as Markdown!") show it. Zen's toast on macOS also has a Share button (the system share sheet); Koan's doesn't. Zen copies the URL without tracking parameters (its stripped URI); Koan copies it as is (#78). |
-| Site panel (security, permissions, extensions; share, reader mode, screenshot, bookmark) | Different | The pill's site button opens Chromium's page info bubble (security, permissions, cookies, site settings). The action row (#78) and the Extensions section (#73) aren't in it yet. |
+| Site panel (security, permissions, extensions; share, reader mode, screenshot, bookmark) | Different | The pill's site button opens Chromium's page info bubble (security, permissions, cookies, site settings). Its Extensions row (page info's own, `PageInfoBubbleSpecification::Builder::SetOnExtensionsClickedCallback()`) opens Chromium's extensions menu at the site icon: the extensions with their access to the site and Manage Extensions, where Zen lists them inline with "Manage" and "Add Extensions" (#73). The action row is #78. |
 | Extension buttons in the sidebar's top row (`zen.view.overflow-webext-toolbar`) | Missing | The single-toolbar layout hides the toolbar that holds them, so extension popups can't be reached with the mouse (#73). |
 | URL bar commands (command palette) | Partial | See Command palette below (#40). |
 
@@ -214,7 +214,7 @@ point of Koan.
 | Toggle Tabs on right | Missing | The setting exists (Look and Feel, sidebar context menu); the palette action isn't there yet (#77). |
 | New Blank Window | Missing | Koan doesn't sync windows, so it would be the same as Open New Window; it comes with window sync (#75). |
 | Open Space Routing, New Boost | Missing | Koan has no Space routing (#81) or Boosts (#83). |
-| Extension actions ("Extension" + name) | Missing | An extension's popup opens from its toolbar button, which the single-toolbar layout hides (#73). |
+| Extension buttons in the single toolbar (`zen.view.overflow-webext-toolbar`) | Same | Extensions pinned to the toolbar are buttons at the end of the sidebar's URL pill, shown while the sidebar is hovered (or a button has focus, its menu or popup is open), faded in 150 ms like Zen's. They take at most 55 % of the pill (`overflow-webext-toolbar-threshold`); the rest are in the extensions menu (site panel > Extensions). Upstream's toolbar container keeps the view models: the buttons drive them, so clicks, Chromium's context menu, keyboard shortcuts and `chrome.action.openPopup()` behave as in Chrome, with the popup at the button (or the site icon). Zen's puzzle button is hidden in single toolbar (`hide-unified-extensions-button`), as is Chromium's with the toolbar. Not done: dragging to reorder in the pill (the extensions menu's pin order is used), Zen's separate overflow list. The multiple-toolbars layout keeps Chromium's toolbar container (#73). |
 
 Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (typing) and `screenshots/palette-zen-vs-koan-actions.png` (Tab in an empty URL bar).
 

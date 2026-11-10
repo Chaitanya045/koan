@@ -1,0 +1,43 @@
+diff --git a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
+--- a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
++++ b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
+@@ -55,6 +55,8 @@
+ #include "extensions/browser/extension_util.h"
+ #include "extensions/common/extension_features.h"
+ #include "extensions/common/extension_id.h"
++#include "koan/browser/ui/views/koan_compact_mode.h"
++#include "koan/browser/ui/views/koan_extensions_hooks.h"
+ #include "ui/base/dragdrop/drag_drop_types.h"
+ #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -1259,16 +1261,30 @@
+ 
+ views::BubbleAnchor ExtensionsToolbarDesktop::GetReferenceButtonForPopup(
+     const extensions::ExtensionId& action_id) {
++  // Koan: the toolbar is hidden (single toolbar); see koan_extensions_hooks.h.
++  if (views::View* koan_anchor =
++          koan::GetExtensionsAnchorView(this, action_id)) {
++    return views::BubbleAnchor(koan_anchor);
++  }
+   ToolbarActionView* view = GetViewForId(action_id);
+   return view ? view->GetReferenceButtonForPopup()
+               : GetExtensionsButtonAnchor();
+ }
+ 
+ views::BubbleAnchor ExtensionsToolbarDesktop::GetExtensionsButtonAnchor() {
++  // Koan: as GetReferenceButtonForPopup().
++  if (views::View* koan_anchor = koan::GetExtensionsAnchorView(this, {})) {
++    return views::BubbleAnchor(koan_anchor);
++  }
+   return views::BubbleAnchor(GetExtensionsButton());
+ }
+ 
+ views::BubbleBorder::Arrow ExtensionsToolbarDesktop::GetPopupArrow() const {
++  // Koan: from the sidebar into the window.
++  if (koan::GetExtensionsAnchorView(this, {})) {
++    return koan::IsSidebarOnRight(this) ? views::BubbleBorder::TOP_RIGHT
++                                        : views::BubbleBorder::TOP_LEFT;
++  }
+   return views::BubbleBorder::TOP_RIGHT;
+ }
+ 
