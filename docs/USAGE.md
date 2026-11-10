@@ -111,6 +111,11 @@ Items are greyed when they don't apply (no Spaces, ...).
 **Dock menu:** New Window and New Private Window, as in Zen's Dock menu, and
 your Spaces (✓ on the active one) to switch the window that was active last.
 
+**Dock icon:** after you close the last window (⌘⇧W or the red button), a click
+on Koan's Dock icon brings that window back, with its Spaces and tabs, as in
+Zen. This follows Settings > On startup: with "Continue where you left off" (the
+default) the window comes back; otherwise you get a new window.
+
 When a page uses a key itself (for example Ctrl+S in an online editor), the
 page gets it first, as in every browser.
 
