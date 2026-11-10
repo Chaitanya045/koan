@@ -10,13 +10,13 @@ import("//testing/test.gni")
 # definitions live in :impl, linked through //chrome/browser:browser.
 source_set("views") {
   sources = [
+    "koan_blank_page.h",
     "koan_browser_view_hooks.h",
     "koan_command_policy.h",
     "koan_compact_mode.h",
     "koan_content_card.h",
     "koan_crash_restore.h",
     "koan_dialogs.h",
-    "koan_empty_tab.h",
     "koan_essentials.h",
     "koan_extensions_hooks.h",
     "koan_glance.h",
@@ -290,6 +290,7 @@ source_set("impl") {
   sources = [
     "koan_agent_indicator.cc",
     "koan_agent_indicator.h",
+    "koan_blank_page.cc",
     "koan_browser_view_controller.cc",
     "koan_browser_view_controller.h",
     "koan_browser_view_hooks.cc",
@@ -309,7 +310,6 @@ source_set("impl") {
     "koan_download_animation.h",
     "koan_emoji_picker.cc",
     "koan_emoji_picker.h",
-    "koan_empty_tab.cc",
     "koan_essentials.cc",
     "koan_essentials_promo.cc",
     "koan_essentials_promo.h",

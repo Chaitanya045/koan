@@ -262,7 +262,8 @@ it, as in Zen. Only a **close** keeps the window: moving
 the last tab to another window (a drag, "Move to another window") closes it, as
 in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
 last unpinned tab leaves the Essential selected, not the empty tab. In compact
-mode the sidebar stays shown while the empty tab is selected.
+mode the sidebar stays shown while the empty tab is selected (only that
+tab: not a tab of yours on about:blank or a new tab page).
 
 ## New tab page
 

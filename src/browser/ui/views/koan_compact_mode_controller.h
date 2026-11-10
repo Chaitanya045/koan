@@ -334,8 +334,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   // Zen's flash popup: the hidden sidebar pops up for a moment.
   void FlashSidebar();
-  // Zen's `zen-has-empty-tab`: while the selected tab is empty (a blank
-  // page), the sidebar is out and can't hide.
+  // Zen's `zen-has-empty-tab`: while the selected tab is Zen's empty tab
+  // (the one Koan marked, IsEmptyTab() in koan_spaces.h; not any blank page,
+  // as Zen keys on `zen-empty-tab`), the sidebar is out and can't hide.
   void UpdateEmptyTabLock(bool snap_reveal = false);
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert);

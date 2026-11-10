@@ -37,10 +37,10 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
+#include "koan/browser/ui/views/koan_blank_page.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
-#include "koan/browser/ui/views/koan_empty_tab.h"
 #include "koan/browser/ui/views/koan_sidebar_extensions.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
@@ -81,9 +81,9 @@ std::u16string DisplayUrl(content::WebContents* contents, Profile* profile) {
   if (!contents) {
     return std::u16string();
   }
-  // An empty tab, or a new tab page (also one served from the search engine,
-  // e.g. google.com's), shows Zen's placeholder.
-  if (IsEmptyTab(contents, profile)) {
+  // about:blank or a new tab page (also one served from the search engine,
+  // e.g. google.com's), Zen's empty tab included, shows Zen's placeholder.
+  if (IsBlankPage(contents, profile)) {
     return std::u16string();
   }
   const GURL& url = contents->GetVisibleURL();
