@@ -422,7 +422,11 @@ int Serve(const Options& options, base::ScopedFD ready) {
   }
 
   uint8_t secret_bytes[16];
-  RAND_bytes(secret_bytes, sizeof(secret_bytes));
+  // A relay without a random secret would be open to anyone on the machine.
+  if (RAND_bytes(secret_bytes, sizeof(secret_bytes)) != 1) {
+    SayReady(std::move(ready), "error no random secret");
+    return kFailed;
+  }
   base::RunLoop run_loop;
   Relay relay(std::move(browser), std::move(server_socket), local.port(),
               base::ToLowerASCII(base::HexEncode(secret_bytes)),
