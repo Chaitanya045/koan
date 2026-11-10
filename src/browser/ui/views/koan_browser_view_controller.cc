@@ -6,11 +6,17 @@
 
 #include <algorithm>
 #include <memory>
+#include <vector>
 
 #include "base/functional/bind.h"
 
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/ui/fullscreen_util_mac.h"
@@ -19,6 +25,11 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_data.h"
+#include "components/search_engines/template_url_service.h"
+#include "components/search_engines/template_url_service_observer.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_agent_indicator.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
@@ -47,6 +58,63 @@
 DEFINE_UI_CLASS_PROPERTY_TYPE(koan::KoanBrowserViewController*)
 
 namespace koan {
+
+// Zen has no Google AI: Chromium's @gemini and @aimode search shortcuts (the
+// starter pack) are kept switched off, once the search engines have loaded
+// and whenever they change, so Settings > Search engine can't switch them back
+// on. (Audit O6, .agent/notes/upstream/omnibox-lockdown.md.)
+class AiStarterPackFilter : public TemplateURLServiceObserver {
+ public:
+  explicit AiStarterPackFilter(TemplateURLService* service)
+      : service_(service) {
+    observation_.Observe(service);
+    if (service->loaded()) {
+      ScheduleApply();
+    }
+  }
+
+  // TemplateURLServiceObserver (also called once the service has loaded):
+  void OnTemplateURLServiceChanged() override { ScheduleApply(); }
+
+ private:
+  // Not from the notification itself: deactivating a search engine runs the
+  // service's own Update(), which notifies and touches other observer lists
+  // that forbid re-entrancy (a CHECK failure at startup when done inside the
+  // "loaded" notification).
+  void ScheduleApply() {
+    if (apply_scheduled_) {
+      return;
+    }
+    apply_scheduled_ = true;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&AiStarterPackFilter::Apply,
+                                  weak_factory_.GetWeakPtr()));
+  }
+
+  void Apply() {
+    apply_scheduled_ = false;
+    using template_url_starter_pack_data::StarterPackId;
+    // Deactivating one notifies the observers again, which schedules another
+    // pass; that pass finds nothing left to do.
+    std::vector<raw_ptr<TemplateURL>> to_deactivate;
+    for (TemplateURL* url : service_->GetTemplateURLs()) {
+      const StarterPackId id = url->starter_pack_id();
+      if ((id == StarterPackId::kGemini || id == StarterPackId::kAiMode) &&
+          url->is_active() != TemplateURLData::ActiveStatus::kFalse) {
+        to_deactivate.emplace_back(url);
+      }
+    }
+    for (TemplateURL* url : to_deactivate) {
+      service_->SetIsActiveTemplateURL(url, /*is_active=*/false);
+    }
+  }
+
+  const raw_ptr<TemplateURLService> service_;
+  bool apply_scheduled_ = false;
+  base::ScopedObservation<TemplateURLService, TemplateURLServiceObserver>
+      observation_{this};
+  base::WeakPtrFactory<AiStarterPackFilter> weak_factory_{this};
+};
 
 namespace {
 
@@ -85,6 +153,10 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)),
       command_palette_(std::make_unique<KoanCommandPalette>(this)) {
   ++g_live_count;
+  if (TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
+          browser_view->browser()->GetProfile())) {
+    ai_starter_pack_filter_ = std::make_unique<AiStarterPackFilter>(service);
+  }
   observations_.AddObservation(browser_view);
   if (MultiContentsView* contents = browser_view->multi_contents_view()) {
     observations_.AddObservation(contents);

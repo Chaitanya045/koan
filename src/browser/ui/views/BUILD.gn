@@ -119,6 +119,38 @@ test("koan_views_unittests") {
   ]
 }
 
+# The empty URL bar's provider and the omnibox disposition rule. The provider
+# is compiled here again (it is in :impl too) to keep the test off the whole
+# UI. Build and run:
+#   autoninja -C out/Koan koan/browser/ui/views:koan_omnibox_unittests
+#   out/Koan/koan_omnibox_unittests
+test("koan_omnibox_unittests") {
+  sources = [
+    "koan_omnibox_disposition.h",
+    "koan_omnibox_disposition_unittest.cc",
+    "koan_omnibox_upstream_unittest.cc",
+    "koan_zero_suggest.cc",
+    "koan_zero_suggest.h",
+    "koan_zero_suggest_unittest.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//components/history/core/browser",
+    "//components/omnibox/browser",
+    "//components/omnibox/browser:test_support",
+    "//components/url_formatter",
+    "//koan/browser:features",
+    "//koan/browser/omnibox:hooks",
+    "//testing/gtest",
+    "//third_party/metrics_proto",
+    "//ui/base",
+    "//ui/base:types",
+    "//url",
+  ]
+}
+
 source_set("impl") {
   sources = [
     "koan_agent_indicator.cc",
@@ -219,6 +251,8 @@ source_set("impl") {
     "koan_zen_window_drag.h",
     "koan_vertical_tabs_policy.cc",
     "koan_vertical_tabs_policy.h",
+    "koan_zero_suggest.cc",
+    "koan_zero_suggest.h",
   ]
   if (is_mac) {
     sources += [

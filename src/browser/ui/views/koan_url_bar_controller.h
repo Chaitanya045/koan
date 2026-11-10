@@ -95,6 +95,14 @@ class KoanUrlBarController : public views::ViewObserver,
   bool OpenForTabSearch();
   // Closes the omnibox without opening anything: the page gets focus back.
   void Close();
+  // The user is about to edit by clicking the sidebar's URL pill: it edits in
+  // the pill, not floating (Zen: a mouse press never floats the bar at once).
+  // Any other way in (Cmd+L, Cmd+T) opens the floating card.
+  void NoteEditInPill();
+  // NoteEditInPill() and focus the omnibox, undone if the focus fails.
+  void FocusLocationInPill();
+  // Cmd+L (chrome::FocusLocationBar()), before the focus moves: it floats.
+  void OnFocusLocationCommand();
 
   // Called by KoanCompactModeController.
   void OnBrowserViewLayout();
@@ -176,6 +184,16 @@ class KoanUrlBarController : public views::ViewObserver,
   // tab.
   void UpdateKeyHandler();
   void FloatOnType();
+  // Posted after the omnibox got focus: an invisible focus closes the bar
+  // again.
+  void CloseIfFocusInvisible();
+  // Asks for the open tabs and top sites again, up to `retries_left` times,
+  // while the first request found no list (upstream drops it while the page
+  // has no entry or the popup is closing); after a new-tab session opened
+  // empty, and when the text goes back to empty (OnOmniboxChanged()).
+  void ScheduleEmptyListRetry(int retries_left);
+  void RetryEmptyList(int retries_left);
+  void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
 
   const raw_ptr<BrowserView> browser_view_;
@@ -184,8 +202,14 @@ class KoanUrlBarController : public views::ViewObserver,
   // Once floating, the bar stays floating until it closes, like Zen's.
   bool floated_ = false;
   bool user_input_in_progress_ = false;
+  // The editing started with a click on the pill.
+  bool edit_in_pill_ = false;
 
   bool new_tab_ = false;
+  // Whether the omnibox text was empty at the last change: the empty list is
+  // asked for on the change from text to none only.
+  bool text_was_empty_ = false;
+  bool empty_list_retry_running_ = false;
   // Zen's zen.urlbar.wait-to-clear: what was typed into a new-tab bar that
   // closed without opening anything, offered again for a while.
   std::u16string last_search_;

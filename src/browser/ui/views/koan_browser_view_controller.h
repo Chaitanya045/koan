@@ -22,6 +22,7 @@ class BrowserView;
 
 namespace koan {
 
+class AiStarterPackFilter;
 class KoanAgentIndicator;
 class KoanCommandPalette;
 class KoanCompactModeController;
@@ -150,6 +151,8 @@ class KoanBrowserViewController : public views::ViewObserver,
   // remaining tabs) runs before Koan's teardown.
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       widget_observation_{this};
+  // Keeps Chromium's AI search shortcuts off (see the constructor).
+  std::unique_ptr<AiStarterPackFilter> ai_starter_pack_filter_;
   base::WeakPtrFactory<KoanBrowserViewController> weak_factory_{this};
 };
 
