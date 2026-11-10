@@ -374,7 +374,7 @@ TEST_F(KoanAgentFacadeTest, EventsPassTheAllowlistTheScrubberAndTheTracker) {
   EXPECT_EQ(backend_.sent.size(), 2u);
 }
 
-TEST_F(KoanAgentFacadeTest, DropsMessagesOfChildSessionsAndUnknownAnswers) {
+TEST_F(KoanAgentFacadeTest, DropsMessagesOfUnknownChildSessionsAndAnswers) {
   AttachTo("T1");
   base::DictValue child;
   child.Set("method", "Page.frameNavigated");
@@ -467,6 +467,193 @@ TEST_F(KoanAgentFacadeTest, TellsOnlyItsOwnClientWhatAPageWaitsToShow) {
       *Events("Koan.userNeeded")[0]->FindStringByDottedPath("params.reason"),
       "dialog");
   ASSERT_EQ(Events("Koan.userNeededDone").size(), 1u);
+}
+
+// A message from Chromium's session `child` of the tab T1.
+void ChildMessage(CdpFacade& facade,
+                  const std::string& child,
+                  base::DictValue message) {
+  message.Set("sessionId", child);
+  facade.OnTabMessage("T1", *base::WriteJson(message));
+}
+
+base::DictValue ChildInfo(std::string_view id,
+                          std::string_view type,
+                          std::string_view url) {
+  base::DictValue info;
+  info.Set("targetId", id);
+  info.Set("type", type);
+  info.Set("url", url);
+  info.Set("browserContextId", "CTX");
+  info.Set("openerId", "OPENER");
+  return info;
+}
+
+TEST_F(KoanAgentFacadeTest, AutoAttachInATabIsTheTabsOwnWithFlatSessions) {
+  const std::string session = AttachTo("T1");
+  Send(1, "Target.setAutoAttach",
+       base::DictValue()
+           .Set("autoAttach", true)
+           .Set("waitForDebuggerOnStart", true)
+           .Set("flatten", true)
+           .Set("filter", base::ListValue()),
+       session);
+  // Sent on to the tab, without the agent's filter.
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  EXPECT_EQ(*backend_.sent[0].command.FindString("method"),
+            "Target.setAutoAttach");
+  EXPECT_FALSE(backend_.sent[0].command.FindDictByDottedPath("params.filter"));
+  EXPECT_EQ(backend_.sent[0].command.FindBoolByDottedPath("params.flatten"),
+            true);
+  EXPECT_FALSE(backend_.sent[0].command.contains("sessionId"));
+  AnswerLast(base::DictValue());
+  EXPECT_TRUE(Answer(1)->FindDict("result"));
+
+  // Not flat: refused before the tab sees it.
+  Send(2, "Target.setAutoAttach",
+       base::DictValue().Set("autoAttach", true).Set("flatten", false),
+       session);
+  EXPECT_EQ(ErrorCode(2), "Koan.invalidParams");
+  EXPECT_EQ(backend_.sent.size(), 1u);
+}
+
+TEST_F(KoanAgentFacadeTest, AReachableFrameBecomesAChildSession) {
+  const std::string session = AttachTo("T1");
+  TabEvent(
+      "T1", "Target.attachedToTarget",
+      base::DictValue()
+          .Set("sessionId", "CR1")
+          .Set("targetInfo", ChildInfo("F1", "iframe", "https://pay.example/"))
+          .Set("waitingForDebugger", true));
+  std::vector<const base::DictValue*> attached =
+      Events("Target.attachedToTarget");
+  ASSERT_EQ(attached.size(), 2u);
+  const base::DictValue& event = *attached.back();
+  // In the tab's session, with an id of the facade's own, and nothing of the
+  // browser context or opener.
+  EXPECT_EQ(*event.FindString("sessionId"), session);
+  const std::string child = *event.FindStringByDottedPath("params.sessionId");
+  EXPECT_NE(child, "CR1");
+  EXPECT_EQ(*event.FindStringByDottedPath("params.targetInfo.targetId"), "F1");
+  EXPECT_FALSE(
+      event.FindStringByDottedPath("params.targetInfo.browserContextId"));
+  EXPECT_FALSE(event.FindStringByDottedPath("params.targetInfo.openerId"));
+  EXPECT_EQ(event.FindBoolByDottedPath("params.waitingForDebugger"), true);
+
+  // A command in the child goes in Chromium's session for it, through the
+  // same policy as the tab's.
+  Send(3, "Runtime.runIfWaitingForDebugger", base::DictValue(), child);
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  EXPECT_EQ(*backend_.sent[0].command.FindString("sessionId"), "CR1");
+  Send(4, "Browser.close", base::DictValue(), child);
+  EXPECT_EQ(ErrorCode(4), "Koan.notPermitted");
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  // Its answer comes back in the child's session.
+  ChildMessage(facade_, "CR1",
+               base::DictValue()
+                   .Set("id", *backend_.sent[0].command.FindInt("id"))
+                   .Set("result", base::DictValue()));
+  ASSERT_TRUE(Answer(3));
+  EXPECT_EQ(*Answer(3)->FindString("sessionId"), child);
+  // And its events too.
+  ChildMessage(facade_, "CR1",
+               base::DictValue()
+                   .Set("method", "Page.frameNavigated")
+                   .Set("params", base::DictValue()));
+  ASSERT_FALSE(Events("Page.frameNavigated").empty());
+  EXPECT_EQ(*Events("Page.frameNavigated").back()->FindString("sessionId"),
+            child);
+
+  // Chromium detaching it ends it for the client.
+  TabEvent("T1", "Target.detachedFromTarget",
+           base::DictValue().Set("sessionId", "CR1"));
+  ASSERT_EQ(Events("Target.detachedFromTarget").size(), 1u);
+  EXPECT_EQ(*Events("Target.detachedFromTarget")[0]->FindStringByDottedPath(
+                "params.sessionId"),
+            child);
+  Send(5, "Runtime.evaluate", base::DictValue().Set("expression", "1"), child);
+  EXPECT_EQ(ErrorCode(5), "Koan.unknownSession");
+  // The tab stays attached.
+  EXPECT_TRUE(backend_.attached.contains("T1"));
+}
+
+TEST_F(KoanAgentFacadeTest, ChildrenTheAgentMayNotReachAreDetached) {
+  AttachTo("T1");
+  const struct {
+    const char* session;
+    const char* type;
+    const char* url;
+  } kRefused[] = {
+      {"CR1", "iframe", "chrome://settings/"},
+      {"CR2", "iframe", "chrome-extension://abc/page.html"},
+      {"CR3", "shared_worker", "https://a.example/w.js"},
+      {"CR4", "service_worker", "https://a.example/sw.js"},
+      {"CR5", "page", "https://a.example/"},
+  };
+  for (const auto& child : kRefused) {
+    TabEvent("T1", "Target.attachedToTarget",
+             base::DictValue()
+                 .Set("sessionId", child.session)
+                 .Set("targetInfo", ChildInfo("X", child.type, child.url)));
+  }
+  // The client hears of none, and the tab is told to let each go.
+  EXPECT_EQ(Events("Target.attachedToTarget").size(), 1u);
+  ASSERT_EQ(backend_.sent.size(), std::size(kRefused));
+  for (size_t i = 0; i < std::size(kRefused); ++i) {
+    EXPECT_EQ(*backend_.sent[i].command.FindString("method"),
+              "Target.detachFromTarget");
+    EXPECT_EQ(
+        *backend_.sent[i].command.FindStringByDottedPath("params.sessionId"),
+        kRefused[i].session);
+  }
+  // Messages of a child the facade did not accept go nowhere.
+  const size_t received = received_.size();
+  ChildMessage(facade_, "CR1",
+               base::DictValue()
+                   .Set("method", "Page.frameNavigated")
+                   .Set("params", base::DictValue()));
+  EXPECT_EQ(received_.size(), received);
+}
+
+TEST_F(KoanAgentFacadeTest, ChildrenGoWithTheirTabAndWithTheClient) {
+  const std::string session = AttachTo("T1");
+  TabEvent("T1", "Target.attachedToTarget",
+           base::DictValue()
+               .Set("sessionId", "CR1")
+               .Set("targetInfo",
+                    ChildInfo("W1", "worker", "https://example.com/w.js")));
+  const std::string child = *Events("Target.attachedToTarget")
+                                 .back()
+                                 ->FindStringByDottedPath("params.sessionId");
+  // A command in flight in the child is answered when the tab goes, and the
+  // tab's command count is given back.
+  Send(1, "Runtime.evaluate", base::DictValue().Set("expression", "1"), child);
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  const int answered = backend_.answered;
+  facade_.OnTabDetached("T1");
+  EXPECT_EQ(ErrorCode(1), "Koan.targetClosed");
+  EXPECT_EQ(backend_.answered, answered + 1);
+  // Both the child and the tab are detached for the client.
+  EXPECT_EQ(Events("Target.detachedFromTarget").size(), 2u);
+  // The agent detaching a child tells Chromium in the parent's session.
+  const std::string again = AttachTo("T1");
+  TabEvent("T1", "Target.attachedToTarget",
+           base::DictValue()
+               .Set("sessionId", "CR2")
+               .Set("targetInfo",
+                    ChildInfo("F2", "iframe", "https://example.com/f")));
+  const std::string second = *Events("Target.attachedToTarget")
+                                  .back()
+                                  ->FindStringByDottedPath("params.sessionId");
+  Send(2, "Target.detachFromTarget", base::DictValue().Set("sessionId", second),
+       again);
+  EXPECT_TRUE(Answer(2)->FindDict("result"));
+  EXPECT_EQ(*backend_.sent.back().command.FindString("method"),
+            "Target.detachFromTarget");
+  EXPECT_EQ(
+      *backend_.sent.back().command.FindStringByDottedPath("params.sessionId"),
+      "CR2");
+  EXPECT_FALSE(backend_.sent.back().command.contains("sessionId"));
 }
 
 TEST_F(KoanAgentFacadeTest, ClosesOnlyItsOwnAgentTabs) {
