@@ -64,6 +64,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/referrer.h"
+#include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_tab_hooks.h"
@@ -264,10 +265,13 @@ ui::ImageModel EmojiIcon(const std::u16string& emoji) {
 }
 
 // Pinned tabs, like Essentials, are never frozen or discarded by Memory
-// Saver (both exempt the pages Chromium knows as pinned tabs).
+// Saver (both exempt the pages Chromium knows as pinned tabs). Neither is a
+// tab an agent holds a lease on (koan/browser/agent/koan_agent_lease.h): the
+// bit is the two composed, never one of them alone.
 void UpdateFreezingExemption(tabs::TabInterface* tab) {
   performance_manager::PageLiveStateDecorator::SetIsPinnedTab(
-      tab->GetContents(), IsPinnedForUser(tab));
+      tab->GetContents(),
+      IsPinnedForUser(tab) || agent::IsAgentLeased(tab->GetContents()));
 }
 
 // Zen's toast in `browser_view`'s window.
@@ -473,6 +477,9 @@ bool CloseButtonUnloads(const tabs::TabInterface* tab) {
 
 KoanPinnedTabController::KoanPinnedTabController(BrowserView* browser_view)
     : browser_view_(browser_view) {
+  // Releasing an agent's lease restores the user's own bit.
+  agent::SetUserPinnedQuery(
+      static_cast<bool (*)(content::WebContents*)>(&IsPinnedForUser));
   if (features::IsPinnedTabsEnabled()) {
     tab_strip_model()->AddObserver(this);
   }

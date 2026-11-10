@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 2ea589165ccac66b5d4043e60130e4bb26eaa359..194e78f08af8ca1c11fe9169df011a2c3841803b 100644
+index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..b8e8623fb372d96987e31251b032778435b4bffb 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -88,6 +88,7 @@
+@@ -88,6 +88,8 @@
  #include "content/public/common/drop_data.h"
  #include "content/public/common/url_constants.h"
  #include "content/public/common/window_container_type.mojom-shared.h"
++#include "koan/browser/agent/koan_agent_tab_hooks.h"
 +#include "koan/browser/ui/views/koan_glance.h"
  #include "extensions/browser/extension_registry.h"
  #include "extensions/browser/extension_system.h"
  #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
-@@ -542,6 +543,23 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
+@@ -579,6 +581,35 @@
                                    std::move(navigation_handle_callback));
    }
  
@@ -31,6 +32,30 @@ index 2ea589165ccac66b5d4043e60130e4bb26eaa359..194e78f08af8ca1c11fe9169df011a2c
 +      break;
 +  }
 +
++  // Koan agent control: what a page in an agent tab opens stays in the
++  // background (koan/browser/agent/koan_agent_tab_hooks.h).
++  if (WindowOpenDisposition koan_disposition = params.disposition;
++      koan::agent::OpensInBackgroundForAgent(source, &koan_disposition)) {
++    content::OpenURLParams background_params(params);
++    background_params.disposition = koan_disposition;
++    content::WebContents* opened = OpenURLFromTab(
++        source, background_params, std::move(navigation_handle_callback));
++    koan::agent::OnOpenedFromAgentTab(source, opened);
++    return opened;
++  }
++
    // If the source is already split, navigate the other pane instead of
    // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
    // sees new_contents == this and skips the DidOpenRequestedURL notification,
+@@ -719,6 +750,11 @@
+     }
+   }
+ 
++  // Koan agent control: window.open() from an agent tab opens a background
++  // tab of the same agent (koan/browser/agent/koan_agent_tab_hooks.h).
++  koan::agent::OpensInBackgroundForAgent(source, &disposition);
++  koan::agent::OnOpenedFromAgentTab(source, new_contents.get());
++
+   FullscreenController* fullscreen_controller =
+       exclusive_access_manager_->fullscreen_controller();
+ #if BUILDFLAG(IS_MAC)
