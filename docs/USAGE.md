@@ -912,6 +912,29 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Updates
+
+Koan has no binary releases: you build it from your clone, and updating is
+`git pull && scripts/build.sh` ([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
+
+- **Update Complete!** After you start a build whose Chromium version or Koan
+  commit differs from the last one you started, the sidebar shows Zen's
+  notification for 15 seconds (it waits while you point at it). **What's new
+  in Koan** opens the commits between the two builds on GitHub; **Something
+  broke?** opens the issues.
+- **Update Available!** Once a day Koan asks GitHub for the newest commit of
+  your clone's develop branch (its `origin` remote, if that is on GitHub). If
+  it is newer than the commit your build was made from, the sidebar says so
+  once for that commit: what's new, **Copy the update command**, and how to
+  update. Koan never downloads or installs anything.
+- **Privacy:** the check is one `GET` to
+  `api.github.com/repos/<owner>/<repo>/commits?sha=develop&per_page=1`. It
+  sends no cookies or credentials, and nothing about you or your build;
+  GitHub sees your IP address, as for any page. No telemetry. Incognito
+  windows never start it.
+- **Turn off:** Settings > Look and Feel > Updates: **Check for updates** and
+  **Show a notification after Koan was updated**.
+
 ## Haptic feedback (macOS)
 
 As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a

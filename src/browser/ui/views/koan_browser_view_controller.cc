@@ -53,6 +53,7 @@
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_updates.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_welcome.h"
@@ -274,6 +275,8 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     command_palette_->OnAddedToWidget();
     // After the workspace switcher: the media cards go above it.
     media_->OnAddedToWidget();
+    // Zen's update notification goes above the switcher too.
+    updates::OnBrowserWindowShown(browser_view_);
     download_animation_->OnAddedToWidget();
     loading_indicator_->OnAddedToWidget();
     welcome_->OnAddedToWidget();

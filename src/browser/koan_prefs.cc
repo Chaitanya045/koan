@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
@@ -150,6 +151,13 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookCustomCss, "");
   registry->RegisterBooleanPref(kLookAcrylicUrlBar, false);
   registry->RegisterBooleanPref(kHapticFeedback, true);
+  registry->RegisterBooleanPref(kUpdatesCheckEnabled, true);
+  registry->RegisterTimePref(kUpdatesLastCheck, base::Time());
+  registry->RegisterStringPref(kUpdatesLatestCommit, "");
+  registry->RegisterTimePref(kUpdatesLatestCommitTime, base::Time());
+  registry->RegisterStringPref(kUpdatesNotifiedCommit, "");
+  registry->RegisterBooleanPref(kUpdatesShowUpdateNotification, true);
+  registry->RegisterStringPref(kUpdatesLastBuild, "");
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);
