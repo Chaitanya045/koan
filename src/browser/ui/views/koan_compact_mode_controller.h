@@ -171,6 +171,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   // A drag of the sidebar's edge collapsed it: like Zen, hide it in compact
   // mode instead, and say once how to bring it back.
+  // Z50: a tab drag runs from the sidebar: it stays out until the drag ends
+  // (Zen's _isTabBeingDragged ignores the hover leave), wherever the pointer
+  // goes. Called on each of the drag's pointer events in the sidebar.
+  void HoldSidebarForTabDrag();
   void OnSidebarDragCollapsed();
 
   // Zen's toolbar context menu, at `screen_point`.
@@ -290,6 +294,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // pointer is off them.
   bool WantsLightsHold() const;
   void CheckLightsHold();
+  // Z50: lets go of the tab drag's hold once no tab drag runs.
+  void CheckTabDragHold();
   // The sidebar came or went, or the lights were laid out again.
   void OnTrafficLightsChanged();
 
@@ -398,6 +404,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   std::unique_ptr<ExpandOnHoverLock> lights_lock_;
   base::OneShotTimer lights_release_timer_;
   std::unique_ptr<ExpandOnHoverLock> empty_tab_lock_;
+  std::unique_ptr<ExpandOnHoverLock> tab_drag_lock_;
+  base::RepeatingTimer tab_drag_timer_;
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;
