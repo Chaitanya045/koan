@@ -41,6 +41,7 @@
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
@@ -446,7 +447,7 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
   for (int step = 1; step < count; ++step) {
     const int i = (active + (forward ? step : count - step)) % count;
     tabs::TabInterface* tab = model->GetTabAtIndex(i);
-    if (model->IsTabCollapsed(i) ||
+    if (model->IsTabCollapsed(i) || IsEmptyTab(tab) ||
         (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
         (within_kind && tab->IsPinned() != active_pinned) ||
         (skip_pending && IsTabUnloaded(tab->GetContents()))) {
