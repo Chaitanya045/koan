@@ -8,8 +8,10 @@ this note says "verified" it means read in pristine source; "UNVERIFIED" means i
 
 A local agent on the user's Mac (Claude Code, Codex, Cursor, a script, or Vercel's `agent-browser`) drives the
 user's **real, signed-in** Koan profile without stealing focus or the mouse, and the user can watch, take over and
-hand back at any time. It is **off by default**, reachable only through a **unix socket** in a 0700 directory, and
-every client is **approved by the user in a native prompt** and **revocable**.
+hand back at any time. The master switch is **Agent ready, on by default** (a user decision, 2026-11-07, which replaced
+"off by default"): the gateway listens, but with no agent paired or attached nothing is kept awake and nothing runs.
+It is reachable only through a **unix socket** in a 0700 directory, and every client is **approved by the user in a
+native prompt** (a paired key is never accepted silently) and **revocable**.
 
 The five decisions the design stands on:
 
@@ -29,7 +31,9 @@ The five decisions the design stands on:
    socket; a loopback relay with an unguessable path, started with and outliving its daemon, hides that. The `koan`
    CLI (C++, built with Chromium's own toolchain) does pairing, lifecycle, take-over and the relay; agent-browser does
    page actions.
-5. **Security is a feature, not a flag** (§3): off by default, keypair pairing with a native prompt naming the
+5. **Security is a feature, not a flag** (§3): **Agent ready is on by default but inert until a user-approved agent
+   attaches** (no listener in Incognito, Guest or a non-default user-data-dir unless turned on there; the indicator
+   ships before the default-on gateway is reachable by a real build), keypair pairing with a native prompt naming the
    *verified* executable and a pinned identity, Keychain-bound client records, capabilities, indicator, no incognito,
    no cookie/storage/clipboard access, a size-capped audit log, and any user input in a driven tab pauses the agent.
    The Chrome 136 gap that Koan has open today ships separately as PR #186 (§3.2).
@@ -55,6 +59,7 @@ benchmark harness spec that can also import externally measured baselines.
 | Secure; incognito excluded; threat model documented | §3 | 3 |
 | agent-browser compatibility (maintainer, 11-06) | §11 | 11 |
 | ego(lite) ideas (maintainer, 11-06) | agent Space §7, skill §12, in-engine snapshot §10, watch/take-over §9 | |
+| **Agent ready, on by default; free when idle; light on battery** (user decision, 11-07) | a listener with no agent attached costs nothing: no lease, no capturer, nothing unthrottled; off means no listener and nothing scheduled, at once; fewer leases and no long keep-alives on battery in Low Power Mode | 3.3 (T21, T22), 6.1, 8 |
 
 ## 2. Architecture
 
@@ -150,18 +155,18 @@ How agent control compares with Chrome's approval mode:
 |---|---|---|
 | T1 | A web page reaches the endpoint (loopback port, DNS rebinding, `Origin`-less WebSocket) | The browser listens on **no TCP port** and parses **no HTTP or WebSocket**; a browser cannot dial a unix socket. The relay (§11) is a separate process: ephemeral 127.0.0.1 port, one path `/cdp/<128-bit secret>`, any request with an `Origin` header refused, `Host == 127.0.0.1:<port>` required (the stock guard is `devtools_http_handler.cc:129-137,478-484`), a second simultaneous connection refused, session-scoped lifetime, killed on revoke |
 | T2 | Another local user connects | 0700 directory + 0600 socket + uid check on accept; the relay's secret path |
-| T3 | An unpaired same-uid process drives the browser | The first connection from an unknown client gets **only** `Koan.pair`; the user sees a native prompt whose headline is the **verified executable** (audit token → path, code-signing identity, ancestors), with the client's own label shown as "calls itself". Unanswered prompts time out (60 s); 3 attempts per minute per peer. **Client records are encrypted and MACed with Keychain-bound `os_crypt` storage** (§5.4), so editing plaintext Local State while Koan is not running cannot add a client |
+| T3 | An unpaired same-uid process drives the browser | The first connection from an unknown client gets **only** `Koan.pair`; the user sees a native prompt whose headline is the **verified executable** (audit token → path, code-signing identity, ancestors), with the client's own label shown as "calls itself". Unanswered prompts time out (60 s); one prompt is open at a time and a user gets 3 a minute by default (a setting, 1 to 10, §6.1), whatever the path of the program (PR #190). With the switch on by default this prompt is the only way in, and it is never skipped: a paired key is never accepted silently. **Client records are encrypted and MACed with Keychain-bound `os_crypt` storage** (§5.4), so editing plaintext Local State while Koan is not running cannot add a client |
 | T4 | A stolen credential is replayed | There is no shared secret in the browser: clients hold an Ed25519 private key and sign a single-use nonce (§5.2). Paired identity is **pinned** (path, signature, ancestors) and a change re-prompts (§5.5). Credentials expire (30 days) and are revocable (flushed before returning, §5.4). **Residual**: a same-uid process that reads `~/.koan/clients/<id>/key` and runs from the same chain is the paired client (§3.5), which is why `observe` is off and `drive` is per tab |
 | T5 | The agent exfiltrates cookies, storage or credentials | Layered: (1) `Storage.*`, `DOMStorage.*`, `IndexedDB.*`, `CacheStorage.*`, `Network.{getCookies,getAllCookies,setCookie,setCookies,deleteCookies,clearBrowserCookies,clearBrowserCache,loadNetworkResource}` and everything unlisted are **denied** by name (§4.3); `Browser.*` and `SystemInfo.*` do not exist for an untrusted client. (2) **`Network.enable` is required by agent-browser and, upstream, leaks cookies including HttpOnly values and `Authorization` through `requestWillBeSentExtraInfo`/`responseReceivedExtraInfo`** (`network_handler.cc:1113-1135, 4033-4058`; review finding 1): the facade rewrites those events and passes only an allowlist of Network events (§4.5), tested by T-sec-4. (3) `getResponseBody` and `setExtraHTTPHeaders` need capability `network` (not offered in v1). **Honest limit**: the agent can run JS in a page, so it can read what that page's JS can read (`document.cookie` minus HttpOnly, that origin's localStorage, the DOM). It is **not limited to the origin it started on**: it can navigate its tab to any site you are logged into and read that page, which is the shared-login point of decision 15. It cannot read HttpOnly cookies, the password store or the cookie jar |
 | T6 | The agent reads passwords / autofill | The `Autofill`, `Security`, `Browser` domains are absent for untrusted clients. Risk: password-manager autofill into a form the agent drives, then JS reads the value. Chrome hides autofilled passwords from script until a user gesture; a CDP-injected click may count as one (UNVERIFIED, test T-sec-1, §15). Mitigation if it does: disable password/autofill UI in agent-owned tabs (`ContentAutofillClient`/`PasswordManagerClient` per WebContents) |
 | T7 | The agent reaches privileged or sensitive pages and worlds: `chrome://`, Koan settings, DevTools, `file://`, the Agent-control page, **extension frames injected into ordinary pages and extension content-script worlds** | A strict Koan-only allowlist (§4.4): a frame is reachable only if http(s)/`about:blank`/the unreachable-error URL, non-WebUI, non-privileged, non-guest, non-PDF/MimeHandler, with every ancestor and the embedder passing the same; `chrome-extension://` frames are not attached; execution contexts other than the main world or the agent's own isolated worlds are dropped and their `contextId`s rejected. `MayReadLocalFiles=false` blocks `file://`, `DOM.setFileInputFiles` and `Network.loadNetworkResource`. Network-error pages do not detach the tab (the original draft would have) |
 | T8 | The agent raises windows, switches tabs, quits, resizes, loads extensions | `Page.bringToFront`/`Target.activateTarget` → no-op success + log; `Browser.*`, `Extensions.*`, `SystemInfo.*` absent; `Target.createBrowserContext`/`disposeBrowserContext`/`attachToBrowserTarget` denied; window bounds denied |
 | T9 | Prompt injection: a page the agent reads tells it to do harm | Cannot be solved in the browser. Reduced by: agent-Space scope, per-tab consent for the user's own tabs, optional per-client **site allow/deny list** (default: deny nothing, but banking/payment categories are a settings suggestion), indicator, pause on user input, audit log, `Fetch`/network interception off by default |
-| T10 | Hidden action: the user does not know the agent is active | Persistent indicator (§6.2), banner on a driven visible tab, toast, menu-bar item, agent-Space glow; "Stop all agents" one click away; audit log |
+| T10 | Hidden action: the user does not know the agent is active | Persistent indicator (§6.2), banner on a driven visible tab, toast, menu-bar item, agent-Space glow; "Stop all agents" one click away; audit log. **The indicator ships before, or in the same PR as, anything that makes the default-on gateway reachable by a real build** (T21) |
 | T11 | Incognito leaks | Excluded by default for every client (§13) |
 | T12 | The agent changes the user's data through the page (deletes, buys) | Out of scope for the browser (the same as any extension). Reduced by capability `drive` (take-over of user tabs needs per-tab approval) and the audit log. The agent Space is where the agent acts by default |
 | T13 | Downloads / uploads | `Page.setDownloadBehavior` denied; downloads go through the normal download UI and Safe Browsing; uploads need a Koan-mediated, user-approved path (a later `Koan.upload`) |
-| T14 | Denial of service: floods, leases, pre-auth bytes, parser bugs | Raw length-prefixed frames, **4 KB cap before authentication**, connection and per-peer caps, 10 s incomplete-frame timeout (§4.1); per-connection rate limits; a lighter lease with a hold-off and a concurrent cap of 4 (§8); tab caps 8 per task, 12 per client, 16 total |
+| T14 | Denial of service: floods, leases, pre-auth bytes, parser bugs | Raw length-prefixed frames, **4 KB cap before authentication**, connection and per-peer caps, 10 s incomplete-frame timeout (§4.1); per-connection rate limits; a lighter lease with a hold-off and a concurrent cap of 4 by default, a setting from 1 to 16 (§6.1, §8); tab caps 8 per task, 12 per client, 16 total |
 | T15 | Policy bypass | `RemoteDebuggingAllowed=false` stops the gateway and closes sessions; `DeveloperToolsAvailability` is enforced on every attach (C§1a) |
 | T16 | Upgrade drift: a Chromium roll changes which domains or methods an untrusted client gets | The protocol-coverage unit test of §4.3 fails on any unclassified CDP method; REBASE rows name the symbols and the behaviours; a Mac test per denied domain (§14, §15) |
 | T17 | The agent reads or writes the OS clipboard (`Input.dispatchKeyEvent {commands:["paste"]}` pastes whatever the user last copied, such as passwords or 2FA codes) | `commands` is stripped from every key event (§4.5); no `clipboard` capability in v1; T-sec-10 |
@@ -169,15 +174,18 @@ How agent control compares with Chrome's approval mode:
 | T19 | Agent browsing leaks into the user's own surfaces: history, omnibox suggestions, Recently Closed, saved tab groups and sync, session restore, session files | Required, with the mechanism per surface in §7.1: agent-visited URLs are not added to history or the omnibox (decision 18, a setting); agent groups never become saved or synced groups (the existing `SavesTabGroups` hooks; agent control needs Spaces on); a restore-side hook blanks and sweeps agent tabs; conditional write-side hooks keep them out of Recently Closed and the session files; T-hist-1, T-sync-1, T-sync-2 |
 | T20 | Audit-log tampering or secret leakage through the log | Best-effort integrity (hash-chained records, chain key Keychain-bound), size-capped, URL paths redacted by default, nothing typed or evaluated stored (§6.3). A same-uid attacker can still delete it; the log is evidence for the user, not a security boundary |
 
+| T21 | **Agent ready is on by default**: every launch has a listener, so a same-user process can reach the socket without the user having done anything | Nothing new is reachable by default compared with "on after the user turned it on", and the controls are the same ones, stated here because they now carry the whole load: (1) **the first-contact native prompt is mandatory**; the only methods before authentication are `Koan.pair` and `Koan.authenticate`, a paired key is never accepted silently, and the prompt limits of #190 stand (one open, which is fixed, and 3 a minute per user by default, a setting that is never 0 or unlimited; a refusal or timeout counts as a failure). (2) 0700 directory, 0600 socket, `flock` ownership, uid check, nothing read until the peer is resolved, 8 connections / 4 unauthenticated / 2 per program, 30 s to authenticate, 4 KB frames (§4.1, §5.2). (3) **No listener in Incognito, Guest or a non-default `--user-data-dir` unless the user turns it on there** (§4.1, §13). (4) The enterprise policy `RemoteDebuggingAllowed=false` still forces it off and greys the row. (5) **The indicator (§6.2) ships before, or in the same PR as, anything that makes the default-on gateway reachable by a real build**; wiring the gateway into `BrowserProcess` stays behind the indicator PR, so no build with a default-on listener can run without a visible "agent connected" state. (6) An idle listener holds no lease and no capturer and unthrottles nothing (§8). Residual: a listener that is always there is attack surface that was optional (a parser bug in the pre-auth frame path is now reachable by default): the pre-auth path is small and fuzzed (`koan_agent_frame_fuzzer`, `koan_agent_session_fuzzer`), and Off removes it entirely |
+| T22 | Agent control costs battery or memory for a user who never uses it, or too much for one who does | Idle cost is the listener only (§8). Only tabs an agent is attached to hold a lease, within the caps (capturer hold-off 3 s, **4 leased tabs by default, a user setting from 1 to 16**, 8/12/16 open tabs, fixed for now); **on battery with Low Power Mode on, half the leased-tab setting (2 by default, minimum 1; a setting can turn the halving off), and `live: always` and `keepAlive` over 60 s are refused with a clear error** (§8, §6.1, T-power-2, T-power-3). Off releases everything at once |
+
 ### 3.4 Controls the maintainer asked for, mapped
 
 | Control | Where |
 |---|---|
-| Off by default | pref `koan.agent_control.enabled` (local state) false; when false, no socket, no thread, no listener, leases released, sessions closed (§6.1) |
+| **Agent ready** (master switch; on by default since 2026-11-07, was "off by default") | pref `koan.agent_control.enabled` (local state), **default true** in the default user-data-dir and false in Incognito, Guest and a non-default `--user-data-dir` launch (§4.1). On: the gateway listens; with no agent paired or attached nothing is kept awake. **Off: no listener and nothing scheduled (the old "off" row, with the accept loop sharing the browser's IO thread instead of owning one), leases released, sessions closed, at once and without a restart** (§6.1). The first-contact prompt is mandatory either way |
 | Only a unix socket or loopback + token; no unauthenticated port | unix socket only in the browser; relay is a client-side process (§11) |
 | User approves each new client, native prompt naming the client, revoke in settings | §5 |
-| Visible indicator while connected | §6.2 |
-| Incognito excluded by default | §13 |
+| Visible indicator while connected (must ship before the default-on gateway is reachable by a real build) | §6.2 |
+| Incognito excluded by default; no listener in Incognito, Guest or a non-default user-data-dir unless turned on there | §13, §4.1 |
 | No access to passwords/cookies/storage beyond what the page exposes unless allowed | T5, T6 and the capability `cookies` (§5.3) |
 | Audit log | §6.3 |
 | User input in a driven tab pauses the agent | §9 |
@@ -198,7 +206,7 @@ Koan.app's ACL can list a second binary, C§5); Touch ID (LocalAuthentication) f
 
 ### 4.1 Gateway (framing decided: raw length-prefixed frames on the unix socket)
 
-New `//koan/browser/agent/` target. A `Koan_AgentIO` thread (`MessagePumpType::IO`) runs **Koan's own accept loop**
+New `//koan/browser/agent/` target. **Koan's own accept loop** runs on the browser's existing IO thread (a dedicated `Koan_AgentIO` thread would be an idle thread in every default launch; the file-system work of starting, and the signature checks, run on thread-pool tasks that may block, as in PR #191),
 on `net::UnixDomainServerSocket(auth_cb, /*use_abstract_namespace=*/false)` using `AcceptSocketDescriptor()`
 (`unix_domain_server_socket_posix.h:77`), because the raw descriptor gives the peer's **audit token**
 (`getsockopt(LOCAL_PEERTOKEN)`) per connection; `net::HttpServer` hides it, and `UnixDomainServerSocket::Credentials`
@@ -248,8 +256,14 @@ browser process.
   are forwarded as bytes untouched; evaluate `UsesBinaryProtocol()` on the client to skip content's CBOR-to-JSON
   transcoding (phase-2 measurement).
 
-Lifetime: started when the pref is true and the first window exists; torn down on pref false, policy change
-(`kDevToolsRemoteDebuggingAllowed`), revoke-all, and app exit. No upstream hook for the lifetime is expected (a pref
+Lifetime: started when the pref is true (**the default**, "Agent ready") and the first window exists; torn down on pref
+false, policy change (`kDevToolsRemoteDebuggingAllowed=false`, which also forces the pref off), revoke-all, and app exit,
+**immediately and without a restart** (the listener gone and nothing scheduled, leases released, sessions closed). **Where it is not on
+by default:** a browser started in Incognito (`--incognito`) or Guest mode, or with a non-default `--user-data-dir`
+(a profile someone points the browser at for a test, a script or a second identity), does not start the gateway unless
+the user has turned the switch on for that user-data-dir (local state is per user-data-dir, so an explicit setting
+there wins). The default is computed once at pref registration from the launch, so it never changes under a running
+browser. **Wiring the gateway into `BrowserProcess` ships in or after the indicator PR (§6.2, T21), not before.** No upstream hook for the lifetime is expected (a pref
 observer and the existing per-window controller start it); the exit hook is a phase-2 detail.
 
 ### 4.2 Wire protocol
@@ -365,9 +379,11 @@ received by the client.
    `claude` (signed by Anthropic …), run from `zsh`*", with full paths on expansion, and the client's own label
    shown as "calls itself *Claude Code*". Switches for the requested capabilities (§5.3). Buttons: *Allow*, *Deny*; no
    default button; Esc denies. Unanswered after 60 s: denied. The limits are on the **user**, not the program's path (a
-   same-user process can run copies from any number of paths): at most one prompt open in the whole browser and 3 prompts
-   a minute per user (a connection from another user is refused before it can ask, so that is also the cap over all
-   users), and a denial or a timeout counts as a failure against the peer (5 in 5 minutes block it for 60 s).
+   same-user process can run copies from any number of paths): at most one prompt open in the whole browser (**fixed**) and
+   **3 prompts a minute per user by default** (a user setting, 1 to 10, §6.1; a connection from another user is refused
+   before it can ask, so that is also the cap over all users), and a denial or a timeout counts as a failure against the
+   peer (**5 failures in 5 minutes block it for 5 minutes by default**, a setting, 1 to 20; #190 shipped a 60 s block, and
+   the settings PR makes 5 minutes the default). 0 and "unlimited" are never accepted for any of them (§6.1).
    **Accepted risk:** a process of the user's own account can use up that budget with pairing offers it signs itself,
    which delays a legitimate client's prompt (the client gets `Koan.rateLimited` and retries) and shows the user
    nuisance dialogs. It gains no access by it: each dialog names the verified program, each refusal counts against
@@ -392,7 +408,7 @@ received by the client.
 `"koan-agent-v1" NUL clientId NUL nonce` with its private key → the browser verifies with the stored public key. (The
 first draft also put an "audit-token identity digest" in the signed bytes. A client cannot know how the browser sees it,
 so it cannot sign it; the browser checks the peer's identity from the OS instead, §5.5, and the proof binds the client
-id and the connection's nonce. Implemented in `src/browser/agent/koan_agent_auth.cc`.) Five failures close the connection and block the peer for 60 s. The private key lives with the client, in
+id and the connection's nonce. Implemented in `src/browser/agent/koan_agent_auth.cc`.) The failures setting (default five; §6.1) closes the connection and blocks the peer for 5 minutes. The private key lives with the client, in
 `~/.koan/clients/<client-id>/key` (0600, the directory is the random id, never the label, which also closes the
 `--name ../..` and silent-overwrite holes of review finding 5). A Keychain-held key with an ACL naming the signed CLI
 is the later hardening (UNVERIFIED that Koan.app's ACL can list a second binary, C§5). Credentials expire after 30 days
@@ -454,8 +470,9 @@ client*, *Deny*. A missing capability returns the CDP error `Koan.notPermitted {
 The client list is **not** plaintext Local State. Each client record is encrypted with `os_crypt` (Koan's
 Keychain-bound "Safe Storage" key, patched in `keychain_password_mac.mm`) and the list carries a MAC under a key held
 the same way, so a same-uid process that edits Local State while Koan is not running can neither add a client nor
-re-enable one: a record that fails the MAC is ignored and logged, and `koan.agent_control.enabled` alone does nothing
-because every unknown connection still needs a prompt. (The `enabled` flag itself may stay a plain pref.) Revoke
+re-enable one: a record that fails the MAC is ignored and logged, and `koan.agent_control.enabled` is not a gate on who
+may connect (it is on by default; every unknown connection needs a prompt whatever its value). (The `enabled` flag itself
+may stay a plain pref.) Revoke
 calls `CommitPendingWrite()` and verifies the flush before returning, so a crash cannot resurrect a revoked client.
 Reading the Keychain item from outside Koan.app prompts the user, which is the property we rely on.
 
@@ -488,14 +505,46 @@ but closes everything.
 
 A new "Agent control" group in `chrome://koan-settings` (a `Row` with `local_state = true`, C§4, plus a small
 `koan_settings_handler.cc` addition for the client list, which is not expressible as a `Row`): the master switch
-with a one-line warning ("Lets programs you approve open and control tabs in Koan, using your logged-in sessions"),
-*Ask every time*, the client list, *Stop all agents*, *Open activity log*, and *Install command line tool* (symlinks
-`~/.local/bin/koan`) and *Install agent skill* (decision 10). Prefs (local state): `koan.agent_control.enabled`, `.strict`,
+**"Agent ready", on by default** (user decision, 2026-11-07), with the one-line copy "Agent ready: lets agents you
+approve open and work in background tabs. Tabs stay awake only while an agent is using them." Turning it off closes the
+socket and every session and releases every lease at once, with no restart. Under it, the **limits are user settings
+with defaults** (user decision, 2026-11-07):
+
+| Setting | Pref (local state) | Default | Range |
+|---|---|---|---|
+| Awake agent tabs at a time | `koan.agent_control.max_leased_tabs` | 4 | 1 to 16. Above 8 the row shows "each awake tab uses its own memory and power" |
+| Fewer awake tabs in Low Power Mode on battery | `koan.agent_control.low_power_halves` | on | when on, half the value above, minimum 1 (§8) |
+| Approval requests per minute | `koan.agent_control.max_prompts_per_minute` | 3 | 1 to 10 |
+| Failed connection attempts before a 5-minute block | `koan.agent_control.max_auth_failures` | 5 | 1 to 20 |
+
+**Read like this, everywhere:** a limit is read through one function (`ReadLimit(pref, default, min, max)`) that returns
+the stored integer if it is an integer in range, and **the default otherwise**: a missing, non-integer, corrupt, out of
+range, 0 or negative value is never used, and is not rounded to the nearest edge (a hand-edited 9999 is not "16"). There
+is no "unlimited" and no way to enter 0. **A change applies to new connections and new leases only.** It does not kill
+live connections, and lowering the tab limit applies as leases are released (the capturer hold-off, 3 s), with no forced
+drops: the next lease waits until the count is under the new limit.
+
+**Fixed, not settings (security floors):** only **one approval prompt on screen at a time**; the pre-authentication
+limits (8 connections, 4 unauthenticated, 2 per program, 30 s to authenticate, 4 KB frames); the 60 s prompt timeout; and
+the open-tab budgets (8 per task, 12 per client, 16 in all), which stay as they are for now. **The open-tab budgets are a
+later setting.** In code, `RateLimiter`'s prompt limit and failure threshold (`kMaxPromptsPerMinute`, `kMaxFailures` in
+`koan_agent_auth.h`) become constructor parameters defaulting to those constants, so the pure-logic tests do not change;
+the browser side reads the prefs and passes them in.
+
+**The switch defaults to on in the default user-data-dir and to off in Incognito, Guest and a non-default
+user-data-dir, unless the user turns it on there** (§4.1, §13, T-ready-3); the first-contact prompt is never skipped.
+
+The rest of the group: *Ask every time*, the client list, *Stop all agents*, *Open activity log*, and *Install command line tool* (symlinks
+`~/.local/bin/koan`) and *Install agent skill* (decision 10). Prefs (local state): `koan.agent_control.enabled` (default true, see §4.1), `.strict`,
 `.live_always` (per client, in its record), `.audit_urls`, `.agent_history`, and the **encrypted, MACed client store**
 (`.clients`, §5.4), which is not a plain dict.
-The settings page itself is never attachable by an agent (T7). Enterprise: `RemoteDebuggingAllowed` greys the row.
+The settings page itself is never attachable by an agent (T7). Enterprise: `RemoteDebuggingAllowed=false` forces the switch off and greys the row (it cannot be turned on by the user).
 
 ### 6.2 Indicator ("agent connected")
+
+**Ordering rule (user decision, 2026-11-07).** With the gateway on by default, this indicator ships **before, or in the
+same PR as, anything that makes the gateway reachable by a real build** (wiring it into `BrowserProcess`, §16). Until
+then the gateway is code under `src/browser/agent/` that nothing starts.
 
 Persistent while any client is connected, layered so one survives every layout including compact mode:
 
@@ -623,8 +672,8 @@ vsync, which on battery is not free, so the lease is **not held while the agent 
 |---|---|---|
 | Hold-off of the **capturer** after the last command on a tab | **3 s** (release then re-acquire transparently on the next command); the pin bit and the priority vote stay | an LLM turn is 3-20 s; holding the compositor through it burns power for nothing |
 | Held for the whole of | a `wait`/program in flight, an open screencast, `Koan.keepAlive {tab, seconds}` (≤ 10 min), an active `record`/`stream` | so waiting for an animation or a timer-driven page works |
-| Concurrent leased tabs | **4** (a fifth waits for a release; commands queue rather than fail) | a MacBook Air has 8-16 GB and 4-8 cores |
-| Open tabs per task / per client / total | **8 / 12 / 16** | ego's page budget is 8 (§19) |
+| Concurrent leased tabs | **4 by default, a user setting from 1 to 16** (`koan.agent_control.max_leased_tabs`, §6.1; the next lease waits once the limit is reached; commands queue rather than fail); **half of it on battery with Low Power Mode on**, minimum 1, unless the user turned that off (below) | a MacBook Air has 8-16 GB and 4-8 cores; above 8 the settings row warns that each awake tab uses its own memory and power |
+| Open tabs per task / per client / total | **8 / 12 / 16**, fixed for now (a later setting) | ego's page budget is 8 (§19) |
 | `live: always` (opt-in, per client) | off | hold the lease for as long as a client is attached, for pages that must run between commands |
 
 Consequence, stated plainly: between commands a default-mode agent tab is a normal hidden tab as far as rendering goes
@@ -633,6 +682,33 @@ for the whole attachment, so the next command answers at once. "Animations and t
 `live: always`; the first frame after re-acquire must be fast (T-keep-10: ≤ 100 ms), and a **never-shown** background
 tab (`did_first_set_visible_` false) must produce its first paint under the lease (T-keep-11). A page that needs to
 progress while the agent is thinking must say so (`keepAlive`).
+
+**What Agent ready costs when no agent is attached** (user decision, 2026-11-07: the switch is on by default). Effectively
+zero: the gateway is a listening socket on the browser's existing IO thread. No tab holds a lease, no capturer runs,
+no pin bit or priority vote is set, nothing is unthrottled, and normal tabs throttle, freeze and discard exactly as in
+Chrome. A lease exists only for a tab an agent is attached to, within the caps above. With the switch **off** there is no
+listener and nothing scheduled, any lease is released and every session is closed, at once (T-ready-2).
+
+**On battery with Low Power Mode on** (user concern, 2026-11-07). While the Mac is on battery power *and* Low Power
+Mode is on:
+
+* **concurrent leased tabs drop to half the setting** (4 to 2 by default; minimum 1; the *Fewer awake tabs in Low Power
+  Mode* switch, `low_power_halves`, on by default, can turn the halving off). The others queue as with any cap: a
+  command waits for a release rather than failing. Like any lowered limit it applies **as leases are released** (the
+  capturer hold-off, 3 s), with no forced drop and nothing in flight cut; a toast and a
+  `Koan.powerStateChanged {onBattery, lowPowerMode, maxLeases}` event tell the client;
+* **`live: always` and `Koan.keepAlive {seconds}` with `seconds > 60` are refused** with a clear error,
+  `Koan.lowPower {reason: "battery-low-power-mode", maxLeases: <the halved limit>, maxKeepAliveSeconds: 60}`, so an agent can tell the
+  user why and retry shorter or plug in; a `live: always` lease already held is downgraded to the default at the moment
+  the state is entered (same event), not dropped; `keepAlive` of 60 s or less, `wait` and in-flight commands are
+  unchanged. These two refusals apply whenever the Mac is on battery with Low Power Mode on, whatever `low_power_halves` says (they are the battery protection, not a limit on tabs);
+* leaving the state (power connected, or Low Power Mode off) restores the defaults at once; nothing is persisted.
+
+The inputs are `base::PowerMonitor` for battery state and the macOS Low Power Mode setting
+(`-[NSProcessInfo isLowPowerModeEnabled]` and `NSProcessInfoPowerStateDidChangeNotification`; UNVERIFIED which
+Chromium wrapper exists in 158, check on the Mac before writing a new observer). The tab limit comes from the pref through `ReadLimit` (§6.1); the keep-alive limit is a constant (`kMaxKeepAliveLowPower`,
+60 s); the lease cap takes both as inputs, so T-power-2, T-power-3 and T-limits-* can drive them with a fake power source
+and fake prefs.
 
 Only agent tabs hold a lease; no global flag changes (A§9 lists the ones never to flip). Expected result for a
 leased non-active agent tab in an unfocused or covered window: rAF yes, CSS animations yes, timers unthrottled,
@@ -817,6 +893,12 @@ are created only in the original profile; there is no `Koan.openTab {incognito}`
 incognito tab is refused with a specific error; an incognito window never gets an agent Space (Koan has no Spaces in
 incognito windows, `ShowsSpaceHeader`). A later capability would be per tab, with its own prompt and a stronger banner.
 
+**No listener in Incognito, Guest or a non-default `--user-data-dir`** (Agent ready, §4.1): a browser started in
+Incognito or Guest mode, or against a user-data-dir other than the default, does not start the gateway, unless the user
+turned the switch on for that user-data-dir. The gateway is a browser-process singleton, so this is decided by how the
+process was launched, not per window: a normal browser with an incognito window open does have the listener (it is the
+same process), and that window's tabs are still unreachable to it, as above.
+
 ## 14. Hook patches (for docs/REBASE.md)
 
 After the review (finding 12) the feature itself needs **two upstream touches (#2, #3) and two conditional ones (#5, #6)**;
@@ -874,6 +956,8 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-keep-12 | lease and pin composition: a user-pinned or Essential tab taken over and released; an agent tab the user pins meanwhile | the PM pinned bit is `user || lease` at every step; Koan's own `IsPinnedForUser` never reads the lease; nothing is left exempt after release |
 | T-keep-13 | the popup-menu runner: click a `<select>` in an agent tab while attached, also after a hold-off; then hand a user tab back | no native NSMenu while attached; native popups return after hand-back |
 | T-power-1 | battery cost of 4 leased tabs vs 4 normal background tabs for 10 min (`powermetrics` where permitted, otherwise CPU time), and the app-suspension blocker while a task runs | recorded; the blocker is released when the task ends; Mac idle sleep resumes |
+| T-power-2 | on battery with Low Power Mode on (a fake power source in the unit test; the real setting on the Mac): attach to 4 tabs, then enter the state with 4 leases held, then leave it | no lease is dropped on entry; as each is released (hold-off) at most 2 hold a capturer, and the next commands wait (none fails); the `Koan.powerStateChanged` event and a toast; leaving restores 4 and the queued commands run. With only one of battery / Low Power Mode, the limit stays 4. With `low_power_halves` off the limit stays 4 in the state; with the tab setting at 1 the halved limit is 1 (not 0) |
+| T-power-3 | in that state: `Koan.keepAlive {seconds: 61}` and `Koan.keepAlive {seconds: 60}`, `live: always` set on a client and requested on a tab, and a `live: always` lease already held when the state is entered | 61 and `live: always` return `Koan.lowPower {reason: "battery-low-power-mode", maxLeases: 2, maxKeepAliveSeconds: 60}` (with the default setting; they are refused with `low_power_halves` off too); 60 is accepted; the lease held on entry is downgraded to the default with the event, not dropped; leaving the state allows both again |
 | **Focus and creation** | | |
 | T-focus-1 | `Koan.openTab` while the user types in another tab | active tab, focus, caret and typed text unchanged (frontmost pid check per `koan-input-grant-and-front-pid`) |
 | T-focus-2 | `Page.bringToFront`, `Target.activateTarget` from the client | no-op success; nothing raised |
@@ -896,7 +980,17 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-sec-9 | audit log: content of a typed password and of `Runtime.evaluate` source | neither appears |
 | T-sec-10 | clipboard: copy a secret in another app, focus an input in an agent tab, send `Input.dispatchKeyEvent {commands:["paste"]}` and ⌘V | nothing pasted (`commands` stripped); the injected ⌘V does not paste either |
 | T-sec-11 | extension reach: a password-manager extension injects a `chrome-extension://` iframe into the page; an extension content script runs in an isolated world | the iframe is not listed or attached; no isolated-world execution context is delivered; `Runtime.evaluate {contextId}` of one is rejected; a failed navigation to an error page does not detach the tab |
-| T-sec-12 | forged client store: while Koan is not running, add a client record and set `enabled=true` in Local State | the record fails its MAC and is ignored (logged); a connection still gets the pairing prompt |
+| T-ready-1 | the switch on (default), no client paired, the browser used normally for 10 min with several background tabs | no `AgentTabLease`, no capturer, no pin or priority vote from agent control, background tabs throttle, freeze and discard as without the feature; CPU and wakeups equal to the build with the switch off within noise (`powermetrics` where permitted) |
+| T-ready-2 | with a paired client attached and a leased tab, turn the switch off in settings (no restart) | the socket file is gone, the listener and its descriptors are closed, every session is closed with a reason, the lease, pin bit, priority vote and popup runner are released, the indicator clears; turning it on again listens again, and the paired clients are still there |
+| T-ready-3 | start the browser with `--incognito`, with `--guest`, and with a non-default `--user-data-dir`; then set the switch on explicitly in the last | no socket and no listener in the first two and the third until it is turned on there; with it on there, a listener in that user-data-dir's own `AgentControl/` directory only |
+| T-ready-4 | a fresh install with the default switch: a `koan` / raw-socket client connects and sends `Koan.pair`; and a client that sends anything else | the native approval prompt appears and names the verified executable; without an answer (60 s) or on Deny nothing is stored; every other method is refused `Koan.notAuthenticated`; no paired key is accepted without a prompt |
+| T-ready-5 | enterprise policy `RemoteDebuggingAllowed=false` on a browser whose switch is on | no listener; the row is greyed and off and cannot be turned on; removing the policy restores the user's setting |
+| T-limits-1 | the four limit prefs (unit test, fake prefs): in range, the edges (1 and the maximum), one past each edge, 0, negative, a huge value, a string, a double, a list, a bool, missing | in range and the edges are used as stored; everything else gives the **default**, not an edge; `low_power_halves` that is not a bool gives the default (on); 0 is never returned |
+| T-limits-2 | a lease cap of 4 with 4 held; the tab pref is lowered to 2 | the 4 held leases stay; the next lease request queues (its command waits) until the count is under 2, then runs; raising it back lets the queued one run; nothing is dropped at any point |
+| T-limits-3 | the prompt and failure prefs changed while connections are live and others are made afterwards | the live connections and the live `RateLimiter` entries keep working; a new gateway session / limiter uses the new numbers: the Nth+1 prompt a minute is `Koan.rateLimited`, the Nth failure blocks for 5 minutes; with the defaults the existing #190 tests pass unchanged |
+| T-limits-4 | the floors: with every limit set to its minimum and then its maximum, open two prompts at once, open a 9th connection, an unauthenticated connection idle for 31 s, 17 tabs | still one prompt on screen; the pre-auth limits and the tab budgets hold exactly as without settings |
+| T-limits-5 | the settings row for the tab limit at 9 and at 16 (screenshot test); the row at 8 | the note "each awake tab uses its own memory and power" shows at 9 and 16 and not at 8; the rows reject 0 and values out of range |
+| T-sec-12 | forged client store: while Koan is not running, add a client record to Local State (and clear `enabled`, or leave it at its default) | the record fails its MAC and is ignored (logged); a connection still gets the pairing prompt; a client that is not in the MACed store is never accepted without the prompt, with the switch on |
 | T-sec-13 | pre-auth abuse: a 1 GB length prefix, 100 half-open connections, malformed JSON, a second `Koan.authenticate`, slow-loris | closed within the limits, browser memory flat, UI thread unaffected |
 | T-sec-14 | `chrome.debugger` interplay: an extension attaches to an agent tab, then detaches | `Koan.contested` event; a second `Emulation` writer refused; the lease survives |
 | T-sec-15 | the protocol-coverage unit test (Linux-runnable): every CDP method in the 158 protocol JSON is classified | fails on any unclassified method |
@@ -940,7 +1034,9 @@ its tests listed).
   scripted and LLM mode, §20.7) as a separate docs/scripts PR; then, in small PRs: the shared frame codec and the policy
   tables with the protocol-coverage test (pure logic, Linux-runnable); the gateway, framing, peer identity, keypair
   pairing and the encrypted client store; the registry and frame/world vetting, event scrubbing and the audit log; the
-  indicator and settings. Mac: T-sec-*.
+  indicator, then settings and the wiring of the gateway into `BrowserProcess` (**the indicator comes first or in the
+  same PR: with Agent ready on by default, nothing may make the gateway reachable by a real build before the "agent
+  connected" state is visible**; PR #190 and #191 are code that nothing starts). Mac: T-sec-*, T-ready-*.
 * **2c, keep-alive:** the lease (the whole-attachment part and the capturer hold-off), agent Space and `Koan.openTab`, the
   history/restore/Recently-Closed hooks of §7.1, `koan` (C++ in GN), the skill file, page-initiated focus hook and
   prompts. Mac: T-keep-*, T-focus-*, T-sync-*, T-hist-*.
@@ -983,6 +1079,8 @@ candidates keep the Mac first.
 | 19 | Raw length-prefixed framing on the unix socket; the relay translates | §2, §4.1 |
 | 20 | The ego(lite) run is mandatory for the "beats ego" headline, with a `< 1.0×` bar | §20.7 |
 | 21 | In-browser `snapshot`/`act`/`run`, diffs and event waits move into phase 3; no "faster" claim before phase-3 numbers | §16, §20 |
+| 22 | **User, 2026-11-07:** the master switch is **"Agent ready", on by default** (replaces "off by default"); free when idle; the first-contact prompt stays mandatory; no listener in Incognito, Guest or a non-default user-data-dir unless turned on there; the indicator ships before, or with, anything that makes the default-on gateway reachable by a real build; battery: half the leased-tab setting (2 by default) and no `live: always` / long `keepAlive` on battery in Low Power Mode | §0, §1, §3.3 (T21, T22), §3.4, §4.1, §6.1, §6.2, §8, §13, §16, T-ready-*, T-power-2, 3 |
+| 23 | **User, 2026-11-07:** the limits are **user settings with defaults**: awake agent tabs (4, 1 to 16, a note above 8), fewer awake tabs in Low Power Mode on battery (on, half, minimum 1), approval requests per minute (3, 1 to 10), failed attempts before a 5-minute block (5, 1 to 20); read with a fallback to the default for anything out of range or corrupt; no "unlimited" and no 0; fixed: one prompt on screen, the pre-auth limits, the open-tab budgets (a later setting); a change applies to new connections and leases only | §6.1, §8, §5.1, §5.2, T-limits-* |
 
 ### 17.2 Still open (smaller; proposals in the sections named)
 
@@ -1231,7 +1329,7 @@ exist only as an explicit `sleep` step.
   be foregrounded.
 * **Parallel tasks**: several agent Spaces at once (§7), each with its own lease and session; `koan run` calls are
   independent, so an agent that can run shell commands in parallel (or several agents) overlaps its page loads and
-  its LLM turns. Gateway limits: per-client max tabs, a CPU-friendly cap on simultaneous leases (default 8).
+  its LLM turns. Gateway limits: per-client max tabs, a CPU-friendly cap on simultaneous leases (default 4, a setting from 1 to 16, §6.1).
 * **Text-first**: every command returns text/JSON by default. `--shot` adds a viewport JPEG (default max 1024 px on
   the long edge, quality 60, ≤ 150 KB) and `--marks` draws ref numbers on it (set-of-marks) for vision models. Full-page
   and `clip` captures are explicit, and never on the user's visible tab (§9.3).
