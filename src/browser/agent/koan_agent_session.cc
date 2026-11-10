@@ -139,7 +139,9 @@ Session::Session(PeerIdentity peer,
     : peer_(std::move(peer)),
       peer_key_(PeerKey(peer_)),
       env_(std::move(environment)),
-      delegate_(delegate) {}
+      delegate_(delegate) {
+  created_ = Now();
+}
 
 Session::~Session() {
   ReleasePrompt();
@@ -150,6 +152,7 @@ base::TimeTicks Session::Now() const {
 }
 
 void Session::OnBytesReceived(base::span<const uint8_t> bytes) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ == State::kClosed) {
     return;
   }
@@ -251,6 +254,12 @@ bool Session::CheckPeer() {
     Close(CloseReason::kUnknownPeer);
     return false;
   }
+  // And it must still be that peer: a dialog built for a program that exec'd
+  // another since it connected would show the user the wrong one.
+  if (!delegate_->PeerUnchanged()) {
+    Close(CloseReason::kUnknownPeer);
+    return false;
+  }
   return true;
 }
 
@@ -337,6 +346,12 @@ void Session::BeginProof(int id, const std::string& client_id) {
 }
 
 void Session::FinishProof(int id, const base::DictValue& params) {
+  // The socket outlives an exec of its peer: check who is there now, before
+  // anything is verified or granted on the strength of who connected.
+  if (!delegate_->PeerUnchanged()) {
+    Close(CloseReason::kUnknownPeer);
+    return;
+  }
   // A nonce is good for one attempt, whatever that attempt's outcome.
   std::vector<uint8_t> nonce = std::move(nonce_);
   nonce_.clear();
@@ -432,6 +447,7 @@ bool Session::StillPaired() {
 }
 
 void Session::OnClientRevoked(std::string_view client_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ == State::kAuthenticated && client_id_ == client_id) {
     Close(CloseReason::kRevoked);
   } else if (state_ == State::kAwaitingApproval && pending_ &&
@@ -466,6 +482,7 @@ bool Session::Ask(int id, ApprovalRequest request, Pending pending) {
     return false;
   }
   holds_prompt_ = true;
+  prompt_open_since_ = Now();
   pending.approval_id = g_next_approval_id.fetch_add(1);
   pending.deadline = Now() + kApprovalTimeout;
   request.id = pending.approval_id;
@@ -491,6 +508,7 @@ void Session::CountDenial() {
 
 void Session::OnApprovalDecision(uint64_t request_id,
                                  ApprovalDecision decision) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ != State::kAwaitingApproval || !pending_ ||
       pending_->approval_id != request_id) {
     return;
@@ -498,6 +516,18 @@ void Session::OnApprovalDecision(uint64_t request_id,
   std::unique_ptr<Pending> pending = std::move(pending_);
   state_ = State::kUnauthenticated;
   ReleasePrompt();
+  prompt_total_ += Now() - prompt_open_since_;
+  prompt_open_since_ = base::TimeTicks();
+  // The dialog may have been open for a minute, and the peer can have become
+  // another program in that time: the user answered about the one that asked.
+  // An approval is applied only if that is still who is there.
+  if (decision.approved && !delegate_->PeerUnchanged()) {
+    ReplyError(pending->message_id, "Koan.peerChanged",
+               "the program that asked is not the one connected any more");
+    CountDenial();
+    Close(CloseReason::kUnknownPeer);
+    return;
+  }
   if (!decision.approved) {
     ReplyError(pending->message_id, "Koan.pairingDenied",
                "the user did not approve");
@@ -549,6 +579,7 @@ void Session::OnApprovalDecision(uint64_t request_id,
 }
 
 void Session::CheckTimeouts() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (state_ == State::kClosed) {
     return;
   }
@@ -568,6 +599,17 @@ void Session::CheckTimeouts() {
     CountDenial();
     Close(CloseReason::kTimeout);
     return;
+  }
+  if (state_ != State::kAuthenticated) {
+    base::TimeDelta in_prompt = prompt_total_;
+    if (state_ == State::kAwaitingApproval && !prompt_open_since_.is_null()) {
+      in_prompt += now - prompt_open_since_;
+    }
+    if (now - created_ - in_prompt > kPreAuthDeadline) {
+      CountDenial();
+      Close(CloseReason::kTimeout);
+      return;
+    }
   }
   if (!partial_since_.is_null() && now - partial_since_ > kFrameTimeout) {
     // A stall is a failure of a peer that has not shown it is anyone yet. After
@@ -631,10 +673,17 @@ void Session::Close(CloseReason reason) {
   if (state_ == State::kClosed) {
     return;
   }
+  const bool was_authenticated = state_ == State::kAuthenticated;
   state_ = State::kClosed;
   nonce_.clear();
   pending_.reset();
   ReleasePrompt();
+  // Garbage, an oversize frame or a second authentication from a peer that has
+  // not proved who it is costs it a failure like a wrong proof, so reconnecting
+  // is not free.
+  if (reason == CloseReason::kProtocolViolation && !was_authenticated) {
+    CountDenial();
+  }
   delegate_->Close(reason);
 }
 

@@ -1,0 +1,73 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+
+#ifndef KOAN_BROWSER_AGENT_KOAN_AGENT_ADMISSION_H_
+#define KOAN_BROWSER_AGENT_KOAN_AGENT_ADMISSION_H_
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include <map>
+#include <string>
+
+// How many connections the gateway keeps open (.agent/notes/agent-control.md
+// section 4.1). A connection is admitted when it is accepted, before anything
+// is read from it or anyone asked who it is, and counted until it is closed.
+// Connections that have not authenticated yet are limited more tightly than the
+// total, so a process that opens connections and says nothing cannot take every
+// slot from an agent that is already working; and once the peer is known, one
+// program may hold only some of the unauthenticated slots, so that it cannot
+// take them all either.
+//
+// The cap is not per user: the listening socket refuses every uid but the
+// browser's before this is asked (it is in a 0700 directory as well), so every
+// connection here is the browser's own user's and the total is the per-user
+// cap.
+namespace koan::agent {
+
+class ConnectionAdmission {
+ public:
+  using Id = uint64_t;
+  // No connection has this id.
+  static constexpr Id kRefused = 0;
+
+  static constexpr size_t kMaxConnections = 8;
+  static constexpr size_t kMaxUnauthenticated = 4;
+  // Of those, at most this many from one program (one PeerKey): a client that
+  // runs a few commands at once fits; one that opens and holds more does not.
+  static constexpr size_t kMaxUnauthenticatedPerPeer = 2;
+
+  ConnectionAdmission();
+  ~ConnectionAdmission();
+
+  // The id of a new connection, or kRefused if the gateway is full or too many
+  // connections have not authenticated.
+  Id TryAdmit();
+  // Once the peer is known: false if this connection would be one more than
+  // kMaxUnauthenticatedPerPeer unauthenticated connections of `peer_key`; the
+  // caller closes it. Ignored for an unknown id.
+  bool AssignPeer(Id id, const std::string& peer_key);
+  // The connection proved who it is: it no longer counts against the limits on
+  // unauthenticated connections.
+  void MarkAuthenticated(Id id);
+  // The connection is closed. Unknown ids are ignored.
+  void Release(Id id);
+
+  size_t open() const { return connections_.size(); }
+  size_t unauthenticated() const;
+  size_t unauthenticated_for_peer(const std::string& peer_key) const;
+
+ private:
+  struct Connection {
+    bool authenticated = false;
+    std::string peer_key;  // empty until AssignPeer()
+  };
+
+  Id next_id_ = 1;
+  std::map<Id, Connection> connections_;
+};
+
+}  // namespace koan::agent
+
+#endif  // KOAN_BROWSER_AGENT_KOAN_AGENT_ADMISSION_H_

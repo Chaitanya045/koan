@@ -12,8 +12,9 @@
 //     signature to this nonce: the unit tests do the matching);
 //   - a prompt about a changed program or chain is never requested before such
 //     a signature has been sent (a prompt for a new client is not held to it);
-//   - the paired client's pin changes only after some approval was given (any
-//     approval, not the matching one);
+//   - the paired client's pin changes only after some approval was given while
+//     the peer was unchanged (any such approval, not the matching one; the
+//     driver flips the peer's identity, see peer_unchanged);
 //   - nothing is sent after the session was closed, it never closes twice, and
 //     the session reports closed once the delegate was told;
 //   - an authenticated session ends authenticated or closed.
@@ -119,7 +120,11 @@ class FuzzDelegate final : public koan::agent::SessionDelegate {
     }
   }
 
+  bool PeerUnchanged() override { return peer_unchanged; }
+
   bool closed = false;
+  // What the second look at the peer finds; the driver flips it.
+  bool peer_unchanged = true;
   std::vector<uint64_t> pending;
   std::vector<uint8_t> last_nonce;
   // Counts of correct signatures the fuzzer sent; set by the driver.
@@ -238,7 +243,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   int approvals_granted = 0;
 
   while (provider.remaining_bytes() > 0) {
-    switch (provider.ConsumeIntegralInRange<int>(0, 8)) {
+    switch (provider.ConsumeIntegralInRange<int>(0, 9)) {
       case 0: {
         const std::vector<uint8_t> chunk = provider.ConsumeBytes<uint8_t>(
             provider.ConsumeIntegralInRange<size_t>(0, 300));
@@ -253,7 +258,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
           decision.granted.drive = provider.ConsumeBool();
           const size_t index = provider.ConsumeIntegralInRange<size_t>(
               0, delegate.pending.size() - 1);
-          if (decision.approved) {
+          if (decision.approved && delegate.peer_unchanged) {
             ++approvals_granted;
           }
           session.OnApprovalDecision(delegate.pending[index], decision);
@@ -333,6 +338,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
           // Revoke it in the store without telling the session.
           store.Remove(kClientId);
         }
+        break;
+      case 9:
+        // The peer becomes another program (or is itself again).
+        delegate.peer_unchanged = provider.ConsumeBool();
         break;
       default:
         if (session.state() == Session::State::kAuthenticated) {

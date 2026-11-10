@@ -291,6 +291,21 @@ the whole page (up to 128K a side) with `captureBeyondViewport`; `Page.createIso
 only way a world gets universal access; a header map is always an object named `*headers` and raw header text is always
 `*headersText`, and `Runtime.enable` reports every world of a tab's frames, extension content-script worlds included.
 
+The gateway (`src/browser/agent/koan_agent_gateway.*`, `koan_agent_socket.*`, `koan_agent_peer.*`) adds no patch but relies on
+upstream behaviour that the code cannot check; re-read these when `net/` or the Security-facing code moves:
+`net::UnixDomainServerSocket::AcceptSocketDescriptor` accepts the next connection by itself when its auth callback says
+no (`AuthenticateAndGetStreamSocket`, a refused peer never reaches the gateway; `GatewayOptions::kernel_uid_for_testing`
+has a test for it), hands back a descriptor whose close-on-exec state is not relied on (the gateway sets it), and reports running out of
+descriptors as `ERR_INSUFFICIENT_RESOURCES` (the accept loop backs off for a second only on that);
+`net::SocketPosix::AdoptConnectedSocket` makes the descriptor non-blocking, `ReadIfReady` returns 0 at end of stream
+and `Close()` cancels a pending read or write; `getsockopt(LOCAL_PEERTOKEN)` is the connector's audit token, fixed at
+connect time; `SecCodeCopyGuestWithAttributes` with an audit token finds nothing once the process has exec'd or the pid
+was reused; `kSecCSBasicValidateOnly` skips the resources of a bundle; `proc_pidinfo(PROC_PIDTBSDINFO)` has a start
+time (`pbi_start_tvsec`, `pbi_start_tvusec`) and a parent pid (`pbi_ppid`) in public headers, and `proc_pidpath` follows an exec; `confstr(_CS_DARWIN_USER_TEMP_DIR)` is a
+0700 per-user directory. The traffic annotation `koan_agent_gateway` is defined in the gateway; Koan does not run
+Chromium's annotation auditor, so a change to the fields `net::DefineNetworkTrafficAnnotation` requires shows up as a
+compile error, not as a failed audit; re-check it then.
+
 A review that changes the outcome updates the table and the baseline in one change. The other things to re-check on a roll
 (the untrusted-client domain list, the `DevToolsAgentHostClient` flag defaults, the `PageLiveStateDecorator` setters the
 keep-alive uses) are in the design's section 14 and become REBASE rows with the PRs that add them.
