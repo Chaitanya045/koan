@@ -11,8 +11,8 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/performance_manager/public/features.h"
 #include "components/variations/feature_overrides.h"
-#include "ui/base/ui_base_features.h"
 #include "koan/browser/ui/vector_icons/koan_icons.h"
+#include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "components/os_crypt/common/os_crypt_switches.h"
