@@ -280,15 +280,20 @@ SkColor FloatingUrlBarCardColor(const ui::ColorProviderKey& key) {
              : SK_ColorWHITE;
 }
 
+SkColor ZenPrimaryColor(const ui::ColorProviderKey& key) {
+  // The window's primary colour: its Space theme's, else the default theme's.
+  return key.user_color && key.user_color_source ==
+                               ui::ColorProviderKey::UserColorSource::kAccent
+             ? *key.user_color
+             : look::ZenDefaultPrimary(
+                   look::CurrentLook().zen_accent,
+                   key.color_mode == ui::ColorProviderKey::ColorMode::kDark);
+}
+
 void AddZenTabColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   const bool dark = key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
-  // The window's primary colour: its Space theme's, else the default theme's.
-  const SkColor primary =
-      key.user_color && key.user_color_source ==
-                            ui::ColorProviderKey::UserColorSource::kAccent
-          ? *key.user_color
-          : look::ZenDefaultPrimary(look::CurrentLook().zen_accent, dark);
-  const look::ZenTabColors tabs = look::ComputeZenTabColors(primary, dark);
+  const look::ZenTabColors tabs =
+      look::ComputeZenTabColors(ZenPrimaryColor(key), dark);
   mixer[kColorKoanToolboxText] = {tabs.text};
   mixer[kColorToolbarText] = {tabs.text};
   mixer[kColorKoanSidebarTabSelected] = {tabs.selected};

@@ -503,7 +503,8 @@ class KoanGlanceView : public views::View {
   views::ImageButton* AddButton(const gfx::VectorIcon& icon,
                                 std::u16string tooltip,
                                 void (KoanGlanceController::*action)()) {
-    // Zen's sidebar buttons: inverted surface, accent-coloured icon.
+    // Zen's Glance buttons: a near-white disc (near-black in light mode)
+    // with the icon in the primary colour.
     auto button = views::CreateVectorImageButton(
         base::BindRepeating(&KoanGlanceController::PostAction,
                             base::Unretained(controller_), action));
