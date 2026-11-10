@@ -1707,6 +1707,14 @@ bool HidesPageActionIcons(const views::View* location_bar) {
   return url_bar && url_bar->is_open();
 }
 
+bool HidesBookmarkStar() {
+  return features::IsUrlBarEnabled();
+}
+
+bool HidesSecurityChipText() {
+  return features::IsUrlBarEnabled();
+}
+
 SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color) {
   const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
   return url_bar && url_bar->IsGlassCard() ? SK_ColorTRANSPARENT : color;

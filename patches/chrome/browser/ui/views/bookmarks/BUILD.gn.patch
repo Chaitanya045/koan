@@ -1,0 +1,10 @@
+--- a/chrome/browser/ui/views/bookmarks/BUILD.gn
++++ b/chrome/browser/ui/views/bookmarks/BUILD.gn
+@@ -152,6 +152,7 @@
+     "//content/public/browser",
+     "//extensions/browser",
+     "//extensions/common",
++    "//koan/browser/ui/views",
+     "//services/network:network_service",
+     "//skia",
+   ]

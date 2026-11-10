@@ -25,6 +25,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
@@ -250,6 +252,15 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     if (views::Widget* widget = browser_view_->GetWidget();
         widget && !widget_observation_.IsObserving()) {
       widget_observation_.Observe(widget);
+    }
+    // Z15: Zen's toolbar has no account or profile button (its Firefox
+    // account button isn't placed; the private window label is hidden), so
+    // the multiple-toolbars layout has no avatar. ToolbarView::Init() (just
+    // run) is the only place upstream sets its visibility.
+    ToolbarView* toolbar = browser_view_->toolbar();
+    if (AvatarToolbarButton* avatar =
+            toolbar ? toolbar->avatar_toolbar_button() : nullptr) {
+      avatar->SetVisible(false);
     }
     vertical_tabs_->OnAddedToWidget();
     compact_mode_->OnAddedToWidget();

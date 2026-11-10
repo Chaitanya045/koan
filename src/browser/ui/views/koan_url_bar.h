@@ -135,6 +135,17 @@ ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
 // Zen's has none. Called from LocationBarView::ShouldHidePageActionIcons().
 bool HidesPageActionIcons(const views::View* location_bar);
 
+// Z15: Zen's URL bar has no bookmark star, in either layout (#star-button-box
+// is hidden; ⌘D and the menus still bookmark). Called from
+// BookmarkPageActionController::ShouldShowPageAction().
+bool HidesBookmarkStar();
+
+// Z15: Zen's identity box has no text (#identity-icon-label is hidden): no
+// "Not secure", "Dangerous" or page name chip by the site icon, in either
+// layout. Screen readers still hear the security state (the icon's
+// description). Called from LocationIconView::GetText().
+bool HidesSecurityChipText();
+
 // Whether `view` (the location bar, or a row of its omnibox popup) is in a
 // window whose floating URL bar is Zen's card: only then do the suggestion
 // rows take Zen's styling (koan_omnibox_rows.h). False for any other omnibox
