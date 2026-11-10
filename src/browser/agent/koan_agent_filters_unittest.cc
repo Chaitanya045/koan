@@ -9,6 +9,7 @@
 
 #include "base/test/values_test_util.h"
 #include "base/values.h"
+#include "koan/browser/agent/koan_agent_contexts.h"
 #include "koan/browser/agent/koan_agent_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -324,12 +325,38 @@ TEST(KoanAgentFiltersTest, EmulationIsForAgentOwnedTabsOnly) {
   EXPECT_EQ(error->code, "Koan.notPermitted");
 }
 
-TEST(KoanAgentFiltersTest,
-     TheExecutionContextRuleRefusesUntilItsTrackerExists) {
+TEST(KoanAgentFiltersTest, TheExecutionContextRuleNeedsATracker) {
   base::DictValue params = Dict(R"({"expression":"1"})");
   const auto error = Apply(ParamFilter::kRuntimeContext, params);
   ASSERT_TRUE(error.has_value());
   EXPECT_EQ(error->code, "Koan.unavailable");
+}
+
+TEST(KoanAgentFiltersTest, TheExecutionContextRuleAllowsOnlyTrackedContexts) {
+  ContextTracker contexts;
+  contexts.OnEvent("Runtime.executionContextCreated",
+                   Dict(R"({"context":{"id":3,"uniqueId":"main-3","auxData":)"
+                        R"({"isDefault":true,"type":"default"}}})"));
+  FilterContext context;
+  context.contexts = &contexts;
+  auto apply = [&](std::string_view json) {
+    base::DictValue params = Dict(json);
+    return ApplyParamFilter(ParamFilter::kRuntimeContext, params, context);
+  };
+  EXPECT_FALSE(apply(R"({"expression":"1"})").has_value());
+  EXPECT_FALSE(apply(R"({"expression":"1","contextId":3})").has_value());
+  EXPECT_FALSE(apply(R"({"uniqueContextId":"main-3"})").has_value());
+  EXPECT_FALSE(apply(R"({"executionContextId":3})").has_value());
+  for (std::string_view refused :
+       {R"({"contextId":4})", R"({"contextId":"3"})",
+        R"({"executionContextId":7})", R"({"uniqueContextId":"other"})",
+        R"({"uniqueContextId":""})", R"({"uniqueContextId":3})",
+        R"({"contextId":3,"uniqueContextId":"other"})",
+        R"({"name":"b","executionContextName":"uBlock"})"}) {
+    const auto error = apply(refused);
+    ASSERT_TRUE(error.has_value()) << refused;
+    EXPECT_EQ(error->code, "Koan.contextNotAllowed") << refused;
+  }
 }
 
 }  // namespace koan::agent

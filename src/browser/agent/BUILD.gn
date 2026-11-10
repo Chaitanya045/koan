@@ -146,6 +146,51 @@ source_set("filters") {
     "//base",
     "//url",
   ]
+  deps = [ ":contexts" ]
+}
+
+# The execution contexts an agent may see and name in a tab: main worlds and
+# the isolated worlds it made.
+source_set("contexts") {
+  sources = [
+    "koan_agent_contexts.cc",
+    "koan_agent_contexts.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# Which frames an agent may attach to, decided from facts the browser gathers.
+source_set("reach") {
+  sources = [
+    "koan_agent_reach.cc",
+    "koan_agent_reach.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+}
+
+# Which tabs each client may see and drive, and the open-tab budgets.
+source_set("registry") {
+  sources = [
+    "koan_agent_registry.cc",
+    "koan_agent_registry.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# The activity log: redacted, size-capped, hash-chained JSON lines.
+source_set("audit") {
+  sources = [
+    "koan_agent_audit.cc",
+    "koan_agent_audit.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    "//crypto",
+    "//url",
+  ]
 }
 
 # Build and run:
@@ -156,20 +201,28 @@ source_set("filters") {
 test("koan_agent_unittests") {
   sources = [
     "koan_agent_admission_unittest.cc",
+    "koan_agent_audit_unittest.cc",
     "koan_agent_auth_unittest.cc",
+    "koan_agent_contexts_unittest.cc",
     "koan_agent_events_unittest.cc",
     "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
     "koan_agent_policy_unittest.cc",
+    "koan_agent_reach_unittest.cc",
+    "koan_agent_registry_unittest.cc",
     "koan_agent_session_unittest.cc",
   ]
   deps = [
     ":admission",
+    ":audit",
     ":auth",
+    ":contexts",
     ":events",
     ":filters",
     ":frame",
     ":policy",
+    ":reach",
+    ":registry",
     ":session",
     "//base",
     "//base/test:run_all_unittests",
@@ -225,6 +278,7 @@ fuzzer_test("koan_agent_events_fuzzer") {
 fuzzer_test("koan_agent_filters_fuzzer") {
   sources = [ "koan_agent_filters_fuzzer.cc" ]
   deps = [
+    ":contexts",
     ":filters",
     "//base",
     "//url",
