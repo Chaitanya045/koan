@@ -14,7 +14,8 @@ namespace koan {
 void OnBrowserViewCreated(BrowserView* browser_view);
 
 // Called first thing in the BrowserView destructor, while child views and
-// the Browser are still alive.
+// the Browser are still alive. Koan has usually torn the window down already,
+// when its widget was destroyed (see KoanBrowserViewController).
 void OnBrowserViewDestroying(BrowserView* browser_view);
 
 // Called when a drag of the vertical tab strip's resize area collapsed an
