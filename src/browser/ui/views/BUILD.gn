@@ -423,10 +423,6 @@ source_set("impl") {
       # (CommandForKeyEvent, koan_glance_controller_mac.mm).
       "//chrome/browser:global_keyboard_shortcuts_mac",
 
-      # Glance: the card window's command-dispatcher delegate
-      # (NativeWidgetMacNSWindow, koan_glance_controller_mac.mm).
-      "//components/remote_cocoa/app_shim",
-
       # The command policy's fullscreen-toolbar row
       # (chrome::ToggleAlwaysShowToolbarInFullscreen).
       "//chrome/browser/ui:browser_commands_mac",
@@ -435,7 +431,9 @@ source_set("impl") {
       "//chrome/browser/ui:fullscreen_util_mac",
 
       # IsPointerOverWindow(): AppKit's fullscreen title strip is a window of
-      # its own (remote_cocoa::IsNSToolbarFullScreenWindow()).
+      # its own (remote_cocoa::IsNSToolbarFullScreenWindow()). Glance: the card
+      # window's command-dispatcher delegate (NativeWidgetMacNSWindow,
+      # koan_glance_controller_mac.mm).
       "//components/remote_cocoa/app_shim",
     ]
     frameworks = [ "AppKit.framework" ]
