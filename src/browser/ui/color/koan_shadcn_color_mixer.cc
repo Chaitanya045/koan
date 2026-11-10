@@ -452,6 +452,18 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanToastKeyBackground] = {t[Token::kMuted]};
   mixer[kColorKoanToastButton] = {t[Token::kSecondary]};
   mixer[kColorKoanToastButtonIcon] = {t[Token::kSecondaryForeground]};
+  // The status bubble is a popover pill with a border, like a toast.
+  for (ui::ColorId id : std::initializer_list<ui::ColorId>{
+           kColorStatusBubbleBackgroundFrameActive,
+           kColorStatusBubbleBackgroundFrameInactive}) {
+    mixer[id] = {t[Token::kPopover]};
+  }
+  for (ui::ColorId id : std::initializer_list<ui::ColorId>{
+           kColorStatusBubbleForegroundFrameActive,
+           kColorStatusBubbleForegroundFrameInactive}) {
+    mixer[id] = {t[Token::kPopoverForeground]};
+  }
+  mixer[kColorStatusBubbleShadow] = {t.Opaque(Token::kBorder, Token::kPopover)};
 
   // Glance: shadcn's dialog overlay is `bg-black/50`.
   mixer[kColorKoanGlanceBackdrop] =
