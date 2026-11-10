@@ -2,10 +2,12 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
-# chrome://koan-settings. Linked through //chrome/browser/ui/webui:configs,
-# which registers it.
+# chrome://koan-settings, chrome://koan-newtab and chrome://koan-welcome. Linked
+# through //chrome/browser/ui/webui:configs, which registers them.
 source_set("webui") {
   sources = [
+    "koan_new_tab_ui.cc",
+    "koan_new_tab_ui.h",
     "koan_settings_handler.cc",
     "koan_settings_handler.h",
     "koan_settings_rows.cc",
@@ -27,6 +29,7 @@ source_set("webui") {
     ":resources",
     ":welcome_resources",
     "//base",
+    "//base:i18n",
     "//chrome/browser:browser_process",
     "//chrome/browser:shell_integration",
     "//chrome/browser/importer",
@@ -35,12 +38,14 @@ source_set("webui") {
     "//chrome/browser/search_engines",
     "//chrome/browser/themes",
     "//chrome/browser/ui:accelerator_table",
+    "//chrome/browser/ui/color:color_headers",
     "//chrome/browser/ui/tabs",
     "//chrome/common:constants",
     "//components/performance_manager",
     "//components/prefs",
     "//components/regional_capabilities",
     "//components/search_engines",
+    "//components/strings",
     "//components/tab_groups",
     "//components/user_data_importer/common",
     "//content/public/common",
@@ -53,12 +58,25 @@ source_set("webui") {
     "//koan/common:url_constants",
     "//services/network/public/mojom",
     "//ui/base",
+    "//ui/color",
     "//ui/events:event_constants",
+    "//ui/gfx:color_utils",
     "//ui/gfx/geometry",
     "//url",
   ]
   if (is_mac) {
     deps += [ "//koan/browser/ui/cocoa:hooks" ]
+  }
+  if (is_posix) {
+    # Agent control is POSIX-only (//koan/browser/agent:browser).
+    sources += [
+      "koan_agent_containers_handler.cc",
+      "koan_agent_containers_handler.h",
+    ]
+    deps += [
+      "//koan/browser/agent:browser",
+      "//koan/browser/containers",
+    ]
   }
 }
 

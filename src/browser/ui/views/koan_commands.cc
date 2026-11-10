@@ -35,10 +35,15 @@
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_command_palette.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/accelerator.h"
 
@@ -79,6 +84,7 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"settings", 10},
     {"open-private-window", 11},
     {"open-new-window", 12},
+    {"new-blank-window", 13},
     {"pin-tab", 14},
     {"unpin-tab", 15},
     {"next-space", 18},
@@ -92,6 +98,7 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"next-tab", 26},
     {"previous-tab", 27},
     {"capture-screenshot", 28},
+    {"toggle-tabs-on-right", 29},
     {"add-to-essentials", 30},
     {"remove-from-essentials", 31},
     {"find-in-page", 32},
@@ -219,7 +226,7 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
                       kDockToLeftIcon, Action::kToggleCompactMode));
   add_if(controller.library()->IsAvailable(),
          ShortcutCommand(controller, "open-library", u"Open Library",
-                         kLibraryIcon, Action::kLibrary));
+                         kKoanLibraryIcon, Action::kLibrary));
   add_if(IsEnabled(controller, IDC_NEW_SPLIT_TAB),
          ShortcutCommand(controller, "new-split-view", u"New Split View",
                          kSplitSceneIcon, Action::kNewEmptySplit));
@@ -239,6 +246,11 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   add_if(IsEnabled(controller, IDC_NEW_WINDOW),
          ShortcutCommand(controller, "open-new-window", u"Open New Window",
                          kNewWindowIcon, Action::kNewWindow));
+  // Zen's zen-action-new-blank-window (cmd_zenNewNavigatorUnsynced).
+  add_if(
+      IsEnabled(controller, IDC_NEW_WINDOW) && features::IsWorkspacesEnabled(),
+      ShortcutCommand(controller, "new-blank-window", u"New Blank Window",
+                      kNewWindowIcon, Action::kNewBlankWindow));
   add_if(tab && !pinned, ShortcutCommand(controller, "pin-tab", u"Pin Tab",
                                          kKeepIcon, Action::kTogglePinTab));
   add_if(pinned, ShortcutCommand(controller, "unpin-tab", u"Unpin Tab",
@@ -277,26 +289,39 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   add_if(IsEnabled(controller, IDC_SHARING_HUB_SCREENSHOT),
          ChromeCommand(controller, "capture-screenshot", u"Capture Screenshot",
                        kScreenshotRegionIcon, IDC_SHARING_HUB_SCREENSHOT));
+  // Zen's cmd_zenToggleTabsOnRight (no shortcut): the sidebar to the other
+  // side, like the setting.
+  if (features::IsSidebarEnabled()) {
+    KoanCommand command =
+        MakeCommand("toggle-tabs-on-right", u"Toggle Tabs on right",
+                    kKoanSidebarsRightIcon);
+    command.run =
+        base::BindRepeating([](KoanBrowserViewController& controller) {
+          controller.compact_mode()->ToggleTabsOnRight();
+        });
+    commands.push_back(std::move(command));
+  }
   // With Koan's pinned tabs off, its Essentials are just pinned tabs, so
   // these pin and unpin.
   add_if(pinned_tabs ? tab && !essential &&
                            controller.pinned_tabs()->CanAddToEssentials(
                                tab->IsSplit() ? 2 : 1)
                      : tab && !pinned,
-         pinned_tabs ? PinnedTabCommand(
-                           "add-to-essentials", u"Add to Essentials", kStarIcon,
-                           &KoanPinnedTabController::AddToEssentials)
-                     : ShortcutCommand(controller, "add-to-essentials",
-                                       u"Add to Essentials", kStarIcon,
-                                       Action::kTogglePinTab));
+         pinned_tabs
+             ? PinnedTabCommand("add-to-essentials", u"Add to Essentials",
+                                kKoanEssentialAddIcon,
+                                &KoanPinnedTabController::AddToEssentials)
+             : ShortcutCommand(controller, "add-to-essentials",
+                               u"Add to Essentials", kKoanEssentialAddIcon,
+                               Action::kTogglePinTab));
   add_if(pinned_tabs ? essential : pinned,
          pinned_tabs ? PinnedTabCommand(
                            "remove-from-essentials", u"Remove from Essentials",
-                           vector_icons::kStarFilledIcon,
+                           kKoanEssentialRemoveIcon,
                            &KoanPinnedTabController::RemoveFromEssentials)
                      : ShortcutCommand(controller, "remove-from-essentials",
                                        u"Remove from Essentials",
-                                       vector_icons::kStarFilledIcon,
+                                       kKoanEssentialRemoveIcon,
                                        Action::kTogglePinTab));
   add_if(IsEnabled(controller, IDC_FIND),
          ChromeCommand(controller, "find-in-page", u"Find in Page",
@@ -309,16 +334,25 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
       ThemeServiceOf(controller)->GetBrowserColorScheme();
   add_if(scheme != ColorScheme::kSystem,
          AppearanceCommand("switch-to-automatic-appearance",
-                           u"Switch to Automatic Appearance",
-                           kAutomaticAppearanceIcon, ColorScheme::kSystem));
+                           u"Switch to Automatic Appearance", kKoanSparklesIcon,
+                           ColorScheme::kSystem));
   add_if(scheme != ColorScheme::kLight,
          AppearanceCommand("switch-to-light-mode", u"Switch to Light Mode",
-                           kLightModeIcon, ColorScheme::kLight));
+                           kKoanFaceSunIcon, ColorScheme::kLight));
   add_if(scheme != ColorScheme::kDark,
          AppearanceCommand("switch-to-dark-mode", u"Switch to Dark Mode",
-                           kDarkModeIcon, ColorScheme::kDark));
+                           kKoanMoonStarsIcon, ColorScheme::kDark));
   add_if(IsEnabled(controller, IDC_PRINT),
          ChromeCommand(controller, "print", u"Print", kPrintIcon, IDC_PRINT));
+  // Zen's theme picker, for the active Space.
+  if (controller.theme()->IsEnabled()) {
+    KoanCommand command = MakeCommand("open-theme-picker", u"Open Theme Picker",
+                                      kKoanPaintbrushFillIcon);
+    command.run = base::BindRepeating([](KoanBrowserViewController& owner) {
+      owner.theme()->ShowThemePickerForActiveSpace();
+    });
+    commands.push_back(std::move(command));
+  }
 }
 
 void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
@@ -340,6 +374,16 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
         controller, "previous-space", u"Previous Space",
         vector_icons::kArrowBackIcon, Action::kWorkspaceBackward));
   }
+  // Zen's zen-action-open-space-routing.
+  {
+    KoanCommand command =
+        MakeCommand("open-space-routing", u"Open Space Routing", kSettingsIcon);
+    command.run =
+        base::BindRepeating([](KoanBrowserViewController& controller) {
+          controller.workspaces()->space_routing()->ShowSettings();
+        });
+    commands.push_back(std::move(command));
+  }
   // Zen: "Focus on" each other Space, matched by the Space's name.
   for (const KoanWorkspaceController::SpaceInfo& space : spaces) {
     if (space.active) {
@@ -347,7 +391,7 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
     }
     const tab_groups::TabGroupId id = space.id;
     KoanCommand command =
-        MakeCommand("focus-space:" + id.ToString(), u"Focus on",
+        MakeCommand(kFocusSpaceCommandPrefix + id.ToString(), u"Focus on",
                     vector_icons::kArrowForwardIcon);
     command.target = space.name;
     command.run = base::BindRepeating(
@@ -355,6 +399,38 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
           controller.workspaces()->SwitchTo(id);
         },
         id);
+    commands.push_back(std::move(command));
+  }
+}
+
+// Zen's folder actions: New Folder, and Collapse / Expand All Folders while
+// a folder of the active Space is expanded / collapsed.
+void AppendFolderCommands(const KoanBrowserViewController* owner,
+                          std::vector<KoanCommand>& commands) {
+  KoanFolderController* folders = owner->folders();
+  if (!folders->IsEnabled()) {
+    return;
+  }
+  KoanCommand create =
+      MakeCommand("new-folder", u"New Folder", vector_icons::kFolderOpenIcon);
+  create.run = base::BindRepeating([](KoanBrowserViewController& controller) {
+    controller.folders()->CreateEmptyFolder();
+  });
+  commands.push_back(std::move(create));
+  for (const bool collapse : {true, false}) {
+    if (!folders->HasFoldersInActiveSpace(/*collapsed=*/!collapse)) {
+      continue;
+    }
+    KoanCommand command =
+        collapse ? MakeCommand("collapse-all-folders", u"Collapse All Folders",
+                               vector_icons::kKeyboardArrowUpIcon)
+                 : MakeCommand("expand-all-folders", u"Expand All Folders",
+                               kUnfoldMoreIcon);
+    command.run = base::BindRepeating(
+        [](bool collapse, KoanBrowserViewController& controller) {
+          controller.folders()->SetAllCollapsed(collapse);
+        },
+        collapse);
     commands.push_back(std::move(command));
   }
 }
@@ -374,6 +450,14 @@ void AddWorkspaceCommands(KoanCommandRegistry& registry,
                           KoanBrowserViewController& controller) {
   registry.AddSource(base::BindRepeating(
       &AppendWorkspaceCommands,
+      base::Unretained(
+          static_cast<const KoanBrowserViewController*>(&controller))));
+}
+
+void AddFolderCommands(KoanCommandRegistry& registry,
+                       KoanBrowserViewController& controller) {
+  registry.AddSource(base::BindRepeating(
+      &AppendFolderCommands,
       base::Unretained(
           static_cast<const KoanBrowserViewController*>(&controller))));
 }

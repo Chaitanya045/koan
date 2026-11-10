@@ -524,8 +524,8 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
                 @[ ActionItem(Action::kOpenSettings, target, @"Settings…") ]);
   }
 
-  // File: Zen's New Blank Window (Cmd+Shift+N) after New Window (Koan has no
-  // window sync, so it is a plain new window) and New Private Window.
+  // File: Zen's New Blank Window (Cmd+Shift+N, a window without Spaces or
+  // window sync) after New Window, and New Private Window.
   if (NSMenu* file = [main_menu itemWithTag:IDC_FILE_MENU].submenu) {
     for (NSMenuItem* item in file.itemArray) {
       if (IsChromeCommand(item, IDC_NEW_INCOGNITO_WINDOW)) {
@@ -533,8 +533,8 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
       }
     }
     HideItems(file, {IDC_NEW_ISOLATED_WINDOW});
-    InsertAfter(file, IDC_NEW_WINDOW, @[ ActionItem(Action::kNewWindow, target,
-                                                    @"New Blank Window") ]);
+    InsertAfter(file, IDC_NEW_WINDOW,
+                @[ ActionItem(Action::kNewBlankWindow, target) ]);
   }
 
   // View: Zen's starts with Appearance > Automatic / Light / Dark. Chrome's

@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/unload_controller.cc b/chrome/browser/ui/unload_controller.cc
+index 9cefffb0e2bf7c7e1f8a9b3d539b18e1a0114b34..007b59d60d5d78199f101272eb1469a2b81abbd6 100644
+--- a/chrome/browser/ui/unload_controller.cc
++++ b/chrome/browser/ui/unload_controller.cc
+@@ -48,6 +48,7 @@
+ #include "content/public/browser/render_view_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/ui/views/koan_window_sync_hooks.h"
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+ #include "chrome/browser/profiles/profile.h"
+@@ -178,6 +179,10 @@ void UnloadController::OnWindowClosing() {
+     return;
+   }
+ 
++  // Koan: Zen's window sync moves the window's synced pages to another
++  // window before its tabs close (koan/browser/ui/views/koan_window_sync.h).
++  koan::OnWindowClosing(browser_);
++
+   if (!HandleBeforeClose()) {
+     return;
+   }

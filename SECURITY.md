@@ -62,6 +62,35 @@ It stops the silent, one-flag attack, not malware that already runs as you.
 Chrome's `chrome://inspect#remote-debugging` switch (a prompt for each
 connection) works as in Chromium.
 
+## Agent containers
+
+Agents you approve (Settings > Agents) work in **containers**: storage
+partitions of their own inside your profile, so their cookies, storage and
+cache are never yours. They are throwaway (cleared when the task ends) unless
+you saved one for an agent. In an agent container Koan refuses every site
+permission, file and device pickers, screen sharing, passkeys and security
+keys, password and address filling, history, open-tab sync and your
+extensions' content scripts, web requests and debugger
+(`.agent/notes/agent-control.md` section 7.2).
+
+Known gap: your own extensions with the "tabs" permission can still see agent
+tabs' URLs and titles (Chromium has no way to hide a tab from them). They
+can't script, debug or change those tabs, and nothing of yours reaches the
+agent through this.
+
+The "Your tab" mode is different: there the agent drives one of your own tabs,
+with your logins, after you approve that tab. It may act only on that tab's
+site (frames from other sites are cut off), and while it holds the tab Koan
+doesn't fill your saved passwords or addresses there.
+
+`koan agent-browser` connects agent-browser through `koan-relay`, a separate
+program you approve like any agent. The relay listens on 127.0.0.1 only, on a
+random port, behind a random secret kept in a file only you can read
+(`~/.koan/relay/`). Known limit: TCP can't tell which program connects, so any
+program running as you that reads that file can use the relay's session,
+within what you approved for the relay. One connection at a time, and the
+relay ends after 15 minutes without use or when you stop agents in Koan.
+
 ## Koan or Chromium?
 
 Koan adds its own UI and features on top of Chromium. If a vulnerability is

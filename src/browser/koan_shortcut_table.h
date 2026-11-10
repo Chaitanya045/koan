@@ -58,6 +58,9 @@ enum class Action {
   kLibraryHistory,
   kInspect,
   kNewWindow,
+  // Zen's New Blank Window: a window without Spaces and without window sync
+  // (koan_window_sync.h OpenBlankWindow()).
+  kNewBlankWindow,
   kNewPrivateWindow,
   kMuteSite,
   kBookmarks,

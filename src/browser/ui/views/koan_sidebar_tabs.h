@@ -7,8 +7,13 @@
 
 class TabStripView;
 
+namespace content {
+class BrowserContext;
+}  // namespace content
+
 namespace gfx {
 class Canvas;
+class Point;
 }  // namespace gfx
 
 namespace views {
@@ -29,7 +34,7 @@ namespace koan {
 // out nothing.
 
 // Hooks for TabStripView's vertical layout (tab_strip_view_layout.cc).
-// The rows' height in the tab strip, 0 when they are not there.
+// The rows' height in the tab strip (both rows), 0 when they are not there.
 int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view);
 
 // Appends the rows to `layout` at (0, `y`), `width` wide, and returns their
@@ -39,14 +44,30 @@ int PlaceSidebarTabRows(const TabStripView* tab_strip_view,
                         int width,
                         int y);
 
-// Hook for TabGroupViewVerticalLayout, called before laying out each child
-// `next_child` of `tab_group_view` and once more with null after the last:
-// if the rows are in this group and `next_child` doesn't belong to the
-// Space's pinned tabs, appends them to `layout` and returns the height the
-// caller moves down by (0 otherwise, and once they are placed). After pinned
-// tabs they go at `y`, followed by `tab_padding`; without pinned tabs at the
-// top of the group, in its top margin, as in the tab strip before. Tabs are
-// inset by the strip's padding when `collapsed`, and so are the rows.
+// With Zen's zen.view.show-newtab-button-top off (koan_prefs.h
+// kShowNewTabButtonTop) the "+ New Tab" row is in the "end" rows instead,
+// laid out after the Space's last tab, or after the tab list without a Space.
+// The end rows have no height while the row is on top.
+
+// Hook for the same layout, after the unpinned tabs: appends the end rows to
+// `layout` at (0, `y`), `width` wide, and returns their height, if they are in
+// the tab strip.
+int PlaceSidebarEndRows(const TabStripView* tab_strip_view,
+                        views::ProposedLayout& layout,
+                        int width,
+                        int y);
+
+// For TabGroupViewVerticalLayout's one Koan hook (SpaceGroupRows,
+// koan_folders.h), called before laying out each child `next_child` of
+// `tab_group_view` and once more with null after the last: if the rows are in
+// this group and `next_child` doesn't belong to the Space's pinned section
+// (its pinned tabs and folders), appends them to `layout` and returns the
+// height the caller moves down by (0 otherwise, and once they are placed).
+// After the pinned section they go at `y`, followed by `tab_padding`; without
+// one at the top of the group, in its top margin, as in the tab strip before.
+// The call after the last child also appends the end rows, at `y` (followed
+// by `tab_padding` unless they are empty).
+// Tabs are inset by the strip's padding when `collapsed`, and so are the rows.
 int PlaceSpaceTabRows(const views::View* tab_group_view,
                       const views::View* next_child,
                       bool collapsed,
@@ -81,6 +102,35 @@ int SidebarTabIconGap(int upstream_value);
 int SidebarMinWidth(int upstream_value);
 int SidebarMaxWidth(int upstream_value);
 int SidebarCollapseSnapWidth(int upstream_value);
+
+// Hook for TabView::UpdateHoverCard and TabGroupView::UpdateHoverCard:
+// whether a hover card may show for a tab or a group header. Zen shows none
+// (browser.tabs.hoverPreview.enabled=false); upstream's with Koan's sidebar
+// off. Updates that hide a card still reach the controller.
+bool ShowsTabHoverCards();
+
+// Whether a loading tab of `context` shows Chromium's throbber. Zen keeps the
+// favicon there instead (zen.theme.hide-tab-throbber, vertical-tabs.css,
+// prefs::kHideTabThrobber); upstream's with Koan's sidebar off.
+// AdjustTabData() applies it.
+bool ShowsTabThrobber(content::BrowserContext* context);
+
+// VerticalTabStripRegionView::IsPositionInWindowCaption(): whether `point` (in
+// `region`'s coordinates) is client area that upstream would make window
+// caption: the Create-a-Space form (IsInSpaceForm()) and, on macOS, the empty
+// space below the tabs, so that its clicks reach the views (on macOS a caption
+// point never does; AppKit takes it). Koan moves the window from there itself,
+// on a press (KoanSidebarTabsController).
+bool IsSidebarClientArea(const views::View* tab_strip_view,
+                         const views::View* region,
+                         const gfx::Point& point);
+
+// Whether `target`, the view a press went to, is the sidebar's empty space:
+// inside `tab_strip_view`'s scroll view of unpinned tabs, and not on a tab,
+// a split view, a group or folder header, a Space header, a button or the
+// New Tab and Clear rows (Zen's .zen-workspace-empty-space).
+bool IsSidebarEmptySpace(const views::View* tab_strip_view,
+                         const views::View* target);
 
 }  // namespace koan
 

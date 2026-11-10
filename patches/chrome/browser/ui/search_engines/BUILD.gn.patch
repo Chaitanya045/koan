@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/search_engines/BUILD.gn b/chrome/browser/ui/search_engines/BUILD.gn
+index 7b5d57c5568af1920b4e4ae61a867f064befef20..797c1b0ae82ef06de4a0ceb90cf5e1f810f95feb 100644
+--- a/chrome/browser/ui/search_engines/BUILD.gn
++++ b/chrome/browser/ui/search_engines/BUILD.gn
+@@ -49,6 +49,7 @@ source_set("search_engines") {
+     "//components/prefs",
+     "//components/search_engines",
+     "//components/url_formatter",
++    "//koan/browser/containers:partition",
+     "//services/network/public/mojom",
+     "//third_party/icu:icui18n",
+     "//third_party/icu:icuuc_public",

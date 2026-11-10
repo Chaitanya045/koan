@@ -1,0 +1,20 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's tracking-protection-fill.svg: Lucide (ISC), lucide.dev icon "shield" (filled), converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 20.859, 12.994,
+QUADRATIC_TO, 20.859, 19.881, 12.636, 22.748,
+QUADRATIC_TO, 11.995, 22.965, 11.368, 22.736,
+QUADRATIC_TO, 3.141, 19.891, 3.141, 12.994,
+LINE_TO, 3.141, 6.034,
+QUADRATIC_TO, 3.141, 4.135, 5.039, 4.135,
+QUADRATIC_TO, 7.809, 4.135, 10.65, 1.654,
+QUADRATIC_TO, 12, 0.5, 13.343, 1.647,
+QUADRATIC_TO, 16.189, 4.135, 18.961, 4.135,
+QUADRATIC_TO, 20.859, 4.135, 20.859, 6.034,
+CLOSE,

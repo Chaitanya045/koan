@@ -1,0 +1,46 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# The Koan commit a build is made from: koan_lastchange.h, rewritten when the
+# clone's HEAD moves (the script's depfile names its reflog).
+action("lastchange") {
+  script = "lastchange.py"
+  outputs = [ "$target_gen_dir/koan_lastchange.h" ]
+  depfile = "$target_gen_dir/koan_lastchange.d"
+  args = [
+    "--output",
+    rebase_path(outputs[0], root_build_dir),
+    "--depfile",
+    rebase_path(depfile, root_build_dir),
+  ]
+}
+
+# The stamp, for the update check and the "Update Complete!" notification.
+# Only this file sees the generated header, so a new commit recompiles one
+# file.
+source_set("build_info") {
+  sources = [
+    "koan_build_info.cc",
+    "koan_build_info.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":lastchange",
+    ":update_logic",
+    "//components/version_info",
+  ]
+}
+
+# Whether a newer commit is on GitHub, and the URLs (pure, unit-tested in
+# //koan/test:koan_unittests).
+source_set("update_logic") {
+  sources = [
+    "koan_update_logic.cc",
+    "koan_update_logic.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+}

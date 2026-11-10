@@ -236,8 +236,23 @@ class RateLimiter {
   static constexpr int kMaxPromptsPerMinute = 3;
   static constexpr int kMaxOpenPrompts = 1;
 
+  // The limits the user can change (design section 6.1). The constants above
+  // are the defaults; one prompt open at a time and the failure window are
+  // fixed.
+  struct Limits {
+    int max_failures = kMaxFailures;
+    base::TimeDelta block_duration = kBlockDuration;
+    int max_prompts_per_minute = kMaxPromptsPerMinute;
+  };
+
   RateLimiter();
+  explicit RateLimiter(const Limits& limits);
   ~RateLimiter();
+
+  // Applies from the next failure or prompt on; a peer already blocked stays
+  // blocked until its time runs out.
+  void SetLimits(const Limits& limits);
+  const Limits& limits() const { return limits_; }
 
   bool IsBlocked(const std::string& key, base::TimeTicks now);
   // Counts a failure; returns true if it blocks the peer.
@@ -259,6 +274,7 @@ class RateLimiter {
   // The entry for a key; makes room by dropping the least recently active one.
   Entry& EntryFor(const std::string& key, base::TimeTicks now);
 
+  Limits limits_;
   std::map<std::string, Entry> entries_;
   // Prompts shown, per user. Kept apart from the failure table: a
   // process cannot push a user's count out by making the table churn, and the

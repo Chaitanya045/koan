@@ -15,7 +15,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -27,7 +26,6 @@
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_chip_view.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_dashboard_view.h"
-#include "chrome/common/webui_url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/url_formatter/url_formatter.h"
@@ -37,11 +35,16 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
+#include "koan/browser/ui/views/koan_blank_page.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_sidebar_extensions.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_site_panel_actions.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -49,6 +52,7 @@
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -67,7 +71,9 @@ namespace koan {
 
 namespace {
 
-constexpr int kButtonSize = 28;
+// Zen's back / forward / reload in the sidebar's top row (zen-mac-spec.md
+// 2.3, measured on Zen 1.24b): 31x29, side by side with no gap (31pt apart).
+constexpr gfx::Size kButtonSize(31, 29);
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
 
@@ -75,14 +81,12 @@ std::u16string DisplayUrl(content::WebContents* contents, Profile* profile) {
   if (!contents) {
     return std::u16string();
   }
-  const GURL& url = contents->GetVisibleURL();
-  // An empty tab, or a new tab page (also one served from the search engine,
-  // e.g. google.com's), shows Zen's placeholder.
-  if (url.is_empty() || url.IsAboutBlank() ||
-      url == GURL(chrome::kChromeUINewTabURL) || search::IsNTPURL(url) ||
-      search::IsNTPOrRelatedURL(url, profile)) {
+  // about:blank or a new tab page (also one served from the search engine,
+  // e.g. google.com's), Zen's empty tab included, shows Zen's placeholder.
+  if (IsBlankPage(contents, profile)) {
     return std::u16string();
   }
+  const GURL& url = contents->GetVisibleURL();
   if (url.SchemeIsHTTPOrHTTPS() && url.has_host()) {
     // Zen shows just the site in the sidebar.
     return base::UTF8ToUTF16(url_formatter::StripWWW(std::string(url.host())));
@@ -165,10 +169,10 @@ KoanSidebarNavButtons::KoanSidebarNavButtons(BrowserView* browser_view)
               chrome::ExecuteCommand(browser, command);
             },
             base::Unretained(browser), command),
-        icon, /*dip_size=*/18);
+        icon, kToolbarIconSize);
     button->SetTooltipText(name);
     button->GetViewAccessibility().SetName(name);
-    button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
+    button->SetPreferredSize(kButtonSize);
     return AddChildView(std::move(button));
   };
   back_ = nav_button(vector_icons::kBackArrowChromeRefreshOldIcon, IDC_BACK,
@@ -303,7 +307,7 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   site_button_ =
       pill_button(base::BindRepeating(&KoanSidebarNavView::OnSiteButtonPressed,
                                       base::Unretained(this)),
-                  vector_icons::kSearchIcon, u"Site information");
+                  kKoanUrlbarSearchGlassIcon, u"Site information");
 
   // Something is in use (camera, microphone ...): see UpdateInUse().
   in_use_ = url_pill_->AddChildView(std::make_unique<views::ImageView>());
@@ -326,12 +330,15 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   // The pill is named after the site already.
   url_label_->GetViewAccessibility().SetIsIgnored(true);
   pill_layout->SetFlexForView(url_label_, 1);
+  // Zen's extension buttons, before its page actions (#73).
+  extensions_ = url_pill_->AddChildView(
+      std::make_unique<KoanSidebarExtensionsView>(browser_view_));
   // Zen's #zen-copy-url-button ("Copy URL"), confirmed with Zen's toast.
   copy_button_ =
       pill_button(base::BindRepeating(&CopyCurrentUrl,
                                       base::Unretained(browser_view_.get()),
                                       /*markdown=*/false),
-                  vector_icons::kContentCopyIcon, u"Copy URL");
+                  kKoanLinkIcon, u"Copy URL");
   // Like Zen's (opacity 0 until hovered), it keeps its place, so Tab and
   // screen readers reach it.
   copy_button_->SetPaintToLayer();
@@ -519,7 +526,7 @@ void KoanSidebarNavView::UpdateUrl() {
       views::Button::STATE_NORMAL,
       !favicon.IsEmpty() ? favicon
                          : ui::ImageModel::FromVectorIcon(
-                               vector_icons::kSearchIcon,
+                               kKoanUrlbarSearchGlassIcon,
                                kColorKoanUrlPillForeground, kUrlPillIconSize));
   const std::u16string site_name =
       has_page ? u"Site information" : u"Search or enter address";
@@ -537,9 +544,9 @@ void KoanSidebarNavView::OnSiteButtonPressed() {
 }
 
 void KoanSidebarNavView::FocusOmnibox() {
-  if (LocationBarView* location_bar = browser_view_->GetLocationBarView()) {
-    location_bar->FocusLocation(/*is_user_initiated=*/true,
-                                /*clear_focus_if_failed=*/false);
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_)) {
+    controller->url_bar()->FocusLocationInPill();
   }
 }
 
@@ -557,13 +564,19 @@ void KoanSidebarNavView::ShowSitePanel() {
           KoanBrowserViewController::From(browser_view_)) {
     controller->compact_mode()->HoldSidebarForBubble();
   }
-  PageInfoBubbleView::CreatePageInfoBubble(
-      PageInfoBubbleSpecification::Builder(
-          views::BubbleAnchor(site_button_.get()),
-          GetWidget()->GetNativeWindow(), contents, entry->GetVirtualURL())
-          .Build())
-      ->GetWidget()
-      ->Show();
+  PageInfoBubbleSpecification::Builder builder(
+      views::BubbleAnchor(site_button_.get()), GetWidget()->GetNativeWindow(),
+      contents, entry->GetVirtualURL());
+  // Zen's site panel lists the extensions (#73): page info's Extensions row
+  // opens Chromium's extensions menu at the site icon.
+  builder.SetOnExtensionsClickedCallback(
+      base::BindRepeating(&KoanSidebarExtensionsView::ShowExtensionsMenu,
+                          extensions_->GetWeakPtr()));
+  views::BubbleDialogDelegateView* bubble =
+      PageInfoBubbleView::CreatePageInfoBubble(builder.Build());
+  // Zen's site panel actions on top (#78).
+  AddSitePanelActions(bubble, browser_view_, contents);
+  bubble->GetWidget()->Show();
 }
 
 BEGIN_METADATA(KoanSidebarNavView)

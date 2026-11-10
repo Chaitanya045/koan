@@ -4,6 +4,8 @@
 
 #include "koan/browser/ui/views/koan_lights_geometry.h"
 
+#include "ui/gfx/color_utils.h"
+
 #include <algorithm>
 
 namespace koan {
@@ -21,6 +23,12 @@ gfx::Rect MoveClearOf(const gfx::Rect& bounds,
     moved.set_y(std::max(bounds.y(), obstacle.bottom()));
   }
   return moved;
+}
+
+SkColor MonoTrafficLightColor(SkColor toolbox_text) {
+  // Dark text: a light theme.
+  const float alpha = color_utils::IsDark(toolbox_text) ? 0.08f : 0.15f;
+  return SkColorSetA(toolbox_text, static_cast<U8CPU>(alpha * 255 + 0.5f));
 }
 
 }  // namespace koan

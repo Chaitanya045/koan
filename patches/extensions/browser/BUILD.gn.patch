@@ -1,0 +1,11 @@
+diff --git a/extensions/browser/BUILD.gn b/extensions/browser/BUILD.gn
+--- a/extensions/browser/BUILD.gn
++++ b/extensions/browser/BUILD.gn
+@@ -672,6 +672,7 @@
+     "//extensions/strings",
+     "//google_apis",
+     "//google_apis/common:request_util",
++    "//koan/browser/containers:partition",
+     "//net",
+     "//pdf:buildflags",
+     "//pdf:features",

@@ -75,6 +75,7 @@ TEST(KoanSidebarCurveTest, SlideValueGoesTheRightWay) {
 TEST(KoanSidebarCurveTest, Durations) {
   EXPECT_EQ(250, kSidebarRevealDuration.InMilliseconds());
   EXPECT_EQ(150, kSidebarHideDuration.InMilliseconds());
+  EXPECT_EQ(150, kSidebarKeepHoverDuration.InMilliseconds());
 }
 
 }  // namespace koan

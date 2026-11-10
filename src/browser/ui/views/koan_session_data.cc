@@ -4,7 +4,6 @@
 
 #include "koan/browser/ui/views/koan_session_data.h"
 
-#include <array>
 #include <utility>
 
 #include "base/command_line.h"
@@ -23,8 +22,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/koan_switches.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 
 namespace koan {
@@ -37,9 +38,11 @@ constexpr std::string_view kKeyPrefix = "koan.";
 // The features that act on a tab or window while it is restored.
 constexpr TabRestoreHook kTabRestoreHooks[] = {
     {kPinnedTabSessionKey, &OnRestoringPinnedTab},
+    {containers::kContainerSessionKey, &containers::OnRestoringContainerTab},
 };
-// None yet; folders (#60) will be the first.
-constexpr std::array<WindowRestoreHook, 0> kWindowRestoreHooks = {};
+constexpr WindowRestoreHook kWindowRestoreHooks[] = {
+    {kFolderSessionKey, &OnRestoringFolders},
+};
 
 // Koan's entries of a restored tab's or window's extra data.
 std::map<std::string, std::string> KoanEntries(

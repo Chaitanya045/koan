@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/media/BUILD.gn b/chrome/browser/media/BUILD.gn
+index a4341780446d50732e3b4bf36d0acf8ba7b88d7f..0c8b46dcfbdd3bf69fc96eece0198765a88fc66f 100644
+--- a/chrome/browser/media/BUILD.gn
++++ b/chrome/browser/media/BUILD.gn
+@@ -434,6 +434,7 @@ source_set("impl") {
+     "//components/site_engagement/content",
+     "//components/user_prefs",
+     "//crypto",
++    "//koan/browser/containers:partition",
+     "//media",
+     "//services/metrics/public/cpp:ukm_builders",
+     "//third_party/blink/public/common",

@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/media/media_engagement_service.cc b/chrome/browser/media/media_engagement_service.cc
+index 46a1f3f0aefa651124fb0686a04092467c0b8a87..bcea9cc1ce8e5999b75be66f242468d42051cbd1 100644
+--- a/chrome/browser/media/media_engagement_service.cc
++++ b/chrome/browser/media/media_engagement_service.cc
+@@ -26,6 +26,7 @@
+ #include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
+ #include "components/prefs/pref_service.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "media/base/media_switches.h"
+ #include "url/origin.h"
+ 
+@@ -72,6 +73,11 @@ void MediaEngagementService::CreateWebContentsObserver(
+   if (prerender::ChromeNoStatePrefetchContentsDelegate::FromWebContents(
+           web_contents))
+     return;
++  // Koan: an agent container's playback doesn't raise the user's media
++  // engagement (autoplay).
++  if (koan::containers::IsAgentContents(web_contents)) {
++    return;
++  }
+ 
+   MediaEngagementService* service =
+       Get(Profile::FromBrowserContext(web_contents->GetBrowserContext()));

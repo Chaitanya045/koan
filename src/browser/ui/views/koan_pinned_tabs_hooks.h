@@ -14,6 +14,10 @@
 
 class TabView;
 
+namespace content {
+class WebContents;
+}  // namespace content
+
 namespace tabs {
 class TabInterface;
 struct TabData;
@@ -42,8 +46,16 @@ bool HandleTabCloseRequest(const tabs::TabInterface* tab);
 // chrome::CloseTab().
 bool HandleCloseTabCommand(tabs::TabInterface* tab);
 
-// Applies a tab's custom label and icon (Change Label… / Change Icon…).
-// Called at the end of TabData::FromTabInterface().
+// Called from chrome::DuplicateTabAt() once `duplicate`, the clone of
+// `source`, is in the window: Zen's duplicate of a pinned tab or Essential is
+// a normal tab of the active Space. Returns whether `duplicate` is still
+// pinned (for the session).
+bool OnTabDuplicated(content::WebContents* source,
+                     content::WebContents* duplicate);
+
+// Applies a tab's custom label and icon (Change Label… / Change Icon…), and
+// hides the throbber where Zen does (ShowsTabThrobber()). Called at the end of
+// TabData::FromTabInterface().
 void AdjustTabData(const tabs::TabInterface* tab, tabs::TabData& data);
 
 }  // namespace koan

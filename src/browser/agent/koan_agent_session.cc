@@ -126,6 +126,15 @@ struct Session::Pending {
 
 SessionDelegate::~SessionDelegate() = default;
 
+bool SessionDelegate::Forward(AgentMessage message) {
+  return false;
+}
+
+AgentMessage::AgentMessage() = default;
+AgentMessage::AgentMessage(AgentMessage&&) = default;
+AgentMessage& AgentMessage::operator=(AgentMessage&&) = default;
+AgentMessage::~AgentMessage() = default;
+
 SessionEnvironment::SessionEnvironment()
     : random_bytes(base::BindRepeating(&DefaultRandomBytes)) {}
 SessionEnvironment::SessionEnvironment(const SessionEnvironment&) = default;
@@ -217,9 +226,17 @@ void Session::HandleFrame(base::span<const uint8_t> payload) {
       return;
     }
   }
+  const std::string* session_id = nullptr;
+  if (message->contains("sessionId")) {
+    session_id = message->FindString("sessionId");
+    if (!session_id) {
+      Close(CloseReason::kProtocolViolation);
+      return;
+    }
+  }
   const base::DictValue none;
   if (state_ == State::kAuthenticated) {
-    HandleAuthenticated(*id, *method);
+    HandleAuthenticated(*id, *method, params, session_id);
   } else {
     HandleUnauthenticated(*id, *method, params ? *params : none);
   }
@@ -456,7 +473,10 @@ void Session::OnClientRevoked(std::string_view client_id) {
   }
 }
 
-void Session::HandleAuthenticated(int id, const std::string& method) {
+void Session::HandleAuthenticated(int id,
+                                  const std::string& method,
+                                  const base::DictValue* params,
+                                  const std::string* session_id) {
   if (!StillPaired()) {
     return;
   }
@@ -468,9 +488,21 @@ void Session::HandleAuthenticated(int id, const std::string& method) {
   } else if (method == "Koan.pair" || method == "Koan.authenticate") {
     Close(CloseReason::kProtocolViolation);
   } else {
-    // Nothing is forwarded from here yet.
-    ReplyError(id, "Koan.unavailable",
-               "this build does not forward commands to tabs");
+    AgentMessage message;
+    message.id = id;
+    message.method = method;
+    if (params) {
+      message.params = params->Clone();
+    }
+    if (session_id) {
+      message.session_id = *session_id;
+    }
+    message.client_id = client_id_;
+    message.capabilities = capabilities_;
+    if (!delegate_->Forward(std::move(message))) {
+      ReplyError(id, "Koan.unavailable",
+                 "this build does not forward commands to tabs");
+    }
   }
 }
 

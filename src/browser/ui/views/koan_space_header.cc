@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_essentials_promo.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
 #include "koan/browser/ui/views/koan_spaces.h"
@@ -342,9 +343,13 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
                      views::ProposedLayout& layouts) {
   KoanSpaceHeaderView* header = nullptr;
   KoanSpaceCreationView* form = nullptr;
+  KoanEssentialsPromoView* promo = nullptr;
   for (views::View* child : tab_strip_view->children()) {
     if (auto* header_view = views::AsViewClass<KoanSpaceHeaderView>(child)) {
       header = header_view;
+    } else if (auto* promo_view =
+                   views::AsViewClass<KoanEssentialsPromoView>(child)) {
+      promo = promo_view;
     } else if (auto* form_view =
                    views::AsViewClass<KoanSpaceCreationView>(child)) {
       form = form_view;
@@ -355,6 +360,15 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
   // upstream's TabView does.
   collapsed = collapsed && width <= tabs::kVerticalTabStripCollapsedWidth;
   int height = 0;
+  if (promo) {
+    // Zen's Essentials promo, where the (empty) Essentials are, during a
+    // tab drag (koan_space_drag.h). Not in a collapsed sidebar.
+    const int promo_height =
+        collapsed || form ? 0 : promo->GetPreferredSize().height();
+    layouts.child_layouts.emplace_back(promo, promo_height > 0,
+                                       gfx::Rect(0, y, width, promo_height));
+    height += promo_height;
+  }
   if (form) {
     // Zen's Create-a-Space form takes the Space's place (the caller hides
     // the tabs) and fills the sidebar.

@@ -1,0 +1,17 @@
+diff --git a/chrome/browser/ui/webui/ntp/new_tab_ui.cc b/chrome/browser/ui/webui/ntp/new_tab_ui.cc
+index 2153cada56b5a8384dedfb0281ccbfdbb966f45a..3d2fe2fd23325bdec61cebd0ff525f422d16a6a9 100644
+--- a/chrome/browser/ui/webui/ntp/new_tab_ui.cc
++++ b/chrome/browser/ui/webui/ntp/new_tab_ui.cc
+@@ -51,9 +51,9 @@ bool NewTabUIConfig::IsWebUIEnabled(content::BrowserContext* browser_context) {
+   // NTPResourceCache::GetNewTabHTML!
+   switch (NTPResourceCache::GetWindowType(profile)) {
+     case NTPResourceCache::NORMAL:
+-      LOG(ERROR) << "Requested load of chrome://newtab/ for incorrect "
+-                    "profile type.";
+-      // TODO(crbug.com/40244589): Add DumpWithoutCrashing() here.
++      // Koan: not logged. URL handlers and WebUI lookups probe the unrewritten
++      // chrome://newtab/ (the page that opens is chrome://koan-newtab); the
++      // answer is no, and no NewTabUI is created.
+       return false;
+     case NTPResourceCache::INCOGNITO:
+       [[fallthrough]];

@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "koan/browser/agent/koan_agent_contexts.h"
 #include "url/gurl.h"
 
 namespace koan::agent {
@@ -184,6 +185,36 @@ std::optional<FilterError> FilterScreenshot(base::DictValue& params,
   return std::nullopt;
 }
 
+std::optional<FilterError> FilterRuntimeContext(const base::DictValue& params,
+                                                const FilterContext& context) {
+  if (!context.contexts) {
+    return Error("Koan.unavailable", "no execution context tracker");
+  }
+  if (params.contains("executionContextName")) {
+    return Error("Koan.contextNotAllowed",
+                 "executionContextName is not allowed; name a context by id");
+  }
+  for (std::string_view key : {"contextId", "executionContextId"}) {
+    const base::Value* value = params.Find(key);
+    if (!value) {
+      continue;
+    }
+    if (!value->is_int() ||
+        !context.contexts->IsAllowedContextId(value->GetInt())) {
+      return Error("Koan.contextNotAllowed",
+                   "that execution context is not one the agent may use");
+    }
+  }
+  if (const base::Value* value = params.Find("uniqueContextId")) {
+    if (!value->is_string() ||
+        !context.contexts->IsAllowedUniqueId(value->GetString())) {
+      return Error("Koan.contextNotAllowed",
+                   "that execution context is not one the agent may use");
+    }
+  }
+  return std::nullopt;
+}
+
 }  // namespace
 
 StreamRegistry::StreamRegistry() = default;
@@ -260,8 +291,7 @@ std::optional<FilterError> ApplyParamFilter(ParamFilter filter,
       }
       return std::nullopt;
     case ParamFilter::kRuntimeContext:
-      return Error("Koan.unavailable",
-                   "the execution context rule is not implemented yet");
+      return FilterRuntimeContext(params, context);
   }
   return Error("Koan.unavailable", "unknown filter");
 }

@@ -16,8 +16,10 @@ class SimpleMenuModel;
 
 namespace content {
 struct ContextMenuParams;
-class WebContents;
 struct OpenURLParams;
+struct Referrer;
+class RenderFrameHost;
+class WebContents;
 }  // namespace content
 
 namespace koan {
@@ -51,6 +53,37 @@ GlanceClick MaybeOpenGlance(BrowserWindowInterface* browser,
                             content::WebContents* source,
                             const content::OpenURLParams& params,
                             WindowOpenDisposition* fallback);
+
+// Hook for ChromeContentBrowserClient::CanCreateWindow(), before the popup
+// blocker: Zen's zen.glance.open-essential-external-links. A link in a
+// pinned tab or Essential (the active tab of a normal window) that opens a
+// new foreground tab on another site (koan_pinned_site.h) -- a click on a
+// target=_blank link, or window.open() with noopener -- opens in that
+// window's Glance instead, posted. Returns true if it does; the caller then
+// refuses the window. Only with a user gesture and the opener suppressed:
+// the page gets no window object either way, and a page script can't open
+// a Glance by itself. Middle and Cmd-clicks (background tabs) and popups
+// stay as they are.
+bool OpenNewTabInGlance(content::RenderFrameHost* opener,
+                        const GURL& target_url,
+                        const content::Referrer& referrer,
+                        WindowOpenDisposition disposition,
+                        bool user_gesture,
+                        bool opener_suppressed);
+
+// Hook at the start of RenderViewContextMenu::ExecuteCommand(), with every
+// command the menu runs: remembers that "Search <engine> for ..." ran in
+// `source`, so that the new tab it opens next opens in Glance
+// (OpenContextMenuSearchInGlance()).
+void OnContextMenuCommand(content::WebContents* source, int command_id);
+
+// Zen's zen.glance.enable-contextmenu-search: if `params` is the new
+// foreground tab of a "Search <engine> for ..." that just ran in `source`
+// (the active tab of a normal window, not a Glance page), opens it in Glance
+// and returns true. Called by MaybeOpenGlance(). With a modifier held
+// (another disposition) the search opens as upstream does.
+bool OpenContextMenuSearchInGlance(content::WebContents* source,
+                                   const content::OpenURLParams& params);
 
 // Command id of the link context menu's "Open Link in Glance" (Zen's
 // zen-open-link-in-glance), in a range chrome_command_ids.h leaves free.

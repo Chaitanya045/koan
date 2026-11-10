@@ -1,16 +1,27 @@
 diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
-index 6aca93a450796c9e6f45b615f7255da0ed2220cf..7c04f2d4aeeb3f477b8be5c1e6a990df86b41bf1 100644
+index f2a9542aea8d31977a7918886c41d5d9a49617af..64c2c5d5d517e87c594f4a580edafc990efa412f 100644
 --- a/chrome/browser/ui/browser_tabrestore.cc
 +++ b/chrome/browser/ui/browser_tabrestore.cc
-@@ -36,6 +36,7 @@
+@@ -37,6 +37,8 @@
  #include "content/public/browser/restore_type.h"
  #include "content/public/browser/session_storage_namespace_handle.h"
  #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_session_data.h"
  #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
  #include "ui/gfx/geometry/size.h"
  #include "ui/gfx/range/range.h"
-@@ -89,6 +90,8 @@ std::unique_ptr<WebContents> CreateRestoredTab(
+@@ -72,6 +74,9 @@ std::unique_ptr<WebContents> CreateRestoredTab(
+       content::CreateMapWithDefaultSessionStorageNamespace(
+           browser->GetProfile(), session_storage_namespace);
+   WebContents::CreateParams create_params(browser->GetProfile());
++  // Koan: a saved user container's tab restores into its container.
++  create_params.site_instance = koan::containers::SiteInstanceForRestoredTab(
++      browser->GetProfile(), extra_data);
+   create_params.initially_hidden = initially_hidden;
+   create_params.desired_renderer_state =
+       WebContents::CreateParams::kNoRendererProcess;
+@@ -92,6 +97,8 @@ std::unique_ptr<WebContents> CreateRestoredTab(
    std::vector<std::unique_ptr<NavigationEntry>> entries =
        ContentSerializedNavigationBuilder::ToNavigationEntries(
            navigations, browser->GetProfile());

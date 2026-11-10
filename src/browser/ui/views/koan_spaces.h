@@ -6,9 +6,8 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACES_H_
 
 #include <optional>
+#include <string>
 
-class BrowserView;
-class BrowserWindowInterface;
 class TabStripModel;
 
 namespace tab_groups {
@@ -56,6 +55,32 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
 bool IsInSpaceForm(const views::View* tab_strip_view,
                    const views::View* region,
                    const gfx::Point& point);
+// Zen's empty tab: the blank page a window shows when its last tab closes,
+// or opens on (a new window, the first launch; not a session restore). It
+// is never listed (no sidebar row), never navigates (what the URL bar opens
+// from it opens in a new tab) and Cmd+W on it closes the window. Zen keeps
+// one per window; here each Space with nothing else has one, since a Space
+// (a tab group) needs a tab to exist. Marked by Koan when it makes one (kept
+// with the session), and an empty page still. Not for Essentials or when
+// Spaces are off.
+bool IsEmptyTab(const tabs::TabInterface* tab);
+
+// The empty tab stops being one when it navigates in place (a bookmark, the
+// Library, a dropped link, chrome.tabs.update): its mark goes, so that Back
+// into the new tab page later is an ordinary tab with a row, and Cmd+W
+// closes the tab, not the window. Called on every change of the tab.
+void ClearEmptyTabMarkIfNavigated(tabs::TabInterface* tab);
+
+// TabGroupViewVerticalLayout: whether `view` is a tab row to hide (see
+// IsEmptyTab()).
+bool IsEmptyTabView(const views::View* view);
+
+// Browser::TabStripEmpty(): Zen keeps the window when its last tab closes
+// (browser.tabs.closeWindowWithLastTab is false). Returns true if `browser`
+// stays: it gets an empty tab (a new tab page in the window's Space) soon.
+// False, so the window closes, when the window itself is closing, in a
+// private window, or without Koan's Spaces.
+bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser);
 
 // The Spaces feature of the tab context menu (koan_tab_menu.h): with Spaces on,
 // replaces the tab group items of the tab context menu for the tab at
@@ -74,6 +99,19 @@ void ReplaceTabGroupMenuItems(ui::SimpleMenuModel* menu,
 tabs::TabInterface* PickSpaceTab(TabStripModel* tab_strip,
                                  const tab_groups::TabGroupId& group);
 
+// TabStripModel::AddWebContents(), for a tab added with no index that isn't
+// a link's (Ctrl+T, the URL bar's new tab, chrome.tabs.create()): Zen puts it
+// at the top of the Space (zen.view.show-newtab-button-top, Tabbrowser's
+// #insertTabAtIndex), where the New Tab row is, not at the end of the window.
+// Sets `index` and `group` to the start of the focused Space (its end with
+// zen.view.show-newtab-button-top off, koan_prefs.h kShowNewTabButtonTop)
+// unless `group` is already set, the tab is pinned, or the window has no
+// Spaces.
+void PlaceUnindexedTab(TabStripModel* tab_strip,
+                       bool pinned,
+                       int& index,
+                       std::optional<tab_groups::TabGroupId>& group);
+
 // TabStripModel::RotateFocusedGroup() (upstream's swipe): whether swiping
 // past the last or first Space wraps around (Zen's
 // zen.workspaces.wrap-around-navigation) instead of leaving focus mode.
@@ -88,12 +126,15 @@ bool ShowsSpaceHeader(const views::View* tab_group_view);
 // upstream's tab group commands there).
 bool HasSpaces(TabStripModel* tab_strip);
 
-// BrowserCommandController::HandleCommandWithDisposition(), first: runs
-// upstream's tab group command `command_id` the way a Spaces window does
-// (KoanWorkspaceController::RunGroupCommand()) and returns true, or returns
-// false (another command, or no Spaces). Only reached without
-// kUseActionsForBrowserCommands; with it the window's ActionItems do the same.
-bool HandleSpacesCommand(BrowserWindowInterface* browser, int command_id);
+// Agent containers (koan/browser/containers/koan_agent_containers.h): makes
+// the ungrouped tab at `index` of `tab_strip` a new Space named `name` with
+// the emoji `icon`, without showing it or changing the active tab. Nullopt if
+// the window has no Spaces.
+std::optional<tab_groups::TabGroupId> CreateBackgroundSpace(
+    TabStripModel* tab_strip,
+    int index,
+    const std::u16string& name,
+    const std::u16string& icon);
 
 // TabStripCollectionController::UpdateFocusModeTheme(): upstream gives a
 // focused group's window the group's colour (a per-window user colour
@@ -109,23 +150,20 @@ bool ApplySpaceColor(TabStripModel* tab_strip);
 // per Space).
 bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab);
 
-// BrowserNativeWidgetMac::ValidateUserInterfaceItem() (the Mac menu bar),
-// after upstream's own validation: Koan's one table of the menu bar items it
-// hides per window. For an item Koan decides, whether it is hidden (and
-// disabled) in `browser_view`'s window, or shown; nullopt for every other item
-// (upstream's state stands). The menu bar is shared by the windows, so each
-// window's validation sets an owned item both ways. Today:
-// - View > "Show Tabs Vertically", hidden while Koan owns the sidebar (#154).
-//   "Collapse Vertical Tabs" stays (titled "Toggle Sidebar's Width", it runs
-//   compact mode and has no key): AppKit doesn't fire a hidden item's key
-//   equivalent, so it isn't hidden.
-// - View > Always Show Toolbar in Full Screen, hidden while Koan's toolbar is
-//   hidden.
-// - The Tab menu's Group Tab and its Option alternate, hidden in a Spaces
-//   window.
-// Other features add their items here rather than set the hidden state
-// themselves.
-std::optional<bool> HidesMenuCommand(BrowserView* browser_view, int command_id);
+// macOS's OpenStartupTabsInBrowserWithProfile() (app_controller_mac.mm), for
+// links from other apps (application:openURLs:, Handoff, and those held back
+// until startup ends): the tabs opened while one lives are external links,
+// which Zen's Space routing sends to its default Space for them
+// (koan_space_routing.h). Nested ones count once.
+class ScopedExternalLinks {
+ public:
+  ScopedExternalLinks();
+  ScopedExternalLinks(const ScopedExternalLinks&) = delete;
+  ScopedExternalLinks& operator=(const ScopedExternalLinks&) = delete;
+  ~ScopedExternalLinks();
+
+  static bool IsActive();
+};
 
 }  // namespace koan
 

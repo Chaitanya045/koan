@@ -38,10 +38,10 @@ class UnixDomainServerSocket;
 // section 4.1): Koan's own accept loop, a Session for every connection, and the
 // limits that keep a process that only connects from using up the browser.
 //
-// **It forwards nothing and nothing starts it.** Like Session, an authenticated
-// connection answers Koan.status and refuses everything else; and no browser
-// code creates a Gateway yet (no preference, no window hook), so this changes
-// nothing a user can see. Starting it belongs to the settings change.
+// An authenticated connection's messages for the tabs go to the observer
+// (GatewayObserver::OnClientMessage), and its answers and events come back
+// through SendToClient(). The browser starts it from the "Agent ready" pref
+// (koan_agent_service.cc).
 //
 // What it does, in the order a connection meets it:
 //   1. The listening socket is in a 0700 directory, 0600, behind a lock file
@@ -92,7 +92,30 @@ class ApprovalPresenter {
   virtual void Cancel(uint64_t request_id) = 0;
 };
 
+// Told on the gateway's sequence when a client has authenticated on a
+// connection and when that connection is gone, so the browser can show that an
+// agent is connected (design section 6.2). A connection that never
+// authenticated is not reported.
+class GatewayObserver {
+ public:
+  virtual ~GatewayObserver();
+
+  virtual void OnClientConnected(uint64_t connection_id,
+                                 const std::string& client_id,
+                                 const std::string& label) = 0;
+  virtual void OnClientDisconnected(uint64_t connection_id) = 0;
+  // A message from an authenticated client for the tabs (always after
+  // OnClientConnected() for that connection). Returns false if nothing takes
+  // it.
+  virtual bool OnClientMessage(uint64_t connection_id, AgentMessage message);
+};
+
 struct GatewayOptions {
+  GatewayOptions();
+  GatewayOptions(const GatewayOptions&);
+  GatewayOptions& operator=(const GatewayOptions&);
+  ~GatewayOptions();
+
   base::FilePath socket_path;
   // The user the browser runs as: the only user whose connections are served.
   uid_t uid = 0;
@@ -100,6 +123,10 @@ struct GatewayOptions {
   // it refuses (the kernel's check, which runs before the gateway hears of the
   // connection). Unset: `uid`.
   std::optional<uid_t> kernel_uid_for_testing;
+  // The user's limits on prompts and failures (design section 6.1).
+  RateLimiter::Limits limits;
+  // Not owned; must outlive the gateway. May be null.
+  raw_ptr<GatewayObserver> observer = nullptr;
 };
 
 // What starting prepares off the sequence.
@@ -152,8 +179,16 @@ class Gateway {
   void Stop();
   bool started() const { return state_ == State::kStarted; }
 
+  // New limits from the settings: from the next failure or prompt on. Live
+  // connections are not closed.
+  void SetLimits(const RateLimiter::Limits& limits);
+
   // The store removed this client: its live connections close at once.
   void OnClientRevoked(std::string_view client_id);
+
+  // Sends one JSON message (an answer or an event) to an authenticated
+  // connection. Does nothing if the connection is gone or closing.
+  void SendToClient(uint64_t connection_id, std::string_view json);
 
   // Run by a once-a-second timer; public so that tests can drive the clock.
   void CheckTimeouts();

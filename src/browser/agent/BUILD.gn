@@ -8,8 +8,8 @@ import("//testing/test.gni")
 # Agent control (.agent/notes/agent-control.md): the pieces that are pure logic
 # and depend on //base and //url only, so they build and test on their own.
 #
-# Nothing in the browser depends on this directory yet. GN loads it because
-# //koan/browser:agent_unit_tests names the test below.
+# The browser depends on :browser only (through //koan/browser/ui/views:impl);
+# the rest is pure logic that //koan/browser:agent_unit_tests tests.
 
 # The wire format of the unix socket: length-prefixed frames, with a decoder
 # built for hostile input. Shared by the gateway in the browser and the `koan`
@@ -62,6 +62,53 @@ source_set("session") {
     "//base",
   ]
   deps = [ "//third_party/icu" ]
+}
+
+# The limits the user can change, and how a stored value is read.
+source_set("limits") {
+  sources = [
+    "koan_agent_limits.cc",
+    "koan_agent_limits.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# When an agent tab holds the visible capturer of its keep-alive lease.
+source_set("lease_scheduler") {
+  sources = [
+    "koan_agent_lease_scheduler.cc",
+    "koan_agent_lease_scheduler.h",
+  ]
+  public_deps = [
+    ":limits",
+    "//base",
+  ]
+}
+
+# The calls upstream tab code makes into agent control (//content only).
+source_set("tab_hooks") {
+  sources = [
+    "koan_agent_tab_hooks.cc",
+    "koan_agent_tab_hooks.h",
+  ]
+  public_deps = [
+    "//base",
+    "//content/public/browser",
+    "//net",
+    "//ui/base",
+    "//ui/base:types",
+    "//url",
+  ]
+}
+
+# What pages in agent tabs wait to show the user (design section 9.4): the
+# queue the indicator shows, as pure logic.
+source_set("prompts") {
+  sources = [
+    "koan_agent_prompts.cc",
+    "koan_agent_prompts.h",
+  ]
+  public_deps = [ "//base" ]
 }
 
 # How many connections the gateway keeps open.
@@ -123,6 +170,77 @@ if (is_posix) {
     ]
     deps = [ ":socket" ]
   }
+
+  # The browser side: starts the gateway from the "Agent ready" pref on the IO
+  # thread, the approval dialog, and the connected clients the indicator shows.
+  # Linked into //chrome/browser through //koan/browser/ui/views:impl.
+  source_set("browser") {
+    sources = [
+      "koan_agent_approval_dialog.cc",
+      "koan_agent_devtools_client.cc",
+      "koan_agent_devtools_client.h",
+      "koan_agent_forwarder.cc",
+      "koan_agent_forwarder.h",
+      "koan_agent_lease.cc",
+      "koan_agent_lease.h",
+      "koan_agent_page_surfaces.cc",
+      "koan_agent_page_surfaces.h",
+      "koan_agent_reach_content.cc",
+      "koan_agent_reach_content.h",
+      "koan_agent_service.cc",
+      "koan_agent_service.h",
+    ]
+    if (is_mac) {
+      sources += [ "koan_agent_lease_mac.mm" ]
+      frameworks = [ "Foundation.framework" ]
+    }
+    public_deps = [
+      ":audit",
+      ":facade",
+      ":lease_scheduler",
+      ":prompts",
+      ":reach",
+      ":registry",
+      ":session",
+      ":tab_hooks",
+      "//base",
+      "//components/prefs",
+      "//content/public/browser",
+    ]
+    deps = [
+      ":auth",
+      ":gateway",
+      ":limits",
+      ":peer",
+      ":socket",
+      "//chrome/browser:browser_process",
+      "//chrome/browser/external_protocol",
+      "//chrome/browser/lifetime:termination_notification",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/browser/ui/dialogs:browser_dialogs",
+      "//chrome/browser/ui/login",
+      "//chrome/browser/ui/tabs:tab_strip",
+      "//chrome/common",
+      "//chrome/common:constants",
+      "//components/embedder_support:user_agent",
+      "//components/javascript_dialogs",
+      "//components/performance_manager",
+      "//components/security_interstitials/content:security_interstitial_page",
+      "//components/tabs:public",
+      "//components/version_info",
+      "//content/public/browser",
+      "//content/public/common",
+      "//koan/browser:prefs",
+      "//koan/browser/containers",
+      "//koan/browser/containers:partition",
+      "//net",
+      "//third_party/blink/public/common:headers",
+      "//ui/base",
+      "//ui/gfx/geometry",
+      "//ui/views",
+    ]
+  }
 }
 
 # What an agent client may receive: the event allowlist, and the scrubber that
@@ -146,6 +264,85 @@ source_set("filters") {
     "//base",
     "//url",
   ]
+  deps = [ ":contexts" ]
+}
+
+# The execution contexts an agent may see and name in a tab: main worlds and
+# the isolated worlds it made.
+source_set("contexts") {
+  sources = [
+    "koan_agent_contexts.cc",
+    "koan_agent_contexts.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# Which frames an agent may attach to, decided from facts the browser gathers.
+source_set("reach") {
+  sources = [
+    "koan_agent_reach.cc",
+    "koan_agent_reach.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+}
+
+# What an agent may not read off a user's tab: secret input values.
+source_set("redact") {
+  sources = [
+    "koan_agent_redact.cc",
+    "koan_agent_redact.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# Which tabs each client may see and drive, and the open-tab budgets.
+source_set("registry") {
+  sources = [
+    "koan_agent_registry.cc",
+    "koan_agent_registry.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# The activity log: redacted, size-capped, hash-chained JSON lines.
+source_set("audit") {
+  sources = [
+    "koan_agent_audit.cc",
+    "koan_agent_audit.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    "//crypto",
+    "//url",
+  ]
+}
+
+# The CDP facade of one connection: the method policy, the registry, the
+# parameter filters, the context tracker and the scrubber between an agent and
+# its tabs, and the Target.* and Koan.* methods over the tabs in its scope.
+source_set("facade") {
+  sources = [
+    "koan_agent_facade.cc",
+    "koan_agent_facade.h",
+  ]
+  public_deps = [
+    ":audit",
+    ":session",
+    "//base",
+    "//url",
+  ]
+  deps = [
+    ":contexts",
+    ":events",
+    ":filters",
+    ":policy",
+    ":reach",
+    ":redact",
+    ":registry",
+  ]
 }
 
 # Build and run:
@@ -156,20 +353,38 @@ source_set("filters") {
 test("koan_agent_unittests") {
   sources = [
     "koan_agent_admission_unittest.cc",
+    "koan_agent_audit_unittest.cc",
     "koan_agent_auth_unittest.cc",
+    "koan_agent_contexts_unittest.cc",
     "koan_agent_events_unittest.cc",
+    "koan_agent_facade_unittest.cc",
     "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
+    "koan_agent_lease_scheduler_unittest.cc",
+    "koan_agent_limits_unittest.cc",
     "koan_agent_policy_unittest.cc",
+    "koan_agent_prompts_unittest.cc",
+    "koan_agent_reach_unittest.cc",
+    "koan_agent_redact_unittest.cc",
+    "koan_agent_registry_unittest.cc",
     "koan_agent_session_unittest.cc",
   ]
   deps = [
     ":admission",
+    ":audit",
     ":auth",
+    ":contexts",
     ":events",
+    ":facade",
     ":filters",
     ":frame",
+    ":lease_scheduler",
+    ":limits",
     ":policy",
+    ":prompts",
+    ":reach",
+    ":redact",
+    ":registry",
     ":session",
     "//base",
     "//base/test:run_all_unittests",
@@ -225,6 +440,7 @@ fuzzer_test("koan_agent_events_fuzzer") {
 fuzzer_test("koan_agent_filters_fuzzer") {
   sources = [ "koan_agent_filters_fuzzer.cc" ]
   deps = [
+    ":contexts",
     ":filters",
     "//base",
     "//url",

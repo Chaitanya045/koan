@@ -7,11 +7,18 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/views/view.h"
+#include "ui/views/view_observer.h"
 
 class BrowserView;
+
+namespace gfx {
+class Point;
+}  // namespace gfx
 
 namespace views {
 class FocusManager;
@@ -28,16 +35,20 @@ namespace koan {
 // setup or Esc leaves at any point.
 //
 // The page is a WebView, the last child of the BrowserView over everything
-// else in the window (in the window itself, not a child widget: on macOS a
-// child widget is a child NSWindow, which never gets the keyboard, and as
-// the key window takes no clicks either). This object is the page's
+// else in the window, in the window itself and never a child widget: on
+// macOS a child widget is a second NSWindow, and the window's keyboard and
+// clicks can't both reach a page in it (c174d/c174e, see koan_welcome.cc).
+// It stays the last child while it shows, and its area is client area for
+// the window's hit test (IsWindowCoveredAt()), so nothing in the window
+// draws over it or drags the window from under it. This object is the page's
 // KoanWelcomeHost (what the page asks of the window). It shows once (pref
 // koan.welcome_screen.seen, set once the screen is on screen) and only on
 // Chromium's first run, i.e. of a new user data directory (not for each
 // profile in it), so --no-first-run skips it and --force-first-run brings it
 // back.
 class KoanWelcome : public content::WebContentsObserver,
-                    public ui::AcceleratorTarget {
+                    public ui::AcceleratorTarget,
+                    public views::ViewObserver {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
   KoanWelcome(const KoanWelcome&) = delete;
@@ -45,6 +56,12 @@ class KoanWelcome : public content::WebContentsObserver,
   ~KoanWelcome() override;
 
   bool is_showing() const { return web_view_ != nullptr; }
+  // Showing, or about to show once the window is up (from OnAddedToWidget()
+  // to the end): what else would open over the window waits for it.
+  bool is_pending() const { return pending_; }
+  // Whether the screen covers `point`, in the BrowserView's parent's
+  // coordinates (BrowserView::NonClientHitTest()).
+  bool CoversPoint(const gfx::Point& point) const;
 
   // Called by KoanBrowserViewController.
   void OnAddedToWidget();
@@ -64,6 +81,14 @@ class KoanWelcome : public content::WebContentsObserver,
   // handles its own).
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
+
+  // views::ViewObserver (the BrowserView): a view added or moved above the
+  // page goes back under it.
+  void OnChildViewAdded(views::View* observed_view,
+                        views::View* child) override;
+  void OnChildViewReordered(views::View* observed_view,
+                            views::View* child) override;
+  void KeepOnTop();
 
   // Whether this window shows the welcome: the first normal window of a
   // regular profile on Chromium's first run, if it hasn't been seen and no
@@ -105,6 +130,8 @@ class KoanWelcome : public content::WebContentsObserver,
   bool finishing_ = false;
   // Gives up on a page that never asks for its data.
   base::OneShotTimer load_timer_;
+  base::ScopedObservation<views::View, views::ViewObserver>
+      browser_view_observation_{this};
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

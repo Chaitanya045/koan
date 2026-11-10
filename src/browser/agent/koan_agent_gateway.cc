@@ -105,6 +105,18 @@ void WriteRefusal(int fd, std::string_view code, std::string_view message) {
 
 ApprovalPresenter::~ApprovalPresenter() = default;
 
+GatewayObserver::~GatewayObserver() = default;
+
+bool GatewayObserver::OnClientMessage(uint64_t connection_id,
+                                      AgentMessage message) {
+  return false;
+}
+
+GatewayOptions::GatewayOptions() = default;
+GatewayOptions::GatewayOptions(const GatewayOptions&) = default;
+GatewayOptions& GatewayOptions::operator=(const GatewayOptions&) = default;
+GatewayOptions::~GatewayOptions() = default;
+
 struct PreparedSocket {
   SocketPrepareResult result = SocketPrepareResult::kError;
   base::ScopedFD lock;
@@ -125,6 +137,13 @@ class Gateway::Connection final : public SessionDelegate {
         created_(gateway->Now()) {}
 
   ~Connection() override {
+    // Every way a connection ends (closed by either side, Stop(), the gateway
+    // destroyed) comes here.
+    if (authenticated_) {
+      if (GatewayObserver* observer = gateway_->options_.observer) {
+        observer->OnClientDisconnected(id_);
+      }
+    }
     if (open_approval_ != 0) {
       gateway_->presenter_->Cancel(open_approval_);
     }
@@ -198,6 +217,27 @@ class Gateway::Connection final : public SessionDelegate {
 
   bool PeerUnchanged() override {
     return peer_ && gateway_->resolver_->Unchanged(*peer_);
+  }
+
+  bool Forward(AgentMessage message) override {
+    // The observer hears that the client is connected before its first
+    // message: the indicator shows before anything reaches a tab.
+    UpdateAdmission();
+    GatewayObserver* observer = gateway_->options_.observer;
+    return authenticated_ && observer &&
+           observer->OnClientMessage(id_, std::move(message));
+  }
+
+  // An answer or event from the facade.
+  void SendJson(std::string_view json) {
+    if (dropped_ || close_after_flush_ || !authenticated_) {
+      return;
+    }
+    std::optional<std::vector<uint8_t>> frame =
+        EncodeFrame(base::as_byte_span(json));
+    if (frame) {
+      Enqueue(std::move(*frame));
+    }
   }
 
  private:
@@ -370,6 +410,13 @@ class Gateway::Connection final : public SessionDelegate {
         session_->state() == Session::State::kAuthenticated) {
       authenticated_ = true;
       gateway_->admission_.MarkAuthenticated(id_);
+      if (GatewayObserver* observer = gateway_->options_.observer) {
+        const std::string& client_id = session_->client_id();
+        const std::optional<ClientRecord> record =
+            gateway_->store_->Find(client_id);
+        observer->OnClientConnected(id_, client_id,
+                                    record ? record->label : std::string());
+      }
     }
   }
 
@@ -435,7 +482,8 @@ Gateway::Gateway(GatewayOptions options,
       store_(store),
       presenter_(presenter),
       tick_clock_(tick_clock),
-      clock_(clock) {
+      clock_(clock),
+      limiter_(options_.limits) {
   // Created anywhere, used and destroyed on one sequence.
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
@@ -572,6 +620,14 @@ void Gateway::OnClientRevoked(std::string_view client_id) {
   }
 }
 
+void Gateway::SendToClient(uint64_t connection_id, std::string_view json) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  auto it = connections_.find(connection_id);
+  if (it != connections_.end()) {
+    it->second->SendJson(json);
+  }
+}
+
 void Gateway::CheckTimeouts() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (auto& [id, connection] : connections_) {
@@ -661,6 +717,11 @@ void Gateway::Remove(ConnectionAdmission::Id id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   connections_.erase(id);
   admission_.Release(id);
+}
+
+void Gateway::SetLimits(const RateLimiter::Limits& limits) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  limiter_.SetLimits(limits);
 }
 
 SessionEnvironment Gateway::SessionEnv() {

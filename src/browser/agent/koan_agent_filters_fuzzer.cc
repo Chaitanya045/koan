@@ -22,6 +22,7 @@
 #include "base/check_op.h"
 #include "base/json/json_reader.h"
 #include "base/values.h"
+#include "koan/browser/agent/koan_agent_contexts.h"
 #include "koan/browser/agent/koan_agent_filters.h"
 #include "koan/browser/agent/koan_agent_policy.h"
 #include "url/gurl.h"
@@ -140,8 +141,17 @@ void CheckForwardable(ParamFilter filter,
     case ParamFilter::kOwnTabOnly:
       CHECK(owned);
       break;
-    case ParamFilter::kRuntimeContext:
-      CHECK(false);  // refuses until its tracker exists
+    case ParamFilter::kRuntimeContext: {
+      // The tracker allows context 1 ("u1") only.
+      CHECK(!params.contains("executionContextName"));
+      for (std::string_view key : {"contextId", "executionContextId"}) {
+        const base::Value* id = params.Find(key);
+        CHECK(!id || (id->is_int() && id->GetInt() == 1));
+      }
+      const base::Value* unique = params.Find("uniqueContextId");
+      CHECK(!unique || (unique->is_string() && unique->GetString() == "u1"));
+      break;
+    }
   }
 }
 
@@ -156,6 +166,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   }
   koan::agent::StreamRegistry streams;
   CHECK(streams.Add("h1"));
+  koan::agent::ContextTracker contexts;
+  contexts.OnEvent("Runtime.executionContextCreated",
+                   base::JSONReader::ReadDict(
+                       R"({"context":{"id":1,"uniqueId":"u1","auxData":)"
+                       R"({"isDefault":true,"type":"default"}}})",
+                       base::JSON_PARSE_RFC)
+                       .value());
   for (ParamFilter filter :
        {ParamFilter::kNone, ParamFilter::kNavigationUrl,
         ParamFilter::kStripKeyCommands, ParamFilter::kIsolatedWorld,
@@ -167,6 +184,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       koan::agent::FilterContext context;
       context.tab_is_agent_owned = owned;
       context.streams = &streams;
+      context.contexts = &contexts;
       if (!koan::agent::ApplyParamFilter(filter, params, context)) {
         CheckForwardable(filter, params, owned);
       }

@@ -32,6 +32,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/display/screen.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
@@ -172,11 +173,22 @@ void KoanWelcome::Show() {
       FROM_HERE, kLoadTimeout,
       base::BindOnce(&KoanWelcome::Skip, weak_factory_.GetWeakPtr()));
 
+  // In the window itself, never a child widget. On macOS a child widget is a
+  // second NSWindow over the browser window, and its page can't have both
+  // the window's keyboard and its clicks: shown inactive (as AppKit shows
+  // child windows), the keyboard stayed with the browser window (c174d: no
+  // Esc, no Tab); made key (45910310's Activate()), it was key while the
+  // browser window stayed main, and the page got no click, hover or key at
+  // all (c174e/c174f). In the window, the window's own key and mouse events
+  // go to the page like any tab's.
+  //
   // The last child, over everything else: macOS stacks the window's native
   // views (the tab's page, this page) in the views' order
   // (NativeWidgetMacNSWindowHost::ReorderChildViews), the traffic lights
-  // above them all.
+  // above them all. It stays the last child (KeepOnTop()), and its area is
+  // client area, not the window's caption (IsWindowCoveredAt()).
   web_view_ = browser_view_->AddChildView(std::move(web_view));
+  browser_view_observation_.Observe(browser_view_);
   LayoutWebView();
   // The keyboard goes to the page (its first button has the focus); Esc
   // anywhere else in the window still leaves.
@@ -265,6 +277,38 @@ bool KoanWelcome::CanHandleAccelerators() const {
   return web_view_ != nullptr;
 }
 
+bool KoanWelcome::CoversPoint(const gfx::Point& point) const {
+  if (!web_view_ || !web_view_->GetVisible() || !browser_view_->parent()) {
+    return false;
+  }
+  gfx::Point in_page(point);
+  views::View::ConvertPointToTarget(browser_view_->parent(), web_view_,
+                                    &in_page);
+  return web_view_->HitTestPoint(in_page);
+}
+
+void KoanWelcome::OnChildViewAdded(views::View* observed_view,
+                                   views::View* child) {
+  if (child != web_view_) {
+    KeepOnTop();
+  }
+}
+
+void KoanWelcome::OnChildViewReordered(views::View* observed_view,
+                                       views::View* child) {
+  if (child != web_view_) {
+    KeepOnTop();
+  }
+}
+
+void KoanWelcome::KeepOnTop() {
+  // (Reordering notifies again, for the page itself: nothing more to do.)
+  if (web_view_ && browser_view_->children().back() != web_view_) {
+    browser_view_->ReorderChildView(web_view_,
+                                    browser_view_->children().size());
+  }
+}
+
 void KoanWelcome::StartWindowDrag() {
   views::Widget* window = browser_view_->GetWidget();
   if (!window || !web_view_) {
@@ -318,6 +362,7 @@ void KoanWelcome::Close(bool remove_page) {
     focus_manager_->UnregisterAccelerator(EscapeAccelerator(), this);
     focus_manager_ = nullptr;
   }
+  browser_view_observation_.Reset();
   views::WebView* web_view = std::exchange(web_view_, nullptr);
   if (remove_page) {
     // Destroys the page (and its KoanWelcomeHost).

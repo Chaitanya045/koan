@@ -1,0 +1,12 @@
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 5beda3489b369b52fd9f711eecf3505a41732bc4..53a6b0b160ba323763f7f0d2c702e66ff215dde7 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -258,6 +258,7 @@ source_set("browser") {
+     "//gpu/command_buffer/client:raster_interface",
+     "//gpu/ipc/host",
+     "//gpu/vulkan:buildflags",
++    "//koan/browser/containers:domain",
+     "//media",
+     "//media:media_buildflags",
+     "//media/capture",

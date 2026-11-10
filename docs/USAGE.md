@@ -35,7 +35,7 @@ Chrome.
 | Open / close the Library | Alt+Shift+L (⌥⇧L) | |
 | Library: History | Ctrl+H or Ctrl+Shift+H (⌘⇧H or ⌘Y) | History page (Ctrl+H; macOS ⌘Y) |
 | Inspect element | Ctrl+Shift+L | |
-| New window | Ctrl+Shift+N | New incognito window |
+| New Blank Window (no Spaces, not synced) | Ctrl+Shift+N | New incognito window |
 | New private window | Ctrl+Shift+P | Print using system dialog |
 | Mute site | Ctrl+M | |
 | Bookmarks | Ctrl+B | |
@@ -64,7 +64,7 @@ Zen's Firefox-based macOS differences are followed:
 | New tab (opens the URL bar) | ⌘T | |
 | Copy the page's URL (as Markdown) | ⌘⇧C (⌘⇧⌥C) | Inspect element (now ⌘⌥L; ⌘⌥C still works) |
 | Pin / unpin tab; close all unpinned tabs | ⌘⇧D; ⌘⇧K | Bookmark All Tabs |
-| New window | ⌘N (Chrome's), ⌘⇧N | New Incognito Window (now ⌘⇧P) |
+| New window; New Blank Window | ⌘N (Chrome's); ⌘⇧N | New Incognito Window (now ⌘⇧P) |
 | New private window | ⌘⇧P | |
 | Inspect element | ⌘⌥L, ⌘⇧L | Downloads (⌘⌥L), collapse of the vertical tab strip (⌘⇧L); ⌘⌥C still works |
 | Downloads | ⌘J (Firefox's) | Chrome's ⌘⇧J |
@@ -92,8 +92,8 @@ Tools, Window, Help. Chrome's Tab menu is hidden and its Profiles menu removed (
 follow the shortcuts in effect (also after you change one in Settings):
 
 - **Zen** (app menu): Settings… (⌘,), which opens Koan's settings.
-- **File:** New Blank Window (⌘⇧N, Zen's; a plain new window here, there is
-  no window sync) after New Window, and New Private Window (⌘⇧P) for
+- **File:** New Blank Window (⌘⇧N, Zen's: a window without Spaces, outside
+  window sync) after New Window, and New Private Window (⌘⇧P) for
   Chrome's Incognito.
 - **View:** Appearance > Automatic / Light / Dark first, as in Zen; Chrome's
   bookmark bar, full-screen toolbar, full URLs, AI, Lens, vertical tabs, Cast
@@ -110,6 +110,11 @@ Items are greyed when they don't apply (no Spaces, ...).
 
 **Dock menu:** New Window and New Private Window, as in Zen's Dock menu, and
 your Spaces (✓ on the active one) to switch the window that was active last.
+
+**Dock icon:** after you close the last window (⌘⇧W or the red button), a click
+on Koan's Dock icon brings that window back, with its Spaces and tabs, as in
+Zen. This follows Settings > On startup: with "Continue where you left off" (the
+default) the window comes back; otherwise you get a new window.
 
 When a page uses a key itself (for example Ctrl+S in an online editor), the
 page gets it first, as in every browser.
@@ -180,11 +185,16 @@ toolbar is hidden) don't change that.
 
 ## URL bar
 
-Like Zen's, the URL bar opens where you are and floats once you type:
-clicking the pill (or Ctrl+L) edits the address right in the pill; the
-first keystroke lifts it into a card centred over the window (two thirds
-of its width, at most 750 px, larger text, a soft shadow over the page)
-with the suggestions under it. The pill is empty meanwhile. Esc, a click
+Like Zen's, the URL bar is a card centred over the window (two thirds of
+its width, at most 750 px, larger text, a soft shadow over the page) with
+the suggestions under it. **Ctrl+L and Ctrl+T (⌘L, ⌘T)** open it at once,
+with no animation; **clicking the pill** edits the address in the pill, which
+grows over the page as you type and never floats (Behavior "Normal" does that
+for the keyboard too). The box is empty after Ctrl+T, and an empty box lists
+your open tabs (most recent first, each with **Switch to Tab**; Enter
+switches to it) and then your most visited sites, all from the browser itself
+with no request to a search engine. On an empty box, **Tab** enters the
+command palette (the ">" mode). The pill is empty meanwhile. Esc, a click
 outside the card or opening a result (or running an action) closes it;
 switching to another window and back leaves it as it was. In compact mode,
 with the sidebar hidden, it floats right away, also when you click the pill
@@ -203,12 +213,26 @@ creating anything; what you had typed comes back if you press Ctrl+T again
 within 45 seconds.
 
 Hover the pill (or Tab to it) for the **copy** button: it copies the page's
-URL and says so ("Copied current URL!"), as do Ctrl+Shift+C and
+URL, without tracking parameters (utm_*, fbclid ...: Firefox's list, as in
+Zen), and says so ("Copied current URL!", with a Share button on macOS), as
+do Ctrl+Shift+C and
 Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The site's icon at the start of the
-pill opens the site's panel (security, permissions, cookies and site settings);
+pill opens the site's panel: Zen's row of Share (macOS's share sheet),
+Screenshot, Reader Mode and Bookmark buttons on top, then security,
+permissions, cookies and site settings;
 on an empty tab it is a magnifier that edits the address. As in Zen, the pill
 and the URL bar show none of Chromium's page actions (site settings, install,
 bookmark star).
+
+**Extensions** pinned to the toolbar (the pin in the extensions menu) show as
+buttons at the end of the pill while the pointer is over the sidebar, as in
+Zen; a click opens the extension's popup there, a right-click its menu. They
+take at most 55 % of the pill; the others, and every extension with its access
+to the site and Manage Extensions, are under **Extensions** in the site's
+panel. An extension's keyboard shortcut opens its popup at its button, or at
+the site's icon. In compact mode the sidebar stays out while a popup is open.
+Drag a button along the pill to change the order (the toolbar's order, so
+every window follows; not in Incognito).
 
 | "Normal": editing in place, widened | Copied |
 |---|---|
@@ -226,6 +250,50 @@ Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
 In the multiple-toolbars layout the address is edited in the toolbar, as
 in Chrome; Ctrl+T still opens it instead of a new-tab page, and Esc closes
 it in one press.
+
+## Closing the last tab
+
+Like Zen (`browser.tabs.closeWindowWithLastTab` is off there), closing a
+window's last tab keeps the window. It shows the **empty tab**: a blank page
+that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
+empty) and never navigates: what you open from the URL bar (⌘T, ⌘L) opens in
+a **new** tab; close that tab and the empty tab is back. (An empty tab that is
+navigated in place anyway, from a bookmark or the Library, becomes an ordinary
+tab.) Ctrl+Tab, ⌘1-9, tab search and extensions (`chrome.tabs.query`) skip
+it, as in Zen. Only a **close** keeps the window: moving
+the last tab to another window (a drag, "Move to another window") closes it, as
+in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
+last unpinned tab leaves the Essential selected, not the empty tab. In compact
+mode the sidebar stays shown while the empty tab is selected (only that
+tab: not a tab of yours on about:blank or a new tab page).
+
+A window also **opens** on the empty tab, as Zen's does: a new window (⌘N),
+the first launch, and a start on the New Tab page. A restored session keeps
+its own tabs, and a new tab page you open later is an ordinary tab.
+
+## New tab page
+
+A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
+horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
+above off) is an empty page in the window's look, like Zen's: near black (#09090b) in the
+dark shadcn look, white in the light one, and in the default Zen look Chromium's
+theme colour for the page (Zen's empty tab shows its window gradient or glass
+there: not matched yet). It follows the window: a change of look or theme loads
+it again with the new colour. No Google logo, search box or shortcut tiles, and nothing to load, so it
+shows at once. It is `chrome://koan-newtab`, a page with no content and no
+script. Ctrl+T (⌘T) still opens the URL bar instead of a tab. A new window that
+starts on the empty page opens the New Tab bar at once (Zen's
+`zen.urlbar.open-on-startup`), except the first-run welcome and a restored
+session.
+
+Koan's settings (Ctrl+,), Look and Feel > New tab page > New tabs, choose
+between **Blank page** (Koan's, the default; pref `koan.newtab.page`) and
+**Chromium's new tab page** (with a search engine other than Google's, that is
+the engine's own remote new tab page, which Chromium loads from the web). A new
+tab page set by your administrator
+(Chromium's `NewTabPageLocation` policy) or by an extension is shown
+instead of either, as in Chromium. Private windows keep Chromium's private
+browsing page. `chrome://flags/#koan-new-tab` turns Koan's page off.
 
 ## Command palette
 
@@ -246,9 +314,11 @@ current view (unsplit), Copy Current URL, Settings, Open Private Window,
 Open New Window, Pin / Unpin Tab, Add to / Remove from Essentials, Close
 Tab, Reopen Closed Tab, Duplicate Current Tab, Reload Tab, Reload Tab
 Without Cache, Next / Previous Tab, Capture Screenshot, Find in Page, Manage
-Extensions, Switch to Automatic Appearance / Light Mode / Dark Mode, Print;
+Extensions, Toggle Tabs on right, Switch to Automatic Appearance / Light
+Mode / Dark Mode, Print;
 with workspaces also New Space, Next / Previous Space and "Focus on" each
-other Space (type its name). Only the actions that apply are offered (Unpin
+other Space (type its name); with folders New Folder and Collapse / Expand
+All Folders. Only the actions that apply are offered (Unpin
 Tab on a pinned tab, Next Space with two Spaces, ...).
 
 ## Sidebar
@@ -259,8 +329,21 @@ every Space. Below them is the Space header (the active Space's icon and
 name), then the Space's pinned tabs, a thin line, **+ New Tab** (opens a
 tab at the top of the Space's other tabs) and the other tabs. The pinned
 tabs, the line, New Tab and the tabs scroll together; the Essentials and
-the Space header stay put. A tab's close button shows while you point at
+the Space header stay put. With **Move the new tab button to the top** off
+(Settings > Look and Feel > Vertical Tabs), **+ New Tab** sits after the last
+tab instead, and new tabs open at the end of the Space. A tab's close button shows while you point at
 it.
+
+While the selected tab loads, Zen's loading bar pulses at the top middle of
+the page (in the gap above it); after three seconds it turns into a wider
+track with a sweep. It isn't shown while a page is fullscreen. Tabs keep
+their favicon while loading, without Chromium's spinner, as in Zen.
+
+A pinned tab or Essential keeps its site, as in Zen: a URL on another site
+typed in its URL bar (or a search) opens in a new tab, and a link in it that
+would open a new tab on another site opens in Glance instead. Both can be
+turned off in Koan's settings (Pinned Tabs, Glance). "Search for ..." in the
+context menu of selected text also opens in Glance.
 
 While the pointer is over the sidebar, **↓ Clear** appears at the end of
 the line: it closes the Space's unpinned tabs except the selected one and
@@ -271,10 +354,11 @@ tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
 bottom is Zen's bottom bar: the Library button on the left, **+** on the
-right, which opens the Create menu (Create Space, New Split and New Tab),
-and the Space switcher in the middle: one narrow button per Space, centred.
-The current Space shows its emoji (or a dot if it has none) in colour, the
-others a small grey dot that turns into their emoji while you hover it.
+right, which opens the Create menu (Create Space, Create Folder, New Split
+and New Tab), and the Space switcher in the middle: one narrow button per
+Space, centred. The current Space shows its emoji (or a dot if it has none)
+in colour, the others a small grey dot that turns into their emoji while
+you hover it.
 The Space buttons only show once there is more than one Space.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
@@ -292,9 +376,11 @@ As in Zen there are two kinds of pinned tab:
   tab moves below New Tab. Pin a tab with Ctrl+Shift+D or "Pin" in its
   context menu. While a pinned tab is loaded, pointing at it shows a dash
   ("Unload and switch to tab") where other tabs have their close button.
-- **Essentials** are shared by all Spaces, up to 12 per window: "Add to
+- **Essentials** are shared by all Spaces, up to 12: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
-  Dragging a tab into the grid also makes it an Essential.
+  Dragging a tab into the grid also makes it an Essential. With no
+  Essentials yet, dragging a tab to the top of the sidebar shows Zen's
+  "Add to Essentials" drop target; drop it there.
 
 Both remember the URL they were pinned on, the **pinned URL**. When a pinned
 tab goes elsewhere, a slash appears after its icon: hover it to see the
@@ -318,10 +404,24 @@ tab among the pinned ones to pin it. With several pinned tabs selected,
 Ctrl+W does the same to each of them and closes none of the others.
 
 Any tab's context menu has "Change Label…" (edit the name in place; Enter
-keeps it, Esc cancels, an empty name goes back to the page title), "Change
+keeps it, Esc cancels, an empty name goes back to the page title, and "Tab
+has been successfully renamed!" confirms a new one). Double-clicking a tab's
+label in the sidebar does the same; Essentials have no label to rename, and
+neither do tabs in a sidebar collapsed to icons. "Change
 Icon…" (an emoji instead of the favicon) and "Unload" (free the tab's
 memory; it reloads when you select it). Pinned URLs, labels and icons are
 kept with the session.
+
+**Every window has the same Essentials and pinned tabs** (Zen's window
+sync). Pinning, unpinning, adding to or removing from the Essentials,
+reordering, a new pinned URL, label or icon in one window does the same in
+the others. Each such tab has one page: the window you select it in (or
+switch to with it selected) takes the page over, and the other windows keep
+its row with the last title and icon it had there, without loading it.
+Closing a window hands its pages to the window you used last. A tab
+unpinned or closed in one window stays, as a normal tab, in a window that
+has its page. Tabs in a split view, and an agent container's tabs, aren't
+synced.
 
 ## Spaces
 
@@ -332,30 +432,46 @@ belongs to a Space, and new tabs open in the active one.
 - **Create** a Space with **+ > Create Space** (or Ctrl+Alt+N): the sidebar
   shows Zen's Create-a-Space form (a collapsed sidebar expands over the
   page until you're done). Click the dashed box to pick an emoji
-  (search by keyword), type a name, Edit Theme… to pick its colour, then
+  (search by keyword), type a name, Theme… to pick its theme (see Space themes), then
   Create Space (or Enter); Escape or Cancel goes back.
 - **Rename**: double-click the Space's name in the header (or right-click
   the header > Change Name…) and type; Enter keeps it, Escape cancels.
   Double-click the icon (or Change Icon…) to pick another emoji, or none.
 - From the keyboard, the header takes focus (Tab through the sidebar):
   Enter or the menu key opens its menu, F2 renames the Space.
-- **Edit Theme…** (right-click the header) picks the Space's colour: the
-  window takes it while the Space is active, or keeps your colour and your
-  theme (also a Chrome Web Store theme) with Default. Each window shows
-  its own Space's colour, so two windows on different Spaces differ;
-  your own colour (Settings > Appearance) is never changed.
+- **Theme…** (right-click the header) opens Zen's theme picker for
+  the Space (see Space themes below).
 - **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
-  on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
+  on macOS; they wrap around unless you turn that off in Settings > Tab
+  Management > Workspaces), on macOS Ctrl+1…0 for Space 1 to 10, swipe
   horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
   fingers: moving them right goes to the next Space, and lifting them
   after enough travel, or a quick flick, switches Space), or turn the mouse wheel
-  there (horizontally, or vertically while holding Ctrl); the right-click
+  there (horizontally, or vertically while holding Ctrl; the key and
+  natural scrolling, which turns the wheel and the swipe round, are in
+  Settings > Tab Management > Workspaces); the right-click
   menu of the header also lists the Spaces. The old Space slides out and
   the new one in, as in Zen, and you land on the tab you left the Space on
   (also after a restart). Going straight to a tab of another Space (the
   address bar's "Switch to this tab", tab search) shows that tab.
 - **Move To**: right-click a tab > Move To moves it (and the other
-  selected tabs) to another Space and shows it.
+  selected tabs) to another Space and shows it. Or drag it: hold a dragged
+  tab at the sidebar's left or right edge for half a second to go to the
+  previous or next Space (again every half second while you stay), or over
+  a Space button in the bottom bar to go there at once; the tab comes along
+  and drops where you let go. Essentials only switch at the edges.
+- **Reorder** Spaces by dragging their buttons in the bottom bar (the
+  others fade while you do; on a Mac the trackpad ticks at each step).
+- **Space routing** (right-click the header > Space Routing Settings, or
+  "Open Space Routing" in the command palette): routes like "When the link
+  contains youtube.com, open it in Media" send new tabs for matching pages
+  to that Space, in the background, with a "New tab opened in Media" toast;
+  the first matching route wins. Match by Contains, Is Exactly (ignoring
+  http(s)://, www. and a final /) or RegEx. "Default route for external
+  links" picks the Space links from other apps open in when no route
+  matches. Right-click a tab > Add Route for Domain adds a route for its
+  site (one per selected tab's site) and opens the settings. Essentials and
+  pinned tabs are never routed.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -378,12 +494,123 @@ names, icons and colours; each with a new tab, the startup pages in the
 Space that was active). So does a window opened on macOS after you closed
 the last one.
 
+**Every window has the same Spaces** (Zen's window sync,
+`koan.window_sync.enabled`): creating, renaming, re-icon'ing, re-theming,
+reordering or deleting a Space in one window does the same in the others.
+A new window (⌘N) gets all your Spaces; the Space it opened in becomes one
+of them, keeping its tabs. Each window still shows its own Space and has its
+own tabs in it (only pinned tabs and Essentials are shared, Zen's
+`sync-only-pinned-tabs`: `koan.window_sync.sync_only_pinned`). A Space
+created in another window shows a new tab here. Private windows have no
+Spaces, and an agent container's Space stays in its window.
+
+**New Blank Window** (⌘⇧N, File > New Blank Window, or "New Blank Window" in
+the command palette) opens a window outside the sync, like Zen's: no Spaces,
+no shared Essentials or pinned tabs, just its own tabs. A link opened in a
+new window (Shift+click, "Open Link in New Window") opens a blank window
+too while synced windows are open
+(`koan.window_sync.open_links_in_blank_window`, Zen's
+`open-link-in-new-unsynced-window`, on by default). After a restart a blank
+window comes back as a normal window, with its tabs in a Space.
+
 Chrome's tab group commands do Zen's thing in a Space window: ⌘⌃P
 (New tab group) opens the Create-a-Space form, ⌘⌃W (Close group) asks to
 delete the Space, ⌘⌃X / ⌘⌃Z go to the next / previous Space, ⌘⌃C opens a
 new tab as ⌘T does. Tab > Group Tab isn't there (use Move To). A Space is
 never collapsed, and a tab group an extension makes becomes a Space with
 the default theme (unless the extension sets a colour).
+
+## Folders
+
+As in Zen, a Space's folders are part of its pinned section: after its
+pinned tabs, above the separator with Clear and "+ New Tab". A folder's tabs
+are pinned tabs of the Space, so they survive Clear and ⌘W runs the pinned
+close behaviour on them. A folder has a row with a folder icon and its name;
+its tabs sit under it, indented, and subfolders nest inside it (five levels
+at most).
+
+- **Create a folder:** click **+** at the bottom of the sidebar and choose
+  **Create Folder**, or right-click a tab and choose **Move to Folder >
+  New Folder** (the folder takes the selected tabs). Type its name and
+  press Enter.
+- **Add tabs:** right-click a tab, **Move to Folder** and pick the folder;
+  drop a tab on the folder's row (it becomes the folder's first tab), or
+  among its tabs. A tab moved in is pinned; an Essential leaves the
+  Essentials and keeps its pinned URL.
+- **Take tabs out:** drag the tab among the pinned tabs above the folders
+  (it stays pinned) or among the normal tabs (it's unpinned), unpin it
+  (⌃⇧D), or use **Move to Folder > Remove from Folder** (it stays pinned).
+- **Collapse / expand:** click the folder's row. A collapsed folder shows
+  its tab count, and still shows its tab if that's the active one (the
+  icon gets three dots).
+- **Search a folder:** hover a collapsed folder for half a second; type to
+  filter its tabs by title or site, use the arrow keys and Enter, or click
+  one.
+- **Folder menu** (right-click the row): Rename Folder (not while the
+  sidebar is collapsed; as in Zen, a double click doesn't rename), Unload
+  All Tabs (frees their memory and collapses the folder), New Subfolder,
+  Change Space, Convert folder to Space, Unpack Folder (its tabs and
+  subfolders move up a level), Delete Folder (closes its tabs; ⌘⇧T reopens
+  them as loose tabs; a folder tab closed on its own reopens in its
+  folder). A Space that a folder empties (Delete, Change Space, Convert to
+  Space) stays, with a new tab.
+
+![Folders](screenshots/folders-open.png)
+
+Folders are saved with the session and come back after a restart, and with
+a reopened window. With startup set to open the New Tab page or other pages,
+the folders of the window you were in still come back, with their tabs
+(unloaded until you open them), as in Zen.
+
+## Space themes
+
+Every Space has its own gradient theme, as in Zen. Right-click the Space's
+header (or a Space in the bottom bar) and choose **Theme…**, or run
+**Open Theme Picker** from the command palette (for the active Space), to
+open Zen's theme picker beside the sidebar. In the Create-a-Space form,
+**Theme…** picks the new Space's theme; the window previews it until
+you create the Space or cancel.
+
+- **Colour field**: click to place a colour, drag the big dot to change it,
+  right-click it to remove it. Up to three colours.
+- **+ / − / harmony**: add or remove a colour; the third button cycles the
+  colour harmony (Complementary, Split, Analogous, Triadic, Floating) that
+  places the other dots around the big one.
+- **Presets**: five pages of Zen's preset swatches (arrows to page).
+- **Opacity**: the wave slider; a flatter wave is a lighter tint. On macOS,
+  over the glass (the blurred desktop behind the window), it sets how much
+  of the blur shows: to the left Zen's most transparent, to the right fully
+  opaque (no blur). It works without colours there too, and each Space keeps
+  its own value.
+- **Grain**: drag the handle around the dial for Zen's grain texture.
+- **Automatic / Light / Dark** (top of the field): the window scheme, which
+  websites follow too.
+
+From the keyboard: Tab to the field, Enter adds a colour, the arrow keys
+move the big dot (Shift for bigger steps), Delete removes it; the swatches
+are one Tab stop (arrows move between them, Space applies one); the opacity
+slider and the grain dial take the arrow keys, Home and End.
+
+Changes show on the window at once and are saved when the panel closes.
+A Space's theme is kept with its tabs in the session, so it comes back
+after a restart; a tab moved to another Space takes that Space's theme.
+The window's sidebar, toolbar and the margin around the page show the
+gradient; switching Spaces cross-fades to the next Space's gradient. A
+theme also decides whether the window's own colours are light or dark and
+sets their accent, like Zen; websites keep following the appearance setting.
+
+What websites use (Automatic, Light or Dark) is the picker's scheme
+buttons, and the palette's "Switch to ... Appearance / Mode".
+**Settings > Look and Feel > Dark Theme Styles** picks Default, Night (a
+black window) or Colorful (dark surfaces tinted with the accent); Night and
+Colorful are Koan's own (Zen has only the setting's name so far).
+**Settings > Tab Management > Workspaces** turns Space themes off. The
+custom colour list of Zen's picker is off by default, as in Zen; turn it on
+with the pref `koan.theme.gradient.show_custom_colors`.
+
+With a Chrome Web Store theme installed, the theme keeps the window's look
+and Space themes are off until you remove it (Settings > Appearance >
+Reset to default).
 
 ## Compact mode
 
@@ -419,6 +646,17 @@ current tab. As in Zen, while you type in the Glance page the first Esc
 only turns the close button red ("Press Esc again to close"); a second Esc
 within 3 seconds closes. A page that asks before you leave it ("Leave
 site?") gets to ask.
+
+While the card is open, the browser's page commands act on the Glance page,
+not the tab under it, from the keyboard, the menu bar or the toolbar, as in
+Zen: Close Tab (Ctrl+W; ⌘W) closes the card; Reload, Back and Forward, Stop
+and zoom act on the Glance page (the Back, Forward and Stop buttons follow
+it); Focus Location (Ctrl+L; ⌘L) opens the URL bar in the sidebar with the
+Glance page's address, and what you open from it loads in the Glance; Copy
+Current URL (Ctrl+Shift+C; ⌘⇧C) copies the Glance page's address. Find
+(Ctrl+F; ⌘F) is off in a Glance for now, and so is reloading a page that
+came from a form. Bookmark, Print, Save Page, DevTools and View Source still
+act on the tab under the card.
 
 On macOS, as in Zen (whose default trigger is `alt` on every platform):
 Alt is the Option key, so ⌥+click opens Glance, Meta is ⌘, and the split
@@ -530,7 +768,7 @@ from its sidebar.
 - **Look and Feel**: the look (see "Look" above), the browser layout (Only
   Sidebar / Sidebar and Top Toolbar), tabs on the right, compact mode, what
   it hides and its flash popup.
-- **Tab Management**: whether the active Space tints the browser,
+- **Tab Management**: whether windows show the active Space's theme,
   whether background tabs freeze (see "Memory and power"), and Zen's tab
   behaviours (Zen's defaults):
   - closing a tab switches to the **most recently used** tab rather than a
@@ -600,10 +838,10 @@ with three sections down its side, and opens on the one you used last:
   where you keep or delete it. While anything downloads, the Downloads tab
   shows a progress ring. Right-click the Downloads tab to clear the list or open
   `chrome://downloads`.
-- **Spaces**: a card per Space with its tabs, tinted with its theme. Click
-  the name to rename it, the icon for the Spaces' emoji picker, the brush
-  for Edit Theme; drag the arrows at the bottom to reorder the Spaces (the
-  bottom bar follows). **⋯** has Change Icon, Edit Theme, Unload Space,
+- **Spaces**: a card per Space with its tabs, tinted with its theme's main
+  colour. Click the name to rename it, the icon for the Spaces' emoji
+  picker, the brush for the theme picker; drag the arrows at the bottom to reorder the Spaces (the
+  bottom bar follows). **⋯** has Change Icon, Theme…, Unload Space,
   Unload All Other Spaces, Create Space and Delete Space (it asks, and not
   for the only Space). **+** after the last card, like Create Space, closes
   the Library and opens the Create-a-Space form. Click a tab to go there.
@@ -634,7 +872,8 @@ When a tab in the background plays music or video, a card appears at the
 bottom of the sidebar, as in Zen (macOS Now Playing and the media keys
 control the same media): the site's icon, previous / play-pause / next and
 mute. Hover it for the title and artist, the progress (click or drag to
-seek), picture-in-picture and close. Click the card (or the icon) to go to
+seek; the media pauses while you drag, as in Zen), picture-in-picture and
+close. Cards are only in windows with the sidebar (tabs on top have none). Click the card (or the icon) to go to
 its tab, in its Space; the card hides while that tab is selected. Up to
 three cards stack, the newest in front. Close pauses the media and
 dismisses its card. From the keyboard, Tab into a card to expand it; on the
@@ -700,6 +939,36 @@ space around the card drags the window.
   records your choice so Chromium doesn't ask again. If you skip the step
   there, Chromium asks later.
 
+## Updates
+
+Koan has no binary releases: you build it from your clone, and updating is
+`git pull && scripts/build.sh` ([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
+
+- **Update Complete!** After you start a build whose Chromium version or Koan
+  commit differs from the last one you started, the sidebar shows Zen's
+  notification for 15 seconds (it waits while you point at it). **What's new
+  in Koan** opens the commits between the two builds on GitHub; **Something
+  broke?** opens the issues.
+- **Update Available!** Once a day Koan asks GitHub for the newest commit of
+  your clone's develop branch (its `origin` remote, if that is on GitHub). If
+  it is newer than the commit your build was made from, the sidebar says so
+  once for that commit: what's new, **Copy the update command**, and how to
+  update. Koan never downloads or installs anything.
+- **Privacy:** the check is one `GET` to
+  `api.github.com/repos/<owner>/<repo>/commits?sha=develop&per_page=1`. It
+  sends no cookies or credentials, and nothing about you or your build;
+  GitHub sees your IP address, as for any page. No telemetry. Incognito
+  windows never start it.
+- **Turn off:** Settings > Look and Feel > Updates: **Check for updates** and
+  **Show a notification after Koan was updated**.
+
+## Haptic feedback (macOS)
+
+As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
+Space button passes another while you reorder them, and as the theme picker's
+sliders pass a step. Turn it off with "Haptic feedback on the trackpad" in
+`chrome://koan-settings` (Look and Feel, Theme Settings).
+
 ## Translucent window (macOS)
 
 Like Zen's, the window is glass: the sidebar, the toolbar and the gutter
@@ -711,21 +980,48 @@ while macOS's Reduce Transparency (System Settings, Accessibility, Display)
 is on, and while the window is being captured. An inactive window goes flat and opaque,
 like Zen's. It needs macOS 26 or later, and on an Intel Mac it is off until you turn it on; not on other platforms.
 
+Zen's `zen.theme.acrylic-urlbar` is "Glass URL bar" (`chrome://koan-settings`,
+URL Bar): the floating URL bar (⌘T / ⌘L) turns translucent with the page
+blurred behind it. Off by default, as in Zen; it also stays opaque while
+macOS's Reduce Transparency is on and in a window that isn't active (Zen's
+rules). The card is translucent over a blur of the page; only the card of
+the window it opens in changes. The suggestion list under it stays opaque. Off
+macOS only the page is blurred.
+
+## Icons
+
+Icons have Zen's look: the same vocabulary (back, reload, sidebar, +, close,
+...), sizes (17 pt toolbar, 16 pt favicon and close, 18 pt menus, 20 pt
+bottom-bar +), weight and rounded caps, in monochrome that takes the text
+colour. Zen's own icons can't be redistributed (Nucleo), so Koan draws them
+from [Lucide](https://lucide.dev) (ISC); see `.agent/notes/koan-icons.md`
+for the table. Icons that Chromium's UI asks for in its Material style
+(toolbar, tabs, location bar, menus, permission chips, download bubble) are
+swapped for them. Web pages of Chromium (Settings, History, New Tab) keep their
+own icons.
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"): Koan
 sidebar, compact mode, workspaces, Glance, restore tabs on demand, freeze
 background tabs, command palette, pinned tabs and Essentials, Library, media
-controls, download animation, window dragging from pages, welcome screen.
+controls, download animation, window dragging from pages, welcome screen,
+folders.
 
 The media controller and the download animation are on by default; like
 Zen's (which keeps them in about:config), they have no setting yet, only
 the prefs `koan.media_controls.enabled` and
-`koan.downloads.download_animation`.
+`koan.downloads.download_animation`. The same goes for renaming tabs
+(`koan.tabs.rename_tabs`, Zen's `zen.tabs.rename-tabs`), the loading bar
+(`koan.view.loading_indicator`, `zen.view.enable-loading-indicator`) and
+hiding the tab spinner (`koan.theme.hide_tab_throbber`,
+`zen.theme.hide-tab-throbber`), all on by default. A change of the last one
+reaches each tab the next time it changes.
 
 In compact mode with the sidebar hidden, a tab a page opens in the
 background shows Zen's "New background tab opened!" toast; its button
-switches to the tab. Renaming a Space in its header shows "Workspace has
+switches to the tab (not while Glance opens or closes; Settings > Look and
+Feel > Show in compact view turns it off). Renaming a Space in its header shows "Workspace has
 been successfully renamed!".
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
@@ -745,6 +1041,120 @@ On Koan's default profile (`~/Library/Application Support/Koan`) the
 `--remote-debugging-port` and `--remote-debugging-pipe` switches are
 refused, as in Chrome, so another program can't take over your real
 browser by relaunching it. See [SECURITY.md](../SECURITY.md#remote-debugging).
+
+## Installing the macOS build
+
+A test build for Apple Silicon Macs (macOS 13 or later) is made every night
+from `develop`:
+
+- **Nightly pre-release:** the `nightly` release on the
+  [Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly),
+  `Koan-<version>-<commit>-arm64.dmg` and its `.sha256`. Each new nightly
+  replaces it.
+- **Any run** (also of a branch): open a run of the
+  [macOS nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/macos.yml)
+  and click the `Koan-….dmg` under "Artifacts" (you need to be signed in to
+  GitHub). The file is the .dmg itself, not a zip. From a terminal
+  (`gh run download` can't fetch it, because it expects a zip):
+
+  ```sh
+  run=<run id>
+  id=$(gh api repos/Chaitanya045/koan/actions/runs/$run/artifacts \
+    --jq '.artifacts[] | select(.name | endswith(".dmg")) | .id')
+  gh api repos/Chaitanya045/koan/actions/artifacts/$id/zip > Koan.dmg
+  ```
+
+Open the .dmg and drag Koan to Applications.
+
+The app isn't signed with an Apple Developer ID or notarised (it is only
+signed ad hoc, which Apple Silicon needs to run it). So the first time,
+macOS says "'Koan' Not Opened: Apple could not verify 'Koan' is free of
+malware", with only **Done** and **Move to Bin**. On current macOS,
+right-click → Open no longer gets past this. Allow it once:
+
+1. **In Terminal**, remove the quarantine flag that the download added
+   (simplest):
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Koan.app
+   ```
+
+2. Or click **Done**, then open **System Settings → Privacy & Security**,
+   scroll down to the message about Koan and click **Open Anyway** (and
+   confirm with your password).
+
+If macOS instead says Koan **"is damaged and can't be opened"**, sign it
+again on your Mac (ad hoc, with the `codesign` tool that comes with
+macOS), then open it:
+
+```sh
+codesign --force --deep -s - /Applications/Koan.app
+```
+
+After that it opens like any other app. Every new build has a new ad-hoc
+signature, so macOS asks again for access to the "Koan Safe Storage"
+keychain item (where saved passwords and cookies are encrypted) after you
+install a new nightly. Click **Always Allow**. The profile is in
+`~/Library/Application Support/Koan`.
+
+## Agent control
+
+**Agent ready** (Settings > Agent Control, on by default) lets a local agent,
+such as Claude Code or a script, open and work in background tabs. Koan listens
+on a private unix socket in `~/Library/Application Support/Koan/AgentControl/`,
+and **every new program has to be approved in a dialog that names it** before
+it can do anything. While an agent is connected, a pill in the bottom corner of
+every window says so; **Stop** closes every agent connection and forgets every
+approval. Turning Agent ready off closes everything at once. It is off in
+Incognito and Guest launches and with another `--user-data-dir` unless you turn
+it on there. Your organisation's `RemoteDebuggingAllowed` policy turns it off.
+
+The limits are settings: awake agent tabs (4, halved on battery in Low Power
+Mode), approval requests per minute (3) and failed attempts before a 5-minute
+block (5). Approvals last until Koan quits for now. The command line tool and
+the tab features come next (see `.agent/notes/agent-control.md`).
+
+An agent's tabs open in a container of their own: a new, empty one for each
+task, cleared when the task ends. **Saved containers** (Settings > Agent
+Control) keep their logins between tasks, for an agent you sign in once
+("GitHub bot"). Add one by name and tick the agents that may use it; an agent
+gets it only if you ticked it **and** it asks for that container by name, and
+never while another task has it open. Delete removes its cookies and site data.
+The ticks last until Koan quits or you press Stop, like the approvals.
+
+**Strict** (Settings > Agent Control) goes further: each task gets a hidden
+profile of its own, with none of your settings, extensions or permissions, in
+a background window of that profile. It takes a moment longer to start, and
+the profile is deleted when the task ends. Hidden profiles never show in the
+profile menu or bring up the profile picker at launch.
+
+What a page asks of you while an agent works in its tab (its own tab, or one
+of yours it controls) never pops up over your work: a "Leave site?" dialog,
+an `alert`/`confirm`/`prompt`, a link that opens an app, a sign-in prompt,
+`window.print()` or a request for focus waits in the pill instead ("a.test
+asks you to sign in · Open · Dismiss"). **Open** switches to the tab and shows
+it as Chrome would; **Dismiss** says no (stay on the page, no sign-in, no
+print). The agent is told, and can still answer a dialog itself.
+
+### The `koan` tool
+
+Agents use Koan through `koan`, in `Koan.app/Contents/Resources/bin/`
+(`out/Koan/koan` in a build). `koan pair --label "Claude Code"` asks you to
+approve the agent; then `koan open <url>`, `koan snapshot <tab>`,
+`koan act <tab> click @12`, `koan screenshot <tab>`, `koan take-over` (asks
+you for the tab you're on) and `koan end`. `koan skill` prints the guide
+agents follow; `src/cli/skill/SKILL.md` is the entry for an agent's skills
+folder. The agent's tabs stay open between its commands, for as long as its
+task lasts: `koan end`, or 30 minutes without a command, closes them.
+`koan open --saved <name>` uses a saved container you allowed that agent;
+otherwise it is refused, never opened in a throwaway one instead.
+
+An agent that uses Vercel's agent-browser runs `koan agent-browser <args>`.
+The first time, Koan asks you to approve **koan-relay** (started by the
+agent): it is a second client of its own, that carries agent-browser's
+connection to Koan over a private loopback address. After that it works like
+`koan`: the agent's own tabs only, and every rule of agent control. `koan relay
+stop` ends it; so do Stop and revoking it in Settings.
 
 ## Install in the app menu
 

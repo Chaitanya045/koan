@@ -1,0 +1,23 @@
+diff --git a/components/performance_manager/decorators/site_data_recorder.cc b/components/performance_manager/decorators/site_data_recorder.cc
+index 22193434500cf13e0c76b4b188a64df6e40286a6..98356b0c496c14c076dd2f8b99b8712f836e0bc7 100644
+--- a/components/performance_manager/decorators/site_data_recorder.cc
++++ b/components/performance_manager/decorators/site_data_recorder.cc
+@@ -22,6 +22,7 @@
+ #include "components/performance_manager/persistence/site_data/site_data_writer.h"
+ #include "components/performance_manager/public/graph/graph.h"
+ #include "components/performance_manager/public/persistence/site_data/site_data_reader.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ 
+ namespace performance_manager {
+ 
+@@ -276,6 +277,10 @@ void SiteDataRecorder::SetPageNodeDataCache(const PageNode* page_node) {
+   auto* page_node_impl = PageNodeImpl::FromNode(page_node);
+   DCHECK(page_node_impl);
+   auto& data = SiteDataNodeData::Create(page_node_impl, page_node_impl, this);
++  // Koan: an agent container's origins stay out of the site data database.
++  if (koan::containers::IsAgentContents(page_node->GetWebContents().get())) {
++    return;
++  }
+   // If this PageNode is in a browser context that doesn't enable keyed services
+   // (such as the system profile), it will have no SiteDataCache.
+   if (auto* factory = SiteDataCacheFactory::GetInstance()) {

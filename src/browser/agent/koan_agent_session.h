@@ -31,11 +31,11 @@
 // the delegate for a decision from the user; it has no socket, no keychain and
 // no UI, so all of it is testable.
 //
-// **It forwards nothing.** An authenticated session answers Koan.status and
-// refuses every other method with Koan.unavailable. Connecting it to the tabs
-// is a later change that needs the execution context tracker and the
-// re-serialised params forward the design requires (PR 4 and after); until then
-// nothing a client sends reaches Classify() or ApplyParamFilter().
+// An authenticated session answers Koan.status itself and hands every other
+// message to SessionDelegate::Forward() (the gateway passes it to the CDP
+// facade, koan_agent_facade.h, which applies the method policy and the
+// filters). A delegate that does not forward has it refused with
+// Koan.unavailable.
 //
 // Messages are JSON in CDP's shape, {"id": N, "method": "Koan.x", "params":
 // {}}, answered by {"id": N, "result": {}} or
@@ -101,6 +101,25 @@ struct ApprovalRequest {
   PinnedIdentity previous;
 };
 
+// A message from an authenticated client that is not the session's own: the
+// parsed JSON, which the facade judges and re-serialises (never the bytes the
+// client sent).
+struct AgentMessage {
+  AgentMessage();
+  AgentMessage(AgentMessage&&);
+  AgentMessage& operator=(AgentMessage&&);
+  ~AgentMessage();
+
+  int id = 0;
+  std::string method;
+  base::DictValue params;
+  // CDP's flat-mode session, if the client named one.
+  std::optional<std::string> session_id;
+  // Who sent it, and what the user allows that client now.
+  std::string client_id;
+  ClientCapabilities capabilities;
+};
+
 struct ApprovalDecision {
   bool approved = false;
   // What the user allows; never more than was requested.
@@ -127,6 +146,9 @@ class SessionDelegate {
   // peer no longer is. After authentication it is not asked again: the client
   // holds a key, and a client that exec'd another program still holds it.
   virtual bool PeerUnchanged() = 0;
+  // An authenticated client's message for the tabs. Returns false if nothing
+  // takes it (the session then answers Koan.unavailable).
+  virtual bool Forward(AgentMessage message);
 };
 
 struct SessionEnvironment {
@@ -212,7 +234,10 @@ class Session {
   void HandleUnauthenticated(int id,
                              const std::string& method,
                              const base::DictValue& params);
-  void HandleAuthenticated(int id, const std::string& method);
+  void HandleAuthenticated(int id,
+                           const std::string& method,
+                           const base::DictValue* params,
+                           const std::string* session_id);
   void HandlePair(int id, const base::DictValue& params);
   void HandleAuthenticate(int id, const base::DictValue& params);
   void BeginProof(int id, const std::string& client_id);

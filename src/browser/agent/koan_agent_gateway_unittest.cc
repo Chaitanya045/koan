@@ -10,6 +10,7 @@
 
 #include <array>
 #include <atomic>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -201,6 +202,22 @@ std::string ErrorCode(const std::optional<base::DictValue>& reply) {
   return error ? *error->FindString("data") : std::string();
 }
 
+class RecordingObserver : public GatewayObserver {
+ public:
+  void OnClientConnected(uint64_t connection_id,
+                         const std::string& client_id,
+                         const std::string& label) override {
+    connected[connection_id] = label;
+  }
+  void OnClientDisconnected(uint64_t connection_id) override {
+    connected.erase(connection_id);
+    ++disconnects;
+  }
+
+  std::map<uint64_t, std::string> connected;
+  int disconnects = 0;
+};
+
 }  // namespace
 
 class KoanAgentGatewayTest : public testing::Test {
@@ -219,6 +236,7 @@ class KoanAgentGatewayTest : public testing::Test {
     GatewayOptions options;
     options.socket_path = path_;
     options.uid = getuid();
+    options.observer = &observer_;
     gateway_ = std::make_unique<Gateway>(options, resolver_, &store_,
                                          &presenter_, &ticks_, &wall_);
     ASSERT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kOk);
@@ -323,6 +341,7 @@ class KoanAgentGatewayTest : public testing::Test {
   std::shared_ptr<FakeResolver> resolver_;
   InMemoryClientStore store_;
   FakePresenter presenter_;
+  RecordingObserver observer_;
   std::unique_ptr<Gateway> gateway_;
 };
 
@@ -350,6 +369,30 @@ TEST_F(KoanAgentGatewayTest, PairsAndAuthenticatesOverARealSocket) {
   // Nothing else is served.
   client->Send(R"({"id":21,"method":"Page.navigate","params":{}})");
   EXPECT_EQ(ErrorCode(client->Read()), "Koan.unavailable");
+}
+
+// The indicator's source (design 6.2): an authenticated client is reported
+// with its label, and its connection's end is reported however it ends.
+TEST_F(KoanAgentGatewayTest, TheObserverSeesAuthenticatedClientsOnly) {
+  Key key;
+  const std::string id = Pair(key);
+  // Pairing alone is not a connected agent.
+  EXPECT_TRUE(observer_.connected.empty());
+  auto client = Authenticated(key, id);
+  ASSERT_EQ(observer_.connected.size(), 1u);
+  EXPECT_EQ(observer_.connected.begin()->second, "Claude Code");
+  auto silent = LiveConnection();
+  EXPECT_EQ(observer_.connected.size(), 1u);
+
+  client.reset();
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return observer_.connected.empty(); }));
+  EXPECT_EQ(observer_.disconnects, 1);
+
+  auto again = Authenticated(key, id);
+  EXPECT_EQ(observer_.connected.size(), 1u);
+  gateway_->Stop();
+  EXPECT_TRUE(observer_.connected.empty());
 }
 
 TEST_F(KoanAgentGatewayTest, AConnectionOfAnotherUserIsClosedUnread) {

@@ -1,0 +1,23 @@
+<!doctype html>
+<title>Glance parent</title>
+<body style="font: 20px sans-serif; margin: 40px">
+  <!-- Open as http://127.0.0.1:8761/parent.html. ⌥-click these with the
+       real pointer (tools/ptr altclick). The child pages are on another host
+       (localhost, serve.sh), so zoom on the Glance page doesn't change this
+       page's zoom. -->
+  <p><a id="child" href="http://localhost:8762/child.html"
+        style="display: inline-block; width: 320px; height: 44px">glance: child</a></p>
+  <p><a id="keeper" href="http://localhost:8762/keeper.html"
+        style="display: inline-block; width: 320px; height: 44px">glance: keeper (eats ⌘W)</a></p>
+  <p><a id="form" href="http://localhost:8762/form.html"
+        style="display: inline-block; width: 320px; height: 44px">glance: POST form</a></p>
+  <p><a id="tab2" href="parent.html#second" target="_blank">a second tab (for GT-B2)</a></p>
+  <p id="loads"></p>
+  <script>
+    // How many times this page loaded (sessionStorage survives reloads): a
+    // reload of the parent shows up here.
+    const n = Number(sessionStorage.getItem('loads') || 0) + 1;
+    sessionStorage.setItem('loads', n);
+    document.getElementById('loads').textContent = 'parent loads: ' + n;
+  </script>
+</body>

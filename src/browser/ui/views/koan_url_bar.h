@@ -7,10 +7,15 @@
 
 #include <string>
 
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/color/color_id.h"
 
 class BrowserWindowInterface;
+class GURL;
+
+class GURL;
 
 namespace views {
 class View;
@@ -18,19 +23,51 @@ class View;
 
 namespace koan {
 
-// While the URL bar is open in place of a new tab (Ctrl+T or the sidebar's
-// new-tab button with Zen's zen.urlbar.replace-newtab), whatever the user
-// opens from it goes to a new foreground tab: turns the kCurrentTab
-// disposition into kNewForegroundTab. Called from
+// What the URL bar opens from its rows. An open tab's row (`is_open_tab_match`,
+// its "Switch to Tab") switches to the tab, wherever the bar was opened from
+// (Zen's rows always do), unless that tab is gone: then, like any other row,
+// it opens in the current tab, or in a new one while the URL bar is open in
+// place of a new tab (Ctrl+T or the sidebar's new-tab button with Zen's
+// zen.urlbar.replace-newtab), or when `destination_url` is on another site
+// than the active tab's and that tab is pinned or an Essential (Zen's
+// zen.tabs.open-pinned-in-new-tab, koan_pinned_site.h). Turns the kCurrentTab
+// disposition into kSwitchToTab or kNewForegroundTab. Called from
 // ChromeOmniboxClient::OnAutocompleteAccept().
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
+                                   bool is_open_tab_match,
+                                   const GURL& destination_url,
                                    WindowOpenDisposition* disposition);
+
+// Whether a new tab page must not focus the URL bar by itself, as Chromium
+// does: with Zen's URL bar the floating card opens only when the user asks
+// (Cmd+L, Cmd+T, a click on the pill). Called from
+// BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault().
+bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser);
+
+// The Focus Location command (Cmd+L, the action and the legacy command both
+// end in chrome::FocusLocationBar()): the floating bar opens for the
+// keyboard, also when the bar is already open in the pill. Called at the
+// start of chrome::FocusLocationBar().
+void OnFocusLocationBarCommand(BrowserWindowInterface* browser);
+
+// While the URL bar is open over a Glance card (⌘L: Zen's Glance is the
+// selected tab, so the URL bar edits its address), what the user picks loads
+// in the Glance page: returns true after loading `url` there, so the caller
+// skips its own navigation. False otherwise (no Glance session, a new-tab
+// disposition such as Alt+Enter, or not a web URL, which closes the card and
+// goes to the tab). Called from ChromeOmniboxClient::OnAutocompleteAccept(),
+// after MaybeAdjustOmniboxDisposition().
+bool MaybeOpenOmniboxMatchInGlance(BrowserWindowInterface* browser,
+                                   const GURL& url,
+                                   ui::PageTransition transition,
+                                   WindowOpenDisposition disposition,
+                                   const std::string& extra_headers);
 
 // Zen's zen.urlbar.replace-newtab for the New Tab command (IDC_NEW_TAB: ⌘T
 // on macOS, which runs as a reserved command before any accelerator, and the
 // menu bar's File > New Tab): opens the URL bar in place of a new tab, or
 // closes the one open for a new tab. Returns false if the command should open
-// a tab as usual. Called from BrowserCommandController.
+// a tab as usual. Called from the command policy (koan_command_policy.cc).
 bool MaybeOpenUrlBarForNewTab(BrowserWindowInterface* browser);
 
 // macOS: whether the reserved commands (Chromium's list, accelerator_table.cc:
@@ -48,9 +85,9 @@ bool KeepsReservedCommandsInFullscreen(BrowserWindowInterface* browser);
 // macOS: whether `browser`'s window has no "Always Show Toolbar in Full
 // Screen" (View menu, ⇧⌘F, the toolbar action): Koan's toolbar is hidden and
 // fullscreen reveals nothing at the top edge, whatever that setting
-// (Chromium's, synced) says. Called from BrowserCommandController, which then
-// ignores the command; the menu item is hidden by the macOS menu table
-// (HidesMenuCommand(), koan_spaces.h).
+// (Chromium's, synced) says. Called from the command policy, which then
+// ignores the command; the menu item is hidden by its macOS menu table
+// (koan_command_policy.h).
 bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
 
 // The view Chromium's bubbles anchor to instead of the toolbar's, where the
@@ -68,10 +105,10 @@ bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
 views::View* GetBubbleAnchorView(const views::View* view);
 
 // The omnibox text of `location_bar` (a LocationBarView) changed;
-// `user_input_in_progress` is whether the user is typing. With Zen's
-// "floating-on-type" URL bar behaviour, the first keystroke lifts the bar
-// from the sidebar's URL pill to the floating card. Called from
-// LocationBarView::OnChanged().
+// `user_input_in_progress` is whether the user is typing. The bar is placed
+// again: a bar edited in the pill widens over the page as the text grows; a
+// pill click never lifts it to the floating card (Zen decides once, when it
+// opens). Called from LocationBarView::OnChanged().
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
 
 // The omnibox of `location_bar` (a LocationBarView) is installing its
@@ -98,11 +135,33 @@ ui::ColorId AdjustOmniboxPlaceholderColorId(views::View* location_bar,
 // Zen's has none. Called from LocationBarView::ShouldHidePageActionIcons().
 bool HidesPageActionIcons(const views::View* location_bar);
 
+// Z15: Zen's URL bar has no bookmark star, in either layout (#star-button-box
+// is hidden; ⌘D and the menus still bookmark). Called from
+// BookmarkPageActionController::ShouldShowPageAction().
+bool HidesBookmarkStar();
+
+// Z15: Zen's identity box has no text (#identity-icon-label is hidden): no
+// "Not secure", "Dangerous" or page name chip by the site icon, in either
+// layout. Screen readers still hear the security state (the icon's
+// description). Called from LocationIconView::GetText().
+bool HidesSecurityChipText();
+
 // Whether `view` (the location bar, or a row of its omnibox popup) is in a
 // window whose floating URL bar is Zen's card: only then do the suggestion
 // rows take Zen's styling (koan_omnibox_rows.h). False for any other omnibox
 // popup, in either look.
 bool ShowsZenCardRows(const views::View* view);
+
+// The colour the location bar of `location_bar` (a LocationBarView) paints and
+// gives its omnibox as its background: clear, while a glass URL bar card (Zen's
+// acrylic-urlbar) is open in its window, over the card's translucent fill;
+// else `color`. Called from LocationBarView::RefreshBackground().
+SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color);
+
+// Whether `browser_view`'s floating URL bar is open as a glass card: the
+// toolbar and the top container behind it paint nothing, so the fill is the
+// card's only colour. Called from koan::OnGlassLayout().
+bool IsGlassUrlBarOpen(const views::View* browser_view);
 
 }  // namespace koan
 

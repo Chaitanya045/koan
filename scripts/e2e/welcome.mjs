@@ -4,7 +4,7 @@
 // Mac steps are scripts/mac/steps/welcome.md).
 //
 //   scripts/e2e/run.sh welcome
-import { CDP_PORT, check, evalIn, finish, sleep, views } from './lib/koan.mjs';
+import { CDP_PORT, check, evalIn, finish, shownViews, sleep, views } from './lib/koan.mjs';
 
 async function welcomePage() {
   for (let i = 0; i < 20; ++i) {
@@ -37,6 +37,14 @@ const overlay = vs.find(v => v.cls === 'WebView' && v.path.at(-1) === 'BrowserVi
 const frame = vs.find(v => v.cls === 'BrowserView');
 check('...over the whole window', overlay && frame && overlay.w === frame.w && overlay.h === frame.h,
       `${overlay?.w}x${overlay?.h} of ${frame?.w}x${frame?.h}`);
+// In the window itself, the last of its views (the c174e/f no-input
+// regression came from a second, child window holding the page).
+const frameDepth = frame ? frame.path.length + 1 : -1;
+const frameChildren = vs.filter(v => v.path.length === frameDepth && v.path.at(-1) === 'BrowserView');
+check('...in the browser window, above its other views', overlay && frameChildren.at(-1) === overlay,
+      frameChildren.map(v => v.cls).join(','));
+check('...and the URL bar did not open over it (the empty tab at startup)',
+      shownViews(vs, 'KoanUrlBarBackdrop').length === 0);
 check('...on the welcome step', await step() === 'welcome', await step());
 check('...in shadcn\'s tokens', await js(
     `getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() !== ''`));

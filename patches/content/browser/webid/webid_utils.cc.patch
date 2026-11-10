@@ -1,0 +1,30 @@
+diff --git a/content/browser/webid/webid_utils.cc b/content/browser/webid/webid_utils.cc
+index 561da9eb5a292409bb3e1ba0fc57da9fe68d4574..92244c56b285e3e7d6c0e3b27d2d6c3f82dd2533 100644
+--- a/content/browser/webid/webid_utils.cc
++++ b/content/browser/webid/webid_utils.cc
+@@ -20,6 +20,7 @@
+ #include "content/public/browser/webid/federated_identity_api_permission_context_delegate.h"
+ #include "content/public/browser/webid/federated_identity_permission_context_delegate.h"
+ #include "content/public/common/web_identity.h"
++#include "koan/browser/containers/koan_partition_domain.h"
+ #include "net/base/net_errors.h"
+ #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+ #include "net/base/schemeful_site.h"
+@@ -106,6 +107,17 @@ void SetIdpSigninStatus(base::WeakPtr<BrowserContext> context,
+     }
+   }
+ 
++  // Koan: an agent container's Set-Login headers aren't the user's IdP
++  // sign-in status.
++  if (frame_tree_node && koan::containers::IsAgentPartitionDomain(
++                             frame_tree_node->current_frame_host()
++                                 ->GetProcess()
++                                 ->GetStoragePartition()
++                                 ->GetConfig()
++                                 .partition_domain())) {
++    return;
++  }
++
+   auto* delegate = context->GetFederatedIdentityPermissionContext();
+   if (!delegate) {
+     // The embedder may not have a delegate (e.g. webview)

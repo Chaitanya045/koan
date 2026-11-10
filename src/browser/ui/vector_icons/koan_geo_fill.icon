@@ -1,0 +1,20 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's geo-fill.svg: Lucide (ISC), lucide.dev icon "map-pin" (filled), converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 20.996, 9.98,
+QUADRATIC_TO, 20.996, 15.864, 13.207, 22.59,
+QUADRATIC_TO, 13.183, 22.61, 13.159, 22.629,
+QUADRATIC_TO, 12, 23.5, 10.841, 22.629,
+QUADRATIC_TO, 10.817, 22.61, 10.793, 22.59,
+QUADRATIC_TO, 3.004, 15.864, 3.004, 9.98,
+QUADRATIC_TO, 3.004, 6.254, 5.639, 3.619,
+QUADRATIC_TO, 8.274, 0.984, 12, 0.984,
+QUADRATIC_TO, 15.726, 0.984, 18.361, 3.619,
+QUADRATIC_TO, 20.996, 6.254, 20.996, 9.98,
+CLOSE,

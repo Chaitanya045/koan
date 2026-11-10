@@ -27,6 +27,8 @@
 // is not implemented yet, refuses.
 namespace koan::agent {
 
+class ContextTracker;
+
 // The most Network.enable may buffer for an agent: it never needs more, and a
 // client must not be able to make the browser hold more.
 inline constexpr int kMaxNetworkTotalBufferSize = 10 * 1024 * 1024;
@@ -65,6 +67,8 @@ struct FilterContext {
   bool tab_is_agent_owned = false;
   // The session's streams, for kOwnStream.
   raw_ptr<StreamRegistry> streams = nullptr;
+  // The tab's execution contexts, for kRuntimeContext.
+  raw_ptr<const ContextTracker> contexts = nullptr;
 };
 
 // The error to answer the agent's command with.
@@ -108,8 +112,13 @@ struct FilterError {
 //  kOwnStream        `handle` must be a stream in context.streams.
 //  kOwnTabOnly       only on agent-owned tabs. That only one client writes
 //                    Emulation state on a tab is the gateway's to enforce.
-//  kRuntimeContext   not implemented yet (it needs the session's execution
-//                    context tracker): refuses.
+//  kRuntimeContext   contextId and executionContextId (integers) and
+//                    uniqueContextId (a string) must name a context
+//                    context.contexts allows (a main world or one the agent
+//                    made); executionContextName is refused, since it names
+//                    every world of that name, an extension's among them.
+//                    None of them given: the default context, which is the
+//                    main world. Without a tracker: refuses.
 std::optional<FilterError> ApplyParamFilter(ParamFilter filter,
                                             base::DictValue& params,
                                             const FilterContext& context);

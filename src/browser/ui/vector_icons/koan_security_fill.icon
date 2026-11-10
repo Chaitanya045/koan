@@ -1,0 +1,27 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's security-fill.svg: Lucide (ISC), lucide.dev icon "lock" (filled), converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 4.621, 9.987,
+LINE_TO, 5.771, 9.987,
+LINE_TO, 5.771, 6.729,
+QUADRATIC_TO, 5.771, 4.149, 7.595, 2.324,
+QUADRATIC_TO, 9.42, 0.5, 12, 0.5,
+QUADRATIC_TO, 14.58, 0.5, 16.405, 2.324,
+QUADRATIC_TO, 18.229, 4.149, 18.229, 6.729,
+LINE_TO, 18.229, 9.987,
+LINE_TO, 19.379, 9.987,
+QUADRATIC_TO, 22.446, 9.987, 22.446, 13.054,
+LINE_TO, 22.446, 20.433,
+QUADRATIC_TO, 22.446, 23.5, 19.379, 23.5,
+LINE_TO, 4.621, 23.5,
+QUADRATIC_TO, 3.351, 23.5, 2.452, 22.602,
+QUADRATIC_TO, 1.554, 21.704, 1.554, 20.433,
+LINE_TO, 1.554, 13.054,
+QUADRATIC_TO, 1.554, 9.987, 4.621, 9.987,
+CLOSE,

@@ -1,16 +1,28 @@
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
-index f251259..c2bbf90 100644
 --- a/chrome/browser/app_controller_mac.mm
 +++ b/chrome/browser/app_controller_mac.mm
-@@ -137,6 +137,7 @@
+@@ -137,6 +137,9 @@
  #include "extensions/browser/extension_registry.h"
  #include "extensions/browser/extension_system.h"
  #include "extensions/buildflags/buildflags.h"
 +#include "koan/browser/ui/cocoa/koan_main_menu.h"
++#include "koan/browser/ui/cocoa/koan_session_reopen.h"
++#include "koan/browser/ui/views/koan_spaces.h"
  #include "net/base/apple/url_conversions.h"
  #include "net/base/filename_util.h"
  #include "ui/base/base_window.h"
-@@ -1961,7 +1962,8 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -1920,6 +1923,10 @@
+           if (!profile) {
+             return;
+           }
++          // Koan: Zen brings the last closed window back (Spaces, tabs).
++          if (koan::ReopenLastSession(profile)) {
++            return;
++          }
+           CreateBrowser(profile);
+         }),
+         app_controller_mac::kShowProfilePickerOnFailure);
+@@ -1961,7 +1968,8 @@
    NSMenu* mainMenu = [NSApp mainMenu];
    NSMenuItem* profileMenu = [mainMenu itemWithTag:IDC_PROFILE_MAIN_MENU];
  
@@ -20,7 +32,7 @@ index f251259..c2bbf90 100644
      [mainMenu removeItem:profileMenu];
      return;
    }
-@@ -2167,6 +2169,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -2167,6 +2175,7 @@
    // profile picker is shown at startup, these buttons won't be added until the
    // user picks a profile.
    if (!profile) {
@@ -28,11 +40,20 @@ index f251259..c2bbf90 100644
      return dockMenu;
    }
  
-@@ -2194,6 +2197,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -2194,6 +2203,7 @@
      [dockMenu addItem:item];
    }
  
 +  koan::ExtendDockMenu(dockMenu);
    return dockMenu;
  }
+ 
+@@ -2677,6 +2687,8 @@
+       first_run::IsChromeFirstRun() ? chrome::startup::IsFirstRun::kYes
+                                     : chrome::startup::IsFirstRun::kNo;
+   StartupBrowserCreatorImpl launch(base::FilePath(), dummy, first_run);
++  // Koan: links from other apps, for Zen's Space routing (koan_spaces.h).
++  koan::ScopedExternalLinks external_links;
+   launch.OpenTabsInBrowser(browser, chrome::startup::IsProcessStartup::kNo,
+                            tabs, StartupBrowserCreatorImpl::TabOverWrite::kNo);
  

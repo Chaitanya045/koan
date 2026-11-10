@@ -17,6 +17,9 @@ import {addWebUiListener, sendWithPromise} from 'chrome://resources/js/cr.js';
 
 let settings;
 let currentPane;
+// Settings > Agent Control > Saved containers (KoanAgentContainersHandler);
+// null where agent control isn't built.
+let agentContainers = null;
 // Functions that bring the controls on screen up to date with the prefs.
 let updaters = [];
 
@@ -468,6 +471,98 @@ function renderShortcuts(query) {
   ];
 }
 
+// Agent Control: saved containers --------------------------------------------
+
+// The saved agent containers, with Add and Delete, and which agent client may
+// use each one. Grants last until Koan quits or the clients' pairings are
+// forgotten, like the pairings themselves.
+function renderAgentContainers(query) {
+  if (!agentContainers ||
+      (query && !matches(query, 'saved containers', 'containers',
+                         ...agentContainers.containers.map(c => c.name)))) {
+    return [];
+  }
+  const granted = (client, container) => agentContainers.grants.some(
+      ([c, id]) => c === client && id === container);
+  const status = h('span', {class: 'theme-status'});
+  const name = h('input', {
+    type: 'text',
+    class: 'container-name',
+    maxLength: 64,
+    placeholder: 'Name, e.g. GitHub bot',
+    'aria-label': 'New saved container name',
+  });
+  const add = async () => {
+    const value = name.value.trim();
+    if (!value) {
+      return;
+    }
+    if (await sendWithPromise('createAgentContainer', value)) {
+      name.value = '';
+      status.textContent = '';
+    } else {
+      status.textContent = 'That name is taken or not allowed';
+    }
+  };
+  name.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      add();
+    }
+  });
+  const containers = agentContainers.containers.map(container => h(
+      'div', {class: 'row saved-container'},
+      h('div', {class: 'saved-container-header'},
+        h('span', {class: 'saved-container-name'}, container.name),
+        h('button', {
+          class: 'reset-button',
+          onclick: () => {
+            if (confirm(`Delete “${container.name}”? Its logins, cookies ` +
+                        'and site data are deleted too.')) {
+              sendWithPromise('deleteAgentContainer', container.name);
+            }
+          },
+        }, 'Delete')),
+      ...(agentContainers.clients.length ?
+              agentContainers.clients.map(client => {
+                const input = h('input', {
+                  type: 'checkbox',
+                  checked: granted(client.id, container.id),
+                  onchange: () => sendWithPromise(
+                      'setAgentContainerGrant', client.id, container.id,
+                      input.checked),
+                });
+                return h('label', {class: 'row checkbox indent'}, input,
+                         h('span', {}, `${client.label || 'Unnamed agent'}` +
+                                           (client.connected ? '' :
+                                                ' (not connected)')));
+              }) :
+              [h('p', {class: 'description'},
+                 'Connect an agent to choose which may use it.')])));
+  return [
+    h('section', {class: 'group', id: 'group-agent-containers'},
+      h('h2', {}, 'Saved containers'),
+      h('p', {class: 'description'},
+        'An agent works in a new, empty container unless you give it a ' +
+            'saved one, which keeps its logins between tasks. Only the ' +
+            'agents you tick here may use a saved container, and only when ' +
+            'they ask for it by name. Your choices last until Koan quits or ' +
+            'you stop all agents.'),
+      ...containers,
+      h('div', {class: 'row theme-paste'},
+        h('div', {class: 'theme-actions'}, name,
+          h('button', {onclick: add}, 'Add'), status))),
+  ];
+}
+
+function renderPane(pane, query) {
+  if (pane.id === settings.shortcutsPane) {
+    return renderShortcuts(query);
+  }
+  const groups = renderGroups(pane, query);
+  return pane.id === 'agents' ?
+      [...groups, ...renderAgentContainers(query)] : groups;
+}
+
 // Page ------------------------------------------------------------------------
 
 function render() {
@@ -475,17 +570,14 @@ function render() {
   const pane = document.getElementById('pane');
   const query = document.getElementById('search').value.trim().toLowerCase();
   if (query) {
-    const results = settings.panes.flatMap(
-        p => p.id === settings.shortcutsPane ? renderShortcuts(query) :
-                                                 renderGroups(p, query));
+    const results = settings.panes.flatMap(p => renderPane(p, query));
     pane.replaceChildren(
         h('h1', {}, 'Search Results'),
         ...(results.length ? results : [h('p', {class: 'empty'},
             `Sorry! There are no results in Settings for “${query}”.`)]));
   } else {
     const current = settings.panes.find(p => p.id === currentPane);
-    pane.replaceChildren(...(current.id === settings.shortcutsPane ?
-                                 renderShortcuts() : renderGroups(current)));
+    pane.replaceChildren(...renderPane(current));
   }
   for (const button of document.querySelectorAll('#categories .category')) {
     button.setAttribute('aria-selected',
@@ -503,6 +595,11 @@ function selectPane(id) {
 
 async function main() {
   settings = await sendWithPromise('getSettings');
+  // Not awaited: where agent control isn't built nothing answers.
+  sendWithPromise('getAgentContainers').then(containers => {
+    agentContainers = containers;
+    render();
+  });
   const panes = settings.panes.filter(paneHasContent);
   settings.panes = panes;
   document.getElementById('categories').replaceChildren(...panes.map(
@@ -524,6 +621,14 @@ async function main() {
       // The page draws from the same tokens as the browser: fetch them again.
       document.getElementById('look-tokens').href =
           `/koan_tokens.css?${Date.now()}`;
+    }
+  });
+  addWebUiListener('agent-containers-changed', containers => {
+    agentContainers = containers;
+    // Don't take the text out of a name being typed.
+    if (currentPane === 'agents' &&
+        !document.activeElement?.classList.contains('container-name')) {
+      render();
     }
   });
   addWebUiListener('shortcuts-changed', shortcuts => {

@@ -86,8 +86,10 @@
   second omnibox, so everything Chrome's omnibox does keeps working; the
   popup anchors to the location bar by itself. #36 moved it into
   `KoanUrlBarController` and added Zen's behaviours: the omnibox edits over
-  the pill and floats on the first keystroke (hook in
-  `LocationBarView::OnChanged`).
+  the pill after a click and floats when opened with the keyboard (hook in
+  `LocationBarView::OnChanged`). A pill click never floats it, typing
+  included (Zen's `#openPopover` decides once, when the bar opens), which
+  reverses #36's "floats on the first keystroke" (#96).
 - **Ctrl+T without a tab (#36)**: no hook in `chrome::NewTab()` (its callers,
   e.g. `CreateNewTabGroup`, use the tab it returns). Ctrl+T is a Koan
   accelerator, the new-tab button's `kActionNewTab` callback is swapped per
@@ -127,3 +129,29 @@
   what the page sees even though headless has no window manager. The same
   callback tells the download animation where the page was clicked (the
   page is a native view on macOS, so Views' event handlers never see it).
+- **Folders are Koan's own model, drawn by upstream's tab strip** (#42):
+  Zen's folders are nested Firefox tab groups in a Space's pinned section.
+  Chromium's tab groups can't nest (`TabGroupTabCollection` allows only
+  splits) or be pinned, and Koan's Spaces already are tab groups, so a
+  folder is a Koan object (name, collapsed, parent folder, Space, tab
+  handles), per window. Its tabs stay ordinary tabs of the Space and, as in
+  Zen, are pinned to it (#59), so folders sit in the pinned section.
+  The Space group's vertical layout has one Koan hook, `koan::SpaceGroupRows`:
+  a `KoanFolderRowView` (a child of the group view) before each folder's
+  tabs, tabs indented 14px per level and, in a collapsed folder, given zero
+  height and hidden once upstream's 200 ms layout animation is over; then
+  #150's separator and New Tab rows. Drag, close, hover cards and context
+  menus of the tabs stay upstream's. There is no ordering pass of its own:
+  Koan's folder actions arrange the folders' tabs once after the change, and
+  Koan's pinned tabs' Normalize()
+  (one pass, one wait for drags and session restore) keeps folder tabs
+  together for moves Koan didn't make (`ArrangeFolders()`). Drags are decided
+  when the drag ends, from where each dragged tab was dropped (one back where
+  it started keeps its folder; a drop on a row's middle joins at its start).
+  Persisted through #59's session data (`koan_session_data.h`, key
+  "koan.folders"), with no session patch of its own: the folder tree in the
+  window's data (each folder with a random token), and each folder tab's
+  token in its own data, so membership follows the tab, not its index. A
+  `WindowRestoreHook` brings the folders back before the tabs, which join them
+  by token. Without a session restore, a profile pref (`koan.folders.list`)
+  brings back the folders of the window the user was in, with their tabs.

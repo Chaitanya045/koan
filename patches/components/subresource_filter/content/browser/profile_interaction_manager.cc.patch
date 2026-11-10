@@ -1,0 +1,46 @@
+diff --git a/components/subresource_filter/content/browser/profile_interaction_manager.cc b/components/subresource_filter/content/browser/profile_interaction_manager.cc
+index 63e1b6c386490a418d39c8bbe92ebac9de250820..df4b6b8e67e7de048fbc4cdfe62ab3f4abe099bf 100644
+--- a/components/subresource_filter/content/browser/profile_interaction_manager.cc
++++ b/components/subresource_filter/content/browser/profile_interaction_manager.cc
+@@ -20,6 +20,7 @@
+ #include "content/public/browser/page.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ 
+ #if BUILDFLAG(IS_ANDROID)
+ #include "components/messages/android/message_dispatcher_bridge.h"
+@@ -67,6 +68,11 @@ void ProfileInteractionManager::OnAdsViolationTriggered(
+   if (ads_violation_triggered_for_last_committed_navigation_) {
+     return;
+   }
++  // Koan: an agent container's ads never turn on ad blocking for the user's
++  // visits.
++  if (koan::containers::IsAgentFrame(rfh)) {
++    return;
++  }
+ 
+   // If the feature is disabled, simulate ads interventions as if we were
+   // enforcing on ads: do not record new interventions if we would be enforcing
+@@ -110,7 +116,9 @@ mojom::ActivationLevel ProfileInteractionManager::OnPageActivationComputed(
+   }
+ 
+   const GURL& url(navigation_handle->GetURL());
+-  if (url.SchemeIsHTTPOrHTTPS()) {
++  // Koan: an agent container's activations aren't written to site settings.
++  if (url.SchemeIsHTTPOrHTTPS() && !koan::containers::IsAgentContents(
++                                       navigation_handle->GetWebContents())) {
+     profile_context_->settings_manager()->SetSiteMetadataBasedOnActivation(
+         url, effective_activation_level == mojom::ActivationLevel::kEnabled,
+         SubresourceFilterContentSettingsManager::ActivationSource::
+@@ -160,7 +168,9 @@ void ProfileInteractionManager::MaybeShowNotification() {
+ 
+     ContentSubresourceFilterThrottleManager::LogAction(
+         SubresourceFilterAction::kUIShown);
+-    profile_context_->settings_manager()->OnDidShowUI(top_level_url);
++    if (!koan::containers::IsAgentContents(GetWebContents())) {
++      profile_context_->settings_manager()->OnDidShowUI(top_level_url);
++    }
+   } else {
+     ContentSubresourceFilterThrottleManager::LogAction(
+         SubresourceFilterAction::kUISuppressed);

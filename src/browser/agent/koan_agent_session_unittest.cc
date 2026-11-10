@@ -74,6 +74,13 @@ class FakeDelegate final : public SessionDelegate {
     ++rechecks;
     return peer_unchanged;
   }
+  bool Forward(AgentMessage message) override {
+    if (!forwards) {
+      return false;
+    }
+    forwarded.push_back(std::move(message));
+    return true;
+  }
 
   const base::DictValue& Last() const { return replies.back(); }
   // The Koan error code of the last reply, or "".
@@ -91,6 +98,9 @@ class FakeDelegate final : public SessionDelegate {
   // What the gateway's second look at the peer finds, and how often it looked.
   bool peer_unchanged = true;
   int rechecks = 0;
+  // Whether Forward() takes messages, and what it took.
+  bool forwards = false;
+  std::vector<AgentMessage> forwarded;
 
  private:
   FrameDecoder decoder_{kMaxPayload};
@@ -693,7 +703,7 @@ TEST_F(KoanAgentSessionTest, APairedClientAuthenticatesWithItsKey) {
 }
 
 TEST_F(KoanAgentSessionTest,
-       AnAuthenticatedSessionAnswersStatusAndForwardsNothing) {
+       WithNothingToForwardToAnAuthenticatedSessionRefusesAllButStatus) {
   Client client;
   const std::string id = Pair(client);
   auto session = NewSession();
@@ -710,6 +720,31 @@ TEST_F(KoanAgentSessionTest,
     EXPECT_EQ(delegate().LastError(), "Koan.unavailable") << method;
   }
   EXPECT_NE(session->state(), Session::State::kClosed);
+}
+
+TEST_F(KoanAgentSessionTest, AnAuthenticatedSessionForwardsTheParsedMessage) {
+  Client client;
+  const std::string id = Pair(client);
+  auto session = NewSession();
+  ASSERT_TRUE(Authenticate(*session, client, id));
+  delegate().forwards = true;
+  const size_t replies = delegate().replies.size();
+  Send(*session, R"({"id":22,"method":"Page.navigate","sessionId":"S1",)"
+                 R"("params":{"url":"https://example.com/"}})");
+  ASSERT_EQ(delegate().forwarded.size(), 1u);
+  const AgentMessage& message = delegate().forwarded[0];
+  EXPECT_EQ(message.id, 22);
+  EXPECT_EQ(message.method, "Page.navigate");
+  EXPECT_EQ(message.session_id, "S1");
+  EXPECT_EQ(*message.params.FindString("url"), "https://example.com/");
+  EXPECT_EQ(message.client_id, id);
+  // The forwarder answers, not the session.
+  EXPECT_EQ(delegate().replies.size(), replies);
+
+  // A session id that is not a string is a protocol violation.
+  Send(*session, R"({"id":23,"method":"Page.reload","sessionId":7})");
+  EXPECT_EQ(delegate().closed, CloseReason::kProtocolViolation);
+  EXPECT_EQ(delegate().forwarded.size(), 1u);
 }
 
 TEST_F(KoanAgentSessionTest,

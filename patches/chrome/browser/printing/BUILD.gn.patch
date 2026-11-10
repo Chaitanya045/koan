@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/printing/BUILD.gn b/chrome/browser/printing/BUILD.gn
+index 3168c27664de4dfd62e1af23548569a4d29a5978..a75ad8a9cd072630d4d026ac99584a730a7c9d47 100644
+--- a/chrome/browser/printing/BUILD.gn
++++ b/chrome/browser/printing/BUILD.gn
+@@ -217,6 +217,7 @@ if (enable_printing) {
+         "//components/guest_view/browser",
+         "//components/pref_registry",
+         "//components/web_modal",
++        "//koan/browser/agent:tab_hooks",
+         "//ui/web_dialogs",
+       ]
+       if (is_chromeos) {

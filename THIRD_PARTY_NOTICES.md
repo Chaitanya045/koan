@@ -25,6 +25,8 @@ remains MIT-licensed. Source for every file is in this repository.
 | --- | --- |
 | `src/browser/koan_shortcut_table.cc` | `ZenKeyboardShortcuts.mjs`, `zen-preferences.ftl` |
 | `src/browser/ui/views/koan_sidebar_curve.{h,cc}` and its unit test | `src/zen/compact-mode/sidebar.inc.css` (compact mode's slide easing table, 250 ms / 150 ms timings) |
+| `src/browser/koan_fuzzy_score.{h,cc}` | `ZenUBActionsProvider.sys.mjs` (fuzzy scoring) |
+| `src/browser/koan_library_logic.{h,cc}` | `ZenLibraryHistorySection.mjs` (URL and site formatting), `ZenLibrarySpacesSection.mjs` (the card drag) |
 | `src/browser/ui/views/koan_commands.cc` | `ZenUBGlobalActions.sys.mjs`, `zen-command-palette.ftl` |
 | `src/browser/ui/views/koan_command_palette.cc` | `ZenUBActionsProvider.sys.mjs` (fuzzy scoring) |
 | `src/browser/ui/webui/koan_settings_rows.cc` | `zen-preferences.ftl` |
@@ -51,15 +53,33 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_native_window_move_mac.mm` | `nsZenNativeWindowMove.mm` (the native window move on macOS), `expose_tiled_attribute_to_all_platforms.patch` (`WindowIsTiled`, the tiling state of a window) |
 | `src/browser/ui/views/koan_zen_download_animation.{h,cc}` | `ZenDownloadAnimation.mjs` (the download arc, the tile's timing) |
 | `src/browser/ui/views/koan_zen_media.{h,cc}` | `ZenMediaController.mjs`, `zen-media-controls.css` (the media cards' stack, timing and time format) |
+| `src/browser/ui/views/koan_zen_logic_unittest.cc` | `ZenMediaController.mjs`, `ZenDownloadAnimation.mjs`, `ZenWindowDragChild.sys.mjs` (tests of the time format, the download arc and the window-drag probe) |
 | `src/browser/ui/views/koan_zen_compact_strings.h` | `zen-general.ftl` (the sidebar button's label and tooltip) |
 | `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |
+| `src/browser/ui/views/koan_zen_sidebar_notification.h` | `ZenSidebarNotification.mjs`, `zen-sidebar-notification.css`, `ZenUpdates.mjs`, `zen-general.ftl` (the sidebar notification's sizes and timing, the "Update Complete!" strings) |
 | `src/browser/ui/views/koan_swipe_tracker.{h,cc}`, `koan_swipe_tracker_unittest.cc` | `ZenSpacesSwipe.mjs` (success threshold, velocity weight, resistance), Gecko's `SwipeTracker.cpp` units as Zen patches it |
+| `src/browser/ui/views/koan_folder_zen_assets.{h,cc}` | `ZenFolder.mjs` (folder icon), `ZenFolders.mjs` (`formatRelativeTime`), `zen-folders.ftl`, `zen-workspaces.ftl`, `zen-vertical-tabs.ftl` (strings) |
+| `src/browser/ui/views/koan_space_theme.h`, `koan_space_theme.cc` | `ZenGradientGenerator.mjs` (colour maths, harmonies, preset swatches, opacity wave), `browser.xhtml` (preset swatch data) |
+| `src/browser/ui/views/koan_theme_picker.cc` | `zen-gradient-generator.css` (panel sizes), `zen-workspaces.ftl` (strings) |
+| `src/browser/ui/views/koan_theme_platform.h`, `koan_theme_platform.cc`, `koan_theme_platform_mac.mm` | `zen-browser-ui.css` (InactiveCaption), `prefs/zen/macos.yaml` (native popovers); Firefox `widget/cocoa/nsLookAndFeel.mm`, `toolkit/themes/shared/global-shared.css` |
+| `src/browser/ui/views/koan_haptics.h`, `koan_haptics.cc`, `koan_haptics_mac.mm` | `ZenCommonUtils.h`, `cocoa/ZenHapticFeedback.mm` (haptic feedback) |
+| `src/browser/ui/views/resources/grain-bg.png` | `zen-images/grain-bg.png` (unmodified) |
 
 New files that port Zen material must carry the same header and be added to
 this table (see CONTRIBUTING.md).
 
-The comparison screenshots `docs/screenshots/*-zen-vs-koan*.png` show Zen
-Browser's interface, for comparison only.
+The comparison screenshots `docs/screenshots/*-zen-vs-koan*.png` and
+`docs/screenshots/zen-folders-*.png` show Zen Browser's interface, for
+comparison only.
+
+## Firefox strip-on-share list (MPL-2.0)
+
+`src/browser/ui/views/koan_strip_on_share.cc` holds the parameter and site
+lists of Firefox's `toolkit/components/antitracking/StripOnShareLists/MPL2/
+StripOnShare.json`, Copyright the Mozilla contributors, under the Mozilla
+Public License 2.0 (https://mozilla.org/MPL/2.0/). That file, Koan's code in
+it included, is covered by the MPL-2.0 and says so in its header. Firefox's
+separately licensed (LGPL) list is not used.
 
 ## shadcn/ui (MIT)
 
@@ -81,14 +101,30 @@ full notice is in `src/browser/ui/webui/resources/welcome_icons/LICENSE`.
 2023 Vercel, in collaboration with basement.studio, under the SIL Open Font
 License 1.1 (`src/browser/ui/fonts/geist/OFL.txt`).
 
+## Icons: Lucide (ISC)
+
+`third_party/icons/lucide/*.svg` are icons from [Lucide](https://lucide.dev)
+(`lucide-static` 1.67.0), ISC licensed, Copyright (c) Lucide Icons and
+Contributors; some derive from Feather (MIT, Copyright (c) Cole Bemis). The
+full notice is in `third_party/icons/LICENSE-lucide`. Koan converts the ones it
+uses to `src/browser/ui/vector_icons/koan_*.icon` (`scripts/gen_koan_icons.py`)
+to give its UI Zen's icon vocabulary and weight. Zen's own icons are Nucleo
+icons and are **not** used or shipped by Koan.
+
+| Koan file | From |
+| --- | --- |
+| `third_party/icons/lucide/*.svg`, `src/browser/ui/vector_icons/koan_*.icon` | Lucide (ISC) |
+| `third_party/icons/firefox/search-glass.svg`, `src/browser/ui/vector_icons/koan_urlbar_search_glass.icon` | Firefox `toolkit/themes/shared/icons/search-glass.svg` (MPL-2.0; header kept; Proton variant, as Zen's URL bar shows it) |
+| `third_party/icons/zen/library.svg`, `src/browser/ui/vector_icons/koan_library.icon` | Zen Browser 1.24b `zen-icons/common/library/library.svg` (MPL-2.0; header kept; Zen's own glyph, not Nucleo) |
+
 ## Chromium-derived files
 
-`src/browser/ui/vector_icons/*.template` and
-`src/browser/ui/vector_icons/{light_mode,automatic_appearance}.icon` are
-adapted from Chromium and stay under Chromium's BSD-style license.
+`src/browser/ui/vector_icons/*.template` are adapted from Chromium and stay
+under Chromium's BSD-style license.
 
 ## Not affiliated
 
 Koan is not affiliated with Google, the Chromium project, or the Zen browser
-project. "Zen" is referenced only to describe the user experience Koan aims
-for.
+project. Apart from the files listed under "Zen Browser (MPL-2.0)" above, which port
+material from Zen, "Zen" is referenced only to describe the user experience
+Koan aims for.

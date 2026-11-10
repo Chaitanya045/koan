@@ -7,6 +7,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_download_animation.h"
+#include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
 #include "ui/gfx/animation/animation.h"
 
@@ -33,6 +34,12 @@ bool ShowsDownloadAnimation(BrowserView* browser_view) {
   // With reduced motion neither animation runs.
   return controller && controller->download_animation()->IsEnabled() &&
          gfx::Animation::ShouldRenderRichAnimation();
+}
+
+bool IsWindowCoveredAt(BrowserView* browser_view, const gfx::Point& point) {
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller && controller->welcome()->CoversPoint(point);
 }
 
 }  // namespace koan
