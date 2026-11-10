@@ -35,7 +35,7 @@ Chrome.
 | Open / close the Library | Alt+Shift+L (⌥⇧L) | |
 | Library: History | Ctrl+H or Ctrl+Shift+H (⌘⇧H or ⌘Y) | History page (Ctrl+H; macOS ⌘Y) |
 | Inspect element | Ctrl+Shift+L | |
-| New window | Ctrl+Shift+N | New incognito window |
+| New Blank Window (no Spaces, not synced) | Ctrl+Shift+N | New incognito window |
 | New private window | Ctrl+Shift+P | Print using system dialog |
 | Mute site | Ctrl+M | |
 | Bookmarks | Ctrl+B | |
@@ -64,7 +64,7 @@ Zen's Firefox-based macOS differences are followed:
 | New tab (opens the URL bar) | ⌘T | |
 | Copy the page's URL (as Markdown) | ⌘⇧C (⌘⇧⌥C) | Inspect element (now ⌘⌥L; ⌘⌥C still works) |
 | Pin / unpin tab; close all unpinned tabs | ⌘⇧D; ⌘⇧K | Bookmark All Tabs |
-| New window | ⌘N (Chrome's), ⌘⇧N | New Incognito Window (now ⌘⇧P) |
+| New window; New Blank Window | ⌘N (Chrome's); ⌘⇧N | New Incognito Window (now ⌘⇧P) |
 | New private window | ⌘⇧P | |
 | Inspect element | ⌘⌥L, ⌘⇧L | Downloads (⌘⌥L), collapse of the vertical tab strip (⌘⇧L); ⌘⌥C still works |
 | Downloads | ⌘J (Firefox's) | Chrome's ⌘⇧J |
@@ -92,8 +92,8 @@ Tools, Window, Help. Chrome's Tab menu is hidden and its Profiles menu removed (
 follow the shortcuts in effect (also after you change one in Settings):
 
 - **Zen** (app menu): Settings… (⌘,), which opens Koan's settings.
-- **File:** New Blank Window (⌘⇧N, Zen's; a plain new window here, there is
-  no window sync) after New Window, and New Private Window (⌘⇧P) for
+- **File:** New Blank Window (⌘⇧N, Zen's: a window without Spaces, outside
+  window sync) after New Window, and New Private Window (⌘⇧P) for
   Chrome's Incognito.
 - **View:** Appearance > Automatic / Light / Dark first, as in Zen; Chrome's
   bookmark bar, full-screen toolbar, full URLs, AI, Lens, vertical tabs, Cast
@@ -495,6 +495,15 @@ own tabs in it (only pinned tabs and Essentials are shared, Zen's
 `sync-only-pinned-tabs`: `koan.window_sync.sync_only_pinned`). A Space
 created in another window shows a new tab here. Private windows have no
 Spaces, and an agent container's Space stays in its window.
+
+**New Blank Window** (⌘⇧N, File > New Blank Window, or "New Blank Window" in
+the command palette) opens a window outside the sync, like Zen's: no Spaces,
+no shared Essentials or pinned tabs, just its own tabs. A link opened in a
+new window (Shift+click, "Open Link in New Window") opens a blank window
+too while synced windows are open
+(`koan.window_sync.open_links_in_blank_window`, Zen's
+`open-link-in-new-unsynced-window`, on by default). After a restart a blank
+window comes back as a normal window, with its tabs in a Space.
 
 Chrome's tab group commands do Zen's thing in a Space window: ⌘⌃P
 (New tab group) opens the Create-a-Space form, ⌘⌃W (Close group) asks to

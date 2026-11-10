@@ -1,16 +1,26 @@
 diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
-index d5d5691f0b7dfdb1a8cc5671537826262c96addd..e4560ef7366d5495218cace9bcc3e416dec1a4ca 100644
+index d5d5691f0b7dfdb1a8cc5671537826262c96addd..d99cd20f38f55e9320d0e866b53cd6c11a8e88b5 100644
 --- a/chrome/browser/ui/navigator/browser_navigator.cc
 +++ b/chrome/browser/ui/navigator/browser_navigator.cc
-@@ -77,6 +77,7 @@
+@@ -77,6 +77,8 @@
  #include "content/public/browser/site_isolation_policy.h"
  #include "content/public/browser/web_contents.h"
  #include "extensions/buildflags/buildflags.h"
 +#include "koan/browser/containers/koan_container_partition.h"
++#include "koan/browser/ui/views/koan_window_sync_hooks.h"
  #include "third_party/blink/public/common/features_generated.h"
  #include "third_party/blink/public/common/permissions/permission_utils.h"
  #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
-@@ -579,6 +580,15 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+@@ -464,6 +466,8 @@ std::tuple<BrowserWindowInterface*, int> GetBrowserAndTabForDisposition(
+       BrowserWindowInterface* browser = nullptr;
+       if (GetBrowserWindowCreationStatusForProfile(*profile) ==
+           BrowserWindowInterface::CreationStatus::kOk) {
++        // Koan: Zen's New Blank Window for a link (koan_window_sync_hooks.h).
++        auto koan_blank_window = koan::WillOpenWindowForNavigation(profile);
+         BrowserWindowCreateParams browser_params(profile, params.user_gesture);
+         browser_params.should_trigger_session_restore =
+             should_trigger_session_restore;
+@@ -579,6 +583,15 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
        params.opener ? params.opener->GetSiteInstance()
                      : tab_util::GetSiteInstanceForNewTab(
                            params.browser->GetProfile(), url);
@@ -26,7 +36,7 @@ index d5d5691f0b7dfdb1a8cc5671537826262c96addd..e4560ef7366d5495218cace9bcc3e416
  
    WebContents::CreateParams create_params(
        params.browser->GetProfile(), initial_site_instance_for_new_contents);
-@@ -864,6 +874,13 @@ base::WeakPtr<content::NavigationHandle> NavigateImpl(
+@@ -864,6 +877,13 @@ base::WeakPtr<content::NavigationHandle> NavigateImpl(
  
    std::unique_ptr<web_app::NavigationCapturingProcess> app_navigation =
        web_app::NavigationCapturingProcess::MaybeHandleAppNavigation(*params);

@@ -84,6 +84,7 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"settings", 10},
     {"open-private-window", 11},
     {"open-new-window", 12},
+    {"new-blank-window", 13},
     {"pin-tab", 14},
     {"unpin-tab", 15},
     {"next-space", 18},
@@ -245,6 +246,11 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   add_if(IsEnabled(controller, IDC_NEW_WINDOW),
          ShortcutCommand(controller, "open-new-window", u"Open New Window",
                          kNewWindowIcon, Action::kNewWindow));
+  // Zen's zen-action-new-blank-window (cmd_zenNewNavigatorUnsynced).
+  add_if(
+      IsEnabled(controller, IDC_NEW_WINDOW) && features::IsWorkspacesEnabled(),
+      ShortcutCommand(controller, "new-blank-window", u"New Blank Window",
+                      kNewWindowIcon, Action::kNewBlankWindow));
   add_if(tab && !pinned, ShortcutCommand(controller, "pin-tab", u"Pin Tab",
                                          kKeepIcon, Action::kTogglePinTab));
   add_if(pinned, ShortcutCommand(controller, "unpin-tab", u"Unpin Tab",

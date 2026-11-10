@@ -45,6 +45,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kWindowSyncEnabled, true);
   registry->RegisterBooleanPref(kWindowSyncOnlyPinned, true);
   registry->RegisterDictionaryPref(kWindowSyncState);
+  registry->RegisterBooleanPref(kWindowSyncOpenLinksInBlankWindow, true);
   registry->RegisterBooleanPref(kGlanceEnabled, true);
   registry->RegisterStringPref(kGlanceActivationMethod, "alt");
   registry->RegisterBooleanPref(kGlanceOpenPinnedExternalLinks, true);

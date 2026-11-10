@@ -96,6 +96,7 @@
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "ui/actions/actions.h"
 #include "ui/base/mojom/themes.mojom.h"
@@ -439,8 +440,10 @@ KoanWorkspaceController* KoanWorkspaceController::FromTabStrip(
 
 bool KoanWorkspaceController::IsEnabled() const {
   // Like Zen, private windows have no Spaces.
+  // Nor Zen's New Blank Window (koan_window_sync.h).
   return features::IsWorkspacesEnabled() &&
          !browser_view_->GetProfile()->IsOffTheRecord() &&
+         !IsBlankWindow(browser_view_) &&
          base::FeatureList::IsEnabled(::features::kTabGroupsFocusing) &&
          browser_view_->GetIsNormalType() &&
          browser_view_->browser()->GetTabStripModel()->SupportsTabGroups();

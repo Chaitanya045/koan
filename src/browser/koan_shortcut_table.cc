@@ -99,6 +99,8 @@ constexpr Info kActions[] = {
     {Action::kToggleSingleToolbar, "toggle-single-toolbar", "zen-other",
      "Switch Single / Multiple Toolbars", features::IsCompactModeEnabled},
     {Action::kNewWindow, "new-window", "windowAndTabManagement", "New Window"},
+    {Action::kNewBlankWindow, "new-blank-window", "windowAndTabManagement",
+     "New Blank Window", features::IsWorkspacesEnabled},
     {Action::kNewTab, "new-tab", "windowAndTabManagement", "New Tab",
      features::IsUrlBarEnabled},
     {Action::kCloseUnpinnedTabs, "close-unpinned-tabs",
@@ -190,10 +192,11 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_H, kAccel, Action::kLibraryHistory),
       bind(ui::VKEY_H, kAccel | kShift, Action::kLibraryHistory),
 #endif
-      // Zen (Firefox) windows: Accel+Shift+N new (blank) window,
-      // Accel+Shift+P private. On macOS the first takes Chrome's reserved
-      // Cmd+Shift+N (a private window there) and Zen's Cmd+N stays Chrome's.
-      bind(ui::VKEY_N, kAccel | kShift, Action::kNewWindow),
+      // Zen (Firefox) windows: Accel+Shift+N New Blank Window (Zen's
+      // zen-new-unsynced-window), Accel+Shift+P private. On macOS the first
+      // takes Chrome's reserved Cmd+Shift+N (a private window there) and Zen's
+      // Cmd+N stays Chrome's New Window.
+      bind(ui::VKEY_N, kAccel | kShift, Action::kNewBlankWindow),
       bind(ui::VKEY_P, kAccel | kShift, Action::kNewPrivateWindow),
       // Zen inherits these from Firefox; Chrome leaves the keys free. Mute is
       // Control+M on macOS too (Firefox's "control" modifier, not "accel").
