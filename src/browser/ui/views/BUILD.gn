@@ -179,6 +179,18 @@ source_set("strip_on_share") {
 
 # Which Space comes next, and the wheel's modifier (koan_space_navigation.h):
 # pure, so the unit tests need nothing else.
+# A Space's pinned tab as stored in its prefs entry (koan_stored_tab.h).
+source_set("stored_tab") {
+  sources = [
+    "koan_stored_tab.cc",
+    "koan_stored_tab.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+}
+
 source_set("space_navigation") {
   sources = [ "koan_space_navigation.h" ]
 }
@@ -197,6 +209,7 @@ test("koan_views_unittests") {
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
     "koan_space_routes_unittest.cc",
+    "koan_stored_tab_unittest.cc",
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
     "koan_window_edges_unittest.cc",
@@ -211,6 +224,7 @@ test("koan_views_unittests") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":stored_tab",
     ":strip_on_share",
     ":swipe_tracker",
     ":window_edges",
@@ -422,6 +436,7 @@ source_set("impl") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":stored_tab",
     ":strip_on_share",
     ":swipe_tracker",
     ":views",

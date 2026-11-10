@@ -153,8 +153,10 @@ inline constexpr char kWorkspaceTintSavedVariant[] =
 // New Tab page or to pages; macOS's new window after the last one closed)
 // gets them back (KoanWorkspaceController::RecreateStoredSpaces()): a list of
 // {"title": "<icon> <name>", "color": tab_groups::TabGroupColorId,
-// "active": bool}, in order. The session holds the Spaces otherwise (their tab
-// groups).
+// "active": bool, "pinned": [koan::StoredTab]}, in order: "pinned" is the
+// Space's pinned tabs, which come back unloaded with it (Zen restores only
+// the pinned tabs when it doesn't resume the session). The session holds the
+// Spaces otherwise (their tab groups).
 inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
