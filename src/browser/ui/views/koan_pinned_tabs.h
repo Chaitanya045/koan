@@ -156,6 +156,13 @@ class KoanPinnedTabController : public TabStripModelObserver {
   void AddToEssentials(tabs::TabInterface* tab);
   // The tab becomes a normal tab of the active Space, as in Zen.
   void RemoveFromEssentials(tabs::TabInterface* tab);
+  // Duplicate (the tab menu, the menu bar, extensions) made `duplicate` from
+  // `source`: Zen's duplicate of a pinned tab or Essential is a normal tab of
+  // the active Space (SessionStore's duplicate path drops the pin), below the
+  // pinned tabs. Chromium's stays an Essential, and a pinned tab's lands in
+  // the pinned run.
+  void OnTabDuplicated(const tabs::TabInterface* source,
+                       tabs::TabInterface* duplicate);
 
   // Goes back to the pinned URL with a fresh history, like Zen's reset. A
   // tab that isn't loaded stays so and goes there when it is next shown.

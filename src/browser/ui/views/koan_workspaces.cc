@@ -2332,6 +2332,23 @@ tabs::TabInterface* PickSpaceTab(TabStripModel* tab_strip,
              : nullptr;
 }
 
+void PlaceUnindexedTab(TabStripModel* tab_strip,
+                       bool pinned,
+                       int& index,
+                       std::optional<tab_groups::TabGroupId>& group) {
+  const std::optional<tab_groups::TabGroupId> space =
+      tab_strip->GetFocusedGroup();
+  if (pinned || group || !space ||
+      !KoanWorkspaceController::FromTabStrip(tab_strip) ||
+      !tab_strip->group_model()->ContainsTabGroup(*space)) {
+    return;
+  }
+  // As the New Tab row (KoanSidebarTabsController::OpenNewTab()).
+  index = static_cast<int>(
+      tab_strip->group_model()->GetTabGroup(*space)->ListTabs().start());
+  group = space;
+}
+
 bool WrapsSpaces(TabStripModel* tab_strip) {
   return KoanWorkspaceController::FromTabStrip(tab_strip) != nullptr;
 }
