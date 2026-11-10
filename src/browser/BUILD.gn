@@ -77,7 +77,8 @@ test("koan_shortcut_unittests") {
   ]
 }
 
-# Agent control's unit tests (src/browser/agent). Nothing else depends on that
+# Agent control's unit tests (src/browser/agent, and its containers in
+# src/browser/containers). Nothing else depends on the agent
 # directory yet, and GN reads a BUILD.gn only when some target names a label in
 # its directory, so this group is what makes the tests buildable:
 #   autoninja -C out/Koan koan/browser:agent_unit_tests
@@ -90,6 +91,7 @@ group("agent_unit_tests") {
     "//koan/browser/agent:koan_agent_session_fuzzer",
     "//koan/browser/agent:koan_agent_unittests",
     "//koan/browser/agent:koan_agent_url_fuzzer",
+    "//koan/browser/containers:koan_containers_unittests",
   ]
 }
 

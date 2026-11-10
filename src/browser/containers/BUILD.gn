@@ -1,0 +1,84 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+# Containers: a StoragePartition of their own inside the user's profile
+# (.agent/notes/agent-control.md section 7). Agent containers, and user
+# containers per Space (#111).
+
+# What a container is, and the SiteInstances upstream's hooks put new tabs
+# in. Depends on //base and //content/public/browser only, so upstream
+# targets in components/ and extensions/ can depend on it.
+source_set("partition") {
+  sources = [
+    "koan_container_partition.cc",
+    "koan_container_partition.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    "//content/public/browser",
+    "//url",
+  ]
+}
+
+# The core's hooks into the browser (koan_containers.h) and the API agent
+# control calls (koan_agent_containers.h). Header-only, so upstream targets
+# and //koan/browser/agent can depend on it without cycles; the definitions
+# are in :impl, linked through //koan/browser/ui/views:impl.
+source_set("containers") {
+  sources = [
+    "koan_agent_containers.h",
+    "koan_containers.h",
+  ]
+  public_deps = [
+    ":partition",
+    "//base",
+    "//url",
+  ]
+}
+
+source_set("impl") {
+  sources = [
+    "koan_agent_containers.cc",
+    "koan_containers.cc",
+  ]
+  deps = [
+    ":containers",
+    ":partition",
+    "//base",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/tabs:tab_enums",
+    "//chrome/browser/ui/tabs:tab_strip",
+    "//components/prefs",
+    "//components/tab_groups",
+    "//components/tabs:public",
+    "//content/public/browser",
+    "//koan/browser:features",
+    "//koan/browser:prefs",
+    "//koan/browser/agent:policy",
+    "//koan/browser/ui/views",
+    "//services/network/public/cpp",
+    "//third_party/blink/public/common",
+    "//ui/base",
+    "//url",
+  ]
+}
+
+# Build and run:
+#   autoninja -C out/Koan koan/browser/containers:koan_containers_unittests
+#   out/Koan/koan_containers_unittests
+test("koan_containers_unittests") {
+  sources = [ "koan_container_partition_unittest.cc" ]
+  deps = [
+    ":partition",
+    "//base",
+    "//base/test:test_support",
+    "//content/public/browser",
+    "//content/test:run_all_unittests",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
+}

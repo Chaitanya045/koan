@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACES_H_
 
 #include <optional>
+#include <string>
 
 class BrowserView;
 class BrowserWindowInterface;
@@ -87,6 +88,16 @@ bool ShowsSpaceHeader(const views::View* tab_group_view);
 // Whether `tab_strip`'s window has Spaces (koan_tab_menu.cc swallows
 // upstream's tab group commands there).
 bool HasSpaces(TabStripModel* tab_strip);
+
+// Agent containers (koan/browser/containers/koan_agent_containers.h): makes
+// the ungrouped tab at `index` of `tab_strip` a new Space named `name` with
+// the emoji `icon`, without showing it or changing the active tab. Nullopt if
+// the window has no Spaces.
+std::optional<tab_groups::TabGroupId> CreateBackgroundSpace(
+    TabStripModel* tab_strip,
+    int index,
+    const std::u16string& name,
+    const std::u16string& icon);
 
 // BrowserCommandController::HandleCommandWithDisposition(), first: runs
 // upstream's tab group command `command_id` the way a Spaces window does

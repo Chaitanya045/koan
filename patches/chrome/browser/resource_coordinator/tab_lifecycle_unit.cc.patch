@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+--- a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
++++ b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+@@ -43,6 +43,7 @@
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/content_features.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+ #include "url/gurl.h"
+ 
+@@ -272,6 +273,9 @@
+     uint64_t tab_memory_footprint_estimate) {
+   content::WebContents* const old_contents = web_contents();
+   content::WebContents::CreateParams create_params(tab_strip_model_->profile());
++  // Koan: a container's tab reloads in its container.
++  create_params.site_instance =
++      koan::containers::SiteInstanceForReplacement(old_contents);
+   // TODO(fdoray): Consider setting |initially_hidden| to true when the tab is
+   // OCCLUDED. Will require checking that the tab reload correctly when it
+   // becomes VISIBLE.

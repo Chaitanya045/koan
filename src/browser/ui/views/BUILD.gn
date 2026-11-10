@@ -218,6 +218,9 @@ source_set("impl") {
     ]
   }
   deps = [
+    "//koan/browser/containers",
+    "//koan/browser/containers:impl",
+    "//koan/browser/containers:partition",
     ":lights_geometry",
     ":glass_tint",
     ":sidebar_curve",

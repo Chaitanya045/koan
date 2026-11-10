@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/resource_coordinator/BUILD.gn b/chrome/browser/resource_coordinator/BUILD.gn
+--- a/chrome/browser/resource_coordinator/BUILD.gn
++++ b/chrome/browser/resource_coordinator/BUILD.gn
+@@ -135,6 +135,7 @@
+       "//components/device_event_log",
+       "//components/discardable_memory/service",
+       "//components/ukm/content",
++      "//koan/browser/containers:partition",
+       "//ui/message_center",
+     ]
+   }

@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc b/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
+--- a/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
++++ b/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
+@@ -21,6 +21,7 @@
+ #include "chrome/browser/web_applications/web_app_registrar.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/prefs/pref_service.h"
++#include "koan/browser/containers/koan_containers.h"
+ 
+ namespace web_app {
+ 
+@@ -74,6 +75,9 @@
+   // Get all paths from Web App system.
+   allowlist.merge(lock_->isolation_delegate().GetIsolatedStoragePaths());
+ 
++  // Koan: its saved containers (a loaded partition is never collected).
++  koan::containers::LoadSavedContainers(profile_);
++
+   base::ListValue* debug_paths =
+       GetMutableDebugValue().EnsureList("allow_list_paths");
+   for (const auto& path : allowlist) {
