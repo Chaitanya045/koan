@@ -96,9 +96,9 @@ For an optimised build, use `KOAN_CONFIG=release ./scripts/build.sh`, which
 produces `out/Release/chrome`. `JOBS=<n>` limits parallel compile jobs on
 machines with less memory.
 
-On a Mac with Apple Silicon and Xcode, the same scripts build
-`chromium/src/out/Koan/Koan.app`; see
-[CONTRIBUTING.md](CONTRIBUTING.md#macos) for what you need.
+**On a Mac** (Apple Silicon, Xcode), one command fetches, builds and installs
+Koan in `~/Applications`, and the same command updates it:
+[docs/BUILDING-MAC.md](docs/BUILDING-MAC.md).
 
 The Chromium version Koan is pinned to is in
 [`CHROMIUM_VERSION`](CHROMIUM_VERSION): a release tag of the milestone it
