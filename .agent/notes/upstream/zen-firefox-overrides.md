@@ -281,7 +281,7 @@ Where the overrides are:
 | css/js | `.private-browsing-indicator-with-label` hidden (zen-single-components.css:34-36) | "Private browsing" label in toolbar | Incognito avatar chip `chrome/browser/ui/views/profiles/avatar_toolbar_button.cc` | partial (no toolbar in single toolbar; shown in multiple toolbars) | override |
 | css/js | `#widget-overflow-mainView > toolbarseparator` hidden, overflow list reversed (zen-single-components.css:677-684) | Overflow panel look | extensions overflow menu | see themes-glass-ntp.md | — |
 | css/js | `ZenUIMigration` v?: Library button replaces downloads button once (common/sys/ZenUIMigration.sys.mjs:60-90); Welcome moves extension widgets to `AREA_ADDONS` (welcome/ZenWelcome.mjs:184-188) | Downloads toolbar button | download toolbar button | done (Library button in footer, ZP 186) | redirect |
-| css/js | Status panel restyled as a pill (`zen.theme.styled-status-panel`=true on macOS; zen-single-components.css:262-275) | Firefox status panel look | `StatusBubbleViews::StatusBubbleViews` `chrome/browser/ui/views/status_bubble_views.cc:728` | missing | override |
+| css/js | Status panel restyled as a pill (`zen.theme.styled-status-panel`=true on macOS; zen-single-components.css:262-275) | Firefox status panel look | `StatusBubbleViews` `chrome/browser/ui/views/status_bubble_views.cc` (patch: constants, `GetFont`, `StatusView::OnPaint`, `Reposition`) + Chromium's `kColorStatusBubble*` ids in Koan's mixer | in PR (Z48) | override |
 
 ### Window chrome, title bar & macOS widget
 
