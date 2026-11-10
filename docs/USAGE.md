@@ -872,7 +872,8 @@ When a tab in the background plays music or video, a card appears at the
 bottom of the sidebar, as in Zen (macOS Now Playing and the media keys
 control the same media): the site's icon, previous / play-pause / next and
 mute. Hover it for the title and artist, the progress (click or drag to
-seek), picture-in-picture and close. Click the card (or the icon) to go to
+seek; the media pauses while you drag, as in Zen), picture-in-picture and
+close. Cards are only in windows with the sidebar (tabs on top have none). Click the card (or the icon) to go to
 its tab, in its Space; the card hides while that tab is selected. Up to
 three cards stack, the newest in front. Close pauses the media and
 dismisses its card. From the keyboard, Tab into a card to expand it; on the
@@ -997,7 +998,8 @@ reaches each tab the next time it changes.
 
 In compact mode with the sidebar hidden, a tab a page opens in the
 background shows Zen's "New background tab opened!" toast; its button
-switches to the tab. Renaming a Space in its header shows "Workspace has
+switches to the tab (not while Glance opens or closes; Settings > Look and
+Feel > Show in compact view turns it off). Renaming a Space in its header shows "Workspace has
 been successfully renamed!".
 
 Scrollbars are thin overlay bars that show while you scroll, like Zen's. For

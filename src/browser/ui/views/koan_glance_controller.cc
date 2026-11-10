@@ -372,6 +372,13 @@ class KoanGlanceView : public views::View {
   // tree, so the overlay just appears and goes.
   bool CanAnimate() { return Page() != nullptr; }
 
+  // Whether the card is growing or shrinking, or the backdrop fading.
+  bool IsAnimating() {
+    ui::LayerOwner* page = Page();
+    return backdrop_->layer()->GetAnimator()->is_animating() ||
+           (page && page->layer()->GetAnimator()->is_animating());
+  }
+
   // Grows the card out of `rect` (in this view's coordinates). With
   // `fresh`, the backdrop and the buttons fade in too; otherwise they stay
   // (a new page replacing the card's).
@@ -724,6 +731,10 @@ void KoanGlanceController::TrackActiveTab() {
   } else if (!tab_input_ || tab_input_->web_contents() != active) {
     tab_input_ = std::make_unique<InputTracker>(active);
   }
+}
+
+bool KoanGlanceController::IsAnimating() const {
+  return view_ && view_->IsAnimating();
 }
 
 void KoanGlanceController::Open(const content::OpenURLParams& params,

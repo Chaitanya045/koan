@@ -318,6 +318,13 @@ constexpr Row kRows[] = {
               "tabs in compact mode",
      .is_available = features::IsCompactModeEnabled,
      .indent = true},
+    // Zen's zen.view.compact.show-background-tab-toast (about:config only).
+    {.group = "compact",
+     .control = Control::kCheckbox,
+     .pref = prefs::kCompactModeShowBackgroundTabToast,
+     .label = "Show a toast when a tab opens in the background in compact mode",
+     .is_available = features::IsCompactModeEnabled,
+     .indent = true},
     {.group = "bookmarks-bar",
      .control = Control::kCheckbox,
      .pref = prefs::kBookmarksBarShow,

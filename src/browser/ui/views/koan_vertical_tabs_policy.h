@@ -21,6 +21,10 @@ namespace actions {
 class ActionItem;
 }  // namespace actions
 
+namespace views {
+class View;
+}  // namespace views
+
 namespace koan {
 
 // Koan owns the sidebar. The sidebar is upstream's vertical tab strip, and
@@ -110,6 +114,12 @@ class KoanVerticalTabsPolicy {
 
   base::WeakPtrFactory<KoanVerticalTabsPolicy> weak_factory_{this};
 };
+
+// The vertical tab strip's content column in `browser_view` (upstream's
+// content area: the tab strip, then its bottom container, which flexes to
+// fill the room, so views appended after it sit at the bottom of the
+// sidebar), or null without a vertical tab strip.
+views::View* GetSidebarContentColumn(BrowserView* browser_view);
 
 }  // namespace koan
 

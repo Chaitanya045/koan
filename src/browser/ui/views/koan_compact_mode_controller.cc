@@ -687,9 +687,14 @@ void KoanCompactModeController::MaybeShowBackgroundTabToast(
   const views::View* region = browser_view_->tab_strip_view();
   const auto* strip = views::AsViewClass<VerticalTabStripRegionView>(region);
   // Not while the sidebar is out (isSidebarPotentiallyOpen(): hovered or
-  // pinned).
+  // pinned), with Zen's zen.view.compact.show-background-tab-toast off, or
+  // while Glance animates (gZenGlanceManager._animating).
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
   if (!hides_sidebar() || peek_lock_ || empty_tab_lock_ ||
-      (strip && strip->is_expanded_on_hover())) {
+      (strip && strip->is_expanded_on_hover()) || !controller ||
+      !GetPrefs()->GetBoolean(prefs::kCompactModeShowBackgroundTabToast) ||
+      controller->glance()->IsAnimating()) {
     return;
   }
   for (const TabStripModelChange::ContentsWithIndex& inserted :
@@ -697,11 +702,6 @@ void KoanCompactModeController::MaybeShowBackgroundTabToast(
     if (inserted.index == tab_strip_model->active_index() ||
         !tab_strip_model->GetOpenerOfTabAt(inserted.index)) {
       continue;
-    }
-    KoanBrowserViewController* controller =
-        KoanBrowserViewController::From(browser_view_);
-    if (!controller) {
-      return;
     }
     controller->toast()->ShowWithAction(
         kBackgroundTabOpenedToast, kTabIcon, u"Switch to tab",
@@ -1413,12 +1413,13 @@ void KoanCompactModeController::InstallSidebarNav() {
           std::make_unique<KoanSidebarNavButtons>(browser_view_)));
       child->InvalidateLayout();
     }
-    // The URL pill at the top of the content area (a FlexLayoutView), above
-    // the separator and the tabs.
-    if (child->GetClassName() == "FlexLayoutView" && !sidebar_nav_.view()) {
-      sidebar_nav_.SetView(child->AddChildViewAt(
-          std::make_unique<KoanSidebarNavView>(browser_view_), 0));
-    }
+  }
+  // The URL pill at the top of the content area, above the separator and
+  // the tabs.
+  if (views::View* column = GetSidebarContentColumn(browser_view_);
+      column && !sidebar_nav_.view()) {
+    sidebar_nav_.SetView(column->AddChildViewAt(
+        std::make_unique<KoanSidebarNavView>(browser_view_), 0));
   }
 }
 
