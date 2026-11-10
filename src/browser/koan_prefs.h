@@ -208,6 +208,27 @@ inline constexpr char kResumedCrashes[] = "koan.session.resumed_crashes";
 // When the last silent crash restore happened.
 inline constexpr char kLastResumedTime[] = "koan.session.last_resumed_time";
 
+// Agent control (.agent/notes/agent-control.md section 6.1), local state.
+// "Agent ready": the gateway listens. On by default in the default
+// user-data-dir; off in Incognito, Guest and a non-default --user-data-dir
+// launch unless the user turns it on there. Enterprise policy
+// RemoteDebuggingAllowed=false keeps it off.
+inline constexpr char kAgentControlEnabled[] = "koan.agent_control.enabled";
+// The limits (koan/browser/agent/koan_agent_limits.h has the ranges): read
+// with koan::agent::ReadLimit(), never directly.
+inline constexpr char kAgentControlMaxLeasedTabs[] =
+    "koan.agent_control.max_leased_tabs";
+inline constexpr char kAgentControlLowPowerHalves[] =
+    "koan.agent_control.low_power_halves";
+inline constexpr char kAgentControlMaxPromptsPerMinute[] =
+    "koan.agent_control.max_prompts_per_minute";
+inline constexpr char kAgentControlMaxAuthFailures[] =
+    "koan.agent_control.max_auth_failures";
+
+// Whether Agent ready is on by default for this launch: the default
+// user-data-dir, not --incognito, not --guest. Computed once, at registration.
+bool AgentReadyByDefault();
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/ui/views/koan_agent_indicator.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -80,6 +81,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
           base::BindRepeating(&KoanDownloadAnimation::OnPagePressed,
                               base::Unretained(download_animation_.get())))),
       welcome_(std::make_unique<KoanWelcome>(browser_view)),
+      agent_indicator_(std::make_unique<KoanAgentIndicator>(browser_view)),
       shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)),
       command_palette_(std::make_unique<KoanCommandPalette>(this)) {
   ++g_live_count;
@@ -182,6 +184,7 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   media_->OnBrowserViewLayout();
   download_animation_->OnBrowserViewLayout();
   welcome_->OnBrowserViewLayout();
+  agent_indicator_->OnBrowserViewLayout();
 }
 
 void KoanBrowserViewController::OnWidgetDestroying(views::Widget* widget) {

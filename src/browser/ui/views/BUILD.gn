@@ -112,6 +112,8 @@ test("koan_views_unittests") {
 
 source_set("impl") {
   sources = [
+    "koan_agent_indicator.cc",
+    "koan_agent_indicator.h",
     "koan_browser_view_controller.cc",
     "koan_browser_view_controller.h",
     "koan_browser_view_hooks.cc",
@@ -331,6 +333,7 @@ source_set("impl") {
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
     "//koan/browser:tab_hooks",
+    "//koan/browser/agent:browser",
     "//koan/browser:vertical_tabs",
     "//koan/common:url_constants",
     "//koan/browser/ui/color",

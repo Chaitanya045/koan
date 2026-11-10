@@ -22,6 +22,7 @@ class BrowserView;
 
 namespace koan {
 
+class KoanAgentIndicator;
 class KoanCommandPalette;
 class KoanCompactModeController;
 class KoanDownloadAnimation;
@@ -133,6 +134,9 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanDownloadAnimation> download_animation_;
   std::unique_ptr<KoanWindowDragController> window_drag_;
   std::unique_ptr<KoanWelcome> welcome_;
+  // "An agent is connected"; it also starts agent control with the first
+  // window (koan/browser/agent/koan_agent_service.h).
+  std::unique_ptr<KoanAgentIndicator> agent_indicator_;
   // Last: it calls into the controllers above.
   std::unique_ptr<KoanShortcutController> shortcuts_;
   // Its commands run the shortcuts above.

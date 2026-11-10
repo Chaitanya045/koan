@@ -4,10 +4,17 @@
 
 #include "koan/browser/koan_prefs.h"
 
+#include "base/command_line.h"
+#include "base/files/file_path.h"
+#include "base/path_service.h"
 #include "base/values.h"
+#include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_paths_internal.h"
+#include "chrome/common/chrome_switches.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "koan/browser/agent/koan_agent_limits.h"
 
 namespace koan::prefs {
 
@@ -49,6 +56,20 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterTimePref(kLastResumedTime, base::Time());
 }
 
+bool AgentReadyByDefault() {
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(::switches::kIncognito) ||
+      command_line.HasSwitch(::switches::kGuest)) {
+    return false;
+  }
+  base::FilePath user_data_dir;
+  base::FilePath default_dir;
+  return base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir) &&
+         chrome::GetDefaultUserDataDirectory(&default_dir) &&
+         user_data_dir == default_dir;
+}
+
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream
 // ones.
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
@@ -58,6 +79,14 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookAccent, "none");
   registry->RegisterStringPref(kLookCustomCss, "");
   registry->RegisterBooleanPref(kLookAcrylicUrlBar, false);
+  registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
+  registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
+                                agent::kLeasedTabsLimit.default_value);
+  registry->RegisterBooleanPref(kAgentControlLowPowerHalves, true);
+  registry->RegisterIntegerPref(kAgentControlMaxPromptsPerMinute,
+                                agent::kPromptsLimit.default_value);
+  registry->RegisterIntegerPref(kAgentControlMaxAuthFailures,
+                                agent::kFailuresLimit.default_value);
   namespace pm = performance_manager::user_tuning::prefs;
   // Memory Saver: discard tabs that have been hidden for 4 hours (the
   // balanced setting) until they are opened again. Chromium ships it off.

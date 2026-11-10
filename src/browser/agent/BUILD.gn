@@ -8,8 +8,8 @@ import("//testing/test.gni")
 # Agent control (.agent/notes/agent-control.md): the pieces that are pure logic
 # and depend on //base and //url only, so they build and test on their own.
 #
-# Nothing in the browser depends on this directory yet. GN loads it because
-# //koan/browser:agent_unit_tests names the test below.
+# The browser depends on :browser only (through //koan/browser/ui/views:impl);
+# the rest is pure logic that //koan/browser:agent_unit_tests tests.
 
 # The wire format of the unix socket: length-prefixed frames, with a decoder
 # built for hostile input. Shared by the gateway in the browser and the `koan`
@@ -62,6 +62,15 @@ source_set("session") {
     "//base",
   ]
   deps = [ "//third_party/icu" ]
+}
+
+# The limits the user can change, and how a stored value is read.
+source_set("limits") {
+  sources = [
+    "koan_agent_limits.cc",
+    "koan_agent_limits.h",
+  ]
+  public_deps = [ "//base" ]
 }
 
 # How many connections the gateway keeps open.
@@ -122,6 +131,40 @@ if (is_posix) {
       "//net",
     ]
     deps = [ ":socket" ]
+  }
+
+  # The browser side: starts the gateway from the "Agent ready" pref on the IO
+  # thread, the approval dialog, and the connected clients the indicator shows.
+  # Linked into //chrome/browser through //koan/browser/ui/views:impl.
+  source_set("browser") {
+    sources = [
+      "koan_agent_approval_dialog.cc",
+      "koan_agent_service.cc",
+      "koan_agent_service.h",
+    ]
+    public_deps = [
+      ":session",
+      "//base",
+      "//components/prefs",
+    ]
+    deps = [
+      ":auth",
+      ":gateway",
+      ":limits",
+      ":peer",
+      ":socket",
+      "//chrome/browser:browser_process",
+      "//chrome/browser/lifetime:termination_notification",
+      "//chrome/browser/ui/browser_window",
+      "//chrome/browser/ui/dialogs:browser_dialogs",
+      "//chrome/common",
+      "//chrome/common:constants",
+      "//components/version_info",
+      "//content/public/browser",
+      "//koan/browser:prefs",
+      "//ui/base",
+      "//ui/views",
+    ]
   }
 }
 
@@ -207,6 +250,7 @@ test("koan_agent_unittests") {
     "koan_agent_events_unittest.cc",
     "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
+    "koan_agent_limits_unittest.cc",
     "koan_agent_policy_unittest.cc",
     "koan_agent_reach_unittest.cc",
     "koan_agent_registry_unittest.cc",
@@ -220,6 +264,7 @@ test("koan_agent_unittests") {
     ":events",
     ":filters",
     ":frame",
+    ":limits",
     ":policy",
     ":reach",
     ":registry",
