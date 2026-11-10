@@ -91,6 +91,7 @@ test("koan_containers_unittests") {
   sources = [
     "koan_container_grants_unittest.cc",
     "koan_container_partition_unittest.cc",
+    "koan_container_restore_unittest.cc",
   ]
   deps = [
     ":grants",

@@ -662,9 +662,10 @@ per-site lease the user approved.
   agent container's tab is **never restored**: a `TabRestoreHook` replaces its pages with one `about:blank` before
   `NavigationController::Restore` runs, and the blank tab is closed once it is in its window (kept, blank, if it is the
   window's only tab). So no agent page ever loads in the user's jar after a restart, a crash or Reopen Closed Tab, and a
-  Saved container's tabs do not come back either (its cookies do, for the next task that names it). User containers
-  (#111) will restore into their container with one more hook in `CreateRestoredTab` (`create_params.site_instance`);
-  until then they are blanked the same way. Brave encodes the partition into the URL so that an older build shows a
+  Saved container's tabs do not come back either (its cookies do, for the next task that names it). A saved user
+  container's tab (#111) restores into its container: `CreateRestoredTab` creates it with
+  `SiteInstanceForRestoredTab()` (`create_params.site_instance`), and the restore hook keeps its pages only when the
+  tab really is in the container its marker names; a throwaway user container's tab is blanked like an agent's. Brave encodes the partition into the URL so that an older build shows a
   blank page instead of loading in the default partition (`containers.md`, Brave); Koan keeps the marker in its session data, which needs
   Koan's restore hook to run, and the hook fails closed (an unknown or malformed marker blanks the tab too).
 * **Spaces.** An agent container's Space is a normal Koan Space (a tab group) in the user's last-active window,

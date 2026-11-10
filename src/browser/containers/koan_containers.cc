@@ -105,10 +105,16 @@ void OnRestoringContainerTab(
     bool from_session_restore,
     std::vector<std::unique_ptr<content::NavigationEntry>>& entries,
     int& selected_navigation) {
-  // Every container's tab, for now: an agent's never comes back (its task is
-  // over), and a user container's (#111) needs `contents` created in its
-  // partition, which CreateRestoredTab() doesn't do yet. Whatever `data` says,
-  // the pages must not load here, in the default partition.
+  // A saved user container's tab that SiteInstanceForRestoredTab() created in
+  // its container: its pages load there.
+  const std::optional<ContainerId> container = Parse(data);
+  if (container && container->kind == ContainerKind::kUser &&
+      container->persistent() && ContainerOf(contents) == container) {
+    return;
+  }
+  // Every other container's tab: an agent's never comes back (its task is
+  // over), a throwaway user container's data is gone, and whatever `data`
+  // says, the pages must not load in the wrong partition.
   entries.clear();
   entries.push_back(content::NavigationController::CreateNavigationEntry(
       GURL(url::kAboutBlankURL), content::Referrer(),

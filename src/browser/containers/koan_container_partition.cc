@@ -12,6 +12,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/supports_user_data.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/security_principal.h"
@@ -210,6 +211,21 @@ scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
   }
   return content::SiteInstance::CreateForFixedStoragePartition(
       old_contents->GetBrowserContext(), GURL(), config);
+}
+
+scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+    content::BrowserContext* context,
+    const std::map<std::string, std::string>& extra_data) {
+  auto it = extra_data.find(kContainerSessionKey);
+  if (!context || context->IsOffTheRecord() || it == extra_data.end()) {
+    return nullptr;
+  }
+  const std::optional<ContainerId> container = Parse(it->second);
+  if (!container || container->kind != ContainerKind::kUser ||
+      !container->persistent()) {
+    return nullptr;
+  }
+  return CreateSiteInstance(context, *container, GURL());
 }
 
 bool AllowsPrerender(const content::WebContents& contents) {
