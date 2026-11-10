@@ -815,6 +815,13 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Haptic feedback (macOS)
+
+As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
+Space button passes another while you reorder them, and as the theme picker's
+sliders pass a step. Turn it off with "Haptic feedback on the trackpad" in
+`chrome://koan-settings` (Look and Feel, Theme Settings).
+
 ## Translucent window (macOS)
 
 Like Zen's, the window is glass: the sidebar, the toolbar and the gutter

@@ -45,6 +45,12 @@ inline constexpr char kLookCustomCss[] = "koan.look.custom_css";
 // glass pane, translucent with the page blurred behind it. Both styles.
 inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
 
+// Zen's zen.haptic-feedback.enabled (default on): the trackpad ticks as a
+// dragged tab or Space button moves a slot and as the theme picker's sliders
+// pass a step (koan::PlayHapticFeedback()). macOS only; a local-state pref, as
+// Zen's is the application's.
+inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
+
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
