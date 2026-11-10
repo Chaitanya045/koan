@@ -9,7 +9,9 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/timer/timer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_shortcut_table.h"
 #include "ui/base/accelerators/accelerator.h"
 
@@ -89,9 +91,18 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   bool Command(int command_id);
   // Zen's Ctrl+Tab settings; returns false (Chrome cycles) when both are off.
   bool CycleTabs(const shortcuts::CycleKey& key);
-  // Ctrl+Tab in recently used order: the tab shown last before the active
-  // one, of those Zen's list has.
-  void CycleToRecentTab(TabStripModel* model);
+  // Ctrl+Tab in recently used order, as Firefox's ctrlTab that Zen keeps
+  // (browser-ctrlTab.js; Zen's patch only narrows its list): the first press
+  // goes to the tab shown last before the active one, of those Zen's list
+  // has; each further press while Ctrl is held goes on down the same list
+  // (Shift goes back up), and letting go of Ctrl ends the walk, so the next
+  // Ctrl+Tab flips back again. (Off macOS, Ctrl counts as let go of after
+  // every press: IsControlKeyDown().)
+  void CycleToRecentTab(TabStripModel* model, bool forward);
+  // The tabs of Zen's list, most recently used first: the active one first.
+  static std::vector<tabs::TabHandle> RecentTabs(TabStripModel* model);
+  // Ends the walk once Ctrl is let go of.
+  void CheckControlReleased();
 
   // Koan's prefs (the regular profile's, also in incognito).
   PrefService* GetPrefs() const;
@@ -106,6 +117,11 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   std::vector<Binding> bindings_;
   PrefChangeRegistrar pref_change_registrar_;
+  // The walk of CycleToRecentTab(): the list as it was at its first press,
+  // and where in it the walk is.
+  std::vector<tabs::TabHandle> recent_walk_;
+  size_t recent_walk_index_ = 0;
+  base::RepeatingTimer control_release_timer_;
 };
 
 }  // namespace koan
