@@ -11,10 +11,13 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "components/universal_optout/prefs.h"
 #include "koan/browser/agent/koan_agent_limits.h"
+#include "koan/browser/koan_features.h"
 
 namespace koan::prefs {
 
@@ -58,11 +61,17 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kPinnedTabCloseShortcutBehavior,
                                "reset-unload-switch");
   registry->RegisterBooleanPref(kPinnedTabRestoreToPinnedUrl, false);
+  registry->RegisterListPref(kFolderList);
   registry->RegisterStringPref(kLibraryLastSection, "history");
   registry->RegisterBooleanPref(kLibraryHistoryClosedTabs, false);
   registry->RegisterBooleanPref(kMediaControlsEnabled, true);
   registry->RegisterBooleanPref(kDownloadAnimation, true);
   registry->RegisterBooleanPref(kDragWindowFromContent, true);
+  registry->RegisterListPref(kSpaceRoutes);
+  registry->RegisterStringPref(kSpaceRoutingExternalDefault, "");
+  registry->RegisterBooleanPref(kRenameTabs, true);
+  registry->RegisterBooleanPref(kLoadingIndicator, true);
+  registry->RegisterBooleanPref(kHideTabThrobber, true);
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
   registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
@@ -99,6 +108,27 @@ void OverrideUpstreamProfilePrefDefaults(
   registry->SetDefaultPrefValue("omnibox.show_ai_mode_omnibox_button",
                                 base::Value(false));
   registry->SetDefaultPrefValue("omnibox.ai_mode_settings", base::Value(1));
+  // Z24: Global Privacy Control on (Zen's
+  // privacy.globalprivacycontrol.enabled): Sec-GPC and
+  // navigator.globalPrivacyControl, with the settings row that
+  // kUniversalOptOutSettings shows (koan_feature_overrides.cc).
+  registry->SetDefaultPrefValue(
+      universal_optout::prefs::kUniversalOptOutEnabled, base::Value(true));
+  // A new window's width when it isn't restored (BrowserWindowFeatures). The
+  // pref is registered by tabs::RegisterProfilePrefs().
+  if (features::IsSidebarEnabled()) {
+    registry->SetDefaultPrefValue(::prefs::kVerticalTabsUncollapsedWidth,
+                                  base::Value(kSidebarDefaultWidth));
+  }
+}
+
+void OverrideServiceProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry) {
+  // Z35: no "Sign in to Koan?" bubble after a Google sign-in on the web
+  // (registered by DiceWebSigninInterceptorFactory). Zen has no browser
+  // account promos.
+  registry->SetDefaultPrefValue(::prefs::kSigninInterceptionEnabled,
+                                base::Value(false));
 }
 
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream
@@ -110,6 +140,7 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookAccent, "none");
   registry->RegisterStringPref(kLookCustomCss, "");
   registry->RegisterBooleanPref(kLookAcrylicUrlBar, false);
+  registry->RegisterBooleanPref(kHapticFeedback, true);
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);

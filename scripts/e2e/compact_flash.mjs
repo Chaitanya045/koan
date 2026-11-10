@@ -12,7 +12,11 @@ check('Compact mode hides the sidebar', (await width()) === 0);
 
 // A new, selected tab. Not Ctrl+T: Zen's URL bar takes that over (the tab
 // only opens once an address is entered), and no tab is selected meanwhile.
-await browserCall('Target.createTarget', { url: 'about:blank' });
+// Not about:blank either: a blank page is Zen's empty tab, which holds the
+// sidebar out for as long as it is selected (`zen-has-empty-tab`), so the
+// sidebar would never slide away.
+await browserCall('Target.createTarget',
+    { url: `data:text/html,${encodeURIComponent('<title>Flash</title>')}` });
 await sleep(150);
 const shown = await width();
 check('Opening a tab pops the sidebar up', shown > 100, `width ${shown}`);

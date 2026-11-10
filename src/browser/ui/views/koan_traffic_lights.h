@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "build/build_config.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 class BrowserView;
 
@@ -58,6 +59,15 @@ bool IsPointerOverWindow(const BrowserView* browser_view);
 #if BUILDFLAG(IS_MAC)
 // Shows or hides the window's traffic lights.
 void SetTrafficLightsShown(const BrowserView* browser_view, bool shown);
+
+// Zen's mono window controls (zen.widget.mac.mono-window-controls, on by
+// default on macOS; zen-browser-ui.css): with the pointer away from them, the
+// traffic lights show as three dots of `dot_color` where the buttons are, and
+// the real buttons come back while the pointer is over them, or while the
+// window has a sheet. Null: the buttons as AppKit draws them. Cheap when
+// nothing changed: the caller applies it on every layout.
+void SetMonoTrafficLights(const BrowserView* browser_view,
+                          std::optional<SkColor> dot_color);
 
 // Makes sure nothing of the window's title bar paints: the content fills the
 // window, the title bar is transparent, with no separator line (Chromium sets

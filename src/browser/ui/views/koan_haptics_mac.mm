@@ -12,10 +12,19 @@
 
 #import <AppKit/AppKit.h>
 
+#include "chrome/browser/browser_process.h"
+#include "components/prefs/pref_service.h"
+#include "koan/browser/koan_prefs.h"
+
 namespace koan {
 
 void PlayHapticFeedback() {
-  // zen.haptic-feedback.enabled is true by default and has no setting.
+  // Zen's zen.haptic-feedback.enabled (ZenCommonUtils.cpp checks it first).
+  PrefService* local_state =
+      g_browser_process ? g_browser_process->local_state() : nullptr;
+  if (!local_state || !local_state->GetBoolean(prefs::kHapticFeedback)) {
+    return;
+  }
   [NSHapticFeedbackManager.defaultPerformer
       performFeedbackPattern:NSHapticFeedbackPatternAlignment
              performanceTime:NSHapticFeedbackPerformanceTimeDefault];

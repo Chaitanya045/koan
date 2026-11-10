@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/profiles/pref_service_builder_utils.cc b/chrome/browser/profiles/pref_service_builder_utils.cc
+index 8986f4d..338e180 100644
+--- a/chrome/browser/profiles/pref_service_builder_utils.cc
++++ b/chrome/browser/profiles/pref_service_builder_utils.cc
+@@ -36,6 +36,7 @@
+ #include "components/sync_preferences/pref_service_syncable.h"
+ #include "components/variations/service/variations_service.h"
+ #include "content/public/browser/network_service_instance.h"
++#include "koan/browser/koan_prefs.h"
+ #include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
+ #include "ui/base/l10n/l10n_util.h"
+ 
+@@ -77,6 +78,8 @@ void RegisterProfilePrefs(bool is_signin_profile,
+       pref_registry);
+   BrowserContextDependencyManager::GetInstance()
+       ->RegisterProfilePrefsForServices(pref_registry);
++  // Koan: Zen's defaults for prefs the services registered (koan_prefs.h).
++  koan::prefs::OverrideServiceProfilePrefDefaults(pref_registry);
+ }
+ 
+ std::unique_ptr<sync_preferences::PrefServiceSyncable> CreateProfilePrefService(

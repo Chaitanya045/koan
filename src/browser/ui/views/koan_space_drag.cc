@@ -1,0 +1,308 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+
+#include "koan/browser/ui/views/koan_space_drag.h"
+
+#include <algorithm>
+#include <memory>
+#include <optional>
+#include <utility>
+
+#include "base/functional/bind.h"
+#include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+#include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+#include "koan/browser/ui/views/koan_essentials_promo.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_space_bar.h"
+#include "koan/browser/ui/views/koan_space_drag_logic.h"
+#include "koan/browser/ui/views/koan_space_header.h"
+#include "koan/browser/ui/views/koan_space_navigation.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
+#include "ui/base/models/list_selection_model.h"
+#include "ui/events/event.h"
+#include "ui/views/controls/scroll_view.h"
+#include "ui/views/view.h"
+
+namespace koan {
+
+namespace {
+
+// How often a running drag is checked for having ended out of sight.
+constexpr base::TimeDelta kWatchInterval = base::Milliseconds(250);
+
+gfx::Point InView(const views::View* from,
+                  const views::View* to,
+                  const gfx::Point& point) {
+  gfx::Point converted = point;
+  views::View::ConvertPointToTarget(from, to, &converted);
+  return converted;
+}
+
+}  // namespace
+
+KoanSpaceDrag::KoanSpaceDrag(KoanWorkspaceController* controller,
+                             BrowserView* browser_view)
+    : controller_(controller), browser_view_(browser_view) {}
+
+KoanSpaceDrag::~KoanSpaceDrag() = default;
+
+void KoanSpaceDrag::OnRegionMouseEvent(views::View* region,
+                                       const ui::MouseEvent& event) {
+  switch (event.type()) {
+    case ui::EventType::kMouseDragged: {
+      // Upstream's tab drag, not a press that hasn't moved enough yet, and
+      // not a Space button's own reorder.
+      if (!TabDragController::IsActive()) {
+        return;
+      }
+      if (!dragging_) {
+        dragging_ = true;
+        // The drag may end where this never sees it (the tab torn off into
+        // a window of its own, Esc, capture lost).
+        watch_timer_.Start(FROM_HERE, kWatchInterval, this,
+                           &KoanSpaceDrag::CheckDragActive);
+      }
+      OnTabDragged(region, InView(static_cast<views::View*>(event.target()),
+                                  region, event.location()));
+      return;
+    }
+    case ui::EventType::kMouseReleased:
+      if (dragging_) {
+        OnDragEnded(/*dropped=*/true);
+      }
+      return;
+    default:
+      return;
+  }
+}
+
+void KoanSpaceDrag::CheckDragActive() {
+  if (dragging_ && !TabDragController::IsActive()) {
+    OnDragEnded(/*dropped=*/false);
+  }
+}
+
+void KoanSpaceDrag::Reset() {
+  watch_timer_.Stop();
+  switch_timer_.Stop();
+  dragging_ = false;
+  edge_ = 0;
+  RemovePromo();
+}
+
+void KoanSpaceDrag::OnTabDragged(views::View* region, const gfx::Point& point) {
+  const std::vector<KoanWorkspaceController::SpaceInfo> spaces =
+      controller_->GetSpaces();
+  const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
+  const bool only_essentials =
+      std::ranges::all_of(tabs, &tabs::TabInterface::IsPinned);
+
+  // Over a Space button: that Space, at once (not for Essentials, which
+  // every Space shows).
+  if (KoanSpaceBarView* bar = controller_->space_bar();
+      bar && bar->GetVisible() && !only_essentials && spaces.size() > 1) {
+    if (const std::optional<tab_groups::TabGroupId> space =
+            bar->SpaceAt(InView(region, bar, point));
+        space && space != controller_->GetActiveSpace()) {
+      switch_timer_.Stop();
+      edge_ = 0;
+      SwitchWithDraggedTabs(*space);
+      return;
+    }
+  }
+
+  UpdatePromo(region, point);
+
+  // Near an edge of an expanded sidebar, away from the Essentials: the
+  // previous or next Space after the delay.
+  const int edge = spaces.size() > 1 && !IsSidebarCollapsed() &&
+                           !IsOverEssentials(region, point)
+                       ? SpaceDragEdge(point.x(), region->width())
+                       : 0;
+  if (edge == 0) {
+    switch_timer_.Stop();
+    edge_ = 0;
+    return;
+  }
+  if (edge != edge_ || !switch_timer_.IsRunning()) {
+    edge_ = edge;
+    switch_timer_.Start(FROM_HERE, kSpaceDragSwitchDelay, this,
+                        &KoanSpaceDrag::OnSwitchTimer);
+  }
+}
+
+void KoanSpaceDrag::OnSwitchTimer() {
+  if (!dragging_ || !TabDragController::IsActive() || edge_ == 0) {
+    return;
+  }
+  const std::vector<KoanWorkspaceController::SpaceInfo> spaces =
+      controller_->GetSpaces();
+  const auto active = std::ranges::find(
+      spaces, true, &KoanWorkspaceController::SpaceInfo::active);
+  if (active == spaces.end()) {
+    return;
+  }
+  // As the Space shortcuts: wrapping around only if the setting says so.
+  const std::optional<size_t> target =
+      NextSpaceIndex(static_cast<size_t>(active - spaces.begin()),
+                     spaces.size(), edge_ > 0, controller_->WrapsAround());
+  if (!target) {
+    return;
+  }
+  SwitchWithDraggedTabs(spaces[*target].id);
+  // Zen's dragover keeps coming while the tab stays at the edge, and each
+  // one starts the delay again: so does this, until the pointer moves away.
+  switch_timer_.Start(FROM_HERE, kSpaceDragSwitchDelay, this,
+                      &KoanSpaceDrag::OnSwitchTimer);
+}
+
+std::vector<tabs::TabInterface*> KoanSpaceDrag::DraggedTabs() const {
+  TabStripModel* model = controller_->tab_strip_model();
+  std::vector<tabs::TabInterface*> tabs;
+  for (size_t index :
+       model->selection_model().GetListSelectionModel().selected_indices()) {
+    if (tabs::TabInterface* tab =
+            model->GetTabAtIndex(static_cast<int>(index))) {
+      tabs.push_back(tab);
+    }
+  }
+  // The tab that was picked up (the active one) last: the new Space shows
+  // it.
+  if (tabs::TabInterface* active = model->GetActiveTab()) {
+    if (auto it = std::ranges::find(tabs, active); it != tabs.end()) {
+      std::rotate(it, it + 1, tabs.end());
+    }
+  }
+  return tabs;
+}
+
+void KoanSpaceDrag::SwitchWithDraggedTabs(const tab_groups::TabGroupId& space) {
+  std::vector<tabs::TabInterface*> tabs = DraggedTabs();
+  std::erase_if(tabs,
+                [](const tabs::TabInterface* tab) { return tab->IsPinned(); });
+  if (tabs.empty()) {
+    // Essentials are in every Space: just the switch.
+    controller_->SwitchTo(space);
+    return;
+  }
+  // (Moves them to the end of the Space and shows it on the picked-up tab;
+  // the drag then places them.)
+  controller_->MoveTabsToSpace(tabs, space);
+}
+
+bool KoanSpaceDrag::IsOverEssentials(views::View* region,
+                                     const gfx::Point& point) const {
+  if (promo_ && promo_->GetVisible() &&
+      promo_->HitTestPoint(InView(region, promo_, point))) {
+    return true;
+  }
+  KoanSpaceHeaderView* header = controller_->space_header();
+  auto* strip =
+      header ? views::AsViewClass<TabStripView>(header->parent()) : nullptr;
+  if (!strip) {
+    return false;
+  }
+  views::View* essentials = strip->pinned_tabs_scroll_view();
+  if (!essentials) {
+    essentials = strip->GetPinnedTabsContainer();
+  }
+  return essentials && essentials->GetVisible() &&
+         essentials->HitTestPoint(InView(region, essentials, point));
+}
+
+void KoanSpaceDrag::UpdatePromo(views::View* region, const gfx::Point& point) {
+  KoanSpaceHeaderView* header = controller_->space_header();
+  auto* strip =
+      header ? views::AsViewClass<TabStripView>(header->parent()) : nullptr;
+  const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
+  KoanPinnedTabController* pinned =
+      tabs.empty() ? nullptr : KoanPinnedTabController::ForTab(tabs.back());
+  // Zen: only while there are no Essentials, for a tab that can become one,
+  // in an expanded sidebar.
+  const bool can_promo =
+      strip && pinned && pinned->EssentialsCount() == 0 &&
+      !std::ranges::all_of(tabs, &tabs::TabInterface::IsPinned) &&
+      !IsSidebarCollapsed();
+  if (!can_promo) {
+    RemovePromo();
+    return;
+  }
+  if (!promo_) {
+    // Zen shows it once the tab is over the (empty) Essentials: here, the
+    // part of the sidebar above the Space header's middle.
+    const gfx::Point in_header = InView(region, header, point);
+    if (in_header.y() >= header->height() / 2 ||
+        !strip->GetLocalBounds().Contains(InView(region, strip, point))) {
+      return;
+    }
+    // Before the header, which PlaceSpaceHeader() puts below it.
+    promo_ = strip->AddChildViewAt(std::make_unique<KoanEssentialsPromoView>(),
+                                   strip->GetIndexOf(header).value_or(0));
+    strip->InvalidateLayout();
+  }
+  // Like Zen's, it stays for the rest of the drag; lit while the tab is
+  // over it.
+  promo_->SetDragOver(promo_->HitTestPoint(InView(region, promo_, point)));
+}
+
+void KoanSpaceDrag::RemovePromo() {
+  KoanEssentialsPromoView* promo = std::exchange(promo_, nullptr);
+  if (!promo) {
+    return;
+  }
+  views::View* strip = promo->parent();
+  strip->RemoveChildViewT(promo);
+  strip->InvalidateLayout();
+}
+
+void KoanSpaceDrag::OnDragEnded(bool dropped) {
+  dragging_ = false;
+  watch_timer_.Stop();
+  switch_timer_.Stop();
+  edge_ = 0;
+  // (A drag cancelled with Esc is over before its release.)
+  const bool to_essentials = dropped && TabDragController::IsActive() &&
+                             promo_ && promo_->GetDragOver();
+  std::vector<tabs::TabHandle> handles;
+  if (to_essentials) {
+    for (tabs::TabInterface* tab : DraggedTabs()) {
+      handles.push_back(tab->GetHandle());
+    }
+  }
+  // After upstream's drag has handled the release (this sees it first), and
+  // not from inside the event's dispatch: the promo's strip lays out again.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&KoanSpaceDrag::AddDroppedToEssentials,
+                     weak_factory_.GetWeakPtr(), std::move(handles)));
+}
+
+void KoanSpaceDrag::AddDroppedToEssentials(std::vector<tabs::TabHandle> tabs) {
+  RemovePromo();
+  for (const tabs::TabHandle& handle : tabs) {
+    tabs::TabInterface* tab = handle.Get();
+    if (!tab || tab->IsPinned()) {
+      continue;
+    }
+    if (KoanPinnedTabController* pinned =
+            KoanPinnedTabController::ForTab(tab)) {
+      pinned->AddToEssentials(tab);
+    }
+  }
+}
+
+bool KoanSpaceDrag::IsSidebarCollapsed() const {
+  // Zen's _prefsSidebarExpanded.
+  const auto* state =
+      tabs::VerticalTabStripStateController::From(browser_view_->browser());
+  return state && state->IsCollapsed();
+}
+
+}  // namespace koan

@@ -14,7 +14,8 @@
 namespace koan {
 
 // Zen's Services.zen.playHapticFeedback(): a light tick on the Mac's
-// trackpad (as the theme picker's dial and slider step). Nothing elsewhere.
+// trackpad (as the theme picker's dial and slider step), unless
+// prefs::kHapticFeedback is off. Nothing elsewhere.
 void PlayHapticFeedback();
 
 }  // namespace koan

@@ -35,11 +35,14 @@
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_command_palette.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -371,6 +374,16 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
         controller, "previous-space", u"Previous Space",
         vector_icons::kArrowBackIcon, Action::kWorkspaceBackward));
   }
+  // Zen's zen-action-open-space-routing.
+  {
+    KoanCommand command =
+        MakeCommand("open-space-routing", u"Open Space Routing", kSettingsIcon);
+    command.run =
+        base::BindRepeating([](KoanBrowserViewController& controller) {
+          controller.workspaces()->space_routing()->ShowSettings();
+        });
+    commands.push_back(std::move(command));
+  }
   // Zen: "Focus on" each other Space, matched by the Space's name.
   for (const KoanWorkspaceController::SpaceInfo& space : spaces) {
     if (space.active) {
@@ -378,7 +391,7 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
     }
     const tab_groups::TabGroupId id = space.id;
     KoanCommand command =
-        MakeCommand("focus-space:" + id.ToString(), u"Focus on",
+        MakeCommand(kFocusSpaceCommandPrefix + id.ToString(), u"Focus on",
                     vector_icons::kArrowForwardIcon);
     command.target = space.name;
     command.run = base::BindRepeating(
@@ -386,6 +399,38 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
           controller.workspaces()->SwitchTo(id);
         },
         id);
+    commands.push_back(std::move(command));
+  }
+}
+
+// Zen's folder actions: New Folder, and Collapse / Expand All Folders while
+// a folder of the active Space is expanded / collapsed.
+void AppendFolderCommands(const KoanBrowserViewController* owner,
+                          std::vector<KoanCommand>& commands) {
+  KoanFolderController* folders = owner->folders();
+  if (!folders->IsEnabled()) {
+    return;
+  }
+  KoanCommand create =
+      MakeCommand("new-folder", u"New Folder", vector_icons::kFolderOpenIcon);
+  create.run = base::BindRepeating([](KoanBrowserViewController& controller) {
+    controller.folders()->CreateEmptyFolder();
+  });
+  commands.push_back(std::move(create));
+  for (const bool collapse : {true, false}) {
+    if (!folders->HasFoldersInActiveSpace(/*collapsed=*/!collapse)) {
+      continue;
+    }
+    KoanCommand command =
+        collapse ? MakeCommand("collapse-all-folders", u"Collapse All Folders",
+                               vector_icons::kKeyboardArrowUpIcon)
+                 : MakeCommand("expand-all-folders", u"Expand All Folders",
+                               kUnfoldMoreIcon);
+    command.run = base::BindRepeating(
+        [](bool collapse, KoanBrowserViewController& controller) {
+          controller.folders()->SetAllCollapsed(collapse);
+        },
+        collapse);
     commands.push_back(std::move(command));
   }
 }
@@ -405,6 +450,14 @@ void AddWorkspaceCommands(KoanCommandRegistry& registry,
                           KoanBrowserViewController& controller) {
   registry.AddSource(base::BindRepeating(
       &AppendWorkspaceCommands,
+      base::Unretained(
+          static_cast<const KoanBrowserViewController*>(&controller))));
+}
+
+void AddFolderCommands(KoanCommandRegistry& registry,
+                       KoanBrowserViewController& controller) {
+  registry.AddSource(base::BindRepeating(
+      &AppendFolderCommands,
       base::Unretained(
           static_cast<const KoanBrowserViewController*>(&controller))));
 }

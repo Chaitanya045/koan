@@ -18,6 +18,11 @@ class PrefRegistrySyncable;
 // chrome://koan-settings.
 namespace koan::prefs {
 
+// The expanded sidebar's default width, and where a double-click on its edge
+// puts it back: Zen's kDefaultSidebarWidth on macOS (ZenCustomizableUI).
+// Chromium's is tabs::kVerticalTabStripDefaultUncollapsedWidth, 240.
+inline constexpr int kSidebarDefaultWidth = 230;
+
 // Koan's look (issue #48), local-state prefs because colours are mixed
 // per colour-provider key, which knows no profile. The style is shadcn/ui's
 // design system ("shadcn") or Zen's ("zen", the default); the mode, base
@@ -39,6 +44,12 @@ inline constexpr char kLookCustomCss[] = "koan.look.custom_css";
 // Zen's zen.theme.acrylic-urlbar (default off): the floating URL bar is a
 // glass pane, translucent with the page blurred behind it. Both styles.
 inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
+
+// Zen's zen.haptic-feedback.enabled (default on): the trackpad ticks as a
+// dragged tab or Space button moves a slot and as the theme picker's sliders
+// pass a step (koan::PlayHapticFeedback()). macOS only; a local-state pref, as
+// Zen's is the application's.
+inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
 
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
@@ -142,8 +153,11 @@ inline constexpr char kWorkspaceTintSavedVariant[] =
 // New Tab page or to pages; macOS's new window after the last one closed)
 // gets them back (KoanWorkspaceController::RecreateStoredSpaces()): a list of
 // {"title": "<icon> <name>", "color": tab_groups::TabGroupColorId,
-// "active": bool}, in order. The session holds the Spaces otherwise (their tab
-// groups).
+// "active": bool, "pinned": [koan::StoredTab]}, in order: "pinned" is the
+// Space's pinned tabs (not its folders' tabs, which kFolderList keeps), which
+// come back unloaded with it (Zen restores only the pinned tabs when it
+// doesn't resume the session). The session holds the Spaces otherwise (their
+// tab groups).
 inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 
 // Zen's window sync (zen.window-sync.enabled, ZenWindowSync.sys.mjs): every
@@ -235,6 +249,12 @@ inline constexpr char kPinnedTabCloseShortcutBehavior[] =
 // (off by default).
 inline constexpr char kPinnedTabRestoreToPinnedUrl[] =
     "koan.pinned_tabs.restore_to_pinned_url";
+
+// The folders of the window the user is in, with their tabs (folder tabs are
+// pinned tabs): restored, unloaded, in a window that opens without a session
+// restore (startup set to the New Tab page or to pages), as Zen restores the
+// pinned tabs and folders then. KoanFolderController keeps it.
+inline constexpr char kFolderList[] = "koan.folders.list";
 // The Library section shown last, opened next ("downloads", "spaces",
 // "history"; Zen's zen.library.last-tab).
 inline constexpr char kLibraryLastSection[] = "koan.library.last_section";
@@ -254,6 +274,24 @@ inline constexpr char kDownloadAnimation[] =
 // (zen.view.drag-window-from-content).
 inline constexpr char kDragWindowFromContent[] =
     "koan.view.drag_window_from_content";
+
+// Zen's Space routing (ZenSpaceRoutingManager.sys.mjs, its
+// zen-space-routing.jsonlz4): the routes, a list of {"reference", "match_type"
+// ("contains", "equal-to" or "regex"), "space" (a Space's name, "" for the
+// most recent one)} in order (koan_space_routes.h), and the Space links from
+// other apps open in when no route matches ("" for the most recent one).
+inline constexpr char kSpaceRoutes[] = "koan.space_routing.routes";
+inline constexpr char kSpaceRoutingExternalDefault[] =
+    "koan.space_routing.external_default";
+// Renaming any sidebar tab by double-clicking its label, and "Change Label…"
+// in its menu (zen.tabs.rename-tabs).
+inline constexpr char kRenameTabs[] = "koan.tabs.rename_tabs";
+// The page-load progress bar above the selected tab's page
+// (zen.view.enable-loading-indicator).
+inline constexpr char kLoadingIndicator[] = "koan.view.loading_indicator";
+// Whether sidebar tabs keep their favicon while loading instead of
+// Chromium's spinner (zen.theme.hide-tab-throbber).
+inline constexpr char kHideTabThrobber[] = "koan.theme.hide_tab_throbber";
 
 // Whether the bookmarks bar may show at all. Zen has none, so Koan's default
 // is no bar anywhere (also on the new tab page, and after an import, which
@@ -317,11 +355,21 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 // Changes the defaults of upstream profile prefs to Zen's: no remote search
 // suggestions (Zen's browser.search.suggest.enabled is off, which also stops
 // Chromium's remote zero-prefix suggestions, Google's trending searches), no
-// AI Mode button in the omnibox, and AI Mode switched off by its policy pref.
+// AI Mode button in the omnibox, AI Mode switched off by its policy pref, and
+// Global Privacy Control on, and with Koan's sidebar, Zen's sidebar width
+// (kSidebarDefaultWidth).
 // A value the user sets still wins. Called from
 // chrome/browser/prefs/browser_prefs.cc at the end of RegisterProfilePrefs(),
 // after upstream registered them.
 void OverrideUpstreamProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry);
+
+// The same for upstream profile prefs that keyed-service factories register,
+// which happens after chrome::RegisterProfilePrefs() (crash note 8): no
+// sign-in interception bubble. Called from
+// chrome/browser/profiles/pref_service_builder_utils.cc after
+// RegisterProfilePrefsForServices().
+void OverrideServiceProfilePrefDefaults(
     user_prefs::PrefRegistrySyncable* registry);
 
 // Registers Koan's local-state prefs (the look), and changes the defaults of
