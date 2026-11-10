@@ -321,12 +321,12 @@ Icons (`.agent/notes/koan-icons.md`) have two tests of their own:
 
 ### Which test to write
 
-Koan has three kinds of tests. Pick the cheapest one that
-can fail for the reason you care about.
+Koan has three kinds of tests. Pick the cheapest one that can fail for the
+reason you care about.
 
 | Test | Use it for | Run it |
 | --- | --- | --- |
-| Unit test (`koan_unittests`) | Pure logic: scoring and ordering, parsing and formatting, tables of data, prefs defaults, colour maths. It must link without the browser. | `scripts/test_unit.sh`, a few seconds after a short build |
+| Unit test (`koan_unittests`, or the area's own target: `koan_shortcut_unittests`, `koan_views_unittests`, `koan_look_unittests`, `koan_icons_unittests`, `koan_agent_unittests`) | Pure logic: scoring and ordering, parsing and formatting, tables of data, colour maths, invariants of prefs. It must link without the browser. | `scripts/test_unit.sh`, a few seconds after a short build |
 | Browser test (`koan_browsertests`) | State that lives in the browser's own objects: Spaces, pinned tabs, what Koan keeps in the session and gets back after a restart. | `scripts/test_browser.sh`, on request: it starts a browser per test |
 | End-to-end test (`scripts/e2e`) | What the user sees and does: views, layout, input, menus, animations. | `scripts/e2e/run.sh <test>` |
 
@@ -337,9 +337,11 @@ can fail for the reason you care about.
    big file next to views, move it out, as `koan_fuzzy_score.cc` and
    `koan_space_title.cc` were moved out of the command palette and the
    Spaces; keep the original call site a one-liner.
-2. Write `foo_unittest.cc` next to `foo.cc` with plain gtest, and list it in
-   the `sources` of `koan_unittests` in `src/test/BUILD.gn`. Add the
-   `source_set` to its `deps`.
+2. Write `foo_unittest.cc` next to `foo.cc` with plain gtest. If its area
+   has a test target of its own (the shortcut table, views, colours, icons,
+   agent control), list it there; otherwise in the `sources` of
+   `koan_unittests` in `src/test/BUILD.gn`. Add the `source_set` to its
+   `deps`.
 3. Run `scripts/test_unit.sh --gtest_filter='Foo*'`.
 
 Test the edge cases that an end-to-end run can't reach cheaply: empty input,

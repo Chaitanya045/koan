@@ -6,7 +6,7 @@
 
 #include "base/test/run_until.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
-#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -18,31 +18,31 @@ namespace koan {
 
 namespace {
 
-KoanBrowserViewController* ControllerOf(Browser* browser) {
+KoanBrowserViewController* ControllerOf(BrowserWindowInterface* browser) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   return browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
 }
 
 }  // namespace
 
-KoanWorkspaceController* GetSpaces(Browser* browser) {
+KoanWorkspaceController* GetSpaces(BrowserWindowInterface* browser) {
   KoanBrowserViewController* controller = ControllerOf(browser);
   return controller ? controller->workspaces() : nullptr;
 }
 
-KoanPinnedTabController* GetPinnedTabs(Browser* browser) {
+KoanPinnedTabController* GetPinnedTabs(BrowserWindowInterface* browser) {
   KoanBrowserViewController* controller = ControllerOf(browser);
   return controller ? controller->pinned_tabs() : nullptr;
 }
 
-bool WaitForSpaceCount(Browser* browser, size_t count) {
+bool WaitForSpaceCount(BrowserWindowInterface* browser, size_t count) {
   return base::test::RunUntil([&] {
     KoanWorkspaceController* spaces = GetSpaces(browser);
     return spaces && spaces->GetSpaces().size() == count;
   });
 }
 
-std::vector<std::u16string> SpaceNames(Browser* browser) {
+std::vector<std::u16string> SpaceNames(BrowserWindowInterface* browser) {
   std::vector<std::u16string> names;
   if (KoanWorkspaceController* spaces = GetSpaces(browser)) {
     for (const KoanWorkspaceController::SpaceInfo& space :
@@ -53,8 +53,8 @@ std::vector<std::u16string> SpaceNames(Browser* browser) {
   return names;
 }
 
-void FlushSession(Browser* browser) {
-  SessionServiceTestHelper(browser->profile()).SaveNow();
+void FlushSession(BrowserWindowInterface* browser) {
+  SessionServiceTestHelper(browser->GetProfile()).SaveNow();
 }
 
 std::vector<int> TabsOfSpace(TabStripModel* tab_strip,

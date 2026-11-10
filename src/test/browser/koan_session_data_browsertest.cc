@@ -23,7 +23,7 @@ namespace koan {
 using KoanSessionDataBrowserTest = InProcessBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, TabDataIsPerFeatureAndTab) {
-  TabStripModel* tab_strip = browser()->tab_strip_model();
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
   content::WebContents* first = tab_strip->GetWebContentsAt(0);
   EXPECT_EQ("", GetTabSessionData(first, "koan.one"));
   EXPECT_TRUE(GetTabSessionData(first).empty());
@@ -44,7 +44,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, TabDataIsPerFeatureAndTab) {
 
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, EmptyDataRemovesTheEntry) {
   content::WebContents* contents =
-      browser()->tab_strip_model()->GetWebContentsAt(0);
+      browser()->GetTabStripModel()->GetWebContentsAt(0);
   SetTabSessionData(contents, "koan.one", "1");
   SetTabSessionData(contents, "koan.one", "");
   EXPECT_EQ("", GetTabSessionData(contents, "koan.one"));
@@ -76,7 +76,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, WindowData) {
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest,
                        RestoringATabTakesKoansEntries) {
   content::WebContents* contents =
-      browser()->tab_strip_model()->GetWebContentsAt(0);
+      browser()->GetTabStripModel()->GetWebContentsAt(0);
   std::vector<std::unique_ptr<content::NavigationEntry>> entries;
   int selected = 0;
   // Only "koan." entries with data are Koan's.

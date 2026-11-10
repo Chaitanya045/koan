@@ -32,7 +32,7 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, WindowAlwaysShowsOneSpace) {
   const auto infos = spaces->GetSpaces();
   EXPECT_EQ(u"Space", infos[0].name);
   EXPECT_TRUE(infos[0].active);
-  EXPECT_THAT(TabsOfSpace(browser()->tab_strip_model(), infos[0].id),
+  EXPECT_THAT(TabsOfSpace(browser()->GetTabStripModel(), infos[0].id),
               testing::ElementsAre(0));
   // Zen keeps at least one Space.
   EXPECT_FALSE(spaces->CanDeleteSpace());
@@ -71,7 +71,7 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, SpacesKeepTheirTabsApart) {
 
   // A Space is a run of tabs: the first Space's tabs, then the second's.
   const auto infos = spaces->GetSpaces();
-  TabStripModel* tab_strip = browser()->tab_strip_model();
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
   EXPECT_THAT(TabsOfSpace(tab_strip, infos[0].id), testing::ElementsAre(0));
   EXPECT_THAT(TabsOfSpace(tab_strip, infos[1].id), testing::ElementsAre(1));
   EXPECT_EQ(infos[1].id, *spaces->GetActiveSpace());
