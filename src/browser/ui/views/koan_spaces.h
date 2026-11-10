@@ -75,6 +75,17 @@ void ReplaceTabGroupMenuItems(ui::SimpleMenuModel* menu,
 tabs::TabInterface* PickSpaceTab(TabStripModel* tab_strip,
                                  const tab_groups::TabGroupId& group);
 
+// TabStripModel::AddWebContents(), for a tab added with no index that isn't
+// a link's (Ctrl+T, the URL bar's new tab, chrome.tabs.create()): Zen puts it
+// at the top of the Space (zen.view.show-newtab-button-top, Tabbrowser's
+// #insertTabAtIndex), where the New Tab row is, not at the end of the window.
+// Sets `index` and `group` to the start of the focused Space unless `group` is
+// already set, the tab is pinned, or the window has no Spaces.
+void PlaceUnindexedTab(TabStripModel* tab_strip,
+                       bool pinned,
+                       int& index,
+                       std::optional<tab_groups::TabGroupId>& group);
+
 // TabStripModel::RotateFocusedGroup() (upstream's swipe): whether swiping
 // past the last or first Space wraps around (Zen's
 // zen.workspaces.wrap-around-navigation) instead of leaving focus mode.

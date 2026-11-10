@@ -551,6 +551,10 @@ bool ShowsTabHoverCards() {
   return !features::IsSidebarEnabled();
 }
 
+bool ShowsTabThrobber() {
+  return !features::IsSidebarEnabled();
+}
+
 int SidebarTabIconGap(int upstream_value) {
   return features::IsSidebarEnabled() ? kSidebarTabIconGap : upstream_value;
 }

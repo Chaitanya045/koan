@@ -412,7 +412,12 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
   const PrefService* prefs = GetPrefs();
   const bool within_kind = prefs->GetBoolean(prefs::kCtrlTabWithinKind);
   const bool skip_pending = prefs->GetBoolean(prefs::kCtrlTabSkipPending);
-  if (!within_kind && !skip_pending) {
+  // Chromium's "Ctrl+Tab in recently used order" (chrome://settings >
+  // Appearance) wins for Ctrl+Tab, as in Zen, whose settings page warns
+  // about the combination; the Koan rows show the same note.
+  const bool mru =
+      key.key == ui::VKEY_TAB && chrome::IsCtrlTabMruEnabled(browser);
+  if (!mru && !within_kind && !skip_pending) {
     return false;
   }
   // Without tab switching (e.g. a popup window) the key goes to the page.
@@ -421,16 +426,14 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
                                              : IDC_SELECT_PREVIOUS_TAB)) {
     return false;
   }
-  // Chromium's "Ctrl+Tab in recently used order" (chrome://settings >
-  // Appearance) wins for Ctrl+Tab, as in Zen, whose settings page warns
-  // about the combination; the Koan rows show the same note.
-  if (key.key == ui::VKEY_TAB && chrome::IsCtrlTabMruEnabled(browser)) {
-    return false;
-  }
   TabStripModel* model = browser->GetTabStripModel();
   const int active = model->active_index();
   if (active == TabStripModel::kNoTab) {
     return false;
+  }
+  if (mru) {
+    CycleToRecentTab(model);
+    return true;
   }
   const bool forward = key.forward;
   // The tabs Chrome would cycle through (the workspace's and the
@@ -454,6 +457,36 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
     return true;
   }
   return true;
+}
+
+void KoanShortcutController::CycleToRecentTab(TabStripModel* model) {
+  // Zen's recently-used list (browser-ctrlTab-js.patch) holds the tabs that
+  // are shown, so this Space's and the Essentials, and never one that hasn't
+  // loaded (zen.ctrlTab.show-pending-tabs, false). Chromium's
+  // (chrome::CycleToMruTab) takes every tab of the window, and would open
+  // another Space's collapsed group to show one.
+  const std::optional<tab_groups::TabGroupId> workspace =
+      model->GetFocusedGroup();
+  tabs::TabInterface* recent = nullptr;
+  for (int i = 0; i < model->count(); ++i) {
+    tabs::TabInterface* tab = model->GetTabAtIndex(i);
+    content::WebContents* contents = tab->GetContents();
+    if (i == model->active_index() || model->IsTabCollapsed(i) ||
+        (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
+        IsTabUnloaded(contents)) {
+      continue;
+    }
+    if (!recent || contents->GetLastActiveTime() >
+                       recent->GetContents()->GetLastActiveTime()) {
+      recent = tab;
+    }
+  }
+  if (recent) {
+    model->ActivateTabAt(
+        model->GetIndexOfTab(recent),
+        TabStripUserGestureDetails(
+            TabStripUserGestureDetails::GestureType::kKeyboard));
+  }
 }
 
 bool KoanShortcutController::IsBound(const ui::Accelerator& accelerator) const {
