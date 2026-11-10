@@ -15,6 +15,7 @@
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "components/universal_optout/prefs.h"
 #include "koan/browser/agent/koan_agent_limits.h"
 #include "koan/browser/koan_features.h"
@@ -127,6 +128,14 @@ void OverrideServiceProfilePrefDefaults(
   // (registered by DiceWebSigninInterceptorFactory). Zen has no browser
   // account promos.
   registry->SetDefaultPrefValue(::prefs::kSigninInterceptionEnabled,
+                                base::Value(false));
+  // Z15: no browser sign-in (registered by AccountConsistencyModeManager-
+  // Factory; kSigninAllowed follows it at the next start). Koan has no Google
+  // sync, and Zen no such account rows: the app menu's "Sign in to Koan" and
+  // sync rows, the avatar menu's and the bookmark bubble's sign-in promos go.
+  // Signing in to Google on the web still works. Settings' sign-in switch
+  // turns it back on.
+  registry->SetDefaultPrefValue(::prefs::kSigninAllowedOnNextStartup,
                                 base::Value(false));
 }
 

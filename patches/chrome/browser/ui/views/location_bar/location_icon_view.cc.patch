@@ -1,0 +1,21 @@
+--- a/chrome/browser/ui/views/location_bar/location_icon_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_icon_view.cc
+@@ -28,6 +28,7 @@
+ #include "components/security_state/core/security_state.h"
+ #include "components/strings/grit/components_strings.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "third_party/skia/include/core/SkColor.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -245,6 +246,10 @@
+ }
+ 
+ std::u16string LocationIconView::GetText() const {
++  // Koan: Zen's identity box has no text ("Not secure", the page's name).
++  if (koan::HidesSecurityChipText()) {
++    return std::u16string();
++  }
+   return location_bar::GetSecurityChipText(delegate_->GetLocationBarModel(),
+                                            delegate_->GetWebContents(),
+                                            delegate_->IsEditingOrEmpty());
