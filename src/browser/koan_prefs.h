@@ -202,6 +202,12 @@ inline constexpr char kBookmarksBarShow[] = "koan.bookmarks_bar.show";
 // Whether the welcome screen was shown (zen.welcome-screen.seen).
 inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
 
+// How many crashes in a row were restored silently (koan_crash_restore.h):
+// 0 after a clean launch; and when the last silent restore was a while ago.
+inline constexpr char kResumedCrashes[] = "koan.session.resumed_crashes";
+// When the last silent crash restore happened.
+inline constexpr char kLastResumedTime[] = "koan.session.last_resumed_time";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
