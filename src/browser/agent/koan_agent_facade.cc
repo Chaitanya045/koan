@@ -202,6 +202,27 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
       break;
   }
 
+  // Design section 4.4: the agent never acts on a security interstitial (it
+  // could press "Proceed"). Reads still work, so it can see why it stopped.
+  if (!IsReadOnlyMethod(method)) {
+    const std::optional<TabFacts> facts =
+        backend_->DescribeTab(session.target_id);
+    if (!facts || facts->interstitial) {
+      deny("Koan.interstitial",
+           "the tab shows a security warning; only the user can decide what "
+           "to do");
+      if (facts && interstitial_tabs_.insert(session.target_id).second) {
+        base::DictValue params;
+        params.Set("targetId", session.target_id);
+        params.Set("reason", "interstitial");
+        SendEvent("Koan.userNeeded", std::move(params), std::nullopt);
+        backend_->UserNeeded(session.target_id, "interstitial");
+      }
+      return;
+    }
+    interstitial_tabs_.erase(session.target_id);
+  }
+
   const TargetEntry* entry = registry_->Find(session.target_id);
   if (!registry_->MaySend(client_id_, session.target_id, method)) {
     if (entry && entry->client_id == client_id_ &&

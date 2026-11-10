@@ -14,6 +14,7 @@
 #include "base/time/default_tick_clock.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/embedder_support/user_agent_utils.h"
+#include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_handle.h"
@@ -104,8 +105,13 @@ class AgentForwarder::Connection final : public FacadeBackend {
     if (!contents) {
       return std::nullopt;
     }
-    return TabFacts{base::UTF16ToUTF8(contents->GetTitle()),
-                    contents->GetLastCommittedURL()};
+    TabFacts facts{base::UTF16ToUTF8(contents->GetTitle()),
+                   contents->GetLastCommittedURL()};
+    if (auto* interstitials = security_interstitials::
+            SecurityInterstitialTabHelper::FromWebContents(contents)) {
+      facts.interstitial = interstitials->IsDisplayingInterstitial();
+    }
+    return facts;
   }
 
   bool AttachTab(const std::string& target_id) override {
@@ -194,6 +200,20 @@ class AgentForwarder::Connection final : public FacadeBackend {
   }
 
   void Audit(AuditRecord record) override {
+    forwarder_->Audit(std::move(record));
+  }
+
+  void UserNeeded(const std::string& target_id,
+                  std::string_view reason) override {
+    // The interstitial is on screen in the tab: the user decides there. The
+    // prompt in the indicator for page-initiated surfaces comes with them.
+    AuditRecord record;
+    record.time = base::Time::Now();
+    record.event = "user-needed";
+    record.client_id = client_id_;
+    record.tab_id = target_id;
+    record.summary = std::string(reason);
+    record.outcome = AuditOutcome::kPaused;
     forwarder_->Audit(std::move(record));
   }
 

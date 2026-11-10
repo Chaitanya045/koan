@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -56,6 +57,10 @@ class TargetRegistry;
 struct TabFacts {
   std::string title;
   GURL url;
+  // The tab shows a security interstitial. It commits under the original
+  // https URL, so attaching stays allowed; the facade must stop the agent from
+  // acting on it (it could press "Proceed").
+  bool interstitial = false;
 };
 
 class FacadeBackend {
@@ -93,6 +98,10 @@ class FacadeBackend {
   // Browser.getVersion's answer.
   virtual base::DictValue BrowserVersion() = 0;
   virtual void Audit(AuditRecord record) = 0;
+  // Something in the tab needs the user, not the agent (design section 9.4):
+  // `reason` is "interstitial", ...
+  virtual void UserNeeded(const std::string& target_id,
+                          std::string_view reason) = 0;
 };
 
 class CdpFacade {
@@ -213,6 +222,9 @@ class CdpFacade {
   // Commands sent to tabs, by the id the facade gave them.
   std::map<int, Pending> pending_;
   int next_command_id_ = 1;
+  // Tabs whose interstitial the client was told about (Koan.userNeeded), so
+  // that it is told once per interstitial.
+  std::set<std::string, std::less<>> interstitial_tabs_;
   bool discover_targets_ = false;
   bool auto_attach_ = false;
 

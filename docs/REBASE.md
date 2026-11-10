@@ -336,7 +336,10 @@ CDP forwarding (`src/browser/agent/koan_agent_facade.*`, `koan_agent_forwarder.*
 host changes, and `MayAttachToURL()` for every navigation request, and a refusal detaches the client through `AgentHostClosed()`
 (T-sec-4, T-sec-11: the facade then sends `Target.detachedFromTarget`, and the tab stays the agent's); an answer carries the
 `id` its command was sent with; a session has no child sessions unless `Target.setAutoAttach` is sent to it, which the facade
-never forwards (it drops any message with a `sessionId` from a tab); `WebContents::Close()` closes a tab without a
+never forwards (it drops any message with a `sessionId` from a tab); a security interstitial commits under the
+page's original https URL (so `MayAttachToURL()` keeps the session), which is why the facade refuses every non-read-only
+command with `Koan.interstitial` while `SecurityInterstitialTabHelper::IsDisplayingInterstitial()` holds (T-sec-17);
+`WebContents::Close()` closes a tab without a
 `beforeunload` dialog; the page target id of `GetOrCreateFor()` stays the tab's across its navigations (UNVERIFIED across a
 prerender activation, T-cdp-5).
 

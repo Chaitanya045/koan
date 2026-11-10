@@ -71,6 +71,10 @@ class FakeBackend : public FacadeBackend {
   void Audit(AuditRecord record) override {
     audits.push_back(std::move(record));
   }
+  void UserNeeded(const std::string& target_id,
+                  std::string_view reason) override {
+    user_needed.push_back(target_id + ":" + std::string(reason));
+  }
 
   struct Sent {
     std::string target_id;
@@ -82,6 +86,7 @@ class FakeBackend : public FacadeBackend {
   std::vector<Sent> sent;
   std::vector<GURL> opened_urls;
   std::vector<std::string> closed;
+  std::vector<std::string> user_needed;
   std::vector<std::string> ended;
   std::vector<AuditRecord> audits;
   int answered = 0;
@@ -391,6 +396,37 @@ TEST_F(KoanAgentFacadeTest, EndingATaskDefaultsToTheThrowawayTask) {
   EXPECT_EQ(backend_.ended,
             (std::vector<std::string>{CdpFacade::kDefaultTask, "research"}));
   EXPECT_TRUE(Answer(2)->FindDict("result"));
+}
+
+TEST_F(KoanAgentFacadeTest, NothingButReadsReachASecurityInterstitial) {
+  const std::string session = AttachTo("T1");
+  // A security interstitial commits under the original https URL, so the
+  // session stays attached; the facade refuses to act on it.
+  backend_.tabs["T1"].interstitial = true;
+  Send(1, "Input.dispatchMouseEvent",
+       base::DictValue().Set("type", "mousePressed").Set("x", 5).Set("y", 5),
+       session);
+  EXPECT_EQ(ErrorCode(1), "Koan.interstitial");
+  Send(2, "Runtime.evaluate", base::DictValue().Set("expression", "proceed()"),
+       session);
+  EXPECT_EQ(ErrorCode(2), "Koan.interstitial");
+  EXPECT_TRUE(backend_.sent.empty());
+  // The user is needed, once per interstitial.
+  ASSERT_EQ(Events("Koan.userNeeded").size(), 1u);
+  EXPECT_EQ(
+      *Events("Koan.userNeeded")[0]->FindStringByDottedPath("params.reason"),
+      "interstitial");
+  EXPECT_EQ(backend_.user_needed, std::vector<std::string>{"T1:interstitial"});
+  EXPECT_EQ(backend_.audits.back().outcome, AuditOutcome::kDenied);
+  // Reads still work.
+  Send(3, "Page.captureScreenshot", base::DictValue(), session);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  // Once the user has decided, the agent may act again.
+  backend_.tabs["T1"].interstitial = false;
+  Send(4, "Input.dispatchMouseEvent",
+       base::DictValue().Set("type", "mousePressed").Set("x", 5).Set("y", 5),
+       session);
+  EXPECT_EQ(backend_.sent.size(), 2u);
 }
 
 TEST_F(KoanAgentFacadeTest, ClosesOnlyItsOwnAgentTabs) {
