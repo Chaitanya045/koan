@@ -938,7 +938,7 @@ void KoanCompactModeController::CheckLightsHold() {
   if (lights_lock_ && !lights_release_timer_.IsRunning()) {
     // Back on the sidebar within that time, upstream's hover tracking keeps
     // it out.
-    lights_release_timer_.Start(FROM_HERE, kSidebarKeepHover,
+    lights_release_timer_.Start(FROM_HERE, kSidebarKeepHoverDuration,
                                 base::BindOnce(
                                     [](KoanCompactModeController* self) {
                                       self->ReleaseLock(self->lights_lock_);
