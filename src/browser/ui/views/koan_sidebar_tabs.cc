@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
+#include "chrome/browser/ui/views/tabs/common/tab_group_header_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
@@ -36,14 +38,17 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_essentials.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -68,7 +73,9 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/resize_area.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/controls/scrollbar/scroll_bar.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_types.h"
@@ -598,6 +605,61 @@ bool ShowsTabThrobber() {
   return !features::IsSidebarEnabled();
 }
 
+bool IsSidebarEmptySpace(const views::View* tab_strip_view,
+                         const views::View* target) {
+  const auto* strip = views::AsViewClass<TabStripView>(tab_strip_view);
+  const views::ScrollView* scroll =
+      strip ? strip->unpinned_tabs_scroll_view() : nullptr;
+  if (!features::IsSidebarEnabled() || !scroll || !target) {
+    return false;
+  }
+  for (const views::View* view = target; view; view = view->parent()) {
+    if (view == scroll) {
+      return true;
+    }
+    if (views::IsViewClass<TabView>(view) ||
+        views::IsViewClass<SplitTabView>(view) ||
+        views::IsViewClass<TabGroupHeaderView>(view) ||
+        views::IsViewClass<KoanSpaceHeaderView>(view) ||
+        views::IsViewClass<views::Button>(view) ||
+        views::IsViewClass<views::ScrollBar>(view) ||
+        IsSidebarTabRowsView(view)) {
+      return false;
+    }
+  }
+  return false;
+}
+
+bool IsSidebarClientArea(const views::View* tab_strip_view,
+                         const views::View* region,
+                         const gfx::Point& point) {
+  if (IsInSpaceForm(tab_strip_view, region, point)) {
+    return true;
+  }
+#if BUILDFLAG(IS_MAC)
+  // Upstream makes the scroll view's empty part below its contents caption
+  // (TabStripView::IsPositionInWindowCaption()); the rest of it is client
+  // area already.
+  const auto* strip = views::AsViewClass<TabStripView>(tab_strip_view);
+  const views::ScrollView* scroll =
+      strip ? strip->unpinned_tabs_scroll_view() : nullptr;
+  if (!features::IsSidebarEnabled() || !scroll || !scroll->GetVisible()) {
+    return false;
+  }
+  const gfx::Point in_scroll =
+      views::View::ConvertPointToTarget(region, scroll, point);
+  if (!scroll->HitTestPoint(in_scroll)) {
+    return false;
+  }
+  const views::ScrollBar* bar = scroll->vertical_scroll_bar();
+  return !bar || !bar->GetVisible() ||
+         !bar->HitTestPoint(
+             views::View::ConvertPointToTarget(scroll, bar, in_scroll));
+#else
+  return false;
+#endif
+}
+
 int SidebarTabIconGap(int upstream_value) {
   return features::IsSidebarEnabled() ? kSidebarTabIconGap : upstream_value;
 }
@@ -977,6 +1039,10 @@ void KoanSidebarTabsController::OnTabPinnedStateChanged(tabs::TabInterface* tab,
 }
 
 void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
+  if (event->type() == ui::EventType::kMousePressed) {
+    OnSidebarPressed(event);
+    return;
+  }
   if (!rows_ || event->target() != region_.get()) {
     return;
   }
@@ -985,6 +1051,54 @@ void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
   } else if (event->type() == ui::EventType::kMouseExited) {
     rows_->clear_row()->button()->SetSidebarHovered(false);
   }
+}
+
+void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
+  auto* region = views::AsViewClass<VerticalTabStripRegionView>(region_.get());
+  auto* target = static_cast<views::View*>(event->target());
+  if (!region || !target || !features::IsSidebarEnabled()) {
+    return;
+  }
+  const bool double_click =
+      event->IsOnlyLeftMouseButton() && event->GetClickCount() == 2;
+  // The splitter: back to the default width (Zen's dblclick on
+  // #zen-sidebar-splitter), through upstream's own resize, which saves it.
+  if (views::IsViewClass<views::ResizeArea>(target) &&
+      target->parent() == region) {
+    if (double_click) {
+      // (OnResize() turns the amount round for a sidebar on the right.)
+      const int widen =
+          tabs::kVerticalTabStripDefaultUncollapsedWidth - region->width();
+      region->OnResize(IsSidebarOnRight(browser_view_) ? -widen : widen,
+                       /*done_resizing=*/true);
+      event->SetHandled();
+    }
+    return;
+  }
+  if (!IsSidebarEmptySpace(region->GetTabStripView(), target)) {
+    return;
+  }
+  if (double_click || event->IsOnlyMiddleMouseButton()) {
+    OpenNewTab();
+    event->SetHandled();
+    return;
+  }
+#if BUILDFLAG(IS_MAC)
+  // Zen's draggable sidebar: the empty space moves the window, as caption
+  // would. From a posted task, as Koan's page drag (koan_window_drag.cc):
+  // AppKit may run the move in a nested loop.
+  if (event->IsOnlyLeftMouseButton()) {
+    event->SetHandled();
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<KoanSidebarTabsController> self) {
+                         if (self && self->browser_view_->GetWidget()) {
+                           StartNativeWindowMove(self->browser_view_);
+                         }
+                       },
+                       weak_factory_.GetWeakPtr()));
+  }
+#endif
 }
 
 void KoanSidebarTabsController::OnViewIsDeleting(views::View* observed_view) {

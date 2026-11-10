@@ -9,6 +9,7 @@ class TabStripView;
 
 namespace gfx {
 class Canvas;
+class Point;
 }  // namespace gfx
 
 namespace views {
@@ -92,6 +93,23 @@ bool ShowsTabHoverCards();
 // instead (zen.theme.hide-tab-throbber, vertical-tabs.css); upstream's with
 // Koan's sidebar off. AdjustTabData() applies it.
 bool ShowsTabThrobber();
+
+// VerticalTabStripRegionView::IsPositionInWindowCaption(): whether `point` (in
+// `region`'s coordinates) is client area that upstream would make window
+// caption: the Create-a-Space form (IsInSpaceForm()) and, on macOS, the empty
+// space below the tabs, so that its clicks reach the views (on macOS a caption
+// point never does; AppKit takes it). Koan moves the window from there itself,
+// on a press (KoanSidebarTabsController).
+bool IsSidebarClientArea(const views::View* tab_strip_view,
+                         const views::View* region,
+                         const gfx::Point& point);
+
+// Whether `target`, the view a press went to, is the sidebar's empty space:
+// inside `tab_strip_view`'s scroll view of unpinned tabs, and not on a tab,
+// a split view, a group or folder header, a Space header, a button or the
+// New Tab and Clear rows (Zen's .zen-workspace-empty-space).
+bool IsSidebarEmptySpace(const views::View* tab_strip_view,
+                         const views::View* target);
 
 }  // namespace koan
 

@@ -29,8 +29,8 @@ index 338178e75c4cd0f82708153edf434945b2cd0c58..5daba736db4c96984f5e592270eb3164
      return false;
    }
  
-+  // Koan: the Create Space form is client area, wherever it sits.
-+  if (koan::IsInSpaceForm(GetTabStripView(), this, point)) {
++  // Koan: the Create Space form and the empty space are client area.
++  if (koan::IsSidebarClientArea(GetTabStripView(), this, point)) {
 +    return false;
 +  }
 +

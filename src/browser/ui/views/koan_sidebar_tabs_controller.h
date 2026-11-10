@@ -70,7 +70,8 @@ class KoanSidebarTabsController : public TabStripModelObserver,
                       TabChangeType change_type) override;
   void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
 
-  // ui::EventHandler (the pointer entering and leaving the sidebar):
+  // ui::EventHandler (the pointer entering and leaving the sidebar; presses
+  // on its empty space and its edge):
   void OnMouseEvent(ui::MouseEvent* event) override;
 
   // views::ViewObserver (the rows going away with their tab strip):
@@ -96,6 +97,13 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // Zen shows the separator only while the workspace has unpinned tabs.
   void UpdateClearRow();
   void OpenNewTab();
+  // Zen's clicks in the sidebar (ZenCustomizableUI, tabs-mjs.patch,
+  // navigator-toolbox-js.patch): a double-click on its edge resets its width;
+  // a middle-click or double-click on the empty space below the tabs opens a
+  // new tab (the URL bar with replace-newtab), and on macOS a press there
+  // moves the window (zen.view.draggable-sidebar). Marks what it takes as
+  // handled.
+  void OnSidebarPressed(ui::MouseEvent* event);
   void ClearUnpinnedTabs();
   // "Close all unpinned tabs" with the user's shortcut for it.
   std::u16string GetClearTooltip() const;
