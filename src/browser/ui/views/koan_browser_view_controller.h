@@ -22,8 +22,8 @@ class BrowserView;
 
 namespace koan {
 
-class KoanAgentIndicator;
 class AiStarterPackFilter;
+class KoanAgentIndicator;
 class KoanCommandPalette;
 class KoanCompactModeController;
 class KoanDownloadAnimation;
