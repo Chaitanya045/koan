@@ -77,6 +77,10 @@ jobs:
           python-version: "3.12"
       - name: Branding rules and the Chromium release watcher
         run: python -I -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      # No checkout needed: the inventory is of the pinned revision
+      # (scripts/agent/list_keyed_services.py writes it on a roll).
+      - name: Every per-profile service is decided for agent containers
+        run: python -I scripts/agent/check_agent_services.py
 
   lint:
     name: Lint

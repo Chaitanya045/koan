@@ -132,6 +132,16 @@ fi
 # (scripts/bootstrap.sh) and reviewers.
 printf '%s\n%s\n' "$version" "$commit" > "$ROOT/CHROMIUM_VERSION"
 
+# The per-profile services agent containers share with the user's tabs
+# (docs/REBASE.md, "Agent containers: every per-profile service"), at the new
+# version: a new one fails scripts/agent/check_agent_services.py (and CI) until
+# it gets a row in src/browser/containers/koan_agent_service_policy.cc.
+python3 -I "$ROOT/scripts/agent/list_keyed_services.py" --chromium-src "$SRC" --write
+if ! python3 -I "$ROOT/scripts/agent/check_agent_services.py"; then
+  echo "Decide the new per-profile services for agent containers (above)," >&2
+  echo "then continue." >&2
+fi
+
 if ! "$ROOT/scripts/apply_patches.sh" apply; then
   echo
   echo "Some patches conflict. Port each CONFLICT by hand in chromium/src, then"
