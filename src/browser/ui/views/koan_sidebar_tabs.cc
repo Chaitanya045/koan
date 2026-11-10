@@ -607,8 +607,12 @@ bool ShowsTabHoverCards() {
   return !features::IsSidebarEnabled();
 }
 
-bool ShowsTabThrobber() {
-  return !features::IsSidebarEnabled();
+bool ShowsTabThrobber(content::BrowserContext* context) {
+  return !features::IsSidebarEnabled() || !context ||
+         !Profile::FromBrowserContext(context)
+              ->GetOriginalProfile()
+              ->GetPrefs()
+              ->GetBoolean(prefs::kHideTabThrobber);
 }
 
 bool IsSidebarEmptySpace(const views::View* tab_strip_view,

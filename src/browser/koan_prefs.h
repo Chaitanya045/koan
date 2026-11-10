@@ -45,6 +45,12 @@ inline constexpr char kLookCustomCss[] = "koan.look.custom_css";
 // glass pane, translucent with the page blurred behind it. Both styles.
 inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
 
+// Zen's zen.haptic-feedback.enabled (default on): the trackpad ticks as a
+// dragged tab or Space button moves a slot and as the theme picker's sliders
+// pass a step (koan::PlayHapticFeedback()). macOS only; a local-state pref, as
+// Zen's is the application's.
+inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
+
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
@@ -147,8 +153,10 @@ inline constexpr char kWorkspaceTintSavedVariant[] =
 // New Tab page or to pages; macOS's new window after the last one closed)
 // gets them back (KoanWorkspaceController::RecreateStoredSpaces()): a list of
 // {"title": "<icon> <name>", "color": tab_groups::TabGroupColorId,
-// "active": bool}, in order. The session holds the Spaces otherwise (their tab
-// groups).
+// "active": bool, "pinned": [koan::StoredTab]}, in order: "pinned" is the
+// Space's pinned tabs, which come back unloaded with it (Zen restores only
+// the pinned tabs when it doesn't resume the session). The session holds the
+// Spaces otherwise (their tab groups).
 inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
@@ -239,6 +247,24 @@ inline constexpr char kDownloadAnimation[] =
 // (zen.view.drag-window-from-content).
 inline constexpr char kDragWindowFromContent[] =
     "koan.view.drag_window_from_content";
+
+// Zen's Space routing (ZenSpaceRoutingManager.sys.mjs, its
+// zen-space-routing.jsonlz4): the routes, a list of {"reference", "match_type"
+// ("contains", "equal-to" or "regex"), "space" (a Space's name, "" for the
+// most recent one)} in order (koan_space_routes.h), and the Space links from
+// other apps open in when no route matches ("" for the most recent one).
+inline constexpr char kSpaceRoutes[] = "koan.space_routing.routes";
+inline constexpr char kSpaceRoutingExternalDefault[] =
+    "koan.space_routing.external_default";
+// Renaming any sidebar tab by double-clicking its label, and "Change Label…"
+// in its menu (zen.tabs.rename-tabs).
+inline constexpr char kRenameTabs[] = "koan.tabs.rename_tabs";
+// The page-load progress bar above the selected tab's page
+// (zen.view.enable-loading-indicator).
+inline constexpr char kLoadingIndicator[] = "koan.view.loading_indicator";
+// Whether sidebar tabs keep their favicon while loading instead of
+// Chromium's spinner (zen.theme.hide-tab-throbber).
+inline constexpr char kHideTabThrobber[] = "koan.theme.hide_tab_throbber";
 
 // Whether the bookmarks bar may show at all. Zen has none, so Koan's default
 // is no bar anywhere (also on the new tab page, and after an import, which

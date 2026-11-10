@@ -170,7 +170,8 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   // the window background, i.e. that background at 70% over the page; the
   // card has --zen-big-shadow (black at 24%); the buttons are
   // color-mix(light-dark(rgb(24, 24, 24), rgb(231, 231, 231)) 96%,
-  // --zen-primary-color) with the icon in --zen-primary-color; the close
+  // --zen-primary-color) with the icon in --zen-primary-color, hovered
+  // light-dark(rgb(41, 41, 41), rgb(204, 204, 204)); the close
   // button asking to confirm is rgb(220, 53, 69) with white. (Not the
   // kColorSysInverse* pair: in the Zen look's dark mode both are its text
   // colour, which drew blank discs, #138.)
@@ -181,6 +182,8 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanGlanceButton] = {color_utils::AlphaBlend(
       primary, dark ? SkColorSetRGB(231, 231, 231) : SkColorSetRGB(24, 24, 24),
       0.04f)};
+  mixer[kColorKoanGlanceButtonHover] = {dark ? SkColorSetRGB(204, 204, 204)
+                                             : SkColorSetRGB(41, 41, 41)};
   mixer[kColorKoanGlanceButtonIcon] = {primary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};
@@ -258,6 +261,17 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanDownloadTileIcon] = {ui::kColorSysOnPrimaryContainer};
   mixer[kColorKoanDownloadTileShadow] = {
       SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
+
+  // The page-load progress bar (#zen-loading-progress-bar): color-mix(in
+  // srgb, --zen-primary-color, light-dark(black, white) at 50% 70%), i.e.
+  // the primary colour at 30% and the half-transparent black (white) at 70%:
+  // 65% opaque, 46% of the way from that black (white) to the primary. The
+  // long load's track is black at 10% (white in dark mode).
+  const SkColor loading_mix = dark ? SK_ColorWHITE : SK_ColorBLACK;
+  mixer[kColorKoanLoadingBar] = {
+      SkColorSetA(color_utils::AlphaBlend(primary, loading_mix, 0.3f / 0.65f),
+                  Alpha(0.65f))};
+  mixer[kColorKoanLoadingBarTrack] = {SkColorSetA(loading_mix, Alpha(0.1f))};
 
   // The welcome screen (zen-welcome.css): Koan's calm green gradient where
   // Zen plays a video, white title, Zen's green start button; the pages in

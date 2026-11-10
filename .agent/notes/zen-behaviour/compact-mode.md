@@ -112,7 +112,7 @@ pointer is on the Dock / next to the window.)
 | `zen-user-show` | Cmd+Opt+S pin |
 | A **tab drag** in progress | `movingtab` on the tab strip keeps it open |
 | **Renaming a tab** | `zen-renaming-tab` forces it open |
-| **Flash** | `flash-popup` for `zen.view.compact.toolbar-flash-popup.duration` (800 ms) when `zen.view.compact.toolbar-flash-popup` is true (default **false** in the shipped prefs; code default true): after exiting DOM fullscreen (`flashSidebarIfNecessary`), not in split view and not during a Glance animation |
+| **Flash** | `flash-popup` for `zen.view.compact.toolbar-flash-popup.duration` (800 ms) when `zen.view.compact.toolbar-flash-popup` is true (default **false** in the shipped prefs; code default true): when a tab is selected (`flashSidebarIfNecessary` from `_handleTabSelect(aInstant)`), not in split view and not during a Glance animation. Not after exiting DOM fullscreen: the window's resize calls `_handleTabSelect(true)`, and `aInstant` skips the flash (its comment says otherwise; checked in the shipped `tabs.mjs`, 2026-11-11) |
 
 ## 5. Background tab opened while the sidebar is hidden
 
@@ -128,8 +128,8 @@ and the tab landed in the current Space.
 
 - **DOM fullscreen** (a video's fullscreen button): `#navigator-toolbox` is
   `visibility: collapse` (no sidebar at all), the page fills the window; the top toolbar
-  wrapper is hidden too; on exit, `flashSidebarIfNecessary` flashes the sidebar if the
-  flash pref is on, and the URL bar height is recalculated.
+  wrapper is hidden too; on exit the URL bar height is recalculated
+  (`flashSidebarIfNecessary(true)`, which doesn't flash: see the flash row in section 4).
 - **Native macOS fullscreen** (Ctrl+Cmd+F) **in compact mode** with
   `zen.view.borderless-fullscreen` (true): `updateElementSeparation` sets
   `--zen-element-separation: 0.1px` (and `zen-no-padding="true"`), so the **page card loses its
@@ -193,5 +193,5 @@ and the tab landed in the current Space.
 8. Open a link in a background tab (middle-click) while hidden: toast with an Open button.
 9. Native fullscreen (Ctrl+Cmd+F) in compact: page edge to edge (no card margin/radius), sidebar
    reveals at the left edge; exit: margins return. In split view: margins stay.
-10. A video's fullscreen: no sidebar; Esc: back (flash only if the flash pref is on).
+10. A video's fullscreen: no sidebar; Esc: back, no flash (even with the flash pref on).
 11. Quit and relaunch in compact mode: the window opens in compact mode with no animation.

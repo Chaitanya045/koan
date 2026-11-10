@@ -20,6 +20,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
@@ -28,8 +29,11 @@
 #include "chrome/browser/ui/views/tabs/tab/tab_close_button.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
+#include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
@@ -43,6 +47,7 @@
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
+#include "ui/events/event_handler.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -98,6 +103,15 @@ base::flat_map<const tabs::TabInterface*, raw_ptr<KoanTabRow>>& Rows() {
 KoanTabRow* RowFor(const tabs::TabInterface* tab) {
   auto it = Rows().find(tab);
   return it == Rows().end() ? nullptr : it->second.get();
+}
+
+// Zen's zen.tabs.rename-tabs (prefs::kRenameTabs).
+bool RenameTabsEnabled(const tabs::TabInterface* tab) {
+  return tab && tab->GetContents() &&
+         Profile::FromBrowserContext(tab->GetContents()->GetBrowserContext())
+             ->GetOriginalProfile()
+             ->GetPrefs()
+             ->GetBoolean(prefs::kRenameTabs);
 }
 
 // "Back to pinned url" under the label while the reset button is hovered.
@@ -229,10 +243,15 @@ class KoanTabRow : public views::Button {
     if (close_button_) {
       watcher_.Watch(close_button_);
     }
+    // Before the tab view's own handling, which would start a drag.
+    tab_view->AddPreTargetHandler(&double_click_handler_);
     Rows()[tab_view->GetTabInterface()] = this;
   }
 
   ~KoanTabRow() override {
+    if (tab_view_) {
+      tab_view_->RemovePreTargetHandler(&double_click_handler_);
+    }
     // The tab may be gone already: look for the row, not the tab.
     base::EraseIf(Rows(),
                   [this](const auto& entry) { return entry.second == this; });
@@ -275,6 +294,37 @@ class KoanTabRow : public views::Button {
   bool CanRename() const {
     return tab() && title_ && title_->GetVisible() &&
            !title_->bounds().IsEmpty() && !tab()->IsPinned();
+  }
+
+  // Zen's tab renamer: a double click on the label (not the favicon or the
+  // close button) of a row that can be renamed starts editing it, unless
+  // zen.tabs.rename-tabs is off. (Chromium has no double click to close a
+  // tab, Zen's other condition.) The press and its release go no further:
+  // they would start a drag.
+  void OnTabViewMouseEvent(ui::MouseEvent* event) {
+    if (event->type() == ui::EventType::kMouseReleased && swallow_release_) {
+      swallow_release_ = false;
+      event->SetHandled();
+      return;
+    }
+    if (event->type() != ui::EventType::kMousePressed ||
+        !event->IsOnlyLeftMouseButton() ||
+        !(event->flags() & ui::EF_IS_DOUBLE_CLICK) || editor_ || !CanRename() ||
+        !RenameTabsEnabled(tab())) {
+      return;
+    }
+    auto* target = static_cast<views::View*>(event->target());
+    gfx::Point point = event->location();
+    views::View::ConvertPointToTarget(target, title_, &point);
+    if (!title_->HitTestPoint(point)) {
+      return;
+    }
+    swallow_release_ = true;
+    event->SetHandled();
+    // Once the click is over, so that the editor keeps the focus.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&KoanTabRow::StartRenaming, weak_factory_.GetWeakPtr()));
   }
 
   void Update() {
@@ -443,6 +493,9 @@ class KoanTabRow : public views::Button {
   }
 
   void OnWatchedViewDeleting(views::View* observed) {
+    if (observed == tab_view_) {
+      tab_view_->RemovePreTargetHandler(&double_click_handler_);
+    }
     if (observed == icon_) {
       icon_ = nullptr;
     } else if (observed == title_) {
@@ -457,6 +510,20 @@ class KoanTabRow : public views::Button {
   }
 
  private:
+  // Sees the tab view's mouse events before it does.
+  class DoubleClickHandler : public ui::EventHandler {
+   public:
+    explicit DoubleClickHandler(KoanTabRow* row) : row_(row) {}
+
+    // ui::EventHandler:
+    void OnMouseEvent(ui::MouseEvent* event) override {
+      row_->OnTabViewMouseEvent(event);
+    }
+
+   private:
+    const raw_ptr<KoanTabRow> row_;
+  };
+
   // views::Button is a ViewObserver already (with final overrides), so the
   // row watches other views through this.
   class Watcher : public views::ViewObserver {
@@ -592,7 +659,10 @@ class KoanTabRow : public views::Button {
   bool separate_ = false;
   std::u16string original_title_;
   bool had_custom_title_ = false;
+  // The press of a double click started renaming: its release goes too.
+  bool swallow_release_ = false;
   Watcher watcher_{this};
+  DoubleClickHandler double_click_handler_{this};
 
   base::WeakPtrFactory<KoanTabRow> weak_factory_{this};
 };
@@ -696,7 +766,7 @@ void UpdateTabRow(const tabs::TabInterface* tab) {
 
 bool CanRenameTabRow(const tabs::TabInterface* tab) {
   KoanTabRow* row = RowFor(tab);
-  return row && row->CanRename();
+  return row && row->CanRename() && RenameTabsEnabled(tab);
 }
 
 bool StartRenamingTabRow(const tabs::TabInterface* tab) {

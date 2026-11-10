@@ -30,6 +30,7 @@ class KoanDownloadAnimation;
 class KoanGlanceController;
 class KoanPinnedTabController;
 class KoanLibraryController;
+class KoanLoadingIndicator;
 class KoanMediaController;
 class KoanShortcutController;
 class KoanSidebarTabsController;
@@ -136,6 +137,7 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
   std::unique_ptr<KoanMediaController> media_;
   std::unique_ptr<KoanDownloadAnimation> download_animation_;
+  std::unique_ptr<KoanLoadingIndicator> loading_indicator_;
   std::unique_ptr<KoanWindowDragController> window_drag_;
   std::unique_ptr<KoanWelcome> welcome_;
   // "An agent is connected"; it also starts agent control with the first

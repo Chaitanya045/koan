@@ -324,6 +324,11 @@ tabs, the line, New Tab and the tabs scroll together; the Essentials and
 the Space header stay put. A tab's close button shows while you point at
 it.
 
+While the selected tab loads, Zen's loading bar pulses at the top middle of
+the page (in the gap above it); after three seconds it turns into a wider
+track with a sweep. It isn't shown while a page is fullscreen. Tabs keep
+their favicon while loading, without Chromium's spinner, as in Zen.
+
 A pinned tab or Essential keeps its site, as in Zen: a URL on another site
 typed in its URL bar (or a search) opens in a new tab, and a link in it that
 would open a new tab on another site opens in Glance instead. Both can be
@@ -388,7 +393,10 @@ tab among the pinned ones to pin it. With several pinned tabs selected,
 Ctrl+W does the same to each of them and closes none of the others.
 
 Any tab's context menu has "Change Label…" (edit the name in place; Enter
-keeps it, Esc cancels, an empty name goes back to the page title), "Change
+keeps it, Esc cancels, an empty name goes back to the page title, and "Tab
+has been successfully renamed!" confirms a new one). Double-clicking a tab's
+label in the sidebar does the same; Essentials have no label to rename, and
+neither do tabs in a sidebar collapsed to icons. "Change
 Icon…" (an emoji instead of the favicon) and "Unload" (free the tab's
 memory; it reloads when you select it). Pinned URLs, labels and icons are
 kept with the session.
@@ -432,6 +440,16 @@ belongs to a Space, and new tabs open in the active one.
   and drops where you let go. Essentials only switch at the edges.
 - **Reorder** Spaces by dragging their buttons in the bottom bar (the
   others fade while you do; on a Mac the trackpad ticks at each step).
+- **Space routing** (right-click the header > Space Routing Settings, or
+  "Open Space Routing" in the command palette): routes like "When the link
+  contains youtube.com, open it in Media" send new tabs for matching pages
+  to that Space, in the background, with a "New tab opened in Media" toast;
+  the first matching route wins. Match by Contains, Is Exactly (ignoring
+  http(s)://, www. and a final /) or RegEx. "Default route for external
+  links" picks the Space links from other apps open in when no route
+  matches. Right-click a tab > Add Route for Domain adds a route for its
+  site (one per selected tab's site) and opens the settings. Essentials and
+  pinned tabs are never routed.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -815,6 +833,13 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Haptic feedback (macOS)
+
+As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
+Space button passes another while you reorder them, and as the theme picker's
+sliders pass a step. Turn it off with "Haptic feedback on the trackpad" in
+`chrome://koan-settings` (Look and Feel, Theme Settings).
+
 ## Translucent window (macOS)
 
 Like Zen's, the window is glass: the sidebar, the toolbar and the gutter
@@ -856,7 +881,12 @@ controls, download animation, window dragging from pages, welcome screen.
 The media controller and the download animation are on by default; like
 Zen's (which keeps them in about:config), they have no setting yet, only
 the prefs `koan.media_controls.enabled` and
-`koan.downloads.download_animation`.
+`koan.downloads.download_animation`. The same goes for renaming tabs
+(`koan.tabs.rename_tabs`, Zen's `zen.tabs.rename-tabs`), the loading bar
+(`koan.view.loading_indicator`, `zen.view.enable-loading-indicator`) and
+hiding the tab spinner (`koan.theme.hide_tab_throbber`,
+`zen.theme.hide-tab-throbber`), all on by default. A change of the last one
+reaches each tab the next time it changes.
 
 In compact mode with the sidebar hidden, a tab a page opens in the
 background shows Zen's "New background tab opened!" toast; its button

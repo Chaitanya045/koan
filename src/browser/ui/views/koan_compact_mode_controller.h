@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
+#include "koan/browser/ui/views/koan_window_edges.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/events/event_observer.h"
 #include "ui/menus/simple_menu_model.h"
@@ -42,6 +43,7 @@ namespace koan {
 
 class KoanCaptionButtonsTargeter;
 class KoanHotZone;
+class KoanOutsideWindowTracker;
 class KoanSidebarContextMenuController;
 class KoanSidebarNavButtons;
 class KoanSidebarNavView;
@@ -273,6 +275,16 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // runs while they are hidden or while the pointer rests over them.
   void UpdatePointerMonitor();
   void CheckRevealedHides();
+  // Zen's native mouse tracker (KoanOutsideWindowTracker): wanted where
+  // compact mode hides the sidebar or the toolbar, outside fullscreen.
+  bool WantsOutsideTracking() const;
+  // The pointer left the window through `edge`: reveals and holds what is on
+  // that edge and returns how far outside to track the pointer, or nullopt.
+  std::optional<int> OnPointerLeftWindow(WindowEdge edge,
+                                         const gfx::Point& point);
+  void OnOutsideTrackingEnded(bool back_in_window);
+  // Stops tracking and lets go of its hold.
+  void EndOutsideTracking();
   // The page's own fullscreen (video) starts or ends, or the window's:
   // Koan's hover state is cleared (Zen's sizemodechange ->
   // _clearAllHoverStates) and the card is laid out again.
@@ -361,6 +373,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
 
   Mode mode_ = Mode::kNone;
+  // The prefs were applied once (the window has opened): later changes are
+  // the user's, and animate.
+  bool applied_ = false;
   // In compact mode: what it hides.
   bool hide_sidebar_ = false;
   bool hide_toolbar_ = false;
@@ -414,7 +429,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Watches the pointer while a hover lock was taken for a hover the hot zone
   // never reported (CheckHoverLock()).
   base::RepeatingTimer hover_poll_timer_;
-  std::optional<base::TimeTicks> toolbar_unwanted_since_;
   bool edge_sidebar_hovered_ = false;
   // Bubbles that hold the toolbar or the sidebar out (see
   // ReconcileBubbleHold()).
@@ -428,12 +442,17 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
-  // The pointer left the window (through an edge) and hasn't come back.
-  bool pointer_left_window_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
   // The monitor sees all the application's windows (fullscreen), not just the
   // browser window's.
   bool pointer_monitor_is_application_wide_ = false;
+  // The monitor hears only the pointer leaving the window (for the outside
+  // tracker): nothing is revealed that it would hide.
+  bool pointer_monitor_exits_only_ = false;
+  // Follows the pointer outside the window after it left through the hidden
+  // sidebar's or toolbar's edge; the sidebar's hold meanwhile.
+  std::unique_ptr<KoanOutsideWindowTracker> outside_tracker_;
+  std::unique_ptr<ExpandOnHoverLock> outside_lock_;
 
   // The sidebar's context menu.
   std::unique_ptr<KoanSidebarContextMenuController> context_menu_controller_;

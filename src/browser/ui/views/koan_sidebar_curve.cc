@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 
+#include "koan/browser/koan_features.h"
 #include "ui/gfx/geometry/cubic_bezier.h"
 
 namespace koan {
@@ -57,6 +58,10 @@ double SidebarEaseAt(double t) {
 double SidebarSlideValue(double from, double target, double t) {
   return from + (target - from) *
                     (target > from ? SidebarSpringAt(t) : SidebarEaseAt(t));
+}
+
+int SidebarToggleDurationMs(int upstream_ms) {
+  return features::IsSidebarEnabled() ? kSidebarToggleDurationMs : upstream_ms;
 }
 
 }  // namespace koan

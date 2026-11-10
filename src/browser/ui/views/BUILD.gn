@@ -59,6 +59,7 @@ source_set("sidebar_curve") {
   ]
   deps = [
     "//base",
+    "//koan/browser:features",
     "//ui/gfx/geometry",
   ]
 }
@@ -72,6 +73,22 @@ source_set("swipe_tracker") {
     "koan_swipe_tracker.h",
   ]
   deps = [ "//base" ]
+}
+
+# Which edge of the window the pointer left through, and how far outside it
+# compact mode still follows it (Zen's mouse tracker): geometry only.
+source_set("window_edges") {
+  sources = [
+    "koan_window_edges.cc",
+    "koan_window_edges.h",
+  ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
+# Zen's content card radius from the OS window's (koan_content_radius.h): pure,
+# for the unit tests.
+source_set("content_radius") {
+  sources = [ "koan_content_radius.h" ]
 }
 
 # Where a sidebar button goes to clear the macOS traffic lights: geometry only.
@@ -108,6 +125,27 @@ source_set("space_drag_logic") {
   deps = [ "//base" ]
 }
 
+# Zen's Space routing rules (koan_space_routes.h): pure, for the unit tests.
+source_set("space_routes") {
+  sources = [
+    "koan_space_routes.cc",
+    "koan_space_routes.h",
+  ]
+  deps = [ "//third_party/re2" ]
+  public_deps = [ "//base" ]
+}
+
+# Zen's page-load progress bar over time (koan_loading_bar.h): pure, for the
+# unit tests.
+source_set("loading_bar") {
+  sources = [
+    "koan_loading_bar.cc",
+    "koan_loading_bar.h",
+  ]
+  deps = [ "//base" ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -142,6 +180,18 @@ source_set("strip_on_share") {
 
 # Which Space comes next, and the wheel's modifier (koan_space_navigation.h):
 # pure, so the unit tests need nothing else.
+# A Space's pinned tab as stored in its prefs entry (koan_stored_tab.h).
+source_set("stored_tab") {
+  sources = [
+    "koan_stored_tab.cc",
+    "koan_stored_tab.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+}
+
 source_set("space_navigation") {
   sources = [ "koan_space_navigation.h" ]
 }
@@ -151,24 +201,34 @@ source_set("space_navigation") {
 #   out/Koan/koan_views_unittests
 test("koan_views_unittests") {
   sources = [
+    "koan_content_radius_unittest.cc",
     "koan_glass_tint_unittest.cc",
     "koan_lights_geometry_unittest.cc",
+    "koan_loading_bar_unittest.cc",
     "koan_pinned_site_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
+    "koan_space_routes_unittest.cc",
+    "koan_stored_tab_unittest.cc",
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
+    "koan_window_edges_unittest.cc",
   ]
   deps = [
+    ":content_radius",
     ":glass_tint",
     ":lights_geometry",
+    ":loading_bar",
     ":pinned_site",
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
+    ":space_routes",
+    ":stored_tab",
     ":strip_on_share",
     ":swipe_tracker",
+    ":window_edges",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -270,11 +330,15 @@ source_set("impl") {
     "koan_library_ui.h",
     "koan_library_view.cc",
     "koan_library_view.h",
+    "koan_loading_indicator.cc",
+    "koan_loading_indicator.h",
     "koan_look_controller.cc",
     "koan_media_controller.cc",
     "koan_media_controller.h",
     "koan_move_to_space.cc",
     "koan_omnibox_rows.cc",
+    "koan_outside_window_tracker.cc",
+    "koan_outside_window_tracker.h",
     "koan_pinned_glance.cc",
     "koan_pinned_tab_views.cc",
     "koan_pinned_tab_views.h",
@@ -305,6 +369,8 @@ source_set("impl") {
     "koan_space_header.h",
     "koan_space_menu.cc",
     "koan_space_menu.h",
+    "koan_space_routing.cc",
+    "koan_space_routing.h",
     "koan_space_swipe.cc",
     "koan_space_swipe.h",
     "koan_split_view.cc",
@@ -362,16 +428,21 @@ source_set("impl") {
   sources += get_target_outputs(":grain_png")
   public_deps = [ ":space_theme" ]
   deps = [
+    ":content_radius",
     ":glass_tint",
     ":grain_png",
     ":lights_geometry",
+    ":loading_bar",
     ":pinned_site",
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
+    ":space_routes",
+    ":stored_tab",
     ":strip_on_share",
     ":swipe_tracker",
     ":views",
+    ":window_edges",
     "//base:i18n",
     "//cc/paint",
     "//chrome/app:command_ids",
@@ -415,6 +486,7 @@ source_set("impl") {
     "//chrome/browser/ui/tabs:utils",
     "//chrome/browser/ui/toolbar",
     "//chrome/browser/ui/views:message_box_dialog",
+    "//chrome/browser/ui/views/animations",
     "//chrome/browser/ui/views/extensions:extensions_container_views",
     "//chrome/browser/ui/views/extensions:extensions_menu_coordinator",
     "//chrome/browser/ui/views/extensions:extensions_menu_view",
@@ -425,6 +497,7 @@ source_set("impl") {
     "//chrome/browser/ui/views/frame:browser_view_layout_params",
     "//chrome/browser/ui/views/frame:browser_widget",
     "//chrome/browser/ui/views/frame:contents_container_view",
+    "//chrome/browser/ui/views/frame:contents_web_view",
     "//chrome/browser/ui/views/frame:custom_corners_background",
     "//chrome/browser/ui/views/frame:glass_frame_service",
     "//chrome/browser/ui/views/frame:multi_contents_view",

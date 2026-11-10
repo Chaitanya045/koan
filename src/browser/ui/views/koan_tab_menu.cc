@@ -10,8 +10,10 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 
 namespace koan {
 
@@ -42,14 +44,28 @@ bool ExecuteSplitViewCommand(TabStripModel* tab_strip,
 // Spaces: "Move To" a Space in place of the tab group items
 // (koan_spaces.h). Its submenu runs its items through its own delegate, so
 // Spaces have no commands of their own here.
+// Zen's "Add Route for Domain(s)" (Space routing).
+constexpr int kAddRouteForDomain =
+    FirstTabMenuCommand(TabMenuFeatureId::kSpaces);
+
 void AddSpacesItems(TabMenuContext& context) {
   ReplaceTabGroupMenuItems(&*context.menu, &*context.tab_strip, context.index);
+  if (!HasSpaces(&*context.tab_strip)) {
+    return;
+  }
+  // At the end: Zen's goes after "Reopen Closed Tab", which Chromium's tab
+  // menu doesn't have.
+  ui::SimpleMenuModel* menu = &*context.menu;
+  menu->AddSeparator(ui::NORMAL_SEPARATOR);
+  menu->AddItem(kAddRouteForDomain, context.num_tabs > 1
+                                        ? u"Add Route for Domains"
+                                        : u"Add Route for Domain");
 }
 
 bool IsSpacesCommandEnabled(const TabStripModel* tab_strip,
                             int index,
                             int command_id) {
-  return false;
+  return command_id == kAddRouteForDomain;
 }
 
 // Upstream's tab group commands do nothing in a Spaces window: a tab is
@@ -59,6 +75,24 @@ bool IsSpacesCommandEnabled(const TabStripModel* tab_strip,
 // (chrome::GroupTab(), CreateNewTabGroup()), as does any other caller of
 // ExecuteContextMenuCommand().
 bool ExecuteSpacesCommand(TabStripModel* tab_strip, int index, int command_id) {
+  if (command_id == kAddRouteForDomain) {
+    if (KoanWorkspaceController* spaces =
+            KoanWorkspaceController::FromTabStrip(tab_strip)) {
+      // The selected tabs if the menu's tab is one of them, as Zen's.
+      std::vector<tabs::TabInterface*> tabs;
+      const ui::ListSelectionModel& selection =
+          tab_strip->selection_model().GetListSelectionModel();
+      if (selection.IsSelected(static_cast<size_t>(index))) {
+        for (size_t selected : selection.selected_indices()) {
+          tabs.push_back(tab_strip->GetTabAtIndex(static_cast<int>(selected)));
+        }
+      } else {
+        tabs.push_back(tab_strip->GetTabAtIndex(index));
+      }
+      spaces->space_routing()->AddRouteForTabs(tabs);
+    }
+    return true;
+  }
   switch (command_id) {
     case TabStripModel::CommandToggleGrouped:
     case TabStripModel::CommandAddToNewGroup:

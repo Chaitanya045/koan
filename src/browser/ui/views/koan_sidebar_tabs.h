@@ -7,6 +7,10 @@
 
 class TabStripView;
 
+namespace content {
+class BrowserContext;
+}  // namespace content
+
 namespace gfx {
 class Canvas;
 class Point;
@@ -89,10 +93,11 @@ int SidebarCollapseSnapWidth(int upstream_value);
 // off. Updates that hide a card still reach the controller.
 bool ShowsTabHoverCards();
 
-// Whether a loading tab shows Chromium's throbber. Zen keeps the favicon there
-// instead (zen.theme.hide-tab-throbber, vertical-tabs.css); upstream's with
-// Koan's sidebar off. AdjustTabData() applies it.
-bool ShowsTabThrobber();
+// Whether a loading tab of `context` shows Chromium's throbber. Zen keeps the
+// favicon there instead (zen.theme.hide-tab-throbber, vertical-tabs.css,
+// prefs::kHideTabThrobber); upstream's with Koan's sidebar off.
+// AdjustTabData() applies it.
+bool ShowsTabThrobber(content::BrowserContext* context);
 
 // VerticalTabStripRegionView::IsPositionInWindowCaption(): whether `point` (in
 // `region`'s coordinates) is client area that upstream would make window
