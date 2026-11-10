@@ -64,7 +64,9 @@ Everything lives in `~/work/koan-mac`:
 **The rule is that everything stays in the folder.** Every script (and
 `branding.py`) refuses to run on macOS unless `KOAN_MAC` is set and `HOME`
 and `TMPDIR` are inside it (`koan_require_mac_env` in
-`scripts/koan_platform.sh`). The scripts also export
+`scripts/koan_platform.sh`). With `KOAN_MAC` unset (a friend's clone,
+docs/BUILDING-MAC.md) the folder is `<clone>/.cache/mac`
+(`koan_use_clone_env`), so the rule holds without an env.sh. The scripts also export
 `CFFIXED_USER_HOME="$HOME"`: Apple's tools (`xcodebuild` from `gn gen`,
 `actool`, `ibtoold`) find the home directory through CoreFoundation, which
 ignores `HOME` but honours that.
