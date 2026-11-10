@@ -8,7 +8,7 @@ Prepare: three Spaces A, B, C (A active) with a few tabs each, no Essentials, si
 
 | # | Do | Expect |
 |---|---|---|
-| SD1 | Drag a tab of A and hold it at the sidebar's right edge (within 20 px, inside or over the page) | After half a second B slides in, the dragged tab is in it under the pointer; after another half second C, then A (wrap-around). Drop: the tab stays in that Space where dropped. |
+| SD1 | Drag a tab of A and hold it at the sidebar's right edge (within 20 px, inside or over the page) | After half a second B slides in, the dragged tab is in it under the pointer; after another half second C, then A if Settings > Tab Management wraps around (else it stops at C). Drop: the tab stays in that Space where dropped. |
 | SD2 | The same at the left edge | Previous Space (C from A). |
 | SD3 | Hold at the edge, then move to the middle before 500 ms | No switch. |
 | SD4 | Drag a tab over B's button in the bottom bar | B shows at once with the tab; move back over the list and drop it there. |
