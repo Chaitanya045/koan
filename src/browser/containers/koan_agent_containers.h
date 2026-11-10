@@ -19,7 +19,12 @@ namespace content {
 class WebContents;
 }  // namespace content
 
-// The API agent control calls to give an agent somewhere to work
+// The containers' lifecycle API. Agent control opens tabs through
+// koan::agent::AgentTabOpener (koan/browser/agent/koan_agent_tab_hooks.h),
+// which the containers implement (InstallAgentTabOpener(), koan_containers.h)
+// on top of the functions below; it ends a task with EndAgentTask().
+//
+// What gives an agent somewhere to work
 // (.agent/notes/agent-control.md section 7): an agent container, shown as a
 // Space in the user's own sidebar, in the user's last active window.
 //
@@ -91,6 +96,11 @@ content::WebContents* OpenAgentTab(Profile* profile,
 std::vector<content::WebContents*> GetContainerTabs(
     Profile* profile,
     const ContainerId& container);
+
+// Ends a task agent control opened tabs for (AgentTabRequest's client and
+// task, through koan::agent::GetAgentTabOpener()): as EndAgentContainer() for
+// the container the task got. Nothing if it has none.
+void EndAgentTask(const std::string& client_id, const std::string& task);
 
 // Ends the task: closes the container's tabs (its Space goes with its last
 // tab) and, for a throwaway container, clears all its data. A saved container

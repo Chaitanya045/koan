@@ -44,6 +44,17 @@ void OnRestoringContainerTab(
     std::vector<std::unique_ptr<content::NavigationEntry>>& entries,
     int& selected_navigation);
 
+// After OnTabInserted(): a tab a page in an agent container's tab opened
+// (a link, window.open; still on its first navigation) joins its container's
+// Space in that window. It is already in the container (the hooks of
+// koan_container_partition.h). A tab the user moves keeps its place.
+void PlaceInContainerSpace(content::WebContents* contents);
+
+// Installs the containers as agent control's koan::agent::AgentTabOpener
+// (koan/browser/agent/koan_agent_tab_hooks.h). Called by every window with
+// Spaces (KoanWorkspaceController); once is enough.
+void InstallAgentTabOpener();
+
 // GarbageCollectStoragePartitionsCommand::DoGarbageCollection(), before it
 // lists the partitions to keep: loads `profile`'s saved containers, because a
 // loaded partition is never collected and nothing else lists Koan's.

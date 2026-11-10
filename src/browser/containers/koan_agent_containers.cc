@@ -10,13 +10,16 @@
 #include <utility>
 
 #include "base/functional/callback_helpers.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -31,6 +34,8 @@
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/agent/koan_agent_policy.h"
+#include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_spaces.h"
@@ -62,6 +67,11 @@ class StartedContainers : public base::SupportsUserData::Data {
   }
 
   std::map<std::string, std::u16string>& names() { return names_; }
+  // The containers agent control's tabs open in, by client and task
+  // (ContainerTabOpener).
+  std::map<std::pair<std::string, std::string>, ContainerId>& tasks() {
+    return tasks_;
+  }
 
  private:
   static const void* Key() {
@@ -70,6 +80,7 @@ class StartedContainers : public base::SupportsUserData::Data {
   }
 
   std::map<std::string, std::u16string> names_;
+  std::map<std::pair<std::string, std::string>, ContainerId> tasks_;
 };
 
 bool IsAllowedProfile(Profile* profile) {
@@ -123,19 +134,133 @@ BrowserWindowInterface* FindWindow(Profile* profile) {
 }
 
 // The Space `container`'s tabs are in, in `tab_strip`: the group of its first
-// grouped tab.
-std::optional<tab_groups::TabGroupId> FindSpace(TabStripModel* tab_strip,
-                                                const ContainerId& container) {
+// grouped tab other than `except`.
+std::optional<tab_groups::TabGroupId> FindSpace(
+    TabStripModel* tab_strip,
+    const ContainerId& container,
+    const content::WebContents* except = nullptr) {
   for (int i = 0; i < tab_strip->count(); ++i) {
     tabs::TabInterface* tab = tab_strip->GetTabAtIndex(i);
-    if (tab->GetGroup() && ContainerOf(tab->GetContents()) == container) {
+    if (tab->GetContents() != except && tab->GetGroup() &&
+        ContainerOf(tab->GetContents()) == container) {
       return tab->GetGroup();
     }
   }
   return std::nullopt;
 }
 
+// The profile agents work in: the one of the user's most recently active
+// normal window with Spaces, never off the record.
+Profile* FindAgentProfile() {
+  Profile* found = nullptr;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&](BrowserWindowInterface* browser) {
+        Profile* profile = browser->GetProfile();
+        if (IsAllowedProfile(profile) &&
+            browser->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+            HasSpaces(browser->GetTabStripModel())) {
+          found = profile;
+          return false;
+        }
+        return true;
+      },
+      BrowserCollection::Order::kActivation);
+  return found;
+}
+
+// Agent control's way to open a tab (koan_agent_tab_hooks.h): each client's
+// task gets a container, a saved one if the task names one, a throwaway one
+// otherwise, and keeps it until EndAgentTask().
+class ContainerTabOpener : public agent::AgentTabOpener {
+ public:
+  void OpenAgentTab(
+      const agent::AgentTabRequest& request,
+      base::OnceCallback<void(content::WebContents*)> done) override {
+    Profile* profile = FindAgentProfile();
+    std::optional<ContainerId> container =
+        profile ? ContainerForTask(profile, request) : std::nullopt;
+    std::move(done).Run(
+        container ? containers::OpenAgentTab(profile, *container, request.url)
+                  : nullptr);
+  }
+
+ private:
+  static std::optional<ContainerId> ContainerForTask(
+      Profile* profile,
+      const agent::AgentTabRequest& request) {
+    StartedContainers& started = StartedContainers::For(profile);
+    const auto key = std::make_pair(request.client_id, request.task);
+    if (auto it = started.tasks().find(key);
+        it != started.tasks().end() &&
+        started.names().contains(it->second.id)) {
+      return it->second;
+    }
+    AgentContainerOptions options{
+        .space_name = request.task.empty() ? std::u16string(kDefaultSpaceName)
+                                           : base::UTF8ToUTF16(request.task)};
+    for (const SavedContainer& saved : GetSavedAgentContainers(profile)) {
+      if (saved.name == request.task) {
+        options.mode = AgentMode::kSaved;
+        options.saved_name = saved.name;
+      }
+    }
+    auto container = StartAgentContainer(profile, options);
+    if (!container.has_value()) {
+      return std::nullopt;
+    }
+    started.tasks()[key] = *container;
+    return *container;
+  }
+};
+
 }  // namespace
+
+void PlaceInContainerSpace(content::WebContents* contents) {
+  const std::optional<ContainerId> container = ContainerOf(contents);
+  tabs::TabInterface* tab = tabs::TabInterface::MaybeGetFromContents(contents);
+  if (!container || !tab || !tab->GetBrowserWindowInterface()) {
+    return;
+  }
+  TabStripModel* tab_strip =
+      tab->GetBrowserWindowInterface()->GetTabStripModel();
+  const std::optional<tab_groups::TabGroupId> space =
+      FindSpace(tab_strip, *container, /*except=*/contents);
+  const int index = tab_strip->GetIndexOfWebContents(contents);
+  // No other tab of the container in this window: it stays where it opened.
+  if (!space || index == TabStripModel::kNoTab || tab->GetGroup() == space) {
+    return;
+  }
+  tab_strip->AddToExistingGroup({index}, *space, /*add_to_end=*/true);
+}
+
+void InstallAgentTabOpener() {
+  static base::NoDestructor<ContainerTabOpener> opener;
+  if (!agent::GetAgentTabOpener()) {
+    agent::SetAgentTabOpener(opener.get());
+  }
+}
+
+void EndAgentTask(const std::string& client_id, const std::string& task) {
+  std::set<Profile*> profiles;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&](BrowserWindowInterface* browser) {
+        profiles.insert(browser->GetProfile());
+        return true;
+      });
+  for (Profile* profile : profiles) {
+    if (!IsAllowedProfile(profile)) {
+      continue;
+    }
+    StartedContainers& started = StartedContainers::For(profile);
+    auto it = started.tasks().find(std::make_pair(client_id, task));
+    if (it == started.tasks().end()) {
+      continue;
+    }
+    const ContainerId container = it->second;
+    started.tasks().erase(it);
+    EndAgentContainer(profile, container);
+  }
+}
 
 base::expected<ContainerId, AgentContainerError> StartAgentContainer(
     Profile* profile,

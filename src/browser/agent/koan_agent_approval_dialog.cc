@@ -162,8 +162,10 @@ void ShowApprovalDialog(const ApprovalRequest& request,
                       u"."})));
   }
   builder.AddParagraph(ui::DialogModelLabel(
-      u"It can open and work in its own background tabs. They share your "
-      u"logins and cookies."));
+      u"It can open and work in its own background tabs, in a container "
+      u"of their own: a throwaway one that is cleared when its task ends, "
+      u"or one you saved for it. They never get your logins, cookies, "
+      u"saved passwords or site permissions."));
   // The capabilities it asked for, on unless the user turns them off.
   struct Choice {
     bool requested;

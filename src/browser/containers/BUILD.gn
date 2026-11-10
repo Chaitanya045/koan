@@ -59,6 +59,7 @@ source_set("impl") {
     "//koan/browser:features",
     "//koan/browser:prefs",
     "//koan/browser/agent:policy",
+    "//koan/browser/agent:tab_hooks",
     "//koan/browser/ui/views",
     "//services/network/public/cpp",
     "//third_party/blink/public/common",

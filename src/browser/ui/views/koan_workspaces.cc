@@ -363,6 +363,8 @@ KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
     : browser_view_(browser_view),
       swipe_(std::make_unique<KoanSpaceSwipe>(this)) {
   if (IsEnabled()) {
+    // Agent control opens agents' tabs in containers, in windows like this.
+    containers::InstallAgentTabOpener();
     tab_strip_model()->AddObserver(this);
     session_restored_subscription_ =
         SessionRestore::RegisterOnSessionRestoredCallback(

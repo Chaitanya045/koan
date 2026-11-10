@@ -85,6 +85,18 @@ void OnTabInserted(content::WebContents* contents) {
   if (GetTabSessionData(contents, kContainerSessionKey) != data) {
     SetTabSessionData(contents, kContainerSessionKey, data);
   }
+  if (container && container->kind == ContainerKind::kAgent &&
+      contents->GetController().IsInitialNavigation()) {
+    // Not while the tab strip notifies its observers.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<content::WebContents> contents) {
+                         if (contents) {
+                           PlaceInContainerSpace(contents.get());
+                         }
+                       },
+                       contents->GetWeakPtr()));
+  }
 }
 
 void OnRestoringContainerTab(
