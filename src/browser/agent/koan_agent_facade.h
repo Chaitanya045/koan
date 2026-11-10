@@ -232,11 +232,35 @@ class CdpFacade {
                     std::string method,
                     base::DictValue params);
 
+  // Sends a command to the tab, or to a child in Chromium's session for it,
+  // and remembers it until it is answered. `client_message_id` is nullopt for
+  // the facade's own commands (their answers are not the client's). False if
+  // it could not be encoded.
+  bool Forward(std::optional<int> client_message_id,
+               TabSession& session,
+               const std::string& method,
+               std::string summary,
+               base::DictValue params);
   // Sends a command of the facade's own to the tab (its answer is not given to
   // the client).
   void SendInternal(TabSession& session,
                     std::string method,
                     base::DictValue params);
+
+  // Child targets (design section 4.4, T-cdp-3): a Target.* event of the tab
+  // or of a child. Returns false if it is not one (it is then an ordinary
+  // event).
+  bool HandleChildTargetEvent(TabSession& session,
+                              const base::DictValue& event);
+  // The tab's auto-attach attached a child in `parent`: the agent gets it if
+  // it is a frame or a dedicated worker on a URL it may reach (content has
+  // asked the client's MayAttachTo* already), and it is detached otherwise.
+  void OnChildAttached(TabSession& parent, const base::DictValue& params);
+  static base::DictValue ChildTargetInfo(const base::DictValue& info);
+  // Whether a child at `url` may be the agent's in the tab `target_id`: any
+  // reachable one in an agent's own tab, only the granted site in a user's
+  // (a one-site lease, design section 9.2).
+  bool ChildOnGrantedSite(const std::string& target_id, const GURL& url) const;
 
   std::optional<base::DictValue> TargetInfo(const std::string& target_id);
   bool InScope(std::string_view target_id) const;
@@ -270,6 +294,8 @@ class CdpFacade {
 
   std::map<std::string, std::unique_ptr<TabSession>, std::less<>> sessions_;
   std::map<std::string, std::string, std::less<>> session_by_target_;
+  // Chromium's session id of each child the client has -> the facade's.
+  std::map<std::string, std::string, std::less<>> child_by_chromium_session_;
   // Commands sent to tabs, by the id the facade gave them.
   std::map<int, Pending> pending_;
   int next_command_id_ = 1;

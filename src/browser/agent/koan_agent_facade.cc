@@ -17,6 +17,7 @@
 #include "koan/browser/agent/koan_agent_events.h"
 #include "koan/browser/agent/koan_agent_filters.h"
 #include "koan/browser/agent/koan_agent_policy.h"
+#include "koan/browser/agent/koan_agent_reach.h"
 #include "koan/browser/agent/koan_agent_redact.h"
 #include "koan/browser/agent/koan_agent_registry.h"
 #include "url/gurl.h"
@@ -60,10 +61,35 @@ FacadeBackend::~FacadeBackend() = default;
 // filters keep for it.
 struct CdpFacade::TabSession {
   std::string session_id;
+  // The tab (the registry's target), for a child too: what the agent may do
+  // in a child is what it may do in its tab.
   std::string target_id;
   ContextTracker contexts;
   StreamRegistry streams;
+  // A child target (an out-of-process frame or a dedicated worker) that the
+  // tab's auto-attach reported: Chromium's session id for it, the facade
+  // session it was attached in, and its own target id and type. Empty for a
+  // tab.
+  std::string child_session;
+  std::string parent_session_id;
+  std::string child_target_id;
+  std::string child_type;
+  bool is_child() const { return !child_session.empty(); }
 };
+
+namespace {
+
+// Children per tab the facade keeps (a page can make frames in a loop).
+constexpr size_t kMaxChildSessions = 64;
+
+// The child targets an agent may have: frames and the page's own workers.
+// Shared and service workers outlive the tab and serve the user's other tabs
+// of the site, so they are not the tab's to hand over.
+bool IsChildType(std::string_view type) {
+  return type == "iframe" || type == "worker";
+}
+
+}  // namespace
 
 // A command sent to a tab and not answered yet.
 struct CdpFacade::Pending {
@@ -266,15 +292,26 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
   if (method == "Page.createIsolatedWorld") {
     session.contexts.OnIsolatedWorldRequested();
   }
+  if (!Forward(message.id, session, method, summary,
+               std::move(message.params))) {
+    deny("Koan.invalidParams", "the parameters could not be encoded");
+  }
+}
+
+bool CdpFacade::Forward(std::optional<int> client_message_id,
+                        TabSession& session,
+                        const std::string& method,
+                        std::string summary,
+                        base::DictValue params) {
   Pending pending;
-  pending.client_message_id = message.id;
+  pending.client_message_id = client_message_id;
   pending.session_id = session.session_id;
   pending.target_id = session.target_id;
   pending.method = method;
-  pending.summary = summary;
+  pending.summary = std::move(summary);
   pending.start = tick_clock_->NowTicks();
   if (method == "IO.close") {
-    if (const std::string* handle = message.params.FindString("handle")) {
+    if (const std::string* handle = params.FindString("handle")) {
       pending.stream = *handle;
     }
   }
@@ -285,14 +322,18 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
   base::DictValue command;
   command.Set("id", id);
   command.Set("method", method);
-  command.Set("params", std::move(message.params));
+  command.Set("params", std::move(params));
+  // A child's command goes in Chromium's session for it, on the tab's client.
+  if (session.is_child()) {
+    command.Set("sessionId", session.child_session);
+  }
   std::optional<std::string> json = base::WriteJson(command);
   if (!json) {
-    deny("Koan.invalidParams", "the parameters could not be encoded");
-    return;
+    return false;
   }
   pending_.emplace(id, std::move(pending));
   backend_->SendToTab(session.target_id, id, std::move(*json));
+  return true;
 }
 
 void CdpFacade::HandleTargetMethod(AgentMessage& message, TabSession* session) {
@@ -322,6 +363,9 @@ void CdpFacade::HandleTargetMethod(AgentMessage& message, TabSession* session) {
     DetachFromTarget(message, session);
   } else if (method == "Target.setAutoAttach") {
     SetAutoAttach(message, session);
+    if (session) {
+      return;  // forwarded, audited when it is answered
+    }
   } else if (method == "Target.setDiscoverTargets") {
     SetDiscoverTargets(message);
   } else if (method == "Target.createTarget") {
@@ -482,30 +526,51 @@ void CdpFacade::DetachFromTarget(const AgentMessage& message,
   } else if (session) {
     session_id = session->session_id;
   }
-  if (!SessionFor(session_id)) {
+  TabSession* ending = SessionFor(session_id);
+  if (!ending) {
     ReplyError(message.id, message.session_id, "Koan.unknownSession",
                "no session with this id");
     return;
   }
   // Answer first: the reply may travel in the session being ended.
   Reply(message.id, message.session_id, base::DictValue());
+  if (ending->is_child()) {
+    // Chromium detaches it in the session it was attached in.
+    if (TabSession* parent = SessionFor(ending->parent_session_id)) {
+      base::DictValue params;
+      params.Set("sessionId", ending->child_session);
+      SendInternal(*parent, "Target.detachFromTarget", std::move(params));
+    }
+  }
   EndSession(session_id, /*tell_client=*/true);
 }
 
 void CdpFacade::SetAutoAttach(const AgentMessage& message,
                               TabSession* session) {
-  if (session) {
-    // Inside a tab: child targets (out-of-process frames, workers) are not
-    // proxied in v1 (T-cdp-3), so nothing is attached; the call succeeds so
-    // that clients that always send it keep working.
-    Reply(message.id, message.session_id, base::DictValue());
-    return;
-  }
   const bool auto_attach =
       message.params.FindBool("autoAttach").value_or(false);
   if (auto_attach && message.params.FindBool("flatten") != true) {
     ReplyError(message.id, message.session_id, "Koan.invalidParams",
                "only flatten: true is supported");
+    return;
+  }
+  if (session) {
+    // Inside a tab (or a child of it): the tab's own auto-attach reports its
+    // out-of-process frames and workers, each checked against the agent's
+    // reach by content (the client's MayAttachToRenderFrameHost and
+    // MayAttachToURL) and by OnChildAttached(). No filter: the facade decides
+    // which children the agent gets.
+    base::DictValue params;
+    params.Set("autoAttach", auto_attach);
+    params.Set(
+        "waitForDebuggerOnStart",
+        message.params.FindBool("waitForDebuggerOnStart").value_or(false));
+    params.Set("flatten", true);
+    if (!Forward(message.id, *session, message.method, std::string(),
+                 std::move(params))) {
+      ReplyError(message.id, message.session_id, "Koan.invalidParams",
+                 "the parameters could not be encoded");
+    }
     return;
   }
   auto_attach_ = auto_attach;
@@ -832,13 +897,27 @@ bool CdpFacade::Redacts(const std::string& target_id) const {
 }
 
 void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
+  // Its children first: they go with it.
+  std::vector<std::string> children;
+  for (const auto& [id, child] : sessions_) {
+    if (child->parent_session_id == session_id) {
+      children.push_back(id);
+    }
+  }
+  for (const std::string& child : children) {
+    EndSession(child, tell_client);
+  }
   auto it = sessions_.find(session_id);
   if (it == sessions_.end()) {
     return;
   }
   std::unique_ptr<TabSession> session = std::move(it->second);
   sessions_.erase(it);
-  session_by_target_.erase(session->target_id);
+  if (session->is_child()) {
+    child_by_chromium_session_.erase(session->child_session);
+  } else {
+    session_by_target_.erase(session->target_id);
+  }
   // Commands in flight are answered: the tab will not.
   for (auto pending = pending_.begin(); pending != pending_.end();) {
     if (pending->second.session_id != session_id) {
@@ -850,9 +929,26 @@ void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
                    pending->second.summary, AuditOutcome::kError,
                    tick_clock_->NowTicks() - pending->second.start);
       ReplyError(*pending->second.client_message_id, session_id,
-                 "Koan.targetClosed", "the tab went away");
+                 "Koan.targetClosed",
+                 session->is_child() ? "the frame or worker went away"
+                                     : "the tab went away");
+    }
+    // A child's tab stays attached: what it held for the command goes now
+    // (a tab's is released by DetachTab()).
+    if (session->is_child()) {
+      backend_->CommandAnswered(session->target_id);
     }
     pending = pending_.erase(pending);
+  }
+  if (session->is_child()) {
+    if (tell_client) {
+      base::DictValue params;
+      params.Set("sessionId", session_id);
+      params.Set("targetId", session->child_target_id);
+      SendEvent("Target.detachedFromTarget", std::move(params),
+                session->parent_session_id);
+    }
+    return;
   }
   backend_->DetachTab(session->target_id);
   if (tell_client) {
@@ -913,16 +1009,145 @@ void CdpFacade::OnTabMessage(const std::string& target_id,
   }
   std::optional<base::DictValue> message =
       base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
-  // A message of a child session: the facade never asks for one (it does not
-  // proxy auto-attach), so it is not the client's to see.
-  if (!message || message->contains("sessionId")) {
+  if (!message) {
     return;
+  }
+  // A child's message: only one the facade accepted (OnChildAttached()), and
+  // only of this tab.
+  if (const std::string* child = message->FindString("sessionId")) {
+    auto it = child_by_chromium_session_.find(*child);
+    TabSession* child_session = it == child_by_chromium_session_.end()
+                                    ? nullptr
+                                    : SessionFor(it->second);
+    if (!child_session || child_session->target_id != target_id) {
+      return;
+    }
+    session = child_session;
   }
   if (message->contains("id")) {
     HandleTabAnswer(*session, std::move(*message));
-  } else {
+  } else if (!HandleChildTargetEvent(*session, *message)) {
     HandleTabEvent(*session, std::move(*message));
   }
+}
+
+bool CdpFacade::HandleChildTargetEvent(TabSession& session,
+                                       const base::DictValue& event) {
+  const std::string* method = event.FindString("method");
+  const base::DictValue* params = event.FindDict("params");
+  if (!method || !method->starts_with("Target.") || !params) {
+    return false;
+  }
+  if (*method == "Target.attachedToTarget") {
+    OnChildAttached(session, *params);
+  } else if (*method == "Target.detachedFromTarget") {
+    const std::string* child = params->FindString("sessionId");
+    auto it = child ? child_by_chromium_session_.find(*child)
+                    : child_by_chromium_session_.end();
+    if (it != child_by_chromium_session_.end()) {
+      EndSession(std::string(it->second), /*tell_client=*/true);
+    }
+  } else if (*method == "Target.targetInfoChanged") {
+    const base::DictValue* info = params->FindDict("targetInfo");
+    const std::string* target = info ? info->FindString("targetId") : nullptr;
+    const std::string* url = info ? info->FindString("url") : nullptr;
+    for (const auto& [id, child] : sessions_) {
+      if (target && child->is_child() && child->child_target_id == *target &&
+          child->parent_session_id == session.session_id) {
+        // A child of a user's tab that went to another site leaves the
+        // agent's reach with it.
+        if (url && !url->empty() &&
+            !ChildOnGrantedSite(child->target_id, GURL(*url))) {
+          base::DictValue detach;
+          detach.Set("sessionId", child->child_session);
+          const std::string ending = id;
+          SendInternal(session, "Target.detachFromTarget", std::move(detach));
+          EndSession(ending, /*tell_client=*/true);
+          break;
+        }
+        base::DictValue changed;
+        changed.Set("targetInfo", ChildTargetInfo(*info));
+        SendEvent("Target.targetInfoChanged", std::move(changed),
+                  session.session_id);
+        break;
+      }
+    }
+  }
+  // Every other Target.* event of a tab (targetCreated, ...) is not the
+  // agent's: the facade's own Target.* describe its scope.
+  return true;
+}
+
+void CdpFacade::OnChildAttached(TabSession& parent,
+                                const base::DictValue& params) {
+  const std::string* child = params.FindString("sessionId");
+  const base::DictValue* info = params.FindDict("targetInfo");
+  if (!child || child->empty() || !info) {
+    return;
+  }
+  const std::string* type = info->FindString("type");
+  const std::string* url = info->FindString("url");
+  const std::string* child_target = info->FindString("targetId");
+  size_t children = 0;
+  for (const auto& [id, session] : sessions_) {
+    children += session->is_child() && session->target_id == parent.target_id;
+  }
+  // Content let the client attach (it asked MayAttachToRenderFrameHost or
+  // MayAttachToURL); the facade checks the child again by what it is, and a
+  // refused one is detached (which also lets one waiting for the debugger
+  // run).
+  // In a user's tab the agent was given one site (design section 9.2): a
+  // frame or worker of another site in it (a payment or sign-in widget) is
+  // not the agent's, to read or to drive. An agent's own tab keeps every
+  // reachable child.
+  if (!type || !IsChildType(*type) || !url ||
+      !IsReachableFrameUrl(GURL(*url)) ||
+      !ChildOnGrantedSite(parent.target_id, GURL(*url)) || !child_target ||
+      children >= kMaxChildSessions ||
+      child_by_chromium_session_.contains(*child)) {
+    base::DictValue detach;
+    detach.Set("sessionId", *child);
+    SendInternal(parent, "Target.detachFromTarget", std::move(detach));
+    return;
+  }
+  auto session = std::make_unique<TabSession>();
+  session->session_id = base::Token::CreateRandom().ToString();
+  session->target_id = parent.target_id;
+  session->child_session = *child;
+  session->parent_session_id = parent.session_id;
+  session->child_target_id = *child_target;
+  session->child_type = *type;
+  const std::string id = session->session_id;
+  child_by_chromium_session_[*child] = id;
+  sessions_[id] = std::move(session);
+
+  base::DictValue attached;
+  attached.Set("sessionId", id);
+  attached.Set("targetInfo", ChildTargetInfo(*info));
+  attached.Set("waitingForDebugger",
+               params.FindBool("waitingForDebugger").value_or(false));
+  SendEvent("Target.attachedToTarget", std::move(attached), parent.session_id);
+}
+
+bool CdpFacade::ChildOnGrantedSite(const std::string& target_id,
+                                   const GURL& url) const {
+  const TargetEntry* entry = registry_->Find(target_id);
+  return entry &&
+         (entry->agent_owned || backend_->IsInGrantedSite(target_id, url));
+}
+
+// static
+base::DictValue CdpFacade::ChildTargetInfo(const base::DictValue& info) {
+  // Only what describes the child: never the browser context or the opener.
+  base::DictValue copy;
+  for (std::string_view key : {"targetId", "type", "title", "url"}) {
+    if (const std::string* value = info.FindString(key)) {
+      copy.Set(key, *value);
+    }
+  }
+  copy.Set("attached", true);
+  copy.Set("canAccessOpener", false);
+  return copy;
 }
 
 void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
@@ -1043,25 +1268,7 @@ void CdpFacade::DeliverEvent(const TabSession& session,
 void CdpFacade::SendInternal(TabSession& session,
                              std::string method,
                              base::DictValue params) {
-  const int id = next_command_id_;
-  next_command_id_ = next_command_id_ == std::numeric_limits<int>::max()
-                         ? 1
-                         : next_command_id_ + 1;
-  base::DictValue command;
-  command.Set("id", id);
-  command.Set("method", method);
-  command.Set("params", std::move(params));
-  std::optional<std::string> json = base::WriteJson(command);
-  if (!json) {
-    return;
-  }
-  Pending pending;
-  pending.session_id = session.session_id;
-  pending.target_id = session.target_id;
-  pending.method = std::move(method);
-  pending.start = tick_clock_->NowTicks();
-  pending_.emplace(id, std::move(pending));
-  backend_->SendToTab(session.target_id, id, std::move(*json));
+  Forward(std::nullopt, session, method, std::string(), std::move(params));
 }
 
 void CdpFacade::Reply(int id,
