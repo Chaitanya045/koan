@@ -202,6 +202,22 @@ constexpr Option kAgentFailures[] = {
     {"17", "17"},         {"18", "18"}, {"19", "19"}, {"20", "20"},
 };
 
+// Zen's zen.workspaces.scroll-modifier-key values (ZenSpaceManager's
+// activationKeyMap).
+constexpr Option kSpaceScrollModifiers[] = {
+#if BUILDFLAG(IS_MAC)
+    {"ctrl", "Control"},
+    {"alt", "Option"},
+    {"shift", "Shift"},
+    {"meta", "Command"},
+#else
+    {"ctrl", "Ctrl"},
+    {"alt", "Alt"},
+    {"shift", "Shift"},
+    {"meta", "Meta"},
+#endif
+};
+
 // The shadcn look (koan::look names).
 constexpr Option kLookStyles[] = {
     {"zen", "Zen (default)"},
@@ -291,6 +307,12 @@ constexpr Row kRows[] = {
      .control = Control::kCheckbox,
      .pref = prefs::kBookmarksBarShow,
      .label = "Show the bookmarks bar"},
+    {.group = "vertical-tabs",
+     .control = Control::kCheckbox,
+     .pref = prefs::kShowNewTabVertical,
+     .label = "Show New Tab Button on Tab List",
+     .is_available = features::IsSidebarEnabled},
+    // Zen has no row for this (its palette and the sidebar's menu do).
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kTabsOnRight,
@@ -416,6 +438,27 @@ constexpr Row kRows[] = {
      .pref = prefs::kSelectRecentlyUsedOnClose,
      .label = "When closing a tab, switch to the most recently used tab "
               "instead of the next tab"},
+    // Zen's about:config prefs zen.workspaces.wrap-around-navigation (on),
+    // natural-scroll (off) and scroll-modifier-key (ctrl).
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kWorkspacesWrapAround,
+     .label = "Go from the last Space to the first (and back) when switching "
+              "Spaces",
+     .is_available = features::IsWorkspacesEnabled},
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kWorkspacesNaturalScroll,
+     .label = "Natural scrolling: the mouse wheel and the swipe over the "
+              "sidebar switch Spaces the other way",
+     .is_available = features::IsWorkspacesEnabled},
+    {.group = "workspaces",
+     .control = Control::kMenu,
+     .pref = prefs::kWorkspacesScrollModifierKey,
+     .label = "Key to hold to switch Spaces with the mouse wheel over the "
+              "sidebar (a sideways wheel needs none)",
+     .options = kSpaceScrollModifiers,
+     .is_available = features::IsWorkspacesEnabled},
     {.group = "pinned-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,

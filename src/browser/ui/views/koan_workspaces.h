@@ -38,6 +38,7 @@
 
 class BrowserView;
 class ExpandOnHoverLock;
+class PrefService;
 class Profile;
 class TabStripModel;
 
@@ -56,8 +57,9 @@ class View;
 }
 
 namespace ui {
+class Event;
 class ScrollEvent;
-}
+}  // namespace ui
 
 namespace koan {
 
@@ -184,6 +186,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void SwitchTo(const tab_groups::TabGroupId& space);
   // The next or previous Space, wrapping around like Zen.
   void Cycle(bool forward);
+  // The same for the user's own moves (shortcuts, the wheel, swipes), as
+  // Zen's settings say (koan_prefs.h kWorkspacesWrapAround): without
+  // wrap-around, nothing past the first or last Space. Returns whether it
+  // switched.
+  bool Navigate(bool forward);
   // The `number`th Space (from 1), Zen's "Switch to Workspace N". False if
   // there is none.
   bool SwitchToNumber(int number);
@@ -275,10 +282,15 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // on the Space's header. Nothing without a visible header.
   void ShowIconPickerForActiveSpace();
   void EditActiveSpaceTheme();
-  // Zen's mouse wheel over the sidebar (horizontal, or vertical with Ctrl):
-  // one Space per notch, at most every 200 ms. Touchpad swipes are
-  // upstream's VerticalTabStripFocusSwipeController.
+  // Zen's mouse wheel over the sidebar (horizontal, or vertical with the
+  // modifier of kWorkspacesScrollModifierKey): one Space per notch, at most
+  // every 200 ms; `forward` is the wheel's way (down or right), which
+  // kWorkspacesNaturalScroll turns round. Touchpad swipes are
+  // KoanSpaceSwipe's on macOS, upstream's VerticalTabStripFocusSwipeController
+  // elsewhere.
   void OnSpaceWheel(bool forward);
+  // Whether a vertical wheel with these modifiers switches Space.
+  bool IsSpaceScrollModifierDown(const ui::Event& event) const;
   // Zen's two-finger swipe (koan_swipe_tracker.h, koan_space_swipe.h): the
   // Space follows the fingers by the gesture `amount` (positive: fingers moving
   // left; the strip moves the other way, as in Zen), then EndSwipe() when they
@@ -437,6 +449,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::optional<std::string> ThemeOfTabs(
       const tab_groups::TabGroupId& space,
       const tabs::TabInterface* except) const;
+  // Zen's wrap-around-navigation setting.
+  bool WrapsAround() const;
+  // A swipe's travel or speed, turned round with Zen's natural-scroll
+  // setting, so the Space follows the way it will switch.
+  float SwipeAmount(float amount) const;
+  // The profile's prefs, also for an Incognito window (koan_prefs.h).
+  PrefService* GetPrefs() const;
 
   void OnDeleteConfirmed(const tab_groups::TabGroupId& space, bool confirmed);
 

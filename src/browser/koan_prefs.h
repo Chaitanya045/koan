@@ -63,6 +63,10 @@ inline constexpr char kCompactModeToolbarFlashPopup[] =
 // on the right of the window, everything mirrored.
 inline constexpr char kTabsOnRight[] = "koan.tabs.on_right";
 
+// Zen's "Show New Tab Button on Tab List" (`zen.tabs.show-newtab-vertical`):
+// the "+ New Tab" row above the unpinned tabs. On by default, like Zen.
+inline constexpr char kShowNewTabVertical[] = "koan.tabs.show_newtab_vertical";
+
 // Whether the "Sidebar hidden!" toast was shown, after a drag of the
 // sidebar's edge hid the sidebar (`zen.view.compact.drag-collapse-hint-seen`).
 // Zen shows it once.
@@ -104,6 +108,23 @@ inline constexpr char kDarkThemeStyle[] = "koan.theme.dark_style";
 // (zen.theme.gradient.show-custom-colors, off by default like Zen's).
 inline constexpr char kShowCustomColors[] =
     "koan.theme.gradient.show_custom_colors";
+
+// How the user moves between Spaces (Zen's about:config prefs, with Zen's
+// defaults):
+// - kWorkspacesWrapAround: past the last Space comes the first, and the
+//   other way (zen.workspaces.wrap-around-navigation, on).
+// - kWorkspacesNaturalScroll: the wheel and the touchpad swipe go the other
+//   way round (zen.workspaces.natural-scroll, off).
+// - kWorkspacesScrollModifierKey: the key that makes a vertical wheel over
+//   the sidebar switch Space (zen.workspaces.scroll-modifier-key): "ctrl"
+//   (the default), "alt" (Option on macOS), "shift" or "meta" (Cmd on macOS).
+//   A horizontal wheel needs none.
+inline constexpr char kWorkspacesWrapAround[] =
+    "koan.workspaces.wrap_around_navigation";
+inline constexpr char kWorkspacesNaturalScroll[] =
+    "koan.workspaces.natural_scroll";
+inline constexpr char kWorkspacesScrollModifierKey[] =
+    "koan.workspaces.scroll_modifier_key";
 
 // Obsolete: until the tint became per window (a window's user colour
 // override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's
