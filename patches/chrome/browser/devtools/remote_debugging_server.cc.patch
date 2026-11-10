@@ -1,0 +1,16 @@
+diff --git a/chrome/browser/devtools/remote_debugging_server.cc b/chrome/browser/devtools/remote_debugging_server.cc
+index 084c1427a65384a4cf8bb55c52a816cdaa9e9750..ceac48f06631ff20980212f6fc1c2b700517f415 100644
+--- a/chrome/browser/devtools/remote_debugging_server.cc
++++ b/chrome/browser/devtools/remote_debugging_server.cc
+@@ -48,8 +48,10 @@
+ bool g_tethering_enabled = false;
+ 
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
++// Koan: on. Chrome refuses --remote-debugging-port and --remote-debugging-pipe
++// on its default user data directory, but only in Google-branded builds.
+ bool g_enable_default_user_data_dir_check_for_chromium_branding_for_testing =
+-    false;
++    true;
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+ 
+ const uint16_t kMinTetheringPort = 9333;

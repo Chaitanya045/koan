@@ -693,6 +693,20 @@ Scrollbars are thin overlay bars that show while you scroll, like Zen's. For
 classic, always-visible scrollbars start Koan with
 `--disable-features=OverlayScrollbar`.
 
+## Remote debugging
+
+For scripts and tools that drive Koan over the DevTools protocol, start it
+with its own profile (a throwaway directory is fine):
+
+```sh
+/Applications/Koan.app/Contents/MacOS/Koan --user-data-dir=/tmp/koan-test --remote-debugging-port=9222
+```
+
+On Koan's default profile (`~/Library/Application Support/Koan`) the
+`--remote-debugging-port` and `--remote-debugging-pipe` switches are
+refused, as in Chrome, so another program can't take over your real
+browser by relaunching it. See [SECURITY.md](../SECURITY.md#remote-debugging).
+
 ## Install in the app menu
 
 ```sh
