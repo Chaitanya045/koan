@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -37,7 +38,11 @@
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_service.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
@@ -51,6 +56,7 @@
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/actions/actions.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -296,19 +302,68 @@ void KoanUrlBarController::OnNewTabAction() {
   }
 }
 
-bool KoanUrlBarController::OpenForNewTab() {
+bool KoanUrlBarController::CanOpenBar() const {
   LocationBarView* bar = location_bar();
   // (In fullscreen, the toolbar is out of sight, except where Koan's stays
   // hidden: on macOS, see HidesFullscreenTopChrome().)
-  if (!features::IsUrlBarEnabled() || !browser_view_->GetIsNormalType() ||
-      (IsWindowFullscreen(browser_view_) && !compact_mode_->hides_toolbar()) ||
-      IsContentFullscreen(browser_view_) ||
-      browser_view_->browser()->GetTabStripModel()->empty() || !bar ||
-      !bar->omnibox_view() ||
-      !browser_view_->GetProfile()
-           ->GetOriginalProfile()
-           ->GetPrefs()
-           ->GetBoolean(prefs::kUrlBarReplaceNewTab)) {
+  return features::IsUrlBarEnabled() && browser_view_->GetIsNormalType() &&
+         (!IsWindowFullscreen(browser_view_) ||
+          compact_mode_->hides_toolbar()) &&
+         !IsContentFullscreen(browser_view_) &&
+         !browser_view_->browser()->GetTabStripModel()->empty() && bar &&
+         bar->omnibox_view();
+}
+
+bool KoanUrlBarController::OpenForTabSearch() {
+  if (!CanOpenBar()) {
+    return false;
+  }
+  // The scope first: Zen's "search tabs" is the URL bar in its tabs search
+  // mode: a "Tabs" chip and an empty input, with Enter on a match switching to
+  // that tab. Chromium's is the @tabs keyword mode. Without it (the starter
+  // pack is off, or the TemplateURLService isn't loaded yet) nothing is done
+  // here, and the caller focuses the omnibox as Chromium's shortcut does.
+  TemplateURLService* service =
+      TemplateURLServiceFactory::GetForProfile(browser_view_->GetProfile());
+  const TemplateURL* tabs =
+      service ? service->FindStarterPackTemplateURL(
+                    template_url_starter_pack_data::StarterPackId::kTabs)
+              : nullptr;
+  if (!tabs || !tabs->CanBeUsedForKeywordMatching()) {
+    return false;
+  }
+  // A new-tab bar that is open is not this one (its Enter would open a tab).
+  if (new_tab_) {
+    EndNewTabSession(/*committed=*/false);
+  }
+  LocationBarView* bar = location_bar();
+  bar->FocusLocation(/*is_user_initiated=*/true,
+                     /*clear_focus_if_failed=*/false);
+  if (!bar->omnibox_view()->HasFocus()) {
+    return false;
+  }
+  // Already focused before (no focus change): place it.
+  if (is_open()) {
+    SetPlacement(DesiredPlacement());
+  }
+  // The keyword mode has to be entered explicitly: SetUserText() clears it, and
+  // only typing the space after the keyword turns it on, so setting "@tabs "
+  // as text would be a plain web search.
+  OmniboxView* view = bar->omnibox_view();
+  view->SetUserText(std::u16string(), /*update_popup=*/false);
+  bar->GetOmniboxController()->edit_model()->EnterKeywordMode(
+      metrics::OmniboxEventProto::KEYBOARD_SHORTCUT, tabs,
+      AutocompleteMatch::GetKeywordPlaceholder(
+          tabs, /*is_history_embeddings_enabled=*/false));
+  return true;
+}
+
+bool KoanUrlBarController::OpenForNewTab() {
+  LocationBarView* bar = location_bar();
+  if (!CanOpenBar() || !browser_view_->GetProfile()
+                            ->GetOriginalProfile()
+                            ->GetPrefs()
+                            ->GetBoolean(prefs::kUrlBarReplaceNewTab)) {
     return false;
   }
   // Zen: the shortcut again closes the bar it opened.
