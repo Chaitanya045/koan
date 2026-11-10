@@ -164,8 +164,14 @@ if (is_posix) {
   source_set("browser") {
     sources = [
       "koan_agent_approval_dialog.cc",
+      "koan_agent_devtools_client.cc",
+      "koan_agent_devtools_client.h",
+      "koan_agent_forwarder.cc",
+      "koan_agent_forwarder.h",
       "koan_agent_lease.cc",
       "koan_agent_lease.h",
+      "koan_agent_reach_content.cc",
+      "koan_agent_reach_content.h",
       "koan_agent_service.cc",
       "koan_agent_service.h",
     ]
@@ -174,7 +180,10 @@ if (is_posix) {
       frameworks = [ "Foundation.framework" ]
     }
     public_deps = [
+      ":audit",
       ":lease_scheduler",
+      ":reach",
+      ":registry",
       ":session",
       ":tab_hooks",
       "//base",
@@ -183,21 +192,26 @@ if (is_posix) {
     ]
     deps = [
       ":auth",
+      ":facade",
       ":gateway",
       ":limits",
       ":peer",
       ":socket",
       "//chrome/browser:browser_process",
       "//chrome/browser/lifetime:termination_notification",
+      "//chrome/browser/profiles:profile",
       "//chrome/browser/ui/browser_window",
       "//chrome/browser/ui/dialogs:browser_dialogs",
       "//chrome/common",
       "//chrome/common:constants",
+      "//components/embedder_support:user_agent",
       "//components/performance_manager",
+      "//components/security_interstitials/content:security_interstitial_page",
       "//components/version_info",
       "//content/public/browser",
       "//content/public/common",
       "//koan/browser:prefs",
+      "//koan/browser/containers",
       "//ui/base",
       "//ui/gfx/geometry",
       "//ui/views",
@@ -273,6 +287,29 @@ source_set("audit") {
   ]
 }
 
+# The CDP facade of one connection: the method policy, the registry, the
+# parameter filters, the context tracker and the scrubber between an agent and
+# its tabs, and the Target.* and Koan.* methods over the tabs in its scope.
+source_set("facade") {
+  sources = [
+    "koan_agent_facade.cc",
+    "koan_agent_facade.h",
+  ]
+  public_deps = [
+    ":audit",
+    ":session",
+    "//base",
+    "//url",
+  ]
+  deps = [
+    ":contexts",
+    ":events",
+    ":filters",
+    ":policy",
+    ":registry",
+  ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser:agent_unit_tests
 #   out/Koan/koan_agent_unittests
@@ -285,6 +322,7 @@ test("koan_agent_unittests") {
     "koan_agent_auth_unittest.cc",
     "koan_agent_contexts_unittest.cc",
     "koan_agent_events_unittest.cc",
+    "koan_agent_facade_unittest.cc",
     "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
     "koan_agent_lease_scheduler_unittest.cc",
@@ -300,6 +338,7 @@ test("koan_agent_unittests") {
     ":auth",
     ":contexts",
     ":events",
+    ":facade",
     ":filters",
     ":frame",
     ":lease_scheduler",

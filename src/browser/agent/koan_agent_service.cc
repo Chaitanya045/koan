@@ -33,6 +33,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "koan/browser/agent/koan_agent_auth.h"
+#include "koan/browser/agent/koan_agent_forwarder.h"
 #include "koan/browser/agent/koan_agent_gateway.h"
 #include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/agent/koan_agent_limits.h"
@@ -49,6 +50,12 @@ bool g_terminated = false;
 
 // The discovery file the CLI reads (design section 4.1): next to the socket's
 // default place, 0600.
+// The activity log (design section 6.3).
+base::FilePath AuditLogDirectory(const base::FilePath& user_data_dir) {
+  return user_data_dir.Append(FILE_PATH_LITERAL("AgentControl"))
+      .Append(FILE_PATH_LITERAL("Log"));
+}
+
 base::FilePath DiscoveryFile(const base::FilePath& user_data_dir) {
   return user_data_dir.Append(FILE_PATH_LITERAL("AgentControl"))
       .Append(FILE_PATH_LITERAL("agent.json"));
@@ -174,6 +181,18 @@ class AgentControlService::GatewayHost final : public ApprovalPresenter,
   void OnClientDisconnected(uint64_t connection_id) override {
     PostToUi(&AgentControlService::OnClientDisconnected, connection_id);
   }
+  bool OnClientMessage(uint64_t connection_id, AgentMessage message) override {
+    PostToUi(&AgentControlService::OnClientMessage, connection_id,
+             std::move(message));
+    return true;
+  }
+
+  // An answer or event for a connection, from the forwarder on the UI thread.
+  void SendToClient(uint64_t connection_id, std::string json) {
+    if (gateway_) {
+      gateway_->SendToClient(connection_id, json);
+    }
+  }
 
  private:
   template <typename Method, typename... Args>
@@ -236,6 +255,12 @@ AgentControlService::AgentControlService(PrefService* local_state)
       content::GetIOThreadTaskRunner({}),
       base::SequencedTaskRunner::GetCurrentDefault(),
       weak_factory_.GetWeakPtr());
+  base::FilePath user_data_dir;
+  base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  forwarder_ = std::make_unique<AgentForwarder>(
+      base::BindRepeating(&AgentControlService::SendToClient,
+                          weak_factory_.GetWeakPtr()),
+      AuditLogDirectory(user_data_dir));
   registrar_.Init(local_state_);
   for (const char* pref :
        {prefs::kAgentControlEnabled, prefs::kAgentControlMaxPromptsPerMinute,
@@ -267,6 +292,9 @@ void AgentControlService::Update() {
   if (!on) {
     host_.AsyncCall(&GatewayHost::Stop);
     // Nothing is kept awake for an agent once Agent ready is off (T-ready-2).
+    if (forwarder_) {
+      forwarder_->Reset(/*end_tasks=*/true);
+    }
     AgentLeaseManager::Get().DetachAll();
     return;
   }
@@ -284,6 +312,9 @@ void AgentControlService::StopAllAgents() {
   const bool on =
       local_state_->GetBoolean(prefs::kAgentControlEnabled) &&
       local_state_->GetBoolean(::prefs::kDevToolsRemoteDebuggingAllowed);
+  if (forwarder_) {
+    forwarder_->Reset(/*end_tasks=*/true);
+  }
   AgentLeaseManager::Get().DetachAll();
   host_.AsyncCall(&GatewayHost::ForgetAll)
       .WithArgs(user_data_dir, on && !user_data_dir.empty(),
@@ -294,6 +325,7 @@ void AgentControlService::Shutdown() {
   g_terminated = true;
   g_service = nullptr;
   registrar_.RemoveAll();
+  forwarder_.reset();
   AgentLeaseManager::Get().DetachAll();
   // Destroys the host, and with it the gateway, on the IO thread; the socket
   // file goes with it.
@@ -312,11 +344,31 @@ void AgentControlService::OnListening(bool listening) {
 }
 
 void AgentControlService::OnClientConnected(ConnectedClient client) {
+  if (forwarder_) {
+    forwarder_->OnClientConnected(client.connection_id, client.client_id,
+                                  client.label);
+  }
   clients_.push_back(std::move(client));
   NotifyObservers();
 }
 
+void AgentControlService::OnClientMessage(uint64_t connection_id,
+                                          AgentMessage message) {
+  if (forwarder_) {
+    forwarder_->OnClientMessage(connection_id, std::move(message));
+  }
+}
+
+void AgentControlService::SendToClient(uint64_t connection_id,
+                                       std::string json) {
+  host_.AsyncCall(&GatewayHost::SendToClient)
+      .WithArgs(connection_id, std::move(json));
+}
+
 void AgentControlService::OnClientDisconnected(uint64_t connection_id) {
+  if (forwarder_) {
+    forwarder_->OnClientDisconnected(connection_id);
+  }
   std::erase_if(clients_, [&](const ConnectedClient& client) {
     return client.connection_id == connection_id;
   });

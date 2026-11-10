@@ -135,6 +135,14 @@ class AgentLeaseManager : public TabHooksDelegate,
 
   size_t lease_count() const { return leases_.size(); }
 
+  // Who decides about a tab a page in an agent tab opened (the forwarder,
+  // which also puts it in the registry and calls Attach()). With none set, the
+  // tab is attached to the same client and task.
+  using OpenedTabHandler =
+      base::RepeatingCallback<void(content::WebContents* source,
+                                   content::WebContents* opened)>;
+  void SetOpenedTabHandler(OpenedTabHandler handler);
+
  private:
   friend class AgentTabLease;
   friend class base::NoDestructor<AgentLeaseManager>;
@@ -166,6 +174,7 @@ class AgentLeaseManager : public TabHooksDelegate,
   PrefChangeRegistrar registrar_;
   bool on_battery_ = false;
   uint64_t next_id_ = 1;
+  OpenedTabHandler opened_tab_handler_;
 };
 
 // Whether macOS's Low Power Mode is on (NSProcessInfo; false elsewhere).
