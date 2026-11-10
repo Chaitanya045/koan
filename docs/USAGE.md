@@ -307,7 +307,8 @@ current view (unsplit), Copy Current URL, Settings, Open Private Window,
 Open New Window, Pin / Unpin Tab, Add to / Remove from Essentials, Close
 Tab, Reopen Closed Tab, Duplicate Current Tab, Reload Tab, Reload Tab
 Without Cache, Next / Previous Tab, Capture Screenshot, Find in Page, Manage
-Extensions, Switch to Automatic Appearance / Light Mode / Dark Mode, Print;
+Extensions, Toggle Tabs on right, Switch to Automatic Appearance / Light
+Mode / Dark Mode, Print;
 with workspaces also New Space, Next / Previous Space and "Focus on" each
 other Space (type its name). Only the actions that apply are offered (Unpin
 Tab on a pinned tab, Next Space with two Spaces, ...).
@@ -409,11 +410,14 @@ belongs to a Space, and new tabs open in the active one.
 - **Theme…** (right-click the header) opens Zen's theme picker for
   the Space (see Space themes below).
 - **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
-  on macOS; they wrap around), on macOS Ctrl+1…0 for Space 1 to 10, swipe
+  on macOS; they wrap around unless you turn that off in Settings > Tab
+  Management > Workspaces), on macOS Ctrl+1…0 for Space 1 to 10, swipe
   horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
   fingers: moving them right goes to the next Space, and lifting them
   after enough travel, or a quick flick, switches Space), or turn the mouse wheel
-  there (horizontally, or vertically while holding Ctrl); the right-click
+  there (horizontally, or vertically while holding Ctrl; the key and
+  natural scrolling, which turns the wheel and the swipe round, are in
+  Settings > Tab Management > Workspaces); the right-click
   menu of the header also lists the Spaces. The old Space slides out and
   the new one in, as in Zen, and you land on the tab you left the Space on
   (also after a restart). Going straight to a tab of another Space (the

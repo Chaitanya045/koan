@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -32,9 +33,11 @@
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
 #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+#include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/vector_icons/vector_icons.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -699,12 +702,20 @@ void KoanSidebarTabsController::OnAddedToWidget() {
         base::BindRepeating(&KoanSidebarTabsController::OnCollapseChanged,
                             base::Unretained(this)));
   }
+  // Zen's "Show New Tab Button on Tab List", from chrome://koan-settings.
+  pref_change_registrar_.Init(
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
+  pref_change_registrar_.Add(
+      prefs::kShowNewTabVertical,
+      base::BindRepeating(&KoanSidebarTabsController::UpdateNewTabRow,
+                          base::Unretained(this)));
   InstallRows();
 }
 
 void KoanSidebarTabsController::OnBrowserViewDestroying() {
   mode_subscription_ = {};
   collapse_subscription_ = {};
+  pref_change_registrar_.RemoveAll();
   if (started_) {
     browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
     started_ = false;
@@ -774,6 +785,7 @@ void KoanSidebarTabsController::InstallRows() {
   // group view.
   rows_observation_.Observe(rows_);
   UpdateClearRow();
+  UpdateNewTabRow();
   UpdateRowsHost();
 
   // The region outlives its tab strip. It notifies itself (not its children)
@@ -913,6 +925,13 @@ void KoanSidebarTabsController::SetNewTabSelected(bool selected) {
       }
     };
     repaint(repaint, region_);
+  }
+}
+
+void KoanSidebarTabsController::UpdateNewTabRow() {
+  if (rows_ && pref_change_registrar_.prefs()) {
+    rows_->new_tab_row()->SetVisible(
+        pref_change_registrar_.prefs()->GetBoolean(prefs::kShowNewTabVertical));
   }
 }
 

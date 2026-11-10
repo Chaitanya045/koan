@@ -24,6 +24,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCompactModeToolbarFlashPopup, false);
   registry->RegisterBooleanPref(kCompactModeDragCollapseHintSeen, false);
   registry->RegisterBooleanPref(kTabsOnRight, false);
+  registry->RegisterBooleanPref(kShowNewTabVertical, true);
   registry->RegisterBooleanPref(kSingleToolbarEnabled, true);
   registry->RegisterStringPref(kUrlBarBehavior, kUrlBarBehaviorFloatingOnType);
   registry->RegisterBooleanPref(kUrlBarReplaceNewTab, true);
@@ -31,6 +32,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kWorkspaceTint, true);
   registry->RegisterIntegerPref(kDarkThemeStyle, 0);
   registry->RegisterBooleanPref(kShowCustomColors, false);
+  registry->RegisterBooleanPref(kWorkspacesWrapAround, true);
+  registry->RegisterBooleanPref(kWorkspacesNaturalScroll, false);
+  registry->RegisterStringPref(kWorkspacesScrollModifierKey, "ctrl");
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
