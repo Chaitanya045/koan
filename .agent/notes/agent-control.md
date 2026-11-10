@@ -21,9 +21,11 @@ The five decisions the design stands on:
    **untrusted** `DevToolsAgentHostClient` (the `chrome.debugger` pattern), so the Browser, SystemInfo and Extensions
    domains, the browser target and local-file access do not exist for the agent (C§2c, C§6); cookie-bearing network
    events are scrubbed, key-event `commands` stripped, extension frames and worlds unreachable.
-2. **Agents work in their own Koan Space** (a tab group; Koan has Spaces), one per task. The user's tabs are
-   invisible to the agent unless the user hands one over or approves a take-over (§7, §9). This is ego(lite)'s
-   model, built on what Koan already has.
+2. **Agents work in their own container** (§7, decided 2026-11-10): a storage partition of its own inside the user's
+   profile (its own cookies, storage, cache and processes), shown as a Space in the user's sidebar, one per task,
+   Throwaway by default. The agent never sees the user's logins; the user's tabs are invisible to it unless the user
+   leases one ("Your tab") or approves a take-over (§9). Agent containers block permissions, passwords, autofill,
+   extensions, history and sync (§7.2).
 3. **A per-tab keep-alive lease** (visible `IncrementCapturerCount` + `PageLiveStateDecorator::SetIsPinnedTab` and
    `SetGlicActuationState`, both public setters) keeps *only agent tabs* rendering with **no upstream patch and no
    global flag** (§8, A§10, review finding 12). It is light on battery: released 3 s after the last command.
@@ -50,7 +52,7 @@ benchmark harness spec that can also import externally measured baselines.
 
 | Requirement | Mechanism | § |
 |---|---|---|
-| Agent opens new tabs and works in them while the user works in another tab | `Koan.openTab` creates a background tab in the agent's Space through Koan code (not `Target.createTarget`, which foregrounds, B§5); the lease keeps it rendering | 7, 8 |
+| Agent opens new tabs and works in them while the user works in another tab | `Koan.openTab` creates a background tab in the agent's container and its Space through Koan code (`koan::containers::OpenAgentTab`) (not `Target.createTarget`, which foregrounds, B§5); the lease keeps it rendering | 7, 8 |
 | Agent sees the user's current tab, takes it over midway | `Koan.listTabs`/`Koan.read` (capability `observe`/`read`), `Koan.takeOver` (user approves per tab), banner with Take over / Release | 9 |
 | Screenshots and animations work while the window is unfocused or covered | lease: visible capturer + priority vote + freeze exemption; a detached/non-active tab renders into its own compositor (A§2) | 8 |
 | Agent never steals focus | `Page.bringToFront`/`Target.activateTarget` are no-ops; tabs are created inactive; no `ShowInactive` where avoidable | 4.3 |
@@ -171,7 +173,7 @@ How agent control compares with Chrome's approval mode:
 | T16 | Upgrade drift: a Chromium roll changes which domains or methods an untrusted client gets | The protocol-coverage unit test of §4.3 fails on any unclassified CDP method; REBASE rows name the symbols and the behaviours; a Mac test per denied domain (§14, §15) |
 | T17 | The agent reads or writes the OS clipboard (`Input.dispatchKeyEvent {commands:["paste"]}` pastes whatever the user last copied, such as passwords or 2FA codes) | `commands` is stripped from every key event (§4.5); no `clipboard` capability in v1; T-sec-10 |
 | T18 | A page the agent drives takes the user's attention or focus: `window.open`/`target=_blank`/popups (CDP clicks carry a user gesture), a `<select>` native menu, a file chooser sheet, HTTP auth, client-cert picker, external-protocol launch, print, permission bubbles | Page-opened tabs open in the background in the agent Space (hook #2, §14); `ForbidExternalPopupMenus()` in the lease; file chooser interception forced on; the others become **`userNeeded` approval prompts** that pause the tab and ask the user, never a silent native sheet (§9.4); T-focus-3..7 |
-| T19 | Agent browsing leaks into the user's own surfaces: history, omnibox suggestions, Recently Closed, saved tab groups and sync, session restore, session files | Required, with the mechanism per surface in §7.1: agent-visited URLs are not added to history or the omnibox (decision 18, a setting); agent groups never become saved or synced groups (the existing `SavesTabGroups` hooks; agent control needs Spaces on); a restore-side hook blanks and sweeps agent tabs; conditional write-side hooks keep them out of Recently Closed and the session files; T-hist-1, T-sync-1, T-sync-2 |
+| T19 | Agent browsing leaks into the user's own surfaces: history, omnibox suggestions, Recently Closed, saved tab groups and sync, session restore, session files | Required. The agent works in a container (§7), so its cookies and storage never mix with the user's; the blocks of §7.2 keep its visits out of History, the omnibox, `@tabs` and sync; the restore hook blanks agent tabs (§7.1); conditional write-side hooks keep them out of the Recently Closed list and the session files (§7.4); T-hist-1, T-sync-1, T-sync-2, T-block-5, T-cont-8 |
 | T20 | Audit-log tampering or secret leakage through the log | Best-effort integrity (hash-chained records, chain key Keychain-bound), size-capped, URL paths redacted by default, nothing typed or evaluated stored (§6.3). A same-uid attacker can still delete it; the log is evidence for the user, not a security boundary |
 
 | T21 | **Agent ready is on by default**: every launch has a listener, so a same-user process can reach the socket without the user having done anything | Nothing new is reachable by default compared with "on after the user turned it on", and the controls are the same ones, stated here because they now carry the whole load: (1) **the first-contact native prompt is mandatory**; the only methods before authentication are `Koan.pair` and `Koan.authenticate`, a paired key is never accepted silently, and the prompt limits of #190 stand (one open, which is fixed, and 3 a minute per user by default, a setting that is never 0 or unlimited; a refusal or timeout counts as a failure). (2) 0700 directory, 0600 socket, `flock` ownership, uid check, nothing read until the peer is resolved, 8 connections / 4 unauthenticated / 2 per program, 30 s to authenticate, 4 KB frames (§4.1, §5.2). (3) **No listener in Incognito, Guest or a non-default `--user-data-dir` unless the user turns it on there** (§4.1, §13). (4) The enterprise policy `RemoteDebuggingAllowed=false` still forces it off and greys the row. (5) **The indicator (§6.2) ships before, or in the same PR as, anything that makes the default-on gateway reachable by a real build**; wiring the gateway into `BrowserProcess` stays behind the indicator PR, so no build with a default-on listener can run without a visible "agent connected" state. (6) An idle listener holds no lease and no capturer and unthrottles nothing (§8). Residual: a listener that is always there is attack surface that was optional (a parser bug in the pre-auth frame path is now reachable by default): the pre-auth path is small and fuzzed (`koan_agent_frame_fuzzer`, `koan_agent_session_fuzzer`), and Off removes it entirely |
@@ -578,61 +580,141 @@ cookie values, headers.
   evidence for the user rather than a security boundary.
 * Viewer: the settings page and `koan log --follow`.
 
-## 7. Where agents work: the agent Space
+## 7. Where agents work: the agent Space, a container
 
-Koan Spaces are tab groups inside a window with an active Space whose tabs are shown (`KoanWorkspaceController`,
-`NewSpaceGroup`, `ReplaceTabGroupMenuItems`, `WriteSpace`, `koan_spaces.h`). A tab in a non-active Space is simply a
-non-active tab: **hidden**, so it needs the lease (§8) to render, and it is hidden from the user's current view,
-which is the point.
+**Decision (user and maintainer, 2026-11-10; replaces "an agent Space is a tab group in the user's profile").** An
+agent Space is a **container**: a `StoragePartition` of its own (cookies, local storage, IndexedDB, cache, service
+workers and renderer processes) **inside the user's profile**, shown as a Space in the user's own sidebar. The agent's
+tabs share none of the user's logins or site data, and the user still watches them where they work: switch to the
+Space, open one of its tabs in split view next to their own, pop the Space out into its own window, or drag a tab out
+to take it over (§9). After comparing six options (tab groups in the profile, DevTools off-the-record contexts, a
+profile per agent, containers, a separate browser instance, an "Agents" profile with containers), containers won on
+daily use, on Zen parity (Zen gives each workspace a container) and on cost. The upstream audit behind every line here
+is `.agent/notes/upstream/containers.md` (cited as E§n).
 
-| Option | What it is | For | Against |
+The earlier draft of this section (a tab group sharing the user's cookie jar, with copy that said so plainly,
+decision 15) is withdrawn: decision 15's warning now applies only to the "Your tab" mode below.
+
+### 7.0 Spawn modes
+
+The default mode is a setting (Settings > Agent control). The pairing and task prompts show the mode, and the user can
+change it or refuse the task.
+
+| Mode | What the agent gets | Data after the task | Status |
 |---|---|---|---|
-| **O1 (recommended v1): one Space per agent task, in the user's last-active window** | Created on the first `Koan.openTab` of a task (`Koan.createTask {name}` optional), named "*Client · task*", agent icon, glow, **ephemeral** (not restored; `koan_session_data.cc` drops it), ended with `Koan.endTask` or by the user | Built on what exists; Zen-like (switch Space to watch, swipe); several tasks = several Spaces; hand-over is "Move To" Space, which exists | The user watches by switching Space, so they cannot see the agent and their own tabs side by side; one window's strip carries agent tabs; Space switching animates |
-| O2: a dedicated agent window per task | A real second `Browser` | Side-by-side watching; fully separate from the user's window ops (⌘W, tab strip drags) | New windows must not steal focus or switch macOS Spaces (`ShowInactive` has Space-switching branches, B§5); minimized/other-Space windows need the Mac checks in §15; a window per task is heavy; Koan windows are Space-bound already |
-| O3: hidden targets (`Target.createTarget {hidden:true}`) | Detached WebContents, no strip entry | No UI footprint, no focus risk, process boosted by upstream (B§5, `hidden_target_manager.cc`) | The user cannot see or take over; no upstream adoption into a window; "watch" impossible |
+| **Throwaway** (default) | a new in-memory container for this task | cleared when the task ends (`StoragePartition::ClearData`, E§1); gone at quit at the latest | core PR |
+| **Saved** | a named container on disk that keeps its cookies between tasks ("GitHub bot") | kept; deleted from Settings. Another agent or task gets it **only if the user names it** in the prompt | core PR |
+| **Your tab** | a lease on one of the user's own tabs, limited to that tab's site (§8, §9). Not a container: this is the only mode where the agent acts with the user's logins, and its prompt says so | n/a | another PR (lease + gateway) |
+| **Strict** | a separate hidden profile: nothing of the user's profile is shared (settings, extensions, history service, permissions), the strongest wall | as Throwaway or Saved, in that profile | seam designed now (`AgentMode::kStrict` returns "not supported"), built last |
 
-Recommend O1 for v1 and O2 as an opt-in "Open this Space in its own window" in v2 (a Space can move to a new
-window the way tabs do). O3 stays as an internal "headless task" mode if the user asks for no UI at all.
+There is **no free run in the user's own jar**: an agent never gets the default partition except through a per-tab,
+per-site lease the user approved.
 
-Mechanics (names to confirm in phase 2): create the tab with `TabStripModel` APIs into the Space's group with
-`ADD_NONE` and `initially_hidden`, **not** through `NavigateParams`, so neither the active tab nor the window
-changes (`kShowWindowInactive` is what `Target.createTarget {background:true}` adds, B§5). `Koan.openTab` accepts
-`{url, task?}`; the agent's tabs are tracked by `AgentTabLease`. Which window: the last-active window of the default
-profile; with no window, Koan creates one ordered back/inactive (Mac test T-win-2). Limits: `max_tabs` per client,
-never Essentials (pinned across Spaces), never another Space's tabs.
+### 7.1 How a container works (E§1-E§6)
 
-**Kept out of the user's other surfaces** (review finding 15, decision 18): §7.1 gives the mechanism per surface. In
-short: an agent Space is ephemeral and never enters saved tab groups or tab-group sync, session restore or Recently Closed;
-`open_tab_provider.cc` (an existing Koan patch) skips agent-Space tabs so `@tabs` does not list them; agent-visited URLs are
-**not added to history or the omnibox by default** (a setting). The Space's copy says plainly that **it shares your logins
-and cookies** (decision 15), as ego's own engineering doc says of theirs, instead of implying isolation.
+* **Identity.** A container is a `ContainerId {kind, id, persistent}`. The kind (agent or user) and the id are in the
+  partition **domain**: `koanagent<id>` or `koanuser<id>`, with `id` = `t` or `s` (throwaway or saved) then 26 random
+  letters, because partition domains are `[a-z]*` (`storage_partition_config.h`). The partition name is empty, so a
+  saved container lives at `<profile>/Storage/ext/koanagent<id>/def`. One domain per container is what makes
+  `BrowserContext::AsyncObliterateStoragePartition(domain)` delete exactly one container (E§1). Throwaway containers are
+  `in_memory`. **Because the kind is in the domain, any code that holds a process, a frame or a partition can tell an
+  agent container** (`koan::containers::IsAgentProcess/Frame/Contents`, `//koan/browser/containers:partition`, which
+  depends on `//base` and `//content/public/browser` only), so the blocks in `components/` and `extensions/` need no
+  service. A user's renaming of a saved container changes only its name in prefs (`koan.containers.saved`), never the
+  id or the path.
+* **Creating a tab.** `WebContents::Create` with `SiteInstance::CreateForFixedStoragePartition(profile, url, config)`
+  (the Android "separate storage partition" tab is the precedent, E§8; `CreateForGuest` is for `<webview>` and is not
+  used). The fixed bit lives on the BrowsingInstance and content copies the partition forward at every switch point
+  (`NavigationRequest::GetUrlInfo`, `SiteInstanceImpl::DeriveSiteInfo`, `RenderFrameHostManager::ConvertToSiteInstance`,
+  E§2), so same-tab links, the omnibox, reload, history, cross-site swaps, subframes and about:blank stay in the
+  container with no patch. `ChromeContentBrowserClient::GetStoragePartitionConfigForSite` is never consulted while the
+  partition is fixed (E§3).
+* **Where content loses the container, and the hooks (§14):**
 
-**Hand-over of a user tab** (ego: "your tabs stay untouched unless you explicitly hand one over"): tab context menu
-*Hand to agent ▸ [Claude Code]* (visible only while a client with `drive` is connected) and a palette command. Two
-modes:
+  | Path | Upstream behaviour | Hook |
+  |---|---|---|
+  | `window.open` with an opener; drag between windows, detach, Move to new window, split view of open tabs; Duplicate (`WebContents::Clone`) | same BrowsingInstance or the same WebContents: kept | none |
+  | `target=_blank` (implicit noopener), `rel=noopener`, `window.open(…, "noopener")` | `WebContentsImpl::CreateNewWindow` makes a default `SiteInstance` (only guests keep their partition) | C1 |
+  | Cmd/middle-click, context menu "Open link in new tab/window/split view" | `CreateTargetContents` in `browser_navigator.cc` makes a default one even with a `source_site_instance` | C2 |
+  | Tab discard (Mac uses the replace-the-WebContents path; `kWebContentsDiscard` is off outside Android) | `TabLifecycleUnit::FinishDiscard` builds the replacement in the default partition | C3 |
+  | Prerender (omnibox, speculation rules) | `PrerenderHost` builds its page in the default partition and swaps it into the tab | C4: no prerender in containers |
+  | Saved containers on disk | the web-app `GarbageCollectStoragePartitionsCommand` deletes everything under `Storage/ext/` that is not an extension's or an isolated app's **data-loss risk** | C5: saved containers are loaded before it lists what to keep |
+  | Session restore, reopen closed tab or window | `sessions::` stores no partition; `CreateRestoredTab` makes a default `SiteInstance` | no new patch, see below |
+  | Glance (Koan) | `KoanGlanceController` made its own `WebContents` in the default partition | Koan code: the Glance opens in the source tab's container |
 
-* **Drive in place** (default for the *active* tab): the tab stays where it is, the lease and banner attach. The user
-  keeps seeing it; if they switch away it keeps running.
-* **Move into the agent Space**: the tab leaves its Space (origin Space and index remembered in the lease) and
-  *Take back* returns it. Refused for Essentials and pinned tabs (drive in place instead). If the user closes it, the
-  agent gets `Target.detachedFromTarget`.
+* **Session restore and Recently Closed.** Every container tab carries `koan.container` in its per-tab session data
+  (`koan_session_data.h`; written when the tab enters a window, so a crash cannot restore it without the marker). An
+  agent container's tab is **never restored**: a `TabRestoreHook` replaces its pages with one `about:blank` before
+  `NavigationController::Restore` runs, and the blank tab is closed once it is in its window (kept, blank, if it is the
+  window's only tab). So no agent page ever loads in the user's jar after a restart, a crash or Reopen Closed Tab, and a
+  Saved container's tabs do not come back either (its cookies do, for the next task that names it). User containers
+  (#111) will restore into their container with one more hook in `CreateRestoredTab` (`create_params.site_instance`);
+  until then they are blanked the same way. Brave encodes the partition into the URL so that an older build shows a
+  blank page instead of loading in the default partition (`containers.md`, Brave); Koan keeps the marker in its session data, which needs
+  Koan's restore hook to run, and the hook fails closed (an unknown or malformed marker blanks the tab too).
+* **Spaces.** An agent container's Space is a normal Koan Space (a tab group) in the user's last-active window,
+  created with the container's first tab **without switching to it**, named by the agent ("Claude Code · task"), with
+  the agent icon. Agent ownership is the **partition**, not Space membership: a tab the user opens in an agent Space
+  (Cmd+T) is the user's own, in their jar; a container tab the user drags into one of their Spaces is still in the
+  agent's jar and keeps its blocks (taking a tab over gives the user the controls, not their logins; to use their own
+  login they open the URL in their own Space). Zen gives each workspace a default container that its new tabs use (`containers.md`, Zen);
+  that is #111 and it reuses this core (`ContainerKind::kUser`, the same partition helpers, restore and hooks) with the
+  blocks off.
+* **End of a task.** `EndAgentContainer` closes the container's tabs in every window (the Space goes with its last tab)
+  and, for a Throwaway container, clears all of its data. In-memory partitions are never unloaded before the profile
+  shuts down (`browser_context.h`, E§1), so each throwaway task leaves an empty partition and its network context
+  behind until quit: a known cost (T-cont-6 measures it). A partition is never reused for another task, because
+  `ClearData` does not reset a network context's HTTP auth cache or sockets.
+* **What the user sees.** The Space's header and its tabs say "Agent · not your logins". Downloads from an agent tab go
+  to `~/Downloads/Koan Agent/` and show in the normal downloads UI (one `DownloadManager` per profile; each item
+  remembers its partition, E§7).
 
-### 7.1 Keeping agent groups out of the user's other surfaces (open item O2, designed)
+### 7.2 What an agent container blocks
 
-An agent Space is a tab group, so it meets every place Chromium persists or surfaces groups. The audit of Koan's existing hooks
-and pristine 158 gives one mechanism per surface, and shows that **most of it already exists**:
+Only **agent** containers block; user containers (#111) behave like the default partition. Each block is a few lines in
+the upstream decision function calling `koan::containers::IsAgent*` (§14 B-rows):
 
-| Surface | Mechanism | New upstream patch? |
+| Surface | Block | Upstream decision point |
 |---|---|---|
-| **Saved tab groups and tab-group sync** | Koan already has `koan::SavesTabGroups(context)` = `!IsWorkspacesEnabled() \|\| context->IsOffTheRecord()` (`koan_tab_hooks.cc:79`), wired into the three places a group becomes a saved group (`saved_tab_group_model_listener.cc` `OnTabGroupAdded`, `session_restore.cc` `ProcessSavedGroup`, `browser_live_tab_context.cc` `AddRestoredTab`'s `SaveGroup`; REBASE row "Spaces aren't saved groups"). With Spaces on, **no group** becomes a saved group, so an agent Space (a Space) is never saved or synced. **Precondition: agent control requires Spaces to be enabled**; with Spaces off (the flag) `Koan.openTab` returns `Koan.unavailable {reason:"spaces-disabled"}` rather than let an agent group be saved or synced (T-sync-2) | none |
-| **Session restore** (restart, crash, reopen window) | Persist a marker `koan.agent_tab` in the tab's session extra data with the existing `SetTabSessionData` (`koan_session_data.h`; written by `BuildCommandsForTab`, carried by `GetExtraDataForTab`). A `TabRestoreHook` for that key replaces the restored tab's `entries` with one `about:blank` entry, and an `AgentSpaceSweeper` closes the flagged tabs and the emptied agent groups when the restore completes (the point at which `DropStartupSpaceAfterRestore` already acts). After a restart no agent page loads or shows. This also covers **reopening a closed window**, where `TabRestoreService` returns the window's tabs through `AddRestoredTab` with the same extra data | none |
-| **Recently Closed** (reopen closed tab/group) | The two funnels are `BrowserTabStripModelDelegate::CreateHistoricalTab` and `CreateHistoricalGroup` (`browser_tab_strip_model_delegate.cc:227,247`, called from `tab_strip_model.cc:953`). A one-line early return for agent-owned contents/groups keeps them out of the list. Whole-window entries (`BrowserClosing`) are covered by the restore-side hook above | **conditional, §14 #5**: needed to keep agent tabs out of the *list*; without it they appear there but reopen blank and are swept |
-| **Session files on disk** | The session files can contain agent-visited URLs until they are next rewritten, even though restore drops the pages. The write side is `SessionServiceBase::BuildCommandsForTab` and the incremental `UpdateTabNavigation`; a tab-level `koan::PersistsInSession(contents)` early return there removes them | **conditional, §14 #6**: decided by T-sync-1, which greps the profile's `Sessions/` files for agent-visited URLs |
-| **History and omnibox** | `HistoryTabHelper::DidFinishNavigation` decides on `navigation_handle->ShouldUpdateHistory()` (`history_tab_helper.cc:532`); a hook `koan::SuppressesHistory(web_contents())` ahead of it keeps agent tabs out of History and therefore out of history-based omnibox suggestions. The setting `koan.agent_control.agent_history` turns it off. There is no per-tab knob upstream (searched `HistoryTabHelper`) | **§14 #3** (certain, no longer conditional) |
-| **`@tabs` / open-tab suggestions** | the existing `open_tab_provider.cc` Koan patch gains one exclusion | none (existing patch) |
+| Every permission (location, camera, microphone, notifications, clipboard, MIDI, sensors, storage access, ...) | denied, never prompted | `PermissionUtil::IsPermissionBlockedInPartition` (the one check `PermissionManager` makes for both requests and status, `permission_manager.cc`), true for agent partitions. Upstream already blocks *undelegated* permissions in any non-default partition; Brave overrides the same function the other way, to share (E§5). WebUSB, WebHID and Web Serial are already refused in non-default partitions upstream |
+| Choosers and pickers | file and directory pickers, Bluetooth chooser and scanning prompt, screen share (`getDisplayMedia`) cancelled, raising `Koan.userNeeded` (§9.4) instead of a native sheet | `BrowserWebContentsDelegate::RunFileChooser`, `EnumerateDirectory`, `RunBluetoothChooser`, `ShowBluetoothScanningPrompt`; `DisplayMediaAccessHandler` |
+| Extensions | no content scripts or extension APIs in agent processes; no webRequest or declarativeNetRequest on agent traffic; no `chrome.debugger` attach; extension APIs cannot address an agent tab by id | `RendererStartupHelper::OnRenderProcessHostCreated` / `OnRenderProcessLaunched` (precedent: `kInitialWebUIWithoutExtensions`), `WebRequestAPI::MaybeProxyURLLoaderFactory`, `ExtensionMayAttachToWebContents` (debugger), `ExtensionTabUtil::GetTabById`. `chrome.cookies` reads only the default jar |
+| Passwords | no fill, no save, no Credential Management API | `ChromePasswordManagerClient::IsFillingEnabled` (saving requires it) |
+| Autofill | no addresses, cards or autocomplete | `ChromeAutofillClient::IsAutofillEnabled`, `IsAutocompleteEnabled` |
+| History and omnibox | agent visits are not added to History, so not to history-based suggestions; `@tabs` does not list agent tabs | `HistoryTabHelper::DidFinishNavigation` (before `ShouldUpdateHistory()`); the existing `open_tab_provider.cc` patch |
+| Downloads | to `~/Downloads/Koan Agent/`, never a Save As prompt, Safe Browsing as usual | `ChromeDownloadManagerDelegate::DetermineDownloadTarget` |
+| Sync | agent tabs are not synced as open tabs (history and passwords are already out) | `TabContentsSyncedTabDelegate::ShouldSync` |
+| Passkeys / WebAuthn / Touch ID | refused before any UI | `ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn` (the existing Koan patch) |
 
-So the new upstream touches for O2 are #3 (history, certain) and #5, #6 (conditional, write-side). Everything restore-side is
-`//koan` plus hooks that exist.
+**Every per-profile service is decided.** A container shares the profile's `KeyedService`s (that is what makes it
+cheap), so a new upstream service could reach agent tabs silently. A unit test lists every factory registered by
+`EnsureBrowserContextKeyedServiceFactoriesBuilt()` and requires each to be on `koan_agent_service_policy.cc`'s list as
+*agent-safe* (it never sees a tab's content or partition, or it is keyed by partition) or *blocked* (and names the
+block above); a factory in neither fails the test, so a Chromium roll that adds a service fails until someone decides
+it (§14, T-cont-9).
+
+**Accepted gap (documented in the agent Space's copy and in SECURITY.md):** the user's own extensions with the "tabs"
+permission still see agent tabs' URLs and titles in `chrome.tabs.query` and tab events. Chromium has no per-tab hide
+flag and the tab model is read in dozens of places; it runs *agent → user's extensions*, never *user's data → agent*.
+
+### 7.3 Hand-over of a user tab
+
+Unchanged in substance: *Hand to agent ▸ [client]* on the tab context menu and the palette (visible only while a
+client with `drive` is connected). A user tab is in the user's jar, so it can only be **driven in place** under a lease
+(the "Your tab" mode, §8); there is no "move into the agent Space" any more (a WebContents cannot change partition, and
+moving it would carry the user's logins into the agent's Space). A container tab dragged out of the agent Space by the
+user is *taken over* (§9): the agent loses it, it keeps the agent jar and its blocks.
+
+### 7.4 Kept out of the user's other surfaces
+
+| Surface | Mechanism | Patch |
+|---|---|---|
+| **History, omnibox, `@tabs`** | §7.2 | B-rows |
+| **Session restore, Recently Closed, reopen a window** | the `koan.container` marker and the restore hook blank agent tabs (§7.1) | none |
+| **Session files on disk** | they can hold agent-visited URLs until next rewritten, though restore blanks the pages; a tab-level early return in `SessionServiceBase::BuildCommandsForTab` / `UpdateTabNavigation` removes them | **conditional, §14 #6**, decided by T-sync-1 |
+| **Recently Closed list** | agent tabs appear there but reopen blank and close; a one-line early return in `CreateHistoricalTab` keeps them out of the list | **conditional, §14 #5**, decided by T-sync-1 |
+| **Saved tab groups and tab-group sync** | `koan::SavesTabGroups(context)` already keeps every Space out of saved groups when Spaces are on; agent control requires Spaces (`kNoSpaces`) | none |
+| **The user's cookie jar, storage, cache, logins** | the container | C-rows |
 
 ## 8. Per-tab keep-alive (the lease)
 
@@ -901,17 +983,47 @@ same process), and that window's tabs are still unreachable to it, as above.
 
 ## 14. Hook patches (for docs/REBASE.md)
 
-After the review (finding 12) the feature itself needs **two upstream touches (#2, #3) and two conditional ones (#5, #6)**;
-everything else is `//koan` plus public setters Koan already calls. (Rows 5 and 6 are conditional write-side hooks for §7.1; the restore side needs none.)
+Three groups. The gateway and lease rows (#1-#6) are unchanged except where marked; the container rows (C) and the
+agent blocks (B) come with the containers (§7, 2026-11-10). Every hook is a few lines that call into `//koan`, except
+C1 (in `content/`, which cannot depend on `//koan`), whose logic is generic and Koan-free.
 
 | # | File | Change | Needed for | Status |
 |---|---|---|---|---|
 | 1 | `chrome/browser/devtools/remote_debugging_server.cc` | the default of `g_enable_default_user_data_dir_check_for_chromium_branding_for_testing` becomes `true` | refuse `--remote-debugging-port`/`-pipe` on the default profile (§3.2) | **its own PR, #186** |
-| 2 | `chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc` (the existing Koan patch; `AddNewContents`) | for a tab owned by an agent lease, a page-opened tab (`window.open`, `target=_blank`, a popup) is opened **in the background, in the same agent Space, never activated, never raising a window** (§9.4) | page-initiated focus (review finding 9) | phase 2c, a few lines in a patch that exists |
-| 3 | `chrome/browser/history/history_tab_helper.cc` (the `ShouldUpdateHistory()` decision in `DidFinishNavigation`, line 532): `if (koan::SuppressesHistory(web_contents())) return;` ahead of it | skip history, and so history-based omnibox suggestions, for agent-owned tabs | decision 18 (a setting) | phase 2c. **Certain**: §7.1 found no per-tab knob upstream |
+| 2 | `chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc` (the existing Koan patch; `AddNewContents`) | a page-opened tab of an agent container opens **in the background, in the same Space, never activated, never raising a window** (§9.4). *Which partition* it is in is C1/C2's job | page-initiated focus (review finding 9) | phase 2c |
+| 3 | `chrome/browser/history/history_tab_helper.cc` | now **B7** | | moved |
 | 4 | `chrome/browser/BUILD.gn` / `chrome/browser/ui/BUILD.gn` | deps on `//koan/browser/agent` | build only | phase 2b |
-| 5 | **conditional** `chrome/browser/ui/browser_tab_strip_model_delegate.cc` (`CreateHistoricalTab`, `CreateHistoricalGroup`): early return for agent-owned contents and groups | keep agent tabs out of Recently Closed | §7.1; only the *list* needs it, restore already blanks and sweeps | phase 2c; decided by T-sync-1 |
-| 6 | **conditional** `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`, `UpdateTabNavigation`; the existing Koan patch): `koan::PersistsInSession(contents)` early return | keep agent-visited URLs out of the session files | §7.1; the pages are already dropped at restore | phase 2c; decided by the `Sessions/` grep in T-sync-1 |
+| 5 | **conditional** `chrome/browser/ui/browser_tab_strip_model_delegate.cc` (`CreateHistoricalTab`, `CreateHistoricalGroup`) | early return for agent-container tabs | keep them out of the Recently Closed *list* (they already reopen blank) | decided by T-sync-1 |
+| 6 | **conditional** `chrome/browser/sessions/session_service_base.cc` (`BuildCommandsForTab`, `UpdateTabNavigation`; the existing Koan patch) | early return for agent-container tabs | agent-visited URLs out of the session files | decided by T-sync-1 |
+| **C1** | `content/browser/web_contents/web_contents_impl.cc` (`CreateNewWindow`, the `opener_suppressed` branch) | a noopener window of a fixed-partition opener gets `SiteInstance::CreateForFixedStoragePartition(…, partition_config)` instead of a default `SiteInstance`, as a guest's keeps its partition | `target=_blank` and noopener popups stay in the container | core PR |
+| **C2** | `chrome/browser/ui/navigator/browser_navigator.cc` (`CreateTargetContents`, no opener) | `koan::containers::SiteInstanceForNewTab(profile, params.source_site_instance, url)` when it returns one | Cmd/middle-click and context-menu "Open link in new tab/window/split" stay | core PR |
+| **C3** | `chrome/browser/resource_coordinator/tab_lifecycle_unit.cc` (`FinishDiscard`) | the replacement `WebContents` gets `koan::containers::SiteInstanceForReplacement(old_contents)` | a discarded container tab reloads in its container | core PR |
+| **C4** | `browser_web_contents_delegate.cc` (`IsPrerender2Supported`, the existing patch) | `kPreloadingDisabled` for container tabs | prerender builds its page in the default partition | core PR |
+| **C5** | `chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc` (`DoGarbageCollection`) | `koan::containers::LoadSavedContainers(profile_)` before the allowlist is used (loaded partitions are never collected) | saved containers are not deleted from disk | core PR |
+| **B1** | `components/permissions/permission_util.cc` (`IsPermissionBlockedInPartition`) | true for agent partitions | every permission denied | blocks PR |
+| **B2** | `browser_web_contents_delegate.cc` (`RunFileChooser`, `EnumerateDirectory`, `RunBluetoothChooser`, `ShowBluetoothScanningPrompt`); `chrome/browser/media/webrtc/display_media_access_handler.cc` (`HandleRequest`) | cancel for agent tabs | pickers, choosers, screen share | blocks PR |
+| **B3** | `extensions/browser/renderer_startup_helper.cc` (`OnRenderProcessHostCreated`, `OnRenderProcessLaunched`), `extensions/browser/api/web_request/web_request_api.cc` (`MaybeProxyURLLoaderFactory`), `chrome/browser/extensions/api/debugger/debugger_api.cc` (`ExtensionMayAttachToWebContents`), `chrome/browser/extensions/extension_tab_util.cc` (`GetTabById`) | skip / refuse for agent processes and tabs | extensions | blocks PR |
+| **B4** | `chrome/browser/password_manager/chrome_password_manager_client.cc` (`IsFillingEnabled`) | false for agent tabs | passwords | blocks PR |
+| **B5** | `chrome/browser/ui/autofill/chrome_autofill_client.cc` (`IsAutofillEnabled`, `IsAutocompleteEnabled`) | false | autofill | blocks PR |
+| **B6** | `chrome/browser/download/chrome_download_manager_delegate.cc` (`DetermineDownloadTarget`) | agent folder, no prompt | downloads | blocks PR |
+| **B7** | `chrome/browser/history/history_tab_helper.cc` (`DidFinishNavigation`, before `ShouldUpdateHistory()`); `components/omnibox/browser/open_tab_provider.cc` (existing patch) | skip agent tabs | history, omnibox, `@tabs` (decision 18) | blocks PR |
+| **B8** | `chrome/browser/ui/sync/tab_contents_synced_tab_delegate.cc` (`ShouldSync`) | false | open-tab sync | blocks PR |
+| **B9** | `chrome/browser/chrome_content_browser_client.cc` (`IsSecurityLevelAcceptableForWebAuthn`, the existing patch) | false for agent frames | passkeys, WebAuthn, Touch ID | blocks PR |
+
+No patch: the container core itself (`//koan/browser/containers`), session restore and Recently Closed (the
+`TabRestoreHook` of `koan_session_data.h`), the Glance, and the upgrade test.
+
+**Upgrade guards** (rule 3 of "Upgrade-safe code"):
+
+* **Every per-profile `KeyedService` is decided** (§7.2): `koan_agent_service_policy_unittest` lists the factories from
+  `BrowserContextDependencyManager` and fails on one that is neither agent-safe nor blocked. CI cannot build it (it
+  needs `//chrome/browser`), so `scripts/ci/check_agent_services.py` checks the same list statically against the
+  pinned Chromium's factory names (the PR that adds it says how it gets them without a checkout).
+* Behaviour the hooks assume, each named in its REBASE row: the fixed-partition bit is copied forward at the three
+  switch points of §7.1 (T-cont-1, T-cont-2); `CreateNewWindow` still has one `opener_suppressed` branch (C1, T-cont-3);
+  `FinishDiscard` still builds a new `WebContents` (C3, T-cont-5; if Koan turns on `kWebContentsDiscard` the hook goes);
+  `PermissionManager` still asks `IsPermissionBlockedInPartition` for both requests and status (T-block-1); upstream
+  still refuses WebUSB/HID/Serial in non-default partitions (T-block-2).
 
 **Dropped from the first draft** (all replaced by `PageLiveStateDecorator::SetIsPinnedTab` and
 `SetGlicActuationState`, §8): the freezer hook, the discard-eligibility reason, the new
@@ -920,17 +1032,39 @@ everything else is `//koan` plus public setters Koan already calls. (Rows 5 and 
 activates agent tabs).
 
 No-patch pieces (all in `//koan`): the settings row and handler, the tab context menu "Hand to agent" (inside the
-existing `AddKoanTabMenuItems`), the open-tab omnibox provider already has a Koan patch (`open_tab_provider.cc`) and
-gets a one-line exclusion of agent-Space tabs. Everything else uses public `content::`, `performance_manager::` and
-`chrome::` APIs: `DevToolsAgentHost`, `DevToolsAgentHostClient`, `WebContents::IncrementCapturerCount`,
+existing `AddKoanTabMenuItems`). Everything else uses public `content::`, `performance_manager::` and `chrome::` APIs:
+`DevToolsAgentHost`, `DevToolsAgentHostClient`, `WebContents::IncrementCapturerCount`,
 `WebContents::ForbidExternalPopupMenus`, `WebContentsObserver::DidGetUserInteraction`, `WebContents::IgnoreInputEvents`,
-`PageLiveStateDecorator`, `TabStripModel`, `net::UnixDomainServerSocket`.
+`PageLiveStateDecorator`, `TabStripModel`, `SiteInstance::CreateForFixedStoragePartition`,
+`StoragePartition::ClearData`, `BrowserContext::AsyncObliterateStoragePartition`, `net::UnixDomainServerSocket`.
 
 REBASE rows must reference **symbols**, not lines (rule 3): `SetIsPinnedTab`, `SetGlicActuationState`,
 `kGlicActuationPriorityVoter`, `IsDomainAvailableToUntrustedClient` (`devtools_session.h:245-266`,
 `chrome_devtools_session.cc:42-48`), `DevToolsAgentHostClient`'s flag defaults, and the protocol-coverage test of §4.3
 (a roll that adds a CDP method fails it). Behaviours to name in the rows: freezing/discard/priority stay exempt for a
 leased tab (T-keep-5, 6, 8), a `<select>` click opens no native menu (T-focus-4).
+
+**Container Mac tests** (part of the §15 plan, listed here with their hooks):
+
+| ID | Test | Pass condition |
+|---|---|---|
+| T-cont-1 | sign in to a site in the user's tab; open it in an agent container | the agent tab is signed out; `document.cookie`, localStorage, IndexedDB empty; a cookie set in the agent tab is not in the user's tab |
+| T-cont-2 | in an agent tab: same-tab link, cross-site link, typed URL in the omnibox, reload, back/forward, a cross-origin iframe | all stay in the container (the cookie set in step 1 is still visible; the user's is not) |
+| T-cont-3 | `target=_blank`, `rel=noopener`, `window.open(…)` with and without `noopener`, Cmd-click, middle-click, context menu "Open link in new tab", "Open link in split view", Glance (Alt-click) | each new tab or Glance is in the container and opens in the background (§9.4) |
+| T-cont-4 | drag an agent tab to another window, Move to new window, Duplicate, split view with a user tab | partition kept; the duplicate is a container tab |
+| T-cont-5 | discard an agent tab (`chrome://discards`) and reload it | still in the container |
+| T-cont-6 | 20 throwaway tasks in a row | each ends with its data cleared (`chrome://serviceworker-internals`, cookies); memory after the 20th recorded |
+| T-cont-7 | a Saved container: sign in, end the task, restart Koan, start a task naming it | still signed in; a task that does not name it is not; deleting it in Settings removes `Storage/ext/koanagent<id>` |
+| T-cont-8 | quit with agent tabs open (normal quit, then `kill -9`), restart; Reopen Closed Tab on an agent tab; reopen a closed window that had one | no agent page loads anywhere; the tabs come back blank and close |
+| T-cont-9 | `koan_agent_service_policy_unittest` and `check_agent_services.py` | pass; a fake new factory fails both |
+| T-cont-10 | uninstall an extension so that `kShouldGarbageCollectStoragePartitions` is set, restart | the saved container's data is still there |
+| T-block-1 | in an agent tab: geolocation, notifications, camera, microphone, clipboard read, MIDI, storage access, persistent storage | all denied with no prompt; `Permissions.query` says denied |
+| T-block-2 | file input, `showOpenFilePicker`, `showDirectoryPicker`, `navigator.bluetooth.requestDevice`, `getDisplayMedia`, WebUSB/HID/Serial | no native UI; each fails; `Koan.userNeeded` raised for the first five |
+| T-block-3 | with an ad blocker, a content-script extension and a webRequest logger installed: load pages in an agent tab | no content script runs, nothing blocked or logged, `chrome.debugger.attach` and `chrome.scripting.executeScript` on the agent tab id fail; `chrome.tabs.query` still lists it (the accepted gap) |
+| T-block-4 | a login form with a saved password; an address form | no fill, no save prompt, no autofill dropdown |
+| T-block-5 | visit pages in an agent tab | not in History, not suggested by the omnibox, not listed by `@tabs`, not in another device's open tabs |
+| T-block-6 | a download in an agent tab | lands in `~/Downloads/Koan Agent/` with no prompt; shows in the downloads UI |
+| T-block-7 | a passkey sign-in in an agent tab | refused at once, no Touch ID sheet |
 
 ## 15. Mac tests (phases 2-3; nothing runs on Linux except the pure-logic unit tests)
 
@@ -1037,8 +1171,18 @@ its tests listed).
   indicator, then settings and the wiring of the gateway into `BrowserProcess` (**the indicator comes first or in the
   same PR: with Agent ready on by default, nothing may make the gateway reachable by a real build before the "agent
   connected" state is visible**; PR #190 and #191 are code that nothing starts). Mac: T-sec-*, T-ready-*.
-* **2c, keep-alive:** the lease (the whole-attachment part and the capturer hold-off), agent Space and `Koan.openTab`, the
-  history/restore/Recently-Closed hooks of §7.1, `koan` (C++ in GN), the skill file, page-initiated focus hook and
+* **2c, containers** (2026-11-10, in this order, each its own PR against `develop`):
+  1. this design change (§7, §14, §16; `.agent/notes/upstream/containers.md`);
+  2. the container core: `ContainerId` and its partition, `koan::containers::StartAgentContainer` / `OpenAgentTab` /
+     `EndAgentContainer` (`src/browser/containers/koan_agent_containers.h`, the header the gateway calls), the Space,
+     Throwaway vs Saved, links and popups (C1, C2), discard (C3), prerender (C4), the GC allowlist (C5), the Glance,
+     and session restore (no patch). Mac: T-cont-1..8, 10;
+  3. the agent blocks (B1-B9). Mac: T-block-*;
+  4. the upgrade test for per-profile services, and its CI check. Mac: T-cont-9;
+  5. Strict mode (a hidden profile) behind the same API, last.
+  If containers slip past 24 Nov, Agent ready ships **off by default** until they land.
+* **2c, keep-alive:** the lease (the whole-attachment part and the capturer hold-off), `Koan.openTab` on top of
+  `OpenAgentTab`, the "Your tab" lease, `koan` (C++ in GN), the skill file, page-initiated focus hook (§14 #2) and
   prompts. Mac: T-keep-*, T-focus-*, T-sync-*, T-hist-*.
 * **2d, relay and agent-browser:** `koan-relay`, the session-scoped relay and `koan agent-browser`, then take-over/hand-back,
   pause and `userNeeded`. Mac: T-ab-*, T-take-*.
@@ -1072,7 +1216,7 @@ candidates keep the Mac first.
 | 12 | **Maintainer:** build the CLI with the Chromium tree's own toolchain (C++, or Rust via GN) so friends need no extra installs (#113). **Design author's choice, not a maintainer decision: C++** (two GN targets, `koan` and `koan-relay`; rationale in §12), open to override | §12 |
 | 13 | `eval`/script step early, not only a DSL | §20.2 |
 | 14 | Ghost cursor and progress line, muted agent tabs, an app-suspension blocker (not display sleep) | §8, §19.4 |
-| 15 | Say plainly that the agent Space shares the profile's logins | §7, §19.4 |
+| 15 | Say plainly that the agent Space shares the profile's logins. **Superseded 2026-11-10**: agent Spaces are containers and share no logins; the warning now applies to the "Your tab" lease only | §7, §19.4 |
 | 16 | Client records Keychain-bound (`os_crypt`) and keypair auth | §5.2, §5.4 |
 | 17 | `observe` defaults off | §5.3 |
 | 18 | Agent-visited URLs are not added to history or the omnibox by default (a setting) | §7, §14 #3 |
@@ -1087,7 +1231,7 @@ candidates keep the Mac first.
 | # | Question | Proposal |
 |---|---|---|
 | O1 | The power numbers for a MacBook Air: hold-off 3 s, 4 concurrent leases, 8/12/16 tabs per task/client/total | §8 proposes; confirm or change after T-keep-9, 10, 12 |
-| O2 | *(resolved in design, §7.1)* The history/omnibox/saved-group/session mechanism | saved groups: already excluded by `SavesTabGroups` when Spaces are on (agent control requires Spaces on); session restore: marker + `TabRestoreHook` + sweeper (no patch); history: §14 #3; Recently Closed and session files: conditional §14 #5, #6, decided by T-sync-1 |
+| O2 | *(resolved in design, §7.4)* The history/omnibox/saved-group/session mechanism | saved groups: already excluded by `SavesTabGroups` when Spaces are on (agent control requires Spaces on); session restore: marker + `TabRestoreHook` + sweeper (no patch); history: §14 #3; Recently Closed and session files: conditional §14 #5, #6, decided by T-sync-1 |
 | O3 | How strict ancestor pinning is (soft re-prompt on a new chain, once per launch) | §5.5 proposes; revisit after the first week of use |
 | O4 | Whether agent-browser's daemon reconnects with the same relay path after a dropped connection | T-ab-4 tests it; decides single-use vs session-lifetime secret (§11.1) |
 | O5 | Keychain-ACL-bound client key (the CLI inside Koan.app) | later hardening; UNVERIFIED feasibility (C§5) |
@@ -1502,7 +1646,7 @@ then LLM mode with ego in the blocks; (4) the claim, or the report of which leve
 | 12 keep-alive without patches | §8, §14 (freezer, discard and Glic patches dropped); T-keep-5/6/8/12 |
 | 13 patch #3 hook location | #186 patches the knob's initial value |
 | 14 UI-thread and power cost | §4.1 workers, §8 lighter lease and numbers; T-keep-10/11, T-power-1 |
-| 15 agent groups vs sync/history/session | §7.1, §14 #3/#5/#6, T19; T-hist-1, T-sync-1, T-sync-2 |
+| 15 agent groups vs sync/history/session | §7.4, §14 B7/#5/#6, T19; T-hist-1, T-sync-1, T-sync-2 |
 | 16 the plan contradicts itself on what ships | §16 (speed is phase 3), §10, §20 intro |
 | 17 DSL vs JavaScript | §20.2 `eval` step; CLI-side runner in phase 3 |
 | 18 strawman lever table | §20 table and intro |
