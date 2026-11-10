@@ -8,6 +8,7 @@
 //   zen-workspaces.css (the Spaces' colour values)
 //   zen-library.css (the Library's colour values)
 //   zen-omnibox.css, zen-popup.css (the floating URL bar card's colours)
+//   zen-single-components.css (the status bubble's colours)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
@@ -184,6 +185,22 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanGlanceButtonIcon] = {primary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};
+
+  // The status bubble (zen-single-components.css, Zen's styled status
+  // panel): the accent mixed 70% towards white (black in dark mode), a
+  // hairline in black at 15% (rgb(225, 225, 225) at 15%), the text in black
+  // (white) at 80%. Zen doesn't dim it in an inactive window.
+  const SkColor status_bubble = color_utils::AlphaBlend(
+      dark ? SK_ColorBLACK : SK_ColorWHITE, primary, 0.7f);
+  const SkColor status_text = color_utils::AlphaBlend(
+      dark ? SK_ColorWHITE : SK_ColorBLACK, status_bubble, 0.8f);
+  mixer[kColorStatusBubbleBackgroundFrameActive] = {status_bubble};
+  mixer[kColorStatusBubbleBackgroundFrameInactive] = {status_bubble};
+  mixer[kColorStatusBubbleForegroundFrameActive] = {status_text};
+  mixer[kColorStatusBubbleForegroundFrameInactive] = {status_text};
+  mixer[kColorStatusBubbleShadow] = {
+      dark ? SkColorSetARGB(Alpha(0.15f), 225, 225, 225)
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.15f))};
 
   // The Library (zen-library.css): on the window's surface, the side column
   // lightening to white at 8%; everything else shades of the text colour
