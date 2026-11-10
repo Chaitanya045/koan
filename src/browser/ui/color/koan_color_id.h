@@ -95,6 +95,7 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceBackdrop,
   kColorKoanGlanceCardShadow,
   kColorKoanGlanceButton,
+  kColorKoanGlanceButtonHover,
   kColorKoanGlanceButtonIcon,
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
@@ -220,6 +221,11 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanThemePickerDialBorder,
   kColorKoanThemePickerDialShine,
   kColorKoanThemePickerSwatchShadow,
+
+  // The page-load progress bar (koan_loading_indicator.cc): the bar (and the
+  // long load's sweep), and the long load's track.
+  kColorKoanLoadingBar,
+  kColorKoanLoadingBarTrack,
 
   kKoanColorsEnd,
 };

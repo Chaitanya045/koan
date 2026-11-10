@@ -40,6 +40,7 @@
 #include "koan/browser/ui/views/koan_download_animation.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_loading_indicator.h"
 #include "koan/browser/ui/views/koan_media_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
@@ -145,6 +146,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       media_(std::make_unique<KoanMediaController>(browser_view)),
       download_animation_(
           std::make_unique<KoanDownloadAnimation>(browser_view)),
+      loading_indicator_(std::make_unique<KoanLoadingIndicator>(browser_view)),
       // Page presses are where downloads fly from. Unretained: the
       // animation outlives the drag controller (declared before it).
       window_drag_(std::make_unique<KoanWindowDragController>(
@@ -215,6 +217,7 @@ void KoanBrowserViewController::TearDown() {
   toast_->Close();
   media_->OnBrowserViewDestroying();
   download_animation_->OnBrowserViewDestroying();
+  loading_indicator_->OnBrowserViewDestroying();
   window_drag_->OnBrowserViewDestroying();
   welcome_->OnBrowserViewDestroying();
 }
@@ -248,6 +251,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     // After the workspace switcher: the media cards go above it.
     media_->OnAddedToWidget();
     download_animation_->OnAddedToWidget();
+    loading_indicator_->OnAddedToWidget();
     welcome_->OnAddedToWidget();
     // After the welcome: both post a task, and the URL bar's must run after
     // the welcome's (FIFO) so it sees whether the welcome is showing.
@@ -266,6 +270,7 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   toast_->OnBrowserViewLayout();
   media_->OnBrowserViewLayout();
   download_animation_->OnBrowserViewLayout();
+  loading_indicator_->OnBrowserViewLayout();
   welcome_->OnBrowserViewLayout();
   agent_indicator_->OnBrowserViewLayout();
 }
