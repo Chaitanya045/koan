@@ -78,6 +78,18 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
       dark ? ui::ColorTransform(kColorKoanEssentialsTileSelected)
            : ui::ColorTransform(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)));
 
+  // The Essentials promo (zen-essentials-promo.css): --zen-primary-color at
+  // 60% (40% with a tab over it), bordered with it, the sidebar's text, a
+  // shadow of black at 10%.
+  mixer[kColorKoanEssentialsPromo] = {
+      SkColorSetA(ZenPrimaryColor(key), Alpha(0.6f))};
+  mixer[kColorKoanEssentialsPromoDragOver] = {
+      SkColorSetA(ZenPrimaryColor(key), Alpha(0.4f))};
+  mixer[kColorKoanEssentialsPromoBorder] = {ZenPrimaryColor(key)};
+  mixer[kColorKoanEssentialsPromoForeground] = {kColorToolbarText};
+  mixer[kColorKoanEssentialsPromoShadow] = {
+      SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
+
   // The URL pill (zen-omnibox.css .urlbar-background): the Essentials tiles'
   // tint (--zen-toolbar-element-bg), on hover --zen-toolbar-element-bg-hover
   // (black at 8%, white at 10% in dark mode); its text the toolbar text at

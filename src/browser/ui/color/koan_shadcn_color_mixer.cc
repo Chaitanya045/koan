@@ -421,6 +421,13 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanEssentialsTileSelected] = {
       t.Over(Token::kSidebarForeground, Token::kSidebarAccent, 0.16f)};
 
+  // The Essentials promo: a sidebar accent drop zone with a primary ring.
+  mixer[kColorKoanEssentialsPromo] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanEssentialsPromoDragOver] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanEssentialsPromoBorder] = {t[Token::kPrimary]};
+  mixer[kColorKoanEssentialsPromoForeground] = {t[Token::kSidebarForeground]};
+  mixer[kColorKoanEssentialsPromoShadow] = {SK_ColorTRANSPARENT};
+
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.
   mixer[kColorKoanUrlPill] = {t.InputFill(Token::kSidebar)};

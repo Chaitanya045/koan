@@ -97,6 +97,16 @@ source_set("glass_tint") {
   deps = [ "//skia" ]
 }
 
+# Zen's tab drag across Spaces and its Space button reorder
+# (koan_space_drag_logic.h): pure, for the unit tests.
+source_set("space_drag_logic") {
+  sources = [
+    "koan_space_drag_logic.cc",
+    "koan_space_drag_logic.h",
+  ]
+  deps = [ "//base" ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -144,6 +154,7 @@ test("koan_views_unittests") {
     "koan_lights_geometry_unittest.cc",
     "koan_pinned_site_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
+    "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
@@ -153,6 +164,7 @@ test("koan_views_unittests") {
     ":lights_geometry",
     ":pinned_site",
     ":sidebar_curve",
+    ":space_drag_logic",
     ":space_navigation",
     ":strip_on_share",
     ":swipe_tracker",
@@ -236,6 +248,8 @@ source_set("impl") {
     "koan_emoji_picker.h",
     "koan_empty_tab.cc",
     "koan_essentials.cc",
+    "koan_essentials_promo.cc",
+    "koan_essentials_promo.h",
     "koan_glance_controller.cc",
     "koan_glance_controller.h",
     "koan_glass_state.cc",
@@ -283,6 +297,8 @@ source_set("impl") {
     "koan_space_bar.h",
     "koan_space_creation.cc",
     "koan_space_creation.h",
+    "koan_space_drag.cc",
+    "koan_space_drag.h",
     "koan_space_header.cc",
     "koan_space_header.h",
     "koan_space_menu.cc",
@@ -349,6 +365,7 @@ source_set("impl") {
     ":lights_geometry",
     ":pinned_site",
     ":sidebar_curve",
+    ":space_drag_logic",
     ":space_navigation",
     ":strip_on_share",
     ":swipe_tracker",

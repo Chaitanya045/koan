@@ -48,6 +48,13 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanEssentialsTile,
   kColorKoanEssentialsTileHovered,
   kColorKoanEssentialsTileSelected,
+  // Zen's Essentials drop promo (koan_essentials_promo.cc): its fill, lit
+  // while a tab is over it, border, text and outline, shadow.
+  kColorKoanEssentialsPromo,
+  kColorKoanEssentialsPromoDragOver,
+  kColorKoanEssentialsPromoBorder,
+  kColorKoanEssentialsPromoForeground,
+  kColorKoanEssentialsPromoShadow,
 
   // The URL bar (koan_sidebar_nav_view.cc, koan_url_bar_controller.cc): the
   // sidebar's URL pill (its fill, hovered fill and text) and the floating URL

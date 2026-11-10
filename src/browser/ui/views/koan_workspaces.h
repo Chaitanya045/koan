@@ -58,6 +58,7 @@ class View;
 
 namespace ui {
 class Event;
+class MouseEvent;
 class ScrollEvent;
 }  // namespace ui
 
@@ -67,6 +68,7 @@ class KoanSpaceSwipe;
 
 class KoanCreateMenu;
 class KoanSpaceBarView;
+class KoanSpaceDrag;
 class KoanSpaceCreationView;
 class KoanSpaceHeaderView;
 class KoanSpaceMenu;
@@ -191,6 +193,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // wrap-around, nothing past the first or last Space. Returns whether it
   // switched.
   bool Navigate(bool forward);
+  // Zen's wrap-around-navigation setting.
+  bool WrapsAround() const;
   // The `number`th Space (from 1), Zen's "Switch to Workspace N". False if
   // there is none.
   bool SwitchToNumber(int number);
@@ -332,6 +336,14 @@ class KoanWorkspaceController : public TabStripModelObserver,
   TabStripModel* tab_strip_model() const;
   base::WeakPtr<KoanWorkspaceController> GetWeakPtr();
 
+  // The sidebar's Space views, while they are installed (null otherwise).
+  KoanSpaceHeaderView* space_header() const { return header_; }
+  KoanSpaceBarView* space_bar() const { return bar_; }
+  // Zen's tab drag across Spaces (koan_space_drag.h).
+  KoanSpaceDrag* space_drag() const { return space_drag_.get(); }
+  // A mouse event on its way to a view in the sidebar.
+  void OnSidebarMouseEvent(const ui::MouseEvent& event);
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
@@ -449,8 +461,6 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::optional<std::string> ThemeOfTabs(
       const tab_groups::TabGroupId& space,
       const tabs::TabInterface* except) const;
-  // Zen's wrap-around-navigation setting.
-  bool WrapsAround() const;
   // A swipe's travel or speed, turned round with Zen's natural-scroll
   // setting, so the Space follows the way it will switch.
   float SwipeAmount(float amount) const;
@@ -466,6 +476,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The sidebar (the vertical tab strip region), with the wheel handler.
   raw_ptr<views::View> region_ = nullptr;
   std::unique_ptr<ui::EventHandler> wheel_handler_;
+  std::unique_ptr<KoanSpaceDrag> space_drag_;
   // Keeps a collapsed sidebar expanded while the Create form is open.
   std::unique_ptr<ExpandOnHoverLock> create_form_lock_;
 
