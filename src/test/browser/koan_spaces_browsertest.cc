@@ -6,6 +6,8 @@
 
 #include "base/test/run_until.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -15,6 +17,7 @@
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -136,16 +139,38 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, RenameAndIcon) {
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, OnlyTheMarkedTabIsTheEmptyTab) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
   TabStripModel* model = browser()->GetTabStripModel();
+  // The window opened on its empty tab (Zen swaps the startup page for it).
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return IsEmptyTab(model->GetTabAtIndex(0)); }));
   // The user's own about:blank page is an ordinary tab.
-  ASSERT_TRUE(
-      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(url::kAboutBlankURL),
+      WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  ASSERT_EQ(2, model->count());
+  EXPECT_FALSE(IsEmptyTab(model->GetActiveTab()));
+  // So is a new tab page opened later (Cmd+T without the floating bar).
+  chrome::AddTabAt(browser(), GURL(), -1, /*foreground=*/true);
   EXPECT_FALSE(IsEmptyTab(model->GetActiveTab()));
 
   // Closing the last tab keeps the window, on the empty tab Koan makes.
+  while (model->count() > 1) {
+    model->CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
+  }
   model->CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
   ASSERT_TRUE(base::test::RunUntil([&] {
     return model->count() == 1 && IsEmptyTab(model->GetActiveTab());
   }));
+}
+
+// A new window opens on its empty tab too.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, NewWindowOpensOnTheEmptyTab) {
+  BrowserWindowInterface* other = CreateBrowser(browser()->GetProfile());
+  ASSERT_TRUE(WaitForSpaceCount(other, 1));
+  TabStripModel* model = other->GetTabStripModel();
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return IsEmptyTab(model->GetActiveTab()); }));
+  EXPECT_EQ(1, model->count());
 }
 
 }  // namespace koan

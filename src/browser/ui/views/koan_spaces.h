@@ -55,7 +55,8 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
 bool IsInSpaceForm(const views::View* tab_strip_view,
                    const views::View* region,
                    const gfx::Point& point);
-// Zen's empty tab: the blank page a window shows when its last tab closes. It
+// Zen's empty tab: the blank page a window shows when its last tab closes,
+// or opens on (a new window, the first launch; not a session restore). It
 // is never listed (no sidebar row), never navigates (what the URL bar opens
 // from it opens in a new tab) and Cmd+W on it closes the window. Zen keeps
 // one per window; here each Space with nothing else has one, since a Space

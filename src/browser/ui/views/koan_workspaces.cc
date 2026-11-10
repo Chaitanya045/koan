@@ -1391,6 +1391,7 @@ void KoanWorkspaceController::Update() {
   // The views go away with the vertical tab strip (switching to horizontal
   // tabs) and come back with it.
   InstallViews();
+  MarkStartupEmptyTab();
   EnsureOneSpaceShown();
   DisconnectSavedGroups();
   KeepStartupEssential();
@@ -1403,6 +1404,21 @@ void KoanWorkspaceController::Update() {
   UpdateViews();
   spaces_changed_callbacks_.Notify();
   CheckSpaces();
+}
+
+void KoanWorkspaceController::MarkStartupEmptyTab() {
+  // Zen swaps the new tab page a window opens on for its empty tab
+  // (ZenSpaceManager.handleInitialTab(), selectStartPage()): a new window,
+  // the first launch, a start on the New Tab page. Not a restored tab, nor
+  // the user's own new tab later (startup_tab_ is only the window's first).
+  tabs::TabInterface* tab =
+      std::exchange(startup_tab_, tabs::TabHandle()).Get();
+  TabStripModel* model = tab_strip_model();
+  const int index = tab ? model->GetIndexOfTab(tab) : TabStripModel::kNoTab;
+  if (!started_ && index != TabStripModel::kNoTab && !tab->IsPinned() &&
+      IsEmptyPageUrl(tab->GetContents()->GetVisibleURL())) {
+    MarkEmptyTab(model, index);
+  }
 }
 
 void KoanWorkspaceController::KeepStartupEssential() {
@@ -1857,6 +1873,7 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
       if (index == TabStripModel::kNoTab) {
         return !ids.empty();
       }
+      MarkEmptyTab(model, index);
       indices = {index};
     }
     const tab_groups::TabGroupId id = NewSpaceGroup(indices);
@@ -2322,6 +2339,13 @@ void KoanWorkspaceController::OnTabStripModelChanged(
     for (const TabStripModelChange::ContentsWithIndex& inserted :
          change.GetInsert()->contents) {
       containers::OnTabInserted(inserted.contents);
+      // The tab the window opened with, if made with it (not restored, nor
+      // adopted from another window: those have pages already). Marked as
+      // the empty tab by the first update (MarkStartupEmptyTab()).
+      if (!started_ && tab_strip_model->count() == 1 &&
+          inserted.contents->GetController().IsInitialBlankNavigation()) {
+        startup_tab_ = inserted.tab->GetHandle();
+      }
       // Zen's Space routing: a new page may belong in another Space.
       space_routing_->OnTabInserted(inserted.tab, selection.old_tab);
     }
