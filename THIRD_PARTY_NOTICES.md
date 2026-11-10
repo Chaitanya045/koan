@@ -69,6 +69,15 @@ this table (see CONTRIBUTING.md).
 The comparison screenshots `docs/screenshots/*-zen-vs-koan*.png` show Zen
 Browser's interface, for comparison only.
 
+## Firefox strip-on-share list (MPL-2.0)
+
+`src/browser/ui/views/koan_strip_on_share.cc` holds the parameter and site
+lists of Firefox's `toolkit/components/antitracking/StripOnShareLists/MPL2/
+StripOnShare.json`, Copyright the Mozilla contributors, under the Mozilla
+Public License 2.0 (https://mozilla.org/MPL/2.0/). That file, Koan's code in
+it included, is covered by the MPL-2.0 and says so in its header. Firefox's
+separately licensed (LGPL) list is not used.
+
 ## shadcn/ui (MIT)
 
 The colour tokens and palettes in `src/browser/ui/color/koan_shadcn_palettes.inc`
