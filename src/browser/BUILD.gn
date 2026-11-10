@@ -33,6 +33,7 @@ source_set("prefs") {
     "koan_prefs.h",
   ]
   deps = [
+    ":features",
     "//base",
     "//chrome/common:constants",
     "//components/performance_manager",
