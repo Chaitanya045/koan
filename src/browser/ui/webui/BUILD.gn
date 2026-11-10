@@ -27,26 +27,22 @@ source_set("webui") {
     ":resources",
     ":welcome_resources",
     "//base",
+    "//chrome/browser:browser_process",
     "//chrome/browser:shell_integration",
-    "//chrome/common:constants",
     "//chrome/browser/importer",
+    "//chrome/browser/profiles:profile",
     "//chrome/browser/regional_capabilities",
     "//chrome/browser/search_engines",
     "//chrome/browser/themes",
+    "//chrome/browser/ui:accelerator_table",
     "//chrome/browser/ui/tabs",
+    "//chrome/common:constants",
+    "//components/performance_manager",
+    "//components/prefs",
     "//components/regional_capabilities",
     "//components/search_engines",
     "//components/tab_groups",
     "//components/user_data_importer/common",
-    "//services/network/public/mojom",
-    "//ui/gfx/geometry",
-    "//url",
-    "//chrome/browser:browser_process",
-    "//chrome/browser/profiles:profile",
-    "//chrome/browser/ui:accelerator_table",
-    "//chrome/common:constants",
-    "//components/performance_manager",
-    "//components/prefs",
     "//content/public/common",
     "//koan/browser:features",
     "//koan/browser:prefs",
@@ -55,8 +51,11 @@ source_set("webui") {
     "//koan/browser/ui/fonts",
     "//koan/browser/ui/views",
     "//koan/common:url_constants",
+    "//services/network/public/mojom",
     "//ui/base",
     "//ui/events:event_constants",
+    "//ui/gfx/geometry",
+    "//url",
   ]
   if (is_mac) {
     deps += [ "//koan/browser/ui/cocoa:hooks" ]
@@ -117,9 +116,11 @@ action("welcome_resources") {
     "kKoanWelcomeIconCheck=" +
         rebase_path("resources/welcome_icons/check.svg", root_build_dir),
     "kKoanWelcomeIconCircleCheckBig=" +
-        rebase_path("resources/welcome_icons/circle-check-big.svg", root_build_dir),
+        rebase_path("resources/welcome_icons/circle-check-big.svg",
+                    root_build_dir),
     "kKoanWelcomeIconHardDriveDownload=" +
-        rebase_path("resources/welcome_icons/hard-drive-download.svg", root_build_dir),
+        rebase_path("resources/welcome_icons/hard-drive-download.svg",
+                    root_build_dir),
     "kKoanWelcomeIconKeyboard=" +
         rebase_path("resources/welcome_icons/keyboard.svg", root_build_dir),
     "kKoanWelcomeIconSearch=" +
