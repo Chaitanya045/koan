@@ -16,7 +16,7 @@ index 8615eb60acaf1a7a9a23a08b505577c8eefb700b..6835b32761f93a29dd235c69a9ea3876
    }
 +  // Koan: where Koan's own toolbar stays hidden (single toolbar), nothing is
 +  // revealed from the top edge, as in Zen: not the toolbar, the bookmarks bar
-+  // or the title bar strip with the window buttons.
++  // (AppKit's own title bar with the window buttons still comes, as in Zen).
 +  if (koan::HidesFullscreenTopChrome(GetBrowserView())) {
 +    new_style = FullscreenToolbarStyle::TOOLBAR_NONE;
 +  }

@@ -11,7 +11,7 @@
 // stays and nothing of Chromium's top chrome shows.
 //   - the top container is still in Koan's overlay, in the window's own
 //     widget, not in Chromium's overlay widget (which reveals it from the top
-//     edge, with a title bar strip);
+//     edge, with a title bar strip and the traffic lights);
 //   - the sidebar's top row has the navigation buttons after the toggle;
 //   - no bookmarks bar, no toolbar above the page;
 //   - Ctrl+Alt+B (multiple toolbars) hands the top container to Chromium's
