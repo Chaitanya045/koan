@@ -57,6 +57,7 @@
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_stored_space.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -1581,19 +1582,22 @@ void KoanFolderController::OnSpacesChanged() {
   Changed();
 }
 
+KoanWorkspaceController* KoanFolderController::Spaces() const {
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return controller ? controller->workspaces() : nullptr;
+}
+
 std::vector<tab_groups::TabGroupId> KoanFolderController::StoredSpaceOrder()
     const {
   // Spaces' own list (no ephemeral groups), as #159 stores the Spaces.
   // (None while the window's controllers go away.)
   std::vector<tab_groups::TabGroupId> spaces;
-  const KoanBrowserViewController* controller =
-      KoanBrowserViewController::From(browser_view_);
-  if (!controller) {
-    return spaces;
-  }
-  for (const KoanWorkspaceController::SpaceInfo& space :
-       controller->workspaces()->GetSpaces()) {
-    spaces.push_back(space.id);
+  if (KoanWorkspaceController* workspaces = Spaces()) {
+    for (const KoanWorkspaceController::SpaceInfo& space :
+         workspaces->GetSpaces()) {
+      spaces.push_back(space.id);
+    }
   }
   return spaces;
 }
@@ -1623,6 +1627,9 @@ base::ListValue KoanFolderController::StoredFolders() const {
     if (const KoanFolder* parent = GetFolder(folder.parent)) {
       dict.Set("parent", parent->token);
     }
+    // Its Space by id (#159's stored Spaces), and by place for a Space
+    // stored without one.
+    dict.Set("space_id", Spaces()->GetStoredSpaceId(*space));
     dict.Set("space", static_cast<int>(space - spaces.begin()));
     dict.Set("tabs", std::move(tab_list));
     list.Append(std::move(dict));
@@ -1720,6 +1727,10 @@ void KoanFolderController::RecreateStoredFolders() {
   }
   TabStripModel* model = tab_strip_model();
   const std::vector<tab_groups::TabGroupId> spaces = StoredSpaceOrder();
+  std::vector<std::string> space_ids;
+  for (const tab_groups::TabGroupId& space : spaces) {
+    space_ids.push_back(Spaces()->GetStoredSpaceId(space));
+  }
   // The folders first, so their tabs join them as they come
   // (OnTabsAdded()). A Space that is no longer there takes its folders
   // along; a parent is an earlier entry.
@@ -1727,9 +1738,14 @@ void KoanFolderController::RecreateStoredFolders() {
   for (const base::Value& value : prefs->GetList(prefs::kFolderList)) {
     const base::DictValue* dict = value.GetIfDict();
     const std::string* token = dict ? dict->FindString("token") : nullptr;
-    const std::optional<int> place =
-        dict ? dict->FindInt("space") : std::nullopt;
-    if (spaces.empty() || !token || token->empty() || !place || *place < 0 ||
+    // Its Space: the one with its stored id, else the one at its place (a
+    // Space that isn't there, as fewer came back, gives its folders to the
+    // last one: they show, and can be moved or deleted).
+    const std::optional<size_t> space =
+        dict ? StoredSpaceIndex(space_ids, dict->FindString("space_id"),
+                                dict->FindInt("space"))
+             : std::nullopt;
+    if (!space || !token || token->empty() ||
         std::ranges::contains(folders_, *token, &KoanFolder::token)) {
       continue;
     }
@@ -1740,9 +1756,7 @@ void KoanFolderController::RecreateStoredFolders() {
       folder.name = CapName(base::UTF8ToUTF16(*name));
     }
     folder.collapsed = dict->FindBool("collapsed").value_or(false);
-    // A Space that isn't there (fewer came back) gives its folders to the
-    // last one: they show, and can be moved or deleted.
-    folder.space = spaces[std::min<size_t>(*place, spaces.size() - 1)];
+    folder.space = spaces[*space];
     if (const std::string* parent = dict->FindString("parent")) {
       const auto it = std::ranges::find(folders_, *parent, &KoanFolder::token);
       if (it != folders_.end()) {

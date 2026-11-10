@@ -40,6 +40,7 @@ class View;
 namespace koan {
 
 class KoanFolderSearch;
+class KoanWorkspaceController;
 class SidebarHold;
 struct TabMenuContext;
 
@@ -298,6 +299,8 @@ class KoanFolderController : public TabStripModelObserver,
   void StoreFolders();
   // The window's Spaces in the order the stored folders count them by.
   std::vector<tab_groups::TabGroupId> StoredSpaceOrder() const;
+  // The window's Spaces, or null while its controllers go away.
+  KoanWorkspaceController* Spaces() const;
   void RecreateStoredFolders();
   // Whether the window is closing (its tabs go; the session keeps what it
   // had).

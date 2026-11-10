@@ -26,6 +26,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -707,6 +708,15 @@ KoanWorkspaceController::GetSpace(const tab_groups::TabGroupId& space) const {
                    .icon = data->icon,
                    .theme = data->theme,
                    .active = GetActiveSpace() == space};
+}
+
+std::string KoanWorkspaceController::GetStoredSpaceId(
+    const tab_groups::TabGroupId& space) {
+  auto [it, inserted] = stored_space_ids_.try_emplace(space);
+  if (inserted) {
+    it->second = base::Uuid::GenerateRandomV4().AsLowercaseString();
+  }
+  return it->second;
 }
 
 base::CallbackListSubscription
@@ -1623,6 +1633,7 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
     }
   }
   std::vector<std::pair<SpaceData, bool>> stored;
+  std::vector<std::string> stored_ids;
   for (const base::Value& entry :
        profile->GetPrefs()->GetList(prefs::kWorkspaceList)) {
     const base::DictValue* dict = entry.GetIfDict();
@@ -1642,6 +1653,14 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
                                          ? std::nullopt
                                          : std::make_optional(color_id)}},
         dict->FindBool("active").value_or(false));
+    // Its id (none in an entry stored before Spaces had ids; a duplicate in
+    // a hand-edited pref is dropped).
+    const std::string* stored_id = dict->FindString("id");
+    stored_ids.push_back(
+        stored_id && base::Uuid::ParseLowercase(*stored_id).is_valid() &&
+                !std::ranges::contains(stored_ids, *stored_id)
+            ? *stored_id
+            : std::string());
   }
   if (stored.empty()) {
     return false;
@@ -1671,6 +1690,9 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
     }
     const tab_groups::TabGroupId id = NewSpaceGroup(indices);
     WriteSpace(id, stored[i].first);
+    if (!stored_ids[i].empty()) {
+      stored_space_ids_[id] = stored_ids[i];
+    }
     ids.push_back(id);
   }
   // In the stored order (the startup tabs' Space was made where they were).
@@ -1687,9 +1709,15 @@ void KoanWorkspaceController::StoreSpaces() {
       browser_view_->browser()->IsDeleteScheduled()) {
     return;
   }
+  // (The ids of Spaces gone since go too.)
+  TabGroupModel* groups = model->group_model();
+  std::erase_if(stored_space_ids_, [groups](const auto& entry) {
+    return !groups || !groups->ContainsTabGroup(entry.first);
+  });
   base::ListValue list;
   for (const auto& [id, data] : spaces_snapshot_) {
     list.Append(base::DictValue()
+                    .Set("id", GetStoredSpaceId(id))
                     .Set("title", JoinTitle(data.icon, data.name))
                     .Set("color", static_cast<int>(data.theme.color.value_or(
                                       kDefaultThemeColor)))

@@ -49,6 +49,14 @@ source_set("views") {
 
 # Zen's compact mode slide curve (MPL-2.0, see koan_sidebar_curve.cc): pure
 # logic over //base and //ui/gfx/geometry, so the unit tests can use it.
+# Which recreated Space a stored per-Space entry (a folder) belongs to.
+source_set("stored_space") {
+  sources = [
+    "koan_stored_space.cc",
+    "koan_stored_space.h",
+  ]
+}
+
 source_set("sidebar_curve") {
   sources = [
     "koan_sidebar_curve.cc",
@@ -105,6 +113,7 @@ test("koan_views_unittests") {
     "koan_lights_geometry_unittest.cc",
     "koan_pinned_site_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
+    "koan_stored_space_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
   ]
   deps = [
@@ -112,6 +121,7 @@ test("koan_views_unittests") {
     ":lights_geometry",
     ":pinned_site",
     ":sidebar_curve",
+    ":stored_space",
     ":swipe_tracker",
     "//base",
     "//base/test:run_all_unittests",
@@ -278,6 +288,7 @@ source_set("impl") {
     ":glass_tint",
     ":pinned_site",
     ":sidebar_curve",
+    ":stored_space",
     ":swipe_tracker",
     ":views",
     "//base:i18n",

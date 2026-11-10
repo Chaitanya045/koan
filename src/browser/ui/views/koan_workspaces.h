@@ -166,6 +166,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::vector<SpaceInfo> GetSpaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveSpace() const;
   std::optional<SpaceInfo> GetSpace(const tab_groups::TabGroupId& space) const;
+  // A Space's id in the stored Spaces (prefs::kWorkspaceList's "id"), made
+  // the first time it's asked for and kept while the window is open. A fresh
+  // start gives each Space it recreates its stored id back, so what other
+  // features store per Space (folders) finds its Space again rather than the
+  // one at its old place.
+  std::string GetStoredSpaceId(const tab_groups::TabGroupId& space);
   // Runs `callback` (soon, coalesced) whenever the Spaces or the active one
   // change.
   base::CallbackListSubscription AddSpacesChangedCallback(
@@ -461,6 +467,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   base::ListValue stored_spaces_;
   std::optional<base::ListValue> first_spaces_;
   bool may_store_spaces_ = true;
+  // GetStoredSpaceId()'s ids.
+  std::map<tab_groups::TabGroupId, std::string> stored_space_ids_;
   // Spaces in order with their data, as of the last update.
   std::vector<std::pair<tab_groups::TabGroupId, SpaceData>> spaces_snapshot_;
   std::vector<ClosedSpace> closed_spaces_;
