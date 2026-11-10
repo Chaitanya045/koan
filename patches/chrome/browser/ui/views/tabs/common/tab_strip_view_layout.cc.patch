@@ -10,7 +10,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chro
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/controls/separator.h"
  #include "ui/views/view_utils.h"
-@@ -287,6 +289,9 @@
+@@ -302,6 +304,9 @@
        remaining_height -=
            tabs_separator->GetPreferredSize().height() + region_vertical_padding;
      }
@@ -20,7 +20,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chro
      // Clamp the remaining height to 0 if we have less space.
      remaining_height = std::max(remaining_height, 0);
    }
-@@ -332,6 +337,14 @@
+@@ -347,6 +352,14 @@
    }
    layouts.child_layouts.emplace_back(tabs_separator, should_show_separator,
                                       separator_bounds);
@@ -35,3 +35,19 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chro
  
    // Place the unpinned container using the entire available width, we do not
    // inset the x value by `region_horizontal_padding` here because, when the tab
+@@ -368,8 +381,13 @@
+                                      unpinned_tabs_scroll_view->GetVisible(),
+                                      unpinned_container_bounds);
+ 
+-  layouts.host_size = gfx::Size(size_bounds.width().value(),
+-                                unpinned_container_bounds.bottom());
++  // Koan: Zen's New Tab row after the tabs, when it isn't on top.
++  const int koan_end_rows_height = koan::PlaceSidebarEndRows(
++      tab_strip_view, layouts, size_bounds.width().value(),
++      unpinned_container_bounds.bottom());
++  layouts.host_size = gfx::Size(
++      size_bounds.width().value(),
++      unpinned_container_bounds.bottom() + koan_end_rows_height);
+   return layouts;
+ }
+ 

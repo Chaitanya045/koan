@@ -78,6 +78,11 @@ constexpr Group kGroups[] = {
     // about:preferences#home has one).
     {"newtab", "looks", "New Tab Page", "New tabs",
      "Choose what a new tab page shows"},
+    // Koan's own: Koan is built from source, so an update is `git pull &&
+    // scripts/build.sh`. Zen's update notification is zen.updates.*.
+    {"updates", "looks", "Updates", "Koan Updates",
+     "Koan asks GitHub once a day for the newest commit of its develop "
+     "branch: the request carries no cookies and nothing about you"},
     {"workspaces", "tabs", "Workspaces", "General settings for workspaces",
      "With workspaces, you can have multiple browsing sessions at once!"},
     {"pinned-tabs", "tabs", "Pinned Tabs", "General settings for pinned tabs",
@@ -329,6 +334,12 @@ constexpr Row kRows[] = {
      .pref = prefs::kShowNewTabVertical,
      .label = "Show New Tab Button on Tab List",
      .is_available = features::IsSidebarEnabled},
+    {.group = "vertical-tabs",
+     .control = Control::kCheckbox,
+     .pref = prefs::kShowNewTabButtonTop,
+     .label = "Move the new tab button to the top",
+     .is_available = features::IsSidebarEnabled,
+     .indent = true},
     // Zen has no row for this (its palette and the sidebar's menu do).
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
@@ -432,6 +443,16 @@ constexpr Row kRows[] = {
      .options = kNewTabPages,
      .is_available = features::IsNewTabEnabled,
      .note = kNewTabPageNote},
+    {.group = "updates",
+     .control = Control::kCheckbox,
+     .pref = prefs::kUpdatesCheckEnabled,
+     .label = "Check for updates",
+     .local_state = true},
+    {.group = "updates",
+     .control = Control::kCheckbox,
+     .pref = prefs::kUpdatesShowUpdateNotification,
+     .label = "Show a notification after Koan was updated",
+     .local_state = true},
     // Tab Management.
     {.group = "workspaces",
      .control = Control::kCheckbox,

@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
@@ -15,6 +16,7 @@
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "components/universal_optout/prefs.h"
 #include "koan/browser/agent/koan_agent_limits.h"
 #include "koan/browser/koan_features.h"
@@ -29,6 +31,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCompactModeDragCollapseHintSeen, false);
   registry->RegisterBooleanPref(kTabsOnRight, false);
   registry->RegisterBooleanPref(kShowNewTabVertical, true);
+  registry->RegisterBooleanPref(kShowNewTabButtonTop, true);
   registry->RegisterBooleanPref(kSingleToolbarEnabled, true);
   registry->RegisterStringPref(kUrlBarBehavior, kUrlBarBehaviorFloatingOnType);
   registry->RegisterBooleanPref(kUrlBarReplaceNewTab, true);
@@ -130,6 +133,14 @@ void OverrideServiceProfilePrefDefaults(
   // account promos.
   registry->SetDefaultPrefValue(::prefs::kSigninInterceptionEnabled,
                                 base::Value(false));
+  // Z15: no browser sign-in (registered by AccountConsistencyModeManager-
+  // Factory; kSigninAllowed follows it at the next start). Koan has no Google
+  // sync, and Zen no such account rows: the app menu's "Sign in to Koan" and
+  // sync rows, the avatar menu's and the bookmark bubble's sign-in promos go.
+  // Signing in to Google on the web still works. Settings' sign-in switch
+  // turns it back on.
+  registry->SetDefaultPrefValue(::prefs::kSigninAllowedOnNextStartup,
+                                base::Value(false));
 }
 
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream
@@ -142,6 +153,13 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookCustomCss, "");
   registry->RegisterBooleanPref(kLookAcrylicUrlBar, false);
   registry->RegisterBooleanPref(kHapticFeedback, true);
+  registry->RegisterBooleanPref(kUpdatesCheckEnabled, true);
+  registry->RegisterTimePref(kUpdatesLastCheck, base::Time());
+  registry->RegisterStringPref(kUpdatesLatestCommit, "");
+  registry->RegisterTimePref(kUpdatesLatestCommitTime, base::Time());
+  registry->RegisterStringPref(kUpdatesNotifiedCommit, "");
+  registry->RegisterBooleanPref(kUpdatesShowUpdateNotification, true);
+  registry->RegisterStringPref(kUpdatesLastBuild, "");
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);

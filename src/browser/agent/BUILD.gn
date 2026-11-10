@@ -339,6 +339,7 @@ source_set("facade") {
     ":events",
     ":filters",
     ":policy",
+    ":reach",
     ":redact",
     ":registry",
   ]

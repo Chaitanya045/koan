@@ -313,6 +313,22 @@ void InstallCommandPolicy(BrowserView* browser_view) {
       item->SetVisible(false);
     }
   }
+  // Z15: URL bar icons Zen hides in both layouts, reading mode
+  // (#reader-mode-button) and the cookie "eye" (Zen's protections icon is
+  // off, zen.urlbar.show-protections-icon): their page actions follow the
+  // item's visibility. Only hidden: reading mode still opens from its
+  // shortcut, the menus and the site panel, cookies from the site panel. (The
+  // star, whose item also backs the app menu's row, has its own hook:
+  // HidesBookmarkStar().)
+  if (features::IsUrlBarEnabled()) {
+    for (const actions::ActionId id :
+         {kActionSidePanelShowReadAnything, kActionShowCookieControls}) {
+      if (actions::ActionItem* item = actions::ActionManager::Get().FindAction(
+              id, actions->root_action_item())) {
+        item->SetVisible(false);
+      }
+    }
+  }
 }
 
 bool HandlesBrowserCommand(BrowserWindowInterface* browser, int command_id) {

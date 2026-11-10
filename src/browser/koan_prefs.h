@@ -51,6 +51,30 @@ inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
 // Zen's is the application's.
 inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
 
+// Updates (koan_updates.h). Koan has no binary releases: a clone is updated
+// with `git pull && scripts/build.sh`. All local-state prefs, as Zen's
+// zen.updates.* are the application's.
+//
+// Check GitHub at most once a day for a newer commit of the clone's develop
+// branch than the build's. On by default; never from an Incognito window.
+inline constexpr char kUpdatesCheckEnabled[] = "koan.updates.check_enabled";
+// When the last check ran (whatever its outcome).
+inline constexpr char kUpdatesLastCheck[] = "koan.updates.last_check";
+// The newest commit on GitHub at the last check and its commit time, and the
+// one the "update available" notification was last shown for (it shows once
+// per commit).
+inline constexpr char kUpdatesLatestCommit[] = "koan.updates.latest_commit";
+inline constexpr char kUpdatesLatestCommitTime[] =
+    "koan.updates.latest_commit_time";
+inline constexpr char kUpdatesNotifiedCommit[] = "koan.updates.notified_commit";
+// Zen's zen.updates.show-update-notification (default on): the sidebar's
+// "Update Complete!" after a launch of a build other than the last launch's.
+inline constexpr char kUpdatesShowUpdateNotification[] =
+    "koan.updates.show_update_notification";
+// The build of the last launch (Zen's zen.updates.last-version and
+// last-build-id): its version and commit, updates::BuildStamp().
+inline constexpr char kUpdatesLastBuild[] = "koan.updates.last_build";
+
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
@@ -83,6 +107,14 @@ inline constexpr char kTabsOnRight[] = "koan.tabs.on_right";
 // Zen's "Show New Tab Button on Tab List" (`zen.tabs.show-newtab-vertical`):
 // the "+ New Tab" row above the unpinned tabs. On by default, like Zen.
 inline constexpr char kShowNewTabVertical[] = "koan.tabs.show_newtab_vertical";
+
+// Zen's "Move the new tab button to the top"
+// (`zen.view.show-newtab-button-top`): the "+ New Tab" row sits above a Space's
+// unpinned tabs and new tabs open at the top of the Space. Off: the row sits
+// after the last tab and new tabs open at the end of the Space. On by default,
+// like Zen.
+inline constexpr char kShowNewTabButtonTop[] =
+    "koan.view.show_newtab_button_top";
 
 // Whether the "Sidebar hidden!" toast was shown, after a drag of the
 // sidebar's edge hid the sidebar (`zen.view.compact.drag-collapse-hint-seen`).

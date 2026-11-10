@@ -14,9 +14,11 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/extension_context_menu_model.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/extensions_container.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_model.h"
+#include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
 #include "chrome/browser/ui/views/extensions/extension_context_menu_controller.h"
 #include "chrome/browser/ui/views/extensions/extensions_container_views.h"
 #include "chrome/browser/ui/views/extensions/extensions_menu_coordinator.h"
@@ -28,10 +30,15 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_extension_drop.h"
 #include "koan/browser/ui/views/koan_extensions_hooks.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/base/dragdrop/os_exchange_data_provider.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/compositor/layer.h"
@@ -104,10 +111,14 @@ class KoanSidebarExtensionsView::Button
     views::InkDrop::Get(this)->SetBaseColor(kColorKoanUrlPillForeground);
     views::InstallCircleHighlightPathGenerator(this);
     set_context_menu_controller(this);
+    set_drag_controller(owner_);
   }
   Button(const Button&) = delete;
   Button& operator=(const Button&) = delete;
-  ~Button() override { set_context_menu_controller(nullptr); }
+  ~Button() override {
+    set_drag_controller(nullptr);
+    set_context_menu_controller(nullptr);
+  }
 
   const ToolbarActionsModel::ActionId& action_id() const { return action_id_; }
 
@@ -144,6 +155,12 @@ class KoanSidebarExtensionsView::Button
         extensions::ExtensionContextMenuModel::ContextMenuSource::
             kToolbarAction);
     menu_->ShowContextMenuForView(source, point, source_type);
+  }
+
+  // views::View:
+  void OnDragDone() override {
+    views::MenuButton::OnDragDone();
+    owner_->OnButtonDragDone();
   }
 
   // ExtensionContextMenuController::Observer:
@@ -314,17 +331,181 @@ gfx::Size KoanSidebarExtensionsView::CalculatePreferredSize(
 }
 
 void KoanSidebarExtensionsView::Layout(PassKey) {
-  int x = 0;
-  for (size_t i = 0; i < buttons_.size(); ++i) {
-    Button* button = buttons_[i];
-    const bool fits = i < fitting_;
-    button->SetVisible(fits);
-    if (fits) {
-      button->SetBounds(x, (height() - ButtonSize().height()) / 2,
-                        ButtonSize().width(), ButtonSize().height());
-      x += ButtonSize().width();
+  for (size_t i = fitting_; i < buttons_.size(); ++i) {
+    buttons_[i]->SetVisible(false);
+  }
+  // A dragged button shows where it would drop.
+  std::vector<size_t> order;
+  if (const std::optional<size_t> from =
+          drop_preview_ ? FittingIndexOf(drop_preview_->action_id)
+                        : std::nullopt) {
+    order = ExtensionDropOrder(fitting_, *from, drop_preview_->slot);
+  } else {
+    for (size_t i = 0; i < fitting_; ++i) {
+      order.push_back(i);
     }
   }
+  int x = 0;
+  for (const size_t i : order) {
+    Button* button = buttons_[i];
+    button->SetVisible(true);
+    button->SetBounds(x, (height() - ButtonSize().height()) / 2,
+                      ButtonSize().width(), ButtonSize().height());
+    x += ButtonSize().width();
+  }
+}
+
+bool KoanSidebarExtensionsView::GetDropFormats(
+    int* formats,
+    std::set<ui::ClipboardFormatType>* format_types) {
+  return BrowserActionDragData::GetDropFormats(format_types);
+}
+
+bool KoanSidebarExtensionsView::AreDropTypesRequired() {
+  return BrowserActionDragData::AreDropTypesRequired();
+}
+
+bool KoanSidebarExtensionsView::CanDrop(const ui::OSExchangeData& data) {
+  return BrowserActionDragData::CanDrop(data, browser_view_->GetProfile());
+}
+
+int KoanSidebarExtensionsView::OnDragUpdated(const ui::DropTargetEvent& event) {
+  BrowserActionDragData data;
+  // Only along the buttons the drag can move between (the extension may
+  // also have gone meanwhile).
+  if (!data.Read(event.data()) || !FittingIndexOf(data.id()) ||
+      !GetModel(data.id())) {
+    ClearDropPreview();
+    return ui::DragDropTypes::DRAG_NONE;
+  }
+  const size_t slot = ExtensionDropSlot(GetMirroredXInView(event.x()),
+                                        ButtonSize().width(), fitting_);
+  if (!drop_preview_ || drop_preview_->action_id != data.id() ||
+      drop_preview_->slot != slot) {
+    drop_preview_ = DropPreview{data.id(), slot};
+    InvalidateLayout();
+  }
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+void KoanSidebarExtensionsView::OnDragExited() {
+  ClearDropPreview();
+}
+
+views::View::DropCallback KoanSidebarExtensionsView::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  BrowserActionDragData data;
+  if (!data.Read(event.data()) || !drop_preview_ ||
+      drop_preview_->action_id != data.id()) {
+    ClearDropPreview();
+    return base::NullCallback();
+  }
+  return base::BindOnce(&KoanSidebarExtensionsView::MovePinnedAction,
+                        weak_factory_.GetWeakPtr(), drop_preview_->action_id,
+                        drop_preview_->slot);
+}
+
+void KoanSidebarExtensionsView::WriteDragDataForView(views::View* sender,
+                                                     const gfx::Point& press_pt,
+                                                     ui::OSExchangeData* data) {
+  auto it = std::ranges::find_if(
+      buttons_, [sender](const Button* button) { return button == sender; });
+  if (it == buttons_.end()) {
+    return;
+  }
+  Button* button = *it;
+  // As the toolbar's (ExtensionsToolbarDesktop::WriteDragDataForView()).
+  if (ToolbarActionViewModel* model = GetModel(button->action_id())) {
+    data->provider().SetDragImage(
+        model->GetIcon(GetActiveContents(), ButtonSize())
+            .Rasterize(GetColorProvider()),
+        press_pt.OffsetFromOrigin());
+  }
+  BrowserActionDragData(button->action_id(),
+                        static_cast<size_t>(it - buttons_.begin()))
+      .Write(browser_view_->GetProfile(), data);
+  // Shown until the drag ends, wherever the pointer goes.
+  dragged_id_ = button->action_id();
+  UpdateReveal();
+}
+
+int KoanSidebarExtensionsView::GetDragOperationsForView(views::View* sender,
+                                                        const gfx::Point& p) {
+  // As the toolbar: Incognito doesn't change the profile's order.
+  return browser_view_->GetProfile()->IsOffTheRecord()
+             ? ui::DragDropTypes::DRAG_NONE
+             : ui::DragDropTypes::DRAG_MOVE;
+}
+
+bool KoanSidebarExtensionsView::CanStartDragForView(views::View* sender,
+                                                    const gfx::Point& press_pt,
+                                                    const gfx::Point& p) {
+  // As ExtensionsToolbarViewModel::IsActionDraggable(): pinned (every
+  // button is), not in Incognito, not force-pinned (ToolbarActionsModel
+  // keeps those at the end).
+  auto it = std::ranges::find_if(
+      buttons_, [sender](const Button* button) { return button == sender; });
+  const ToolbarActionsModel* model = model_observation_.IsObserving()
+                                         ? model_observation_.GetSource()
+                                         : nullptr;
+  return it != buttons_.end() && model &&
+         !browser_view_->GetProfile()->IsOffTheRecord() &&
+         !model->IsActionForcePinned((*it)->action_id());
+}
+
+std::optional<size_t> KoanSidebarExtensionsView::FittingIndexOf(
+    std::string_view action_id) const {
+  for (size_t i = 0; i < buttons_.size() && i < fitting_; ++i) {
+    if (buttons_[i]->action_id() == action_id) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+void KoanSidebarExtensionsView::OnButtonDragDone() {
+  dragged_id_.reset();
+  ClearDropPreview();
+  UpdateReveal();
+}
+
+void KoanSidebarExtensionsView::ClearDropPreview() {
+  if (drop_preview_) {
+    drop_preview_.reset();
+    InvalidateLayout();
+  }
+}
+
+void KoanSidebarExtensionsView::MovePinnedAction(
+    std::string action_id,
+    size_t slot,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image) {
+  ToolbarActionsModel* model = model_observation_.IsObserving()
+                                   ? model_observation_.GetSource()
+                                   : nullptr;
+  if (!model || browser_view_->GetProfile()->IsOffTheRecord() ||
+      slot >= fitting_ || !FittingIndexOf(action_id)) {
+    ClearDropPreview();
+    return;
+  }
+  // The slot's button's place in the model: the moved one goes there, the
+  // ones between shift over (pinned extensions without a button, which the
+  // model may list, stay put relative to the others).
+  const std::vector<ToolbarActionsModel::ActionId>& pinned =
+      model->pinned_action_ids();
+  const auto target = std::ranges::find(pinned, buttons_[slot]->action_id());
+  if (target == pinned.end() ||
+      std::ranges::find(pinned, action_id) == pinned.end()) {
+    ClearDropPreview();
+    return;
+  }
+  model->MovePinnedAction(action_id,
+                          static_cast<size_t>(target - pinned.begin()));
+  output_drag_op = ui::mojom::DragOperation::kMove;
+  // In the model's order now, without the preview's jump back.
+  Rebuild();
 }
 
 void KoanSidebarExtensionsView::OnToolbarActionAdded(
@@ -413,22 +594,45 @@ void KoanSidebarExtensionsView::ScheduleRebuild() {
 
 void KoanSidebarExtensionsView::Rebuild() {
   rebuild_pending_ = false;
-  for (Button* button : buttons_) {
-    button->ResetMenu();
-  }
-  buttons_.clear();
-  RemoveAllChildViews();
+  drop_preview_.reset();
   const ToolbarActionsModel* model = model_observation_.IsObserving()
                                          ? model_observation_.GetSource()
                                          : nullptr;
+  // In the toolbar's order (the user's).
+  std::vector<ToolbarActionsModel::ActionId> ids;
   if (model && model->actions_initialized()) {
-    // In the toolbar's order (the user's).
     for (const ToolbarActionsModel::ActionId& id : model->pinned_action_ids()) {
       if (GetModel(id)) {
-        buttons_.push_back(AddChildView(std::make_unique<Button>(this, id)));
+        ids.push_back(id);
       }
     }
   }
+  // The buttons that stay are kept, not remade: one may be the source of a
+  // drag that is running (a view removed from its widget gets no
+  // OnDragDone()).
+  std::vector<raw_ptr<Button>> buttons;
+  for (size_t i = 0; i < ids.size(); ++i) {
+    auto it = std::ranges::find_if(buttons_, [&](const Button* button) {
+      return button->action_id() == ids[i];
+    });
+    Button* button = it != buttons_.end()
+                         ? it->get()
+                         : AddChildView(std::make_unique<Button>(this, ids[i]));
+    if (it != buttons_.end()) {
+      buttons_.erase(it);
+    }
+    ReorderChildView(button, i);
+    buttons.push_back(button);
+  }
+  for (Button* gone : buttons_) {
+    gone->ResetMenu();
+    RemoveChildViewT(gone);
+  }
+  buttons_ = std::move(buttons);
+  if (dragged_id_ && std::ranges::find(ids, *dragged_id_) == ids.end()) {
+    dragged_id_.reset();
+  }
+  InvalidateLayout();
   UpdateButtons();
   UpdateFit();
 }
@@ -460,7 +664,8 @@ bool KoanSidebarExtensionsView::ShouldReveal() const {
   if (fitting_ == 0) {
     return false;
   }
-  if (sidebar_hovered_ || base::TimeTicks::Now() < press_hold_until_) {
+  if (sidebar_hovered_ || dragged_id_ ||
+      base::TimeTicks::Now() < press_hold_until_) {
     return true;
   }
   for (Button* button : buttons_) {

@@ -289,11 +289,22 @@ authenticated connection on the UI thread. A tab command passes `Classify()`, `T
 `ApplyParamFilter()` (with the tab's `ContextTracker` and the session's `StreamRegistry`), is re-serialised with a facade id and
 sent through the lease's `RunCommand()`; its answer gets the client's id back after the result hooks (`createIsolatedWorld` →
 the tracker, `printToPDF` → the stream registry). Every event passes `FilterEvent()` and, for context events, the tracker. Every
-command is audited (denied ones at once, forwarded ones when answered, with the duration). `Target.setAutoAttach` inside a tab
-succeeds and attaches nothing: child targets (OOPIFs, workers) are not proxied yet (T-cdp-3). Parsing and scrubbing run on the
+command is audited (denied ones at once, forwarded ones when answered, with the duration). **Child targets (child-targets PR):**
+`Target.setAutoAttach {flatten: true}` inside a tab (or a child) goes to the tab's own `TargetHandler`, without the agent's filter.
+Content asks the untrusted client's `MayAttachToRenderFrameHost` (OOPIFs) and `MayAttachToURL` (workers, and every navigation of
+a child) before it attaches one, so the reach of §4.4 holds per child; the facade checks each reported child again
+(`OnChildAttached`): only `iframe` and `worker` on an `IsReachableFrameUrl()` URL, at most 64 per tab; anything else (a shared or
+service worker, which outlives the tab and serves the user's other tabs of the site) is detached at once and never shown. In a
+**user's** tab (a one-site lease, §9.2) a child must also be on the granted site, when it attaches and whenever its URL changes
+(`targetInfoChanged`), so a cross-site payment or sign-in iframe there is never the agent's; an agent's own tab keeps every
+reachable child. An
+accepted child gets a session id of the facade's own, mapped to Chromium's; its commands pass the same policy, registry and
+filters as its tab's (paused, read-only, interstitial and site checks are the tab's) with their own context tracker and streams,
+and go on the tab's client in Chromium's session for it. Its `Target.attachedToTarget`/`detachedFromTarget`/`targetInfoChanged`
+reach the client in the parent's session with the browser context and opener taken out; it ends with its tab. Parsing and scrubbing run on the
 UI thread for now; moving them to a worker is the measurement of §4.1 (T-perf-1 in the PR's test plan). `Koan.openTab` and
 `Target.createTarget` call the `AgentTabOpener` the agent containers install (#202): every task gets a throwaway container,
-and the request carries only the client, the task's name and the URL, so nothing the agent sends can name a saved container. A
+unless the agent names a saved container the user granted it (#219, `savedContainer`; refused: `Koan.notGranted`). A
 null tab (no normal window with Spaces) is `Koan.noWindow`. `containers::EndAgentTask()` runs for a task on `Koan.endTask {task}`,
 and for each of a client's tasks when its last connection goes, on Stop all agents and on Agent ready off (not at quit: a throwaway
 container is in memory). A one-shot CLI command therefore ends its tasks when it disconnects: the CLI keeps one connection for a
@@ -930,7 +941,7 @@ iframes, shadow DOM and embedded widgets, plus a multi-step script per call. Opt
 
 | Option | What | Pros | Cons |
 |---|---|---|---|
-| **S1 (v1, free): CDP from the client** | agent-browser's own `snapshot` = `Accessibility.getFullAXTree` + `DOM`, flat sessions per frame, refs by `backendDOMNodeId` (D§4) | Works day one through the facade; nothing to build; the same tool agents already know | Needs the `Accessibility` domain to be reachable by an untrusted client (T-cdp-3) and the facade to pass child (OOPIF) target attach events; one CDP round trip per frame |
+| **S1 (v1, free): CDP from the client** | agent-browser's own `snapshot` = `Accessibility.getFullAXTree` + `DOM`, flat sessions per frame, refs by `backendDOMNodeId` (D§4) | Works day one through the facade; nothing to build; the same tool agents already know | Needs the `Accessibility` domain to be reachable by an untrusted client (T-cdp-3) and the facade to pass child (OOPIF) target attach events (built); one CDP round trip per frame |
 | **S2: `Koan.snapshot` / `Koan.act` in the browser process** | `WebContents::RequestAXTreeSnapshot(callback, ui::AXMode, max_nodes, timeout, ...)` (public, `web_contents.h:648`) builds a tree across out-of-process iframes and shadow DOM with no script injected; refs `@N` are bound to (frame, AX node id); `Koan.act {ref, click|fill|select|scroll|hover}` resolves bounds in the browser, scrolls into view, dispatches input | Closest to ego; one call returns a compact, token-cheap tree; no page-visible injection; no CDP domain exposure; the engine can drop sensitive nodes (password fields' values) | New code to maintain; we must not enable full platform accessibility in the tab (the snapshot AX mode must be a one-off, UNVERIFIED); Chrome's own actor does the equivalent with annotated page content (`chrome/browser/actor/`, `ToolRequest`s, not audited here: audit before building) |
 | S3: scripted batches | `koan run script.js` runs agent JS **in the CLI** (embedded QuickJS), exposing `tab.snapshot()/click()/fill()/wait()/capture()` that call S1/S2 over the socket | Fewer LLM round trips, no code in the page | A JS engine in the CLI; sandboxing it |
 
@@ -1012,6 +1023,26 @@ koan skill                       print the usage guide generated from the instal
 koan log [--follow]              the audit log
 koan revoke [id|--all]
 ```
+
+**Built (CLI PR, `src/cli/`, `//koan/cli:koan`):** `pair`, `status`, `tabs`, `open [url] [--task T] [--saved NAME]`,
+`snapshot`, `screenshot [-o f]`, `act <tab> click @ref | fill @ref text | press key | scroll px | navigate url`, `take-over [tab]`,
+`release` (alias `hand-back`), `end [--task T]`, `watch`, `skill`. **One connection for a task's life:** the first command that
+needs a task starts `koan __hold`, which authenticates (while the starting `koan` is still alive, so the agent is among its
+ancestors as at pairing), listens on `~/.koan/run/<id>.sock` (0700 dir, 0600 socket) and admits a command only as the browser
+admits `koan` (review F1): its peer is resolved with the gateway's own resolver (`LOCAL_PEERTOKEN` → executable, signature,
+ancestors, `koan_agent_peer`), and `DecideLocalClient()` (`koan_cli_admission.*`, `CompareIdentity`) requires the holder's
+own executable and signature and the agent the pairing recorded (`koan pair` resolves itself through a socket pair and stores
+`PinPeer()` in `client.json`) among its ancestors; `Unchanged()` is asked again before each of its requests. Anything else is
+closed unread and logged in `~/.koan/run/<id>.log`; with no resolver (not macOS) the holder does not start. It forwards every
+command over its one browser connection with ids of its own, sharing one flat session per tab and keeping the last 64 `Koan.*`
+events for `status`. `koan end` (or 30 minutes without a command) closes it, and with it every task. `snapshot` and `act` run on
+the CDP the facade allows (`Accessibility.getFullAXTree`, `DOM.getContentQuads`, `Input.*`, `Runtime.callFunctionOn` on a
+resolved node); phase 3's in-browser `Koan.snapshot`/`act` replaces them. Keys: an Ed25519 seed in
+`~/.koan/clients/<id>/key` (0600), never the label as a path. Copied into `Koan.app/Contents/Resources/bin/` (a 3-line hook
+in `chrome/BUILD.gn`) and signed by `mac_package.sh`. **Saved containers (#219):** `Koan.openTab`/`Target.createTarget` take
+`savedContainer` (the task defaults to its name); a refused choice, or a task already open in another container, is
+`Koan.notGranted`, never a throwaway tab. Not built: `watch` filtering, `log`, `revoke`, `relay`/`agent-browser` (§11),
+and the settings button that installs `~/.local/bin/koan` and the skill.
 
 **Skill file** (ego's integration model: shell commands, no SDK, no remote-debugging setup). The installed entry skill
 is a few lines ("run `koan skill` and follow it"); `koan skill` prints the guide from the installed version so it is
@@ -1159,6 +1190,13 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-focus-6 | HTTP auth, client-certificate request, an external-protocol link, `window.print()`, `beforeunload` | each becomes a `userNeeded` approval prompt, none a silent native sheet |
 | T-focus-7 | all of the above while the user is typing in a different window | the frontmost pid and the user's text are unchanged |
 | T-focus-8 | in an agent tab and in a driven user tab: `alert`, `confirm`, `prompt`, `window.focus()` from a timer, a service worker's `clients.focus()`; then Open and Dismiss each prompt; answer one dialog with `Page.handleJavaScriptDialog` instead; release a tab with a prompt waiting | no dialog, sheet or focus change until Open; Open brings the tab forward and shows Chrome's own dialog; Dismiss cancels (`confirm` returns false, the page stays on `beforeunload`, the 401 body shows); the agent's answer removes the prompt (`Koan.userNeededDone`); on release the dialog shows in its tab as in Chrome and the focus request is dropped |
+| T-cli-1 | the packaged app: `Koan.app/Contents/Resources/bin/koan version`; `codesign -dv` on it | runs; signed (ad hoc in CI); `codesign --verify --deep --strict` on the app passes |
+| T-cli-2 | from Claude Code: `koan pair --label "Claude Code"`, approve; `koan status` | the dialog names `koan` started by `claude`; status says paired, Koan running, no connection |
+| T-cli-3 | `koan open https://example.com`, then `koan snapshot <id>`, `koan act <id> click @ref`, `koan screenshot <id>` as separate commands | one tab, still open between commands (one holder in `ps`); the outline has refs; the click lands; the PNG shows the page while Koan is in the background |
+| T-cli-4 | `koan end`; then `koan open` again; then wait 30 minutes idle | `end` closes the tabs and clears the throwaway container; a new holder starts; the idle holder exits and its tabs close |
+| T-cli-5 | `koan open --saved bot` with and without the grant in Settings, and while another task has it open | granted: the saved container's logins; not granted or in use: `Koan.notGranted`, no tab opens |
+| T-cli-6 | `koan take-over`, Allow; `koan act` on it; `koan release <id>` | the take-over prompt; the act works on the granted site only; release gives the tab back |
+| T-cli-7 | with a holder running for Claude Code: connect to `~/.koan/run/<id>.sock` from `python3` and `nc -U`; run a copy of `koan` from `/tmp`; run the bundled `koan tabs` from a plain Terminal (not under claude) | each is closed before any request reaches Koan, with a `refused other-program` / `agent-missing` line in `~/.koan/run/<id>.log`; `koan tabs` from Claude Code still works; `client.json` holds the pinned `koan` and `claude` |
 | T-win-1 | Koan on another display / Space, `Koan.openTab` | no Space switch, no window raise |
 | T-win-2 | no window open (windowless Mac app) then `Koan.openTab` | window appears inactive, does not take focus |
 | **Security** | | |
@@ -1208,6 +1246,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-cdp-1 | Puppeteer `connect({browserWSEndpoint})` through the relay | attaches; limitations documented |
 | T-cdp-3 | `Accessibility.getFullAXTree` from an untrusted client, incl. OOPIF and shadow DOM (the domain itself is not trust-gated: review correction) | iframes and shadow roots present, or the facade proxies child targets |
 | T-cdp-4 | `Page.captureScreenshot` with `clip`/`captureBeyondViewport` on the user's visible tab | refused or no relayout flicker |
+| T-cdp-8 | in an agent tab with a cross-site iframe (a payment widget), a dedicated worker, a shared worker, a service worker and a `chrome-extension://` iframe: `Target.setAutoAttach {autoAttach, waitForDebuggerOnStart: true, flatten: true}` in the tab session, then `Runtime.evaluate` and `Accessibility.getFullAXTree` in each child; navigate the iframe to `chrome://version`; Puppeteer `page.frames()` and agent-browser `snapshot` | the OOPIF and the dedicated worker attach (and run after `runIfWaitingForDebugger`) and answer in their sessions; the shared and service worker and the extension frame never show; the iframe's session ends when it navigates to chrome://; Puppeteer lists the OOPIF; agent-browser's snapshot includes the iframe's content; in a readable user tab the child's answers are redacted like the tab's |
 | **UI** | | |
 | T-ui-1 | indicator in each layout: normal, compact (sidebar hidden), fullscreen, multiple windows | at least one persistent mark is visible; menu-bar item correct |
 | T-ui-2 | settings: toggle, client list, revoke, stop all, install CLI/skill | pref, socket, sessions follow the toggle immediately |

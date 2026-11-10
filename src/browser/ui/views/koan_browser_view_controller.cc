@@ -25,6 +25,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
@@ -51,6 +53,7 @@
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_updates.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_welcome.h"
@@ -251,6 +254,15 @@ void KoanBrowserViewController::OnViewAddedToWidget(
         widget && !widget_observation_.IsObserving()) {
       widget_observation_.Observe(widget);
     }
+    // Z15: Zen's toolbar has no account or profile button (its Firefox
+    // account button isn't placed; the private window label is hidden), so
+    // the multiple-toolbars layout has no avatar. ToolbarView::Init() (just
+    // run) is the only place upstream sets its visibility.
+    ToolbarView* toolbar = browser_view_->toolbar();
+    if (AvatarToolbarButton* avatar =
+            toolbar ? toolbar->avatar_toolbar_button() : nullptr) {
+      avatar->SetVisible(false);
+    }
     vertical_tabs_->OnAddedToWidget();
     compact_mode_->OnAddedToWidget();
     sidebar_tabs_->OnAddedToWidget();
@@ -263,6 +275,8 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     command_palette_->OnAddedToWidget();
     // After the workspace switcher: the media cards go above it.
     media_->OnAddedToWidget();
+    // Zen's update notification goes above the switcher too.
+    updates::OnBrowserWindowShown(browser_view_);
     download_animation_->OnAddedToWidget();
     loading_indicator_->OnAddedToWidget();
     welcome_->OnAddedToWidget();

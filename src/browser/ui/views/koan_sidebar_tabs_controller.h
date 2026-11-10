@@ -13,7 +13,7 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observation.h"
+#include "base/scoped_multi_source_observation.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
@@ -97,7 +97,8 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   void OnCollapseChanged(tabs::VerticalTabStripCollapseState state);
   // Zen shows the separator only while the workspace has unpinned tabs.
   void UpdateClearRow();
-  // Zen's zen.tabs.show-newtab-vertical (koan_prefs.h kShowNewTabVertical).
+  // Zen's zen.tabs.show-newtab-vertical and zen.view.show-newtab-button-top
+  // (koan_prefs.h kShowNewTabVertical, kShowNewTabButtonTop).
   void UpdateNewTabRow();
   void OpenNewTab();
   // Zen's clicks in the sidebar (ZenCustomizableUI, tabs-mjs.patch,
@@ -124,9 +125,12 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // are (ZenDragAndDrop: the first is skipped, "too annoying").
   int drag_moves_ = 0;
   raw_ptr<KoanSidebarTabRowsView> rows_ = nullptr;
+  // The New Tab row after the tabs, with Zen's
+  // zen.view.show-newtab-button-top off. Always with `rows_`, in their parent.
+  raw_ptr<KoanSidebarTabRowsView> end_rows_ = nullptr;
   bool rows_host_update_pending_ = false;
-  base::ScopedObservation<views::View, views::ViewObserver> rows_observation_{
-      this};
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      rows_observation_{this};
   base::CallbackListSubscription mode_subscription_;
   base::CallbackListSubscription collapse_subscription_;
   PrefChangeRegistrar pref_change_registrar_;

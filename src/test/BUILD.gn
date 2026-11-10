@@ -14,6 +14,7 @@ test("koan_unittests") {
     "//koan/browser/koan_library_logic_unittest.cc",
     "//koan/browser/koan_prefs_unittest.cc",
     "//koan/browser/koan_space_title_unittest.cc",
+    "//koan/browser/updates/koan_update_logic_unittest.cc",
     "//koan/browser/window_sync/koan_window_sync_model_unittest.cc",
   ]
   deps = [
@@ -28,6 +29,7 @@ test("koan_unittests") {
     "//koan/browser:library_logic",
     "//koan/browser:prefs",
     "//koan/browser:space_title",
+    "//koan/browser/updates:update_logic",
     "//koan/browser/window_sync:model",
     "//testing/gmock",
     "//testing/gtest",
@@ -49,6 +51,7 @@ source_set("browsertests_impl") {
     "browser/koan_session_data_browsertest.cc",
     "browser/koan_session_restore_browsertest.cc",
     "browser/koan_spaces_browsertest.cc",
+    "browser/koan_toolbar_browsertest.cc",
   ]
   deps = [
     "//base",
@@ -66,6 +69,7 @@ source_set("browsertests_impl") {
     "//chrome/test:test_support_ui",
     "//chrome/test/base:browser_tests_runner",
     "//components/prefs",
+    "//components/signin/public/base",
     "//components/tab_groups",
     "//components/tabs:public",
     "//content/public/browser",
@@ -74,6 +78,7 @@ source_set("browsertests_impl") {
     "//koan/browser/ui/views:impl",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/actions",
     "//ui/base:types",
     "//ui/gfx/geometry",
     "//url",

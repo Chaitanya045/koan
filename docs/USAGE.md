@@ -231,6 +231,8 @@ take at most 55 % of the pill; the others, and every extension with its access
 to the site and Manage Extensions, are under **Extensions** in the site's
 panel. An extension's keyboard shortcut opens its popup at its button, or at
 the site's icon. In compact mode the sidebar stays out while a popup is open.
+Drag a button along the pill to change the order (the toolbar's order, so
+every window follows; not in Incognito).
 
 | "Normal": editing in place, widened | Copied |
 |---|---|
@@ -264,6 +266,10 @@ in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing th
 last unpinned tab leaves the Essential selected, not the empty tab. In compact
 mode the sidebar stays shown while the empty tab is selected (only that
 tab: not a tab of yours on about:blank or a new tab page).
+
+A window also **opens** on the empty tab, as Zen's does: a new window (⌘N),
+the first launch, and a start on the New Tab page. A restored session keeps
+its own tabs, and a new tab page you open later is an ordinary tab.
 
 ## New tab page
 
@@ -323,7 +329,9 @@ every Space. Below them is the Space header (the active Space's icon and
 name), then the Space's pinned tabs, a thin line, **+ New Tab** (opens a
 tab at the top of the Space's other tabs) and the other tabs. The pinned
 tabs, the line, New Tab and the tabs scroll together; the Essentials and
-the Space header stay put. A tab's close button shows while you point at
+the Space header stay put. With **Move the new tab button to the top** off
+(Settings > Look and Feel > Vertical Tabs), **+ New Tab** sits after the last
+tab instead, and new tabs open at the end of the Space. A tab's close button shows while you point at
 it.
 
 While the selected tab loads, Zen's loading bar pulses at the top middle of
@@ -909,6 +917,29 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Updates
+
+Koan has no binary releases: you build it from your clone, and updating is
+`git pull && scripts/build.sh` ([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
+
+- **Update Complete!** After you start a build whose Chromium version or Koan
+  commit differs from the last one you started, the sidebar shows Zen's
+  notification for 15 seconds (it waits while you point at it). **What's new
+  in Koan** opens the commits between the two builds on GitHub; **Something
+  broke?** opens the issues.
+- **Update Available!** Once a day Koan asks GitHub for the newest commit of
+  your clone's develop branch (its `origin` remote, if that is on GitHub). If
+  it is newer than the commit your build was made from, the sidebar says so
+  once for that commit: what's new, **Copy the update command**, and how to
+  update. Koan never downloads or installs anything.
+- **Privacy:** the check is one `GET` to
+  `api.github.com/repos/<owner>/<repo>/commits?sha=develop&per_page=1`. It
+  sends no cookies or credentials, and nothing about you or your build;
+  GitHub sees your IP address, as for any page. No telemetry. Incognito
+  windows never start it.
+- **Turn off:** Settings > Look and Feel > Updates: **Check for updates** and
+  **Show a notification after Koan was updated**.
+
 ## Haptic feedback (macOS)
 
 As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
@@ -1082,6 +1113,19 @@ an `alert`/`confirm`/`prompt`, a link that opens an app, a sign-in prompt,
 asks you to sign in · Open · Dismiss"). **Open** switches to the tab and shows
 it as Chrome would; **Dismiss** says no (stay on the page, no sign-in, no
 print). The agent is told, and can still answer a dialog itself.
+
+### The `koan` tool
+
+Agents use Koan through `koan`, in `Koan.app/Contents/Resources/bin/`
+(`out/Koan/koan` in a build). `koan pair --label "Claude Code"` asks you to
+approve the agent; then `koan open <url>`, `koan snapshot <tab>`,
+`koan act <tab> click @12`, `koan screenshot <tab>`, `koan take-over` (asks
+you for the tab you're on) and `koan end`. `koan skill` prints the guide
+agents follow; `src/cli/skill/SKILL.md` is the entry for an agent's skills
+folder. The agent's tabs stay open between its commands, for as long as its
+task lasts: `koan end`, or 30 minutes without a command, closes them.
+`koan open --saved <name>` uses a saved container you allowed that agent;
+otherwise it is refused, never opened in a throwaway one instead.
 
 ## Install in the app menu
 
