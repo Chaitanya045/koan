@@ -292,7 +292,12 @@ the tracker, `printToPDF` → the stream registry). Every event passes `FilterEv
 command is audited (denied ones at once, forwarded ones when answered, with the duration). `Target.setAutoAttach` inside a tab
 succeeds and attaches nothing: child targets (OOPIFs, workers) are not proxied yet (T-cdp-3). Parsing and scrubbing run on the
 UI thread for now; moving them to a worker is the measurement of §4.1 (T-perf-1 in the PR's test plan). `Koan.openTab` and
-`Target.createTarget` call the `AgentTabOpener` the agent containers install, and answer `Koan.unavailable` until they do.
+`Target.createTarget` call the `AgentTabOpener` the agent containers install (#202): every task gets a throwaway container,
+and the request carries only the client, the task's name and the URL, so nothing the agent sends can name a saved container. A
+null tab (no normal window with Spaces) is `Koan.noWindow`. `containers::EndAgentTask()` runs for a task on `Koan.endTask {task}`,
+and for each of a client's tasks when its last connection goes, on Stop all agents and on Agent ready off (not at quit: a throwaway
+container is in memory). A one-shot CLI command therefore ends its tasks when it disconnects: the CLI keeps one connection for a
+task's life (`koan shell`, the relay).
 
 ### 4.3 Method policy: per-method tables, **unlisted = deny**
 

@@ -211,6 +211,7 @@ if (is_posix) {
       "//content/public/browser",
       "//content/public/common",
       "//koan/browser:prefs",
+      "//koan/browser/containers",
       "//ui/base",
       "//ui/gfx/geometry",
       "//ui/views",

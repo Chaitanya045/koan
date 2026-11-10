@@ -293,7 +293,7 @@ void AgentControlService::Update() {
     host_.AsyncCall(&GatewayHost::Stop);
     // Nothing is kept awake for an agent once Agent ready is off (T-ready-2).
     if (forwarder_) {
-      forwarder_->Reset();
+      forwarder_->Reset(/*end_tasks=*/true);
     }
     AgentLeaseManager::Get().DetachAll();
     return;
@@ -313,7 +313,7 @@ void AgentControlService::StopAllAgents() {
       local_state_->GetBoolean(prefs::kAgentControlEnabled) &&
       local_state_->GetBoolean(::prefs::kDevToolsRemoteDebuggingAllowed);
   if (forwarder_) {
-    forwarder_->Reset();
+    forwarder_->Reset(/*end_tasks=*/true);
   }
   AgentLeaseManager::Get().DetachAll();
   host_.AsyncCall(&GatewayHost::ForgetAll)

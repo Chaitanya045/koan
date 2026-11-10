@@ -58,6 +58,7 @@ class FakeBackend : public FacadeBackend {
     opened_urls.push_back(url);
     std::move(done).Run(std::nullopt, "Koan.unavailable", "no containers");
   }
+  void EndTask(const std::string& task) override { ended.push_back(task); }
   bool CloseTab(const std::string& target_id) override {
     closed.push_back(target_id);
     return true;
@@ -81,6 +82,7 @@ class FakeBackend : public FacadeBackend {
   std::vector<Sent> sent;
   std::vector<GURL> opened_urls;
   std::vector<std::string> closed;
+  std::vector<std::string> ended;
   std::vector<AuditRecord> audits;
   int answered = 0;
 };
@@ -381,6 +383,14 @@ TEST_F(KoanAgentFacadeTest, OpeningATabChecksTheUrlFirst) {
   Send(3, "Target.createTarget",
        base::DictValue().Set("url", "about:blank").Set("newWindow", true));
   EXPECT_EQ(ErrorCode(3), "Koan.notPermitted");
+}
+
+TEST_F(KoanAgentFacadeTest, EndingATaskDefaultsToTheThrowawayTask) {
+  Send(1, "Koan.endTask");
+  Send(2, "Koan.endTask", base::DictValue().Set("task", "research"));
+  EXPECT_EQ(backend_.ended,
+            (std::vector<std::string>{CdpFacade::kDefaultTask, "research"}));
+  EXPECT_TRUE(Answer(2)->FindDict("result"));
 }
 
 TEST_F(KoanAgentFacadeTest, ClosesOnlyItsOwnAgentTabs) {

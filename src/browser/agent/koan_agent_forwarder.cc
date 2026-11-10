@@ -23,6 +23,7 @@
 #include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "koan/browser/containers/koan_agent_containers.h"
 
 namespace koan::agent {
 
@@ -151,14 +152,22 @@ class AgentForwarder::Connection final : public FacadeBackend {
                           "build does not have yet");
       return;
     }
+    // Only the client, the task's name and the URL: the containers give every
+    // task a throwaway container, and nothing the agent sends can name a saved
+    // one (a saved container is a separate, user-approved grant).
     AgentTabRequest request;
     request.client_id = client_id_;
     request.task = task;
     request.url = url;
+    forwarder_->NoteTask(client_id_, task);
     opener->OpenAgentTab(
         request,
         base::BindOnce(&AgentForwarder::Connection::OnOpened,
                        weak_factory_.GetWeakPtr(), task, std::move(done)));
+  }
+
+  void EndTask(const std::string& task) override {
+    forwarder_->EndTask(client_id_, task);
   }
 
   bool CloseTab(const std::string& target_id) override {
@@ -205,8 +214,10 @@ class AgentForwarder::Connection final : public FacadeBackend {
                 OpenTabCallback done,
                 content::WebContents* contents) {
     if (!contents) {
-      std::move(done).Run(std::nullopt, "Koan.unavailable",
-                          "the tab could not be opened");
+      // The containers open agent tabs only in a normal window with Spaces.
+      std::move(done).Run(std::nullopt, "Koan.noWindow",
+                          "no Koan window with Spaces is open to put the "
+                          "agent's tab in; open one and try again");
       return;
     }
     const std::string target_id =
@@ -241,7 +252,8 @@ AgentForwarder::AgentForwarder(SendCallback send, base::FilePath log_dir)
 
 AgentForwarder::~AgentForwarder() {
   AgentLeaseManager::Get().SetOpenedTabHandler({});
-  Reset();
+  // The app is quitting: throwaway containers are in memory and go with it.
+  Reset(/*end_tasks=*/false);
 }
 
 AgentForwarder::Connection* AgentForwarder::ConnectionFor(
@@ -278,13 +290,23 @@ void AgentForwarder::OnClientMessage(uint64_t connection_id,
 }
 
 void AgentForwarder::OnClientDisconnected(uint64_t connection_id) {
-  // The client's agent tabs stay its own (it may reconnect: agent-browser's
-  // daemon does), and keep their lease until the tab closes, the task ends or
-  // the client is stopped; only the capturer follows the hold-off.
-  connections_.erase(connection_id);
+  auto it = connections_.find(connection_id);
+  if (it == connections_.end()) {
+    return;
+  }
+  const std::string client_id = it->second->client_id();
+  connections_.erase(it);
+  // The client's last connection went: its tasks end, and their throwaway
+  // containers are cleared (an agent that reconnects starts new ones).
+  for (const auto& [id, connection] : connections_) {
+    if (connection->client_id() == client_id) {
+      return;
+    }
+  }
+  EndClient(client_id);
 }
 
-void AgentForwarder::Reset() {
+void AgentForwarder::Reset(bool end_tasks) {
   connections_.clear();
   std::vector<std::string> targets;
   for (const auto& [target_id, watcher] : tabs_) {
@@ -294,6 +316,55 @@ void AgentForwarder::Reset() {
     RemoveTab(target_id, /*destroyed=*/false);
   }
   labels_.clear();
+  std::map<std::string, std::set<std::string>, std::less<>> tasks =
+      std::move(tasks_);
+  tasks_.clear();
+  if (end_tasks) {
+    for (const auto& [client_id, names] : tasks) {
+      for (const std::string& task : names) {
+        containers::EndAgentTask(client_id, task);
+      }
+    }
+  }
+}
+
+void AgentForwarder::NoteTask(const std::string& client_id,
+                              const std::string& task) {
+  tasks_[client_id].insert(task);
+}
+
+void AgentForwarder::EndTask(const std::string& client_id,
+                             const std::string& task) {
+  // Out of the registry first (the facades say the tabs are gone), then the
+  // containers close the tabs and clear the container.
+  for (const std::string& target_id : registry_.TargetsFor(client_id)) {
+    const TargetEntry* entry = registry_.Find(target_id);
+    if (entry && entry->agent_owned && entry->task == task) {
+      RemoveTab(target_id, /*destroyed=*/false);
+    }
+  }
+  if (auto it = tasks_.find(client_id); it != tasks_.end()) {
+    it->second.erase(task);
+    if (it->second.empty()) {
+      tasks_.erase(it);
+    }
+  }
+  containers::EndAgentTask(client_id, task);
+}
+
+void AgentForwarder::EndClient(const std::string& client_id) {
+  for (const std::string& target_id : registry_.TargetsFor(client_id)) {
+    RemoveTab(target_id, /*destroyed=*/false);
+  }
+  auto it = tasks_.find(client_id);
+  if (it == tasks_.end()) {
+    return;
+  }
+  const std::set<std::string> names = std::move(it->second);
+  tasks_.erase(it);
+  for (const std::string& task : names) {
+    containers::EndAgentTask(client_id, task);
+  }
 }
 
 content::WebContents* AgentForwarder::ContentsFor(

@@ -85,6 +85,9 @@ class FacadeBackend {
   virtual void OpenTab(const std::string& task,
                        const GURL& url,
                        OpenTabCallback done) = 0;
+  // Koan.endTask: the task's tabs close and its throwaway container is
+  // cleared (containers::EndAgentTask()).
+  virtual void EndTask(const std::string& task) = 0;
   // Closes an agent tab of the client. False if it could not.
   virtual bool CloseTab(const std::string& target_id) = 0;
   // Browser.getVersion's answer.

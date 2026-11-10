@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -54,10 +55,12 @@ class AgentForwarder {
   void OnClientMessage(uint64_t connection_id, AgentMessage message);
   void OnClientDisconnected(uint64_t connection_id);
 
-  // Stop all agents, Agent ready off, or the app quits: every connection's
-  // facade goes, every tab leaves the registry and every lease is released.
-  // Agent tabs stay open as ordinary background tabs.
-  void Reset();
+  // Stop all agents or Agent ready off (`end_tasks`), or the app quits: every
+  // connection's facade goes, every tab leaves the registry and every lease is
+  // released. With `end_tasks` every task's container ends too
+  // (containers::EndAgentTask(): its tabs close and a throwaway container is
+  // cleared).
+  void Reset(bool end_tasks);
 
   const TargetRegistry& registry() const { return registry_; }
 
@@ -75,6 +78,12 @@ class AgentForwarder {
                           const std::string& client_id,
                           const std::string& task);
   void RemoveTab(const std::string& target_id, bool destroyed);
+  // The tasks a client opened tabs for, so that each gets
+  // containers::EndAgentTask() when it ends (Koan.endTask), when the client's
+  // last connection goes, on Stop and on Agent ready off.
+  void NoteTask(const std::string& client_id, const std::string& task);
+  void EndTask(const std::string& client_id, const std::string& task);
+  void EndClient(const std::string& client_id);
   // From the watcher: the tab closed, or its title or URL changed.
   void OnTabDestroyed(const std::string& target_id);
   void OnTabChanged(const std::string& target_id);
@@ -90,6 +99,7 @@ class AgentForwarder {
   std::map<uint64_t, std::unique_ptr<Connection>> connections_;
   std::map<std::string, std::unique_ptr<TabWatcher>, std::less<>> tabs_;
   std::map<std::string, std::string, std::less<>> labels_;
+  std::map<std::string, std::set<std::string>, std::less<>> tasks_;
   base::SequenceBound<AuditLog> audit_;
   base::WeakPtrFactory<AgentForwarder> weak_factory_{this};
 };

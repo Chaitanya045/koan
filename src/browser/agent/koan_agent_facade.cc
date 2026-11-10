@@ -315,6 +315,13 @@ void CdpFacade::HandleKoanMethod(AgentMessage& message) {
     OpenTab(message, /*cdp_shape=*/false);
   } else if (message.method == "Koan.closeTab") {
     CloseTarget(message);
+  } else if (message.method == "Koan.endTask") {
+    const std::string* task = message.params.FindString("task");
+    const std::string name = task && !task->empty() ? *task : kDefaultTask;
+    AuditCommand(message.method, "", "", AuditOutcome::kOk, base::TimeDelta());
+    // Answer first: ending the task detaches its sessions.
+    Reply(message.id, message.session_id, base::DictValue());
+    backend_->EndTask(name);
   } else {
     AuditCommand(message.method, "", "", AuditOutcome::kDenied,
                  base::TimeDelta());
