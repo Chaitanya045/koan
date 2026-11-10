@@ -42,6 +42,7 @@ class KoanUrlBarController;
 class KoanVerticalTabsPolicy;
 class KoanWelcome;
 class KoanWindowDragController;
+class KoanWindowSyncClient;
 class KoanWorkspaceController;
 
 // Per-window Koan state and behaviour. Owned by its BrowserView through a
@@ -95,6 +96,7 @@ class KoanBrowserViewController : public views::ViewObserver,
     return download_animation_.get();
   }
   KoanWelcome* welcome() const { return welcome_.get(); }
+  KoanWindowSyncClient* window_sync() const { return window_sync_.get(); }
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
   // Koan features' data for this window's session (koan_session_data.h).
   std::map<std::string, std::string>& session_data() { return session_data_; }
@@ -143,6 +145,8 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanLoadingIndicator> loading_indicator_;
   std::unique_ptr<KoanWindowDragController> window_drag_;
   std::unique_ptr<KoanWelcome> welcome_;
+  // Zen's window sync: after the Spaces and pinned tabs it reconciles.
+  std::unique_ptr<KoanWindowSyncClient> window_sync_;
   // "An agent is connected"; it also starts agent control with the first
   // window (koan/browser/agent/koan_agent_service.h).
   std::unique_ptr<KoanAgentIndicator> agent_indicator_;

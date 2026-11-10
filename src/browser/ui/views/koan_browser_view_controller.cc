@@ -55,6 +55,7 @@
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_drag.h"
+#include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/class_property.h"
 #include "ui/views/widget/widget.h"
@@ -156,6 +157,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
           base::BindRepeating(&KoanDownloadAnimation::OnPagePressed,
                               base::Unretained(download_animation_.get())))),
       welcome_(std::make_unique<KoanWelcome>(browser_view)),
+      window_sync_(std::make_unique<KoanWindowSyncClient>(browser_view)),
       agent_indicator_(std::make_unique<KoanAgentIndicator>(browser_view)),
       shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)),
       command_palette_(std::make_unique<KoanCommandPalette>(this)) {
@@ -207,6 +209,8 @@ void KoanBrowserViewController::TearDown() {
   observations_.RemoveAllObservations();
   // First: from here on nothing touches the sidebar's state.
   vertical_tabs_->OnBrowserViewDestroying();
+  // Before the Spaces and pinned tabs it reconciles go.
+  window_sync_->OnBrowserViewDestroying();
   command_palette_->OnBrowserViewDestroying();
   shortcuts_->OnBrowserViewDestroying();
   compact_mode_->OnBrowserViewDestroying();
@@ -249,6 +253,8 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     sidebar_tabs_->OnAddedToWidget();
     workspaces_->OnAddedToWidget();
     folders_->OnAddedToWidget();
+    // Once the window's Spaces are set up.
+    window_sync_->OnAddedToWidget();
     theme_->OnAddedToWidget();
     shortcuts_->OnAddedToWidget();
     command_palette_->OnAddedToWidget();
