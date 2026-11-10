@@ -51,6 +51,7 @@
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -69,7 +70,9 @@ namespace koan {
 
 namespace {
 
-constexpr int kButtonSize = 28;
+// Zen's back / forward / reload in the sidebar's top row (zen-mac-spec.md
+// 2.3, measured on Zen 1.24b): 31x29, side by side with no gap (31pt apart).
+constexpr gfx::Size kButtonSize(31, 29);
 // Gap between the navigation buttons and what's before them in the row.
 constexpr int kTrailingGap = 4;
 
@@ -170,7 +173,7 @@ KoanSidebarNavButtons::KoanSidebarNavButtons(BrowserView* browser_view)
         icon, kToolbarIconSize);
     button->SetTooltipText(name);
     button->GetViewAccessibility().SetName(name);
-    button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
+    button->SetPreferredSize(kButtonSize);
     return AddChildView(std::move(button));
   };
   back_ = nav_button(vector_icons::kBackArrowChromeRefreshOldIcon, IDC_BACK,
