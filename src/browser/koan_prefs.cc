@@ -62,6 +62,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kMediaControlsEnabled, true);
   registry->RegisterBooleanPref(kDownloadAnimation, true);
   registry->RegisterBooleanPref(kDragWindowFromContent, true);
+  registry->RegisterBooleanPref(kRenameTabs, true);
+  registry->RegisterBooleanPref(kLoadingIndicator, true);
+  registry->RegisterBooleanPref(kHideTabThrobber, true);
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
   registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);

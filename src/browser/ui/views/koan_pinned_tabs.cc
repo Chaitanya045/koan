@@ -1601,7 +1601,18 @@ bool HandleTabCloseRequest(const tabs::TabInterface* tab) {
 }
 
 void AdjustTabData(const tabs::TabInterface* tab, tabs::TabData& data) {
-  data.should_hide_throbber |= !ShowsTabThrobber();
+  // Zen's zen.theme.hide-tab-throbber (ShowsTabThrobber()): the favicon
+  // stays while the page loads, without Chromium's spinner or its 250 ms
+  // shrinking of the favicon; the page-load bar shows the load instead. A
+  // network error keeps its state (the tab's accessible name says so).
+  if (!ShowsTabThrobber(tab->GetContents()
+                            ? tab->GetContents()->GetBrowserContext()
+                            : nullptr)) {
+    data.should_hide_throbber = true;
+    if (data.network_state != tabs::TabNetworkState::kError) {
+      data.network_state = tabs::TabNetworkState::kNone;
+    }
+  }
   const KoanTabState* state =
       features::IsPinnedTabsEnabled() ? GetTabState(tab) : nullptr;
   if (!state) {

@@ -246,6 +246,16 @@ inline constexpr char kDownloadAnimation[] =
 inline constexpr char kDragWindowFromContent[] =
     "koan.view.drag_window_from_content";
 
+// Renaming any sidebar tab by double-clicking its label, and "Change Label…"
+// in its menu (zen.tabs.rename-tabs).
+inline constexpr char kRenameTabs[] = "koan.tabs.rename_tabs";
+// The page-load progress bar above the selected tab's page
+// (zen.view.enable-loading-indicator).
+inline constexpr char kLoadingIndicator[] = "koan.view.loading_indicator";
+// Whether sidebar tabs keep their favicon while loading instead of
+// Chromium's spinner (zen.theme.hide-tab-throbber).
+inline constexpr char kHideTabThrobber[] = "koan.theme.hide_tab_throbber";
+
 // Whether the bookmarks bar may show at all. Zen has none, so Koan's default
 // is no bar anywhere (also on the new tab page, and after an import, which
 // would turn Chromium's own setting on); Koan's settings turn it on. Gated in

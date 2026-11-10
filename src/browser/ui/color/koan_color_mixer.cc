@@ -262,6 +262,17 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanDownloadTileShadow] = {
       SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
 
+  // The page-load progress bar (#zen-loading-progress-bar): color-mix(in
+  // srgb, --zen-primary-color, light-dark(black, white) at 50% 70%), i.e.
+  // the primary colour at 30% and the half-transparent black (white) at 70%:
+  // 65% opaque, 46% of the way from that black (white) to the primary. The
+  // long load's track is black at 10% (white in dark mode).
+  const SkColor loading_mix = dark ? SK_ColorWHITE : SK_ColorBLACK;
+  mixer[kColorKoanLoadingBar] = {
+      SkColorSetA(color_utils::AlphaBlend(primary, loading_mix, 0.3f / 0.65f),
+                  Alpha(0.65f))};
+  mixer[kColorKoanLoadingBarTrack] = {SkColorSetA(loading_mix, Alpha(0.1f))};
+
   // The welcome screen (zen-welcome.css): Koan's calm green gradient where
   // Zen plays a video, white title, Zen's green start button; the pages in
   // Zen's light-dark() greys, the accent buttons in the browser's accent.

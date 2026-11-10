@@ -19,8 +19,8 @@ namespace koan {
 // url") after the tab's pinned state or URL changed. No-op without a row.
 void UpdateTabRow(const tabs::TabInterface* tab);
 
-// Whether `tab`'s row shows a label to rename: not an Essential, not in a
-// collapsed sidebar.
+// Whether `tab`'s row shows a label to rename (not an Essential, not in a
+// collapsed sidebar) and renaming is on (prefs::kRenameTabs).
 bool CanRenameTabRow(const tabs::TabInterface* tab);
 // Starts editing `tab`'s label in its row (Zen's inline rename). Returns
 // false if the row can't.
