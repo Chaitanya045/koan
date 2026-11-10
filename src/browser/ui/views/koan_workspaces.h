@@ -240,6 +240,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void ApplySpaceColor();
   // Asks, then closes the Space's tabs and shows another Space.
   void DeleteSpace(const tab_groups::TabGroupId& space);
+  // Window sync (KoanWindowSyncClient): `space` was deleted in another
+  // window. Closes its tabs at once, without asking and without adding them
+  // to Recently Closed (that window did).
+  void DeleteSpaceForSync(const tab_groups::TabGroupId& space);
   // Puts `space` at position `to` among the Spaces (dragging a card in the
   // Library's Spaces, like Zen's).
   void MoveSpace(const tab_groups::TabGroupId& space, int to);
@@ -458,6 +462,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   PrefService* GetPrefs() const;
 
   void OnDeleteConfirmed(const tab_groups::TabGroupId& space, bool confirmed);
+  void CloseSpaceTabs(const tab_groups::TabGroupId& space,
+                      uint32_t close_types);
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<KoanSpaceHeaderView> header_ = nullptr;

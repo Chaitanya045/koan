@@ -446,6 +446,16 @@ names, icons and colours; each with a new tab, the startup pages in the
 Space that was active). So does a window opened on macOS after you closed
 the last one.
 
+**Every window has the same Spaces** (Zen's window sync,
+`koan.window_sync.enabled`): creating, renaming, re-icon'ing, re-theming,
+reordering or deleting a Space in one window does the same in the others.
+A new window (⌘N) gets all your Spaces; the Space it opened in becomes one
+of them, keeping its tabs. Each window still shows its own Space and has its
+own tabs in it (only pinned tabs and Essentials are shared, Zen's
+`sync-only-pinned-tabs`: `koan.window_sync.sync_only_pinned`). A Space
+created in another window shows a new tab here. Private windows have no
+Spaces, and an agent container's Space stays in its window.
+
 Chrome's tab group commands do Zen's thing in a Space window: ⌘⌃P
 (New tab group) opens the Create-a-Space form, ⌘⌃W (Close group) asks to
 delete the Space, ⌘⌃X / ⌘⌃Z go to the next / previous Space, ⌘⌃C opens a

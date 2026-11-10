@@ -83,6 +83,43 @@ Plan<SpaceRecord> PlanSpaces(const std::vector<SpaceRecord>& local,
   return PlanRecords(local, target);
 }
 
+std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
+                                     const std::vector<SpaceRecord>& target,
+                                     const std::set<std::string>& taken) {
+  std::vector<bool> free(target.size());
+  for (size_t i = 0; i < target.size(); ++i) {
+    free[i] = !taken.contains(target[i].id);
+  }
+  std::vector<std::string> adopted(local.size());
+  // Same name and icon first, so a window that recreated the Spaces from
+  // prefs::kWorkspaceList keeps each one's tabs in it.
+  for (size_t l = 0; l < local.size(); ++l) {
+    for (size_t t = 0; t < target.size(); ++t) {
+      if (free[t] && target[t].name == local[l].name &&
+          target[t].icon == local[l].icon) {
+        adopted[l] = target[t].id;
+        free[t] = false;
+        break;
+      }
+    }
+  }
+  size_t next = 0;
+  for (size_t l = 0; l < local.size(); ++l) {
+    if (!adopted[l].empty()) {
+      continue;
+    }
+    while (next < target.size() && !free[next]) {
+      ++next;
+    }
+    if (next == target.size()) {
+      break;
+    }
+    adopted[l] = target[next].id;
+    free[next] = false;
+  }
+  return adopted;
+}
+
 Plan<ItemRecord> PlanItems(const std::vector<ItemRecord>& local,
                            const std::vector<ItemRecord>& target) {
   return PlanRecords(local, target);
