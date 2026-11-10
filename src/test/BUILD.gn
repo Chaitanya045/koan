@@ -72,6 +72,7 @@ source_set("browsertests_impl") {
     "//koan/browser/ui/views:impl",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/base:types",
     "//ui/gfx/geometry",
     "//url",
   ]

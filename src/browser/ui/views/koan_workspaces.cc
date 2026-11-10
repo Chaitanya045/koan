@@ -25,6 +25,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -74,6 +75,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
@@ -155,6 +157,12 @@ base::ListValue StoredPinnedTabs(TabStripModel* model,
     content::WebContents* contents = tab ? tab->GetContents() : nullptr;
     if (!contents || !IsPinnedInSpace(tab) ||
         !contents->GetLastCommittedURL().is_valid()) {
+      continue;
+    }
+    // A folder's tabs are stored with their folder (koan.folders.list), which
+    // brings them back into it.
+    if (features::IsFoldersEnabled() &&
+        !GetTabSessionData(contents, kFolderSessionKey).empty()) {
       continue;
     }
     list.Append(StoredTab(contents->GetLastCommittedURL(), contents->GetTitle(),
@@ -697,6 +705,15 @@ KoanWorkspaceController::GetSpace(const tab_groups::TabGroupId& space) const {
                    .active = GetActiveSpace() == space};
 }
 
+std::string KoanWorkspaceController::GetStoredSpaceId(
+    const tab_groups::TabGroupId& space) {
+  auto [it, inserted] = stored_space_ids_.try_emplace(space);
+  if (inserted) {
+    it->second = base::Uuid::GenerateRandomV4().AsLowercaseString();
+  }
+  return it->second;
+}
+
 base::CallbackListSubscription
 KoanWorkspaceController::AddSpacesChangedCallback(
     base::RepeatingClosure callback) {
@@ -802,23 +819,32 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
                                           const std::u16string& icon,
                                           const SpaceTheme& theme) {
   TabStripModel* model = tab_strip_model();
-  // Zen puts a new Space right after the active one. (Creating a group
-  // leaves focus mode, so remember which one that is.)
-  const std::optional<tab_groups::TabGroupId> active = GetActiveSpace();
   content::WebContents* contents = chrome::AddAndReturnTabAt(
-      browser_view_->browser(), GURL(), InsertionIndexAfter(active),
+      browser_view_->browser(), GURL(), InsertionIndexAfter(GetActiveSpace()),
       /*foreground=*/false);
   const int index = model->GetIndexOfWebContents(contents);
   if (index == TabStripModel::kNoTab) {
     return;
   }
-  const tabs::TabHandle tab = model->GetTabAtIndex(index)->GetHandle();
-  const tab_groups::TabGroupId space = NewSpaceGroup({index});
-  WriteSpace(space, {.name = name.empty() ? kDefaultSpaceName : name,
-                     .icon = icon,
-                     .theme = theme});
-  // The tab opened in the active Space, and grouping it may have moved it
-  // past the next one.
+  CreateSpaceFromTabs({index}, {.name = name, .icon = icon, .theme = theme});
+}
+
+tab_groups::TabGroupId KoanWorkspaceController::CreateSpaceFromTabs(
+    const std::vector<int>& indices,
+    const SpaceData& data) {
+  TabStripModel* model = tab_strip_model();
+  // Zen puts a new Space right after the active one. (Creating a group
+  // leaves focus mode, so remember which one that is.)
+  const std::optional<tab_groups::TabGroupId> active = GetActiveSpace();
+  const tabs::TabHandle tab = model->GetTabAtIndex(indices.back())->GetHandle();
+  const tab_groups::TabGroupId space = NewSpaceGroup(indices);
+  SpaceData stored = data;
+  if (stored.name.empty()) {
+    stored.name = kDefaultSpaceName;
+  }
+  WriteSpace(space, stored);
+  // The tabs were in the active Space, or a new one opened there, and
+  // grouping them may have moved them past the next one.
   if (active && GetSpace(*active)) {
     const int after_active = InsertionIndexAfter(active);
     if (static_cast<int>(
@@ -829,6 +855,7 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
   }
   last_active_tabs_[space] = tab;
   SwitchTo(space);
+  return space;
 }
 
 tab_groups::TabGroupId KoanWorkspaceController::CreateBackgroundSpace(
@@ -1213,7 +1240,7 @@ void KoanWorkspaceController::AddDefaultCreateMenuEntries() {
   create_space.run = base::BindRepeating(
       &KoanWorkspaceController::ShowCreateForm, base::Unretained(this));
   AddCreateMenuEntry(std::move(create_space));
-  // (Folders add "New Folder" here.)
+  // (Folders add "Create Folder" after it: KoanFolderController.)
   const auto command = [&](std::u16string label, const gfx::VectorIcon& icon,
                            int id) {
     CreateMenuEntry entry;
@@ -1759,6 +1786,7 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
     }
   }
   std::vector<std::pair<SpaceData, bool>> stored;
+  std::vector<std::string> stored_ids;
   std::vector<std::vector<StoredTab>> pinned;
   for (const base::Value& entry :
        profile->GetPrefs()->GetList(prefs::kWorkspaceList)) {
@@ -1779,6 +1807,14 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
                   .icon = std::move(icon),
                   .theme = {.stored = theme ? *theme : std::string()}},
         dict->FindBool("active").value_or(false));
+    // Its id (none in an entry stored before Spaces had ids; a duplicate in
+    // a hand-edited pref is dropped).
+    const std::string* stored_id = dict->FindString("id");
+    stored_ids.push_back(
+        stored_id && base::Uuid::ParseLowercase(*stored_id).is_valid() &&
+                !std::ranges::contains(stored_ids, *stored_id)
+            ? *stored_id
+            : std::string());
     pinned.push_back(StoredTab::FromList(dict->FindList("pinned")));
   }
   if (stored.empty()) {
@@ -1809,6 +1845,9 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
     }
     const tab_groups::TabGroupId id = NewSpaceGroup(indices);
     WriteSpace(id, stored[i].first);
+    if (!stored_ids[i].empty()) {
+      stored_space_ids_[id] = stored_ids[i];
+    }
     AddStoredPinnedTabs(browser_view_->browser(), model, id, pinned[i]);
     ids.push_back(id);
   }
@@ -1826,9 +1865,15 @@ void KoanWorkspaceController::StoreSpaces() {
       browser_view_->browser()->IsDeleteScheduled()) {
     return;
   }
+  // (The ids of Spaces gone since go too.)
+  TabGroupModel* groups = model->group_model();
+  std::erase_if(stored_space_ids_, [groups](const auto& entry) {
+    return !groups || !groups->ContainsTabGroup(entry.first);
+  });
   base::ListValue list;
   for (const auto& [id, data] : spaces_snapshot_) {
     list.Append(base::DictValue()
+                    .Set("id", GetStoredSpaceId(id))
                     .Set("title", JoinTitle(data.icon, data.name))
                     .Set("color", static_cast<int>(kSpaceGroupColor))
                     .Set("theme", data.theme.stored)
