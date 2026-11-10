@@ -186,14 +186,19 @@ void ForgetRows(TabGroupView* group) {
 }
 
 // Zen's focus order in a Space: the pinned tabs, Clear, New Tab, then the
-// other tabs. `rows` is a child of `group`.
-void PlaceRowsInFocusList(views::View* rows, TabGroupView* group) {
+// other tabs, then the end rows' New Tab. `rows` and `end_rows` are children
+// of `group`.
+void PlaceRowsInFocusList(views::View* rows,
+                          views::View* end_rows,
+                          TabGroupView* group) {
   if (!group->collection_node()) {
     return;
   }
+  const TabCollectionNode::ChildViews children =
+      group->collection_node()->GetDirectChildren();
   views::View* last_pinned = nullptr;
   views::View* first_normal = nullptr;
-  for (views::View* child : group->collection_node()->GetDirectChildren()) {
+  for (views::View* child : children) {
     if (!IsInPinnedSection(child)) {
       first_normal = child;
       break;
@@ -205,6 +210,12 @@ void PlaceRowsInFocusList(views::View* rows, TabGroupView* group) {
     rows->InsertAfterInFocusList(last_pinned);
   } else if (!last_pinned && first_normal && first_normal->parent() == group) {
     rows->InsertBeforeInFocusList(first_normal);
+  }
+  if (!first_normal) {
+    end_rows->InsertAfterInFocusList(rows);
+  } else if (views::View* last = children[children.size() - 1];
+             last->parent() == group) {
+    end_rows->InsertAfterInFocusList(last);
   }
 }
 
@@ -437,7 +448,8 @@ BEGIN_METADATA(KoanClearTabsRow)
 END_METADATA
 
 // The rows Koan puts between the pinned and the unpinned tabs of the vertical
-// tab strip, laid out by PlaceSidebarTabRows.
+// tab strip, laid out by PlaceSidebarTabRows, or (the "end" rows) after the
+// unpinned tabs, laid out by PlaceSidebarEndRows.
 class KoanSidebarTabRowsView : public views::View {
   METADATA_HEADER(KoanSidebarTabRowsView, views::View)
 
@@ -451,8 +463,17 @@ class KoanSidebarTabRowsView : public views::View {
         AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
   }
 
+  // The end rows: only a New Tab row, Zen's with
+  // zen.view.show-newtab-button-top off.
+  explicit KoanSidebarTabRowsView(base::RepeatingClosure open_new_tab) {
+    new_tab_row_ =
+        AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
+  }
+
+  // Null in the end rows.
   KoanClearTabsRow* clear_row() { return clear_row_; }
   KoanNewTabRow* new_tab_row() { return new_tab_row_; }
+  bool at_end() const { return !clear_row_; }
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -494,28 +515,60 @@ class KoanSidebarTabRowsView : public views::View {
 BEGIN_METADATA(KoanSidebarTabRowsView)
 END_METADATA
 
-int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view) {
-  for (const views::View* child : tab_strip_view->children()) {
-    if (IsSidebarTabRowsView(child)) {
-      return child->GetPreferredSize().height();
+namespace {
+
+// `host`'s rows between the pinned and unpinned tabs, or its end rows.
+views::View* FindRows(const views::View* host, bool at_end) {
+  for (views::View* child : host->children()) {
+    if (auto* rows = views::AsViewClass<KoanSidebarTabRowsView>(child);
+        rows && rows->at_end() == at_end) {
+      return rows;
     }
   }
-  return 0;
+  return nullptr;
+}
+
+// Appends `rows` (if any) to `layout` at (`x`, `y`) and returns their height.
+int PlaceRows(views::View* rows,
+              views::ProposedLayout& layout,
+              int x,
+              int y,
+              int width) {
+  if (!rows) {
+    return 0;
+  }
+  const int height = rows->GetPreferredSize().height();
+  layout.child_layouts.emplace_back(rows, rows->GetVisible(),
+                                    gfx::Rect(x, y, width, height));
+  return height;
+}
+
+}  // namespace
+
+int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view) {
+  int height = 0;
+  for (const bool at_end : {false, true}) {
+    if (const views::View* rows = FindRows(tab_strip_view, at_end)) {
+      height += rows->GetPreferredSize().height();
+    }
+  }
+  return height;
 }
 
 int PlaceSidebarTabRows(const TabStripView* tab_strip_view,
                         views::ProposedLayout& layout,
                         int width,
                         int y) {
-  for (views::View* child : tab_strip_view->children()) {
-    if (IsSidebarTabRowsView(child)) {
-      const int height = child->GetPreferredSize().height();
-      layout.child_layouts.emplace_back(child, child->GetVisible(),
-                                        gfx::Rect(0, y, width, height));
-      return height;
-    }
-  }
-  return 0;
+  return PlaceRows(FindRows(tab_strip_view, /*at_end=*/false), layout, 0, y,
+                   width);
+}
+
+int PlaceSidebarEndRows(const TabStripView* tab_strip_view,
+                        views::ProposedLayout& layout,
+                        int width,
+                        int y) {
+  return PlaceRows(FindRows(tab_strip_view, /*at_end=*/true), layout, 0, y,
+                   width);
 }
 
 int PlaceSpaceTabRows(const views::View* tab_group_view,
@@ -529,29 +582,33 @@ int PlaceSpaceTabRows(const views::View* tab_group_view,
   if (!static_cast<const TabGroupView*>(tab_group_view)->IsGroupFocused()) {
     return 0;
   }
-  views::View* rows = nullptr;
-  for (views::View* child : tab_group_view->children()) {
-    if (IsSidebarTabRowsView(child)) {
-      rows = child;
-      break;
-    }
-  }
-  if (!rows || layout.GetLayoutFor(rows) ||
-      (next_child && IsInPinnedSection(next_child))) {
-    return 0;
-  }
-  const bool after_pinned =
-      std::ranges::any_of(layout.child_layouts, [](const auto& child_layout) {
-        return IsInPinnedSection(child_layout.child_view);
-      });
   const int x = collapsed ? SidebarStripInset() : 0;
   const int width = size_bounds.width().is_bounded()
                         ? std::max(0, size_bounds.width().value() - x)
                         : 0;
-  const int height = rows->GetPreferredSize().height();
-  layout.child_layouts.emplace_back(
-      rows, true, gfx::Rect(x, after_pinned ? y : 0, width, height));
-  return after_pinned ? height + tab_padding : height;
+  int moved = 0;
+  views::View* rows = FindRows(tab_group_view, /*at_end=*/false);
+  if (rows && !layout.GetLayoutFor(rows) &&
+      !(next_child && IsInPinnedSection(next_child))) {
+    const bool after_pinned =
+        std::ranges::any_of(layout.child_layouts, [](const auto& child_layout) {
+          return IsInPinnedSection(child_layout.child_view);
+        });
+    const int height = rows->GetPreferredSize().height();
+    layout.child_layouts.emplace_back(
+        rows, true, gfx::Rect(x, after_pinned ? y : 0, width, height));
+    moved = after_pinned ? height + tab_padding : height;
+  }
+  // The end rows, after the last tab (an empty row when hidden).
+  views::View* end_rows =
+      next_child ? nullptr : FindRows(tab_group_view, /*at_end=*/true);
+  if (end_rows && !layout.GetLayoutFor(end_rows)) {
+    const int height = PlaceRows(end_rows, layout, x, y + moved, width);
+    if (height) {
+      moved += height + tab_padding;
+    }
+  }
+  return moved;
 }
 
 bool IsEmptyTabView(const views::View* view) {
@@ -714,13 +771,16 @@ void KoanSidebarTabsController::OnAddedToWidget() {
         base::BindRepeating(&KoanSidebarTabsController::OnCollapseChanged,
                             base::Unretained(this)));
   }
-  // Zen's "Show New Tab Button on Tab List", from chrome://koan-settings.
+  // Zen's "Show New Tab Button on Tab List" and "Move the new tab button to
+  // the top", from chrome://koan-settings.
   pref_change_registrar_.Init(
       browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
-  pref_change_registrar_.Add(
-      prefs::kShowNewTabVertical,
-      base::BindRepeating(&KoanSidebarTabsController::UpdateNewTabRow,
-                          base::Unretained(this)));
+  for (const char* pref :
+       {prefs::kShowNewTabVertical, prefs::kShowNewTabButtonTop}) {
+    pref_change_registrar_.Add(
+        pref, base::BindRepeating(&KoanSidebarTabsController::UpdateNewTabRow,
+                                  base::Unretained(this)));
+  }
   InstallRows();
 }
 
@@ -737,7 +797,7 @@ void KoanSidebarTabsController::OnBrowserViewDestroying() {
     region_ = nullptr;
   }
   if (rows_) {
-    rows_observation_.Reset();
+    rows_observation_.RemoveAllObservations();
     // Never deleted here: left to their parent, which deletes them in order.
     // A Space's group view drops its animating layout manager before its
     // children; the tab strip deletes its children after the tab list's
@@ -746,9 +806,11 @@ void KoanSidebarTabsController::OnBrowserViewDestroying() {
     // Deleted now, the rows would dangle in those maps (the closing widget
     // no longer recomputes layouts). Inert meanwhile: they call into this
     // controller.
-    KoanSidebarTabRowsView* rows = std::exchange(rows_, nullptr);
-    rows->SetCanProcessEventsWithinSubtree(false);
-    rows->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    for (KoanSidebarTabRowsView* rows :
+         {std::exchange(rows_, nullptr), std::exchange(end_rows_, nullptr)}) {
+      rows->SetCanProcessEventsWithinSubtree(false);
+      rows->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+    }
   }
 }
 
@@ -792,10 +854,14 @@ void KoanSidebarTabsController::InstallRows() {
           base::BindRepeating(&KoanSidebarTabsController::GetClearTooltip,
                               base::Unretained(this))),
       RowsIndexInStrip(strip));
+  end_rows_ = strip->AddChildView(
+      std::make_unique<KoanSidebarTabRowsView>(base::BindRepeating(
+          &KoanSidebarTabsController::OpenNewTab, base::Unretained(this))));
   // The rows go with the tab strip, which upstream rebuilds when the window
   // switches between vertical and horizontal tabs, or with the Space's tab
   // group view.
-  rows_observation_.Observe(rows_);
+  rows_observation_.AddObservation(rows_);
+  rows_observation_.AddObservation(end_rows_);
   UpdateClearRow();
   UpdateNewTabRow();
   UpdateRowsHost();
@@ -868,25 +934,30 @@ void KoanSidebarTabsController::MoveRowsTo(
   views::View* parent = rows_->parent();
   if (parent == host) {
     if (group) {
-      PlaceRowsInFocusList(rows_, group);
+      PlaceRowsInFocusList(rows_, end_rows_, group);
     }
     return;
   }
   // Moved, not rebuilt: the Clear button keeps its state.
   std::unique_ptr<KoanSidebarTabRowsView> rows =
       parent->RemoveChildViewT(rows_.get());
+  std::unique_ptr<KoanSidebarTabRowsView> end_rows =
+      parent->RemoveChildViewT(end_rows_.get());
   if (auto* old_group = views::AsViewClass<TabGroupView>(parent)) {
     ForgetRows(old_group);
   }
   rows_ = host == strip
               ? strip->AddChildViewAt(std::move(rows), RowsIndexInStrip(strip))
               : host->AddChildView(std::move(rows));
+  end_rows_ = host->AddChildView(std::move(end_rows));
   // Shown with the tab list (hidden while Zen's Create-a-Space form takes
   // its place).
-  rows_->SetVisible(host != strip ||
-                    strip->unpinned_tabs_scroll_view()->GetVisible());
+  for (KoanSidebarTabRowsView* view : {rows_.get(), end_rows_.get()}) {
+    view->SetVisible(host != strip ||
+                     strip->unpinned_tabs_scroll_view()->GetVisible());
+  }
   if (group) {
-    PlaceRowsInFocusList(rows_, group);
+    PlaceRowsInFocusList(rows_, end_rows_, group);
   }
 }
 
@@ -926,6 +997,7 @@ void KoanSidebarTabsController::UpdateClearRow() {
 void KoanSidebarTabsController::SetNewTabSelected(bool selected) {
   if (rows_) {
     rows_->new_tab_row()->SetSelected(selected);
+    end_rows_->new_tab_row()->SetSelected(selected);
   }
   // The current tab's pill goes (or comes back) with it. The tab rows are
   // in the sidebar's region, each painting itself.
@@ -941,10 +1013,14 @@ void KoanSidebarTabsController::SetNewTabSelected(bool selected) {
 }
 
 void KoanSidebarTabsController::UpdateNewTabRow() {
-  if (rows_ && pref_change_registrar_.prefs()) {
-    rows_->new_tab_row()->SetVisible(
-        pref_change_registrar_.prefs()->GetBoolean(prefs::kShowNewTabVertical));
+  const PrefService* prefs = pref_change_registrar_.prefs();
+  if (!rows_ || !prefs) {
+    return;
   }
+  const bool shown = prefs->GetBoolean(prefs::kShowNewTabVertical);
+  const bool top = prefs->GetBoolean(prefs::kShowNewTabButtonTop);
+  rows_->new_tab_row()->SetVisible(shown && top);
+  end_rows_->new_tab_row()->SetVisible(shown && !top);
 }
 
 void KoanSidebarTabsController::OpenNewTab() {
@@ -954,14 +1030,18 @@ void KoanSidebarTabsController::OpenNewTab() {
       controller && controller->url_bar()->OpenForNewTab()) {
     return;
   }
-  // With the New Tab row on top, Zen puts the tab at the top of the space.
+  // With the New Tab row on top, Zen puts the tab at the top of the space,
+  // else at its end.
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
   const std::optional<tab_groups::TabGroupId> workspace =
       model->GetFocusedGroup();
-  int index = model->IndexOfFirstNonPinnedTab();
+  const bool top =
+      pref_change_registrar_.prefs()->GetBoolean(prefs::kShowNewTabButtonTop);
+  int index = top ? model->IndexOfFirstNonPinnedTab() : model->count();
   if (workspace && model->group_model()->ContainsTabGroup(*workspace)) {
-    index = static_cast<int>(
-        model->group_model()->GetTabGroup(*workspace)->ListTabs().start());
+    const gfx::Range tabs =
+        model->group_model()->GetTabGroup(*workspace)->ListTabs();
+    index = static_cast<int>(top ? tabs.start() : tabs.end());
   }
   chrome::AddTabAt(browser_view_->browser(), GURL(), index,
                    /*foreground=*/true, workspace);
@@ -1150,8 +1230,10 @@ void KoanSidebarTabsController::OnViewIsDeleting(views::View* observed_view) {
   // The tab strip or the Space's group view, and the rows with it, is going
   // away. A new tab strip gets new rows in OnModeChanged(); the Space that
   // takes a closed Space's place gets them here.
-  rows_observation_.Reset();
+  // Both rows are in the same parent, so both go.
+  rows_observation_.RemoveAllObservations();
   rows_ = nullptr;
+  end_rows_ = nullptr;
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanSidebarTabsController::InstallRows,
                                 weak_factory_.GetWeakPtr()));

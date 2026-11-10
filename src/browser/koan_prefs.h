@@ -102,6 +102,14 @@ inline constexpr char kTabsOnRight[] = "koan.tabs.on_right";
 // the "+ New Tab" row above the unpinned tabs. On by default, like Zen.
 inline constexpr char kShowNewTabVertical[] = "koan.tabs.show_newtab_vertical";
 
+// Zen's "Move the new tab button to the top"
+// (`zen.view.show-newtab-button-top`): the "+ New Tab" row sits above a Space's
+// unpinned tabs and new tabs open at the top of the Space. Off: the row sits
+// after the last tab and new tabs open at the end of the Space. On by default,
+// like Zen.
+inline constexpr char kShowNewTabButtonTop[] =
+    "koan.view.show_newtab_button_top";
+
 // Whether the "Sidebar hidden!" toast was shown, after a drag of the
 // sidebar's edge hid the sidebar (`zen.view.compact.drag-collapse-hint-seen`).
 // Zen shows it once.

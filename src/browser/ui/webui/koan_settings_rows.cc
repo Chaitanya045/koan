@@ -327,6 +327,12 @@ constexpr Row kRows[] = {
      .pref = prefs::kShowNewTabVertical,
      .label = "Show New Tab Button on Tab List",
      .is_available = features::IsSidebarEnabled},
+    {.group = "vertical-tabs",
+     .control = Control::kCheckbox,
+     .pref = prefs::kShowNewTabButtonTop,
+     .label = "Move the new tab button to the top",
+     .is_available = features::IsSidebarEnabled,
+     .indent = true},
     // Zen has no row for this (its palette and the sidebar's menu do).
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,

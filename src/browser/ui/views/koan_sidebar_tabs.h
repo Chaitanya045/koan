@@ -34,12 +34,25 @@ namespace koan {
 // out nothing.
 
 // Hooks for TabStripView's vertical layout (tab_strip_view_layout.cc).
-// The rows' height in the tab strip, 0 when they are not there.
+// The rows' height in the tab strip (both rows), 0 when they are not there.
 int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view);
 
 // Appends the rows to `layout` at (0, `y`), `width` wide, and returns their
 // height, if they are in the tab strip.
 int PlaceSidebarTabRows(const TabStripView* tab_strip_view,
+                        views::ProposedLayout& layout,
+                        int width,
+                        int y);
+
+// With Zen's zen.view.show-newtab-button-top off (koan_prefs.h
+// kShowNewTabButtonTop) the "+ New Tab" row is in the "end" rows instead,
+// laid out after the Space's last tab, or after the tab list without a Space.
+// The end rows have no height while the row is on top.
+
+// Hook for the same layout, after the unpinned tabs: appends the end rows to
+// `layout` at (0, `y`), `width` wide, and returns their height, if they are in
+// the tab strip.
+int PlaceSidebarEndRows(const TabStripView* tab_strip_view,
                         views::ProposedLayout& layout,
                         int width,
                         int y);
@@ -52,6 +65,8 @@ int PlaceSidebarTabRows(const TabStripView* tab_strip_view,
 // height the caller moves down by (0 otherwise, and once they are placed).
 // After the pinned section they go at `y`, followed by `tab_padding`; without
 // one at the top of the group, in its top margin, as in the tab strip before.
+// The call after the last child also appends the end rows, at `y` (followed
+// by `tab_padding` unless they are empty).
 // Tabs are inset by the strip's padding when `collapsed`, and so are the rows.
 int PlaceSpaceTabRows(const views::View* tab_group_view,
                       const views::View* next_child,
