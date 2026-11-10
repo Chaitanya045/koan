@@ -57,6 +57,7 @@ source_set("browsertests_impl") {
     "//chrome/browser/sessions:test_support",
     "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/ui/tabs:tab_strip",
     "//chrome/browser/ui/views/frame:browser_widget",
     "//chrome/test:test_support",

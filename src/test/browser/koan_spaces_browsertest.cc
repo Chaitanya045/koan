@@ -4,13 +4,19 @@
 
 #include <vector>
 
+#include "base/test/run_until.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace koan {
 
@@ -122,6 +128,24 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, RenameAndIcon) {
   info = spaces->GetSpace(id);
   EXPECT_EQ(u"Home", info->name);
   EXPECT_EQ(u"", info->icon);
+}
+
+// Zen's empty tab is the one Koan marks when it makes it, as Zen keys on
+// `zen-empty-tab`, not any blank page: compact mode holds the sidebar out,
+// and the sidebar hides the row, only for that one.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, OnlyTheMarkedTabIsTheEmptyTab) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* model = browser()->GetTabStripModel();
+  // The user's own about:blank page is an ordinary tab.
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
+  EXPECT_FALSE(IsEmptyTab(model->GetActiveTab()));
+
+  // Closing the last tab keeps the window, on the empty tab Koan makes.
+  model->CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->count() == 1 && IsEmptyTab(model->GetActiveTab());
+  }));
 }
 
 }  // namespace koan

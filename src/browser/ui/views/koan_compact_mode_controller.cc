@@ -40,7 +40,6 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_content_card.h"
-#include "koan/browser/ui/views/koan_empty_tab.h"
 #include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_outside_window_tracker.h"
@@ -48,6 +47,7 @@
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_curve.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
@@ -655,9 +655,9 @@ void KoanCompactModeController::UpdateEmptyTabLock(bool snap_reveal) {
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
   // Closing the window or all of its tabs makes a new active tab per closed
   // one (new tab pages): no hold for those, and each would start an animation.
-  const bool wanted =
-      hides_sidebar() && !IsClosing() && !model->closing_all() &&
-      IsEmptyTab(model->GetActiveWebContents(), browser_view_->GetProfile());
+  const bool wanted = hides_sidebar() && !IsClosing() &&
+                      !model->closing_all() &&
+                      IsEmptyTab(model->GetActiveTab());
   if (!wanted) {
     ReleaseLock(empty_tab_lock_);
     return;
@@ -1157,8 +1157,7 @@ void KoanCompactModeController::UpdateActive() {
   UpdateEmptyTabLock(/*snap_reveal=*/true);
   SyncSidebar();
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
-  if (slide_away && hides_sidebar() &&
-      !IsEmptyTab(model->GetActiveWebContents(), browser_view_->GetProfile())) {
+  if (slide_away && hides_sidebar() && !IsEmptyTab(model->GetActiveTab())) {
     SlideSidebarAway(browser_view_);
   }
   applied_ = applied_ || CanCompactMode();

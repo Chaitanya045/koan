@@ -132,11 +132,14 @@ bool IsEmptyPageUrl(const GURL& url) {
          url == GURL(chrome::kChromeUINewTabURL);
 }
 
-// Marks the tab as Zen's empty tab (kept with the session, so it is one again
-// after a restart): see IsEmptyTab().
+// Marks the tab at `index` as Zen's empty tab (kept with the session, so it
+// is one again after a restart): see IsEmptyTab(). The tab strip's observers
+// are told, since a tab that has loaded already (one adopted) changes nothing
+// else: compact mode holds the sidebar out for it, the sidebar hides its row.
 constexpr char kEmptyTabKey[] = "koan.empty_tab";
-void MarkEmptyTab(content::WebContents* contents) {
-  SetTabSessionData(contents, kEmptyTabKey, "1");
+void MarkEmptyTab(TabStripModel* model, int index) {
+  SetTabSessionData(model->GetWebContentsAt(index), kEmptyTabKey, "1");
+  model->NotifyTabChanged(model->GetTabAtIndex(index), TabChangeType::kAll);
 }
 
 // The Space's pinned tabs, for its stored entry (StoreSpaces()), so that a
@@ -1539,7 +1542,7 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
           continue;
         }
       }
-      MarkEmptyTab(model->GetWebContentsAt(new_index));
+      MarkEmptyTab(model, new_index);
       indices = {new_index};
     }
     // Same id, so whatever refers to the Space still does.
@@ -1580,7 +1583,7 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     // Only Essentials: the window still has a Space, with a new tab.
     chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
                      /*foreground=*/false);
-    MarkEmptyTab(model->GetWebContentsAt(model->count() - 1));
+    MarkEmptyTab(model, model->count() - 1);
     loose.push_back(model->count() - 1);
   }
   // A window that opened with no Spaces (none restored) while the profile has

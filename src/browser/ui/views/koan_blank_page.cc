@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#include "koan/browser/ui/views/koan_empty_tab.h"
+#include "koan/browser/ui/views/koan_blank_page.h"
 
 #include "chrome/browser/search/search.h"
 #include "chrome/common/webui_url_constants.h"
@@ -11,7 +11,7 @@
 
 namespace koan {
 
-bool IsEmptyTab(content::WebContents* contents, Profile* profile) {
+bool IsBlankPage(content::WebContents* contents, Profile* profile) {
   if (!contents) {
     return false;
   }
