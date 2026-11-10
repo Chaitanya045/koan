@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/password_manager/BUILD.gn b/chrome/browser/password_manager/BUILD.gn
+--- a/chrome/browser/password_manager/BUILD.gn
++++ b/chrome/browser/password_manager/BUILD.gn
+@@ -200,6 +200,7 @@
+     "//components/variations/service",
+     "//components/version_info",
+     "//extensions/buildflags",
++    "//koan/browser/containers:partition",
+   ]
+ 
+   if (is_android) {

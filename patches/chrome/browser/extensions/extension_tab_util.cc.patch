@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
+--- a/chrome/browser/extensions/extension_tab_util.cc
++++ b/chrome/browser/extensions/extension_tab_util.cc
+@@ -54,6 +54,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/browser/extension_function.h"
+ #include "extensions/browser/extension_util.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
+ #include "extensions/common/error_utils.h"
+@@ -658,6 +659,11 @@
+       WebContents* target_contents = window->GetWebContentsAt(i);
+       if (sessions::SessionTabHelper::IdForTab(target_contents).id() ==
+           tab_id) {
++        // Koan: extension APIs can't address an agent container's tab (they
++        // still see it listed, accepted in agent-control.md section 7.2).
++        if (koan::containers::IsAgentContents(target_contents)) {
++          return false;
++        }
+         if (out_window) {
+           *out_window = window;
+         }

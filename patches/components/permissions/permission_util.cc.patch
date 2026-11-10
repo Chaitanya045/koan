@@ -1,0 +1,22 @@
+diff --git a/components/permissions/permission_util.cc b/components/permissions/permission_util.cc
+--- a/components/permissions/permission_util.cc
++++ b/components/permissions/permission_util.cc
+@@ -30,6 +30,7 @@
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/content_features.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+@@ -680,6 +681,10 @@
+     const GURL& requesting_origin,
+     content::RenderProcessHost* render_process_host) {
+   DCHECK(render_process_host);
++  // Koan: an agent container gets no permission, and is never asked.
++  if (koan::containers::IsAgentProcess(render_process_host)) {
++    return true;
++  }
+   switch (GetPermissionDelegationMode(permission)) {
+     case PermissionDelegationMode::kDelegated:
+       return false;

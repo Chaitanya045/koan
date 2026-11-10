@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/download/BUILD.gn b/chrome/browser/download/BUILD.gn
+--- a/chrome/browser/download/BUILD.gn
++++ b/chrome/browser/download/BUILD.gn
+@@ -233,6 +233,7 @@
+     "//components/strings",
+     "//components/supervised_user/core/browser",
+     "//components/supervised_user/core/common",
++    "//koan/browser/containers:partition",
+     "//third_party/re2",
+     "//ui/base/unowned_user_data",
+     "//url",

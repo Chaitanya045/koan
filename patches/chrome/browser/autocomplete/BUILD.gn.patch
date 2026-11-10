@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/autocomplete/BUILD.gn b/chrome/browser/autocomplete/BUILD.gn
+--- a/chrome/browser/autocomplete/BUILD.gn
++++ b/chrome/browser/autocomplete/BUILD.gn
+@@ -119,6 +119,7 @@
+     "//components/unified_consent",
+     "//components/variations/service",
+     "//content/public/browser",
++    "//koan/browser/containers:partition",
+   ]
+ 
+   if (is_android) {
