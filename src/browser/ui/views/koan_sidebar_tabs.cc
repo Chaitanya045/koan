@@ -205,6 +205,15 @@ class KoanNewTabRow : public views::Button {
                                                   SidebarRowCornerRadius());
   }
 
+  // Whether the row is drawn as the selected one, like Zen's while its URL
+  // bar is open instead of a new tab.
+  void SetSelected(bool selected) {
+    if (selected_ != selected) {
+      selected_ = selected;
+      SchedulePaint();
+    }
+  }
+
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override {
@@ -213,7 +222,12 @@ class KoanNewTabRow : public views::Button {
 
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
-    if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
+    if (selected_) {
+      cc::PaintFlags flags;
+      flags.setAntiAlias(true);
+      flags.setColor(provider->GetColor(kColorKoanSidebarTabSelected));
+      canvas->DrawRoundRect(GetLocalBounds(), SidebarRowCornerRadius(), flags);
+    } else if (GetState() == STATE_HOVERED || GetState() == STATE_PRESSED) {
       cc::PaintFlags flags;
       flags.setAntiAlias(true);
       flags.setColor(provider->GetColor(GetState() == STATE_PRESSED
@@ -222,7 +236,12 @@ class KoanNewTabRow : public views::Button {
       canvas->DrawRoundRect(GetLocalBounds(), SidebarRowCornerRadius(), flags);
     }
 
-    const SkColor color = provider->GetColor(kColorKoanSidebarNewTabForeground);
+    // Zen's [in-urlbar] row has the selected tab's text colour, not the 70%
+    // of the plain row (vertical-tabs.css).
+    const ui::ColorId color_id =
+        selected_ ? ui::ColorId(kColorToolbarText)
+                  : ui::ColorId(kColorKoanSidebarNewTabForeground);
+    const SkColor color = provider->GetColor(color_id);
     const bool expanded = width() >= kMinExpandedRowWidth;
     const gfx::Rect icon(
         expanded ? kNewTabIconX : (width() - kNewTabIconSize) / 2,
@@ -239,6 +258,9 @@ class KoanNewTabRow : public views::Button {
           LeadingTextAlignment());
     }
   }
+
+ private:
+  bool selected_ = false;
 };
 
 BEGIN_METADATA(KoanNewTabRow)
@@ -407,10 +429,12 @@ class KoanSidebarTabRowsView : public views::View {
                          base::RepeatingCallback<std::u16string()> tooltip) {
     clear_row_ = AddChildView(std::make_unique<KoanClearTabsRow>(
         std::move(clear), std::move(tooltip)));
-    AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
+    new_tab_row_ =
+        AddChildView(std::make_unique<KoanNewTabRow>(std::move(open_new_tab)));
   }
 
   KoanClearTabsRow* clear_row() { return clear_row_; }
+  KoanNewTabRow* new_tab_row() { return new_tab_row_; }
 
   // views::View:
   gfx::Size CalculatePreferredSize(
@@ -446,6 +470,7 @@ class KoanSidebarTabRowsView : public views::View {
 
  private:
   raw_ptr<KoanClearTabsRow> clear_row_ = nullptr;
+  raw_ptr<KoanNewTabRow> new_tab_row_ = nullptr;
 };
 
 BEGIN_METADATA(KoanSidebarTabRowsView)
@@ -511,6 +536,11 @@ int PlaceSpaceTabRows(const views::View* tab_group_view,
   return after_pinned ? height + tab_padding : height;
 }
 
+bool IsEmptyTabView(const views::View* view) {
+  const TabView* tab_view = views::AsViewClass<TabView>(view);
+  return tab_view && IsEmptyTab(tab_view->GetTabInterface());
+}
+
 bool IsSidebarTabRowsView(const views::View* view) {
   return views::IsViewClass<KoanSidebarTabRowsView>(view);
 }
@@ -524,6 +554,19 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
   const ui::ColorProvider* provider = tab.GetColorProvider();
   if (!features::IsSidebarEnabled() || !provider) {
     return false;
+  }
+  // Zen unselects the current tab while its URL bar is open for a new tab:
+  // the "+ New Tab" row is the selected one then.
+  if (selected && tab.GetWidget()) {
+    if (const BrowserView* browser_view =
+            BrowserView::GetBrowserViewForNativeWindow(
+                tab.GetWidget()->GetNativeWindow())) {
+      if (const KoanBrowserViewController* controller =
+              KoanBrowserViewController::From(browser_view);
+          controller && controller->url_bar()->is_new_tab()) {
+        selected = false;
+      }
+    }
   }
   if (pinned) {
     PaintEssentialsTile(canvas, tab, selected, hover, corner_radius);
@@ -780,6 +823,7 @@ void KoanSidebarTabsController::UpdateClearRow() {
   bool listed = false;
   for (int i = 0; i < model->count() && !listed; ++i) {
     listed = !IsPinnedForUser(model->GetTabAtIndex(i)) &&
+             !IsEmptyTab(model->GetTabAtIndex(i)) &&
              (!workspace || model->GetTabGroupForTab(i) == workspace);
   }
   const auto* state =
@@ -791,6 +835,23 @@ void KoanSidebarTabsController::UpdateClearRow() {
   // closed or because none can (then it closes them all).
   rows_->clear_row()->button()->SetShowIcon(closable == unpinned.size() ||
                                             closable == 0);
+}
+
+void KoanSidebarTabsController::SetNewTabSelected(bool selected) {
+  if (rows_) {
+    rows_->new_tab_row()->SetSelected(selected);
+  }
+  // The current tab's pill goes (or comes back) with it. The tab rows are
+  // in the sidebar's region, each painting itself.
+  if (region_) {
+    const auto repaint = [](auto& self, views::View* view) -> void {
+      view->SchedulePaint();
+      for (views::View* child : view->children()) {
+        self(self, child);
+      }
+    };
+    repaint(repaint, region_);
+  }
 }
 
 void KoanSidebarTabsController::OpenNewTab() {
@@ -854,6 +915,18 @@ void KoanSidebarTabsController::OnTabStripModelChanged(
   UpdateClearRow();
   // A Space's group view comes and goes with its tabs.
   ScheduleUpdateRowsHost();
+  if (change.type() == TabStripModelChange::kRemoved) {
+    for (const auto& removed : change.GetRemove()->contents) {
+      empty_tab_by_id_.erase(removed.tab->GetHandle().raw_value());
+    }
+  } else if (change.type() == TabStripModelChange::kInserted) {
+    // Seeded here too, so a tab that never gets a full change (a restored,
+    // never loaded one) has a state to compare with.
+    for (const auto& inserted : change.GetInsert()->contents) {
+      empty_tab_by_id_[inserted.tab->GetHandle().raw_value()] =
+          IsEmptyTab(inserted.tab);
+    }
+  }
 }
 
 void KoanSidebarTabsController::OnTabGroupFocusChanged(
@@ -875,6 +948,26 @@ void KoanSidebarTabsController::OnTabChangedAt(tabs::TabInterface* tab,
     // So does pinning a tab in place, and it moves the rows in the focus
     // order.
     ScheduleUpdateRowsHost();
+    // A Space's only tab showing a page, or an empty one, shows or hides its
+    // row (IsEmptyTab()); the layouts are not told by the tab's URL. Only
+    // when that changes: this runs for every title, icon and load change of
+    // every tab.
+    // An unknown tab (never seen, e.g. restored without a load) is laid out
+    // once, so a row hidden for a mark that is gone shows.
+    const bool empty = IsEmptyTab(tab);
+    const int32_t id = tab->GetHandle().raw_value();
+    const auto known = empty_tab_by_id_.find(id);
+    if ((known == empty_tab_by_id_.end() || known->second != empty) &&
+        region_) {
+      empty_tab_by_id_[id] = empty;
+      const auto relayout = [](auto& self, views::View* view) -> void {
+        view->InvalidateLayout();
+        for (views::View* child : view->children()) {
+          self(self, child);
+        }
+      };
+      relayout(relayout, region_);
+    }
   }
 }
 

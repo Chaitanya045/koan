@@ -54,9 +54,11 @@ class KoanUrlBarCardFill;
 //   the page). Clicking outside closes it.
 //
 // Where it opens follows koan.urlbar.behavior (Zen's zen.urlbar.behavior):
-// "normal" edits in the pill, "floating-on-type" (the default) edits in the
-// pill and floats on the first keystroke, "float" floats right away. Without
-// a pill to edit in (compact mode with the sidebar hidden) it floats.
+// "normal" edits in the pill; "floating-on-type" (the default) floats when
+// the bar is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill
+// after a click on it; "float" floats right away
+// (UrlbarInputBase-mjs.patch, #openPopover). Without a pill to edit in
+// (compact mode with the sidebar hidden) it floats.
 //
 // With koan.urlbar.replace_newtab (Zen's zen.urlbar.replace-newtab), Ctrl+T
 // and the sidebar's new-tab button open the bar empty instead of a tab;
@@ -93,6 +95,12 @@ class KoanUrlBarController : public views::ViewObserver,
   // scope (Chromium's "@tabs"). False if the bar can't open now (the caller
   // falls back to focusing the omnibox).
   bool OpenForTabSearch();
+
+  // Called by KoanBrowserViewController once the window is in its widget.
+  // Zen's zen.urlbar.open-on-startup (true): a window that starts on the
+  // empty tab (a new window, the first launch; not a session restore) opens
+  // the New Tab bar at once.
+  void OnAddedToWidget();
   // Closes the omnibox without opening anything: the page gets focus back.
   void Close();
   // The user is about to edit by clicking the sidebar's URL pill: it edits in
@@ -183,7 +191,7 @@ class KoanUrlBarController : public views::ViewObserver,
   // Handles the omnibox's keys (Esc) while the bar is open or open for a new
   // tab.
   void UpdateKeyHandler();
-  void FloatOnType();
+  void UpdatePlacementOnInput();
   // Posted after the omnibox got focus: an invisible focus closes the bar
   // again.
   void CloseIfFocusInvisible();
@@ -193,8 +201,11 @@ class KoanUrlBarController : public views::ViewObserver,
   // empty, and when the text goes back to empty (OnOmniboxChanged()).
   void ScheduleEmptyListRetry(int retries_left);
   void RetryEmptyList(int retries_left);
+  void OpenOnStartup();
   void FloatIfOpenInPill();
   void EndNewTabSession(bool committed);
+  // Zen draws the "+ New Tab" row as selected during a new-tab session.
+  void SetNewTabRowSelected(bool selected);
 
   const raw_ptr<BrowserView> browser_view_;
   const raw_ptr<KoanCompactModeController> compact_mode_;

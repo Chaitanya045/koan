@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_TABS_CONTROLLER_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_TABS_CONTROLLER_H_
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -53,6 +54,10 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // button and Ctrl+Shift+K both go through it). Only with Koan's sidebar on.
   void ShowTabsClosedToast();
 
+  // Draws the "+ New Tab" row as selected while the URL bar is open instead
+  // of a new tab, as Zen does.
+  void SetNewTabSelected(bool selected);
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
@@ -99,6 +104,10 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   bool started_ = false;
   // The vertical tab strip region; its pointer enter/exit reveals Clear.
   raw_ptr<views::View> region_ = nullptr;
+  // Whether each tab (by handle) was the empty tab at its last change: what
+  // decides whether a change needs a layout (OnTabChangedAt()). Dropped with
+  // the tab.
+  std::map<int32_t, bool> empty_tab_by_id_;
   raw_ptr<KoanSidebarTabRowsView> rows_ = nullptr;
   bool rows_host_update_pending_ = false;
   base::ScopedObservation<views::View, views::ViewObserver> rows_observation_{

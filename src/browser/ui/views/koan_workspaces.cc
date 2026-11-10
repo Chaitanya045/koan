@@ -34,6 +34,7 @@
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+#include "chrome/browser/tab_list/tab_removed_reason.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -115,6 +116,19 @@
 namespace koan {
 
 namespace {
+
+// A page with nothing on it: a new tab page or about:blank.
+bool IsEmptyPageUrl(const GURL& url) {
+  return url.is_empty() || url.IsAboutBlank() ||
+         url == GURL(chrome::kChromeUINewTabURL);
+}
+
+// Marks the tab as Zen's empty tab (kept with the session, so it is one again
+// after a restart): see IsEmptyTab().
+constexpr char kEmptyTabKey[] = "koan.empty_tab";
+void MarkEmptyTab(content::WebContents* contents) {
+  SetTabSessionData(contents, kEmptyTabKey, "1");
+}
 
 // zen.workspaces.switch-animation-duration.
 constexpr base::TimeDelta kSwitchAnimationDuration = base::Milliseconds(250);
@@ -1373,12 +1387,19 @@ void KoanWorkspaceController::DropStartupSpaceAfterRestore() {
 
 void KoanWorkspaceController::EnsureOneSpaceShown() {
   TabStripModel* model = tab_strip_model();
+  // The last tab closed and the window stays: the empty tab arrives soon, in
+  // the Space that closed with it.
+  if (model->empty() && expect_empty_tab_ && !model->closing_all()) {
+    return;
+  }
   if (model->empty() || model->closing_all() ||
       browser_view_->browser()->IsDeleteScheduled()) {
+    expect_empty_tab_ = false;
     closed_spaces_.clear();
     ungrouped_from_.clear();
     return;
   }
+  expect_empty_tab_ = false;
   // A Space whose tabs didn't all close (a page's "Leave site?" was
   // cancelled, which clears its close gesture) stays a normal Space.
   std::erase_if(deleting_, [model](const tab_groups::TabGroupId& id) {
@@ -1409,21 +1430,63 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
           model->group_model()->GetTabGroup(*closed.next)->ListTabs().start());
     }
     // Its last tabs were only taken out of it (chrome.tabs.ungroup()): they
-    // bring it back, as no new tab is needed. Else a new tab.
+    // bring it back, as no new tab is needed. Else Zen's empty tab: an empty
+    // page already there (the window's fallback tab, which upstream adds when
+    // a Space with every tab closes, or the one added when the window's last
+    // tab closed) becomes the Space's tab, not a second one; else a new tab.
     std::vector<int> indices = ReclaimUngroupedTabs(closed.id);
     if (indices.empty()) {
-      content::WebContents* contents = chrome::AddAndReturnTabAt(
-          browser_view_->browser(), GURL(), index, /*foreground=*/false);
-      const int new_index = model->GetIndexOfWebContents(contents);
-      if (new_index == TabStripModel::kNoTab) {
-        continue;
+      // The tab KeepWindowOnLastTabClosed() added, exactly; else an empty
+      // page already there (the window's fallback tab, which upstream adds
+      // when a Space with every tab closes).
+      int new_index = TabStripModel::kNoTab;
+      if (tabs::TabInterface* adopted = empty_tab_.Get()) {
+        new_index = model->GetIndexOfTab(adopted);
+        if (new_index != TabStripModel::kNoTab &&
+            (model->IsTabPinned(new_index) ||
+             model->GetTabGroupForTab(new_index))) {
+          new_index = TabStripModel::kNoTab;
+        }
       }
+      for (int i = 0; new_index == TabStripModel::kNoTab && !empty_tab_.Get() &&
+                      i < model->count();
+           ++i) {
+        if (!model->IsTabPinned(i) && !model->GetTabGroupForTab(i) &&
+            IsEmptyPageUrl(model->GetWebContentsAt(i)->GetVisibleURL())) {
+          new_index = i;
+        }
+      }
+      empty_tab_ = tabs::TabHandle();
+      if (new_index != TabStripModel::kNoTab) {
+        const int target =
+            std::min(index > new_index ? index - 1 : index, model->count() - 1);
+        if (target != new_index) {
+          model->MoveWebContentsAt(new_index, target,
+                                   /*select_after_move=*/false);
+          new_index = target;
+        }
+      } else {
+        content::WebContents* contents = chrome::AddAndReturnTabAt(
+            browser_view_->browser(), GURL(), index, /*foreground=*/false);
+        new_index = model->GetIndexOfWebContents(contents);
+        if (new_index == TabStripModel::kNoTab) {
+          continue;
+        }
+      }
+      MarkEmptyTab(model->GetWebContentsAt(new_index));
       indices = {new_index};
     }
     // Same id, so whatever refers to the Space still does.
     model->AddToGroupForRestore(indices, closed.id);
     WriteSpace(closed.id, closed.data);
-    if (closed.was_active && !model->GetFocusedGroup()) {
+    // Zen shows the empty tab only when nothing else is left to show: with
+    // Essentials the window keeps what it shows (zen.workspaces.open-new-tab-
+    // if-last-unpinned-tab-is-closed is off by default).
+    bool has_essentials = false;
+    for (int i = 0; i < model->count() && !has_essentials; ++i) {
+      has_essentials = model->IsTabPinned(i);
+    }
+    if (closed.was_active && !model->GetFocusedGroup() && !has_essentials) {
       // Zen stays on an Essential that was selected when the Space emptied.
       tabs::TabInterface* active_tab = model->GetActiveTab();
       const bool on_essential = active_tab && active_tab->IsPinned();
@@ -1433,6 +1496,10 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
       }
     }
   }
+
+  // The handed-over empty tab was for the loop above (or not needed: the last
+  // tab was loose); a later emptied Space must not adopt it.
+  empty_tab_ = tabs::TabHandle();
 
   // Loose tabs (dragged in from another window, unpinned, from an older
   // Koan) join the active Space, or a new one.
@@ -1447,6 +1514,7 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     // Only Essentials: the window still has a Space, with a new tab.
     chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
                      /*foreground=*/false);
+    MarkEmptyTab(model->GetWebContentsAt(model->count() - 1));
     loose.push_back(model->count() - 1);
   }
   // A window that opened with no Spaces (none restored) while the profile has
@@ -2150,8 +2218,27 @@ void KoanWorkspaceController::OnTabStripModelChanged(
       containers::OnTabInserted(inserted.contents);
     }
   }
+  if (change.type() == TabStripModelChange::kRemoved) {
+    // Closed, or moved to another window (a drag, "Move to another window",
+    // chrome.tabs.move): only a close keeps the window (see
+    // KeepWindowOnLastTabClosed(); TabStripEmpty() fires for both).
+    last_removal_closed_ = std::ranges::all_of(
+        change.GetRemove()->contents, [](const auto& removed) {
+          return TabRemoveReasonUtils::WillDeleteWebContents(
+              removed.remove_reason);
+        });
+  }
   if (change.type() != TabStripModelChange::kSelectionOnly) {
     ScheduleUpdate();
+  }
+}
+
+void KoanWorkspaceController::OnTabChangedAt(tabs::TabInterface* tab,
+                                             TabChangeType change_type) {
+  // The empty tab that navigated in place is an ordinary tab from then on.
+  // (Here, not in the sidebar's controller, which runs only with the sidebar.)
+  if (change_type == TabChangeType::kAll) {
+    ClearEmptyTabMarkIfNavigated(tab);
   }
 }
 
@@ -2372,6 +2459,71 @@ void PlaceUnindexedTab(TabStripModel* tab_strip,
 
 bool WrapsSpaces(TabStripModel* tab_strip) {
   return KoanWorkspaceController::FromTabStrip(tab_strip) != nullptr;
+}
+
+bool IsEmptyTab(const tabs::TabInterface* tab) {
+  if (!features::IsWorkspacesEnabled() || !tab || tab->IsPinned()) {
+    return false;
+  }
+  content::WebContents* contents = tab->GetContents();
+  // Marked when Koan made it, and an empty page still: it never navigates
+  // (what is opened from it opens in a new tab).
+  return contents && IsEmptyPageUrl(contents->GetVisibleURL()) &&
+         !GetTabSessionData(contents, kEmptyTabKey).empty();
+}
+
+void ClearEmptyTabMarkIfNavigated(tabs::TabInterface* tab) {
+  content::WebContents* contents = tab ? tab->GetContents() : nullptr;
+  if (contents && !IsEmptyPageUrl(contents->GetVisibleURL()) &&
+      !GetTabSessionData(contents, kEmptyTabKey).empty()) {
+    SetTabSessionData(contents, kEmptyTabKey, std::string());
+  }
+}
+
+bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
+  if (!features::IsWorkspacesEnabled() ||
+      browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
+      browser->GetProfile()->IsOffTheRecord() || browser->IsDeleteScheduled() ||
+      browser->GetTabStripModel()->closing_all()) {
+    return false;
+  }
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  if (!controller || !controller->workspaces()->IsEnabled()) {
+    return false;
+  }
+  // The tab strip also empties when its last tab moves to another window: a
+  // drag (which hides this window on macOS and relies on the empty strip
+  // closing it), "Move to another window", chrome.tabs.move. Those removals
+  // are never closes, so no separate check for a drag in progress: a global
+  // one would also close this window when its last tab *closes* while a drag
+  // runs in another window.
+  if (!controller->workspaces()->LastTabsWereClosed()) {
+    return false;
+  }
+  controller->workspaces()->ExpectEmptyTab();
+  // Not from inside the tab strip's close: it can't be modified there.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<BrowserWindowInterface> window,
+                        base::WeakPtr<KoanBrowserViewController> controller) {
+                       if (!window || !controller ||
+                           !window->GetTabStripModel()->empty()) {
+                         return;
+                       }
+                       content::WebContents* contents =
+                           chrome::AddAndReturnTabAt(window.get(), GURL(), -1,
+                                                     /*foreground=*/true);
+                       TabStripModel* model = window->GetTabStripModel();
+                       const int index = model->GetIndexOfWebContents(contents);
+                       if (index != TabStripModel::kNoTab) {
+                         controller->workspaces()->AdoptEmptyTab(
+                             model->GetTabAtIndex(index)->GetHandle());
+                       }
+                     },
+                     browser->GetWeakPtr(), controller->GetWeakPtr()));
+  return true;
 }
 
 bool ShowsSpaceHeader(const views::View* tab_group_view) {

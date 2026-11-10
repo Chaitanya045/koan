@@ -75,8 +75,10 @@ inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
 
 // How the URL bar opens when the address is edited (Zen's
 // zen.urlbar.behavior): "normal" edits it in place (in the sidebar's URL
-// pill), "floating-on-type" (Zen's default) starts there too and floats over
-// the page on the first keystroke, "float" floats over the page right away.
+// pill), "floating-on-type" (Zen's default) floats over the page when the bar
+// is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill after a
+// click on it (typing then never floats it), "float" floats over the page
+// right away.
 inline constexpr char kUrlBarBehavior[] = "koan.urlbar.behavior";
 inline constexpr char kUrlBarBehaviorNormal[] = "normal";
 inline constexpr char kUrlBarBehaviorFloatingOnType[] = "floating-on-type";
@@ -219,6 +221,13 @@ inline constexpr char kDragWindowFromContent[] =
 // this pref by name: keep the name in
 // patches/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc.patch.
 inline constexpr char kBookmarksBarShow[] = "koan.bookmarks_bar.show";
+// What a new tab page shows: "koan" (the default) is Koan's blank page in the
+// theme's colours, like Zen's new tab; "chromium" is Chromium's own new tab
+// page. Koan's own setting. A new tab page set by policy or by an extension
+// wins over both.
+inline constexpr char kNewTabPage[] = "koan.newtab.page";
+inline constexpr char kNewTabPageKoan[] = "koan";
+inline constexpr char kNewTabPageChromium[] = "chromium";
 
 // Whether the welcome screen was shown (zen.welcome-screen.seen).
 inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";

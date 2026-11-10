@@ -185,11 +185,16 @@ toolbar is hidden) don't change that.
 
 ## URL bar
 
-Like Zen's, the URL bar opens where you are and floats once you type:
-clicking the pill (or Ctrl+L) edits the address right in the pill; the
-first keystroke lifts it into a card centred over the window (two thirds
-of its width, at most 750 px, larger text, a soft shadow over the page)
-with the suggestions under it. The pill is empty meanwhile. Esc, a click
+Like Zen's, the URL bar is a card centred over the window (two thirds of
+its width, at most 750 px, larger text, a soft shadow over the page) with
+the suggestions under it. **Ctrl+L and Ctrl+T (⌘L, ⌘T)** open it at once,
+with no animation; **clicking the pill** edits the address in the pill, which
+grows over the page as you type and never floats (Behavior "Normal" does that
+for the keyboard too). The box is empty after Ctrl+T, and an empty box lists
+your open tabs (most recent first, each with **Switch to Tab**; Enter
+switches to it) and then your most visited sites, all from the browser itself
+with no request to a search engine. On an empty box, **Tab** enters the
+command palette (the ">" mode). The pill is empty meanwhile. Esc, a click
 outside the card or opening a result (or running an action) closes it;
 switching to another window and back leaves it as it was. In compact mode,
 with the sidebar hidden, it floats right away, also when you click the pill
@@ -231,6 +236,45 @@ Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
 In the multiple-toolbars layout the address is edited in the toolbar, as
 in Chrome; Ctrl+T still opens it instead of a new-tab page, and Esc closes
 it in one press.
+
+## Closing the last tab
+
+Like Zen (`browser.tabs.closeWindowWithLastTab` is off there), closing a
+window's last tab keeps the window. It shows the **empty tab**: a blank page
+that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
+empty) and never navigates: what you open from the URL bar (⌘T, ⌘L) opens in
+a **new** tab; close that tab and the empty tab is back. (An empty tab that is
+navigated in place anyway, from a bookmark or the Library, becomes an ordinary
+tab.) It is still reached by Ctrl+Tab, ⌘1-9, tab search and extensions, which
+Zen's cycling skips: not done yet. Only a **close** keeps the window: moving
+the last tab to another window (a drag, "Move to another window") closes it, as
+in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
+last unpinned tab leaves the Essential selected, not the empty tab. In compact
+mode the sidebar stays shown while the empty tab is selected.
+
+## New tab page
+
+A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
+horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
+above off) is an empty page in the window's look, like Zen's: near black (#09090b) in the
+dark shadcn look, white in the light one, and in the default Zen look Chromium's
+theme colour for the page (Zen's empty tab shows its window gradient or glass
+there: not matched yet). It follows the window: a change of look or theme loads
+it again with the new colour. No Google logo, search box or shortcut tiles, and nothing to load, so it
+shows at once. It is `chrome://koan-newtab`, a page with no content and no
+script. Ctrl+T (⌘T) still opens the URL bar instead of a tab. A new window that
+starts on the empty page opens the New Tab bar at once (Zen's
+`zen.urlbar.open-on-startup`), except the first-run welcome and a restored
+session.
+
+Koan's settings (Ctrl+,), Look and Feel > New tab page > New tabs, choose
+between **Blank page** (Koan's, the default; pref `koan.newtab.page`) and
+**Chromium's new tab page** (with a search engine other than Google's, that is
+the engine's own remote new tab page, which Chromium loads from the web). A new
+tab page set by your administrator
+(Chromium's `NewTabPageLocation` policy) or by an extension is shown
+instead of either, as in Chromium. Private windows keep Chromium's private
+browsing page. `chrome://flags/#koan-new-tab` turns Koan's page off.
 
 ## Command palette
 

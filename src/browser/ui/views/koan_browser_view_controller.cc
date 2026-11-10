@@ -245,6 +245,9 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     media_->OnAddedToWidget();
     download_animation_->OnAddedToWidget();
     welcome_->OnAddedToWidget();
+    // After the welcome: both post a task, and the URL bar's must run after
+    // the welcome's (FIFO) so it sees whether the welcome is showing.
+    url_bar_->OnAddedToWidget();
   }
 }
 
