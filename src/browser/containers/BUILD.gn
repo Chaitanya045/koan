@@ -33,6 +33,13 @@ source_set("grants") {
   public_deps = [ "//base" ]
 }
 
+# The launch picker's profile count (koan_visible_profiles.h). Header-only, for
+# //chrome/browser/ui/profiles.
+source_set("visible_profiles") {
+  sources = [ "koan_visible_profiles.h" ]
+  public_deps = [ "//chrome/browser/profiles:profile_util" ]
+}
+
 # The core's hooks into the browser (koan_containers.h) and the API agent
 # control calls (koan_agent_containers.h). Header-only, so upstream targets
 # and //koan/browser/agent can depend on it without cycles; the definitions
@@ -60,8 +67,11 @@ source_set("impl") {
     ":grants",
     ":partition",
     "//base",
+    "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/profiles:profile_manager",
+    "//chrome/browser/profiles:profile_util",
+    "//chrome/browser/profiles/keep_alive",
     "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/browser_window:create_browser_window",
@@ -114,20 +124,26 @@ source_set("service_policy") {
   public_deps = [ "//base" ]
 }
 
-# The upgrade guard: every factory Chromium registers has a row. It links the
+# The upgrade guard: every factory Chromium registers has a row (and the launch
+# picker's profile count, koan_visible_profiles.h). It links the
 # browser (to build every factory), so it is its own target. Build and run:
 #   autoninja -C out/Koan koan/browser/containers:koan_agent_service_unittests
 #   out/Koan/koan_agent_service_unittests
 test("koan_agent_service_unittests") {
-  sources = [ "koan_agent_service_policy_unittest.cc" ]
+  sources = [
+    "koan_agent_service_policy_unittest.cc",
+    "koan_visible_profiles_unittest.cc",
+  ]
   deps = [
     ":service_policy",
+    ":visible_profiles",
     "//base",
     "//chrome/browser",
     "//chrome/browser/profiles:profiles_extra_parts",
     "//chrome/test:test_support_unit",
     "//components/keyed_service/content",
     "//components/keyed_service/core",
+    "//content/test:test_support",
     "//testing/gtest",
   ]
 }

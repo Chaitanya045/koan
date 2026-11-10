@@ -945,6 +945,12 @@ gets it only if you ticked it **and** it asks for that container by name, and
 never while another task has it open. Delete removes its cookies and site data.
 The ticks last until Koan quits or you press Stop, like the approvals.
 
+**Strict** (Settings > Agent Control) goes further: each task gets a hidden
+profile of its own, with none of your settings, extensions or permissions, in
+a background window of that profile. It takes a moment longer to start, and
+the profile is deleted when the task ends. Hidden profiles never show in the
+profile menu or bring up the profile picker at launch.
+
 ## Install in the app menu
 
 ```sh
