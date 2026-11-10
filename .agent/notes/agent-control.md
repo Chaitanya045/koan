@@ -284,6 +284,16 @@ Two namespaces on one connection:
   **nothing else is listed**, which is what makes `agent-browser`, which attaches to every page target on connect
   (D§3), see only the agent's Space.
 
+**Built (CDP forwarding PR, `koan_agent_facade.*`, `koan_agent_forwarder.*`, `koan_agent_devtools_client.*`):** one facade per
+authenticated connection on the UI thread. A tab command passes `Classify()`, `TargetRegistry::MaySend()` and the row's
+`ApplyParamFilter()` (with the tab's `ContextTracker` and the session's `StreamRegistry`), is re-serialised with a facade id and
+sent through the lease's `RunCommand()`; its answer gets the client's id back after the result hooks (`createIsolatedWorld` →
+the tracker, `printToPDF` → the stream registry). Every event passes `FilterEvent()` and, for context events, the tracker. Every
+command is audited (denied ones at once, forwarded ones when answered, with the duration). `Target.setAutoAttach` inside a tab
+succeeds and attaches nothing: child targets (OOPIFs, workers) are not proxied yet (T-cdp-3). Parsing and scrubbing run on the
+UI thread for now; moving them to a worker is the measurement of §4.1 (T-perf-1 in the PR's test plan). `Koan.openTab` and
+`Target.createTarget` call the `AgentTabOpener` the agent containers install, and answer `Koan.unavailable` until they do.
+
 ### 4.3 Method policy: per-method tables, **unlisted = deny**
 
 Rules: (1) no domain wildcards; a method is allowed only by name; (2) the table is data, in one file, and a unit

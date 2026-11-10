@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,10 @@
 #include "koan/browser/agent/koan_agent_session.h"
 
 class PrefService;
+
+namespace koan::agent {
+class AgentForwarder;
+}
 
 // Agent control in the browser process (.agent/notes/agent-control.md
 // sections 4.1, 6.1 and 6.2): starts the gateway while "Agent ready" is on and
@@ -79,6 +84,9 @@ class AgentControlService {
   void OnListening(bool listening);
   void OnClientConnected(ConnectedClient client);
   void OnClientDisconnected(uint64_t connection_id);
+  void OnClientMessage(uint64_t connection_id, AgentMessage message);
+  // From the forwarder: posted to the gateway.
+  void SendToClient(uint64_t connection_id, std::string json);
   void ShowApproval(ApprovalRequest request,
                     base::OnceCallback<void(ApprovalDecision)> answer);
   void CancelApproval(uint64_t request_id);
@@ -88,6 +96,8 @@ class AgentControlService {
   PrefChangeRegistrar registrar_;
   base::CallbackListSubscription terminating_;
   base::SequenceBound<GatewayHost> host_;
+  // The facades, the registry and the DevTools clients (UI thread).
+  std::unique_ptr<AgentForwarder> forwarder_;
   bool listening_ = false;
   std::vector<ConnectedClient> clients_;
   base::ObserverList<Observer> observers_;

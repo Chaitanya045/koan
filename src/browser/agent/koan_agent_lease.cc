@@ -315,10 +315,18 @@ void AgentLeaseManager::OnOpenedFromAgentTab(content::WebContents* source,
   if (!lease) {
     return;
   }
+  if (opened_tab_handler_) {
+    opened_tab_handler_.Run(source, opened);
+    return;
+  }
   // It belongs to the same agent and task. A tab a page opens from a user's
   // tab the agent drives in place is the agent's own: the user did not open
   // it.
   Attach(opened, lease->client_id(), lease->task(), /*agent_owned=*/true);
+}
+
+void AgentLeaseManager::SetOpenedTabHandler(OpenedTabHandler handler) {
+  opened_tab_handler_ = std::move(handler);
 }
 
 void AgentLeaseManager::OnBatteryPowerStatusChange(

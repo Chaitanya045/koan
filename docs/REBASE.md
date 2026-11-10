@@ -324,6 +324,22 @@ freezing and from Memory Saver's discard, and nothing outside performance_manage
 on a hidden tab (T-keep-1..4); macOS's Low Power Mode is read from `NSProcessInfo.lowPowerModeEnabled`, since Chromium has no
 wrapper for it.
 
+CDP forwarding (`src/browser/agent/koan_agent_facade.*`, `koan_agent_forwarder.*`, `koan_agent_devtools_client.*`,
+`koan_agent_reach_content.*`) adds no patch: each connection gets one `content::DevToolsAgentHostClient` per tab, attached with
+`DevToolsAgentHost::GetOrCreateFor(WebContents*)->AttachClient()`, with `IsTrusted()`, `MayReadLocalFiles()`,
+`MayWriteLocalFiles()` and `AllowUnsafeOperations()` all false. It uses upstream symbols, so a rename breaks the compile:
+`DevToolsAgentHostClient`'s virtuals, `DevToolsAgentHost::GetProtocolVersion`, `RenderFrameHost::GetParentOrOuterDocumentOrEmbedder`,
+`SiteInstance::GetSecurityPrincipal().GetDeprecatedSiteURL()`, `WebContents::IsPrivileged`, `RenderProcessHost::IsPdf`/`IsForGuestsOnly`,
+`SecurityInterstitialTabHelper::IsDisplayingInterstitial`, `embedder_support::GetUserAgent`. Behaviour it relies on, to re-read in
+`content/browser/devtools/` on a roll: an untrusted client has no `Browser`, `SystemInfo` or `Extensions` domain and no browser target
+(`DevToolsSession::IsDomainAvailableToUntrustedClient`); content asks `MayAttachToRenderFrameHost()` at attach and when the frame
+host changes, and `MayAttachToURL()` for every navigation request, and a refusal detaches the client through `AgentHostClosed()`
+(T-sec-4, T-sec-11: the facade then sends `Target.detachedFromTarget`, and the tab stays the agent's); an answer carries the
+`id` its command was sent with; a session has no child sessions unless `Target.setAutoAttach` is sent to it, which the facade
+never forwards (it drops any message with a `sessionId` from a tab); `WebContents::Close()` closes a tab without a
+`beforeunload` dialog; the page target id of `GetOrCreateFor()` stays the tab's across its navigations (UNVERIFIED across a
+prerender activation, T-cdp-5).
+
 A review that changes the outcome updates the table and the baseline in one change. The other things to re-check on a roll
 (the untrusted-client domain list, the `DevToolsAgentHostClient` flag defaults, the `PageLiveStateDecorator` setters the
 keep-alive uses) are in the design's section 14 and become REBASE rows with the PRs that add them.

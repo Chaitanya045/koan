@@ -107,6 +107,11 @@ ApprovalPresenter::~ApprovalPresenter() = default;
 
 GatewayObserver::~GatewayObserver() = default;
 
+bool GatewayObserver::OnClientMessage(uint64_t connection_id,
+                                      AgentMessage message) {
+  return false;
+}
+
 GatewayOptions::GatewayOptions() = default;
 GatewayOptions::GatewayOptions(const GatewayOptions&) = default;
 GatewayOptions& GatewayOptions::operator=(const GatewayOptions&) = default;
@@ -212,6 +217,27 @@ class Gateway::Connection final : public SessionDelegate {
 
   bool PeerUnchanged() override {
     return peer_ && gateway_->resolver_->Unchanged(*peer_);
+  }
+
+  bool Forward(AgentMessage message) override {
+    // The observer hears that the client is connected before its first
+    // message: the indicator shows before anything reaches a tab.
+    UpdateAdmission();
+    GatewayObserver* observer = gateway_->options_.observer;
+    return authenticated_ && observer &&
+           observer->OnClientMessage(id_, std::move(message));
+  }
+
+  // An answer or event from the facade.
+  void SendJson(std::string_view json) {
+    if (dropped_ || close_after_flush_ || !authenticated_) {
+      return;
+    }
+    std::optional<std::vector<uint8_t>> frame =
+        EncodeFrame(base::as_byte_span(json));
+    if (frame) {
+      Enqueue(std::move(*frame));
+    }
   }
 
  private:
@@ -591,6 +617,14 @@ void Gateway::OnClientRevoked(std::string_view client_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (auto& [id, connection] : connections_) {
     connection->OnClientRevoked(client_id);
+  }
+}
+
+void Gateway::SendToClient(uint64_t connection_id, std::string_view json) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  auto it = connections_.find(connection_id);
+  if (it != connections_.end()) {
+    it->second->SendJson(json);
   }
 }
 

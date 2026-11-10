@@ -38,10 +38,10 @@ class UnixDomainServerSocket;
 // section 4.1): Koan's own accept loop, a Session for every connection, and the
 // limits that keep a process that only connects from using up the browser.
 //
-// **It forwards nothing and nothing starts it.** Like Session, an authenticated
-// connection answers Koan.status and refuses everything else; and no browser
-// code creates a Gateway yet (no preference, no window hook), so this changes
-// nothing a user can see. Starting it belongs to the settings change.
+// An authenticated connection's messages for the tabs go to the observer
+// (GatewayObserver::OnClientMessage), and its answers and events come back
+// through SendToClient(). The browser starts it from the "Agent ready" pref
+// (koan_agent_service.cc).
 //
 // What it does, in the order a connection meets it:
 //   1. The listening socket is in a 0700 directory, 0600, behind a lock file
@@ -104,6 +104,10 @@ class GatewayObserver {
                                  const std::string& client_id,
                                  const std::string& label) = 0;
   virtual void OnClientDisconnected(uint64_t connection_id) = 0;
+  // A message from an authenticated client for the tabs (always after
+  // OnClientConnected() for that connection). Returns false if nothing takes
+  // it.
+  virtual bool OnClientMessage(uint64_t connection_id, AgentMessage message);
 };
 
 struct GatewayOptions {
@@ -181,6 +185,10 @@ class Gateway {
 
   // The store removed this client: its live connections close at once.
   void OnClientRevoked(std::string_view client_id);
+
+  // Sends one JSON message (an answer or an event) to an authenticated
+  // connection. Does nothing if the connection is gone or closing.
+  void SendToClient(uint64_t connection_id, std::string_view json);
 
   // Run by a once-a-second timer; public so that tests can drive the clock.
   void CheckTimeouts();
