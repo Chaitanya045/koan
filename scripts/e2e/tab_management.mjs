@@ -130,16 +130,21 @@ await sleep(800);
 check('...and from an Essential stays among the Essentials',
       (await activeOf([opener, b, c]))?.id === opener.id);
 
-// Chromium's "Ctrl+Tab in recently used order" wins for Ctrl+Tab, and the
-// page says so under Koan's row. Chromium ranks tabs by window focus, which
-// a headless session doesn't have, so check that Koan's cycling (which would
-// go to B, skipping the Essential) yields.
+// Chromium's "Ctrl+Tab in recently used order" wins for Ctrl+Tab over
+// "within Essential or Workspace tabs only", and the page says so under
+// Koan's row. Since #214 Koan walks that order itself, as Zen's list: the
+// Space's tabs and the Essentials, most recently shown first. The tab shown
+// before C is the Essential (above), which cycling within kind would skip
+// for B. (Should the session give the tabs no activation times, the order
+// falls back to the strip's, where the Essential is first too.)
 await front(c);
 await key(c, VK.TAB, CTRL, 'Tab');
-await sleep(800);
-now = await activeOf([opener, b, c]);
-check('With Chromium\'s recently used Ctrl+Tab on, Koan\'s cycling yields to it',
-      now?.id !== b.id, now ? await title(now) : 'none');
+now = await waitFor(async () => {
+  const tab = await activeOf([opener, b, c]);
+  return tab && tab.id !== c.id ? tab : null;
+});
+check('With Chromium\'s recently used Ctrl+Tab on, Ctrl+Tab goes to the last tab shown',
+      now?.id === opener.id, now ? await title(now) : 'none');
 await evalIn(settings, `document.querySelector('#category-tabs').click()`);
 check('...and the Koan row notes it, like Zen',
       await evalIn(settings, `(() => {

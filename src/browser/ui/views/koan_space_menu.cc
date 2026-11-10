@@ -18,6 +18,7 @@
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/color/color_id.h"
@@ -39,6 +40,7 @@ enum SpaceMenuCommand {
   kUnloadOthers,
   kCreateSpace,
   kDelete,
+  kSpaceRouting,
   // The Spaces to switch to (opened from the header).
   kFirstSwitch = 100,
 };
@@ -97,6 +99,9 @@ KoanSpaceMenu::KoanSpaceMenu(KoanWorkspaceController* controller,
   model_.AddSeparator(ui::NORMAL_SEPARATOR);
   model_.AddItem(kCreateSpace, u"Create Space");
   model_.AddItem(kDelete, u"Delete Space");
+  model_.AddSeparator(ui::NORMAL_SEPARATOR);
+  // Zen's zen-space-routing-settings.
+  model_.AddItem(kSpaceRouting, u"Space Routing Settings");
 }
 
 KoanSpaceMenu::~KoanSpaceMenu() = default;
@@ -157,6 +162,9 @@ void KoanSpaceMenu::Execute(int command_id) {
     case kDelete:
       controller_->DeleteSpace(space_);
       return;
+    case kSpaceRouting:
+      controller_->space_routing()->ShowSettings();
+      return;
   }
 }
 
@@ -198,6 +206,10 @@ KoanCreateMenu::KoanCreateMenu(KoanWorkspaceController* controller)
         model_.AddItemWithIcon(command_id, entry.label, MenuIcon(*entry.icon));
       } else {
         model_.AddItem(command_id, entry.label);
+      }
+      if (entry.element_id) {
+        model_.SetElementIdentifierAt(model_.GetItemCount() - 1,
+                                      entry.element_id);
       }
     }
   }

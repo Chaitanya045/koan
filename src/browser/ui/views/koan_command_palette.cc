@@ -286,7 +286,9 @@ void KoanCommandProvider::Start(const AutocompleteInput& input,
   }
   PrefService* prefs = client_->GetPrefs();
   std::u16string_view text = input.text();
-  const bool prefixed = text.starts_with(kActionsModePrefix);
+  // Zen's Spaces mode is its actions mode with only the Spaces' actions.
+  const bool spaces_mode = text.starts_with(kSpacesModePrefix);
+  const bool prefixed = spaces_mode || text.starts_with(kActionsModePrefix);
   if (prefixed) {
     text.remove_prefix(1);
   } else if (!prefs->GetBoolean(prefs::kCommandPaletteSuggestions) ||
@@ -312,6 +314,9 @@ void KoanCommandProvider::Start(const AutocompleteInput& input,
   std::vector<Candidate> candidates;
   for (KoanCommand& command :
        controller->command_palette()->registry().GetAvailableCommands()) {
+    if (spaces_mode && !command.id.starts_with(kFocusSpaceCommandPrefix)) {
+      continue;
+    }
     const int score =
         query.empty() ? kMinimumPrefixedScore + 1 : Score(command, query);
     if (score > (prefixed ? kMinimumPrefixedScore : kMinimumScore)) {
@@ -414,9 +419,12 @@ void KoanCommandProvider::OnURLOpened(OmniboxLog* log) {
       seen.push_back(std::move(id));
     }
   }
-  // Like Zen, the full ">" list doesn't count as passing actions over.
+  // Like Zen, the full ">" (or "`") list doesn't count as passing actions
+  // over.
   std::u16string_view text = log->text;
-  if (text.starts_with(kActionsModePrefix) && text.size() < 3) {
+  if ((text.starts_with(kActionsModePrefix) ||
+       text.starts_with(kSpacesModePrefix)) &&
+      text.size() < 3) {
     seen.clear();
   }
   if (!used && seen.empty()) {
@@ -457,6 +465,7 @@ KoanCommandPalette::KoanCommandPalette(KoanBrowserViewController* controller)
     : controller_(controller) {
   AddGlobalCommands(registry_, *controller);
   AddWorkspaceCommands(registry_, *controller);
+  AddFolderCommands(registry_, *controller);
 }
 
 KoanCommandPalette::~KoanCommandPalette() {

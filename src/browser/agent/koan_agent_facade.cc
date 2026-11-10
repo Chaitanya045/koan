@@ -744,6 +744,19 @@ void CdpFacade::OnTargetStateChanged(const std::string& target_id,
   SendEvent(event, std::move(params), std::nullopt);
 }
 
+void CdpFacade::OnUserNeeded(const std::string& target_id,
+                             std::string_view reason,
+                             bool needed) {
+  if (!InScope(target_id)) {
+    return;
+  }
+  base::DictValue params;
+  params.Set("targetId", target_id);
+  params.Set("reason", reason);
+  SendEvent(needed ? "Koan.userNeeded" : "Koan.userNeededDone",
+            std::move(params), std::nullopt);
+}
+
 bool CdpFacade::MayDispatch(int command_id) const {
   auto it = pending_.find(command_id);
   if (it == pending_.end()) {

@@ -1,16 +1,21 @@
 // End-to-end test of Zen's empty tab against a real build. Closing the last
 // tab keeps the window and leaves the Space with an empty tab: no tab row in
 // the sidebar and no second new tab. A page opened from the URL bar opens in
-// a new tab (the empty tab never navigates), and Cmd+W on the empty tab closes
-// the window.
+// a new tab (the empty tab never navigates), Ctrl+Tab and Cmd+1-9 skip the
+// empty tab, and Cmd+W on the empty tab closes the window.
 //
 //   scripts/e2e/run.sh empty_tab
 import {
-  CTRL, check, finish, front, key, pages, shownViews, sleep, typeInto, viewTree,
+  CTRL, META, SHIFT, check, finish, front, key, pages, shownViews, sleep, typeInto, viewTree,
   views, waitFor, browserCall, onPage, evalIn,
 } from './lib/koan.mjs';
 
-const VK = { T: 84, RETURN: 13 };
+const VK = { T: 84, RETURN: 13, TAB: 9, ONE: 49 };
+// Cmd on macOS, Ctrl elsewhere (Cmd+1-9 select a tab; Ctrl+1-9 on macOS
+// switch Spaces).
+const ACCEL = process.platform === 'darwin' ? META : CTRL;
+const isShown = async page =>
+    await evalIn(page, 'document.visibilityState') === 'visible';
 const tabRows = async () =>
     shownViews(await views(), 'TabView').filter(t => t.h > 1).length;
 
@@ -49,6 +54,20 @@ check('Opening a page from the empty state opens it in a new tab',
       after.map(p => p.url).join(' '));
 check('...and the sidebar lists just that one (the empty tab has no row)',
       await tabRows() === 1, String(await tabRows()));
+
+// The hidden empty tab is out of Ctrl+Tab and Cmd+1-9 (#177): with it and the
+// opened page in the Space, neither leaves the opened page.
+const opened = after.find(p => p.url.includes('?opened'));
+await key(opened, VK.TAB, CTRL, 'Tab');
+await sleep(500);
+check('Ctrl+Tab skips the hidden empty tab', await isShown(opened));
+await key(opened, VK.TAB, CTRL | SHIFT, 'Tab');
+await sleep(500);
+check('...and so does Ctrl+Shift+Tab', await isShown(opened));
+await key(opened, VK.ONE, ACCEL, '1');
+await sleep(500);
+check('Cmd+1 selects the first listed tab, not the empty tab',
+      await isShown(opened));
 
 // Cmd+W on the page that was opened: back to the empty state, then Cmd+W on
 // it closes the window.

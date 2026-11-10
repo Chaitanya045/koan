@@ -257,12 +257,13 @@ that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
 empty) and never navigates: what you open from the URL bar (⌘T, ⌘L) opens in
 a **new** tab; close that tab and the empty tab is back. (An empty tab that is
 navigated in place anyway, from a bookmark or the Library, becomes an ordinary
-tab.) It is still reached by Ctrl+Tab, ⌘1-9, tab search and extensions, which
-Zen's cycling skips: not done yet. Only a **close** keeps the window: moving
+tab.) Ctrl+Tab, ⌘1-9, tab search and extensions (`chrome.tabs.query`) skip
+it, as in Zen. Only a **close** keeps the window: moving
 the last tab to another window (a drag, "Move to another window") closes it, as
 in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
 last unpinned tab leaves the Essential selected, not the empty tab. In compact
-mode the sidebar stays shown while the empty tab is selected.
+mode the sidebar stays shown while the empty tab is selected (only that
+tab: not a tab of yours on about:blank or a new tab page).
 
 ## New tab page
 
@@ -310,7 +311,8 @@ Without Cache, Next / Previous Tab, Capture Screenshot, Find in Page, Manage
 Extensions, Toggle Tabs on right, Switch to Automatic Appearance / Light
 Mode / Dark Mode, Print;
 with workspaces also New Space, Next / Previous Space and "Focus on" each
-other Space (type its name). Only the actions that apply are offered (Unpin
+other Space (type its name); with folders New Folder and Collapse / Expand
+All Folders. Only the actions that apply are offered (Unpin
 Tab on a pinned tab, Next Space with two Spaces, ...).
 
 ## Sidebar
@@ -323,6 +325,11 @@ tab at the top of the Space's other tabs) and the other tabs. The pinned
 tabs, the line, New Tab and the tabs scroll together; the Essentials and
 the Space header stay put. A tab's close button shows while you point at
 it.
+
+While the selected tab loads, Zen's loading bar pulses at the top middle of
+the page (in the gap above it); after three seconds it turns into a wider
+track with a sweep. It isn't shown while a page is fullscreen. Tabs keep
+their favicon while loading, without Chromium's spinner, as in Zen.
 
 A pinned tab or Essential keeps its site, as in Zen: a URL on another site
 typed in its URL bar (or a search) opens in a new tab, and a link in it that
@@ -339,10 +346,11 @@ tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
 bottom is Zen's bottom bar: the Library button on the left, **+** on the
-right, which opens the Create menu (Create Space, New Split and New Tab),
-and the Space switcher in the middle: one narrow button per Space, centred.
-The current Space shows its emoji (or a dot if it has none) in colour, the
-others a small grey dot that turns into their emoji while you hover it.
+right, which opens the Create menu (Create Space, Create Folder, New Split
+and New Tab), and the Space switcher in the middle: one narrow button per
+Space, centred. The current Space shows its emoji (or a dot if it has none)
+in colour, the others a small grey dot that turns into their emoji while
+you hover it.
 The Space buttons only show once there is more than one Space.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
@@ -362,7 +370,9 @@ As in Zen there are two kinds of pinned tab:
   ("Unload and switch to tab") where other tabs have their close button.
 - **Essentials** are shared by all Spaces, up to 12 per window: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
-  Dragging a tab into the grid also makes it an Essential.
+  Dragging a tab into the grid also makes it an Essential. With no
+  Essentials yet, dragging a tab to the top of the sidebar shows Zen's
+  "Add to Essentials" drop target; drop it there.
 
 Both remember the URL they were pinned on, the **pinned URL**. When a pinned
 tab goes elsewhere, a slash appears after its icon: hover it to see the
@@ -386,7 +396,10 @@ tab among the pinned ones to pin it. With several pinned tabs selected,
 Ctrl+W does the same to each of them and closes none of the others.
 
 Any tab's context menu has "Change Label…" (edit the name in place; Enter
-keeps it, Esc cancels, an empty name goes back to the page title), "Change
+keeps it, Esc cancels, an empty name goes back to the page title, and "Tab
+has been successfully renamed!" confirms a new one). Double-clicking a tab's
+label in the sidebar does the same; Essentials have no label to rename, and
+neither do tabs in a sidebar collapsed to icons. "Change
 Icon…" (an emoji instead of the favicon) and "Unload" (free the tab's
 memory; it reloads when you select it). Pinned URLs, labels and icons are
 kept with the session.
@@ -423,7 +436,23 @@ belongs to a Space, and new tabs open in the active one.
   (also after a restart). Going straight to a tab of another Space (the
   address bar's "Switch to this tab", tab search) shows that tab.
 - **Move To**: right-click a tab > Move To moves it (and the other
-  selected tabs) to another Space and shows it.
+  selected tabs) to another Space and shows it. Or drag it: hold a dragged
+  tab at the sidebar's left or right edge for half a second to go to the
+  previous or next Space (again every half second while you stay), or over
+  a Space button in the bottom bar to go there at once; the tab comes along
+  and drops where you let go. Essentials only switch at the edges.
+- **Reorder** Spaces by dragging their buttons in the bottom bar (the
+  others fade while you do; on a Mac the trackpad ticks at each step).
+- **Space routing** (right-click the header > Space Routing Settings, or
+  "Open Space Routing" in the command palette): routes like "When the link
+  contains youtube.com, open it in Media" send new tabs for matching pages
+  to that Space, in the background, with a "New tab opened in Media" toast;
+  the first matching route wins. Match by Contains, Is Exactly (ignoring
+  http(s)://, www. and a final /) or RegEx. "Default route for external
+  links" picks the Space links from other apps open in when no route
+  matches. Right-click a tab > Add Route for Domain adds a route for its
+  site (one per selected tab's site) and opens the settings. Essentials and
+  pinned tabs are never routed.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -452,6 +481,48 @@ delete the Space, ⌘⌃X / ⌘⌃Z go to the next / previous Space, ⌘⌃C ope
 new tab as ⌘T does. Tab > Group Tab isn't there (use Move To). A Space is
 never collapsed, and a tab group an extension makes becomes a Space with
 the default theme (unless the extension sets a colour).
+
+## Folders
+
+As in Zen, a Space's folders are part of its pinned section: after its
+pinned tabs, above the separator with Clear and "+ New Tab". A folder's tabs
+are pinned tabs of the Space, so they survive Clear and ⌘W runs the pinned
+close behaviour on them. A folder has a row with a folder icon and its name;
+its tabs sit under it, indented, and subfolders nest inside it (five levels
+at most).
+
+- **Create a folder:** click **+** at the bottom of the sidebar and choose
+  **Create Folder**, or right-click a tab and choose **Move to Folder >
+  New Folder** (the folder takes the selected tabs). Type its name and
+  press Enter.
+- **Add tabs:** right-click a tab, **Move to Folder** and pick the folder;
+  drop a tab on the folder's row (it becomes the folder's first tab), or
+  among its tabs. A tab moved in is pinned; an Essential leaves the
+  Essentials and keeps its pinned URL.
+- **Take tabs out:** drag the tab among the pinned tabs above the folders
+  (it stays pinned) or among the normal tabs (it's unpinned), unpin it
+  (⌃⇧D), or use **Move to Folder > Remove from Folder** (it stays pinned).
+- **Collapse / expand:** click the folder's row. A collapsed folder shows
+  its tab count, and still shows its tab if that's the active one (the
+  icon gets three dots).
+- **Search a folder:** hover a collapsed folder for half a second; type to
+  filter its tabs by title or site, use the arrow keys and Enter, or click
+  one.
+- **Folder menu** (right-click the row): Rename Folder (not while the
+  sidebar is collapsed; as in Zen, a double click doesn't rename), Unload
+  All Tabs (frees their memory and collapses the folder), New Subfolder,
+  Change Space, Convert folder to Space, Unpack Folder (its tabs and
+  subfolders move up a level), Delete Folder (closes its tabs; ⌘⇧T reopens
+  them as loose tabs; a folder tab closed on its own reopens in its
+  folder). A Space that a folder empties (Delete, Change Space, Convert to
+  Space) stays, with a new tab.
+
+![Folders](screenshots/folders-open.png)
+
+Folders are saved with the session and come back after a restart, and with
+a reopened window. With startup set to open the New Tab page or other pages,
+the folders of the window you were in still come back, with their tabs
+(unloaded until you open them), as in Zen.
 
 ## Space themes
 
@@ -807,6 +878,13 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Haptic feedback (macOS)
+
+As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
+Space button passes another while you reorder them, and as the theme picker's
+sliders pass a step. Turn it off with "Haptic feedback on the trackpad" in
+`chrome://koan-settings` (Look and Feel, Theme Settings).
+
 ## Translucent window (macOS)
 
 Like Zen's, the window is glass: the sidebar, the toolbar and the gutter
@@ -843,12 +921,18 @@ own icons.
 Every Koan feature has a switch in `chrome://flags` (search "Koan"): Koan
 sidebar, compact mode, workspaces, Glance, restore tabs on demand, freeze
 background tabs, command palette, pinned tabs and Essentials, Library, media
-controls, download animation, window dragging from pages, welcome screen.
+controls, download animation, window dragging from pages, welcome screen,
+folders.
 
 The media controller and the download animation are on by default; like
 Zen's (which keeps them in about:config), they have no setting yet, only
 the prefs `koan.media_controls.enabled` and
-`koan.downloads.download_animation`.
+`koan.downloads.download_animation`. The same goes for renaming tabs
+(`koan.tabs.rename_tabs`, Zen's `zen.tabs.rename-tabs`), the loading bar
+(`koan.view.loading_indicator`, `zen.view.enable-loading-indicator`) and
+hiding the tab spinner (`koan.theme.hide_tab_throbber`,
+`zen.theme.hide-tab-throbber`), all on by default. A change of the last one
+reaches each tab the next time it changes.
 
 In compact mode with the sidebar hidden, a tab a page opens in the
 background shows Zen's "New background tab opened!" toast; its button
@@ -958,6 +1042,14 @@ profile of its own, with none of your settings, extensions or permissions, in
 a background window of that profile. It takes a moment longer to start, and
 the profile is deleted when the task ends. Hidden profiles never show in the
 profile menu or bring up the profile picker at launch.
+
+What a page asks of you while an agent works in its tab (its own tab, or one
+of yours it controls) never pops up over your work: a "Leave site?" dialog,
+an `alert`/`confirm`/`prompt`, a link that opens an app, a sign-in prompt,
+`window.print()` or a request for focus waits in the pill instead ("a.test
+asks you to sign in · Open · Dismiss"). **Open** switches to the tab and shows
+it as Chrome would; **Dismiss** says no (stay on the page, no sign-in, no
+print). The agent is told, and can still answer a dialog itself.
 
 ## Install in the app menu
 

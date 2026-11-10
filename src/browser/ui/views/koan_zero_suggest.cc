@@ -17,6 +17,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/escape.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/history/core/browser/history_types.h"
@@ -27,6 +28,9 @@
 #include "components/omnibox/browser/autocomplete_match_classification.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
+#include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_event_global_tracker.h"
+#include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/tab_matcher.h"
 #include "components/url_formatter/url_formatter.h"
@@ -35,6 +39,8 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/omnibox/koan_omnibox_hooks.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -56,9 +62,25 @@ std::set<const AutocompleteProvider*>& LiveProviders() {
 constexpr size_t kMaxOpenTabs = 5;
 constexpr size_t kMaxSuggestions = 8;
 
-// Relevance of the two groups; tabs come first, each group in order.
+// Relevance of the groups: the copied link first (Firefox gives its provider
+// priority), then tabs, each group in order.
+constexpr int kClipboardRelevance = 1600;
 constexpr int kOpenTabRelevance = 1500;
 constexpr int kTopSiteRelevance = 1000;
+
+// Firefox's UrlbarProviderClipboard limits.
+constexpr size_t kMaxClipboardChars = 2048;
+constexpr int kClipboardImpressions = 2;
+
+// The link last offered from the clipboard, and how many more times it may be.
+struct ClipboardSuggestion {
+  GURL url;
+  int impressions_left = 0;
+};
+ClipboardSuggestion& LastClipboardSuggestion() {
+  static base::NoDestructor<ClipboardSuggestion> suggestion;
+  return *suggestion;
+}
 
 // The host of Koan's own new tab page (koan/common/koan_url_constants.h,
 // which comes with that page).
@@ -125,6 +147,11 @@ class KoanZeroSuggestProvider : public AutocompleteProvider {
       : AutocompleteProvider(AutocompleteProvider::Type::kBuiltin),
         client_(client) {
     LiveProviders().insert(this);
+    // A picked copied link isn't offered again (Firefox's onEngagement).
+    url_opened_subscription_ =
+        OmniboxEventGlobalTracker::GetInstance()->RegisterCallback(
+            base::BindRepeating(&KoanZeroSuggestProvider::OnURLOpened,
+                                base::Unretained(this)));
   }
   KoanZeroSuggestProvider(const KoanZeroSuggestProvider&) = delete;
   KoanZeroSuggestProvider& operator=(const KoanZeroSuggestProvider&) = delete;
@@ -134,7 +161,9 @@ class KoanZeroSuggestProvider : public AutocompleteProvider {
   void Stop(AutocompleteStopReason stop_reason) override {
     AutocompleteProvider::Stop(stop_reason);
     weak_factory_.InvalidateWeakPtrs();
+    pending_ = 0;
   }
+  void DeleteMatch(const AutocompleteMatch& match) override;
 
  private:
   ~KoanZeroSuggestProvider() override { LiveProviders().erase(this); }
@@ -145,8 +174,15 @@ class KoanZeroSuggestProvider : public AutocompleteProvider {
                               omnibox::AutocompleteMatchType type);
   void OnTopSites(std::set<GURL> open_urls,
                   const history::MostVisitedURLList& sites);
+  void OnClipboardText(std::u16string text);
+  void OnURLOpened(OmniboxLog* log);
+  // One asynchronous part (the clipboard, the top sites) has finished.
+  void FinishPart(bool changed);
 
   const raw_ptr<AutocompleteProviderClient> client_;
+  base::CallbackListSubscription url_opened_subscription_;
+  // The asynchronous parts still running for this request.
+  int pending_ = 0;
   base::WeakPtrFactory<KoanZeroSuggestProvider> weak_factory_{this};
 };
 
@@ -189,6 +225,7 @@ void KoanZeroSuggestProvider::Start(const AutocompleteInput& input,
   matches_.clear();
   done_ = true;
   weak_factory_.InvalidateWeakPtrs();
+  pending_ = 0;
   // Only a box that was just opened or clicked (empty, or with the page's
   // address selected: Ctrl+L; Zen lists the same then), not one the user is
   // typing in, and only in the omnibox (not the NTP's realbox, a composebox
@@ -230,19 +267,68 @@ void KoanZeroSuggestProvider::Start(const AutocompleteInput& input,
 
   // Then the most visited sites, from the history's top sites.
   scoped_refptr<history::TopSites> top_sites = client_->GetTopSites();
-  if (!top_sites || matches_.size() >= kMaxSuggestions) {
+  const bool wants_top_sites = top_sites && matches_.size() < kMaxSuggestions;
+  // A link on the clipboard goes above them all. (Read on every opening, as
+  // Firefox does; the answer may come at once.)
+  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+  pending_ = (wants_top_sites ? 1 : 0) + (clipboard ? 1 : 0);
+  done_ = pending_ == 0;
+  base::WeakPtr<KoanZeroSuggestProvider> weak = weak_factory_.GetWeakPtr();
+  if (wants_top_sites) {
+    top_sites->GetMostVisitedURLs(base::BindOnce(
+        &KoanZeroSuggestProvider::OnTopSites, weak, std::move(open_urls)));
+  }
+  if (clipboard && weak) {
+    clipboard->ReadText(
+        ui::ClipboardBuffer::kCopyPaste, /*data_dst=*/std::nullopt,
+        base::BindOnce(&KoanZeroSuggestProvider::OnClipboardText, weak));
+  }
+}
+
+void KoanZeroSuggestProvider::OnClipboardText(std::u16string text) {
+  std::optional<GURL> url = ClipboardUrlForSuggestion(text);
+  const bool shows = url && TakeClipboardImpression(*url);
+  if (shows) {
+    // Firefox's row: the whole link as its title.
+    AutocompleteMatch match = MakeMatch(
+        *url, base::UTF8ToUTF16(DisplaySpec(*url)), kClipboardRelevance,
+        omnibox::AutocompleteMatchType::kNavsuggest);
+    match.deletable = true;
+    matches_.insert(matches_.begin(), std::move(match));
+  }
+  FinishPart(shows);
+}
+
+void KoanZeroSuggestProvider::FinishPart(bool changed) {
+  if (pending_ > 0) {
+    --pending_;
+  }
+  done_ = pending_ == 0;
+  NotifyListeners(changed);
+}
+
+void KoanZeroSuggestProvider::DeleteMatch(const AutocompleteMatch& match) {
+  // Only the copied link is deletable (Firefox's Dismiss).
+  ForgetClipboardSuggestion(match.destination_url);
+  std::erase_if(matches_, [&match](const AutocompleteMatch& m) {
+    return m.deletable && m.destination_url == match.destination_url;
+  });
+}
+
+void KoanZeroSuggestProvider::OnURLOpened(OmniboxLog* log) {
+  const AutocompleteResult& result = *log->result;
+  if (log->selection.line >= result.size()) {
     return;
   }
-  done_ = false;
-  top_sites->GetMostVisitedURLs(
-      base::BindOnce(&KoanZeroSuggestProvider::OnTopSites,
-                     weak_factory_.GetWeakPtr(), std::move(open_urls)));
+  const AutocompleteMatch& match = result.match_at(log->selection.line);
+  if (match.provider == this && match.deletable) {
+    ForgetClipboardSuggestion(match.destination_url);
+  }
 }
 
 void KoanZeroSuggestProvider::OnTopSites(
     std::set<GURL> open_urls,
     const history::MostVisitedURLList& sites) {
-  done_ = true;
   size_t added = 0;
   for (const history::MostVisitedURL& site : sites) {
     if (matches_.size() >= kMaxSuggestions) {
@@ -256,10 +342,42 @@ void KoanZeroSuggestProvider::OnTopSites(
                                  kTopSiteRelevance - static_cast<int>(added++),
                                  omnibox::AutocompleteMatchType::kNavsuggest));
   }
-  NotifyListeners(added > 0);
+  FinishPart(added > 0);
 }
 
 }  // namespace
+
+std::optional<GURL> ClipboardUrlForSuggestion(std::u16string_view text) {
+  if (text.empty() || text.size() > kMaxClipboardChars ||
+      std::ranges::any_of(
+          text, [](char16_t c) { return base::IsUnicodeWhitespace(c); })) {
+    return std::nullopt;
+  }
+  GURL url(text);
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
+    return std::nullopt;
+  }
+  return url;
+}
+
+bool TakeClipboardImpression(const GURL& url) {
+  ClipboardSuggestion& last = LastClipboardSuggestion();
+  if (last.url != url) {
+    last = {url, kClipboardImpressions};
+  }
+  if (last.impressions_left <= 0) {
+    return false;
+  }
+  --last.impressions_left;
+  return true;
+}
+
+void ForgetClipboardSuggestion(const GURL& url) {
+  ClipboardSuggestion& last = LastClipboardSuggestion();
+  if (last.url == url) {
+    last.impressions_left = 0;
+  }
+}
 
 bool UsesLocalZeroSuggestSection(
     metrics::OmniboxEventProto::PageClassification classification) {

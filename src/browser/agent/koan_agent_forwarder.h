@@ -23,6 +23,7 @@
 #include "base/timer/timer.h"
 #include "koan/browser/agent/koan_agent_audit.h"
 #include "koan/browser/agent/koan_agent_facade.h"
+#include "koan/browser/agent/koan_agent_prompts.h"
 #include "koan/browser/agent/koan_agent_registry.h"
 #include "koan/browser/agent/koan_agent_session.h"
 
@@ -120,6 +121,11 @@ class AgentForwarder {
   // From the watcher: the tab closed, or its title or URL changed.
   void OnTabDestroyed(const std::string& target_id);
   void OnTabChanged(const std::string& target_id);
+  // A page in a tab the agent holds asked for the user, or no longer does
+  // (AgentPageSurfaces).
+  void OnPageSurface(content::WebContents* contents,
+                     PageSurface surface,
+                     bool held);
   // A page in an agent tab opened `opened` (AgentLeaseManager).
   void OnOpenedFromAgentTab(content::WebContents* source,
                             content::WebContents* opened);

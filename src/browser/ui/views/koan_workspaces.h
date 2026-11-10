@@ -32,6 +32,7 @@
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget_observer.h"
@@ -58,6 +59,7 @@ class View;
 
 namespace ui {
 class Event;
+class MouseEvent;
 class ScrollEvent;
 }  // namespace ui
 
@@ -67,6 +69,8 @@ class KoanSpaceSwipe;
 
 class KoanCreateMenu;
 class KoanSpaceBarView;
+class KoanSpaceDrag;
+class KoanSpaceRouting;
 class KoanSpaceCreationView;
 class KoanSpaceHeaderView;
 class KoanSpaceMenu;
@@ -144,6 +148,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
     // Null: always enabled.
     base::RepeatingCallback<bool()> is_enabled;
     base::RepeatingClosure run;
+    // Names the item for UI DevTools (e2e tests), if set.
+    ui::ElementIdentifier element_id;
   };
 
   explicit KoanWorkspaceController(BrowserView* browser_view);
@@ -177,6 +183,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::vector<SpaceInfo> GetSpaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveSpace() const;
   std::optional<SpaceInfo> GetSpace(const tab_groups::TabGroupId& space) const;
+  // A Space's id in the stored Spaces (prefs::kWorkspaceList's "id"), made
+  // the first time it's asked for and kept while the window is open. A fresh
+  // start gives each Space it recreates its stored id back, so what other
+  // features store per Space (folders) finds its Space again rather than the
+  // one at its old place.
+  std::string GetStoredSpaceId(const tab_groups::TabGroupId& space);
   // Runs `callback` (soon, coalesced) whenever the Spaces or the active one
   // change.
   base::CallbackListSubscription AddSpacesChangedCallback(
@@ -191,6 +203,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // wrap-around, nothing past the first or last Space. Returns whether it
   // switched.
   bool Navigate(bool forward);
+  // Zen's wrap-around-navigation setting.
+  bool WrapsAround() const;
   // The `number`th Space (from 1), Zen's "Switch to Workspace N". False if
   // there is none.
   bool SwitchToNumber(int number);
@@ -212,6 +226,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // koan/browser/containers/koan_agent_containers.h).
   tab_groups::TabGroupId CreateBackgroundSpace(int index,
                                                const SpaceData& data);
+  // Makes a Space of the tabs at `indices` (sorted), right after the active
+  // Space, and shows it on the last of them (folders' "Convert folder to
+  // Space").
+  tab_groups::TabGroupId CreateSpaceFromTabs(const std::vector<int>& indices,
+                                             const SpaceData& data);
   void RenameSpace(const tab_groups::TabGroupId& space,
                    const std::u16string& name);
   // `icon` empty removes the icon.
@@ -332,6 +351,21 @@ class KoanWorkspaceController : public TabStripModelObserver,
   TabStripModel* tab_strip_model() const;
   base::WeakPtr<KoanWorkspaceController> GetWeakPtr();
 
+  // The sidebar's Space views, while they are installed (null otherwise).
+  KoanSpaceHeaderView* space_header() const { return header_; }
+  KoanSpaceBarView* space_bar() const { return bar_; }
+  // Zen's tab drag across Spaces (koan_space_drag.h).
+  KoanSpaceDrag* space_drag() const { return space_drag_.get(); }
+  // A mouse event on its way to a view in the sidebar.
+  void OnSidebarMouseEvent(const ui::MouseEvent& event);
+
+  // Zen's Space routing (koan_space_routing.h).
+  KoanSpaceRouting* space_routing() const { return space_routing_.get(); }
+  // Makes `tab` the one switching to `space` lands on (a routed tab, Zen's
+  // lastSelectedWorkspaceTabs).
+  void SetLastActiveTab(const tab_groups::TabGroupId& space,
+                        tabs::TabInterface* tab);
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
@@ -449,8 +483,6 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::optional<std::string> ThemeOfTabs(
       const tab_groups::TabGroupId& space,
       const tabs::TabInterface* except) const;
-  // Zen's wrap-around-navigation setting.
-  bool WrapsAround() const;
   // A swipe's travel or speed, turned round with Zen's natural-scroll
   // setting, so the Space follows the way it will switch.
   float SwipeAmount(float amount) const;
@@ -466,6 +498,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The sidebar (the vertical tab strip region), with the wheel handler.
   raw_ptr<views::View> region_ = nullptr;
   std::unique_ptr<ui::EventHandler> wheel_handler_;
+  std::unique_ptr<KoanSpaceDrag> space_drag_;
+  std::unique_ptr<KoanSpaceRouting> space_routing_;
   // Keeps a collapsed sidebar expanded while the Create form is open.
   std::unique_ptr<ExpandOnHoverLock> create_form_lock_;
 
@@ -491,6 +525,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   base::ListValue stored_spaces_;
   std::optional<base::ListValue> first_spaces_;
   bool may_store_spaces_ = true;
+  // GetStoredSpaceId()'s ids.
+  std::map<tab_groups::TabGroupId, std::string> stored_space_ids_;
   // Spaces in order with their data, as of the last update.
   std::vector<std::pair<tab_groups::TabGroupId, SpaceData>> spaces_snapshot_;
   std::vector<ClosedSpace> closed_spaces_;

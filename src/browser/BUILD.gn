@@ -33,11 +33,13 @@ source_set("prefs") {
     "koan_prefs.h",
   ]
   deps = [
+    ":features",
     "//base",
     "//chrome/common:constants",
     "//components/performance_manager",
     "//components/pref_registry",
     "//components/prefs",
+    "//components/universal_optout",
     "//koan/browser/agent:limits",
   ]
 }
@@ -216,6 +218,7 @@ source_set("feature_overrides") {
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/tabs:features",
+    "//chrome/browser/ui/toasts",
     "//chrome/browser/ui/webui/new_tab_page/composebox/variations",
     "//chrome/common:chrome_features",
     "//components/compose/core/browser:features",
@@ -227,8 +230,10 @@ source_set("feature_overrides") {
     "//components/optimization_guide/core:features",
     "//components/performance_manager",
     "//components/search",
+    "//components/universal_optout:features",
     "//components/variations",
     "//koan/browser/ui/vector_icons:koan_icons",
+    "//third_party/blink/public/common",
     "//ui/base:features",
   ]
   if (is_mac) {

@@ -6,9 +6,11 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
 #include "base/callback_list.h"
+#include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
@@ -89,12 +91,14 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/skia_paint_util.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/animation/ink_drop.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -120,12 +124,18 @@ namespace {
 // zen-glance.css: the card is 80% of the contents width and their full
 // height, with the content card's radius and Zen's --zen-big-shadow (0 3px
 // 8px); the button column hangs off its right edge, 15px down plus 12px
-// padding, 34px round buttons 12px apart. Colours are Koan colour ids
+// padding, round buttons 12px apart, `--size-item-large` (Firefox's 32px for
+// a toolbarbutton: measured 32 x 32 at a 44pt pitch on the Mac) with 8px of
+// padding around a 16px icon. Colours are Koan colour ids
 // (koan_color_id.h), radii the content card's and the LayoutProvider's, so a
 // theme can restyle them.
 constexpr float kCardWidthFraction = 0.8f;
-constexpr int kButtonSize = 34;
-constexpr int kButtonIconSize = 18;
+constexpr int kButtonSize = 32;
+constexpr int kButtonIconSize = 16;
+// zen-glance.css: a hovered button grows to 1.02, a pressed one shrinks to
+// 0.98 (in 0.05s, about three frames: set at once here).
+constexpr float kButtonHoverScale = 1.02f;
+constexpr float kButtonPressedScale = 0.98f;
 constexpr int kButtonGap = 12;
 constexpr int kButtonsTop = 15 + 12;
 constexpr gfx::Vector2d kCardShadowOffset(0, 3);
@@ -438,11 +448,8 @@ class KoanGlanceView : public views::View {
   // Zen's close button asking to confirm (zen-glance.css's
   // [waitconfirmation]): red with a white icon.
   void SetCloseConfirming(bool confirming) {
-    StyleButton(
-        close_, vector_icons::kCloseIcon,
-        confirming ? kColorKoanGlanceButtonConfirm : kColorKoanGlanceButton,
-        confirming ? kColorKoanGlanceButtonConfirmIcon
-                   : kColorKoanGlanceButtonIcon);
+    close_confirming_ = confirming;
+    UpdateButtonLook(close_);
     const std::u16string tooltip =
         confirming ? u"Press Esc again to close" : u"Close (Esc)";
     close_->SetTooltipText(tooltip);
@@ -507,17 +514,32 @@ class KoanGlanceView : public views::View {
 #endif
   }
 
-  static void StyleButton(views::ImageButton* button,
-                          const gfx::VectorIcon& icon,
-                          ui::ColorId background,
-                          ui::ColorId foreground) {
+  // The button's colours and scale for its state: Zen's hover colour and
+  // scale, the close button's "Confirm" red (which a hover doesn't change).
+  void UpdateButtonLook(views::ImageButton* button) {
+    const bool confirming = button == close_ && close_confirming_;
+    const views::Button::ButtonState state = button->GetState();
+    const bool hovered = state == views::Button::STATE_HOVERED ||
+                         state == views::Button::STATE_PRESSED;
+    const ui::ColorId background = confirming ? kColorKoanGlanceButtonConfirm
+                                   : hovered  ? kColorKoanGlanceButtonHover
+                                              : kColorKoanGlanceButton;
+    const ui::ColorId foreground = confirming
+                                       ? kColorKoanGlanceButtonConfirmIcon
+                                       : kColorKoanGlanceButtonIcon;
     views::SetImageFromVectorIconWithColor(
-        button, icon, kButtonIconSize,
+        button, *button_icons_[button], kButtonIconSize,
         views::IconColors(foreground, foreground, foreground));
     button->SetBackground(views::CreateRoundedRectBackground(
         background,
         views::LayoutProvider::Get()->GetCornerRadiusMetric(
             views::Emphasis::kMaximum, gfx::Size(kButtonSize, kButtonSize))));
+    const float scale =
+        state == views::Button::STATE_PRESSED   ? kButtonPressedScale
+        : state == views::Button::STATE_HOVERED ? kButtonHoverScale
+                                                : 1.f;
+    button->layer()->SetTransform(
+        gfx::GetScaleTransform(gfx::Rect(button->size()).CenterPoint(), scale));
   }
 
   views::ImageButton* AddButton(const gfx::VectorIcon& icon,
@@ -525,15 +547,23 @@ class KoanGlanceView : public views::View {
                                 void (KoanGlanceController::*action)()) {
     // Zen's Glance buttons: a near-white disc (near-black in light mode)
     // with the icon in the primary colour.
-    auto button = views::CreateVectorImageButton(
+    auto owned = views::CreateVectorImageButton(
         base::BindRepeating(&KoanGlanceController::PostAction,
                             base::Unretained(controller_), action));
-    StyleButton(button.get(), icon, kColorKoanGlanceButton,
-                kColorKoanGlanceButtonIcon);
+    views::ImageButton* button = buttons_->AddChildView(std::move(owned));
     button->SetTooltipText(tooltip);
     button->GetViewAccessibility().SetName(tooltip);
     button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
-    return buttons_->AddChildView(std::move(button));
+    // Zen's buttons change colour and size on hover, with no ink drop.
+    views::InkDrop::Get(button)->SetMode(views::InkDropHost::InkDropMode::OFF);
+    button->SetPaintToLayer();
+    button->layer()->SetFillsBoundsOpaquely(false);
+    button_icons_[button] = &icon;
+    button_subscriptions_.push_back(button->AddStateChangedCallback(
+        base::BindRepeating(&KoanGlanceView::UpdateButtonLook,
+                            base::Unretained(this), base::Unretained(button))));
+    UpdateButtonLook(button);
+    return button;
   }
 
   const raw_ptr<KoanGlanceController> controller_;
@@ -542,6 +572,12 @@ class KoanGlanceView : public views::View {
   raw_ptr<views::WebView> web_view_ = nullptr;
   raw_ptr<views::BoxLayoutView> buttons_ = nullptr;
   raw_ptr<views::ImageButton> close_ = nullptr;
+  bool close_confirming_ = false;
+  // Each button's icon, and the subscriptions that restyle it as its state
+  // changes (they go before the buttons, which are children).
+  base::flat_map<const views::Button*, raw_ptr<const gfx::VectorIcon>>
+      button_icons_;
+  std::vector<base::CallbackListSubscription> button_subscriptions_;
   // The latest open animation, so an earlier one's end doesn't show the
   // shadow; and whether the card is shrinking away.
   int animation_id_ = 0;

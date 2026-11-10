@@ -23,11 +23,13 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -212,6 +214,55 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SessionDataComesBack) {
   EXPECT_EQ("", GetTabSessionData(tab_strip->GetWebContentsAt(1), kTabDataKey));
   ASSERT_TRUE(base::test::RunUntil([&] {
     return GetWindowSessionData(browser(), kWindowDataKey) == "window data";
+  }));
+}
+
+// A folder's tabs are kept with their folder (koan.folders.list), not also
+// among their Space's pinned tabs (koan.workspaces.list): a start without a
+// session restore brings each list back, and would add them twice.
+IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
+                       FolderTabsAreStoredOnlyWithTheirFolder) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), PinnedUrl()));
+  GetPinnedTabs(browser())->PinInSpace(tab_strip->GetActiveTab());
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), OtherUrl(), WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  KoanFolderController* folders = KoanFolderController::FromBrowser(browser());
+  ASSERT_TRUE(folders);
+  folders->CreateFolder({tab_strip->GetActiveTab()}, /*parent=*/0,
+                        folders->GetActiveSpace(), u"Folder",
+                        /*rename=*/false);
+  ASSERT_TRUE(IsPinnedInSpace(tab_strip->GetActiveTab()));
+
+  const PrefService* prefs = browser()->GetProfile()->GetPrefs();
+  const auto stored_urls = [](const base::ListValue* tabs) {
+    std::vector<std::string> urls;
+    if (!tabs) {
+      return urls;
+    }
+    for (const base::Value& tab : *tabs) {
+      if (const std::string* url = tab.GetDict().FindString("url")) {
+        urls.push_back(*url);
+      }
+    }
+    return urls;
+  };
+  const auto space_tabs = [&] {
+    const base::ListValue& list = prefs->GetList(prefs::kWorkspaceList);
+    return list.empty()
+               ? std::vector<std::string>()
+               : stored_urls(list.front().GetDict().FindList("pinned"));
+  };
+  const auto folder_tabs = [&] {
+    const base::ListValue& list = prefs->GetList(prefs::kFolderList);
+    return list.empty() ? std::vector<std::string>()
+                        : stored_urls(list.front().GetDict().FindList("tabs"));
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return space_tabs() == std::vector<std::string>{PinnedUrl().spec()} &&
+           folder_tabs() == std::vector<std::string>{OtherUrl().spec()};
   }));
 }
 

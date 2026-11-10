@@ -14,7 +14,7 @@ import { CTRL, boundsOf, check, evalIn, finish, key, mouseOn, sleep, views, visi
 const findShown = (vs, cls) => vs.find(v => v.cls === cls && v.shown);
 const VK = { S: 83 };
 // Upstream's expand-on-hover width, which compact mode's reveal slides in.
-const REVEAL_WIDTH = 240;
+const REVEAL_WIDTH = 230;  // koan::prefs::kSidebarDefaultWidth, Zen's
 // A frame at a time would be ~15 resizes for a 250 ms animation; a single
 // reflow gives one, plus what the layout switch around it adds.
 const MAX_RESIZES = 4;
