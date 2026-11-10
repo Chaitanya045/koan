@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/autocomplete/tab_matcher_desktop.cc b/chrome/browser/autocomplete/tab_matcher_desktop.cc
+--- a/chrome/browser/autocomplete/tab_matcher_desktop.cc
++++ b/chrome/browser/autocomplete/tab_matcher_desktop.cc
+@@ -12,6 +12,7 @@
+ #include "components/omnibox/common/omnibox_features.h"
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/web_contents_user_data.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ 
+ namespace {
+ class AutocompleteClientWebContentsUserData
+@@ -114,6 +115,11 @@
+     TabStripModel* const tab_strip_model = bwi->GetTabStripModel();
+     for (int i = 0; i < tab_strip_model->count(); ++i) {
+       auto* web_contents = tab_strip_model->GetWebContentsAt(i);
++      // Koan: the omnibox never offers an agent container's tab (@tabs,
++      // Switch to tab).
++      if (koan::containers::IsAgentContents(web_contents)) {
++        continue;
++      }
+       if (web_contents != active_tab || !exclude_active_tab) {
+         all_tabs.push_back(web_contents);
+       }

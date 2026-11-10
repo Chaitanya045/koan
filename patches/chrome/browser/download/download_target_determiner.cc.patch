@@ -1,0 +1,30 @@
+diff --git a/chrome/browser/download/download_target_determiner.cc b/chrome/browser/download/download_target_determiner.cc
+--- a/chrome/browser/download/download_target_determiner.cc
++++ b/chrome/browser/download/download_target_determiner.cc
+@@ -46,6 +46,7 @@
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/download_item_utils.h"
+ #include "content/public/common/buildflags.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
+ #include "net/base/filename_util.h"
+@@ -401,6 +402,18 @@
+       RecordDownloadPathGeneration(
+           DownloadPathGenerationEvent::USE_DEFAULTL_DOWNLOAD_DIRECTORY, false);
+     }
++    // Koan: an agent container's download goes to its own folder, with no
++    // Save As prompt.
++    if (koan::containers::IsAgentContents(
++            content::DownloadItemUtils::GetWebContents(download_))) {
++      if (confirmation_reason_ == DownloadConfirmationReason::PREFERENCE ||
++          confirmation_reason_ == DownloadConfirmationReason::SAVE_AS) {
++        confirmation_reason_ = DownloadConfirmationReason::NONE;
++      }
++      target_directory = koan::containers::AgentDownloadDirectory(
++          download_prefs_->DownloadPath());
++      create_target_directory_ = true;
++    }
+     should_notify_extensions_ = true;
+     virtual_path_ = target_directory.Append(generated_filename);
+     containment_directory_ = target_directory;

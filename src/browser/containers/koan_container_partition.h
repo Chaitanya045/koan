@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+#include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 
 class GURL;
@@ -91,6 +92,9 @@ bool IsAgentPartition(const content::StoragePartitionConfig& config);
 
 // Whether the process, frame or tab is in an agent container. Null is not.
 // IsAgentContents() asks the primary main frame, which a tab always has.
+// The agent blocks call these from upstream (agent-control.md section 7.2):
+// permissions, choosers and pickers, extensions, passwords, autofill,
+// downloads, history and the omnibox, open-tab sync, WebAuthn.
 bool IsAgentProcess(content::RenderProcessHost* process);
 bool IsAgentFrame(content::RenderFrameHost* frame);
 bool IsAgentContents(const content::WebContents* contents);
@@ -132,6 +136,13 @@ scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
 // prerender. Not in a container: content builds a prerendered page in the
 // default partition and swaps it into the tab.
 bool AllowsPrerender(const content::WebContents& contents);
+
+// --- Agent blocks (.agent/notes/agent-control.md section 7.2) ---
+
+// DownloadTargetDeterminer: where an agent container's downloads go, a
+// folder in the user's download folder (`download_dir`). Created on the
+// first download.
+base::FilePath AgentDownloadDirectory(const base::FilePath& download_dir);
 
 }  // namespace koan::containers
 

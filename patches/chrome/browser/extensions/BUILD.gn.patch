@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -643,6 +643,7 @@
+     "//extensions/common",
+     "//extensions/strings",
+     "//google_apis/common:request_util",
++    "//koan/browser/containers:partition",
+     "//net",
+     "//net:extras",
+     "//services/metrics/public/cpp:ukm_builders",

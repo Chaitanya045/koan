@@ -200,4 +200,8 @@ bool AllowsPrerender(const content::WebContents& contents) {
   return !ContainerFromPartitionConfig(config) && !IsAgentPartition(config);
 }
 
+base::FilePath AgentDownloadDirectory(const base::FilePath& download_dir) {
+  return download_dir.Append(FILE_PATH_LITERAL("Koan Agent"));
+}
+
 }  // namespace koan::containers

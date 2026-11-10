@@ -71,3 +71,26 @@ diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_content
    FullscreenController* fullscreen_controller =
        exclusive_access_manager_->fullscreen_controller();
  #if BUILDFLAG(IS_MAC)
+@@ -1172,6 +1214,11 @@
+     content::RenderFrameHost* render_frame_host,
+     scoped_refptr<content::FileSelectListener> listener,
+     const blink::mojom::FileChooserParams& params) {
++  // Koan: no file picker for an agent container.
++  if (koan::containers::IsAgentFrame(render_frame_host)) {
++    listener->FileSelectionCanceled();
++    return;
++  }
+   FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
+                                    params);
+ }
+@@ -1180,6 +1227,10 @@
+     content::WebContents* web_contents,
+     scoped_refptr<content::FileSelectListener> listener,
+     const base::FilePath& path) {
++  if (koan::containers::IsAgentContents(web_contents)) {
++    listener->FileSelectionCanceled();
++    return;
++  }
+   FileSelectHelper::EnumerateDirectory(web_contents, std::move(listener), path);
+ }
+ 

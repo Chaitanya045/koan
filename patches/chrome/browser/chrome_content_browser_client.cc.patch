@@ -1,16 +1,18 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 03111c8..8c49e26 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -410,6 +410,8 @@
+@@ -410,6 +410,9 @@
  #include "google_apis/google_api_keys.h"
  #include "gpu/config/gpu_switches.h"
  #include "ipc/ipc_channel_proxy.h"
 +#include "koan/browser/koan_renderer_switches.h"
++#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_glance.h"
  #include "media/base/media_switches.h"
  #include "media/media_buildflags.h"
  #include "media/mojo/buildflags.h"
-@@ -3161,6 +3163,8 @@ void ChromeContentBrowserClient::AppendE
+@@ -3161,6 +3164,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -19,7 +21,7 @@ diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/ch
      }
  
  #if BUILDFLAG(IS_CHROMEOS)
-@@ -4636,6 +4640,13 @@ bool ChromeContentBrowserClient::CanCrea
+@@ -4636,6 +4641,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
    }
  #endif  // !BUILDFLAG(IS_ANDROID)
  
@@ -33,3 +35,15 @@ diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/ch
    const BlockedWindowParams blocked_params(
        target_url, opener->GetGlobalFrameToken(), source_origin,
        opener->GetSiteInstance(), referrer, frame_name, disposition, features,
+@@ -7338,6 +7350,11 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
+ bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
+     content::RenderFrameHost* rfh,
+     const url::Origin& caller_origin) {
++  // Koan: no passkey or security key sign-in in an agent container, refused
++  // before any UI.
++  if (koan::containers::IsAgentFrame(rfh)) {
++    return false;
++  }
+   const Profile* profile =
+       Profile::FromBrowserContext(rfh->GetBrowserContext());
+   if (profile->GetPrefs()->GetBoolean(

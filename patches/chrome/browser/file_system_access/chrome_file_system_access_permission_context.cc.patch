@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc b/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc
+--- a/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc
++++ b/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc
+@@ -68,6 +68,7 @@
+ #include "content/public/browser/security_principal.h"
+ #include "content/public/browser/site_instance.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "storage/browser/file_system/external_mount_points.h"
+ #include "third_party/blink/public/common/features_generated.h"
+@@ -2567,6 +2568,10 @@
+ base::expected<void, std::string>
+ ChromeFileSystemAccessPermissionContext::CanShowFilePicker(
+     content::RenderFrameHost* rfh) {
++  // Koan: no file or directory picker for an agent container.
++  if (koan::containers::IsAgentFrame(rfh)) {
++    return base::unexpected(kDefaultNotAllowedMessage);
++  }
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE) && BUILDFLAG(ENABLE_GUEST_VIEW)
+   // Because permission is scoped to profile, <webview> and <controlledframe>,
+   // despite having isolated StoragePartition, will share File System Access
