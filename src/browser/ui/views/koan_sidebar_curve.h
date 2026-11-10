@@ -31,6 +31,10 @@ inline constexpr int kSidebarToggleDurationMs = 100;
 inline constexpr base::TimeDelta kSidebarToggleDuration =
     base::Milliseconds(kSidebarToggleDurationMs);
 
+// The hook in tab_strip_animations.cc: kSidebarToggleDurationMs while Koan's
+// sidebar is on, else upstream's own `upstream_ms`.
+int SidebarToggleDurationMs(int upstream_ms);
+
 // `zen.view.compact.sidebar-keep-hover.duration`: how long the revealed
 // sidebar stays after the pointer leaves it or the menu it opened closes
 // (measured live: it collapses 150-185 ms after the pointer leaves).

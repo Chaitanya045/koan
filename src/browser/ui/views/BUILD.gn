@@ -58,6 +58,7 @@ source_set("sidebar_curve") {
   ]
   deps = [
     "//base",
+    "//koan/browser:features",
     "//ui/gfx/geometry",
   ]
 }
@@ -81,6 +82,12 @@ source_set("window_edges") {
     "koan_window_edges.h",
   ]
   public_deps = [ "//ui/gfx/geometry" ]
+}
+
+# Zen's content card radius from the OS window's (koan_content_radius.h): pure,
+# for the unit tests.
+source_set("content_radius") {
+  sources = [ "koan_content_radius.h" ]
 }
 
 # Where a sidebar button goes to clear the macOS traffic lights: geometry only.
@@ -160,6 +167,7 @@ source_set("space_navigation") {
 #   out/Koan/koan_views_unittests
 test("koan_views_unittests") {
   sources = [
+    "koan_content_radius_unittest.cc",
     "koan_glass_tint_unittest.cc",
     "koan_lights_geometry_unittest.cc",
     "koan_pinned_site_unittest.cc",
@@ -171,6 +179,7 @@ test("koan_views_unittests") {
     "koan_window_edges_unittest.cc",
   ]
   deps = [
+    ":content_radius",
     ":glass_tint",
     ":lights_geometry",
     ":pinned_site",
@@ -374,6 +383,7 @@ source_set("impl") {
   sources += get_target_outputs(":grain_png")
   public_deps = [ ":space_theme" ]
   deps = [
+    ":content_radius",
     ":glass_tint",
     ":grain_png",
     ":lights_geometry",

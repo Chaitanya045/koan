@@ -170,7 +170,8 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   // the window background, i.e. that background at 70% over the page; the
   // card has --zen-big-shadow (black at 24%); the buttons are
   // color-mix(light-dark(rgb(24, 24, 24), rgb(231, 231, 231)) 96%,
-  // --zen-primary-color) with the icon in --zen-primary-color; the close
+  // --zen-primary-color) with the icon in --zen-primary-color, hovered
+  // light-dark(rgb(41, 41, 41), rgb(204, 204, 204)); the close
   // button asking to confirm is rgb(220, 53, 69) with white. (Not the
   // kColorSysInverse* pair: in the Zen look's dark mode both are its text
   // colour, which drew blank discs, #138.)
@@ -181,6 +182,8 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanGlanceButton] = {color_utils::AlphaBlend(
       primary, dark ? SkColorSetRGB(231, 231, 231) : SkColorSetRGB(24, 24, 24),
       0.04f)};
+  mixer[kColorKoanGlanceButtonHover] = {dark ? SkColorSetRGB(204, 204, 204)
+                                             : SkColorSetRGB(41, 41, 41)};
   mixer[kColorKoanGlanceButtonIcon] = {primary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};

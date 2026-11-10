@@ -25,6 +25,11 @@ namespace koan::settings {
 
 namespace {
 
+// Haptic feedback is macOS's (koan::PlayHapticFeedback()).
+bool IsMacOS() {
+  return BUILDFLAG(IS_MAC);
+}
+
 constexpr Pane kPanes[] = {
     {"looks", "Look and Feel"},
     {"tabs", "Tab Management"},
@@ -60,6 +65,11 @@ constexpr Group kGroups[] = {
     {"window-drag", "looks", "Theme Settings", "Window dragging",
      "Move the window by dragging empty space at the top of websites, just "
      "like the titlebar."},
+    // Zen has the pref (zen.haptic-feedback.enabled) but no setting for it;
+    // #80 asks for one beside the other Look and Feel options.
+    {"haptics", "looks", "Theme Settings", "Haptic feedback",
+     "A light tick on the trackpad as you drag tabs and Spaces, and as the "
+     "theme picker's sliders pass a step"},
     {"glance", "looks", "Glance", "General settings for glance",
      "Get a quick overview of your links without opening them in a new tab"},
     {"urlbar", "looks", "URL Bar", "General settings for the URL bar",
@@ -332,6 +342,12 @@ constexpr Row kRows[] = {
      .pref = prefs::kDragWindowFromContent,
      .label = "Allow dragging the window from web pages",
      .is_available = features::IsWindowDragEnabled},
+    {.group = "haptics",
+     .control = Control::kCheckbox,
+     .pref = prefs::kHapticFeedback,
+     .label = "Haptic feedback on the trackpad",
+     .is_available = IsMacOS,
+     .local_state = true},
     {.group = "dark-theme",
      .control = Control::kMenu,
      .pref = prefs::kDarkThemeStyle,

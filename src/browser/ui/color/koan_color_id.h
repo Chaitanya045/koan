@@ -95,6 +95,7 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceBackdrop,
   kColorKoanGlanceCardShadow,
   kColorKoanGlanceButton,
+  kColorKoanGlanceButtonHover,
   kColorKoanGlanceButtonIcon,
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,

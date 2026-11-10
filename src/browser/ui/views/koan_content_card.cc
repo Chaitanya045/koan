@@ -13,7 +13,12 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_content_radius.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mac_util.h"
+#endif
 
 namespace koan {
 
@@ -48,6 +53,19 @@ bool IsBorderlessFullscreen(const BrowserView* browser_view) {
 }
 
 }  // namespace
+
+float ContentCardCornerRadius() {
+  if (look::IsShadcnStyle()) {
+    return static_cast<float>(look::Radius(look::Step::kXl));
+  }
+#if BUILDFLAG(IS_MAC)
+  static const int os_radius =
+      ZenOsWindowRadius(/*mac=*/true, base::mac::MacOSMajorVersion());
+#else
+  constexpr int os_radius = ZenOsWindowRadius(/*mac=*/false, 0);
+#endif
+  return ZenContentCardRadius(os_radius, kContentCardMargin);
+}
 
 bool UseContentCard(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)

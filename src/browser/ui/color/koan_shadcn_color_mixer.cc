@@ -459,6 +459,9 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanGlanceCardShadow] = {
       ui::kColorShadowValueAmbientShadowElevationFour};
   mixer[kColorKoanGlanceButton] = {t[Token::kSecondary]};
+  // shadcn's secondary button: `hover:bg-secondary/80`.
+  mixer[kColorKoanGlanceButtonHover] = {color_utils::AlphaBlend(
+      t[Token::kSecondary], t[Token::kBackground], 0.8f)};
   mixer[kColorKoanGlanceButtonIcon] = {t[Token::kSecondaryForeground]};
   mixer[kColorKoanGlanceButtonConfirm] = {t[Token::kDestructive]};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {t.OnDestructive()};
