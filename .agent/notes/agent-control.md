@@ -618,7 +618,7 @@ change it or refuse the task.
 | Mode | What the agent gets | Data after the task | Status |
 |---|---|---|---|
 | **Throwaway** (default) | a new in-memory container for this task | cleared when the task ends (`StoragePartition::ClearData`, E§1); gone at quit at the latest | core PR |
-| **Saved** | a named container on disk that keeps its cookies between tasks ("GitHub bot") | kept; deleted from Settings. Another agent or task gets it **only if the user names it** in the prompt | core PR |
+| **Saved** | a named container on disk that keeps its cookies between tasks ("GitHub bot") | kept; made and deleted in Settings > Agent Control (never by an agent). A task gets it **only if the user granted it to that client** (Settings, per paired client, by its stable id; in memory, reset with the pairings) **and the agent asked for it by name** (`AgentTabRequest::saved_container`), and not while another task has it open (`ChooseContainer`, `koan_container_grants.h`) | core PR + grants PR |
 | **Your tab** | a lease on one of the user's own tabs, limited to that tab's site (§8, §9). Not a container: this is the only mode where the agent acts with the user's logins, and its prompt says so | n/a | another PR (lease + gateway) |
 | **Strict** | a separate hidden profile: nothing of the user's profile is shared (settings, extensions, history service, permissions), the strongest wall | as Throwaway or Saved, in that profile | seam designed now (`AgentMode::kStrict` returns "not supported"), built last |
 

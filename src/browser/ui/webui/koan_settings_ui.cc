@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/strcat.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/web_ui.h"
@@ -22,6 +23,10 @@
 #include "koan/browser/ui/webui/koan_settings_handler.h"
 #include "koan/browser/ui/webui/koan_settings_resources.h"
 #include "koan/common/koan_url_constants.h"
+
+#if BUILDFLAG(IS_POSIX)
+#include "koan/browser/ui/webui/koan_agent_containers_handler.h"
+#endif
 
 namespace koan {
 
@@ -119,6 +124,10 @@ KoanSettingsUI::KoanSettingsUI(content::WebUI* web_ui)
   web_ui->AddMessageHandler(std::make_unique<KoanSettingsHandler>(
       *profile->GetOriginalProfile()->GetPrefs(),
       *g_browser_process->local_state()));
+#if BUILDFLAG(IS_POSIX)
+  web_ui->AddMessageHandler(std::make_unique<KoanAgentContainersHandler>(
+      *profile->GetOriginalProfile()));
+#endif
 }
 
 KoanSettingsUI::~KoanSettingsUI() = default;

@@ -35,6 +35,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/agent/koan_agent_policy.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "koan/browser/containers/koan_container_grants.h"
 #include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
@@ -169,7 +170,8 @@ Profile* FindAgentProfile() {
 }
 
 // Agent control's way to open a tab (koan_agent_tab_hooks.h): each client's
-// task gets its own throwaway container and keeps it until EndAgentTask().
+// task gets its own container, throwaway or a saved one granted to the client,
+// and keeps it until EndAgentTask().
 class ContainerTabOpener : public agent::AgentTabOpener {
  public:
   void OpenAgentTab(
@@ -194,13 +196,33 @@ class ContainerTabOpener : public agent::AgentTabOpener {
         started.names().contains(it->second.id)) {
       return it->second;
     }
-    // Always a throwaway container. A saved one holds logins, so a task never
-    // gets it by naming it (the task name is the agent's own string): only an
-    // explicit, user-approved grant to that client may hand one out, and
-    // there is none yet (maintainer review of #202).
+    // A saved container holds logins, so naming one is never enough (the
+    // name is the agent's own string): the user must have granted it to this
+    // client (maintainer review of #202). A refused request opens nothing
+    // rather than a throwaway tab the agent didn't ask for.
+    std::map<std::string, std::string, std::less<>> saved;
+    for (const SavedContainer& container : GetSavedAgentContainers(profile)) {
+      saved[container.name] = container.id.id;
+    }
+    std::set<std::string, std::less<>> in_use;
+    for (const auto& [task, container] : started.tasks()) {
+      if (started.names().contains(container.id)) {
+        in_use.insert(container.id);
+      }
+    }
+    const ContainerChoice choice =
+        ChooseContainer(ContainerGrants::Get(), request.client_id,
+                        request.saved_container, saved, in_use);
+    if (choice.kind == ContainerChoice::Kind::kRefused) {
+      return std::nullopt;
+    }
     AgentContainerOptions options{
         .space_name = request.task.empty() ? std::u16string(kDefaultSpaceName)
                                            : base::UTF8ToUTF16(request.task)};
+    if (choice.kind == ContainerChoice::Kind::kSaved) {
+      options.mode = AgentMode::kSaved;
+      options.saved_name = request.saved_container;
+    }
     auto container = StartAgentContainer(profile, options);
     if (!container.has_value()) {
       return std::nullopt;
@@ -419,6 +441,7 @@ void DeleteSavedAgentContainer(Profile* profile, const std::string& name) {
   if (!container) {
     return;
   }
+  ContainerGrants::Get().RemoveContainer(container->id);
   EndAgentContainer(profile, *container);
   // Clears a loaded partition and deletes its folder; a folder in use is left
   // for the next start, when nothing loads it and Chromium's storage
@@ -426,6 +449,17 @@ void DeleteSavedAgentContainer(Profile* profile, const std::string& name) {
   profile->AsyncObliterateStoragePartition(
       PartitionConfigFor(profile, *container).partition_domain(),
       base::DoNothing(), base::DoNothing());
+}
+
+bool CreateSavedAgentContainer(Profile* profile, const std::string& name) {
+  if (!IsAllowedProfile(profile) || !IsValidSavedName(name) ||
+      profile->GetPrefs()
+          ->GetDict(prefs::kAgentSavedContainers)
+          .FindString(name)) {
+    return false;
+  }
+  SavedContainerNamed(profile, name);
+  return true;
 }
 
 }  // namespace koan::containers

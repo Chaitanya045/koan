@@ -48,6 +48,17 @@ source_set("webui") {
   if (is_mac) {
     deps += [ "//koan/browser/ui/cocoa:hooks" ]
   }
+  if (is_posix) {
+    # Agent control is POSIX-only (//koan/browser/agent:browser).
+    sources += [
+      "koan_agent_containers_handler.cc",
+      "koan_agent_containers_handler.h",
+    ]
+    deps += [
+      "//koan/browser/agent:browser",
+      "//koan/browser/containers",
+    ]
+  }
 }
 
 # The page's files as C++ strings (koan_settings_resources.h).

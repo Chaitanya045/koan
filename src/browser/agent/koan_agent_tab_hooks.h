@@ -44,6 +44,11 @@ struct AgentTabRequest {
   std::string client_id;
   // The task, which names the agent container ("Throwaway" by default).
   std::string task;
+  // The saved agent container the agent asked for by name, or empty for a
+  // throwaway one. The tab opens in it only if the user granted it to
+  // `client_id` (Settings > Agent Control, koan_container_grants.h);
+  // otherwise no tab opens.
+  std::string saved_container;
   // Already checked with IsAllowedNavigationUrl().
   GURL url;
 };
