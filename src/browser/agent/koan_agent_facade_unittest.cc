@@ -656,6 +656,68 @@ TEST_F(KoanAgentFacadeTest, ChildrenGoWithTheirTabAndWithTheClient) {
   EXPECT_FALSE(backend_.sent.back().command.contains("sessionId"));
 }
 
+TEST_F(KoanAgentFacadeTest, AUserTabsChildrenStayOnTheGrantedSite) {
+  // The user gave the agent U1 for mail.example only (the fake backend's
+  // grant): a cross-site widget in it is not the agent's.
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven);
+  const std::string session = AttachTo("U1");
+  ASSERT_FALSE(session.empty());
+  auto attach = [&](const char* chromium_session, const char* target,
+                    const char* url) {
+    facade_.OnTabMessage(
+        "U1",
+        *base::WriteJson(
+            base::DictValue()
+                .Set("method", "Target.attachedToTarget")
+                .Set("params", base::DictValue()
+                                   .Set("sessionId", chromium_session)
+                                   .Set("targetInfo",
+                                        ChildInfo(target, "iframe", url)))));
+  };
+  attach("CR1", "F1", "https://pay.other.example/widget");
+  attach("CR2", "F2", "https://mail.example/frame");
+  // Only the same-site frame is the client's; the other is let go.
+  ASSERT_EQ(Events("Target.attachedToTarget").size(), 2u);
+  EXPECT_EQ(*Events("Target.attachedToTarget")
+                 .back()
+                 ->FindStringByDottedPath("params.targetInfo.targetId"),
+            "F2");
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  EXPECT_EQ(*backend_.sent[0].command.FindString("method"),
+            "Target.detachFromTarget");
+  EXPECT_EQ(
+      *backend_.sent[0].command.FindStringByDottedPath("params.sessionId"),
+      "CR1");
+
+  // The same-site frame navigating to another site goes too.
+  facade_.OnTabMessage(
+      "U1", *base::WriteJson(
+                base::DictValue()
+                    .Set("method", "Target.targetInfoChanged")
+                    .Set("params", base::DictValue().Set(
+                                       "targetInfo",
+                                       ChildInfo("F2", "iframe",
+                                                 "https://other.example/")))));
+  ASSERT_EQ(Events("Target.detachedFromTarget").size(), 1u);
+  EXPECT_EQ(
+      *backend_.sent.back().command.FindStringByDottedPath("params.sessionId"),
+      "CR2");
+  EXPECT_TRUE(Events("Target.targetInfoChanged").empty());
+
+  // An agent's own tab keeps a cross-site child (the fake backend grants
+  // mail.example only, so the facade must not ask it about an agent tab).
+  AttachTo("T1");
+  TabEvent("T1", "Target.attachedToTarget",
+           base::DictValue()
+               .Set("sessionId", "CR3")
+               .Set("targetInfo",
+                    ChildInfo("F3", "iframe", "https://pay.other.example/")));
+  EXPECT_EQ(*Events("Target.attachedToTarget")
+                 .back()
+                 ->FindStringByDottedPath("params.targetInfo.targetId"),
+            "F3");
+}
+
 TEST_F(KoanAgentFacadeTest, ClosesOnlyItsOwnAgentTabs) {
   registry_.GrantUserTab("U1", "alice", TabState::kDriven);
   Send(1, "Target.closeTarget", base::DictValue().Set("targetId", "U1"));

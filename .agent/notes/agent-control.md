@@ -294,7 +294,10 @@ command is audited (denied ones at once, forwarded ones when answered, with the 
 Content asks the untrusted client's `MayAttachToRenderFrameHost` (OOPIFs) and `MayAttachToURL` (workers, and every navigation of
 a child) before it attaches one, so the reach of §4.4 holds per child; the facade checks each reported child again
 (`OnChildAttached`): only `iframe` and `worker` on an `IsReachableFrameUrl()` URL, at most 64 per tab; anything else (a shared or
-service worker, which outlives the tab and serves the user's other tabs of the site) is detached at once and never shown. An
+service worker, which outlives the tab and serves the user's other tabs of the site) is detached at once and never shown. In a
+**user's** tab (a one-site lease, §9.2) a child must also be on the granted site, when it attaches and whenever its URL changes
+(`targetInfoChanged`), so a cross-site payment or sign-in iframe there is never the agent's; an agent's own tab keeps every
+reachable child. An
 accepted child gets a session id of the facade's own, mapped to Chromium's; its commands pass the same policy, registry and
 filters as its tab's (paused, read-only, interstitial and site checks are the tab's) with their own context tracker and streams,
 and go on the tab's client in Chromium's session for it. Its `Target.attachedToTarget`/`detachedFromTarget`/`targetInfoChanged`

@@ -1037,9 +1037,21 @@ bool CdpFacade::HandleChildTargetEvent(TabSession& session,
   } else if (*method == "Target.targetInfoChanged") {
     const base::DictValue* info = params->FindDict("targetInfo");
     const std::string* target = info ? info->FindString("targetId") : nullptr;
+    const std::string* url = info ? info->FindString("url") : nullptr;
     for (const auto& [id, child] : sessions_) {
       if (target && child->is_child() && child->child_target_id == *target &&
           child->parent_session_id == session.session_id) {
+        // A child of a user's tab that went to another site leaves the
+        // agent's reach with it.
+        if (url && !url->empty() &&
+            !ChildOnGrantedSite(child->target_id, GURL(*url))) {
+          base::DictValue detach;
+          detach.Set("sessionId", child->child_session);
+          const std::string ending = id;
+          SendInternal(session, "Target.detachFromTarget", std::move(detach));
+          EndSession(ending, /*tell_client=*/true);
+          break;
+        }
         base::DictValue changed;
         changed.Set("targetInfo", ChildTargetInfo(*info));
         SendEvent("Target.targetInfoChanged", std::move(changed),
@@ -1071,8 +1083,13 @@ void CdpFacade::OnChildAttached(TabSession& parent,
   // MayAttachToURL); the facade checks the child again by what it is, and a
   // refused one is detached (which also lets one waiting for the debugger
   // run).
+  // In a user's tab the agent was given one site (design section 9.2): a
+  // frame or worker of another site in it (a payment or sign-in widget) is
+  // not the agent's, to read or to drive. An agent's own tab keeps every
+  // reachable child.
   if (!type || !IsChildType(*type) || !url ||
-      !IsReachableFrameUrl(GURL(*url)) || !child_target ||
+      !IsReachableFrameUrl(GURL(*url)) ||
+      !ChildOnGrantedSite(parent.target_id, GURL(*url)) || !child_target ||
       children >= kMaxChildSessions ||
       child_by_chromium_session_.contains(*child)) {
     base::DictValue detach;
@@ -1097,6 +1114,13 @@ void CdpFacade::OnChildAttached(TabSession& parent,
   attached.Set("waitingForDebugger",
                params.FindBool("waitingForDebugger").value_or(false));
   SendEvent("Target.attachedToTarget", std::move(attached), parent.session_id);
+}
+
+bool CdpFacade::ChildOnGrantedSite(const std::string& target_id,
+                                   const GURL& url) const {
+  const TargetEntry* entry = registry_->Find(target_id);
+  return entry &&
+         (entry->agent_owned || backend_->IsInGrantedSite(target_id, url));
 }
 
 // static

@@ -253,6 +253,10 @@ class CdpFacade {
   // asked the client's MayAttachTo* already), and it is detached otherwise.
   void OnChildAttached(TabSession& parent, const base::DictValue& params);
   static base::DictValue ChildTargetInfo(const base::DictValue& info);
+  // Whether a child at `url` may be the agent's in the tab `target_id`: any
+  // reachable one in an agent's own tab, only the granted site in a user's
+  // (a one-site lease, design section 9.2).
+  bool ChildOnGrantedSite(const std::string& target_id, const GURL& url) const;
 
   std::optional<base::DictValue> TargetInfo(const std::string& target_id);
   bool InScope(std::string_view target_id) const;
