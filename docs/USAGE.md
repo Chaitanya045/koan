@@ -322,7 +322,9 @@ every Space. Below them is the Space header (the active Space's icon and
 name), then the Space's pinned tabs, a thin line, **+ New Tab** (opens a
 tab at the top of the Space's other tabs) and the other tabs. The pinned
 tabs, the line, New Tab and the tabs scroll together; the Essentials and
-the Space header stay put. A tab's close button shows while you point at
+the Space header stay put. With **Move the new tab button to the top** off
+(Settings > Look and Feel > Vertical Tabs), **+ New Tab** sits after the last
+tab instead, and new tabs open at the end of the Space. A tab's close button shows while you point at
 it.
 
 While the selected tab loads, Zen's loading bar pulses at the top middle of

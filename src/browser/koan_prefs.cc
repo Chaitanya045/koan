@@ -28,6 +28,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCompactModeDragCollapseHintSeen, false);
   registry->RegisterBooleanPref(kTabsOnRight, false);
   registry->RegisterBooleanPref(kShowNewTabVertical, true);
+  registry->RegisterBooleanPref(kShowNewTabButtonTop, true);
   registry->RegisterBooleanPref(kSingleToolbarEnabled, true);
   registry->RegisterStringPref(kUrlBarBehavior, kUrlBarBehaviorFloatingOnType);
   registry->RegisterBooleanPref(kUrlBarReplaceNewTab, true);

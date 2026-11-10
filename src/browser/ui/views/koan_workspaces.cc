@@ -2545,9 +2545,15 @@ void PlaceUnindexedTab(TabStripModel* tab_strip,
       !tab_strip->group_model()->ContainsTabGroup(*space)) {
     return;
   }
-  // As the New Tab row (KoanSidebarTabsController::OpenNewTab()).
+  // As the New Tab row (KoanSidebarTabsController::OpenNewTab()): at the top
+  // of the Space, or with Zen's zen.view.show-newtab-button-top off at its
+  // end.
+  const gfx::Range tabs =
+      tab_strip->group_model()->GetTabGroup(*space)->ListTabs();
   index = static_cast<int>(
-      tab_strip->group_model()->GetTabGroup(*space)->ListTabs().start());
+      tab_strip->profile()->GetPrefs()->GetBoolean(prefs::kShowNewTabButtonTop)
+          ? tabs.start()
+          : tabs.end());
   group = space;
 }
 
