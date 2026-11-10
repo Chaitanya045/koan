@@ -8,6 +8,7 @@
 #include <memory>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
@@ -17,10 +18,14 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -41,6 +46,8 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
+#include "ui/base/base_window.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 namespace koan::containers {
@@ -169,6 +176,44 @@ Profile* FindAgentProfile() {
   return found;
 }
 
+// Opens a normal window for agents, in the background: on the screen of the
+// window the user last used (any kind), so that macOS orders it behind that
+// one instead of fronting it and switching Spaces
+// (NativeWidgetNSWindowBridge::SetVisibilityState(), kShowInactive). It is
+// never activated, and its active tab is the user's own new tab page in a
+// Space of theirs; the agent's tabs go into Spaces of their own. Runs `ready`
+// once the window is ready, or returns false (no profile agents may use, or
+// Spaces are off).
+bool OpenBackgroundWindow(base::OnceClosure ready) {
+  Profile* profile = ProfileManager::GetLastUsedProfileIfLoaded();
+  profile = profile ? profile->GetOriginalProfile() : nullptr;
+  if (!IsAllowedProfile(profile) || !features::IsWorkspacesEnabled()) {
+    return false;
+  }
+  BrowserWindowCreateParams params(BrowserWindowInterface::TYPE_NORMAL,
+                                   *profile, /*from_user_gesture=*/false);
+  params.initial_show_state = ui::mojom::WindowShowState::kInactive;
+  if (BrowserWindowInterface* last =
+          GlobalBrowserCollection::GetInstance()->GetLastActiveBrowser()) {
+    params.initial_bounds = last->GetWindow()->GetRestoredBounds();
+  }
+  CreateBrowserWindow(
+      std::move(params),
+      base::BindOnce(
+          [](base::OnceClosure ready, BrowserWindowInterface* browser) {
+            if (browser) {
+              // A window always has a tab: the user's, not the agent's.
+              chrome::AddTabAt(browser, GURL(), -1, /*foreground=*/true,
+                               std::nullopt, /*pinned=*/false,
+                               NavigateParams::WindowAction::kNoAction);
+              browser->GetWindow()->ShowInactive();
+            }
+            std::move(ready).Run();
+          },
+          std::move(ready)));
+  return true;
+}
+
 // Agent control's way to open a tab (koan_agent_tab_hooks.h): each client's
 // task gets its own container, throwaway or a saved one granted to the client,
 // and keeps it until EndAgentTask().
@@ -177,6 +222,37 @@ class ContainerTabOpener : public agent::AgentTabOpener {
   void OpenAgentTab(
       const agent::AgentTabRequest& request,
       base::OnceCallback<void(content::WebContents*)> done) override {
+    if (!FindAgentProfile()) {
+      // No normal window with Spaces (only Incognito, an app, or none): open
+      // one in the background, once for every request waiting on it.
+      waiting_.push_back({request, std::move(done)});
+      if (waiting_.size() == 1 &&
+          !OpenBackgroundWindow(base::BindOnce(
+              // Never destroyed (InstallAgentTabOpener()).
+              &ContainerTabOpener::OnWindowReady, base::Unretained(this)))) {
+        OnWindowReady();
+      }
+      return;
+    }
+    Open(request, std::move(done));
+  }
+
+ private:
+  struct Waiting {
+    agent::AgentTabRequest request;
+    base::OnceCallback<void(content::WebContents*)> done;
+  };
+
+  void OnWindowReady() {
+    std::vector<Waiting> waiting = std::move(waiting_);
+    waiting_.clear();
+    for (Waiting& entry : waiting) {
+      Open(entry.request, std::move(entry.done));
+    }
+  }
+
+  static void Open(const agent::AgentTabRequest& request,
+                   base::OnceCallback<void(content::WebContents*)> done) {
     Profile* profile = FindAgentProfile();
     std::optional<ContainerId> container =
         profile ? ContainerForTask(profile, request) : std::nullopt;
@@ -185,7 +261,6 @@ class ContainerTabOpener : public agent::AgentTabOpener {
                   : nullptr);
   }
 
- private:
   static std::optional<ContainerId> ContainerForTask(
       Profile* profile,
       const agent::AgentTabRequest& request) {
@@ -230,6 +305,8 @@ class ContainerTabOpener : public agent::AgentTabOpener {
     started.tasks()[key] = *container;
     return *container;
   }
+
+  std::vector<Waiting> waiting_;
 };
 
 }  // namespace
