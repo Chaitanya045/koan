@@ -8,6 +8,12 @@ import("//testing/test.gni")
 # (.agent/notes/agent-control.md section 7). Agent containers, and user
 # containers per Space (#111).
 
+# The partition domains, with no dependency at all, for the hooks in
+# //content/browser (which :partition depends on).
+source_set("domain") {
+  sources = [ "koan_partition_domain.h" ]
+}
+
 # What a container is, and the SiteInstances upstream's hooks put new tabs
 # in. Depends on //base and //content/public/browser only, so upstream
 # targets in components/ and extensions/ can depend on it.
@@ -16,7 +22,10 @@ source_set("partition") {
     "koan_container_partition.cc",
     "koan_container_partition.h",
   ]
-  public_deps = [ "//base" ]
+  public_deps = [
+    ":domain",
+    "//base",
+  ]
   deps = [
     "//content/public/browser",
     "//url",
@@ -101,6 +110,7 @@ test("koan_containers_unittests") {
     "//content/test:run_all_unittests",
     "//content/test:test_support",
     "//testing/gtest",
+    "//url",
   ]
 }
 

@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/visited_url_ranking/BUILD.gn b/chrome/browser/visited_url_ranking/BUILD.gn
+index 29b2c230bc2a261f948e19c4d5e2ba4cddcd4953..7772b2020030ed772264190a97d9a6da9732b7ec 100644
+--- a/chrome/browser/visited_url_ranking/BUILD.gn
++++ b/chrome/browser/visited_url_ranking/BUILD.gn
+@@ -60,6 +60,7 @@ source_set("impl") {
+     "//components/visited_url_ranking/internal:internal_url_grouping",
+     "//components/visited_url_ranking/public",
+     "//content/public/browser",
++    "//koan/browser/containers:partition",
+     "//url",
+   ]
+ 

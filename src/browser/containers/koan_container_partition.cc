@@ -48,6 +48,13 @@ const content::StoragePartitionConfig& ConfigOf(
       .GetStoragePartitionConfig();
 }
 
+// Any container, and any domain that only looks like an agent's (fails
+// closed).
+bool IsContainerConfig(const content::StoragePartitionConfig& config) {
+  return ContainerFromPartitionConfig(config).has_value() ||
+         IsAgentPartition(config);
+}
+
 }  // namespace
 
 bool IsValidContainerId(std::string_view id) {
@@ -113,10 +120,7 @@ std::optional<ContainerId> ContainerFromPartitionConfig(
 }
 
 bool IsAgentPartition(const content::StoragePartitionConfig& config) {
-  // Fails closed: any domain with the prefix is treated as an agent's, even
-  // one ContainerFromPartitionConfig() wouldn't parse.
-  return base::StartsWith(config.partition_domain(),
-                          kAgentPartitionDomainPrefix);
+  return IsAgentPartitionDomain(config.partition_domain());
 }
 
 bool IsAgentProcess(content::RenderProcessHost* process) {
@@ -135,6 +139,10 @@ bool IsAgentContents(const content::WebContents* contents) {
                       contents->GetUserData(&kAgentLeasedKey));
 }
 
+bool IsAgentContainerContents(const content::WebContents* contents) {
+  return contents && IsAgentPartition(ConfigOf(contents));
+}
+
 void SetAgentLeased(content::WebContents* contents, bool leased) {
   if (!contents) {
     return;
@@ -145,6 +153,20 @@ void SetAgentLeased(content::WebContents* contents, bool leased) {
   } else {
     contents->RemoveUserData(&kAgentLeasedKey);
   }
+}
+
+bool IsContainerFrame(content::RenderFrameHost* frame) {
+  return frame && IsContainerSiteInstance(frame->GetSiteInstance());
+}
+
+bool IsContainerContents(const content::WebContents* contents) {
+  return contents && IsContainerConfig(ConfigOf(contents));
+}
+
+bool IsContainerSiteInstance(content::SiteInstance* site_instance) {
+  return site_instance &&
+         IsContainerConfig(
+             site_instance->GetSecurityPrincipal().GetStoragePartitionConfig());
 }
 
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents) {
@@ -195,7 +217,7 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
   }
   const content::StoragePartitionConfig& config =
       source->GetSecurityPrincipal().GetStoragePartitionConfig();
-  if (!ContainerFromPartitionConfig(config) && !IsAgentPartition(config)) {
+  if (!IsContainerConfig(config)) {
     return nullptr;
   }
   return content::SiteInstance::CreateForFixedStoragePartition(context, url,
@@ -205,7 +227,7 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
 scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
     content::WebContents* old_contents) {
   const content::StoragePartitionConfig& config = ConfigOf(old_contents);
-  if (!ContainerFromPartitionConfig(config) && !IsAgentPartition(config)) {
+  if (!IsContainerConfig(config)) {
     return nullptr;
   }
   return content::SiteInstance::CreateForFixedStoragePartition(
@@ -213,8 +235,7 @@ scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
 }
 
 bool AllowsPrerender(const content::WebContents& contents) {
-  const content::StoragePartitionConfig& config = ConfigOf(&contents);
-  return !ContainerFromPartitionConfig(config) && !IsAgentPartition(config);
+  return !IsContainerContents(&contents);
 }
 
 base::FilePath AgentDownloadDirectory(const base::FilePath& download_dir) {

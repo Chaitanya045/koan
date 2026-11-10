@@ -72,11 +72,23 @@ class CheckTest(unittest.TestCase):
       problems, _ = svc.check(rules, inventory('A', 'B'), COMMIT)
       self.assertTrue(problems)
 
-  def test_extra_rows_and_gaps_are_notes(self):
+  def test_extra_rows_and_pinned_gaps_are_notes(self):
     rules = [('A', 'Gap', 'why'), ('Z', 'Safe', 'runtime only')]
-    problems, notes = svc.check(rules, inventory('A'), COMMIT)
+    problems, notes = svc.check(rules, inventory('A'), COMMIT,
+                                pinned_gaps={'A': '#180'})
     self.assertEqual(problems, [])
     self.assertEqual(len(notes), 2)
+
+  def test_an_unpinned_gap_fails(self):
+    problems, _ = svc.check([('A', 'Gap', 'why')], inventory('A'), COMMIT,
+                            pinned_gaps={})
+    self.assertEqual(len(problems), 1)
+    self.assertIn('A', problems[0])
+
+  def test_a_stale_pin_fails(self):
+    problems, _ = svc.check([('A', 'Blocked', 'B1')], inventory('A'), COMMIT,
+                            pinned_gaps={'A': '#180'})
+    self.assertEqual(len(problems), 1)
 
 
 class RealTableTest(unittest.TestCase):
@@ -87,6 +99,11 @@ class RealTableTest(unittest.TestCase):
     pinned = svc.VERSION.read_text().split()[1]
     more, _ = svc.check(rules, json.loads(svc.INVENTORY.read_text()), pinned)
     self.assertEqual(more, [])
+
+  def test_no_service_is_a_gap_at_the_pin(self):
+    rules, _ = svc.parse_policy(svc.POLICY.read_text())
+    self.assertEqual([r[0] for r in rules if r[1] == 'Gap'], [])
+    self.assertEqual(svc.PINNED_GAPS, {})
 
 
 if __name__ == '__main__':

@@ -7,10 +7,12 @@
 #include <set>
 #include <string>
 
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace koan::containers {
 namespace {
@@ -90,6 +92,28 @@ TEST_F(ContainerPartitionTest, AgentPrefixFailsClosed) {
                                               /*in_memory=*/true);
   EXPECT_FALSE(ContainerFromPartitionConfig(odd));
   EXPECT_TRUE(IsAgentPartition(odd));
+}
+
+// The check //content/browser's FedCM and client-hints hooks use.
+static_assert(IsAgentPartitionDomain("koanagenttabc"));
+static_assert(IsAgentPartitionDomain("koanagent"));
+static_assert(!IsAgentPartitionDomain("koanusertabc"));
+static_assert(!IsAgentPartitionDomain(""));
+
+// The default-partition paths (NoStatePrefetch, the loading predictor, app
+// capturing) are refused for both kinds of container, and only for them.
+TEST_F(ContainerPartitionTest, ContainerSiteInstances) {
+  const GURL url("https://example.com/");
+  for (ContainerKind kind : {ContainerKind::kAgent, ContainerKind::kUser}) {
+    const ContainerId container{.kind = kind, .id = NewContainerId(false)};
+    EXPECT_TRUE(IsContainerSiteInstance(
+        CreateSiteInstance(&context_, container, url).get()));
+  }
+  EXPECT_FALSE(IsContainerSiteInstance(
+      content::SiteInstance::CreateForURL(&context_, url).get()));
+  EXPECT_FALSE(IsContainerSiteInstance(nullptr));
+  EXPECT_FALSE(IsContainerFrame(nullptr));
+  EXPECT_FALSE(IsContainerContents(nullptr));
 }
 
 TEST_F(ContainerPartitionTest, SessionFormRoundTrip) {

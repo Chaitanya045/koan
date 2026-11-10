@@ -1,0 +1,25 @@
+diff --git a/components/no_state_prefetch/browser/no_state_prefetch_processor_impl.cc b/components/no_state_prefetch/browser/no_state_prefetch_processor_impl.cc
+index e5ec0a2839fc93166b36787d87e4af27129ccd88..398e170b2e93fa4a1862546e9d64d19c54548a56 100644
+--- a/components/no_state_prefetch/browser/no_state_prefetch_processor_impl.cc
++++ b/components/no_state_prefetch/browser/no_state_prefetch_processor_impl.cc
+@@ -11,6 +11,7 @@
+ #include "content/public/browser/render_view_host.h"
+ #include "content/public/common/content_features.h"
+ #include "content/public/common/referrer.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ 
+ namespace prerender {
+ 
+@@ -100,6 +101,12 @@ void NoStatePrefetchProcessorImpl::Start(
+     return;
+   }
+ 
++  // Koan: NoStatePrefetch loads in the default partition, with the user's
++  // cookies, so a container's page never starts one.
++  if (koan::containers::IsContainerFrame(render_frame_host)) {
++    return;
++  }
++
+   auto* link_manager = GetNoStatePrefetchLinkManager();
+   if (!link_manager) {
+     return;

@@ -14,7 +14,7 @@ namespace {
 // Decided at Chromium 158 (.agent/notes/agent-control.md section 7.2), by the
 // name each factory gives its base class. Sorted (byte order). A row's
 // reason says why the service is safe, names the block that covers it
-// (B1-B9), or says what a gap leaks. scripts/agent/check_agent_services.py
+// (B1-B16), or says what a gap leaks. scripts/agent/check_agent_services.py
 // parses the rows between the markers.
 // clang-format off
 constexpr auto kRules = std::to_array<ServiceRule>({
@@ -166,9 +166,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "B1: background fetch permission is denied in agent partitions"},
     {"BackgroundSyncService", ServiceVerdict::kBlocked,
      "B1: background sync permission is denied in agent partitions"},
-    {"BadgeManager", ServiceVerdict::kGap,
-     "navigator.setAppBadge in an agent tab badges the users installed app "
-     "in scope"},
+    {"BadgeManager", ServiceVerdict::kBlocked,
+     "B15: navigator.setAppBadge not bound in agent frames or workers"},
     {"BatchUpload", ServiceVerdict::kSafe,
      "local-to-account data upload UI; no tab path"},
     {"BitmapFetcherService", ServiceVerdict::kSafe,
@@ -278,9 +277,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "Safe Browsing reports; protective"},
     {"ChromeSigninClient", ServiceVerdict::kSafe,
      "signin plumbing; DICE disabled without OAuth keys"},
-    {"ClientHints", ServiceVerdict::kGap,
-     "Accept-CH from agent sites persists per origin in the profile, applies "
-     "to user tabs"},
+    {"ClientHints", ServiceVerdict::kBlocked,
+     "B15: Accept-CH from agent frames is not persisted (content hook)"},
     {"ClientSideDetectionService", ServiceVerdict::kSafe,
      "Safe Browsing phishing model; protects agent too"},
     {"ClipboardAPI", ServiceVerdict::kBlocked,
@@ -528,17 +526,16 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"ExternalProviderManager", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
-    {"FaviconService", ServiceVerdict::kGap,
-     "ContentFaviconDriver stores agent page URL to icon mappings in the "
-     "Favicons DB"},
+    {"FaviconService", ServiceVerdict::kBlocked,
+     "B15: agent tabs get a favicon driver with no service: icons show, none "
+     "stored"},
     {"FcmService", ServiceVerdict::kSafe, "FCM transport; no page path"},
-    {"FederatedIdentityApiPermissionContext", ServiceVerdict::kGap,
-     "FedCM bypasses B1: agent dismissals embargo the RP in the users profile"},
-    {"FederatedIdentityAutoReauthnPermissionContext", ServiceVerdict::kGap,
-     "FedCM auto-reauthn embargo/state is profile-wide, set from agent tabs"},
-    {"FederatedIdentityPermissionContext", ServiceVerdict::kGap,
-     "FedCM grants and Set-Login IdP status from agent tabs written to "
-     "profile"},
+    {"FederatedIdentityApiPermissionContext", ServiceVerdict::kBlocked,
+     "B12: no FedCM service bound in agent frames"},
+    {"FederatedIdentityAutoReauthnPermissionContext", ServiceVerdict::kBlocked,
+     "B12: no FedCM service bound in agent frames"},
+    {"FederatedIdentityPermissionContext", ServiceVerdict::kBlocked,
+     "B12: no FedCM in agent frames, Set-Login from them ignored"},
     {"FeedService", ServiceVerdict::kSafe, "NTP feed; no page path"},
     {"FeedbackPrivateAPI", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
@@ -593,9 +590,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"HashRealTimeService", ServiceVerdict::kSafe,
      "Safe Browsing lookups; protects agent too"},
     {"HatsService", ServiceVerdict::kSafe, "survey trigger; no page data kept"},
-    {"HeavyAdService", ServiceVerdict::kGap,
-     "heavy-ad interventions on agent pages recorded per host in the profile "
-     "blocklist"},
+    {"HeavyAdService", ServiceVerdict::kBlocked,
+     "B15: the ads observer gets no heavy-ad service for agent tabs"},
     {"HidChooserContext", ServiceVerdict::kBlocked,
      "B1: WebHID refused in non-default partitions, no chooser"},
     {"HidConnectionResourceManager", ServiceVerdict::kBlocked,
@@ -620,7 +616,7 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"HistoryUiFaviconRequestHandler", ServiceVerdict::kSafe,
      "favicons for history UI; reads only"},
     {"HostContentSettingsMap", ServiceVerdict::kSafe,
-     "settings store; agent-tab writers are listed per service (B1, gaps)"},
+     "settings store; agent-tab writers are listed per service (B1, B15)"},
     {"HttpEngagementKeyService", ServiceVerdict::kSafe,
      "HTTPS engagement metrics only"},
     {"HttpHeaderInjectionServiceFactory", ServiceVerdict::kSafe,
@@ -698,9 +694,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "live caption settings; no page data kept"},
     {"LiveTranslateController", ServiceVerdict::kSafe,
      "live translate settings; no page data kept"},
-    {"LoadingPredictor", ServiceVerdict::kGap,
-     "learns agent navs into users predictor DB; prewarm/SW warm-up use "
-     "default partition"},
+    {"LoadingPredictor", ServiceVerdict::kBlocked,
+     "B10: the tab helper has no predictor in containers: no learning or "
+     "prewarm"},
     {"LocalBinaryUploadService", ServiceVerdict::kSafe,
      "enterprise local scanning; protective"},
     {"LocalOrSyncableBookmarkSyncServiceFactory", ServiceVerdict::kSafe,
@@ -734,9 +730,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "ChromeOS Manta; not on macOS"},
     {"MediaDeviceSaltServiceFactory", ServiceVerdict::kSafe,
      "device ids need camera/mic permission (B1)"},
-    {"MediaEngagementServiceFactory", ServiceVerdict::kGap,
-     "agent media playback raises per-origin media engagement (autoplay) in "
-     "profile"},
+    {"MediaEngagementServiceFactory", ServiceVerdict::kBlocked,
+     "B15: no media engagement observer for agent tabs"},
     {"MediaGalleriesAPI", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -801,12 +796,10 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "webRequest"},
     {"NewTabPageExtensionBridge", ServiceVerdict::kSafe,
      "NTP bridge; no page path"},
-    {"NoStatePrefetchLinkManager", ServiceVerdict::kGap,
-     "link rel=prerender from agent pages starts NoStatePrefetch (C4 misses "
-     "it)"},
-    {"NoStatePrefetchManager", ServiceVerdict::kGap,
-     "NoStatePrefetch contents are built in the default partition: user "
-     "cookies"},
+    {"NoStatePrefetchLinkManager", ServiceVerdict::kBlocked,
+     "B10: link rel=prerender from a container page starts nothing"},
+    {"NoStatePrefetchManager", ServiceVerdict::kBlocked,
+     "B10: never started from a container page (its only page trigger)"},
     {"NotebooksEligibilityService", ServiceVerdict::kSafe,
      "Google-account AI feature; dormant: needs Google sign-in (Koan has no "
      "OAuth keys)"},
@@ -870,9 +863,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "actor origin gating; dormant with Glic actor"},
     {"OriginKeyedPermissionActionService", ServiceVerdict::kBlocked,
      "B1: no permission actions from agent containers"},
-    {"OriginTrials", ServiceVerdict::kGap,
-     "persistent origin-trial tokens from agent pages apply profile-wide to "
-     "user tabs"},
+    {"OriginTrials", ServiceVerdict::kSafe,
+     "persistent trials need the sites own token, resent on the users visit"},
     {"PageColorsController", ServiceVerdict::kSafe,
      "forced colors setting; no page data"},
     {"PageContentAnnotationsService", ServiceVerdict::kSafe,
@@ -925,7 +917,7 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"PermissionActionsHistory", ServiceVerdict::kBlocked,
      "B1: no prompts in agent containers, so no actions recorded"},
     {"PermissionDecisionAutoBlocker", ServiceVerdict::kBlocked,
-     "B1: no prompts in agent containers (FedCM path is a gap)"},
+     "B1: no prompts in agent containers; FedCM is not bound (B12)"},
     {"PermissionHelper", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -976,7 +968,7 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"PredictionService", ServiceVerdict::kSafe,
      "permission prediction; no prompts in agents (B1)"},
     {"PredictorDatabase", ServiceVerdict::kSafe,
-     "storage for LoadingPredictor; the agent-nav writes are that gap"},
+     "storage for LoadingPredictor, which learns nothing from containers (B10)"},
     {"PrefMetricsService", ServiceVerdict::kSafe, "metrics only"},
     {"PrefWatcher", ServiceVerdict::kSafe,
      "pushes profile prefs to renderers; read-only for pages"},
@@ -1025,9 +1017,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "enterprise profile-token signin; policy-only"},
     {"ProfileTokenWebSigninInterceptor", ServiceVerdict::kSafe,
      "enterprise profile-token signin; policy-only"},
-    {"ProtocolHandlerRegistry", ServiceVerdict::kGap,
-     "registerProtocolHandler prompt bypasses B1; accept adds handler to "
-     "profile"},
+    {"ProtocolHandlerRegistry", ServiceVerdict::kBlocked,
+     "B13: registerProtocolHandler from agent frames is dropped"},
     {"ProtocolHandlersManager", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -1050,9 +1041,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "Safe Browsing lookups; protects agent too"},
     {"RealtimeReportingClient", ServiceVerdict::kSafe,
      "enterprise event reporting; policy-only"},
-    {"ReduceAcceptLanguage", ServiceVerdict::kGap,
-     "negotiated Accept-Language of agent sites persisted per origin, "
-     "profile-wide"},
+    {"ReduceAcceptLanguage", ServiceVerdict::kSafe,
+     "kReduceAcceptLanguage(HTTP) off by default at 158; value is a user "
+     "lang"},
     {"RegionalCapabilitiesService", ServiceVerdict::kSafe,
      "country/region capabilities; no page path"},
     {"RemoteActorCredentialSharingService", ServiceVerdict::kBlocked,
@@ -1161,9 +1152,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "webRequest"},
     {"SessionSyncService", ServiceVerdict::kBlocked,
      "B8: no open-tab sync for agent tabs"},
-    {"SessionsAPI", ServiceVerdict::kGap,
-     "chrome.sessions lists and restores closed agent tabs from "
-     "TabRestoreService"},
+    {"SessionsAPI", ServiceVerdict::kBlocked,
+     "B16: reads TabRestoreService, which never gets agent tabs"},
     {"SettingsOverridesAPI", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -1201,11 +1191,10 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "signin policy; no page path"},
     {"SigninProfileAttributesUpdater", ServiceVerdict::kSafe,
      "profile name/avatar; no page path"},
-    {"SiteDataCacheFacadeFactory", ServiceVerdict::kGap,
-     "performance-manager site data DB records agent-visited origins"},
-    {"SiteEngagementService", ServiceVerdict::kGap,
-     "agent navigation/input raises user site engagement (NTP, prompts, "
-     "HTTPS)"},
+    {"SiteDataCacheFacadeFactory", ServiceVerdict::kBlocked,
+     "B15: agent page nodes get no site data cache"},
+    {"SiteEngagementService", ServiceVerdict::kBlocked,
+     "B15: navigation, input and media in agent tabs add no points"},
     {"SiteTokenProviderService", ServiceVerdict::kSafe,
      "feature off by default; no agent-tab path while off"},
     {"SkillRecordingService", ServiceVerdict::kSafe,
@@ -1235,8 +1224,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "B1: storage access grants denied in agent containers"},
     {"StorageNotificationService", ServiceVerdict::kSafe,
      "disk pressure notices; no page data"},
-    {"SubresourceFilterProfileContext", ServiceVerdict::kGap,
-     "ad-blocking activation on agent sites written to profile site settings"},
+    {"SubresourceFilterProfileContext", ServiceVerdict::kBlocked,
+     "B15: filtering stays on; agent activations write no ADS_DATA"},
     {"SubscriptionEligibilityService", ServiceVerdict::kSafe,
      "subscription eligibility; no page path"},
     {"SupervisedUserMetricsServiceFactory", ServiceVerdict::kSafe,
@@ -1285,12 +1274,12 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "feature off by default; no agent-tab path while off"},
     {"TaskStore", ServiceVerdict::kSafe,
      "feature off by default; no agent-tab path while off"},
-    {"TemplateURLFetcher", ServiceVerdict::kGap,
-     "OSDD links on agent pages are fetched and added as users search engines"},
+    {"TemplateURLFetcher", ServiceVerdict::kBlocked,
+     "B11: no OSDD handler bound for agent frames"},
     {"TemplateURLPrepopulateDataResolver", ServiceVerdict::kSafe,
      "prepopulated engines; no page path"},
-    {"TemplateURLServiceFactory", ServiceVerdict::kGap,
-     "SearchEngineTabHelper auto-adds keywords from agent search-form navs"},
+    {"TemplateURLServiceFactory", ServiceVerdict::kBlocked,
+     "B11: no autogenerated keywords from agent form submits"},
     {"TerminalPrivateAPI", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -1332,8 +1321,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"UpdateService", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
-    {"UrlLanguageHistogram", ServiceVerdict::kGap,
-     "agent page languages counted into the users language prefs"},
+    {"UrlLanguageHistogram", ServiceVerdict::kBlocked,
+     "B15: agent tabs translate driver gets no histogram (Incognito path)"},
     {"UsbChooserContext", ServiceVerdict::kBlocked,
      "B1: WebUSB refused in non-default partitions, no chooser"},
     {"UsbConnectionTracker", ServiceVerdict::kBlocked,
@@ -1376,8 +1365,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"VirtualKeyboardAPI", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
-    {"VisitedURLRankingService", ServiceVerdict::kGap,
-     "desktop TabModel fetcher lists open agent tabs to NTP tab resumption"},
+    {"VisitedURLRankingService", ServiceVerdict::kBlocked,
+     "B16: the desktop tab fetcher skips agent tabs"},
     {"WaapUIMetricsService", ServiceVerdict::kSafe, "metrics only"},
     {"WalletPassAccessManager", ServiceVerdict::kBlocked,
      "B5: ChromeAutofillClient is off in agent tabs, no autofill/autocomplete"},
@@ -1389,9 +1378,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "webRequest"},
     {"WebAppMetrics", ServiceVerdict::kSafe,
      "installed-app engagement metrics only"},
-    {"WebAppProvider", ServiceVerdict::kGap,
-     "nav capturing may move agent link clicks into app windows (default "
-     "partition)"},
+    {"WebAppProvider", ServiceVerdict::kBlocked,
+     "B14: no navigation capturing from container tabs"},
     {"WebAuthentcationProxyRegistrar", ServiceVerdict::kBlocked,
      "B9/B3: WebAuthn refused in agent frames before any proxy"},
     {"WebAuthenticationProxyAPI", ServiceVerdict::kBlocked,
@@ -1399,12 +1387,11 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"WebAuthenticationProxyService", ServiceVerdict::kBlocked,
      "B9/B3: WebAuthn refused in agent frames before any proxy"},
     {"WebDataService", ServiceVerdict::kSafe,
-     "storage backend; writers are autofill (B5) and keywords (TemplateURL "
-     "gap)"},
+     "storage backend; writers are autofill (B5) and keywords (B11)"},
     {"WebHistoryServiceFactory", ServiceVerdict::kSafe,
      "Google web history; needs sign-in"},
-    {"WebNavigationAPI", ServiceVerdict::kGap,
-     "webNavigation events still fire for every agent frame navigation (URLs)"},
+    {"WebNavigationAPI", ServiceVerdict::kBlocked,
+     "B16: the webNavigation tab observer observes nothing in agent tabs"},
     {"WebRequestAPI", ServiceVerdict::kBlocked,
      "B3: no webRequest/DNR proxy for agent traffic"},
     {"WebRequestEventRouter", ServiceVerdict::kBlocked,
@@ -1431,9 +1418,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "private AI transport; no page data kept"},
     {"sct_reporting::Factory", ServiceVerdict::kSafe,
      "CT reporting; protective"},
-    {"sessions::TabRestoreService", ServiceVerdict::kGap,
-     "closed agent tabs and Spaces listed in Recently Closed (reopen is "
-     "blanked)"},
+    {"sessions::TabRestoreService", ServiceVerdict::kBlocked,
+     "B16: agent tabs are blank to it, so never listed or written"},
 // END AGENT SERVICE RULES
 });
 // clang-format on

@@ -1,0 +1,12 @@
+diff --git a/components/performance_manager/BUILD.gn b/components/performance_manager/BUILD.gn
+index 50ba1c997bbfcb58296919a4748a2dc15b1a2ea6..da06ed47797f7283f1e6670262d078a1dd7f5e23 100644
+--- a/components/performance_manager/BUILD.gn
++++ b/components/performance_manager/BUILD.gn
+@@ -325,6 +325,7 @@ static_library("performance_manager") {
+     "//components/prefs",
+     "//components/system_cpu",
+     "//components/url_matcher",
++    "//koan/browser/containers:partition",
+     "//third_party/blink/public/common:headers",
+   ]
+ 
