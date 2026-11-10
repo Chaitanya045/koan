@@ -156,6 +156,7 @@ source_set("feature_overrides") {
     "//components/feature_engagement/public:feature_constants",
     "//components/performance_manager",
     "//components/variations",
+    "//koan/browser/ui/vector_icons:koan_icons",
     "//ui/base:features",
   ]
   if (is_mac) {

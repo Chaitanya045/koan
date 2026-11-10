@@ -11,6 +11,7 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/performance_manager/public/features.h"
 #include "components/variations/feature_overrides.h"
+#include "koan/browser/ui/vector_icons/koan_icons.h"
 #include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -20,6 +21,10 @@
 namespace koan {
 
 void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
+  // The earliest browser-process hook: Zen's icons for every Chromium icon
+  // that has one (koan_icons.h).
+  InstallVectorIconOverride();
+
   // Workspaces are tab groups shown one at a time: upstream's group focus
   // mode hides every other group and scopes tab cycling to the focused one.
   overrides.EnableFeature(features::kTabGroupsFocusing);

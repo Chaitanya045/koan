@@ -697,6 +697,18 @@ rules). The card is translucent over a blur of the page; only the card of
 the window it opens in changes. The suggestion list under it stays opaque. Off
 macOS only the page is blurred.
 
+## Icons
+
+Icons have Zen's look: the same vocabulary (back, reload, sidebar, +, close,
+...), sizes (17 pt toolbar, 16 pt favicon and close, 18 pt menus, 20 pt
+bottom-bar +), weight and rounded caps, in monochrome that takes the text
+colour. Zen's own icons can't be redistributed (Nucleo), so Koan draws them
+from [Lucide](https://lucide.dev) (ISC); see `.agent/notes/koan-icons.md`
+for the table. Icons that Chromium's UI asks for in its Material style
+(toolbar, tabs, location bar, menus, permission chips, download bubble) are
+swapped for them. Web pages of Chromium (Settings, History, New Tab) keep their
+own icons.
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"): Koan

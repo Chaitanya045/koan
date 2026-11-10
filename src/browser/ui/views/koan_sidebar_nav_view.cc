@@ -37,6 +37,8 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -165,7 +167,7 @@ KoanSidebarNavButtons::KoanSidebarNavButtons(BrowserView* browser_view)
               chrome::ExecuteCommand(browser, command);
             },
             base::Unretained(browser), command),
-        icon, /*dip_size=*/18);
+        icon, kToolbarIconSize);
     button->SetTooltipText(name);
     button->GetViewAccessibility().SetName(name);
     button->SetPreferredSize(gfx::Size(kButtonSize, kButtonSize));
@@ -303,7 +305,7 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   site_button_ =
       pill_button(base::BindRepeating(&KoanSidebarNavView::OnSiteButtonPressed,
                                       base::Unretained(this)),
-                  vector_icons::kSearchIcon, u"Site information");
+                  kKoanUrlbarSearchGlassIcon, u"Site information");
 
   // Something is in use (camera, microphone ...): see UpdateInUse().
   in_use_ = url_pill_->AddChildView(std::make_unique<views::ImageView>());
@@ -331,7 +333,7 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
       pill_button(base::BindRepeating(&CopyCurrentUrl,
                                       base::Unretained(browser_view_.get()),
                                       /*markdown=*/false),
-                  vector_icons::kContentCopyIcon, u"Copy URL");
+                  kKoanLinkIcon, u"Copy URL");
   // Like Zen's (opacity 0 until hovered), it keeps its place, so Tab and
   // screen readers reach it.
   copy_button_->SetPaintToLayer();
@@ -519,7 +521,7 @@ void KoanSidebarNavView::UpdateUrl() {
       views::Button::STATE_NORMAL,
       !favicon.IsEmpty() ? favicon
                          : ui::ImageModel::FromVectorIcon(
-                               vector_icons::kSearchIcon,
+                               kKoanUrlbarSearchGlassIcon,
                                kColorKoanUrlPillForeground, kUrlPillIconSize));
   const std::u16string site_name =
       has_page ? u"Site information" : u"Search or enter address";

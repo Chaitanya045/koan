@@ -1,0 +1,29 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's unpin.svg: Lucide (ISC), lucide.dev icon "minus", converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 4.3, 11,
+LINE_TO, 19.7, 11,
+QUADRATIC_TO, 19.899, 11, 20.083, 11.076,
+QUADRATIC_TO, 20.266, 11.152, 20.407, 11.293,
+QUADRATIC_TO, 20.548, 11.434, 20.624, 11.617,
+QUADRATIC_TO, 20.7, 11.801, 20.7, 12,
+QUADRATIC_TO, 20.7, 12.199, 20.624, 12.383,
+QUADRATIC_TO, 20.548, 12.566, 20.407, 12.707,
+QUADRATIC_TO, 20.266, 12.848, 20.083, 12.924,
+QUADRATIC_TO, 19.899, 13, 19.7, 13,
+LINE_TO, 4.3, 13,
+QUADRATIC_TO, 4.101, 13, 3.917, 12.924,
+QUADRATIC_TO, 3.734, 12.848, 3.593, 12.707,
+QUADRATIC_TO, 3.452, 12.566, 3.376, 12.383,
+QUADRATIC_TO, 3.3, 12.199, 3.3, 12,
+QUADRATIC_TO, 3.3, 11.801, 3.376, 11.617,
+QUADRATIC_TO, 3.452, 11.434, 3.593, 11.293,
+QUADRATIC_TO, 3.734, 11.152, 3.917, 11.076,
+QUADRATIC_TO, 4.101, 11, 4.3, 11,
+CLOSE,

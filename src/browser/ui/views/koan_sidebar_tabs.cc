@@ -34,6 +34,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_essentials.h"
 #include "koan/browser/ui/views/koan_pinned.h"
@@ -328,7 +329,7 @@ class KoanClearButton : public views::Button {
                         (GetState() == STATE_PRESSED ? kClearPressedOffset : 0),
                     kClearIconSize, kClearIconSize));
       canvas->DrawImageInt(
-          gfx::CreateVectorIcon(kArrowDownwardIcon, kClearIconSize, color),
+          gfx::CreateVectorIcon(kKoanDartDownIcon, kClearIconSize, color),
           icon.x(), icon.y());
       x += kClearIconSize + kClearIconGap;
     }
