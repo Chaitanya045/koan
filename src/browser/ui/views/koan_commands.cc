@@ -41,6 +41,7 @@
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -365,6 +366,16 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
     commands.push_back(ShortcutCommand(
         controller, "previous-space", u"Previous Space",
         vector_icons::kArrowBackIcon, Action::kWorkspaceBackward));
+  }
+  // Zen's zen-action-open-space-routing.
+  {
+    KoanCommand command =
+        MakeCommand("open-space-routing", u"Open Space Routing", kSettingsIcon);
+    command.run =
+        base::BindRepeating([](KoanBrowserViewController& controller) {
+          controller.workspaces()->space_routing()->ShowSettings();
+        });
+    commands.push_back(std::move(command));
   }
   // Zen: "Focus on" each other Space, matched by the Space's name.
   for (const KoanWorkspaceController::SpaceInfo& space : spaces) {

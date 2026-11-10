@@ -147,6 +147,21 @@ bool ApplySpaceColor(TabStripModel* tab_strip);
 // per Space).
 bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab);
 
+// macOS's OpenStartupTabsInBrowserWithProfile() (app_controller_mac.mm), for
+// links from other apps (application:openURLs:, Handoff, and those held back
+// until startup ends): the tabs opened while one lives are external links,
+// which Zen's Space routing sends to its default Space for them
+// (koan_space_routing.h). Nested ones count once.
+class ScopedExternalLinks {
+ public:
+  ScopedExternalLinks();
+  ScopedExternalLinks(const ScopedExternalLinks&) = delete;
+  ScopedExternalLinks& operator=(const ScopedExternalLinks&) = delete;
+  ~ScopedExternalLinks();
+
+  static bool IsActive();
+};
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SPACES_H_

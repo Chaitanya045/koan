@@ -8,6 +8,7 @@ Prepare: three Spaces A, B, C (A active) with a few tabs each, no Essentials, si
 
 | # | Do | Expect |
 |---|---|---|
+| SD0 | **Mandatory, high risk (maintainer review of #224).** DCHECK build. Drag one tab, then a 3-tab selection, across Spaces both over a Space button and by holding at the edge; drop in each case. Repeat with Esc mid-drag. | No CHECK/DCHECK, no crash, the tabs land in the new Space. `MoveTabsToSpace` changes group membership while `TabDragController` is active (upstream only changes groups from inside the controller). If anything trips, change `KoanSpaceDrag::SwitchWithDraggedTabs` to switch only and move the tabs on drop. |
 | SD1 | Drag a tab of A and hold it at the sidebar's right edge (within 20 px, inside or over the page) | After half a second B slides in, the dragged tab is in it under the pointer; after another half second C, then A if Settings > Tab Management wraps around (else it stops at C). Drop: the tab stays in that Space where dropped. |
 | SD2 | The same at the left edge | Previous Space (C from A). |
 | SD3 | Hold at the edge, then move to the middle before 500 ms | No switch. |

@@ -81,6 +81,8 @@
 #include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_space_menu.h"
 #include "koan/browser/ui/views/koan_space_navigation.h"
+#include "koan/browser/ui/views/koan_space_routes.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_space_swipe.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
@@ -342,6 +344,7 @@ KoanWorkspaceController::CreateMenuEntry::~CreateMenuEntry() = default;
 KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
     : browser_view_(browser_view),
       space_drag_(std::make_unique<KoanSpaceDrag>(this, browser_view)),
+      space_routing_(std::make_unique<KoanSpaceRouting>(this, browser_view)),
       swipe_(std::make_unique<KoanSpaceSwipe>(this)) {
   if (IsEnabled()) {
     // Agent control opens agents' tabs in containers, in windows like this.
@@ -449,6 +452,7 @@ void KoanWorkspaceController::OnWidgetDestroying(views::Widget* widget) {
 void KoanWorkspaceController::OnBrowserViewDestroying() {
   session_restored_subscription_ = base::CallbackListSubscription();
   destroying_ = true;
+  space_routing_->OnBrowserViewDestroying();
   CancelSwipe(/*animate=*/false);
   widget_observation_.Reset();
   slide_outs_.clear();
@@ -537,6 +541,12 @@ void KoanWorkspaceController::OnSidebarMouseEvent(const ui::MouseEvent& event) {
   if (region_ && !destroying_ && IsEnabled()) {
     space_drag_->OnRegionMouseEvent(region_, event);
   }
+}
+
+void KoanWorkspaceController::SetLastActiveTab(
+    const tab_groups::TabGroupId& space,
+    tabs::TabInterface* tab) {
+  last_active_tabs_[space] = tab->GetHandle();
 }
 
 bool KoanWorkspaceController::RunGroupCommand(int command_id) {
@@ -862,6 +872,19 @@ void KoanWorkspaceController::RenameSpace(const tab_groups::TabGroupId& space,
   // Zen ignores an empty name.
   if (!data || trimmed.empty() || trimmed == data->name) {
     return;
+  }
+  // Routes name their Space: they follow it (Zen's keep its id).
+  PrefService* prefs =
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs();
+  std::vector<SpaceRoute> routes =
+      ParseSpaceRoutes(prefs->GetList(prefs::kSpaceRoutes));
+  if (RenameSpaceInRoutes(routes, data->name, trimmed)) {
+    prefs->SetList(prefs::kSpaceRoutes, SpaceRoutesToValue(routes));
+  }
+  if (prefs->GetString(prefs::kSpaceRoutingExternalDefault) ==
+      base::UTF16ToUTF8(data->name)) {
+    prefs->SetString(prefs::kSpaceRoutingExternalDefault,
+                     base::UTF16ToUTF8(trimmed));
   }
   data->name = trimmed;
   WriteSpace(space, *data);
@@ -2175,6 +2198,8 @@ void KoanWorkspaceController::OnTabStripModelChanged(
     for (const TabStripModelChange::ContentsWithIndex& inserted :
          change.GetInsert()->contents) {
       containers::OnTabInserted(inserted.contents);
+      // Zen's Space routing: a new page may belong in another Space.
+      space_routing_->OnTabInserted(inserted.tab, selection.old_tab);
     }
   }
   if (change.type() == TabStripModelChange::kRemoved) {
