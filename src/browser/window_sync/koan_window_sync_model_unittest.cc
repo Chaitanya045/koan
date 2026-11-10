@@ -93,6 +93,22 @@ TEST(WindowSyncPlanTest, ItemMovingToAnotherSpaceIsAnUpdate) {
   EXPECT_EQ("b", plan.update[0].space_id);
 }
 
+// A new window's own Space (with its startup tabs) becomes one of the synced
+// Spaces rather than being deleted: by name first, then in order.
+TEST(WindowSyncPlanTest, JoiningWindowAdoptsItsSpaces) {
+  const std::vector<SpaceRecord> target = {
+      Space("a", u"Work"), Space("b", u"Home"), Space("c", u"Play")};
+  EXPECT_THAT(
+      AdoptSpaces({Space("", u"Home"), Space("", u"Other")}, target, {}),
+      ElementsAre("b", "a"));
+  // Ids the window has already are not adopted twice.
+  EXPECT_THAT(AdoptSpaces({Space("", u"Work")}, target, {"a"}),
+              ElementsAre("b"));
+  // More local Spaces than free targets: the rest adopt nothing.
+  EXPECT_THAT(AdoptSpaces({Space(""), Space(""), Space("")}, {Space("a")}, {}),
+              ElementsAre("a", "", ""));
+}
+
 TEST(WindowSyncModelTest, FirstWindowSeeds) {
   WindowSyncModel model;
   EXPECT_FALSE(model.seeded());

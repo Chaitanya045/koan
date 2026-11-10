@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -85,6 +86,15 @@ struct Plan {
 // Reconciles a window's Spaces (`local`, in its order) to `target`.
 Plan<SpaceRecord> PlanSpaces(const std::vector<SpaceRecord>& local,
                              const std::vector<SpaceRecord>& target);
+// A window joining the sync: its Spaces that have no sync id yet (`local`,
+// in its order) take the ids of target Spaces no Space of the window has
+// (`target` minus `taken`), so that they become those Spaces, with their
+// tabs, instead of being deleted. A local Space takes the first free target
+// Space with its name and icon, else the first free one in order. Returns
+// the id each local Space takes, or empty if none is left for it.
+std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
+                                     const std::vector<SpaceRecord>& target,
+                                     const std::set<std::string>& taken);
 // The same for synced tabs. `order` is the target's ids in sidebar order
 // (an item that changes kind or Space is updated, then ordered).
 Plan<ItemRecord> PlanItems(const std::vector<ItemRecord>& local,

@@ -1086,7 +1086,20 @@ void KoanWorkspaceController::DeleteSpace(const tab_groups::TabGroupId& space) {
 void KoanWorkspaceController::OnDeleteConfirmed(
     const tab_groups::TabGroupId& space,
     bool confirmed) {
-  if (!confirmed || !GetSpace(space) || !CanDeleteSpace()) {
+  if (confirmed) {
+    CloseSpaceTabs(space, TabCloseTypes::CLOSE_USER_GESTURE);
+  }
+}
+
+void KoanWorkspaceController::DeleteSpaceForSync(
+    const tab_groups::TabGroupId& space) {
+  CloseSpaceTabs(space, TabCloseTypes::CLOSE_NONE);
+}
+
+void KoanWorkspaceController::CloseSpaceTabs(
+    const tab_groups::TabGroupId& space,
+    uint32_t close_types) {
+  if (!GetSpace(space) || !CanDeleteSpace()) {
     return;
   }
   TabStripModel* model = tab_strip_model();
@@ -1097,7 +1110,7 @@ void KoanWorkspaceController::OnDeleteConfirmed(
   last_active_tabs_.erase(space);
   for (int i = model->count() - 1; i >= 0; --i) {
     if (model->GetTabGroupForTab(i) == space) {
-      model->CloseWebContentsAt(i, TabCloseTypes::CLOSE_USER_GESTURE);
+      model->CloseWebContentsAt(i, close_types);
     }
   }
 }
