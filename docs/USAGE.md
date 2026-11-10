@@ -432,6 +432,16 @@ belongs to a Space, and new tabs open in the active one.
   and drops where you let go. Essentials only switch at the edges.
 - **Reorder** Spaces by dragging their buttons in the bottom bar (the
   others fade while you do; on a Mac the trackpad ticks at each step).
+- **Space routing** (right-click the header > Space Routing Settings, or
+  "Open Space Routing" in the command palette): routes like "When the link
+  contains youtube.com, open it in Media" send new tabs for matching pages
+  to that Space, in the background, with a "New tab opened in Media" toast;
+  the first matching route wins. Match by Contains, Is Exactly (ignoring
+  http(s)://, www. and a final /) or RegEx. "Default route for external
+  links" picks the Space links from other apps open in when no route
+  matches. Right-click a tab > Add Route for Domain adds a route for its
+  site (one per selected tab's site) and opens the settings. Essentials and
+  pinned tabs are never routed.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in

@@ -240,6 +240,15 @@ inline constexpr char kDownloadAnimation[] =
 inline constexpr char kDragWindowFromContent[] =
     "koan.view.drag_window_from_content";
 
+// Zen's Space routing (ZenSpaceRoutingManager.sys.mjs, its
+// zen-space-routing.jsonlz4): the routes, a list of {"reference", "match_type"
+// ("contains", "equal-to" or "regex"), "space" (a Space's name, "" for the
+// most recent one)} in order (koan_space_routes.h), and the Space links from
+// other apps open in when no route matches ("" for the most recent one).
+inline constexpr char kSpaceRoutes[] = "koan.space_routing.routes";
+inline constexpr char kSpaceRoutingExternalDefault[] =
+    "koan.space_routing.external_default";
+
 // Whether the bookmarks bar may show at all. Zen has none, so Koan's default
 // is no bar anywhere (also on the new tab page, and after an import, which
 // would turn Chromium's own setting on); Koan's settings turn it on. Gated in

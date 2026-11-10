@@ -69,6 +69,7 @@ class KoanSpaceSwipe;
 class KoanCreateMenu;
 class KoanSpaceBarView;
 class KoanSpaceDrag;
+class KoanSpaceRouting;
 class KoanSpaceCreationView;
 class KoanSpaceHeaderView;
 class KoanSpaceMenu;
@@ -344,6 +345,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // A mouse event on its way to a view in the sidebar.
   void OnSidebarMouseEvent(const ui::MouseEvent& event);
 
+  // Zen's Space routing (koan_space_routing.h).
+  KoanSpaceRouting* space_routing() const { return space_routing_.get(); }
+  // Makes `tab` the one switching to `space` lands on (a routed tab, Zen's
+  // lastSelectedWorkspaceTabs).
+  void SetLastActiveTab(const tab_groups::TabGroupId& space,
+                        tabs::TabInterface* tab);
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
@@ -477,6 +485,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   raw_ptr<views::View> region_ = nullptr;
   std::unique_ptr<ui::EventHandler> wheel_handler_;
   std::unique_ptr<KoanSpaceDrag> space_drag_;
+  std::unique_ptr<KoanSpaceRouting> space_routing_;
   // Keeps a collapsed sidebar expanded while the Create form is open.
   std::unique_ptr<ExpandOnHoverLock> create_form_lock_;
 

@@ -107,6 +107,16 @@ source_set("space_drag_logic") {
   deps = [ "//base" ]
 }
 
+# Zen's Space routing rules (koan_space_routes.h): pure, for the unit tests.
+source_set("space_routes") {
+  sources = [
+    "koan_space_routes.cc",
+    "koan_space_routes.h",
+  ]
+  deps = [ "//third_party/re2" ]
+  public_deps = [ "//base" ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -156,6 +166,7 @@ test("koan_views_unittests") {
     "koan_sidebar_curve_unittest.cc",
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
+    "koan_space_routes_unittest.cc",
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
   ]
@@ -166,6 +177,7 @@ test("koan_views_unittests") {
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
+    ":space_routes",
     ":strip_on_share",
     ":swipe_tracker",
     "//base",
@@ -303,6 +315,8 @@ source_set("impl") {
     "koan_space_header.h",
     "koan_space_menu.cc",
     "koan_space_menu.h",
+    "koan_space_routing.cc",
+    "koan_space_routing.h",
     "koan_space_swipe.cc",
     "koan_space_swipe.h",
     "koan_split_view.cc",
@@ -367,6 +381,7 @@ source_set("impl") {
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
+    ":space_routes",
     ":strip_on_share",
     ":swipe_tracker",
     ":views",
