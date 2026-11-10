@@ -13,6 +13,8 @@
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 
 #include <algorithm>
+#include <cmath>
+#include <optional>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -232,10 +234,25 @@ class KoanUrlBarCardDecoration : public views::View {
     layer()->SetFillsBoundsOpaquely(false);
   }
 
-  // `icon` is the location icon's bounds in this view.
-  void SetIconBounds(const gfx::Rect& icon) {
-    if (icon_ != icon) {
+  // `icon` is the location icon's bounds in this view. With `glyph_x`, the
+  // magnifier's glyph starts there (Zen's inset), else it is centred on the
+  // icon. `leading` is the width at the card's start that the toolbar, moved
+  // right for Zen's text inset, leaves uncovered.
+  void SetIconBounds(const gfx::Rect& icon,
+                     std::optional<int> glyph_x,
+                     int leading) {
+    if (icon_ != icon || glyph_x_ != glyph_x || leading_ != leading) {
       icon_ = icon;
+      glyph_x_ = glyph_x;
+      leading_ = leading;
+      SchedulePaint();
+    }
+  }
+
+  // As KoanUrlBarCardFill::SetGlass(), for the strip SetIconBounds() names.
+  void SetGlass(bool glass) {
+    if (glass_ != glass) {
+      glass_ = glass;
       SchedulePaint();
     }
   }
@@ -243,6 +260,13 @@ class KoanUrlBarCardDecoration : public views::View {
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();
+    if (leading_ > 0) {
+      // The card's fill there, as KoanUrlBarCardFill paints it in the toolbar.
+      canvas->FillRect(
+          gfx::Rect(0, 0, leading_, height()),
+          colors->GetColor(glass_ ? kColorKoanFloatingUrlBarGlass
+                                  : kColorKoanFloatingUrlBarBackground));
+    }
     if (!icon_.IsEmpty()) {
       // A plain, muted magnifier: the location icon under it is hidden
       // (KoanUrlBarController::SetLocationIconHidden()), not painted over, so
@@ -250,9 +274,14 @@ class KoanUrlBarCardDecoration : public views::View {
       const gfx::ImageSkia magnifier = gfx::CreateVectorIcon(
           kKoanUrlbarSearchGlassIcon, kFloatingUrlBarMagnifierSize,
           colors->GetColor(ui::kColorIcon));
+      const int x =
+          glyph_x_
+              ? *glyph_x_ -
+                    static_cast<int>(std::lround(kFloatingUrlBarMagnifierSize *
+                                                 kSearchGlassGlyphStart))
+              : icon_.x() + (icon_.width() - magnifier.width()) / 2;
       canvas->DrawImageInt(
-          magnifier, icon_.x() + (icon_.width() - magnifier.width()) / 2,
-          icon_.y() + (icon_.height() - magnifier.height()) / 2);
+          magnifier, x, icon_.y() + (icon_.height() - magnifier.height()) / 2);
     }
     // A thin line inset from the card's edges (Zen's input row padding).
     canvas->FillRect(
@@ -263,6 +292,9 @@ class KoanUrlBarCardDecoration : public views::View {
 
  private:
   gfx::Rect icon_;
+  std::optional<int> glyph_x_;
+  int leading_ = 0;
+  bool glass_ = false;
 };
 
 BEGIN_METADATA(KoanUrlBarCardDecoration)
@@ -867,6 +899,9 @@ void KoanUrlBarController::UpdateGlassCard() {
   if (fill_) {
     fill_->SetGlass(glass);
   }
+  if (decoration_) {
+    decoration_->SetGlass(glass);
+  }
   if (bar) {
     SetLabelsSubpixelRendering(bar, !glass);
   }
@@ -926,18 +961,33 @@ void KoanUrlBarController::Layout() {
   const gfx::Rect field =
       views::View::ConvertRectToTarget(bar->parent(), toolbar, bar->bounds());
   const int right_padding = toolbar->width() - field.right();
+  const bool zen_card = IsFloatingZenCard();
+  // Zen's text starts kFloatingUrlBarTextInset into the card: move the field
+  // right by what the location bar's own insets leave short of that.
+  int lead = 0;
+  if (zen_card && bar->omnibox_view()) {
+    views::View* omnibox = bar->omnibox_view();
+    const int text_x = views::View::ConvertRectToTarget(
+                           omnibox, toolbar, omnibox->GetContentsBounds())
+                           .x() -
+                       field.x();
+    lead = std::max(0, kFloatingUrlBarTextInset - text_x);
+  }
   // Zen's input row is 62pt tall (--urlbar-container-height); the field sits
   // in the middle of it, the rest filled with the card's colour (the
-  // decoration).
+  // decoration). Its top is Zen's --zen-urlbar-top, the top of `card`; the
+  // input row grows down from there, as Zen's results do.
   const int card_height =
-      IsFloatingZenCard() ? std::max(field.height(), kFloatingUrlBarInputHeight)
-                          : field.height();
-  const gfx::Rect bar_card(card.x(), card.CenterPoint().y() - card_height / 2,
-                           card.width(), card_height);
+      zen_card ? std::max(field.height(), kFloatingUrlBarInputHeight)
+               : field.height();
+  const gfx::Rect bar_card(
+      card.x(), zen_card ? card.y() : card.CenterPoint().y() - card_height / 2,
+      card.width(), card_height);
   top_container->SetBoundsRect(bar_card);
-  toolbar->SetBoundsRect(
-      gfx::Rect(-field.x(), -field.y() + (card_height - field.height()) / 2,
-                card.width() + field.x() + right_padding, card.height()));
+  const int toolbar_x = lead - field.x();
+  toolbar->SetBoundsRect(gfx::Rect(
+      toolbar_x, -field.y() + (card_height - field.height()) / 2,
+      card.width() + field.x() + right_padding - lead, card.height()));
   toolbar->DeprecatedLayoutImmediately();
   if (card_size_ != bar_card.size()) {
     card_size_ = bar_card.size();
@@ -961,7 +1011,9 @@ void KoanUrlBarController::Layout() {
         icon && icon->GetVisible()
             ? views::View::ConvertRectToTarget(icon->parent(), top_container,
                                                icon->bounds())
-            : gfx::Rect());
+            : gfx::Rect(),
+        zen_card ? std::optional<int>(kFloatingUrlBarGlyphInset) : std::nullopt,
+        std::max(0, toolbar_x));
   }
 }
 
