@@ -231,6 +231,8 @@ take at most 55 % of the pill; the others, and every extension with its access
 to the site and Manage Extensions, are under **Extensions** in the site's
 panel. An extension's keyboard shortcut opens its popup at its button, or at
 the site's icon. In compact mode the sidebar stays out while a popup is open.
+Drag a button along the pill to change the order (the toolbar's order, so
+every window follows; not in Incognito).
 
 | "Normal": editing in place, widened | Copied |
 |---|---|

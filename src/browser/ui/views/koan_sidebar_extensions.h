@@ -6,6 +6,9 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_EXTENSIONS_H_
 
 #include <memory>
+#include <optional>
+#include <set>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -17,6 +20,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/views/drag_controller.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 
@@ -46,7 +50,13 @@ namespace koan {
 // context menu), so popups, keyboard shortcuts and chrome.action behave as
 // in the toolbar. The popup points at the button (GetExtensionsAnchorView()
 // in koan_extensions_hooks.h).
+//
+// As in Chromium's toolbar, a button can be dragged along the pill to reorder
+// the pinned extensions (ToolbarActionsModel::MovePinnedAction(), with the
+// toolbar's drag data, BrowserActionDragData); not in Incognito, and not a
+// force-pinned extension.
 class KoanSidebarExtensionsView : public views::View,
+                                  public views::DragController,
                                   public ToolbarActionsModel::Observer,
                                   public TabStripModelObserver,
                                   public views::ViewObserver {
@@ -76,6 +86,23 @@ class KoanSidebarExtensionsView : public views::View,
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
+  bool AreDropTypesRequired() override;
+  bool CanDrop(const ui::OSExchangeData& data) override;
+  int OnDragUpdated(const ui::DropTargetEvent& event) override;
+  void OnDragExited() override;
+  DropCallback GetDropCallback(const ui::DropTargetEvent& event) override;
+
+  // views::DragController (the buttons'):
+  void WriteDragDataForView(views::View* sender,
+                            const gfx::Point& press_pt,
+                            ui::OSExchangeData* data) override;
+  int GetDragOperationsForView(views::View* sender,
+                               const gfx::Point& p) override;
+  bool CanStartDragForView(views::View* sender,
+                           const gfx::Point& press_pt,
+                           const gfx::Point& p) override;
 
   // ToolbarActionsModel::Observer:
   void OnToolbarActionAdded(
@@ -125,6 +152,23 @@ class KoanSidebarExtensionsView : public views::View,
 
   void OnButtonPressed(Button* button);
 
+  // A drag of the button of `action_id` is over the pill, showing it in the
+  // slot `slot` of the fitting buttons.
+  struct DropPreview {
+    std::string action_id;
+    size_t slot = 0;
+  };
+  // The index among the fitting buttons of `action_id`'s, if it fits.
+  std::optional<size_t> FittingIndexOf(std::string_view action_id) const;
+  // The drag from one of the buttons ended (dropped anywhere or cancelled).
+  void OnButtonDragDone();
+  void ClearDropPreview();
+  void MovePinnedAction(std::string action_id,
+                        size_t slot,
+                        const ui::DropTargetEvent& event,
+                        ui::mojom::DragOperation& output_drag_op,
+                        std::unique_ptr<ui::LayerTreeOwner> drag_image);
+
   const raw_ptr<BrowserView> browser_view_;
   std::vector<raw_ptr<Button>> buttons_;
   // How many of `buttons_` fit; the rest are hidden.
@@ -142,6 +186,10 @@ class KoanSidebarExtensionsView : public views::View,
   // The extensions menu where kExtensionsMenuAccessControl is on.
   std::unique_ptr<ExtensionsMenuCoordinator> menu_coordinator_;
   bool rebuild_pending_ = false;
+  // The extension whose button is being dragged from here, and where it
+  // would drop.
+  std::optional<std::string> dragged_id_;
+  std::optional<DropPreview> drop_preview_;
 
   base::ScopedObservation<ToolbarActionsModel, ToolbarActionsModel::Observer>
       model_observation_{this};

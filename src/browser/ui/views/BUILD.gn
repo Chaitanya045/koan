@@ -199,6 +199,12 @@ source_set("space_navigation") {
   sources = [ "koan_space_navigation.h" ]
 }
 
+# Where a dragged pinned extension's button goes in the URL pill
+# (koan_extension_drop.h): pure, so the unit tests need nothing else.
+source_set("extension_drop") {
+  sources = [ "koan_extension_drop.h" ]
+}
+
 # Which recreated Space a stored per-Space entry (a folder) belongs to.
 source_set("stored_space") {
   sources = [
@@ -213,6 +219,7 @@ source_set("stored_space") {
 test("koan_views_unittests") {
   sources = [
     "koan_content_radius_unittest.cc",
+    "koan_extension_drop_unittest.cc",
     "koan_glass_tint_unittest.cc",
     "koan_lights_geometry_unittest.cc",
     "koan_loading_bar_unittest.cc",
@@ -229,6 +236,7 @@ test("koan_views_unittests") {
   ]
   deps = [
     ":content_radius",
+    ":extension_drop",
     ":glass_tint",
     ":lights_geometry",
     ":loading_bar",
@@ -459,6 +467,7 @@ source_set("impl") {
   public_deps = [ ":space_theme" ]
   deps = [
     ":content_radius",
+    ":extension_drop",
     ":glass_tint",
     ":grain_png",
     ":lights_geometry",
