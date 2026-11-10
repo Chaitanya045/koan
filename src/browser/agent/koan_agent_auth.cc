@@ -297,6 +297,12 @@ bool VerifyProof(base::span<const uint8_t> public_key,
 }
 
 RateLimiter::RateLimiter() = default;
+
+RateLimiter::RateLimiter(const Limits& limits) : limits_(limits) {}
+
+void RateLimiter::SetLimits(const Limits& limits) {
+  limits_ = limits;
+}
 RateLimiter::~RateLimiter() = default;
 
 bool RateLimiter::IsBlocked(const std::string& key, base::TimeTicks now) {
@@ -332,13 +338,13 @@ RateLimiter::Entry& RateLimiter::EntryFor(const std::string& key,
 bool RateLimiter::RecordFailure(const std::string& key, base::TimeTicks now) {
   Entry& entry = EntryFor(key, now);
   if (now >= entry.blocked_until &&
-      (entry.failures >= kMaxFailures ||
+      (entry.failures >= limits_.max_failures ||
        now - entry.last_failure > kFailureWindow)) {
     entry.failures = 0;  // the block ran out, or the failures are old
   }
   entry.last_failure = now;
-  if (++entry.failures >= kMaxFailures) {
-    entry.blocked_until = now + kBlockDuration;
+  if (++entry.failures >= limits_.max_failures) {
+    entry.blocked_until = now + limits_.block_duration;
     return true;
   }
   return false;
@@ -368,7 +374,7 @@ bool RateLimiter::TryBeginPrompt(const std::string& key, base::TimeTicks now) {
     return false;
   }
   std::vector<base::TimeTicks>& times = user_prompts_[key];
-  if (static_cast<int>(times.size()) >= kMaxPromptsPerMinute) {
+  if (static_cast<int>(times.size()) >= limits_.max_prompts_per_minute) {
     return false;
   }
   times.push_back(now);

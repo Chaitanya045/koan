@@ -340,6 +340,37 @@ TEST(KoanAgentAuthTest, AUserGetsThreePromptsAMinute) {
   EXPECT_TRUE(limiter.TryBeginPrompt("uid:1", now + base::Seconds(61)));
 }
 
+// T-limits-3: the user's numbers apply from the next failure or prompt; a
+// block already running keeps its length.
+TEST(KoanAgentAuthTest, TheLimitsCanBeChanged) {
+  RateLimiter limiter({.max_failures = 2,
+                       .block_duration = base::Minutes(5),
+                       .max_prompts_per_minute = 1});
+  const base::TimeTicks now = base::TimeTicks() + base::Seconds(1);
+  EXPECT_FALSE(limiter.RecordFailure("a", now));
+  EXPECT_TRUE(limiter.RecordFailure("a", now));
+  EXPECT_TRUE(limiter.IsBlocked("a", now + base::Minutes(4)));
+  EXPECT_FALSE(
+      limiter.IsBlocked("a", now + base::Minutes(5) + base::Seconds(1)));
+  ASSERT_TRUE(limiter.TryBeginPrompt("uid:1", now));
+  limiter.EndPrompt();
+  EXPECT_FALSE(limiter.TryBeginPrompt("uid:1", now));
+
+  limiter.SetLimits({.max_failures = 3,
+                     .block_duration = base::Seconds(60),
+                     .max_prompts_per_minute = 2});
+  ASSERT_TRUE(limiter.TryBeginPrompt("uid:1", now));
+  limiter.EndPrompt();
+  const base::TimeTicks later = now + base::Minutes(10);
+  EXPECT_FALSE(limiter.RecordFailure("b", later));
+  EXPECT_FALSE(limiter.RecordFailure("b", later));
+  EXPECT_TRUE(limiter.RecordFailure("b", later));
+  // Still one prompt open at a time, whatever the numbers.
+  ASSERT_TRUE(limiter.TryBeginPrompt("uid:2", later));
+  EXPECT_FALSE(limiter.TryBeginPrompt("uid:3", later));
+  limiter.EndPrompt();
+}
+
 TEST(KoanAgentAuthTest, OnlyOnePromptIsOpenAtATime) {
   RateLimiter limiter;
   const base::TimeTicks now = base::TimeTicks() + base::Seconds(1);

@@ -799,6 +799,23 @@ keychain item (where saved passwords and cookies are encrypted) after you
 install a new nightly. Click **Always Allow**. The profile is in
 `~/Library/Application Support/Koan`.
 
+## Agent control
+
+**Agent ready** (Settings > Agent Control, on by default) lets a local agent,
+such as Claude Code or a script, open and work in background tabs. Koan listens
+on a private unix socket in `~/Library/Application Support/Koan/AgentControl/`,
+and **every new program has to be approved in a dialog that names it** before
+it can do anything. While an agent is connected, a pill in the bottom corner of
+every window says so; **Stop** closes every agent connection and forgets every
+approval. Turning Agent ready off closes everything at once. It is off in
+Incognito and Guest launches and with another `--user-data-dir` unless you turn
+it on there. Your organisation's `RemoteDebuggingAllowed` policy turns it off.
+
+The limits are settings: awake agent tabs (4, halved on battery in Low Power
+Mode), approval requests per minute (3) and failed attempts before a 5-minute
+block (5). Approvals last until Koan quits for now. The command line tool and
+the tab features come next (see `.agent/notes/agent-control.md`).
+
 ## Install in the app menu
 
 ```sh

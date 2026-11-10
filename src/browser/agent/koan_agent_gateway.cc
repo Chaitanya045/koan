@@ -105,6 +105,13 @@ void WriteRefusal(int fd, std::string_view code, std::string_view message) {
 
 ApprovalPresenter::~ApprovalPresenter() = default;
 
+GatewayObserver::~GatewayObserver() = default;
+
+GatewayOptions::GatewayOptions() = default;
+GatewayOptions::GatewayOptions(const GatewayOptions&) = default;
+GatewayOptions& GatewayOptions::operator=(const GatewayOptions&) = default;
+GatewayOptions::~GatewayOptions() = default;
+
 struct PreparedSocket {
   SocketPrepareResult result = SocketPrepareResult::kError;
   base::ScopedFD lock;
@@ -125,6 +132,13 @@ class Gateway::Connection final : public SessionDelegate {
         created_(gateway->Now()) {}
 
   ~Connection() override {
+    // Every way a connection ends (closed by either side, Stop(), the gateway
+    // destroyed) comes here.
+    if (authenticated_) {
+      if (GatewayObserver* observer = gateway_->options_.observer) {
+        observer->OnClientDisconnected(id_);
+      }
+    }
     if (open_approval_ != 0) {
       gateway_->presenter_->Cancel(open_approval_);
     }
@@ -370,6 +384,13 @@ class Gateway::Connection final : public SessionDelegate {
         session_->state() == Session::State::kAuthenticated) {
       authenticated_ = true;
       gateway_->admission_.MarkAuthenticated(id_);
+      if (GatewayObserver* observer = gateway_->options_.observer) {
+        const std::string& client_id = session_->client_id();
+        const std::optional<ClientRecord> record =
+            gateway_->store_->Find(client_id);
+        observer->OnClientConnected(id_, client_id,
+                                    record ? record->label : std::string());
+      }
     }
   }
 
@@ -435,7 +456,8 @@ Gateway::Gateway(GatewayOptions options,
       store_(store),
       presenter_(presenter),
       tick_clock_(tick_clock),
-      clock_(clock) {
+      clock_(clock),
+      limiter_(options_.limits) {
   // Created anywhere, used and destroyed on one sequence.
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
@@ -661,6 +683,11 @@ void Gateway::Remove(ConnectionAdmission::Id id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   connections_.erase(id);
   admission_.Release(id);
+}
+
+void Gateway::SetLimits(const RateLimiter::Limits& limits) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  limiter_.SetLimits(limits);
 }
 
 SessionEnvironment Gateway::SessionEnv() {

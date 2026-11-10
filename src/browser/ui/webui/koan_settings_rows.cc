@@ -12,9 +12,11 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
+#include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
@@ -27,6 +29,8 @@ constexpr Pane kPanes[] = {
     {"looks", "Look and Feel"},
     {"tabs", "Tab Management"},
     {kShortcutsPane, "Keyboard Shortcuts"},
+    // Koan's own: Zen has no agent control.
+    {"agents", "Agent Control"},
 };
 
 // Zen's groups (zen-preferences.ftl), in Zen's order.
@@ -68,7 +72,25 @@ constexpr Group kGroups[] = {
     {"background-tabs", "tabs", "Performance", "Background tabs",
      "Save memory and battery with the tabs you aren't using. Memory Saver "
      "and Energy Saver are in Chromium's settings (Performance)."},
+    // Koan's own (.agent/notes/agent-control.md section 6.1).
+    {"agent-control", "agents", "Agents", "Agent ready",
+     "Lets agents you approve open and work in background tabs. Tabs stay "
+     "awake only while an agent is using them. Every new program asks you "
+     "first, naming the program. Agent tabs share your logins and cookies. "
+     "Turned off by your organisation's policy if remote debugging is."},
+    {"agent-limits", "agents", "Agents", "Limits",
+     "A change applies to new connections and new awake tabs; nothing running "
+     "is cut off."},
 };
+
+// Enterprise policy RemoteDebuggingAllowed=false turns agent control off; its
+// rows are then hidden (the group says why).
+bool IsAgentControlAllowed() {
+  PrefService* local_state =
+      g_browser_process ? g_browser_process->local_state() : nullptr;
+  return local_state &&
+         local_state->GetBoolean(::prefs::kDevToolsRemoteDebuggingAllowed);
+}
 
 // Chromium's "Ctrl+Tab in recently used order" (prefs::kCtrlTabMru,
 // chrome://settings > Appearance) takes Ctrl+Tab over Koan's settings.
@@ -123,6 +145,39 @@ constexpr Option kPinnedTabCloseBehaviors[] = {
     {"switch", "Switch to next tab"},
     {"reset", "Reset URL"},
     {"close", "Close tab"},
+};
+
+// Agent control's limits (koan/browser/agent/koan_agent_limits.h). Only these
+// values can be set, so 0 and "unlimited" cannot. Above 8 awake tabs the
+// option says what it costs (T-limits-5).
+constexpr Option kAgentLeasedTabs[] = {
+    {"1", "1"},
+    {"2", "2"},
+    {"3", "3"},
+    {"4", "4 (default)"},
+    {"5", "5"},
+    {"6", "6"},
+    {"7", "7"},
+    {"8", "8"},
+    {"9", "9 (each awake tab uses its own memory and power)"},
+    {"10", "10 (each awake tab uses its own memory and power)"},
+    {"11", "11 (each awake tab uses its own memory and power)"},
+    {"12", "12 (each awake tab uses its own memory and power)"},
+    {"13", "13 (each awake tab uses its own memory and power)"},
+    {"14", "14 (each awake tab uses its own memory and power)"},
+    {"15", "15 (each awake tab uses its own memory and power)"},
+    {"16", "16 (each awake tab uses its own memory and power)"},
+};
+constexpr Option kAgentPrompts[] = {
+    {"1", "1"}, {"2", "2"}, {"3", "3 (default)"}, {"4", "4"}, {"5", "5"},
+    {"6", "6"}, {"7", "7"}, {"8", "8"},           {"9", "9"}, {"10", "10"},
+};
+constexpr Option kAgentFailures[] = {
+    {"1", "1"},           {"2", "2"},   {"3", "3"},   {"4", "4"},
+    {"5", "5 (default)"}, {"6", "6"},   {"7", "7"},   {"8", "8"},
+    {"9", "9"},           {"10", "10"}, {"11", "11"}, {"12", "12"},
+    {"13", "13"},         {"14", "14"}, {"15", "15"}, {"16", "16"},
+    {"17", "17"},         {"18", "18"}, {"19", "19"}, {"20", "20"},
 };
 
 // The shadcn look (koan::look names).
@@ -329,6 +384,42 @@ constexpr Row kRows[] = {
               "played audio, are in a call or show notifications keep "
               "running)",
      .is_available = IsTabFreezingAvailable,
+     .local_state = true},
+    // Agents.
+    {.group = "agent-control",
+     .control = Control::kCheckbox,
+     .pref = prefs::kAgentControlEnabled,
+     .label = "Agent ready",
+     .is_available = IsAgentControlAllowed,
+     .local_state = true},
+    {.group = "agent-limits",
+     .control = Control::kMenu,
+     .pref = prefs::kAgentControlMaxLeasedTabs,
+     .label = "Awake agent tabs at a time",
+     .options = kAgentLeasedTabs,
+     .is_available = IsAgentControlAllowed,
+     .local_state = true},
+    {.group = "agent-limits",
+     .control = Control::kCheckbox,
+     .pref = prefs::kAgentControlLowPowerHalves,
+     .label = "Fewer awake tabs in Low Power Mode on battery (half, at least "
+              "one)",
+     .is_available = IsAgentControlAllowed,
+     .indent = true,
+     .local_state = true},
+    {.group = "agent-limits",
+     .control = Control::kMenu,
+     .pref = prefs::kAgentControlMaxPromptsPerMinute,
+     .label = "Approval requests per minute",
+     .options = kAgentPrompts,
+     .is_available = IsAgentControlAllowed,
+     .local_state = true},
+    {.group = "agent-limits",
+     .control = Control::kMenu,
+     .pref = prefs::kAgentControlMaxAuthFailures,
+     .label = "Failed connection attempts before a 5-minute block",
+     .options = kAgentFailures,
+     .is_available = IsAgentControlAllowed,
      .local_state = true},
 };
 

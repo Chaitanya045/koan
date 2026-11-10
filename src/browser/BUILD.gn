@@ -34,9 +34,11 @@ source_set("prefs") {
   ]
   deps = [
     "//base",
+    "//chrome/common:constants",
     "//components/performance_manager",
     "//components/pref_registry",
     "//components/prefs",
+    "//koan/browser/agent:limits",
   ]
 }
 

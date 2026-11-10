@@ -306,6 +306,15 @@ time (`pbi_start_tvsec`, `pbi_start_tvusec`) and a parent pid (`pbi_ppid`) in pu
 Chromium's annotation auditor, so a change to the fields `net::DefineNetworkTrafficAnnotation` requires shows up as a
 compile error, not as a failed audit; re-check it then.
 
+The wiring (`src/browser/agent/koan_agent_service.cc`, `koan_agent_approval_dialog.cc`, the indicator in
+`src/browser/ui/views/koan_agent_indicator.cc`) adds no patch either: the first `KoanBrowserViewController` creates the
+service. It uses upstream symbols, so a rename breaks the compile: `prefs::kDevToolsRemoteDebuggingAllowed` (local state;
+policy `RemoteDebuggingAllowed=false` keeps the gateway off, T-ready-5), `browser_shutdown::AddAppTerminatingCallback`,
+`GetLastActiveBrowserWindowInterfaceWithAnyProfile`, `chrome::ShowBrowserModal`, `content::GetIOThreadTaskRunner` (the
+gateway needs a `MessagePumpForIO` thread, which the browser IO thread is). Behaviour it relies on: `chrome::DIR_USER_DATA`
+is set before local state is registered (the Agent ready default is computed then, T-ready-3); a browser-modal dialog's
+close callback runs for Esc and for closing the window (both deny, T-ready-4).
+
 A review that changes the outcome updates the table and the baseline in one change. The other things to re-check on a roll
 (the untrusted-client domain list, the `DevToolsAgentHostClient` flag defaults, the `PageLiveStateDecorator` setters the
 keep-alive uses) are in the design's section 14 and become REBASE rows with the PRs that add them.
