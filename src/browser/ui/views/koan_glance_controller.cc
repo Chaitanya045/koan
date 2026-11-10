@@ -762,14 +762,14 @@ void KoanGlanceController::Open(const content::OpenURLParams& params,
 #if BUILDFLAG(IS_MAC)
   PrepareCardWindow(widget_.get());
   key_dispatcher_ = std::make_unique<CardKeyDispatcher>(
-      widget_.get(),
-      base::BindRepeating(
-          [](base::WeakPtr<KoanGlanceController> controller,
-             const input::NativeWebKeyboardEvent& event) {
-            return controller ? controller->OnCardKeyEquivalent(event)
-                              : CardKeyResult::kUnhandled;
-          },
-          weak_factory_.GetWeakPtr()));
+      widget_.get(), base::BindRepeating(
+                         [](base::WeakPtr<KoanGlanceController> controller,
+                            const input::NativeWebKeyboardEvent& event) {
+                           return controller
+                                      ? controller->OnCardKeyEquivalent(event)
+                                      : CardKeyResult::kUnhandled;
+                         },
+                         weak_factory_.GetWeakPtr()));
 #endif
   view_ = widget_->SetContentsView(
       std::make_unique<KoanGlanceView>(this, contents_.get()));
@@ -943,8 +943,7 @@ bool KoanGlanceController::HandleBrowserCommand(int command_id) {
     // ⌘W pressed twice (or repeating) closes the card, not the tab under it
     // too, as in Zen: for as long as the close animation lasts, also where
     // the card closes at once (macOS).
-    return command_id == IDC_CLOSE_TAB &&
-           !closed_by_close_tab_at_.is_null() &&
+    return command_id == IDC_CLOSE_TAB && !closed_by_close_tab_at_.is_null() &&
            base::TimeTicks::Now() - closed_by_close_tab_at_ <
                kAnimationDuration;
   }
@@ -1175,8 +1174,8 @@ CardKeyResult KoanGlanceController::TakeKeyEquivalent(
 void KoanGlanceController::ProcessPriorityKey(
     const input::NativeWebKeyboardEvent& event) {
   views::FocusManager* focus_manager = browser_view_->GetFocusManager();
-  const bool handled = focus_manager &&
-                       focus_manager->ProcessAccelerator(
+  const bool handled =
+      focus_manager && focus_manager->ProcessAccelerator(
                            ui::GetAcceleratorFromNativeWebKeyboardEvent(event));
   VLOG(1) << "Koan Glance: the high-priority shortcut for key "
           << event.windows_key_code << (handled ? " took it" : " declined");

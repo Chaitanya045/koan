@@ -108,7 +108,6 @@ CardKeyDispatcher::~CardKeyDispatcher() {
   }
 }
 
-
 int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
                                const input::NativeWebKeyboardEvent& event) {
   // As ChromeCommandDispatcherDelegate's prePerformKeyEquivalent: the key
@@ -127,10 +126,10 @@ int ReservedCommandForKeyEvent(BrowserWindowInterface* browser,
   }
   // Like the delegate: a repeating ⌘T / ⌘N opens nothing more (it drops
   // the key; passed on, it would reach the menu bar's item again).
-  if (ns_event.isARepeat && (result.chrome_command == IDC_NEW_TAB ||
-                             result.chrome_command == IDC_NEW_WINDOW ||
-                             result.chrome_command ==
-                                 IDC_NEW_INCOGNITO_WINDOW)) {
+  if (ns_event.isARepeat &&
+      (result.chrome_command == IDC_NEW_TAB ||
+       result.chrome_command == IDC_NEW_WINDOW ||
+       result.chrome_command == IDC_NEW_INCOGNITO_WINDOW)) {
     return kDropKeyEvent;
   }
   chrome::BrowserCommandController* commands =
@@ -189,7 +188,8 @@ bool PerformWindowMenuKey(views::Widget* browser,
   // (it validates against the card's window, and is disabled, while that is
   // key), and enabled for the browser window (not in native fullscreen, for
   // instance, where Minimize is off).
-  for (SEL action : {@selector(performMiniaturize:), @selector(performZoom:)}) {
+  for (SEL action :
+       { @selector(performMiniaturize:), @selector(performZoom:) }) {
     NSMenuItem* item = WindowMenuItemWithAction(action);
     if (!IsKeyEquivalentOf(item, ns_event) ||
         ![window validateUserInterfaceItem:item]) {
