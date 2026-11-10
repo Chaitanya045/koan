@@ -653,7 +653,11 @@ per-site lease the user approved.
   blank page instead of loading in the default partition (`containers.md`, Brave); Koan keeps the marker in its session data, which needs
   Koan's restore hook to run, and the hook fails closed (an unknown or malformed marker blanks the tab too).
 * **Spaces.** An agent container's Space is a normal Koan Space (a tab group) in the user's last-active window,
-  created with the container's first tab **without switching to it**, named by the agent ("Claude Code · task"), with
+  created with the container's first tab **without switching to it**. With no normal window that has Spaces (only
+  Incognito or app windows, or none), agent control opens **one** normal window for every request waiting on it
+  (`CreateBrowserWindow`, then `ShowInactive()`), never activated, on the screen of the window the user last used so
+  that macOS orders it behind that one rather than fronting it and switching Spaces (`NativeWidgetNSWindowBridge::
+  SetVisibilityState`, `kShowInactive`); its active tab is the user's own new tab page, named by the agent ("Claude Code · task"), with
   the agent icon. Agent ownership is the **partition**, not Space membership: a tab the user opens in an agent Space
   (Cmd+T) is the user's own, in their jar; a container tab the user drags into one of their Spaces is still in the
   agent's jar and keeps its blocks (taking a tab over gives the user the controls, not their logins; to use their own
