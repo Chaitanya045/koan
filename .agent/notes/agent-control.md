@@ -900,10 +900,28 @@ The agent controls CDP calls; the page controls what it does next. Everything be
 | File chooser | `Page.setInterceptFileChooserDialog` forced on; a `userNeeded {file-chooser}` prompt; a Koan-mediated, user-approved path upload later (T-focus-5) |
 | HTTP auth, client-certificate picker, external-protocol launch, print, `beforeunload` | `userNeeded` approval prompts, never a silent native sheet; `beforeunload` is handled explicitly (T-focus-6) |
 | Permission prompts (location, camera, microphone, notifications, USB, …) | the tab pauses and the normal permission bubble is anchored in the agent Space; the agent can never grant (`Browser.grantPermissions` does not exist); event reason keys as in §19.4 |
-| `alert`/`confirm`/`prompt` | stay with the agent (`Page.handleJavaScriptDialog`) |
+| `alert`/`confirm`/`prompt` | held as `userNeeded {dialog}` prompts (maintainer, 2026-11-11); the agent can still answer with `Page.handleJavaScriptDialog` |
+| `window.focus()`, `clients.focus()` | held as a `userNeeded {focus}` prompt; the tab never comes forward by itself (T-focus-8) |
 | A downloaded file | the normal download UI and Safe Browsing; `Page.setDownloadBehavior` denied |
 
 T-focus-7: nothing in this table changes the active tab, the focused window or the frontmost app.
+
+**Built (page-prompts PR):** in every tab an agent holds a lease on (its own, and a user tab it drives), `beforeunload`,
+`alert`/`confirm`/`prompt`, app links, HTTP sign-in, `window.print()` and `window.focus()` are held in a queue
+(`koan_agent_prompts.*`, pure) by `AgentPageSurfaces` (`koan_agent_page_surfaces.*`), through the seams Chrome's own actor
+uses where it has them (`HandleExternalProtocol`, next to `IsActorActingOnWebContents`) and the narrowest one where it does
+not: the delegate's `GetJavaScriptDialogManager` (both dialogs and `beforeunload`, which is app-modal on the Mac),
+`CreateLoginDelegate`, `PrintViewManager::OnScriptedPrintPreviewCallback` (only `window.print()`; the user's ⌘P never
+passes there) and `ActivateContents`. The agent gets `Koan.userNeeded {targetId, reason}` and, once it no longer waits,
+`Koan.userNeededDone`; the indicator shows the oldest ("*a.test asks you to sign in* · Open · Dismiss", "(+N)" for the
+rest) in every window. **Open** brings the tab and its window forward, then shows the surface exactly as Chrome would
+(Chrome's `TabModalDialogManager`, `ExternalProtocolHandler::LaunchUrl`, an `HttpAuthCoordinator`, the print preview);
+**Dismiss** answers cancel (stay on the page, no credentials, no print). When the agent lets go of the tab, what it held is
+shown as Chrome would have, without bringing the tab forward (a focus request is dropped); when the tab closes it goes. A
+tab holds at most 4, and one focus request. Not paused: the agent can still answer a dialog itself, and a held print or
+dialog blocks the page anyway. Not held: the client-certificate picker (agent containers have no certificates to offer,
+and a user tab's picker is tab-modal), and `window.print()` with print preview turned off by policy (the system dialog
+path, `PrintViewManagerBase::ScriptedPrint`).
 
 ## 10. Snapshots built in the engine (ego's idea) and the tool surface
 
@@ -1140,6 +1158,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-focus-5 | trigger a file chooser | no native sheet; a `userNeeded {file-chooser}` event and prompt; the tab pauses |
 | T-focus-6 | HTTP auth, client-certificate request, an external-protocol link, `window.print()`, `beforeunload` | each becomes a `userNeeded` approval prompt, none a silent native sheet |
 | T-focus-7 | all of the above while the user is typing in a different window | the frontmost pid and the user's text are unchanged |
+| T-focus-8 | in an agent tab and in a driven user tab: `alert`, `confirm`, `prompt`, `window.focus()` from a timer, a service worker's `clients.focus()`; then Open and Dismiss each prompt; answer one dialog with `Page.handleJavaScriptDialog` instead; release a tab with a prompt waiting | no dialog, sheet or focus change until Open; Open brings the tab forward and shows Chrome's own dialog; Dismiss cancels (`confirm` returns false, the page stays on `beforeunload`, the 401 body shows); the agent's answer removes the prompt (`Koan.userNeededDone`); on release the dialog shows in its tab as in Chrome and the focus request is dropped |
 | T-win-1 | Koan on another display / Space, `Koan.openTab` | no Space switch, no window raise |
 | T-win-2 | no window open (windowless Mac app) then `Koan.openTab` | window appears inactive, does not take focus |
 | **Security** | | |

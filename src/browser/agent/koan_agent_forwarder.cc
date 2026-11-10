@@ -30,6 +30,7 @@
 #include "koan/browser/agent/koan_agent_devtools_client.h"
 #include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_lease.h"
+#include "koan/browser/agent/koan_agent_page_surfaces.h"
 #include "koan/browser/agent/koan_agent_reach_content.h"
 #include "koan/browser/agent/koan_agent_service.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
@@ -392,12 +393,18 @@ AgentForwarder::AgentForwarder(SendCallback send,
              AuditLog::Limits()) {
   AgentLeaseManager::Get().SetOpenedTabHandler(base::BindRepeating(
       &AgentForwarder::OnOpenedFromAgentTab, weak_factory_.GetWeakPtr()));
+  AgentPageSurfaces::Get().Install(
+      base::BindRepeating(&AgentForwarder::OnPageSurface,
+                          weak_factory_.GetWeakPtr()),
+      base::BindRepeating(&AgentForwarder::NotifyChanged,
+                          weak_factory_.GetWeakPtr()));
 }
 
 AgentForwarder::~AgentForwarder() {
   AgentLeaseManager::Get().SetOpenedTabHandler({});
   // The app is quitting: throwaway containers are in memory and go with it.
   Reset(/*end_tasks=*/false);
+  AgentPageSurfaces::Get().Uninstall();
 }
 
 AgentForwarder::Connection* AgentForwarder::ConnectionFor(
@@ -570,6 +577,8 @@ void AgentForwarder::RemoveTab(const std::string& target_id, bool destroyed) {
   if (content::WebContents* contents = watcher->web_contents();
       contents && !destroyed) {
     AgentLeaseManager::Get().Detach(contents);
+    // What a page held for the user is shown as Chrome would now.
+    AgentPageSurfaces::Get().ReleaseTab(contents);
   }
 }
 
@@ -600,6 +609,30 @@ void AgentForwarder::OnOpenedFromAgentTab(content::WebContents* source,
   // background tab: it was opened, and closing what a page opened would be a
   // surprise, but the agent does not get it.
   AddAgentTab(opened, std::string(entry->client_id), std::string(entry->task));
+}
+
+void AgentForwarder::OnPageSurface(content::WebContents* contents,
+                                   PageSurface surface,
+                                   bool held) {
+  const std::string target_id = TargetIdFor(contents);
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry) {
+    return;
+  }
+  const std::string client_id = entry->client_id;
+  if (held) {
+    AuditRecord record;
+    record.time = base::Time::Now();
+    record.event = "user-needed";
+    record.client_id = client_id;
+    record.tab_id = target_id;
+    record.summary = std::string(ReasonFor(surface));
+    record.outcome = AuditOutcome::kPaused;
+    Audit(std::move(record));
+  }
+  ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+    facade.OnUserNeeded(target_id, ReasonFor(surface), held);
+  });
 }
 
 void AgentForwarder::ForEachFacadeOf(std::string_view client_id,

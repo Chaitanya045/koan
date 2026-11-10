@@ -160,6 +160,14 @@ class CdpFacade {
   void OnTargetStateChanged(const std::string& target_id,
                             std::string_view event,
                             std::string_view reason);
+  // A page in the tab asked for something only the user can answer (design
+  // section 9.4; `reason` as koan_agent_prompts.h's ReasonFor()), which waits
+  // in the indicator: Koan.userNeeded {targetId, reason}. Once it no longer
+  // waits (the user opened or dismissed it, the agent answered the dialog, the
+  // page went on): Koan.userNeededDone {targetId, reason}.
+  void OnUserNeeded(const std::string& target_id,
+                    std::string_view reason,
+                    bool needed);
 
   // Whether a command the facade sent may still run (the tab may have been
   // paused while it waited for the lease), and the answer for one that may

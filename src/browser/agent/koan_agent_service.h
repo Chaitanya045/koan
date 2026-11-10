@@ -29,6 +29,7 @@ class WebContents;
 namespace koan::agent {
 class AgentForwarder;
 struct ControlledTab;
+struct HeldPrompt;
 }  // namespace koan::agent
 
 // Agent control in the browser process (.agent/notes/agent-control.md
@@ -79,6 +80,11 @@ class AgentControlService {
   std::vector<ControlledTab> controlled_tabs() const;
   void HandBack(const std::string& target_id);
   void TakeBack(const std::string& target_id);
+  // What pages in agent tabs wait to show the user (design section 9.4), and
+  // the indicator's Open and Dismiss.
+  std::vector<HeldPrompt> user_prompts() const;
+  void OpenPrompt(uint64_t id);
+  void DismissPrompt(uint64_t id);
 
  private:
   class GatewayHost;

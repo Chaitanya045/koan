@@ -93,9 +93,22 @@ source_set("tab_hooks") {
   ]
   public_deps = [
     "//base",
+    "//content/public/browser",
+    "//net",
+    "//ui/base",
     "//ui/base:types",
     "//url",
   ]
+}
+
+# What pages in agent tabs wait to show the user (design section 9.4): the
+# queue the indicator shows, as pure logic.
+source_set("prompts") {
+  sources = [
+    "koan_agent_prompts.cc",
+    "koan_agent_prompts.h",
+  ]
+  public_deps = [ "//base" ]
 }
 
 # How many connections the gateway keeps open.
@@ -170,6 +183,8 @@ if (is_posix) {
       "koan_agent_forwarder.h",
       "koan_agent_lease.cc",
       "koan_agent_lease.h",
+      "koan_agent_page_surfaces.cc",
+      "koan_agent_page_surfaces.h",
       "koan_agent_reach_content.cc",
       "koan_agent_reach_content.h",
       "koan_agent_service.cc",
@@ -183,6 +198,7 @@ if (is_posix) {
       ":audit",
       ":facade",
       ":lease_scheduler",
+      ":prompts",
       ":reach",
       ":registry",
       ":session",
@@ -198,13 +214,17 @@ if (is_posix) {
       ":peer",
       ":socket",
       "//chrome/browser:browser_process",
+      "//chrome/browser/external_protocol",
       "//chrome/browser/lifetime:termination_notification",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui/browser_window",
       "//chrome/browser/ui/dialogs:browser_dialogs",
+      "//chrome/browser/ui/login",
+      "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/common",
       "//chrome/common:constants",
       "//components/embedder_support:user_agent",
+      "//components/javascript_dialogs",
       "//components/performance_manager",
       "//components/security_interstitials/content:security_interstitial_page",
       "//components/tabs:public",
@@ -342,6 +362,7 @@ test("koan_agent_unittests") {
     "koan_agent_lease_scheduler_unittest.cc",
     "koan_agent_limits_unittest.cc",
     "koan_agent_policy_unittest.cc",
+    "koan_agent_prompts_unittest.cc",
     "koan_agent_reach_unittest.cc",
     "koan_agent_redact_unittest.cc",
     "koan_agent_registry_unittest.cc",
@@ -359,6 +380,7 @@ test("koan_agent_unittests") {
     ":lease_scheduler",
     ":limits",
     ":policy",
+    ":prompts",
     ":reach",
     ":redact",
     ":registry",

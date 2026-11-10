@@ -1,0 +1,28 @@
+diff --git a/chrome/browser/printing/print_view_manager.cc b/chrome/browser/printing/print_view_manager.cc
+index 49a87cb382a1d255d9407c8f0d074776377fc458..a2c7ba4471069e5084b8de64c3f83ae149dd05db 100644
+--- a/chrome/browser/printing/print_view_manager.cc
++++ b/chrome/browser/printing/print_view_manager.cc
+@@ -34,6 +34,7 @@
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/render_view_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/agent/koan_agent_tab_hooks.h"
+ #include "mojo/public/cpp/bindings/associated_remote.h"
+ #include "printing/buildflags/buildflags.h"
+ #include "printing/print_settings.h"
+@@ -564,6 +565,15 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
+     return;
+   }
+ 
++  // Koan: in a tab an agent holds, the preview waits for the user in the agent
++  // indicator (koan/browser/agent/koan_agent_tab_hooks.h).
++  if (koan::agent::HoldPrintForAgent(
++          web_contents(),
++          base::BindOnce(&PrintViewManager::OnScriptedPrintPreviewCallback,
++                         weak_factory_.GetWeakPtr(), rfh_id))) {
++    return;
++  }
++
+   // Running a dialog causes an exit to webpage-initiated fullscreen.
+   // https://crbug.com/41322524
+   if (web_contents()->IsFullscreen()) {

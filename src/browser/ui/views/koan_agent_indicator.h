@@ -42,22 +42,27 @@ class KoanAgentIndicator : public koan::agent::AgentControlService::Observer {
   void OnBrowserViewLayout();
 
   // What the pill shows: its text, and the Hand back / Take back buttons for
-  // one tab of this window (design section 9.2).
+  // one tab of this window (design section 9.2), or Open / Dismiss for what a
+  // page in an agent tab waits to show (section 9.4).
   struct Content {
     std::u16string text;
     std::string target_id;
     bool hand_back = false;
     bool take_back = false;
+    uint64_t prompt_id = 0;
     bool operator==(const Content&) const = default;
   };
 
   // What the pill says, or empty when nothing is connected. Public for tests.
   static std::u16string TextFor(
       const std::vector<koan::agent::ConnectedClient>& clients);
-  // The pill for those clients and this window's controlled tabs.
+  // The pill for those clients, this window's controlled tabs and every
+  // held prompt (an agent tab may be in a window of its own, so each window
+  // shows them).
   static Content ContentFor(
       const std::vector<koan::agent::ConnectedClient>& clients,
-      const std::vector<koan::agent::ControlledTab>& tabs_in_window);
+      const std::vector<koan::agent::ControlledTab>& tabs_in_window,
+      const std::vector<koan::agent::HeldPrompt>& prompts);
 
   bool IsShowingForTesting() const;
 
