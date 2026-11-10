@@ -15,6 +15,7 @@
 
 #include "base/auto_reset.h"
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -58,6 +60,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
+#include "components/sessions/core/serialized_navigation_entry.h"
+#include "components/sessions/core/serialized_user_agent_override.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
@@ -72,6 +76,7 @@
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
@@ -85,6 +90,7 @@
 #include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_space_swipe.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_stored_tab.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
@@ -104,6 +110,7 @@
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/range/range.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
@@ -128,6 +135,55 @@ bool IsEmptyPageUrl(const GURL& url) {
 constexpr char kEmptyTabKey[] = "koan.empty_tab";
 void MarkEmptyTab(content::WebContents* contents) {
   SetTabSessionData(contents, kEmptyTabKey, "1");
+}
+
+// The Space's pinned tabs, for its stored entry (StoreSpaces()), so that a
+// start without a session restore brings them back (Z20).
+base::ListValue StoredPinnedTabs(TabStripModel* model,
+                                 const tab_groups::TabGroupId& space) {
+  base::ListValue list;
+  const TabGroup* group = model->group_model()->GetTabGroup(space);
+  if (!group) {
+    return list;
+  }
+  const gfx::Range range = group->ListTabs();
+  for (size_t index = range.start(); index < range.end(); ++index) {
+    tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(index));
+    content::WebContents* contents = tab ? tab->GetContents() : nullptr;
+    if (!contents || !IsPinnedInSpace(tab) ||
+        !contents->GetLastCommittedURL().is_valid()) {
+      continue;
+    }
+    list.Append(StoredTab(contents->GetLastCommittedURL(), contents->GetTitle(),
+                          GetTabSessionData(contents))
+                    .ToValue());
+  }
+  return list;
+}
+
+// Adds a Space's stored pinned tabs at its start, unloaded, with their Koan
+// session data (pinned URL, label, icon, container), as Zen restores only
+// the pinned tabs when it doesn't resume the session.
+void AddStoredPinnedTabs(BrowserWindowInterface* browser,
+                         TabStripModel* model,
+                         const tab_groups::TabGroupId& space,
+                         const std::vector<StoredTab>& tabs) {
+  int index = static_cast<int>(
+      model->group_model()->GetTabGroup(space)->ListTabs().start());
+  for (const StoredTab& tab : tabs) {
+    sessions::SerializedNavigationEntry navigation;
+    navigation.set_index(0);
+    navigation.set_virtual_url(tab.url);
+    navigation.set_title(tab.title);
+    navigation.set_timestamp(base::Time::Now());
+    chrome::AddRestoredTab(
+        browser, base::span_from_ref(navigation), index++,
+        /*selected_navigation=*/0, /*extension_app_id=*/std::string(), space,
+        /*select=*/false, /*pin=*/false, base::TimeTicks(), base::Time(),
+        /*storage_namespace=*/nullptr, sessions::SerializedUserAgentOverride(),
+        tab.data, /*from_session_restore=*/true,
+        /*is_active_browser=*/std::nullopt);
+  }
 }
 
 // zen.workspaces.switch-animation-duration.
@@ -1700,6 +1756,7 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
     }
   }
   std::vector<std::pair<SpaceData, bool>> stored;
+  std::vector<std::vector<StoredTab>> pinned;
   for (const base::Value& entry :
        profile->GetPrefs()->GetList(prefs::kWorkspaceList)) {
     const base::DictValue* dict = entry.GetIfDict();
@@ -1719,6 +1776,7 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
                   .icon = std::move(icon),
                   .theme = {.stored = theme ? *theme : std::string()}},
         dict->FindBool("active").value_or(false));
+    pinned.push_back(StoredTab::FromList(dict->FindList("pinned")));
   }
   if (stored.empty()) {
     return false;
@@ -1748,6 +1806,7 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
     }
     const tab_groups::TabGroupId id = NewSpaceGroup(indices);
     WriteSpace(id, stored[i].first);
+    AddStoredPinnedTabs(browser_view_->browser(), model, id, pinned[i]);
     ids.push_back(id);
   }
   // In the stored order (the startup tabs' Space was made where they were).
@@ -1770,7 +1829,8 @@ void KoanWorkspaceController::StoreSpaces() {
                     .Set("title", JoinTitle(data.icon, data.name))
                     .Set("color", static_cast<int>(kSpaceGroupColor))
                     .Set("theme", data.theme.stored)
-                    .Set("active", GetActiveSpace() == id));
+                    .Set("active", GetActiveSpace() == id)
+                    .Set("pinned", StoredPinnedTabs(model, id)));
   }
   if (list.empty()) {
     return;
@@ -2223,6 +2283,11 @@ void KoanWorkspaceController::OnTabChangedAt(tabs::TabInterface* tab,
   // (Here, not in the sidebar's controller, which runs only with the sidebar.)
   if (change_type == TabChangeType::kAll) {
     ClearEmptyTabMarkIfNavigated(tab);
+    // A pinned tab's page is part of its Space's stored entry: stored by
+    // the next update, after its snapshot of the Spaces.
+    if (IsEnabled() && IsPinnedInSpace(tab)) {
+      ScheduleUpdate();
+    }
   }
 }
 
