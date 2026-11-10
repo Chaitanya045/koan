@@ -117,6 +117,23 @@ TEST(KoanAgentRegistryTest, PausedAndReadableTabsOnlyRead) {
   EXPECT_TRUE(registry.MaySend("alice", "T1", "Input.dispatchKeyEvent"));
 }
 
+TEST(KoanAgentRegistryTest, LeavingTheAllowedSiteEndsWriteAccess) {
+  TargetRegistry registry;
+  ASSERT_EQ(registry.AddAgentTab("T1", "alice", ""), AddResult::kOk);
+  ASSERT_EQ(registry.GrantUserTab("U1", "alice", TabState::kDriven,
+                                  "https://example.com"),
+            AddResult::kOk);
+  EXPECT_EQ(registry.Find("U1")->site, "https://example.com");
+  EXPECT_TRUE(registry.SetReadable("U1"));
+  EXPECT_EQ(registry.Find("U1")->state, TabState::kReadable);
+  EXPECT_TRUE(registry.Find("U1")->site.empty());
+  EXPECT_FALSE(registry.MaySend("alice", "U1", "Input.dispatchKeyEvent"));
+  EXPECT_FALSE(registry.SetReadable("U1"));
+  // An agent's own tab has no site limit.
+  EXPECT_FALSE(registry.SetReadable("T1"));
+  EXPECT_EQ(registry.Find("T1")->state, TabState::kDriven);
+}
+
 TEST(KoanAgentRegistryTest, RemovingAClientOrATask) {
   TargetRegistry registry;
   registry.AddAgentTab("T1", "alice", "one");

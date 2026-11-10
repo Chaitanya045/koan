@@ -73,10 +73,14 @@ class FacadeBackend {
   // the tab is gone or content refused (a frame the agent may not reach).
   virtual bool AttachTab(const std::string& target_id) = 0;
   virtual void DetachTab(const std::string& target_id) = 0;
-  // Sends a command (JSON) to the attached tab once its keep-alive lease lets
-  // it run. Every command sent is answered by OnTabMessage() or ended by
-  // OnTabDetached().
-  virtual void SendToTab(const std::string& target_id, std::string json) = 0;
+  // Sends a command (JSON, with the facade's `command_id`) to the attached
+  // tab once its keep-alive lease lets it run. Just before it runs, the
+  // backend asks CdpFacade::MayDispatch(): a command the user's input paused
+  // meanwhile is not sent but CdpFacade::OnCommandDropped(). Every command
+  // sent is answered by OnTabMessage() or ended by OnTabDetached().
+  virtual void SendToTab(const std::string& target_id,
+                         int command_id,
+                         std::string json) = 0;
   // The tab answered a command sent with SendToTab().
   virtual void CommandAnswered(const std::string& target_id) = 0;
   // Opens a background tab for the client in `task` (Koan.openTab,
@@ -95,6 +99,20 @@ class FacadeBackend {
   virtual void EndTask(const std::string& task) = 0;
   // Closes an agent tab of the client. False if it could not.
   virtual bool CloseTab(const std::string& target_id) = 0;
+  // Koan.takeOver: asks the user to let the client drive one of their tabs
+  // (`target_id`, or the tab they are looking at), limited to that tab's site.
+  // On yes the tab is in the registry (kDriven) before `done` runs.
+  virtual void TakeOver(const std::optional<std::string>& target_id,
+                        OpenTabCallback done) = 0;
+  // Koan.release: the client gives a user tab back. False if it is not one.
+  virtual bool ReleaseUserTab(const std::string& target_id) = 0;
+  // Whether a navigation of a user tab to `url` stays on the site the user
+  // allowed (always true for an agent tab).
+  virtual bool IsInGrantedSite(const std::string& target_id,
+                               const GURL& url) = 0;
+  // Koan.resume: the agent cannot resume a paused tab; this shows the user
+  // that it asks to.
+  virtual void AskToResume(const std::string& target_id) = 0;
   // Browser.getVersion's answer.
   virtual base::DictValue BrowserVersion() = 0;
   virtual void Audit(AuditRecord record) = 0;
@@ -136,6 +154,18 @@ class CdpFacade {
   void OnTargetAdded(const std::string& target_id);
   void OnTargetRemoved(const std::string& target_id);
   void OnTargetChanged(const std::string& target_id);
+  // A tab's state in the registry changed (paused by the user's input, handed
+  // back, left the allowed site): tells the client with `event`
+  // ("Koan.paused", "Koan.resumed", "Koan.siteLeft") and `reason`.
+  void OnTargetStateChanged(const std::string& target_id,
+                            std::string_view event,
+                            std::string_view reason);
+
+  // Whether a command the facade sent may still run (the tab may have been
+  // paused while it waited for the lease), and the answer for one that may
+  // not.
+  bool MayDispatch(int command_id) const;
+  void OnCommandDropped(int command_id);
 
   bool IsAttached(std::string_view target_id) const;
 
@@ -169,6 +199,15 @@ class CdpFacade {
                    std::string error_code,
                    std::string error_message);
   void ListTabs(const AgentMessage& message);
+  void TakeOver(const AgentMessage& message);
+  void Release(const AgentMessage& message);
+  void Resume(const AgentMessage& message);
+  // Whether answers and events from the tab are redacted (a user tab the
+  // agent may only read).
+  bool Redacts(const std::string& target_id) const;
+  // Whether `method` would act on a tab that shows a security interstitial.
+  bool BehindInterstitial(const std::string& target_id,
+                          std::string_view method) const;
 
   // Attaches the client's session to the tab and tells it
   // (Target.attachedToTarget). Returns the session, or null.

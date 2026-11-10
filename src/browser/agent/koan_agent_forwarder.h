@@ -9,17 +9,24 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/functional/function_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/sequence_bound.h"
+#include "base/timer/timer.h"
 #include "koan/browser/agent/koan_agent_audit.h"
+#include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_registry.h"
 #include "koan/browser/agent/koan_agent_session.h"
+
+class GURL;
 
 namespace content {
 class WebContents;
@@ -37,14 +44,34 @@ class WebContents;
 // the user's it was not given.
 namespace koan::agent {
 
+// A tab the user may need to act on (the indicator shows it): a user tab an
+// agent controls, or any tab paused by the user's input.
+struct ControlledTab {
+  std::string target_id;
+  // The client's label.
+  std::string label;
+  TabState state = TabState::kDriven;
+  bool agent_owned = false;
+  // The agent asked to resume (Koan.resume).
+  bool resume_asked = false;
+  raw_ptr<content::WebContents> contents = nullptr;
+};
+
+// The site write access to a user's tab is limited to: the scheme and
+// registrable domain (net::SchemefulSite) of an http(s) URL; empty otherwise.
+std::string SiteFor(const GURL& url);
+
 class AgentForwarder {
  public:
   // Sends one JSON message to a connection (posted to the gateway).
   using SendCallback =
       base::RepeatingCallback<void(uint64_t connection_id, std::string json)>;
 
-  // `log_dir` is where the audit log is written.
-  AgentForwarder(SendCallback send, base::FilePath log_dir);
+  // `log_dir` is where the audit log is written; `on_changed` runs when
+  // ControlledTabs() may have changed.
+  AgentForwarder(SendCallback send,
+                 base::FilePath log_dir,
+                 base::RepeatingClosure on_changed);
   AgentForwarder(const AgentForwarder&) = delete;
   AgentForwarder& operator=(const AgentForwarder&) = delete;
   ~AgentForwarder();
@@ -63,6 +90,12 @@ class AgentForwarder {
   void Reset(bool end_tasks);
 
   const TargetRegistry& registry() const { return registry_; }
+
+  // The indicator's buttons (design section 9.2): the user hands a paused
+  // tab back to the agent, or takes a tab of theirs back from it.
+  void HandBack(const std::string& target_id);
+  void TakeBack(const std::string& target_id);
+  std::vector<ControlledTab> ControlledTabs() const;
 
  private:
   class Connection;
@@ -91,15 +124,51 @@ class AgentForwarder {
   void OnOpenedFromAgentTab(content::WebContents* source,
                             content::WebContents* opened);
 
+  // Take-over (design section 9.2), from a facade.
+  void RequestTakeOver(const std::string& client_id,
+                       const std::optional<std::string>& target_id,
+                       FacadeBackend::OpenTabCallback done);
+  void OnTakeOverAnswer(std::string target_id,
+                        uint64_t request_id,
+                        bool allowed);
+  bool ReleaseUserTab(const std::string& target_id);
+  void AskToResume(const std::string& target_id);
+  // From the watcher: the user's own input in the tab, and a committed
+  // navigation of it.
+  void OnUserInput(const std::string& target_id);
+  void OnTabNavigated(const std::string& target_id, const GURL& url);
+
+  void ForEachFacadeOf(std::string_view client_id,
+                       base::FunctionRef<void(CdpFacade&)> run);
   content::WebContents* ContentsFor(std::string_view target_id) const;
+  void AuditEvent(std::string_view event,
+                  const std::string& target_id,
+                  const std::string& client_id);
   void Audit(AuditRecord record);
+  void NotifyChanged();
+
+  struct TakeOverRequest {
+    uint64_t request_id = 0;
+    uint64_t dialog_id = 0;
+    std::string client_id;
+    std::string site;
+    base::WeakPtr<content::WebContents> contents;
+    FacadeBackend::OpenTabCallback done;
+    base::OneShotTimer timer;
+  };
 
   const SendCallback send_;
+  const base::RepeatingClosure on_changed_;
   TargetRegistry registry_;
   std::map<uint64_t, std::unique_ptr<Connection>> connections_;
   std::map<std::string, std::unique_ptr<TabWatcher>, std::less<>> tabs_;
   std::map<std::string, std::string, std::less<>> labels_;
   std::map<std::string, std::set<std::string>, std::less<>> tasks_;
+  // Open take-over prompts, by target id: one per tab.
+  std::map<std::string, std::unique_ptr<TakeOverRequest>, std::less<>>
+      take_overs_;
+  uint64_t next_take_over_id_ = 1;
+  std::set<std::string, std::less<>> resume_asked_;
   base::SequenceBound<AuditLog> audit_;
   base::WeakPtrFactory<AgentForwarder> weak_factory_{this};
 };

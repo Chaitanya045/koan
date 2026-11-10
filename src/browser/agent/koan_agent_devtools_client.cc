@@ -62,7 +62,9 @@ bool AgentDevToolsClient::Attach() {
   return true;
 }
 
-void AgentDevToolsClient::Send(std::string json) {
+void AgentDevToolsClient::Send(std::string json,
+                               base::OnceCallback<bool()> may_dispatch,
+                               base::OnceClosure on_dropped) {
   if (!host_ || !contents_) {
     return;
   }
@@ -72,11 +74,21 @@ void AgentDevToolsClient::Send(std::string json) {
       base::BindOnce(
           &RunQueued, weak_factory_.GetWeakPtr(), contents_,
           base::BindOnce(&AgentDevToolsClient::Dispatch,
-                         weak_factory_.GetWeakPtr(), std::move(json))));
+                         weak_factory_.GetWeakPtr(), std::move(json),
+                         std::move(may_dispatch), std::move(on_dropped))));
 }
 
-void AgentDevToolsClient::Dispatch(std::string json) {
+void AgentDevToolsClient::Dispatch(std::string json,
+                                   base::OnceCallback<bool()> may_dispatch,
+                                   base::OnceClosure on_dropped) {
   if (!host_) {
+    return;
+  }
+  // The user's input pauses the tab (design section 9.2): what was still
+  // waiting for the lease is not sent.
+  if (!std::move(may_dispatch).Run()) {
+    Answered();
+    std::move(on_dropped).Run();
     return;
   }
   host_->DispatchProtocolMessage(this, base::as_byte_span(json));

@@ -4,6 +4,7 @@
 
 #include "koan/browser/agent/koan_agent_forwarder.h"
 
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -13,18 +14,29 @@
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "components/embedder_support/user_agent_utils.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "koan/browser/agent/koan_agent_devtools_client.h"
 #include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_lease.h"
+#include "koan/browser/agent/koan_agent_reach_content.h"
+#include "koan/browser/agent/koan_agent_service.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
 #include "koan/browser/containers/koan_agent_containers.h"
+#include "net/base/schemeful_site.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "url/origin.h"
 
 namespace koan::agent {
 
@@ -45,17 +57,51 @@ std::string TargetIdFor(content::WebContents* contents) {
   return host ? host->GetId() : std::string();
 }
 
+// How long the user has to answer a take-over before it is a no.
+constexpr base::TimeDelta kTakeOverTimeout = base::Seconds(60);
+
+// Input the user made, not the agent: every event CDP injects carries
+// kFromDebugger.
+bool IsUsersInput(const blink::WebInputEvent& event) {
+  return !(event.GetModifiers() & blink::WebInputEvent::kFromDebugger);
+}
+
 }  // namespace
 
-// Watches a tab in the registry: its end, and changes the facades announce.
-class AgentForwarder::TabWatcher final : public content::WebContentsObserver {
+std::string SiteFor(const GURL& url) {
+  if (!url.SchemeIsHTTPOrHTTPS()) {
+    return std::string();
+  }
+  return net::SchemefulSite(url).Serialize();
+}
+
+// Watches a tab in the registry: its end, the changes the facades announce,
+// the user's own input in it (which pauses the agent, design section 9.2), and
+// a user tab leaving the site the user allowed.
+class AgentForwarder::TabWatcher final
+    : public content::WebContentsObserver,
+      public content::RenderWidgetHost::InputEventObserver,
+      public content::RenderWidgetHostObserver {
  public:
   TabWatcher(AgentForwarder* forwarder,
              content::WebContents* contents,
              std::string target_id)
       : content::WebContentsObserver(contents),
         forwarder_(forwarder),
-        target_id_(std::move(target_id)) {}
+        target_id_(std::move(target_id)) {
+    // A wheel scroll is not a "user interaction" upstream, and an observer on
+    // the root widget alone would miss a cross-origin frame's (a payment
+    // widget's), so every frame's widget is watched for it.
+    contents->ForEachRenderFrameHost(
+        [this](content::RenderFrameHost* frame) { Watch(frame); });
+  }
+
+  ~TabWatcher() override {
+    for (content::RenderWidgetHost* widget : widgets_) {
+      widget->RemoveInputEventObserver(this);
+      widget->RemoveObserver(this);
+    }
+  }
 
   // content::WebContentsObserver:
   void WebContentsDestroyed() override {
@@ -64,16 +110,54 @@ class AgentForwarder::TabWatcher final : public content::WebContentsObserver {
   }
   void DidFinishNavigation(content::NavigationHandle* handle) override {
     if (handle->IsInPrimaryMainFrame() && handle->HasCommitted()) {
+      forwarder_->OnTabNavigated(target_id_, handle->GetURL());
       forwarder_->OnTabChanged(target_id_);
     }
   }
   void TitleWasSetForMainFrame(content::RenderFrameHost*) override {
     forwarder_->OnTabChanged(target_id_);
   }
+  void RenderFrameCreated(content::RenderFrameHost* frame) override {
+    Watch(frame);
+  }
+  // Mouse down, key down, the start of a scroll, a touch: in any frame of the
+  // tab. Switching to the tab is not input; the omnibox and the tab strip
+  // never reach here.
+  void DidGetUserInteraction(const blink::WebInputEvent& event) override {
+    if (IsUsersInput(event)) {
+      forwarder_->OnUserInput(target_id_);
+    }
+  }
+
+  // content::RenderWidgetHost::InputEventObserver:
+  void OnInputEvent(const content::RenderWidgetHost& widget,
+                    const blink::WebInputEvent& event,
+                    InputEventSource source) override {
+    if (event.GetType() == blink::WebInputEvent::Type::kMouseWheel &&
+        IsUsersInput(event)) {
+      forwarder_->OnUserInput(target_id_);
+    }
+  }
+
+  // content::RenderWidgetHostObserver:
+  void RenderWidgetHostDestroyed(content::RenderWidgetHost* widget) override {
+    widget->RemoveInputEventObserver(this);
+    widget->RemoveObserver(this);
+    widgets_.erase(widget);
+  }
 
  private:
+  void Watch(content::RenderFrameHost* frame) {
+    content::RenderWidgetHost* widget = frame->GetRenderWidgetHost();
+    if (widget && widgets_.insert(widget).second) {
+      widget->AddInputEventObserver(this);
+      widget->AddObserver(this);
+    }
+  }
+
   const raw_ptr<AgentForwarder> forwarder_;
   const std::string target_id_;
+  std::set<raw_ptr<content::RenderWidgetHost>> widgets_;
 };
 
 // One authenticated connection: its facade, and the DevTools client the facade
@@ -136,9 +220,18 @@ class AgentForwarder::Connection final : public FacadeBackend {
     clients_.erase(target_id);
   }
 
-  void SendToTab(const std::string& target_id, std::string json) override {
+  void SendToTab(const std::string& target_id,
+                 int command_id,
+                 std::string json) override {
     if (auto it = clients_.find(target_id); it != clients_.end()) {
-      it->second->Send(std::move(json));
+      it->second->Send(std::move(json),
+                       base::BindOnce(
+                           [](base::WeakPtr<Connection> connection, int id) {
+                             return connection && connection->MayDispatch(id);
+                           },
+                           weak_factory_.GetWeakPtr(), command_id),
+                       base::BindOnce(&Connection::OnDropped,
+                                      weak_factory_.GetWeakPtr(), command_id));
     }
   }
 
@@ -187,6 +280,31 @@ class AgentForwarder::Connection final : public FacadeBackend {
     return true;
   }
 
+  void TakeOver(const std::optional<std::string>& target_id,
+                OpenTabCallback done) override {
+    forwarder_->RequestTakeOver(client_id_, target_id, std::move(done));
+  }
+
+  bool ReleaseUserTab(const std::string& target_id) override {
+    return forwarder_->ReleaseUserTab(target_id);
+  }
+
+  bool IsInGrantedSite(const std::string& target_id, const GURL& url) override {
+    const TargetEntry* entry = forwarder_->registry_.Find(target_id);
+    if (!entry) {
+      return false;
+    }
+    if (entry->agent_owned) {
+      return true;
+    }
+    const std::string site = SiteFor(url);
+    return !site.empty() && site == entry->site;
+  }
+
+  void AskToResume(const std::string& target_id) override {
+    forwarder_->AskToResume(target_id);
+  }
+
   base::DictValue BrowserVersion() override {
     base::DictValue version;
     version.Set("protocolVersion",
@@ -218,6 +336,9 @@ class AgentForwarder::Connection final : public FacadeBackend {
   }
 
  private:
+  bool MayDispatch(int command_id) { return facade_->MayDispatch(command_id); }
+  void OnDropped(int command_id) { facade_->OnCommandDropped(command_id); }
+
   void OnTabMessage(const std::string& target_id, std::string_view json) {
     facade_->OnTabMessage(target_id, json);
   }
@@ -258,8 +379,11 @@ class AgentForwarder::Connection final : public FacadeBackend {
   base::WeakPtrFactory<Connection> weak_factory_{this};
 };
 
-AgentForwarder::AgentForwarder(SendCallback send, base::FilePath log_dir)
+AgentForwarder::AgentForwarder(SendCallback send,
+                               base::FilePath log_dir,
+                               base::RepeatingClosure on_changed)
     : send_(std::move(send)),
+      on_changed_(std::move(on_changed)),
       audit_(base::ThreadPool::CreateSequencedTaskRunner(
                  {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
                   base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
@@ -327,6 +451,10 @@ void AgentForwarder::OnClientDisconnected(uint64_t connection_id) {
 }
 
 void AgentForwarder::Reset(bool end_tasks) {
+  for (auto& [id, request] : take_overs_) {
+    CancelTakeOverDialog(request->dialog_id);
+  }
+  take_overs_.clear();
   connections_.clear();
   std::vector<std::string> targets;
   for (const auto& [target_id, watcher] : tabs_) {
@@ -346,6 +474,8 @@ void AgentForwarder::Reset(bool end_tasks) {
       }
     }
   }
+  resume_asked_.clear();
+  NotifyChanged();
 }
 
 void AgentForwarder::NoteTask(const std::string& client_id,
@@ -434,6 +564,8 @@ void AgentForwarder::RemoveTab(const std::string& target_id, bool destroyed) {
   }
   std::unique_ptr<TabWatcher> watcher = std::move(it->second);
   tabs_.erase(it);
+  resume_asked_.erase(target_id);
+  NotifyChanged();
   // A tab being destroyed ends its own lease.
   if (content::WebContents* contents = watcher->web_contents();
       contents && !destroyed) {
@@ -468,6 +600,277 @@ void AgentForwarder::OnOpenedFromAgentTab(content::WebContents* source,
   // background tab: it was opened, and closing what a page opened would be a
   // surprise, but the agent does not get it.
   AddAgentTab(opened, std::string(entry->client_id), std::string(entry->task));
+}
+
+void AgentForwarder::ForEachFacadeOf(std::string_view client_id,
+                                     base::FunctionRef<void(CdpFacade&)> run) {
+  for (const auto& [id, connection] : connections_) {
+    if (connection->client_id() == client_id) {
+      run(connection->facade());
+    }
+  }
+}
+
+void AgentForwarder::AuditEvent(std::string_view event,
+                                const std::string& target_id,
+                                const std::string& client_id) {
+  AuditRecord record;
+  record.time = base::Time::Now();
+  record.event = std::string(event);
+  record.client_id = client_id;
+  record.tab_id = target_id;
+  if (content::WebContents* contents = ContentsFor(target_id)) {
+    const GURL& url = contents->GetLastCommittedURL();
+    if (url.is_valid()) {
+      record.tab_origin = url::Origin::Create(url).Serialize();
+    }
+  }
+  Audit(std::move(record));
+}
+
+void AgentForwarder::RequestTakeOver(
+    const std::string& client_id,
+    const std::optional<std::string>& target_id,
+    FacadeBackend::OpenTabCallback done) {
+  content::WebContents* contents = nullptr;
+  if (target_id) {
+    if (scoped_refptr<content::DevToolsAgentHost> host =
+            content::DevToolsAgentHost::GetForId(*target_id)) {
+      contents = host->GetWebContents();
+    }
+  } else if (BrowserWindowInterface* browser =
+                 GetLastActiveBrowserWindowInterfaceWithAnyProfile()) {
+    // "The tab the user is looking at": the active tab of their last active
+    // window (design section 9.3).
+    if (tabs::TabInterface* tab = browser->GetActiveTabInterface()) {
+      contents = tab->GetContents();
+    }
+  }
+  // Only a tab in a window, of the original profile, on a page the agent may
+  // reach at all, and on http(s): the grant is a site.
+  tabs::TabInterface* tab =
+      contents ? tabs::TabInterface::MaybeGetFromContents(contents) : nullptr;
+  Profile* profile =
+      contents ? Profile::FromBrowserContext(contents->GetBrowserContext())
+               : nullptr;
+  if (!tab || !profile || profile->IsOffTheRecord() ||
+      profile->IsSystemProfile() || profile->IsGuestSession() ||
+      !MayReachRenderFrameHost(contents->GetPrimaryMainFrame())) {
+    std::move(done).Run(std::nullopt, "Koan.notPermitted",
+                        "that tab cannot be given to an agent");
+    return;
+  }
+  const std::string site = SiteFor(contents->GetLastCommittedURL());
+  const std::string id = TargetIdFor(contents);
+  if (site.empty() || id.empty()) {
+    std::move(done).Run(std::nullopt, "Koan.notPermitted",
+                        "only a tab showing a web page can be given to an "
+                        "agent");
+    return;
+  }
+  if (const TargetEntry* entry = registry_.Find(id)) {
+    if (entry->client_id != client_id || entry->agent_owned) {
+      std::move(done).Run(std::nullopt, "Koan.notPermitted",
+                          "that tab is not the user's to give");
+      return;
+    }
+    if (entry->state == TabState::kDriven) {
+      std::move(done).Run(id, std::string(), std::string());
+      return;
+    }
+  }
+  if (take_overs_.contains(id)) {
+    std::move(done).Run(std::nullopt, "Koan.busy",
+                        "the user is already being asked about that tab");
+    return;
+  }
+  const uint64_t request_id = next_take_over_id_++;
+  auto owned = std::make_unique<TakeOverRequest>();
+  TakeOverRequest& request = *owned;
+  take_overs_[id] = std::move(owned);
+  request.request_id = request_id;
+  request.client_id = client_id;
+  request.site = site;
+  request.contents = contents->GetWeakPtr();
+  request.done = std::move(done);
+  request.timer.Start(
+      FROM_HERE, kTakeOverTimeout,
+      base::BindOnce(&AgentForwarder::OnTakeOverAnswer,
+                     weak_factory_.GetWeakPtr(), id, request_id, false));
+  auto label = labels_.find(client_id);
+  AuditEvent("take-over-asked", id, client_id);
+  const uint64_t dialog_id = ShowTakeOverDialog(
+      contents, label == labels_.end() ? std::string() : label->second, site,
+      base::BindOnce(&AgentForwarder::OnTakeOverAnswer,
+                     weak_factory_.GetWeakPtr(), id, request_id));
+  // With no window to ask in, the answer (a no) has come already.
+  if (auto it = take_overs_.find(id);
+      it != take_overs_.end() && it->second->request_id == request_id) {
+    it->second->dialog_id = dialog_id;
+  }
+}
+
+void AgentForwarder::OnTakeOverAnswer(std::string target_id,
+                                      uint64_t request_id,
+                                      bool allowed) {
+  auto it = take_overs_.find(target_id);
+  if (it == take_overs_.end() || it->second->request_id != request_id) {
+    return;
+  }
+  std::unique_ptr<TakeOverRequest> owned = std::move(it->second);
+  take_overs_.erase(it);
+  TakeOverRequest& request = *owned;
+  request.timer.Stop();
+  if (!allowed) {
+    // The timeout: the dialog goes too.
+    CancelTakeOverDialog(request.dialog_id);
+  }
+  content::WebContents* contents = request.contents.get();
+  // The client must still be connected: a grant to an agent that went away
+  // would outlive the task it was for.
+  bool connected = false;
+  for (const auto& [connection_id, connection] : connections_) {
+    connected = connected || connection->client_id() == request.client_id;
+  }
+  allowed = allowed && connected;
+  // The user approved the site they saw: if the tab left it meanwhile, no.
+  if (allowed &&
+      (!contents || SiteFor(contents->GetLastCommittedURL()) != request.site)) {
+    allowed = false;
+  }
+  if (!allowed) {
+    AuditEvent("take-over-denied", target_id, request.client_id);
+    std::move(request.done)
+        .Run(std::nullopt, "Koan.denied",
+             "the user did not give the agent that tab");
+    return;
+  }
+  if (registry_.GrantUserTab(target_id, request.client_id, TabState::kDriven,
+                             request.site) != TargetRegistry::AddResult::kOk) {
+    std::move(request.done)
+        .Run(std::nullopt, "Koan.notPermitted",
+             "another agent controls that tab");
+    return;
+  }
+  if (!tabs_.contains(target_id)) {
+    tabs_[target_id] = std::make_unique<TabWatcher>(this, contents, target_id);
+  }
+  // A user tab driven in place: kept awake, its <select>s render in the page,
+  // and it is not muted (AgentTabLease mutes only the agent's own tabs).
+  AgentLeaseManager::Get().Attach(contents, request.client_id, std::string(),
+                                  /*agent_owned=*/false);
+  AuditEvent("take-over", target_id, request.client_id);
+  ForEachFacadeOf(request.client_id,
+                  [&](CdpFacade& facade) { facade.OnTargetAdded(target_id); });
+  NotifyChanged();
+  std::move(request.done).Run(target_id, std::string(), std::string());
+}
+
+bool AgentForwarder::ReleaseUserTab(const std::string& target_id) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry || entry->agent_owned) {
+    return false;
+  }
+  AuditEvent("release", target_id, entry->client_id);
+  RemoveTab(target_id, /*destroyed=*/false);
+  return true;
+}
+
+void AgentForwarder::OnUserInput(const std::string& target_id) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry || entry->state != TabState::kDriven) {
+    return;
+  }
+  // Detect after delivery: this input already reached the page; what the
+  // agent queued behind it is not sent (CdpFacade::MayDispatch()).
+  registry_.Pause(target_id);
+  const std::string client_id = entry->client_id;
+  AuditEvent("pause", target_id, client_id);
+  ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+    facade.OnTargetStateChanged(target_id, "Koan.paused", "user-input");
+  });
+  NotifyChanged();
+}
+
+void AgentForwarder::OnTabNavigated(const std::string& target_id,
+                                    const GURL& url) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry || entry->agent_owned || entry->state == TabState::kReadable ||
+      SiteFor(url) == entry->site) {
+    return;
+  }
+  // The user allowed one site; leaving it (a link, a redirect, the user
+  // typing in the omnibox) ends write access. The agent may still read it.
+  registry_.SetReadable(target_id);
+  const std::string client_id = entry->client_id;
+  AuditEvent("site-left", target_id, client_id);
+  ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+    facade.OnTargetStateChanged(target_id, "Koan.siteLeft", "navigation");
+  });
+  NotifyChanged();
+}
+
+void AgentForwarder::AskToResume(const std::string& target_id) {
+  resume_asked_.insert(target_id);
+  NotifyChanged();
+}
+
+void AgentForwarder::HandBack(const std::string& target_id) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry || !registry_.Resume(target_id)) {
+    return;
+  }
+  resume_asked_.erase(target_id);
+  const std::string client_id = entry->client_id;
+  AuditEvent("hand-back", target_id, client_id);
+  ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+    facade.OnTargetStateChanged(target_id, "Koan.resumed", "handed-back");
+  });
+  NotifyChanged();
+}
+
+void AgentForwarder::TakeBack(const std::string& target_id) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry) {
+    return;
+  }
+  if (entry->agent_owned) {
+    // The agent's own tab stays the agent's; taking it back from a pause is
+    // keeping it paused, which it already is.
+    return;
+  }
+  const std::string client_id = entry->client_id;
+  ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+    facade.OnTargetStateChanged(target_id, "Koan.released", "user");
+  });
+  AuditEvent("take-back", target_id, client_id);
+  RemoveTab(target_id, /*destroyed=*/false);
+}
+
+std::vector<ControlledTab> AgentForwarder::ControlledTabs() const {
+  std::vector<ControlledTab> tabs;
+  for (const auto& [target_id, watcher] : tabs_) {
+    const TargetEntry* entry = registry_.Find(target_id);
+    if (!entry || (entry->agent_owned && entry->state != TabState::kPaused)) {
+      continue;
+    }
+    ControlledTab tab;
+    tab.target_id = target_id;
+    auto label = labels_.find(entry->client_id);
+    tab.label = label == labels_.end() ? std::string() : label->second;
+    tab.state = entry->state;
+    tab.agent_owned = entry->agent_owned;
+    tab.resume_asked = resume_asked_.contains(target_id);
+    tab.contents = watcher->web_contents();
+    tabs.push_back(std::move(tab));
+  }
+  return tabs;
+}
+
+void AgentForwarder::NotifyChanged() {
+  if (on_changed_) {
+    on_changed_.Run();
+  }
 }
 
 void AgentForwarder::Audit(AuditRecord record) {

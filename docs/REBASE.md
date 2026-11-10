@@ -343,6 +343,16 @@ command with `Koan.interstitial` while `SecurityInterstitialTabHelper::IsDisplay
 `beforeunload` dialog; the page target id of `GetOrCreateFor()` stays the tab's across its navigations (UNVERIFIED across a
 prerender activation, T-cdp-5).
 
+Take-over and pause (`koan_agent_forwarder.cc`'s `TabWatcher`, `RequestTakeOver`; the prompt in `koan_agent_approval_dialog.cc`;
+the Hand back / Take back buttons in `koan_agent_indicator.cc`) add no patch. Symbols: `WebContentsObserver::DidGetUserInteraction`,
+`RenderWidgetHost::InputEventObserver::OnInputEvent`, `RenderWidgetHostObserver::RenderWidgetHostDestroyed`,
+`blink::WebInputEvent::kFromDebugger`, `net::SchemefulSite`, `tabs::TabInterface::MaybeGetFromContents`,
+`BrowserWindowInterface::GetActiveTabInterface`. Behaviour it relies on: every input event CDP's `Input` domain injects carries
+`kFromDebugger` (`content/browser/devtools/protocol/input_handler.cc`), so the agent's own clicks never pause it (T-take-2);
+`DidGetUserInteraction` fires for mouse down, raw key down, gesture scroll begin and touch start in every frame of the primary page,
+out-of-process iframes included, and a wheel event reaches the `InputEventObserver` of the frame's local root widget (T-take-1,
+T-take-1b); `RenderFrameHost::GetRenderWidgetHost()` is the local root's widget for any frame.
+
 A review that changes the outcome updates the table and the baseline in one change. The other things to re-check on a roll
 (the untrusted-client domain list, the `DevToolsAgentHostClient` flag defaults, the `PageLiveStateDecorator` setters the
 keep-alive uses) are in the design's section 14 and become REBASE rows with the PRs that add them.

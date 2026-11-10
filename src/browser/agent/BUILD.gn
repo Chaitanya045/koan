@@ -181,6 +181,7 @@ if (is_posix) {
     }
     public_deps = [
       ":audit",
+      ":facade",
       ":lease_scheduler",
       ":reach",
       ":registry",
@@ -192,7 +193,6 @@ if (is_posix) {
     ]
     deps = [
       ":auth",
-      ":facade",
       ":gateway",
       ":limits",
       ":peer",
@@ -207,11 +207,15 @@ if (is_posix) {
       "//components/embedder_support:user_agent",
       "//components/performance_manager",
       "//components/security_interstitials/content:security_interstitial_page",
+      "//components/tabs:public",
       "//components/version_info",
       "//content/public/browser",
       "//content/public/common",
       "//koan/browser:prefs",
       "//koan/browser/containers",
+      "//koan/browser/containers:partition",
+      "//net",
+      "//third_party/blink/public/common:headers",
       "//ui/base",
       "//ui/gfx/geometry",
       "//ui/views",
@@ -315,6 +319,7 @@ source_set("facade") {
     ":events",
     ":filters",
     ":policy",
+    ":redact",
     ":registry",
   ]
 }

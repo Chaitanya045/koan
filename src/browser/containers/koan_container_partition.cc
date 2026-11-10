@@ -5,11 +5,13 @@
 #include "koan/browser/containers/koan_container_partition.h"
 
 #include <iterator>
+#include <memory>
 
 #include "base/check.h"
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/supports_user_data.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/security_principal.h"
@@ -30,6 +32,8 @@ constexpr char kThrowawayMarker = 't';
 constexpr char kSavedMarker = 's';
 constexpr std::string_view kAgentSessionPrefix = "agent:";
 constexpr std::string_view kUserSessionPrefix = "user:";
+// The mark SetAgentLeased() puts on a user's tab while an agent leases it.
+const int kAgentLeasedKey = 0;
 
 std::string_view DomainPrefix(ContainerKind kind) {
   return kind == ContainerKind::kAgent ? kAgentPartitionDomainPrefix
@@ -127,7 +131,20 @@ bool IsAgentFrame(content::RenderFrameHost* frame) {
 }
 
 bool IsAgentContents(const content::WebContents* contents) {
-  return contents && IsAgentPartition(ConfigOf(contents));
+  return contents && (IsAgentPartition(ConfigOf(contents)) ||
+                      contents->GetUserData(&kAgentLeasedKey));
+}
+
+void SetAgentLeased(content::WebContents* contents, bool leased) {
+  if (!contents) {
+    return;
+  }
+  if (leased) {
+    contents->SetUserData(&kAgentLeasedKey,
+                          std::make_unique<base::SupportsUserData::Data>());
+  } else {
+    contents->RemoveUserData(&kAgentLeasedKey);
+  }
 }
 
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents) {

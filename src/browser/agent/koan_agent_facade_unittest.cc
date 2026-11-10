@@ -48,8 +48,11 @@ class FakeBackend : public FacadeBackend {
   void DetachTab(const std::string& target_id) override {
     attached.erase(target_id);
   }
-  void SendToTab(const std::string& target_id, std::string json) override {
+  void SendToTab(const std::string& target_id,
+                 int command_id,
+                 std::string json) override {
     sent.push_back({target_id, Parse(json)});
+    EXPECT_EQ(sent.back().command.FindInt("id"), command_id);
   }
   void CommandAnswered(const std::string& target_id) override { ++answered; }
   void OpenTab(const std::string& task,
@@ -62,6 +65,21 @@ class FakeBackend : public FacadeBackend {
   bool CloseTab(const std::string& target_id) override {
     closed.push_back(target_id);
     return true;
+  }
+  void TakeOver(const std::optional<std::string>& target_id,
+                OpenTabCallback done) override {
+    take_over_asked = true;
+    std::move(done).Run(std::nullopt, "Koan.denied", "no");
+  }
+  bool ReleaseUserTab(const std::string& target_id) override {
+    released.push_back(target_id);
+    return true;
+  }
+  bool IsInGrantedSite(const std::string& target_id, const GURL& url) override {
+    return url.host() == "mail.example";
+  }
+  void AskToResume(const std::string& target_id) override {
+    resume_asked.push_back(target_id);
   }
   base::DictValue BrowserVersion() override {
     base::DictValue version;
@@ -88,6 +106,9 @@ class FakeBackend : public FacadeBackend {
   std::vector<std::string> closed;
   std::vector<std::string> user_needed;
   std::vector<std::string> ended;
+  bool take_over_asked = false;
+  std::vector<std::string> released;
+  std::vector<std::string> resume_asked;
   std::vector<AuditRecord> audits;
   int answered = 0;
 };
@@ -114,8 +135,10 @@ class KoanAgentFacadeTest : public testing::Test {
   void Send(int id,
             std::string method,
             base::DictValue params = base::DictValue(),
-            std::optional<std::string> session_id = std::nullopt) {
+            std::optional<std::string> session_id = std::nullopt,
+            bool drive = false) {
     AgentMessage message;
+    message.capabilities.drive = drive;
     message.id = id;
     message.method = std::move(method);
     message.params = std::move(params);
@@ -451,6 +474,93 @@ TEST_F(KoanAgentFacadeTest, AutoAttachAttachesNewTargetsInScopeOnly) {
   backend_.tabs["T4"] = TabFacts{"", GURL("about:blank")};
   facade_.OnTargetAdded("T4");
   EXPECT_EQ(Events("Target.attachedToTarget").size(), 2u);
+}
+
+TEST_F(KoanAgentFacadeTest, TakeOverNeedsDriveAndOnlyTheUserResumes) {
+  Send(1, "Koan.takeOver");
+  EXPECT_EQ(ErrorCode(1), "Koan.notPermitted");
+  EXPECT_FALSE(backend_.take_over_asked);
+  Send(2, "Koan.takeOver", base::DictValue(), std::nullopt, /*drive=*/true);
+  EXPECT_TRUE(backend_.take_over_asked);
+  EXPECT_EQ(ErrorCode(2), "Koan.denied");
+
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven,
+                         "https://mail.example");
+  registry_.Pause("U1");
+  Send(3, "Koan.resume", base::DictValue().Set("targetId", "U1"));
+  EXPECT_EQ(registry_.Find("U1")->state, TabState::kPaused);
+  EXPECT_EQ(backend_.resume_asked, std::vector<std::string>{"U1"});
+  EXPECT_EQ(Answer(3)->FindBoolByDottedPath("result.asked"), true);
+
+  // Releasing is for user tabs; the agent's own are closed instead.
+  Send(4, "Koan.release", base::DictValue().Set("targetId", "T1"));
+  EXPECT_EQ(ErrorCode(4), "Koan.unknownTarget");
+  Send(5, "Koan.release", base::DictValue().Set("targetId", "U1"));
+  EXPECT_EQ(backend_.released, std::vector<std::string>{"U1"});
+}
+
+TEST_F(KoanAgentFacadeTest, AUserTabIsDrivenOnItsSiteOnly) {
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven,
+                         "https://mail.example");
+  const std::string session = AttachTo("U1");
+  Send(1, "Page.navigate",
+       base::DictValue().Set("url", "https://bank.example/transfer"), session);
+  EXPECT_EQ(ErrorCode(1), "Koan.offSite");
+  EXPECT_TRUE(backend_.sent.empty());
+  Send(2, "Page.navigate",
+       base::DictValue().Set("url", "https://mail.example/inbox"), session);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  // The agent's own tabs go anywhere the URL filter allows.
+  const std::string own = AttachTo("T1");
+  Send(3, "Page.navigate",
+       base::DictValue().Set("url", "https://bank.example/"), own);
+  EXPECT_EQ(backend_.sent.size(), 2u);
+}
+
+TEST_F(KoanAgentFacadeTest, AReadableUserTabHidesSecretInputValues) {
+  registry_.GrantUserTab("U1", "alice", TabState::kReadable);
+  const std::string session = AttachTo("U1");
+  Send(1, "DOM.getOuterHTML", base::DictValue().Set("nodeId", 1), session);
+  AnswerLast(base::DictValue().Set(
+      "outerHTML", R"(<input type="hidden" name="csrf" value="tok3n">)"));
+  EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.outerHTML"),
+            R"(<input type="hidden" name="csrf" value="">)");
+  // The agent's own tab is not redacted.
+  const std::string own = AttachTo("T1");
+  Send(2, "DOM.getOuterHTML", base::DictValue().Set("nodeId", 1), own);
+  AnswerLast(base::DictValue().Set("outerHTML",
+                                   R"(<input type="hidden" value="mine">)"));
+  EXPECT_EQ(*Answer(2)->FindStringByDottedPath("result.outerHTML"),
+            R"(<input type="hidden" value="mine">)");
+}
+
+TEST_F(KoanAgentFacadeTest, ACommandThePauseOvertookIsNotSent) {
+  const std::string session = AttachTo("T1");
+  Send(1, "Input.insertText", base::DictValue().Set("text", "hi"), session);
+  const int id = *backend_.sent.back().command.FindInt("id");
+  EXPECT_TRUE(facade_.MayDispatch(id));
+  // The user typed while the command waited for the lease.
+  registry_.Pause("T1");
+  facade_.OnTargetStateChanged("T1", "Koan.paused", "user-input");
+  ASSERT_EQ(Events("Koan.paused").size(), 1u);
+  EXPECT_EQ(*Events("Koan.paused")[0]->FindStringByDottedPath("params.state"),
+            "paused");
+  EXPECT_FALSE(facade_.MayDispatch(id));
+  facade_.OnCommandDropped(id);
+  EXPECT_EQ(ErrorCode(1), "Koan.paused");
+  // An interstitial that came up while a command waited stops it too.
+  registry_.Resume("T1");
+  Send(3, "Input.insertText", base::DictValue().Set("text", "x"), session);
+  const int waiting = *backend_.sent.back().command.FindInt("id");
+  backend_.tabs["T1"].interstitial = true;
+  EXPECT_FALSE(facade_.MayDispatch(waiting));
+  facade_.OnCommandDropped(waiting);
+  EXPECT_EQ(ErrorCode(3), "Koan.interstitial");
+  backend_.tabs["T1"].interstitial = false;
+  // Reads still work on the paused tab.
+  registry_.Pause("T1");
+  Send(2, "Page.captureScreenshot", base::DictValue(), session);
+  EXPECT_TRUE(facade_.MayDispatch(*backend_.sent.back().command.FindInt("id")));
 }
 
 }  // namespace
