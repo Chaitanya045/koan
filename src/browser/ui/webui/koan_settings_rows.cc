@@ -491,6 +491,14 @@ constexpr Row kRows[] = {
      .label = "Agent ready",
      .is_available = IsAgentControlAllowed,
      .local_state = true},
+    {.group = "agent-control",
+     .control = Control::kCheckbox,
+     .pref = prefs::kAgentControlStrict,
+     .label = "Strict: each task in a hidden profile of its own (slower to "
+              "start; shares none of your settings, extensions or "
+              "permissions)",
+     .is_available = IsAgentControlAllowed,
+     .indent = true},
     {.group = "agent-limits",
      .control = Control::kMenu,
      .pref = prefs::kAgentControlMaxLeasedTabs,

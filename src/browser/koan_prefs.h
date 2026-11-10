@@ -280,6 +280,11 @@ inline constexpr char kAgentControlMaxAuthFailures[] =
 // user-data-dir, not --incognito, not --guest. Computed once, at registration.
 bool AgentReadyByDefault();
 
+// Agent control's strict mode (koan/browser/containers): a task that asks for
+// no saved container runs in a hidden profile of its own, deleted when it
+// ends. Profile pref; off by default.
+inline constexpr char kAgentControlStrict[] = "koan.agent_control.strict";
+
 // Agent control's saved containers (koan/browser/containers): their names
 // and container ids, {name: id}. A throwaway container is never listed.
 inline constexpr char kAgentSavedContainers[] =

@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/profiles/profile_picker.cc b/chrome/browser/ui/profiles/profile_picker.cc
+index daf2ee3aafd1b2853bf417704fe44d941457072f..35e05774074a33c69b5e1fa349265d6b7446a4f7 100644
+--- a/chrome/browser/ui/profiles/profile_picker.cc
++++ b/chrome/browser/ui/profiles/profile_picker.cc
+@@ -28,6 +28,7 @@
+ #include "components/signin/public/base/consent_level.h"
+ #include "components/signin/public/base/signin_pref_names.h"
+ #include "components/signin/public/identity_manager/identity_manager.h"
++#include "koan/browser/containers/koan_visible_profiles.h"
+ 
+ namespace {
+ 
+@@ -222,7 +223,9 @@ StartupProfileMode ProfilePicker::GetStartupMode() {
+     }
+   }
+ 
+-  size_t number_of_profiles = profile_manager->GetNumberOfProfiles();
++  // Koan: agents' hidden profiles don't count.
++  size_t number_of_profiles = koan::containers::CountVisibleProfiles(
++      profile_manager->GetProfileAttributesStorage());
+   // Need to consider 0 profiles as this is what happens in some browser-tests.
+   if (number_of_profiles <= 1) {
+     return StartupProfileMode::kBrowserWindow;

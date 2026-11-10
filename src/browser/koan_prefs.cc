@@ -65,6 +65,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterIntegerPref(kResumedCrashes, 0);
   registry->RegisterTimePref(kLastResumedTime, base::Time());
   registry->RegisterDictionaryPref(kAgentSavedContainers);
+  registry->RegisterBooleanPref(kAgentControlStrict, false);
 }
 
 bool AgentReadyByDefault() {
