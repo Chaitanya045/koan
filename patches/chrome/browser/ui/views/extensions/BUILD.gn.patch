@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/views/extensions/BUILD.gn b/chrome/browser/ui/views/extensions/BUILD.gn
+--- a/chrome/browser/ui/views/extensions/BUILD.gn
++++ b/chrome/browser/ui/views/extensions/BUILD.gn
+@@ -937,6 +937,7 @@
+     "//chrome/browser/ui/views/frame:toolbar_button_provider",
+     "//chrome/browser/ui/views/toolbar",
+     "//chrome/browser/user_education",
++    "//koan/browser/ui/views",
+     "//ui/base/dragdrop/mojom",
+   ]
+ }

@@ -27,6 +27,8 @@ class Label;
 
 namespace koan {
 
+class KoanSidebarExtensionsView;
+
 // Zen's single-toolbar sidebar header is two pieces:
 // - KoanSidebarNavButtons (back / forward / reload) at the trailing end of
 //   the vertical tab strip's top row, next to the sidebar toggle;
@@ -67,6 +69,9 @@ class KoanSidebarNavView : public views::View,
 
   // The pill, over which the URL bar edits in place.
   views::View* url_pill() const { return url_pill_; }
+
+  // Zen's extension buttons in the pill (#73).
+  KoanSidebarExtensionsView* extensions() const { return extensions_; }
 
   // What a bubble about the page (permissions, page info, the bookmark
   // bubble ...) points at: the site icon, else the pill. Null while neither
@@ -116,6 +121,7 @@ class KoanSidebarNavView : public views::View,
   raw_ptr<views::View> url_pill_ = nullptr;
   raw_ptr<views::Label> url_label_ = nullptr;
   raw_ptr<views::Button> copy_button_ = nullptr;
+  raw_ptr<KoanSidebarExtensionsView> extensions_ = nullptr;
   raw_ptr<views::ImageButton> site_button_ = nullptr;
   bool editing_ = false;
   // Whether the pill shows a page (not an empty tab).

@@ -220,6 +220,14 @@ on an empty tab it is a magnifier that edits the address. As in Zen, the pill
 and the URL bar show none of Chromium's page actions (site settings, install,
 bookmark star).
 
+**Extensions** pinned to the toolbar (the pin in the extensions menu) show as
+buttons at the end of the pill while the pointer is over the sidebar, as in
+Zen; a click opens the extension's popup there, a right-click its menu. They
+take at most 55 % of the pill; the others, and every extension with its access
+to the site and Manage Extensions, are under **Extensions** in the site's
+panel. An extension's keyboard shortcut opens its popup at its button, or at
+the site's icon. In compact mode the sidebar stays out while a popup is open.
+
 | "Normal": editing in place, widened | Copied |
 |---|---|
 | ![Normal](screenshots/urlbar-normal.png) | ![Copied current URL!](screenshots/urlbar-toast.png) |
