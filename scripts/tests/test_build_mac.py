@@ -86,8 +86,8 @@ class JudgeTest(unittest.TestCase):
     self.assertVerdict('ok', 'ram', '24')
 
   def test_path_with_space(self):
-    self.assertVerdict('FAIL', 'path', '/Users/a/My Code/koan')
-    self.assertVerdict('ok', 'path', '/Users/a/src/koan')
+    self.assertVerdict('FAIL', 'path', '/Users/<user>/My Code/koan')
+    self.assertVerdict('ok', 'path', '/Users/<user>/src/koan')
 
 
 class DryRunTest(unittest.TestCase):
@@ -162,7 +162,7 @@ class DryRunTest(unittest.TestCase):
     self.assertIn('install      skip', out)
 
   def test_maintainer_folder_does_not_install(self):
-    out = self.plan(KOAN_MAC='/Users/x/work/koan-mac')
+    out = self.plan(KOAN_MAC='/Users/<user>/work/koan-mac')
     self.assertIn('install      skip', out)
 
   def test_missing_prereqs_are_reported(self):

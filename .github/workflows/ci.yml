@@ -113,7 +113,7 @@ jobs:
           KOAN_FAKE_RAM_GB: "16"
         run: |
           for f in scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh; do bash -n "$f"; done
-          scripts/build.sh --dry-run | tee "$RUNNER_TEMP/plan.txt"
+          env -u CI scripts/build.sh --dry-run | tee "$RUNNER_TEMP/plan.txt"
           if grep -q FAIL "$RUNNER_TEMP/plan.txt"; then exit 1; fi
           grep -q 'fetch        would: fetch depot_tools and Chromium' "$RUNNER_TEMP/plan.txt"
       # The workflows, with shellcheck on their run: scripts. The macOS build
