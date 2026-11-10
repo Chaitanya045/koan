@@ -34,6 +34,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "koan/browser/agent/koan_agent_auth.h"
 #include "koan/browser/agent/koan_agent_gateway.h"
+#include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/agent/koan_agent_limits.h"
 #include "koan/browser/agent/koan_agent_peer.h"
 #include "koan/browser/agent/koan_agent_socket.h"
@@ -265,6 +266,8 @@ void AgentControlService::Update() {
       local_state_->GetBoolean(::prefs::kDevToolsRemoteDebuggingAllowed);
   if (!on) {
     host_.AsyncCall(&GatewayHost::Stop);
+    // Nothing is kept awake for an agent once Agent ready is off (T-ready-2).
+    AgentLeaseManager::Get().DetachAll();
     return;
   }
   base::FilePath user_data_dir;
@@ -281,6 +284,7 @@ void AgentControlService::StopAllAgents() {
   const bool on =
       local_state_->GetBoolean(prefs::kAgentControlEnabled) &&
       local_state_->GetBoolean(::prefs::kDevToolsRemoteDebuggingAllowed);
+  AgentLeaseManager::Get().DetachAll();
   host_.AsyncCall(&GatewayHost::ForgetAll)
       .WithArgs(user_data_dir, on && !user_data_dir.empty(),
                 LimitsFrom(*local_state_));
@@ -290,6 +294,7 @@ void AgentControlService::Shutdown() {
   g_terminated = true;
   g_service = nullptr;
   registrar_.RemoveAll();
+  AgentLeaseManager::Get().DetachAll();
   // Destroys the host, and with it the gateway, on the IO thread; the socket
   // file goes with it.
   host_.Reset();

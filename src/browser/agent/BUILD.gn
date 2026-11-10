@@ -73,6 +73,31 @@ source_set("limits") {
   public_deps = [ "//base" ]
 }
 
+# When an agent tab holds the visible capturer of its keep-alive lease.
+source_set("lease_scheduler") {
+  sources = [
+    "koan_agent_lease_scheduler.cc",
+    "koan_agent_lease_scheduler.h",
+  ]
+  public_deps = [
+    ":limits",
+    "//base",
+  ]
+}
+
+# The calls upstream tab code makes into agent control (//content only).
+source_set("tab_hooks") {
+  sources = [
+    "koan_agent_tab_hooks.cc",
+    "koan_agent_tab_hooks.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/base:types",
+    "//url",
+  ]
+}
+
 # How many connections the gateway keeps open.
 source_set("admission") {
   sources = [
@@ -139,13 +164,22 @@ if (is_posix) {
   source_set("browser") {
     sources = [
       "koan_agent_approval_dialog.cc",
+      "koan_agent_lease.cc",
+      "koan_agent_lease.h",
       "koan_agent_service.cc",
       "koan_agent_service.h",
     ]
+    if (is_mac) {
+      sources += [ "koan_agent_lease_mac.mm" ]
+      frameworks = [ "Foundation.framework" ]
+    }
     public_deps = [
+      ":lease_scheduler",
       ":session",
+      ":tab_hooks",
       "//base",
       "//components/prefs",
+      "//content/public/browser",
     ]
     deps = [
       ":auth",
@@ -159,10 +193,13 @@ if (is_posix) {
       "//chrome/browser/ui/dialogs:browser_dialogs",
       "//chrome/common",
       "//chrome/common:constants",
+      "//components/performance_manager",
       "//components/version_info",
       "//content/public/browser",
+      "//content/public/common",
       "//koan/browser:prefs",
       "//ui/base",
+      "//ui/gfx/geometry",
       "//ui/views",
     ]
   }
@@ -250,6 +287,7 @@ test("koan_agent_unittests") {
     "koan_agent_events_unittest.cc",
     "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
+    "koan_agent_lease_scheduler_unittest.cc",
     "koan_agent_limits_unittest.cc",
     "koan_agent_policy_unittest.cc",
     "koan_agent_reach_unittest.cc",
@@ -264,6 +302,7 @@ test("koan_agent_unittests") {
     ":events",
     ":filters",
     ":frame",
+    ":lease_scheduler",
     ":limits",
     ":policy",
     ":reach",
