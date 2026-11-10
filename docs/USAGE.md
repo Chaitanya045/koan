@@ -827,6 +827,14 @@ Mode), approval requests per minute (3) and failed attempts before a 5-minute
 block (5). Approvals last until Koan quits for now. The command line tool and
 the tab features come next (see `.agent/notes/agent-control.md`).
 
+An agent's tabs open in a container of their own: a new, empty one for each
+task, cleared when the task ends. **Saved containers** (Settings > Agent
+Control) keep their logins between tasks, for an agent you sign in once
+("GitHub bot"). Add one by name and tick the agents that may use it; an agent
+gets it only if you ticked it **and** it asks for that container by name, and
+never while another task has it open. Delete removes its cookies and site data.
+The ticks last until Koan quits or you press Stop, like the approvals.
+
 ## Install in the app menu
 
 ```sh

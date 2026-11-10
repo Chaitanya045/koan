@@ -50,8 +50,9 @@ enum class AgentMode {
   // An in-memory container, new for this task and cleared when it ends. The
   // default.
   kThrowaway,
-  // A named container on disk that keeps its cookies between tasks. Another
-  // task gets it only if the user names it (`saved_name`).
+  // A named container on disk that keeps its cookies between tasks. The user
+  // makes it in Settings, and agent control hands it only to a client the
+  // user granted it to (koan_container_grants.h).
   kSaved,
   // A separate hidden profile (not implemented yet: StartAgentContainer()
   // returns kNotSupported).
@@ -107,14 +108,20 @@ void EndAgentTask(const std::string& client_id, const std::string& task);
 // keeps its data for the next task that names it.
 void EndAgentContainer(Profile* profile, const ContainerId& container);
 
-// The user's saved agent containers, by name (Settings > Agent control lists
-// them; deleting one clears its data and removes it from disk).
+// The user's saved agent containers, by name (Settings > Agent Control lists
+// them; deleting one clears its data, its grants
+// (koan_container_grants.h) and removes it from disk).
 struct SavedContainer {
   std::string name;
   ContainerId id;
 };
 std::vector<SavedContainer> GetSavedAgentContainers(Profile* profile);
 void DeleteSavedAgentContainer(Profile* profile, const std::string& name);
+
+// Settings > Agent Control's "Add": a new, empty saved container named
+// `name`. Only the user makes saved containers; an agent's request for an
+// unknown name opens nothing. False for an invalid or existing name.
+bool CreateSavedAgentContainer(Profile* profile, const std::string& name);
 
 }  // namespace koan::containers
 

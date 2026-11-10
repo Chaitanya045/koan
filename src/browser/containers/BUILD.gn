@@ -23,6 +23,16 @@ source_set("partition") {
   ]
 }
 
+# Which paired client may use which saved container (koan_container_grants.h).
+# //base only.
+source_set("grants") {
+  sources = [
+    "koan_container_grants.cc",
+    "koan_container_grants.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
 # The core's hooks into the browser (koan_containers.h) and the API agent
 # control calls (koan_agent_containers.h). Header-only, so upstream targets
 # and //koan/browser/agent can depend on it without cycles; the definitions
@@ -33,6 +43,7 @@ source_set("containers") {
     "koan_containers.h",
   ]
   public_deps = [
+    ":grants",
     ":partition",
     "//base",
     "//url",
@@ -46,6 +57,7 @@ source_set("impl") {
   ]
   deps = [
     ":containers",
+    ":grants",
     ":partition",
     "//base",
     "//chrome/browser/profiles:profile",
@@ -72,8 +84,12 @@ source_set("impl") {
 #   autoninja -C out/Koan koan/browser/containers:koan_containers_unittests
 #   out/Koan/koan_containers_unittests
 test("koan_containers_unittests") {
-  sources = [ "koan_container_partition_unittest.cc" ]
+  sources = [
+    "koan_container_grants_unittest.cc",
+    "koan_container_partition_unittest.cc",
+  ]
   deps = [
+    ":grants",
     ":partition",
     "//base",
     "//base/test:test_support",
