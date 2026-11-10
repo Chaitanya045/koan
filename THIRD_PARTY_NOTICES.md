@@ -56,6 +56,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_zen_media.{h,cc}` | `ZenMediaController.mjs`, `zen-media-controls.css` (the media cards' stack, timing and time format) |
 | `src/browser/ui/views/koan_zen_compact_strings.h` | `zen-general.ftl` (the sidebar button's label and tooltip) |
 | `src/browser/ui/views/koan_zen_toasts.h` | `zen-general.ftl` (the background tab and renamed workspace toasts) |
+| `src/browser/ui/views/koan_zen_sidebar_notification.h` | `ZenSidebarNotification.mjs`, `zen-sidebar-notification.css`, `ZenUpdates.mjs`, `zen-general.ftl` (the sidebar notification's sizes and timing, the "Update Complete!" strings) |
 | `src/browser/ui/views/koan_swipe_tracker.{h,cc}`, `koan_swipe_tracker_unittest.cc` | `ZenSpacesSwipe.mjs` (success threshold, velocity weight, resistance), Gecko's `SwipeTracker.cpp` units as Zen patches it |
 | `src/browser/ui/views/koan_folder_zen_assets.{h,cc}` | `ZenFolder.mjs` (folder icon), `ZenFolders.mjs` (`formatRelativeTime`), `zen-folders.ftl`, `zen-workspaces.ftl`, `zen-vertical-tabs.ftl` (strings) |
 | `src/browser/ui/views/koan_space_theme.h`, `koan_space_theme.cc` | `ZenGradientGenerator.mjs` (colour maths, harmonies, preset swatches, opacity wave), `browser.xhtml` (preset swatch data) |

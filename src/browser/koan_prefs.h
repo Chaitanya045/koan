@@ -51,6 +51,30 @@ inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
 // Zen's is the application's.
 inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
 
+// Updates (koan_updates.h). Koan has no binary releases: a clone is updated
+// with `git pull && scripts/build.sh`. All local-state prefs, as Zen's
+// zen.updates.* are the application's.
+//
+// Check GitHub at most once a day for a newer commit of the clone's develop
+// branch than the build's. On by default; never from an Incognito window.
+inline constexpr char kUpdatesCheckEnabled[] = "koan.updates.check_enabled";
+// When the last check ran (whatever its outcome).
+inline constexpr char kUpdatesLastCheck[] = "koan.updates.last_check";
+// The newest commit on GitHub at the last check and its commit time, and the
+// one the "update available" notification was last shown for (it shows once
+// per commit).
+inline constexpr char kUpdatesLatestCommit[] = "koan.updates.latest_commit";
+inline constexpr char kUpdatesLatestCommitTime[] =
+    "koan.updates.latest_commit_time";
+inline constexpr char kUpdatesNotifiedCommit[] = "koan.updates.notified_commit";
+// Zen's zen.updates.show-update-notification (default on): the sidebar's
+// "Update Complete!" after a launch of a build other than the last launch's.
+inline constexpr char kUpdatesShowUpdateNotification[] =
+    "koan.updates.show_update_notification";
+// The build of the last launch (Zen's zen.updates.last-version and
+// last-build-id): its version and commit, updates::BuildStamp().
+inline constexpr char kUpdatesLastBuild[] = "koan.updates.last_build";
+
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";

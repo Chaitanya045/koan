@@ -115,6 +115,13 @@ new version (`scripts/update_chromium.sh`), re-applies Koan and rebuilds. A
 new Chromium version rebuilds most of the tree, so it takes hours, like the
 first build.
 
+Koan tells you when there is something to pull: once a day it asks GitHub
+for the newest commit of your clone's develop branch, and the sidebar says
+"Update Available!" when it is newer than your build (one request with no
+cookies and nothing about you; Settings > Look and Feel > Updates turns it
+off; see [USAGE.md](USAGE.md#updates)). After the update, the sidebar's
+"Update Complete!" links to what changed.
+
 Quit Koan before the install step; if it is running, the script stops before
 copying and asks you to quit it and run the command again (nothing is
 rebuilt).
