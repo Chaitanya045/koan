@@ -82,6 +82,12 @@ int SidebarMinWidth(int upstream_value);
 int SidebarMaxWidth(int upstream_value);
 int SidebarCollapseSnapWidth(int upstream_value);
 
+// Hook for TabView::UpdateHoverCard and TabGroupView::UpdateHoverCard:
+// whether a hover card may show for a tab or a group header. Zen shows none
+// (browser.tabs.hoverPreview.enabled=false); upstream's with Koan's sidebar
+// off. Updates that hide a card still reach the controller.
+bool ShowsTabHoverCards();
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_TABS_H_
