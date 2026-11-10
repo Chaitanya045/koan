@@ -7,12 +7,14 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_download_animation.h"
+#include "koan/browser/ui/views/koan_window_glass.h"
 #include "ui/gfx/animation/animation.h"
 
 namespace koan {
 
 void OnBrowserViewCreated(BrowserView* browser_view) {
   KoanBrowserViewController::CreateFor(browser_view);
+  StartWindowGlass();
 }
 
 void OnBrowserViewDestroying(BrowserView* browser_view) {

@@ -675,6 +675,17 @@ own buttons stay usable above it.
 |---|---|
 | ![Welcome](screenshots/welcome-start.png) | ![Import](screenshots/welcome-import.png) |
 
+## Translucent window (macOS)
+
+Like Zen's, the window is glass: the sidebar, the toolbar and the gutter
+around the page show the desktop through, blurred, and the page is an opaque
+card on top, with Zen's default theme's tint over the blur (dark: black at
+40%, light: none). Turn it off with "Translucent window" in
+`chrome://koan-settings` (Look and Feel, Theme Settings); it is off by itself
+while macOS's Reduce Transparency (System Settings, Accessibility, Display)
+is on, and while the window is being captured. An inactive window goes flat and opaque,
+like Zen's. It needs macOS 26 or later, and on an Intel Mac it is off until you turn it on; not on other platforms.
+
 ## Turning things off
 
 Every Koan feature has a switch in `chrome://flags` (search "Koan"): Koan

@@ -11,6 +11,7 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/performance_manager/public/features.h"
 #include "components/variations/feature_overrides.h"
+#include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "components/os_crypt/common/os_crypt_switches.h"
@@ -79,6 +80,14 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
           os_crypt::switches::kUseMockKeychain)) {
     overrides.DisableFeature(features::kOSCryptAsyncAvailabilityInfoBar);
   }
+  // Chromium offers to turn its glass frame on or off with a promo; Koan's
+  // is Zen's, on, with a setting.
+  overrides.DisableFeature(feature_engagement::kIPHGlassFrameOptInFeature);
+  overrides.DisableFeature(feature_engagement::kIPHGlassFrameOptOutFeature);
+  // Zen's translucent window: Chromium's glass frame, which koan_window_glass.h
+  // makes work for every window. On by default (the glass_frame.enabled
+  // setting), off while macOS's Reduce Transparency is on.
+  overrides.EnableFeature(::features::kGlassFrame);
 #endif
 }
 

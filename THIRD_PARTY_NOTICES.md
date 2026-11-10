@@ -37,6 +37,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/color/koan_shadcn_color_mixer.cc` | `zen-omnibox.css`, `zen-popup.css` (the floating URL bar card and suggestion colours), `zen-theme.css` (tab colours) |
 | `src/browser/ui/views/koan_omnibox_rows.{h,cc}` | `zen-omnibox.css` (the suggestion rows' height, radius and font) |
 | `src/browser/ui/views/koan_url_bar_controller.cc` | `zen-omnibox.css`, `ZenUIManager.mjs` (the floating URL bar card: size, position, input, divider), the `zen.urlbar` preferences |
+| `src/browser/ui/views/koan_window_glass.h`, `koan_window_glass.cc`, `koan_window_glass_mac.h`, `koan_window_glass_mac.mm`, `koan_glass_tint.h`, `koan_glass_tint.cc` | `src/widget/cocoa/nsCocoaWindow-mm.patch` (the window material view and its mapping), `prefs/zen/macos.yaml` (window vibrancy and material), `src/zen/spaces/ZenGradientGenerator.mjs` (the default theme's tint), `zen-theme.css`, `zen-toolbar.css` (the transparent window and toolbar) |
 | `src/browser/ui/views/koan_space_menu.cc` | `ZenSpaceManager.mjs` (the Space and Create menus), `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_space_creation.cc` | `ZenSpaceCreation.mjs`, `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_library.h`, `koan_library_controller.cc` | `ZenLibrary.mjs` (open/close spring, toggle, unmounting) |

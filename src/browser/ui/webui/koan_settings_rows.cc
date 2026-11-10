@@ -12,10 +12,12 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_window_glass.h"
 
 namespace koan::settings {
 
@@ -49,6 +51,8 @@ constexpr Group kGroups[] = {
      "Only show the toolbars you use!"},
     {"dark-theme", "looks", "Theme Settings", "Dark Theme Styles",
      "Customize the dark theme to your liking"},
+    {"window-material", "looks", "Theme Settings", "Window material",
+     "Let the desktop show through the window, blurred"},
     {"window-drag", "looks", "Theme Settings", "Window dragging",
      "Move the window by dragging empty space at the top of websites, just "
      "like the titlebar."},
@@ -215,6 +219,15 @@ constexpr Row kRows[] = {
      .pref = prefs::kTabsOnRight,
      .label = "Tabs on the right",
      .is_available = features::IsSidebarEnabled},
+    // Zen's zen.widget.macos.window-vibrancy (default on), here Chromium's
+    // pref; macOS's Reduce Transparency turns it off as well.
+    {.group = "window-material",
+     .control = Control::kCheckbox,
+     .pref = ::prefs::kGlassFrameEnabled,
+     .label = "Translucent window",
+     .is_available = IsWindowGlassSupported,
+     .local_state = true,
+     .note = "Off while macOS's Reduce Transparency is on"},
     {.group = "window-drag",
      .control = Control::kCheckbox,
      .pref = prefs::kDragWindowFromContent,

@@ -28,6 +28,9 @@ source_set("views") {
     "koan_url_bar.h",
     "koan_spaces.h",
     "koan_traffic_lights.h",
+    "koan_glass_tint.h",
+    "koan_window_glass.h",
+    "koan_window_glass_mac.h",
   ]
   public_deps = [
     "//base",
@@ -75,16 +78,26 @@ source_set("lights_geometry") {
   public_deps = [ "//ui/gfx/geometry" ]
 }
 
+source_set("glass_tint") {
+  sources = [
+    "koan_glass_tint.cc",
+    "koan_glass_tint.h",
+  ]
+  deps = [ "//skia" ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
 test("koan_views_unittests") {
   sources = [
+    "koan_glass_tint_unittest.cc",
     "koan_lights_geometry_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
   ]
   deps = [
+    ":glass_tint",
     ":lights_geometry",
     ":sidebar_curve",
     ":swipe_tracker",
@@ -178,6 +191,7 @@ source_set("impl") {
     "koan_traffic_lights.cc",
     "koan_traffic_lights_controller.cc",
     "koan_traffic_lights_controller.h",
+    "koan_window_glass.cc",
     "koan_workspaces.cc",
     "koan_workspaces.h",
     "koan_zen_download_animation.cc",
@@ -200,6 +214,7 @@ source_set("impl") {
   }
   deps = [
     ":lights_geometry",
+    ":glass_tint",
     ":sidebar_curve",
     ":swipe_tracker",
     ":views",
@@ -207,6 +222,7 @@ source_set("impl") {
     "//cc/paint",
     "//chrome/app:command_ids",
     "//chrome/app/vector_icons",
+    "//chrome/browser:browser_process",
     "//chrome/browser:command_updater_impl",
     "//chrome/browser/ui:browser_command_controller",
     "//chrome/browser/ui:browser_actions",
@@ -252,6 +268,8 @@ source_set("impl") {
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/tabs",
     "//chrome/browser/ui/views/frame",
+    "//chrome/browser/ui/views/frame:custom_corners_background",
+    "//chrome/browser/ui/views/frame:glass_frame_service",
     "//chrome/browser/ui/views/frame:browser_frame_view",
     "//chrome/browser/ui/views/frame:browser_view_header",
     "//chrome/browser/ui/views/frame:browser_view_layout_params",
@@ -358,6 +376,11 @@ source_set("impl") {
     # Glance animates the page's native window (an aura::Window). macOS
     # uses NSViews instead and has no Aura.
     deps += [ "//ui/aura" ]
+  }
+  if (is_mac) {
+    # The blurred desktop behind the window (koan_window_glass_mac.mm).
+    sources += [ "koan_window_glass_mac.mm" ]
+    frameworks += [ "AppKit.framework" ]
   }
   if (is_linux) {
     # Dragging the window from the page asks the window manager to move it
