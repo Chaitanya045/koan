@@ -262,6 +262,12 @@ tabs, the line, New Tab and the tabs scroll together; the Essentials and
 the Space header stay put. A tab's close button shows while you point at
 it.
 
+A pinned tab or Essential keeps its site, as in Zen: a URL on another site
+typed in its URL bar (or a search) opens in a new tab, and a link in it that
+would open a new tab on another site opens in Glance instead. Both can be
+turned off in Koan's settings (Pinned Tabs, Glance). "Search for ..." in the
+context menu of selected text also opens in Glance.
+
 While the pointer is over the sidebar, **↓ Clear** appears at the end of
 the line: it closes the Space's unpinned tabs except the selected one and
 any playing sound (if those are all there is, it closes them too), the

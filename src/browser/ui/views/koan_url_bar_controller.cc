@@ -53,6 +53,8 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_pinned.h"
+#include "koan/browser/ui/views/koan_pinned_site.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_toast.h"
@@ -1090,6 +1092,7 @@ void CopyCurrentUrl(BrowserView* browser_view, bool markdown) {
 // The koan_url_bar.h hooks.
 
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
+                                   const GURL& destination_url,
                                    WindowOpenDisposition* disposition) {
   if (!browser || *disposition != WindowOpenDisposition::kCurrentTab) {
     return;
@@ -1098,6 +1101,16 @@ void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   if (controller && controller->url_bar()->TakeNewTabDisposition()) {
+    *disposition = WindowOpenDisposition::kNewForegroundTab;
+    return;
+  }
+  // A pinned tab or Essential keeps its site (Zen's getOpenUILinkWhere).
+  content::WebContents* active =
+      browser->GetTabStripModel()->GetActiveWebContents();
+  if (active && IsPinnedForUser(active) &&
+      browser->GetProfile()->GetPrefs()->GetBoolean(
+          prefs::kOpenPinnedInNewTab) &&
+      !StaysOnPinnedSite(active->GetLastCommittedURL(), destination_url)) {
     *disposition = WindowOpenDisposition::kNewForegroundTab;
   }
 }

@@ -1,16 +1,16 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index f238f7139d7179ef4ffd13e66127a29fa45aef7d..74f055d519f1b9b76e889c1e6524112dbad0cc36 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -407,6 +407,7 @@
+@@ -410,6 +410,8 @@
  #include "google_apis/google_api_keys.h"
  #include "gpu/config/gpu_switches.h"
  #include "ipc/ipc_channel_proxy.h"
 +#include "koan/browser/koan_renderer_switches.h"
++#include "koan/browser/ui/views/koan_glance.h"
  #include "media/base/media_switches.h"
  #include "media/media_buildflags.h"
  #include "media/mojo/buildflags.h"
-@@ -3159,6 +3160,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3161,6 +3163,8 @@ void ChromeContentBrowserClient::AppendE
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -19,3 +19,17 @@ index f238f7139d7179ef4ffd13e66127a29fa45aef7d..74f055d519f1b9b76e889c1e6524112d
      }
  
  #if BUILDFLAG(IS_CHROMEOS)
+@@ -4636,6 +4640,13 @@ bool ChromeContentBrowserClient::CanCrea
+   }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
++  // Koan: a link from a pinned tab to another site opens in Glance, as in
++  // Zen (koan/browser/ui/views/koan_glance.h).
++  if (koan::OpenNewTabInGlance(opener, target_url, referrer, disposition,
++                               user_gesture, opener_suppressed)) {
++    return false;
++  }
++
+   const BlockedWindowParams blocked_params(
+       target_url, opener->GetGlobalFrameToken(), source_origin,
+       opener->GetSiteInstance(), referrer, frame_name, disposition, features,

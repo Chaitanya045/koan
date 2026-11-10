@@ -124,6 +124,14 @@ inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 inline constexpr char kGlanceEnabled[] = "koan.glance.enabled";
 inline constexpr char kGlanceActivationMethod[] =
     "koan.glance.activation_method";
+// Zen's zen.glance.open-essential-external-links: a link from a pinned tab
+// or Essential that opens a new tab on another site opens in Glance instead.
+inline constexpr char kGlanceOpenPinnedExternalLinks[] =
+    "koan.glance.open_essential_external_links";
+// Zen's zen.glance.enable-contextmenu-search: the context menu's "Search
+// ... for" opens its results in Glance.
+inline constexpr char kGlanceContextMenuSearch[] =
+    "koan.glance.enable_contextmenu_search";
 
 // The user's own keyboard shortcuts, set in chrome://koan-settings: a
 // dictionary from a shortcut's id (koan_shortcut_table.h) to its key, or to
@@ -140,6 +148,11 @@ inline constexpr char kSelectRecentlyUsedOnClose[] =
 // it (zen.tabs.close-on-back-with-no-history).
 inline constexpr char kCloseOnBackWithNoHistory[] =
     "koan.tabs.close_on_back_with_no_history";
+// What the URL bar opens from a pinned tab or Essential on another site goes
+// to a new tab, so the pinned tab keeps its site
+// (zen.tabs.open-pinned-in-new-tab).
+inline constexpr char kOpenPinnedInNewTab[] =
+    "koan.tabs.open_pinned_in_new_tab";
 // Ctrl+Tab cycles within the Essentials (pinned tabs) or within the
 // workspace's tabs, whichever the active tab belongs to
 // (zen.tabs.ctrl-tab.ignore-essential-tabs).
