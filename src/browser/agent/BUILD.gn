@@ -265,6 +265,15 @@ source_set("reach") {
   ]
 }
 
+# What an agent may not read off a user's tab: secret input values.
+source_set("redact") {
+  sources = [
+    "koan_agent_redact.cc",
+    "koan_agent_redact.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
 # Which tabs each client may see and drive, and the open-tab budgets.
 source_set("registry") {
   sources = [
@@ -329,6 +338,7 @@ test("koan_agent_unittests") {
     "koan_agent_limits_unittest.cc",
     "koan_agent_policy_unittest.cc",
     "koan_agent_reach_unittest.cc",
+    "koan_agent_redact_unittest.cc",
     "koan_agent_registry_unittest.cc",
     "koan_agent_session_unittest.cc",
   ]
@@ -345,6 +355,7 @@ test("koan_agent_unittests") {
     ":limits",
     ":policy",
     ":reach",
+    ":redact",
     ":registry",
     ":session",
     "//base",
