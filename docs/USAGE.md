@@ -253,8 +253,8 @@ that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
 empty) and never navigates: what you open from the URL bar (⌘T, ⌘L) opens in
 a **new** tab; close that tab and the empty tab is back. (An empty tab that is
 navigated in place anyway, from a bookmark or the Library, becomes an ordinary
-tab.) It is still reached by Ctrl+Tab, ⌘1-9, tab search and extensions, which
-Zen's cycling skips: not done yet. Only a **close** keeps the window: moving
+tab.) Ctrl+Tab, ⌘1-9, tab search and extensions (`chrome.tabs.query`) skip
+it, as in Zen. Only a **close** keeps the window: moving
 the last tab to another window (a drag, "Move to another window") closes it, as
 in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
 last unpinned tab leaves the Essential selected, not the empty tab. In compact
