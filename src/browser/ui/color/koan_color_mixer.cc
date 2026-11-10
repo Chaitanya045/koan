@@ -167,8 +167,7 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanGlanceCardShadow] = {
       ui::kColorShadowValueAmbientShadowElevationFour};
   mixer[kColorKoanGlanceButton] = {color_utils::AlphaBlend(
-      primary,
-      dark ? SkColorSetRGB(231, 231, 231) : SkColorSetRGB(24, 24, 24),
+      primary, dark ? SkColorSetRGB(231, 231, 231) : SkColorSetRGB(24, 24, 24),
       0.04f)};
   mixer[kColorKoanGlanceButtonIcon] = {primary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
