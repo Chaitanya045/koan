@@ -35,9 +35,12 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterListPref(kWorkspaceList);
   registry->RegisterBooleanPref(kGlanceEnabled, true);
   registry->RegisterStringPref(kGlanceActivationMethod, "alt");
+  registry->RegisterBooleanPref(kGlanceOpenPinnedExternalLinks, true);
+  registry->RegisterBooleanPref(kGlanceContextMenuSearch, true);
   registry->RegisterDictionaryPref(kShortcuts);
   registry->RegisterBooleanPref(kSelectRecentlyUsedOnClose, true);
   registry->RegisterBooleanPref(kCloseOnBackWithNoHistory, true);
+  registry->RegisterBooleanPref(kOpenPinnedInNewTab, true);
   registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
   registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);

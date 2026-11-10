@@ -1,3 +1,4 @@
+diff --git a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 --- a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 +++ b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 @@ -114,6 +114,7 @@
@@ -8,12 +9,13 @@
  #include "net/traffic_annotation/network_traffic_annotation.h"
  #include "services/metrics/public/cpp/ukm_builders.h"
  #include "services/metrics/public/cpp/ukm_recorder.h"
-@@ -964,6 +965,9 @@
+@@ -966,6 +967,10 @@ void ChromeOmniboxClient::OnAutocomplete
                      {header.first, ": ", header.second, "\r\n"});
    }
  
-+  // Koan: the URL bar opened in place of a new tab opens a new tab.
-+  koan::MaybeAdjustOmniboxDisposition(browser_, &disposition);
++  // Koan: the URL bar opened in place of a new tab opens a new tab, and so
++  // does another site from a pinned tab.
++  koan::MaybeAdjustOmniboxDisposition(browser_, destination_url, &disposition);
 +
    // Store the details necessary to open the omnibox match via browser commands.
    location_bar_->set_navigation_params(LocationBar::NavigationParams(

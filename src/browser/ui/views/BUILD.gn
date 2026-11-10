@@ -87,6 +87,13 @@ source_set("glass_tint") {
   deps = [ "//skia" ]
 }
 
+# Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
+# tests need nothing else.
+source_set("pinned_site") {
+  sources = [ "koan_pinned_site.h" ]
+  public_deps = [ "//url" ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
@@ -94,12 +101,14 @@ test("koan_views_unittests") {
   sources = [
     "koan_glass_tint_unittest.cc",
     "koan_lights_geometry_unittest.cc",
+    "koan_pinned_site_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
   ]
   deps = [
     ":glass_tint",
     ":lights_geometry",
+    ":pinned_site",
     ":sidebar_curve",
     ":swipe_tracker",
     "//base",
@@ -163,6 +172,7 @@ source_set("impl") {
     "koan_window_drag.cc",
     "koan_window_drag.h",
     "koan_glance_controller.h",
+    "koan_pinned_glance.cc",
     "koan_pinned_tab_views.cc",
     "koan_pinned_tab_views.h",
     "koan_pinned_tabs.cc",
@@ -220,6 +230,7 @@ source_set("impl") {
   deps = [
     ":lights_geometry",
     ":glass_tint",
+    ":pinned_site",
     ":sidebar_curve",
     ":swipe_tracker",
     ":views",

@@ -537,6 +537,10 @@ GlanceClick MaybeOpenGlance(BrowserWindowInterface* browser,
                             content::WebContents* source,
                             const content::OpenURLParams& params,
                             WindowOpenDisposition* fallback) {
+  // "Search ... for" from the context menu (koan_pinned_glance.cc).
+  if (OpenContextMenuSearchInGlance(source, params)) {
+    return GlanceClick::kOpened;
+  }
   if (!features::IsGlanceEnabled() || !browser || !IsActivationClick(params)) {
     return GlanceClick::kNone;
   }

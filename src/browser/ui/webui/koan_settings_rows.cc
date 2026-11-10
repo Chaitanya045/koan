@@ -303,6 +303,21 @@ constexpr Row kRows[] = {
      // Blink reads it when a page's renderer process starts.
      .note = "Applies to pages opened after the change; reload others in a "
              "new tab or restart Koan"},
+    // Zen's about:config prefs zen.glance.open-essential-external-links and
+    // zen.glance.enable-contextmenu-search (both on).
+    {.group = "glance",
+     .control = Control::kCheckbox,
+     .pref = prefs::kGlanceOpenPinnedExternalLinks,
+     .label = "Open links from Essentials and pinned tabs to other sites in "
+              "Glance",
+     .depends_on = prefs::kGlanceEnabled,
+     .is_available = features::IsGlanceEnabled},
+    {.group = "glance",
+     .control = Control::kCheckbox,
+     .pref = prefs::kGlanceContextMenuSearch,
+     .label = "Open \"Search for\" from the context menu in Glance",
+     .depends_on = prefs::kGlanceEnabled,
+     .is_available = features::IsGlanceEnabled},
     // Zen shows only the behaviour; the other two are its about:config
     // prefs zen.urlbar.replace-newtab and
     // zen.urlbar.single-toolbar-show-copy-url.
@@ -370,6 +385,11 @@ constexpr Row kRows[] = {
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,
      .label = "Restore pinned tabs to their originally pinned URL on startup",
      .is_available = features::IsPinnedTabsEnabled},
+    // Zen's about:config pref zen.tabs.open-pinned-in-new-tab (on).
+    {.group = "pinned-tabs",
+     .control = Control::kCheckbox,
+     .pref = prefs::kOpenPinnedInNewTab,
+     .label = "Open other sites from a pinned tab's URL bar in a new tab"},
     {.group = "pinned-tabs",
      .control = Control::kMenu,
      .pref = prefs::kPinnedTabCloseShortcutBehavior,

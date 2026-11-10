@@ -12,6 +12,7 @@
 #include "ui/color/color_id.h"
 
 class BrowserWindowInterface;
+class GURL;
 
 namespace views {
 class View;
@@ -22,9 +23,12 @@ namespace koan {
 // While the URL bar is open in place of a new tab (Ctrl+T or the sidebar's
 // new-tab button with Zen's zen.urlbar.replace-newtab), whatever the user
 // opens from it goes to a new foreground tab: turns the kCurrentTab
-// disposition into kNewForegroundTab. Called from
+// disposition into kNewForegroundTab. So does `destination_url` on another
+// site than the active tab's when that tab is pinned or an Essential (Zen's
+// zen.tabs.open-pinned-in-new-tab, koan_pinned_site.h). Called from
 // ChromeOmniboxClient::OnAutocompleteAccept().
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
+                                   const GURL& destination_url,
                                    WindowOpenDisposition* disposition);
 
 // Zen's zen.urlbar.replace-newtab for the New Tab command (IDC_NEW_TAB: ⌘T

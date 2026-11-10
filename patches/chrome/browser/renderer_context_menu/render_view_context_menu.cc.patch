@@ -1,5 +1,4 @@
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-index 21568c7fbce946136265066a3b82ecc18106ec32..599a94160abde1ba3b16ed8ee0ccdb493a12bb89 100644
 --- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 +++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 @@ -254,6 +254,7 @@
@@ -10,7 +9,7 @@ index 21568c7fbce946136265066a3b82ecc18106ec32..599a94160abde1ba3b16ed8ee0ccdb49
  #include "media/base/media_switches.h"
  #include "mojo/public/cpp/bindings/associated_remote.h"
  #include "net/base/network_anonymization_key.h"
-@@ -2120,6 +2121,10 @@ void RenderViewContextMenu::AppendLinkItems() {
+@@ -2120,6 +2121,10 @@ void RenderViewContextMenu::AppendLinkIt
                : vector_icons::kBusinessChromeRefreshOldIcon);
      }
  
@@ -21,7 +20,7 @@ index 21568c7fbce946136265066a3b82ecc18106ec32..599a94160abde1ba3b16ed8ee0ccdb49
      AppendOpenInWebAppLinkItems();
      AppendOpenWithLinkItems();
  
-@@ -3507,6 +3512,10 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+@@ -3520,6 +3525,10 @@ bool RenderViewContextMenu::IsCommandIdE
    }
  #endif
  
@@ -32,10 +31,12 @@ index 21568c7fbce946136265066a3b82ecc18106ec32..599a94160abde1ba3b16ed8ee0ccdb49
    bool enabled = false;
    if (RenderViewContextMenuBase::IsCommandIdKnown(id, &enabled)) {
      return enabled;
-@@ -3901,6 +3910,11 @@ void RenderViewContextMenu::OpenURLWithExtraHeaders(
+@@ -3914,6 +3923,13 @@ void RenderViewContextMenu::OpenURLWithE
  }
  
  void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
++  // Koan: "Search ... for" opens in Glance (koan_glance.h).
++  koan::OnContextMenuCommand(source_web_contents_, id);
 +  // Koan: "Open Link in Glance" (no upstream metrics id, so before them).
 +  if (koan::IsGlanceLinkContextMenuCommand(id)) {
 +    koan::OpenLinkInGlance(source_web_contents_, params_);
