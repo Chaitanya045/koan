@@ -48,6 +48,13 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanEssentialsTile,
   kColorKoanEssentialsTileHovered,
   kColorKoanEssentialsTileSelected,
+  // Zen's Essentials drop promo (koan_essentials_promo.cc): its fill, lit
+  // while a tab is over it, border, text and outline, shadow.
+  kColorKoanEssentialsPromo,
+  kColorKoanEssentialsPromoDragOver,
+  kColorKoanEssentialsPromoBorder,
+  kColorKoanEssentialsPromoForeground,
+  kColorKoanEssentialsPromoShadow,
 
   // The URL bar (koan_sidebar_nav_view.cc, koan_url_bar_controller.cc): the
   // sidebar's URL pill (its fill, hovered fill and text) and the floating URL
@@ -88,6 +95,7 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanGlanceBackdrop,
   kColorKoanGlanceCardShadow,
   kColorKoanGlanceButton,
+  kColorKoanGlanceButtonHover,
   kColorKoanGlanceButtonIcon,
   kColorKoanGlanceButtonConfirm,
   kColorKoanGlanceButtonConfirmIcon,
@@ -133,6 +141,14 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanLibraryAddSpace,
   kColorKoanLibraryAddSpaceHovered,
   kColorKoanLibraryAddSpaceForeground,
+  // Folders (koan_folder_views.cc): Zen's folder icon (the folder behind,
+  // its cover, their outline and dots), a collapsed folder's tab count, and
+  // the highlighted tab in a folder's search popup.
+  kColorKoanFolderIconBack,
+  kColorKoanFolderIconFront,
+  kColorKoanFolderIconStroke,
+  kColorKoanFolderCount,
+  kColorKoanFolderSearchItemSelected,
 
   // Media cards in the sidebar (koan_media_controller.cc): the card, its
   // shadow and outline, and the progress bar's track and played part.
@@ -213,6 +229,11 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanThemePickerDialBorder,
   kColorKoanThemePickerDialShine,
   kColorKoanThemePickerSwatchShadow,
+
+  // The page-load progress bar (koan_loading_indicator.cc): the bar (and the
+  // long load's sweep), and the long load's track.
+  kColorKoanLoadingBar,
+  kColorKoanLoadingBarTrack,
 
   kKoanColorsEnd,
 };

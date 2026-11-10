@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/views/animations/BUILD.gn b/chrome/browser/ui/views/animations/BUILD.gn
+--- a/chrome/browser/ui/views/animations/BUILD.gn
++++ b/chrome/browser/ui/views/animations/BUILD.gn
+@@ -18,6 +18,7 @@
+   public_deps = [
+     "//base",
+     "//chrome/browser/ui/animation",
++    "//koan/browser/ui/views:sidebar_curve",
+     "//ui/base/identifier",
+     "//ui/base/interaction",
+     "//ui/gfx/animation",

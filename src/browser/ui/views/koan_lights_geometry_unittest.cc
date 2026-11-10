@@ -51,4 +51,12 @@ TEST(KoanLightsGeometryTest, ItNeverMovesALowerButtonUp) {
   EXPECT_EQ(low, MoveClearOf(low, Lights(), 48));
 }
 
+TEST(KoanLightsGeometryTest, MonoDotsAreTheToolboxTextFaintly) {
+  // Zen's --zen-toolbar-element-bg: 8% of dark text, 15% of light text.
+  EXPECT_EQ(SkColorSetARGB(20, 0x20, 0x20, 0x20),
+            MonoTrafficLightColor(SkColorSetRGB(0x20, 0x20, 0x20)));
+  EXPECT_EQ(SkColorSetARGB(38, 0xf0, 0xf0, 0xf0),
+            MonoTrafficLightColor(SkColorSetRGB(0xf0, 0xf0, 0xf0)));
+}
+
 }  // namespace koan

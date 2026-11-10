@@ -11,6 +11,7 @@ source_set("hooks") {
   sources = [
     "koan_main_menu.h",
     "koan_session_reopen.h",
+    "koan_swipe.h",
   ]
   public_deps = [
     "//base",

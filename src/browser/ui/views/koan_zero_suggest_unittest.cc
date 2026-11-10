@@ -19,6 +19,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
@@ -50,11 +54,14 @@ class KoanZeroSuggestTest : public testing::Test {
           ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
       owns_resource_bundle_ = true;
     }
+    // The provider reads the clipboard: a fake one, empty unless a test copies.
+    ui::TestClipboard::CreateForCurrentThread();
     provider_ = CreateZeroSuggestProvider(&client_);
   }
 
   void TearDown() override {
     provider_.reset();
+    ui::Clipboard::DestroyClipboardForCurrentThread();
     if (owns_resource_bundle_) {
       ui::ResourceBundle::CleanupSharedInstance();
     }
@@ -77,6 +84,10 @@ class KoanZeroSuggestTest : public testing::Test {
                              ? metrics::OmniboxFocusType::INTERACTION_FOCUS
                              : metrics::OmniboxFocusType::INTERACTION_DEFAULT);
     return input;
+  }
+
+  void Copy(const std::u16string& text) {
+    ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste).WriteText(text);
   }
 
   const ACMatches& Run(const AutocompleteInput& input) {
@@ -222,6 +233,63 @@ TEST_F(KoanZeroSuggestTest, OnlyTheProvidersOwnMatchesAreLocal) {
   AddTab(u"Tab", "https://tab.example/", 1);
   ASSERT_EQ(1u, Run(Input()).size());
   EXPECT_TRUE(IsLocalZeroSuggestMatch(provider_->matches()[0]));
+}
+
+TEST_F(KoanZeroSuggestTest, ACopiedLinkComesFirstTwiceThenNotAgain) {
+  AddTab(u"Tab", "https://tab.example/", 1);
+  Copy(u"https://copied.example/page?q=1");
+  for (int i = 0; i < 2; ++i) {
+    const ACMatches& matches = Run(Input());
+    ASSERT_EQ(2u, matches.size()) << i;
+    EXPECT_EQ(GURL("https://copied.example/page?q=1"),
+              matches[0].destination_url);
+    EXPECT_TRUE(matches[0].deletable);
+    EXPECT_GT(matches[0].relevance, matches[1].relevance);
+    EXPECT_TRUE(provider_->done());
+  }
+  // Firefox's CLIPBOARD_IMPRESSION_LIMIT.
+  EXPECT_EQ(1u, Run(Input()).size());
+  // Not while typing.
+  Copy(u"https://other.example/");
+  EXPECT_TRUE(Run(Input(u"abc", OEP::OTHER, /*zero_suggest=*/false)).empty());
+}
+
+TEST_F(KoanZeroSuggestTest, RemovingTheCopiedLinkForgetsIt) {
+  Copy(u"https://removed.example/");
+  const ACMatches& matches = Run(Input());
+  ASSERT_EQ(1u, matches.size());
+  provider_->DeleteMatch(matches[0]);
+  EXPECT_TRUE(provider_->matches().empty());
+  EXPECT_TRUE(Run(Input()).empty());
+}
+
+TEST(KoanClipboardSuggestionTest, OnlyAWholeHttpLink) {
+  EXPECT_EQ(GURL("https://a.example/x"),
+            ClipboardUrlForSuggestion(u"https://a.example/x"));
+  EXPECT_EQ(GURL("http://a.example/"),
+            ClipboardUrlForSuggestion(u"http://a.example"));
+  for (const std::u16string& text :
+       {std::u16string(), std::u16string(u"a.example"),
+        std::u16string(u"ftp://a.example/"), std::u16string(u"javascript:x"),
+        std::u16string(u"https://a.example/ b"),
+        std::u16string(u"https://a.example/\n"),
+        std::u16string(u" https://a.example/"), std::u16string(u"some text"),
+        u"https://a.example/" + std::u16string(2048, u'a')}) {
+    EXPECT_FALSE(ClipboardUrlForSuggestion(text)) << text;
+  }
+}
+
+TEST(KoanClipboardSuggestionTest, TwicePerLinkUntilForgotten) {
+  const GURL a("https://twice-a.example/");
+  const GURL b("https://twice-b.example/");
+  EXPECT_TRUE(TakeClipboardImpression(a));
+  EXPECT_TRUE(TakeClipboardImpression(a));
+  EXPECT_FALSE(TakeClipboardImpression(a));
+  EXPECT_TRUE(TakeClipboardImpression(b));
+  ForgetClipboardSuggestion(b);
+  EXPECT_FALSE(TakeClipboardImpression(b));
+  // A link copied again after another counts afresh, as in Firefox.
+  EXPECT_TRUE(TakeClipboardImpression(a));
 }
 
 TEST(KoanZeroSuggestSectionTest, EveryOmniboxButTheWebUISearchboxes) {

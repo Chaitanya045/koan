@@ -7,6 +7,10 @@
 
 class TabStripView;
 
+namespace content {
+class BrowserContext;
+}  // namespace content
+
 namespace gfx {
 class Canvas;
 class Point;
@@ -40,14 +44,15 @@ int PlaceSidebarTabRows(const TabStripView* tab_strip_view,
                         int width,
                         int y);
 
-// Hook for TabGroupViewVerticalLayout, called before laying out each child
-// `next_child` of `tab_group_view` and once more with null after the last:
-// if the rows are in this group and `next_child` doesn't belong to the
-// Space's pinned tabs, appends them to `layout` and returns the height the
-// caller moves down by (0 otherwise, and once they are placed). After pinned
-// tabs they go at `y`, followed by `tab_padding`; without pinned tabs at the
-// top of the group, in its top margin, as in the tab strip before. Tabs are
-// inset by the strip's padding when `collapsed`, and so are the rows.
+// For TabGroupViewVerticalLayout's one Koan hook (SpaceGroupRows,
+// koan_folders.h), called before laying out each child `next_child` of
+// `tab_group_view` and once more with null after the last: if the rows are in
+// this group and `next_child` doesn't belong to the Space's pinned section
+// (its pinned tabs and folders), appends them to `layout` and returns the
+// height the caller moves down by (0 otherwise, and once they are placed).
+// After the pinned section they go at `y`, followed by `tab_padding`; without
+// one at the top of the group, in its top margin, as in the tab strip before.
+// Tabs are inset by the strip's padding when `collapsed`, and so are the rows.
 int PlaceSpaceTabRows(const views::View* tab_group_view,
                       const views::View* next_child,
                       bool collapsed,
@@ -89,10 +94,11 @@ int SidebarCollapseSnapWidth(int upstream_value);
 // off. Updates that hide a card still reach the controller.
 bool ShowsTabHoverCards();
 
-// Whether a loading tab shows Chromium's throbber. Zen keeps the favicon there
-// instead (zen.theme.hide-tab-throbber, vertical-tabs.css); upstream's with
-// Koan's sidebar off. AdjustTabData() applies it.
-bool ShowsTabThrobber();
+// Whether a loading tab of `context` shows Chromium's throbber. Zen keeps the
+// favicon there instead (zen.theme.hide-tab-throbber, vertical-tabs.css,
+// prefs::kHideTabThrobber); upstream's with Koan's sidebar off.
+// AdjustTabData() applies it.
+bool ShowsTabThrobber(content::BrowserContext* context);
 
 // VerticalTabStripRegionView::IsPositionInWindowCaption(): whether `point` (in
 // `region`'s coordinates) is client area that upstream would make window

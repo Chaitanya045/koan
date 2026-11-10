@@ -5,7 +5,12 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_ZERO_SUGGEST_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_ZERO_SUGGEST_H_
 
+#include <optional>
+#include <string_view>
+
 #include "base/memory/scoped_refptr.h"
+
+class GURL;
 
 class AutocompleteProvider;
 class AutocompleteProviderClient;
@@ -20,6 +25,19 @@ namespace koan {
 // pages).
 scoped_refptr<AutocompleteProvider> CreateZeroSuggestProvider(
     AutocompleteProviderClient* client);
+
+// The empty URL bar's "visit copied link" row (Zen turns Firefox's
+// browser.urlbar.clipboard.featureGate on; UrlbarProviderClipboard): the
+// clipboard's text when it is an http(s) URL of at most 2048 characters with
+// no whitespace in it, else nothing.
+std::optional<GURL> ClipboardUrlForSuggestion(std::u16string_view text);
+
+// Whether the row for `url` may show once more, counting this time: twice per
+// copied link (Firefox's CLIPBOARD_IMPRESSION_LIMIT), and never again once
+// picked or removed (ForgetClipboardSuggestion()). For the whole browser, like
+// Firefox's provider.
+bool TakeClipboardImpression(const GURL& url);
+void ForgetClipboardSuggestion(const GURL& url);
 
 }  // namespace koan
 
