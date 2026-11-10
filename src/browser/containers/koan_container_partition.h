@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_PARTITION_H_
 #define KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_PARTITION_H_
 
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -125,6 +126,10 @@ std::optional<ContainerId> ContainerOf(const content::WebContents* contents);
 std::string Serialize(const ContainerId& container);
 std::optional<ContainerId> Parse(std::string_view text);
 
+// The per-tab session data key (koan_session_data.h) of a container's tab: its
+// Serialize()d ContainerId.
+inline constexpr char kContainerSessionKey[] = "koan.container";
+
 // --- SiteInstances for new tabs ---
 
 // A SiteInstance in a new BrowsingInstance fixed to `container`'s partition:
@@ -149,6 +154,15 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
 // null when it isn't in one.
 scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
     content::WebContents* old_contents);
+
+// CreateRestoredTab() in browser_tabrestore.cc, before it creates the tab:
+// for a saved user container's tab (`extra_data`'s kContainerSessionKey), a
+// SiteInstance fixed to that container, so that the tab restores into it
+// (#111); null for every other tab. An agent container's tab never comes back
+// in its container (OnRestoringContainerTab() in koan_containers.h blanks it).
+scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+    content::BrowserContext* context,
+    const std::map<std::string, std::string>& extra_data);
 
 // BrowserWebContentsDelegate::IsPrerender2Supported(): whether `contents` may
 // prerender. Not in a container: content builds a prerendered page in the

@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "koan/browser/containers/koan_container_partition.h"
+
 class Profile;
 
 namespace content {
@@ -22,18 +24,16 @@ class WebContents;
 // //koan/browser/ui/views:impl.
 namespace koan::containers {
 
-// The per-tab session data key (koan_session_data.h) of a container's tab: its
-// Serialize()d ContainerId.
-inline constexpr char kContainerSessionKey[] = "koan.container";
-
 // KoanWorkspaceController, when a tab enters a window: a container's tab
 // records its container in the session, at once, so that a crash can't
 // restore it without; any other tab drops a stale record.
 void OnTabInserted(content::WebContents* contents);
 
 // The TabRestoreHook for kContainerSessionKey (koan_session_data.cc): a tab
-// that was in a container is never loaded in the default partition. An agent
-// container's tab, a container's tab that can't come back in it, and a
+// that was in a container is never loaded in the default partition. A saved
+// user container's tab that SiteInstanceForRestoredTab() put back in its
+// container keeps its pages. An agent container's tab, a throwaway user
+// container's, any tab that isn't in the container its record names, and a
 // malformed record all get one about:blank entry instead of their pages, and
 // the blank tab closes once it is in its window (unless it is the window's
 // only tab).
