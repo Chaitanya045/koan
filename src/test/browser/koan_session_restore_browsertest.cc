@@ -26,6 +26,7 @@
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -215,6 +216,29 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SessionDataComesBack) {
   ASSERT_TRUE(base::test::RunUntil([&] {
     return GetWindowSessionData(browser(), kWindowDataKey) == "window data";
   }));
+}
+
+// A restored window keeps the tabs it had: its first is not taken for Zen's
+// empty tab, as a new window's is (Zen's restore selects the session's tab).
+IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
+                       PRE_RestoredNewTabPageIsNotTheEmptyTab) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), PinnedUrl()));
+  ASSERT_FALSE(IsEmptyTab(tab_strip->GetTabAtIndex(0)));
+  // The user's own new tab page.
+  chrome::AddTabAt(browser(), GURL(), -1, /*foreground=*/false);
+  ASSERT_FALSE(IsEmptyTab(tab_strip->GetTabAtIndex(1)));
+  FlushSession(browser());
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
+                       RestoredNewTabPageIsNotTheEmptyTab) {
+  ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/2, /*spaces=*/1));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  for (int i = 0; i < tab_strip->count(); ++i) {
+    EXPECT_FALSE(IsEmptyTab(tab_strip->GetTabAtIndex(i))) << i;
+  }
 }
 
 // A folder's tabs are kept with their folder (koan.folders.list), not also

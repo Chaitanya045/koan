@@ -449,6 +449,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Debug builds: fails loudly if upstream state leaked into the Spaces
   // (G14 of .agent/notes/upstream/tab-groups-omnibox-fullscreen.md).
   void CheckSpaces();
+  // Once, when the window first has tabs: marks the new tab page it opened
+  // on as Zen's empty tab (IsEmptyTab()).
+  void MarkStartupEmptyTab();
   // Once, when the window first has tabs: puts back the Essential it opened
   // on.
   void KeepStartupEssential();
@@ -544,6 +547,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Whether the first update with tabs ran, and the Essential selected
   // before it.
   bool started_ = false;
+  // The window's first tab while it is a fresh empty page: its startup tab.
+  tabs::TabHandle startup_tab_;
   bool expect_empty_tab_ = false;
   tabs::TabHandle empty_tab_;
   bool last_removal_closed_ = false;

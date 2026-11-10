@@ -265,6 +265,10 @@ last unpinned tab leaves the Essential selected, not the empty tab. In compact
 mode the sidebar stays shown while the empty tab is selected (only that
 tab: not a tab of yours on about:blank or a new tab page).
 
+A window also **opens** on the empty tab, as Zen's does: a new window (⌘N),
+the first launch, and a start on the New Tab page. A restored session keeps
+its own tabs, and a new tab page you open later is an ordinary tab.
+
 ## New tab page
 
 A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with

@@ -17,6 +17,7 @@
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "url/gurl.h"
 
 namespace koan {
 
@@ -24,7 +25,9 @@ using KoanSessionDataBrowserTest = InProcessBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, TabDataIsPerFeatureAndTab) {
   TabStripModel* tab_strip = browser()->GetTabStripModel();
-  content::WebContents* first = tab_strip->GetWebContentsAt(0);
+  // Not the window's first tab, which is Zen's empty tab (that is data too).
+  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
+  content::WebContents* first = tab_strip->GetWebContentsAt(1);
   EXPECT_EQ("", GetTabSessionData(first, "koan.one"));
   EXPECT_TRUE(GetTabSessionData(first).empty());
 
@@ -38,13 +41,14 @@ IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, TabDataIsPerFeatureAndTab) {
 
   // Another tab has none of it.
   chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
-  EXPECT_TRUE(GetTabSessionData(tab_strip->GetWebContentsAt(1)).empty());
+  EXPECT_TRUE(GetTabSessionData(tab_strip->GetWebContentsAt(2)).empty());
   EXPECT_EQ("1", GetTabSessionData(first, "koan.one"));
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, EmptyDataRemovesTheEntry) {
+  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
   content::WebContents* contents =
-      browser()->GetTabStripModel()->GetWebContentsAt(0);
+      browser()->GetTabStripModel()->GetWebContentsAt(1);
   SetTabSessionData(contents, "koan.one", "1");
   SetTabSessionData(contents, "koan.one", "");
   EXPECT_EQ("", GetTabSessionData(contents, "koan.one"));
@@ -75,8 +79,9 @@ IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, WindowData) {
 
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest,
                        RestoringATabTakesKoansEntries) {
+  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
   content::WebContents* contents =
-      browser()->GetTabStripModel()->GetWebContentsAt(0);
+      browser()->GetTabStripModel()->GetWebContentsAt(1);
   std::vector<std::unique_ptr<content::NavigationEntry>> entries;
   int selected = 0;
   // Only "koan." entries with data are Koan's.
