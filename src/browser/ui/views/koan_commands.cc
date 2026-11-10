@@ -35,6 +35,7 @@
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_command_palette.h"
 #include "koan/browser/ui/views/koan_command_registry.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
@@ -372,7 +373,7 @@ void AppendWorkspaceCommands(const KoanBrowserViewController* owner,
     }
     const tab_groups::TabGroupId id = space.id;
     KoanCommand command =
-        MakeCommand("focus-space:" + id.ToString(), u"Focus on",
+        MakeCommand(kFocusSpaceCommandPrefix + id.ToString(), u"Focus on",
                     vector_icons::kArrowForwardIcon);
     command.target = space.name;
     command.run = base::BindRepeating(

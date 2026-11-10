@@ -21,8 +21,10 @@
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/performance_manager/public/features.h"
 #include "components/search/ntp_features.h"
+#include "components/universal_optout/features.h"
 #include "components/variations/feature_overrides.h"
 #include "koan/browser/ui/vector_icons/koan_icons.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -167,6 +169,13 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // Z36: "Help me write" (Compose) in the context menu of text fields, off
   // directly, not only through the model execution above.
   overrides.DisableFeature(compose::features::kEnableCompose);
+
+  // Z24: Global Privacy Control, on by default as in Zen
+  // (privacy.globalprivacycontrol.enabled): the navigator.globalPrivacyControl
+  // API, and the setting (universal_optout.enabled, on in koan_prefs.cc) that
+  // sends Sec-GPC and has a row in Settings > Privacy.
+  overrides.EnableFeature(blink::features::kGlobalPrivacyControlApi);
+  overrides.EnableFeature(universal_optout::features::kUniversalOptOutSettings);
 
   // O13: Zen has no in-product help, and none for the features Koan
   // repurposes. (Code that asks for a promo before the browser has finished

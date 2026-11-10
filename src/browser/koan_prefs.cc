@@ -11,9 +11,11 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "components/universal_optout/prefs.h"
 #include "koan/browser/agent/koan_agent_limits.h"
 
 namespace koan::prefs {
@@ -95,6 +97,21 @@ void OverrideUpstreamProfilePrefDefaults(
   registry->SetDefaultPrefValue("omnibox.show_ai_mode_omnibox_button",
                                 base::Value(false));
   registry->SetDefaultPrefValue("omnibox.ai_mode_settings", base::Value(1));
+  // Z24: Global Privacy Control on (Zen's
+  // privacy.globalprivacycontrol.enabled): Sec-GPC and
+  // navigator.globalPrivacyControl, with the settings row that
+  // kUniversalOptOutSettings shows (koan_feature_overrides.cc).
+  registry->SetDefaultPrefValue(
+      universal_optout::prefs::kUniversalOptOutEnabled, base::Value(true));
+}
+
+void OverrideServiceProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry) {
+  // Z35: no "Sign in to Koan?" bubble after a Google sign-in on the web
+  // (registered by DiceWebSigninInterceptorFactory). Zen has no browser
+  // account promos.
+  registry->SetDefaultPrefValue(::prefs::kSigninInterceptionEnabled,
+                                base::Value(false));
 }
 
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream

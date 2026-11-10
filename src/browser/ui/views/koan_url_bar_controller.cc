@@ -52,6 +52,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
@@ -676,18 +677,35 @@ void KoanUrlBarController::OnModeChanged() {
 }
 
 void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
+  // A tab-modal dialog over the hidden bar has the focus (Z43): the bar comes
+  // back when it closes.
+  if (yielded_to_dialog_ && IsTabModalDialogActive()) {
+    return;
+  }
+  SetYieldedToDialog(false);
   // The focus leaves with the window (Alt-Tab, another window) and comes
   // back with it: keep the bar, what was typed and the new-tab session, like
   // Zen. Views clears the focus after the widget is inactive.
   views::Widget* widget = browser_view_->GetWidget();
   if (!focused_now && widget && !widget->IsActive()) {
+    left_with_window_ = is_open();
     return;
   }
   LocationBarView* bar = location_bar();
+  const bool came_back = std::exchange(left_with_window_, false);
   if (focused_now && bar && bar->Contains(focused_now)) {
     if (!is_open()) {
       user_input_in_progress_ =
           bar->GetOmniboxController()->edit_model()->user_input_in_progress();
+    }
+    // Z23: upstream closed the suggestions when the window lost the focus
+    // (OmniboxViewViews::OnBlur, PopupCloseReason::kBlur); Zen's are still
+    // there when it comes back. What was typed is kept, so ask again, once
+    // the omnibox has taken the focus itself.
+    if (came_back && is_open()) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&KoanUrlBarController::ReopenSuggestions,
+                                    weak_factory_.GetWeakPtr()));
     }
     SetPlacement(DesiredPlacement());
     // An invisible focus (search::FocusOmnibox(OMNIBOX_FOCUS_INVISIBLE), from
@@ -707,6 +725,55 @@ void KoanUrlBarController::OnFocusChanged(views::View* focused_now) {
   // (the pill shows it; the omnibox is out of sight).
   if (was_open && bar && features::IsUrlBarEnabled()) {
     bar->Revert();
+  }
+}
+
+void KoanUrlBarController::ReopenSuggestions() {
+  LocationBarView* bar = location_bar();
+  if (!is_open() || !bar || !bar->omnibox_view() ||
+      !bar->omnibox_view()->HasFocus()) {
+    return;
+  }
+  OmniboxController* omnibox = bar->GetOmniboxController();
+  if (omnibox->edit_model()->user_input_in_progress() &&
+      !omnibox->IsPopupOpen()) {
+    omnibox->edit_model()->StartAutocomplete(
+        /*prevent_inline_autocomplete=*/true);
+  }
+}
+
+bool KoanUrlBarController::IsTabModalDialogActive() const {
+  return dialog_observation_.IsObserving() &&
+         dialog_observation_.GetSource()->IsDialogActive();
+}
+
+void KoanUrlBarController::OnWillShow() {
+  if (is_open()) {
+    SetYieldedToDialog(true);
+  }
+}
+
+void KoanUrlBarController::SetYieldedToDialog(bool yielded) {
+  if (yielded_to_dialog_ == yielded) {
+    return;
+  }
+  yielded_to_dialog_ = yielded;
+  views::View* top_container = browser_view_->top_container();
+  if (ui::Layer* layer = top_container->layer()) {
+    layer->SetOpacity(yielded ? 0.0f : 1.0f);
+  }
+  top_container->SetCanProcessEventsWithinSubtree(!yielded);
+  if (yielded) {
+    dialog_gone_timer_.Start(FROM_HERE, base::Milliseconds(100), this,
+                             &KoanUrlBarController::CheckDialogGone);
+  } else {
+    dialog_gone_timer_.Stop();
+  }
+}
+
+void KoanUrlBarController::CheckDialogGone() {
+  if (!IsTabModalDialogActive()) {
+    SetYieldedToDialog(false);
   }
 }
 
@@ -911,6 +978,9 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
       return;
     }
     // Closing: put everything back.
+    SetYieldedToDialog(false);
+    dialog_observation_.Reset();
+    left_with_window_ = false;
     if (KoanSidebarNavView* nav = compact_mode_->sidebar_nav()) {
       nav->SetEditing(false);
     }
@@ -952,6 +1022,15 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     }
     if (KoanSidebarNavView* nav = compact_mode_->sidebar_nav()) {
       nav->SetEditing(true);
+    }
+    // Z43: a tab-modal dialog of the page hides the bar while it shows.
+    content::WebContents* contents = browser_view_->GetActiveWebContents();
+    if (auto* dialogs =
+            contents
+                ? web_modal::WebContentsModalDialogManager::FromWebContents(
+                      contents)
+                : nullptr) {
+      dialog_observation_.Observe(dialogs);
     }
     // Just the location bar: hide the rest of the toolbar, remembering what
     // to restore (and watching for other code showing things meanwhile).
