@@ -33,6 +33,7 @@ source_set("prefs") {
     "koan_prefs.h",
   ]
   deps = [
+    ":features",
     "//base",
     "//chrome/common:constants",
     "//components/performance_manager",
@@ -217,6 +218,7 @@ source_set("feature_overrides") {
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/tabs:features",
+    "//chrome/browser/ui/toasts",
     "//chrome/browser/ui/webui/new_tab_page/composebox/variations",
     "//chrome/common:chrome_features",
     "//components/compose/core/browser:features",

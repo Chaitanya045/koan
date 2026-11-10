@@ -946,6 +946,27 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
   CheckLightsHold();
 }
 
+void KoanCompactModeController::HoldSidebarForTabDrag() {
+  if (tab_drag_lock_ || mode_ == Mode::kNone || !hides_sidebar() ||
+      IsClosing() || !TabDragController::IsActive()) {
+    return;
+  }
+  VLOG(1) << "Koan: sidebar held for a tab drag";
+  tab_drag_lock_ = TakeExpandedLock();
+  // (TabDragController tells nobody when it ends; a drag that left the window
+  // may end in AppKit's move loop, out of the sidebar's sight.)
+  tab_drag_timer_.Start(FROM_HERE, base::Milliseconds(100), this,
+                        &KoanCompactModeController::CheckTabDragHold);
+}
+
+void KoanCompactModeController::CheckTabDragHold() {
+  if (TabDragController::IsActive() && !IsClosing()) {
+    return;
+  }
+  tab_drag_timer_.Stop();
+  ReleaseLock(tab_drag_lock_);
+}
+
 bool KoanCompactModeController::WantsLightsHold() const {
   // (Out of fullscreen: there AppKit's lights come with the menu bar, over
   // the page, and the sidebar is revealed at the screen's edge.)
@@ -1592,6 +1613,8 @@ void KoanCompactModeController::Deactivate() {
   ReleaseLock(hover_lock_);
   ReleaseLock(empty_tab_lock_);
   ReleaseLock(peek_lock_);
+  tab_drag_timer_.Stop();
+  ReleaseLock(tab_drag_lock_);
   lights_release_timer_.Stop();
   ReleaseLock(lights_lock_);
   // (Zen drops `zen-user-show` when compact mode turns off.)

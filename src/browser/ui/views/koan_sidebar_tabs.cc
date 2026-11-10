@@ -33,6 +33,7 @@
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
 #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/vector_icons/vector_icons.h"
@@ -42,7 +43,9 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_essentials.h"
+#include "koan/browser/ui/views/koan_haptics.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
@@ -996,6 +999,11 @@ void KoanSidebarTabsController::OnTabStripModelChanged(
   UpdateClearRow();
   // A Space's group view comes and goes with its tabs.
   ScheduleUpdateRowsHost();
+  // Z50: a tab drag moving the tab to another slot ticks the trackpad.
+  if (change.type() == TabStripModelChange::kMoved &&
+      TabDragController::IsActive() && ++drag_moves_ > 1) {
+    PlayHapticFeedback();
+  }
   if (change.type() == TabStripModelChange::kRemoved) {
     for (const auto& removed : change.GetRemove()->contents) {
       empty_tab_by_id_.erase(removed.tab->GetHandle().raw_value());
@@ -1062,6 +1070,14 @@ void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
     OnSidebarPressed(event);
     return;
   }
+  if (event->type() == ui::EventType::kMouseDragged &&
+      TabDragController::IsActive()) {
+    if (KoanBrowserViewController* controller =
+            KoanBrowserViewController::From(browser_view_)) {
+      controller->compact_mode()->HoldSidebarForTabDrag();
+    }
+    return;
+  }
   if (!rows_ || event->target() != region_.get()) {
     return;
   }
@@ -1073,6 +1089,8 @@ void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
+  // (A tab drag starts with a press.)
+  drag_moves_ = 0;
   auto* region = views::AsViewClass<VerticalTabStripRegionView>(region_.get());
   auto* target = static_cast<views::View*>(event->target());
   if (!region || !target || !features::IsSidebarEnabled()) {
@@ -1080,14 +1098,13 @@ void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
   }
   const bool double_click =
       event->IsOnlyLeftMouseButton() && event->GetClickCount() == 2;
-  // The splitter: back to the default width (Zen's dblclick on
+  // The splitter: back to Zen's default width (its dblclick on
   // #zen-sidebar-splitter), through upstream's own resize, which saves it.
   if (views::IsViewClass<views::ResizeArea>(target) &&
       target->parent() == region) {
     if (double_click) {
       // (OnResize() turns the amount round for a sidebar on the right.)
-      const int widen =
-          tabs::kVerticalTabStripDefaultUncollapsedWidth - region->width();
+      const int widen = prefs::kSidebarDefaultWidth - region->width();
       region->OnResize(IsSidebarOnRight(browser_view_) ? -widen : widen,
                        /*done_resizing=*/true);
       event->SetHandled();

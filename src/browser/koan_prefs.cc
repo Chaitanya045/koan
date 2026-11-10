@@ -17,6 +17,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/universal_optout/prefs.h"
 #include "koan/browser/agent/koan_agent_limits.h"
+#include "koan/browser/koan_features.h"
 
 namespace koan::prefs {
 
@@ -103,6 +104,12 @@ void OverrideUpstreamProfilePrefDefaults(
   // kUniversalOptOutSettings shows (koan_feature_overrides.cc).
   registry->SetDefaultPrefValue(
       universal_optout::prefs::kUniversalOptOutEnabled, base::Value(true));
+  // A new window's width when it isn't restored (BrowserWindowFeatures). The
+  // pref is registered by tabs::RegisterProfilePrefs().
+  if (features::IsSidebarEnabled()) {
+    registry->SetDefaultPrefValue(::prefs::kVerticalTabsUncollapsedWidth,
+                                  base::Value(kSidebarDefaultWidth));
+  }
 }
 
 void OverrideServiceProfilePrefDefaults(
