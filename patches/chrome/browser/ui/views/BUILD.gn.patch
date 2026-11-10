@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..314a59a217bcf0381d6c82773c72235eff9abe51 100644
+index ccf57b0..4e98ac9 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -107,6 +107,7 @@ source_set("bubble_anchor_util_views_imp
+@@ -107,6 +107,7 @@ source_set("bubble_anchor_util_views_impl") {
      "//components/payments/core",
      "//components/tabs:public",
      "//content/public/browser",
@@ -26,3 +26,11 @@ index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..314a59a217bcf0381d6c82773c72235e
      "//skia",
      "//ui/base",
      "//ui/display",
+@@ -1045,6 +1048,7 @@ source_set("javascript_tab_modal_dialog_view_views") {
+     "//chrome/browser/ui/javascript_dialogs",
+     "//chrome/browser/ui/tabs:tab_strip",
+     "//components/constrained_window",
++    "//koan/browser/ui/views",
+     "//ui/base",
+     "//ui/base/mojom:ui_base_types",
+     "//ui/strings:ui_strings",
