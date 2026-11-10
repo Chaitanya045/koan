@@ -21,6 +21,16 @@ inline constexpr base::TimeDelta kSidebarRevealDuration =
     base::Milliseconds(250);
 inline constexpr base::TimeDelta kSidebarHideDuration = base::Milliseconds(150);
 
+// Zen's compact mode toggle (animateCompactMode(), with
+// `zen.view.compact.animate-sidebar`): the docked sidebar slides away as
+// compact mode goes on, and back in as it goes off, in 0.1 s. Also how long
+// upstream's sidebar expand and collapse take (the hook in
+// tab_strip_animations.cc): in Koan the sidebar only collapses for compact
+// mode.
+inline constexpr int kSidebarToggleDurationMs = 100;
+inline constexpr base::TimeDelta kSidebarToggleDuration =
+    base::Milliseconds(kSidebarToggleDurationMs);
+
 // `zen.view.compact.sidebar-keep-hover.duration`: how long the revealed
 // sidebar stays after the pointer leaves it or the menu it opened closes
 // (measured live: it collapses 150-185 ms after the pointer leaves).

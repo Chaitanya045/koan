@@ -73,6 +73,16 @@ source_set("swipe_tracker") {
   deps = [ "//base" ]
 }
 
+# Which edge of the window the pointer left through, and how far outside it
+# compact mode still follows it (Zen's mouse tracker): geometry only.
+source_set("window_edges") {
+  sources = [
+    "koan_window_edges.cc",
+    "koan_window_edges.h",
+  ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 # Where a sidebar button goes to clear the macOS traffic lights: geometry only.
 source_set("lights_geometry") {
   sources = [
@@ -158,6 +168,7 @@ test("koan_views_unittests") {
     "koan_space_navigation_unittest.cc",
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
+    "koan_window_edges_unittest.cc",
   ]
   deps = [
     ":glass_tint",
@@ -168,6 +179,7 @@ test("koan_views_unittests") {
     ":space_navigation",
     ":strip_on_share",
     ":swipe_tracker",
+    ":window_edges",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -273,6 +285,8 @@ source_set("impl") {
     "koan_media_controller.h",
     "koan_move_to_space.cc",
     "koan_omnibox_rows.cc",
+    "koan_outside_window_tracker.cc",
+    "koan_outside_window_tracker.h",
     "koan_pinned_glance.cc",
     "koan_pinned_tab_views.cc",
     "koan_pinned_tab_views.h",
@@ -370,6 +384,7 @@ source_set("impl") {
     ":strip_on_share",
     ":swipe_tracker",
     ":views",
+    ":window_edges",
     "//base:i18n",
     "//cc/paint",
     "//chrome/app:command_ids",
@@ -413,6 +428,7 @@ source_set("impl") {
     "//chrome/browser/ui/tabs:utils",
     "//chrome/browser/ui/toolbar",
     "//chrome/browser/ui/views:message_box_dialog",
+    "//chrome/browser/ui/views/animations",
     "//chrome/browser/ui/views/extensions:extensions_container_views",
     "//chrome/browser/ui/views/extensions:extensions_menu_coordinator",
     "//chrome/browser/ui/views/extensions:extensions_menu_view",
