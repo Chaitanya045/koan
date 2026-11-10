@@ -1,0 +1,15 @@
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+index 06bfcf5a90d093b9ac8e255e93ef2ffd0a00421e..23f0f26fedffc6738989d11b646c89b637e47589 100644
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -573,6 +573,10 @@ if (is_win) {
+       ":chrome_versioned_bundle_data",
+     ]
+ 
++    # Koan: the agent's `koan` tool in Contents/Resources/bin, signed with the
++    # app (koan/cli/BUILD.gn).
++    bundle_deps += [ "//koan/cli:koan_bundle_data" ]
++
+     if (enable_updater) {
+       bundle_deps += [ ":chromium_updater_privileged_helper" ]
+     }

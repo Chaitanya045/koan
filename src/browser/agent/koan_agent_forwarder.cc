@@ -243,6 +243,7 @@ class AgentForwarder::Connection final : public FacadeBackend {
   }
 
   void OpenTab(const std::string& task,
+               const std::string& saved_container,
                const GURL& url,
                OpenTabCallback done) override {
     AgentTabOpener* opener = GetAgentTabOpener();
@@ -252,18 +253,27 @@ class AgentForwarder::Connection final : public FacadeBackend {
                           "build does not have yet");
       return;
     }
-    // Only the client, the task's name and the URL: the containers give every
-    // task a throwaway container, and nothing the agent sends can name a saved
-    // one (a saved container is a separate, user-approved grant).
+    // A task's container is chosen when its first tab opens: a later tab
+    // that asks for another one would silently land in the first.
+    if (!forwarder_->NoteTask(client_id_, task, saved_container)) {
+      std::move(done).Run(
+          std::nullopt, "Koan.notGranted",
+          "the task \"" + task +
+              "\" is already open in another container; end it or use "
+              "another task name");
+      return;
+    }
+    // The containers open a saved container only if the user granted it to
+    // this client (koan_container_grants.h); otherwise nothing opens.
     AgentTabRequest request;
     request.client_id = client_id_;
     request.task = task;
+    request.saved_container = saved_container;
     request.url = url;
-    forwarder_->NoteTask(client_id_, task);
-    opener->OpenAgentTab(
-        request,
-        base::BindOnce(&AgentForwarder::Connection::OnOpened,
-                       weak_factory_.GetWeakPtr(), task, std::move(done)));
+    opener->OpenAgentTab(request,
+                         base::BindOnce(&AgentForwarder::Connection::OnOpened,
+                                        weak_factory_.GetWeakPtr(), task,
+                                        saved_container, std::move(done)));
   }
 
   void EndTask(const std::string& task) override {
@@ -353,8 +363,20 @@ class AgentForwarder::Connection final : public FacadeBackend {
   }
 
   void OnOpened(std::string task,
+                std::string saved_container,
                 OpenTabCallback done,
                 content::WebContents* contents) {
+    if (!contents && !saved_container.empty()) {
+      // Never a silent throwaway tab instead (#219).
+      forwarder_->ForgetTaskIfEmpty(client_id_, task);
+      std::move(done).Run(
+          std::nullopt, "Koan.notGranted",
+          "the saved container \"" + saved_container +
+              "\" was not opened: the user has not let this agent use it, "
+              "it does not exist, or another task has it open (Settings > "
+              "Agent Control)");
+      return;
+    }
     if (!contents) {
       // The containers open agent tabs only in a normal window with Spaces.
       std::move(done).Run(std::nullopt, "Koan.noWindow",
@@ -471,12 +493,12 @@ void AgentForwarder::Reset(bool end_tasks) {
     RemoveTab(target_id, /*destroyed=*/false);
   }
   labels_.clear();
-  std::map<std::string, std::set<std::string>, std::less<>> tasks =
+  std::map<std::string, std::map<std::string, std::string>, std::less<>> tasks =
       std::move(tasks_);
   tasks_.clear();
   if (end_tasks) {
     for (const auto& [client_id, names] : tasks) {
-      for (const std::string& task : names) {
+      for (const auto& [task, saved] : names) {
         containers::EndAgentTask(client_id, task);
       }
     }
@@ -485,9 +507,29 @@ void AgentForwarder::Reset(bool end_tasks) {
   NotifyChanged();
 }
 
-void AgentForwarder::NoteTask(const std::string& client_id,
-                              const std::string& task) {
-  tasks_[client_id].insert(task);
+bool AgentForwarder::NoteTask(const std::string& client_id,
+                              const std::string& task,
+                              const std::string& saved_container) {
+  auto [it, added] = tasks_[client_id].try_emplace(task, saved_container);
+  return added || it->second == saved_container;
+}
+
+void AgentForwarder::ForgetTaskIfEmpty(const std::string& client_id,
+                                       const std::string& task) {
+  auto it = tasks_.find(client_id);
+  if (it == tasks_.end()) {
+    return;
+  }
+  for (const std::string& target_id : registry_.TargetsFor(client_id)) {
+    const TargetEntry* entry = registry_.Find(target_id);
+    if (entry && entry->agent_owned && entry->task == task) {
+      return;
+    }
+  }
+  it->second.erase(task);
+  if (it->second.empty()) {
+    tasks_.erase(it);
+  }
 }
 
 void AgentForwarder::EndTask(const std::string& client_id,
@@ -517,9 +559,9 @@ void AgentForwarder::EndClient(const std::string& client_id) {
   if (it == tasks_.end()) {
     return;
   }
-  const std::set<std::string> names = std::move(it->second);
+  const std::map<std::string, std::string> names = std::move(it->second);
   tasks_.erase(it);
-  for (const std::string& task : names) {
+  for (const auto& [task, saved] : names) {
     containers::EndAgentTask(client_id, task);
   }
 }

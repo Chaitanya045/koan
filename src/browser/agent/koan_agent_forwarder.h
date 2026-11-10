@@ -115,7 +115,14 @@ class AgentForwarder {
   // The tasks a client opened tabs for, so that each gets
   // containers::EndAgentTask() when it ends (Koan.endTask), when the client's
   // last connection goes, on Stop and on Agent ready off.
-  void NoteTask(const std::string& client_id, const std::string& task);
+  // False if the task is open already with another saved container (or with
+  // one, and now none is named, or the other way round).
+  bool NoteTask(const std::string& client_id,
+                const std::string& task,
+                const std::string& saved_container);
+  // A task whose first tab could not open is forgotten, so that it can be
+  // asked for again with another container.
+  void ForgetTaskIfEmpty(const std::string& client_id, const std::string& task);
   void EndTask(const std::string& client_id, const std::string& task);
   void EndClient(const std::string& client_id);
   // From the watcher: the tab closed, or its title or URL changed.
@@ -169,7 +176,9 @@ class AgentForwarder {
   std::map<uint64_t, std::unique_ptr<Connection>> connections_;
   std::map<std::string, std::unique_ptr<TabWatcher>, std::less<>> tabs_;
   std::map<std::string, std::string, std::less<>> labels_;
-  std::map<std::string, std::set<std::string>, std::less<>> tasks_;
+  // Each client's tasks, and the saved container each was opened in (empty
+  // for a throwaway one).
+  std::map<std::string, std::map<std::string, std::string>, std::less<>> tasks_;
   // Open take-over prompts, by target id: one per tab.
   std::map<std::string, std::unique_ptr<TakeOverRequest>, std::less<>>
       take_overs_;

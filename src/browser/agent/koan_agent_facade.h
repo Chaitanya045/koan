@@ -85,13 +85,17 @@ class FacadeBackend {
   virtual void CommandAnswered(const std::string& target_id) = 0;
   // Opens a background tab for the client in `task` (Koan.openTab,
   // Target.createTarget) and adds it to the registry. `url` passed
-  // IsAllowedNavigationUrl() and the registry had room. Runs `done` with the
-  // new tab's target id, or with nullopt and the error (code, message).
+  // IsAllowedNavigationUrl() and the registry had room. `saved_container` is
+  // the saved container the agent asked for by name (empty for a throwaway
+  // one); one the user did not grant it is Koan.notGranted, never a
+  // throwaway tab. Runs `done` with the new tab's target id, or with nullopt
+  // and the error (code, message).
   using OpenTabCallback =
       base::OnceCallback<void(std::optional<std::string> target_id,
                               std::string error_code,
                               std::string error_message)>;
   virtual void OpenTab(const std::string& task,
+                       const std::string& saved_container,
                        const GURL& url,
                        OpenTabCallback done) = 0;
   // Koan.endTask: the task's tabs close and its throwaway container is

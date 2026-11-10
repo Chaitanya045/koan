@@ -1081,6 +1081,19 @@ asks you to sign in · Open · Dismiss"). **Open** switches to the tab and shows
 it as Chrome would; **Dismiss** says no (stay on the page, no sign-in, no
 print). The agent is told, and can still answer a dialog itself.
 
+### The `koan` tool
+
+Agents use Koan through `koan`, in `Koan.app/Contents/Resources/bin/`
+(`out/Koan/koan` in a build). `koan pair --label "Claude Code"` asks you to
+approve the agent; then `koan open <url>`, `koan snapshot <tab>`,
+`koan act <tab> click @12`, `koan screenshot <tab>`, `koan take-over` (asks
+you for the tab you're on) and `koan end`. `koan skill` prints the guide
+agents follow; `src/cli/skill/SKILL.md` is the entry for an agent's skills
+folder. The agent's tabs stay open between its commands, for as long as its
+task lasts: `koan end`, or 30 minutes without a command, closes them.
+`koan open --saved <name>` uses a saved container you allowed that agent;
+otherwise it is refused, never opened in a throwaway one instead.
+
 ## Install in the app menu
 
 ```sh
