@@ -24,6 +24,7 @@
 #include "ui/color/color_provider_key.h"
 #include "ui/color/color_recipe.h"
 #include "ui/color/color_transform.h"
+#include "ui/gfx/color_utils.h"
 
 namespace koan {
 
@@ -155,14 +156,20 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
 
   // Glance (zen-glance.css): Zen fades the page behind the card to 30% over
   // the window background, i.e. that background at 70% over the page; the
-  // card has --zen-big-shadow (black at 24%); the buttons are near-black
-  // (near-white in dark mode) with accent-coloured icons; the close button
-  // asking to confirm is rgb(220, 53, 69) with white.
+  // card has --zen-big-shadow (black at 24%); the buttons are
+  // color-mix(light-dark(rgb(24, 24, 24), rgb(231, 231, 231)) 96%,
+  // --zen-primary-color) with the icon in --zen-primary-color; the close
+  // button asking to confirm is rgb(220, 53, 69) with white. (Not the
+  // kColorSysInverse* pair: in the Zen look's dark mode both are its text
+  // colour, which drew blank discs, #138.)
+  const SkColor primary = ZenPrimaryColor(key);
   mixer[kColorKoanGlanceBackdrop] = ui::SetAlpha(kColorToolbar, Alpha(0.7f));
   mixer[kColorKoanGlanceCardShadow] = {
       ui::kColorShadowValueAmbientShadowElevationFour};
-  mixer[kColorKoanGlanceButton] = {ui::kColorSysInverseSurface};
-  mixer[kColorKoanGlanceButtonIcon] = {ui::kColorSysInversePrimary};
+  mixer[kColorKoanGlanceButton] = {color_utils::AlphaBlend(
+      primary, dark ? SkColorSetRGB(231, 231, 231) : SkColorSetRGB(24, 24, 24),
+      0.04f)};
+  mixer[kColorKoanGlanceButtonIcon] = {primary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};
 
@@ -232,7 +239,7 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanDownloadArcRing] =
       ui::AlphaBlend(kColorToolbarText, kColorToolbar, Alpha(0.15f));
   mixer[kColorKoanDownloadArcCircle] = {kColorToolbarText};
-  mixer[kColorKoanDownloadArcIcon] = {ui::kColorSysInversePrimary};
+  mixer[kColorKoanDownloadArcIcon] = {primary};
   mixer[kColorKoanDownloadArcShadow] = {
       SkColorSetA(SK_ColorBLACK, Alpha(0.24f))};
   mixer[kColorKoanDownloadTile] = {ui::kColorSysPrimaryContainer};

@@ -27,6 +27,10 @@ void AddKoanColorMixer(ui::ColorProvider* provider,
 // so none of them can loop back through Chromium's recipes.
 SkColor FloatingUrlBarCardColor(const ui::ColorProviderKey& key);
 
+// Zen's --zen-primary-color for the window of `key`: its Space theme's (from
+// the colour key's accent), else the default theme's, from the system accent.
+SkColor ZenPrimaryColor(const ui::ColorProviderKey& key);
+
 // Zen's sidebar colours that derive from the window's primary colour (the
 // Space theme's, from its colour key, or the default theme's from the system
 // accent): the toolbar and tab text (also `kColorToolbarText`), the selected

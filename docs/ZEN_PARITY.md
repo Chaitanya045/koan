@@ -154,7 +154,7 @@ point of Koan.
 | "Search for ..." on selected text opens in Glance (`zen.glance.enable-contextmenu-search`) | Missing | #74. |
 | Glance on a link in the Glance page | Different | Zen 1.23 ignores it; Koan shows the link in the card (as #37 asks). |
 | Close with Esc or a click outside | Same | beforeunload can keep the page; while typing, the first Esc turns the close button red and a second closes (Zen asks whenever anything in the page has focus, and labels the button "Confirm"). macOS: no grow/shrink (the page is an NSView); not verified on a Mac. |
-| Expand to a tab (Ctrl+O), split Glance | Same | Zen's button column: 34 px round buttons, 12 px apart, beside the card. No expand animation. |
+| Expand to a tab (Ctrl+O), split Glance | Same | Zen's button column: 34 px round buttons, 12 px apart, beside the card, in Zen's colours (`zen-glance.css`: rgb(231, 231, 231), rgb(24, 24, 24) in light mode, mixed 4% with the primary colour, the icon in the primary colour). No expand animation. |
 | Split view side by side / stacked | Same | Ctrl+Alt+V / Ctrl+Alt+H (⌘⌥ on macOS, Zen's accel). |
 | Split grid of 3–4 tabs (Ctrl+Alt+G) | Missing | Chromium's split view has exactly two panes: `TabStripModel::AddToNewSplit` CHECKs one or two tabs, `SplitTabLayout` is side by side or stacked, `MultiContentsView` holds two contents. Ctrl+Alt+G splits side by side. |
 | Tab context menu "Add Split View… / Join N Tabs / Split Out Tab" | Same | Zen's labels on upstream's split item; "Join N Tabs" is disabled past two tabs. Upstream's "Arrange split view" and "Move tab into split view" submenus stay. |
