@@ -18,6 +18,11 @@ class PrefRegistrySyncable;
 // chrome://koan-settings.
 namespace koan::prefs {
 
+// The expanded sidebar's default width, and where a double-click on its edge
+// puts it back: Zen's kDefaultSidebarWidth on macOS (ZenCustomizableUI).
+// Chromium's is tabs::kVerticalTabStripDefaultUncollapsedWidth, 240.
+inline constexpr int kSidebarDefaultWidth = 230;
+
 // Koan's look (issue #48), local-state prefs because colours are mixed
 // per colour-provider key, which knows no profile. The style is shadcn/ui's
 // design system ("shadcn") or Zen's ("zen", the default); the mode, base
@@ -271,7 +276,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 // Changes the defaults of upstream profile prefs to Zen's: no remote search
 // suggestions (Zen's browser.search.suggest.enabled is off, which also stops
 // Chromium's remote zero-prefix suggestions, Google's trending searches), no
-// AI Mode button in the omnibox, and AI Mode switched off by its policy pref.
+// AI Mode button in the omnibox, AI Mode switched off by its policy pref, and
+// with Koan's sidebar, Zen's sidebar width (kSidebarDefaultWidth).
 // A value the user sets still wins. Called from
 // chrome/browser/prefs/browser_prefs.cc at the end of RegisterProfilePrefs(),
 // after upstream registered them.

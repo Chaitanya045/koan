@@ -90,7 +90,7 @@ for (let i = 0; i < 8; i++) {
 await sleep(1000);
 vs = await views();
 check('Right many times widens the sidebar to at most 500',
-      region(vs)?.w > 240 && region(vs)?.w <= 500, `${region(vs)?.w}`);
+      region(vs)?.w > 230 && region(vs)?.w <= 500, `${region(vs)?.w}`);
 
 check('Koan still answers', await alive());
 check('The leak detector is silent', !leakLogged());

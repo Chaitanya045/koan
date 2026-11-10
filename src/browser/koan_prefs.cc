@@ -11,10 +11,12 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "koan/browser/agent/koan_agent_limits.h"
+#include "koan/browser/koan_features.h"
 
 namespace koan::prefs {
 
@@ -90,6 +92,12 @@ void OverrideUpstreamProfilePrefDefaults(
   registry->SetDefaultPrefValue("omnibox.show_ai_mode_omnibox_button",
                                 base::Value(false));
   registry->SetDefaultPrefValue("omnibox.ai_mode_settings", base::Value(1));
+  // A new window's width when it isn't restored (BrowserWindowFeatures). The
+  // pref is registered by tabs::RegisterProfilePrefs().
+  if (features::IsSidebarEnabled()) {
+    registry->SetDefaultPrefValue(::prefs::kVerticalTabsUncollapsedWidth,
+                                  base::Value(kSidebarDefaultWidth));
+  }
 }
 
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream

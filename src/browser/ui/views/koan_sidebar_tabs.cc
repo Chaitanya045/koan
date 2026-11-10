@@ -35,6 +35,7 @@
 #include "components/tabs/public/tab_group.h"
 #include "components/vector_icons/vector_icons.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -1061,14 +1062,13 @@ void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
   }
   const bool double_click =
       event->IsOnlyLeftMouseButton() && event->GetClickCount() == 2;
-  // The splitter: back to the default width (Zen's dblclick on
+  // The splitter: back to Zen's default width (its dblclick on
   // #zen-sidebar-splitter), through upstream's own resize, which saves it.
   if (views::IsViewClass<views::ResizeArea>(target) &&
       target->parent() == region) {
     if (double_click) {
       // (OnResize() turns the amount round for a sidebar on the right.)
-      const int widen =
-          tabs::kVerticalTabStripDefaultUncollapsedWidth - region->width();
+      const int widen = prefs::kSidebarDefaultWidth - region->width();
       region->OnResize(IsSidebarOnRight(browser_view_) ? -widen : widen,
                        /*done_resizing=*/true);
       event->SetHandled();
