@@ -1,16 +1,25 @@
 diff --git a/chrome/browser/ui/browser_commands.cc b/chrome/browser/ui/browser_commands.cc
-index 547bcd709db493b28661d844e2c49e9e007ea459..aa452a43ea280d0d526b94d8a47e13b3bad2a253 100644
 --- a/chrome/browser/ui/browser_commands.cc
 +++ b/chrome/browser/ui/browser_commands.cc
-@@ -206,6 +206,7 @@
+@@ -207,6 +207,8 @@
  #include "content/public/common/url_constants.h"
  #include "content/public/common/url_utils.h"
  #include "extensions/buildflags/buildflags.h"
 +#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
  #include "pdf/buildflags.h"
  #include "printing/buildflags/buildflags.h"
  #include "rlz/buildflags/buildflags.h"
-@@ -1475,6 +1476,10 @@ void CloseTab(BrowserWindowInterface* browser) {
+@@ -406,6 +408,8 @@ content::WebContents* DuplicateTabAt(Bro
+     const auto old_group = tab_strip_model->GetTabGroupForTab(index);
+     tab_strip_model->InsertWebContentsAt(dst_index, std::move(contents_dupe),
+                                          add_types, old_group);
++    // Koan: Zen duplicates a pinned tab or Essential as a normal tab.
++    pinned = koan::OnTabDuplicated(contents, raw_contents_dupe);
+   } else {
+     CreateAndShowNewWindowWithContents(std::move(contents_dupe), browser);
+   }
+@@ -1461,6 +1465,10 @@ void CloseTab(BrowserWindowInterface* br
    if (!active_tab) {
      return;
    }
@@ -21,3 +30,12 @@ index 547bcd709db493b28661d844e2c49e9e007ea459..aa452a43ea280d0d526b94d8a47e13b3
  
    // If the selection model consists of only the indices of a single split tab,
    // decide if just the active tab in the split is closed instead of all tabs in
+@@ -2698,6 +2706,8 @@ void FocusToolbar(BrowserWindowInterface
+ 
+ void FocusLocationBar(BrowserWindowInterface* browser) {
+   base::RecordAction(UserMetricsAction("FocusLocation"));
++  // Koan: Cmd+L floats the URL bar, also when it is already open in the pill.
++  koan::OnFocusLocationBarCommand(browser);
+   BrowserWindow::FromBrowser(browser)->SetFocusToLocationBar(true);
+   ActivateWindowAfterFocusCommand(browser);
+ }

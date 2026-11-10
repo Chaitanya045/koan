@@ -102,6 +102,24 @@ jobs:
             xargs clang-format --style=file --dry-run --Werror
       - name: shellcheck
         run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
+      # The friends' Mac build (docs/BUILDING-MAC.md): the scripts parse, and
+      # build.sh plans a fresh clone's build on a faked Mac without running
+      # or fetching anything.
+      - name: Mac build scripts (bash -n, build.sh --dry-run)
+        env:
+          KOAN_FAKE_OS: mac
+          KOAN_FAKE_ARCH: arm64
+          KOAN_FAKE_MACOS: "27.0"
+          KOAN_FAKE_XCODE: Xcode 27.1
+          KOAN_FAKE_XCODE_LICENSE: "0"
+          KOAN_FAKE_METAL: /fake/metal
+          KOAN_FAKE_DISK_GB: "200"
+          KOAN_FAKE_RAM_GB: "16"
+        run: |
+          for f in scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh; do bash -n "$f"; done
+          env -u CI scripts/build.sh --dry-run | tee "$RUNNER_TEMP/plan.txt"
+          if grep -q FAIL "$RUNNER_TEMP/plan.txt"; then exit 1; fi
+          grep -q 'fetch        would: fetch depot_tools and Chromium' "$RUNNER_TEMP/plan.txt"
       # The workflows, with shellcheck on their run: scripts. The macOS build
       # runs only nightly or when asked for (macos.yml), so this is all a
       # pull request that changes it gets automatically.

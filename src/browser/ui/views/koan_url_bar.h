@@ -14,22 +14,40 @@
 class BrowserWindowInterface;
 class GURL;
 
+class GURL;
+
 namespace views {
 class View;
 }
 
 namespace koan {
 
-// While the URL bar is open in place of a new tab (Ctrl+T or the sidebar's
-// new-tab button with Zen's zen.urlbar.replace-newtab), whatever the user
-// opens from it goes to a new foreground tab: turns the kCurrentTab
-// disposition into kNewForegroundTab. So does `destination_url` on another
-// site than the active tab's when that tab is pinned or an Essential (Zen's
-// zen.tabs.open-pinned-in-new-tab, koan_pinned_site.h). Called from
+// What the URL bar opens from its rows. An open tab's row (`is_open_tab_match`,
+// its "Switch to Tab") switches to the tab, wherever the bar was opened from
+// (Zen's rows always do), unless that tab is gone: then, like any other row,
+// it opens in the current tab, or in a new one while the URL bar is open in
+// place of a new tab (Ctrl+T or the sidebar's new-tab button with Zen's
+// zen.urlbar.replace-newtab), or when `destination_url` is on another site
+// than the active tab's and that tab is pinned or an Essential (Zen's
+// zen.tabs.open-pinned-in-new-tab, koan_pinned_site.h). Turns the kCurrentTab
+// disposition into kSwitchToTab or kNewForegroundTab. Called from
 // ChromeOmniboxClient::OnAutocompleteAccept().
 void MaybeAdjustOmniboxDisposition(BrowserWindowInterface* browser,
+                                   bool is_open_tab_match,
                                    const GURL& destination_url,
                                    WindowOpenDisposition* disposition);
+
+// Whether a new tab page must not focus the URL bar by itself, as Chromium
+// does: with Zen's URL bar the floating card opens only when the user asks
+// (Cmd+L, Cmd+T, a click on the pill). Called from
+// BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault().
+bool SuppressesDefaultUrlBarFocus(BrowserWindowInterface* browser);
+
+// The Focus Location command (Cmd+L, the action and the legacy command both
+// end in chrome::FocusLocationBar()): the floating bar opens for the
+// keyboard, also when the bar is already open in the pill. Called at the
+// start of chrome::FocusLocationBar().
+void OnFocusLocationBarCommand(BrowserWindowInterface* browser);
 
 // Zen's zen.urlbar.replace-newtab for the New Tab command (IDC_NEW_TAB: ⌘T
 // on macOS, which runs as a reserved command before any accelerator, and the
@@ -73,10 +91,10 @@ bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser);
 views::View* GetBubbleAnchorView(const views::View* view);
 
 // The omnibox text of `location_bar` (a LocationBarView) changed;
-// `user_input_in_progress` is whether the user is typing. With Zen's
-// "floating-on-type" URL bar behaviour, the first keystroke lifts the bar
-// from the sidebar's URL pill to the floating card. Called from
-// LocationBarView::OnChanged().
+// `user_input_in_progress` is whether the user is typing. The bar is placed
+// again: a bar edited in the pill widens over the page as the text grows; a
+// pill click never lifts it to the floating card (Zen decides once, when it
+// opens). Called from LocationBarView::OnChanged().
 void OnOmniboxChanged(views::View* location_bar, bool user_input_in_progress);
 
 // The omnibox of `location_bar` (a LocationBarView) is installing its

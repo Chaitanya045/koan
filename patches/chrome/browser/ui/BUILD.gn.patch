@@ -1,7 +1,8 @@
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index 0772e0c6b5cd4c0577f9d89ee0820fc7fc8d7c5f..40a83c2c478fec0edf02d97fdc28b735dbf3e245 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -516,6 +516,7 @@
+@@ -516,6 +516,7 @@ if (!is_android) {
        "//components/tab_groups",
        "//components/tabs:public",
        "//content/public/browser",
@@ -9,7 +10,7 @@ diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
        "//third_party/blink/public/common:headers",
        "//ui/gfx/geometry",
        "//ui/gfx/range",
-@@ -582,6 +583,8 @@
+@@ -582,6 +583,8 @@ if (!is_android) {
        "//components/tab_groups",
        "//components/tabs:public",
        "//content/public/browser",
@@ -18,7 +19,7 @@ diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
        "//ui/base",
        "//ui/base/mojom:ui_base_types",
      ]
-@@ -776,6 +779,7 @@
+@@ -776,6 +779,7 @@ if (!is_android) {
        "//content/public/browser",
        "//content/public/common",
        "//extensions/buildflags",
@@ -26,7 +27,7 @@ diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
        "//printing/buildflags",
        "//ui/actions",
        "//ui/base",
-@@ -975,6 +979,7 @@
+@@ -975,6 +979,7 @@ if (!is_android) {
        "//content/public/browser",
        "//content/public/common",
        "//extensions/buildflags",
@@ -34,7 +35,15 @@ diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
        "//pdf:features",
        "//printing/buildflags",
        "//ui/actions",
-@@ -1518,6 +1523,8 @@
+@@ -1461,6 +1466,7 @@ if (!is_android) {
+       "//components/web_modal",
+       "//content/public/browser",
+       "//content/public/common",
++      "//koan/browser/ui/views",
+       "//net",
+       "//third_party/blink/public/common",
+       "//ui/base",
+@@ -1518,6 +1524,8 @@ source_set("layout_constants") {
      "//chrome/browser/ui:ui_features",
      "//chrome/common:chrome_features",
      "//components/omnibox/common",

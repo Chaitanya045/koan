@@ -1,5 +1,5 @@
 // End-to-end test of Zen's URL bar against a real build: the behaviour
-// setting (edit in the pill, float on the first keystroke), Ctrl+T opening
+// setting (edit in the pill, floating for the keyboard), Ctrl+T opening
 // the URL bar instead of a tab (replace-newtab), the pill's look and size,
 // its copy-URL button and toast, its site icon (page info) and no page
 // actions. Then: the new-tab bar through a window switch, a pill edit in
@@ -363,12 +363,14 @@ if (BEHAVIOR === 'float') {
 }
 await type(find(vs, 'OmniboxViewViews'), 'wiki');
 vs = await views();
-if (BEHAVIOR === 'normal') {
-  check('Typing keeps the bar in place ("normal"), widened over the page',
-        bar(vs)?.x === pillNow.x && bar(vs)?.w > pillNow.w && !isFloating(vs),
+if (BEHAVIOR === 'float') {
+  check('Typing keeps the floating URL bar, centred and Zen-sized', isFloating(vs),
         `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
 } else {
-  check('Typing floats the URL bar, centred and Zen-sized', isFloating(vs),
+  // Zen's test_Click_Shoudnt_FLoat_Urlbar: a mouse press never floats the
+  // bar, not even once you type (#openPopover decides once, when it opens).
+  check('Typing keeps the bar in place, widened over the page (a click never floats it)',
+        bar(vs)?.x === pillNow.x && bar(vs)?.w > pillNow.w && !isFloating(vs),
         `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
 }
 shot('typing');
@@ -604,9 +606,13 @@ now = await waitFor(async () => {
   const p = await pages();
   return p.length === tabsNow + 1 && p;
 });
+// Chromium upgrades a typed http:// address to https:// (HTTPS Upgrades), so
+// the page's URL is compared without its scheme.
+const noScheme = url => url.replace(/^https?:/, '');
 check('Alt+Enter opens one new tab, leaving the page alone',
       now && now.some(p => p.url.endsWith('?alt')) &&
-          now.some(p => p.id === current.id && p.url === current.url),
+          now.some(p => p.id === current.id &&
+                        noScheme(p.url) === noScheme(current.url)),
       (now || await pages()).map(p => p.url).join(' '));
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');

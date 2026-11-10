@@ -16,8 +16,12 @@ koan_os() {
 # ~/work/koan-mac). Its env.sh points HOME, TMPDIR and the tool caches into
 # it; refuse to run without it, so caches (vpython, CIPD, siso, ...) never
 # land in the real home directory. See .agent/notes/mac.md.
+#
+# Without KOAN_MAC (a friend's fresh clone), the folder is the clone's own
+# .cache/mac: koan_use_clone_env sets it up, so nothing needs sourcing first.
 koan_require_mac_env() {
   local hint="source the folder's env.sh first, e.g. source ~/work/koan-mac/env.sh"
+  [[ -n ${KOAN_MAC:-} ]] || koan_use_clone_env
   if [[ -z ${KOAN_MAC:-} || ! -d $KOAN_MAC ]]; then
     echo "KOAN_MAC is not set: $hint" >&2
     exit 1
@@ -30,6 +34,33 @@ koan_require_mac_env() {
   # Apple's tools (xcodebuild, actool, ibtoold) find the home directory
   # through CoreFoundation, which ignores HOME but honours this.
   export CFFIXED_USER_HOME="$HOME"
+}
+
+# macOS: the one folder is <clone>/.cache/mac (what scripts/ci/mac_env.sh
+# does for CI, with the friend's own Xcode and depot_tools updates on).
+# Exported, so the scripts this one runs see the same folder.
+koan_use_clone_env() {
+  local root
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  export KOAN_MAC="$root/.cache/mac"
+  export HOME="$KOAN_MAC/home"
+  export TMPDIR="$KOAN_MAC/tmp"
+  export XDG_CACHE_HOME="$HOME/.cache"
+  export XDG_CONFIG_HOME="$HOME/.config"
+  export VPYTHON_VIRTUALENV_ROOT="$HOME/.vpython-root"
+  export CIPD_CACHE_DIR="$HOME/.cipd-cache"
+  export DEPOT_TOOLS_METRICS=0
+  mkdir -p "$HOME" "$TMPDIR"
+}
+
+# The user's real home directory (from the directory service, not HOME,
+# which points into the one folder on macOS).
+koan_real_home() {
+  if [[ $(koan_os) == mac ]]; then
+    dscl . -read "/Users/$(id -un)" NFSHomeDirectory | awk '{ print $2 }'
+  else
+    getent passwd "$(id -un)" | cut -d: -f6
+  fi
 }
 
 # macOS: Chromium needs a full Xcode, chosen with DEVELOPER_DIR rather than

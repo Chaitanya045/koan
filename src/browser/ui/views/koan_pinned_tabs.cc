@@ -74,8 +74,11 @@
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "ui/base/base_window.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/dialog_model.h"
@@ -903,6 +906,20 @@ void KoanPinnedTabController::RemoveFromEssentials(tabs::TabInterface* tab) {
   MoveAfterPinnedTabs(tab);
 }
 
+void KoanPinnedTabController::OnTabDuplicated(const tabs::TabInterface* source,
+                                              tabs::TabInterface* duplicate) {
+  if (!IsPinnedForUser(source) ||
+      tab_strip_model()->GetIndexOfTab(duplicate) == TabStripModel::kNoTab) {
+    return;
+  }
+  if (duplicate->IsPinned()) {
+    RemoveFromEssentials(duplicate);
+    return;
+  }
+  // (The clone has none of Koan's state: it is already a normal tab.)
+  MoveAfterPinnedTabs(duplicate);
+}
+
 void KoanPinnedTabController::ResetToPinnedUrl(tabs::TabInterface* tab) {
   KoanTabState* state = GetTabState(tab);
   if (!IsPinnedForUser(tab) || !state || !state->pinned_url.is_valid()) {
@@ -1552,8 +1569,29 @@ bool ExecutePinnedTabMenuCommand(TabStripModel* tab_strip,
 // --- Tab views and data ---
 
 bool HandleCloseTabCommand(tabs::TabInterface* tab) {
+  // Zen (zen.tabs.close-window-with-empty, on): Cmd+W on the empty tab closes
+  // the window. (Nothing in a split view, which Koan's split view isn't.)
+  if (IsEmptyTab(tab)) {
+    tab->GetBrowserWindowInterface()->GetWindow()->Close();
+    return true;
+  }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
   return controller && controller->HandleCloseShortcut(tab);
+}
+
+bool OnTabDuplicated(content::WebContents* source,
+                     content::WebContents* duplicate) {
+  tabs::TabInterface* duplicate_tab =
+      tabs::TabInterface::MaybeGetFromContents(duplicate);
+  if (!duplicate_tab) {
+    return false;
+  }
+  if (KoanPinnedTabController* controller =
+          KoanPinnedTabController::ForTab(duplicate_tab)) {
+    controller->OnTabDuplicated(
+        tabs::TabInterface::MaybeGetFromContents(source), duplicate_tab);
+  }
+  return duplicate_tab->IsPinned();
 }
 
 bool HandleTabCloseRequest(const tabs::TabInterface* tab) {
@@ -1563,6 +1601,7 @@ bool HandleTabCloseRequest(const tabs::TabInterface* tab) {
 }
 
 void AdjustTabData(const tabs::TabInterface* tab, tabs::TabData& data) {
+  data.should_hide_throbber |= !ShowsTabThrobber();
   const KoanTabState* state =
       features::IsPinnedTabsEnabled() ? GetTabState(tab) : nullptr;
   if (!state) {

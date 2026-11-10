@@ -9,12 +9,13 @@
 // times; Ctrl+T opens a tab). Text is typed into the omnibox as character
 // events; Tab, Enter, arrows and Esc go to the browser window's widget, so
 // they take the same path as real keys (pre-target handlers, focus manager,
-// focused view). The rows are read from Chromium's WebUI popup. At the end Koan is restarted on
+// focused view). The rows are read from Chromium's Views popup (see rows()). At
+// the end Koan is restarted on
 // the same profile to check the opt-outs. Prints one PASS/FAIL line per
 // check; exits non-zero on any failure.
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createSpace, visiblePage } from './lib/koan.mjs';
+import { createSpace, views, visiblePage } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -100,34 +101,38 @@ async function evalIn(page, expression) {
   return r.result?.result?.value;
 }
 
-// The suggestions, from Chromium's WebUI popup (chrome://omnibox-popup), as
-// {texts: [primary, secondary], selected, search, a11y, icon (the start of
-// its icon URL)}. The palette's rows are those with a PNG data icon (ours()).
+// The suggestions, from Chromium's Views popup (Koan turns the WebUI one off:
+// omnibox lockdown O1): one entry per OmniboxResultView, {texts, selected,
+// search, a11y, icon}. The texts are its OmniboxTextViews' (the label first:
+// AutocompleteController puts a non-search match's description first, then its
+// contents), `selected` is its MatchSelected property. The Views rows have
+// neither icon URL, match type nor accessible label here, so `icon` marks the
+// palette's own rows by their title (the titles in koan_commands.cc), `search`
+// is a search suggestion's " - <engine> Search" tail, and `a11y` is the texts.
+// The palette's rows are those with that mark (ours()). Written for the Mac
+// harness, where the property names (MatchSelected, Text) are to be checked.
+const COMMAND_TITLES = new Set(
+    [...readFileSync(new URL('../../src/browser/ui/views/koan_commands.cc',
+                             import.meta.url), 'utf8').matchAll(/u"([A-Z][^"]*)"/g)]
+        .map(m => m[1]));
 async function rows() {
-  const popup = (await targets()).find(t => t.url.startsWith('chrome://omnibox-popup'));
-  if (!popup) return [];
-  return (await evalIn(popup, `(() => {
-    const matches = [];
-    const walk = root => {
-      for (const el of root.querySelectorAll('*')) {
-        if (el.localName === 'cr-searchbox-match') matches.push(el);
-        if (el.shadowRoot) walk(el.shadowRoot);
-      }
-    };
-    walk(document);
-    // mojo_base.mojom.String16 may arrive as {data}, url.mojom.Url as {url}.
-    const s16 = v => typeof v === 'string' ? v : String.fromCharCode(...(v?.data ?? []));
-    return matches.filter(m => m.getClientRects().length).map(m => {
-      const text = id => m.shadowRoot.getElementById(id)?.textContent.trim() ?? '';
-      return {
-        texts: [text('primaryText'), text('secondaryText')].filter(Boolean),
-        selected: m.hasAttribute('selected'),
-        search: !!m.match?.isSearchType,
-        a11y: s16(m.match?.a11yLabel),
-        icon: String(m.match?.iconUrl?.url ?? m.match?.iconUrl ?? '').slice(0, 22),
-      };
-    });
-  })()`)) ?? [];
+  const out = [];
+  let row = null;
+  for (const v of await views()) {
+    if (v.cls === 'OmniboxResultView') {
+      row = v.shown ? { texts: [], selected: v.props?.MatchSelected === 'true' } : null;
+      if (row) out.push(row);
+    } else if (row && v.cls === 'OmniboxTextView' && v.shown) {
+      const text = (v.props?.Text ?? '').trim();
+      if (text && !/^[-\u2013\u2014]$/.test(text)) row.texts.push(text);
+    }
+  }
+  return out.filter(r => r.texts.length).map(r => ({
+    ...r,
+    search: /Search$/.test(r.texts[1] ?? ''),
+    a11y: r.texts.join(', '),
+    icon: COMMAND_TITLES.has(r.texts[0]) ? 'data:image/png;base64,' : '',
+  }));
 }
 
 const ours = rs => rs.filter(r => r.icon === 'data:image/png;base64,');

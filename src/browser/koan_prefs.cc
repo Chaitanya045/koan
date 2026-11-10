@@ -29,6 +29,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kUrlBarReplaceNewTab, true);
   registry->RegisterBooleanPref(kUrlBarShowCopyUrl, true);
   registry->RegisterBooleanPref(kWorkspaceTint, true);
+  registry->RegisterIntegerPref(kDarkThemeStyle, 0);
+  registry->RegisterBooleanPref(kShowCustomColors, false);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
@@ -54,6 +56,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kDownloadAnimation, true);
   registry->RegisterBooleanPref(kDragWindowFromContent, true);
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
+  registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
   registry->RegisterIntegerPref(kResumedCrashes, 0);
   registry->RegisterTimePref(kLastResumedTime, base::Time());
@@ -72,6 +75,21 @@ bool AgentReadyByDefault() {
   return base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir) &&
          chrome::GetDefaultUserDataDirectory(&default_dir) &&
          user_data_dir == default_dir;
+}
+
+// Sets Koan's defaults for upstream profile prefs (Zen's search suggestion
+// and AI settings). Must run after the owning components registered them, at
+// the end of chrome::RegisterProfilePrefs() (crash note 8).
+void OverrideUpstreamProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry) {
+  // chrome/common/pref_names.h kSearchSuggestEnabled,
+  // components/omnibox/browser/omnibox_pref_names.h kShowAiModeOmniboxButton
+  // and kAIModeSettings (1: AI Mode disallowed). Written out: these headers'
+  // targets are not dependencies of this one.
+  registry->SetDefaultPrefValue("search.suggest_enabled", base::Value(false));
+  registry->SetDefaultPrefValue("omnibox.show_ai_mode_omnibox_button",
+                                base::Value(false));
+  registry->SetDefaultPrefValue("omnibox.ai_mode_settings", base::Value(1));
 }
 
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream

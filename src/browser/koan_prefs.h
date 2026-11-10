@@ -75,8 +75,10 @@ inline constexpr char kSingleToolbarEnabled[] = "koan.single_toolbar";
 
 // How the URL bar opens when the address is edited (Zen's
 // zen.urlbar.behavior): "normal" edits it in place (in the sidebar's URL
-// pill), "floating-on-type" (Zen's default) starts there too and floats over
-// the page on the first keystroke, "float" floats over the page right away.
+// pill), "floating-on-type" (Zen's default) floats over the page when the bar
+// is opened with the keyboard (Cmd+L, Cmd+T) and edits in the pill after a
+// click on it (typing then never floats it), "float" floats over the page
+// right away.
 inline constexpr char kUrlBarBehavior[] = "koan.urlbar.behavior";
 inline constexpr char kUrlBarBehaviorNormal[] = "normal";
 inline constexpr char kUrlBarBehaviorFloatingOnType[] = "floating-on-type";
@@ -91,9 +93,17 @@ inline constexpr char kUrlBarReplaceNewTab[] = "koan.urlbar.replace_newtab";
 // sidebar's URL pill on hover. On by default, like Zen.
 inline constexpr char kUrlBarShowCopyUrl[] = "koan.urlbar.show_copy_url";
 
-// Whether the browser takes the active workspace's colour (Zen's
-// per-workspace themes).
+// Whether windows show their active Space's theme (Zen's per-Space
+// gradient themes).
 inline constexpr char kWorkspaceTint[] = "koan.workspaces.tint";
+
+// Zen's dark theme styles: 0 default, 1 night (AMOLED), 2 colorful.
+inline constexpr char kDarkThemeStyle[] = "koan.theme.dark_style";
+
+// Whether the theme picker shows the custom colour list
+// (zen.theme.gradient.show-custom-colors, off by default like Zen's).
+inline constexpr char kShowCustomColors[] =
+    "koan.theme.gradient.show_custom_colors";
 
 // Obsolete: until the tint became per window (a window's user colour
 // override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's
@@ -211,6 +221,13 @@ inline constexpr char kDragWindowFromContent[] =
 // this pref by name: keep the name in
 // patches/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc.patch.
 inline constexpr char kBookmarksBarShow[] = "koan.bookmarks_bar.show";
+// What a new tab page shows: "koan" (the default) is Koan's blank page in the
+// theme's colours, like Zen's new tab; "chromium" is Chromium's own new tab
+// page. Koan's own setting. A new tab page set by policy or by an extension
+// wins over both.
+inline constexpr char kNewTabPage[] = "koan.newtab.page";
+inline constexpr char kNewTabPageKoan[] = "koan";
+inline constexpr char kNewTabPageChromium[] = "chromium";
 
 // Whether the welcome screen was shown (zen.welcome-screen.seen).
 inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
@@ -250,6 +267,16 @@ inline constexpr char kAgentSavedContainers[] =
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+// Changes the defaults of upstream profile prefs to Zen's: no remote search
+// suggestions (Zen's browser.search.suggest.enabled is off, which also stops
+// Chromium's remote zero-prefix suggestions, Google's trending searches), no
+// AI Mode button in the omnibox, and AI Mode switched off by its policy pref.
+// A value the user sets still wins. Called from
+// chrome/browser/prefs/browser_prefs.cc at the end of RegisterProfilePrefs(),
+// after upstream registered them.
+void OverrideUpstreamProfilePrefDefaults(
+    user_prefs::PrefRegistrySyncable* registry);
 
 // Registers Koan's local-state prefs (the look), and changes the defaults of
 // upstream local-state prefs for Koan's memory behaviour (see

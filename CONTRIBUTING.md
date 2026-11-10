@@ -74,6 +74,9 @@ instead.
 
 ### macOS
 
+Just want Koan on your Mac? Follow [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md):
+clone, run `scripts/build.sh`, done. This section is the maintainer's setup.
+
 Koan is coming to macOS on Apple Silicon
 ([#51](https://github.com/Chaitanya045/koan/issues/51)). It builds from
 source with the same scripts, but the Mac build is new, so expect rough
@@ -95,8 +98,9 @@ tools.
 **Everything stays in one folder**, e.g. `~/work/koan-mac`, so Chromium's
 tools (depot_tools, vpython, CIPD, siso) and Apple's don't scatter caches
 across your home directory. The folder's `env.sh` points `HOME`, `TMPDIR`
-and the tool caches into it, and every script refuses to run on macOS until
-it has been sourced:
+and the tool caches into it. Without it, the scripts use `.cache/mac` in the
+clone as the folder (what a friend's clone does), so source it on a Mac that
+has one:
 
 ```sh
 # ~/work/koan-mac/env.sh, with Koan cloned to ~/work/koan-mac/koan.

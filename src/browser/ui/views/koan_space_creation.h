@@ -26,11 +26,10 @@ class Textfield;
 namespace koan {
 
 class KoanSpaceIconField;
-class KoanThemeMenu;
 
 // Zen's Create-a-Space form (zen-workspace-creation), shown in the sidebar
 // in place of the Space: a title, the icon (Zen's emoji picker) and name of
-// the new Space, Edit Theme..., and Create Space / Cancel. Create Space is
+// the new Space, Theme..., and Create Space / Cancel. Create Space is
 // enabled once the Space has a name; Enter creates, Escape cancels.
 class KoanSpaceCreationView : public views::View,
                               public views::TextfieldController {
@@ -76,7 +75,6 @@ class KoanSpaceCreationView : public views::View,
   raw_ptr<views::MdTextButton> create_ = nullptr;
   KoanWorkspaceController::SpaceTheme theme_;
   bool focus_name_pending_ = false;
-  std::unique_ptr<KoanThemeMenu> theme_menu_;
   std::unique_ptr<KoanEmojiPicker::Bubble> picker_;
   base::WeakPtrFactory<KoanSpaceCreationView> weak_factory_{this};
 };

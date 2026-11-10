@@ -88,6 +88,11 @@ int SidebarCollapseSnapWidth(int upstream_value);
 // off. Updates that hide a card still reach the controller.
 bool ShowsTabHoverCards();
 
+// Whether a loading tab shows Chromium's throbber. Zen keeps the favicon there
+// instead (zen.theme.hide-tab-throbber, vertical-tabs.css); upstream's with
+// Koan's sidebar off. AdjustTabData() applies it.
+bool ShowsTabThrobber();
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_TABS_H_

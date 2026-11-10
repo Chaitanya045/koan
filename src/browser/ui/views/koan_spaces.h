@@ -57,6 +57,31 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
 bool IsInSpaceForm(const views::View* tab_strip_view,
                    const views::View* region,
                    const gfx::Point& point);
+// Zen's empty tab: the blank page a window shows when its last tab closes. It
+// is never listed (no sidebar row), never navigates (what the URL bar opens
+// from it opens in a new tab) and Cmd+W on it closes the window. Zen keeps
+// one per window; here each Space with nothing else has one, since a Space
+// (a tab group) needs a tab to exist. Marked by Koan when it makes one (kept
+// with the session), and an empty page still. Not for Essentials or when
+// Spaces are off.
+bool IsEmptyTab(const tabs::TabInterface* tab);
+
+// The empty tab stops being one when it navigates in place (a bookmark, the
+// Library, a dropped link, chrome.tabs.update): its mark goes, so that Back
+// into the new tab page later is an ordinary tab with a row, and Cmd+W
+// closes the tab, not the window. Called on every change of the tab.
+void ClearEmptyTabMarkIfNavigated(tabs::TabInterface* tab);
+
+// TabGroupViewVerticalLayout: whether `view` is a tab row to hide (see
+// IsEmptyTab()).
+bool IsEmptyTabView(const views::View* view);
+
+// Browser::TabStripEmpty(): Zen keeps the window when its last tab closes
+// (browser.tabs.closeWindowWithLastTab is false). Returns true if `browser`
+// stays: it gets an empty tab (a new tab page in the window's Space) soon.
+// False, so the window closes, when the window itself is closing, in a
+// private window, or without Koan's Spaces.
+bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser);
 
 // The Spaces feature of the tab context menu (koan_tab_menu.h): with Spaces on,
 // replaces the tab group items of the tab context menu for the tab at
@@ -74,6 +99,17 @@ void ReplaceTabGroupMenuItems(ui::SimpleMenuModel* menu,
 // upstream decides (no Spaces in the window).
 tabs::TabInterface* PickSpaceTab(TabStripModel* tab_strip,
                                  const tab_groups::TabGroupId& group);
+
+// TabStripModel::AddWebContents(), for a tab added with no index that isn't
+// a link's (Ctrl+T, the URL bar's new tab, chrome.tabs.create()): Zen puts it
+// at the top of the Space (zen.view.show-newtab-button-top, Tabbrowser's
+// #insertTabAtIndex), where the New Tab row is, not at the end of the window.
+// Sets `index` and `group` to the start of the focused Space unless `group` is
+// already set, the tab is pinned, or the window has no Spaces.
+void PlaceUnindexedTab(TabStripModel* tab_strip,
+                       bool pinned,
+                       int& index,
+                       std::optional<tab_groups::TabGroupId>& group);
 
 // TabStripModel::RotateFocusedGroup() (upstream's swipe): whether swiping
 // past the last or first Space wraps around (Zen's
