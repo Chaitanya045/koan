@@ -33,6 +33,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_agent_indicator.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
+#include "koan/browser/ui/views/koan_command_policy.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
@@ -178,6 +179,9 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
   browser_view->SetProperty(
       kKoanBrowserViewControllerKey,
       std::make_unique<KoanBrowserViewController>(browser_view));
+  // Once From() finds the controller: the policy's rows ask it which of
+  // them this window has (Spaces).
+  InstallCommandPolicy(browser_view);
 }
 
 // static

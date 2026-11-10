@@ -34,7 +34,8 @@ namespace koan {
 //   is collapsed only while compact mode hides the sidebar, which is never
 //   saved (the hook);
 // - every command, menu item, shortcut and setting that reaches the strip's
-//   state either does what Koan does with it or nothing (InstallActions(),
+//   state either does what Koan does with it or nothing (the command
+//   policy's kSidebar rows and InstallActions(),
 //   RemoveOldPrefs(), the hooks that call ShowSidebarButtonContextMenu() and
 //   koan::OnSidebarDragCollapsed());
 // - the strip is collapsed and expanded by one function, SetSidebarHidden(),
@@ -74,16 +75,19 @@ class KoanVerticalTabsPolicy {
   // on its own schedule, so this runs again when compact mode changes.
   void UpdateSidebarButtonText();
 
+  // The sidebar button's action (the command policy's kSidebar row): in Zen
+  // the sidebar button toggles compact mode.
+  void OnSidebarButtonAction();
+
  private:
   PrefService* GetPrefs() const;
   actions::ActionItem* FindAction(int action_id) const;
-  // Re-points the window's own actions (BrowserActions, so no other window's
-  // and no profile state): the commands that reach the strip's state. With
-  // kUseActionsForBrowserCommands (on, and forced on by Koan) every route to
-  // them, the menu bar, shortcuts and chrome::ExecuteCommand(), runs these.
+  // The state of the window's own actions that reach the strip (enabled,
+  // the sidebar button's key and text). What they run is the command
+  // policy's (koan_command_policy.cc, kSidebar rows): with
+  // kUseActionsForBrowserCommands (forced on) every route to them, the menu
+  // bar, shortcuts and chrome::ExecuteCommand(), runs those.
   void InstallActions();
-  void OnSidebarButtonAction();
-  void OnTabSearchAction();
   // Old profiles (or chrome://settings) may have the three prefs upstream
   // reads for the strip's mode and hover; the hook ignores them, and this
   // keeps them at their defaults so that the settings page is truthful.

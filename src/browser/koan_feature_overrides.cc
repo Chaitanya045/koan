@@ -52,13 +52,14 @@ void RegisterFeatureOverrides(variations::FeatureOverrides& overrides) {
   // prefs::kCloseOnBackWithNoHistory (koan_tab_hooks.h).
   overrides.EnableFeature(tabs::kBackToOpener);
 
-  // The sidebar is Koan's (KoanVerticalTabsPolicy): the commands that reach
-  // upstream's vertical tab strip state run the window's actions, which Koan
-  // re-points (also the Spaces' tab group commands and the URL bar's new
-  // tab), so the legacy command switch (which would not go through them)
-  // must not be what runs. On by default upstream; set here so that a
-  // study can't turn it off. (A command-line switch still can; the state
-  // controller's hook keeps the mode and collapse state safe then.)
+  // Every route to a browser command (the menu bar, shortcuts,
+  // chrome::ExecuteCommand, toolbar buttons) runs the window's actions, which
+  // Koan's command policy re-points (koan_command_policy.cc: the sidebar's
+  // commands, the Spaces' tab group commands, the URL bar's new tab, the
+  // Glance's page commands, Esc). On by default upstream; set here so that a
+  // study can't bring back the legacy command switch. (A command-line switch
+  // still can; the policy's legacy hook and the state controller's hook keep
+  // things safe then.)
   overrides.EnableFeature(features::kUseActionsForBrowserCommands);
   // Upstream's hints about expand-on-hover (shown after any collapse, which
   // compact mode does) and the vertical tabs tutorial and badge: Koan has no

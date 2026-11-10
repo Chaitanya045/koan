@@ -522,6 +522,17 @@ only turns the close button red ("Press Esc again to close"); a second Esc
 within 3 seconds closes. A page that asks before you leave it ("Leave
 site?") gets to ask.
 
+While the card is open, the browser's page commands act on the Glance page,
+not the tab under it, from the keyboard, the menu bar or the toolbar, as in
+Zen: Close Tab (Ctrl+W; ⌘W) closes the card; Reload, Back and Forward, Stop
+and zoom act on the Glance page (the Back, Forward and Stop buttons follow
+it); Focus Location (Ctrl+L; ⌘L) opens the URL bar in the sidebar with the
+Glance page's address, and what you open from it loads in the Glance; Copy
+Current URL (Ctrl+Shift+C; ⌘⇧C) copies the Glance page's address. Find
+(Ctrl+F; ⌘F) is off in a Glance for now, and so is reloading a page that
+came from a form. Bookmark, Print, Save Page, DevTools and View Source still
+act on the tab under the card.
+
 On macOS, as in Zen (whose default trigger is `alt` on every platform):
 Alt is the Option key, so ⌥+click opens Glance, Meta is ⌘, and the split
 view shortcuts are ⌘⌥V / ⌘⌥H / ⌘⌥G / ⌘⌥U, which take over View Source

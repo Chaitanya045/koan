@@ -27,6 +27,7 @@
 #include "ui/views/view_tracker.h"
 
 class BrowserView;
+class GURL;
 class LocationBarView;
 
 namespace ui {
@@ -95,13 +96,25 @@ class KoanUrlBarController : public views::ViewObserver,
   // scope (Chromium's "@tabs"). False if the bar can't open now (the caller
   // falls back to focusing the omnibox).
   bool OpenForTabSearch();
+  // ⌘L over a Glance card: opens the omnibox with the Glance page's `url`,
+  // selected, to edit in place (Zen: the Glance is the selected tab). What
+  // the user opens from it loads in the Glance page
+  // (MaybeOpenOmniboxMatchInGlance()). Returns false if the omnibox can't
+  // open here (content fullscreen, no location bar).
+  bool OpenForGlance(const GURL& url);
+  // Whether the omnibox is open over a Glance (OpenForGlance()).
+  bool is_glance_edit() const { return glance_edit_; }
+  // Whether what the user opens now should load in the Glance page; ends the
+  // Glance session if so.
+  bool TakeGlanceEdit();
 
   // Called by KoanBrowserViewController once the window is in its widget.
   // Zen's zen.urlbar.open-on-startup (true): a window that starts on the
   // empty tab (a new window, the first launch; not a session restore) opens
   // the New Tab bar at once.
   void OnAddedToWidget();
-  // Closes the omnibox without opening anything: the page gets focus back.
+  // Closes the omnibox without opening anything: the page (or the Glance
+  // page it was opened over) gets focus back.
   void Close();
   // The user is about to edit by clicking the sidebar's URL pill: it edits in
   // the pill, not floating (Zen: a mouse press never floats the bar at once).
@@ -157,11 +170,6 @@ class KoanUrlBarController : public views::ViewObserver,
   void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
  private:
-  // Routes the window's "New tab" action (the sidebar's new-tab button, the
-  // app menu) through OpenForNewTab().
-  void InstallNewTabAction();
-  void OnNewTabAction();
-
   // Whether the floating bar can open now: the feature, a normal window with
   // tabs and an omnibox, not in a fullscreen that hides the toolbar's view.
   bool CanOpenBar() const;
@@ -221,6 +229,8 @@ class KoanUrlBarController : public views::ViewObserver,
   // asked for on the change from text to none only.
   bool text_was_empty_ = false;
   bool empty_list_retry_running_ = false;
+  // Open over a Glance card (OpenForGlance()).
+  bool glance_edit_ = false;
   // Zen's zen.urlbar.wait-to-clear: what was typed into a new-tab bar that
   // closed without opening anything, offered again for a while.
   std::u16string last_search_;
