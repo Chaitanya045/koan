@@ -277,8 +277,12 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every
 pull request. It checks that:
 
 - every patch applies to the Chromium revision in `CHROMIUM_VERSION`;
-- the unit tests pass;
+- the Python unit tests (the branding rules) pass;
 - clang-format, shellcheck and `node --check` find no problems.
+
+CI doesn't build Chromium on Linux, so the C++ tests (`koan_unittests` and
+`koan_browsertests`) run on your build instead, and the macOS CI can compile
+them (see below).
 
 Run the same checks locally before pushing:
 
@@ -286,6 +290,7 @@ Run the same checks locally before pushing:
 scripts/ci/check_patches.sh
 python3 -m unittest discover -s scripts/tests
 git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file --dry-run --Werror
+shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
 ```
 
 The macOS build runs separately, every night and on demand
@@ -317,6 +322,50 @@ Icons (`.agent/notes/koan-icons.md`) have two tests of their own:
   size. It reads `--koan-icon-trace=<file>`, a developer switch that only
   builds with DCHECKs have (it does nothing in a release build); run it with
   `scripts/e2e/run.sh icons`.
+
+### Which test to write
+
+Koan has three kinds of tests. Pick the cheapest one that can fail for the
+reason you care about.
+
+| Test | Use it for | Run it |
+| --- | --- | --- |
+| Unit test (`koan_unittests`, or the area's own target: `koan_shortcut_unittests`, `koan_views_unittests`, `koan_look_unittests`, `koan_icons_unittests`, `koan_agent_unittests`) | Pure logic: scoring and ordering, parsing and formatting, tables of data, colour maths, invariants of prefs. It must link without the browser. | `scripts/test_unit.sh`, a few seconds after a short build |
+| Browser test (`koan_browsertests`) | State that lives in the browser's own objects: Spaces, pinned tabs, what Koan keeps in the session and gets back after a restart. | `scripts/test_browser.sh`, on request: it starts a browser per test |
+| End-to-end test (`scripts/e2e`) | What the user sees and does: views, layout, input, menus, animations. | `scripts/e2e/run.sh <test>` |
+
+#### Adding a unit test
+
+1. Put the logic in a small `source_set` that depends on `//base` (and
+   `//ui/base` or the like) only, not on `//chrome/browser`. If it sits in a
+   big file next to views, move it out, as `koan_fuzzy_score.cc` and
+   `koan_space_title.cc` were moved out of the command palette and the
+   Spaces; keep the original call site a one-liner.
+2. Write `foo_unittest.cc` next to `foo.cc` with plain gtest. If its area
+   has a test target of its own (the shortcut table, views, colours, icons,
+   agent control), list it there; otherwise in the `sources` of
+   `koan_unittests` in `src/test/BUILD.gn`. Add the `source_set` to its
+   `deps`.
+3. Run `scripts/test_unit.sh --gtest_filter='Foo*'`.
+
+Test the edge cases that an end-to-end run can't reach cheaply: empty input,
+the largest and smallest values, malformed prefs, and each platform's branch
+(`BUILDFLAG(IS_MAC)`). A test that reads a table (like the shortcut table's)
+should check its invariants, so that a new row that breaks them fails at
+once.
+
+#### Adding a browser test
+
+Derive from `InProcessBrowserTest`, put the file in `src/test/browser/` and
+list it in `browsertests_impl` in `src/test/BUILD.gn`. `koan_browser_test_utils.h`
+has helpers for Koan's controllers. To test a restart, write a `PRE_Foo` test
+(the first browser, closed at the end) and a `Foo` test (the next one, on the
+same profile and with "continue where I left off" set), as
+`koan_session_restore_browsertest.cc` does. Use `chrome://` pages, which load
+without a server.
+
+Both targets also build for macOS (`is_mac`), and the macOS CI can compile
+them. Keep platform code in them behind `BUILDFLAG(IS_MAC)` too.
 
 ## Commits
 
