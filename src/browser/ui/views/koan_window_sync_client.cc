@@ -116,6 +116,7 @@ void KoanWindowSyncClient::Join() {
           ->AddSpacesChangedCallback(
               base::BindRepeating(&KoanWindowSyncClient::OnLocalSpacesChanged,
                                   weak_factory_.GetWeakPtr()));
+  browser_view_->browser()->GetTabStripModel()->AddObserver(this);
   sync_->AddWindow(this);
   if (widget_observation_.IsObserving() &&
       widget_observation_.GetSource()->IsActive()) {
@@ -130,7 +131,9 @@ void KoanWindowSyncClient::OnBrowserViewDestroying() {
   session_restored_subscription_ = base::CallbackListSubscription();
   spaces_changed_subscription_ = base::CallbackListSubscription();
   widget_observation_.Reset();
+  items_report_timer_.Stop();
   if (sync_) {
+    browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
     sync_->RemoveWindow(this);
     sync_ = nullptr;
   }
@@ -148,6 +151,8 @@ void KoanWindowSyncClient::OnWidgetActivationChanged(views::Widget* widget,
                                                      bool active) {
   if (active && sync_) {
     sync_->OnWindowActivated(this);
+    // Zen's focus swap: the selected synced tab's page comes here.
+    MaybeRequestActivePage();
   }
 }
 
@@ -230,6 +235,8 @@ void KoanWindowSyncClient::OnLocalSpacesChanged() {
     return;
   }
   sync_->ReportSpaces(this, LocalSpaces(/*assign_ids=*/true));
+  // Pinned tabs name their Space's id.
+  ScheduleItemsReport();
 }
 
 void KoanWindowSyncClient::ApplySpaces(

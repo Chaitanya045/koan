@@ -59,6 +59,9 @@ struct ItemRecord {
   // "Change Label…" and "Change Icon…" (an emoji); empty: the page's.
   std::u16string custom_title;
   std::u16string custom_icon;
+  // The user container the tab is in (containers::Serialize()), or empty.
+  // An agent container's tab is never an item.
+  std::string container;
 
   bool operator==(const ItemRecord&) const = default;
 };

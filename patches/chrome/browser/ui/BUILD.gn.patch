@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 0772e0c6b5cd4c0577f9d89ee0820fc7fc8d7c5f..50189459b76f2b0bfe716e81de5320348104c1a6 100644
+index 0772e0c6b5cd4c0577f9d89ee0820fc7fc8d7c5f..c969a07ea0b2b994c4a61fb4ea3074132efbdbc7 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
 @@ -516,6 +516,8 @@ if (!is_android) {
@@ -20,7 +20,15 @@ index 0772e0c6b5cd4c0577f9d89ee0820fc7fc8d7c5f..50189459b76f2b0bfe716e81de532034
        "//ui/base",
        "//ui/base/mojom:ui_base_types",
      ]
-@@ -776,6 +780,7 @@ if (!is_android) {
+@@ -644,6 +648,7 @@ if (!is_android) {
+       "//components/webapps/common",
+       "//content/public/browser",
+       "//extensions/buildflags",
++      "//koan/browser/ui/views",
+     ]
+     if (enable_extensions_core) {
+       deps += [
+@@ -776,6 +781,7 @@ if (!is_android) {
        "//content/public/browser",
        "//content/public/common",
        "//extensions/buildflags",
@@ -28,7 +36,7 @@ index 0772e0c6b5cd4c0577f9d89ee0820fc7fc8d7c5f..50189459b76f2b0bfe716e81de532034
        "//printing/buildflags",
        "//ui/actions",
        "//ui/base",
-@@ -975,6 +980,7 @@ if (!is_android) {
+@@ -975,6 +981,7 @@ if (!is_android) {
        "//content/public/browser",
        "//content/public/common",
        "//extensions/buildflags",
@@ -36,7 +44,7 @@ index 0772e0c6b5cd4c0577f9d89ee0820fc7fc8d7c5f..50189459b76f2b0bfe716e81de532034
        "//pdf:features",
        "//printing/buildflags",
        "//ui/actions",
-@@ -1461,6 +1467,7 @@ if (!is_android) {
+@@ -1461,6 +1468,7 @@ if (!is_android) {
        "//components/web_modal",
        "//content/public/browser",
        "//content/public/common",
@@ -44,7 +52,7 @@ index 0772e0c6b5cd4c0577f9d89ee0820fc7fc8d7c5f..50189459b76f2b0bfe716e81de532034
        "//net",
        "//third_party/blink/public/common",
        "//ui/base",
-@@ -1518,6 +1525,8 @@ source_set("layout_constants") {
+@@ -1518,6 +1526,8 @@ source_set("layout_constants") {
      "//chrome/browser/ui:ui_features",
      "//chrome/common:chrome_features",
      "//components/omnibox/common",

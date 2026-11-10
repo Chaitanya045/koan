@@ -1030,6 +1030,34 @@ void KoanPinnedTabController::SetPinnedUrl(tabs::TabInterface* tab,
   ResetToPinnedUrl(tab);
 }
 
+void KoanPinnedTabController::SetSyncedPin(tabs::TabInterface* tab,
+                                           bool essential,
+                                           const GURL& pinned_url,
+                                           const std::u16string& custom_title,
+                                           const std::u16string& custom_icon) {
+  TabStripModel* model = tab_strip_model();
+  const int index = model->GetIndexOfTab(tab);
+  if (index == TabStripModel::kNoTab) {
+    return;
+  }
+  KoanTabState& state = GetOrCreateTabState(tab->GetContents());
+  state.pinned_in_space = !essential;
+  if (state.pinned_url != pinned_url) {
+    state.pinned_url = pinned_url;
+    state.pinned_icon = ui::ImageModel();
+    FetchPinnedIcon(tab->GetContents());
+  }
+  state.custom_title = custom_title;
+  state.custom_icon = custom_icon;
+  if (tab->IsPinned() != essential) {
+    base::AutoReset<bool> changing(&changing_pin_, true);
+    model->SetTabPinned(index, essential);
+  }
+  UpdateFreezingExemption(tab);
+  SaveTabState(tab->GetContents());
+  UpdateTabView(tab);
+}
+
 void KoanPinnedTabController::StartRenaming(tabs::TabInterface* tab) {
   StartRenamingTabRow(tab);
 }
