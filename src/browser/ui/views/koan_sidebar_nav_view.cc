@@ -44,6 +44,7 @@
 #include "koan/browser/ui/views/koan_sidebar_extensions.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_site_panel_actions.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -571,9 +572,11 @@ void KoanSidebarNavView::ShowSitePanel() {
   builder.SetOnExtensionsClickedCallback(
       base::BindRepeating(&KoanSidebarExtensionsView::ShowExtensionsMenu,
                           extensions_->GetWeakPtr()));
-  PageInfoBubbleView::CreatePageInfoBubble(builder.Build())
-      ->GetWidget()
-      ->Show();
+  views::BubbleDialogDelegateView* bubble =
+      PageInfoBubbleView::CreatePageInfoBubble(builder.Build());
+  // Zen's site panel actions on top (#78).
+  AddSitePanelActions(bubble, browser_view_, contents);
+  bubble->GetWidget()->Show();
 }
 
 BEGIN_METADATA(KoanSidebarNavView)

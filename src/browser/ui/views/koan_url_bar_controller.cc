@@ -68,7 +68,9 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_site_panel_actions.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_strip_on_share.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
 #include "koan/browser/ui/views/koan_welcome.h"
@@ -1402,8 +1404,9 @@ void CopyCurrentUrl(BrowserView* browser_view, bool markdown) {
   if (!contents) {
     return;
   }
-  const std::u16string url =
-      base::UTF8ToUTF16(contents->GetVisibleURL().spec());
+  // Zen copies the URL without its tracking parameters (#78).
+  const GURL page_url = StripTrackingParameters(contents->GetVisibleURL());
+  const std::u16string url = base::UTF8ToUTF16(page_url.spec());
   std::u16string text = url;
   if (markdown) {
     std::u16string title = contents->GetTitle();
@@ -1417,11 +1420,28 @@ void CopyCurrentUrl(BrowserView* browser_view, bool markdown) {
     writer.WriteText(text);
   }
   // Zen's strings (zen-general.ftl).
-  if (KoanBrowserViewController* controller =
-          KoanBrowserViewController::From(browser_view)) {
-    controller->toast()->Show(markdown ? u"Copied current URL as Markdown!"
-                                       : u"Copied current URL!");
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view);
+  if (!controller) {
+    return;
   }
+  const std::u16string done =
+      markdown ? u"Copied current URL as Markdown!" : u"Copied current URL!";
+  // On macOS Zen's toast for a web page's URL can share it
+  // (copyCurrentURLToClipboard()).
+  if (!markdown && CanSharePage() && page_url.SchemeIsHTTPOrHTTPS()) {
+    controller->toast()->ShowWithAction(
+        done, kKoanShareIcon, u"Share",
+        base::BindOnce(
+            [](base::WeakPtr<content::WebContents> contents, const GURL& url) {
+              if (contents) {
+                SharePage(contents.get(), url);
+              }
+            },
+            contents->GetWeakPtr(), page_url));
+    return;
+  }
+  controller->toast()->Show(done);
 }
 
 // The koan_url_bar.h hooks.
