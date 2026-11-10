@@ -12,8 +12,11 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 
@@ -39,7 +42,18 @@ class KoanWorkspaceController;
 // Per-window Koan state and behaviour. Owned by its BrowserView through a
 // ui::ClassProperty; created and destroyed by the hooks in
 // koan_browser_view_hooks.h. Compact mode and sidebar styling hang off this.
-class KoanBrowserViewController : public views::ViewObserver {
+//
+// Teardown runs once, at the first of:
+// - the window's widget being destroyed (OnWidgetDestroying()), the usual
+//   case: the widget, the widgets it owns (Koan's overlays, bubbles) and the
+//   browser's window features are all still there;
+// - ~BrowserView (DestroyFor()), for a widget deleted without its native
+//   window closing first. By then BrowserView::DeleteBrowserWindow() has
+//   nulled browser_widget(), the owned widgets are closed and the browser's
+//   window features are torn down (BrowserWidget::~BrowserWidget()): the #153
+//   crash came from UI work at that point.
+class KoanBrowserViewController : public views::ViewObserver,
+                                  public views::WidgetObserver {
  public:
   explicit KoanBrowserViewController(BrowserView* browser_view);
   KoanBrowserViewController(const KoanBrowserViewController&) = delete;
@@ -90,6 +104,13 @@ class KoanBrowserViewController : public views::ViewObserver {
   void OnViewAddedToWidget(views::View* observed_view) override;
   void OnViewBoundsChanged(views::View* observed_view) override;
 
+  // views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget* widget) override;
+
+  // Lets every controller go of the window's UI, once. Nothing is forwarded
+  // to the controllers afterwards.
+  void TearDown();
+
   // Rounds the content card's corners when it is shown, restores upstream's
   // corners otherwise. Runs after each layout of the contents area, since the
   // card depends on tab strip mode and fullscreen state.
@@ -117,8 +138,14 @@ class KoanBrowserViewController : public views::ViewObserver {
   // Its commands run the shortcuts above.
   std::unique_ptr<KoanCommandPalette> command_palette_;
   std::map<std::string, std::string> session_data_;
+  bool torn_down_ = false;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       observations_{this};
+  // The window's widget. BrowserView observes it from its AddedToWidget(),
+  // before Koan does, so its OnWidgetDestroying() (which closes the
+  // remaining tabs) runs before Koan's teardown.
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
   base::WeakPtrFactory<KoanBrowserViewController> weak_factory_{this};
 };
 

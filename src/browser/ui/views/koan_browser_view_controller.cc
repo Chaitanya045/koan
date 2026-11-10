@@ -107,23 +107,35 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
 // static
 void KoanBrowserViewController::DestroyFor(BrowserView* browser_view) {
   if (KoanBrowserViewController* controller = From(browser_view)) {
-    // First: from here on nothing touches the sidebar's state.
-    controller->vertical_tabs_->OnBrowserViewDestroying();
-    controller->command_palette_->OnBrowserViewDestroying();
-    controller->shortcuts_->OnBrowserViewDestroying();
-    controller->compact_mode_->OnBrowserViewDestroying();
-    controller->sidebar_tabs_->OnBrowserViewDestroying();
-    controller->workspaces_->OnBrowserViewDestroying();
-    controller->pinned_tabs_->OnBrowserViewDestroying();
-    controller->glance_->OnBrowserViewDestroying();
-    controller->library_->OnBrowserViewDestroying();
-    controller->toast_->Close();
-    controller->media_->OnBrowserViewDestroying();
-    controller->download_animation_->OnBrowserViewDestroying();
-    controller->window_drag_->OnBrowserViewDestroying();
-    controller->welcome_->OnBrowserViewDestroying();
+    controller->TearDown();
   }
   browser_view->ClearProperty(kKoanBrowserViewControllerKey);
+}
+
+void KoanBrowserViewController::TearDown() {
+  if (torn_down_) {
+    return;
+  }
+  torn_down_ = true;
+  VLOG(1) << "Koan: window torn down"
+          << (browser_view_->browser_widget() ? "" : " (widget gone)");
+  widget_observation_.Reset();
+  observations_.RemoveAllObservations();
+  // First: from here on nothing touches the sidebar's state.
+  vertical_tabs_->OnBrowserViewDestroying();
+  command_palette_->OnBrowserViewDestroying();
+  shortcuts_->OnBrowserViewDestroying();
+  compact_mode_->OnBrowserViewDestroying();
+  sidebar_tabs_->OnBrowserViewDestroying();
+  workspaces_->OnBrowserViewDestroying();
+  pinned_tabs_->OnBrowserViewDestroying();
+  glance_->OnBrowserViewDestroying();
+  library_->OnBrowserViewDestroying();
+  toast_->Close();
+  media_->OnBrowserViewDestroying();
+  download_animation_->OnBrowserViewDestroying();
+  window_drag_->OnBrowserViewDestroying();
+  welcome_->OnBrowserViewDestroying();
 }
 
 // static
@@ -141,6 +153,10 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     views::View* observed_view) {
   if (observed_view == browser_view_) {
     VLOG(1) << "Koan: window attached to widget";
+    if (views::Widget* widget = browser_view_->GetWidget();
+        widget && !widget_observation_.IsObserving()) {
+      widget_observation_.Observe(widget);
+    }
     vertical_tabs_->OnAddedToWidget();
     compact_mode_->OnAddedToWidget();
     sidebar_tabs_->OnAddedToWidget();
@@ -166,6 +182,10 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   media_->OnBrowserViewLayout();
   download_animation_->OnBrowserViewLayout();
   welcome_->OnBrowserViewLayout();
+}
+
+void KoanBrowserViewController::OnWidgetDestroying(views::Widget* widget) {
+  TearDown();
 }
 
 void KoanBrowserViewController::UpdateContentCard() {
