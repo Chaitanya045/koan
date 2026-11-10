@@ -75,6 +75,9 @@
       {"koan-welcome", "Koan welcome screen",                                \
        "Zen's welcome screen on Chromium's first run.", kOsDesktop,          \
        FEATURE_VALUE_TYPE(koan::features::kKoanWelcome)},                    \
+      {"koan-folders", "Koan folders",                                       \
+       "Zen's tab folders at the top of each Space in the sidebar.",         \
+       kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanFolders)},        \
       {"koan-new-tab", "Koan new tab page",                                  \
        "Zen's blank new tab page instead of Chromium's.", kOsDesktop,        \
        FEATURE_VALUE_TYPE(koan::features::kKoanNewTab)},

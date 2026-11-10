@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_vertical_tabs.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_spaces.h"
@@ -114,6 +115,8 @@ constexpr TabMenuFeature kFeatures[] = {
      &IsPinnedTabMenuCommandEnabled, &ExecutePinnedTabMenuCommand},
     {TabMenuFeatureId::kSpaces, &AddSpacesItems, &IsSpacesCommandEnabled,
      &ExecuteSpacesCommand},
+    {TabMenuFeatureId::kFolders, &AddFolderTabMenuItems,
+     &IsFolderTabMenuCommandEnabled, &ExecuteFolderTabMenuCommand},
 };
 
 // The feature whose range `command_id` is in, or null.

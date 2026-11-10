@@ -38,6 +38,7 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_download_animation.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_loading_indicator.h"
@@ -138,6 +139,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
                                                       compact_mode_.get())),
       workspaces_(std::make_unique<KoanWorkspaceController>(browser_view)),
       pinned_tabs_(std::make_unique<KoanPinnedTabController>(browser_view)),
+      folders_(std::make_unique<KoanFolderController>(browser_view)),
       theme_(std::make_unique<KoanThemeController>(browser_view)),
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       library_(std::make_unique<KoanLibraryController>(browser_view)),
@@ -211,6 +213,7 @@ void KoanBrowserViewController::TearDown() {
   sidebar_tabs_->OnBrowserViewDestroying();
   workspaces_->OnBrowserViewDestroying();
   pinned_tabs_->OnBrowserViewDestroying();
+  folders_->OnBrowserViewDestroying();
   theme_->OnBrowserViewDestroying();
   glance_->OnBrowserViewDestroying();
   library_->OnBrowserViewDestroying();
@@ -245,6 +248,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     compact_mode_->OnAddedToWidget();
     sidebar_tabs_->OnAddedToWidget();
     workspaces_->OnAddedToWidget();
+    folders_->OnAddedToWidget();
     theme_->OnAddedToWidget();
     shortcuts_->OnAddedToWidget();
     command_palette_->OnAddedToWidget();

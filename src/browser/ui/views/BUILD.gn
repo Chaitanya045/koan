@@ -18,6 +18,7 @@ source_set("views") {
     "koan_dialogs.h",
     "koan_empty_tab.h",
     "koan_essentials.h",
+    "koan_folders.h",
     "koan_extensions_hooks.h",
     "koan_glance.h",
     "koan_glass_tint.h",
@@ -197,6 +198,14 @@ source_set("space_navigation") {
   sources = [ "koan_space_navigation.h" ]
 }
 
+# Which recreated Space a stored per-Space entry (a folder) belongs to.
+source_set("stored_space") {
+  sources = [
+    "koan_stored_space.cc",
+    "koan_stored_space.h",
+  ]
+}
+
 # Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_views_unittests
 #   out/Koan/koan_views_unittests
@@ -210,6 +219,7 @@ test("koan_views_unittests") {
     "koan_sidebar_curve_unittest.cc",
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
+    "koan_stored_space_unittest.cc",
     "koan_space_routes_unittest.cc",
     "koan_stored_tab_unittest.cc",
     "koan_strip_on_share_unittest.cc",
@@ -225,6 +235,7 @@ test("koan_views_unittests") {
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
+    ":stored_space",
     ":space_routes",
     ":stored_tab",
     ":strip_on_share",
@@ -313,6 +324,12 @@ source_set("impl") {
     "koan_essentials.cc",
     "koan_essentials_promo.cc",
     "koan_essentials_promo.h",
+    "koan_folder_controller.cc",
+    "koan_folder_controller.h",
+    "koan_folder_views.cc",
+    "koan_folder_views.h",
+    "koan_folder_zen_assets.cc",
+    "koan_folder_zen_assets.h",
     "koan_glance_controller.cc",
     "koan_glance_controller.h",
     "koan_glass_state.cc",
@@ -439,6 +456,7 @@ source_set("impl") {
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
+    ":stored_space",
     ":space_routes",
     ":stored_tab",
     ":strip_on_share",
@@ -459,6 +477,7 @@ source_set("impl") {
     "//chrome/browser/first_run",
     "//chrome/browser/lifetime",
     "//chrome/browser/performance_manager",
+    "//chrome/browser/prefs:util",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/resource_coordinator",
     "//chrome/browser/search",

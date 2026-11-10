@@ -32,6 +32,7 @@
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget_observer.h"
@@ -147,6 +148,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
     // Null: always enabled.
     base::RepeatingCallback<bool()> is_enabled;
     base::RepeatingClosure run;
+    // Names the item for UI DevTools (e2e tests), if set.
+    ui::ElementIdentifier element_id;
   };
 
   explicit KoanWorkspaceController(BrowserView* browser_view);
@@ -180,6 +183,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::vector<SpaceInfo> GetSpaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveSpace() const;
   std::optional<SpaceInfo> GetSpace(const tab_groups::TabGroupId& space) const;
+  // A Space's id in the stored Spaces (prefs::kWorkspaceList's "id"), made
+  // the first time it's asked for and kept while the window is open. A fresh
+  // start gives each Space it recreates its stored id back, so what other
+  // features store per Space (folders) finds its Space again rather than the
+  // one at its old place.
+  std::string GetStoredSpaceId(const tab_groups::TabGroupId& space);
   // Runs `callback` (soon, coalesced) whenever the Spaces or the active one
   // change.
   base::CallbackListSubscription AddSpacesChangedCallback(
@@ -217,6 +226,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // koan/browser/containers/koan_agent_containers.h).
   tab_groups::TabGroupId CreateBackgroundSpace(int index,
                                                const SpaceData& data);
+  // Makes a Space of the tabs at `indices` (sorted), right after the active
+  // Space, and shows it on the last of them (folders' "Convert folder to
+  // Space").
+  tab_groups::TabGroupId CreateSpaceFromTabs(const std::vector<int>& indices,
+                                             const SpaceData& data);
   void RenameSpace(const tab_groups::TabGroupId& space,
                    const std::u16string& name);
   // `icon` empty removes the icon.
@@ -511,6 +525,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   base::ListValue stored_spaces_;
   std::optional<base::ListValue> first_spaces_;
   bool may_store_spaces_ = true;
+  // GetStoredSpaceId()'s ids.
+  std::map<tab_groups::TabGroupId, std::string> stored_space_ids_;
   // Spaces in order with their data, as of the last update.
   std::vector<std::pair<tab_groups::TabGroupId, SpaceData>> spaces_snapshot_;
   std::vector<ClosedSpace> closed_spaces_;

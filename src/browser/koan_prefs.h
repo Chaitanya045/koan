@@ -154,9 +154,10 @@ inline constexpr char kWorkspaceTintSavedVariant[] =
 // gets them back (KoanWorkspaceController::RecreateStoredSpaces()): a list of
 // {"title": "<icon> <name>", "color": tab_groups::TabGroupColorId,
 // "active": bool, "pinned": [koan::StoredTab]}, in order: "pinned" is the
-// Space's pinned tabs, which come back unloaded with it (Zen restores only
-// the pinned tabs when it doesn't resume the session). The session holds the
-// Spaces otherwise (their tab groups).
+// Space's pinned tabs (not its folders' tabs, which kFolderList keeps), which
+// come back unloaded with it (Zen restores only the pinned tabs when it
+// doesn't resume the session). The session holds the Spaces otherwise (their
+// tab groups).
 inline constexpr char kWorkspaceList[] = "koan.workspaces.list";
 
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
@@ -228,6 +229,12 @@ inline constexpr char kPinnedTabCloseShortcutBehavior[] =
 // (off by default).
 inline constexpr char kPinnedTabRestoreToPinnedUrl[] =
     "koan.pinned_tabs.restore_to_pinned_url";
+
+// The folders of the window the user is in, with their tabs (folder tabs are
+// pinned tabs): restored, unloaded, in a window that opens without a session
+// restore (startup set to the New Tab page or to pages), as Zen restores the
+// pinned tabs and folders then. KoanFolderController keeps it.
+inline constexpr char kFolderList[] = "koan.folders.list";
 // The Library section shown last, opened next ("downloads", "spaces",
 // "history"; Zen's zen.library.last-tab).
 inline constexpr char kLibraryLastSection[] = "koan.library.last_section";

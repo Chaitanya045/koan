@@ -158,12 +158,10 @@ point of Koan.
 | Reset Pinned Tab, Replace with Current URL, Edit Pinned URL… | Same | Always offered for a pinned tab, as in Zen; a reset ignores no part of the URL (a hash-routed app's `#inbox` is reset too), while the reset button only shows once the page itself changed. Replace and Edit… are in an "Edit Pinned URL" ("Edit Essential URL") submenu, as in Zen. Zen's "Reset Pinned Tab to Pinned URL" shortcut is in the shortcut editor, without a key, as in Zen. |
 | Closing a pinned tab: reset, unload and switch | Same | Ctrl+W, Ctrl+F4 (Cmd+W and the menu bar on macOS), the close button and middle click; Zen's six behaviours in Settings > Tab Management > Pinned Tabs. |
 | Restore pinned tabs to their pinned URL on startup | Same | Settings > Tab Management > Pinned Tabs, off by default like Zen.  Pinned URLs, labels and icons come back with the session (Koan continues where you left off by default); with Settings > On startup set to open a new tab page, Chromium reopens Essentials from its own list and their current URL becomes the pinned URL. |
-| Pinned tabs come back when the session isn't restored (On startup set to the New Tab page or to pages) | Same | Essentials come back from Chromium's list, and each Space's pinned tabs come back into their Space unloaded, with their pinned URL, label, icon and container (kept with the Spaces in `koan.workspaces.list`). Unpinned tabs don't. A pinned tab comes back with its page but not its back/forward history. Zen also restores everything once after an app update; Koan doesn't. Folders: with #60. |
+| Pinned tabs come back when the session isn't restored (On startup set to the New Tab page or to pages) | Same | Essentials come back from Chromium's list, and each Space's pinned tabs come back into their Space unloaded, with their pinned URL, label, icon and container (kept with the Spaces in `koan.workspaces.list`). Unpinned tabs don't. A pinned tab comes back with its page but not its back/forward history. Zen also restores everything once after an app update; Koan doesn't. A folder's tabs come back with their folder (`koan.folders.list`), not also among the Space's pinned tabs. |
 | Change Label… / Change Icon… | Same | Inline rename; the icon picker is a grid of emoji plus a field for any other, smaller than Zen's searchable picker. |
 | Unload a tab | Same | Chromium's tab discarding. Resetting a tab that isn't loaded keeps it unloaded until it is shown, like Zen. Reset, unload and switch on a loaded tab away from its pinned URL loads the pinned page once before unloading it (Zen rewrites the unloaded tab's state instead; Chromium can't change an unloaded tab's page without loading it). |
 | Toasts: pinned URL replaced / updated / invalid, tab renamed | Same | Zen's texts, in Koan's toast. |
-| Unload all tabs of a folder | Missing | Koan has no folders yet (#42, PR #60); folders can use the same unload. |
-| Live Folders (RSS feeds, GitHub pull requests as a self-refreshing folder) | Missing | Needs folders first (#42); noted there as a follow-up. |
 | A pinned tab stays on its site: a URL from the URL bar on another domain opens a new tab (`zen.tabs.open-pinned-in-new-tab`); a new tab it opens on another domain opens in Glance (`zen.glance.open-essential-external-links`) | Same | Zen's host match (`www.` is another host; a search, or anything typed in a pinned tab that isn't on an http(s) page, opens a new tab). The Glance part covers a click on a `target=_blank` link and `window.open()` with noopener from a pinned tab or Essential that is the active tab; middle and ⌘-clicks still open background tabs, as in Zen, and a `window.open()` that keeps its opener (`rel=opener`, scripts that use the window) still opens a tab, since Glance can't hand the page its window. Both are settings (Glance, Pinned Tabs), on by default. Not yet tried on a Mac. |
 | At most 12 Essentials | Different | "Add to Essentials" shows how many are used ("3 / 12") and is off when the tab (a split view counts two) doesn't fit. Zen refuses a 13th dropped on the tiles; Koan accepts the drop, then moves the tab back to the Space as a normal tab once the drag is over. The same for one duplicated from an Essential. |
 | Duplicate of an Essential or a pinned tab | Same | The copy is a normal tab of the active Space, below its pinned tabs, as in Zen (Chromium would add another Essential, or a tab in the pinned run). Not yet tried on a Mac. |
@@ -173,6 +171,51 @@ point of Koan.
 | Pinned tabs that belong to their Space | Same | Ctrl+Shift+D or "Pin": the tab moves up to its Space's pinned section, between the Space header and the separator (Clear) above "+ New Tab", survives Clear and has a pinned URL; unpinned, it moves below New Tab. Each Space has its own. As in Zen, the pinned section, the separator, New Tab and the normal tabs scroll together, and the separator only shows while the Space has normal tabs. In a window without Spaces (Incognito) the separator and New Tab stay above the tab list, so pinned tabs are listed under them. Folders (#42) aren't in Koan yet; a pinned folder will need the same place. |
 | Pinned tab's unload button | Same | A loaded pinned tab shows Zen's dash ("Unload and switch to tab") on hover instead of the close button; it runs the close behaviour. An unloaded one shows the close button, which closes it. With the close behaviour "Close tab" it is the close button, as in Zen. A change of that setting shows on each tab when it next changes. |
 | Close all unpinned tabs (Ctrl+Shift+K, or Clear in the sidebar) | Same | Keeps the selected tab and the Space, like Zen; Ctrl+Shift+T reopens the last closed tab, one per press. Pinned tabs and Essentials stay. |
+
+## Folders
+
+Zen's folders are Firefox tab groups nested inside a Space's pinned section.
+Chromium's tab groups can't nest or be pinned, and Koan's Spaces already
+are tab groups, so Koan keeps folders in its own model (a tree of folders
+per Space holding tabs) and draws a row per folder in the vertical tab
+strip. As in Zen, a folder's tabs are pinned tabs of its Space, so folders
+sit in the pinned section, above the separator.
+
+Side by side with Zen (dark, the same tabs; `docs/screenshots/folders-*.png`
+and `zen-folders-*.png`, taken before folders moved above the separator):
+the folder icon, the semibold name, the 14px indent per level, the row pitch
+and the search popup's layout match. Koan shows the tab count on a collapsed
+folder.
+
+| Zen | Koan | Notes |
+|---|---|---|
+| Folders in a Space's pinned section, their tabs pinned | Same | A Space shows its pinned tabs, then its folders, then the separator with Clear and "+ New Tab", then its other tabs (Zen's `createFolder` puts a new folder at the end of the pinned section). A tab moved into a folder is pinned to the Space; an Essential leaves the Essentials keeping its pinned URL (Zen's `removeEssentials(tab, false)`). So folder tabs have the pinned close behaviour, survive Clear and have a pinned URL. Unpinning a folder tab takes it out of the folder, to the top of the normal tabs. A pinned tab dragged below the folders stays there. |
+| Create from "+" (Create Folder), the tab menu (Move to Folder > New Folder) or the command palette (New Folder) | Same | |
+| Move tabs into a folder from the tab menu | Same | Koan adds "Remove from Folder": the tab stays pinned, among the Space's pinned tabs (Zen has no such item; Unpack or a drag does it). |
+| Drag tabs in and out of folders | Same | Decided where the tab is dropped: a drag that comes back to where it started, or is cancelled (Esc), leaves it where it was. Dropped on a folder's row, a tab joins the folder as its first tab, and an Essential leaves the Essentials for it; the row's top fifth (and its bottom fifth unless the folder is expanded with two or more items) drops above or below the folder instead (zen.tabs.folder-dragover-threshold-percent = 20). Dropped among a folder's tabs it joins that folder; among the pinned tabs above the folders it leaves the folder, still pinned; among the normal tabs it leaves the folder and is unpinned. A folder tab dragged out of the window and back before the drop comes back loose (it left the window, and its folder with it). |
+| Dragging a folder (its row) | Missing | Chromium's tab drag only drags tabs; a folder moves with Change Space, or its tabs one by one. |
+| Rename from the folder menu only | Same | A double click toggles the folder twice, as in Zen. No Rename while the sidebar is collapsed. Empty names become "Folder". |
+| Moving a tab with ⌃⇧PgUp / ⌃⇧PgDn, or an extension's `tabs.move` | Same | Within a folder it changes places with the folder's other tabs, and the order is kept. Like Zen's `moveTabTo`, a move that isn't a drag never pins or unpins a tab: moved past the pinned section's edge, a folder tab goes back into the pinned section and its folder, and a normal tab back below it. Unlike Zen, the tab is seen to move past the edge and back (about 0.4 s later); Zen doesn't move it at all. |
+| Collapse / expand with animation | Same | Tabs slide away over 200 ms (Chromium's tab strip animation); the icon opens and closes like Zen's. Collapsed tabs are hidden once the animation ends. |
+| A collapsed folder shows its active tab | Same | With three dots on the folder icon. |
+| Subfolders (up to 5 levels) | Same | |
+| Unpack, Delete Folder | Same | Unpack keeps the tabs pinned, a level up. Like Zen's, a Space whose last tabs a folder deletes (or moves away with Change Space or Convert to Space) stays, with a fresh tab. Deleted tabs reopen (⌘⇧T) as loose tabs of the Space; a folder tab closed on its own reopens in its folder if the folder is still there (Zen brings back a plain tab group). |
+| Moving tabs into a collapsed folder opens it | Same | Unless it shows the active tab, as in Zen. |
+| A temporary ungroup (Tab menu, ⌃⇧PgUp/PgDn at the Space's edge, an extension's `tabs.ungroup`) | Same | A folder tab stays in its folder while it is out of its Space for a moment, and stays pinned when Spaces put it back (a regroup keeps a pinned tab among the pinned tabs). Folders follow their Spaces only once Spaces have put such tabs back. A folder tab ungrouped in a Space that isn't shown goes back to that Space (Spaces remember where it came from), and stays in its folder. |
+| Folders restored without the session (startup set to the New Tab page or pages) | Same | As Zen restores the pinned tabs and folders: the folders of the window you were in, with their tabs unloaded and pinned (pinned URL, label and icon kept), in the profile's only window when it opens without a session restore. They are kept in a profile pref (`koan.folders.list`) next to the session. The stored Spaces come back first (`koan.workspaces.list`, each with a stored id), and each folder goes to the Space with its stored Space id; one whose Space didn't come back (or stored before Spaces had ids) goes to the Space at its stored place, and a place with no Space gives its folders to the last one. Zen keeps the same folders in every window; Koan's are per window, so a window that never had a folder (⌘N next to one that has them) leaves the stored ones alone, and quitting from it keeps them. Its Spaces are stored, though, so the folders then come back by place in that window's Spaces. A split view in a folder comes back as two tabs. Known edge: after closing the last window on macOS and reopening it from the Dock (startup not set to continue), History > Reopen Closed Window brings the old window back with the same folders, next to the recreated ones. |
+| "New Folder" in the sidebar's context menu (empty area) | Missing | The "+" menu, the tab menu and the command palette have it. |
+| "New Folder" at the top level of the tab context menu | Missing | Koan has it inside Move to Folder only (Zen has both). |
+| zen.folders.max-subfolders, zen.folders.search.hover-delay, zen.folders.owned-tabs-in-folder | Different | Zen's defaults (5 levels, 500 ms, a new tab opened from a folder tab doesn't join it), fixed: no settings rows. |
+| Change Space, Convert folder to Space | Same | |
+| Search within a collapsed folder (hover) | Same | |
+| Unload All Tabs | Same | From the folder menu; Zen also has a button on the row of a collapsed folder with an active tab, Koan doesn't. |
+| Folder icon | Same | Zen's folder drawing in the accent colour, which is the active Space's tint. |
+| Tab count | Different | Zen shows none; Koan shows the count on a collapsed folder's row and in its tooltip. |
+| Change Icon… (custom folder icons) | Missing | Koan has no icon picker yet. |
+| Share Folder | Missing | Zen's sharing service. |
+| Live folders (RSS feeds, GitHub issues and pull requests) | Missing | Out of scope for the folders work (#42); not done yet. |
+| Folders in the collapsed (icons-only) sidebar | Different | Koan shows the folder icon only and doesn't indent. |
+| Folders without Spaces | Different | Koan's windows always show a Space; folders need Spaces and pinned tabs (Zen's folders always belong to a Space). |
 
 ## Glance and split view
 
@@ -219,7 +262,7 @@ point of Koan.
 | "Focus on" a Space | Same | Matched by the Space's name, which is shown beside "Focus on". |
 | Add to / Remove from Essentials | Same | As in the tab's context menu; Pin / Unpin Tab pin the tab to its Space. |
 | Open Theme Picker | Same | Opens the theme picker for the active Space. |
-| New Folder, Collapse / Expand All Folders | Missing | Not in Koan yet (#42); each feature adds its actions to the palette's registry. |
+| New Folder, Collapse / Expand All Folders | Same | Collapse / Expand only while a folder of the active Space is expanded / collapsed, as in Zen. |
 | Open Library | Same | Zen's second action; toggles the Library. |
 | Reset Pinned Tab | Same | Offered while the tab is away from its pinned URL, as in Zen. |
 | Toggle Tabs on right | Missing | The setting exists (Look and Feel, sidebar context menu); the palette action isn't there yet (#77). |

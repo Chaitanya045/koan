@@ -140,11 +140,12 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // from layout and for bubbles that never open.
   views::View* GetBubbleAnchor();
 
-  // A bubble is about to open at the peeked sidebar's pill (Koan's own page
-  // info button, which doesn't ask GetBubbleAnchor()): hold the sidebar out
-  // from now, before it opens, so the pill the bubble points at stays, and
-  // let go again when the bubble is gone (ReconcileBubbleHold()). Does
-  // nothing unless compact mode hides the sidebar.
+  // A bubble is about to open in the peeked sidebar (Koan's own page info
+  // button at the pill, which doesn't ask GetBubbleAnchor(), or a folder's
+  // search popup at its row): hold the sidebar out from now, before it opens,
+  // so the view the bubble points at stays, and let go again when the bubble
+  // is gone (ReconcileBubbleHold()). Does nothing unless compact mode hides
+  // the sidebar.
   void HoldSidebarForBubble();
 
   // Called by KoanUrlBarController when the omnibox is lifted out of the

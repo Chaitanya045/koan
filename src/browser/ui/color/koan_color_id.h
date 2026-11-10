@@ -141,6 +141,14 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanLibraryAddSpace,
   kColorKoanLibraryAddSpaceHovered,
   kColorKoanLibraryAddSpaceForeground,
+  // Folders (koan_folder_views.cc): Zen's folder icon (the folder behind,
+  // its cover, their outline and dots), a collapsed folder's tab count, and
+  // the highlighted tab in a folder's search popup.
+  kColorKoanFolderIconBack,
+  kColorKoanFolderIconFront,
+  kColorKoanFolderIconStroke,
+  kColorKoanFolderCount,
+  kColorKoanFolderSearchItemSelected,
 
   // Media cards in the sidebar (koan_media_controller.cc): the card, its
   // shadow and outline, and the progress bar's track and played part.

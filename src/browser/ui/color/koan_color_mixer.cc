@@ -323,6 +323,26 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanWelcomeAccentHovered] =
       ui::AlphaBlend(SK_ColorWHITE, kColorKoanWelcomeAccent, Alpha(0.1f));
   mixer[kColorKoanWelcomeOnAccent] = {ui::kColorSysOnPrimary};
+  // Folders (zen-folders.css), from the accent colour (the active Space's
+  // tint): the folder behind is the accent at 60% over grey (#c1c1c1 in dark
+  // mode), its cover the accent at 30% over white (60% over black in dark
+  // mode), the outline the accent at 50% over black (15% over #ebebeb in
+  // dark mode). The tab count is the text colour at 60%; a highlighted
+  // search result the text colour at 10%.
+  mixer[kColorKoanFolderIconBack] = ui::AlphaBlend(
+      ui::kColorSysPrimary,
+      dark ? SkColorSetRGB(0xc1, 0xc1, 0xc1) : SkColorSetRGB(0x80, 0x80, 0x80),
+      Alpha(0.6f));
+  mixer[kColorKoanFolderIconFront] =
+      ui::AlphaBlend(ui::kColorSysPrimary, dark ? SK_ColorBLACK : SK_ColorWHITE,
+                     Alpha(dark ? 0.6f : 0.3f));
+  mixer[kColorKoanFolderIconStroke] =
+      ui::AlphaBlend(ui::kColorSysPrimary,
+                     dark ? SkColorSetRGB(0xeb, 0xeb, 0xeb) : SK_ColorBLACK,
+                     Alpha(dark ? 0.15f : 0.5f));
+  mixer[kColorKoanFolderCount] = ui::SetAlpha(kColorToolbarText, Alpha(0.6f));
+  mixer[kColorKoanFolderSearchItemSelected] =
+      ui::SetAlpha(ui::kColorPrimaryForeground, Alpha(0.1f));
 
   // Space themes: Zen's --zen-themed-toolbar-bg-transparent, its background
   // without a theme (getGradient()) and getToolbarModifiedBaseRaw().

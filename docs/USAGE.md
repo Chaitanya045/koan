@@ -310,7 +310,8 @@ Without Cache, Next / Previous Tab, Capture Screenshot, Find in Page, Manage
 Extensions, Toggle Tabs on right, Switch to Automatic Appearance / Light
 Mode / Dark Mode, Print;
 with workspaces also New Space, Next / Previous Space and "Focus on" each
-other Space (type its name). Only the actions that apply are offered (Unpin
+other Space (type its name); with folders New Folder and Collapse / Expand
+All Folders. Only the actions that apply are offered (Unpin
 Tab on a pinned tab, Next Space with two Spaces, ...).
 
 ## Sidebar
@@ -344,10 +345,11 @@ tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
 bottom is Zen's bottom bar: the Library button on the left, **+** on the
-right, which opens the Create menu (Create Space, New Split and New Tab),
-and the Space switcher in the middle: one narrow button per Space, centred.
-The current Space shows its emoji (or a dot if it has none) in colour, the
-others a small grey dot that turns into their emoji while you hover it.
+right, which opens the Create menu (Create Space, Create Folder, New Split
+and New Tab), and the Space switcher in the middle: one narrow button per
+Space, centred. The current Space shows its emoji (or a dot if it has none)
+in colour, the others a small grey dot that turns into their emoji while
+you hover it.
 The Space buttons only show once there is more than one Space.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
@@ -478,6 +480,48 @@ delete the Space, ⌘⌃X / ⌘⌃Z go to the next / previous Space, ⌘⌃C ope
 new tab as ⌘T does. Tab > Group Tab isn't there (use Move To). A Space is
 never collapsed, and a tab group an extension makes becomes a Space with
 the default theme (unless the extension sets a colour).
+
+## Folders
+
+As in Zen, a Space's folders are part of its pinned section: after its
+pinned tabs, above the separator with Clear and "+ New Tab". A folder's tabs
+are pinned tabs of the Space, so they survive Clear and ⌘W runs the pinned
+close behaviour on them. A folder has a row with a folder icon and its name;
+its tabs sit under it, indented, and subfolders nest inside it (five levels
+at most).
+
+- **Create a folder:** click **+** at the bottom of the sidebar and choose
+  **Create Folder**, or right-click a tab and choose **Move to Folder >
+  New Folder** (the folder takes the selected tabs). Type its name and
+  press Enter.
+- **Add tabs:** right-click a tab, **Move to Folder** and pick the folder;
+  drop a tab on the folder's row (it becomes the folder's first tab), or
+  among its tabs. A tab moved in is pinned; an Essential leaves the
+  Essentials and keeps its pinned URL.
+- **Take tabs out:** drag the tab among the pinned tabs above the folders
+  (it stays pinned) or among the normal tabs (it's unpinned), unpin it
+  (⌃⇧D), or use **Move to Folder > Remove from Folder** (it stays pinned).
+- **Collapse / expand:** click the folder's row. A collapsed folder shows
+  its tab count, and still shows its tab if that's the active one (the
+  icon gets three dots).
+- **Search a folder:** hover a collapsed folder for half a second; type to
+  filter its tabs by title or site, use the arrow keys and Enter, or click
+  one.
+- **Folder menu** (right-click the row): Rename Folder (not while the
+  sidebar is collapsed; as in Zen, a double click doesn't rename), Unload
+  All Tabs (frees their memory and collapses the folder), New Subfolder,
+  Change Space, Convert folder to Space, Unpack Folder (its tabs and
+  subfolders move up a level), Delete Folder (closes its tabs; ⌘⇧T reopens
+  them as loose tabs; a folder tab closed on its own reopens in its
+  folder). A Space that a folder empties (Delete, Change Space, Convert to
+  Space) stays, with a new tab.
+
+![Folders](screenshots/folders-open.png)
+
+Folders are saved with the session and come back after a restart, and with
+a reopened window. With startup set to open the New Tab page or other pages,
+the folders of the window you were in still come back, with their tabs
+(unloaded until you open them), as in Zen.
 
 ## Space themes
 
@@ -876,7 +920,8 @@ own icons.
 Every Koan feature has a switch in `chrome://flags` (search "Koan"): Koan
 sidebar, compact mode, workspaces, Glance, restore tabs on demand, freeze
 background tabs, command palette, pinned tabs and Essentials, Library, media
-controls, download animation, window dragging from pages, welcome screen.
+controls, download animation, window dragging from pages, welcome screen,
+folders.
 
 The media controller and the download animation are on by default; like
 Zen's (which keeps them in about:config), they have no setting yet, only
