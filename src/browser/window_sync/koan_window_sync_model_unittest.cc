@@ -184,6 +184,7 @@ TEST(WindowSyncModelTest, RoundTripsThroughPrefs) {
   ItemRecord pinned = Pinned("p", "b");
   pinned.custom_title = u"Mail";
   pinned.custom_icon = u"✉️";
+  pinned.container = "user:s1";
   model.SetItems({Essential("e"), pinned});
   model.SetLive("e", 3);
 

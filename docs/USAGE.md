@@ -368,7 +368,7 @@ As in Zen there are two kinds of pinned tab:
   tab moves below New Tab. Pin a tab with Ctrl+Shift+D or "Pin" in its
   context menu. While a pinned tab is loaded, pointing at it shows a dash
   ("Unload and switch to tab") where other tabs have their close button.
-- **Essentials** are shared by all Spaces, up to 12 per window: "Add to
+- **Essentials** are shared by all Spaces, up to 12: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
   Dragging a tab into the grid also makes it an Essential. With no
   Essentials yet, dragging a tab to the top of the sidebar shows Zen's
@@ -403,6 +403,17 @@ neither do tabs in a sidebar collapsed to icons. "Change
 Icon…" (an emoji instead of the favicon) and "Unload" (free the tab's
 memory; it reloads when you select it). Pinned URLs, labels and icons are
 kept with the session.
+
+**Every window has the same Essentials and pinned tabs** (Zen's window
+sync). Pinning, unpinning, adding to or removing from the Essentials,
+reordering, a new pinned URL, label or icon in one window does the same in
+the others. Each such tab has one page: the window you select it in (or
+switch to with it selected) takes the page over, and the other windows keep
+its row with the last title and icon it had there, without loading it.
+Closing a window hands its pages to the window you used last. A tab
+unpinned or closed in one window stays, as a normal tab, in a window that
+has its page. Tabs in a split view, and an agent container's tabs, aren't
+synced.
 
 ## Spaces
 

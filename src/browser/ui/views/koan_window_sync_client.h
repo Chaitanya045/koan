@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WINDOW_SYNC_CLIENT_H_
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -14,12 +15,19 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/timer/timer.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "koan/browser/ui/views/koan_window_sync.h"
 #include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
+class BrowserWindowInterface;
 class Profile;
+
+namespace tabs {
+class TabInterface;
+}
 
 namespace koan {
 
@@ -29,6 +37,7 @@ namespace koan {
 // for every window; it does nothing in a window that isn't synced (see
 // KoanWindowSync::ShouldSync()).
 class KoanWindowSyncClient : public KoanWindowSync::Window,
+                             public TabStripModelObserver,
                              public views::WidgetObserver {
  public:
   explicit KoanWindowSyncClient(BrowserView* browser_view);
@@ -38,6 +47,7 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
 
   // The client of `browser_view`'s window if it is synced, else null.
   static KoanWindowSyncClient* From(const BrowserView* browser_view);
+  static KoanWindowSyncClient* ForBrowser(BrowserWindowInterface* browser);
 
   // After the window's controllers are set up (its Spaces in particular).
   void OnAddedToWidget();
@@ -46,6 +56,7 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
 
   // Whether the window takes part in the sync.
   bool is_synced() const { return sync_ != nullptr; }
+  KoanWindowSync* sync() const { return sync_; }
   // Whether the sync is changing this window right now (KoanWindowSync::
   // IsApplying()): its controllers leave what changes alone.
   bool IsApplying() const;
@@ -54,6 +65,29 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   KoanWindowSync::WindowId window_id() const override;
   void ApplySpaces(
       const std::vector<window_sync::SpaceRecord>& spaces) override;
+  void ApplyItems(const std::vector<window_sync::ItemRecord>& items) override;
+  bool CanGivePage(const std::string& item) const override;
+  bool CanTakePage(const std::string& item) const override;
+  std::unique_ptr<content::WebContents> TakePage(
+      const std::string& item) override;
+  void PutPage(const std::string& item,
+               std::unique_ptr<content::WebContents> page) override;
+  void LoadPage(const window_sync::ItemRecord& item) override;
+  content::WebContents* PageOf(const std::string& item) const override;
+
+  // TabStripModelObserver:
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
+  void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
+  void TabGroupedStateChanged(TabStripModel* tab_strip_model,
+                              std::optional<tab_groups::TabGroupId> old_group,
+                              std::optional<tab_groups::TabGroupId> new_group,
+                              tabs::TabInterface* tab,
+                              int index) override;
 
   // views::WidgetObserver:
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
@@ -82,6 +116,25 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   void LoadSpaceIds();
   void SaveSpaceIds();
 
+  // --- Essentials and pinned tabs ---
+
+  // The window's synced tabs, in sidebar order: its Essentials and the
+  // pinned tabs of its synced Spaces, not an agent container's tabs nor a
+  // split view's. With `assign_ids`, a tab without a sync id gets one;
+  // otherwise those are left out.
+  std::vector<window_sync::ItemRecord> LocalItems(bool assign_ids);
+  // The tab of synced tab `item` in this window, or null.
+  tabs::TabInterface* FindItemTab(const std::string& item) const;
+  // Reports the window's items (and the pages it has) once its tabs settle
+  // (after KoanPinnedTabController's Normalize()).
+  void ScheduleItemsReport();
+  void ReportItems();
+  // The active tab is a placeholder: its page comes here.
+  void MaybeRequestActivePage();
+  // Puts the tabs of `target` in its order: the Essentials first, then each
+  // Space's pinned tabs at the top of the Space.
+  void OrderItems(const std::vector<window_sync::ItemRecord>& target);
+
   const raw_ptr<BrowserView> browser_view_;
   // Set while the window is synced.
   raw_ptr<KoanWindowSync> sync_ = nullptr;
@@ -90,6 +143,7 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   base::CallbackListSubscription session_restored_subscription_;
   base::CallbackListSubscription spaces_changed_subscription_;
   std::map<tab_groups::TabGroupId, std::string> space_ids_;
+  base::OneShotTimer items_report_timer_;
   base::WeakPtrFactory<KoanWindowSyncClient> weak_factory_{this};
 };
 

@@ -11,10 +11,14 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_window_sync_client.h"
+#include "koan/browser/ui/views/koan_window_sync_hooks.h"
 
 namespace koan {
 
@@ -156,8 +160,92 @@ void KoanWindowSync::MarkOthersOutOfDate(Window* origin,
   ScheduleFlush();
 }
 
+void KoanWindowSync::RequestShow(Window* window, const std::string& item) {
+  if (!IsInSync(window)) {
+    return;
+  }
+  pending_shows_[item] = window->window_id();
+  ScheduleFlush();
+}
+
+void KoanWindowSync::SetLive(Window* window, const std::string& item) {
+  const WindowId had = model_.LiveWindow(item);
+  if (had == window->window_id()) {
+    return;
+  }
+  model_.SetLive(item, window->window_id());
+  if (had != window_sync::kNoWindow && FindWindow(had)) {
+    pending_drops_[item] = had;
+    ScheduleFlush();
+  }
+}
+
+content::WebContents* KoanWindowSync::LivePage(const std::string& item) const {
+  Window* window = FindWindow(model_.LiveWindow(item));
+  return window ? window->PageOf(item) : nullptr;
+}
+
+void KoanWindowSync::OnWindowClosing(Window* window) {
+  if (browser_shutdown::IsTryingToQuit() || applying_) {
+    return;
+  }
+  Window* rescue = MostRecentWindow(window);
+  if (!rescue) {
+    return;
+  }
+  // A move needs both tab strips out of their notifications: true here
+  // (UnloadController runs this before CloseAllTabs()).
+  for (const std::string& item :
+       model_.OnWindowClosing(window->window_id(), rescue->window_id())) {
+    if (!window->CanGivePage(item) || !rescue->CanTakePage(item)) {
+      continue;
+    }
+    applying_ = rescue;
+    if (std::unique_ptr<content::WebContents> page = window->TakePage(item)) {
+      rescue->PutPage(item, std::move(page));
+      model_.SetLive(item, rescue->window_id());
+    }
+    applying_ = nullptr;
+  }
+}
+
+void KoanWindowSync::MovePage(const std::string& item, Window* to) {
+  const window_sync::ShowDecision decision =
+      model_.RequestShow(item, to->window_id());
+  if (decision.kind == window_sync::ShowDecision::Kind::kNone ||
+      !to->CanTakePage(item)) {
+    return;
+  }
+  Window* from = decision.kind == window_sync::ShowDecision::Kind::kMove
+                     ? FindWindow(decision.from)
+                     : nullptr;
+  // The window with the page can't give it (the tab is in a split view
+  // there): it stays, and this window keeps showing the placeholder.
+  if (from && !from->CanGivePage(item)) {
+    return;
+  }
+  applying_ = to;
+  if (from) {
+    if (std::unique_ptr<content::WebContents> page = from->TakePage(item)) {
+      to->PutPage(item, std::move(page));
+      model_.SetLive(item, to->window_id());
+    }
+  } else {
+    // No window has the page (the one that had it is gone): it loads here.
+    for (const window_sync::ItemRecord& record : model_.items()) {
+      if (record.id == item) {
+        to->LoadPage(record);
+        model_.SetLive(item, to->window_id());
+        break;
+      }
+    }
+  }
+  applying_ = nullptr;
+}
+
 void KoanWindowSync::ScheduleFlush() {
-  if (flush_scheduled_ || (stale_spaces_.empty() && stale_items_.empty())) {
+  if (flush_scheduled_ || (stale_spaces_.empty() && stale_items_.empty() &&
+                           pending_shows_.empty() && pending_drops_.empty())) {
     return;
   }
   flush_scheduled_ = true;
@@ -170,7 +258,34 @@ void KoanWindowSync::Flush() {
   flush_scheduled_ = false;
   // One window at a time, in a fresh task each, re-reading the lists: a
   // window may close, or another report come in, while one is reconciled.
-  // Spaces first: a window's pinned tabs need their Spaces.
+  // Page moves first (the user is looking), then Spaces (a window's pinned
+  // tabs need their Spaces), then the synced tabs.
+  if (!pending_shows_.empty()) {
+    auto [item, id] = *pending_shows_.begin();
+    pending_shows_.erase(pending_shows_.begin());
+    if (Window* to = FindWindow(id)) {
+      MovePage(item, to);
+    }
+    ScheduleFlush();
+    return;
+  }
+  if (!pending_drops_.empty()) {
+    auto [item, id] = *pending_drops_.begin();
+    pending_drops_.erase(pending_drops_.begin());
+    Window* window = FindWindow(id);
+    if (window && model_.LiveWindow(item) != id && window->CanGivePage(item)) {
+      applying_ = window;
+      // The duplicate page goes (after this task: it may still be in use
+      // by the notifications of its replace).
+      if (std::unique_ptr<content::WebContents> page = window->TakePage(item)) {
+        base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+            FROM_HERE, std::move(page));
+      }
+      applying_ = nullptr;
+    }
+    ScheduleFlush();
+    return;
+  }
   Window* window = nullptr;
   bool spaces = false;
   if (!stale_spaces_.empty()) {
@@ -197,6 +312,13 @@ void KoanWindowSync::Flush() {
 
 void KoanWindowSync::Store() {
   profile_->GetPrefs()->SetDict(prefs::kWindowSyncState, model_.ToValue());
+}
+
+void OnWindowClosing(BrowserWindowInterface* browser) {
+  KoanWindowSyncClient* client = KoanWindowSyncClient::ForBrowser(browser);
+  if (KoanWindowSync* sync = client ? client->sync() : nullptr) {
+    sync->OnWindowClosing(client);
+  }
 }
 
 }  // namespace koan

@@ -234,7 +234,8 @@ base::DictValue WindowSyncModel::ToValue() const {
                      .Set("space", item.space_id)
                      .Set("url", item.url)
                      .Set("title", item.custom_title)
-                     .Set("icon", item.custom_icon));
+                     .Set("icon", item.custom_icon)
+                     .Set("container", item.container));
   }
   base::DictValue value;
   if (seeded_) {
@@ -292,7 +293,8 @@ void WindowSyncModel::FromValue(const base::DictValue& value) {
            .space_id = string_of(*dict, "space"),
            .url = string_of(*dict, "url"),
            .custom_title = base::UTF8ToUTF16(string_of(*dict, "title")),
-           .custom_icon = base::UTF8ToUTF16(string_of(*dict, "icon"))});
+           .custom_icon = base::UTF8ToUTF16(string_of(*dict, "icon")),
+           .container = string_of(*dict, "container")});
     }
   }
   SetItems(std::move(item_records));

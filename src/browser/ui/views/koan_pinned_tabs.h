@@ -205,6 +205,17 @@ class KoanPinnedTabController : public TabStripModelObserver {
   // Writes the tab's state to the session.
   void SaveTabState(content::WebContents* contents);
 
+  // Window sync (KoanWindowSyncClient): makes `tab` an Essential, or a
+  // pinned tab of the Space it is in, with `pinned_url` and the label and
+  // icon of "Change Label…" / "Change Icon…", as it is in another window.
+  // None of the user's pinning rules run, no toast shows and the tab doesn't
+  // navigate; the caller puts it in its place.
+  void SetSyncedPin(tabs::TabInterface* tab,
+                    bool essential,
+                    const GURL& pinned_url,
+                    const std::u16string& custom_title,
+                    const std::u16string& custom_icon);
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,

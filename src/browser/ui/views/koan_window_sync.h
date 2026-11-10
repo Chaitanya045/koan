@@ -5,7 +5,10 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_WINDOW_SYNC_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WINDOW_SYNC_H_
 
+#include <map>
+#include <memory>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -14,6 +17,10 @@
 #include "koan/browser/window_sync/koan_window_sync_model.h"
 
 class BrowserView;
+
+namespace content {
+class WebContents;
+}
 class Profile;
 
 namespace koan {
@@ -46,6 +53,27 @@ class KoanWindowSync : public base::SupportsUserData::Data {
         const std::vector<window_sync::SpaceRecord>& spaces) {}
     virtual void ApplyItems(const std::vector<window_sync::ItemRecord>& items) {
     }
+
+    // --- The page of a synced tab (KoanWindowSync::MovePage()) ---
+
+    // Whether the window has the page of `item` and can hand it over (the
+    // tab is there, it isn't a placeholder, nor in a split view).
+    virtual bool CanGivePage(const std::string& item) const = 0;
+    // Whether the window has a placeholder for `item` to take a page into.
+    virtual bool CanTakePage(const std::string& item) const = 0;
+    // Replaces the page of `item` by a placeholder (in the page's
+    // container) and returns the page. Only after CanGivePage().
+    virtual std::unique_ptr<content::WebContents> TakePage(
+        const std::string& item) = 0;
+    // Puts `page` in place of the placeholder of `item`. Only after
+    // CanTakePage().
+    virtual void PutPage(const std::string& item,
+                         std::unique_ptr<content::WebContents> page) = 0;
+    // No window has the page: the placeholder of `item` loads its URL.
+    virtual void LoadPage(const window_sync::ItemRecord& item) = 0;
+    // The page of `item` in this window (its tab's contents, placeholder or
+    // not), or null.
+    virtual content::WebContents* PageOf(const std::string& item) const = 0;
   };
 
   explicit KoanWindowSync(Profile* profile);
@@ -79,6 +107,22 @@ class KoanWindowSync : public base::SupportsUserData::Data {
                     std::vector<window_sync::SpaceRecord> spaces);
   void ReportItems(Window* window, std::vector<window_sync::ItemRecord> items);
 
+  // `window` shows the synced tab `item` (selected it, or was activated with
+  // it selected) and has a placeholder for it: its page comes over soon,
+  // from the window that has it, or loads there (Zen's TabSelect / focus
+  // swap). A later request for the same item replaces this one.
+  void RequestShow(Window* window, const std::string& item);
+  // `window` has the page of `item` (it loaded it, or restored it). If
+  // another window had one too (both restored it), that one becomes a
+  // placeholder soon: one page per synced tab.
+  void SetLive(Window* window, const std::string& item);
+  // The page of `item` in the window that has it, or null.
+  content::WebContents* LivePage(const std::string& item) const;
+  // `window` is closing (UnloadController::OnWindowClosing()): its pages go
+  // to the most recently active other synced window, now, before its tabs
+  // close. Not while quitting, nor from inside a reconcile or a move.
+  void OnWindowClosing(Window* window);
+
   // Whether `window` is being reconciled right now: its controllers leave
   // alone what the sync is doing (it isn't the user's).
   bool IsApplying(const Window* window) const {
@@ -99,6 +143,9 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   void MarkOthersOutOfDate(Window* origin, bool spaces, bool items);
   void ScheduleFlush();
   void Flush();
+  // Brings the page of `item` to `to`, if both windows can (re-checked
+  // here: a queued request may be stale).
+  void MovePage(const std::string& item, Window* to);
   void Store();
 
   // Owns this (as user data), so outlives it.
@@ -109,6 +156,10 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   // Windows to reconcile, by what.
   std::set<raw_ptr<Window>> stale_spaces_;
   std::set<raw_ptr<Window>> stale_items_;
+  // Requested page moves: item -> the window that shows it.
+  std::map<std::string, WindowId> pending_shows_;
+  // Second pages to turn back into placeholders: item -> their window.
+  std::map<std::string, WindowId> pending_drops_;
   raw_ptr<Window> applying_ = nullptr;
   bool flush_scheduled_ = false;
   base::WeakPtrFactory<KoanWindowSync> weak_factory_{this};
