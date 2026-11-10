@@ -107,6 +107,17 @@ source_set("space_drag_logic") {
   deps = [ "//base" ]
 }
 
+# Zen's page-load progress bar over time (koan_loading_bar.h): pure, for the
+# unit tests.
+source_set("loading_bar") {
+  sources = [
+    "koan_loading_bar.cc",
+    "koan_loading_bar.h",
+  ]
+  deps = [ "//base" ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -152,6 +163,7 @@ test("koan_views_unittests") {
   sources = [
     "koan_glass_tint_unittest.cc",
     "koan_lights_geometry_unittest.cc",
+    "koan_loading_bar_unittest.cc",
     "koan_pinned_site_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
     "koan_space_drag_logic_unittest.cc",
@@ -162,6 +174,7 @@ test("koan_views_unittests") {
   deps = [
     ":glass_tint",
     ":lights_geometry",
+    ":loading_bar",
     ":pinned_site",
     ":sidebar_curve",
     ":space_drag_logic",
@@ -268,6 +281,8 @@ source_set("impl") {
     "koan_library_ui.h",
     "koan_library_view.cc",
     "koan_library_view.h",
+    "koan_loading_indicator.cc",
+    "koan_loading_indicator.h",
     "koan_look_controller.cc",
     "koan_media_controller.cc",
     "koan_media_controller.h",
@@ -363,6 +378,7 @@ source_set("impl") {
     ":glass_tint",
     ":grain_png",
     ":lights_geometry",
+    ":loading_bar",
     ":pinned_site",
     ":sidebar_curve",
     ":space_drag_logic",
@@ -423,6 +439,7 @@ source_set("impl") {
     "//chrome/browser/ui/views/frame:browser_view_layout_params",
     "//chrome/browser/ui/views/frame:browser_widget",
     "//chrome/browser/ui/views/frame:contents_container_view",
+    "//chrome/browser/ui/views/frame:contents_web_view",
     "//chrome/browser/ui/views/frame:custom_corners_background",
     "//chrome/browser/ui/views/frame:glass_frame_service",
     "//chrome/browser/ui/views/frame:multi_contents_view",

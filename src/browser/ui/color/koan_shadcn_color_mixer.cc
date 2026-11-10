@@ -521,6 +521,11 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanDownloadTileShadow] = ui::SetAlpha(
       ui::kColorShadowBase, static_cast<SkAlpha>(t.dark() ? 0x66 : 0x1a));
 
+  // The page-load progress bar: primary on secondary, like a shadcn
+  // Progress.
+  mixer[kColorKoanLoadingBar] = {t[Token::kPrimary]};
+  mixer[kColorKoanLoadingBarTrack] = {t[Token::kSecondary]};
+
   // The welcome screen: shadcn pages on `background`.
   mixer[kColorKoanWelcomeBackdropTop] = {t[Token::kSidebar]};
   mixer[kColorKoanWelcomeBackdropBottom] = {t[Token::kBackground]};
