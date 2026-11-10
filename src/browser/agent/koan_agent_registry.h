@@ -105,7 +105,8 @@ class TargetRegistry {
   // Whether the client may send `method` to the tab now: a tab of another
   // client, or one not in the registry, never; a kDriven tab, anything the
   // method policy allows; a kReadable or kPaused tab, only the methods that
-  // change nothing (IsReadOnlyMethod()).
+  // change nothing (IsReadOnlyMethod()), and on a user's tab not
+  // Network.enable (the user's own traffic is not part of reading a tab).
   bool MaySend(std::string_view client_id,
                std::string_view target_id,
                std::string_view method) const;

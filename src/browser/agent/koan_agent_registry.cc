@@ -209,7 +209,16 @@ bool TargetRegistry::MaySend(std::string_view client_id,
   if (!entry || client_id.empty() || entry->client_id != client_id) {
     return false;
   }
-  return entry->state == TabState::kDriven || IsReadOnlyMethod(method);
+  if (entry->state == TabState::kDriven) {
+    return true;
+  }
+  // Network.enable changes nothing in the page, but on the user's own tab it
+  // would show the agent every request of their session (#196 review, N2):
+  // reading a user's tab is a screenshot and a snapshot, not their traffic.
+  if (!entry->agent_owned && method == "Network.enable") {
+    return false;
+  }
+  return IsReadOnlyMethod(method);
 }
 
 size_t TargetRegistry::CountFor(std::string_view client_id,

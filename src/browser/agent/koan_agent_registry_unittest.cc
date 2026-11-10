@@ -104,6 +104,11 @@ TEST(KoanAgentRegistryTest, PausedAndReadableTabsOnlyRead) {
           << target << " " << mutating;
     }
   }
+  // The user's own traffic is not part of reading their tab (#196 N2); the
+  // agent's own paused tab keeps its Network events.
+  EXPECT_TRUE(registry.MaySend("alice", "T1", "Network.enable"));
+  EXPECT_FALSE(registry.MaySend("alice", "U1", "Network.enable"));
+  EXPECT_TRUE(registry.MaySend("alice", "U1", "Network.disable"));
   // Pausing a readable tab keeps it readable; only a paused tab resumes.
   EXPECT_TRUE(registry.Pause("U1"));
   EXPECT_EQ(registry.Find("U1")->state, TabState::kReadable);

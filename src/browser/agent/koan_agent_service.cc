@@ -135,9 +135,8 @@ class AgentControlService::GatewayHost final : public ApprovalPresenter,
     // gateway goes.
     gateway_.reset();
     if (!discovery_file_.empty()) {
-      base::ThreadPool::PostTask(
-          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-          base::GetDeleteFileCallback(discovery_file_));
+      file_runner_->PostTask(FROM_HERE,
+                             base::GetDeleteFileCallback(discovery_file_));
       discovery_file_.clear();
     }
     PostToUi(&AgentControlService::OnListening, false);
@@ -193,10 +192,9 @@ class AgentControlService::GatewayHost final : public ApprovalPresenter,
       return;
     }
     discovery_file_ = discovery_file;
-    base::ThreadPool::PostTask(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-        base::BindOnce(&WriteDiscoveryFile, std::move(discovery_file),
-                       std::move(socket_path)));
+    file_runner_->PostTask(FROM_HERE, base::BindOnce(&WriteDiscoveryFile,
+                                                     std::move(discovery_file),
+                                                     std::move(socket_path)));
     PostToUi(&AgentControlService::OnListening, true);
   }
 
@@ -208,6 +206,13 @@ class AgentControlService::GatewayHost final : public ApprovalPresenter,
   std::unique_ptr<InMemoryClientStore> store_;
   std::unique_ptr<Gateway> gateway_;
   base::FilePath discovery_file_;
+  // Writing and deleting the discovery file run in order on one sequence, so a
+  // quick off and on (or on and off) cannot leave the wrong file behind (#201
+  // review).
+  const scoped_refptr<base::SequencedTaskRunner> file_runner_ =
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
   base::WeakPtrFactory<GatewayHost> weak_factory_{this};
 };
 
