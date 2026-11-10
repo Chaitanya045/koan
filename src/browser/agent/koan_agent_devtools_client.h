@@ -50,8 +50,12 @@ class AgentDevToolsClient final : public content::DevToolsAgentHostClient {
   bool Attach();
   bool attached() const { return static_cast<bool>(host_); }
 
-  // Sends a command once the lease lets it run.
-  void Send(std::string json);
+  // Sends a command once the lease lets it run, if `may_dispatch` still says
+  // yes then; otherwise runs `on_dropped` instead (the user paused the tab
+  // while the command waited).
+  void Send(std::string json,
+            base::OnceCallback<bool()> may_dispatch,
+            base::OnceClosure on_dropped);
   // A command sent with Send() was answered.
   void Answered();
 
@@ -69,7 +73,9 @@ class AgentDevToolsClient final : public content::DevToolsAgentHostClient {
   std::string GetTypeForMetrics() override;
 
  private:
-  void Dispatch(std::string json);
+  void Dispatch(std::string json,
+                base::OnceCallback<bool()> may_dispatch,
+                base::OnceClosure on_dropped);
   void EndCommands();
 
   base::WeakPtr<content::WebContents> contents_;

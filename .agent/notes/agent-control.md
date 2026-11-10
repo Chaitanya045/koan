@@ -854,6 +854,16 @@ Agent-Space tabs start `driven`.
   few milliseconds an injected sequence runs (B§7; note the `ShouldIgnoreInputEvents` effect is Aura-only, so
   Mac relies on the callback).
 
+**Built (take-over PR):** `Koan.takeOver {targetId?}` (capability `drive`; the user's active tab by default) shows a browser-modal
+prompt in the tab's window, 60 s, default deny, and grants the tab `driven` **for its site only** (`net::SchemefulSite` at approval).
+The agent's own `Page.navigate` off that site is `Koan.offSite`; any committed navigation off it (a link, a redirect, the user) makes
+the tab `readable` (`Koan.siteLeft`), where DOM answers and events go through `RedactSecretInputs()` (#196 N1) and `Network.enable`
+is refused (N2). The user's own input (`DidGetUserInteraction` without `kFromDebugger`, plus wheel per widget) pauses any registry
+tab (`Koan.paused`); commands still waiting for the lease are answered `Koan.paused` instead of sent (`CdpFacade::MayDispatch()`).
+The indicator pill shows *Hand back* for a paused tab and *Take back* for a user tab; `Koan.resume` only marks the pill
+"asks to continue". `Koan.release` gives a user tab back. The prompt is browser-modal rather than the URL-pill bubble of the
+design: a bubble anchored to Koan's URL pill is a UI follow-up.
+
 ### 9.3 Seeing the user's tab (`read`)
 
 "Current tab" is C++ knowledge, not CDP: the first window in `ForEachCurrentBrowserWindowInterfaceOrderedByActivation`

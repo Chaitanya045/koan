@@ -41,9 +41,23 @@ class KoanAgentIndicator : public koan::agent::AgentControlService::Observer {
   // Keeps the pill in its corner.
   void OnBrowserViewLayout();
 
+  // What the pill shows: its text, and the Hand back / Take back buttons for
+  // one tab of this window (design section 9.2).
+  struct Content {
+    std::u16string text;
+    std::string target_id;
+    bool hand_back = false;
+    bool take_back = false;
+    bool operator==(const Content&) const = default;
+  };
+
   // What the pill says, or empty when nothing is connected. Public for tests.
   static std::u16string TextFor(
       const std::vector<koan::agent::ConnectedClient>& clients);
+  // The pill for those clients and this window's controlled tabs.
+  static Content ContentFor(
+      const std::vector<koan::agent::ConnectedClient>& clients,
+      const std::vector<koan::agent::ControlledTab>& tabs_in_window);
 
   bool IsShowingForTesting() const;
 
@@ -51,11 +65,12 @@ class KoanAgentIndicator : public koan::agent::AgentControlService::Observer {
   // koan::agent::AgentControlService::Observer:
   void OnAgentControlChanged() override;
 
-  void Show(const std::u16string& text);
+  void Show(const Content& content);
   void Hide();
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
+  Content shown_;
   base::ScopedObservation<koan::agent::AgentControlService,
                           koan::agent::AgentControlService::Observer>
       observation_{this};

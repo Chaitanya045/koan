@@ -17,6 +17,7 @@
 #include "koan/browser/agent/koan_agent_events.h"
 #include "koan/browser/agent/koan_agent_filters.h"
 #include "koan/browser/agent/koan_agent_policy.h"
+#include "koan/browser/agent/koan_agent_redact.h"
 #include "koan/browser/agent/koan_agent_registry.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -250,6 +251,18 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
     return;
   }
 
+  // The user allowed one site in their tab (design section 9.2): the agent's
+  // own navigation may not leave it. (A link that leaves it ends write
+  // access when it commits.)
+  if (!entry->agent_owned && method == "Page.navigate") {
+    const std::string* url = message.params.FindString("url");
+    if (!url || !backend_->IsInGrantedSite(session.target_id, GURL(*url))) {
+      deny("Koan.offSite",
+           "the user allowed this tab for its current site only; open other "
+           "sites in the agent's own tabs");
+      return;
+    }
+  }
   if (method == "Page.createIsolatedWorld") {
     session.contexts.OnIsolatedWorldRequested();
   }
@@ -279,7 +292,7 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
     return;
   }
   pending_.emplace(id, std::move(pending));
-  backend_->SendToTab(session.target_id, std::move(*json));
+  backend_->SendToTab(session.target_id, id, std::move(*json));
 }
 
 void CdpFacade::HandleTargetMethod(AgentMessage& message, TabSession* session) {
@@ -343,6 +356,12 @@ void CdpFacade::HandleKoanMethod(AgentMessage& message) {
     // Answer first: ending the task detaches its sessions.
     Reply(message.id, message.session_id, base::DictValue());
     backend_->EndTask(name);
+  } else if (message.method == "Koan.takeOver") {
+    TakeOver(message);
+  } else if (message.method == "Koan.release") {
+    Release(message);
+  } else if (message.method == "Koan.resume") {
+    Resume(message);
   } else {
     AuditCommand(message.method, "", "", AuditOutcome::kDenied,
                  base::TimeDelta());
@@ -651,6 +670,141 @@ void CdpFacade::ListTabs(const AgentMessage& message) {
   Reply(message.id, message.session_id, std::move(result));
 }
 
+void CdpFacade::TakeOver(const AgentMessage& message) {
+  // Each tab asks the user again; the capability is only the right to ask.
+  if (!message.capabilities.drive) {
+    AuditCommand(message.method, "", "", AuditOutcome::kDenied,
+                 base::TimeDelta());
+    ReplyError(message.id, message.session_id, "Koan.notPermitted",
+               "this agent may not ask to control your tabs (capability "
+               "drive)");
+    return;
+  }
+  std::optional<std::string> target_id;
+  if (const std::string* given = message.params.FindString("targetId")) {
+    target_id = *given;
+  }
+  backend_->TakeOver(
+      target_id,
+      base::BindOnce(&CdpFacade::OnTabOpened, weak_factory_.GetWeakPtr(),
+                     message.id, message.method, message.session_id,
+                     tick_clock_->NowTicks(), std::string()));
+}
+
+void CdpFacade::Release(const AgentMessage& message) {
+  const std::string* target_id = message.params.FindString("targetId");
+  const TargetEntry* entry = target_id ? registry_->Find(*target_id) : nullptr;
+  if (!entry || entry->client_id != client_id_ || entry->agent_owned) {
+    AuditCommand(message.method, "", "", AuditOutcome::kDenied,
+                 base::TimeDelta());
+    ReplyError(message.id, message.session_id, "Koan.unknownTarget",
+               "no user tab with this id; close the agent's own tabs with "
+               "Koan.closeTab");
+    return;
+  }
+  const std::string id = *target_id;
+  AuditCommand("release", id, "", AuditOutcome::kOk, base::TimeDelta());
+  // Answer first: releasing ends the tab's session.
+  Reply(message.id, message.session_id, base::DictValue());
+  backend_->ReleaseUserTab(id);
+}
+
+void CdpFacade::Resume(const AgentMessage& message) {
+  const std::string* target_id = message.params.FindString("targetId");
+  const TargetEntry* entry = target_id ? registry_->Find(*target_id) : nullptr;
+  if (!entry || entry->client_id != client_id_) {
+    ReplyError(message.id, message.session_id, "Koan.unknownTarget",
+               "no target with this id");
+    return;
+  }
+  if (entry->state != TabState::kPaused) {
+    Reply(message.id, message.session_id,
+          base::DictValue().Set("state", StateName(entry->state)));
+    return;
+  }
+  // Only the user resumes (design section 9.2): this asks them.
+  AuditCommand(message.method, *target_id, "", AuditOutcome::kPaused,
+               base::TimeDelta());
+  backend_->AskToResume(*target_id);
+  Reply(message.id, message.session_id,
+        base::DictValue().Set("state", "paused").Set("asked", true));
+}
+
+void CdpFacade::OnTargetStateChanged(const std::string& target_id,
+                                     std::string_view event,
+                                     std::string_view reason) {
+  const TargetEntry* entry = registry_->Find(target_id);
+  if (!entry || entry->client_id != client_id_) {
+    return;
+  }
+  base::DictValue params;
+  params.Set("targetId", target_id);
+  params.Set("state", StateName(entry->state));
+  params.Set("reason", reason);
+  SendEvent(event, std::move(params), std::nullopt);
+}
+
+bool CdpFacade::MayDispatch(int command_id) const {
+  auto it = pending_.find(command_id);
+  if (it == pending_.end()) {
+    return false;
+  }
+  // The facade's own commands (IO.close) always run.
+  if (!it->second.client_message_id) {
+    return true;
+  }
+  return registry_->MaySend(client_id_, it->second.target_id,
+                            it->second.method) &&
+         !BehindInterstitial(it->second.target_id, it->second.method);
+}
+
+bool CdpFacade::BehindInterstitial(const std::string& target_id,
+                                   std::string_view method) const {
+  if (IsReadOnlyMethod(method)) {
+    return false;
+  }
+  const std::optional<TabFacts> facts = backend_->DescribeTab(target_id);
+  return !facts || facts->interstitial;
+}
+
+void CdpFacade::OnCommandDropped(int command_id) {
+  auto it = pending_.find(command_id);
+  if (it == pending_.end()) {
+    return;
+  }
+  Pending pending = std::move(it->second);
+  pending_.erase(it);
+  if (!pending.client_message_id) {
+    return;
+  }
+  if (pending.method == "Page.createIsolatedWorld") {
+    if (TabSession* session = SessionFor(pending.session_id)) {
+      session->contexts.OnIsolatedWorldAnswered(std::nullopt);
+    }
+  }
+  // An interstitial came up while it waited, or the user's input paused the
+  // tab.
+  const bool interstitial =
+      BehindInterstitial(pending.target_id, pending.method);
+  AuditCommand(pending.method, pending.target_id, pending.summary,
+               interstitial ? AuditOutcome::kDenied : AuditOutcome::kPaused,
+               tick_clock_->NowTicks() - pending.start);
+  if (interstitial) {
+    ReplyError(*pending.client_message_id, pending.session_id,
+               "Koan.interstitial",
+               "the tab shows a security warning; only the user can decide "
+               "what to do");
+    return;
+  }
+  ReplyError(*pending.client_message_id, pending.session_id, "Koan.paused",
+             "the user is using this tab; wait until they hand it back");
+}
+
+bool CdpFacade::Redacts(const std::string& target_id) const {
+  const TargetEntry* entry = registry_->Find(target_id);
+  return !entry || (!entry->agent_owned && entry->state != TabState::kDriven);
+}
+
 void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
   auto it = sessions_.find(session_id);
   if (it == sessions_.end()) {
@@ -794,6 +948,9 @@ void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
   } else if (result) {
     AuditCommand(pending.method, pending.target_id, pending.summary,
                  AuditOutcome::kOk, duration);
+    if (Redacts(session.target_id)) {
+      RedactSecretInputs(pending.method, *result);
+    }
     Reply(*pending.client_message_id, session_id, std::move(*result));
   } else {
     AuditCommand(pending.method, pending.target_id, pending.summary,
@@ -831,6 +988,9 @@ void CdpFacade::HandleTabEvent(TabSession& session, base::DictValue event) {
   base::DictValue params;
   if (base::DictValue* given = event.FindDict("params")) {
     params = std::move(*given);
+  }
+  if (Redacts(session.target_id)) {
+    RedactSecretInputs(name, params);
   }
   switch (FilterEvent(name, params)) {
     case EventVerdict::kDeliver:
@@ -875,7 +1035,7 @@ void CdpFacade::SendInternal(TabSession& session,
   pending.method = std::move(method);
   pending.start = tick_clock_->NowTicks();
   pending_.emplace(id, std::move(pending));
-  backend_->SendToTab(session.target_id, std::move(*json));
+  backend_->SendToTab(session.target_id, id, std::move(*json));
 }
 
 void CdpFacade::Reply(int id,

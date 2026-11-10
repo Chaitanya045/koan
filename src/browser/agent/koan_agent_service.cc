@@ -265,7 +265,9 @@ AgentControlService::AgentControlService(PrefService* local_state)
   forwarder_ = std::make_unique<AgentForwarder>(
       base::BindRepeating(&AgentControlService::SendToClient,
                           weak_factory_.GetWeakPtr()),
-      AuditLogDirectory(user_data_dir));
+      AuditLogDirectory(user_data_dir),
+      base::BindRepeating(&AgentControlService::NotifyObservers,
+                          base::Unretained(this)));
   registrar_.Init(local_state_);
   for (const char* pref :
        {prefs::kAgentControlEnabled, prefs::kAgentControlMaxPromptsPerMinute,
@@ -324,6 +326,23 @@ void AgentControlService::StopAllAgents() {
   host_.AsyncCall(&GatewayHost::ForgetAll)
       .WithArgs(user_data_dir, on && !user_data_dir.empty(),
                 LimitsFrom(*local_state_));
+}
+
+std::vector<ControlledTab> AgentControlService::controlled_tabs() const {
+  return forwarder_ ? forwarder_->ControlledTabs()
+                    : std::vector<ControlledTab>();
+}
+
+void AgentControlService::HandBack(const std::string& target_id) {
+  if (forwarder_) {
+    forwarder_->HandBack(target_id);
+  }
+}
+
+void AgentControlService::TakeBack(const std::string& target_id) {
+  if (forwarder_) {
+    forwarder_->TakeBack(target_id);
+  }
 }
 
 void AgentControlService::Shutdown() {

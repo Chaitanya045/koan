@@ -22,9 +22,14 @@
 
 class PrefService;
 
+namespace content {
+class WebContents;
+}
+
 namespace koan::agent {
 class AgentForwarder;
-}
+struct ControlledTab;
+}  // namespace koan::agent
 
 // Agent control in the browser process (.agent/notes/agent-control.md
 // sections 4.1, 6.1 and 6.2): starts the gateway while "Agent ready" is on and
@@ -69,6 +74,12 @@ class AgentControlService {
   // forgotten; the gateway keeps listening if Agent ready is on.
   void StopAllAgents();
 
+  // The tabs the indicator offers a button for (design section 9.2), and the
+  // buttons: hand a paused tab back to its agent, take a user tab back.
+  std::vector<ControlledTab> controlled_tabs() const;
+  void HandBack(const std::string& target_id);
+  void TakeBack(const std::string& target_id);
+
  private:
   class GatewayHost;
   friend class GatewayHost;
@@ -110,6 +121,16 @@ class AgentControlService {
 void ShowApprovalDialog(const ApprovalRequest& request,
                         base::OnceCallback<void(ApprovalDecision)> answer);
 void CancelApprovalDialog(uint64_t request_id);
+
+// The take-over prompt (design section 9.2) in the window of `contents`:
+// "<label> wants to control this tab on <site>". Runs `answer` once with the
+// user's choice (Esc and closing deny), unless cancelled first. Returns the id
+// to cancel it with.
+uint64_t ShowTakeOverDialog(content::WebContents* contents,
+                            const std::string& label,
+                            const std::string& site,
+                            base::OnceCallback<void(bool)> answer);
+void CancelTakeOverDialog(uint64_t dialog_id);
 
 }  // namespace koan::agent
 
