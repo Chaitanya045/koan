@@ -104,7 +104,13 @@ A synced tab exists in every synced window. One of them has the page; the
 others have a **placeholder**: a tab whose `WebContents` never navigated
 (nothing loads, no network), shown in the sidebar with the live tab's title
 and favicon (`koan::AdjustTabData`, the existing tab_data.cc hook) and the
-item's custom label and icon.
+item's custom label and icon. The row follows the page: a `kAll` change of
+the live tab (`OnTabChangedAt`; Zen's ZenTabLabelChanged / ZenTabIconChanged,
+which Zen also takes only from the window with the page) makes every other
+window's placeholder ask for a UI update
+(`NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB)`, coalesced by Browser),
+and its row reads the live tab's `TabUIHelper` again
+(`AdjustPlaceholderTabData`). Nothing is copied into the placeholder.
 
 The page moves **on activation**: when a window shows a placeholder (the
 user selects it, or the window is activated with it selected, Zen's

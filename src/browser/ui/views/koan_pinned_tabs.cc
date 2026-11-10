@@ -79,6 +79,7 @@
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "ui/base/base_window.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -1686,6 +1687,10 @@ void AdjustTabData(const tabs::TabInterface* tab, tabs::TabData& data) {
       data.network_state = tabs::TabNetworkState::kNone;
     }
   }
+  // A synced tab whose page is in another window shows that page's title
+  // and favicon (window sync, Zen's label and icon sync); its own label and
+  // icon go on top.
+  AdjustPlaceholderTabData(tab, data);
   const KoanTabState* state =
       features::IsPinnedTabsEnabled() ? GetTabState(tab) : nullptr;
   if (!state) {

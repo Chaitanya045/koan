@@ -74,6 +74,7 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
                std::unique_ptr<content::WebContents> page) override;
   void LoadPage(const window_sync::ItemRecord& item) override;
   content::WebContents* PageOf(const std::string& item) const override;
+  void RefreshPlaceholder(const std::string& item) override;
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
