@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/badging/BUILD.gn b/chrome/browser/badging/BUILD.gn
+index eed71c0a924fe1acb17b5e41212dfe6d6517b4e7..5be2946e6dd364e092449406217bcea980dde6ec 100644
+--- a/chrome/browser/badging/BUILD.gn
++++ b/chrome/browser/badging/BUILD.gn
+@@ -43,6 +43,7 @@ source_set("impl") {
+     "//chrome/browser/web_applications/proto",
+     "//components/prefs",
+     "//components/ukm",
++    "//koan/browser/containers:partition",
+     "//services/metrics/public/cpp:gen_ukm_builders",
+     "//services/metrics/public/cpp:metrics_cpp",
+     "//services/metrics/public/cpp:ukm_builders",

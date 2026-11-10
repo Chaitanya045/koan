@@ -1,0 +1,25 @@
+diff --git a/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc b/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
+index bead81c9feefbcb641ba38522948ac7969f6a244..8f48be9781376bfa0bd8e1ec1881cffa9b7ad812 100644
+--- a/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
++++ b/content/browser/renderer_host/render_frame_host_impl_interface_binders.cc
+@@ -40,6 +40,7 @@
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/common/content_client.h"
++#include "koan/browser/containers/koan_partition_domain.h"
+ #include "media/mojo/mojom/media_player.mojom.h"
+ #include "media/mojo/services/mojo_video_encoder_metrics_provider_service.h"
+ #include "mojo/public/cpp/bindings/message.h"
+@@ -470,6 +471,12 @@ void RenderFrameHostImpl::BindDigitalIdentityRequestReceiver(
+ 
+ void RenderFrameHostImpl::BindFederatedRequestServiceReceiver(
+     mojo::PendingReceiver<blink::mojom::FederatedRequestService> receiver) {
++  // Koan: no FedCM in an agent container, whose grants, embargoes and IdP
++  // sign-in status would be the user's profile's. The page's calls fail.
++  if (koan::containers::IsAgentPartitionDomain(
++          GetProcess()->GetStoragePartition()->GetConfig().partition_domain())) {
++    return;
++  }
+   webid::RequestService* service =
+       webid::RequestService::GetOrCreateForCurrentDocument(this);
+   service->BindFederatedRequestService(std::move(receiver));

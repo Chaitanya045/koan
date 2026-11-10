@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/extensions/api/web_navigation/BUILD.gn b/chrome/browser/extensions/api/web_navigation/BUILD.gn
+index 156d8b3c957f5094ddfa51bb6232d38e1d6b1b1c..82943171b3e3744f1acae17f7636651f26a3f75a 100644
+--- a/chrome/browser/extensions/api/web_navigation/BUILD.gn
++++ b/chrome/browser/extensions/api/web_navigation/BUILD.gn
+@@ -42,6 +42,7 @@ source_set("web_navigation") {
+     "//content/public/common",
+     "//extensions/common:common_constants",
+     "//extensions/common:mojom",
++    "//koan/browser/containers:partition",
+     "//net",
+   ]
+ 

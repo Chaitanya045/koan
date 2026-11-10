@@ -704,6 +704,16 @@ the upstream decision function calling `koan::containers::IsAgent*` (§14 B-rows
 | Downloads | to `~/Downloads/Koan Agent/`, never a Save As prompt, Safe Browsing as usual | `DownloadTargetDeterminer::DoGenerateTargetPath` (where the prompt and the target directory are decided) |
 | Sync | agent tabs are not synced as open tabs (history and passwords are already out) | `TabContentsSyncedTabDelegate::ShouldSync` |
 | Passkeys / WebAuthn / Touch ID | refused before any UI | `ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn` (the existing Koan patch) |
+| Preloading in the default partition (B10; both kinds of container) | `<link rel=prerender>` starts no NoStatePrefetch; the loading predictor neither learns from nor preconnects/prewarms for a container's tab | `NoStatePrefetchProcessorImpl::Start`; the `LoadingPredictorTabHelper` constructor |
+| Search engines (B11) | OSDD links and form submits never add search engines | `SearchEngineTabHelper::BindOpenSearchDescriptionDocumentHandler`, `GenerateKeywordIfNecessary` |
+| FedCM (B12) | no FedCM service (the page's calls fail), Set-Login headers ignored | `RenderFrameHostImpl::BindFederatedRequestServiceReceiver`, `webid::SetIdpSigninStatus` (content: `//koan/browser/containers:domain`, no deps) |
+| Protocol handlers (B13) | `registerProtocolHandler` dropped | `BrowserWebContentsDelegate::RegisterProtocolHandler` |
+| Web-app link capturing (B14; both kinds) | a container tab's links never move into an installed app's window (default partition) | `Navigate()` in `browser_navigator.cc`, after `MaybeHandleAppNavigation` |
+| Site state in the profile (B15) | app badges, Accept-CH, the Favicons DB (icons still show), the heavy-ad blocklist, media engagement, the site data DB, site engagement, ad-filter site metadata and interventions, page-language counts | `BadgeManager` binders, `PersistAcceptCH`, `CreateContentFaviconDriverForWebContents`, page-load-metrics init, `MediaEngagementService::CreateWebContentsObserver`, `SiteDataRecorder::SetPageNodeDataCache`, `SiteEngagementService::Handle*`, `ProfileInteractionManager`, `ChromeTranslateClient` |
+| User surfaces (B16) | Recently Closed and `chrome.sessions` never list agent tabs (nor a Space of only agent tabs; a split of an agent and a user tab is dropped whole), NTP tab resumption skips them, no webNavigation events | `ContentLiveTab::IsInitialBlankNavigation`, `DesktopTabModelURLVisitDataFetcher`, the `WebNavigationTabObserver` constructor |
+
+Two services stay safe by decision: **OriginTrials** (a persistent trial needs the site's own token, which it sends again on
+the user's own visit; blocking it needs three hooks in content) and **ReduceAcceptLanguage** (off by default at 158).
 
 **Every per-profile service is decided.** A container shares the profile's `KeyedService`s (that is what makes it
 cheap), so a new upstream service could reach agent tabs silently. A unit test lists every factory registered by
@@ -731,7 +741,7 @@ user is *taken over* (§9): the agent loses it, it keeps the agent jar and its b
 | **History, omnibox, `@tabs`** | §7.2 | B-rows |
 | **Session restore, Recently Closed, reopen a window** | the `koan.container` marker and the restore hook blank agent tabs (§7.1) | none |
 | **Session files on disk** | they can hold agent-visited URLs until next rewritten, though restore blanks the pages; a tab-level early return in `SessionServiceBase::BuildCommandsForTab` / `UpdateTabNavigation` removes them | **conditional, §14 #6**, decided by T-sync-1 |
-| **Recently Closed list** | agent tabs appear there but reopen blank and close; a one-line early return in `CreateHistoricalTab` keeps them out of the list | **conditional, §14 #5**, decided by T-sync-1 |
+| **Recently Closed list** | agent tabs are blank to `TabRestoreService` (`ContentLiveTab::IsInitialBlankNavigation`, B16), so they are never listed or written | B16 |
 | **Saved tab groups and tab-group sync** | `koan::SavesTabGroups(context)` already keeps every Space out of saved groups when Spaces are on; agent control requires Spaces (`kNoSpaces`) | none |
 | **The user's cookie jar, storage, cache, logins** | the container | C-rows |
 

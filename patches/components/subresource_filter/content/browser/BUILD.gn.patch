@@ -1,0 +1,12 @@
+diff --git a/components/subresource_filter/content/browser/BUILD.gn b/components/subresource_filter/content/browser/BUILD.gn
+index 41e369ef513fffa527ce1e3e191540f5052cd27e..762111bdd719f30b0fb3c13209432a23387ac7f9 100644
+--- a/components/subresource_filter/content/browser/BUILD.gn
++++ b/components/subresource_filter/content/browser/BUILD.gn
+@@ -70,6 +70,7 @@ static_library("browser") {
+     "//content/public/browser",
+     "//content/public/common",
+     "//ipc",
++    "//koan/browser/containers:partition",
+     "//net",
+     "//third_party/blink/public/common",
+     "//third_party/protobuf:protobuf_lite",

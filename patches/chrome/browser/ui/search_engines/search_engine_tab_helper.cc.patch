@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/search_engines/search_engine_tab_helper.cc b/chrome/browser/ui/search_engines/search_engine_tab_helper.cc
+index 7c61d9feb520f67ac50b747b720218398ce05846..852960a16d8ea256a5df690518c72a9edfa91e80 100644
+--- a/chrome/browser/ui/search_engines/search_engine_tab_helper.cc
++++ b/chrome/browser/ui/search_engines/search_engine_tab_helper.cc
+@@ -23,6 +23,7 @@
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "services/network/public/mojom/url_loader_factory.mojom.h"
+ #include "third_party/blink/public/mojom/loader/referrer.mojom.h"
+@@ -53,6 +54,10 @@ void SearchEngineTabHelper::BindOpenSearchDescriptionDocumentHandler(
+   if (rfh->GetParentOrOuterDocument()) {
+     return;
+   }
++  // Koan: an agent container's pages never add search engines.
++  if (koan::containers::IsAgentFrame(rfh)) {
++    return;
++  }
+ 
+   auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
+   if (!web_contents) {

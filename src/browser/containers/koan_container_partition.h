@@ -11,6 +11,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
+#include "koan/browser/containers/koan_partition_domain.h"
 
 class GURL;
 
@@ -45,11 +46,6 @@ class WebContents;
 // This file is the part of the core that needs nothing but content: the
 // identity, and the SiteInstances upstream hooks put new tabs in.
 namespace koan::containers {
-
-// StoragePartitionConfig domains are [a-z]* (storage_partition_config.h). With
-// a container id after them they can't be an extension id (32 letters a-p).
-inline constexpr char kAgentPartitionDomainPrefix[] = "koanagent";
-inline constexpr char kUserPartitionDomainPrefix[] = "koanuser";
 
 enum class ContainerKind {
   kUser,
@@ -104,9 +100,22 @@ bool IsAgentFrame(content::RenderFrameHost* frame);
 // process, stay the user's in their own tab.)
 bool IsAgentContents(const content::WebContents* contents);
 
+// Whether `contents` itself is in an agent container: false for a user's tab
+// an agent leases. For surfaces that list the agent's own tabs (Recently
+// Closed, tab resumption), where a leased tab is still the user's.
+bool IsAgentContainerContents(const content::WebContents* contents);
+
 // Marks `contents`, a user's tab, as leased to an agent, or not. Called by
 // agent control's lease (koan_agent_lease.cc) for tabs the agent doesn't own.
 void SetAgentLeased(content::WebContents* contents, bool leased);
+
+// Whether the frame, tab or SiteInstance is in a container of either kind.
+// Paths that would load its pages in the default partition, with the user's
+// cookies, check this: NoStatePrefetch, the loading predictor's prewarming,
+// web-app navigation capturing. Null is not.
+bool IsContainerFrame(content::RenderFrameHost* frame);
+bool IsContainerContents(const content::WebContents* contents);
+bool IsContainerSiteInstance(content::SiteInstance* site_instance);
 
 // The container `contents` is in, or nullopt.
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents);

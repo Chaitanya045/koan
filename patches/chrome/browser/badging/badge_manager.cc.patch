@@ -1,0 +1,33 @@
+diff --git a/chrome/browser/badging/badge_manager.cc b/chrome/browser/badging/badge_manager.cc
+index 8d2c7681aee83dfeee87b241e8a69470f572671e..1db96e6be31f93cfcd2144f1d3008c9079938298 100644
+--- a/chrome/browser/badging/badge_manager.cc
++++ b/chrome/browser/badging/badge_manager.cc
+@@ -24,6 +24,7 @@
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/service_worker_version_base_info.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+ #include "third_party/blink/public/mojom/service_worker/service_worker_ancestor_frame_type.mojom.h"
+@@ -93,6 +94,10 @@ void BadgeManager::BindFrameReceiverIfAllowed(
+   if (frame->GetStorageKey().IsThirdPartyContext()) {
+     return;
+   }
++  // Koan: an agent container's pages never badge the user's installed apps.
++  if (koan::containers::IsAgentFrame(frame)) {
++    return;
++  }
+ 
+   auto* profile = Profile::FromBrowserContext(frame->GetBrowserContext());
+ 
+@@ -123,6 +128,9 @@ void BadgeManager::BindServiceWorkerReceiverIfAllowed(
+   if (info.storage_key.IsThirdPartyContext()) {
+     return;
+   }
++  if (koan::containers::IsAgentProcess(service_worker_process_host)) {
++    return;
++  }
+ 
+   auto* profile = Profile::FromBrowserContext(
+       service_worker_process_host->GetBrowserContext());

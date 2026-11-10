@@ -1,0 +1,25 @@
+diff --git a/components/sessions/content/content_live_tab.cc b/components/sessions/content/content_live_tab.cc
+index 2d4396ffb564e7a7a1965032f39d6ee08e2e7fd6..40b2f01c9262aa224df4d9167a16897b9a859a51 100644
+--- a/components/sessions/content/content_live_tab.cc
++++ b/components/sessions/content/content_live_tab.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "components/sessions/content/content_live_tab.h"
+ 
++#include "koan/browser/containers/koan_container_partition.h"
++
+ #include <memory>
+ 
+ #include "base/memory/ptr_util.h"
+@@ -28,6 +30,11 @@ SessionID ContentLiveTab::GetSessionID() const {
+ }
+ 
+ bool ContentLiveTab::IsInitialBlankNavigation() {
++  // Koan: an agent container's tab has nothing to restore, so Recently Closed
++  // (and chrome.sessions) never lists it, nor a Space of only agent tabs.
++  if (koan::containers::IsAgentContainerContents(&GetWebContents())) {
++    return true;
++  }
+   return navigation_controller().IsInitialBlankNavigation();
+ }
+ 
