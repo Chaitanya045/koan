@@ -13,10 +13,10 @@ class BrowserView;
 
 namespace koan {
 
-// Corner radius of the Zen-style content card.
-inline float ContentCardCornerRadius() {
-  return static_cast<float>(look::StyleRadius(8, look::Step::kXl));
-}
+// Corner radius of the content card (and of Glance's card): Zen's, which
+// follows the OS window's corners (on macOS 6, 7 on macOS 26; see
+// koan_content_radius.h), or the shadcn style's xl.
+float ContentCardCornerRadius();
 
 // Gap between the content card and the window edges.
 inline constexpr int kContentCardMargin = 8;

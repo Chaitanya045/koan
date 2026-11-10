@@ -45,6 +45,12 @@ inline constexpr char kLookCustomCss[] = "koan.look.custom_css";
 // glass pane, translucent with the page blurred behind it. Both styles.
 inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
 
+// Zen's zen.haptic-feedback.enabled (default on): the trackpad ticks as a
+// dragged tab or Space button moves a slot and as the theme picker's sliders
+// pass a step (koan::PlayHapticFeedback()). macOS only; a local-state pref, as
+// Zen's is the application's.
+inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
+
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
 inline constexpr char kCompactModeEnabled[] = "koan.compact_mode.enabled";
@@ -248,6 +254,15 @@ inline constexpr char kDragWindowFromContent[] =
 inline constexpr char kSpaceRoutes[] = "koan.space_routing.routes";
 inline constexpr char kSpaceRoutingExternalDefault[] =
     "koan.space_routing.external_default";
+// Renaming any sidebar tab by double-clicking its label, and "Change Label…"
+// in its menu (zen.tabs.rename-tabs).
+inline constexpr char kRenameTabs[] = "koan.tabs.rename_tabs";
+// The page-load progress bar above the selected tab's page
+// (zen.view.enable-loading-indicator).
+inline constexpr char kLoadingIndicator[] = "koan.view.loading_indicator";
+// Whether sidebar tabs keep their favicon while loading instead of
+// Chromium's spinner (zen.theme.hide-tab-throbber).
+inline constexpr char kHideTabThrobber[] = "koan.theme.hide_tab_throbber";
 
 // Whether the bookmarks bar may show at all. Zen has none, so Koan's default
 // is no bar anywhere (also on the new tab page, and after an import, which

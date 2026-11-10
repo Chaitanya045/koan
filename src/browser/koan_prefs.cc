@@ -64,6 +64,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kDragWindowFromContent, true);
   registry->RegisterListPref(kSpaceRoutes);
   registry->RegisterStringPref(kSpaceRoutingExternalDefault, "");
+  registry->RegisterBooleanPref(kRenameTabs, true);
+  registry->RegisterBooleanPref(kLoadingIndicator, true);
+  registry->RegisterBooleanPref(kHideTabThrobber, true);
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
   registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
@@ -132,6 +135,7 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kLookAccent, "none");
   registry->RegisterStringPref(kLookCustomCss, "");
   registry->RegisterBooleanPref(kLookAcrylicUrlBar, false);
+  registry->RegisterBooleanPref(kHapticFeedback, true);
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);
