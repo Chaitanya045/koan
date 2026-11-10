@@ -362,7 +362,9 @@ As in Zen there are two kinds of pinned tab:
   ("Unload and switch to tab") where other tabs have their close button.
 - **Essentials** are shared by all Spaces, up to 12 per window: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
-  Dragging a tab into the grid also makes it an Essential.
+  Dragging a tab into the grid also makes it an Essential. With no
+  Essentials yet, dragging a tab to the top of the sidebar shows Zen's
+  "Add to Essentials" drop target; drop it there.
 
 Both remember the URL they were pinned on, the **pinned URL**. When a pinned
 tab goes elsewhere, a slash appears after its icon: hover it to see the
@@ -423,7 +425,13 @@ belongs to a Space, and new tabs open in the active one.
   (also after a restart). Going straight to a tab of another Space (the
   address bar's "Switch to this tab", tab search) shows that tab.
 - **Move To**: right-click a tab > Move To moves it (and the other
-  selected tabs) to another Space and shows it.
+  selected tabs) to another Space and shows it. Or drag it: hold a dragged
+  tab at the sidebar's left or right edge for half a second to go to the
+  previous or next Space (again every half second while you stay), or over
+  a Space button in the bottom bar to go there at once; the tab comes along
+  and drops where you let go. Essentials only switch at the edges.
+- **Reorder** Spaces by dragging their buttons in the bottom bar (the
+  others fade while you do; on a Mac the trackpad ticks at each step).
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in

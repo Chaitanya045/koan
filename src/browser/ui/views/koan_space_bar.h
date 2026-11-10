@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_BAR_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -56,6 +57,25 @@ class KoanSpaceBarView : public views::View {
   // A Space button's state changed: the others may change how they look.
   void OnButtonStateChanged();
 
+  // The Space whose button is at `point` (in this view's coordinates), if a
+  // button shows there.
+  std::optional<tab_groups::TabGroupId> SpaceAt(const gfx::Point& point) const;
+
+  // Zen's reorder by dragging (ZenSpaceIcons.mjs): a press on a Space
+  // button, then the drag (once it has moved kSpaceReorderThreshold along
+  // the bar) puts it before or after the button under the pointer, with a
+  // haptic tick per step; the release saves the order. Points are in this
+  // view's coordinates.
+  void StartReorder(KoanSpaceButton* button, const gfx::Point& point);
+  void UpdateReorder(KoanSpaceButton* button, const gfx::Point& point);
+  void EndReorder(KoanSpaceButton* button);
+  void CancelReorder();
+  // A reorder is under way (Zen's reorder-mode): the other buttons fade.
+  bool IsReordering() const { return reordering_; }
+  bool IsReordered(const KoanSpaceButton* button) const {
+    return reordering_ && reorder_button_ == button;
+  }
+
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
@@ -69,6 +89,11 @@ class KoanSpaceBarView : public views::View {
   raw_ptr<views::Button> create_button_ = nullptr;
   raw_ptr<views::View> leading_ = nullptr;
   bool compact_ = true;
+  // The button pressed for a reorder, where along the bar, and whether it
+  // has moved far enough to be one.
+  raw_ptr<KoanSpaceButton> reorder_button_ = nullptr;
+  int reorder_start_ = 0;
+  bool reordering_ = false;
 };
 
 }  // namespace koan
