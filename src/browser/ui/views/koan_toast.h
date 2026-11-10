@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_TOAST_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_TOAST_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -85,6 +86,9 @@ class KoanToast {
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<KoanToastView> view_ = nullptr;
+  // Counts the toasts shown, so that a click's posted hide (RunAction())
+  // only hides the toast clicked.
+  uint64_t shown_ = 0;
   // Hides the toast, then closes it once it has faded out.
   base::OneShotTimer timer_;
   base::TimeDelta timeout_;

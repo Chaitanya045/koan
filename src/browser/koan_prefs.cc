@@ -25,6 +25,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCompactModeEnabled, false);
   registry->RegisterStringPref(kCompactModeHide, kCompactModeHideSidebar);
   registry->RegisterBooleanPref(kCompactModeToolbarFlashPopup, false);
+  registry->RegisterBooleanPref(kCompactModeShowBackgroundTabToast, true);
   registry->RegisterBooleanPref(kCompactModeDragCollapseHintSeen, false);
   registry->RegisterBooleanPref(kTabsOnRight, false);
   registry->RegisterBooleanPref(kShowNewTabVertical, true);

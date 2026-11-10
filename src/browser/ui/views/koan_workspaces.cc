@@ -96,6 +96,7 @@
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "ui/actions/actions.h"
@@ -595,15 +596,11 @@ void KoanWorkspaceController::InstallViews() {
   // The bottom bar goes at the bottom of the vertical tab strip's content area
   // (a FlexLayoutView whose new-tab container flexes to fill the space, so
   // anything appended after it sits at the bottom of the sidebar).
-  for (views::View* child : region->children()) {
-    if (child->GetClassName() == "FlexLayoutView") {
-      bar_ = child->AddChildView(std::make_unique<KoanSpaceBarView>(this));
-      // The Library's button, in the room Zen keeps on the bar's leading
-      // side.
-      bar_->SetLeadingButton(CreateLibraryButton(browser_view_));
-      view_observations_.AddObservation(bar_);
-      return;
-    }
+  if (views::View* column = GetSidebarContentColumn(browser_view_)) {
+    bar_ = column->AddChildView(std::make_unique<KoanSpaceBarView>(this));
+    // The Library's button, in the room Zen keeps on the bar's leading side.
+    bar_->SetLeadingButton(CreateLibraryButton(browser_view_));
+    view_observations_.AddObservation(bar_);
   }
 }
 

@@ -87,6 +87,8 @@ class KoanMediaController : public TabStripModelObserver,
   void SetCardShown(KoanMediaCard* card, bool shown);
 
   void InstallView();
+  // InstallView(), and cards for the tabs playing already.
+  void InstallAndRescan();
   KoanMediaControlsView* view();
   void UpdateView();
   void UpdateVisibility();
@@ -95,6 +97,7 @@ class KoanMediaController : public TabStripModelObserver,
   std::map<content::WebContents*, std::unique_ptr<TabWatcher>> watchers_;
   // Oldest first.
   std::vector<std::unique_ptr<KoanMediaCard>> cards_;
+  bool rescan_pending_ = false;
   views::ViewTracker view_;
   base::ScopedObservation<views::View, views::ViewObserver>
       sidebar_observation_{this};

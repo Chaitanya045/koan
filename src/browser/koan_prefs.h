@@ -70,6 +70,12 @@ inline constexpr char kCompactModeHideBoth[] = "both";
 inline constexpr char kCompactModeToolbarFlashPopup[] =
     "koan.compact_mode.toolbar_flash_popup";
 
+// Zen's zen.view.compact.show-background-tab-toast: the "New background tab
+// opened!" toast while compact mode hides the sidebar. On by default, like
+// Zen.
+inline constexpr char kCompactModeShowBackgroundTabToast[] =
+    "koan.compact_mode.show_background_tab_toast";
+
 // Zen's "Tabs on the right" (`zen.tabs.vertical.right-side`): the sidebar is
 // on the right of the window, everything mirrored.
 inline constexpr char kTabsOnRight[] = "koan.tabs.on_right";

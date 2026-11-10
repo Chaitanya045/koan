@@ -110,6 +110,8 @@ class KoanGlanceController : public content::WebContentsDelegate,
   bool is_open() const { return contents_ != nullptr; }
   // While the card shrinks away after a close.
   bool is_closing() const { return closing_; }
+  // While the card grows or shrinks (Zen's gZenGlanceManager._animating).
+  bool IsAnimating() const;
   content::WebContents* contents() const { return contents_.get(); }
 
   // Runs `action` (Close, ExpandToTab, OpenInSplit) after the current event

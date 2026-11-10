@@ -18,6 +18,8 @@
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
+#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "koan/browser/koan_features.h"
@@ -31,6 +33,7 @@
 #include "ui/actions/actions.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace koan {
@@ -277,6 +280,15 @@ bool ShowSidebarButtonContextMenu(BrowserWindowInterface* browser,
   }
   controller->compact_mode()->ShowContextMenu(screen_point, source_type);
   return true;
+}
+
+views::View* GetSidebarContentColumn(BrowserView* browser_view) {
+  // Through upstream's accessor, not the column's class name: the bottom
+  // container is its child.
+  auto* region = views::AsViewClass<VerticalTabStripRegionView>(
+      browser_view->tab_strip_view());
+  views::View* bottom = region ? region->GetBottomContainer() : nullptr;
+  return bottom ? bottom->parent() : nullptr;
 }
 
 }  // namespace koan

@@ -195,6 +195,20 @@ source_set("stored_tab") {
   ]
 }
 
+# Zen's media time format, download arc and window-drag probe (MPL-2.0, see
+# THIRD_PARTY_NOTICES.md): pure, so the unit tests need nothing else.
+source_set("zen_logic") {
+  sources = [
+    "koan_zen_download_animation.cc",
+    "koan_zen_download_animation.h",
+    "koan_zen_media.cc",
+    "koan_zen_media.h",
+    "koan_zen_window_drag.cc",
+    "koan_zen_window_drag.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
 source_set("space_navigation") {
   sources = [ "koan_space_navigation.h" ]
 }
@@ -226,6 +240,7 @@ test("koan_views_unittests") {
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
     "koan_window_edges_unittest.cc",
+    "koan_zen_logic_unittest.cc",
   ]
   deps = [
     ":content_radius",
@@ -242,6 +257,7 @@ test("koan_views_unittests") {
     ":strip_on_share",
     ":swipe_tracker",
     ":window_edges",
+    ":zen_logic",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
@@ -431,14 +447,8 @@ source_set("impl") {
     "koan_workspaces.cc",
     "koan_workspaces.h",
     "koan_zen_compact_strings.h",
-    "koan_zen_download_animation.cc",
-    "koan_zen_download_animation.h",
-    "koan_zen_media.cc",
-    "koan_zen_media.h",
     "koan_zen_toasts.h",
     "koan_zen_welcome.h",
-    "koan_zen_window_drag.cc",
-    "koan_zen_window_drag.h",
     "koan_zero_suggest.cc",
     "koan_zero_suggest.h",
   ]
@@ -469,6 +479,7 @@ source_set("impl") {
     ":swipe_tracker",
     ":views",
     ":window_edges",
+    ":zen_logic",
     "//base:i18n",
     "//cc/paint",
     "//chrome/app:command_ids",

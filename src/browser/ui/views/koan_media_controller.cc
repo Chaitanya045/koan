@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "components/prefs/pref_service.h"
@@ -34,6 +35,8 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_space_bar.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_media.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -163,6 +166,14 @@ class KoanMediaCard : public media_session::mojom::MediaSessionObserver {
   void NextTrack() {
     if (Supports(Action::kNextTrack)) {
       content::MediaSession::Get(contents_)->NextTrack();
+    }
+  }
+  // Zen pauses the media while its seek bar is dragged (onSeekDrag); the
+  // seek resumes it.
+  void PauseForSeek() {
+    if (playing_) {
+      content::MediaSession::Get(contents_)->Suspend(
+          content::MediaSession::SuspendType::kUI);
     }
   }
   void SeekTo(double fraction) {
@@ -645,6 +656,8 @@ class KoanMediaCardView : public views::View {
         FormatMediaTime(card_->position()->duration() * fraction));
     if (done) {
       card_->SeekTo(fraction);
+    } else {
+      card_->PauseForSeek();
     }
   }
 
@@ -904,11 +917,30 @@ void KoanMediaController::OnAddedToWidget() {
 }
 
 void KoanMediaController::OnBrowserViewLayout() {
-  // The tab strip may have been rebuilt (e.g. a tab strip mode change).
-  if (!view() && !cards_.empty()) {
+  // The tab strip may have been rebuilt (e.g. a tab strip mode change, also
+  // to vertical tabs while a tab plays).
+  if (!view() && IsEnabled() && !rescan_pending_) {
+    rescan_pending_ = true;
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&KoanMediaController::InstallView,
+        FROM_HERE, base::BindOnce(&KoanMediaController::InstallAndRescan,
                                   weak_factory_.GetWeakPtr()));
+  }
+}
+
+void KoanMediaController::InstallAndRescan() {
+  rescan_pending_ = false;
+  InstallView();
+  if (!view()) {
+    return;
+  }
+  std::vector<content::WebContents*> audible;
+  for (const auto& [contents, watcher] : watchers_) {
+    if (contents->IsCurrentlyAudible()) {
+      audible.push_back(contents);
+    }
+  }
+  for (content::WebContents* contents : audible) {
+    OnAudibleChanged(contents, true);
   }
 }
 
@@ -925,9 +957,14 @@ void KoanMediaController::OnBrowserViewDestroying() {
 }
 
 bool KoanMediaController::IsEnabled() const {
+  // The cards live in the vertical tab strip: none in a window with tabs on
+  // top.
+  const auto* tab_strip_state =
+      tabs::VerticalTabStripStateController::From(browser_view_->browser());
   return features::IsMediaControlsEnabled() &&
          browser_view_->GetProfile()->GetPrefs()->GetBoolean(
-             prefs::kMediaControlsEnabled);
+             prefs::kMediaControlsEnabled) &&
+         tab_strip_state && tab_strip_state->ShouldDisplayVerticalTabs();
 }
 
 void KoanMediaController::Watch(content::WebContents* contents) {
@@ -1148,27 +1185,24 @@ void KoanMediaController::InstallView() {
   }
   // At the bottom of the vertical tab strip's content area, above the
   // Spaces' bottom bar (see KoanWorkspaceController::InstallViews).
-  views::View* region = browser_view_->tab_strip_view();
-  if (!region || region->GetClassName() != "VerticalTabStripRegionView") {
+  views::View* column = GetSidebarContentColumn(browser_view_);
+  if (!column) {
     return;
   }
-  for (views::View* child : region->children()) {
-    if (child->GetClassName() != "FlexLayoutView") {
-      continue;
-    }
-    size_t index = child->children().size();
-    for (size_t i = 0; i < child->children().size(); ++i) {
-      if (child->children()[i]->GetClassName() == "KoanSpaceBarView") {
-        index = i;
-      }
-    }
-    view_.SetView(child->AddChildViewAt(
-        std::make_unique<KoanMediaControlsView>(this), index));
-    sidebar_observation_.Reset();
-    sidebar_observation_.Observe(region);
-    UpdateView();
-    return;
-  }
+  // Before the Spaces' bar, if there is one.
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  const views::View* bar = controller && controller->workspaces()
+                               ? controller->workspaces()->space_bar()
+                               : nullptr;
+  const size_t index = bar && bar->parent() == column
+                           ? column->GetIndexOf(bar).value()
+                           : column->children().size();
+  view_.SetView(column->AddChildViewAt(
+      std::make_unique<KoanMediaControlsView>(this), index));
+  sidebar_observation_.Reset();
+  sidebar_observation_.Observe(browser_view_->tab_strip_view());
+  UpdateView();
 }
 
 KoanMediaControlsView* KoanMediaController::view() {
