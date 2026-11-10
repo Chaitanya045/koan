@@ -83,3 +83,31 @@ test("koan_containers_unittests") {
     "//testing/gtest",
   ]
 }
+
+# The decision for every per-profile KeyedService (koan_agent_service_policy.h).
+# The table is also read by scripts/agent/check_agent_services.py.
+source_set("service_policy") {
+  sources = [
+    "koan_agent_service_policy.cc",
+    "koan_agent_service_policy.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# The upgrade guard: every factory Chromium registers has a row. It links the
+# browser (to build every factory), so it is its own target. Build and run:
+#   autoninja -C out/Koan koan/browser/containers:koan_agent_service_unittests
+#   out/Koan/koan_agent_service_unittests
+test("koan_agent_service_unittests") {
+  sources = [ "koan_agent_service_policy_unittest.cc" ]
+  deps = [
+    ":service_policy",
+    "//base",
+    "//chrome/browser",
+    "//chrome/browser/profiles:profiles_extra_parts",
+    "//chrome/test:test_support_unit",
+    "//components/keyed_service/content",
+    "//components/keyed_service/core",
+    "//testing/gtest",
+  ]
+}
