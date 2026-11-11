@@ -57,6 +57,7 @@
 #include "ui/base/base_window.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace koan::containers {
 
@@ -581,6 +582,14 @@ content::WebContents* OpenAgentTab(Profile* profile,
   std::unique_ptr<content::WebContents> owned =
       content::WebContents::Create(create_params);
   content::WebContents* contents = owned.get();
+  // The size of the window's page, as upstream's TabStripModel::AddTab()
+  // gives a tab added in the background (InsertWebContentsAt() doesn't). It
+  // is never shown, and on macOS its view stays 0x0 otherwise: the page lays
+  // out in no width, a click lands at the origin and a screenshot gets no
+  // frame.
+  if (content::WebContents* active = tab_strip->GetActiveWebContents()) {
+    contents->Resize(gfx::Rect(active->GetContainerBounds().size()));
+  }
   content::NavigationController::LoadURLParams load(url);
   load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   contents->GetController().LoadURLWithParams(load);

@@ -112,8 +112,23 @@ void KoanWindowSyncClient::OnAddedToWidget() {
 }
 
 void KoanWindowSyncClient::OnSessionRestored(Profile* profile, int tab_count) {
-  if (profile != browser_view_->GetProfile() ||
-      SessionRestore::IsRestoring(profile)) {
+  if (profile != browser_view_->GetProfile()) {
+    return;
+  }
+  // Upstream tells while its restorer is still running (SessionRestoreImpl
+  // notifies before it returns, so IsRestoring() is still true here): join
+  // right after it.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KoanWindowSyncClient::JoinAfterRestore,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KoanWindowSyncClient::JoinAfterRestore() {
+  // Not once the window goes (OnBrowserViewDestroying() drops the
+  // subscription) or has joined; and not while another restore of the
+  // profile runs, whose end is told too.
+  if (!session_restored_subscription_ ||
+      SessionRestore::IsRestoring(browser_view_->GetProfile())) {
     return;
   }
   session_restored_subscription_ = base::CallbackListSubscription();

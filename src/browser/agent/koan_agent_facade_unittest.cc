@@ -485,6 +485,26 @@ TEST_F(KoanAgentFacadeTest, NothingButReadsReachASecurityInterstitial) {
   EXPECT_EQ(backend_.sent.size(), 2u);
 }
 
+TEST_F(KoanAgentFacadeTest, AttachingToATabBehindAnInterstitialSaysSo) {
+  // Content refuses to attach to a tab that already shows the warning (the
+  // first act on a tab opened onto a bad certificate): the answer is the
+  // one acting on it gets, and the user is needed, once.
+  backend_.tabs["T1"].interstitial = true;
+  backend_.refuse_attach = true;
+  for (int id : {1, 2}) {
+    Send(id, "Target.attachToTarget",
+         base::DictValue().Set("targetId", "T1").Set("flatten", true));
+    EXPECT_EQ(ErrorCode(id), "Koan.interstitial");
+  }
+  EXPECT_EQ(backend_.user_needed, std::vector<std::string>{"T1:interstitial"});
+  ASSERT_EQ(Events("Koan.userNeeded").size(), 1u);
+  // Any other refusal is still Koan.unavailable.
+  backend_.tabs["T1"].interstitial = false;
+  Send(3, "Target.attachToTarget",
+       base::DictValue().Set("targetId", "T1").Set("flatten", true));
+  EXPECT_EQ(ErrorCode(3), "Koan.unavailable");
+}
+
 TEST_F(KoanAgentFacadeTest, TellsOnlyItsOwnClientWhatAPageWaitsToShow) {
   // Design section 9.4: a page's dialog in the client's tab waits for the
   // user; the client hears that it waits and when it no longer does.

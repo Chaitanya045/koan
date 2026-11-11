@@ -36,6 +36,16 @@ std::map<std::string, std::string> TestKeys(content::WebContents* contents) {
   return data;
 }
 
+// The same for a window's data: window sync keeps its Space ids there
+// (koan.window_sync.spaces) once the window joins.
+std::map<std::string, std::string> TestKeys(BrowserWindowInterface* browser) {
+  std::map<std::string, std::string> data = GetWindowSessionData(browser);
+  std::erase_if(data, [](const auto& entry) {
+    return entry.first.starts_with("koan.window_sync.");
+  });
+  return data;
+}
+
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, TabDataIsPerFeatureAndTab) {
@@ -82,13 +92,13 @@ IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, WindowData) {
   SetWindowSessionData(browser(), "koan.one", "w1");
   SetWindowSessionData(browser(), "koan.two", "w2");
   EXPECT_EQ("w1", GetWindowSessionData(browser(), "koan.one"));
-  EXPECT_THAT(GetWindowSessionData(browser()),
+  EXPECT_THAT(TestKeys(browser()),
               testing::ElementsAre(testing::Pair("koan.one", "w1"),
                                    testing::Pair("koan.two", "w2")));
 
   SetWindowSessionData(browser(), "koan.one", "");
   EXPECT_EQ("", GetWindowSessionData(browser(), "koan.one"));
-  EXPECT_THAT(GetWindowSessionData(browser()),
+  EXPECT_THAT(TestKeys(browser()),
               testing::ElementsAre(testing::Pair("koan.two", "w2")));
 }
 
@@ -122,7 +132,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, RestoringAWindowMerges) {
   OnRestoringWindow(browser(),
                     {{"koan.both", "new"}, {"koan.theirs", "t"}, {"x", "y"}},
                     /*from_session_restore=*/true);
-  EXPECT_THAT(GetWindowSessionData(browser()),
+  EXPECT_THAT(TestKeys(browser()),
               testing::ElementsAre(testing::Pair("koan.both", "new"),
                                    testing::Pair("koan.own", "mine"),
                                    testing::Pair("koan.theirs", "t")));

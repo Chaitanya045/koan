@@ -100,6 +100,7 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   // Spaces.
   void Join();
   void OnSessionRestored(Profile* profile, int tab_count);
+  void JoinAfterRestore();
 
   // --- Spaces ---
 

@@ -99,6 +99,7 @@ source_set("impl") {
     "//services/network/public/cpp",
     "//third_party/blink/public/common",
     "//ui/base",
+    "//ui/gfx/geometry",
     "//url",
   ]
 }

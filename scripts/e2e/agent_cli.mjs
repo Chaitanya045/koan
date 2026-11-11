@@ -36,7 +36,8 @@ if (!PROFILE || !AGENT_HOME) skip('KOAN_PROFILE and KOAN_AGENT_HOME are set by s
 const env = { ...process.env, HOME: AGENT_HOME, KOAN_USER_DATA_DIR: PROFILE };
 
 // Runs `koan args...`; resolves {code, out, err}. `whileRunning` runs once
-// the command started (e.g. to answer a dialog it waits for).
+// the command started (e.g. to answer a dialog it waits for), with a
+// function that returns what the command printed so far.
 function koan(args, { timeout = 60000, whileRunning } = {}) {
   return new Promise(resolve => {
     const child = spawn(CLI, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -48,14 +49,22 @@ function koan(args, { timeout = 60000, whileRunning } = {}) {
       clearTimeout(timer);
       resolve({ code, out: out.trim(), err: err.trim() });
     });
-    whileRunning?.().catch(e => console.log(`  (${e.message})`));
+    whileRunning?.(() => out + err).catch(e => console.log(`  (${e.message})`));
   });
 }
 const brief = r => `exit ${r.code}; ${(r.err || r.out).split('\n')[0].slice(0, 160)}`;
 
 // Presses the Allow button of the dialog whose title matches `title` (a
-// RegExp; UI DevTools, through the dialog widget's root view, like a click).
-async function allow(title) {
+// RegExp; UI DevTools, through the dialog widget's root view, like a click),
+// once the command (`printed`, from koan()'s whileRunning) says it waits
+// for the user in Koan. Not before: on macOS a widget made while a UI
+// DevTools session is between its DOM.enable and DOM.getDocument crashes
+// the browser in UI DevTools (DOMAgentMac::OnNativeWidgetAdded(), whose
+// element_root() is still null), and each poll opens a session.
+async function allow(title, printed) {
+  if (!await waitFor(() => / in Koan\.\.\./.test(printed()), 30000)) return false;
+  // The dialog is shown in a task after the request arrives.
+  await sleep(1000);
   const found = await waitFor(async () => {
     const vs = await viewTree();
     const label = vs.find(v => v.shown && title.test(v.props.Text ?? ''));
@@ -94,7 +103,9 @@ let r = await koan(['status']);
 check('koan status: Koan running, Agent ready', /running, Agent ready/.test(r.out), brief(r));
 let allowed = false;
 r = await koan(['pair', '--label', 'koan suite', '--capabilities', 'observe,read,drive'],
-               { timeout: 90000, whileRunning: async () => { allowed = await allow(/^Allow a program to control Koan\?$/); } });
+               { timeout: 90000, whileRunning: async printed => {
+                 allowed = await allow(/^Allow a program to control Koan\?$/, printed);
+               } });
 check('koan pair: the approval dialog showed and was allowed', allowed);
 check('koan pair: paired', r.code === 0 && /paired as/.test(r.out), brief(r));
 if (r.code !== 0) {
@@ -175,7 +186,9 @@ check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).t
   await sleep(800);
   let ok = false;
   r = await koan(['take-over'], { timeout: 90000,
-                                  whileRunning: async () => { ok = await allow(/ wants to control a tab$/); } });
+                                  whileRunning: async printed => {
+                                    ok = await allow(/ wants to control a tab$/, printed);
+                                  } });
   const taken = r.out.split('\n').at(-1);
   check('koan take-over: the user\'s tab, after its prompt was allowed', ok && r.code === 0 && !!taken,
         brief(r));

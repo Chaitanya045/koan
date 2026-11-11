@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
@@ -19,6 +20,7 @@
 #include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
+class BrowserWindowInterface;
 
 namespace koan {
 
@@ -50,9 +52,16 @@ class KoanWorkspaceController;
 // koan_browser_view_hooks.h. Compact mode and sidebar styling hang off this.
 //
 // Teardown runs once, at the first of:
-// - the window's widget being destroyed (OnWidgetDestroying()), the usual
-//   case: the widget, the widgets it owns (Koan's overlays, bubbles) and the
-//   browser's window features are all still there;
+// - the browser's close being final (RegisterBrowserDidClose(), from
+//   UnloadController::OnWindowCloseComplete(): unload handlers ran and the
+//   tabs are closed), the usual case: the widget, the widgets it owns
+//   (Koan's overlays, bubbles) and the browser's window features are all
+//   still there. On macOS it is the only one before the widget goes: the
+//   browser is deleted, and with it the widget (DeleteBrowserWindow()),
+//   before its NSWindow closes, so OnWidgetDestroying() comes from ~Widget,
+//   after ~BrowserWidget;
+// - the window's widget being destroyed (OnWidgetDestroying()), for a widget
+//   whose native window closes without the browser closing first;
 // - ~BrowserView (DestroyFor()), for a widget deleted without its native
 //   window closing first. By then BrowserView::DeleteBrowserWindow() has
 //   nulled browser_widget(), the owned widgets are closed and the browser's
@@ -116,6 +125,9 @@ class KoanBrowserViewController : public views::ViewObserver,
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
+  // The browser's close is final (RegisterBrowserDidClose()).
+  void OnBrowserDidClose(BrowserWindowInterface* browser);
+
   // Lets every controller go of the window's UI, once. Nothing is forwarded
   // to the controllers afterwards.
   void TearDown();
@@ -163,6 +175,7 @@ class KoanBrowserViewController : public views::ViewObserver,
   // remaining tabs) runs before Koan's teardown.
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       widget_observation_{this};
+  base::CallbackListSubscription browser_did_close_subscription_;
   // Keeps Chromium's AI search shortcuts off (see the constructor).
   std::unique_ptr<AiStarterPackFilter> ai_starter_pack_filter_;
   base::WeakPtrFactory<KoanBrowserViewController> weak_factory_{this};
