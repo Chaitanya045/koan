@@ -31,6 +31,7 @@
 class BrowserView;
 class GURL;
 class LocationBarView;
+enum class OmniboxPopupState;
 
 namespace ui {
 class Layer;
@@ -159,6 +160,12 @@ class KoanUrlBarController
   // session if so.
   bool TakeNewTabDisposition();
 
+  // The omnibox popup in Zen's card (koan_url_bar.h): whether the popup frame
+  // being built leaves its surface to the card (remembered until the popup
+  // closes), and the popup's bounds under the card's input row.
+  bool OnOmniboxPopupFrameCreated();
+  void AdjustOmniboxPopupBounds(int results_height, gfx::Rect& bounds);
+
   // views::ViewObserver:
   void OnViewVisibilityChanged(views::View* observed_view,
                                views::View* starting_view,
@@ -229,6 +236,11 @@ class KoanUrlBarController
   void RetryEmptyList(int retries_left);
   void OpenOnStartup();
   void FloatIfOpenInPill();
+  // A popup opened in the pill keeps Chromium's frame: once the bar is Zen's
+  // card, closes it and asks for its suggestions again, in the card.
+  void RebuildPopupForCard();
+  void OnPopupStateChanged(OmniboxPopupState old_state,
+                           OmniboxPopupState new_state);
   void EndNewTabSession(bool committed);
   // Zen draws the "+ New Tab" row as selected during a new-tab session.
   void SetNewTabRowSelected(bool selected);
@@ -283,6 +295,13 @@ class KoanUrlBarController
   raw_ptr<KoanUrlBarCardFill> fill_ = nullptr;
   // The card's size at the last layout (empty while closed).
   gfx::Size card_size_;
+  // Zen's card: its input row's height at the last layout, and whether the
+  // open omnibox popup is in the card (OnOmniboxPopupFrameCreated()) and how
+  // tall its suggestions are; the card is that much taller.
+  int input_row_height_ = 0;
+  bool popup_in_card_ = false;
+  int popup_results_height_ = 0;
+  base::CallbackListSubscription popup_state_subscription_;
   // The omnibox, while this handles its keys (Esc).
   views::ViewTracker key_target_;
 

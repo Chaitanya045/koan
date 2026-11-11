@@ -142,5 +142,43 @@ class FlowTest(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(shots, 'diffs', 'default-box-diff.png')))
 
 
+class SameColourTest(unittest.TestCase):
+    def test_band_rect_counts_from_the_far_edges(self):
+        self.assertEqual(diff.band_rect([10, 20, 100, 60], [24, 2, -24, 4]), [34, 22, 52, 4])
+        self.assertEqual(diff.band_rect([10, 20, 100, 60], [24, -6, -24, 4]), [34, 74, 52, 4])
+        self.assertEqual(diff.band_rect([0, 0, 50, 40], [0, 0, 0, 0]), [0, 0, 50, 40])
+
+    def test_tolerance(self):
+        self.assertTrue(diff.same_colour([(24, 24, 24), (26, 23, 24)]))
+        self.assertFalse(diff.same_colour([(19, 19, 19), (24, 24, 24)]))
+
+    def capture(self, shots, img):
+        # A 2x capture of a 10x8 point root view; the card is 8x6 points at 1,1.
+        w, h, rgb = img
+        rgba = bytearray()
+        for i in range(w * h):
+            rgba += rgb[i * 3:i * 3 + 3] + b'\xff'
+        rgba_png(os.path.join(shots, 'card.png'), w, h, bytes(rgba))
+        with open(os.path.join(shots, 'card.json'), 'w') as f:
+            json.dump({'root': [10, 8], 'regions': {'card': [1, 1, 8, 6]},
+                       'same': {'card': [[1, 0, -1, 1], [1, -1, -1, 1]]}}, f)
+
+    def test_one_surface_passes_two_fail(self):
+        page = solid(20, 16, (34, 36, 41))
+        card = with_block(page, 2, 2, 18, 14, (24, 24, 24))
+        with tempfile.TemporaryDirectory() as d:
+            shots, ref = os.path.join(d, 'shots'), os.path.join(d, 'ref')
+            os.makedirs(shots)
+            self.capture(shots, card)
+            code, out = FlowTest.run_diff(self, '--shots', shots, '--ref', ref)
+            self.assertEqual(code, 0, out)
+            self.assertIn('PASS card/card one surface', out)
+            # The bug: a second, darker card showing above the suggestions.
+            self.capture(shots, with_block(card, 2, 2, 18, 4, (19, 19, 19)))
+            code, out = FlowTest.run_diff(self, '--shots', shots, '--ref', ref)
+            self.assertEqual(code, 1)
+            self.assertIn('FAIL card/card one surface: (19, 19, 19) vs (24, 24, 24)', out)
+
+
 if __name__ == '__main__':
     unittest.main()

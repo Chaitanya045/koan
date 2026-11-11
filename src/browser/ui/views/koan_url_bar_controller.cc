@@ -40,6 +40,7 @@
 #include "chrome/browser/ui/omnibox/omnibox_controller.h"
 #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
 #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
+#include "chrome/browser/ui/omnibox/omnibox_popup_state_manager.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
@@ -289,20 +290,27 @@ class KoanUrlBarCardDecoration : public views::View {
 
   // `icon` is the location icon's bounds in this view. With `glyph_x`, the
   // magnifier's glyph starts there (Zen's inset), else it is centred on the
-  // icon. `leading` is the width at the card's start that the toolbar, moved
-  // right for Zen's text inset, leaves uncovered.
-  void SetIconBounds(const gfx::Rect& icon,
-                     std::optional<int> glyph_x,
-                     int leading) {
-    if (icon_ != icon || glyph_x_ != glyph_x || leading_ != leading) {
+  // icon. `toolbar` is the toolbar's bounds in this view (the card fill is in
+  // it): the card's colour goes everywhere else, the strip the toolbar, moved
+  // right for Zen's text inset, leaves at the card's start, the input row's
+  // top and bottom around it, and the suggestions under it. The divider is at
+  // the bottom of the `input_row_height` tall input row.
+  void SetLayout(const gfx::Rect& icon,
+                 std::optional<int> glyph_x,
+                 const gfx::Rect& toolbar,
+                 int input_row_height) {
+    if (icon_ != icon || glyph_x_ != glyph_x || toolbar_ != toolbar ||
+        input_row_height_ != input_row_height) {
       icon_ = icon;
       glyph_x_ = glyph_x;
-      leading_ = leading;
+      toolbar_ = toolbar;
+      input_row_height_ = input_row_height;
       SchedulePaint();
     }
   }
 
-  // As KoanUrlBarCardFill::SetGlass(), for the strip SetIconBounds() names.
+  // As KoanUrlBarCardFill::SetGlass(), for what SetLayout() says is outside
+  // the toolbar.
   void SetGlass(bool glass) {
     if (glass_ != glass) {
       glass_ = glass;
@@ -313,10 +321,16 @@ class KoanUrlBarCardDecoration : public views::View {
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();
-    if (leading_ > 0) {
-      // The card's fill there, as KoanUrlBarCardFill paints it in the toolbar.
+    {
+      // The card's fill there, as KoanUrlBarCardFill paints it in the toolbar
+      // (not over it: a glass fill is translucent). Without it the top
+      // container's own colour (the toolbar's, or nothing over a glass card's
+      // blur) showed above the input row, as a second, darker card.
+      gfx::ScopedCanvas scoped(canvas);
+      canvas->sk_canvas()->clipRect(gfx::RectToSkRect(toolbar_),
+                                    SkClipOp::kDifference);
       canvas->FillRect(
-          gfx::Rect(0, 0, leading_, height()),
+          GetLocalBounds(),
           colors->GetColor(glass_ ? kColorKoanFloatingUrlBarGlass
                                   : kColorKoanFloatingUrlBarBackground));
     }
@@ -338,7 +352,7 @@ class KoanUrlBarCardDecoration : public views::View {
     }
     // A thin line inset from the card's edges (Zen's input row padding).
     canvas->FillRect(
-        gfx::Rect(kFloatingUrlBarDividerInset, height() - 1,
+        gfx::Rect(kFloatingUrlBarDividerInset, input_row_height_ - 1,
                   std::max(0, width() - 2 * kFloatingUrlBarDividerInset), 1),
         colors->GetColor(kColorKoanFloatingUrlBarDivider));
   }
@@ -346,7 +360,8 @@ class KoanUrlBarCardDecoration : public views::View {
  private:
   gfx::Rect icon_;
   std::optional<int> glyph_x_;
-  int leading_ = 0;
+  gfx::Rect toolbar_;
+  int input_row_height_ = 0;
   bool glass_ = false;
 };
 
@@ -1015,6 +1030,8 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     }
     restore_.clear();
     card_size_ = gfx::Size();
+    input_row_height_ = 0;
+    popup_results_height_ = 0;
     if (ui::Layer* layer = top_container->layer()) {
       layer->GetAnimator()->AbortAllAnimations();
       layer->SetOpacity(1.0f);
@@ -1084,6 +1101,95 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
   ApplyCardStyle();
   Layout();
   // Zen 1.24b on macOS opens and closes the bar in a single frame: no fade.
+  if (IsFloatingZenCard() && !popup_in_card_ &&
+      bar->GetOmniboxController()->IsPopupOpen()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanUrlBarController::RebuildPopupForCard,
+                                  weak_factory_.GetWeakPtr()));
+  }
+}
+
+void KoanUrlBarController::RebuildPopupForCard() {
+  LocationBarView* bar = location_bar();
+  if (!IsFloatingZenCard() || popup_in_card_ || !bar || !bar->omnibox_view() ||
+      !bar->omnibox_view()->HasFocus()) {
+    return;
+  }
+  OmniboxController* omnibox = bar->GetOmniboxController();
+  if (!omnibox->IsPopupOpen()) {
+    return;
+  }
+  // Clearing the result closes the popup (its frame goes with it); the next
+  // one, asked for once that is done, is built for the card.
+  omnibox->StopAutocomplete(/*clear_result=*/true);
+  if (omnibox->edit_model()->user_input_in_progress()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanUrlBarController::ReopenSuggestions,
+                                  weak_factory_.GetWeakPtr()));
+  } else if (bar->omnibox_view()->GetText().empty()) {
+    ScheduleEmptyListRetry(kZeroSuggestRetries);
+  } else {
+    // The page's URL, selected (Cmd+L in the pill): its on-focus suggestions.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<KoanUrlBarController> self) {
+                         LocationBarView* bar =
+                             self ? self->location_bar() : nullptr;
+                         if (bar && self->is_open() &&
+                             !bar->GetOmniboxController()->IsPopupOpen()) {
+                           bar->GetOmniboxController()
+                               ->edit_model()
+                               ->StartZeroSuggestRequest(
+                                   /*user_clobbered_permanent_text=*/false);
+                         }
+                       },
+                       weak_factory_.GetWeakPtr()));
+  }
+}
+
+bool KoanUrlBarController::OnOmniboxPopupFrameCreated() {
+  LocationBarView* bar = location_bar();
+  popup_in_card_ = is_open() && IsFloatingZenCard() && bar;
+  popup_results_height_ = 0;
+  if (popup_in_card_ && !popup_state_subscription_) {
+    // Upstream's own signal that the popup opened or closed: the card shrinks
+    // back to its input row when it closes.
+    popup_state_subscription_ =
+        bar->GetOmniboxController()
+            ->popup_state_manager()
+            ->AddPopupStateChangedCallback(
+                base::BindRepeating(&KoanUrlBarController::OnPopupStateChanged,
+                                    base::Unretained(this)));
+  }
+  return popup_in_card_;
+}
+
+void KoanUrlBarController::OnPopupStateChanged(OmniboxPopupState old_state,
+                                               OmniboxPopupState new_state) {
+  if (new_state == OmniboxPopupState::kClassic || !popup_in_card_) {
+    return;
+  }
+  popup_in_card_ = false;
+  popup_results_height_ = 0;
+  Layout();
+}
+
+void KoanUrlBarController::AdjustOmniboxPopupBounds(int results_height,
+                                                    gfx::Rect& bounds) {
+  if (!popup_in_card_ || !is_open() || !IsFloatingZenCard() ||
+      input_row_height_ <= 0) {
+    return;
+  }
+  results_height = std::max(0, results_height);
+  if (popup_results_height_ != results_height) {
+    popup_results_height_ = results_height;
+    Layout();
+  }
+  // The card's part under its input row, to the pixel: the popup paints no
+  // surface of its own there (PaintsOmniboxPopupSurface()).
+  const gfx::Rect card = browser_view_->top_container()->GetBoundsInScreen();
+  bounds = gfx::Rect(card.x(), card.y() + input_row_height_, card.width(),
+                     results_height);
 }
 
 void KoanUrlBarController::RefreshPageActions() {
@@ -1353,9 +1459,14 @@ void KoanUrlBarController::Layout() {
   const int card_height =
       zen_card ? std::max(field.height(), kFloatingUrlBarInputHeight)
                : field.height();
+  // Zen's card holds the suggestions under the input row: the popup's rows
+  // are laid out there (AdjustOmniboxPopupBounds()), over the card's surface.
+  input_row_height_ = card_height;
+  const int results_height =
+      zen_card && popup_in_card_ ? popup_results_height_ : 0;
   const gfx::Rect bar_card(
       card.x(), zen_card ? card.y() : card.CenterPoint().y() - card_height / 2,
-      card.width(), card_height);
+      card.width(), card_height + results_height);
   top_container->SetBoundsRect(bar_card);
   const int toolbar_x = lead - field.x();
   toolbar->SetBoundsRect(gfx::Rect(
@@ -1380,13 +1491,13 @@ void KoanUrlBarController::Layout() {
   if (decoration_) {
     decoration_->SetBoundsRect(top_container->GetLocalBounds());
     LocationIconView* icon = bar->location_icon_view();
-    decoration_->SetIconBounds(
+    decoration_->SetLayout(
         icon && icon->GetVisible()
             ? views::View::ConvertRectToTarget(icon->parent(), top_container,
                                                icon->bounds())
             : gfx::Rect(),
         zen_card ? std::optional<int>(kFloatingUrlBarGlyphInset) : std::nullopt,
-        std::max(0, toolbar_x));
+        toolbar->bounds(), card_height);
   }
 }
 
@@ -1759,6 +1870,24 @@ bool IsGlassUrlBarOpen(const views::View* browser_view) {
 bool ShowsZenCardRows(const views::View* view) {
   const KoanUrlBarController* url_bar = UrlBarOf(view);
   return url_bar && url_bar->IsFloatingZenCard();
+}
+
+bool PaintsOmniboxPopupSurface(LocationBar* location_bar) {
+  BrowserWindowInterface* browser =
+      location_bar ? location_bar->GetBrowser() : nullptr;
+  BrowserView* browser_view =
+      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
+  KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller && controller->url_bar()->OnOmniboxPopupFrameCreated();
+}
+
+void AdjustOmniboxPopupBounds(views::View* location_bar,
+                              int results_height,
+                              gfx::Rect& bounds) {
+  if (KoanUrlBarController* url_bar = UrlBarOf(location_bar)) {
+    url_bar->AdjustOmniboxPopupBounds(results_height, bounds);
+  }
 }
 
 }  // namespace koan

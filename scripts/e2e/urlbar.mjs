@@ -261,6 +261,8 @@ const WINDOW_WIDTH = 1280;
 // Zen's look (the default; ZenUIManager.mjs updateTabsToolbar):
 // min(window width / 1.5, 750), centred. (shadcn's: 55% of the window.)
 const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
+// Zen's input row in the card (--urlbar-container-height, 62pt).
+const INPUT_ROW = 62;
 
 const bar = vs => find(vs, 'TopContainerView');
 const isFloating = vs => bar(vs)?.w === FLOAT_WIDTH &&
@@ -437,6 +439,30 @@ await closeBar();
 await key(VK.T, ACCEL, 't');
 vs = await views();
 await type(find(vs, 'OmniboxViewViews'), 'koan');
+if (BEHAVIOR !== 'normal') {
+  // Zen's card is one panel (#urlbar[breakout-extend]): the input row with
+  // the suggestions under it, one surface, one shadow. Chromium's popup frame
+  // has no surface, shadow or location bar cutout of its own there; it is
+  // exactly the card's part under the 62pt input row, and the card grows to
+  // hold it. (A second, darker card showed above and around the suggestions
+  // when the popup kept its own frame around the location bar.)
+  const withPopup = await waitFor(async () => {
+    const now = await views();
+    const frame = find(now, 'RoundedOmniboxResultsFrame');
+    return frame?.shown && frame.h > 0 && bar(now)?.h > INPUT_ROW ? now : null;
+  });
+  vs = withPopup ?? await views();
+  const frame = find(vs, 'RoundedOmniboxResultsFrame');
+  const decoration = find(vs, 'KoanUrlBarCardDecoration');
+  check('The suggestions are in the card: as wide as it, under its input row',
+        !!withPopup && frame.w === bar(vs).w && bar(vs).h === INPUT_ROW + frame.h,
+        `card ${bar(vs)?.w}x${bar(vs)?.h}, popup ${frame?.w}x${frame?.h}`);
+  check('...and the card\'s surface covers all of it, the input row\'s top too',
+        decoration?.shown && decoration.x === 0 && decoration.y === 0 &&
+            decoration.w === bar(vs)?.w && decoration.h === bar(vs)?.h,
+        `${decoration?.x},${decoration?.y} ${decoration?.w}x${decoration?.h}`);
+  shot('suggestions');
+}
 if (BEHAVIOR === 'normal') {
   await closeBar();
 } else {

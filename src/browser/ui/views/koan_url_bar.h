@@ -14,8 +14,13 @@
 
 class BrowserWindowInterface;
 class GURL;
+class LocationBar;
 
 class GURL;
+
+namespace gfx {
+class Rect;
+}
 
 namespace views {
 class View;
@@ -151,6 +156,29 @@ bool HidesSecurityChipText();
 // rows take Zen's styling (koan_omnibox_rows.h). False for any other omnibox
 // popup, in either look.
 bool ShowsZenCardRows(const views::View* view);
+
+// Zen's floating URL bar is one card: the input row with the suggestions under
+// it, one surface, one shadow (#urlbar[breakout-extend]). Chromium's popup is
+// a frame of its own around the location bar (its own surface, corners,
+// shadow and location bar cutout); in Zen's card the card paints all of that
+// and grows to hold the suggestions, and the popup only lays out its rows.
+
+// Whether the omnibox popup frame being built for `location_bar` leaves its
+// surface, shadow and cutout to Zen's card: only while that window's bar is
+// open as Zen's card. Decided once per popup; the card closes a popup opened
+// before it floated and asks for its suggestions again. Called from
+// RoundedOmniboxResultsFrame's constructor.
+bool PaintsOmniboxPopupSurface(LocationBar* location_bar);
+
+// The omnibox popup widget's `bounds` (in screen coordinates) for
+// `location_bar` (a LocationBarView) and its suggestions, `results_height`
+// tall: for a popup in Zen's card (PaintsOmniboxPopupSurface()), exactly the
+// part of the card under its input row, as wide as the card; the card grows
+// to match. Unchanged otherwise. Called from
+// OmniboxPopupViewViews::GetTargetBounds().
+void AdjustOmniboxPopupBounds(views::View* location_bar,
+                              int results_height,
+                              gfx::Rect& bounds);
 
 // The colour the location bar of `location_bar` (a LocationBarView) paints and
 // gives its omnibox as its background: clear, while a glass URL bar card (Zen's

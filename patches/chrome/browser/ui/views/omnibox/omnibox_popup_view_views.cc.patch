@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/views/omnibox/omnibox_popup_view_views.cc b/chrome/browser/ui/views/omnibox/omnibox_popup_view_views.cc
+--- a/chrome/browser/ui/views/omnibox/omnibox_popup_view_views.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_popup_view_views.cc
+@@ -35,6 +35,7 @@
+ #include "components/omnibox/common/omnibox_feature_configs.h"
+ #include "components/omnibox/common/omnibox_metrics_utils.h"
+ #include "components/viz/common/frame_timing_details.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "ui/accessibility/ax_node_data.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/compositor/closure_animation_observer.h"
+@@ -757,6 +758,11 @@
+ 
+   // Finally, expand the widget to accommodate the custom-drawn shadows.
+   content_rect.Inset(-RoundedOmniboxResultsFrame::GetShadowInsets());
++  // Koan: in Zen's floating URL bar card, the suggestions under its input row.
++  koan::AdjustOmniboxPopupBounds(
++      location_bar_view_,
++      popup_height - RoundedOmniboxResultsFrame::GetNonResultSectionHeight(),
++      content_rect);
+   return content_rect;
+ }
+ 
