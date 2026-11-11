@@ -294,6 +294,12 @@ class KoanUrlBarController
   base::ScopedObservation<web_modal::WebContentsModalDialogManager,
                           web_modal::WebContentsModalDialogManager::Observer>
       dialog_observation_{this};
+  // The tab whose dialog manager `dialog_observation_` watches: the manager
+  // goes with its WebContents and says nothing, so the observation is dropped
+  // when the tab is destroyed (closed while the bar is open, or the window's
+  // tabs closing before Koan's teardown).
+  class DialogContentsWatch;
+  std::unique_ptr<DialogContentsWatch> dialog_watch_;
   // Z23: the focus left with the window while the bar was open (Zen's
   // browser.urlbar.closeOnWindowBlur=false keeps its suggestions too).
   bool left_with_window_ = false;

@@ -54,6 +54,7 @@
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -108,6 +109,24 @@
 #include "url/gurl.h"
 
 namespace koan {
+
+class KoanUrlBarController::DialogContentsWatch
+    : public content::WebContentsObserver {
+ public:
+  DialogContentsWatch(content::WebContents* contents,
+                      base::OnceClosure on_destroyed)
+      : content::WebContentsObserver(contents),
+        on_destroyed_(std::move(on_destroyed)) {}
+
+  void WebContentsDestroyed() override {
+    if (on_destroyed_) {
+      std::move(on_destroyed_).Run();
+    }
+  }
+
+ private:
+  base::OnceClosure on_destroyed_;
+};
 
 namespace {
 
@@ -980,6 +999,7 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
     // Closing: put everything back.
     SetYieldedToDialog(false);
     dialog_observation_.Reset();
+    dialog_watch_.reset();
     left_with_window_ = false;
     if (KoanSidebarNavView* nav = compact_mode_->sidebar_nav()) {
       nav->SetEditing(false);
@@ -1031,6 +1051,14 @@ void KoanUrlBarController::SetPlacement(Placement placement) {
                       contents)
                 : nullptr) {
       dialog_observation_.Observe(dialogs);
+      dialog_watch_ = std::make_unique<DialogContentsWatch>(
+          contents, base::BindOnce(
+                        [](KoanUrlBarController* self) {
+                          self->dialog_observation_.Reset();
+                          // (Destroys the watch; it returns right after.)
+                          self->dialog_watch_.reset();
+                        },
+                        base::Unretained(this)));
     }
     // Just the location bar: hide the rest of the toolbar, remembering what
     // to restore (and watching for other code showing things meanwhile).
