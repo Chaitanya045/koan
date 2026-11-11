@@ -178,7 +178,7 @@ class WindowSyncModel {
   bool SetFolders(std::vector<FolderRecord> folders);
   // `closed`: the items whose tab the window closed, unpinned or took out of
   // the Essentials without pinning it (Zen's TabUnpinned closes it in the
-  // other windows). Not a tab taken into a split: it stays as a normal tab.
+  // other windows).
   bool SetItems(std::vector<ItemRecord> items,
                 const std::set<std::string>& closed = {});
   // Whether `item` left the model because a window closed or unpinned its

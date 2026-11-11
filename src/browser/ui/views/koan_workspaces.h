@@ -555,6 +555,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::unique_ptr<ExpandOnHoverLock> create_form_lock_;
 
   bool update_pending_ = false;
+  // Update() is running (its own changes to the model notify the
+  // observers).
+  bool updating_ = false;
   // The browser view is going away: no more updates.
   bool destroying_ = false;
   // Koan is creating a group for a Space, or writing a Space's data (so the

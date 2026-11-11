@@ -51,6 +51,7 @@ source_set("browsertests_impl") {
     "browser/koan_session_data_browsertest.cc",
     "browser/koan_session_restore_browsertest.cc",
     "browser/koan_spaces_browsertest.cc",
+    "browser/koan_split_view_browsertest.cc",
     "browser/koan_toolbar_browsertest.cc",
   ]
   deps = [
@@ -70,6 +71,7 @@ source_set("browsertests_impl") {
     "//chrome/test/base:browser_tests_runner",
     "//components/prefs",
     "//components/signin/public/base",
+    "//components/split_tabs",
     "//components/tab_groups",
     "//components/tabs:public",
     "//content/public/browser",

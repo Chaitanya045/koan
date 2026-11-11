@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
@@ -23,11 +24,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/split_tabs/split_tab_visual_data.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -156,6 +159,16 @@ class KoanSessionRestoreBrowserTest : public InProcessBrowserTest {
       }
     }
     return nullptr;
+  }
+};
+
+// Without the test launcher's about:blank, which a restore opens after the
+// session's tabs and selects.
+class KoanSessionRestoreNoUrlBrowserTest
+    : public KoanSessionRestoreBrowserTest {
+ public:
+  KoanSessionRestoreNoUrlBrowserTest() {
+    set_open_about_blank_on_browser_launch(false);
   }
 };
 
@@ -410,6 +423,49 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
     return space_tabs() == std::vector<std::string>{PinnedUrl().spec()} &&
            folder_tabs() == std::vector<std::string>{OtherUrl().spec()};
   }));
+}
+
+// A split view comes back (upstream restores it) and is what the window
+// shows. A restore into a new window selects its first tab, an Essential
+// here, as it adds it, then the session's selected tab; the Essential was
+// taken for the one the window opened on (KeepStartupEssential()) and
+// selected again, hiding the split.
+IN_PROC_BROWSER_TEST_F(KoanSessionRestoreNoUrlBrowserTest,
+                       PRE_SplitViewComesBackShown) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), PinnedUrl()));
+  GetPinnedTabs(browser())->AddToEssentials(tab_strip->GetActiveTab());
+  ASSERT_TRUE(tab_strip->IsTabPinned(0));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), OtherUrl(), WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  const int other = tab_strip->active_index();
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("chrome://credits/"),
+      WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  tab_strip->AddToNewSplit({other}, split_tabs::SplitTabVisualData(),
+                           split_tabs::SplitTabCreatedSource::kTabContextMenu);
+  ASSERT_TRUE(tab_strip->GetActiveTab()->IsSplit());
+  SaveSession();
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSessionRestoreNoUrlBrowserTest,
+                       SplitViewComesBackShown) {
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return tab_strip->count() == 3 && !tab_strip->ListSplits().empty();
+  })) << DescribeTabs();
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  // Once the Spaces' first update (which puts back an Essential the window
+  // opened on) has run.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(tab_strip->IsTabPinned(0)) << DescribeTabs();
+  tabs::TabInterface* active = tab_strip->GetActiveTab();
+  ASSERT_TRUE(active);
+  EXPECT_FALSE(active->IsPinned()) << DescribeTabs();
+  EXPECT_TRUE(active->IsSplit()) << DescribeTabs();
 }
 
 }  // namespace koan

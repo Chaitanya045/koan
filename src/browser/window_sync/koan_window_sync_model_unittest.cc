@@ -301,14 +301,14 @@ TEST(WindowSyncModelTest, CollapsingAFolderIsSavedButNotAChange) {
 
 // Zen's TabClose and TabUnpinned: a synced tab closed, unpinned or taken out
 // of the Essentials in one window closes in every window. The window reports
-// all of those in `closed`, but not a tab taken into a split, which stays
-// where its page is.
+// all of those in `closed`; an item that leaves without being named there
+// stays where its page is.
 TEST(WindowSyncModelTest, ClosedOrUnpinnedItemsCloseEverywhere) {
   WindowSyncModel model;
   model.SetSpaces({Space("a")});
   model.SetItems(
       {Essential("e"), Essential("f"), Pinned("p", "a"), Pinned("s", "a")});
-  // "e" closed, "f" unpinned, "s" into a split (not in `closed`); "p" is
+  // "e" closed, "f" unpinned, "s" left unnamed (not in `closed`); "p" is
   // still synced, so naming it doesn't count.
   EXPECT_TRUE(model.SetItems({Pinned("p", "a")}, {"e", "f", "p"}));
   EXPECT_TRUE(model.WasClosed("e"));

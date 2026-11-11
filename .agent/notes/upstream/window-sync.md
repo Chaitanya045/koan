@@ -76,7 +76,9 @@ then the order), and puts the tabs in their folders after the items
 (`ApplyFolderMembership`). A folder deleted elsewhere is unpacked here: its
 tabs follow their own sync. Koan's folders have no icon (#60 left Zen's
 icon picker out). Split views are not synced: a synced tab in a split
-keeps its page in its window.
+stays synced (a pinned tab in the other windows) and keeps its page in its
+window (`CanGivePage()`); a placeholder taken into a split gets its page
+(`CanTakePage()`, `MaybeRequestActivePage()` for both panes).
 
 ## Design: one owner, deferred moves
 
@@ -187,8 +189,8 @@ item's URL in place and becomes live.
   new tab first. Unpinning a synced tab, or taking it out of the Essentials
   without pinning it, counts as a close (#262, Zen's `on_TabUnpinned` calls
   `on_TabClose` with only pinned tabs synced): `ReportItems()` adds every
-  tab that lost its id to `closed`, except one in a split view, which
-  stays as a normal tab where its page is.
+  tab that lost its id to `closed`. A tab taken into a split keeps its id
+  (pinned split tabs are synced items).
 - **Window gone.** `RemoveWindow` drops the window from every list and
   forgets the pages it had; queued moves from or to it are dropped when they
   run.

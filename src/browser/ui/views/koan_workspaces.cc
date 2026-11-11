@@ -1442,6 +1442,7 @@ void KoanWorkspaceController::ScheduleUpdate() {
 
 void KoanWorkspaceController::Update() {
   update_pending_ = false;
+  base::AutoReset<bool> updating(&updating_, true);
   if (!IsEnabled() || destroying_) {
     ungrouped_from_.clear();
     return;
@@ -2575,10 +2576,19 @@ void KoanWorkspaceController::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
-  // The Essential a restored window opened on (see KeepStartupEssential()).
-  if (!started_ && selection.active_tab_changed() && selection.new_tab &&
-      selection.new_tab->IsPinned()) {
-    startup_essential_ = selection.new_tab->GetHandle();
+  // The Essential a restored window opened on (see KeepStartupEssential()):
+  // the last tab selected before the first update, not one only on the way
+  // there. A restore into a new window selects its first tab (an Essential,
+  // if it has any) as it inserts it, then the session's selected tab (e.g. a
+  // split view's). Not a selection that shows a Space (the update's own, or
+  // the restore's focused group: focus mode entered, not told yet).
+  const std::optional<tab_groups::TabGroupId> focused =
+      tab_strip_model->GetFocusedGroup();
+  const bool shows_space = updating_ || (focused && focused != last_space_);
+  if (!started_ && !shows_space && selection.active_tab_changed()) {
+    startup_essential_ = selection.new_tab && selection.new_tab->IsPinned()
+                             ? selection.new_tab->GetHandle()
+                             : tabs::TabHandle();
   }
   // Each Space remembers its last active tab: the one it had when the window
   // left it.
