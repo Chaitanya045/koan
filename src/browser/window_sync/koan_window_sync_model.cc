@@ -145,7 +145,8 @@ bool WindowSyncModel::SetSpaces(std::vector<SpaceRecord> spaces) {
   return true;
 }
 
-bool WindowSyncModel::SetItems(std::vector<ItemRecord> items) {
+bool WindowSyncModel::SetItems(std::vector<ItemRecord> items,
+                               const std::set<std::string>& closed) {
   DropDuplicateIds(items);
   // An item's Space must be in the model (the window reports its Spaces
   // first).
@@ -160,6 +161,16 @@ bool WindowSyncModel::SetItems(std::vector<ItemRecord> items) {
   });
   if (items == items_) {
     return false;
+  }
+  std::set<std::string> ids;
+  for (const ItemRecord& item : items) {
+    ids.insert(item.id);
+    closed_.erase(item.id);
+  }
+  for (const ItemRecord& item : items_) {
+    if (!ids.contains(item.id) && closed.contains(item.id)) {
+      closed_.insert(item.id);
+    }
   }
   items_ = std::move(items);
   DropOrphans();
@@ -249,6 +260,7 @@ void WindowSyncModel::FromValue(const base::DictValue& value) {
   spaces_.clear();
   items_.clear();
   live_.clear();
+  closed_.clear();
   seeded_ = false;
   const base::ListValue* spaces = value.FindList("spaces");
   if (!spaces) {

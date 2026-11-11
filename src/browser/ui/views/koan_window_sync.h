@@ -113,7 +113,11 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   // being reconciled (its changes are the sync's own).
   void ReportSpaces(Window* window,
                     std::vector<window_sync::SpaceRecord> spaces);
-  void ReportItems(Window* window, std::vector<window_sync::ItemRecord> items);
+  // `closed`: the synced tabs the user closed in `window` since its last
+  // report; they close in every window (Zen's TabClose).
+  void ReportItems(Window* window,
+                   std::vector<window_sync::ItemRecord> items,
+                   const std::set<std::string>& closed);
 
   // `window` shows the synced tab `item` (selected it, or was activated with
   // it selected) and has a placeholder for it: its page comes over soon,
