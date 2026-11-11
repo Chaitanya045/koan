@@ -9,11 +9,13 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
+#include "content/public/browser/weak_document_ptr.h"
 #include "koan/browser/agent/koan_agent_prompts.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
 
@@ -34,9 +36,13 @@ class WebContents;
 //  - app links: ExternalProtocolHandler::LaunchUrl on open;
 //  - HTTP sign-in: an HttpAuthCoordinator of Koan's own on open;
 //  - window.print(): the preview the PrintViewManager was about to show;
-//  - window.focus(): the tab comes forward on open.
+//  - window.focus(): the tab comes forward on open;
+//  - <input type=file>, the device choosers (WebUSB, WebHID, Web Serial, Web
+//    Bluetooth) and getDisplayMedia()'s picker: Chrome's own path once the tab
+//    is in front and visible (the file chooser checks both).
 // When the agent lets go of the tab, what it held is shown as Chrome would
-// have (without bringing the tab forward); when the tab closes it goes.
+// have (without bringing the tab forward), except the pickers, which are
+// cancelled; when the tab closes it goes, and a picker goes with its page.
 //
 // One per browser process, UI thread. Installed while agent control forwards
 // (AgentForwarder); nothing is held without a lease.
@@ -86,6 +92,12 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
   bool HoldPrint(content::WebContents* contents,
                  base::OnceCallback<void(bool show)> show) override;
   void HoldActivation(content::WebContents* contents) override;
+  bool MayHoldPickers(content::WebContents* contents) override;
+  bool IsShowingHeld(content::WebContents* contents) override;
+  uint64_t HoldPicker(content::RenderFrameHost* frame,
+                      HeldPicker picker,
+                      base::OnceCallback<void(bool show)> show) override;
+  void ForgetPicker(uint64_t id) override;
 
  private:
   friend class base::NoDestructor<AgentPageSurfaces>;
@@ -108,14 +120,23 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
   std::vector<uint64_t> DialogsOf(content::WebContents* contents) const;
   content::WebContents* ContentsOf(uintptr_t tab) const;
   void OnTabDestroyed(uintptr_t tab);
+  // The tab became visible: the pickers opened while it wasn't are shown.
+  void OnTabVisible(uintptr_t tab);
+  // A page of the tab went: its held pickers go too.
+  void SweepPickers(uintptr_t tab);
   void Notify(uintptr_t tab, PageSurface surface, bool held);
 
   PromptQueue queue_;
   std::map<uintptr_t, std::unique_ptr<TabWatch>> tabs_;
   std::unique_ptr<HeldDialogs> dialog_manager_;
   std::unique_ptr<HttpAuthCoordinator> http_auth_;
-  // The tab whose print preview is being shown now (not held again).
-  raw_ptr<content::WebContents> showing_print_ = nullptr;
+  // The page each held picker is for.
+  std::map<uint64_t, content::WeakDocumentPtr> pickers_;
+  // Pickers the user opened whose tab isn't visible yet.
+  std::set<uint64_t> opening_;
+  // The tab whose held print preview or picker is being shown now (not held
+  // again).
+  raw_ptr<content::WebContents> showing_ = nullptr;
   bool installed_ = false;
   EventCallback on_event_;
   base::RepeatingClosure on_changed_;

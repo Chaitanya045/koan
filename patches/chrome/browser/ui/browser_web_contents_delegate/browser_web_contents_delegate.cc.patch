@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 3c3aaff..f8f9745 100644
+index 3c3aaff..5e4b714 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -88,6 +88,10 @@
@@ -109,19 +109,29 @@ index 3c3aaff..f8f9745 100644
    return javascript_dialogs::TabModalDialogManager::FromWebContents(source);
  }
  
-@@ -1174,6 +1232,11 @@ void BrowserWebContentsDelegate::RunFileChooser(
+@@ -1174,14 +1232,32 @@ void BrowserWebContentsDelegate::RunFileChooser(
      content::RenderFrameHost* render_frame_host,
      scoped_refptr<content::FileSelectListener> listener,
      const blink::mojom::FileChooserParams& params) {
-+  // Koan: no file picker for an agent tab.
-+  if (koan::containers::IsAgentTabFrame(render_frame_host)) {
++  // Koan: no file picker for an agent tab, unless an agent holds it (it
++  // waited in the agent indicator: HoldFileChooser()).
++  if (koan::containers::IsAgentTabFrame(render_frame_host) &&
++      !koan::agent::HoldsPickersForAgent(render_frame_host)) {
 +    listener->FileSelectionCanceled();
 +    return;
 +  }
    FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
                                     params);
  }
-@@ -1182,6 +1245,10 @@ void BrowserWebContentsDelegate::EnumerateDirectory(
+ 
++bool BrowserWebContentsDelegate::HoldFileChooser(
++    content::RenderFrameHost* render_frame_host,
++    base::OnceCallback<void(bool show)> show) {
++  return koan::agent::HoldFileChooserForAgent(render_frame_host,
++                                              std::move(show));
++}
++
+ void BrowserWebContentsDelegate::EnumerateDirectory(
      content::WebContents* web_contents,
      scoped_refptr<content::FileSelectListener> listener,
      const base::FilePath& path) {
@@ -132,7 +142,7 @@ index 3c3aaff..f8f9745 100644
    FileSelectHelper::EnumerateDirectory(web_contents, std::move(listener), path);
  }
  
-@@ -1369,6 +1436,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
+@@ -1369,6 +1445,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
    if (context->IsOffTheRecord()) {
      return;
    }

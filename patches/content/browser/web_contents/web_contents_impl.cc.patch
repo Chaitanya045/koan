@@ -1,7 +1,8 @@
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index a2638c2..1ba4b37 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -5783,6 +5783,11 @@
+@@ -5807,6 +5807,11 @@ FrameTree* WebContentsImpl::CreateNewWindow(
        // as long as they preserve the guest's StoragePartition.
        site_instance =
            SiteInstance::CreateForGuest(GetBrowserContext(), partition_config);
@@ -13,3 +14,34 @@ diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser
      } else {
        site_instance = SiteInstance::Create(GetBrowserContext());
      }
+@@ -9943,6 +9948,30 @@ void WebContentsImpl::RunFileChooser(
+   OPTIONAL_TRACE_EVENT1("content", "WebContentsImpl::RunFileChooser",
+                         "render_frame_host", render_frame_host);
+ 
++  // Koan: the delegate may hold the chooser and run it again later.
++  if (delegate_ && render_frame_host &&
++      delegate_->HoldFileChooser(
++          render_frame_host,
++          base::BindOnce(
++              [](base::WeakPtr<FileChooserImpl> file_chooser,
++                 GlobalRenderFrameHostId frame_id,
++                 scoped_refptr<FileChooserImpl::FileSelectListenerImpl>
++                     listener,
++                 blink::mojom::FileChooserParamsPtr params, bool show) {
++                RenderFrameHostImpl* frame =
++                    RenderFrameHostImpl::FromID(frame_id);
++                if (!show || !frame || !file_chooser) {
++                  listener->FileSelectionCanceled();
++                  return;
++                }
++                FromRenderFrameHostImpl(frame)->RunFileChooser(
++                    file_chooser, frame, std::move(listener), *params);
++              },
++              file_chooser, render_frame_host->GetGlobalId(), listener,
++              params.Clone()))) {
++    return;
++  }
++
+   absl::Cleanup cancel_chooser = [&listener] {
+     listener->FileSelectionCanceled();
+   };

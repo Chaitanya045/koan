@@ -26,8 +26,31 @@ std::string_view ReasonFor(PageSurface surface) {
       return "print";
     case PageSurface::kFocus:
       return "focus";
+    case PageSurface::kFilePicker:
+      return "file-picker";
+    case PageSurface::kDeviceChooser:
+      return "device-chooser";
+    case PageSurface::kScreenShare:
+      return "screen-share";
   }
   return "";
+}
+
+bool NeedsUserInFront(PageSurface surface) {
+  switch (surface) {
+    case PageSurface::kFilePicker:
+    case PageSurface::kDeviceChooser:
+    case PageSurface::kScreenShare:
+      return true;
+    case PageSurface::kBeforeUnload:
+    case PageSurface::kJavaScriptDialog:
+    case PageSurface::kExternalProtocol:
+    case PageSurface::kHttpAuth:
+    case PageSurface::kPrint:
+    case PageSurface::kFocus:
+      return false;
+  }
+  return false;
 }
 
 std::u16string PromptTextFor(PageSurface surface,
@@ -51,6 +74,12 @@ std::u16string PromptTextFor(PageSurface surface,
       return base::StrCat({page, u" wants to print"});
     case PageSurface::kFocus:
       return base::StrCat({page, u" wants your attention"});
+    case PageSurface::kFilePicker:
+      return base::StrCat({page, u" wants you to choose a file"});
+    case PageSurface::kDeviceChooser:
+      return base::StrCat({page, u" wants to connect to a device"});
+    case PageSurface::kScreenShare:
+      return base::StrCat({page, u" wants to share your screen"});
   }
   return page;
 }
@@ -143,7 +172,12 @@ void PromptQueue::ReplayTab(uintptr_t tab) {
   }
   // Out of the queue first: a replay may add to it or forget from it.
   for (Entry& entry : taken) {
-    if (entry.prompt.surface != PageSurface::kFocus && entry.actions.replay) {
+    if (NeedsUserInFront(entry.prompt.surface)) {
+      if (entry.actions.dismiss) {
+        std::move(entry.actions.dismiss).Run();
+      }
+    } else if (entry.prompt.surface != PageSurface::kFocus &&
+               entry.actions.replay) {
       std::move(entry.actions.replay).Run();
     }
   }

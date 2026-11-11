@@ -1,10 +1,12 @@
 diff --git a/chrome/browser/media/webrtc/BUILD.gn b/chrome/browser/media/webrtc/BUILD.gn
+index 7e90d3b..904eadc 100644
 --- a/chrome/browser/media/webrtc/BUILD.gn
 +++ b/chrome/browser/media/webrtc/BUILD.gn
-@@ -180,6 +180,7 @@
+@@ -180,6 +180,8 @@ source_set("webrtc") {
      "//components/webrtc",
      "//content/public/common",
      "//content/public/common:buildflags",
++    "//koan/browser/agent:tab_hooks",
 +    "//koan/browser/containers:partition",
      "//media",
      "//media/webrtc",

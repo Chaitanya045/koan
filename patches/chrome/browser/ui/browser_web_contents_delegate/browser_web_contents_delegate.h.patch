@@ -1,0 +1,15 @@
+diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
+index cb68c45..20d10b7 100644
+--- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
++++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
+@@ -196,6 +196,10 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {
+   void RunFileChooser(content::RenderFrameHost* render_frame_host,
+                       scoped_refptr<content::FileSelectListener> listener,
+                       const blink::mojom::FileChooserParams& params) override;
++  // Koan: the file chooser of a tab an agent holds waits in the agent
++  // indicator (koan/browser/agent/koan_agent_tab_hooks.h).
++  bool HoldFileChooser(content::RenderFrameHost* render_frame_host,
++                       base::OnceCallback<void(bool show)> show) override;
+   void EnumerateDirectory(content::WebContents* web_contents,
+                           scoped_refptr<content::FileSelectListener> listener,
+                           const base::FilePath& path) override;

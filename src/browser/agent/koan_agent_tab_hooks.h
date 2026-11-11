@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_AGENT_KOAN_AGENT_TAB_HOOKS_H_
 #define KOAN_BROWSER_AGENT_KOAN_AGENT_TAB_HOOKS_H_
 
+#include <stdint.h>
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -14,6 +16,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/login_delegate.h"
+#include "content/public/browser/media_stream_request.h"
 #include "net/base/auth.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -106,6 +109,19 @@ void OnOpenedFromAgentTab(content::WebContents* source,
 // indicator, and shown the way Chrome would show it when the user opens the
 // prompt (koan_agent_page_surfaces.h installs this). Each call is made from
 // a hook of a few lines in upstream code (docs/REBASE.md).
+// The pickers a page in a held tab may ask for. Unlike the surfaces above they
+// need the user in front of the tab, so when the agent lets go they are
+// cancelled, not shown.
+enum class HeldPicker {
+  // <input type=file>.
+  kFileChooser,
+  // A WebUSB, WebHID, Web Serial or Web Bluetooth chooser, or a Bluetooth
+  // scanning prompt.
+  kDeviceChooser,
+  // getDisplayMedia().
+  kScreenShare,
+};
+
 struct HttpAuthRequest {
   HttpAuthRequest();
   HttpAuthRequest(HttpAuthRequest&&);
@@ -147,6 +163,21 @@ class PageSurfaceDelegate {
   virtual bool HoldPrint(content::WebContents* contents,
                          base::OnceCallback<void(bool show)> show) = 0;
   virtual void HoldActivation(content::WebContents* contents) = 0;
+  // Whether the pickers of `contents`, which an agent holds, may be held: not
+  // in an agent container (they stay refused there).
+  virtual bool MayHoldPickers(content::WebContents* contents) = 0;
+  // Whether a held surface of `contents` is being shown now (it isn't held
+  // again).
+  virtual bool IsShowingHeld(content::WebContents* contents) = 0;
+  // Holds a picker `frame` asked for; returns its id (0 if refused). `show`
+  // runs once, never inside this call: with true to show the picker the way
+  // Chrome would (its tab is in front then), with false to cancel it as if the
+  // user had.
+  virtual uint64_t HoldPicker(content::RenderFrameHost* frame,
+                              HeldPicker picker,
+                              base::OnceCallback<void(bool show)> show) = 0;
+  // The held picker `id` ended on its own (its request went away).
+  virtual void ForgetPicker(uint64_t id) = 0;
 };
 
 // Installs or (with null) removes the delegate. Not owned.
@@ -193,6 +224,43 @@ bool HoldPrintForAgent(content::WebContents* contents,
 // BrowserWebContentsDelegate::ActivateContents (window.focus(), a service
 // worker's clients.focus()): true if the tab must not come forward.
 bool HoldActivationForAgent(content::WebContents* contents);
+
+// Whether an agent holds the tab of `frame` and its pickers wait in the agent
+// indicator. The picker hooks ask this before their own refusal: a picker of
+// an agent container, or of an agent's tab no agent holds, stays refused.
+bool HoldsPickersForAgent(content::RenderFrameHost* frame);
+
+// Whether a picker `frame` asks for now is held (HoldsPickersForAgent(), and
+// it isn't the held picker being shown): the calls below then hold it.
+bool ShouldHoldPickerForAgent(content::RenderFrameHost* frame);
+
+// WebContentsImpl::RunFileChooser, through
+// BrowserWebContentsDelegate::HoldFileChooser: true if the chooser is held;
+// `show` then runs later (true: run it again, false: cancel it).
+bool HoldFileChooserForAgent(content::RenderFrameHost* frame,
+                             base::OnceCallback<void(bool show)> show);
+
+// chrome::ShowDeviceChooserDialog, after ShouldHoldPickerForAgent(owner): holds
+// the chooser. `show` runs later with the frame to show it for, or with null
+// to close it as if the user had; it returns what closes the dialog. Returns
+// what closes the chooser, as ShowDeviceChooserDialog does.
+using ShowDeviceChooser =
+    base::OnceCallback<base::OnceClosure(content::RenderFrameHost* frame)>;
+base::OnceClosure HoldDeviceChooserForAgent(content::RenderFrameHost* owner,
+                                            ShowDeviceChooser show);
+
+// DisplayMediaAccessHandler::HandleRequest, after its checks and
+// ShouldHoldPickerForAgent(frame): holds getDisplayMedia()'s picker. `show`
+// (the handler's ShowMediaSelectionDialog) runs later, or `callback` gets
+// PERMISSION_DENIED_BY_USER, as when the user cancels the picker.
+using ShowScreenSharePicker =
+    base::OnceCallback<void(content::WebContents* contents,
+                            const content::MediaStreamRequest& request,
+                            content::MediaResponseCallback callback)>;
+void HoldScreenShareForAgent(content::RenderFrameHost* frame,
+                             const content::MediaStreamRequest& request,
+                             content::MediaResponseCallback callback,
+                             ShowScreenSharePicker show);
 
 }  // namespace koan::agent
 
