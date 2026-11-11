@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+--- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
++++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
+ #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+ #include "content/public/browser/navigation_controller.h"
++#include "koan/browser/ui/views/koan_essentials.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/gfx/geometry/rect.h"
+ #include "ui/views/controls/scroll_view.h"
+@@ -60,7 +61,10 @@
+               ? TabCollectionAnimatingLayoutManager::AnimationAxis::kHorizontal
+               : TabCollectionAnimatingLayoutManager::AnimationAxis::
+                     kHorizontalWrappingVertically,
+-          /*animate_host_size=*/false))) {
++          // Koan (Zen): the Essentials grid grows and shrinks with its
++          // tiles' animation, so the Space below slides.
++          /*animate_host_size=*/koan::AnimatesEssentialsHeight(
++              orientation_ == TabStripOrientation::kVertical)))) {
+   collection_node->set_remove_child_from_node(base::BindRepeating(
+       &TabCollectionAnimatingLayoutManager::AnimateAndDestroyChildView,
+       base::Unretained(base::to_address(layout_manager_))));
