@@ -17,8 +17,9 @@ import {
   ALT, CTRL, SHIFT, browserCall, check, countViews, evalIn, finish, createSpace, front, key,
   menuMouse, onPage, openMenus, pages, readPref, settingsCall, sleep, viewEvent, viewMouse,
   viewTree, visiblePage, waitFor, windowTints, koanMenuItems, searchSettings, showPane,
-  ACCEL, IS_MAC,
+  ACCEL, IS_MAC, NATIVE_MENUS, NATIVE_MENU_WHY,
 } from './lib/koan.mjs';
+import { skipped } from './lib/mac.mjs';
 import fs from 'node:fs';
 
 // What the page shows for a key: Zen's notation, the Mac's on macOS.
@@ -145,9 +146,10 @@ await waitFor(async () => await hotZones() === 1);
 await evalIn(settings, `${showPane('tabs')}`);
 const rowLabels = await evalIn(settings,
     `[...koanSettingsRoot.querySelectorAll('#pane .row')].map(r => r.textContent)`);
+// The rows named here, not a count: features add rows to the pane.
 check('Tab Management has the tint, Zen\'s tab and pinned tab settings and the ' +
       'freeze switch',
-      rowLabels?.length === 8 &&
+      rowLabels?.some(l => l.startsWith('Show the active Space\'s theme')) &&
       rowLabels.some(l => l.startsWith('Close Tab Shortcut Behavior')) &&
       rowLabels.some(l => l.startsWith('When closing a tab, switch to the most recently used')) &&
       rowLabels.some(l => l.startsWith('Freeze background tabs')),
@@ -255,11 +257,15 @@ await key(settings, VK.Q, CTRL | ALT, 'q');
 await key(settings, VK.TAB, 0, 'Tab');
 check('Tab leaves a shortcut unchanged',
       await value('mute') === ctrlM && await note('mute') === null);
+// Leaving a field with keys typed saves them (Zen asks for Escape and warns
+// "Unsaved shortcut!"; Koan saves them, since people click away: #90).
 await focus('mute');
 await key(settings, VK.Q, CTRL | ALT, 'q');
 await evalIn(settings, 'koanSettingsRoot.activeElement?.blur()');
-check('Leaving without Escape shows Zen\'s "Unsaved shortcut!" note',
-      (await note('mute'))?.startsWith('Unsaved shortcut!') && await value('mute') === ctrlM);
+check('Leaving a field with keys typed saves them',
+      await waitFor(async () => await value('mute') === shown('Ctrl+Alt+Q', '⌃ ⌥ Q')) &&
+      await note('mute') === null,
+      `${await value('mute')}, ${JSON.stringify(await note('mute'))}`);
 
 // Backspace clears a shortcut: its key stops working.
 await focus('toggle-single-toolbar');
@@ -297,9 +303,27 @@ const found = await waitFor(() => evalIn(settings,
     t => t?.includes('Toggle Compact Mode'));
 check('Search finds Koan\'s settings and shortcuts',
       found?.includes('Enable Koan\'s compact mode') && found?.includes('Toggle Compact Mode'));
+// A section of the page in search results: shown, not hidden by the search.
+const sectionFound = id => evalIn(settings, `(() => {
+    const main = document.querySelector('settings-ui').shadowRoot
+        .querySelector('#main').shadowRoot;
+    const plugin = main.querySelector('[slot=view]#${id} > *');
+    return !!plugin && !plugin.hasAttribute('hidden-by-search') &&
+        plugin.checkVisibility();
+  })()`);
+const koanShown = () => evalIn(settings,
+    `!koanSettingsRoot.host.hasAttribute('hidden-by-search')`);
+// "cookies" is in Koan's agent settings and in Chromium's Privacy section.
 await evalIn(settings, searchSettings('cookies'));
-check('...and Chromium\'s, with no Koan results shown',
-      await waitFor(() => evalIn(settings, `koanSettingsRoot.host.hasAttribute('hidden-by-search')`)));
+check('A search for both lists Koan\'s matches and Chromium\'s ("cookies")',
+      await waitFor(async () => await koanShown() && await sectionFound('privacy') &&
+          (await evalIn(settings, `koanSettingsRoot.getElementById('pane').textContent`))
+              ?.includes('cookies')));
+// "proxy" is only in Chromium's System section.
+await evalIn(settings, searchSettings('proxy'));
+check('...a Chromium-only search ("proxy") shows Chromium\'s and no Koan block',
+      await waitFor(async () => !await koanShown() && await sectionFound('system')),
+      `Koan shown ${await koanShown()}, System found ${await sectionFound('system')}`);
 await evalIn(settings, searchSettings(''));
 
 if (SHOTS) {
@@ -319,46 +343,53 @@ check('Ctrl+, with the page open on another pane switches to it, no second tab',
 // Space themes (the "tint" row): per window, so a Space's theme tints only
 // its window and leaves the profile's colour alone; the switch applies live
 // (scripts/e2e/theme.mjs checks the themes themselves).
-const tint = `koanSettingsRoot.querySelector('[data-pref="koan.workspaces.tint"] input')`;
-await evalIn(settings, `${showPane('tabs')}`);
-const userColor = await readPref('browser.theme.user_color2');
-await front(other);
-// A new Space gets a theme with Theme... (the theme picker): Space
-// themes are per window, so the profile's colour stays.
-await createSpace(other, 'Themed');
-const header = (await viewTree()).find(v => v.cls === 'KoanSpaceHeaderView' && v.shown);
-for (const type of ['mousePressed', 'mouseReleased']) {
-  await viewMouse(header, type, 20, 20, 'right');
-}
-await sleep(1000);
-const [menu] = openMenus(await viewTree());
-await menuMouse(menu, menu.items[2]);  // Theme...
-const swatch = await waitFor(async () => (await viewTree()).find(
-    v => v.cls === 'KoanThemeSwatch' && v.shown));
-check('Theme... opens the theme picker', !!swatch);
-if (swatch) {
+// On macOS the Space header's menu is a native NSMenu that UI DevTools can't
+// reach (NATIVE_MENUS); there the picker and themes are theme.mjs's.
+if (NATIVE_MENUS) {
+  skipped('Space themes and the tint row (Theme... in the Space header\'s menu)',
+          NATIVE_MENU_WHY);
+} else {
+  const tint = `koanSettingsRoot.querySelector('[data-pref="koan.workspaces.tint"] input')`;
+  await evalIn(settings, `${showPane('tabs')}`);
+  const userColor = await readPref('browser.theme.user_color2');
+  await front(other);
+  // A new Space gets a theme with Theme... (the theme picker): Space
+  // themes are per window, so the profile's colour stays.
+  await createSpace(other, 'Themed');
+  const header = (await viewTree()).find(v => v.cls === 'KoanSpaceHeaderView' && v.shown);
   for (const type of ['mousePressed', 'mouseReleased']) {
-    await viewMouse(swatch, type, 13, 13);
+    await viewMouse(header, type, 20, 20, 'right');
   }
-  await sleep(800);
-  // Esc, in the picker, closes (and saves) it.
-  await viewEvent(swatch, 'DOM.dispatchKeyEvent', { type: 'keyPressed', keyCode: 27,
-    code: 0, flags: 0, key: 0, isChar: false });
-  await sleep(800);
+  await sleep(1000);
+  const [menu] = openMenus(await viewTree());
+  await menuMouse(menu, menu.items[2]);  // Theme...
+  const swatch = await waitFor(async () => (await viewTree()).find(
+      v => v.cls === 'KoanThemeSwatch' && v.shown));
+  check('Theme... opens the theme picker', !!swatch);
+  if (swatch) {
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await viewMouse(swatch, type, 13, 13);
+    }
+    await sleep(800);
+    // Esc, in the picker, closes (and saves) it.
+    await viewEvent(swatch, 'DOM.dispatchKeyEvent', { type: 'keyPressed', keyCode: 27,
+      code: 0, flags: 0, key: 0, isChar: false });
+    await sleep(800);
+  }
+  const seed = await waitFor(async () => (await windowTints()).find(t => t));
+  check("A Space's theme tints its window and leaves the browser's colour alone",
+        !!seed &&
+        await readPref('browser.theme.user_color2') === userColor &&
+        await readPref('koan.workspaces.tint_applied') === 0);
+  await evalIn(settings, `${tint}.click()`);
+  check('Switching Space themes off gives the window the user\'s colour at once',
+        await waitFor(async () => await readPref('koan.workspaces.tint') === false &&
+                                  (await windowTints()).every(t => !t)));
+  await evalIn(settings, `${tint}.click()`);
+  check('...and switching them on tints it again',
+        await waitFor(async () => await readPref('koan.workspaces.tint') === true &&
+                                  (await windowTints()).includes(seed)));
 }
-const seed = await waitFor(async () => (await windowTints()).find(t => t));
-check("A Space's theme tints its window and leaves the browser's colour alone",
-      !!seed &&
-      await readPref('browser.theme.user_color2') === userColor &&
-      await readPref('koan.workspaces.tint_applied') === 0);
-await evalIn(settings, `${tint}.click()`);
-check('Switching Space themes off gives the window the user\'s colour at once',
-      await waitFor(async () => await readPref('koan.workspaces.tint') === false &&
-                                (await windowTints()).every(t => !t)));
-await evalIn(settings, `${tint}.click()`);
-check('...and switching them on tints it again',
-      await waitFor(async () => await readPref('koan.workspaces.tint') === true &&
-                                (await windowTints()).includes(seed)));
 
 // One Settings page: a link to one of Chromium's sections opens it in the
 // same page (Koan's panes hidden), Ctrl+, goes back to Koan's first pane in
