@@ -12,6 +12,7 @@
 // - a quit with compact mode on and a relaunch, which opens in compact mode.
 //
 //   scripts/e2e/run.sh compact_close
+import { ACCEL } from './lib/koan.mjs';
 import { spawn } from 'node:child_process';
 import { ALT, CDP_PORT, CTRL, browserCall, check, connect, finish, key, mouseOn, pages,
          sleep, views, waitFor }
@@ -60,14 +61,14 @@ check('A close with the sidebar revealed doesn\'t crash', await alive());
 
 // Pinned out with Ctrl+Alt+S.
 w = await openWindow();
-await key(w.page, VK.S, CTRL | ALT, 's');
+await key(w.page, VK.S, ACCEL | ALT, 's');
 await sleep(700);
 await closeWindow(w);
 check('A close with the sidebar pinned out doesn\'t crash', await alive());
 
 // Right after the compact toggle, while it animates.
 w = await openWindow();
-await key(w.page, VK.S, CTRL, 's');
+await key(w.page, VK.S, ACCEL, 's');
 await sleep(50);
 await closeWindow(w);
 check('A close during the compact toggle doesn\'t crash', await alive());

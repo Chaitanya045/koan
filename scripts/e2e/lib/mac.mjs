@@ -6,8 +6,8 @@
 //
 // Keys. CDP's Input.dispatchKeyEvent hands an unhandled key to the browser
 // only with a native key code; on macOS that code is built into an NSEvent,
-// so it has to be the Mac's virtual key code (kVK_*), not the Windows one
-// that lib/koan.mjs key() passes. key() here sends the right one.
+// so it has to be the Mac's virtual key code (kVK_*). key() here takes a key
+// name; lib/koan.mjs key() takes a Windows key code and converts it.
 //
 // Real input (KOAN_INPUT=real, set by suite.sh only after its gates passed:
 // the screen is granted and the user has been away for 10 minutes).
@@ -18,13 +18,10 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
-import { ALT, CTRL, META, SHIFT, browserCall, connect, onPage, pages, sleep, typeInto, viewTree,
+import { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT, browserCall, connect, onPage, pages, sleep, typeInto, viewTree,
          waitFor } from './koan.mjs';
 
-export const IS_MAC = process.platform === 'darwin';
-// The modifier of the platform's primary shortcuts (Cmd on macOS).
-export const ACCEL = IS_MAC ? META : CTRL;
-export { ALT, CTRL, META, SHIFT };
+export { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT };
 
 // kVK_* (HIToolbox/Events.h) by key name.
 const MAC_VK = {

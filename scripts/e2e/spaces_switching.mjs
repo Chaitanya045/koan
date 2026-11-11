@@ -13,10 +13,9 @@
 import { spawn } from 'node:child_process';
 import { servePages } from '../perf/pages_server.mjs';
 import {
-  CDP_PORT, CTRL, ALT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
-  key, menuMouse, onPage, openMenus, pages, sleep, tabMenuCommand,
-  viewEvent,
-  viewMouse, viewTree, visiblePage, waitFor, windowTints,
+  CDP_PORT, CTRL, ALT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish, key,
+  menuMouse, onPage, openMenus, pages, sleep, tabMenuCommand, viewEvent, viewMouse, viewTree,
+  visiblePage, waitFor, windowTints, ACCEL,
 } from './lib/koan.mjs';
 
 const site = await servePages();
@@ -198,7 +197,7 @@ await browserCall('Target.closeTarget', { targetId: second });
 await sleep(1500);
 // Back with Ctrl+Alt+Left. (Right after the theme menu, with the emoji
 // picker still open, a synthetic click on the bar can be dropped.)
-await key(await find('b2'), 37, CTRL | ALT, 'ArrowLeft');
+await key(await find('b2'), 37, ACCEL | ALT, 'ArrowLeft');
 await sleep(1500);
 s = await sidebar();
 check('Back in the first Space, on its last active tab',

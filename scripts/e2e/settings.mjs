@@ -11,11 +11,11 @@
 // Ctrl+Alt+R) that is another action's default (Toggle Reader Mode).
 // With SHOTS=<dir>, also saves screenshots of the page (light and dark).
 import {
-  ALT, CTRL, SHIFT, browserCall, check, countViews, evalIn, finish,
-  createSpace, front, key, menuMouse, onPage, openMenus, pages, readPref,
-  settingsCall, sleep, viewEvent, viewMouse, viewTree, visiblePage, waitFor,
-  windowTints,
+  ALT, CTRL, SHIFT, browserCall, check, countViews, evalIn, finish, createSpace, front, key,
+  menuMouse, onPage, openMenus, pages, readPref, settingsCall, sleep, viewEvent, viewMouse,
+  viewTree, visiblePage, waitFor, windowTints, skipOnMac,
 } from './lib/koan.mjs';
+skipOnMac("checks Linux's shortcut texts (Ctrl+M) and Ctrl+Tab, a main-menu key on macOS; port it to the Mac's texts and real input (#270)");
 
 const SHOTS = process.env.SHOTS;
 const VK = { B: 66, J: 74, P: 80, Q: 81, S: 83, TAB: 9, ESC: 27, BACKSPACE: 8,

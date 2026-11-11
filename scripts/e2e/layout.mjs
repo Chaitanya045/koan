@@ -5,6 +5,8 @@
 // switching to the multiple-toolbars layout (Ctrl+Alt+B).
 //
 //   scripts/e2e/run.sh layout
+import { sendKey, skipOnMac } from './lib/koan.mjs';
+skipOnMac();
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -100,9 +102,7 @@ async function key(code, modifiers, keyName = '') {
   const page = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
       .filter(t => t.type === 'page')[0];
   const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1200);
 }

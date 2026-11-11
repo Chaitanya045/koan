@@ -24,9 +24,12 @@
 // macOS fullscreen").
 //
 //   scripts/e2e/run.sh fullscreen_single
-import { ALT, CTRL, browserCall, check, finish, key, pages, readPref, sleep,
-         views, visiblePage, waitFor } from './lib/koan.mjs';
+import {
+  ALT, CTRL, browserCall, check, finish, key, pages, readPref, sleep, views, visiblePage,
+  waitFor, skipOnMac,
+} from './lib/koan.mjs';
 import { alive, goFullscreen, isMac, primary } from './lib/fullscreen.mjs';
+skipOnMac();
 
 const find = (vs, cls) => vs.find(v => v.cls === cls);
 const findShown = (vs, cls) => vs.find(v => v.cls === cls && v.shown);

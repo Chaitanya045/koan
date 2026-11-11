@@ -4,6 +4,7 @@
 // to hiding both and to hiding just the sidebar.
 //
 //   scripts/e2e/run.sh compact_variants
+import { ACCEL } from './lib/koan.mjs';
 import fs from 'node:fs';
 
 import { ALT, CTRL, check, finish, key, mouseOn, sidebarMenu, sleep, views, visiblePage }
@@ -68,7 +69,7 @@ check('...hot zones along the left and top edges', zones.length === 2 &&
       JSON.stringify(zones.map(z => [z.x, z.y, z.w, z.h])));
 
 // The hidden sidebar slides in for the menu: pick the variant from it.
-await press(VK.S, CTRL | ALT, 's');
+await press(VK.S, ACCEL | ALT, 's');
 missing = await sidebarMenu(COMPACT_MODE, HIDE_SIDEBAR);
 check('...and the menu switches to Hide sidebar', !missing, missing ?? '');
 await sleep(4000);
@@ -78,7 +79,7 @@ top = find(vs, 'TopContainerView');
 check('Hide sidebar: the sidebar takes no space', strip?.w === 0, `width ${strip?.w}`);
 check('...and the toolbar is back above the page', top?.path.at(-1) === 'BrowserView');
 
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 vs = await views();
 check('Ctrl+S leaves compact mode', findShown(vs, 'VerticalTabStripRegionView')?.w >= 200 &&
       find(vs, 'TopContainerView')?.path.at(-1) === 'BrowserView' &&

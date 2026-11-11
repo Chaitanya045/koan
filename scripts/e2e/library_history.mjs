@@ -10,9 +10,11 @@ import { spawn } from 'node:child_process';
 import { openSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  ALT, CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, finish,
-  key as keyTo, pages, sleep, visiblePage, waitFor,
+  ALT, CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, finish, key as keyTo,
+  pages, sleep, visiblePage, waitFor, ACCEL, IS_MAC, META,
 } from './lib/koan.mjs';
+// Library History: Ctrl+H, on macOS Cmd+Y (koan_shortcut_table.cc).
+const HISTORY_KEY = IS_MAC ? [89, META, 'y'] : [72, CTRL, 'h'];
 
 const KEY_L = 76, KEY_H = 72, KEY_P = 80, ESC = 27;
 
@@ -266,7 +268,7 @@ await key(KEY_L, ALT | SHIFT, 'L');
       .filter(t => t.type === 'page');
   const before = await contextOf();
   const normal = before[0].browserContextId;
-  await key(KEY_P, CTRL | SHIFT, 'P');
+  await key(KEY_P, ACCEL | SHIFT, 'P');
   const privatePage = await waitFor(async () =>
     (await contextOf()).find(t => t.browserContextId !== normal), 8000);
   const page = privatePage &&
@@ -276,7 +278,7 @@ await key(KEY_L, ALT | SHIFT, 'L');
     await key(KEY_L, ALT | SHIFT, 'L', page);
     check('A private window has no Library (Alt+Shift+L)', !(await library()).open);
     step = 'Ctrl+H in the private window';
-    await within(key(KEY_H, CTRL, 'h', page), 10000);
+    await within(key(...HISTORY_KEY, page), 10000);
     step = 'looking for the incognito history notice';
     const notice = await within(waitFor(async () =>
       shown(await views(), 'IncognitoClearBrowsingDataDialog').length > 0), 20000);

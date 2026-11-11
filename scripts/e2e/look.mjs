@@ -10,8 +10,8 @@
 // border #27272a; light background #ffffff, sidebar #fafafa. Neutral's dark
 // background is #0a0a0a.
 import {
-  CTRL, check, evalIn, finish, front, key, pages, settingsCall, sleep,
-  waitFor, windowFrame,
+  CTRL, check, evalIn, finish, front, key, pages, settingsCall, sleep, waitFor, windowFrame,
+  ACCEL,
 } from './lib/koan.mjs';
 
 const settingsPages = async () =>
@@ -19,7 +19,7 @@ const settingsPages = async () =>
 
 let [other] = await pages();
 await front(other);
-await key(other, 188, CTRL, ',');
+await key(other, 188, ACCEL, ',');
 let [settings] = await waitFor(settingsPages);
 await waitFor(() => evalIn(settings, `document.querySelectorAll('.category').length > 0`));
 

@@ -10,10 +10,11 @@
 //
 //   scripts/e2e/run.sh spaces
 import {
-  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish,
-  key as pageKey, menuMouse, openMenus, pages as pageTargets, readPref, sleep,
-  typeInto, viewEvent, viewMouse, viewTree, visiblePage, waitFor, windowTints,
+  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, key as pageKey,
+  menuMouse, openMenus, pages as pageTargets, readPref, sleep, typeInto, viewEvent, viewMouse,
+  viewTree, visiblePage, waitFor, windowTints, skipOnMac,
 } from './lib/koan.mjs';
+skipOnMac();
 
 const views = viewTree;
 // The node of the view tagged with element identifier `id`, if one shows.

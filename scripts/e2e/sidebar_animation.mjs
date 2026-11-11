@@ -8,6 +8,7 @@
 //   width while it slides in and out), and doesn't resize the page at all.
 //
 //   scripts/e2e/run.sh sidebar_animation
+import { ACCEL } from './lib/koan.mjs';
 import { CTRL, boundsOf, check, evalIn, finish, key, mouseOn, sleep, views, visiblePage }
     from './lib/koan.mjs';
 
@@ -64,14 +65,14 @@ check('The sidebar button turns compact mode on: the sidebar takes no space',
       findShown(vs, 'VerticalTabStripRegionView').w === 0);
 check('...resizing the page once, not on every frame',
       (await resizes()) <= MAX_RESIZES);
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 vs = await views();
 check('Compact mode off brings the sidebar back',
       findShown(vs, 'VerticalTabStripRegionView')?.w >= 200);
 check('...resizing the page once', (await resizes()) <= MAX_RESIZES);
 
 // Compact mode hides it without a jump.
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 vs = await views();
 check('Compact mode hides the sidebar completely',
       !findShown(vs, 'VerticalTabStripRegionView') ||
@@ -101,7 +102,7 @@ check('...without a new width on every frame', shown.length <= 1,
 check('...or resizing the page', (await resizes()) === 0);
 
 // Leaving compact mode expands the sidebar again.
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 await sleep(500);
 vs = await views();
 check('Ctrl+S gives the sidebar back', findShown(vs, 'VerticalTabStripRegionView')?.w >= 200);

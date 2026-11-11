@@ -15,6 +15,7 @@
 // - at the end the leak detector has said nothing.
 //
 //   scripts/e2e/run.sh vertical_tabs_teardown
+import { ACCEL } from './lib/koan.mjs';
 import { ALT, CTRL, browserCall, check, finish, key, mouseOn, pages, sleep, views, waitFor }
     from './lib/koan.mjs';
 import { VK, alive, checkKoanSidebar, leakLogged, press, railShown, region } from './lib/vertical_tabs.mjs';
@@ -42,7 +43,7 @@ checkKoanSidebar('Start', {}, await views());
 // Test 21: 20 toggles in ~10 s, a window closed in the middle.
 let w = await openWindow();
 for (let i = 0; i < 20; i++) {
-  await key(w.page, VK.S, CTRL, 's');
+  await key(w.page, VK.S, ACCEL, 's');
   await sleep(150);
   if (i === 10) {
     await closeWindow(w);
@@ -56,12 +57,12 @@ check('The first window ended in one of Koan\'s two states',
       hiddenNow || region(await views())?.w >= 163, `${region(await views())?.w}`);
 check('...and no rail', !railShown(await views()));
 if (hiddenNow) {
-  await press(VK.S, CTRL, 's', 1500);
+  await press(VK.S, ACCEL, 's', 1500);
 }
 checkKoanSidebar('After the toggles', {}, await views());
 
 // Closing with the sidebar revealed, pinned out and with the form open.
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 w = await openWindow();
 {
   const last = windows(await views()).at(-1);
@@ -73,7 +74,7 @@ w = await openWindow();
 await closeWindow(w);
 check('A close with the sidebar revealed: alive', await alive());
 w = await openWindow();
-await key(w.page, VK.S, CTRL | ALT, 's');
+await key(w.page, VK.S, ACCEL | ALT, 's');
 await sleep(700);
 await closeWindow(w);
 check('A close with the sidebar pinned out: alive', await alive());
@@ -83,13 +84,13 @@ await waitFor(async () => windows(await views()).at(-1)
     .find(v => v.cls === 'KoanSpaceCreationView' && v.shown));
 await closeWindow(w);
 check('A close with the new-Space form open: alive', await alive());
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 checkKoanSidebar('The first window after the closes', {}, await views());
 
 // Test 22: fullscreen with compact mode off and on.
 if (await isMac()) {
   for (const compact of [false, true]) {
-    if (compact) await press(VK.S, CTRL, 's', 1500);
+    if (compact) await press(VK.S, ACCEL, 's', 1500);
     await goFullscreen(true);
     let vs = await views();
     check(`Fullscreen (compact ${compact}): no rail`, !railShown(vs));
@@ -99,7 +100,7 @@ if (await isMac()) {
     vs = await views();
     checkKoanSidebar(`After fullscreen (compact ${compact})`, { hidden: compact }, vs);
   }
-  await press(VK.S, CTRL, 's', 1500);
+  await press(VK.S, ACCEL, 's', 1500);
 } else {
   console.log('note: native fullscreen is macOS only; test 22 skipped here');
 }

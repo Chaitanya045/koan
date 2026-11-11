@@ -9,7 +9,8 @@ import { spawn } from 'node:child_process';
 import { browserSession, connect, evaluate, key, pageTargets, sleep, traceUi, uiMouse,
          uiViews } from '../perf/cdp.mjs';
 import { servePages } from '../perf/pages_server.mjs';
-import { createSpace, tabMenuCommand } from './lib/koan.mjs';
+import { createSpace, tabMenuCommand, skipOnMac } from './lib/koan.mjs';
+skipOnMac();
 
 const CDP_PORT = process.env.CDP_PORT;
 const UI_PORT = process.env.UI_PORT;

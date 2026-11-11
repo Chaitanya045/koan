@@ -5,6 +5,7 @@
 // Ctrl+Alt+B; and in a window opened meanwhile.
 //
 //   scripts/e2e/run.sh compact_single
+import { ACCEL } from './lib/koan.mjs';
 import { ALT, CTRL, check, finish, key, sidebarMenu, sleep, views, visiblePage }
     from './lib/koan.mjs';
 
@@ -36,17 +37,17 @@ async function checkSingleToolbarCompact(when, onRight) {
         zone && `${zone.x}+${zone.w}`);
 }
 
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 await checkSingleToolbarCompact('Ctrl+S', false);
 
 // Tabs on the right from the menu of the peeked sidebar, then back: the
 // menu opens twice in the window.
-await press(VK.S, CTRL | ALT, 's');
+await press(VK.S, ACCEL | ALT, 's');
 let missing = await sidebarMenu(TABS_ON_RIGHT);
 check('The sidebar\'s menu has Tabs on the right', !missing, missing ?? '');
 await sleep(3500);
 await checkSingleToolbarCompact('Tabs on the right', true);
-await press(VK.S, CTRL | ALT, 's');
+await press(VK.S, ACCEL | ALT, 's');
 missing = await sidebarMenu(TABS_ON_RIGHT);
 check('...and opens again to put them back on the left', !missing, missing ?? '');
 await sleep(3500);
@@ -61,7 +62,7 @@ check('Ctrl+Alt+B in compact mode: the toolbar is above the page, sidebar hidden
 await press(VK.B, CTRL | ALT, 'b');
 await checkSingleToolbarCompact('Ctrl+Alt+B again', false);
 
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 vs = await views();
 check('Ctrl+S leaves compact mode, still single toolbar',
       findShown(vs, 'VerticalTabStripRegionView')?.w >= 200 &&
@@ -74,8 +75,8 @@ const windows = vs => {
   const roots = vs.flatMap((v, i) => (v.cls === 'BrowserRootView' ? [i] : []));
   return roots.map((start, n) => vs.slice(start, roots[n + 1]));
 };
-await press(VK.S, CTRL, 's');
-await press(VK.N, CTRL, 'n');
+await press(VK.S, ACCEL, 's');
+await press(VK.N, ACCEL, 'n');
 await sleep(1500);
 let all = windows(await views());
 check('Ctrl+N in compact mode opens a second window', all.length === 2, `${all.length} windows`);
@@ -83,7 +84,7 @@ check('...which keeps single toolbar too',
       all.length === 2 && all.every(w => find(w, 'KoanSidebarNavButtons') &&
           find(w, 'TopContainerView')?.path.includes('TopContainerOverlayView') &&
           find(w, 'VerticalTabStripRegionView')?.w === 0));
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 await sleep(1000);
 all = windows(await views());
 check('Leaving compact mode gives both windows their expanded sidebar back',

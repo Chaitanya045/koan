@@ -9,8 +9,10 @@
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { CTRL, check, click, evalIn, finish, front, key, pages, saveShot, shownViews,
-         sleep, views } from './lib/koan.mjs';
+import {
+  CTRL, check, click, evalIn, finish, front, key, pages, saveShot, shownViews, sleep, views,
+  ACCEL,
+} from './lib/koan.mjs';
 
 const [page] = await pages();
 // Downloads land in the default folder: each gets a name of its own, to
@@ -46,7 +48,7 @@ check('The icon goes away afterwards', await gone());
 
 // ---- Compact mode hides the sidebar: the tile instead.
 await front(page);
-await key(page, 83, CTRL, 's');   // Ctrl+S: compact mode
+await key(page, 83, ACCEL, 's');   // Ctrl+S: compact mode
 await sleep(800);
 vs = await download();
 saveShot('download-start');
