@@ -39,6 +39,14 @@ bool UseSingleReflowSidebarAnimation();
 // as it is, and the layer has no transform.
 double LayoutSidebarReveal(views::View* browser_view, double progress);
 
+// The width the strip shows at when it is out on hover, for
+// BrowserViewTabbedLayoutImpl in place of upstream's
+// tabs::kVerticalTabStripDefaultUncollapsedWidth (240): while compact mode
+// hides the sidebar, the sidebar's own width (Zen's 230 by default, or what
+// the user dragged it to), as Zen's compact mode shows it; otherwise
+// upstream's.
+int SidebarRevealWidth(views::View* browser_view);
+
 // Compact mode has just hidden the docked sidebar (the page already takes its
 // place): the strip is shown out, over the page, and slides away in Zen's
 // 0.1 s (kSidebarToggleDuration), as Zen's animateCompactMode() does. Nothing

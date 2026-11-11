@@ -16,9 +16,10 @@
 import { spawn } from 'node:child_process';
 import { openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CDP_PORT, browserCall, check, connect, finish, pages, readPref, sleep, viewTree,
+import { CDP_PORT, browserCall, check, connect, finish, onPage, pages, readPref, sleep, viewTree,
          waitFor } from './lib/koan.mjs';
-import { IS_MAC, closeWindowOf, createSpace, fatalInLog, spaceButtons } from './lib/mac.mjs';
+import { IS_MAC, closeWindowOf, createSpace, fatalInLog, spaceButtons, startServer,
+         windows } from './lib/mac.mjs';
 
 const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean);
 const profile = args.find(a => a.startsWith('--user-data-dir='))?.split('=').slice(1).join('=');
@@ -67,7 +68,15 @@ async function expectTwo(when) {
 const firstPage = async () => (await pages()).find(p => p.type === 'page');
 
 // ---- Two Spaces, Work shown.
-check('A new profile has one Space', (await spaces()).names === 'Space', (await spaces()).names);
+// Zen hides the bottom bar's buttons while there is only one Space, so this
+// counts the window's buttons, shown or not.
+const allButtons = await waitFor(async () => {
+  const found = (await viewTree()).filter(v => v.cls === 'KoanSpaceButton');
+  return found.length ? found : null;
+}, 10000) ?? [];
+check('A new profile has one Space',
+      allButtons.length === 1 && allButtons[0].props.TooltipText === 'Space',
+      allButtons.map(b => b.props.TooltipText).join() || 'no Space button');
 check('Create a Space', await createSpace(await firstPage(), 'Work'));
 await expectTwo('Before the first quit');
 
@@ -81,7 +90,15 @@ await expectTwo('After a second quit and start');
 
 // ---- macOS: the last window closes, the app stays; then a quit and a start.
 if (IS_MAC) {
-  check('Close the last window', await closeWindowOf(await firstPage(), 1500));
+  // test_helper answers only 127.0.0.1 pages (its externally_connectable).
+  const server = await startServer();
+  const page = await firstPage();
+  await onPage(page, c => c.send('Page.navigate', { url: server.url('/p?t=Last') }));
+  await sleep(1500);
+  check('Close the last window', await closeWindowOf(page, 1500) &&
+        await waitFor(async () => (await windows()).length === 0, 10000),
+        `${(await windows()).length} window(s)`);
+  server.close();
   check('...and Koan stays running', await alive());
   await quit();
   await start();

@@ -108,6 +108,16 @@ export const MAIN_MENU_ONLY_ON_MAC =
   'needs a main-menu key (Cmd+W/Cmd+Shift+W/Cmd+Q/Cmd+L), which CDP keys never reach on macOS; ' +
   'port it to the test_helper extension or real input (#270)';
 
+// On macOS the menus Koan builds from a menu model (the sidebar's, the
+// Space header's, a tab's, the Library's tab and row menus) are native
+// NSMenus (MenuRunnerImplMac). UI DevTools can't see them, and while one is
+// open its nested run loop keeps UI DevTools from answering, so a script
+// that opens one hangs until the suite's timeout. Scripts skip those steps
+// (or reach the command another way) when NATIVE_MENUS is set.
+export const NATIVE_MENUS = IS_MAC;
+export const NATIVE_MENU_WHY =
+  'needs a context menu, a native NSMenu on macOS that UI DevTools can\'t see or click';
+
 // Ends a script that can't run on macOS with a SKIP (exit 77, which
 // scripts/mac/suite.sh reports as SKIP, not as a pass); elsewhere nothing.
 export function skipOnMac(why = MAIN_MENU_ONLY_ON_MAC) {
@@ -169,10 +179,14 @@ export function keyEventParams(code, modifiers = 0, keyName) {
 
 // Sends keyEventParams() for one press over CDP session `c` (a connect()):
 // rawKeyDown and keyUp, as the scripts always have, but on macOS a printable
-// key without Cmd/Ctrl/Option goes as keyDown so it types its text.
+// key without Cmd/Ctrl/Option goes as keyDown so it types its text. Not
+// Escape: it types nothing, and the browser runs its accelerators (the
+// Library's and the URL bar's Esc, ...) for a page's unhandled rawKeyDown
+// only (views::UnhandledKeyboardEventHandler).
 export async function sendKey(c, code, modifiers = 0, keyName) {
   const p = keyEventParams(code, modifiers, keyName);
-  const types = IS_MAC && p.text && !(modifiers & (CTRL | META | ALT)) ? 'keyDown' : 'rawKeyDown';
+  const types = IS_MAC && p.text && code !== 27 && !(modifiers & (CTRL | META | ALT))
+      ? 'keyDown' : 'rawKeyDown';
   await c.send('Input.dispatchKeyEvent', { ...p, type: types });
   await c.send('Input.dispatchKeyEvent', { ...p, type: 'keyUp' });
 }
@@ -304,6 +318,7 @@ export async function boundsOf(cls) {
 // sidebar's hot zone's id named the top edge's. The view is found again in
 // this session, by its class and its bounds.
 export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
+  if (!view) throw new Error(`mouseOn(): no view to send ${type} to (not found)`);
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('CSS.enable');

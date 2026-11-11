@@ -8,7 +8,7 @@
 //   drag; Right many times widens to the 500 maximum.
 //
 //   scripts/e2e/run.sh vertical_tabs_drag
-import { ALT, CTRL, check, finish, key, mouseOn, readPref, setKoanPref, sidebarMenu, sleep, views,
+import { ACCEL, ALT, CTRL, check, finish, key, mouseOn, readPref, setKoanPref, sidebarMenu, sleep, views,
          visiblePage } from './lib/koan.mjs';
 import { VK, alive, checkKoanSidebar, leakLogged, press, railShown, region }
     from './lib/vertical_tabs.mjs';
@@ -45,7 +45,7 @@ checkKoanSidebar('After the drag', { hidden: true }, vs);
 check('...compact mode is on', await readPref('koan.compact_mode.enabled') === true);
 
 // 18: compact on, sidebar revealed (peeked): the same drag snaps back.
-await press(VK.S, CTRL | ALT, 's', 900);
+await press(VK.S, ACCEL | ALT, 's', 900);
 vs = await views();
 check('The peeked sidebar is out', region(vs)?.w >= 200, `${region(vs)?.w}`);
 seen = await drag(-260);
@@ -53,7 +53,7 @@ vs = await views();
 check('Dragging the revealed sidebar leaves no rail', !railShown(vs) &&
       seen.every(w => w === 0 || w >= 100), seen.join(', '));
 check('...and compact mode stays on', await readPref('koan.compact_mode.enabled') === true);
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 checkKoanSidebar('Compact off', {}, await views());
 
 // 17 with the tabs on the right: the edge is on the other side.
@@ -62,7 +62,7 @@ await sleep(1500);
 seen = await drag(260);
 check('Tabs on the right: the drag never shows the rail', seen.every(w => w >= 100), seen.join(', '));
 checkKoanSidebar('Tabs on the right, after the drag', { hidden: true }, await views());
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 await setKoanPref('koan.tabs.on_right', false);
 await sleep(1500);
 
@@ -82,7 +82,7 @@ await sleep(1500);
 vs = await views();
 check('Left on the resize area many times hides the sidebar with compact mode, no rail',
       !railShown(vs) && region(vs)?.w === 0, `${region(vs)?.w}`);
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 await focus();
 for (let i = 0; i < 8; i++) {
   await key(page, 39, 0, 'ArrowRight');

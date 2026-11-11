@@ -5,7 +5,7 @@
 // nothing, and a drag below the snap width snaps back.
 //
 //   scripts/e2e/run.sh vertical_tabs_no_compact
-import { CTRL, SHIFT, check, finish, mouseOn, sleep, views } from './lib/koan.mjs';
+import { ACCEL, CTRL, SHIFT, check, finish, mouseOn, sleep, views } from './lib/koan.mjs';
 import { VK, alive, checkKoanSidebar, leakLogged, press, railShown, region }
     from './lib/vertical_tabs.mjs';
 
@@ -19,7 +19,7 @@ const WITHOUT = { toolbar: true };
 checkKoanSidebar('Without compact mode', WITHOUT, vs);
 const width = region(vs).w;
 
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 vs = await views();
 checkKoanSidebar('Ctrl+S', WITHOUT, vs);
 check('...the sidebar is as wide as before', region(vs).w === width, `${region(vs).w} vs ${width}`);

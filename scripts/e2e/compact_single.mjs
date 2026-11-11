@@ -6,8 +6,8 @@
 //
 //   scripts/e2e/run.sh compact_single
 import { ACCEL } from './lib/koan.mjs';
-import { ALT, CTRL, check, finish, key, sidebarMenu, sleep, views, visiblePage }
-    from './lib/koan.mjs';
+import { ALT, CTRL, IS_MAC, NATIVE_MENUS, browserCall, check, finish, key, setKoanPref,
+         sidebarMenu, sleep, views, visiblePage } from './lib/koan.mjs';
 
 const find = (vs, cls) => vs.find(v => v.cls === cls);
 const findShown = (vs, cls) => vs.find(v => v.cls === cls && v.shown);
@@ -41,16 +41,22 @@ await press(VK.S, ACCEL, 's');
 await checkSingleToolbarCompact('Ctrl+S', false);
 
 // Tabs on the right from the menu of the peeked sidebar, then back: the
-// menu opens twice in the window.
-await press(VK.S, ACCEL | ALT, 's');
-let missing = await sidebarMenu(TABS_ON_RIGHT);
-check('The sidebar\'s menu has Tabs on the right', !missing, missing ?? '');
-await sleep(3500);
+// menu opens twice in the window. On macOS the menu is a native NSMenu that
+// UI DevTools can't reach (NATIVE_MENUS), so the pref is set as the menu
+// item sets it, without peeking the sidebar for its menu.
+async function tabsOnRight(onRight, name) {
+  if (NATIVE_MENUS) {
+    await setKoanPref('koan.tabs.on_right', onRight);
+  } else {
+    await press(VK.S, ACCEL | ALT, 's');
+    const missing = await sidebarMenu(TABS_ON_RIGHT);
+    check(name, !missing, missing ?? '');
+  }
+  await sleep(3500);
+}
+await tabsOnRight(true, 'The sidebar\'s menu has Tabs on the right');
 await checkSingleToolbarCompact('Tabs on the right', true);
-await press(VK.S, ACCEL | ALT, 's');
-missing = await sidebarMenu(TABS_ON_RIGHT);
-check('...and opens again to put them back on the left', !missing, missing ?? '');
-await sleep(3500);
+await tabsOnRight(false, '...and opens again to put them back on the left');
 await checkSingleToolbarCompact('Tabs on the left', false);
 
 // Multiple toolbars and back while compact mode is on.
@@ -76,7 +82,13 @@ const windows = vs => {
   return roots.map((start, n) => vs.slice(start, roots[n + 1]));
 };
 await press(VK.S, ACCEL, 's');
-await press(VK.N, ACCEL, 'n');
+// Cmd+N is the main menu's on macOS, which CDP keys never reach (see
+// lib/koan.mjs): a new window the way it opens one.
+if (IS_MAC) {
+  await browserCall('Target.createTarget', { url: 'https://example.com/?second', newWindow: true });
+} else {
+  await press(VK.N, ACCEL, 'n');
+}
 await sleep(1500);
 let all = windows(await views());
 check('Ctrl+N in compact mode opens a second window', all.length === 2, `${all.length} windows`);

@@ -4,7 +4,7 @@
 //
 //   scripts/e2e/run.sh background_tab_toast
 import {
-  CTRL, check, evalIn, finish, front, key, mouseOn, onPage, pages, saveShot, shownViews, sleep,
+  check, evalIn, finish, front, key, mouseOn, onPage, pages, saveShot, shownViews, sleep,
   views, ACCEL,
 } from './lib/koan.mjs';
 
@@ -12,7 +12,8 @@ const [page] = await pages();
 await key(page, 83, ACCEL, 's');   // Ctrl+S: compact mode
 await sleep(800);
 
-// Ctrl+click opens the link in a background tab.
+// Ctrl+click (Cmd+click on macOS, where Ctrl+click is a right click) opens
+// the link in a background tab.
 const box = await evalIn(page, `(() => {
   const r = document.querySelector('#link').getBoundingClientRect();
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
@@ -20,7 +21,7 @@ const box = await evalIn(page, `(() => {
 await onPage(page, async c => {
   for (const type of ['mousePressed', 'mouseReleased']) {
     await c.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left',
-                                               clickCount: 1, modifiers: CTRL });
+                                               clickCount: 1, modifiers: ACCEL });
   }
 });
 await sleep(800);
@@ -34,9 +35,11 @@ check('...with a button to switch to it', button?.props.TooltipText === 'Switch 
       button?.props.TooltipText);
 saveShot('background-tab-toast');
 
-await mouseOn(button, 'mousePressed');
-await mouseOn(button, 'mouseReleased');
-await sleep(1000);
+if (button) {
+  await mouseOn(button, 'mousePressed');
+  await mouseOn(button, 'mouseReleased');
+  await sleep(1000);
+}
 const background = (await pages()).find(p => p.url.endsWith('?background'));
 check('The button switches to the new tab',
       background && await evalIn(background, 'document.visibilityState') === 'visible');
@@ -50,7 +53,7 @@ await sleep(800);
 await onPage(page, async c => {
   for (const type of ['mousePressed', 'mouseReleased']) {
     await c.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left',
-                                               clickCount: 1, modifiers: CTRL });
+                                               clickCount: 1, modifiers: ACCEL });
   }
 });
 await sleep(800);

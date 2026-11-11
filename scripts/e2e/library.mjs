@@ -303,8 +303,10 @@ const downloads = join(profile, 'Downloads');
   const downloadActions = await withViews(nodes =>
     find(nodes, 'ImageButton', n => n.shown && n.path.includes('KoanLibraryRow'))
         .map(n => n.p.TooltipText ?? n.p.Tooltip));
-  check('Hovering a finished download offers Show in folder and More',
-        downloadActions.includes('Show in folder') && downloadActions.includes('More options'),
+  // "Show in Finder" on macOS (koan_library_downloads.cc, as Chrome says it).
+  const SHOW_IN_FOLDER = IS_MAC ? 'Show in Finder' : 'Show in folder';
+  check(`Hovering a finished download offers ${SHOW_IN_FOLDER} and More`,
+        downloadActions.includes(SHOW_IN_FOLDER) && downloadActions.includes('More options'),
         downloadActions.join(', '));
 
   // File type filters: a .txt is a document, not a picture.

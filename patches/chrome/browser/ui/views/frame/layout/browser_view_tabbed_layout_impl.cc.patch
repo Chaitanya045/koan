@@ -41,6 +41,15 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_tabbed_layout_imp
    animation.expand_on_hover_opacity =
        *controller->GetCurrentValue(TabStripAnimations::kVerticalTabStrip,
                                     TabStripAnimations::kTabStripHoverOpacity);
+@@ -910,7 +924,7 @@
+       }
+ 
+       const int vertical_tab_strip_hover_width =
+-          std::max(0, tabs::kVerticalTabStripDefaultUncollapsedWidth -
++          std::max(0, koan::SidebarRevealWidth(views().browser_view) -
+                           horizontal_layout.vertical_tab_strip_width) *
+           vertical_tab_strip_animation.expand_on_hover_width;
+ 
 @@ -977,8 +991,12 @@
        if (vertical_tab_strip_animation.current_motion) {
          clip_content_for_animation =

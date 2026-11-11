@@ -40,10 +40,12 @@ const settle = async (ms = 1500) => sleep(ms);
 
 checkKoanSidebar('Start', {}, await views());
 
-// Test 21: 20 toggles in ~10 s, a window closed in the middle.
+// Test 21: 20 toggles in ~10 s, a window closed in the middle (the rest go
+// to the first window).
+const [firstPage] = await pages();
 let w = await openWindow();
 for (let i = 0; i < 20; i++) {
-  await key(w.page, VK.S, ACCEL, 's');
+  await key(w?.page ?? firstPage, VK.S, ACCEL, 's');
   await sleep(150);
   if (i === 10) {
     await closeWindow(w);

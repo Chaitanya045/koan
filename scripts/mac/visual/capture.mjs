@@ -50,6 +50,7 @@ async function regionsNow(names) {
   const root = win.views[0];
   const out = {};
   const same = {};
+  const outside = [];
   for (const name of names) {
     const r = spec.regions[name];
     if (r.same) same[name] = r.same;
@@ -61,11 +62,17 @@ async function regionsNow(names) {
       continue;
     }
     const v = win.views.find(x => x.cls === r.view && x.shown && x.w > 0 && x.h > 0);
-    if (!v) continue;
+    if (!v) {
+      // In a widget of its own (a child window on macOS): its bounds aren't
+      // in the window's root view, so it can't be placed in the capture.
+      const elsewhere = vs.find(x => x.cls === r.view && x.shown && x.w > 0 && x.h > 0);
+      if (elsewhere) outside.push(name);
+      continue;
+    }
     const pad = r.pad ?? 0;
     out[name] = [v.ax - pad, v.ay - pad, v.w + 2 * pad, v.h + 2 * pad];
   }
-  return { root: [root.w, root.h], regions: out, same };
+  return { root: [root.w, root.h], regions: out, same, outside };
 }
 
 const omnibox = async () =>
@@ -112,7 +119,9 @@ for (const [state, names] of Object.entries(spec.states)) {
   fs.writeFileSync(path.join(OUT, `${state}.json`), JSON.stringify(info, null, 1));
   const missing = names.filter(n => !info.regions[n]);
   check(`${state}: captured, every region found`, fs.existsSync(png) && !missing.length,
-        missing.length ? `missing ${missing.join(', ')}` : '');
+        missing.length ? `missing ${missing.join(', ')}` +
+            (info.outside.length ? ` (in a widget of their own: ${info.outside.join(', ')})` : '')
+          : '');
   await teardowns[state]?.();
 }
 await setKoanPref('koan.compact_mode.enabled', false);

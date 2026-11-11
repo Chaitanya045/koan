@@ -138,13 +138,14 @@ export async function openWindow(url) {
   return { targetId, windowId: (await windowOf(targetId))?.windowId };
 }
 // Has the test_helper extension (loaded by the test's .flags) do `action`
-// ('close-window', 'pin-tab') for `page`, a 127.0.0.1 page: for what
-// synthetic input can't reach on macOS. Returns whether the page could ask.
+// ('close-window', 'pin-tab', or {discard: [urls]}) for `page`, a 127.0.0.1
+// page: for what synthetic input can't reach on macOS. Returns whether the
+// page could ask.
 const TEST_HELPER_ID = 'efmifboglkpejppaiocdcajnkhbfoofo';
 export async function askTestHelper(page, action, settle = 800) {
   const asked = await onPage(page, c => c.send('Runtime.evaluate', {
     expression: `!!globalThis.chrome?.runtime?.sendMessage &&
-        (chrome.runtime.sendMessage('${TEST_HELPER_ID}', '${action}').catch(() => {}), true)`,
+        (chrome.runtime.sendMessage('${TEST_HELPER_ID}', ${JSON.stringify(action)}).catch(() => {}), true)`,
     returnByValue: true }));
   await sleep(settle);
   return asked.result?.result?.value === true;
