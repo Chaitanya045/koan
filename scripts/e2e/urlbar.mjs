@@ -522,6 +522,24 @@ if (BEHAVIOR !== 'normal') {
             decoration.w === bar(vs)?.w && decoration.h === bar(vs)?.h,
         `${decoration?.x},${decoration?.y} ${decoration?.w}x${decoration?.h}`);
   shot('suggestions');
+
+  // Deleted back to empty (the open tabs and top sites come back: Koan asks
+  // for them in the next task) and typed again at once: the suggestions are
+  // back, and stay. On macOS a popup opened while the previous one was still
+  // fading out was torn down with it, and none showed again until the bar
+  // closed (omnibox_popup_view_views.cc.patch): the card's list, the typed
+  // suggestions, an open tab's "Switch to Tab".
+  const backspace = { type: 'keyPressed', keyCode: 8, code: 0, flags: 0, key: 8, isChar: false };
+  await toClass('OmniboxViewViews', 'DOM.dispatchKeyEvent', Array(4).fill(backspace));
+  await type(find(await views(), 'OmniboxViewViews'), 'koan');
+  const popupShown = now => now.find(
+      v => v.cls === 'RoundedOmniboxResultsFrame' && v.shown && v.h > 0);
+  vs = await views();
+  check('...deleted back to empty and typed again at once, the suggestions are back',
+        omniboxText(vs) === 'koan' && !!popupShown(vs) &&
+            vs.some(v => v.cls === 'OmniboxResultView' && v.shown),
+        `${JSON.stringify(omniboxText(vs))}, popup ` +
+            `${popupShown(vs) ? `${popupShown(vs).w}x${popupShown(vs).h}` : 'none'}`);
 }
 if (BEHAVIOR === 'normal') {
   await closeBar();
