@@ -197,6 +197,9 @@ class KoanThemeController : public TabStripModelObserver,
   // Whether `child` is the window's own chrome in another widget, which
   // keeps the Space's mode.
   bool IsWindowChrome(const views::Widget* child) const;
+  // Whether `view` floats over the page: the sidebar, or the top container
+  // and toolbar, in compact mode.
+  bool FloatsOverPage(const views::View* view) const;
   Profile* profile() const;
   KoanWorkspaceController* workspaces() const;
   Space active_space() const;

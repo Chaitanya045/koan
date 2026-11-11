@@ -29,6 +29,8 @@
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/split_tabs/split_tab_id.h"
+#include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/invalidate_type.h"
@@ -205,7 +207,7 @@ std::vector<window_sync::ItemRecord> KoanWindowSyncClient::LocalItems(
     tabs::TabInterface* tab = model->GetTabAtIndex(i);
     content::WebContents* contents = tab->GetContents();
     const bool essential = tab->IsPinned();
-    if ((!essential && !IsPinnedInSpace(tab)) || tab->IsSplit() || !contents ||
+    if ((!essential && !IsPinnedInSpace(tab)) || !contents ||
         containers::IsAgentTab(contents)) {
       continue;
     }
@@ -303,10 +305,11 @@ void KoanWindowSyncClient::ReportItems() {
       sync_->SetLive(this, record.id);
     }
   }
-  // A tab that stopped being synced here (unpinned, out of the Essentials,
-  // into a split) loses its id; a placeholder of one loads its page. Unless
-  // it went into a split, the other windows close theirs (Zen's
-  // TabUnpinned).
+  // A tab that stopped being synced here (unpinned, or out of the Essentials
+  // without being pinned) loses its id; a placeholder of one loads its page,
+  // and the other windows close theirs (Zen's TabUnpinned). A pinned tab
+  // taken into a split view stays synced: the split's tabs are pinned
+  // together (KoanPinnedTabController::MatchSplitPinnedState()).
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
   std::set<std::string> ids;
   for (const window_sync::ItemRecord& record : items) {
@@ -318,9 +321,7 @@ void KoanWindowSyncClient::ReportItems() {
     if (id.empty() || ids.contains(id)) {
       continue;
     }
-    if (!model->GetTabAtIndex(i)->IsSplit()) {
-      closed.insert(id);
-    }
+    closed.insert(id);
     SetTabSessionData(contents, kItemIdSessionKey, std::string());
     if (IsPlaceholder(contents)) {
       contents->RemoveUserData(Placeholder::UserDataKey());
@@ -335,11 +336,20 @@ void KoanWindowSyncClient::MaybeRequestActivePage() {
       !widget_observation_.GetSource()->IsActive()) {
     return;
   }
-  tabs::TabInterface* tab =
-      browser_view_->browser()->GetTabStripModel()->GetActiveTab();
-  content::WebContents* contents = tab ? tab->GetContents() : nullptr;
-  if (IsPlaceholder(contents)) {
-    sync_->RequestShow(this, ItemIdOf(contents));
+  TabStripModel* model = browser_view_->browser()->GetTabStripModel();
+  tabs::TabInterface* tab = model->GetActiveTab();
+  if (!tab) {
+    return;
+  }
+  // Also the other pane of a split view: it is on screen too.
+  std::vector<tabs::TabInterface*> shown = {tab};
+  if (std::optional<split_tabs::SplitTabId> split = tab->GetSplit()) {
+    shown = model->GetSplitData(*split)->ListTabs();
+  }
+  for (tabs::TabInterface* each : shown) {
+    if (IsPlaceholder(each->GetContents())) {
+      sync_->RequestShow(this, ItemIdOf(each->GetContents()));
+    }
   }
 }
 
@@ -368,8 +378,9 @@ bool KoanWindowSyncClient::CanGivePage(const std::string& item) const {
 }
 
 bool KoanWindowSyncClient::CanTakePage(const std::string& item) const {
+  // Also into a split view: the page shows in its pane.
   tabs::TabInterface* tab = FindItemTab(item);
-  return tab && !tab->IsSplit() && IsPlaceholder(tab->GetContents()) &&
+  return tab && IsPlaceholder(tab->GetContents()) &&
          !browser_view_->browser()->GetTabStripModel()->closing_all();
 }
 
@@ -459,9 +470,9 @@ void KoanWindowSyncClient::ApplyItems(
       CloseSyncedTab(browser_view_->browser(), tab);
       continue;
     }
-    // Taken into a split elsewhere, and the page is here: it stays, as a
-    // normal tab of the Space it is in (or the active one). (Unpinned or out
-    // of the Essentials elsewhere counts as closed, as in Zen.)
+    // Gone from the model without a close, and the page is here: it stays,
+    // as a normal tab of the Space it is in (or the active one). (Unpinned
+    // or out of the Essentials elsewhere counts as closed, as in Zen.)
     SetTabSessionData(contents, kItemIdSessionKey, std::string());
     if (tab->IsPinned()) {
       pinned->RemoveFromEssentials(tab);
@@ -629,6 +640,14 @@ void KoanWindowSyncClient::OnTabChangedAt(tabs::TabInterface* tab,
   // The page's title or favicon: the other windows' rows show them.
   if (sync_ && !IsPlaceholder(tab->GetContents())) {
     sync_->OnPageChanged(this, item);
+  }
+}
+
+void KoanWindowSyncClient::OnSplitTabChanged(const SplitTabChange& change) {
+  // A placeholder taken into the active split view gets its page (a split
+  // made of the active tab and a placeholder, or a placeholder put in).
+  if (change.type == SplitTabChange::Type::kAdded && !IsApplying()) {
+    MaybeRequestActivePage();
   }
 }
 

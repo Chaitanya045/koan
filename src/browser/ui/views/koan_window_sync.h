@@ -69,7 +69,8 @@ class KoanWindowSync : public base::SupportsUserData::Data {
     // --- The page of a synced tab (KoanWindowSync::MovePage()) ---
 
     // Whether the window has the page of `item` and can hand it over (the
-    // tab is there, it isn't a placeholder, nor in a split view).
+    // tab is there, it isn't a placeholder, nor in a split view, where it
+    // is on screen).
     virtual bool CanGivePage(const std::string& item) const = 0;
     // Whether the window has a placeholder for `item` to take a page into.
     virtual bool CanTakePage(const std::string& item) const = 0;

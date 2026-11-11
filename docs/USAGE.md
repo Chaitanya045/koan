@@ -423,8 +423,9 @@ its row with the last title and icon it had there, without loading it.
 Closing a window hands its pages to the window you used last. Closing
 such a tab closes it in every window, like Zen, and so does unpinning it or
 taking it out of the Essentials in one window: it stays there as a normal
-tab and closes in the others. Tabs in a split view, and an agent container's tabs, aren't
-synced.
+tab and closes in the others. An agent container's tabs aren't synced, nor
+is a split view itself: a pinned split's tabs are pinned in every window, and
+the page stays in the window with the split.
 
 ## Spaces
 

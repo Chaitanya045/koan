@@ -19,6 +19,9 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/top_container_view.h"
+#include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
@@ -52,6 +55,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/view.h"
 #include "ui/views/view_tracker.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace koan {
@@ -583,6 +587,17 @@ void KoanThemeController::PaintBackground(gfx::Canvas* canvas,
                          colors->GetColor(kColorKoanThemeInactiveWindow)));
     return;
   }
+  // Floating over the page in compact mode, the sidebar and the toolbar have
+  // the page behind them, not the blur: Zen's .zen-toolbar-background
+  // (zen-compact-mode.css) is an opaque light-dark(#e9e9e9, #131313) with the
+  // window's gradient over it (its blurred acrylic-sidebar is off by
+  // default). Upstream's glass gives them full opacity there, but a
+  // translucent window's paint is see-through by itself.
+  if (SkColorGetA(now.base) < SK_AlphaOPAQUE && FloatsOverPage(view)) {
+    theme::PaintBase(
+        canvas, box,
+        view->GetColorProvider()->GetColor(kColorKoanThemeDefaultBackground));
+  }
   const double progress = SwitchProgress();
   // Zen fades the old gradient out while the new one fades in, over the
   // window's own background (none on a translucent window: the blur).
@@ -611,6 +626,13 @@ void KoanThemeController::PaintBackground(gfx::Canvas* canvas,
     theme::PaintLayers(canvas, box, now.cover_layers, now.cover * progress);
   }
   theme::PaintGrain(canvas, box, grain);
+}
+
+bool KoanThemeController::FloatsOverPage(const views::View* view) const {
+  return IsCompactModeActive(browser_view_) &&
+         (views::IsViewClass<VerticalTabStripRegionView>(view) ||
+          view == browser_view_->top_container() ||
+          view == browser_view_->toolbar());
 }
 
 std::string KoanThemeController::DescribeCurrentBackground() const {

@@ -86,6 +86,7 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
       const TabStripSelectionChange& selection) override;
   void OnTabChangedAt(tabs::TabInterface* tab,
                       TabChangeType change_type) override;
+  void OnSplitTabChanged(const SplitTabChange& change) override;
   void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
   void TabGroupedStateChanged(TabStripModel* tab_strip_model,
                               std::optional<tab_groups::TabGroupId> old_group,
@@ -143,8 +144,8 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   // --- Essentials and pinned tabs ---
 
   // The window's synced tabs, in sidebar order: its Essentials and the
-  // pinned tabs of its synced Spaces, not an agent container's tabs nor a
-  // split view's. With `assign_ids`, a tab without a sync id gets one;
+  // pinned tabs of its synced Spaces (also in a split view), not an agent
+  // container's tabs. With `assign_ids`, a tab without a sync id gets one;
   // otherwise those are left out.
   std::vector<window_sync::ItemRecord> LocalItems(bool assign_ids);
   // The tab of synced tab `item` in this window, or null.
