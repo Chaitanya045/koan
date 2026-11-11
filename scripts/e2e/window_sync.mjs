@@ -11,18 +11,49 @@
 // - a Space made in A shows in B's bottom bar (#244 step 1);
 // - nothing fatal in the log, Koan alive throughout.
 // Run by scripts/mac/suite.sh (or scripts/e2e/run.sh window_sync).
-import { browserCall, check, evalIn, finish, pages, sleep, tabMenuCommand, typeInto, viewEvent,
-         viewTree, waitFor } from './lib/koan.mjs';
+//
+// Windows open through CDP (Target.createTarget), which navigates to their
+// URL in a new window: with Zen's open-link-in-new-unsynced-window on, that
+// is a New Blank Window, never synced. prefs/window_sync.json turns it off
+// (koan.window_sync.open_links_in_blank_window), so they join like a New
+// Window does.
+//
+// On macOS the tab and folder context menus are native NSMenus
+// (MenuRunnerImplMac), which UI DevTools can't see or click, and Close
+// Window is the main menu's: the Essential is pinned and window C closed by
+// the test_helper extension (window_sync.flags), and the folder steps, which
+// need its menus, are skipped.
+import { browserCall, check, connect, evalIn, finish, pages, sleep, tabMenuCommand, typeInto,
+         viewEvent, viewTree, waitFor } from './lib/koan.mjs';
 import { clickMenuItem } from './lib/folders.mjs';
-import { ACCEL, ALT, CTRL, SHIFT, alive, clickThroughRoot, fatalInLog, key, openWindow,
-         startServer, widgetWithTab, windowOf, windows } from './lib/mac.mjs';
+import { ACCEL, ALT, CTRL, IS_MAC, SHIFT, alive, askTestHelper, clickThroughRoot, closeWindowOf,
+         fatalInLog, key, openWindow, skipped, startServer, widgetWithTab, windowOf,
+         windows } from './lib/mac.mjs';
 
 const server = await startServer();
 const U = t => server.url(`/p?t=${encodeURIComponent(t)}`);
 const PIN1 = U('Pin one'), PIN2 = U('Pin two'), PIN3 = U('Pin three'), FOLDER_TAB = U('Folder tab');
 const ESS = U('Essential one'), A_ONLY = U('Window A');
 
-const pageByUrl = async url => (await pages()).find(p => p.url === url);
+const NATIVE_MENUS = IS_MAC;
+// CDP lists a placeholder too (a tab whose contents have no renderer, with
+// the page's history copied, like a discarded tab), at the page's URL. Only
+// a live page answers an evaluation; a placeholder's never does.
+async function isLive(page) {
+  const c = await connect(page.webSocketDebuggerUrl);
+  const r = await Promise.race([
+    c.send('Runtime.evaluate', { expression: '1', returnByValue: true }), sleep(1500)]);
+  c.close();
+  return r?.result?.result?.value === 1;
+}
+const livePages = async url => {
+  const live = [];
+  for (const p of (await pages()).filter(p => p.url === url)) {
+    if (await isLive(p)) live.push(p);
+  }
+  return live;
+};
+const pageByUrl = async url => (await livePages(url))[0];
 async function newTab(url) {
   await browserCall('Target.createTarget', { url, background: false });
   return waitFor(() => pageByUrl(url), 8000);
@@ -35,7 +66,6 @@ const rowFor = (w, url) => rowsIn(w, p => p.PinnedUrl === url)[0];
 const folderRows = w => (w?.views ?? []).filter(v => v.cls === 'KoanFolderRowView')
     .map(v => ({ v, name: v.props.FolderName, collapsed: v.props.Collapsed === 'true',
                  count: +v.props.TabCount }));
-const livePages = async url => (await pages()).filter(p => p.url === url);
 
 // --- Window A: two pinned tabs, an Essential, a folder of a pinned tab.
 const a = await newTab(A_ONLY);
@@ -48,11 +78,20 @@ let vs = await viewTree();
 let A = await widgetA(vs);
 check('A: four pinned tabs', [PIN1, PIN2, PIN3, FOLDER_TAB].every(u => rowFor(A, u)),
       rowsIn(A, p => !!p.PinnedUrl).map(r => r.props.PinnedUrl).join(' '));
-await newTab(ESS);
-check('A: "Add to Essentials" on a tab',
-      await tabMenuCommand({ title: 'Essential one' }, 'kKoanAddToEssentialsMenuItem'));
+const essential = await newTab(ESS);
+if (NATIVE_MENUS) {
+  // An extension's pin, which makes an Essential as the menu item does.
+  await askTestHelper(essential, 'pin-tab', 1500);
+  check('A: an Essential (pinned by an extension)',
+        rowsIn(await widgetA(), p => p.Essential === 'true').length >= 1);
+} else {
+  check('A: "Add to Essentials" on a tab',
+        await tabMenuCommand({ title: 'Essential one' }, 'kKoanAddToEssentialsMenuItem'));
+}
 // The folder: the tab menu's Move to Folder > New Folder, named "Reading".
-{
+if (NATIVE_MENUS) {
+  skipped('A: a folder "Reading" holds the pinned tab', 'needs the native tab menu');
+} else {
   const made = await tabMenuCommand({ title: 'Folder tab' }, 'kKoanTabNewFolderItem',
                                     { via: 'kKoanMoveToFolderItem' });
   const field = await waitFor(async () => (await viewTree()).find(
@@ -74,8 +113,10 @@ let B = await widgetB(vs);
 check('B: has the pinned tabs as rows', [PIN1, PIN2, PIN3].every(u => rowFor(B, u)),
       rowsIn(B, p => !!p.PinnedUrl).map(r => r.props.PinnedUrl).join(' '));
 check('B: has the Essential', rowsIn(B, p => p.Essential === 'true').length >= 1);
-check('B: has the folder "Reading"', folderRows(B).some(r => r.name === 'Reading'),
-      JSON.stringify(folderRows(B).map(r => r.name)));
+if (!NATIVE_MENUS) {
+  check('B: has the folder "Reading"', folderRows(B).some(r => r.name === 'Reading'),
+        JSON.stringify(folderRows(B).map(r => r.name)));
+}
 check('B: never got A\'s normal tab (only pinned items sync)',
       !(B?.views ?? []).some(v => v.cls === 'TabTitle' && v.props.Text === 'Window A'));
 check('One live page per synced item (B\'s rows are placeholders)',
@@ -120,14 +161,21 @@ check('P1: a title change in A shows in B\'s placeholder row', !!titled);
 }
 // #264 step 3: unpinning in A keeps it in A as a normal tab, closes it in B.
 {
-  await key(await pageByUrl(PIN3), 'd', ACCEL | SHIFT, 1500);
+  // Toggle Pin Tab acts on the window's active tab.
+  const pin3 = await pageByUrl(PIN3);
+  await browserCall('Target.activateTarget', { targetId: pin3.id });
+  await sleep(500);
+  await key(pin3, 'd', ACCEL | SHIFT, 1500);
   const gone = await waitFor(async () => !rowFor(await widgetB(), PIN3), 4000);
   check('Unpinning in A closes it in B', !!gone);
   check('...and A keeps it as a normal tab', !!(await pageByUrl(PIN3)));
 }
 
 // --- Folders: a rename syncs, a collapse doesn't (#264).
-{
+if (NATIVE_MENUS) {
+  skipped('Folders: a rename in A syncs to B, a collapse doesn\'t, a third window starts collapsed',
+          'needs the native folder menu');
+} else {
   vs = await viewTree();
   A = await widgetA(vs);
   const folder = folderRows(A).find(r => r.name === 'Reading');
@@ -166,7 +214,7 @@ check('P1: a title change in A shows in B\'s placeholder row', !!titled);
   // Close Window (C also holds the synced placeholders, so closing its one
   // normal tab would leave it open).
   const cPage = (await pages()).find(p => p.id === c.targetId);
-  if (cPage) await key(cPage, 'w', ACCEL | SHIFT, 1500);
+  if (cPage) await closeWindowOf(cPage, 1500);
   check('Window C closed', !!(await waitFor(async () =>
       !(await windows()).some(w => w.windowId === c.windowId), 8000)));
 }

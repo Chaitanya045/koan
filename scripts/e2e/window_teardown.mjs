@@ -5,11 +5,16 @@
 // "(widget gone)" (KoanBrowserViewController::TearDown() ran before the
 // widget went; window_teardown.flags turns its VLOG on).
 //
+// The windows open through CDP (Target.createTarget), a navigation in a new
+// window: prefs/window_teardown.json turns off Zen's open-link-in-new-
+// unsynced-window, so they are normal windows (Spaces, window sync), not New
+// Blank Windows.
+//
 // Layouts: single toolbar (the default), compact mode, native fullscreen,
 // compact + fullscreen, tabs on the right. The window closes with the Close
 // Window shortcut (Cmd+Shift+W on macOS; the red button runs the same
 // BrowserView::Close path) through the real keyboard when suite.sh allows
-// real input. Else, on macOS, through the window_closer test extension
+// real input. Else, on macOS, through the test_helper extension
 // (window_teardown.flags; synthetic keys don't reach the menu that owns the
 // key), and through CDP elsewhere; the quit, through CDP's Browser.close.
 // Run by scripts/mac/suite.sh (or scripts/e2e/run.sh window_teardown off
@@ -79,7 +84,7 @@ await secondWindowCase('Tabs on the right', { right: true });
 // The last tab of a second window closed: like Zen (browser.tabs.
 // closeWindowWithLastTab is off), the window stays, on Zen's empty tab
 // (KeepWindowOnLastTabClosed()), and nothing is torn down. Then Close Window
-// from that tab (navigated to a local page, which can ask window_closer).
+// from that tab (navigated to a local page, which can ask test_helper).
 {
   const tornBefore = torn(), goneBefore = gone();
   const w = await openWindow(server.url('/p?t=Last%20tab'));

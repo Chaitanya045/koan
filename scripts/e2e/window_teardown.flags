@@ -1,5 +1,5 @@
 # KoanBrowserViewController::TearDown()'s "Koan: window torn down" line (#193).
 --vmodule=koan_browser_view_controller=1
-# The window_closer extension: closeWindowOf() in lib/mac.mjs ({root} is the
+# The test_helper extension: closeWindowOf() in lib/mac.mjs ({root} is the
 # repo; scripts/mac/suite.sh expands it).
---load-extension={root}/scripts/e2e/extensions/window_closer
+--load-extension={root}/scripts/e2e/extensions/test_helper

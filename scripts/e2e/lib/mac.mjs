@@ -140,26 +140,32 @@ export async function openWindow(url) {
   await sleep(2500);
   return { targetId, windowId: (await windowOf(targetId))?.windowId };
 }
-// Close Window for `page` (a 127.0.0.1 page) without real input. On macOS
-// the Close Window and Close Tab keys belong to the main menu, which
-// synthetic (CDP) keys never reach, so the page asks the window_closer test
-// extension (the test's .flags loads it) to close its window:
-// chrome.windows.remove() runs BrowserView::Close(), as the menu item and the
-// red button do. Elsewhere it sends the key. Returns false when the page
-// can't ask (no extension).
-const WINDOW_CLOSER_ID = 'efmifboglkpejppaiocdcajnkhbfoofo';
+// Has the test_helper extension (loaded by the test's .flags) do `action`
+// ('close-window', 'pin-tab') for `page`, a 127.0.0.1 page: for what
+// synthetic input can't reach on macOS. Returns whether the page could ask.
+const TEST_HELPER_ID = 'efmifboglkpejppaiocdcajnkhbfoofo';
+export async function askTestHelper(page, action, settle = 800) {
+  const asked = await onPage(page, c => c.send('Runtime.evaluate', {
+    expression: `!!globalThis.chrome?.runtime?.sendMessage &&
+        (chrome.runtime.sendMessage('${TEST_HELPER_ID}', '${action}').catch(() => {}), true)`,
+    returnByValue: true }));
+  await sleep(settle);
+  return asked.result?.result?.value === true;
+}
+
+// Close Window for `page` without real input. On macOS the Close Window and
+// Close Tab keys belong to the main menu, which synthetic (CDP) keys never
+// reach, so test_helper closes the window: chrome.windows.remove() runs
+// BrowserView::Close(), as the menu item and the red button do. Elsewhere
+// it sends the key.
 export async function closeWindowOf(page, settle = 800) {
   if (!IS_MAC) {
     await key(page, 'w', ACCEL | SHIFT, settle);
     return true;
   }
-  const asked = await onPage(page, c => c.send('Runtime.evaluate', {
-    expression: `!!globalThis.chrome?.runtime?.sendMessage &&
-        (chrome.runtime.sendMessage('${WINDOW_CLOSER_ID}', 'close-window').catch(() => {}), true)`,
-    returnByValue: true }));
-  await sleep(settle);
-  return asked.result?.result?.value === true;
+  return askTestHelper(page, 'close-window', settle);
 }
+
 export async function setWindowState(windowId, windowState) {
   await browserCall('Browser.setWindowBounds', { windowId, bounds: { windowState } });
 }

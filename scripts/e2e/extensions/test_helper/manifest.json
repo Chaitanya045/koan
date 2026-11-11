@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Koan e2e window closer",
+  "name": "Koan e2e test helper",
   "version": "1.0",
-  "description": "scripts/e2e/lib/mac.mjs closeWindowOf(): closes the window of the 127.0.0.1 page that asks (chrome.windows.remove, which runs BrowserView::Close like the Close Window menu item), where synthetic keys can't reach macOS's menu. The key fixes the id to efmifboglkpejppaiocdcajnkhbfoofo.",
+  "description": "scripts/e2e/lib/mac.mjs askTestHelper(): what synthetic keys and UI DevTools can't reach on macOS (the main menu, native context menus), for the 127.0.0.1 page that asks: close its window (chrome.windows.remove, which runs BrowserView::Close like the Close Window menu item), pin its tab. The key fixes the id.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz4gY/LkfjDZCLv0mR0wc5G3iIXM3YNid+ko2TW5+XBNlIt4jk8whPL9g+O4/MnaVCpD1/iJHaVrYoaqxVLDszO6E5vH0qR6BsuxzutvpNJpKwU1n/MATrweXwA/q077faZHL9nvHdJsgoNk9lMeMtjZlfF48RO8tWeJUJUKjOo9i8JTScyWqcwumkbD4Ohg60kfPnM6ERGw616D/Zj25vVoU96X2VPF1TImHfyT+r+Viyyer1fT00/oFpyOxnF8UQajxvig1sqG0zSbuLV7tnA2HAxa1mS9igqhbGko1MANbXURiyl8zvg7OCb6y5xJHq9sMHJ5nGLCJuO3DC0zr0wIDAQAB",
   "background": { "service_worker": "worker.js" },
   "externally_connectable": { "matches": ["http://127.0.0.1/*"] }
