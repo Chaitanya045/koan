@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
-index 83d474959c614edfc4bd253328559e8172d1b4b1..8d7268ee3c287846daf3341fe31bd61db69686ec 100644
+index b4311a1dd972cbb3c44b315a93c19f985f884b9f..49865014fed4621e783d0cd0e95a24ab21208925 100644
 --- a/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
 +++ b/chrome/browser/ui/omnibox/chrome_omnibox_client.cc
-@@ -114,6 +114,7 @@
+@@ -116,6 +116,7 @@
  #include "content/public/browser/web_contents_observer.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/constants.h"
@@ -10,8 +10,8 @@ index 83d474959c614edfc4bd253328559e8172d1b4b1..8d7268ee3c287846daf3341fe31bd61d
  #include "net/traffic_annotation/network_traffic_annotation.h"
  #include "services/metrics/public/cpp/ukm_builders.h"
  #include "services/metrics/public/cpp/ukm_recorder.h"
-@@ -966,6 +967,18 @@ void ChromeOmniboxClient::OnAutocompleteAccept(
-                     {header.first, ": ", header.second, "\r\n"});
+@@ -985,6 +986,18 @@ void ChromeOmniboxClient::OnAutocompleteAccept(
+     }
    }
  
 +  // Koan: an open tab's row switches to its tab; the URL bar opened in place
@@ -28,4 +28,4 @@ index 83d474959c614edfc4bd253328559e8172d1b4b1..8d7268ee3c287846daf3341fe31bd61d
 +
    // Store the details necessary to open the omnibox match via browser commands.
    location_bar_->set_navigation_params(LocationBar::NavigationParams(
-       destination_url, disposition, transition, match_selection_timestamp,
+       url, disposition, transition, match_selection_timestamp,
