@@ -14,10 +14,12 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -28,6 +30,10 @@
 
 class BrowserView;
 
+namespace gfx {
+class AnimationContainer;
+}  // namespace gfx
+
 namespace ui {
 class EventHandler;
 }  // namespace ui
@@ -35,12 +41,14 @@ class EventHandler;
 namespace views {
 class FocusManager;
 class View;
+class ViewTracker;
 class Widget;
 }  // namespace views
 
 namespace koan {
 
 class KoanLibraryView;
+struct LibraryMotion;
 
 // Zen's Library for one window (zen/library/ZenLibrary.mjs): a full-height
 // panel that slides in over the sidebar, with section tabs (Downloads,
@@ -133,7 +141,17 @@ class KoanLibraryController : public TabStripModelObserver,
   void DestroyWidget();
   // Slides the panel towards `target` (0 closed, 1 open) on Zen's spring.
   void AnimateTo(double target);
+  // Steps the spring with the window's compositor frames.
+  void UseCompositorFrames();
+  // Moves the panel, and the sidebar under it, to `progress`
+  // (GetLibraryMotion(): the sidebar collapses first in compact mode, else
+  // grows into the panel).
   void SetProgress(double progress);
+  // The sidebar (the vertical tab strip's region) while it is shown.
+  views::View* GetSidebar() const;
+  void MoveSidebar(views::View* sidebar, const LibraryMotion& motion);
+  // The Library has closed: the sidebar is back as it was.
+  void RestoreSidebar();
   void Finish();
   void ReleaseKeepAlive();
   void ScheduleCleanup();
@@ -158,6 +176,9 @@ class KoanLibraryController : public TabStripModelObserver,
 
   // Open/close spring: progress runs from `from_` to `target_`.
   gfx::LinearAnimation slide_{this};
+  scoped_refptr<gfx::AnimationContainer> frames_container_;
+  // The sidebar's children the Library gave a layer to move them.
+  std::vector<std::unique_ptr<views::ViewTracker>> sidebar_layered_;
   double progress_ = 0;
   double from_ = 0;
   double target_ = 0;

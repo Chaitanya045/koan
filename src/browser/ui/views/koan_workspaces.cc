@@ -2441,6 +2441,8 @@ void KoanWorkspaceController::EndSwipe(float amount, float velocity) {
   if (!drag_.live()) {
     swipe_action_ = action;
     CancelSwipeEdgeAction(/*animate=*/true);
+    // (Whatever the swipe left off its place goes back too.)
+    SpringBackSwipe();
     return;
   }
   drag_.Release();
@@ -2526,12 +2528,11 @@ void KoanWorkspaceController::CancelSwipe(bool animate) {
   swipe_timer_.Stop();
   swipe_->Cancel();
   CancelSwipeEdgeAction(animate);
-  // (Only a drag leaves the views off their place; a slide in progress isn't
-  // this swipe's to stop.)
-  const bool was_dragging = drag_.live();
+  // Whatever the swipe moved (the drag, the add-Space swipe's offset) goes
+  // back to rest: on the spring-back's timing, or at once while the sidebar
+  // goes. A slide in progress isn't this swipe's to stop (both leave it).
   drag_.Reset();
-  if (animate && was_dragging && header_ &&
-      gfx::Animation::ShouldRenderRichAnimation()) {
+  if (animate && header_) {
     SpringBackSwipe();
   } else {
     DropSwitchLayers();
@@ -2543,26 +2544,62 @@ void KoanWorkspaceController::OnSwipeTimeout() {
 }
 
 void KoanWorkspaceController::SpringBackSwipe() {
-  if (switch_layered_views_.empty()) {
+  // (A slide under way isn't the swipe's: it ends at rest by itself.)
+  if (!slide_outs_.empty()) {
+    return;
+  }
+  // Every view the swipe moved, also one that had a layer of its own before
+  // (which switch_layered_views_ doesn't track).
+  std::vector<views::View*> views = GetOffsetViews();
+  if (views.empty() || !gfx::Animation::ShouldRenderRichAnimation()) {
+    DropSwitchLayers();
     return;
   }
   views::AnimationBuilder builder;
   builder.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  // Once at rest, the layers go if nothing needs them. (Cut short by a new
+  // drag or slide, those keep the layers and put the views where they want.)
   builder.OnEnded(base::BindOnce(&KoanWorkspaceController::DropSwitchLayers,
                                  weak_factory_.GetWeakPtr()));
   auto& rest = builder.Once().SetDuration(kSwitchAnimationDuration);
+  for (views::View* view : views) {
+    rest.SetTransform(view, gfx::Transform(), gfx::Tween::EASE_OUT);
+  }
+}
+
+std::vector<views::View*> KoanWorkspaceController::GetOffsetViews() const {
+  std::vector<views::View*> views;
+  const auto add = [&views](views::View* view) {
+    // Off rest now, or on the way somewhere (a spring-back under way counts:
+    // a second one takes it on from where it is).
+    if (view && view->layer() && !std::ranges::contains(views, view) &&
+        (!view->layer()->transform().IsIdentity() ||
+         !view->layer()->GetTargetTransform().IsIdentity())) {
+      views.push_back(view);
+    }
+  };
   for (const std::unique_ptr<views::ViewTracker>& tracker :
        switch_layered_views_) {
-    if (views::View* view = tracker->view(); view && view->layer()) {
-      rest.SetTransform(view, gfx::Transform(), gfx::Tween::EASE_OUT);
+    add(tracker->view());
+  }
+  if (header_) {
+    add(header_.get());
+    if (auto* tab_strip = views::AsViewClass<TabStripView>(header_->parent())) {
+      add(tab_strip->unpinned_tabs_scroll_view());
     }
   }
+  return views;
 }
 
 void KoanWorkspaceController::DropSwitchLayers() {
   if (!slide_outs_.empty() || drag_.live()) {
     return;
+  }
+  // A view that had a layer before the swipe keeps it, at rest.
+  for (views::View* view : GetOffsetViews()) {
+    view->layer()->GetAnimator()->AbortAllAnimations();
+    view->layer()->SetTransform(gfx::Transform());
   }
   for (const std::unique_ptr<views::ViewTracker>& tracker :
        std::exchange(switch_layered_views_, {})) {

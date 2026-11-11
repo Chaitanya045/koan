@@ -70,9 +70,11 @@ source_set("sidebar_curve") {
 # Zen's two-finger swipe between Spaces (MPL-2.0, see koan_swipe_tracker.h):
 # the gesture state machine and the formulas, and its edge actions (the
 # Library, a new Space: koan_swipe_edge_actions.h), plain C++ so that the unit
-# tests can use them.
+# tests can use them. Also the Library's open motion (koan_library_motion.h).
 source_set("swipe_tracker") {
   sources = [
+    "koan_library_motion.cc",
+    "koan_library_motion.h",
     "koan_swipe_edge_actions.cc",
     "koan_swipe_edge_actions.h",
     "koan_swipe_tracker.cc",
@@ -241,6 +243,7 @@ test("koan_views_unittests") {
     "koan_content_radius_unittest.cc",
     "koan_extension_drop_unittest.cc",
     "koan_glass_tint_unittest.cc",
+    "koan_library_motion_unittest.cc",
     "koan_lights_geometry_unittest.cc",
     "koan_loading_bar_unittest.cc",
     "koan_pinned_site_unittest.cc",
