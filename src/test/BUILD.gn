@@ -14,6 +14,7 @@ test("koan_unittests") {
     "//koan/browser/koan_library_logic_unittest.cc",
     "//koan/browser/koan_prefs_unittest.cc",
     "//koan/browser/koan_space_title_unittest.cc",
+    "//koan/browser/ui/webui/koan_settings_url_unittest.cc",
     "//koan/browser/updates/koan_update_logic_unittest.cc",
     "//koan/browser/window_sync/koan_window_sync_model_unittest.cc",
   ]
@@ -29,6 +30,7 @@ test("koan_unittests") {
     "//koan/browser:library_logic",
     "//koan/browser:prefs",
     "//koan/browser:space_title",
+    "//koan/browser/ui/webui:settings_url",
     "//koan/browser/updates:update_logic",
     "//koan/browser/window_sync:model",
     "//testing/gmock",

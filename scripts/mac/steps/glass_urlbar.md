@@ -1,6 +1,6 @@
 # Mac steps: the glass URL bar (#105)
 
-For the Mac loop and the hands-on tester. DCHECK build. "Glass URL bar" (`chrome://koan-settings`, URL Bar) is **off** by
+For the Mac loop and the hands-on tester. DCHECK build. "Glass URL bar" (`chrome://settings/koan/looks`, URL Bar) is **off** by
 default: rows 1 and 2 check that, the rest turn it on. Judge the blur and the fill **on the real screen**. After every row:
 `grep -E ':FATAL:|Check failed' <koan log>` is empty and there is no new `.ips`.
 

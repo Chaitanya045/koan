@@ -96,7 +96,7 @@ once-a-minute CPU measurement stays: energy saver's freezing needs it.
 
 Freezing is an upstream experiment, off by default in Chromium; Koan turns
 it on (`koan_feature_overrides.cc`). Users turn it off in Koan's settings
-(`chrome://koan-settings`, Tab Management > Performance > "Freeze background
+(Settings, Tab Management > Performance > "Freeze background
 tabs"), which sets Chromium's own `performance_tuning.tab_freezing.enabled`
 (local state; the `BackgroundTabFreezingEnabled` enterprise policy can
 manage it, and the row is then greyed out, "Set by your organization").

@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 565bd58..31b2812 100644
+index 565bd580ba6172469d31079a4e455eb05020488c..cdaf40bfcbba825c5766bd38f4e07741ba25d0da 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -411,6 +411,11 @@
+@@ -411,6 +411,12 @@
  #include "google_apis/google_api_keys.h"
  #include "gpu/config/gpu_switches.h"
  #include "ipc/ipc_channel_proxy.h"
@@ -11,10 +11,11 @@ index 565bd58..31b2812 100644
 +#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_glance.h"
 +#include "koan/browser/ui/views/koan_window_background.h"
++#include "koan/browser/ui/webui/koan_settings_url.h"
  #include "media/base/media_switches.h"
  #include "media/media_buildflags.h"
  #include "media/mojo/buildflags.h"
-@@ -3160,6 +3165,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3160,6 +3166,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -23,7 +24,7 @@ index 565bd58..31b2812 100644
      }
  
  #if BUILDFLAG(IS_CHROMEOS)
-@@ -4125,6 +4132,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+@@ -4125,6 +4133,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
                                         ui::ColorProviderKey::ColorMode::kLight
                                     ? blink::mojom::PreferredColorScheme::kLight
                                     : blink::mojom::PreferredColorScheme::kDark;
@@ -38,7 +39,7 @@ index 565bd58..31b2812 100644
      }
      const auto effective_page_colors =
          PageColorsController::GetEffectivePageColors(*profile.GetPrefs());
-@@ -4141,6 +4156,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+@@ -4141,6 +4157,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
            web_contents->GetColorProvider().GetColor(kColorToolbar))
            ? blink::mojom::PreferredColorScheme::kDark
            : blink::mojom::PreferredColorScheme::kLight;
@@ -53,7 +54,7 @@ index 565bd58..31b2812 100644
  #endif
  
  #if BUILDFLAG(ENABLE_GUEST_VIEW)
-@@ -4633,6 +4656,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
+@@ -4633,6 +4657,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
      }
    }
  
@@ -67,7 +68,19 @@ index 565bd58..31b2812 100644
    const BlockedWindowParams blocked_params(
        target_url, opener->GetGlobalFrameToken(), source_origin,
        opener->GetSiteInstance(), referrer, frame_name, disposition, features,
-@@ -7335,6 +7365,14 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
+@@ -5237,6 +5268,11 @@ void ChromeContentBrowserClient::BrowserURLHandlerCreated(
+     part->BrowserURLHandlerCreated(handler);
+   }
+ 
++  // Koan: chrome://koan-settings opens its panes in chrome://settings
++  // (koan/browser/ui/webui/koan_settings_url.h).
++  handler->AddHandlerPair(&koan::settings::RewriteLegacySettingsURL,
++                          &koan::settings::ReverseLegacySettingsURL);
++
+   // Handler to rewrite chrome://about and chrome://sync URLs.
+   handler->AddHandlerPair(&HandleChromeAboutAndChromeSyncRewrite,
+                           BrowserURLHandler::null_handler());
+@@ -7335,6 +7371,14 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
  bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
      content::RenderFrameHost* rfh,
      const url::Origin& caller_origin) {
@@ -82,7 +95,7 @@ index 565bd58..31b2812 100644
    const Profile* profile =
        Profile::FromBrowserContext(rfh->GetBrowserContext());
    if (profile->GetPrefs()->GetBoolean(
-@@ -7511,6 +7549,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
+@@ -7511,6 +7555,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
    }
  #endif  // BUILDFLAG(IS_CHROMEOS)
  
@@ -98,7 +111,7 @@ index 565bd58..31b2812 100644
    if (!http_auth_coordinator_) {
      http_auth_coordinator_ = CreateHttpAuthCoordinator();
    }
-@@ -7591,6 +7638,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
+@@ -7591,6 +7644,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
      // applications.
      return false;
    }

@@ -13,7 +13,7 @@
 
 namespace koan {
 
-// The pref names are what profiles on disk and chrome://koan-settings use.
+// The pref names are what profiles on disk and Koan's settings use.
 TEST(KoanPrefsTest, ProfilePrefsAreInKoanNamespace) {
   sync_preferences::TestingPrefServiceSyncable prefs;
   prefs::RegisterProfilePrefs(prefs.registry());

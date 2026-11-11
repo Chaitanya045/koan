@@ -31,19 +31,19 @@ KoanAgentContainersHandler::~KoanAgentContainersHandler() = default;
 
 void KoanAgentContainersHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "getAgentContainers",
+      "koanGetAgentContainers",
       base::BindRepeating(&KoanAgentContainersHandler::HandleGet,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "createAgentContainer",
+      "koanCreateAgentContainer",
       base::BindRepeating(&KoanAgentContainersHandler::HandleCreate,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "deleteAgentContainer",
+      "koanDeleteAgentContainer",
       base::BindRepeating(&KoanAgentContainersHandler::HandleDelete,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "setAgentContainerGrant",
+      "koanSetAgentContainerGrant",
       base::BindRepeating(&KoanAgentContainersHandler::HandleSetGrant,
                           base::Unretained(this)));
 }
@@ -171,7 +171,7 @@ base::DictValue KoanAgentContainersHandler::AgentContainers() const {
 
 void KoanAgentContainersHandler::NotifyChanged() {
   if (IsJavascriptAllowed()) {
-    FireWebUIListener("agent-containers-changed", AgentContainers());
+    FireWebUIListener("koan-agent-containers-changed", AgentContainers());
   }
 }
 

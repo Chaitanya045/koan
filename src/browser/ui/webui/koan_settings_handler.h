@@ -20,15 +20,18 @@ class PrefService;
 
 namespace koan {
 
-// Backs chrome://koan-settings. Messages from the page:
-//   getSettings()            -> everything the page shows (see Settings())
-//   setPref(pref, value)     sets a pref that has a row in koan_settings_rows
-//   setShortcut(id, key)     key: {key, modifiers}, or null for "not set"
-//   resetShortcuts()         back to the defaults
-//   setEditing(editing)      suspends the window's shortcuts while a key is
-//                            being recorded, so the page sees every key
-// and events to it: "pref-changed" (pref, value) and "shortcuts-changed"
-// (shortcuts), so the page follows changes made elsewhere (e.g. Ctrl+S).
+// Backs Koan's panes in chrome://settings (koan_settings_ui.h). Messages from
+// the page, prefixed because the page shares one WebUI with Chromium's
+// settings handlers (a second handler for a name would be ignored):
+//   koanGetSettings()         -> everything the page shows (see Settings())
+//   koanSetPref(pref, value)  sets a pref that has a row in koan_settings_rows
+//   koanSetShortcut(id, key)  key: {key, modifiers}, or null for "not set"
+//   koanResetShortcuts()      back to the defaults
+//   koanSetEditing(editing)   suspends the window's shortcuts while a key is
+//                             being recorded, so the page sees every key
+// and events to it: "koan-pref-changed" (pref, value) and
+// "koan-shortcuts-changed" (shortcuts), so the page follows changes made
+// elsewhere (e.g. Ctrl+S).
 class KoanSettingsHandler : public content::WebUIMessageHandler,
                             public views::WidgetObserver {
  public:

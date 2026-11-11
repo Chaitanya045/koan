@@ -35,7 +35,7 @@ TEST(KoanAgentReachTest, ReachableUrls) {
 // T7: privileged pages and the agent control page itself are never reached.
 TEST(KoanAgentReachTest, UnreachableUrls) {
   for (std::string_view url :
-       {"chrome://settings", "chrome://koan-settings/agent",
+       {"chrome://settings", "chrome://settings/koan/agents",
         "chrome-untrusted://print", "chrome-extension://abc/popup.html",
         "devtools://devtools/bundled/inspector.html", "file:///etc/hosts",
         "view-source:https://example.com", "filesystem:https://e.com/t/a",

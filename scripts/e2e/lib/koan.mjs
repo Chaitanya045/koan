@@ -224,8 +224,26 @@ export async function visiblePage() {
   return null;
 }
 
-// Calls chrome://koan-settings' handler from `page` (a settings tab), as the
-// page itself does.
+// Koan's panes are a section of chrome://settings (koan_settings_ui.h). In a
+// settings tab, `koanSettingsRoot` is the panes' shadow root (Chromium's
+// own shadow roots hide it from document.querySelector()).
+//
+// An expression that shows Koan's pane `id` (looks, tabs, shortcuts, agents)
+// through Chromium's router, as its menu does.
+export const showPane = id => `import('chrome://settings/settings.js').then(
+    ({Router}) => { const r = Router.getInstance();
+                    r.navigateTo(r.getRouteForPath('/koan/${id}')); })`;
+// An expression for the labels of the Koan items in Chromium's menu.
+export const koanMenuItems = `[...document.querySelector('settings-ui').shadowRoot
+    .querySelector('#leftMenu').shadowRoot.querySelectorAll('a[id^="koan"]')]
+    .map(a => a.textContent.trim())`;
+// An expression that searches with Chromium's toolbar search, as typing does.
+export const searchSettings = text => `import('chrome://settings/settings.js').then(
+    ({Router, routes}) => Router.getInstance().navigateTo(routes.BASIC,
+        new URLSearchParams({search: ${JSON.stringify(text)}})))`;
+
+// Calls Koan's settings handler from `page` (a settings tab), as the panes
+// themselves do.
 export function settingsCall(page, method, ...args) {
   return evalIn(page, `import('chrome://resources/js/cr.js').then(
       m => m.sendWithPromise(${JSON.stringify(method)},
@@ -625,7 +643,7 @@ export function finish() {
 }
 
 // Sets a pref through a page opened in the background, then closes it:
-// a Koan pref with a settings row (chrome://koan-settings' handler), or one
+// a Koan pref with a settings row (Koan's settings handler), or one
 // of Chromium's (chrome://settings).
 async function setPrefThrough(url, expression) {
   const targetId = (await browserCall('Target.createTarget',
@@ -636,9 +654,9 @@ async function setPrefThrough(url, expression) {
   await sleep(500);
   return value;
 }
-export const setKoanPref = (pref, value) => setPrefThrough('chrome://koan-settings',
+export const setKoanPref = (pref, value) => setPrefThrough('chrome://settings/koan/looks',
     `import('chrome://resources/js/cr.js').then(m => m.sendWithPromise(
-         'setPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
+         'koanSetPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
 export const setChromePref = (pref, value) => setPrefThrough('chrome://settings',
     `new Promise(r => chrome.settingsPrivate.setPref(${JSON.stringify(pref)},
          ${JSON.stringify(value)}, '', r))`);

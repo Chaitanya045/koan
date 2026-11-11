@@ -275,9 +275,9 @@ async function settingsPage(url, expression) {
   await browser.send('Target.closeTarget', { targetId: id });
   return value;
 }
-const setKoanPref = (pref, value) => settingsPage('chrome://koan-settings',
+const setKoanPref = (pref, value) => settingsPage('chrome://settings/koan/looks',
     `import('chrome://resources/js/cr.js').then(m => m.sendWithPromise(
-         'setPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
+         'koanSetPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
 const setChromePref = (pref, value) => settingsPage('chrome://settings/performance',
     `new Promise(r => chrome.settingsPrivate.setPref(${JSON.stringify(pref)},
          ${JSON.stringify(value)}, '', r))`);

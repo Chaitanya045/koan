@@ -16,7 +16,7 @@
 // Koan's keyboard shortcuts as data: every action with its Zen group and
 // label, the default keys, and the user's own keys from the settings page
 // (prefs::kShortcuts). Shared by the per-window KoanShortcutController,
-// which runs them, and chrome://koan-settings, which edits them.
+// which runs them, and Koan's settings, which edits them.
 namespace koan::shortcuts {
 
 enum class Action {

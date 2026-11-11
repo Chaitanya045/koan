@@ -68,8 +68,8 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
       policy {
         cookies_allowed: NO
         setting:
-          "chrome://koan-settings, Look and Feel > Updates > Check for "
-          "updates."
+          "Settings (chrome://settings/koan/looks), Look and Feel > Updates > "
+          "Check for updates."
         policy_exception_justification: "Not implemented."
       })");
 

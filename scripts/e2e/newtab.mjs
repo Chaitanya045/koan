@@ -3,7 +3,7 @@
 // near-black in the dark shadcn look; the theme's new tab page colour in the
 // default Zen look) that loads nothing else and runs no script (like Zen's),
 // follows the window's look, and is right after another new tab page closed;
-// chrome://koan-settings lets the user choose Chromium's own page instead. (Ctrl+T opening the floating URL bar
+// Koan's settings (chrome://settings/koan/looks) let the user choose Chromium's own page instead. (Ctrl+T opening the floating URL bar
 // rather than a tab is urlbar's; newtab_custom checks that a new tab page set
 // by policy wins.)
 //
@@ -125,10 +125,10 @@ await tab.close();
 const [first] = await pages();
 await front(first);
 const settings = (await browserCall('Target.createTarget',
-    { url: 'chrome://koan-settings', background: true })).result.targetId;
+    { url: 'chrome://settings/koan/looks', background: true })).result.targetId;
 const settingsPage = await waitFor(async () => (await pages()).find(p => p.id === settings));
-await waitFor(() => evalIn(settingsPage, `document.querySelectorAll('.category').length > 0`));
-const row = `document.querySelector('[data-pref="koan.newtab.page"]')`;
+await waitFor(() => evalIn(settingsPage, `koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`));
+const row = `koanSettingsRoot.querySelector('[data-pref="koan.newtab.page"]')`;
 check('Koan\'s settings has a "New tab page" choice, Blank page by default',
       await evalIn(settingsPage, `${row}?.querySelector('select')?.selectedOptions[0]?.text`) ===
       'Blank page');

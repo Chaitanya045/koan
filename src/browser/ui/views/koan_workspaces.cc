@@ -513,7 +513,7 @@ void KoanWorkspaceController::OnAddedToWidget() {
   // The window takes its Space's colour from the start (upstream may have
   // given it the group's before Koan was there).
   ApplySpaceColor();
-  // The tint can be switched in chrome://koan-settings.
+  // The tint can be switched in Koan's settings.
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kWorkspaceTint,

@@ -15,7 +15,7 @@ class PrefRegistrySyncable;
 // write them through Profile::GetOriginalProfile()->GetPrefs(), never their
 // own PrefService: a write there would land in incognito's in-memory layer
 // and hide later changes, so the window would drift from the others and from
-// chrome://koan-settings.
+// Koan's settings.
 namespace koan::prefs {
 
 // The expanded sidebar's default width, and where a double-click on its edge
@@ -249,7 +249,7 @@ inline constexpr char kGlanceOpenPinnedExternalLinks[] =
 inline constexpr char kGlanceContextMenuSearch[] =
     "koan.glance.enable_contextmenu_search";
 
-// The user's own keyboard shortcuts, set in chrome://koan-settings: a
+// The user's own keyboard shortcuts, set in Koan's settings: a
 // dictionary from a shortcut's id (koan_shortcut_table.h) to its key, or to
 // no key if the user cleared it. Actions not listed keep their default keys.
 inline constexpr char kShortcuts[] = "koan.shortcuts";

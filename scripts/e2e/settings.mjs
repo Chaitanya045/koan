@@ -1,5 +1,5 @@
-// End-to-end test of chrome://koan-settings against a real build: the page
-// lists Koan's settings like Zen's preferences, changes apply live (layout,
+// End-to-end test of Koan's panes in chrome://settings against a real build:
+// the page lists Koan's settings like Zen's preferences, changes apply live (layout,
 // compact mode, Space themes), incognito windows and the page agree, the
 // page follows changes made elsewhere, the handler refuses what the page
 // can't set, and the shortcut editor rebinds, refuses conflicts, clears and
@@ -13,7 +13,7 @@
 import {
   ALT, CTRL, SHIFT, browserCall, check, countViews, evalIn, finish, createSpace, front, key,
   menuMouse, onPage, openMenus, pages, readPref, settingsCall, sleep, viewEvent, viewMouse,
-  viewTree, visiblePage, waitFor, windowTints, skipOnMac,
+  viewTree, visiblePage, waitFor, windowTints, skipOnMac, koanMenuItems, searchSettings, showPane,
 } from './lib/koan.mjs';
 skipOnMac("checks Linux's shortcut texts (Ctrl+M) and Ctrl+Tab, a main-menu key on macOS; port it to the Mac's texts and real input (#270)");
 
@@ -35,7 +35,7 @@ async function shot(page, name, colorScheme = 'light') {
 }
 
 const settingsPages = async () =>
-  (await pages()).filter(p => p.url.startsWith('chrome://koan-settings'));
+  (await pages()).filter(p => p.url.startsWith('chrome://settings'));
 const hotZones = () => countViews('KoanHotZone');
 const navViews = () => countViews('KoanSidebarNavView');
 
@@ -45,15 +45,17 @@ await front(other);
 await key(other, VK.COMMA, CTRL, ',');
 let [settings] = await waitFor(settingsPages);
 check('Ctrl+, opens Koan\'s settings', settings !== undefined);
-await waitFor(() => evalIn(settings, `document.querySelectorAll('.category').length > 0`));
+await waitFor(() => evalIn(settings, `koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`));
 
-const navItems = await evalIn(settings,
-    `[...document.querySelectorAll('#categories .category')].map(c => c.textContent.trim())`);
-check('The page lists Zen\'s panes', JSON.stringify(navItems) ===
-      JSON.stringify(['Look and Feel', 'Tab Management', 'Keyboard Shortcuts']),
+const navItems = await evalIn(settings, koanMenuItems);
+check('Chromium\'s settings menu lists Zen\'s panes first', JSON.stringify(navItems) ===
+      JSON.stringify(['Look and Feel', 'Tab Management', 'Keyboard Shortcuts',
+                      'Agent Control']),
       JSON.stringify(navItems));
+check('...in chrome://settings, on Look and Feel',
+      settings.url === 'chrome://settings/koan/looks', settings.url);
 const headings = await evalIn(settings,
-    `[...document.querySelectorAll('#pane h1, #pane h2')].map(e => e.textContent)`);
+    `[...koanSettingsRoot.querySelectorAll('#pane h1, #pane h2')].map(e => e.textContent)`);
 check('...Look and Feel shows the browser layout and compact mode groups',
       headings?.includes('Browser Layout') && headings?.includes('Show in compact view'),
       JSON.stringify(headings));
@@ -61,15 +63,15 @@ await shot(settings, 'settings-look-and-feel');
 
 // The handler only sets prefs that have a row, with a value of their type.
 check('setPref refuses a pref that has no row',
-      await settingsCall(settings, 'setPref', 'koan.workspaces.tint_applied', 5) === false);
+      await settingsCall(settings, 'koanSetPref', 'koan.workspaces.tint_applied', 5) === false);
 check('...and a value of the wrong type',
-      await settingsCall(settings, 'setPref', 'koan.single_toolbar', 'x') === false);
+      await settingsCall(settings, 'koanSetPref', 'koan.single_toolbar', 'x') === false);
 check('...leaving the prefs unchanged',
       await readPref('koan.workspaces.tint_applied') === 0 &&
       await readPref('koan.single_toolbar') === true);
 
 // Browser layout: the cards switch single / multiple toolbars live.
-const card = label => `[...document.querySelectorAll('.layout-card')]
+const card = label => `[...koanSettingsRoot.querySelectorAll('.layout-card')]
     .find(c => c.textContent.includes('${label}'))`;
 const checked = label => evalIn(settings, `${card(label)}.getAttribute('aria-checked')`);
 check('Only Sidebar is selected by default', await checked('Only Sidebar') === 'true');
@@ -83,7 +85,7 @@ check('The page follows a change made with a shortcut (Ctrl+Alt+B)',
 check('...back to single toolbar', await waitFor(async () => await navViews() === 1));
 
 // Compact mode.
-const compact = `document.querySelector('[data-pref="koan.compact_mode.enabled"] input')`;
+const compact = `koanSettingsRoot.querySelector('[data-pref="koan.compact_mode.enabled"] input')`;
 await evalIn(settings, `${compact}.click()`);
 check('The compact mode checkbox turns compact mode on',
       await waitFor(async () => await hotZones() === 2));
@@ -91,7 +93,7 @@ await evalIn(settings, `${compact}.click()`);
 check('...and off', await waitFor(async () => await hotZones() === 1));
 
 // What compact mode hides, its flash popup and tabs on the right.
-const hide = `document.querySelector('[data-pref="koan.compact_mode.hide"] select')`;
+const hide = `koanSettingsRoot.querySelector('[data-pref="koan.compact_mode.hide"] select')`;
 check('The page has what compact mode hides, with Zen\'s choices',
       JSON.stringify(await evalIn(settings, `[...${hide}.options].map(o => o.text)`)) ===
       JSON.stringify(['Hide Tab bar', 'Hide Top bar', 'Hide Both']));
@@ -99,11 +101,11 @@ await evalIn(settings, `(() => { const s = ${hide}; s.selectedIndex = 2;
     s.dispatchEvent(new Event('change')); })()`);
 check('...and choosing Hide Both sets it',
       await waitFor(async () => await readPref('koan.compact_mode.hide') === 'both'));
-await settingsCall(settings, 'setPref', 'koan.compact_mode.hide', 'sidebar');
+await settingsCall(settings, 'koanSetPref', 'koan.compact_mode.hide', 'sidebar');
 check('The page has the flash popup setting, off by default',
-      await evalIn(settings, `document.querySelector(
+      await evalIn(settings, `koanSettingsRoot.querySelector(
           '[data-pref="koan.compact_mode.toolbar_flash_popup"] input')?.checked`) === false);
-const right = `document.querySelector('[data-pref="koan.tabs.on_right"] input')`;
+const right = `koanSettingsRoot.querySelector('[data-pref="koan.tabs.on_right"] input')`;
 await evalIn(settings, `${right}.click()`);
 check('...and Tabs on the right, which sets it',
       await waitFor(async () => await readPref('koan.tabs.on_right') === true));
@@ -128,9 +130,9 @@ await browserCall('Target.closeTarget', { targetId: incognito.id });
 await waitFor(async () => await hotZones() === 1);
 
 // Tab Management.
-await evalIn(settings, `document.querySelector('#category-tabs').click()`);
+await evalIn(settings, `${showPane('tabs')}`);
 const rowLabels = await evalIn(settings,
-    `[...document.querySelectorAll('#pane .row')].map(r => r.textContent)`);
+    `[...koanSettingsRoot.querySelectorAll('#pane .row')].map(r => r.textContent)`);
 check('Tab Management has the tint, Zen\'s tab and pinned tab settings and the ' +
       'freeze switch',
       rowLabels?.length === 8 &&
@@ -148,23 +150,23 @@ check('No glass settings off macOS',
 
 // The freeze switch is Chromium's own (local-state) pref: on by default,
 // and the page can turn it off and back on.
-const freeze = `document.querySelector('[data-pref="performance_tuning.tab_freezing.enabled"] input')`;
+const freeze = `koanSettingsRoot.querySelector('[data-pref="performance_tuning.tab_freezing.enabled"] input')`;
 const freezeOn = await evalIn(settings, `${freeze}?.checked`);
-const turnedOff = await settingsCall(settings, 'setPref',
+const turnedOff = await settingsCall(settings, 'koanSetPref',
                                      'performance_tuning.tab_freezing.enabled', false);
 const showsOff = await waitFor(() => evalIn(settings, `${freeze}?.checked === false || null`));
-await settingsCall(settings, 'setPref', 'performance_tuning.tab_freezing.enabled', true);
+await settingsCall(settings, 'koanSetPref', 'performance_tuning.tab_freezing.enabled', true);
 check('The freeze switch is on and the page can change it (a local-state pref)',
       freezeOn === true && turnedOff === true && showsOff === true,
       `on ${freezeOn}, set ${turnedOff}, shows off ${showsOff}`);
 
 // Keyboard shortcuts.
-await evalIn(settings, `document.querySelector('#category-shortcuts').click()`);
-const value = id => evalIn(settings, `document.querySelector('#shortcut-${id}').value`);
-const note = id => evalIn(settings, `document.querySelector('#shortcut-${id}')
+await evalIn(settings, `${showPane('shortcuts')}`);
+const value = id => evalIn(settings, `koanSettingsRoot.querySelector('#shortcut-${id}').value`);
+const note = id => evalIn(settings, `koanSettingsRoot.querySelector('#shortcut-${id}')
     .parentElement.querySelector('.shortcut-note')?.textContent ?? null`);
 const groups = await evalIn(settings,
-    `[...document.querySelectorAll('.shortcut-group h2')].map(e => e.textContent)`);
+    `[...koanSettingsRoot.querySelectorAll('.shortcut-group h2')].map(e => e.textContent)`);
 check('Shortcuts are grouped as in Zen',
       groups?.[0] === 'Compact Mode' && groups?.[1] === 'Workspaces' &&
       groups?.[2] === 'Split View', JSON.stringify(groups));
@@ -174,7 +176,7 @@ check('...showing Zen\'s keys', await value('compact-mode-toggle') === 'Ctrl+S' 
       `${await value('compact-mode-toggle')}, ${await value('copy-url-markdown')}`);
 // The page switches to Zen's macOS notation (⌘ ⇧ C) on the browser's say-so;
 // it is only the flag that a Linux browser can show.
-const platform = await settingsCall(settings, 'getSettings');
+const platform = await settingsCall(settings, 'koanGetSettings');
 check('The browser tells the page it is not a Mac',
       platform?.shortcuts?.mac === false, JSON.stringify(platform?.shortcuts?.mac));
 check('A custom key wins over a default with the same key (seeded)',
@@ -182,7 +184,7 @@ check('A custom key wins over a default with the same key (seeded)',
       `${await value('downloads')}, ${await value('reader-mode')}`);
 await shot(settings, 'settings-shortcuts');
 
-const focus = id => evalIn(settings, `document.querySelector('#shortcut-${id}').focus()`);
+const focus = id => evalIn(settings, `koanSettingsRoot.querySelector('#shortcut-${id}').focus()`);
 await focus('compact-mode-toggle');
 await key(settings, VK.J, CTRL | ALT, 'j');
 check('Typing a key shows it', await value('compact-mode-toggle') === 'Ctrl+Alt+J');
@@ -209,20 +211,20 @@ check('A key taken by another shortcut is refused with Zen\'s conflict message',
           'Conflicts with Compact Mode -> Toggle Compact Mode',
       JSON.stringify(await note('compact-mode-show-sidebar')));
 check('...marked invalid, and the field shows the key that is bound',
-      await evalIn(settings, `document.querySelector('#shortcut-compact-mode-show-sidebar')
+      await evalIn(settings, `koanSettingsRoot.querySelector('#shortcut-compact-mode-show-sidebar')
           .classList.contains('invalid')`) &&
       await value('compact-mode-show-sidebar') === 'Ctrl+Alt+S');
 // Ctrl+Alt+J (modifiers: Ctrl 4 | Alt 8) is Toggle Compact Mode's now.
 check('The browser refuses a conflicting key itself',
-      await settingsCall(settings, 'setShortcut', 'mute', { key: VK.J, modifiers: 12 }) ===
+      await settingsCall(settings, 'koanSetShortcut', 'mute', { key: VK.J, modifiers: 12 }) ===
           false);
 check('...and a key without Ctrl, Alt or Win',
-      await settingsCall(settings, 'setShortcut', 'mute', { key: VK.Q, modifiers: 0 }) ===
+      await settingsCall(settings, 'koanSetShortcut', 'mute', { key: VK.Q, modifiers: 0 }) ===
           false);
 
 // Tab switching keys can't be shortcuts (Koan's Ctrl+Tab settings use them).
 check('...and a tab switching key (Ctrl+Tab)',
-      await settingsCall(settings, 'setShortcut', 'mute', { key: VK.TAB, modifiers: 4 }) ===
+      await settingsCall(settings, 'koanSetShortcut', 'mute', { key: VK.TAB, modifiers: 4 }) ===
           false);
 await focus('mute');
 await key(settings, VK.TAB, CTRL, 'Tab');
@@ -239,14 +241,14 @@ check('Tab leaves a shortcut unchanged',
       await value('mute') === 'Ctrl+M' && await note('mute') === null);
 await focus('mute');
 await key(settings, VK.Q, CTRL | ALT, 'q');
-await evalIn(settings, 'document.activeElement.blur()');
+await evalIn(settings, 'koanSettingsRoot.activeElement?.blur()');
 check('Leaving without Escape shows Zen\'s "Unsaved shortcut!" note',
       (await note('mute'))?.startsWith('Unsaved shortcut!') && await value('mute') === 'Ctrl+M');
 
 // Backspace clears a shortcut: its key stops working.
 await focus('toggle-single-toolbar');
 await key(settings, VK.BACKSPACE, 0, 'Backspace');
-await evalIn(settings, 'document.activeElement.blur()');
+await evalIn(settings, 'koanSettingsRoot.activeElement?.blur()');
 check('Backspace clears a shortcut',
       await waitFor(async () => await value('toggle-single-toolbar') === 'Not set'));
 await front(other);
@@ -256,7 +258,7 @@ check('...and its key does nothing any more (Ctrl+Alt+B)', await navViews() === 
 
 // Reset to Default (confirmed) restores the defaults.
 await evalIn(settings, 'window.confirm = () => true');
-await evalIn(settings, `document.querySelector('#reset-shortcuts').click()`);
+await evalIn(settings, `koanSettingsRoot.querySelector('#reset-shortcuts').click()`);
 check('Reset to Default restores the defaults',
       await waitFor(async () => await value('compact-mode-toggle') === 'Ctrl+S' &&
                                 await value('toggle-single-toolbar') === 'Ctrl+Alt+B' &&
@@ -270,20 +272,26 @@ check('...and the cleared one works again (Ctrl+Alt+B)',
 await key(other, VK.B, CTRL | ALT, 'b');
 await waitFor(async () => await navViews() === 1);
 
-// Search.
-await evalIn(settings, `(() => { const s = document.querySelector('#search');
-    s.value = 'compact'; s.dispatchEvent(new Event('input')); })()`);
-const found = await evalIn(settings, `document.querySelector('#pane').textContent`);
-check('Find in Settings searches settings and shortcuts',
+// Search: Chromium's one search box finds Koan's settings and shortcuts and
+// Chromium's own.
+await evalIn(settings, searchSettings('compact'));
+const found = await waitFor(() => evalIn(settings,
+    `koanSettingsRoot.querySelector('#pane').textContent`),
+    t => t?.includes('Toggle Compact Mode'));
+check('Search finds Koan\'s settings and shortcuts',
       found?.includes('Enable Koan\'s compact mode') && found?.includes('Toggle Compact Mode'));
+await evalIn(settings, searchSettings('cookies'));
+check('...and Chromium\'s, with no Koan results shown',
+      await waitFor(() => evalIn(settings, `koanSettingsRoot.host.hasAttribute('hidden-by-search')`)));
+await evalIn(settings, searchSettings(''));
 
 if (SHOTS) {
-  await evalIn(settings, `document.querySelector('#category-looks').click()`);
+  await evalIn(settings, `${showPane('looks')}`);
   await shot(settings, 'settings-look-and-feel-dark', 'dark');
 }
 
 // Ctrl+, with the page open (on any pane) goes back to it.
-await evalIn(settings, `document.querySelector('#category-tabs').click()`);
+await evalIn(settings, `${showPane('tabs')}`);
 await front(other);
 await key(other, VK.COMMA, CTRL, ',');
 await sleep(800);
@@ -294,9 +302,8 @@ check('Ctrl+, with the page open on another pane switches to it, no second tab',
 // Space themes (the "tint" row): per window, so a Space's theme tints only
 // its window and leaves the profile's colour alone; the switch applies live
 // (scripts/e2e/theme.mjs checks the themes themselves).
-const tint = `document.querySelector('[data-pref="koan.workspaces.tint"] input')`;
-await waitFor(() => evalIn(settings, `!!document.querySelector('#category-tabs')`));
-await evalIn(settings, `document.querySelector('#category-tabs').click()`);
+const tint = `koanSettingsRoot.querySelector('[data-pref="koan.workspaces.tint"] input')`;
+await evalIn(settings, `${showPane('tabs')}`);
 const userColor = await readPref('browser.theme.user_color2');
 await front(other);
 // A new Space gets a theme with Theme... (the theme picker): Space
@@ -335,5 +342,32 @@ await evalIn(settings, `${tint}.click()`);
 check('...and switching them on tints it again',
       await waitFor(async () => await readPref('koan.workspaces.tint') === true &&
                                 (await windowTints()).includes(seed)));
+
+// One Settings page: a link to one of Chromium's sections opens it in the
+// same page (Koan's panes hidden), Ctrl+, goes back to Koan's first pane in
+// that tab, and the old chrome://koan-settings/<pane> opens the pane.
+const sectionShown = id => evalIn(settings, `(() => {
+    const main = document.querySelector('settings-ui').shadowRoot
+        .querySelector('#main').shadowRoot;
+    const view = main.querySelector('#${id}');
+    return !!view && view.checkVisibility();
+  })()`);
+await browserCall('Target.activateTarget', { targetId: settings.id });
+await onPage(settings, c => c.send('Page.navigate',
+    { url: 'chrome://settings/appearance' }));
+check('chrome://settings/appearance shows Chromium\'s Appearance in the page',
+      await waitFor(() => sectionShown('appearance')) && !await sectionShown('koan'));
+await front(other);
+await key(other, VK.COMMA, CTRL, ',');
+check('...and Ctrl+, from there shows Koan\'s Look and Feel, in the same tab',
+      await waitFor(() => sectionShown('koan')) &&
+      (await settingsPages()).length === 1);
+const legacy = (await browserCall('Target.createTarget',
+    { url: 'chrome://koan-settings/shortcuts' })).result.targetId;
+const legacyPage = await waitFor(async () => (await pages()).find(
+    p => p.id === legacy && p.url.startsWith('chrome://settings')));
+check('chrome://koan-settings/shortcuts opens chrome://settings/koan/shortcuts',
+      legacyPage?.url === 'chrome://settings/koan/shortcuts', legacyPage?.url);
+await browserCall('Target.closeTarget', { targetId: legacy });
 
 finish();

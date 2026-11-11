@@ -29,7 +29,7 @@ class KoanBrowserViewController;
 
 // Koan's keyboard shortcuts: Zen's defaults (zen-browser/desktop
 // src/zen/kbs/ZenKeyboardShortcuts.mjs, shortcuts version 21, Linux), plus a
-// few Koan-only ones, as rebound in chrome://koan-settings (the table is in
+// few Koan-only ones, as rebound in Koan's settings (the table is in
 // koan/browser/koan_shortcut_table.h), and Zen's Ctrl+Tab settings.
 // Registered on the window's FocusManager
 // after BrowserView's own accelerators, so they are tried first; where Zen

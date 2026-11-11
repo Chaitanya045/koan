@@ -772,7 +772,7 @@ void KoanSidebarTabsController::OnAddedToWidget() {
                             base::Unretained(this)));
   }
   // Zen's "Show New Tab Button on Tab List" and "Move the new tab button to
-  // the top", from chrome://koan-settings.
+  // the top", from Koan's settings.
   pref_change_registrar_.Init(
       browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
   for (const char* pref :

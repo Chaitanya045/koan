@@ -99,23 +99,24 @@ KoanSettingsHandler::~KoanSettingsHandler() {
 
 void KoanSettingsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
-      "getSettings",
+      "koanGetSettings",
       base::BindRepeating(&KoanSettingsHandler::HandleGetSettings,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "setPref", base::BindRepeating(&KoanSettingsHandler::HandleSetPref,
-                                     base::Unretained(this)));
+      "koanSetPref", base::BindRepeating(&KoanSettingsHandler::HandleSetPref,
+                                         base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "setShortcut",
+      "koanSetShortcut",
       base::BindRepeating(&KoanSettingsHandler::HandleSetShortcut,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "resetShortcuts",
+      "koanResetShortcuts",
       base::BindRepeating(&KoanSettingsHandler::HandleResetShortcuts,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "setEditing", base::BindRepeating(&KoanSettingsHandler::HandleSetEditing,
-                                        base::Unretained(this)));
+      "koanSetEditing",
+      base::BindRepeating(&KoanSettingsHandler::HandleSetEditing,
+                          base::Unretained(this)));
 }
 
 void KoanSettingsHandler::OnJavascriptAllowed() {
@@ -154,10 +155,10 @@ void KoanSettingsHandler::OnWidgetDestroying(views::Widget* widget) {
 
 void KoanSettingsHandler::OnPrefChanged(const std::string& pref) {
   if (pref == prefs::kShortcuts) {
-    FireWebUIListener("shortcuts-changed", Shortcuts());
+    FireWebUIListener("koan-shortcuts-changed", Shortcuts());
     return;
   }
-  FireWebUIListener("pref-changed", pref, PrefsFor(pref).GetValue(pref));
+  FireWebUIListener("koan-pref-changed", pref, PrefsFor(pref).GetValue(pref));
 }
 
 PrefService& KoanSettingsHandler::PrefsFor(std::string_view pref) const {

@@ -112,7 +112,7 @@ export async function visiblePage() {
   return null;
 }
 
-// Calls chrome://koan-settings' handler from `page` (a settings tab), as the
+// Calls Koan's settings handler (chrome://settings/koan/<pane>) from `page` (a settings tab), as the
 // page itself does.
 export function settingsCall(page, method, ...args) {
   return evalIn(page, `import('chrome://resources/js/cr.js').then(
@@ -476,7 +476,7 @@ export function finish() {
 }
 
 // Sets a pref through a page opened in the background, then closes it:
-// a Koan pref with a settings row (chrome://koan-settings' handler), or one
+// a Koan pref with a settings row (Koan's settings handler), or one
 // of Chromium's (chrome://settings).
 async function setPrefThrough(url, expression) {
   const targetId = (await browserCall('Target.createTarget',
@@ -487,9 +487,9 @@ async function setPrefThrough(url, expression) {
   await sleep(500);
   return value;
 }
-export const setKoanPref = (pref, value) => setPrefThrough('chrome://koan-settings',
+export const setKoanPref = (pref, value) => setPrefThrough('chrome://settings/koan/looks',
     `import('chrome://resources/js/cr.js').then(m => m.sendWithPromise(
-         'setPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
+         'koanSetPref', ${JSON.stringify(pref)}, ${JSON.stringify(value)}))`);
 export const setChromePref = (pref, value) => setPrefThrough('chrome://settings',
     `new Promise(r => chrome.settingsPrivate.setPref(${JSON.stringify(pref)},
          ${JSON.stringify(value)}, '', r))`);

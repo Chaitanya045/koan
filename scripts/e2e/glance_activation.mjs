@@ -163,10 +163,10 @@ const browser = await connect(
     (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json())
         .webSocketDebuggerUrl);
 const settingsId = (await browser.send('Target.createTarget',
-    { url: 'chrome://koan-settings' })).result.targetId;
+    { url: 'chrome://settings/koan/looks' })).result.targetId;
 await sleep(2000);
 const settings = (await targets()).find(t => t.id === settingsId);
-const trigger = `document.querySelector(
+const trigger = `koanSettingsRoot.querySelector(
     '[data-pref="koan.glance.activation_method"] select')`;
 const shownMethod = await withPage(settings, async c => (await c.send('Runtime.evaluate', {
   expression: `${trigger}?.selectedOptions[0]?.textContent`, returnByValue: true,
@@ -210,10 +210,10 @@ await sleep(1000);
 // "Enable Glance" off: an Alt+click in a page opened afterwards is Chromium's
 // again (no Glance, no popup window).
 const settings2 = (await browser.send('Target.createTarget',
-    { url: 'chrome://koan-settings' })).result.targetId;
+    { url: 'chrome://settings/koan/looks' })).result.targetId;
 await sleep(2000);
 await withPage((await targets()).find(t => t.id === settings2), c => c.send(
-    'Runtime.evaluate', { expression: `document.querySelector(
+    'Runtime.evaluate', { expression: `koanSettingsRoot.querySelector(
         '[data-pref="koan.glance.enabled"] input').click()` }));
 await sleep(1000);
 check('"Enable Glance" turns Glance off',

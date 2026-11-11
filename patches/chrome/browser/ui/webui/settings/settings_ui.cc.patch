@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index 1437a643e275ba752f482464c3a24a2e83cd6026..1417073a7b8c5be5910df62b29480560d5987023 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -157,6 +157,7 @@
+ #include "content/public/common/content_features.h"
+ #include "crypto/crypto_buildflags.h"
+ #include "device/vr/buildflags/buildflags.h"
++#include "koan/browser/ui/webui/koan_settings_ui.h"
+ #include "printing/buildflags/buildflags.h"
+ #include "services/device/public/cpp/device_features.h"
+ #include "services/network/public/cpp/features.h"
+@@ -760,6 +761,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+                 kTabStylingSettingElementId,
+             });
+ 
++  // Koan: its settings are panes of this page (koan_settings_ui.h).
++  koan::settings::ExtendSettingsUI(*web_ui, *html_source);
++
+   TryShowHatsSurveyWithTimeout();
+ }
+ 

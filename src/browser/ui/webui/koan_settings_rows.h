@@ -10,7 +10,7 @@
 #include "base/containers/span.h"
 #include "base/memory/raw_ptr_exclusion.h"
 
-// What chrome://koan-settings shows, as data. The page lays out Zen's
+// What Koan's settings show, as data. The page lays out Zen's
 // preferences: panes in the sidebar, each with sections (big headings), each
 // with groups (a header, a description and the settings). Every setting is a
 // row bound to a pref, a Koan profile pref or one of Chromium's local-state
