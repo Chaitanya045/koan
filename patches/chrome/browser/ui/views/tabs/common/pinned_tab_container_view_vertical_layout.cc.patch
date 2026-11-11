@@ -1,5 +1,4 @@
 diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc
-index 8b3b821..a0201cd 100644
 --- a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_vertical_layout.cc
 @@ -12,6 +12,7 @@
@@ -10,7 +9,18 @@ index 8b3b821..a0201cd 100644
  #include "ui/gfx/geometry/rect.h"
  #include "ui/gfx/geometry/size.h"
  #include "ui/views/layout/proposed_layout.h"
-@@ -99,6 +100,8 @@ PinnedTabContainerViewVerticalLayout::CalculateProposedLayout(
+@@ -62,7 +63,9 @@
+   int children_on_row = children.size();
+ 
+   if (children_on_row == 0) {
+-    layouts.host_size = gfx::Size(0, 0);
++    // Koan: as wide as with tiles, so the first one animates in.
++    layouts.host_size =
++        gfx::Size(koan::GetEmptyEssentialsWidth(size_bounds), 0);
+     return layouts;
+   }
+ 
+@@ -99,6 +102,8 @@
                                        (child_width +
                                         PinnedTabContainerView::kTabPadding)) +
                             1));

@@ -284,9 +284,10 @@ check('Clear keeps the selected tab', before === 5 && (await pages()) === 3 &&
       inContainer(await views(), 'TabView', 'UnpinnedTabContainerView').length === 1,
       `${before} -> ${await pages()}`);
 
-// Compact mode collapses the sidebar (the sidebar button toggles it, as in
-// Zen): upstream's separator is the only line, there is no Clear row. (The
-// views are looked up again afterwards.)
+// Compact mode hides the sidebar (the sidebar button toggles it, as in Zen).
+// Its reveal shows the whole sidebar, Clear included, as Zen's does: the row
+// itself stays visible (koan_sidebar_transitions_browsertest.cc checks it on
+// screen in the reveal). (The views are looked up again afterwards.)
 const toggleCompact = async () => {
   await key(VK.S, CTRL, 's');
   await sleep(1000);
@@ -294,8 +295,9 @@ const toggleCompact = async () => {
 await toggleCompact();
 vs = await views();
 clear = find(vs, 'KoanClearTabsRow');
-check('Compact: no Clear row (upstream draws the line)', clear && !clear.shown,
-      JSON.stringify(clear && { shown: clear.shown }));
+check('Compact: the Clear row stays, for the revealed sidebar',
+      clear && clear.props.Visible !== 'false',
+      JSON.stringify(clear && { visible: clear.props.Visible }));
 await toggleCompact();
 check('Compact off: the Clear row is back', find(await views(), 'KoanClearTabsRow')?.shown);
 

@@ -94,7 +94,6 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   void MoveRowsTo(std::optional<tab_groups::TabGroupId> space);
   // The window switched between vertical and horizontal tabs.
   void OnModeChanged(tabs::VerticalTabStripStateController* state);
-  void OnCollapseChanged(tabs::VerticalTabStripCollapseState state);
   // Zen shows the separator only while the workspace has unpinned tabs.
   void UpdateClearRow();
   // Zen's zen.tabs.show-newtab-vertical and zen.view.show-newtab-button-top
@@ -132,7 +131,6 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       rows_observation_{this};
   base::CallbackListSubscription mode_subscription_;
-  base::CallbackListSubscription collapse_subscription_;
   PrefChangeRegistrar pref_change_registrar_;
 
   base::WeakPtrFactory<KoanSidebarTabsController> weak_factory_{this};
