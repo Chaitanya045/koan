@@ -107,8 +107,10 @@ It re-checks what the first recording (2026-11-11) caught. From the anchor tab a
 | 2 | a second, beside it, selected | the same; the grid's height doesn't change |
 | 3-4 | a third and fourth, in the background | the same |
 | 5 | a fifth: a new row of tiles | the Space slides down a row |
-| 6-7 | two back to the Space (`remove-essential`, test_helper's `unpin-tab`) | the tile fades out as the row comes in; the last one out lets the Space slide up |
-| 8 | compact mode on (`compact-on`), the sidebar revealed at the window's edge (`reveal-sidebar`), compact mode off (`compact-off`) | the revealed sidebar has the separator with Clear above "+ New Tab"; as it comes back, no frame with the page over the sidebar or its edge |
+| 6-7 | two back to the Space (`remove-essential`, test_helper's `unpin-tab`, as an extension or a drag does it) | the tile fades out as the row comes in at the top of the Space's pinned tabs, with no gap and no row crossing the others; the last one out lets the Space slide up |
+| 8 | Remove from Essentials, the user's way: Toggle Pin (Cmd+Shift+D) on the selected Essential (`remove-essential`, `action: toggle-pin`) | the row comes in at the top of the Space's tabs as the tile leaves |
+| 9 | compact mode on (`compact-on`), the sidebar revealed (`reveal-sidebar`), compact mode off with it out (`compact-off-revealed`), on again with it hidden, and off (`compact-off`) | the revealed sidebar keeps the Essentials a grid of tiles (`tiles`, `tileRows`, `tileMaxW` vs `gridW`) and has Clear above "+ New Tab"; off with the sidebar out, it doesn't move; off with it hidden, the page is laid out once and the sidebar slides in over the gap, never over the page |
+| 10 | a real Clear click in the reveal, compact mode off, then Ctrl+Alt+N three times (`new-space-key`) | the new-Space form opens (the lead on #295) |
 
 Each round records `after` (right away) and `after-1s`: `essentials` (the model's), `views` (shown rows of the tab: 1 once the
 transition is over), `inGrid`, `gridH`, `headerBelowGrid`, `clearShown`, `compact`; `ok` is the end state. The summary

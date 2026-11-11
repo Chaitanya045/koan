@@ -53,6 +53,18 @@ int SidebarRevealWidth(views::View* browser_view);
 // unless compact mode is active in the window.
 void SlideSidebarAway(views::View* browser_view);
 
+// Whether compact mode's sidebar is out (revealed) or on its way out, in the
+// window of `browser_view`. False without compact mode.
+bool IsSidebarShownOut(views::View* browser_view);
+
+// Compact mode has just stopped hiding the sidebar: the strip is docked at
+// once, without upstream's expand animation, so that the page is laid out
+// beside it in one step. With `slide_in` (the sidebar was hidden) the strip
+// then slides in from the window's edge in Zen's 0.1 s; without it (the
+// sidebar was out) it just stays where it is, as Zen's animateCompactMode()
+// doesn't animate a sidebar that is already shown.
+void DockSidebarAfterCompact(views::View* browser_view, bool slide_in);
+
 // The next time the sidebar is revealed (the strip going out) it just is out,
 // with no slide, once; `snap` false takes that back. For an empty tab holding
 // the sidebar as compact mode hides it: Zen applies that state without

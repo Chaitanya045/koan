@@ -9,15 +9,24 @@ diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view.cc b/
  #include "ui/base/metadata/metadata_impl_macros.h"
  #include "ui/gfx/geometry/rect.h"
  #include "ui/views/controls/scroll_view.h"
-@@ -60,7 +61,10 @@
-               ? TabCollectionAnimatingLayoutManager::AnimationAxis::kHorizontal
-               : TabCollectionAnimatingLayoutManager::AnimationAxis::
-                     kHorizontalWrappingVertically,
--          /*animate_host_size=*/false))) {
-+          // Koan (Zen): the Essentials grid grows and shrinks with its
-+          // tiles' animation, so the Space below slides.
-+          /*animate_host_size=*/koan::AnimatesEssentialsHeight(
-+              orientation_ == TabStripOrientation::kVertical)))) {
-   collection_node->set_remove_child_from_node(base::BindRepeating(
-       &TabCollectionAnimatingLayoutManager::AnimateAndDestroyChildView,
-       base::Unretained(base::to_address(layout_manager_))));
+@@ -142,7 +143,9 @@
+       return index;
+     }
+   } else {
+-    auto collapse_state = GetTabStripCollapseState();
++    // Koan: Essentials stay a grid in compact mode's revealed sidebar.
++    auto collapse_state =
++        koan::GetEssentialsCollapseState(GetTabStripCollapseState());
+     if (collapse_state != tabs::VerticalTabStripCollapseState::kExpanded) {
+       if (auto index = GetLinkDropIndexForCollapsed(loc_in_container)) {
+         return index;
+@@ -270,7 +273,8 @@
+     tabs::VerticalTabStripCollapseState state) {
+   // Collapsed state only exists for the vertical orientation.
+   CHECK_EQ(orientation_, TabStripOrientation::kVertical);
+-  set_drag_axes(state == tabs::VerticalTabStripCollapseState::kCollapsed
++  set_drag_axes(koan::GetEssentialsCollapseState(state) ==
++                        tabs::VerticalTabStripCollapseState::kCollapsed
+                     ? DragAxes::kVerticalOnly
+                     : DragAxes::kBoth);
+   InvalidateLayout();

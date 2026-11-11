@@ -14,12 +14,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "chrome/browser/ui/animation/browser_animation_controller.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/animations/common_animation_values.h"
+#include "chrome/browser/ui/views/animations/tab_strip_animations.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_sidebar_curve.h"
@@ -68,6 +71,7 @@ class SidebarReveal {
 
   // Returns the progress the layout uses for the strip's width.
   double Update(double raw) {
+    docking_ = false;
     if (raw > last_raw_) {
       SetTarget(1.0);
     } else if (raw < last_raw_) {
@@ -86,6 +90,9 @@ class SidebarReveal {
     return (raw > 0.0 || value_ > 0.0 || animating_) ? 1.0 : 0.0;
   }
 
+  // Whether the strip is out or on its way out (compact mode's reveal).
+  bool IsOut() const { return target_ > 0.0 || value_ > 0.0; }
+
   // The next reveal is not slid: the strip is just there (an empty tab holds
   // the sidebar out as compact mode hides it, and Zen doesn't animate that).
   void SnapNextReveal(bool snap) { snap_next_ = snap; }
@@ -94,6 +101,7 @@ class SidebarReveal {
   // that already fills its place, and slides away (Zen's animateCompactMode).
   void SlideAway() {
     snap_next_ = false;
+    docking_ = false;
     ++generation_;
     animating_ = false;
     value_ = 1.0;
@@ -101,8 +109,28 @@ class SidebarReveal {
     SetTarget(0.0, kSidebarToggleDuration);
   }
 
-  // Compact mode is off: the strip is where the layout puts it.
+  // Compact mode has just shown the docked sidebar again (the page already
+  // beside it, laid out once): the strip, `width` wide, slides in from the
+  // window's edge over the gap it left, in Zen's 0.1 s
+  // (animateCompactMode() with compact mode off).
+  void SlideIn(int width) {
+    snap_next_ = false;
+    ++generation_;
+    animating_ = false;
+    value_ = 0.0;
+    target_ = 0.0;
+    last_raw_ = 0.0;
+    docking_ = true;
+    dock_width_ = width;
+    SetTarget(1.0, kSidebarToggleDuration);
+  }
+
+  // Compact mode is off: the strip is where the layout puts it (once a slide
+  // in has ended).
   void Reset() {
+    if (docking_) {
+      return;
+    }
     snap_next_ = false;
     ++generation_;
     animating_ = false;
@@ -180,6 +208,7 @@ class SidebarReveal {
     }
     animating_ = false;
     value_ = target_;
+    docking_ = false;
     // The layout kept the strip at its width until now.
     browser_view_->InvalidateLayout();
   }
@@ -190,6 +219,7 @@ class SidebarReveal {
     }
     animating_ = false;
     value_ = target_;
+    docking_ = false;
     browser_view_->InvalidateLayout();
   }
 
@@ -199,8 +229,9 @@ class SidebarReveal {
     // both.
     const bool slides_from_right =
         IsSidebarOnRight(browser_view_) != base::i18n::IsRTL();
-    const float offset =
-        static_cast<float>((1.0 - value) * SidebarRevealWidth(browser_view_));
+    const int width =
+        docking_ ? dock_width_ : SidebarRevealWidth(browser_view_);
+    const float offset = static_cast<float>((1.0 - value) * width);
     gfx::Transform transform;
     transform.Translate(slides_from_right ? offset : -offset, 0);
     return transform;
@@ -226,6 +257,9 @@ class SidebarReveal {
   // Tells a finished slide from one that was replaced.
   int generation_ = 0;
   bool snap_next_ = false;
+  // Sliding in as compact mode turns off (SlideIn()), `dock_width_` wide.
+  bool docking_ = false;
+  int dock_width_ = 0;
   // Upstream's progress at the last layout, to tell which way it is going.
   double last_raw_ = 0.0;
   base::WeakPtrFactory<SidebarReveal> weak_factory_{this};
@@ -361,7 +395,11 @@ double LayoutSidebarReveal(views::View* browser_view, double progress) {
     if (reveal) {
       reveal->Reset();
     }
-    return progress;
+    // The docked sidebar is never out on hover: with Koan's sidebar the strip
+    // is collapsed only while compact mode hides it, so an expand-on-hover
+    // still winding down as compact mode turns off (its lock let go) would
+    // only make the docked strip shrink and grow again.
+    return OwnsSidebar() ? 0.0 : progress;
   }
   if (!reveal) {
     reveal = region->SetProperty(
@@ -397,6 +435,54 @@ void SlideSidebarAway(views::View* browser_view) {
   }
   reveal->SlideAway();
   // The layout keeps the strip out (over the page) while it slides.
+  browser_view->InvalidateLayout();
+}
+
+bool IsSidebarShownOut(views::View* browser_view) {
+  auto* view = views::AsViewClass<BrowserView>(browser_view);
+  views::View* region = view ? view->tab_strip_view() : nullptr;
+  if (!region || region->GetClassName() != "VerticalTabStripRegionView" ||
+      !IsCompactModeActive(browser_view)) {
+    return false;
+  }
+  const SidebarReveal* reveal = region->GetProperty(kSidebarRevealKey);
+  return reveal && reveal->IsOut();
+}
+
+void DockSidebarAfterCompact(views::View* browser_view, bool slide_in) {
+  auto* view = views::AsViewClass<BrowserView>(browser_view);
+  views::View* region = view ? view->tab_strip_view() : nullptr;
+  if (!region || region->GetClassName() != "VerticalTabStripRegionView") {
+    return;
+  }
+  // Upstream's expand (started by the strip's collapse state, see
+  // KoanVerticalTabsPolicy::SetSidebarHidden()) grows the strip while the
+  // page's old picture stays where it was, clipped by the card's moving edge:
+  // it is put at its end at once, so the page is laid out beside the sidebar
+  // once, now.
+  BrowserAnimationController* controller =
+      BrowserAnimationController::From(view->browser());
+  if (controller &&
+      controller->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip) ==
+          TabStripAnimations::kExpand) {
+    controller->Reset(TabStripAnimations::kVerticalTabStrip);
+  }
+  if (!slide_in || !region->layer() ||
+      !gfx::Animation::ShouldRenderRichAnimation()) {
+    return;
+  }
+  const auto* state =
+      tabs::VerticalTabStripStateController::From(view->browser());
+  if (!state) {
+    return;
+  }
+  SidebarReveal* reveal = region->GetProperty(kSidebarRevealKey);
+  if (!reveal) {
+    reveal = region->SetProperty(
+        kSidebarRevealKey,
+        std::make_unique<SidebarReveal>(browser_view, region));
+  }
+  reveal->SlideIn(state->GetUncollapsedWidth());
   browser_view->InvalidateLayout();
 }
 

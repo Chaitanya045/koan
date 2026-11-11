@@ -1,17 +1,18 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -65,6 +65,9 @@
+@@ -65,6 +65,10 @@
  #include "components/tabs/public/tab_collection_types.h"
  #include "components/tabs/public/tab_interface.h"
  #include "content/public/browser/navigation_controller.h"
++#include "koan/browser/ui/views/koan_essentials.h"
 +#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
 +#include "koan/browser/ui/views/koan_sidebar_tabs.h"
 +#include "koan/browser/ui/views/koan_spaces.h"
  #include "third_party/skia/include/core/SkPath.h"
  #include "third_party/skia/include/core/SkPathBuilder.h"
  #include "third_party/skia/include/core/SkRRect.h"
-@@ -417,6 +420,7 @@ TabView::TabView(TabCollectionNode* coll
+@@ -417,6 +421,7 @@
              &TabView::OnCollapseStateChanged, base::Unretained(this)));
    }
    close_button_observation_.Observe(close_button_);
@@ -19,7 +20,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui
  }
  
  TabView::~TabView() = default;
-@@ -475,6 +479,12 @@ void TabView::UpdateFocusFreezing() {
+@@ -475,6 +480,12 @@
    if (!tab) {
      return;
    }
@@ -32,7 +33,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui
    const auto* controller =
        collection_node_ ? collection_node_->GetController() : nullptr;
    if (!controller) {
-@@ -1261,6 +1271,7 @@ void TabView::UpdateColors() {
+@@ -1261,6 +1272,7 @@
    TabStyle::TabColors colors = tab_styling()->CalculateTargetColors();
    title_->SetEnabledColor(colors.foreground_color);
    close_button_->SetColors(colors);
@@ -40,7 +41,18 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui
    alert_indicator_->OnParentTabButtonColorChanged();
  
    UpdateBorder();
-@@ -1408,6 +1419,10 @@ void TabView::UpdateHoverCard(HoverCardA
+@@ -1392,7 +1404,9 @@
+ }
+ 
+ bool TabView::IsInExpandOnHover(int width) const {
+-  return collapsed_ && width > CollapsedWidth();
++  // Koan: an Essentials tile stays a tile in compact mode's reveal.
++  return collapsed_ && width > CollapsedWidth() &&
++         !koan::IsEssentialsTile(pinned_);
+ }
+ 
+ const tabs::TabInterface* TabView::GetTabInterface() const {
+@@ -1408,6 +1422,10 @@
    if (!collection_node_ || !collection_node_->GetController()) {
      return;
    }
