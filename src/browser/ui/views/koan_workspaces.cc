@@ -100,6 +100,7 @@
 #include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_zen_toasts.h"
 #include "ui/actions/actions.h"
+#include "ui/base/models/list_selection_model.h"
 #include "ui/base/mojom/themes.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -1177,6 +1178,36 @@ void KoanWorkspaceController::MoveTabsToSpace(
     model->ActivateTabAt(model->GetIndexOfTab(last));
   }
   SwitchTo(space);
+}
+
+void KoanWorkspaceController::MoveDraggedTabsToSpace(
+    const std::vector<tabs::TabInterface*>& tabs,
+    const tab_groups::TabGroupId& space) {
+  std::vector<tabs::TabHandle> handles;
+  for (tabs::TabInterface* tab : tabs) {
+    handles.push_back(tab->GetHandle());
+  }
+  MoveTabsToSpace(tabs, space);
+  // MoveTabsToSpace() shows the Space on one tab, which selects only it.
+  TabStripModel* model = tab_strip_model();
+  tabs::TabInterface* active = model->GetActiveTab();
+  if (!active || active->GetGroup() != space) {
+    return;
+  }
+  ui::ListSelectionModel selection;
+  for (const tabs::TabHandle& handle : handles) {
+    // (Essentials stay out of Spaces, and out of a drag of Space tabs.)
+    if (tabs::TabInterface* tab = handle.Get();
+        tab && tab->GetGroup() == space) {
+      selection.AddIndexToSelection(
+          static_cast<size_t>(model->GetIndexOfTab(tab)));
+    }
+  }
+  const size_t active_index = static_cast<size_t>(model->GetIndexOfTab(active));
+  selection.AddIndexToSelection(active_index);
+  selection.set_active(active_index);
+  selection.set_anchor(active_index);
+  model->SetSelectionFromModel(std::move(selection));
 }
 
 void KoanWorkspaceController::ShowKeptLoadedToast(int kept) {

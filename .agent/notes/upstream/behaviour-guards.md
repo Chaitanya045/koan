@@ -111,6 +111,12 @@ Issue #183's three examples: guarded 2, partly 1.
 | (2) Vertical tab strip collapse states (`kCollapsed`, `kCollapsing`, `kExpanded`) and the state controller: Koan never lets the strip collapse to the 56 px rail, `collapsed_state` stays false, compact mode owns the hiding, `kCollapsing` mid-drag or mid-animation shows no rail | e2e/lib/vertical_tabs "${when}: no icon rail" (used by compact_close, vertical_tabs_teardown, fullscreen runs); e2e/vertical_tabs_drag "Mid-drag the strip never becomes the 56 wide rail", "Left on the resize area many times hides the sidebar with compact mode, no rail"; e2e/vertical_tabs_old_profile "vertical_tabs.collapsed_state is back to false", "...and ${pref} snaps back"; e2e/vertical_tabs_no_compact "Mid-drag (${dx}) no rail"; mac/drv/vtabs "T13", "T21a-d", "T22", "T20" (no rail), "T3: prefs written back". The enum values themselves are not named in any test | guarded | yes |
 | (3) Omnibox zero-prefix (zero suggest) flow: an empty or focused bar still starts zero suggest (`input.IsZeroSuggest()`), which Koan's palette provider skips; `ZeroSuggestVerbatimMatchProvider` still gives the on-focus match | e2e/urlbar "Ctrl+T opens the URL bar...", "...empty" (the bar opens with no text); e2e/palette "Tab in an empty URL bar switches to actions (\">\")", "...none of which Enter would run yet"; mac/steps/omnibox_trailing_space row 9 (no crash only). Nothing asserts that an empty-bar zero-suggest list shows no palette actions | partly | yes |
 
+## Behaviours Koan code relies on without a hook
+
+| Behaviour | Guard | Status | Runs on the Mac now |
+|---|---|---|---|
+| Upstream's tab drag takes the model's selection to be the dragged tabs: `TabDragHandler::HandleDraggedTabsIntoNode()` / `HandleTabDragInContainer()` count every dragged tab before the target, then call `MoveSelectedTabsTo()`. Koan's drag across Spaces (`KoanSpaceDrag`) moves the tabs mid-drag and must leave them all selected (`MoveDraggedTabsToSpace()`), or the index lands inside the new Space and `TabCollection::FindMovePositionRecursive()` CHECKs | koan_browsertests `KoanSpacesBrowserTest.DragToAnotherSpaceKeepsTheDraggedTabsSelected` | partly (the test replays the handler's arithmetic; a change to the handler itself needs a Mac drag step) | on request (Mac cycle) |
+
 ## Adding a guard
 
 A hook that relies on behaviour gets, in the same PR: the test that fails if
