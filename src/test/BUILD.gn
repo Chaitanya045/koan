@@ -91,9 +91,11 @@ source_set("browsertests_impl") {
     "//ui/actions",
     "//ui/base",
     "//ui/base:types",
+    "//ui/compositor",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/views",
+    "//ui/views:test_support",
     "//url",
   ]
 }

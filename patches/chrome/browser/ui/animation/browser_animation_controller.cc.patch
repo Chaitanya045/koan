@@ -1,8 +1,7 @@
 diff --git a/chrome/browser/ui/animation/browser_animation_controller.cc b/chrome/browser/ui/animation/browser_animation_controller.cc
-index e8b59e5765b3fef28d33ab46d7a2a9a581d2e666..84ef83c9dc0fc836a9f6ddf04c2dbe52a249dd83 100644
 --- a/chrome/browser/ui/animation/browser_animation_controller.cc
 +++ b/chrome/browser/ui/animation/browser_animation_controller.cc
-@@ -486,6 +486,7 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+@@ -486,6 +486,7 @@
    // Starts `motion` for the current group. Any existing motion will be
    // canceled.
    void Start(BrowserAnimationMotion motion, MotionInfo motion_info) {
@@ -10,7 +9,7 @@ index e8b59e5765b3fef28d33ab46d7a2a9a581d2e666..84ef83c9dc0fc836a9f6ddf04c2dbe52
      const auto params = GetParamsLookup();
      OnCancel(params);
      current_motion_ = motion;
-@@ -504,6 +505,7 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+@@ -504,11 +505,16 @@
  
    // Resets the animation for the current group to the end of `motion`.
    void Reset(BrowserAnimationMotion motion, MotionInfo motion_info) {
@@ -18,7 +17,16 @@ index e8b59e5765b3fef28d33ab46d7a2a9a581d2e666..84ef83c9dc0fc836a9f6ddf04c2dbe52
      const auto params = GetParamsLookup();
      if (current_motion_ != motion) {
        OnCancel(params);
-@@ -619,7 +621,16 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+       current_motion_ = motion;
+       current_motion_info_ = std::move(motion_info);
++    } else if (animator_) {
++      // Koan: fast-forwarding the playing motion stops its animator, whose
++      // next step would otherwise find no motion (a CHECK).
++      animator_->Stop();
+     }
+     OnAnimationEnded(params);
+   }
+@@ -619,7 +625,16 @@
        logger_->MaybeLog();
        logger_.reset();
      }
@@ -35,7 +43,7 @@ index e8b59e5765b3fef28d33ab46d7a2a9a581d2e666..84ef83c9dc0fc836a9f6ddf04c2dbe52
      current_motion_ = BrowserAnimationMotion();
      PersistCurrentValues(params);
    }
-@@ -706,6 +717,9 @@ class BrowserAnimationController::GroupData : public gfx::AnimationDelegate {
+@@ -706,6 +721,9 @@
    ValueLookup current_values_;
    BrowserAnimationMotion current_motion_;
    MotionInfo current_motion_info_;

@@ -17,12 +17,15 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+#include "chrome/browser/ui/animation/browser_animation_controller.h"
+#include "chrome/browser/ui/views/animations/tab_strip_animations.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
+#include "chrome/browser/ui/views/tabs/tab/tab_title.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/tabs/public/tab_interface.h"
@@ -32,8 +35,10 @@
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/view_utils.h"
 #include "url/gurl.h"
@@ -170,15 +175,16 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
   pinned->AddToEssentials(tabs[1]);
   ASSERT_TRUE(tabs[1]->IsPinned());
   if (gfx::Animation::ShouldRenderRichAnimation()) {
-    // Upstream behaviour Koan relies on (koan_essentials.h): the first tile
-    // animates in (no snap for the grid's width change), and the grid's
-    // height follows it from 0 instead of being its final height at once.
-    EXPECT_TRUE(TabCollectionAnimatingLayoutManager::IsViewAnimating(grid));
-    EXPECT_LT(grid->GetPreferredSize().height(),
-              static_cast<TabCollectionAnimatingLayoutManager*>(
-                  grid->GetLayoutManager())
-                  ->GetTargetPreferredSize()
-                  .height());
+    // Upstream behaviour Koan relies on (koan_essentials.h): the row and the
+    // tile animate with the strip's shared animation, which is running now,
+    // and the grid (a scroll view sized by the strip's layout) is given an
+    // eased height, still 0 at the start, instead of its final row at once.
+    views::test::RunScheduledLayout(browser_view());
+    const auto* manager = static_cast<TabCollectionAnimatingLayoutManager*>(
+        grid->GetLayoutManager());
+    EXPECT_LT(manager->animation_coordinator().current_offset(), 1.0);
+    EXPECT_LT(strip->pinned_tabs_scroll_view()->height(),
+              manager->GetTargetPreferredSize().height());
   }
 
   std::vector<TabView*> views;
@@ -205,6 +211,110 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
     CollectTabViews(strip, tab, views);
     ASSERT_EQ(1u, views.size());
     EXPECT_NE(grid, views[0]->parent());
+  }
+}
+
+// The recording (compact mode, 30.0 s): the revealed sidebar showed the
+// Essentials as full-width rows with titles, because upstream lays the grid
+// out one per row while the strip is collapsed. Zen's revealed compact
+// sidebar keeps its grid of tiles.
+IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
+                       CompactModeRevealKeepsTheEssentialsGrid) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanPinnedTabController* pinned = GetPinnedTabs(browser());
+  ASSERT_TRUE(pinned);
+  const std::vector<tabs::TabInterface*> tabs = OpenTabs(4);
+  for (int i = 0; i < 3; ++i) {
+    pinned->AddToEssentials(tabs[i]);
+  }
+  TabStripView* strip = FindView<TabStripView>(browser_view());
+  ASSERT_TRUE(strip);
+  PinnedTabContainerView* grid = strip->GetPinnedTabsContainer();
+  ASSERT_TRUE(grid);
+
+  KoanCompactModeController* compact =
+      KoanBrowserViewController::From(browser_view())->compact_mode();
+  ASSERT_TRUE(compact);
+  compact->ToggleCompactMode();
+  const auto* state = tabs::VerticalTabStripStateController::From(browser());
+  ASSERT_TRUE(base::test::RunUntil([&] { return state->IsCollapsed(); }));
+  ASSERT_TRUE(compact->PeekSidebar());
+  auto* region = views::AsViewClass<VerticalTabStripRegionView>(
+      browser_view()->tab_strip_view());
+  ASSERT_TRUE(region);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return region->is_expanded_on_hover(); }));
+  ASSERT_TRUE(state->IsCollapsed());
+
+  // One row of three tiles, each well under half the grid's width, no titles.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    views::test::RunScheduledLayout(browser_view());
+    return !TabCollectionAnimatingLayoutManager::IsViewAnimating(grid) &&
+           grid->width() > 0;
+  }));
+  std::vector<TabView*> tiles;
+  for (int i = 0; i < 3; ++i) {
+    std::vector<TabView*> views;
+    CollectTabViews(grid, tabs[i], views);
+    ASSERT_EQ(1u, views.size());
+    tiles.push_back(views[0]);
+  }
+  for (TabView* tile : tiles) {
+    EXPECT_EQ(tiles[0]->y(), tile->y());
+    EXPECT_GT(tile->width(), 0);
+    EXPECT_LT(tile->width() * 2, grid->width());
+    TabTitle* title = FindView<TabTitle>(tile);
+    EXPECT_TRUE(!title || !title->GetVisible());
+  }
+}
+
+// The recording: compact mode off with the sidebar hidden showed the sidebar
+// in a frame while the page's old picture showed through beside it (upstream's
+// expand moves the card's edge over the page), and off with the sidebar out
+// slid it out and back. Zen docks it at once: a hidden one slides in over no
+// page, one that is out stays.
+IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
+                       CompactModeOffDocksTheSidebarAtOnce) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanCompactModeController* compact =
+      KoanBrowserViewController::From(browser_view())->compact_mode();
+  ASSERT_TRUE(compact);
+  const auto* state = tabs::VerticalTabStripStateController::From(browser());
+  auto* region = browser_view()->tab_strip_view();
+  ASSERT_TRUE(region);
+  BrowserAnimationController* animations =
+      BrowserAnimationController::From(browser());
+  ASSERT_TRUE(animations);
+
+  for (const bool revealed : {false, true}) {
+    SCOPED_TRACE(revealed ? "revealed" : "hidden");
+    compact->ToggleCompactMode();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return state->IsCollapsed() &&
+             !animations->IsAnimating(TabStripAnimations::kVerticalTabStrip);
+    }));
+    if (revealed) {
+      ASSERT_TRUE(compact->PeekSidebar());
+      ASSERT_TRUE(base::test::RunUntil([&] {
+        return !animations->IsAnimating(TabStripAnimations::kVerticalTabStrip);
+      }));
+    }
+    compact->ToggleCompactMode();
+    // Upstream's expand is over at once: the strip is docked and the page laid
+    // out beside it in this turn.
+    ASSERT_TRUE(base::test::RunUntil([&] { return !compact->hides_sidebar(); }));
+    EXPECT_FALSE(animations->IsAnimating(TabStripAnimations::kVerticalTabStrip));
+    EXPECT_FALSE(state->IsCollapsed());
+    views::test::RunScheduledLayout(browser_view());
+    EXPECT_EQ(state->GetUncollapsedWidth(), region->width());
+    if (revealed && region->layer()) {
+      // Out already: no slide.
+      EXPECT_TRUE(region->layer()->GetTargetTransform().IsIdentity());
+    }
+    // A hidden one slides in from the edge, and ends in place.
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return !region->layer() || region->layer()->transform().IsIdentity();
+    }));
   }
 }
 
