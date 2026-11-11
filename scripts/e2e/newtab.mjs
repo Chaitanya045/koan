@@ -140,7 +140,9 @@ await front(first);
 const settings = (await browserCall('Target.createTarget',
     { url: 'chrome://settings/koan/looks', background: true })).result.targetId;
 const settingsPage = await waitFor(async () => (await pages()).find(p => p.id === settings));
-await waitFor(() => evalIn(settingsPage, `koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`));
+check('Koan\'s panes draw in chrome://settings (Look and Feel)',
+      await waitFor(() => evalIn(settingsPage,
+          `window.koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`)));
 const row = `koanSettingsRoot.querySelector('[data-pref="koan.newtab.page"]')`;
 check('Koan\'s settings has a "New tab page" choice, Blank page by default',
       await evalIn(settingsPage, `${row}?.querySelector('select')?.selectedOptions[0]?.text`) ===

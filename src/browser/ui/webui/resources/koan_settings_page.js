@@ -16,8 +16,11 @@
 // Everything shown comes from the browser (koan_settings_rows.cc and
 // koan_shortcut_table.cc); add settings there, not here.
 
-import 'chrome://resources/cr_elements/cr_icon/cr_iconset.js';
-
+// Only chrome://resources modules the settings bundle keeps shared may be
+// imported here (BUNDLE_JS_EXCLUDES, ui/webui/resources/tools/
+// bundle_js_excludes.gni): the bundle has its own copy of every other one, and
+// a second copy defines its elements twice (cr-iconset, 2026-11-12: the whole
+// settings app failed to start).
 import {addWebUiListener, sendWithPromise} from 'chrome://resources/js/cr.js';
 
 // The page's router (chrome://settings/settings.js re-exports it). Imported
@@ -698,7 +701,14 @@ const ICONS = {
   }
   const svg = document.createElementNS(SVG, 'svg');
   svg.append(defs);
-  document.head.append(h('cr-iconset', {name: 'koan', size: 16}, svg));
+  // Not defined yet: the settings bundle's own cr-iconset upgrades it when it
+  // loads, before the menu draws, and registers it where the menu's icons
+  // look. Attributes, which the element reads when it upgrades.
+  const iconset = document.createElement('cr-iconset');
+  iconset.setAttribute('name', 'koan');
+  iconset.setAttribute('size', '16');
+  iconset.append(svg);
+  document.head.append(iconset);
 }
 
 // <koan-settings-page> (settings_main.html hook): one plugin for every Koan

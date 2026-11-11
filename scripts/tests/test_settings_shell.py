@@ -102,6 +102,19 @@ class SettingsShellTest(unittest.TestCase):
     declared = (ROOT / 'src' / definitions.group(1)).read_text()
     self.assertIn("declare module '%s'" % url, declared)
 
+  def test_plugin_imports_only_shared_resources(self):
+    # The settings bundle has its own copy of every chrome://resources module
+    # but these (BUNDLE_JS_EXCLUDES in bundle_js_excludes.gni); importing
+    # another one loads a second copy, which defines its elements again and
+    # stops the settings app (cr-iconset, 2026-11-12).
+    shared = {'chrome://resources/js/cr.js',
+              'chrome://resources/js/load_time_data.js',
+              'chrome://resources/lit/v3_0/lit.rollup.js'}
+    imports = set(re.findall(r"^import (?:[^'\n]* from )?'([^']+)';", JS, re.M))
+    self.assertTrue(imports)
+    self.assertLessEqual(imports, shared)
+    self.assertNotIn("customElements.define('cr-", JS)
+
   def test_messages_are_koan_prefixed_and_handled(self):
     handlers = ''.join(
         (WEBUI / f).read_text()
