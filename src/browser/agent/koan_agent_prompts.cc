@@ -32,6 +32,8 @@ std::string_view ReasonFor(PageSurface surface) {
       return "device-chooser";
     case PageSurface::kScreenShare:
       return "screen-share";
+    case PageSurface::kPasskey:
+      return "passkey";
   }
   return "";
 }
@@ -41,6 +43,7 @@ bool NeedsUserInFront(PageSurface surface) {
     case PageSurface::kFilePicker:
     case PageSurface::kDeviceChooser:
     case PageSurface::kScreenShare:
+    case PageSurface::kPasskey:
       return true;
     case PageSurface::kBeforeUnload:
     case PageSurface::kJavaScriptDialog:
@@ -80,6 +83,8 @@ std::u16string PromptTextFor(PageSurface surface,
       return base::StrCat({page, u" wants to connect to a device"});
     case PageSurface::kScreenShare:
       return base::StrCat({page, u" wants to share your screen"});
+    case PageSurface::kPasskey:
+      return base::StrCat({page, u" wants you to use a passkey"});
   }
   return page;
 }

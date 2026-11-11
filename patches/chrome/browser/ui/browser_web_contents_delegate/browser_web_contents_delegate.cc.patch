@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 3c3aaff..5e4b714 100644
+index 3c3aaff..e2c004d 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -88,6 +88,10 @@
@@ -109,7 +109,7 @@ index 3c3aaff..5e4b714 100644
    return javascript_dialogs::TabModalDialogManager::FromWebContents(source);
  }
  
-@@ -1174,14 +1232,32 @@ void BrowserWebContentsDelegate::RunFileChooser(
+@@ -1174,14 +1232,43 @@ void BrowserWebContentsDelegate::RunFileChooser(
      content::RenderFrameHost* render_frame_host,
      scoped_refptr<content::FileSelectListener> listener,
      const blink::mojom::FileChooserParams& params) {
@@ -131,6 +131,17 @@ index 3c3aaff..5e4b714 100644
 +                                              std::move(show));
 +}
 +
++base::OnceCallback<void(content::WebContentsDelegate::WebAuthnRun run)>
++BrowserWebContentsDelegate::HoldWebAuthnRequest(
++    content::RenderFrameHost* render_frame_host) {
++  return koan::agent::HoldWebAuthnForAgent(render_frame_host);
++}
++
++void BrowserWebContentsDelegate::CancelHeldWebAuthnRequests(
++    content::RenderFrameHost* render_frame_host) {
++  koan::agent::CancelHeldWebAuthnForAgent(render_frame_host);
++}
++
  void BrowserWebContentsDelegate::EnumerateDirectory(
      content::WebContents* web_contents,
      scoped_refptr<content::FileSelectListener> listener,
@@ -142,7 +153,7 @@ index 3c3aaff..5e4b714 100644
    FileSelectHelper::EnumerateDirectory(web_contents, std::move(listener), path);
  }
  
-@@ -1369,6 +1445,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
+@@ -1369,6 +1456,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
    if (context->IsOffTheRecord()) {
      return;
    }

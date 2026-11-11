@@ -1,8 +1,8 @@
 diff --git a/content/public/browser/web_contents_delegate.cc b/content/public/browser/web_contents_delegate.cc
-index 0b44d8b..ce015f9 100644
+index 0b44d8b..6249e34 100644
 --- a/content/public/browser/web_contents_delegate.cc
 +++ b/content/public/browser/web_contents_delegate.cc
-@@ -285,6 +285,12 @@ void WebContentsDelegate::RunFileChooser(
+@@ -285,6 +285,20 @@ void WebContentsDelegate::RunFileChooser(
    listener->FileSelectionCanceled();
  }
  
@@ -11,6 +11,14 @@ index 0b44d8b..ce015f9 100644
 +    base::OnceCallback<void(bool show)> show) {
 +  return false;
 +}
++
++base::OnceCallback<void(WebContentsDelegate::WebAuthnRun run)>
++WebContentsDelegate::HoldWebAuthnRequest(RenderFrameHost* render_frame_host) {
++  return {};
++}
++
++void WebContentsDelegate::CancelHeldWebAuthnRequests(
++    RenderFrameHost* render_frame_host) {}
 +
  #if BUILDFLAG(IS_ANDROID)
  bool WebContentsDelegate::UseFileChooserForFileSystemAccess() const {

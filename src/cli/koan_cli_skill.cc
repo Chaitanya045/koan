@@ -37,8 +37,9 @@ not yours unless they give you one. Every command is `koan ...`.
 If a command fails with Koan.paused, the user is using that tab: stop and
 wait for them to hand it back. If `koan status` or `koan watch` shows
 Koan.userNeeded (a dialog, a sign-in, a print, an app link, a file or
-device picker, screen sharing, a security warning), the page is waiting for
-the user: tell them what it asks, and wait. Do not try to get around either.
+device picker, screen sharing, a passkey, a security warning), the page is
+waiting for the user: tell them what it asks, and wait. Do not try to get
+around either.
 
 Your tabs stay open between commands for as long as your task lasts (30
 minutes without a command ends it). Some agents sandbox shell commands:

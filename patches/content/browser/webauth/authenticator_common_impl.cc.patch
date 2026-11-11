@@ -1,0 +1,108 @@
+diff --git a/content/browser/webauth/authenticator_common_impl.cc b/content/browser/webauth/authenticator_common_impl.cc
+index 9e46493..157d29e 100644
+--- a/content/browser/webauth/authenticator_common_impl.cc
++++ b/content/browser/webauth/authenticator_common_impl.cc
+@@ -67,6 +67,7 @@
+ #include "content/public/browser/web_authentication_delegate.h"
+ #include "content/public/browser/web_authentication_request_proxy.h"
+ #include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_delegate.h"
+ #include "content/public/browser/webauth_request_security_checker.h"
+ #include "content/public/common/content_client.h"
+ #include "crypto/hash.h"
+@@ -819,6 +820,18 @@ void MaybeRecordBrowserAssistedLogin(CredentialRequestResult request_result) {
+     GetContentClient()->browser()->RecordAssistedLogin(*login_type);
+   }
+ }
++
++// Koan: what holds a request `render_frame_host` makes now
++// (WebContentsDelegate::HoldWebAuthnRequest()), or null.
++base::OnceCallback<void(WebContentsDelegate::WebAuthnRun)> HoldForEmbedder(
++    RenderFrameHost* render_frame_host) {
++  WebContentsDelegate* delegate =
++      WebContents::FromRenderFrameHost(render_frame_host)->GetDelegate();
++  if (!delegate) {
++    return {};
++  }
++  return delegate->HoldWebAuthnRequest(render_frame_host);
++}
+ }  // namespace
+ 
+ // RequestState contains all state that is specific to a single WebAuthn call.
+@@ -1099,6 +1112,31 @@ void AuthenticatorCommonImpl::MakeCredential(
+     blink::mojom::PublicKeyCredentialCreationOptionsPtr options,
+     blink::mojom::PaymentOptionsPtr payment_options,
+     MakeCredentialCallback callback) {
++  // Koan: the embedder may hold a modal request and make it again later.
++  if (!options->is_conditional && !options->is_payment_credential_creation) {
++    if (auto hold = HoldForEmbedder(GetRenderFrameHost())) {
++      std::move(hold).Run(base::BindOnce(
++          [](base::WeakPtr<AuthenticatorCommonImpl> self, url::Origin origin,
++             blink::mojom::PublicKeyCredentialCreationOptionsPtr options,
++             blink::mojom::PaymentOptionsPtr payment_options,
++             MakeCredentialCallback callback, bool run,
++             base::OnceClosure done) {
++            if (!run || !self) {
++              std::move(callback).Run(
++                  blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR,
++                  nullptr, nullptr);
++              return;
++            }
++            self->MakeCredential(std::move(origin), std::move(options),
++                                 std::move(payment_options),
++                                 std::move(callback).Then(std::move(done)));
++          },
++          weak_factory_.GetWeakPtr(), std::move(caller_origin),
++          std::move(options), std::move(payment_options),
++          std::move(callback)));
++      return;
++    }
++  }
+   base::RecordAction(base::UserMetricsAction("WebAuthn.MakeCredential.Start"));
+   callback = base::BindOnce(
+       &AuthenticatorCommonImpl::GetMetricsWrappedMakeCredentialCallback,
+@@ -1561,6 +1599,31 @@ void AuthenticatorCommonImpl::GetCredential(
+     blink::mojom::GetCredentialOptionsPtr options,
+     blink::mojom::PaymentOptionsPtr payment_options,
+     GetCredentialCallback callback) {
++  // Koan: the embedder may hold a modal request and make it again later.
++  if (options->public_key && options->mediation == Mediation::MODAL &&
++      payment_options.is_null()) {
++    if (auto hold = HoldForEmbedder(GetRenderFrameHost())) {
++      std::move(hold).Run(base::BindOnce(
++          [](base::WeakPtr<AuthenticatorCommonImpl> self, url::Origin origin,
++             blink::mojom::GetCredentialOptionsPtr options,
++             GetCredentialCallback callback, bool run,
++             base::OnceClosure done) {
++            if (!run || !self) {
++              std::move(callback).Run(
++                  AuthenticatorImpl::MakeGetAssertionResponse(
++                      blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR,
++                      nullptr, nullptr));
++              return;
++            }
++            self->GetCredential(std::move(origin), std::move(options),
++                                /*payment_options=*/nullptr,
++                                std::move(callback).Then(std::move(done)));
++          },
++          weak_factory_.GetWeakPtr(), std::move(caller_origin),
++          std::move(options), std::move(callback)));
++      return;
++    }
++  }
+   if (options->mediation == Mediation::CONDITIONAL) {
+     base::RecordAction(
+         base::UserMetricsAction("WebAuthn.GetAssertion.Conditional.Start"));
+@@ -2530,6 +2593,12 @@ void AuthenticatorCommonImpl::GetMetricsWrappedGetCredentialCallback(
+ }
+ 
+ void AuthenticatorCommonImpl::Cancel() {
++  // Koan: a request the embedder holds is answered too.
++  if (WebContentsDelegate* delegate =
++          WebContents::FromRenderFrameHost(GetRenderFrameHost())
++              ->GetDelegate()) {
++    delegate->CancelHeldWebAuthnRequests(GetRenderFrameHost());
++  }
+   CancelWithStatus(blink::mojom::AuthenticatorStatus::ABORT_ERROR);
+ }
+ 

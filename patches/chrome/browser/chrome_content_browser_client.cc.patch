@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 565bd58..144c525 100644
+index 565bd58..31b2812 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -411,6 +411,11 @@
@@ -67,19 +67,22 @@ index 565bd58..144c525 100644
    const BlockedWindowParams blocked_params(
        target_url, opener->GetGlobalFrameToken(), source_origin,
        opener->GetSiteInstance(), referrer, frame_name, disposition, features,
-@@ -7335,6 +7365,11 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
+@@ -7335,6 +7365,14 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
  bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
      content::RenderFrameHost* rfh,
      const url::Origin& caller_origin) {
 +  // Koan: no passkey or security key sign-in in an agent tab, refused before
-+  // any UI (it would show over the user's work: an assertion needs no focus).
-+  if (koan::containers::IsAgentTabFrame(rfh)) {
++  // any UI (it would show over the user's work: an assertion needs no focus),
++  // except the one the user opened from the agent indicator
++  // (WebContentsDelegate::HoldWebAuthnRequest()).
++  if (koan::containers::IsAgentTabFrame(rfh) &&
++      !koan::agent::IsOpenedWebAuthnRequestForAgent(rfh)) {
 +    return false;
 +  }
    const Profile* profile =
        Profile::FromBrowserContext(rfh->GetBrowserContext());
    if (profile->GetPrefs()->GetBoolean(
-@@ -7511,6 +7546,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
+@@ -7511,6 +7549,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
    }
  #endif  // BUILDFLAG(IS_CHROMEOS)
  
@@ -95,7 +98,7 @@ index 565bd58..144c525 100644
    if (!http_auth_coordinator_) {
      http_auth_coordinator_ = CreateHttpAuthCoordinator();
    }
-@@ -7591,6 +7635,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
+@@ -7591,6 +7638,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
      // applications.
      return false;
    }

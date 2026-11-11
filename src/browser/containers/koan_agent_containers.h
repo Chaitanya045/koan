@@ -48,8 +48,10 @@ class WebContents;
 // tabs (links, window.open, target=_blank) stay in the container, also in the
 // background. Agent tabs block what the user turned off in "What agents can
 // use" (passwords, autofill, extensions, history: koan_agent_access.h) and,
-// in a container, site permissions; pickers, passkeys and open-tab sync are
-// blocked in every agent tab (agent-control.md section 7.2).
+// in a container, site permissions; open-tab sync is blocked in every agent
+// tab, and pickers and passkeys too, except that while an agent holds a tab
+// outside a container they wait for the user (agent-control.md sections 7.2
+// and 9.4).
 //
 // The "your tab" mode (a lease on one of the user's tabs) is not a container
 // and is not here: see the lease in agent-control.md section 8.

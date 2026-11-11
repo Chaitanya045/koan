@@ -103,6 +103,8 @@ PageSurface SurfaceFor(HeldPicker picker) {
       return PageSurface::kDeviceChooser;
     case HeldPicker::kScreenShare:
       return PageSurface::kScreenShare;
+    case HeldPicker::kPasskey:
+      return PageSurface::kPasskey;
   }
   return PageSurface::kFilePicker;
 }
@@ -542,6 +544,21 @@ void AgentPageSurfaces::ForgetPicker(uint64_t id) {
   pickers_.erase(id);
   opening_.erase(id);
   Forget(id);
+}
+
+void AgentPageSurfaces::DismissPickers(content::RenderFrameHost* frame,
+                                       HeldPicker picker) {
+  std::vector<uint64_t> ids;
+  for (const auto& [id, document] : pickers_) {
+    const UserPrompt* prompt = queue_.Find(id);
+    if (prompt && prompt->surface == SurfaceFor(picker) &&
+        document.AsRenderFrameHostIfValid() == frame) {
+      ids.push_back(id);
+    }
+  }
+  for (uint64_t id : ids) {
+    Dismiss(id);
+  }
 }
 
 uint64_t AgentPageSurfaces::Hold(content::WebContents* contents,
