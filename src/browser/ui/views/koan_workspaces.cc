@@ -326,7 +326,18 @@ class SpaceWheelHandler : public ui::EventHandler {
   void OnScrollEvent(ui::ScrollEvent* event) override {
     if (event->type() == ui::EventType::kScroll && event->HasNativeEvent() &&
         !ui::GetMouseWheelTick120ths(event->native_event()).IsZero()) {
-      Handle(event->x_offset(), event->y_offset(), event);
+      if (!Handle(event->x_offset(), event->y_offset(), event)) {
+        // A plain vertical wheel over the Space switcher scrolls it.
+        ScrollStrip(event->x_offset(), event->y_offset(), /*precise=*/false,
+                    event);
+      }
+      return;
+    }
+    // Touchpad scrolling over the Space switcher scrolls it, when its Spaces
+    // don't fit (Zen's overflow-x: auto).
+    if (event->type() == ui::EventType::kScroll &&
+        ScrollStrip(event->x_offset(), event->y_offset(), /*precise=*/true,
+                    event)) {
       return;
     }
     if (controller_->OnSwipeScroll(*event)) {
@@ -346,18 +357,33 @@ class SpaceWheelHandler : public ui::EventHandler {
     // A horizontal wheel (or touchpad scroll) is upstream's swipe, which
     // switches Space too (through PickSpaceTab() and WrapsSpaces()); the
     // modifier with a vertical wheel is Zen's. Not touchpad scrolling.
-    if (!event->IsMouseWheelEvent() ||
-        !controller_->IsSpaceScrollModifierDown(*event) ||
-        (event->flags() & ui::EF_PRECISION_SCROLLING_DELTA)) {
+    if (!event->IsMouseWheelEvent()) {
       return;
     }
     const ui::MouseWheelEvent* wheel = event->AsMouseWheelEvent();
-    Handle(wheel->x_offset(), wheel->y_offset(), event);
+    const bool precise = event->flags() & ui::EF_PRECISION_SCROLLING_DELTA;
+    if (!precise && controller_->IsSpaceScrollModifierDown(*event) &&
+        Handle(wheel->x_offset(), wheel->y_offset(), event)) {
+      return;
+    }
+    // Otherwise, over the Space switcher with Spaces that don't fit, the
+    // touchpad or a vertical wheel scrolls it (before upstream's swipe).
+    ScrollStrip(wheel->x_offset(), wheel->y_offset(), precise, event);
 #endif
   }
 
  private:
-  void Handle(float x, float y, ui::Event* event) {
+  bool ScrollStrip(float x, float y, bool precise, ui::Event* event) {
+    if (!controller_->ScrollSpaceStrip(*event, x, y, precise)) {
+      return false;
+    }
+    event->SetHandled();
+    event->StopPropagation();
+    return true;
+  }
+
+  // Zen's wheel switch; returns whether it took the event.
+  bool Handle(float x, float y, ui::Event* event) {
     float delta = 0;
     if (x != 0 && y == 0) {
       delta = -x;
@@ -366,12 +392,13 @@ class SpaceWheelHandler : public ui::EventHandler {
       delta = -y;
     }
     if (delta == 0) {
-      return;
+      return false;
     }
     // Wheel down or right: the next Space (unless natural scroll is on).
     controller_->OnSpaceWheel((delta > 0) != base::i18n::IsRTL());
     event->SetHandled();
     event->StopPropagation();
+    return true;
   }
 
   const raw_ptr<KoanWorkspaceController> controller_;
@@ -2237,6 +2264,15 @@ bool KoanWorkspaceController::CanSwipe() const {
 
 bool KoanWorkspaceController::OnSwipeScroll(const ui::ScrollEvent& event) {
   return swipe_->OnScrollEvent(event);
+}
+
+bool KoanWorkspaceController::ScrollSpaceStrip(const ui::Event& event,
+                                               float x,
+                                               float y,
+                                               bool precise) {
+  return bar_ && !drag_.live() && IsEnabled() &&
+         bar_->ScrollStrip(static_cast<const views::View*>(event.target()), x,
+                           y, precise);
 }
 
 void KoanWorkspaceController::UpdateSwipe(float amount) {

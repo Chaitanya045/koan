@@ -335,6 +335,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // A touchpad scroll over the sidebar (macOS): whether it is part of a swipe,
   // which then takes it.
   bool OnSwipeScroll(const ui::ScrollEvent& event);
+  // A wheel or touchpad scroll over the sidebar, with `event`'s offsets:
+  // whether it scrolled the bottom bar's Space switcher, the pointer being
+  // over it and its Spaces not fitting (KoanSpaceBarView::ScrollStrip()).
+  // Not during a swipe, which it would cut short.
+  bool ScrollSpaceStrip(const ui::Event& event, float x, float y, bool precise);
   // Abandons a swipe in progress: the end of the gesture can't be relied on to
   // arrive (the sidebar or its header went away, compact mode toggled, the
   // window lost focus, the fingers rested too long). The Space springs back
