@@ -87,6 +87,7 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"new-blank-window", 13},
     {"pin-tab", 14},
     {"unpin-tab", 15},
+    {"open-space-routing", 16},
     {"next-space", 18},
     {"previous-space", 19},
     {"close-tab", 20},
@@ -112,6 +113,9 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"focus-space", 100},
 });
 
+// Where a command missing from kZenOrder goes: after every other.
+constexpr int kLastOrder = 1000;
+
 // Labels are Zen's palette strings (zen-command-palette.ftl), which differ
 // from its shortcut names in the shortcut table (zen-preferences.ftl), e.g.
 // "Settings" vs "Open Preferences"; the keys do come from the table.
@@ -122,8 +126,10 @@ KoanCommand MakeCommand(std::string id,
   // "focus-space:<id>" takes the place of "focus-space".
   const auto order =
       kZenOrder.find(std::string_view(id).substr(0, id.find(':')));
-  CHECK(order != kZenOrder.end()) << id;
-  command.order = order->second;
+  // A command missing from kZenOrder is a bug (KoanCommandsTest checks every
+  // one), but it must never crash the URL bar: it goes last.
+  DUMP_WILL_BE_CHECK(order != kZenOrder.end()) << id;
+  command.order = order != kZenOrder.end() ? order->second : kLastOrder;
   command.id = std::move(id);
   command.label = std::move(label);
   command.icon = &icon;
