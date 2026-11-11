@@ -238,12 +238,8 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
       deny("Koan.interstitial",
            "the tab shows a security warning; only the user can decide what "
            "to do");
-      if (facts && interstitial_tabs_.insert(session.target_id).second) {
-        base::DictValue params;
-        params.Set("targetId", session.target_id);
-        params.Set("reason", "interstitial");
-        SendEvent("Koan.userNeeded", std::move(params), std::nullopt);
-        backend_->UserNeeded(session.target_id, "interstitial");
+      if (facts) {
+        TellUserNeededForInterstitial(session.target_id);
       }
       return;
     }
@@ -477,6 +473,16 @@ void CdpFacade::AttachToTarget(const AgentMessage& message) {
   }
   TabSession* session = Attach(*target_id);
   if (!session) {
+    // Content refuses to attach to a tab that already shows a security
+    // interstitial (MayReachFrame()): the same answer as acting on one.
+    const std::optional<TabFacts> facts = backend_->DescribeTab(*target_id);
+    if (facts && facts->interstitial) {
+      TellUserNeededForInterstitial(*target_id);
+      ReplyError(message.id, message.session_id, "Koan.interstitial",
+                 "the tab shows a security warning; only the user can decide "
+                 "what to do");
+      return;
+    }
     ReplyError(message.id, message.session_id, "Koan.unavailable",
                "the tab could not be attached");
     return;
@@ -484,6 +490,18 @@ void CdpFacade::AttachToTarget(const AgentMessage& message) {
   base::DictValue result;
   result.Set("sessionId", session->session_id);
   Reply(message.id, message.session_id, std::move(result));
+}
+
+void CdpFacade::TellUserNeededForInterstitial(const std::string& target_id) {
+  // Once per interstitial.
+  if (!interstitial_tabs_.insert(target_id).second) {
+    return;
+  }
+  base::DictValue params;
+  params.Set("targetId", target_id);
+  params.Set("reason", "interstitial");
+  SendEvent("Koan.userNeeded", std::move(params), std::nullopt);
+  backend_->UserNeeded(target_id, "interstitial");
 }
 
 CdpFacade::TabSession* CdpFacade::Attach(const std::string& target_id) {

@@ -224,6 +224,9 @@ class CdpFacade {
   // Attaches the client's session to the tab and tells it
   // (Target.attachedToTarget). Returns the session, or null.
   TabSession* Attach(const std::string& target_id);
+  // Koan.userNeeded {reason: "interstitial"} for `target_id`, once per
+  // interstitial.
+  void TellUserNeededForInterstitial(const std::string& target_id);
   void EndSession(const std::string& session_id, bool tell_client);
 
   void HandleTabAnswer(TabSession& session, base::DictValue answer);
