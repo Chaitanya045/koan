@@ -1,0 +1,2 @@
+# The welcome shows on a first run only (KoanWelcome is on by default).
+--force-first-run

@@ -1,0 +1,24 @@
+# The e2e scripts scripts/mac/suite.sh runs on the Mac, in order:
+#   <name> [timeout=<seconds>]
+# <name> is scripts/e2e/<name>.mjs (its .flags, prefs/<name>.json and
+# local_state/<name>.json apply, as with run.sh). The default timeout is 300 s.
+# `suite.sh --all-e2e` runs every scripts/e2e/*.mjs instead (to port more);
+# scripts whose .flags need Linux's headless Ozone ({dump}, --ozone-*) are
+# skipped there.
+#
+# Written for the Mac suite (Mac key codes, real input when allowed):
+window_teardown timeout=420
+window_sync timeout=420
+space_drag timeout=420
+welcome_input timeout=240
+agent_cli timeout=420
+# Existing scripts that send no keys (lib/koan.mjs key() passes Windows key
+# codes, which macOS reads as other keys), so they mean the same on the Mac:
+colors
+compact_flash
+fullscreen_compact
+newtab
+newtab_custom
+scrollbars
+vertical_tabs_hover
+window_drag

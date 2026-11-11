@@ -1,4 +1,7 @@
-// ptr pos | move x y [ms] | click x y | rclick x y   -- global pointer control (CG coordinates, points). Only used while the user is away.
+// ptr pos | move x y [ms] | click x y | rclick x y | altclick x y | cmdclick x y
+//     | down x y | dragto x y [ms] | up x y   -- global pointer control (CG coordinates, points). Only used while the user is away.
+// down/dragto/up make a held-button drag: down presses at (x, y), dragto moves there in steps with the left button held
+// (kCGEventLeftMouseDragged), up releases. scripts/e2e/space_drag.mjs uses them.
 #import <Cocoa/Cocoa.h>
 static void post(CGEventType t, CGPoint p, CGMouseButton b){ CGEventRef e=CGEventCreateMouseEvent(NULL,t,p,b); CGEventSetIntegerValueField(e,kCGMouseEventClickState,1); CGEventPost(kCGHIDEventTap,e); CFRelease(e); }
 int main(int c,char**v){@autoreleasepool{
@@ -11,5 +14,10 @@ int main(int c,char**v){@autoreleasepool{
    for(int i=1;i<=steps;i++){ double f=(double)i/steps; CGPoint q=CGPointMake(p.x+(to.x-p.x)*f,p.y+(to.y-p.y)*f); post(kCGEventMouseMoved,q,kCGMouseButtonLeft); usleep(8000);} return 0; }
  if([cmd isEqual:@"click"]){ post(kCGEventMouseMoved,to,kCGMouseButtonLeft); usleep(80000); post(kCGEventLeftMouseDown,to,kCGMouseButtonLeft); usleep(60000); post(kCGEventLeftMouseUp,to,kCGMouseButtonLeft); return 0; }
  if([cmd isEqual:@"altclick"]){ post(kCGEventMouseMoved,to,kCGMouseButtonLeft); usleep(80000); CGEventRef d=CGEventCreateMouseEvent(NULL,kCGEventLeftMouseDown,to,kCGMouseButtonLeft); CGEventSetFlags(d,kCGEventFlagMaskAlternate); CGEventSetIntegerValueField(d,kCGMouseEventClickState,1); CGEventPost(kCGHIDEventTap,d); CFRelease(d); usleep(60000); CGEventRef u=CGEventCreateMouseEvent(NULL,kCGEventLeftMouseUp,to,kCGMouseButtonLeft); CGEventSetFlags(u,kCGEventFlagMaskAlternate); CGEventPost(kCGHIDEventTap,u); CFRelease(u); return 0; }
+ if([cmd isEqual:@"cmdclick"]){ post(kCGEventMouseMoved,to,kCGMouseButtonLeft); usleep(80000); CGEventRef d=CGEventCreateMouseEvent(NULL,kCGEventLeftMouseDown,to,kCGMouseButtonLeft); CGEventSetFlags(d,kCGEventFlagMaskCommand); CGEventSetIntegerValueField(d,kCGMouseEventClickState,1); CGEventPost(kCGHIDEventTap,d); CFRelease(d); usleep(60000); CGEventRef u=CGEventCreateMouseEvent(NULL,kCGEventLeftMouseUp,to,kCGMouseButtonLeft); CGEventSetFlags(u,kCGEventFlagMaskCommand); CGEventPost(kCGHIDEventTap,u); CFRelease(u); return 0; }
+ if([cmd isEqual:@"down"]){ post(kCGEventMouseMoved,to,kCGMouseButtonLeft); usleep(80000); post(kCGEventLeftMouseDown,to,kCGMouseButtonLeft); return 0; }
+ if([cmd isEqual:@"up"]){ post(kCGEventLeftMouseUp,to,kCGMouseButtonLeft); return 0; }
+ if([cmd isEqual:@"dragto"]){ int ms=c>4?atoi(v[4]):300; int steps=MAX(1,ms/8);
+   for(int i=1;i<=steps;i++){ double f=(double)i/steps; CGPoint q=CGPointMake(p.x+(to.x-p.x)*f,p.y+(to.y-p.y)*f); post(kCGEventLeftMouseDragged,q,kCGMouseButtonLeft); usleep(8000);} return 0; }
  if([cmd isEqual:@"rclick"]){ post(kCGEventMouseMoved,to,kCGMouseButtonRight); usleep(80000); post(kCGEventRightMouseDown,to,kCGMouseButtonRight); usleep(60000); post(kCGEventRightMouseUp,to,kCGMouseButtonRight); return 0; }
  return 2; }}

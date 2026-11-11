@@ -1,0 +1,3 @@
+# The content-marker extension ({root} is the repo; scripts/mac/suite.sh
+# expands it): an agent container's tabs must not run it.
+--load-extension={root}/scripts/e2e/extensions/content_marker

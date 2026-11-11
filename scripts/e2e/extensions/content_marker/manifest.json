@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Koan e2e content marker",
+  "version": "1.0",
+  "description": "scripts/e2e/agent_cli.mjs: marks every page it runs in, so a test can tell whether extensions reach a tab (an agent container's tabs must stay unmarked).",
+  "content_scripts": [{
+    "matches": ["http://127.0.0.1/*", "https://127.0.0.1/*"],
+    "js": ["marker.js"],
+    "run_at": "document_end"
+  }]
+}

@@ -101,7 +101,7 @@ jobs:
           git ls-files 'src/*.cc' 'src/*.h' |
             xargs clang-format --style=file --dry-run --Werror
       - name: shellcheck
-        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
+        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh scripts/mac/suite.sh
       # The friends' Mac build (docs/BUILDING-MAC.md): the scripts parse, and
       # build.sh plans a fresh clone's build on a faked Mac without running
       # or fetching anything.
@@ -132,8 +132,8 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -color
       - name: Node scripts parse
-        run: for f in scripts/*.mjs scripts/e2e/*.mjs; do node --check "$f"; done
+        run: for f in scripts/*.mjs scripts/e2e/*.mjs scripts/e2e/lib/*.mjs scripts/mac/visual/*.mjs scripts/e2e/extensions/*/*.js; do node --check "$f"; done
       - name: GN files are gn-format clean
         run: scripts/ci/check_gn_format.sh
       - name: Python compiles
-        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/agent/*.py scripts/tests/*.py
+        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/agent/*.py scripts/tests/*.py scripts/mac/visual/*.py
