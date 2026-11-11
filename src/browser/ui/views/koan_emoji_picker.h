@@ -27,9 +27,9 @@ namespace koan {
 
 // Zen's emoji picker (ZenEmojiPicker): a 250px panel below the anchor with
 // a search field and a grid of emoji, plus a None button that removes the
-// icon. Like Zen's Space icon pickers it stays open while you pick, so you
-// can try icons. Koan searches its own set of emoji by keyword; Zen's
-// second page of SVG icons isn't there.
+// icon. Like Zen's Space icon pickers it can stay open while you pick, so
+// you can try icons (Zen's closeOnSelect). Koan searches its own set of emoji
+// by keyword; Zen's second page of SVG icons isn't there.
 class KoanEmojiPicker : public views::View, public views::TextfieldController {
   METADATA_HEADER(KoanEmojiPicker, views::View)
 
@@ -40,12 +40,18 @@ class KoanEmojiPicker : public views::View, public views::TextfieldController {
   // An open picker; destroying it closes the picker.
   class Bubble {
    public:
-    Bubble(views::View* anchor, bool allow_none, PickedCallback on_pick);
+    Bubble(views::View* anchor,
+           bool allow_none,
+           bool close_on_pick,
+           PickedCallback on_pick);
     Bubble(const Bubble&) = delete;
     Bubble& operator=(const Bubble&) = delete;
     ~Bubble();
 
    private:
+    void OnPicked(bool close_on_pick,
+                  const PickedCallback& on_pick,
+                  const std::u16string& emoji);
     void OnClosed();
     void Drop();
 
@@ -55,9 +61,11 @@ class KoanEmojiPicker : public views::View, public views::TextfieldController {
   };
 
   // Opens the picker below `anchor`. `allow_none` shows the None button (Zen
-  // offers it while there is an icon to remove).
+  // offers it while there is an icon to remove). `close_on_pick` closes the
+  // picker once an icon is picked.
   static std::unique_ptr<Bubble> Show(views::View* anchor,
                                       bool allow_none,
+                                      bool close_on_pick,
                                       PickedCallback on_pick);
 
   KoanEmojiPicker(bool allow_none, PickedCallback on_pick);

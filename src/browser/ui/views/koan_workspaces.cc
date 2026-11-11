@@ -857,6 +857,8 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
   if (index == TabStripModel::kNoTab) {
     return;
   }
+  // Zen's new Space shows its empty state: the empty tab, with no row.
+  MarkEmptyTab(model, index);
   CreateSpaceFromTabs({index}, {.name = name, .icon = icon, .theme = theme});
 }
 
@@ -1366,7 +1368,7 @@ void KoanWorkspaceController::ShowIconPicker(
     return;
   }
   icon_picker_ = KoanEmojiPicker::Show(
-      anchor, /*allow_none=*/!info->icon.empty(),
+      anchor, /*allow_none=*/!info->icon.empty(), /*close_on_pick=*/false,
       base::BindRepeating(&KoanWorkspaceController::SetSpaceIcon,
                           weak_factory_.GetWeakPtr(), space));
 }

@@ -66,8 +66,9 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, NewSpaceComesAfterTheActiveOne) {
   EXPECT_THAT(SpaceNames(browser()),
               testing::ElementsAre(u"Space", u"Work", u"Play"));
 
-  // The new Space is shown.
+  // The new Space is shown, on Zen's empty tab (its empty state, no row).
   EXPECT_EQ(u"Play", spaces->GetSpace(*spaces->GetActiveSpace())->name);
+  EXPECT_TRUE(IsEmptyTab(browser()->GetTabStripModel()->GetActiveTab()));
 
   // After the active Space, not at the end.
   spaces->SwitchTo(spaces->GetSpaces()[0].id);

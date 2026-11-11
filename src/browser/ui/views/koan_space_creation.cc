@@ -273,6 +273,8 @@ bool KoanSpaceCreationView::HandleKeyEvent(views::Textfield* sender,
 void KoanSpaceCreationView::PickIcon() {
   picker_ =
       KoanEmojiPicker::Show(icon_, /*allow_none=*/!icon_->GetIcon().empty(),
+                            // The open picker covers the form's Theme button.
+                            /*close_on_pick=*/true,
                             base::BindRepeating(&KoanSpaceCreationView::SetIcon,
                                                 weak_factory_.GetWeakPtr()));
 }

@@ -152,8 +152,9 @@ the app menu, and no "Expand tabs on hover" (always on) in the sidebar
 button's menu, which is the sidebar's menu. The View menu's "Toggle Sidebar's
 Width" does the same as the button and has no key (⇧⌘L opens the inspector, as
 in Zen). The button's tooltip is Zen's, "Toggle Compact Mode". ⇧⌘A searches the
-open tabs, as in Zen: the URL bar opens in its tabs mode (a "Tabs" chip; Chromium's @tabs), you
-type to filter the open tabs, and Enter on a match switches to that tab.
+open tabs, as in Zen: the URL bar opens in its tabs mode (a "Tabs" chip; Chromium's @tabs)
+listing the open tabs, most recently used first; you type to filter them, and Enter
+on a match switches to that tab.
 
 **Tabs on the right**: right-click an empty part of the sidebar and pick
 **Tabs on the right** (or Settings > Look and Feel > Vertical Tabs).
@@ -435,8 +436,9 @@ belongs to a Space, and new tabs open in the active one.
 - **Create** a Space with **+ > Create Space** (or Ctrl+Alt+N): the sidebar
   shows Zen's Create-a-Space form (a collapsed sidebar expands over the
   page until you're done). Click the dashed box to pick an emoji
-  (search by keyword), type a name, Theme… to pick its theme (see Space themes), then
-  Create Space (or Enter); Escape or Cancel goes back.
+  (search by keyword; the picker closes once you pick), type a name, Theme… to pick its theme (see Space themes), then
+  Create Space (or Enter); Escape or Cancel goes back. The new Space opens
+  on Zen's empty state (the hidden empty tab, no tab row).
 - **Rename**: double-click the Space's name in the header (or right-click
   the header > Change Name…) and type; Enter keeps it, Escape cancels.
   Double-click the icon (or Change Icon…) to pick another emoji, or none.
