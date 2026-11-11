@@ -240,8 +240,8 @@ constexpr Option kSpaceScrollModifiers[] = {
 
 // The shadcn look (koan::look names).
 constexpr Option kLookStyles[] = {
-    {"zen", "Zen (default)"},
-    {"shadcn", "shadcn/ui"},
+    {"shadcn", "shadcn/ui (default)"},
+    {"zen", "Zen"},
 };
 constexpr Option kLookModes[] = {
     {"dark", "Dark"},

@@ -315,6 +315,12 @@ TEST(KoanZenTest, TheSystemAccentReachesThePrimaryColour) {
 
 // --- shadcn's tokens ---
 
+// shadcn's look is the default (2026-11-11); Zen's is the option.
+TEST(KoanShadcnTest, DefaultLookIsShadcn) {
+  EXPECT_EQ(Look().style, Style::kShadcn);
+  EXPECT_EQ(StyleToString(Look().style), "shadcn");
+}
+
 TEST(KoanShadcnTest, BlackBase) {
   Look look;
   look.style = Style::kShadcn;

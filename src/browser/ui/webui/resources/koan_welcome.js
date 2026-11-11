@@ -270,7 +270,7 @@ function getSteps(data) {
     {
       id: 'welcome',
       icon: 'sparkles',
-      title: 'Welcome to a calmer internet',
+      title: 'The only browser you need',
       description: 'Set Koan up in a minute. Every step is optional, and ' +
           'you can change all of it later in Settings.',
     },

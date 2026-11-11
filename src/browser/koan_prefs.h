@@ -25,10 +25,12 @@ inline constexpr int kSidebarDefaultWidth = 230;
 
 // Koan's look (issue #48), local-state prefs because colours are mixed
 // per colour-provider key, which knows no profile. The style is shadcn/ui's
-// design system ("shadcn") or Zen's ("zen", the default); the mode, base
+// design system ("shadcn", the default) or Zen's ("zen"); the mode, base
 // colour, accent and pasted theme apply to the shadcn style only (the Zen
 // style follows the system's light or dark mode). Names are
-// koan::look::StyleToString() & co.
+// koan::look::StyleToString() & co. The style's default is not written to
+// the profile, so a user who never chose one follows the default (shadcn
+// since 2026-11-11, Zen before); one who picked a style keeps it.
 // - kLookMode: "auto" (the system), "light" or "dark" (the default).
 // - kLookBase: black (default: Koan's near-black Zinc), or shadcn's base
 //   colours neutral, zinc, slate, stone, gray.
