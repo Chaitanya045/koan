@@ -31,4 +31,11 @@ SkColor MonoTrafficLightColor(SkColor toolbox_text) {
   return SkColorSetA(toolbox_text, static_cast<U8CPU>(alpha * 255 + 0.5f));
 }
 
+MonoLightsState GetMonoLightsState(bool pointer_over_buttons,
+                                   bool has_sheet,
+                                   bool buttons_hidden) {
+  const bool buttons = pointer_over_buttons || has_sheet;
+  return {.buttons_opaque = buttons, .dots_drawn = !buttons && !buttons_hidden};
+}
+
 }  // namespace koan

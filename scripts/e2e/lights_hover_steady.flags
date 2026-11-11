@@ -1,0 +1,2 @@
+# KoanMonoTrafficLightsView logs each change of what it shows (VLOG 1).
+--vmodule=koan_traffic_lights_mac=1

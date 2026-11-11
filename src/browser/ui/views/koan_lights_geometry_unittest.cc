@@ -59,4 +59,19 @@ TEST(KoanLightsGeometryTest, MonoDotsAreTheToolboxTextFaintly) {
             MonoTrafficLightColor(SkColorSetRGB(0xf0, 0xf0, 0xf0)));
 }
 
+TEST(KoanLightsGeometryTest, MonoLightsShowTheButtonsOnlyWhileHovered) {
+  // Pointer away: the dots, the buttons see-through.
+  EXPECT_EQ((MonoLightsState{.buttons_opaque = false, .dots_drawn = true}),
+            GetMonoLightsState(false, false, false));
+  // Pointer over them: AppKit's buttons, no dots under them.
+  EXPECT_EQ((MonoLightsState{.buttons_opaque = true, .dots_drawn = false}),
+            GetMonoLightsState(true, false, false));
+  // A sheet: the buttons whatever the pointer does.
+  EXPECT_EQ((MonoLightsState{.buttons_opaque = true, .dots_drawn = false}),
+            GetMonoLightsState(false, true, false));
+  // Buttons hidden (compact mode): no dots either.
+  EXPECT_EQ((MonoLightsState{.buttons_opaque = false, .dots_drawn = false}),
+            GetMonoLightsState(false, false, true));
+}
+
 }  // namespace koan

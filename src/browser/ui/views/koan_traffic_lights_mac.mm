@@ -7,14 +7,21 @@
 #import <AppKit/AppKit.h>
 
 #include "base/apple/foundation_util.h"
+#include "base/logging.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/remote_cocoa/app_shim/immersive_mode_controller_cocoa.h"
+#include "koan/browser/ui/views/koan_lights_geometry.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/views/widget/widget.h"
 
 // Zen's mono window controls: three dots behind AppKit's buttons, which are
 // see-through (alpha 0, not hidden, so that AppKit's own hover and clicks
-// still work) until the pointer is over them.
+// still work) until the pointer is over them. The view itself is never hidden:
+// it owns the tracking area that says where the pointer is, and a hidden
+// view's area tracks nothing (its visible rect is empty), so hiding it while
+// the pointer is over it ends the hover at once and AppKit sends an exit, then
+// an enter once it shows again, as fast as the run loop turns. It stops
+// drawing instead.
 @interface KoanMonoTrafficLightsView : NSView
 @property(nonatomic, copy) NSColor* dotColor;
 @property(nonatomic) BOOL pointerInside;
@@ -25,6 +32,7 @@
 
 @implementation KoanMonoTrafficLightsView {
   NSMutableArray<NSValue*>* _centres;
+  BOOL _dotsDrawn;
 }
 
 @synthesize dotColor = _dotColor;
@@ -91,16 +99,28 @@
                       valueWithPoint:NSMakePoint(NSMidX(b) - NSMinX(frame),
                                                  NSMidY(b) - NSMinY(frame))]];
   }
-  // The real buttons over a sheet too (Zen: not with window-modal-open).
-  const BOOL showButtons = self.pointerInside || self.window.attachedSheet;
-  const BOOL hiddenButtons = buttons.count && buttons.firstObject.hidden;
+  const koan::MonoLightsState state = koan::GetMonoLightsState(
+      self.pointerInside, self.window.attachedSheet != nil,
+      buttons.count && buttons.firstObject.hidden);
+  // (Only what changed: this runs on every layout.)
+  const CGFloat alpha = state.buttons_opaque ? 1.0 : 0.0;
   for (NSButton* button in buttons) {
-    button.alphaValue = showButtons ? 1.0 : 0.0;
+    if (button.alphaValue != alpha) {
+      button.alphaValue = alpha;
+    }
   }
-  self.hidden = showButtons || hiddenButtons;
+  if (state.dots_drawn != _dotsDrawn) {
+    _dotsDrawn = state.dots_drawn;
+    // For the Mac check of a steady hover (lights_hover_steady.mjs).
+    VLOG(1) << "KoanMonoTrafficLights: " << (_dotsDrawn ? "dots" : "no dots");
+    [self setNeedsDisplay:YES];
+  }
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
+  if (!_dotsDrawn) {
+    return;
+  }
   // Zen's --zen-traffic-light-size: 6px, 7px with macOS 26's larger buttons.
   CGFloat radius = 6;
   if (@available(macOS 26, *)) {
