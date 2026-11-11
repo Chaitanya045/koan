@@ -4,6 +4,9 @@
 
 #include "koan/browser/agent/koan_agent_peer.h"
 
+#include <sys/socket.h>
+
+#include "base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -11,7 +14,6 @@
 #include <Security/Security.h>
 #include <bsm/libbsm.h>
 #include <libproc.h>
-#include <sys/socket.h>
 #include <sys/un.h>
 
 #include <algorithm>
@@ -35,6 +37,13 @@
 namespace koan::agent {
 
 PeerResolver::~PeerResolver() = default;
+
+bool PeerHasHungUp(int fd) {
+  char byte;
+  // 0 is the end of the stream with nothing before it; data, an error or
+  // "nothing yet" (EAGAIN) is not.
+  return HANDLE_EINTR(recv(fd, &byte, 1, MSG_PEEK | MSG_DONTWAIT)) == 0;
+}
 
 #if BUILDFLAG(IS_MAC)
 

@@ -38,7 +38,8 @@ class FrameChannel {
   int fd() const { return fd_.get(); }
 
   // Writes one frame (blocking). False if the frame is too large or the
-  // socket failed.
+  // socket failed; what the other end sent before it closed can still be
+  // read.
   bool Write(std::string_view payload);
 
   // The next frame, waiting at most `timeout` (TimeDelta::Max(): forever).
@@ -57,6 +58,7 @@ class FrameChannel {
   base::ScopedFD fd_;
   agent::FrameDecoder decoder_;
   bool closed_ = false;
+  bool write_failed_ = false;
 };
 
 }  // namespace koan::cli

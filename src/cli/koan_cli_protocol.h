@@ -69,7 +69,12 @@ std::string Request(int id,
                     base::DictValue params,
                     std::string_view session_id = {});
 
-// An answer or an event, as read from the wire.
+// Why a connection is being closed before anything was read from it, as the
+// gateway says it: an error without an id ({"error": {"code", "message",
+// "data": code}}). ParseMessage() reads it as an error with no id.
+std::string Refusal(std::string_view code, std::string_view message);
+
+// An answer, an event or a refusal, as read from the wire.
 struct Message {
   std::optional<int> id;
   std::string method;

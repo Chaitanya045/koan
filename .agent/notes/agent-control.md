@@ -1141,8 +1141,16 @@ ancestors as at pairing), listens on `~/.koan/run/<id>.sock` (0700 dir, 0600 soc
 admits `koan` (review F1): its peer is resolved with the gateway's own resolver (`LOCAL_PEERTOKEN` → executable, signature,
 ancestors, `koan_agent_peer`), and `DecideLocalClient()` (`koan_cli_admission.*`, `CompareIdentity`) requires the holder's
 own executable and signature and the agent the pairing recorded (`koan pair` resolves itself through a socket pair and stores
-`PinPeer()` in `client.json`) among its ancestors; `Unchanged()` is asked again before each of its requests. Anything else is
-closed unread and logged in `~/.koan/run/<id>.log`; with no resolver (not macOS) the holder does not start. It forwards every
+`PinPeer()` in `client.json`) among its ancestors; `Unchanged()` is asked again before each of its requests. **Both ends read the
+chain at the same moment** (fix of the 2026-11-11 end-user pass): the browser pins the peer when it accepts the connection, so
+`koan pair` resolves itself before it sends `Koan.pair`, not after the user answers (a launcher that had exited by then left an
+empty pin, and the holder turned every later command away as `agent-missing`), and the holder resolves itself before it dials.
+The holder serves the agents of `AgentsToServe()`: the pinned agent, and, only if its own chain lacks that one (the browser let
+it in all the same: the user approved a changed chain, or the record's pin is not the browser's), also the agent that started it.
+Anything else is closed unread with a `Hold.refused` (or `Hold.busy`) frame, so `koan` prints why instead of "no answer", and
+logged in `~/.koan/run/<id>.log`; another user's process is told nothing. With no resolver (not macOS) the holder does not
+start. A connection that has closed before the gateway looks at it (`koan status` only checks that Koan answers) has no audit
+token to read; the gateway drops it quietly (`PeerHasHungUp()`) instead of warning. It forwards every
 command over its one browser connection with ids of its own, sharing one flat session per tab and keeping the last 64 `Koan.*`
 events for `status`. `koan end` (or 30 minutes without a command) closes it, and with it every task. `snapshot` and `act` run on
 the CDP the facade allows (`Accessibility.getFullAXTree`, `DOM.getContentQuads`, `Input.*`, `Runtime.callFunctionOn` on a
@@ -1324,6 +1332,7 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-cli-5 | `koan open --saved bot` with and without the grant in Settings, and while another task has it open | granted: the saved container's logins; not granted or in use: `Koan.notGranted`, no tab opens |
 | T-cli-6 | `koan take-over`, Allow; `koan act` on it; `koan release <id>` | the take-over prompt; the act works on the granted site only; release gives the tab back |
 | T-cli-7 | with a holder running for Claude Code: connect to `~/.koan/run/<id>.sock` from `python3` and `nc -U`; run a copy of `koan` from `/tmp`; run the bundled `koan tabs` from a plain Terminal (not under claude) | each is closed before any request reaches Koan, with a `refused other-program` / `agent-missing` line in `~/.koan/run/<id>.log`; `koan tabs` from Claude Code still works; `client.json` holds the pinned `koan` and `claude` |
+| T-cli-8 | `koan pair` started in the background by a shell that exits while the dialog is open (`sh -c 'koan pair >out & sleep 2'`), Allow after the shell is gone; then `koan open` from the agent's terminal; then `koan tabs` from a process with no agent above it | paired; `client.json` pins the same agent as the dialog showed; `koan open` prints a tab id; the orphan's `koan tabs` fails with `Hold.refused` (never "no answer"); `koan status` adds no `no audit token` warning to Koan's log (scripts/e2e/agent_cli.mjs) |
 | T-win-1 | Koan on another display / Space, `Koan.openTab` | no Space switch, no window raise |
 | T-win-2 | no window open (windowless Mac app) then `Koan.openTab` | window appears inactive, does not take focus |
 | **Security** | | |

@@ -4,18 +4,19 @@
 
 #include "koan/browser/agent/koan_agent_peer.h"
 
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "base/files/scoped_file.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_MAC)
 #include <fcntl.h>
 #include <poll.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -27,6 +28,31 @@
 #endif
 
 namespace koan::agent {
+
+// `koan status` connects and closes at once: that is told apart from a peer
+// that is there (or has sent something and gone), which the gateway must look
+// up and warn about if it cannot.
+TEST(KoanAgentPeerTest, APeerThatHungUpIsToldApart) {
+  int fds[2];
+  ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+  base::ScopedFD ours(fds[0]);
+  base::ScopedFD theirs(fds[1]);
+  EXPECT_FALSE(PeerHasHungUp(ours.get()));
+  theirs.reset();
+  EXPECT_TRUE(PeerHasHungUp(ours.get()));
+
+  ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+  ours.reset(fds[0]);
+  theirs.reset(fds[1]);
+  ASSERT_EQ(write(theirs.get(), "x", 1), 1);
+  theirs.reset();
+  EXPECT_FALSE(PeerHasHungUp(ours.get()));
+  // Peeking took nothing.
+  char byte = 0;
+  EXPECT_EQ(read(ours.get(), &byte, 1), 1);
+  EXPECT_EQ(byte, 'x');
+  EXPECT_FALSE(PeerHasHungUp(-1));
+}
 
 #if BUILDFLAG(IS_MAC)
 
@@ -179,6 +205,19 @@ TEST(KoanAgentPeerTest, AHandleThatIsNotThePeersIsNotUnchanged) {
   tampered = *peer;
   tampered.handle.pop_back();
   EXPECT_FALSE(resolver->Unchanged(tampered));
+}
+
+// The gateway's quiet path for `koan status` relies on this (macOS): once the
+// connecting end is closed, the accepted socket has no audit token.
+TEST(KoanAgentPeerTest, NoAuditTokenOnceThePeerHasGone) {
+  const std::unique_ptr<PeerResolver> resolver = CreatePlatformPeerResolver();
+  ASSERT_TRUE(resolver);
+  base::ScopedTempDir dir;
+  ASSERT_TRUE(dir.CreateUniqueTempDirUnderPath(base::FilePath("/tmp")));
+  ConnectedPair pair = Connect(dir.GetPath().Append("s"));
+  pair.client.reset();
+  EXPECT_FALSE(resolver->TokenForSocket(pair.accepted.get()));
+  EXPECT_TRUE(PeerHasHungUp(pair.accepted.get()));
 }
 
 TEST(KoanAgentPeerTest, WhatIsNotAPeerFailsClosed) {

@@ -109,7 +109,7 @@ FrameChannel::~FrameChannel() = default;
 bool FrameChannel::Write(std::string_view payload) {
   std::optional<std::vector<uint8_t>> frame =
       agent::EncodeFrame(base::as_byte_span(payload), decoder_.max_payload());
-  if (!frame || closed_) {
+  if (!frame || closed_ || write_failed_) {
     return false;
   }
   size_t written = 0;
@@ -122,7 +122,7 @@ bool FrameChannel::Write(std::string_view payload) {
         HANDLE_EINTR(send(fd_.get(), rest.data(), rest.size(), MSG_NOSIGNAL));
 #endif
     if (n <= 0) {
-      closed_ = true;
+      write_failed_ = true;
       return false;
     }
     written += static_cast<size_t>(n);
