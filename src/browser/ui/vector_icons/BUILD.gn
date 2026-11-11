@@ -167,6 +167,7 @@ aggregate_vector_icons("koan_vector_icons") {
     "koan_u_turn_to_left.icon",
     "koan_unpin.icon",
     "koan_urlbar_search_glass.icon",
+    "koan_urlbar_switch_tab.icon",
     "koan_video.icon",
     "koan_video_blocked.icon",
     "koan_video_blocked_fill.icon",
