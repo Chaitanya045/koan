@@ -10,11 +10,15 @@
 
 #include <algorithm>
 #include <map>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
+#include "base/uuid.h"
+#include "base/values.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -32,6 +36,7 @@
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
@@ -186,6 +191,62 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SpacesComeBack) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   EXPECT_TRUE(base::test::RunUntil(
       [&] { return KoanWindowSyncClient::From(browser_view) != nullptr; }));
+}
+
+// A start brings back the session's Spaces and makes none, even when the
+// saved window sync state (prefs::kWindowSyncState) has a Space the session
+// doesn't: the restored window is the profile's first synced window, so its
+// Spaces only take back their saved ids. (The saved state had drifted from
+// the session before restored windows joined window sync, #270, and each
+// start added its stale Spaces.)
+IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, PRE_RestoreMakesNoSpace) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  spaces->CreateSpace(u"Work", kRocket, {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  PrefService* prefs = browser()->GetProfile()->GetPrefs();
+  const auto saved_spaces = [prefs] {
+    return prefs->GetDict(prefs::kWindowSyncState).FindList("spaces");
+  };
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return saved_spaces() && saved_spaces()->size() == 2u; }));
+  base::DictValue state = prefs->GetDict(prefs::kWindowSyncState).Clone();
+  state.FindList("spaces")->Append(
+      base::DictValue()
+          .Set("id", base::Uuid::GenerateRandomV4().AsLowercaseString())
+          .Set("name", "Gone")
+          .Set("icon", "")
+          .Set("theme", ""));
+  prefs->SetDict(prefs::kWindowSyncState, std::move(state));
+  SaveSession();
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, RestoreMakesNoSpace) {
+  ASSERT_NO_FATAL_FAILURE(WaitForRestore(/*tabs=*/2, /*spaces=*/2));
+  // Once the window has joined window sync and nothing is left to apply.
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    KoanWindowSyncClient* client = KoanWindowSyncClient::From(browser_view);
+    return client && client->sync()->IsInSync(client);
+  }));
+  EXPECT_THAT(SpaceNames(browser()), testing::ElementsAre(u"Space", u"Work"))
+      << DescribeTabs();
+  // The Space shown last is shown.
+  const std::optional<tab_groups::TabGroupId> active =
+      GetSpaces(browser())->GetActiveSpace();
+  ASSERT_TRUE(active);
+  EXPECT_EQ(u"Work", GetSpaces(browser())->GetSpace(*active)->name);
+  // The saved state is the window's Spaces now, without the stale one.
+  std::vector<std::string> saved;
+  for (const base::Value& space : *browser()
+                                       ->GetProfile()
+                                       ->GetPrefs()
+                                       ->GetDict(prefs::kWindowSyncState)
+                                       .FindList("spaces")) {
+    saved.push_back(*space.GetDict().FindString("name"));
+  }
+  EXPECT_THAT(saved, testing::ElementsAre("Space", "Work"));
 }
 
 // Pinned in the Space, and away from the pinned URL.

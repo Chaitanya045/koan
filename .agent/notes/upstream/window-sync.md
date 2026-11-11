@@ -112,7 +112,14 @@ keeps its page in its window.
   model has state, so it takes the other windows' Spaces and items first and
   its own startup Space never overwrites them. With no state yet (a new
   profile, or the first run after updating), its first report seeds the
-  model.
+  model. The first synced window of a start (no other synced window open) is
+  not reconciled to the *saved* Spaces: its Spaces are the profile's (its
+  session's, or `koan.workspaces.list`'s), so they only take back the saved
+  ids of the Spaces with their name and icon (`AdoptSavedSpaces()`) and
+  become the model's. A saved state that drifted from the session (it did
+  before restored windows joined, #270) would otherwise add, rename or
+  remove Spaces at every start; Zen's restore makes none. Its items are
+  still reconciled (placeholders for the synced tabs it lacks).
 
 ### Moving a page between windows
 
@@ -194,8 +201,11 @@ The model is saved in a profile pref (`koan.window_sync.state`, like
 `koan.workspaces.list`), not in the session: the session keeps each window's
 own tabs. A placeholder has no navigation entries, so session restore drops
 it; the live tab comes back in its window. After a restart every synced
-window is reconciled to the saved model: missing items get placeholders,
-and the one restored live tab stays live. Which window has a page is not
+window is reconciled to the saved model's items: missing items get
+placeholders, and the one restored live tab stays live. The first window's
+Spaces are its session's (see Joining); session restore gives their tab
+groups new ids, so the window's group-to-id map (`koan.window_sync.spaces`)
+keeps only groups it has, and its Spaces take their ids back by name. Which window has a page is not
 saved.
 
 ### Blank windows across restarts

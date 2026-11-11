@@ -116,6 +116,16 @@ Plan<SpaceRecord> PlanSpaces(const std::vector<SpaceRecord>& local,
 std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
                                      const std::vector<SpaceRecord>& target,
                                      const std::set<std::string>& taken);
+// The first synced window of a start (no other synced window is open): its
+// Spaces are the profile's, from its session or prefs::kWorkspaceList, and
+// the saved state (from the last session) only gives them their ids back,
+// so that its pinned tabs and folders find their Spaces. Only a Space with
+// the same name and icon takes a saved Space's id (each one once, not one in
+// `taken`); the others get new ids. Returns the id each local Space takes,
+// or empty.
+std::vector<std::string> AdoptSavedSpaces(const std::vector<SpaceRecord>& local,
+                                          const std::vector<SpaceRecord>& saved,
+                                          const std::set<std::string>& taken);
 // The same for folders, except that a folder's collapsed state isn't synced
 // live (Zen keeps it only in the session): `update` leaves out a folder that
 // differs only in it, which a new folder still takes from the target.

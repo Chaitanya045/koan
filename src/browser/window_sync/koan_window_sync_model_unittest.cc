@@ -126,6 +126,28 @@ TEST(WindowSyncPlanTest, JoiningWindowAdoptsItsSpaces) {
               ElementsAre("a", "", ""));
 }
 
+// The first window of a start (its Spaces restored with new tab group ids)
+// takes back only the saved ids of the Spaces it has: no saved Space is
+// renamed into another one, and a saved Space it lacks stays unmatched (it
+// is not added to the window).
+TEST(WindowSyncPlanTest, FirstWindowTakesBackOnlyMatchingSavedIds) {
+  const std::vector<SpaceRecord> saved = {
+      Space("a", u"Space"), Space("b", u"Work"), Space("c", u"Gone")};
+  EXPECT_THAT(AdoptSavedSpaces(
+                  {Space("", u"Work"), Space("", u"Space"), Space("", u"New")},
+                  saved, {}),
+              ElementsAre("b", "a", ""));
+  // Two Spaces with one name take the saved ones in order, each once.
+  EXPECT_THAT(AdoptSavedSpaces({Space(""), Space(""), Space("")},
+                               {Space("a"), Space("b")}, {}),
+              ElementsAre("a", "b", ""));
+  // A different icon is a different Space; ids the window has aren't taken.
+  SpaceRecord rocket = Space("", u"Work");
+  rocket.icon = u"\U0001F680";
+  EXPECT_THAT(AdoptSavedSpaces({rocket, Space("", u"Space")}, saved, {"a"}),
+              ElementsAre("", ""));
+}
+
 TEST(WindowSyncModelTest, FirstWindowSeeds) {
   WindowSyncModel model;
   EXPECT_FALSE(model.seeded());

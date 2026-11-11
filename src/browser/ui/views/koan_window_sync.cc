@@ -91,7 +91,7 @@ void KoanWindowSync::AddWindow(Window* window) {
   // it is activated.
   windows_.push_back(window);
   if (model_.seeded()) {
-    stale_spaces_.insert(window);
+    (windows_.size() == 1 ? adopt_spaces_ : stale_spaces_).insert(window);
     stale_items_.insert(window);
     ScheduleFlush();
   }
@@ -99,6 +99,7 @@ void KoanWindowSync::AddWindow(Window* window) {
 
 void KoanWindowSync::RemoveWindow(Window* window) {
   std::erase(windows_, window);
+  adopt_spaces_.erase(window);
   stale_spaces_.erase(window);
   stale_items_.erase(window);
   if (applying_.get() == window) {
@@ -122,6 +123,7 @@ bool KoanWindowSync::IsInSync(const Window* window) const {
     return other.get() == window;
   };
   return std::ranges::any_of(windows_, is) &&
+         std::ranges::none_of(adopt_spaces_, is) &&
          std::ranges::none_of(stale_spaces_, is) &&
          std::ranges::none_of(stale_items_, is) && applying_.get() != window;
 }
@@ -296,8 +298,9 @@ void KoanWindowSync::MovePage(const std::string& item, Window* to) {
 }
 
 void KoanWindowSync::ScheduleFlush() {
-  if (flush_scheduled_ || (stale_spaces_.empty() && stale_items_.empty() &&
-                           pending_shows_.empty() && pending_drops_.empty())) {
+  if (flush_scheduled_ ||
+      (adopt_spaces_.empty() && stale_spaces_.empty() && stale_items_.empty() &&
+       pending_shows_.empty() && pending_drops_.empty())) {
     return;
   }
   flush_scheduled_ = true;
@@ -334,6 +337,20 @@ void KoanWindowSync::Flush() {
             FROM_HERE, std::move(page));
       }
       applying_ = nullptr;
+    }
+    ScheduleFlush();
+    return;
+  }
+  if (!adopt_spaces_.empty()) {
+    Window* window = adopt_spaces_.begin()->get();
+    adopt_spaces_.erase(adopt_spaces_.begin());
+    applying_ = window;
+    std::vector<window_sync::SpaceRecord> spaces =
+        window->AdoptSavedSpaces(model_.spaces());
+    applying_ = nullptr;
+    // (A window that has no Space yet leaves the saved ones.)
+    if (model_.SetSpaces(std::move(spaces))) {
+      MarkOthersOutOfDate(window, /*spaces=*/true, /*items=*/true);
     }
     ScheduleFlush();
     return;

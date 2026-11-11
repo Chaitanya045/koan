@@ -355,6 +355,37 @@ void KoanWindowSyncClient::ApplySpaces(
   SaveSpaceIds();
 }
 
+std::vector<window_sync::SpaceRecord> KoanWindowSyncClient::AdoptSavedSpaces(
+    const std::vector<window_sync::SpaceRecord>& saved) {
+  KoanWorkspaceController* workspaces =
+      KoanBrowserViewController::From(browser_view_)->workspaces();
+  if (workspaces->tab_strip_model()->closing_all()) {
+    return {};
+  }
+  std::vector<tab_groups::TabGroupId> unmapped;
+  std::set<std::string> taken;
+  for (const window_sync::SpaceRecord& record :
+       LocalSpaces(/*assign_ids=*/false, &unmapped)) {
+    taken.insert(record.id);
+  }
+  std::vector<window_sync::SpaceRecord> unmapped_records;
+  for (const tab_groups::TabGroupId& group : unmapped) {
+    std::optional<KoanWorkspaceController::SpaceInfo> info =
+        workspaces->GetSpace(group);
+    unmapped_records.push_back({.name = info ? info->name : std::u16string(),
+                                .icon = info ? info->icon : std::u16string()});
+  }
+  const std::vector<std::string> adopted =
+      window_sync::AdoptSavedSpaces(unmapped_records, saved, taken);
+  for (size_t i = 0; i < unmapped.size(); ++i) {
+    if (!adopted[i].empty()) {
+      space_ids_[unmapped[i]] = adopted[i];
+    }
+  }
+  // The rest get new ids; all of them are the model's now.
+  return LocalSpaces(/*assign_ids=*/true);
+}
+
 // --- Folders ---
 
 std::vector<window_sync::FolderRecord> KoanWindowSyncClient::LocalFolders(
@@ -487,11 +518,20 @@ void KoanWindowSyncClient::LoadSpaceIds() {
   if (!value || !value->is_dict()) {
     return;
   }
+  const TabGroupModel* groups =
+      browser_view_->browser()->GetTabStripModel()->group_model();
   for (const auto [token, id] : value->GetDict()) {
     std::optional<base::Token> parsed = base::Token::FromString(token);
-    if (parsed && !parsed->is_zero() && id.is_string()) {
-      space_ids_[tab_groups::TabGroupId::FromRawToken(*parsed)] =
-          id.GetString();
+    if (!parsed || parsed->is_zero() || !id.is_string()) {
+      continue;
+    }
+    const tab_groups::TabGroupId group =
+        tab_groups::TabGroupId::FromRawToken(*parsed);
+    // A group the window doesn't have (a restored window's old ids) would
+    // stand for the Space its new group adopts, and FindSpace() would pick
+    // it instead.
+    if (groups && groups->ContainsTabGroup(group)) {
+      space_ids_[group] = id.GetString();
     }
   }
 }

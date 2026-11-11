@@ -83,16 +83,14 @@ Plan<SpaceRecord> PlanSpaces(const std::vector<SpaceRecord>& local,
   return PlanRecords(local, target);
 }
 
-std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
+namespace {
+
+// Gives each Space of `local` the id of the first `free` Space of `target`
+// with its name and icon, and takes that one.
+std::vector<std::string> AdoptByName(const std::vector<SpaceRecord>& local,
                                      const std::vector<SpaceRecord>& target,
-                                     const std::set<std::string>& taken) {
-  std::vector<bool> free(target.size());
-  for (size_t i = 0; i < target.size(); ++i) {
-    free[i] = !taken.contains(target[i].id);
-  }
+                                     std::vector<bool>& free) {
   std::vector<std::string> adopted(local.size());
-  // Same name and icon first, so a window that recreated the Spaces from
-  // prefs::kWorkspaceList keeps each one's tabs in it.
   for (size_t l = 0; l < local.size(); ++l) {
     for (size_t t = 0; t < target.size(); ++t) {
       if (free[t] && target[t].name == local[l].name &&
@@ -103,6 +101,21 @@ std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
       }
     }
   }
+  return adopted;
+}
+
+}  // namespace
+
+std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
+                                     const std::vector<SpaceRecord>& target,
+                                     const std::set<std::string>& taken) {
+  std::vector<bool> free(target.size());
+  for (size_t i = 0; i < target.size(); ++i) {
+    free[i] = !taken.contains(target[i].id);
+  }
+  // Same name and icon first, so a window that recreated the Spaces from
+  // prefs::kWorkspaceList keeps each one's tabs in it.
+  std::vector<std::string> adopted = AdoptByName(local, target, free);
   size_t next = 0;
   for (size_t l = 0; l < local.size(); ++l) {
     if (!adopted[l].empty()) {
@@ -118,6 +131,16 @@ std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
     free[next] = false;
   }
   return adopted;
+}
+
+std::vector<std::string> AdoptSavedSpaces(const std::vector<SpaceRecord>& local,
+                                          const std::vector<SpaceRecord>& saved,
+                                          const std::set<std::string>& taken) {
+  std::vector<bool> free(saved.size());
+  for (size_t i = 0; i < saved.size(); ++i) {
+    free[i] = !taken.contains(saved[i].id);
+  }
+  return AdoptByName(local, saved, free);
 }
 
 namespace {
