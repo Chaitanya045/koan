@@ -11,6 +11,7 @@
 import { ACCEL } from './lib/koan.mjs';
 import { CTRL, boundsOf, check, evalIn, finish, key, mouseOn, sleep, views, visiblePage }
     from './lib/koan.mjs';
+import { checkSlidesAway } from './lib/mac.mjs';
 
 const findShown = (vs, cls) => vs.find(v => v.cls === cls && v.shown);
 const VK = { S: 83 };
@@ -96,7 +97,8 @@ check('...without resizing the page', (await resizes()) === 0);
 await mouseOn(zone, 'mouseExited');
 widths = await sampleStripWidths(1500);
 shown = distinct(widths.filter(w => w > 0));
-check('The sidebar slides away again', widths.at(-1) === 0, `final width ${widths.at(-1)}`);
+await checkSlidesAway(check, 'The sidebar slides away again', widths.at(-1) === 0,
+                      `final width ${widths.at(-1)}`, REVEAL_WIDTH);
 check('...without a new width on every frame', shown.length <= 1,
       `widths ${shown.join(', ')} of ${widths.length} samples`);
 check('...or resizing the page', (await resizes()) === 0);

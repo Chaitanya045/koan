@@ -5,6 +5,7 @@
 //
 //   scripts/e2e/run.sh compact_flash
 import { boundsOf, browserCall, check, finish, sleep } from './lib/koan.mjs';
+import { checkSlidesAway } from './lib/mac.mjs';
 
 const width = async () => (await boundsOf('VerticalTabStripRegionView'))[0]?.w;
 
@@ -22,6 +23,6 @@ const shown = await width();
 check('Opening a tab pops the sidebar up', shown > 100, `width ${shown}`);
 await sleep(1800);
 const after = await width();
-check('...and it slides away again', after === 0, `width ${after}`);
+await checkSlidesAway(check, '...and it slides away again', after === 0, `width ${after}`);
 
 finish();

@@ -97,6 +97,12 @@ async function key(code, modifiers, keyName = '', page = null) {
 }
 
 const shown = (vs, cls, pred = () => true) => vs.filter(v => v.cls === cls && v.shown && pred(v));
+// The shown buttons of `row` (a KoanLibraryRow from views()), by position:
+// another row can show its buttons too while it is hovered, e.g. under the
+// real pointer of someone at the Mac.
+const rowButtons = (vs, row) => shown(vs, 'ImageButton', v =>
+    v.path.includes('KoanLibraryRow') && v.x >= row.x && v.y >= row.y &&
+    v.x + v.w <= row.x + row.w && v.y + v.h <= row.y + row.h);
 
 // The Library's state, and the titles of the History rows it lists.
 async function library() {
@@ -201,10 +207,10 @@ check('History lists the visits written into the database',
   const row = shown(await views(), 'KoanLibraryRow', v => v.p.Title === 'Seeded days')[0];
   await mouse(row, 'mouseEntered', 20, 20);
   await sleep(300);
-  const trash = shown(await views(), 'ImageButton',
-                      v => v.path.includes('KoanLibraryRow') &&
-                           (v.p.TooltipText ?? v.p.Tooltip) === 'Remove from history')[0];
-  await click(trash);
+  const trash = rowButtons(await views(), row)
+      .find(v => (v.p.TooltipText ?? v.p.Tooltip) === 'Remove from history');
+  // (None: the check below fails rather than the script.)
+  if (trash) await click(trash);
   await sleep(1000);
   // A search asks the history service again.
   const field = shown(await views(), 'Textfield',
@@ -310,10 +316,10 @@ await key(KEY_L, ALT | SHIFT, 'L');
 await waitFor(async () => (await library()).titles.includes('Seeded hours'));
 {
   const row = shown(await views(), 'KoanLibraryRow', v => v.p.Title === 'Seeded hours')[0];
-  await mouse(row, 'mouseEntered', 20, 20);
+  if (row) await mouse(row, 'mouseEntered', 20, 20);
   await sleep(300);
-  const actions = shown(await views(), 'ImageButton', v => v.path.includes('KoanLibraryRow'))
-      .map(v => v.p.TooltipText ?? v.p.Tooltip);
+  const actions = !row ? []
+      : rowButtons(await views(), row).map(v => v.p.TooltipText ?? v.p.Tooltip);
   check('Without the right to delete history, a row has no Remove button',
         actions.includes('Reopen page') && !actions.includes('Remove from history'),
         actions.join(', '));

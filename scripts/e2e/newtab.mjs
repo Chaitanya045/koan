@@ -1,7 +1,7 @@
 // End-to-end test of the new tab page against a real build: chrome://newtab
 // shows Koan's page, an empty page in the look's background (shadcn's
-// near-black in the dark shadcn look; the theme's new tab page colour in the
-// default Zen look) that loads nothing else and runs no script (like Zen's),
+// near-black in the default look, dark shadcn; the theme's new tab page colour
+// in the Zen look) that loads nothing else and runs no script (like Zen's),
 // follows the window's look, and is right after another new tab page closed;
 // chrome://koan-settings lets the user choose Chromium's own page instead. (Ctrl+T opening the floating URL bar
 // rather than a tab is urlbar's; newtab_custom checks that a new tab page set
@@ -56,30 +56,36 @@ check('The page is empty: no content, script or extra requests',
       facts && facts.children === 0 && facts.text === '' && facts.scripts === 0 &&
       facts.images === 0 && facts.links === 0 && facts.resources === 0,
       JSON.stringify(facts));
-// The default look is Zen: Chromium's new tab page colour of the window's
-// provider (opaque; Partial against Zen's window gradient, ZEN_PARITY).
-// chrome://theme/colors.css has it as --color-new-tab-page-background.
-const css = await (async () => {
+// The window provider's new tab page colour (opaque; in the Zen look Partial
+// against Zen's window gradient, ZEN_PARITY): chrome://theme/colors.css has it
+// as --color-new-tab-page-background. As a computed style: 'rgb(r, g, b)', or
+// the start of 'rgba(r, g, b, a)'; null if the page doesn't say.
+const providerBackground = async () => {
   const id = (await browserCall('Target.createTarget', {
       url: 'chrome://theme/colors.css?sets=ui,chrome', background: true })).result.targetId;
   await sleep(800);
   const page = (await pages()).find(p => p.id === id);
   const text = page && await evalIn(page, 'document.body?.innerText');
   await browserCall('Target.closeTarget', { targetId: id });
-  return text;
-})();
-// #rrggbb, or #rrggbbaa (opaque in practice; an alpha below ff reads as rgba).
-const hex = css?.match(/--color-new-tab-page-background:\s*#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?/);
-const [r, g, b] = hex ? [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16)) : [];
-const alpha = hex?.[2] ? parseInt(hex[2], 16) : 255;
-const wanted = hex && (alpha === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b},`);
-// (The target opens in the window the user is in, as the new tab pages above
-// do, so the colour is that window's.)
-check('...in the Zen look\'s new tab page colour (the window provider\'s)',
-      wanted ? (alpha === 255 ? facts?.background === wanted
-                              : facts?.background?.startsWith(wanted))
-             : /^rgb\(\d+, \d+, \d+\)$/.test(facts?.background ?? ''),
-      `${facts?.background} vs ${wanted ?? css?.slice(0, 80)}`);
+  // #rrggbb, or #rrggbbaa (opaque in practice; an alpha below ff reads as rgba).
+  const hex = text?.match(/--color-new-tab-page-background:\s*#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?/);
+  if (!hex) return null;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16));
+  return !hex[2] || parseInt(hex[2], 16) === 255 ? `rgb(${r}, ${g}, ${b})`
+                                                 : `rgba(${r}, ${g}, ${b},`;
+};
+const isBackground = (colour, wanted) => !!colour &&
+    (wanted ? colour === wanted || (wanted.startsWith('rgba') && colour.startsWith(wanted))
+            : /^rgb\(\d+, \d+, \d+\)$/.test(colour));
+// The default look is shadcn's, dark: its background (#09090b), which is the
+// window provider's new tab page colour too. (The target opens in the window
+// the user is in, as the new tab pages above do, so the colour is that
+// window's.)
+const SHADCN_DARK = 'rgb(9, 9, 11)';
+const wanted = await providerBackground();
+check('...in the default look\'s colour, shadcn dark (#09090b), the window provider\'s',
+      facts?.background === SHADCN_DARK && isBackground(facts?.background, wanted),
+      `${facts?.background} vs ${wanted}`);
 if (process.env.SHOTS) {
   const r = await onPage(tab.page, c => c.send('Page.captureScreenshot', { format: 'png' }));
   fs.writeFileSync(`${process.env.SHOTS}/newtab.png`, Buffer.from(r.result.data, 'base64'));
@@ -100,12 +106,19 @@ await sleep(1500);
 check('A new tab page reloaded after another one closed keeps its colour',
       await colour(tab) === before && before !== 'rgba(0, 0, 0, 0)', await colour(tab));
 
-// It follows the window's look, live: shadcn dark is #09090b, shadcn light
-// bright, and the open page loads again with the change.
-await setKoanPref('koan.look.style', 'shadcn');
+// It follows the window's look, live, and the open page loads again with the
+// change: the Zen look is the theme's new tab page colour (the window
+// provider's, not shadcn's), shadcn light bright, shadcn dark #09090b.
 await setKoanPref('koan.look.mode', 'dark');
-check('...follows a change of look to shadcn dark (#09090b) without a reload by hand',
-      await waitFor(async () => await colour(tab) === 'rgb(9, 9, 11)'), await colour(tab));
+await setKoanPref('koan.look.style', 'zen');
+const zen = await providerBackground();
+check('...follows a change to the Zen look (the window provider\'s colour) ' +
+          'without a reload by hand',
+      await waitFor(async () => {
+        const now = await colour(tab);
+        return now !== SHADCN_DARK && isBackground(now, zen);
+      }), `${await colour(tab)} vs ${zen}`);
+await setKoanPref('koan.look.style', 'shadcn');
 await setKoanPref('koan.look.mode', 'light');
 check('...and to shadcn light (bright)',
       await waitFor(async () => {
@@ -116,9 +129,9 @@ check('...and to shadcn light (bright)',
 // reload makes a new page and controller, which must keep what the last one
 // knew).
 await setKoanPref('koan.look.mode', 'dark');
-await setKoanPref('koan.look.style', 'zen');
-check('...and back to the Zen look\'s colour, the third change in a row',
-      await waitFor(async () => await colour(tab) === before), await colour(tab));
+check('...and back to shadcn dark, the third change in a row',
+      await waitFor(async () => await colour(tab) === before) && before === SHADCN_DARK,
+      await colour(tab));
 await tab.close();
 
 // Chromium's own page, chosen in Koan's settings.

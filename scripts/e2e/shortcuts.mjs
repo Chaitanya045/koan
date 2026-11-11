@@ -7,6 +7,7 @@
 // page, so unhandled ones reach the browser's accelerators exactly like real
 // input. Prints one PASS/FAIL line per check; exits non-zero on any failure.
 import { ACCEL, sendKey } from './lib/koan.mjs';
+import { checkSlidesAway } from './lib/mac.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -149,7 +150,8 @@ await key(VK.S, ACCEL | ALT, 's');
 await sleep(1500);
 vs = await views();
 const after = vs.find(v => v.cls === 'VerticalTabStripRegionView');
-check('Ctrl+Alt+S again hides it', after && after.w === 0, `width ${after?.w}`);
+await checkSlidesAway(check, 'Ctrl+Alt+S again hides it', after && after.w === 0,
+                      `width ${after?.w}`);
 await key(VK.S, ACCEL, 's');
 vs = await views();
 check('Ctrl+S turns compact mode off', count(vs, 'KoanHotZone') === 1);
