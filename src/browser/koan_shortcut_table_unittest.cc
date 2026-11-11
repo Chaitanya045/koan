@@ -84,6 +84,7 @@ TEST(KoanShortcutTable, ZenKeysFollowAccel) {
   EXPECT_TRUE(IsBound(Key(ui::VKEY_L, kAlt | kShift), Action::kLibrary));
   EXPECT_TRUE(IsBound(Key(ui::VKEY_O, kAccel), Action::kGlanceExpand));
   EXPECT_TRUE(IsBound(Key(ui::VKEY_D, kAccel | kShift), Action::kTogglePinTab));
+  EXPECT_TRUE(IsBound(Key(ui::VKEY_N, kAccel), Action::kNewWindow));
   EXPECT_TRUE(
       IsBound(Key(ui::VKEY_N, kAccel | kShift), Action::kNewBlankWindow));
   EXPECT_TRUE(IsBound(Key(ui::VKEY_C, kAccel | kShift), Action::kCopyUrl));

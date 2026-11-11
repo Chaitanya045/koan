@@ -540,6 +540,45 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   // Progress.
   mixer[kColorKoanLoadingBar] = {t[Token::kPrimary]};
   mixer[kColorKoanLoadingBarTrack] = {t[Token::kSecondary]};
+
+  // Folders: the folder glyph in `primary` over the sidebar, with
+  // `muted-foreground` counts and an `accent` selected search row.
+  mixer[kColorKoanFolderIconBack] = {
+      t.Over(Token::kPrimary, Token::kSidebar, 0.6f)};
+  mixer[kColorKoanFolderIconFront] = {
+      t.Over(Token::kPrimary, Token::kSidebar, 0.3f)};
+  mixer[kColorKoanFolderIconStroke] = {
+      t.Opaque(Token::kSidebarBorder, Token::kSidebar)};
+  mixer[kColorKoanFolderCount] = {t[Token::kMutedForeground]};
+  mixer[kColorKoanFolderSearchItemSelected] = {t[Token::kAccent]};
+
+  // Space themes. shadcn has no theme picker, but the window and picker
+  // colours must still resolve: `background` surfaces, `popover` dialogs.
+  mixer[kColorKoanThemeWindow] = {t[Token::kBackground]};
+  mixer[kColorKoanThemeDefaultBackground] = {t[Token::kBackground]};
+  mixer[kColorKoanThemeTintBase] = {t[Token::kBackground]};
+  mixer[kColorKoanThemeInactiveWindow] = {t[Token::kMuted]};
+  mixer[kColorKoanThemePickerBackground] = {t[Token::kPopover]};
+  mixer[kColorKoanThemePickerForeground] = {t[Token::kPopoverForeground]};
+  mixer[kColorKoanThemePickerField] = {t[Token::kMuted]};
+  mixer[kColorKoanThemePickerFieldGrid] = {
+      t.Opaque(Token::kBorder, Token::kMuted)};
+  mixer[kColorKoanThemePickerIcon] = {t[Token::kMutedForeground]};
+  mixer[kColorKoanThemePickerButtonHovered] = {t[Token::kAccent]};
+  mixer[kColorKoanThemePickerDotBorder] = {t[Token::kPrimaryForeground]};
+  mixer[kColorKoanThemePickerWave] = {t[Token::kMutedForeground]};
+  mixer[kColorKoanThemePickerWaveDim] = {
+      t.Alpha(Token::kMutedForeground, 0.5f)};
+  mixer[kColorKoanThemePickerTrack] = {t[Token::kSecondary]};
+  mixer[kColorKoanThemePickerThumb] = {t[Token::kPrimary]};
+  mixer[kColorKoanThemePickerDialDot] = {
+      t.Alpha(Token::kMutedForeground, 0.3f)};
+  mixer[kColorKoanThemePickerDialHandle] = {t[Token::kMutedForeground]};
+  mixer[kColorKoanThemePickerDialBorder] = {
+      t.Opaque(Token::kBorder, Token::kPopover)};
+  mixer[kColorKoanThemePickerDialShine] = {t[Token::kAccent]};
+  mixer[kColorKoanThemePickerSwatchShadow] = ui::SetAlpha(
+      ui::kColorShadowBase, static_cast<SkAlpha>(t.dark() ? 0x66 : 0x1a));
 }
 
 }  // namespace koan

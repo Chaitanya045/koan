@@ -42,7 +42,7 @@ TEST(KoanAgentReachTest, UnreachableUrls) {
         "about:version", "about:settings", "blob:chrome://settings/0f3c",
         "blob:chrome-extension://abc/0f3c", "javascript:alert(1)",
         "chrome-error://other/", "ws://example.com", "ftp://example.com",
-        "not a url"}) {
+        "http://[bad"}) {
     EXPECT_FALSE(IsReachableFrameUrl(GURL(url))) << url;
   }
 }

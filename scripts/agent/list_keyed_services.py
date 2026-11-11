@@ -18,8 +18,17 @@ finds the name every factory gives its base class, which is what
 KeyedServiceBaseFactory::name() returns at runtime:
 
   * ProfileKeyedServiceFactory("Name", ...), BrowserContextKeyedServiceFactory,
-    and their Refcounted variants;
-  * BrowserContextKeyedAPIFactory<T> (extensions), named by T::service_name().
+    their Refcounted variants and BrowserContextKeyedServiceShutdownNotifier-
+    Factory;
+  * the base classes in _SUBCLASS_BASES, which pass a literal name through
+    (ExtensionSystemProvider, IsolatedWebAppBrowserContextServiceFactory,
+    FeedbackUploaderFactory);
+  * BrowserContextKeyedAPIFactory<T> (extensions), named by T::service_name(),
+    inline or defined out of line (`const char* T::service_name()`).
+
+Comments are stripped first, so a comment between the base class and its name
+doesn't hide it. extensions/browser/api/test/ is the chrome.test API, which
+ships, so it is scanned.
 
 Test-only code and platforms Koan doesn't ship (Android, ChromeOS, iOS,
 Fuchsia) are skipped. A factory constructed with a name that is not a string
@@ -43,24 +52,34 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 INVENTORY = pathlib.Path(__file__).resolve().parent / 'keyed_services.json'
 
-ROOTS = ('chrome', 'components', 'extensions')
+ROOTS = ('apps', 'chrome', 'components', 'extensions')
 _SKIP = re.compile(
-    r'(^|/)(test|tests|android|ash|chromeos|ios|fuchsia|lacros)(/|$)|'
+    r'(^|/)((?<!api/)test|tests|android|ash|chromeos|ios|fuchsia|lacros)(/|$)|'
     r'(_test|_unittest|_browsertest|_interactive_uitest|_fuzzer|test_util|'
     r'_test_util|_test_utils|_test_helper|fake_|mock_|_fake|_mock|testing_)'
-    r'[a-z_]*\.cc$')
+    r'[a-z_]*\.(cc|h)$|_ash\.cc$')
+# Base classes that forward a name to a KeyedServiceFactory constructor.
+_SUBCLASS_BASES = ('ExtensionSystemProvider',
+                   'IsolatedWebAppBrowserContextServiceFactory',
+                   'FeedbackUploaderFactory')
 _FACTORY = re.compile(
-    r'\b(?:Refcounted)?(?:Profile|BrowserContext)KeyedServiceFactory\(\s*'
+    r'\b(?:(?:Refcounted)?(?:Profile|BrowserContext)KeyedService'
+    r'(?:ShutdownNotifier)?Factory|' + '|'.join(_SUBCLASS_BASES) + r')\(\s*'
     r'(?:"((?:[^"\\]|\\.)*)"|([A-Za-z_][\w:]*))')
 _API_NAME = re.compile(
-    r'static\s+(?:constexpr\s+)?const\s+char\s*\*\s*service_name\(\)\s*'
+    r'(?:static\s+)?(?:constexpr\s+)?const\s+char\s*\*\s*(?:\w+::)*'
+    r'service_name\(\)\s*'
     r'(?:const\s*)?\{\s*return\s+"([^"]+)"\s*;')
+
+
+_COMMENT = re.compile(r'//[^\n]*')
 
 
 def head_files(src):
   out = subprocess.run(
       ['git', '-C', str(src), 'grep', '-l', '-E',
-       r'KeyedServiceFactory\(|service_name\(\)', 'HEAD', '--'] +
+       r'KeyedService(ShutdownNotifier)?Factory\(|service_name\(\)|' +
+       '|'.join(b + r'\(' for b in _SUBCLASS_BASES), 'HEAD', '--'] +
       ['%s/*.cc' % r for r in ROOTS] + ['%s/*.h' % r for r in ROOTS],
       capture_output=True, text=True, check=True).stdout
   for line in out.splitlines():
@@ -78,7 +97,7 @@ def scan(src):
   factories = {}
   unnamed = set()
   for path in head_files(src):
-    text = read(src, path)
+    text = _COMMENT.sub('', read(src, path))
     for m in _FACTORY.finditer(text):
       if m.group(1) is not None:
         factories.setdefault(m.group(1), path)

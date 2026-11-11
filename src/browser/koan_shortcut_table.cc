@@ -192,10 +192,12 @@ std::vector<Binding> DefaultBindings() {
       bind(ui::VKEY_H, kAccel, Action::kLibraryHistory),
       bind(ui::VKEY_H, kAccel | kShift, Action::kLibraryHistory),
 #endif
-      // Zen (Firefox) windows: Accel+Shift+N New Blank Window (Zen's
-      // zen-new-unsynced-window), Accel+Shift+P private. On macOS the first
-      // takes Chrome's reserved Cmd+Shift+N (a private window there) and Zen's
-      // Cmd+N stays Chrome's New Window.
+      // Zen (Firefox) windows: Accel+N New Window (Firefox's key_newNavigator;
+      // it runs Chrome's IDC_NEW_WINDOW, so on macOS Cmd+N does what the menu
+      // does), Accel+Shift+N New Blank Window (Zen's zen-new-unsynced-window),
+      // Accel+Shift+P private. On macOS the second takes Chrome's reserved
+      // Cmd+Shift+N (a private window there).
+      bind(ui::VKEY_N, kAccel, Action::kNewWindow),
       bind(ui::VKEY_N, kAccel | kShift, Action::kNewBlankWindow),
       bind(ui::VKEY_P, kAccel | kShift, Action::kNewPrivateWindow),
       // Zen inherits these from Firefox; Chrome leaves the keys free. Mute is

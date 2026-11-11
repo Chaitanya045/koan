@@ -86,10 +86,14 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"AppFirewallHoleManager", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
+    {"AppLifetimeMonitor", ServiceVerdict::kSafe,
+     "Chrome Apps lifetime events; no agent-tab path"},
     {"AppLoadService", ServiceVerdict::kSafe,
      "Chrome Apps launch; no agent-tab path"},
     {"AppPreloadService", ServiceVerdict::kSafe,
      "ChromeOS app preload; not on macOS"},
+    {"AppRestoreService", ServiceVerdict::kSafe,
+     "Chrome Apps restart on launch; no agent-tab path"},
     {"AppServiceProxy", ServiceVerdict::kSafe,
      "app service registry; no agent-tab path"},
     {"AppSessionService", ServiceVerdict::kSafe,
@@ -349,6 +353,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "cross-device theme sync; no page path"},
     {"CrossTabCopyPasteTracker", ServiceVerdict::kBlocked,
      "B5: fed by ChromeAutofillClient, which is off in agent tabs"},
+    {"CrxInstaller", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"DataControlsRulesService", ServiceVerdict::kSafe,
      "enterprise data controls; protective"},
     {"DataProtectionUrlLookupService", ServiceVerdict::kSafe,
@@ -463,6 +470,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"ExtensionErrorController", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
+    {"ExtensionFunction", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"ExtensionGCMAppHandler", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -476,6 +486,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "enterprise reporting of extension installs; no tab path"},
     {"ExtensionInstallPolicyService", ServiceVerdict::kSafe,
      "extension install policy; no tab path"},
+    {"ExtensionKeybindingRegistryShutdownNotifierFactory", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"ExtensionManagement", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -497,6 +510,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"ExtensionPrefsHelper", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
+    {"ExtensionProtocolShutdownNotifierFactory", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"ExtensionRegistrar", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -506,11 +522,16 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"ExtensionSyncService", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
+    {"ExtensionSystem", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"ExtensionSystemShared", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
     {"ExtensionTelemetryEventRouter", ServiceVerdict::kSafe,
      "enterprise reporting of extension telemetry; no tab path"},
+    {"ExtensionTelemetryService", ServiceVerdict::kSafe,
+     "Safe Browsing extension telemetry; protective, no page data"},
     {"ExtensionUpdater", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -563,6 +584,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "account avatar/name; no tab path"},
     {"GCMProfileService", ServiceVerdict::kSafe,
      "push transport; web push needs notifications permission (B1)"},
+    {"GalleryWatchManager", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"GapisService", ServiceVerdict::kSafe,
      "feature off by default; no agent-tab path while off"},
     {"GeminiAntiscamProtectionService", ServiceVerdict::kSafe,
@@ -670,6 +694,18 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "invalidation transport; no page path"},
     {"IsolatedModeSettingsService", ServiceVerdict::kSafe,
      "enterprise settings; no tab path"},
+    {"IsolatedWebAppReaderRegistry", ServiceVerdict::kSafe,
+     "Isolated Web Apps only; isolated-app:// is never reachable from agent "
+     "tabs"},
+    {"IsolatedWebAppURLLoaderShutdownNotifierFactory", ServiceVerdict::kSafe,
+     "Isolated Web Apps only; isolated-app:// is never reachable from agent "
+     "tabs"},
+    {"IsolatedWebAppsWindowOpenPermissionService", ServiceVerdict::kSafe,
+     "Isolated Web Apps only; isolated-app:// is never reachable from agent "
+     "tabs"},
+    {"IwaPermissionsPolicyCache", ServiceVerdict::kSafe,
+     "Isolated Web Apps only; isolated-app:// is never reachable from agent "
+     "tabs"},
     {"JumpList", ServiceVerdict::kSafe, "Windows jump list; not on macOS"},
     {"LanguageDetectionModelService", ServiceVerdict::kSafe,
      "language detection model; nothing stored"},
@@ -732,6 +768,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "device ids need camera/mic permission (B1)"},
     {"MediaEngagementServiceFactory", ServiceVerdict::kBlocked,
      "B15: no media engagement observer for agent tabs"},
+    {"MediaFileSystemRegistry", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"MediaGalleriesAPI", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -777,6 +816,15 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "autofill ML logs for internals page; B5"},
     {"ModelValidatorKeyedService", ServiceVerdict::kSafe,
      "model validation for testing; no page path"},
+    {"MultiCaptureDataServiceFactory", ServiceVerdict::kSafe,
+     "Isolated Web Apps only; isolated-app:// is never reachable from agent "
+     "tabs"},
+    {"MultiCaptureSessionControllerFactory", ServiceVerdict::kSafe,
+     "Isolated Web Apps only; isolated-app:// is never reachable from agent "
+     "tabs"},
+    {"MultiCaptureUsageIndicatorServiceFactory", ServiceVerdict::kSafe,
+     "Isolated Web Apps only; isolated-app:// is never reachable from agent "
+     "tabs"},
     {"MultistepFilterLogRouter", ServiceVerdict::kSafe,
      "feature off by default; no agent-tab path while off"},
     {"MultistepFilterService", ServiceVerdict::kSafe,
@@ -909,6 +957,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "webRequest"},
     {"PaymentRequestDisplayManager", ServiceVerdict::kSafe,
      "payment sheet is browser UI the user must confirm"},
+    {"PendingApprovals", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"PendingExtensionManager", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -927,6 +978,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
     {"PermissionsManager", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
+    {"PermissionsUpdaterShutdownFactory", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
     {"PersistentRendererPrefsManager", ServiceVerdict::kSafe,
@@ -950,6 +1004,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "toolbar pins; settings only"},
     {"PlatformNotificationService", ServiceVerdict::kBlocked,
      "B1: notifications permission denied in agent containers"},
+    {"PluginInfoHostImpl", ServiceVerdict::kSafe,
+     "plugin (PDF viewer) lookup per frame; nothing stored"},
     {"PluginManager", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -1100,6 +1156,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "survey trigger; no page data"},
     {"SafetyHubMenuNotificationService", ServiceVerdict::kSafe,
      "Safety Hub menu notices; no page data"},
+    {"SavedFilesService", ServiceVerdict::kSafe,
+     "Chrome Apps file retention; no agent-tab path"},
     {"ScreenAIService", ServiceVerdict::kSafe,
      "OCR/layout service; no page data kept"},
     {"SearchEngineChoiceDialogServiceFactory", ServiceVerdict::kSafe,
@@ -1138,6 +1196,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "webRequest"},
     {"ServerCertificateDatabaseService", ServiceVerdict::kSafe,
      "user-managed server certs; no page path"},
+    {"ServiceWorkerKeepalive", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"ServiceWorkerTaskQueue", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -1222,6 +1283,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "cert-error and HTTP allowlist decisions are kept per StoragePartition"},
     {"StorageAccessAPIService", ServiceVerdict::kBlocked,
      "B1: storage access grants denied in agent containers"},
+    {"StorageFrontend", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"StorageNotificationService", ServiceVerdict::kSafe,
      "disk pressure notices; no page data"},
     {"SubresourceFilterProfileContext", ServiceVerdict::kBlocked,
@@ -1283,6 +1347,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
     {"TerminalPrivateAPI", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
+    {"TestStartedAndFinishedEventQueue", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"ThemeColorsSourceManager", ServiceVerdict::kSafe,
      "theme colors WebUI; no page path"},
     {"ThemeService", ServiceVerdict::kSafe, "browser theme; set by the user"},
@@ -1318,6 +1385,9 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "consent state; no page path"},
     {"UniversalOptOutService", ServiceVerdict::kSafe,
      "opt-out setting; no page data"},
+    {"UnpackedInstaller", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"UpdateService", ServiceVerdict::kBlocked,
      "B3: extensions system; agent renderers get no extension init, APIs or "
      "webRequest"},
@@ -1396,6 +1466,15 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "B3: no webRequest/DNR proxy for agent traffic"},
     {"WebRequestEventRouter", ServiceVerdict::kBlocked,
      "B3: no webRequest/DNR proxy for agent traffic"},
+    {"WebRequestProxyingURLLoaderFactory", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
+    {"WebRequestProxyingWebSocket", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
+    {"WebRequestProxyingWebTransport", ServiceVerdict::kBlocked,
+     "B3: extensions system; agent renderers get no extension init, APIs or "
+     "webRequest"},
     {"WebRtcEventLogManagerKeyedService", ServiceVerdict::kSafe,
      "WebRTC diagnostic logs; local, opt-in"},
     {"WebcamPrivateAPI", ServiceVerdict::kBlocked,
@@ -1414,6 +1493,8 @@ constexpr auto kRules = std::to_array<ServiceRule>({
      "IPH counters; no page data"},
     {"feedback::FeedbackUploader", ServiceVerdict::kSafe,
      "user-sent feedback reports"},
+    {"feedback::FeedbackUploaderChrome", ServiceVerdict::kSafe,
+     "user-sent feedback reports; no tab path"},
     {"private_ai::PrivateAiService", ServiceVerdict::kSafe,
      "private AI transport; no page data kept"},
     {"sct_reporting::Factory", ServiceVerdict::kSafe,
