@@ -144,12 +144,15 @@ await click(cells[0]);
 vs = await views();
 check('Picking an emoji sets the icon',
       one(vs, 'KoanSpaceIconField')?.props.Icon === ROCKET);
+check('...and closes the picker, which covered the form\'s Theme button',
+      !shown(vs, 'KoanEmojiPicker').length);
 
 const nameField = shown(vs, 'Textfield').find(t => t.path.includes('KoanSpaceCreationView'));
 await type(nameField, 'Research', VK.RETURN);
 s = await sidebar();
-check('Enter creates the Space and shows it',
-      s.header?.name === 'Research' && s.header.icon === ROCKET && s.tabs === 1 &&
+// The new Space opens on Zen's empty tab, which has no row.
+check('Enter creates the Space and shows it, on the empty tab',
+      s.header?.name === 'Research' && s.header.icon === ROCKET && s.tabs === 0 &&
       !one(s.vs, 'KoanSpaceCreationView'),
       JSON.stringify({ header: s.header && [s.header.icon, s.header.name], tabs: s.tabs }));
 check('The bottom bar shows both Spaces, the new one active',
@@ -199,7 +202,7 @@ check('The bottom bar shows both Spaces, the new one active',
 
 await key(VK.T, CTRL, 't');
 s = await sidebar();
-check('A new tab opens in the active Space', s.tabs === 2, `${s.tabs} tab(s)`);
+check('A new tab opens in the active Space', s.tabs === 1, `${s.tabs} tab(s)`);
 
 // ---- Switching: the bottom bar, keys (wrapping around), the wheel.
 await click(s.buttons[0].view);
@@ -313,11 +316,13 @@ s = await sidebar();
 check('A third Space, after the active one',
       s.buttons.map(b => b.name).join() === 'Home,Scratch,Research' &&
       s.header?.name === 'Scratch', s.buttons.map(b => b.name).join());
+// (A tab of its own first: Cmd+W on the empty tab would close the window.)
+await key(VK.T, CTRL, 't');
 await key(VK.W, CTRL, 'w');
 await sleep(1000);
 s = await sidebar();
-check('Closing its last tab keeps the Space, with a new tab',
-      s.buttons.length === 3 && s.header?.name === 'Scratch' && s.tabs === 1,
+check('Closing its last tab keeps the Space, with the empty tab (no row)',
+      s.buttons.length === 3 && s.header?.name === 'Scratch' && s.tabs === 0,
       JSON.stringify({ spaces: s.buttons.length, header: s.header?.name, tabs: s.tabs }));
 
 // ---- The Create form from a collapsed sidebar: the sidebar expands over
@@ -338,7 +343,7 @@ await click(cancel);
 await sleep(1000);
 s = await sidebar();
 check('...and Cancel goes back to the collapsed sidebar with the tabs',
-      !one(s.vs, 'KoanSpaceCreationView') && s.tabs === 1 &&
+      !one(s.vs, 'KoanSpaceCreationView') && s.tabs === 0 &&
       (one(s.vs, 'KoanSpaceBarView')?.w ?? 999) < 150,
       JSON.stringify({ tabs: s.tabs, bar: one(s.vs, 'KoanSpaceBarView')?.w }));
 await click(await toggle());
@@ -380,7 +385,7 @@ if (moveTo) {
 }
 s = await sidebar();
 check('Move To moves the tab and shows its new Space',
-      s.header?.name === 'Research' && s.tabs === 3,
+      s.header?.name === 'Research' && s.tabs === 2,
       JSON.stringify({ header: s.header?.name, tabs: s.tabs }));
 // The Space it left no longer has the tab it remembered.
 await click(s.buttons[0].view);

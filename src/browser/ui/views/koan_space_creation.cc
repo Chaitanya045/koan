@@ -273,6 +273,10 @@ bool KoanSpaceCreationView::HandleKeyEvent(views::Textfield* sender,
 void KoanSpaceCreationView::PickIcon() {
   picker_ =
       KoanEmojiPicker::Show(icon_, /*allow_none=*/!icon_->GetIcon().empty(),
+                            // Zen 1.24b keeps it open in the form
+                            // (closeOnSelect: false): a click outside closes
+                            // it.
+                            /*close_on_pick=*/false,
                             base::BindRepeating(&KoanSpaceCreationView::SetIcon,
                                                 weak_factory_.GetWeakPtr()));
 }

@@ -1,0 +1,25 @@
+diff --git a/components/omnibox/browser/search_provider.cc b/components/omnibox/browser/search_provider.cc
+--- a/components/omnibox/browser/search_provider.cc
++++ b/components/omnibox/browser/search_provider.cc
+@@ -56,6 +56,7 @@
+ #include "components/strings/grit/components_strings.h"
+ #include "components/url_formatter/url_formatter.h"
+ #include "components/variations/net/variations_http_headers.h"
++#include "koan/browser/omnibox/koan_omnibox_hooks.h"
+ #include "net/base/load_flags.h"
+ #include "net/http/http_request_headers.h"
+ #include "net/traffic_annotation/network_traffic_annotation.h"
+@@ -279,6 +280,13 @@
+     Stop(AutocompleteStopReason::kClobbered);
+     return;
+   }
++
++  // Koan: no web search for the keyword of Zen's tabs search, before anything
++  // is typed (OpenTabProvider lists the open tabs then).
++  if (koan::IsEmptyTabSearch(input, model)) {
++    Stop(AutocompleteStopReason::kClobbered);
++    return;
++  }
+ 
+   keyword_input_ = input;
+   const TemplateURL* keyword_provider =

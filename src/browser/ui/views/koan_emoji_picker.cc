@@ -373,12 +373,15 @@ END_METADATA
 std::unique_ptr<KoanEmojiPicker::Bubble> KoanEmojiPicker::Show(
     views::View* anchor,
     bool allow_none,
+    bool close_on_pick,
     PickedCallback on_pick) {
-  return std::make_unique<Bubble>(anchor, allow_none, std::move(on_pick));
+  return std::make_unique<Bubble>(anchor, allow_none, close_on_pick,
+                                  std::move(on_pick));
 }
 
 KoanEmojiPicker::Bubble::Bubble(views::View* anchor,
                                 bool allow_none,
+                                bool close_on_pick,
                                 PickedCallback on_pick)
     // Below the anchor, lined up with its start ("after_start").
     : delegate_(std::make_unique<views::BubbleDialogDelegate>(
@@ -390,8 +393,11 @@ KoanEmojiPicker::Bubble::Bubble(views::View* anchor,
   delegate_->set_margins(gfx::Insets());
   delegate_->set_fixed_width(kEmojiPickerWidth);
   delegate_->SetTitle(u"Choose an icon");
-  KoanEmojiPicker* picker = delegate_->SetContentsView(
-      std::make_unique<KoanEmojiPicker>(allow_none, std::move(on_pick)));
+  KoanEmojiPicker* picker =
+      delegate_->SetContentsView(std::make_unique<KoanEmojiPicker>(
+          allow_none,
+          base::BindRepeating(&Bubble::OnPicked, weak_factory_.GetWeakPtr(),
+                              close_on_pick, std::move(on_pick))));
   // The client owns the widget; once closed (e.g. a click elsewhere) it is
   // dropped, not kept as an empty shell.
   widget_ = views::BubbleDialogDelegate::CreateBubble(
@@ -405,6 +411,18 @@ KoanEmojiPicker::Bubble::Bubble(views::View* anchor,
           weak_factory_.GetWeakPtr()));
   widget_->Show();
   picker->search_->RequestFocus();
+}
+
+void KoanEmojiPicker::Bubble::OnPicked(bool close_on_pick,
+                                       const PickedCallback& on_pick,
+                                       const std::u16string& emoji) {
+  // `on_pick` may drop this bubble.
+  base::WeakPtr<Bubble> self = weak_factory_.GetWeakPtr();
+  on_pick.Run(emoji);
+  if (close_on_pick && self && self->widget_) {
+    // Closes asynchronously, so not under the pressed cell.
+    self->widget_->Close();
+  }
 }
 
 void KoanEmojiPicker::Bubble::OnClosed() {

@@ -5,6 +5,7 @@
 #include "koan/browser/ui/views/koan_zero_suggest.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <set>
 #include <string>
 #include <string_view>
@@ -33,6 +34,8 @@
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/tab_matcher.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/url_constants.h"
@@ -56,6 +59,12 @@ std::set<const AutocompleteProvider*>& LiveProviders() {
   static base::NoDestructor<std::set<const AutocompleteProvider*>> providers;
   return *providers;
 }
+
+// Tabs search's list before anything is typed: tabs shown in the last 50
+// minutes in order (by tens of seconds), older ones after them in tab order.
+// Below what OpenTabProvider gives a typed match (up to 10000), never 0.
+constexpr int kEmptyTabSearchRelevance = 1300;
+constexpr int kEmptyTabSearchSteps = 299;
 
 // How many of each, and in all (Chromium's own limit for zero-prefix
 // suggestions is 8).
@@ -389,6 +398,33 @@ bool UsesLocalZeroSuggestSection(
 
 bool IsLocalZeroSuggestMatch(const AutocompleteMatch& match) {
   return match.provider && LiveProviders().contains(match.provider);
+}
+
+bool IsEmptyTabSearch(const AutocompleteInput& input,
+                      const TemplateURLService* service) {
+  if (!input.in_keyword_mode() || !service) {
+    return false;
+  }
+  // (Strips the keyword from the copy.)
+  AutocompleteInput query = input;
+  const TemplateURL* keyword =
+      AutocompleteInput::GetSubstitutingTemplateURLForInput(service, &query);
+  return keyword &&
+         keyword->starter_pack_id() ==
+             template_url_starter_pack_data::StarterPackId::kTabs &&
+         base::TrimWhitespace(query.text(), base::TRIM_ALL).empty();
+}
+
+int EmptyTabSearchRelevance(const AutocompleteInput& input,
+                            const GURL& url,
+                            base::Time last_shown_time) {
+  if (!IsListableTab(url) || url.EqualsIgnoringRef(input.current_url())) {
+    return 0;
+  }
+  const int64_t steps = std::clamp<int64_t>(
+      (base::Time::Now() - last_shown_time).InSeconds() / 10, 0,
+      kEmptyTabSearchSteps);
+  return kEmptyTabSearchRelevance - static_cast<int>(steps);
 }
 
 scoped_refptr<AutocompleteProvider> CreateZeroSuggestProvider(

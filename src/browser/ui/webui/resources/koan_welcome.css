@@ -394,7 +394,9 @@ kbd {
   color: var(--muted-foreground);
 }
 
-/* The radio circle, then its dot. */
+/* The radio circle, then its dot. It keeps the card's own background so it
+ * stays visible on a hovered row, where --accent can match --input (shadcn's
+ * dark tokens). */
 .radio {
   display: flex;
   align-items: center;
@@ -404,6 +406,7 @@ kbd {
   flex-shrink: 0;
   border: 1px solid var(--input);
   border-radius: 50%;
+  background: var(--background);
   box-shadow: var(--shadow-xs);
 }
 
