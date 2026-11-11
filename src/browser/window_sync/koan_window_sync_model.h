@@ -44,6 +44,22 @@ struct SpaceRecord {
   bool operator==(const SpaceRecord&) const = default;
 };
 
+// A Zen folder (KoanFolder, #60): in a Space's pinned section, maybe inside
+// another folder. Folders are in sidebar order (each folder before its
+// subfolders, which follow in their order). Its sync id is the folder's
+// session token, the same in every window. Zen 1.24b syncs folders as tab
+// groups (TabGroupCreate / Update / Moved / Removed).
+struct FolderRecord {
+  std::string id;
+  std::u16string name;
+  bool collapsed = false;
+  std::string space_id;
+  // The folder this one is in; empty at the top of its Space.
+  std::string parent_id;
+
+  bool operator==(const FolderRecord&) const = default;
+};
+
 // A synced tab: an Essential (in every Space) or a tab pinned to a Space.
 // Items are in sidebar order: Essentials first, then each Space's pinned
 // tabs (the order among one Space's pinned tabs is what counts).
@@ -62,6 +78,8 @@ struct ItemRecord {
   // The user container the tab is in (containers::Serialize()), or empty.
   // An agent container's tab is never an item.
   std::string container;
+  // The folder a pinned tab is in, or empty.
+  std::string folder_id;
 
   bool operator==(const ItemRecord&) const = default;
 };
@@ -98,6 +116,9 @@ Plan<SpaceRecord> PlanSpaces(const std::vector<SpaceRecord>& local,
 std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
                                      const std::vector<SpaceRecord>& target,
                                      const std::set<std::string>& taken);
+// The same for folders.
+Plan<FolderRecord> PlanFolders(const std::vector<FolderRecord>& local,
+                               const std::vector<FolderRecord>& target);
 // The same for synced tabs. `order` is the target's ids in sidebar order
 // (an item that changes kind or Space is updated, then ordered).
 Plan<ItemRecord> PlanItems(const std::vector<ItemRecord>& local,
@@ -128,6 +149,7 @@ class WindowSyncModel {
   ~WindowSyncModel();
 
   const std::vector<SpaceRecord>& spaces() const { return spaces_; }
+  const std::vector<FolderRecord>& folders() const { return folders_; }
   const std::vector<ItemRecord>& items() const { return items_; }
   // Whether any window has given the model its state yet (a new profile, or
   // one from before window sync, has none: its first window seeds it).
@@ -137,6 +159,10 @@ class WindowSyncModel {
   // target of every other window. Returns whether anything changed. Items
   // in Spaces that are gone are dropped (their tabs closed with the Space).
   bool SetSpaces(std::vector<SpaceRecord> spaces);
+  // A folder needs its Space, and its parent before it in the same Space
+  // (else it is dropped, with what is inside it); a window reports its
+  // folders after its Spaces and before its items.
+  bool SetFolders(std::vector<FolderRecord> folders);
   // `closed`: the items whose tab the window closed (not unpinned, nor taken
   // out of the Essentials or into a split: those stay as normal tabs there).
   bool SetItems(std::vector<ItemRecord> items,
@@ -178,10 +204,15 @@ class WindowSyncModel {
   void FromValue(const base::DictValue& value);
 
  private:
-  // Drops items whose Space is gone and pages of items that are gone.
+  // Drops folders and items whose Space is gone, folders whose parent is,
+  // takes items out of folders that are gone, and forgets pages of items
+  // that are gone.
   void DropOrphans();
+  // Takes `items` out of folders the model doesn't have in their Space.
+  void ClearUnknownFolders(std::vector<ItemRecord>& items) const;
 
   std::vector<SpaceRecord> spaces_;
+  std::vector<FolderRecord> folders_;
   std::vector<ItemRecord> items_;
   bool seeded_ = false;
   std::map<std::string, WindowId> live_;

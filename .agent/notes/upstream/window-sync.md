@@ -57,9 +57,22 @@ syncs every tab. The choice is a pref, `koan.window_sync.sync_only_pinned`
 Normal tabs stay per window, as the issue's
 "cheap first step" allows: copying every tab into every window doubles the
 tab strip work of each window for each window, and Koan's empty tab, Glance
-and split views would all need copies. Folders (#60, still an open PR) are
-not synced yet: the model has a seam for them (an item kind and a container
-id), added when #60 lands. Split views are not synced: a synced tab in a split
+and split views would all need copies. Folders (#60) sync
+with the pinned tabs, through the same model: `FolderRecord`s (name,
+collapsed, Space, parent, in sidebar order) and each pinned item's
+`folder_id`. A folder's sync id is its session token, the same in every
+window (a folder made by the sync takes the other window's token), so a
+placeholder joins its folder through the page's copied session data, and
+windows agree again after a restart. Each window keeps the tokens of its
+synced folders in its session data (`koan.window_sync.folders`), so a joining
+window's own folders are added to the model, not deleted. A window reports
+its folders right before its items (`ReportFolders`, on the folder
+controller's change callback too) and applies them first
+(`ApplyFolders`: unpack the removed ones, add or update in target order,
+then the order), and puts the tabs in their folders after the items
+(`ApplyFolderMembership`). A folder deleted elsewhere is unpacked here: its
+tabs follow their own sync. Koan's folders have no icon (#60 left Zen's
+icon picker out). Split views are not synced: a synced tab in a split
 keeps its page in its window.
 
 ## Design: one owner, deferred moves

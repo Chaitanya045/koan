@@ -37,6 +37,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_window_sync_client.h"
@@ -192,6 +193,11 @@ KoanWindowSyncClient* KoanWindowSyncClient::ForBrowser(
 std::vector<window_sync::ItemRecord> KoanWindowSyncClient::LocalItems(
     bool assign_ids) {
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
+  KoanFolderController* folders =
+      KoanBrowserViewController::From(browser_view_)->folders();
+  if (folders && !folders->IsEnabled()) {
+    folders = nullptr;
+  }
   std::vector<window_sync::ItemRecord> essentials;
   std::map<std::string, std::vector<window_sync::ItemRecord>> pinned;
   std::vector<std::string> space_order;
@@ -233,6 +239,13 @@ std::vector<window_sync::ItemRecord> KoanWindowSyncClient::LocalItems(
         .custom_icon = state ? state->custom_icon : std::u16string(),
         .container =
             container ? containers::Serialize(*container) : std::string()};
+    if (const KoanFolder* folder =
+            !essential && folders
+                ? folders->GetFolder(folders->GetFolderOf(tab))
+                : nullptr;
+        folder && synced_folders_.contains(folder->token)) {
+      record.folder_id = folder->token;
+    }
     if (essential) {
       essentials.push_back(std::move(record));
     } else {
@@ -281,6 +294,8 @@ void KoanWindowSyncClient::ReportItems() {
       browser_view_->browser()->GetTabStripModel()->closing_all()) {
     return;
   }
+  // Its folders first: the items name them.
+  sync_->ReportFolders(this, LocalFolders(/*assign_ids=*/true));
   std::vector<window_sync::ItemRecord> items = LocalItems(/*assign_ids=*/true);
   // The pages this window has, so the others' placeholders copy them.
   for (const window_sync::ItemRecord& record : items) {
@@ -423,6 +438,8 @@ void KoanWindowSyncClient::ApplyItems(
     return;
   }
   KoanPinnedTabController* pinned = controller->pinned_tabs();
+  // The folders first: the items go into them.
+  ApplyFolders(sync_->model().folders());
   const window_sync::Plan<window_sync::ItemRecord> plan =
       window_sync::PlanItems(LocalItems(/*assign_ids=*/false), target);
 
@@ -503,7 +520,34 @@ void KoanWindowSyncClient::ApplyItems(
     }
   }
 
+  ApplyFolderMembership(target);
   OrderItems(target);
+}
+
+void KoanWindowSyncClient::ApplyFolderMembership(
+    const std::vector<window_sync::ItemRecord>& target) {
+  KoanFolderController* folders =
+      KoanBrowserViewController::From(browser_view_)->folders();
+  if (!folders || !folders->IsEnabled()) {
+    return;
+  }
+  for (const window_sync::ItemRecord& record : target) {
+    tabs::TabInterface* tab = FindItemTab(record.id);
+    if (!tab || record.kind != window_sync::ItemRecord::Kind::kPinned ||
+        !IsPinnedInSpace(tab)) {
+      continue;
+    }
+    // A folder of the window's own (not synced yet) keeps its tabs.
+    const KoanFolder* current = folders->GetFolder(folders->GetFolderOf(tab));
+    if (current && !synced_folders_.contains(current->token)) {
+      continue;
+    }
+    const int folder = folders->FindFolderByToken(record.folder_id);
+    if (!record.folder_id.empty() && !folder) {
+      continue;
+    }
+    folders->SetSyncedFolderOf(tab, folder);
+  }
 }
 
 void KoanWindowSyncClient::OrderItems(

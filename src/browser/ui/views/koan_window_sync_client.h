@@ -118,6 +118,22 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   void LoadSpaceIds();
   void SaveSpaceIds();
 
+  // --- Folders ---
+
+  // The window's synced folders, in sidebar order: those of its synced
+  // Spaces. With `assign_ids`, a folder that isn't synced yet becomes one
+  // (its token is its sync id); otherwise those are left out.
+  std::vector<window_sync::FolderRecord> LocalFolders(bool assign_ids);
+  // Reconciles the window's folders to `target` (before its items).
+  void ApplyFolders(const std::vector<window_sync::FolderRecord>& target);
+  // Puts each tab of `target` in its folder.
+  void ApplyFolderMembership(
+      const std::vector<window_sync::ItemRecord>& target);
+  // The tokens of the window's synced folders, kept with the window in the
+  // session (a joining window's own folders aren't, until it reports them).
+  void LoadFolderIds();
+  void SaveFolderIds();
+
   // --- Essentials and pinned tabs ---
 
   // The window's synced tabs, in sidebar order: its Essentials and the
@@ -145,6 +161,8 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   base::CallbackListSubscription session_restored_subscription_;
   base::CallbackListSubscription spaces_changed_subscription_;
   std::map<tab_groups::TabGroupId, std::string> space_ids_;
+  base::CallbackListSubscription folders_changed_subscription_;
+  std::set<std::string> synced_folders_;
   // The synced tabs the user closed here since the last report.
   std::set<std::string> closed_items_;
   base::OneShotTimer items_report_timer_;

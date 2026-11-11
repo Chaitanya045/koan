@@ -566,6 +566,13 @@ a reopened window. With startup set to open the New Tab page or other pages,
 the folders of the window you were in still come back, with their tabs
 (unloaded until you open them), as in Zen.
 
+Every synced window has the same folders (Zen's window sync): creating,
+renaming, collapsing or expanding, nesting, moving to another Space,
+reordering or deleting a folder in one window does the same in the others,
+and its tabs are the same synced pinned tabs, in the same folders. Deleting a
+folder in another window leaves its tabs here (the tabs that closed there go
+with their own sync). A New Blank Window has no folders.
+
 ## Space themes
 
 Every Space has its own gradient theme, as in Zen. Right-click the Space's
