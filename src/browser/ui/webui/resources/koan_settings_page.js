@@ -21,8 +21,9 @@ import 'chrome://resources/cr_elements/cr_icon/cr_iconset.js';
 import {addWebUiListener, sendWithPromise} from 'chrome://resources/js/cr.js';
 
 // The page's router (chrome://settings/settings.js re-exports it). Imported
-// dynamically: this script runs before settings.js (settings.html hook), so
-// that the menu's koan: icons exist when the menu draws them.
+// dynamically: settings_main.ts imports this module (hook patch), so it runs
+// before Chromium's settings app is defined, and the menu's koan: icons
+// exist when the menu first draws them.
 const settingsModule = import('./settings.js');
 
 // Koan's sections are chrome://settings/koan/<pane> (route.ts hook).

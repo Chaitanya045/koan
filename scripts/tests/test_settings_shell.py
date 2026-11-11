@@ -42,7 +42,7 @@ def pane_ids():
   return ids
 
 
-JS = (WEBUI / 'resources/koan_settings.js').read_text()
+JS = (WEBUI / 'resources/koan_settings_page.js').read_text()
 
 
 class SettingsShellTest(unittest.TestCase):
@@ -58,7 +58,7 @@ class SettingsShellTest(unittest.TestCase):
   def test_menu_lists_every_pane_with_its_title_and_icon(self):
     menu = added_lines('settings_menu/settings_menu.html.patch')
     icons = re.search(r'const ICONS = \{(.*?)\n\};', JS, re.S)
-    self.assertTrue(icons, 'koan_settings.js: no ICONS')
+    self.assertTrue(icons, 'koan_settings_page.js: no ICONS')
     icon_ids = re.findall(r'^\s*(\w+):', icons.group(1), re.M)
     hrefs = re.findall(r'href="/koan/(\w+)"', menu)
     self.assertEqual(hrefs, pane_ids())
@@ -79,14 +79,28 @@ class SettingsShellTest(unittest.TestCase):
   def test_page_loads_the_served_files(self):
     ui = (WEBUI / 'koan_settings_ui.cc').read_text()
     served = set(re.findall(r'\{"(koan_[\w.]+)", File::', ui))
-    self.assertIn('src="koan_settings.js"', added_lines('settings.html.patch'))
-    used = {'koan_settings.js'}
+    used = {'koan_settings_page.js'}
     used |= set(re.findall(r"href: '(koan_[\w.]+)'", JS))
     used |= set(re.findall(r'url\(/(koan_[\w.]+)\)', ui))
     self.assertEqual(used, served)
     self.assertIn('<koan-settings-page>',
                   added_lines('settings_main/settings_main.html.patch'))
     self.assertIn("customElements.define('koan-settings-page'", JS)
+
+  def test_settings_build_loads_the_plugin(self):
+    # settings_main.ts imports the plugin, which the browser serves outside the
+    # bundle: Chromium's lint wants the import (web-component-missing-deps
+    # looks for koan_settings_page.js), tsc a declaration of the module
+    # (noUncheckedSideEffectImports) and rollup an exclude.
+    url = 'chrome://settings/koan_settings_page.js'
+    self.assertIn("import '%s';" % url,
+                  added_lines('settings_main/settings_main.ts.patch'))
+    build = added_lines('BUILD.gn.patch')
+    self.assertIn('"%s"' % url, build)
+    definitions = re.search(r'"//koan/(\S+\.d\.ts)"', build)
+    self.assertTrue(definitions, 'BUILD.gn patch: no Koan ts_definitions')
+    declared = (ROOT / 'src' / definitions.group(1)).read_text()
+    self.assertIn("declare module '%s'" % url, declared)
 
   def test_messages_are_koan_prefixed_and_handled(self):
     handlers = ''.join(

@@ -39,7 +39,7 @@ namespace {
 // koan/looks).
 enum class File { kJs, kCss, kTokens, kSans, kMono };
 constexpr auto kFiles = base::MakeFixedFlatMap<std::string_view, File>({
-    {"koan_settings.js", File::kJs},
+    {"koan_settings_page.js", File::kJs},
     {"koan_settings.css", File::kCss},
     {"koan_tokens.css", File::kTokens},
     {"koan_geist.woff2", File::kSans},

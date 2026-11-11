@@ -113,7 +113,7 @@ action("resources") {
   script = "embed_resources.py"
   sources = [
     "resources/koan_settings.css",
-    "resources/koan_settings.js",
+    "resources/koan_settings_page.js",
   ]
   outputs = [ "$target_gen_dir/koan_settings_resources.h" ]
   args = [
@@ -121,7 +121,7 @@ action("resources") {
     "kKoanSettingsCss=" +
         rebase_path("resources/koan_settings.css", root_build_dir),
     "kKoanSettingsJs=" +
-        rebase_path("resources/koan_settings.js", root_build_dir),
+        rebase_path("resources/koan_settings_page.js", root_build_dir),
   ]
 }
 

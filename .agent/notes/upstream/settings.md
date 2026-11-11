@@ -78,7 +78,10 @@ or the settings hook patches.
 - `chrome/browser/ui/webui/settings/settings_ui.cc` (+ `settings/BUILD.gn`):
   `koan::settings::ExtendSettingsUI()` at the end of the constructor: Koan's
   handlers, the pane titles as strings, a request filter serving `koan/*`.
-- `chrome/browser/resources/settings/settings.html`: loads `koan/koan_settings.js`.
+- `chrome/browser/resources/settings/settings_main/settings_main.ts`: imports
+  `chrome://settings/koan_settings_page.js` (the plugin, served by the browser;
+  the lint wants every element in a template imported), and `BUILD.gn`: the
+  module's `.d.ts` in `ts_definitions` and the URL in `optimize_webui_excludes`.
 - `chrome/browser/resources/settings/route.ts`: Koan's sections; top-level route.
 - `chrome/browser/resources/settings/settings_menu/settings_menu.html`: Koan's
   menu items.

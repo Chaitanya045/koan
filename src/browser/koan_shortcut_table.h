@@ -146,8 +146,9 @@ bool IsValidCustomAccelerator(const ui::Accelerator& accelerator);
 // How Zen shows `accelerator` (its settings page and command palette):
 // Ctrl+Win+Alt+⇧+Key, e.g. "Ctrl+Alt+⇧+C", "Ctrl+,". On macOS, as Zen does,
 // the glyphs ⌃ ⌘ ⌥ ⇧ separated by spaces, then the key ("⌘ ⇧ C", "⌃ ␣"), with
-// ⎋ ↩ ␣ for Escape, Enter and Space. The settings page's koan_settings.js has
-// the same table. `macos` is for tests; the other overload uses the platform.
+// ⎋ ↩ ␣ for Escape, Enter and Space. The settings page's koan_settings_page.js
+// has the same table. `macos` is for tests; the other overload uses the
+// platform.
 std::u16string DisplayText(const ui::Accelerator& accelerator, bool macos);
 std::u16string DisplayText(const ui::Accelerator& accelerator);
 

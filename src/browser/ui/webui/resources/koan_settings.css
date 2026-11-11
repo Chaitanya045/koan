@@ -2,7 +2,7 @@
  * Use of this source code is governed by the MIT license that can be
  * found in the LICENSE file. */
 
-/* Koan's panes in chrome://settings (koan_settings.js, in the plugin's
+/* Koan's panes in chrome://settings (koan_settings_page.js, in the plugin's
  * shadow root), laid out like Zen's preferences (Firefox's in-content pages
  * plus zen-preferences.css): sizes and colours measured from Zen 1.23 in
  * light and dark mode. */
