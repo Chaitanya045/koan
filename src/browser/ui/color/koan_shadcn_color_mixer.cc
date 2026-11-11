@@ -488,6 +488,16 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanSpaceFormDescription] = {t[Token::kMutedForeground]};
   mixer[kColorKoanSpaceIconBorder] = {t.Opaque(Token::kInput, Token::kSidebar)};
   mixer[kColorKoanEmojiHovered] = {t[Token::kAccent]};
+  // The add-Space swipe: a `sidebar-accent` badge whose `sidebar-primary`
+  // ring fills it once ready, the plus turning `sidebar-primary-foreground`;
+  // the glow `sidebar-primary` at 30%.
+  mixer[kColorKoanSpaceAddSwipeBadge] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanSpaceAddSwipeRing] = {t[Token::kSidebarPrimary]};
+  mixer[kColorKoanSpaceAddSwipeIcon] = {t[Token::kSidebarForeground]};
+  mixer[kColorKoanSpaceAddSwipeIconReady] = {
+      t[Token::kSidebarPrimaryForeground]};
+  mixer[kColorKoanSpaceAddSwipeShadow] = {SkColorSetA(SK_ColorBLACK, 0x33)};
+  mixer[kColorKoanSpaceAddSwipeGlow] = {t.Alpha(Token::kSidebarPrimary, 0.3f)};
 
   // The Library is a Sheet: `background`, with `accent` hovers.
   mixer[kColorKoanLibraryBackground] = {t[Token::kBackground]};

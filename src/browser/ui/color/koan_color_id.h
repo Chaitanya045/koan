@@ -114,6 +114,15 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanSpaceFormDescription,
   kColorKoanSpaceIconBorder,
   kColorKoanEmojiHovered,
+  // The add-Space swipe's badge (koan_space_add_swipe.cc): its fill, ring,
+  // plus (and the plus once the ring fills the badge), shadow, and the glow
+  // behind it.
+  kColorKoanSpaceAddSwipeBadge,
+  kColorKoanSpaceAddSwipeRing,
+  kColorKoanSpaceAddSwipeIcon,
+  kColorKoanSpaceAddSwipeIconReady,
+  kColorKoanSpaceAddSwipeShadow,
+  kColorKoanSpaceAddSwipeGlow,
   // The Library (koan_library_*.cc): its surface and the side column's
   // highlight; text, secondary text (subtitles, headers) and dim text (the
   // search icon); pills (search box, Filter, chips) normal, hovered and

@@ -151,6 +151,22 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanEmojiHovered] =
       ui::SetAlpha(ui::kColorLabelForeground, Alpha(0.1f));
 
+  // The add-Space swipe (zen-single-components.css
+  // .zen-swipe-add-space-*): the badge color-mix(--zen-primary-color, white
+  // 15%) with a shadow of black at 20%, its ring and plus --toolbox-textcolor,
+  // the plus --zen-primary-color once ready; the glow --zen-accent-button-color
+  // at 70%.
+  mixer[kColorKoanSpaceAddSwipeBadge] = {
+      color_utils::AlphaBlend(SK_ColorWHITE, ZenPrimaryColor(key), 0.15f)};
+  mixer[kColorKoanSpaceAddSwipeRing] = {kColorToolbarText};
+  mixer[kColorKoanSpaceAddSwipeIcon] = {kColorToolbarText};
+  mixer[kColorKoanSpaceAddSwipeIconReady] = {ZenPrimaryColor(key)};
+  mixer[kColorKoanSpaceAddSwipeShadow] = {
+      SkColorSetA(SK_ColorBLACK, Alpha(0.2f))};
+  mixer[kColorKoanSpaceAddSwipeGlow] = {SkColorSetA(
+      look::ComputeZenAccent(ZenPrimaryColor(key), dark).button_background,
+      Alpha(0.7f))};
+
   // Toasts: the accent colour fading to 20% darker (towards Zen's #0f0f0f),
   // the text in the accent's contrast colour, the key cap that colour at 40%
   // (10% in dark mode).

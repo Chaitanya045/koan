@@ -172,8 +172,8 @@ float SwipeDrag::Update(float amount, float strip_width) {
     released_ = false;
   }
   live_ = true;
-  offset_ = SwipeOffsetPixels(SwipeTranslate(amount, strip_width, translate_),
-                              strip_width);
+  translate_value_ = SwipeTranslate(amount, strip_width, translate_);
+  offset_ = SwipeOffsetPixels(translate_value_, strip_width);
   return offset_;
 }
 
@@ -194,6 +194,7 @@ void SwipeDrag::Reset() {
   live_ = false;
   released_ = false;
   offset_ = 0;
+  translate_value_ = 0;
   translate_ = SwipeTranslateState();
 }
 

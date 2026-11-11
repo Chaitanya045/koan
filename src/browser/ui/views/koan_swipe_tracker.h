@@ -147,6 +147,9 @@ class SwipeDrag {
   // Whether the fingers are still down and the Space is being dragged.
   bool live() const { return live_; }
   float offset() const { return offset_; }
+  // Zen's translateX behind offset() (SwipeTranslate()), which the Library's
+  // swipe follows.
+  float translate() const { return translate_value_; }
 
   // Follows the cumulative gesture `amount` over a sidebar `strip_width` wide;
   // returns the Space's offset.
@@ -169,6 +172,7 @@ class SwipeDrag {
  private:
   bool live_ = false;
   float offset_ = 0;
+  float translate_value_ = 0;
   SwipeTranslateState translate_;
   // Set by Release(): the swipe ended and may switch Space.
   bool released_ = false;

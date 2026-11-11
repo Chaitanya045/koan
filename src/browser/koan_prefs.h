@@ -168,12 +168,19 @@ inline constexpr char kShowCustomColors[] =
 //   the sidebar switch Space (zen.workspaces.scroll-modifier-key): "ctrl"
 //   (the default), "alt" (Option on macOS), "shift" or "meta" (Cmd on macOS).
 //   A horizontal wheel needs none.
+// - kWorkspacesSwipeEdgeActions: a two-finger swipe past the Space next to the
+//   Library opens the Library, and one past the Space at the other end
+//   offers to create a Space, instead of wrapping around
+//   (zen.workspaces.swipe-actions.edge-actions, on; about:config only in Zen,
+//   so no setting here either). Shortcuts and the wheel still wrap.
 inline constexpr char kWorkspacesWrapAround[] =
     "koan.workspaces.wrap_around_navigation";
 inline constexpr char kWorkspacesNaturalScroll[] =
     "koan.workspaces.natural_scroll";
 inline constexpr char kWorkspacesScrollModifierKey[] =
     "koan.workspaces.scroll_modifier_key";
+inline constexpr char kWorkspacesSwipeEdgeActions[] =
+    "koan.workspaces.swipe_actions.edge_actions";
 
 // Obsolete: until the tint became per window (a window's user colour
 // override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's

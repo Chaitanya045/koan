@@ -77,11 +77,13 @@
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_haptics.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_space_add_swipe.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
 #include "koan/browser/ui/views/koan_space_drag.h"
@@ -121,6 +123,7 @@
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/interaction/element_tracker_views.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -2256,10 +2259,14 @@ std::vector<views::View*> KoanWorkspaceController::GetSlidingViews() {
   return views;
 }
 
-bool KoanWorkspaceController::CanSwipe() const {
+bool KoanWorkspaceController::CanFollowSwipe() const {
   return header_ && header_->GetVisible() && header_->has_space() &&
-         !creation_form_ && slide_outs_.empty() && GetSpaces().size() >= 2 &&
-         header_->parent() && header_->parent()->width() > 0;
+         slide_outs_.empty() && header_->parent() &&
+         header_->parent()->width() > 0;
+}
+
+bool KoanWorkspaceController::CanSwipe() const {
+  return CanFollowSwipe() && !creation_form_ && GetSpaces().size() >= 2;
 }
 
 bool KoanWorkspaceController::OnSwipeScroll(const ui::ScrollEvent& event) {
@@ -2275,19 +2282,89 @@ bool KoanWorkspaceController::ScrollSpaceStrip(const ui::Event& event,
                            y, precise);
 }
 
-void KoanWorkspaceController::UpdateSwipe(float amount) {
-  if (!CanSwipe()) {
-    // Whatever was dragged lets go (another Space is sliding in, the form
-    // opened...).
-    if (drag_.live()) {
-      CancelSwipe(/*animate=*/true);
-    }
+KoanLibraryController* KoanWorkspaceController::GetLibrary() const {
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  KoanLibraryController* library = controller ? controller->library() : nullptr;
+  return library && library->IsAvailable() ? library : nullptr;
+}
+
+bool KoanWorkspaceController::IsLibraryOnScreenRight() const {
+  KoanLibraryController* library = GetLibrary();
+  return library && library->IsOnScreenRight();
+}
+
+void KoanWorkspaceController::BeginSwipe() {
+  swipe_begun_ = true;
+  KoanLibraryController* library = GetLibrary();
+  const std::vector<SpaceInfo> spaces = GetSpaces();
+  auto it = std::ranges::find(spaces, true, &SpaceInfo::active);
+  SwipeEdgeContext context;
+  context.index =
+      it == spaces.end() ? 0 : static_cast<size_t>(it - spaces.begin());
+  context.count = it == spaces.end() ? 0 : spaces.size();
+  context.edge_actions =
+      library && GetPrefs()->GetBoolean(prefs::kWorkspacesSwipeEdgeActions);
+  context.library_open = library && library->is_open();
+  context.library_on_screen_right = IsLibraryOnScreenRight();
+  context.rtl = base::i18n::IsRTL();
+  context.creating_space = creation_form_ != nullptr;
+  swipe_allowed_ = AllowedSwipeEdgeActions(context);
+  swipe_action_ = InitialSwipeEdgeAction(context.library_open);
+  if (swipe_action_ == SwipeEdgeAction::kLibrary) {
+    StartLibrarySwipe();
+  }
+}
+
+void KoanWorkspaceController::StartLibrarySwipe() {
+  KoanLibraryController* library = GetLibrary();
+  if (!library) {
+    swipe_action_ = SwipeEdgeAction::kNone;
     return;
   }
-  const float width = static_cast<float>(header_->parent()->width());
-  const float offset = drag_.Update(SwipeAmount(amount), width);
-  swipe_timer_.Start(FROM_HERE, kSwipeIdleTimeout, this,
-                     &KoanWorkspaceController::OnSwipeTimeout);
+  library_swipe_start_ = static_cast<float>(library->StartSwipe());
+  // The Space goes back to rest while the Library moves (Zen puts the strip
+  // at 0).
+  SpringBackSwipe();
+}
+
+void KoanWorkspaceController::StartAddSpaceSwipe() {
+  auto* tab_strip = views::AsViewClass<TabStripView>(header_->parent());
+  if (add_space_badge_ && add_space_badge_->parent() != tab_strip) {
+    // The sidebar was rebuilt: the old one goes with its tab strip.
+    view_observations_.RemoveObservation(add_space_badge_.get());
+    add_space_badge_ = nullptr;
+  }
+  if (!add_space_badge_) {
+    add_space_badge_ =
+        tab_strip->AddChildView(std::make_unique<KoanSpaceAddSwipeView>());
+    add_space_badge_->SetProperty(views::kViewIgnoredByLayoutKey, true);
+    view_observations_.AddObservation(add_space_badge_.get());
+  }
+  // Over the Space's tab list (Zen's #tabbrowser-tabs), on top.
+  add_space_badge_->SetBoundsRect(tab_strip->GetLocalBounds());
+  tab_strip->ReorderChildView(add_space_badge_, tab_strip->children().size());
+  add_space_badge_->Start(/*on_right=*/!IsLibraryOnScreenRight());
+  add_space_progress_ = 0;
+}
+
+void KoanWorkspaceController::UpdateAddSpaceSwipe(float amount, float width) {
+  const bool library_right = IsLibraryOnScreenRight();
+  const float progress = AddSpaceSwipeProgress(amount, library_right);
+  // Zen ticks the trackpad as the badge becomes ready, and as it stops being.
+  if (AddSpaceSwipeCrossedReady(add_space_progress_, progress)) {
+    PlayHapticFeedback();
+  }
+  add_space_progress_ = progress;
+  if (add_space_badge_) {
+    add_space_badge_->SetProgress(progress);
+  }
+  // The Space makes way for the badge.
+  SetSlidingOffset(SwipeOffsetPixels(
+      AddSpaceSwipeSpaceTranslate(progress, library_right), width));
+}
+
+void KoanWorkspaceController::SetSlidingOffset(float offset) {
   if (!gfx::Animation::ShouldRenderRichAnimation()) {
     return;
   }
@@ -2299,23 +2376,119 @@ void KoanWorkspaceController::UpdateSwipe(float amount) {
   }
 }
 
+void KoanWorkspaceController::UpdateSwipe(float amount) {
+  if (!swipe_begun_) {
+    BeginSwipe();
+  }
+  if (!CanFollowSwipe()) {
+    // Whatever was dragged lets go (another Space is sliding in, the sidebar
+    // went...).
+    if (drag_.live() || swipe_action_ != SwipeEdgeAction::kNone) {
+      CancelSwipe(/*animate=*/true);
+    }
+    return;
+  }
+  amount = SwipeAmount(amount);
+  // Until the swipe turns into an edge action, each update asks whether it
+  // does now (Zen's #decideAction()).
+  if (swipe_action_ == SwipeEdgeAction::kNone) {
+    swipe_action_ =
+        DecideSwipeEdgeAction(swipe_allowed_, amount, IsLibraryOnScreenRight());
+    if (swipe_action_ == SwipeEdgeAction::kLibrary) {
+      StartLibrarySwipe();
+    } else if (swipe_action_ == SwipeEdgeAction::kAddSpace) {
+      StartAddSpaceSwipe();
+    }
+  }
+  if (swipe_action_ == SwipeEdgeAction::kNone && !CanSwipe()) {
+    // No other Space to go to, or the form opened: what was dragged lets go.
+    if (drag_.live()) {
+      CancelSwipe(/*animate=*/true);
+    }
+    return;
+  }
+  const float width = static_cast<float>(header_->parent()->width());
+  // The drag goes on under an edge action too: its translateX is the one the
+  // Library follows.
+  const float offset = drag_.Update(amount, width);
+  swipe_timer_.Start(FROM_HERE, kSwipeIdleTimeout, this,
+                     &KoanWorkspaceController::OnSwipeTimeout);
+  switch (swipe_action_) {
+    case SwipeEdgeAction::kLibrary:
+      if (KoanLibraryController* library = GetLibrary()) {
+        library->SwipeTo(LibrarySwipeProgress(library_swipe_start_,
+                                              drag_.translate(), width,
+                                              IsLibraryOnScreenRight()));
+      }
+      return;
+    case SwipeEdgeAction::kAddSpace:
+      UpdateAddSpaceSwipe(amount, width);
+      return;
+    case SwipeEdgeAction::kNone:
+      SetSlidingOffset(offset);
+      return;
+  }
+}
+
 void KoanWorkspaceController::EndSwipe(float amount, float velocity) {
   swipe_timer_.Stop();
+  const SwipeEdgeAction action = swipe_action_;
+  swipe_begun_ = false;
+  swipe_action_ = SwipeEdgeAction::kNone;
   if (!drag_.live()) {
+    swipe_action_ = action;
+    CancelSwipeEdgeAction(/*animate=*/true);
     return;
   }
   drag_.Release();
   if (!header_ || !header_->parent()) {
     drag_.Reset();
+    swipe_action_ = action;
+    CancelSwipeEdgeAction(/*animate=*/false);
     return;
   }
   amount = SwipeAmount(amount);
   velocity = SwipeAmount(velocity);
+  switch (action) {
+    case SwipeEdgeAction::kLibrary: {
+      // Zen's thresholds (SwipeSucceeds()): far or fast enough opens or
+      // closes it the way the swipe went, else it goes back.
+      drag_.Reset();
+      DropSwitchLayers();
+      KoanLibraryController* library = GetLibrary();
+      if (library) {
+        library->EndSwipe(
+            SwipeSucceeds(amount, velocity)
+                ? LibrarySwipeOpens(amount, IsLibraryOnScreenRight())
+                : library->is_open());
+      }
+      return;
+    }
+    case SwipeEdgeAction::kAddSpace:
+      drag_.Reset();
+      if (AddSpaceSwipeSucceeds(add_space_progress_)) {
+        // Zen's badge leaves its ready state here, with another tick.
+        PlayHapticFeedback();
+        if (add_space_badge_) {
+          add_space_badge_->Stop();
+        }
+        add_space_progress_ = 0;
+        DropSwitchLayers();
+        ShowCreateForm();
+        return;
+      }
+      swipe_action_ = action;
+      CancelSwipeEdgeAction(/*animate=*/true);
+      SpringBackSwipe();
+      return;
+    case SwipeEdgeAction::kNone:
+      break;
+  }
   // Fingers moving right (a negative amount) go to the next Space, the
   // strip moving left, as Zen's does (ZenSpacesSwipe #handleSwipeEnd()).
   // The slide takes the dragged offset (PlaySwitchAnimation()). Past the
   // last or first Space without wrap-around, the drag springs back.
-  if (SwipeSucceeds(amount, velocity) &&
+  if (SwipeSucceeds(amount, velocity) && CanSwipe() &&
       Navigate((amount < 0) != base::i18n::IsRTL())) {
     // If there was no slide (no animation, no other Space), the drag is over.
     drag_.Reset();
@@ -2326,9 +2499,30 @@ void KoanWorkspaceController::EndSwipe(float amount, float velocity) {
   SpringBackSwipe();
 }
 
+void KoanWorkspaceController::CancelSwipeEdgeAction(bool animate) {
+  const SwipeEdgeAction action = swipe_action_;
+  swipe_begun_ = false;
+  swipe_action_ = SwipeEdgeAction::kNone;
+  // (The window's other controllers are going too when it closes.)
+  if (action == SwipeEdgeAction::kLibrary && !destroying_) {
+    if (KoanLibraryController* library = GetLibrary()) {
+      library->EndSwipe(library->is_open());
+    }
+  }
+  if (add_space_badge_) {
+    if (animate) {
+      add_space_badge_->AnimateOut(kSwitchAnimationDuration);
+    } else {
+      add_space_badge_->Stop();
+    }
+  }
+  add_space_progress_ = 0;
+}
+
 void KoanWorkspaceController::CancelSwipe(bool animate) {
   swipe_timer_.Stop();
   swipe_->Cancel();
+  CancelSwipeEdgeAction(animate);
   // (Only a drag leaves the views off their place; a slide in progress isn't
   // this swipe's to stop.)
   const bool was_dragging = drag_.live();
@@ -2596,6 +2790,8 @@ void KoanWorkspaceController::OnViewIsDeleting(views::View* observed_view) {
   if (observed_view == header_) {
     CancelSwipe(/*animate=*/false);
     header_ = nullptr;
+  } else if (observed_view == add_space_badge_) {
+    add_space_badge_ = nullptr;
   } else if (observed_view == bar_) {
     bar_ = nullptr;
   } else if (observed_view == creation_form_) {
