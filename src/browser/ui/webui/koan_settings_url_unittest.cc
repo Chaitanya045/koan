@@ -40,5 +40,16 @@ TEST(KoanSettingsUrlTest, OtherURLsAreNotRewritten) {
   }
 }
 
+// Koan's constant is Chromium's settings page (chrome::kChromeUISettingsHost,
+// which these targets can't depend on).
+TEST(KoanSettingsUrlTest, SettingsPagesAreChromeSettings) {
+  EXPECT_TRUE(IsSettingsURL(GURL("chrome://settings")));
+  EXPECT_TRUE(IsSettingsURL(GURL("chrome://settings/koan/looks")));
+  EXPECT_TRUE(IsSettingsURL(GURL("chrome://settings/appearance")));
+  EXPECT_FALSE(IsSettingsURL(GURL("chrome://koan-settings/")));
+  EXPECT_FALSE(IsSettingsURL(GURL("chrome://settings-frame/")));
+  EXPECT_FALSE(IsSettingsURL(GURL("https://settings/")));
+}
+
 }  // namespace
 }  // namespace koan::settings

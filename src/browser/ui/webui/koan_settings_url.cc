@@ -7,16 +7,33 @@
 #include <string>
 #include <string_view>
 
+#include "base/no_destructor.h"
 #include "base/strings/strcat.h"
-#include "chrome/common/webui_url_constants.h"
-#include "content/public/common/url_constants.h"
 #include "koan/common/koan_url_constants.h"
 #include "url/gurl.h"
 
 namespace koan::settings {
 
+namespace {
+
+// chrome://settings, from Koan's own constant: chrome::kChromeUISettingsHost
+// is in //chrome/common:url_constants, which only //chrome/common may depend
+// on, and this target links into koan_unittests without //chrome or
+// //content. KoanSettingsUrlTest checks it is chrome://settings.
+const GURL& SettingsPagesURL() {
+  static const base::NoDestructor<GURL> url(kSettingsURL);
+  return *url;
+}
+
+}  // namespace
+
+bool IsSettingsURL(const GURL& url) {
+  return url.SchemeIs(SettingsPagesURL().scheme()) &&
+         url.host() == SettingsPagesURL().host();
+}
+
 std::optional<GURL> SettingsURLForLegacyURL(const GURL& url) {
-  if (!url.SchemeIs(content::kChromeUIScheme) ||
+  if (!url.SchemeIs(SettingsPagesURL().scheme()) ||
       url.host() != kLegacySettingsHost) {
     return std::nullopt;
   }
@@ -27,11 +44,10 @@ std::optional<GURL> SettingsURLForLegacyURL(const GURL& url) {
   while (!pane.empty() && pane.back() == '/') {
     pane.remove_suffix(1);
   }
-  const GURL first_pane(kSettingsURL);
-  const std::string path = pane.empty() ? std::string(first_pane.path())
+  const std::string path = pane.empty() ? std::string(SettingsPagesURL().path())
                                         : base::StrCat({"/koan/", pane});
   GURL::Replacements replacements;
-  replacements.SetHostStr(chrome::kChromeUISettingsHost);
+  replacements.SetHostStr(SettingsPagesURL().host());
   replacements.SetPathStr(path);
   return url.ReplaceComponents(replacements);
 }

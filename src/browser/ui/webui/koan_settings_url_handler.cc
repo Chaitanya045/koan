@@ -2,9 +2,9 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#include "chrome/common/webui_url_constants.h"
+#include <utility>
+
 #include "content/public/browser/browser_context.h"
-#include "content/public/common/url_constants.h"
 #include "koan/browser/ui/webui/koan_settings_url.h"
 #include "url/gurl.h"
 
@@ -27,8 +27,7 @@ bool ReverseLegacySettingsURL(GURL* url,
                               content::BrowserContext* browser_context) {
   // Nothing to rewrite back: returning true makes the URL bar show the page
   // that opened, chrome://settings/koan/<pane>.
-  return url->SchemeIs(content::kChromeUIScheme) &&
-         url->host() == chrome::kChromeUISettingsHost;
+  return IsSettingsURL(*url);
 }
 
 }  // namespace koan::settings

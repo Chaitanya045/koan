@@ -22,6 +22,9 @@ namespace koan::settings {
 // other URL. Pure, for the unit test.
 std::optional<GURL> SettingsURLForLegacyURL(const GURL& url);
 
+// Whether `url` is a chrome://settings page (any section). Pure.
+bool IsSettingsURL(const GURL& url);
+
 // The BrowserURLHandler pair for the above (hooked in
 // ChromeContentBrowserClient::BrowserURLHandlerCreated). Rewrites only in a
 // regular profile: chrome://settings refuses incognito, so the alias doesn't

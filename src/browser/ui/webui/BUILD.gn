@@ -92,8 +92,6 @@ source_set("settings_url") {
   ]
   deps = [
     "//base",
-    "//chrome/common:url_constants",
-    "//content/public/common",
     "//koan/common:url_constants",
     "//url",
   ]
@@ -105,9 +103,7 @@ source_set("settings_url_handler") {
   sources = [ "koan_settings_url_handler.cc" ]
   public_deps = [ ":settings_url" ]
   deps = [
-    "//chrome/common:url_constants",
     "//content/public/browser",
-    "//content/public/common",
     "//url",
   ]
 }
