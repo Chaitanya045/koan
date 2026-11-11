@@ -61,23 +61,22 @@ class KoanSessionRestoreBrowserTest : public InProcessBrowserTest {
   }
 
  protected:
-  // Waits for the restored window to have `tabs` tabs and `spaces` Spaces.
-  // Only for a state a fresh window isn't in (it has one tab and one Space),
-  // else it returns before the session is restored; tests that restore
-  // that much wait on what they restore.
+  // Waits for the restored window to have the session's `tabs` tabs, plus
+  // the test launcher's about:blank (InProcessBrowserTest passes it on the
+  // command line, and a restore opens command-line URLs after the session's
+  // tabs, as upstream's StartupPrefSetAsLastAndURLs expects; it joins the
+  // shown Space), and `spaces` Spaces. Only for a state a fresh window isn't
+  // in (it has one tab and one Space), else it returns before the session is
+  // restored; tests that restore that much wait on what they restore.
   //
   // On failure it lists the window's tabs (index, Space, URL, pinned, Zen's
-  // empty tab, session data keys), so a Mac run shows what came back.
-  // TODO(#267): the first Mac run timed out here in SpacesComeBack,
-  // PinnedTabComesBack and SessionDataComesBack (each PRE_ leaves the
-  // window's startup about:blank, marked as Zen's empty tab since #252), but
-  // not in RestoredNewTabPageIsNotTheEmptyTab (whose first tab navigated
-  // away). The listing decides between a stale count and a restore bug.
+  // empty tab, session data keys).
   void WaitForRestore(int tabs, size_t spaces) {
     TabStripModel* tab_strip = browser()->GetTabStripModel();
+    const int expected = tabs + 1;
     const bool restored =
-        base::test::RunUntil([&] { return tab_strip->count() == tabs; });
-    ASSERT_TRUE(restored) << "expected " << tabs << " tabs, got "
+        base::test::RunUntil([&] { return tab_strip->count() == expected; });
+    ASSERT_TRUE(restored) << "expected " << expected << " tabs, got "
                           << tab_strip->count() << ":\n"
                           << DescribeTabs();
     ASSERT_TRUE(WaitForSpaceCount(browser(), spaces)) << DescribeTabs();
