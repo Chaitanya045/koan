@@ -455,7 +455,19 @@ belongs to a Space, and new tabs open in the active one.
   Settings > Tab Management > Workspaces); the right-click
   menu of the header also lists the Spaces. The old Space slides out and
   the new one in, as in Zen, and you land on the tab you left the Space on
-  (also after a restart). Going straight to a tab of another Space (the
+  (also after a restart).
+- **Swipe past the ends** (on a Mac, as in Zen): from the first Space (the
+  one next to the Library; the last with the tabs on the right), swiping
+  on towards the Library's side (fingers moving left) opens the
+  **Library**, which follows your fingers; swipe back over it to close it.
+  From the last Space, swiping on (fingers moving right) brings in a round
+  **+** badge whose ring fills as you go; once the ring fills the badge
+  (the trackpad ticks), lifting your fingers opens the Create-a-Space
+  form. With one Space, both. These swipes don't wrap around; Ctrl+Alt+
+  Left/Right and the wheel still do. Off with
+  `koan.workspaces.swipe_actions.edge_actions` (Zen's about:config
+  `zen.workspaces.swipe-actions.edge-actions`), as in Zen there is no
+  setting for it. Going straight to a tab of another Space (the
   address bar's "Switch to this tab", tab search) shows that tab.
 - **Move To**: right-click a tab > Move To moves it (and the other
   selected tabs) to another Space and shows it. Or drag it: hold a dragged
@@ -875,7 +887,9 @@ with three sections down its side, and opens on the one you used last:
   Chrome's History page.
 
 Esc, the back arrow at the bottom of the side column, the same shortcut
-again or opening a tab closes the Library. Incognito windows have no
+again, opening a tab, or (on a Mac) a two-finger swipe back over it closes
+the Library; swiping past the first Space opens it (see Spaces). Incognito
+windows have no
 Library: there Ctrl+H shows Chrome's notice that history isn't saved, as
 in Chrome, and the Downloads key opens `chrome://downloads`.
 With "Reduce motion" set in the system, it opens and closes without

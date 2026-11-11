@@ -30,6 +30,7 @@
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
+#include "koan/browser/ui/views/koan_swipe_edge_actions.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -65,6 +66,8 @@ class ScrollEvent;
 
 namespace koan {
 
+class KoanLibraryController;
+class KoanSpaceAddSwipeView;
 class KoanSpaceSwipe;
 
 class KoanCreateMenu;
@@ -330,6 +333,14 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // to the next (fingers moved right) or previous Space, or lets the Space
   // spring back. Both do nothing where the sidebar shows no Space to swipe
   // (one Space, the Create form open).
+  //
+  // With Zen's edge actions (kWorkspacesSwipeEdgeActions,
+  // koan_swipe_edge_actions.h) a swipe past the Space next to the Library
+  // opens the Library instead, the panel following the fingers; one past the
+  // Space at the other end brings in Zen's add-Space badge
+  // (koan_space_add_swipe.h) and opens the Create form if it gets far enough;
+  // and while the Library is open a swipe only moves the Library (back closes
+  // it). Those swipes don't wrap around.
   void UpdateSwipe(float amount);
   void EndSwipe(float amount, float velocity);
   // A touchpad scroll over the sidebar (macOS): whether it is part of a swipe,
@@ -491,6 +502,23 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Gives each a layer for it (dropped by DropSwitchLayers()).
   std::vector<views::View*> GetSlidingViews();
   bool CanSwipe() const;
+  // Whether the sidebar shows a Space a swipe can follow at all (CanSwipe()
+  // without the other Space or the closed form a switch needs: the edge
+  // actions don't).
+  bool CanFollowSwipe() const;
+  // A swipe's first update: what it may turn into (koan_swipe_edge_actions.h).
+  void BeginSwipe();
+  // The window's Library, if it has one.
+  KoanLibraryController* GetLibrary() const;
+  bool IsLibraryOnScreenRight() const;
+  void StartLibrarySwipe();
+  void StartAddSpaceSwipe();
+  void UpdateAddSpaceSwipe(float amount, float width);
+  // Lets go of the swipe's edge action: the Library goes back to how the swipe
+  // found it, the badge out (`animate`) or away.
+  void CancelSwipeEdgeAction(bool animate);
+  // Drags the sliding views (GetSlidingViews()) `offset` pixels from rest.
+  void SetSlidingOffset(float offset);
   void OnSwipeTimeout();
   // Lets the views the swipe dragged go back to rest.
   void SpringBackSwipe();
@@ -582,6 +610,16 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // events' tracker, and the watchdog that abandons a swipe whose end never
   // came.
   SwipeDrag drag_;
+  // The swipe's edge action: whether its first update came, what it may turn
+  // into, what it turned into, the Library's progress as it took the swipe,
+  // and the add-Space badge (kept hidden over the tab list between swipes)
+  // with its progress.
+  bool swipe_begun_ = false;
+  SwipeEdgeActions swipe_allowed_;
+  SwipeEdgeAction swipe_action_ = SwipeEdgeAction::kNone;
+  float library_swipe_start_ = 0;
+  raw_ptr<KoanSpaceAddSwipeView> add_space_badge_ = nullptr;
+  float add_space_progress_ = 0;
   std::unique_ptr<KoanSpaceSwipe> swipe_;
   base::OneShotTimer swipe_timer_;
 

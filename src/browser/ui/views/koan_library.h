@@ -28,6 +28,10 @@
 
 class BrowserView;
 
+namespace ui {
+class EventHandler;
+}  // namespace ui
+
 namespace views {
 class FocusManager;
 class View;
@@ -71,6 +75,21 @@ class KoanLibraryController : public TabStripModelObserver,
   void Open();
   void Close();
   void ShowSection(LibrarySection section);
+
+  // Zen's Library swipe (ZenLibrary startSwipe(), swipeProgress(),
+  // stopSwipe()), driven by the two-finger swipe over the sidebar or the panel
+  // (KoanWorkspaceController, koan_swipe_edge_actions.h). StartSwipe() shows
+  // the panel where it is and returns its open progress, SwipeTo() moves it to
+  // `progress` (0 closed, 1 open, a little past either), EndSwipe() opens or
+  // closes it on the spring from there. Opening or closing it any other way
+  // ends the swipe's hold on it.
+  double StartSwipe();
+  void SwipeTo(double progress);
+  void EndSwipe(bool open);
+  bool is_swiping() const { return swiping_; }
+  // Whether the panel is on the screen's right (the sidebar's side), also
+  // while it doesn't exist.
+  bool IsOnScreenRight() const;
 
   // Runs `open_tab`, which opens a tab from inside the library, without that
   // tab closing the library (a page opened in the background).
@@ -126,11 +145,16 @@ class KoanLibraryController : public TabStripModelObserver,
   void SetEscapeRegistered(bool registered);
 
   const raw_ptr<BrowserView> browser_view_;
+  // Hands the touchpad's swipes over the panel to the Spaces' swipe (macOS).
+  // Outlives the widget, whose root view has it.
+  std::unique_ptr<ui::EventHandler> swipe_handler_;
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<KoanLibraryView> view_ = nullptr;
   LibrarySection section_;
   bool open_ = false;
   bool keeping_open_ = false;
+  // A swipe holds the panel (StartSwipe()).
+  bool swiping_ = false;
 
   // Open/close spring: progress runs from `from_` to `target_`.
   gfx::LinearAnimation slide_{this};

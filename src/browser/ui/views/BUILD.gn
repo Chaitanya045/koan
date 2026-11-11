@@ -68,10 +68,13 @@ source_set("sidebar_curve") {
 }
 
 # Zen's two-finger swipe between Spaces (MPL-2.0, see koan_swipe_tracker.h):
-# the gesture state machine and the formulas, plain C++ so that the unit tests
-# can use them.
+# the gesture state machine and the formulas, and its edge actions (the
+# Library, a new Space: koan_swipe_edge_actions.h), plain C++ so that the unit
+# tests can use them.
 source_set("swipe_tracker") {
   sources = [
+    "koan_swipe_edge_actions.cc",
+    "koan_swipe_edge_actions.h",
     "koan_swipe_tracker.cc",
     "koan_swipe_tracker.h",
   ]
@@ -248,6 +251,7 @@ test("koan_views_unittests") {
     "koan_stored_space_unittest.cc",
     "koan_stored_tab_unittest.cc",
     "koan_strip_on_share_unittest.cc",
+    "koan_swipe_edge_actions_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
     "koan_window_edges_unittest.cc",
     "koan_zen_logic_unittest.cc",
@@ -405,6 +409,8 @@ source_set("impl") {
     "koan_sidebar_tabs_controller.h",
     "koan_site_panel_actions.cc",
     "koan_site_panel_actions.h",
+    "koan_space_add_swipe.cc",
+    "koan_space_add_swipe.h",
     "koan_space_background.cc",
     "koan_space_background.h",
     "koan_space_bar.cc",

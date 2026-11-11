@@ -19,6 +19,7 @@
 #include "base/i18n/rtl.h"
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -35,17 +36,22 @@
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_view.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
+#include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/event_handler.h"
+#include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/cubic_bezier.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 
 namespace koan {
@@ -155,6 +161,36 @@ class KoanLibraryButton : public views::ImageButton {
 BEGIN_METADATA(KoanLibraryButton)
 END_METADATA
 
+// The open panel covers the sidebar, so the touchpad's horizontal swipes over
+// it go to the Spaces' swipe as the sidebar's do (Zen listens on the library
+// too): swiping back closes it. macOS sends the mouse wheel as scroll events
+// too; only a wheel has ticks, and it stays the panel's.
+class LibrarySwipeHandler : public ui::EventHandler {
+ public:
+  explicit LibrarySwipeHandler(BrowserView* browser_view)
+      : browser_view_(browser_view) {}
+
+  // ui::EventHandler:
+  void OnScrollEvent(ui::ScrollEvent* event) override {
+#if BUILDFLAG(IS_MAC)
+    if (event->type() == ui::EventType::kScroll && event->HasNativeEvent() &&
+        !ui::GetMouseWheelTick120ths(event->native_event()).IsZero()) {
+      return;
+    }
+    KoanBrowserViewController* controller =
+        KoanBrowserViewController::From(browser_view_);
+    if (controller && controller->workspaces() &&
+        controller->workspaces()->OnSwipeScroll(*event)) {
+      event->SetHandled();
+      event->StopPropagation();
+    }
+#endif
+  }
+
+ private:
+  const raw_ptr<BrowserView> browser_view_;
+};
+
 }  // namespace
 
 KoanLibraryController::KoanLibraryController(BrowserView* browser_view)
@@ -198,6 +234,7 @@ void KoanLibraryController::Open() {
   if (!IsAvailable()) {
     return;
   }
+  swiping_ = false;
   if (open_) {
     view_->OnOpened();
     return;
@@ -218,6 +255,7 @@ void KoanLibraryController::Open() {
 }
 
 void KoanLibraryController::Close() {
+  swiping_ = false;
   if (!open_) {
     return;
   }
@@ -243,6 +281,50 @@ void KoanLibraryController::ShowSection(LibrarySection section) {
   if (view_) {
     view_->ShowSection(section);
   }
+}
+
+double KoanLibraryController::StartSwipe() {
+  if (!IsAvailable()) {
+    return 0;
+  }
+  swiping_ = true;
+  // The spring stops where it is: the fingers take over from there.
+  slide_.Stop();
+  cleanup_timer_.Stop();
+  if (!widget_) {
+    CreateWidget();
+  }
+  if (!widget_->IsVisible()) {
+    view_->ShowSection(section_);
+    width_ = GetTargetWidth();
+    resize_.Stop();
+    LayoutWidget();
+    widget_->Show();
+  }
+  return progress_;
+}
+
+void KoanLibraryController::SwipeTo(double progress) {
+  if (swiping_) {
+    SetProgress(progress);
+  }
+}
+
+void KoanLibraryController::EndSwipe(bool open) {
+  if (!swiping_) {
+    return;
+  }
+  swiping_ = false;
+  if (open) {
+    // Open() springs on from where the fingers left it.
+    open_ ? AnimateTo(1) : Open();
+  } else {
+    open_ ? Close() : AnimateTo(0);
+  }
+}
+
+bool KoanLibraryController::IsOnScreenRight() const {
+  return IsSidebarOnRight(browser_view_) != base::i18n::IsRTL();
 }
 
 void KoanLibraryController::KeepOpenWhile(base::OnceClosure open_tab) {
@@ -287,6 +369,7 @@ void KoanLibraryController::OnBrowserViewLayout() {
 
 void KoanLibraryController::OnBrowserViewDestroying() {
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
+  swiping_ = false;
   SetEscapeRegistered(false);
   slide_.Stop();
   resize_.Stop();
@@ -356,12 +439,18 @@ void KoanLibraryController::CreateWidget() {
   view_ = widget_->SetContentsView(std::make_unique<KoanLibraryView>(this));
   // The panel slides in from the window's edge, not from beyond it.
   widget_->GetLayer()->SetMasksToBounds(true);
+  if (!swipe_handler_) {
+    swipe_handler_ = std::make_unique<LibrarySwipeHandler>(browser_view_);
+  }
+  widget_->GetRootView()->AddPreTargetHandler(
+      swipe_handler_.get(), ui::EventTarget::Priority::kSystem);
 }
 
 void KoanLibraryController::DestroyWidget() {
   cleanup_timer_.Stop();
   view_ = nullptr;
   if (widget_) {
+    widget_->GetRootView()->RemovePreTargetHandler(swipe_handler_.get());
     widget_->CloseNow();
     widget_.reset();
   }
@@ -450,7 +539,7 @@ void KoanLibraryController::LayoutWidget() {
   // The side is logical: in a right-to-left UI the sidebar is on the
   // screen's right unless it is "on the right" (like KoanToast).
   const bool on_right = IsSidebarOnRight(browser_view_);
-  on_screen_right_ = on_right != base::i18n::IsRTL();
+  on_screen_right_ = IsOnScreenRight();
   view_->SetSide(on_right, on_screen_right_);
   gfx::Rect bounds = GetArea();
   if (on_screen_right_) {
