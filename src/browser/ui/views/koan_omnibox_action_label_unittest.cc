@@ -15,6 +15,7 @@
 #include <string_view>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/test/task_environment.h"
 #include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/actions/omnibox_action_concepts.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -63,6 +64,8 @@ class KoanOmniboxActionLabelTest : public testing::Test {
   }
 
  private:
+  // The fake client's services post tasks.
+  base::test::TaskEnvironment task_environment_;
   bool owns_resource_bundle_ = false;
 };
 
