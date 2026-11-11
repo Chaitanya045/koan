@@ -13,7 +13,6 @@
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
-#include "chrome/browser/ui/views/tabs/shared/rounded_scroll_bar.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -45,10 +44,11 @@ struct EssentialsHeight {
   // layout: a new start (or a restart from 0) begins a new ease from `shown`.
   double starting_offset = 0.0;
   double last_offset = 1.0;
-  // The scroll bar's thumb is hidden while the grid is shorter than its
-  // tiles: upstream's thumb shows whenever its bounds change, and the grid is
-  // not scrolled, only revealed.
-  bool thumb_hidden = false;
+  // The grid is shorter than its tiles while it eases, which upstream takes
+  // for an overflow: it scrolls a new active tile into view and shows the
+  // scroll bar's thumb (TabStripView::EnsureViewsVisibleInViewportPostLayout(),
+  // EnableOverflowVisuals()). The bar is hidden meanwhile.
+  bool bar_hidden = false;
 };
 
 }  // namespace koan
@@ -95,22 +95,24 @@ int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height) {
     height = scroll_view->SetProperty(kEssentialsHeightKey,
                                       std::make_unique<EssentialsHeight>());
   }
-  auto* scroll_bar = views::AsViewClass<tabs::RoundedScrollBar>(
-      scroll_view->vertical_scroll_bar());
   const double offset = coordinator.current_offset();
   if (offset >= 1.0 || height->shown < 0 ||
       !gfx::Animation::ShouldRenderRichAnimation()) {
-    if (height->thumb_hidden && scroll_bar) {
-      // After this layout, which still changes the thumb's bounds (and a
-      // thumb shows when they change).
-      auto tracker = std::make_unique<views::ViewTracker>(scroll_bar);
+    if (height->bar_hidden) {
+      // Back after this layout, as upstream has it whenever no scroll is
+      // under way.
+      auto tracker = std::make_unique<views::ViewTracker>(scroll_view);
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(
               [](std::unique_ptr<views::ViewTracker> tracker) {
-                if (auto* bar = views::AsViewClass<tabs::RoundedScrollBar>(
-                        tracker->view())) {
-                  bar->SetIsAnimatingSize(false);
+                auto* view =
+                    views::AsViewClass<views::ScrollView>(tracker->view());
+                if (view &&
+                    view->GetVerticalScrollBarMode() ==
+                        views::ScrollView::ScrollBarMode::kHiddenButEnabled) {
+                  view->SetVerticalScrollBarMode(
+                      views::ScrollView::ScrollBarMode::kEnabled);
                 }
               },
               std::move(tracker)));
@@ -133,9 +135,12 @@ int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height) {
     height->starting_offset = coordinator.starting_offset();
   }
   height->last_offset = offset;
-  if (height->from != height->to && !height->thumb_hidden && scroll_bar) {
-    height->thumb_hidden = true;
-    scroll_bar->SetIsAnimatingSize(true);
+  if (height->from != height->to &&
+      scroll_view->GetVerticalScrollBarMode() !=
+          views::ScrollView::ScrollBarMode::kHiddenButEnabled) {
+    height->bar_hidden = true;
+    scroll_view->SetVerticalScrollBarMode(
+        views::ScrollView::ScrollBarMode::kHiddenButEnabled);
   }
   height->shown = gfx::Tween::IntValueBetween(coordinator.GetCurrentProgress(),
                                               height->from, height->to);
