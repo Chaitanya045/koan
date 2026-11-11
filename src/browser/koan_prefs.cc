@@ -150,7 +150,7 @@ void OverrideServiceProfilePrefDefaults(
 // Registers Koan's local-state prefs, and sets Koan's defaults for upstream
 // ones.
 void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
-  registry->RegisterStringPref(kLookStyle, "zen");
+  registry->RegisterStringPref(kLookStyle, "shadcn");
   registry->RegisterStringPref(kLookMode, "dark");
   registry->RegisterStringPref(kLookBase, "black");
   registry->RegisterStringPref(kLookAccent, "none");

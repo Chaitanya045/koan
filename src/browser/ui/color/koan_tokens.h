@@ -152,7 +152,7 @@ ZenTabColors ComputeZenTabColors(SkColor primary, bool dark);
 
 // What makes the tokens.
 struct Look {
-  Style style = Style::kZen;
+  Style style = Style::kShadcn;
   Mode mode = Mode::kDark;
   BaseColor base = BaseColor::kBlack;
   Accent accent = Accent::kNone;

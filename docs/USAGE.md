@@ -744,7 +744,8 @@ lg 10, xl 14). The font is Geist (bundled, SIL OFL), from the next start.
 **Settings > Look and Feel > Appearance** (browser-wide, applies at once to
 every window):
 
-- **Look**: Zen (default) or shadcn/ui. Zen has its gradient themes and the
+- **Look**: shadcn/ui (default) or Zen. A profile that never chose a look
+  follows the default; one that picked Zen keeps it. Zen has its gradient themes and the
   theme picker's per-Space colours; the choices below are shadcn's.
 - **Mode** (shadcn only; Zen follows the system): Dark (default), Light, or Automatic (follow the system). The
   mode is the window's colour mode, so on macOS the title bar, scrollbars and
@@ -937,7 +938,7 @@ dragging.
 ## Welcome
 
 The first time Koan starts with a new profile it offers a short, optional
-setup over the first window: "Welcome to a calmer internet", then four
+setup over the first window: "The only browser you need", then four
 steps. Every step has Skip, and **Skip setup** (top right) or Esc leaves at
 any point; nothing changes until a step's Next. It shows once (start Koan
 with `--force-first-run` and a new user data directory to see it again).
