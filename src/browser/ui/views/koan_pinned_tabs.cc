@@ -1470,19 +1470,23 @@ void KoanPinnedTabController::PlaceUnpinnedEssential(tabs::TabHandle handle) {
   TabStripModel* model = tab_strip_model();
   const int index = tab ? model->GetIndexOfTab(tab) : TabStripModel::kNoTab;
   // A split view, or a tab that has moved on since: Normalize() decides.
-  if (index == TabStripModel::kNoTab || tab->IsPinned() || tab->GetGroup() ||
-      tab->IsSplit() || TabDragController::IsActive()) {
+  if (index == TabStripModel::kNoTab || tab->IsPinned() || tab->IsSplit() ||
+      TabDragController::IsActive()) {
     return;
   }
   const std::optional<tab_groups::TabGroupId> space = model->GetFocusedGroup();
   KoanTabState* state = GetTabState(tab);
+  // (Spaces may have put it back at the Space's end already, in a task that
+  // ran first: KoanWorkspaceController::EnsureOneSpaceShown().)
   if (!space || !model->group_model()->ContainsTabGroup(*space) || !state ||
-      !state->was_essential) {
+      !state->was_essential || (tab->GetGroup() && tab->GetGroup() != space)) {
     return;
   }
   state->was_essential = false;
   // To the Space's start: the top of its pinned tabs.
-  model->AddToExistingGroup({index}, *space, /*add_to_end=*/false);
+  if (!tab->GetGroup()) {
+    model->AddToExistingGroup({index}, *space, /*add_to_end=*/false);
+  }
   // Keeps its pinned URL, as one of the Space's pinned tabs; without one (an
   // Essential that never had one) a normal tab, below them.
   if (state->pinned_url.is_valid()) {
@@ -1491,7 +1495,10 @@ void KoanPinnedTabController::PlaceUnpinnedEssential(tabs::TabHandle handle) {
     UpdateFreezingExemption(tab);
     SaveTabState(tab->GetContents());
     UpdateTabView(tab);
-    MoveIntoPinnedTabs(tab);
+    const int at = model->GetIndexOfTab(tab);
+    if (const int start = SectionStart(at); at != start) {
+      model->MoveWebContentsAt(at, start, /*select_after_move=*/false);
+    }
   } else {
     ClearPinnedState(tab);
     MoveAfterPinnedTabs(tab);
