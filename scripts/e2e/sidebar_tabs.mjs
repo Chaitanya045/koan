@@ -10,7 +10,8 @@
 // The profile (prefs/sidebar_tabs.json) turns off Zen's replace-newtab, so
 // the New Tab row and Ctrl+T open tabs right away; urlbar.mjs tests them
 // with it on.
-import { tabMenuCommand } from './lib/koan.mjs';
+import { tabMenuCommand, sendKey, skipOnMac } from './lib/koan.mjs';
+skipOnMac('needs Cmd+Shift+T (Reopen Closed Tab), a main-menu key CDP keys never reach on macOS; port it to the test_helper extension or real input (#270)');
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -130,9 +131,7 @@ async function key(code, modifiers, keyName = '') {
   const page = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
       .filter(t => t.type === 'page')[0];
   const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1200);
 }

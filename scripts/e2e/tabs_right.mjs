@@ -4,6 +4,7 @@
 // the right edge; the multiple-toolbars layout puts the toolbar on the left.
 //
 //   scripts/e2e/run.sh tabs_right
+import { ACCEL } from './lib/koan.mjs';
 import { ALT, CTRL, boundsOf, check, finish, key, setChromePref, setKoanPref, sleep, views,
          visiblePage }
     from './lib/koan.mjs';
@@ -48,7 +49,7 @@ check('...the window buttons\' hot zone is along the top above the page',
       topZone && `${topZone.x}+${topZone.w}`);
 
 // Compact mode hides the sidebar at the right edge.
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 vs = await views();
 strip = find(vs, 'VerticalTabStripRegionView');
 check('Compact mode hides the sidebar', strip?.w === 0, `width ${strip?.w}`);
@@ -58,12 +59,12 @@ check('...the card has a gutter on the right too', card && card.x + card.w === r
 const zone = vs.find(v => v.cls === 'KoanHotZone' && v.shown && v.h > bv.h / 2);
 check('...and the sidebar hot zone is on the right edge',
       zone && zone.x + zone.w === right && zone.w === 8, `zone ${zone?.x}+${zone?.w}`);
-await press(VK.S, CTRL | ALT, 's');
+await press(VK.S, ACCEL | ALT, 's');
 await sleep(500);
 const [peek] = await boundsOf('VerticalTabStripRegionView');
 check('Ctrl+Alt+S slides it in from the right',
       peek && peek.w > 100 && peek.x + peek.w === bv.w, `${peek?.x}+${peek?.w}`);
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 
 // Multiple toolbars: the toolbar is above the page, left of the sidebar.
 await press(VK.B, CTRL | ALT, 'b');
@@ -79,7 +80,7 @@ await press(VK.B, CTRL | ALT, 'b');
 // revealed above the page, left of the sidebar.
 await press(VK.B, CTRL | ALT, 'b');
 await setKoanPref('koan.compact_mode.hide', 'toolbar');
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 vs = await views();
 strip = findShown(vs, 'VerticalTabStripRegionView');
 const revealed = find(vs, 'TopContainerView');
@@ -87,7 +88,7 @@ check('Hide toolbar: the revealed toolbar is left of the sidebar, not over it',
       revealed?.path.includes('TopContainerOverlayView') && revealed.x === bv.x &&
       revealed.x + revealed.w === strip.x,
       `toolbar ${revealed?.x}+${revealed?.w}, sidebar ${strip?.x}`);
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 await setKoanPref('koan.compact_mode.hide', 'sidebar');
 await press(VK.B, CTRL | ALT, 'b');
 

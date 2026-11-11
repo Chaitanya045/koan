@@ -9,8 +9,12 @@ import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
-  key as keyTo, pages as tabs, setKoanPref, sleep, visiblePage, waitFor,
+  key as keyTo, pages as tabs, setKoanPref, sleep, visiblePage, waitFor, IS_MAC, META,
 } from './lib/koan.mjs';
+// Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
+const DOWNLOADS_KEY = IS_MAC ? [74, META, 'j'] : [89, CTRL | SHIFT, 'Y'];
+// Library History: Ctrl+H, on macOS Cmd+Y (koan_shortcut_table.cc).
+const HISTORY_KEY = IS_MAC ? [89, META, 'y'] : [72, CTRL, 'h'];
 
 // With SHOTS=<dir> (see run.sh), copies the window's latest off-screen frame
 // (the largest dump) there as <name>.png.
@@ -250,10 +254,10 @@ check('Opening a page from History adds a tab and closes the Library',
       `${tabsBefore} -> ${(await tabs()).length} tab(s), open ${state.open}`);
 
 // --- Ctrl+H toggles the Library's History. ---
-await key(KEY_H, CTRL, 'h');
+await key(...HISTORY_KEY);
 state = await library();
 check('Ctrl+H opens History', state.open && state.section === 'KoanLibraryHistorySection');
-await key(KEY_H, CTRL, 'h');
+await key(...HISTORY_KEY);
 check('Ctrl+H again closes it', !(await library()).open);
 
 // --- A download, then Ctrl+Shift+Y shows it in Downloads. ---
@@ -276,7 +280,7 @@ const downloads = join(profile, 'Downloads');
   c.close();
   await sleep(2000);
 
-  await key(KEY_Y, CTRL | SHIFT, 'Y');
+  await key(...DOWNLOADS_KEY);
   state = await waitFor(async () => {
     const s = await library();
     return s.open && s.rows >= 1 ? s : null;
@@ -327,7 +331,7 @@ const downloads = join(profile, 'Downloads');
   await chip('Done');
   await sleep(300);
 
-  await key(KEY_Y, CTRL | SHIFT, 'Y');
+  await key(...DOWNLOADS_KEY);
   check('Ctrl+Shift+Y again closes it', !(await library()).open);
 }
 
@@ -348,7 +352,7 @@ const downloads = join(profile, 'Downloads');
   await sleep(2000);
   const dangerous = async () => withViews(nodes =>
     find(nodes, 'KoanLibraryRow', n => n.shown && n.p.Title === 'koan-dangerous.py')[0]?.p);
-  await key(KEY_Y, CTRL | SHIFT, 'Y');
+  await key(...DOWNLOADS_KEY);
   // Safe Browsing's verdict (library.flags) comes once the file is in.
   let row = await waitFor(async () => {
     const r = await dangerous();
@@ -366,11 +370,11 @@ const downloads = join(profile, 'Downloads');
   // The warning: the download bubble's, or the downloads page.
   check('...clicking it goes to Chrome\'s warning and closes the Library',
         !(await library()).open, tabsNow.map(t => t.url).join(', '));
-  if (!(await library()).open) await key(KEY_Y, CTRL | SHIFT, 'Y');
+  if (!(await library()).open) await key(...DOWNLOADS_KEY);
   row = await waitFor(dangerous) ?? {};
   check('...and doesn\'t make it open when it\'s done', /dangerous/.test(row.Subtitle ?? ''),
         `${row.Title} / ${row.Subtitle}`);
-  await key(KEY_Y, CTRL | SHIFT, 'Y');
+  await key(...DOWNLOADS_KEY);
   for (const t of await tabs()) {
     if (t.id === targetId || t.url.startsWith('chrome://downloads')) {
       await browserCall('Target.closeTarget', { targetId: t.id });

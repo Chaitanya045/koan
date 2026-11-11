@@ -6,14 +6,14 @@
 //
 //   scripts/e2e/run.sh empty_tab
 import {
-  CTRL, META, SHIFT, check, finish, front, key, pages, shownViews, sleep, typeInto, viewTree,
-  views, waitFor, browserCall, onPage, evalIn,
+  ACCEL, CTRL, SHIFT, check, finish, front, key, pages, shownViews, sleep, typeInto, viewTree,
+  views, waitFor, browserCall, onPage, evalIn, skipOnMac,
 } from './lib/koan.mjs';
+skipOnMac();
 
 const VK = { T: 84, RETURN: 13, TAB: 9, ONE: 49 };
-// Cmd on macOS, Ctrl elsewhere (Cmd+1-9 select a tab; Ctrl+1-9 on macOS
+// ACCEL (lib/koan.mjs): Cmd+1-9 select a tab on macOS (Ctrl+1-9 there
 // switch Spaces).
-const ACCEL = process.platform === 'darwin' ? META : CTRL;
 const isShown = async page =>
     await evalIn(page, 'document.visibilityState') === 'visible';
 const tabRows = async () =>

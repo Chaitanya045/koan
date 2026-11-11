@@ -4,6 +4,7 @@
 // of Spaces is in spaces.mjs.
 //
 //   scripts/e2e/run.sh workspaces
+import { ACCEL, sendKey } from './lib/koan.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -91,9 +92,7 @@ async function key(code, modifiers, keyName = '') {
   const page = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
       .filter(t => t.type === 'page')[0];
   const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1500);
 }
@@ -151,7 +150,7 @@ check('Creating a Space shows it, with its tab only',
 
 // Ctrl+T opens the URL bar (Zen's replace-newtab); the tab opens with what
 // is opened from it.
-await key(VK.T, CTRL, 't');
+await key(VK.T, ACCEL, 't');
 await openFromUrlBar('about:blank');
 s = await sidebar();
 check('A new tab joins the active Space', s.visibleTabs === 2, `${s.visibleTabs} tab(s)`);
@@ -163,12 +162,12 @@ check('A third Space goes after the active one',
       s.buttons.map(b => b.name).join() === 'Space,Work,Play' && s.buttons[2].active,
       s.buttons.map(b => b.name).join());
 
-await key(VK.LEFT, CTRL | ALT);
+await key(VK.LEFT, ACCEL | ALT);
 s = await sidebar();
 check('Ctrl+Alt+Left goes to the previous Space',
       s.header === 'Work' && s.visibleTabs === 2, JSON.stringify(s.header));
-await key(VK.RIGHT, CTRL | ALT);
-await key(VK.RIGHT, CTRL | ALT);
+await key(VK.RIGHT, ACCEL | ALT);
+await key(VK.RIGHT, ACCEL | ALT);
 s = await sidebar();
 check('Ctrl+Alt+Right past the last Space wraps around to the first',
       s.header === 'Space' && s.visibleTabs === 2, JSON.stringify(s.header));

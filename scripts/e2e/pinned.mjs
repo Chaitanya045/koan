@@ -12,8 +12,9 @@
 // The profile (prefs/pinned.json) turns off Zen's replace-newtab, so a new
 // Space (Zen's Create form, Ctrl+Alt+N) opens with a tab.
 import {
-  browserCall, createSpace, evalIn, settingsCall, tabMenuCommand, waitFor,
+  browserCall, createSpace, evalIn, settingsCall, tabMenuCommand, waitFor, sendKey, skipOnMac,
 } from './lib/koan.mjs';
+skipOnMac();
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -140,9 +141,7 @@ async function navigate(page, url) {
 async function key(code, modifiers, keyName = '') {
   const page = await activePage() ?? (await pages())[0];
   const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1500);
 }
@@ -196,9 +195,7 @@ const activate = async page => {
 // Sends a key press to `page` (not "the active page").
 async function keyTo(page, code, modifiers, keyName = '') {
   const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1500);
 }

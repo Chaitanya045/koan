@@ -17,9 +17,11 @@ import { spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import {
-  CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish,
-  key as keyTo, pages, sleep, visiblePage, waitFor,
+  CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, key as keyTo,
+  pages, sleep, visiblePage, waitFor, IS_MAC, META,
 } from './lib/koan.mjs';
+// Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
+const DOWNLOADS_KEY = IS_MAC ? [74, META, 'j'] : [89, CTRL | SHIFT, 'Y'];
 
 const KEY_Y = 89;
 // The Library frees a closed panel after 30 s (koan_library_controller.cc).
@@ -164,7 +166,7 @@ process.on('exit', () => server.close());
 step = 'starting the slow download';
 await browserCall('Target.createTarget', { url: `${base}/later.exe`, background: true });
 await sleep(2000);
-await key(KEY_Y, CTRL | SHIFT, 'Y');
+await key(...DOWNLOADS_KEY);
 let later = await waitFor(() => row('koan-later.exe'), 8000);
 check('The download coming in is listed in the Library', Boolean(later),
       later ? later.p.Subtitle : 'no row');
@@ -178,7 +180,7 @@ if (later) {
 
 // --- The Library closes, and is freed. ---
 step = 'waiting for the closed Library to be freed';
-await key(KEY_Y, CTRL | SHIFT, 'Y');
+await key(...DOWNLOADS_KEY);
 await sleep(kCleanupDelay + 5000);
 check('The closed Library is freed (its sections with it)',
       shown(await views(), 'KoanLibraryDownloadsSection').length === 0 &&
@@ -232,7 +234,7 @@ await sleep(1000);
 step = 'opening a safe download from the row menu';
 await browserCall('Target.createTarget', { url: `${base}/safe.txt`, background: true });
 await sleep(2000);
-await key(KEY_Y, CTRL | SHIFT, 'Y');
+await key(...DOWNLOADS_KEY);
 const safe = await waitFor(async () => {
   const r = await row('koan-safe.txt');
   return r && !/\//.test(r.p.Subtitle ?? '/') ? r : null;

@@ -19,7 +19,7 @@
 // profile was started with. With SHOTS=<dir> (see run.sh) it saves
 // screenshots of each state there.
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
-import { browserCall, setKoanPref, visiblePage, waitFor } from './lib/koan.mjs';
+import { browserCall, setKoanPref, visiblePage, waitFor, ACCEL, sendKey } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -212,9 +212,7 @@ const activePage = async () => (await visiblePage()) ?? (await pages())[0];
 async function key(code, modifiers, keyName = '') {
   const page = await activePage();
   const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1200);
 }
@@ -235,7 +233,7 @@ async function clipboard() {
     document.body.append(t);
     t.focus();
   })()`);
-  await key(86, 2, 'v');
+  await key(86, ACCEL, 'v');
   return evalIn(page, `(() => { const t = document.getElementById('koan-paste');
                                 const v = t.value; t.remove(); return v; })()`);
 }
@@ -385,7 +383,7 @@ check('...and the pill shows the site again',
 
 // --- Ctrl+T: the URL bar in place of a new tab ---------------------------------
 const tabsBefore = (await pages()).length;
-await key(VK.T, CTRL, 't');
+await key(VK.T, ACCEL, 't');
 vs = await views();
 const newTabPlaced = BEHAVIOR === 'normal' ? bar(vs)?.x === pillNow.x : isFloating(vs);
 check('Ctrl+T opens the URL bar' + (BEHAVIOR === 'normal' ? ' in the pill' : ', floating'),
@@ -422,7 +420,7 @@ check('A repeated Ctrl+T (key held) leaves it open', bar(vs)?.w < WINDOW_WIDTH,
 await windowKey(VK.ESC, EF_CONTROL);
 vs = await views();
 check('...and so does Ctrl+Esc', bar(vs)?.w < WINDOW_WIDTH, `width ${bar(vs)?.w}`);
-await key(VK.T, CTRL, 't');
+await key(VK.T, ACCEL, 't');
 vs = await views();
 check('Ctrl+T again closes it', bar(vs)?.w === WINDOW_WIDTH &&
       (await pages()).length === tabsBefore, `width ${bar(vs)?.w}`);
@@ -436,7 +434,7 @@ check('The New Tab row opens the URL bar too, without a tab',
       `${bar(vs)?.w} at ${bar(vs)?.x}, ${(await pages()).length} tab(s)`);
 await closeBar();
 
-await key(VK.T, CTRL, 't');
+await key(VK.T, ACCEL, 't');
 vs = await views();
 await type(find(vs, 'OmniboxViewViews'), 'koan');
 if (BEHAVIOR === 'normal') {
@@ -451,7 +449,7 @@ check('A click outside (or Esc) closes it without creating a tab',
 check('...and the pill shows the page again',
       vs.find(v => v.cls === 'Label' && v.path.at(-1) === 'KoanUrlPill')?.p.Text === 'example.com');
 if (BEHAVIOR !== 'normal') {
-  await key(VK.T, CTRL, 't');
+  await key(VK.T, ACCEL, 't');
   vs = await views();
   check('Ctrl+T within 45 s brings the unfinished search back', omniboxText(vs) === 'koan',
         JSON.stringify(omniboxText(vs)));
@@ -459,7 +457,7 @@ if (BEHAVIOR !== 'normal') {
 }
 
 const firstUrl = (await pages())[0].url;
-await key(VK.T, CTRL, 't');
+await key(VK.T, ACCEL, 't');
 vs = await views();
 const omnibox = find(vs, 'OmniboxViewViews');
 // Ctrl+A: replace any unfinished search.
@@ -479,8 +477,8 @@ check('...and the URL bar is closed', bar(vs)?.w === WINDOW_WIDTH, `width ${bar(
 // Chromium collapses an expanded-on-hover sidebar while the omnibox's
 // suggestions are open, which would take the pill away mid-edit: with the
 // sidebar hidden, the bar floats from the start, in every behaviour.
-await key(VK.S, CTRL, 's');
-await key(VK.S, CTRL | ALT, 's');
+await key(VK.S, ACCEL, 's');
+await key(VK.S, ACCEL | ALT, 's');
 // Not views(): reading every view's properties takes long enough for the
 // peek to end.
 const peeked = (await propsOf(['VerticalTabStripRegionView'])).VerticalTabStripRegionView.Width;
@@ -499,7 +497,7 @@ check('...and typing keeps it there', isFloating(vs) && omniboxText(vs) === 'wik
 await closeBar();
 // Open item from the #58 review, reported, not checked: the site panel
 // opened from a peeked sidebar, and whether the sidebar stays under it.
-await key(VK.S, CTRL | ALT, 's');
+await key(VK.S, ACCEL | ALT, 's');
 {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
@@ -525,14 +523,14 @@ console.log(`INFO  site panel from a peeked sidebar, 4.5 s later: bubble ` +
 const closeInfoPeeked = vs.find(v => v.path.includes('PageInfoBubbleView') && v.shown &&
     /close/i.test(`${v.p.TooltipText ?? ''} ${v.p.AccessibleName ?? ''}`));
 if (closeInfoPeeked) await click(closeInfoPeeked);
-await key(VK.S, CTRL, 's');
+await key(VK.S, ACCEL, 's');
 
 // --- Switching away from the window keeps the new-tab bar ----------------------
 // Like Zen: Alt-Tab and back, and what was typed is still there, for a new
 // tab. Minimizing deactivates the window here (headless Ozone).
 let tabsNow = (await pages()).length;
 let current = await visiblePage();
-await key(VK.T, CTRL, 't');
+await key(VK.T, ACCEL, 't');
 await type(find(await views(), 'OmniboxViewViews'), 'example.com/?away');
 const { windowId } = (await browserCall('Browser.getWindowForTarget',
     { targetId: current.id })).result ?? {};
@@ -580,7 +578,7 @@ check('...the app menu\'s New tab opens the URL bar in the toolbar, empty, witho
           !shown(vs, 'KoanUrlBarBackdrop') && (await pages()).length === tabsNow,
       `menu ${!!menuButton}, ${items.length} item(s), ${JSON.stringify(omniboxText(vs))}, ` +
           `width ${bar(vs)?.w}, ${(await pages()).length} tab(s)`);
-if (omniboxText(vs) !== '') await key(VK.T, CTRL, 't');
+if (omniboxText(vs) !== '') await key(VK.T, ACCEL, 't');
 vs = await views();
 await type(find(vs, 'OmniboxViewViews'), 'foo');
 await closeBar();
@@ -594,7 +592,7 @@ await sleep(1000);
 check('...and a later Enter opens nothing', (await pages()).length === tabsNow,
       `${(await pages()).length} tab(s)`);
 
-await key(VK.T, CTRL, 't');
+await key(VK.T, ACCEL, 't');
 vs = await views();
 check('Ctrl+T opens the toolbar\'s URL bar for a new tab, with the unfinished search',
       omniboxText(vs) === 'foo', JSON.stringify(omniboxText(vs)));

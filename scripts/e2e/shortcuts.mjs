@@ -6,6 +6,7 @@
 // DevTools protocol on CDP_PORT (run.sh starts it). Keys are sent to the
 // page, so unhandled ones reach the browser's accelerators exactly like real
 // input. Prints one PASS/FAIL line per check; exits non-zero on any failure.
+import { ACCEL, sendKey } from './lib/koan.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -71,9 +72,7 @@ const count = (vs, cls) => vs.filter(v => v.cls === cls && v.visible).length;
 async function key(code, modifiers, keyName = '') {
   const page = await activePage();
   const c = await connect(page.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+  await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1200);
 }
@@ -103,7 +102,7 @@ async function clipboard() {
     document.body.append(t);
     t.focus();
   })()`);
-  await key(86, 2, 'v');
+  await key(86, ACCEL, 'v');
   const value = await evalIn(page,
       `(() => { const t = document.getElementById('koan-paste');
                 const v = t.value; t.remove(); return v; })()`);
@@ -121,14 +120,14 @@ const CTRL = 2, ALT = 1, SHIFT = 8;
 const VK = { S: 83, C: 67, D: 68, K: 75, V: 86, H: 72, U: 85, N: 78, B: 66, RIGHT: 39 };
 
 // Compact mode: Ctrl+S on, Ctrl+Alt+S peeks the sidebar, Ctrl+S off.
-await key(VK.S, CTRL, 's');
+await key(VK.S, ACCEL, 's');
 let vs = await views();
 // With single toolbar (the default) compact mode hides only the sidebar,
 // like Zen: hot zones for the sidebar and the window buttons' strip, none
 // for a toolbar.
 check('Ctrl+S turns compact mode on', count(vs, 'KoanHotZone') === 2 &&
       vs.find(v => v.cls === 'VerticalTabStripRegionView')?.w === 0);
-await key(VK.S, CTRL | ALT, 's');
+await key(VK.S, ACCEL | ALT, 's');
 vs = await views();
 const strip = vs.find(v => v.cls === 'VerticalTabStripRegionView');
 check('Ctrl+Alt+S shows the sidebar in compact mode', strip && strip.w >= 200, `width ${strip?.w}`);
@@ -136,50 +135,50 @@ await sleep(4500);
 vs = await views();
 const after = vs.find(v => v.cls === 'VerticalTabStripRegionView');
 check('...and hides it again when the pointer stays away', after && after.w === 0, `width ${after?.w}`);
-await key(VK.S, CTRL, 's');
+await key(VK.S, ACCEL, 's');
 vs = await views();
 check('Ctrl+S turns compact mode off', count(vs, 'KoanHotZone') === 1);
 
 // Copy URL / as Markdown.
-await key(VK.C, CTRL | SHIFT, 'c');
+await key(VK.C, ACCEL | SHIFT, 'c');
 let clip = await clipboard();
 check('Ctrl+Shift+C copies the URL', clip === 'https://example.com/', JSON.stringify(clip));
-await key(VK.C, CTRL | SHIFT | ALT, 'c');
+await key(VK.C, ACCEL | SHIFT | ALT, 'c');
 clip = await clipboard();
 check('Ctrl+Shift+Alt+C copies a Markdown link',
       clip === '[Example Domain](https://example.com/)', JSON.stringify(clip));
 
 // Pin / unpin: like Zen, the tab is pinned in its workspace (not an
 // Essential; see pinned.mjs).
-await key(VK.D, CTRL | SHIFT, 'd');
+await key(VK.D, ACCEL | SHIFT, 'd');
 vs = await views();
 const pinnedAfter = vs.some(v => v.cls === 'KoanTabRow' && v.pinnedInSpace);
 check('Ctrl+Shift+D pins the tab', pinnedAfter);
-await key(VK.D, CTRL | SHIFT, 'd');
+await key(VK.D, ACCEL | SHIFT, 'd');
 
 // Split view: vertical, horizontal (layout switch), unsplit.
-await key(VK.V, CTRL | ALT, 'v');
+await key(VK.V, ACCEL | ALT, 'v');
 vs = await views();
 check('Ctrl+Alt+V splits side by side', count(vs, 'SplitTabView') === 1 &&
       count(vs, 'ContentsContainerView') === 2);
-await key(VK.H, CTRL | ALT, 'h');
+await key(VK.H, ACCEL | ALT, 'h');
 vs = await views();
 const panes = vs.filter(v => v.cls === 'ContentsContainerView' && v.visible);
 check('Ctrl+Alt+H stacks the split', panes.length === 2 && panes[0].w === panes[1].w &&
       panes[0].h < 500, panes.map(p => `${p.w}x${p.h}`).join(' '));
-await key(VK.U, CTRL | ALT, 'u');
+await key(VK.U, ACCEL | ALT, 'u');
 vs = await views();
 check('Ctrl+Alt+U unsplits', count(vs, 'SplitTabView') === 0);
 
 // Close all unpinned tabs: keeps the selected one, like Zen.
-await key(VK.K, CTRL | SHIFT, 'k');
+await key(VK.K, ACCEL | SHIFT, 'k');
 let ps = await pages();
 check('Ctrl+Shift+K closes unpinned tabs', ps.length === 1, `${ps.length} page(s)`);
 
 // New window.
 const windowsBefore = (await browserCall('Browser.getWindowForTarget', {
   targetId: (await activePage()).id })).result?.windowId;
-await key(VK.N, CTRL | SHIFT, 'n');
+await key(VK.N, ACCEL | SHIFT, 'n');
 ps = await pages();
 const ids = new Set();
 for (const p of ps) {

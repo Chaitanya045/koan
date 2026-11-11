@@ -3,11 +3,13 @@
 // toast with a button that switches to the new tab.
 //
 //   scripts/e2e/run.sh background_tab_toast
-import { CTRL, check, evalIn, finish, front, key, mouseOn, onPage, pages, saveShot, shownViews,
-         sleep, views } from './lib/koan.mjs';
+import {
+  CTRL, check, evalIn, finish, front, key, mouseOn, onPage, pages, saveShot, shownViews, sleep,
+  views, ACCEL,
+} from './lib/koan.mjs';
 
 const [page] = await pages();
-await key(page, 83, CTRL, 's');   // Ctrl+S: compact mode
+await key(page, 83, ACCEL, 's');   // Ctrl+S: compact mode
 await sleep(800);
 
 // Ctrl+click opens the link in a background tab.
@@ -43,7 +45,7 @@ check('...and the toast goes', !shownViews(vs, 'KoanToastView').length);
 
 // With the sidebar showing there's no toast (Zen).
 await front(page);
-await key(page, 83, CTRL, 's');   // compact mode off
+await key(page, 83, ACCEL, 's');   // compact mode off
 await sleep(800);
 await onPage(page, async c => {
   for (const type of ['mousePressed', 'mouseReleased']) {

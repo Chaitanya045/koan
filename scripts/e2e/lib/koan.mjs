@@ -12,6 +12,11 @@ export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Key modifiers for Input.dispatchKeyEvent.
 export const ALT = 1, CTRL = 2, META = 4, SHIFT = 8;
+export const IS_MAC = process.platform === 'darwin';
+// The modifier of the platform's primary shortcuts (Koan's and Chromium's
+// kAccel): Cmd (META) on macOS, Ctrl elsewhere. Keys bound to Ctrl on every
+// platform (Koan's Ctrl+Alt+B / Ctrl+Alt+N, Ctrl+Tab, Ctrl+PageDown) keep CTRL.
+export const ACCEL = IS_MAC ? META : CTRL;
 
 export async function connect(url) {
   const ws = new WebSocket(url);
@@ -75,15 +80,108 @@ export async function front(page) {
   await sleep(500);
 }
 
+// --- Keys.
+//
+// key() takes a Windows virtual key code (VK_*, ui::KeyboardCode), as every
+// script passes. On Linux it sends that code as both the Windows and the
+// native key code, as it always has.
+//
+// On macOS Chromium builds the NSEvent that the browser's shortcuts read
+// from the native key code (content/browser/devtools/protocol/
+// input_handler.cc: no native code, no os_event, so the key never leaves the
+// page), and reads that code as a Mac virtual key code (kVK_*,
+// ui/events/keycodes/keyboard_code_conversion_mac.mm), so a Windows code
+// there is another key (VK_T, 84, is kVK_F5...). So on macOS key() sends the
+// kVK_* code, the DOM `code`, the event's characters (`text`,
+// `unmodifiedText`), and for Cmd+A/C/V/X/Z the editing command the Mac's
+// key bindings would run (the page has no menu to do it).
+//
+// What CDP keys can't do on macOS: the main menu's key equivalents. A
+// synthetic key goes to the page and then the browser window's accelerators
+// (Koan's shortcut table, Chrome's global_keyboard_shortcuts_mac.mm), never
+// through NSApp's main menu, so the keys only the menu bar has (Cmd+W Close
+// Tab, Cmd+Shift+W Close Window, Cmd+Q Quit, Cmd+L Open Location, ...) do
+// nothing. Steps that need them use the test_helper extension
+// (lib/mac.mjs askTestHelper(), closeWindowOf()) or the real-input tools
+// (lib/mac.mjs realKey(), #270), or skip on macOS (MAIN_MENU_ONLY_ON_MAC).
+export const MAIN_MENU_ONLY_ON_MAC =
+  'needs a main-menu key (Cmd+W/Cmd+Shift+W/Cmd+Q/Cmd+L), which CDP keys never reach on macOS; ' +
+  'port it to the test_helper extension or real input (#270)';
+
+// Ends a script that can't run on macOS with a SKIP (exit 77, which
+// scripts/mac/suite.sh reports as SKIP, not as a pass); elsewhere nothing.
+export function skipOnMac(why = MAIN_MENU_ONLY_ON_MAC) {
+  if (!IS_MAC) return;
+  console.log(`SKIP on macOS: ${why}`);
+  process.exit(77);
+}
+
+// Windows VK -> [kVK_* (HIToolbox/Events.h), DOM code], for the keys the
+// scripts use. Letters and digits are filled in below.
+const MAC_KEYS = {
+  8: [51, 'Backspace'], 9: [48, 'Tab'], 13: [36, 'Enter'], 27: [53, 'Escape'],
+  32: [49, 'Space'], 33: [116, 'PageUp'], 34: [121, 'PageDown'], 35: [119, 'End'],
+  36: [115, 'Home'], 37: [123, 'ArrowLeft'], 38: [126, 'ArrowUp'],
+  39: [124, 'ArrowRight'], 40: [125, 'ArrowDown'], 46: [117, 'Delete'],
+  106: [67, 'NumpadMultiply'], 186: [41, 'Semicolon'], 187: [24, 'Equal'],
+  188: [43, 'Comma'], 189: [27, 'Minus'], 190: [47, 'Period'], 191: [44, 'Slash'],
+  219: [33, 'BracketLeft'], 221: [30, 'BracketRight'],
+};
+'asdfhgzxcv_bqweryt'.split('').forEach((ch, i) => {
+  if (ch !== '_') MAC_KEYS[ch.toUpperCase().charCodeAt(0)] = [i, `Key${ch.toUpperCase()}`];
+});
+Object.assign(MAC_KEYS, { 79: [31, 'KeyO'], 85: [32, 'KeyU'], 73: [34, 'KeyI'],
+  80: [35, 'KeyP'], 76: [37, 'KeyL'], 74: [38, 'KeyJ'], 75: [40, 'KeyK'],
+  78: [45, 'KeyN'], 77: [46, 'KeyM'] });
+[29, 18, 19, 20, 21, 23, 22, 26, 28, 25].forEach((mac, n) =>
+  (MAC_KEYS[48 + n] = [mac, `Digit${n}`]));
+// The characters each non-letter key types (NSEvent characters).
+const MAC_TEXT = { 8: '\x7f', 9: '\t', 13: '\r', 27: '\x1b', 32: ' ', 186: ';',
+  187: '=', 188: ',', 189: '-', 190: '.', 191: '/', 219: '[', 221: ']' };
+// Cmd+<key> -> the editing command macOS's key bindings send the page.
+const MAC_COMMANDS = { 65: 'selectAll', 67: 'copy', 86: 'paste', 88: 'cut', 90: 'undo' };
+
+// The Input.dispatchKeyEvent params (without `type`) for Windows key code
+// `code` with `modifiers` and DOM key `keyName`.
+export function keyEventParams(code, modifiers = 0, keyName) {
+  if (!IS_MAC) {
+    return { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
+  }
+  const mac = MAC_KEYS[code];
+  if (!mac) throw new Error(`key(): no macOS key code for Windows key code ${code}`);
+  const p = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: mac[0], code: mac[1],
+              modifiers, key: keyName };
+  let unmodified = MAC_TEXT[code];
+  if (/^Key/.test(mac[1])) unmodified = mac[1].slice(3).toLowerCase();
+  if (/^Digit/.test(mac[1])) unmodified = mac[1].slice(5);
+  if (unmodified !== undefined) {
+    // Shift gives the capital (what Chromium's Mac key tables match); other
+    // modifiers keep the plain character, as AppKit's charactersIgnoringModifiers.
+    const shifted = modifiers & SHIFT && /^Key/.test(mac[1]) ? unmodified.toUpperCase() : unmodified;
+    Object.assign(p, { text: shifted, unmodifiedText: unmodified });
+    if (!keyName && /^(Key|Digit)/.test(mac[1])) p.key = shifted;
+  }
+  if ((modifiers & (META | CTRL | ALT | SHIFT)) === META && MAC_COMMANDS[code]) {
+    p.commands = [MAC_COMMANDS[code]];
+  }
+  return p;
+}
+
+// Sends keyEventParams() for one press over CDP session `c` (a connect()):
+// rawKeyDown and keyUp, as the scripts always have, but on macOS a printable
+// key without Cmd/Ctrl/Option goes as keyDown so it types its text.
+export async function sendKey(c, code, modifiers = 0, keyName) {
+  const p = keyEventParams(code, modifiers, keyName);
+  const types = IS_MAC && p.text && !(modifiers & (CTRL | META | ALT)) ? 'keyDown' : 'rawKeyDown';
+  await c.send('Input.dispatchKeyEvent', { ...p, type: types });
+  await c.send('Input.dispatchKeyEvent', { ...p, type: 'keyUp' });
+}
+
 // Sends a key press to `page`; keys the page doesn't handle reach the
-// browser's accelerators like real input.
+// browser's accelerators like real input (on macOS not the main menu's: see
+// above).
 export async function key(page, code, modifiers, keyName) {
-  await onPage(page, async c => {
-    const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers,
-                   key: keyName };
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
-  });
+  await onPage(page, c => sendKey(c, code, modifiers, keyName));
   await sleep(300);
 }
 

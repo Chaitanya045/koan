@@ -3,6 +3,7 @@
 // toast once; leaving compact mode brings the sidebar back expanded.
 //
 //   scripts/e2e/run.sh sidebar_drag
+import { ACCEL } from './lib/koan.mjs';
 import { CTRL, check, finish, key, mouseOn, sleep, views, visiblePage }
     from './lib/koan.mjs';
 
@@ -54,7 +55,7 @@ check('...with Zen\'s toast saying how to bring it back (the shortcut in a key c
 await sleep(6500);
 check('...which goes away after 5 seconds', !find(await views(), 'KoanToastView'));
 
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 check('Ctrl+S brings the sidebar back expanded',
       findShown(await views(), 'VerticalTabStripRegionView')?.w >= 200);
 
@@ -62,6 +63,6 @@ await dragSidebarEdgeLeft();
 vs = await views();
 check('Dragging again hides it, without the toast this time',
       find(vs, 'VerticalTabStripRegionView')?.w === 0 && !find(vs, 'KoanToastView'));
-await press(VK.S, CTRL, 's');
+await press(VK.S, ACCEL, 's');
 
 finish();

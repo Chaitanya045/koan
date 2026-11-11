@@ -11,9 +11,10 @@
 // once on the Mac.
 import fs from 'node:fs';
 import {
-  CDP_PORT, CTRL, check, clickView, finish, front, key, pages, readPref,
-  shownViews, sleep, views, viewTree, typeInto, visiblePage, waitFor, browserCall, evalIn,
+  CDP_PORT, CTRL, check, clickView, finish, front, key, pages, readPref, shownViews, sleep,
+  views, viewTree, typeInto, visiblePage, waitFor, browserCall, evalIn, skipOnMac,
 } from './lib/koan.mjs';
+skipOnMac();
 
 const VK = { T: 84, L: 76, ESC: 27 };
 const MOD_SHIFT = 8;

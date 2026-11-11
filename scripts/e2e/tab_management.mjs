@@ -9,10 +9,11 @@
 //
 //   scripts/e2e/run.sh tab_management
 import {
-  ALT, CTRL, SHIFT, browserCall, check, click, clickView, createSpace, evalIn,
-  finish, front, key, onPage, pages, settingsCall, sleep, tabMenuCommand, views,
-  viewMouse, viewTree, waitFor,
+  ALT, CTRL, SHIFT, browserCall, check, click, clickView, createSpace, evalIn, finish, front,
+  key, onPage, pages, settingsCall, sleep, tabMenuCommand, views, viewMouse, viewTree, waitFor,
+  skipOnMac,
 } from './lib/koan.mjs';
+skipOnMac();
 
 const VK = { T: 84, W: 87, D: 68, N: 78, P: 80, X: 88, TAB: 9, LEFT: 37, PGUP: 33, PGDN: 34 };
 
