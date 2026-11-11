@@ -25,7 +25,6 @@
 #include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/browser_tabrestore.h"
-#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -57,6 +56,7 @@
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_stored_space.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -619,11 +619,12 @@ void KoanFolderController::KeepSpace(
   if (remaining > 0) {
     return;
   }
-  // The active tab is going (it's one of them): the new one takes its place.
+  // The active tab is going (it's one of them): the empty tab takes its
+  // place.
   const bool foreground =
       closing && std::ranges::contains(leaving, model->GetActiveTab());
   base::AutoReset<bool> busy(&normalizing_, true);
-  chrome::AddTabAt(browser_view_->browser(), GURL(), at, foreground, space);
+  EnsureEmptyTab(browser_view_->browser(), space, at, foreground);
 }
 
 void KoanFolderController::Delete(int id) {
@@ -683,11 +684,10 @@ void KoanFolderController::ConvertToSpace(int id) {
   TabStripModel* model = tab_strip_model();
   std::vector<tabs::TabInterface*> tab_list = GetTabs(id, true);
   if (tab_list.empty()) {
-    // A Space needs a tab.
-    content::WebContents* contents = chrome::AddAndReturnTabAt(
-        browser_view_->browser(), GURL(), model->count(), /*foreground=*/true);
+    // A Space needs a tab: a new Space's is its empty tab.
     if (tabs::TabInterface* tab =
-            contents ? model->GetTabForWebContents(contents) : nullptr) {
+            EnsureEmptyTab(browser_view_->browser(), std::nullopt,
+                           model->count(), /*foreground=*/true)) {
       tab_list.push_back(tab);
     }
     if (tab_list.empty()) {

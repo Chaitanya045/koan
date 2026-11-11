@@ -37,13 +37,16 @@ void OnTabViewCreated(TabView* tab_view);
 void OnTabViewColorsChanged(const TabView* tab_view);
 
 // The close button or a middle click on `tab`: a pinned tab follows Zen's
-// close behaviour instead of closing. Returns true if Koan handled it.
+// close behaviour instead of closing, and a Space's only tab on a blank page
+// becomes its empty tab (KeepAsEmptyTabInsteadOfClosing() in koan_spaces.h).
+// Returns true if Koan handled it.
 bool HandleTabCloseRequest(const tabs::TabInterface* tab);
 
 // Chrome's "Close Tab" command (Ctrl+W, Ctrl+F4, Cmd+W and the menu bar on
 // macOS) on the active `tab`: a pinned tab or Essential follows Zen's close
-// behaviour instead. Returns true if Koan handled it. Called from
-// chrome::CloseTab().
+// behaviour instead, the empty tab closes the window, and a Space's only tab
+// on a blank page becomes its empty tab. Returns true if Koan handled it.
+// Called from chrome::CloseTab().
 bool HandleCloseTabCommand(tabs::TabInterface* tab);
 
 // Called from chrome::DuplicateTabAt() once `duplicate`, the clone of
