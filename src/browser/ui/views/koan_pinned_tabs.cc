@@ -1208,8 +1208,8 @@ void KoanPinnedTabController::SelectAnotherTab(tabs::TabInterface* tab) {
       return;
     }
   }
-  chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
-                   /*foreground=*/true, space);
+  EnsureEmptyTab(browser_view_->browser(), space, /*index=*/-1,
+                 /*foreground=*/true);
 }
 
 void KoanPinnedTabController::Discard(content::WebContents* contents) {
@@ -1702,6 +1702,9 @@ bool HandleCloseTabCommand(tabs::TabInterface* tab) {
     tab->GetBrowserWindowInterface()->GetWindow()->Close();
     return true;
   }
+  if (!IsPinnedForUser(tab) && KeepAsEmptyTabInsteadOfClosing(tab)) {
+    return true;
+  }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
   return controller && controller->HandleCloseShortcut(tab);
 }
@@ -1722,6 +1725,12 @@ bool OnTabDuplicated(content::WebContents* source,
 }
 
 bool HandleTabCloseRequest(const tabs::TabInterface* tab) {
+  // The Space's only tab, a blank page: it hides as the empty tab rather
+  // than closing and having a tab added back.
+  if (!IsPinnedForUser(tab) &&
+      KeepAsEmptyTabInsteadOfClosing(const_cast<tabs::TabInterface*>(tab))) {
+    return true;
+  }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
   return controller &&
          controller->HandleCloseRequest(const_cast<tabs::TabInterface*>(tab));

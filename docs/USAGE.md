@@ -351,8 +351,8 @@ context menu of selected text also opens in Glance.
 While the pointer is over the sidebar, **↓ Clear** appears at the end of
 the line: it closes the Space's unpinned tabs except the selected one and
 any playing sound (if those are all there is, it closes them too), the
-same as Ctrl+Shift+K. The Space stays (an emptied one gets a fresh tab),
-and a toast reminds you that Ctrl+Shift+T reopens them, the last closed
+same as Ctrl+Shift+K. The Space stays: an emptied one shows its empty
+tab, a blank page with no row (nothing is left in its list), and a toast reminds you that Ctrl+Shift+T reopens them, the last closed
 tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the

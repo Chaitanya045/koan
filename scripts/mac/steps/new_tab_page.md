@@ -21,3 +21,5 @@ and `empty_tab.mjs` are the Linux drivers for several rows; they run nowhere now
 | 14 | With a new tab page open and the New Tab bar open on it: edit the theme colour or switch the look | The page loads again in the new colour; the bar stays open and keeps its focus. |
 | 15 | New window in a Space with a colour (Space tint) | The page's colour is the tinted window's, after at most one reload; no stale untinted page. |
 | 16 | Drag the theme colour picker continuously with several new tab pages open | No reload storm (each page reloads at most about four times a second, not on every step); a bookmark clicked in an NTP tab at the same time still opens. |
+| 17 | A Space with two pages, the second selected: Clear twice (hover the sidebar, ↓ Clear; or ⇧⌘K) | First the other page goes; then the selected one, and the Space shows no rows at all (no "New tab" row), the page is the empty tab, Clear is gone. ⌘W then closes the window. |
+| 18 | A profile from before this fix with a listed "New tab" row as a Space's only tab: click its × | The row goes and stays gone (the tab becomes the empty tab); the sidebar doesn't jump or flash. |

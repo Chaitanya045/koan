@@ -17,7 +17,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
@@ -678,23 +677,32 @@ bool KoanShortcutController::CloseUnpinnedTabs() {
   if (closes_selected) {
     to_close = unpinned;
   }
-  // A workspace is a tab group, which goes away with its last tab; Zen's
-  // space survives being emptied. Leave it (or, closing the selected tab, the
-  // window) a fresh tab.
+  // By handle: the empty tab may be added among them.
+  std::vector<tabs::TabHandle> handles;
+  for (int index : to_close) {
+    handles.push_back(model->GetTabAtIndex(index)->GetHandle());
+  }
+  // Zen's space keeps no listed tab then, and shows its empty tab (selected
+  // when the selected tab goes). A workspace is a tab group, which would go
+  // away with its last tab, and the window with its last: the empty tab comes
+  // first, so neither empties and nothing adds a tab back. (Without
+  // workspaces only a window losing its selected tab needs one, a plain one.)
   const std::optional<tab_groups::TabGroupId> workspace =
       model->GetFocusedGroup();
-  const bool empties_workspace =
-      workspace &&
-      static_cast<int>(to_close.size()) ==
-          model->group_model()->GetTabGroup(*workspace)->tab_count();
-  if (closes_selected || empties_workspace) {
-    chrome::AddTabAt(browser_view_->browser(), GURL(), to_close.back() + 1,
-                     /*foreground=*/closes_selected, workspace);
+  if (closes_selected || (workspace && to_close.size() == unpinned.size())) {
+    EnsureEmptyTab(browser_view_->browser(), workspace, to_close.back() + 1,
+                   /*foreground=*/closes_selected);
   }
-  for (auto it = to_close.rbegin(); it != to_close.rend(); ++it) {
+  for (auto it = handles.rbegin(); it != handles.rend(); ++it) {
+    tabs::TabInterface* tab = it->Get();
+    const int index = tab ? model->GetIndexOfTab(tab) : TabStripModel::kNoTab;
+    if (index == TabStripModel::kNoTab) {
+      continue;
+    }
     // Into the history, so Ctrl+Shift+T restores them.
-    model->CloseWebContentsAt(*it, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB |
-                                       TabCloseTypes::CLOSE_USER_GESTURE);
+    model->CloseWebContentsAt(index,
+                              TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB |
+                                  TabCloseTypes::CLOSE_USER_GESTURE);
   }
   controller_->sidebar_tabs()->ShowTabsClosedToast();
   return true;
@@ -709,8 +717,10 @@ std::vector<int> KoanShortcutController::UnpinnedTabsForClear(
       model->GetFocusedGroup();
   std::vector<int> indices;
   for (int i = 0; i < model->count(); ++i) {
-    // Pinned tabs (Essentials, and those pinned to the workspace) stay.
+    // Pinned tabs (Essentials, and those pinned to the workspace) stay, and
+    // so does the empty tab, which Zen's space doesn't list.
     if (!IsPinnedForUser(model->GetTabAtIndex(i)) &&
+        !IsEmptyTab(model->GetTabAtIndex(i)) &&
         model->GetTabGroupForTab(i) == workspace) {
       indices.push_back(i);
     }

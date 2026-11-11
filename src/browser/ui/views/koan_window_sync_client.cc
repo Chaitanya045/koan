@@ -17,18 +17,19 @@
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_restore.h"
-#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/sessions/core/session_id.h"
 #include "components/tabs/public/tab_group.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_session_data.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/gfx/range/range.h"
 #include "ui/views/widget/widget.h"
@@ -323,14 +324,15 @@ void KoanWindowSyncClient::ApplySpaces(
       window_sync::PlanSpaces(local, target);
   // Additions first: a window keeps at least one Space.
   for (const auto& [record, index] : plan.add) {
-    content::WebContents* contents = chrome::AddAndReturnTabAt(
-        browser_view_->browser(), GURL(), model->count(), /*foreground=*/false);
-    const int tab_index = model->GetIndexOfWebContents(contents);
-    if (tab_index == TabStripModel::kNoTab) {
+    // A new Space shows its empty tab (no row), as Create a Space's does.
+    tabs::TabInterface* tab =
+        EnsureEmptyTab(browser_view_->browser(), std::nullopt, model->count(),
+                       /*foreground=*/false);
+    if (!tab) {
       continue;
     }
     space_ids_[workspaces->CreateBackgroundSpace(
-        tab_index, ToSpaceData(record))] = record.id;
+        model->GetIndexOfTab(tab), ToSpaceData(record))] = record.id;
   }
   for (const window_sync::SpaceRecord& record : plan.update) {
     if (std::optional<tab_groups::TabGroupId> group = FindSpace(record.id)) {
