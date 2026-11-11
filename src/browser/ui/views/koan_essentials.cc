@@ -6,7 +6,8 @@
 
 #include <algorithm>
 
-#include "base/logging.h"
+#include "base/functional/bind.h"
+#include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
@@ -27,6 +28,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/view.h"
+#include "ui/views/view_tracker.h"
 #include "ui/views/view_utils.h"
 
 namespace koan {
@@ -99,7 +101,19 @@ int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height) {
   if (offset >= 1.0 || height->shown < 0 ||
       !gfx::Animation::ShouldRenderRichAnimation()) {
     if (height->thumb_hidden && scroll_bar) {
-      scroll_bar->SetIsAnimatingSize(false);
+      // After this layout, which still changes the thumb's bounds (and a
+      // thumb shows when they change).
+      auto tracker = std::make_unique<views::ViewTracker>(scroll_bar);
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](std::unique_ptr<views::ViewTracker> tracker) {
+                if (auto* bar = views::AsViewClass<tabs::RoundedScrollBar>(
+                        tracker->view())) {
+                  bar->SetIsAnimatingSize(false);
+                }
+              },
+              std::move(tracker)));
     }
     *height = {.from = target_height,
                .to = target_height,
@@ -125,13 +139,6 @@ int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height) {
   }
   height->shown = gfx::Tween::IntValueBetween(coordinator.GetCurrentProgress(),
                                               height->from, height->to);
-  LOG(INFO) << "KOANDBG ess-height target=" << target_height
-            << " shown=" << height->shown << " from=" << height->from
-            << " offset=" << offset
-            << " progress=" << coordinator.GetCurrentProgress()
-            << " grid_animating="
-            << TabCollectionAnimatingLayoutManager::IsViewAnimating(grid)
-            << " grid_w=" << grid->width();
   return height->shown;
 }
 
@@ -139,7 +146,6 @@ int GetEmptyEssentialsWidth(const views::SizeBounds& size_bounds) {
   if (!features::IsSidebarEnabled()) {
     return 0;
   }
-  LOG(INFO) << "KOANDBG ess-empty-width " << size_bounds.width().value_or(-1);
   return size_bounds.width().value_or(0);
 }
 

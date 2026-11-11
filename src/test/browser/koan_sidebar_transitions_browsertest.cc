@@ -12,10 +12,12 @@
 #include <string_view>
 #include <vector>
 
+#include "base/run_loop.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/ui/animation/browser_animation_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
@@ -28,6 +30,8 @@
 #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/test/browser_test.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -318,6 +322,39 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
       return !region->layer() || region->layer()->transform().IsIdentity();
     }));
   }
+}
+
+// The recording (an extension unpinning an Essential, E3 at 23.6 s): the tab
+// was nowhere for 0.5 s (upstream leaves it outside every Space), then came in
+// at the end of the list and slid up over the other rows into the pinned
+// tabs. Now it goes to the top of the Space's pinned tabs at once, in the task
+// right after the unpin, so its row fades in there as the tile leaves.
+IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
+                       AnEssentialUnpinnedFromOutsideGoesToItsPlaceAtOnce) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanPinnedTabController* pinned = GetPinnedTabs(browser());
+  ASSERT_TRUE(pinned);
+  const std::vector<tabs::TabInterface*> tabs = OpenTabs(3);
+  pinned->AddToEssentials(tabs[0]);
+  pinned->AddToEssentials(tabs[1]);
+  TabStripModel* model = browser()->GetTabStripModel();
+  // The other tab stays selected, as in the flow (a background Essential).
+  model->ActivateTabAt(model->GetIndexOfTab(tabs[2]));
+  const std::optional<tab_groups::TabGroupId> space = model->GetFocusedGroup();
+  ASSERT_TRUE(space);
+  ASSERT_TRUE(tabs[0]->IsPinned());
+
+  // chrome.tabs.update(id, {pinned: false}) does this.
+  model->SetTabPinned(model->GetIndexOfTab(tabs[0]), false);
+  // Only the tasks that are due: not Normalize()'s delayed pass.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(tabs[0]->IsPinned());
+  EXPECT_EQ(space, tabs[0]->GetGroup());
+  EXPECT_EQ(static_cast<int>(
+                model->group_model()->GetTabGroup(*space)->ListTabs().start()),
+            model->GetIndexOfTab(tabs[0]));
+  EXPECT_TRUE(IsPinnedInSpace(tabs[0]));
+  EXPECT_EQ(space, model->GetFocusedGroup());
 }
 
 }  // namespace koan

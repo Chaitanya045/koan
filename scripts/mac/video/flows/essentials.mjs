@@ -23,12 +23,12 @@
 //   set -a; . <rec dir>/koan.env; set +a
 //   MARKS=<rec dir>/essentials.marks.json node scripts/mac/video/flows/essentials.mjs
 import { ACCEL, ALT, CTRL, SHIFT, browserCall, key, sleep, viewTree, waitFor } from '../../../e2e/lib/koan.mjs';
-import { askTestHelper, windowOf } from '../../../e2e/lib/mac.mjs';
+import { askTestHelper, realKey, windowOf } from '../../../e2e/lib/mac.mjs';
 import { activate, clearButtonOf, clickAt, closeTabs, compactOn, findPage, finish, mark, modelTabs,
          out, pointer, save, screenRect, setRound, setup, sidebarRows, startFlow,
          startPages } from './common.mjs';
 
-const VK_S = 83, VK_D = 68, VK_N = 78, VK_ESCAPE = 27;
+const VK_S = 83, VK_D = 68, VK_N = 78;
 const MARKS = startFlow('essentials');
 const { origin, pageUrl } = await startPages();
 mark('start', { origin });
@@ -217,9 +217,13 @@ setRound(out.rounds.length + 1);
     const shown = vs.some(v => v.cls === 'KoanSpaceCreationView' && v.shown);
     rec.forms.push(shown);
     mark('count-new-space-form', { shown, any: vs.some(v => v.cls === 'KoanSpaceCreationView') });
+    // Closed again with a real Escape (the form's name field has the focus;
+    // CDP's keys go to the page), so that each try opens it anew.
     if (shown) {
-      await key(anchor, VK_ESCAPE, 0, 'Escape');
-      await sleep(800);
+      await realKey('Escape', '', 800);
+      vs = await viewTree();
+      mark('count-new-space-form-closed',
+           { closed: !vs.some(v => v.cls === 'KoanSpaceCreationView' && v.shown) });
     }
   }
   rec.ok = rec.forms.every(Boolean);
