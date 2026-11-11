@@ -11,3 +11,8 @@ scale (2x on the MacBook Air).
 has been checked against Zen 1.24b (the full-flow pass, `scripts/mac/full-flow.md`). Then commit the crops in their own
 PR, saying which build and which display they came from. Re-record when a look change is intended, in the PR that makes
 the change, and say why.
+
+**None are recorded at the moment (#285).** The first set (#271) came from the wrong window: `capture.mjs` made a
+second window and closed the first one's tabs, but Koan keeps a window whose last tab closes (on Zen's empty tab), and
+the capture took the bigger, unsized one. `capture.mjs` now uses one window, checks its size and that the capture is
+exactly that window, so record them again from the next Mac cycle.

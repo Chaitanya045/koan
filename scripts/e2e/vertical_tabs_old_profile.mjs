@@ -15,7 +15,7 @@
 // - Shift+Cmd+A (tab search) opens Koan's URL bar, not Chromium's bubble.
 //
 //   scripts/e2e/run.sh vertical_tabs_old_profile
-import { CTRL, SHIFT, browserCall, check, finish, key, readPref, setChromePref, sleep, views,
+import { ACCEL, CTRL, SHIFT, browserCall, check, finish, key, readPref, setChromePref, sleep, views,
          visiblePage } from './lib/koan.mjs';
 import { VK, alive, checkKoanSidebar, leakLogged, press, railShown, region,
          tabSearchBubbleShown } from './lib/vertical_tabs.mjs';
@@ -48,18 +48,18 @@ for (const [pref, value] of [['vertical_tabs.enabled', false],
 }
 
 // Test 13: the compact key; Shift+Cmd+L is Koan's inspector (#90), not the sidebar's.
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 vs = await views();
 checkKoanSidebar('Ctrl+S', { hidden: true }, vs);
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 vs = await views();
 checkKoanSidebar('Ctrl+S again', {}, vs);
 // ...with the URL bar focused (Ctrl+L).
-await press(VK.L, CTRL, 'l', 800);
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.L, ACCEL, 'l', 800);
+await press(VK.S, ACCEL, 's', 1500);
 vs = await views();
 check('The compact key with the URL bar focused: no icon rail', !railShown(vs));
-await press(VK.S, CTRL, 's', 1500);
+await press(VK.S, ACCEL, 's', 1500);
 await key(await visiblePage(), 27, 0, 'Escape');
 await sleep(500);
 checkKoanSidebar('After the toggles', {}, await views());

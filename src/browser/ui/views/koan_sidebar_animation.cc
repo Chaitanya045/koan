@@ -15,6 +15,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
+#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/animations/common_animation_values.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
@@ -198,8 +199,8 @@ class SidebarReveal {
     // both.
     const bool slides_from_right =
         IsSidebarOnRight(browser_view_) != base::i18n::IsRTL();
-    const float offset = static_cast<float>(
-        (1.0 - value) * tabs::kVerticalTabStripDefaultUncollapsedWidth);
+    const float offset =
+        static_cast<float>((1.0 - value) * SidebarRevealWidth(browser_view_));
     gfx::Transform transform;
     transform.Translate(slides_from_right ? offset : -offset, 0);
     return transform;
@@ -368,6 +369,17 @@ double LayoutSidebarReveal(views::View* browser_view, double progress) {
         std::make_unique<SidebarReveal>(browser_view, region));
   }
   return reveal->Update(progress);
+}
+
+int SidebarRevealWidth(views::View* browser_view) {
+  auto* view = views::AsViewClass<BrowserView>(browser_view);
+  if (view && IsCompactModeActive(browser_view)) {
+    if (const auto* state =
+            tabs::VerticalTabStripStateController::From(view->browser())) {
+      return state->GetUncollapsedWidth();
+    }
+  }
+  return tabs::kVerticalTabStripDefaultUncollapsedWidth;
 }
 
 void SlideSidebarAway(views::View* browser_view) {

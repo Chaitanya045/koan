@@ -5,8 +5,8 @@
 //
 //   scripts/e2e/run.sh tabs_right
 import { ACCEL } from './lib/koan.mjs';
-import { ALT, CTRL, boundsOf, check, finish, key, setChromePref, setKoanPref, sleep, views,
-         visiblePage }
+import { ALT, CTRL, IS_MAC, boundsOf, check, finish, key, readPref, setChromePref, setKoanPref,
+         sleep, views, visiblePage }
     from './lib/koan.mjs';
 
 const find = (vs, cls) => vs.find(v => v.cls === cls);
@@ -27,8 +27,14 @@ check('The sidebar is on the right edge of the window',
       strip && strip.x > bv.x + bv.w / 2 && strip.x + strip.w === right,
       `strip ${strip?.x}+${strip?.w}, window right ${right}`);
 let card = findShown(vs, 'ContentsContainerView');
-check('...the page card is on its left, with the gutter on the window side',
-      card && card.x === bv.x + 8 && card.x + card.w <= strip.x && card.y === bv.y + 8,
+// On macOS the traffic lights aren't in the sidebar's top row: they stay
+// over the page's corner, so the strip with them stays open above the card
+// (Zen's lights are always there; koan_compact_mode_controller.cc
+// lights_keep_strip_open_).
+check(IS_MAC ? '...the page card is on its left, below the traffic lights\' strip'
+             : '...the page card is on its left, with the gutter on the window side',
+      card && card.x === bv.x + 8 && card.x + card.w <= strip.x &&
+          (IS_MAC ? card.y > bv.y + 8 : card.y === bv.y + 8),
       `card ${card?.x},${card?.y} ${card?.w}x${card?.h}`);
 const resize = vs.find(v => v.cls === 'ResizeArea' &&
                             v.path.includes('VerticalTabStripRegionView'));
@@ -44,9 +50,14 @@ check('...its top row is mirrored: navigation buttons left, sidebar toggle right
 
 // The window buttons' hot zone runs along the top edge above the page.
 const topZone = vs.find(v => v.cls === 'KoanHotZone' && v.shown && v.h === 8);
-check('...the window buttons\' hot zone is along the top above the page',
-      topZone && topZone.y === bv.y && topZone.x === bv.x && topZone.x + topZone.w === strip.x,
-      topZone && `${topZone.x}+${topZone.w}`);
+if (IS_MAC) {
+  check('...the traffic lights\' strip stays open, so it has no hot zone', !topZone,
+        topZone && `${topZone.x}+${topZone.w}`);
+} else {
+  check('...the window buttons\' hot zone is along the top above the page',
+        topZone && topZone.y === bv.y && topZone.x === bv.x && topZone.x + topZone.w === strip.x,
+        topZone && `${topZone.x}+${topZone.w}`);
+}
 
 // Compact mode hides the sidebar at the right edge.
 await press(VK.S, ACCEL, 's');
@@ -92,19 +103,17 @@ await press(VK.S, ACCEL, 's');
 await setKoanPref('koan.compact_mode.hide', 'sidebar');
 await press(VK.B, CTRL | ALT, 'b');
 
-// A window without Koan's sidebar (horizontal tabs) isn't mirrored: the
-// setting changes nothing in it.
-const topLevel = async () => (await views())
-    .filter(v => v.shown && v.path.at(-1) === 'BrowserView')
-    .map(v => `${v.cls} ${v.x},${v.y} ${v.w}x${v.h}`).join('; ');
-check('Horizontal tabs', (await setChromePref('vertical_tabs.enabled', false)) === true);
+// Chromium's horizontal tabs can't come back (#154: vertical_tabs.enabled
+// snaps back, see vertical_tabs_old_profile): setting it from
+// chrome://settings leaves the sidebar on the right.
+await setChromePref('vertical_tabs.enabled', false);
 await sleep(1500);
-const mirrored = await topLevel();
+vs = await views();
+strip = findShown(vs, 'VerticalTabStripRegionView');
+check('Turning horizontal tabs on from chrome://settings snaps back',
+      await readPref('vertical_tabs.enabled') === true, `${await readPref('vertical_tabs.enabled')}`);
+check('...and the sidebar stays on the right', strip && strip.x + strip.w === right,
+      `strip ${strip?.x}+${strip?.w}`);
 await setKoanPref('koan.tabs.on_right', false);
-await sleep(1500);
-const plain = await topLevel();
-check('...aren\'t mirrored by tabs on the right', mirrored === plain,
-      mirrored === plain ? '' : `${mirrored} | ${plain}`);
-await setChromePref('vertical_tabs.enabled', true);
 
 finish();

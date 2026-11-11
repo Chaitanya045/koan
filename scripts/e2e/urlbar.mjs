@@ -4,7 +4,8 @@
 // its copy-URL button and toast, its site icon (page info) and no page
 // actions. Then: the new-tab bar through a window switch, a pill edit in
 // compact mode's peeked sidebar, and the multiple-toolbars layout (Esc, the
-// tab strip's "+" button, Alt+Enter).
+// tab strip's "+" button, Alt+Enter), and last the card in a second, resized
+// window (sized and placed from that window, its suggestions inside it).
 //
 // TODO(#51): on macOS, ⌘T is a reserved command that runs before any
 // accelerator (koan::MaybeOpenUrlBarForNewTab() in BrowserCommandController
@@ -19,7 +20,8 @@
 // profile was started with. With SHOTS=<dir> (see run.sh) it saves
 // screenshots of each state there.
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
-import { browserCall, setKoanPref, visiblePage, waitFor, ACCEL, sendKey } from './lib/koan.mjs';
+import { browserCall, setKoanPref, viewEvent, viewTree, visiblePage, waitFor, ACCEL, IS_MAC,
+         sendKey } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -188,6 +190,32 @@ async function propsOf(classes) {
   return out;
 }
 
+// Each widget's bounds on the screen (a Widget node's X, Y, Width and Height
+// in UI DevTools: Widget::GetRestoredBounds()), numbered as viewTree()
+// numbers them.
+async function widgetRects() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const out = {};
+  let widget = 0;
+  const walk = async n => {
+    if (n.nodeName === 'Widget') {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+      const p = {};
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const prop of rule.rule.style.cssProperties) p[prop.name] = +prop.value;
+      }
+      out[++widget] = { x: p.X, y: p.Y, w: p.Width, h: p.Height };
+    }
+    for (const c of n.children ?? []) await walk(c);
+  };
+  await walk(doc);
+  ui.close();
+  return out;
+}
+
 // Types into a textfield the way an input method would. The first
 // keystroke may float the bar, which moves the textfield's node: each
 // character finds it again.
@@ -254,10 +282,13 @@ function check(name, ok, detail = '') {
 }
 
 const CTRL = 2, ALT = 1;
-// ui::EventFlags, for windowKey().
-const EF_ALT = 8;
+// ui::EventFlags, for windowKey(); EF_ACCEL is the platform's shortcut
+// modifier (Cmd on macOS: EF_COMMAND_DOWN), as ACCEL for page keys.
+const EF_ALT = 8, EF_ACCEL = IS_MAC ? 16 : 4;
 const VK = { T: 84, ESC: 27, ENTER: 13, S: 83 };
-const WINDOW_WIDTH = 1280;
+// The browser view's width: 1280 in run.sh's window, less on a Mac screen
+// that can't fit it (the suite's 1280-wide window comes up 1249 wide there).
+const WINDOW_WIDTH = find(await views(), 'BrowserView')?.w || 1280;
 // Zen's look (the default; ZenUIManager.mjs updateTabsToolbar):
 // min(window width / 1.5, 750), centred. (shadcn's: 55% of the window.)
 const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
@@ -266,7 +297,7 @@ const INPUT_ROW = 62;
 
 const bar = vs => find(vs, 'TopContainerView');
 const isFloating = vs => bar(vs)?.w === FLOAT_WIDTH &&
-    bar(vs).x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2 && shown(vs, 'KoanUrlBarBackdrop');
+    bar(vs).x === Math.floor((WINDOW_WIDTH - FLOAT_WIDTH) / 2) && shown(vs, 'KoanUrlBarBackdrop');
 const omniboxText = vs => find(vs, 'OmniboxViewViews')?.p.Text ?? '';
 
 // Zen: one Esc closes the bar.
@@ -413,13 +444,13 @@ if (BEHAVIOR !== 'normal') {
       `; backdrop ${backdrop?.ax},${backdrop?.ay} ${backdrop?.w}x${backdrop?.h}`);
 }
 // Holding Ctrl+T: like Chrome's New Tab, a repeated key does nothing.
-const EF_CONTROL = 4, EF_IS_REPEAT = 1 << 17;
-await windowKey(VK.T, EF_CONTROL | EF_IS_REPEAT);
+const EF_IS_REPEAT = 1 << 17;
+await windowKey(VK.T, EF_ACCEL | EF_IS_REPEAT);
 vs = await views();
 check('A repeated Ctrl+T (key held) leaves it open', bar(vs)?.w < WINDOW_WIDTH,
       `width ${bar(vs)?.w}`);
 // Only a plain Esc closes it.
-await windowKey(VK.ESC, EF_CONTROL);
+await windowKey(VK.ESC, EF_ACCEL);
 vs = await views();
 check('...and so does Ctrl+Esc', bar(vs)?.w < WINDOW_WIDTH, `width ${bar(vs)?.w}`);
 await key(VK.T, ACCEL, 't');
@@ -487,7 +518,7 @@ await key(VK.T, ACCEL, 't');
 vs = await views();
 const omnibox = find(vs, 'OmniboxViewViews');
 // Ctrl+A: replace any unfinished search.
-await windowKey(65, 4);
+await windowKey(65, EF_ACCEL);
 await type(omnibox, 'example.com/?typed');
 await viewKey(omnibox, VK.ENTER);
 await sleep(1000);
@@ -623,7 +654,7 @@ vs = await views();
 check('Ctrl+T opens the toolbar\'s URL bar for a new tab, with the unfinished search',
       omniboxText(vs) === 'foo', JSON.stringify(omniboxText(vs)));
 // Ctrl+A: replace it.
-await windowKey(65, 4);
+await windowKey(65, EF_ACCEL);
 await type(find(vs, 'OmniboxViewViews'), 'example.com/?alt');
 await windowKey(VK.ENTER, EF_ALT);
 now = await waitFor(async () => {
@@ -638,6 +669,104 @@ check('Alt+Enter opens one new tab, leaving the page alone',
           now.some(p => p.id === current.id &&
                         noScheme(p.url) === noScheme(current.url)),
       (now || await pages()).map(p => p.url).join(' '));
+
+// --- A second window, resized: the card is sized and placed from its window ---
+// Zen's card is min(window width / 1.5, 750) wide, centred in the window it
+// opens in, and its suggestions are part of it, whatever window that is and
+// however it was sized just before (#285: the Mac capture of a second
+// window measured and typed into the first one). Last: the window stays.
+if (BEHAVIOR !== 'normal') {
+  check('Back to the single toolbar', await setKoanPref('koan.single_toolbar', true) === true);
+  const SECOND = { left: 40, top: 60, width: 900, height: 640 };
+  const secondId = (await browserCall('Target.createTarget',
+      { url: 'https://example.com/?second', newWindow: true })).result?.targetId;
+  await waitFor(async () => (await pages()).some(p => p.id === secondId), 8000);
+  await sleep(2500);
+  const { windowId: secondWindow } = (await browserCall('Browser.getWindowForTarget',
+      { targetId: secondId })).result ?? {};
+  await browserCall('Browser.setWindowBounds',
+                    { windowId: secondWindow, bounds: { windowState: 'normal' } });
+  await browserCall('Browser.setWindowBounds', { windowId: secondWindow, bounds: SECOND });
+  await browserCall('Target.activateTarget', { targetId: secondId });
+  await sleep(1500);
+  // Each browser window's views and its widget's place on the screen.
+  const windowsNow = async () => {
+    const tree = await viewTree();
+    const rects = await widgetRects();
+    const ids = [...new Set(tree.filter(v => v.cls === 'BrowserView').map(v => v.widget))];
+    return { tree, rects, wins: ids.map(widget => ({
+      widget, rect: rects[widget], views: tree.filter(v => v.widget === widget) })) };
+  };
+  const ofSecond = now => now.wins.find(w => {
+    const root = w.views[0];
+    return root && root.w === SECOND.width && root.h === SECOND.height;
+  });
+  let now = await windowsNow();
+  let win = ofSecond(now);
+  check('Second window: resized (its root view is the size it was given)', !!win,
+        now.wins.map(w => `${w.views[0]?.w}x${w.views[0]?.h}`).join(' '));
+  const secondPage = (await pages()).find(p => p.id === secondId);
+  if (win && secondPage) {
+    const c = await connect(secondPage.webSocketDebuggerUrl);
+    await sendKey(c, VK.T, ACCEL, 't');
+    c.close();
+    await sleep(1200);
+    // A character at a time, finding the omnibox again: the suggestions'
+    // widget opens with the first one and moves the nodes after it.
+    for (const ch of 'koan') {
+      const field = ofSecond(await windowsNow())?.views.find(
+          v => v.cls === 'OmniboxViewViews' && v.shown);
+      if (!field) break;
+      await viewEvent(field, 'DOM.dispatchKeyEvent', { type: 'keyPressed',
+          keyCode: ch.codePointAt(0), code: 0, flags: 0, key: ch.codePointAt(0), isChar: true });
+    }
+    await waitFor(async () => {
+      const w = ofSecond(await windowsNow());
+      return w && find(w.views, 'TopContainerView')?.h > INPUT_ROW;
+    });
+    now = await windowsNow();
+    win = ofSecond(now);
+    const root = win.views[0];
+    const browserView = find(win.views, 'BrowserView');
+    const card = find(win.views, 'TopContainerView');
+    const width = Math.min(Math.floor(browserView.w * 2 / 3), 750);
+    check('...Cmd+T opens the card in that window, Zen-sized from its width, centred',
+          card?.w === width &&
+              card.ax - browserView.ax === Math.floor((browserView.w - width) / 2) &&
+              shown(win.views, 'KoanUrlBarBackdrop'),
+          `card ${card?.w} at ${card?.ax}, window ${browserView.w}, expected ${width}`);
+    check('...inside the window',
+          card && card.ax >= 0 && card.ay >= 0 && card.ax + card.w <= root.w &&
+              card.ay + card.h <= root.h,
+          `${card?.ax},${card?.ay} ${card?.w}x${card?.h} in ${root.w}x${root.h}`);
+    const typed = find(win.views, 'OmniboxViewViews')?.props.Text;
+    check('...with everything typed in its omnibox', typed === 'koan', JSON.stringify(typed));
+    // The other window's bar stays closed.
+    const first = now.wins.find(w => w !== win);
+    const firstBar = first && find(first.views, 'TopContainerView');
+    const firstWidth = first && find(first.views, 'BrowserView')?.w;
+    check('...and the first window\'s bar is not open',
+          !first || (firstBar?.w === firstWidth && !shown(first.views, 'KoanUrlBarBackdrop')),
+          `${firstBar?.w} in ${firstWidth}`);
+    // The suggestions: their widget is the card's part under its input row,
+    // on the screen too (a child window on macOS), inside the window.
+    const frame = now.tree.find(v => v.cls === 'RoundedOmniboxResultsFrame' && v.shown && v.h > 0);
+    const popup = frame && now.rects[frame.widget];
+    const at = card && win.rect &&
+        { x: win.rect.x + card.ax, y: win.rect.y + card.ay + INPUT_ROW };
+    check('...the suggestions are in the card: as wide as it, under its input row',
+          frame && card.h === INPUT_ROW + frame.h && popup?.w === card.w &&
+              Math.abs(popup.x - at.x) <= 1 && Math.abs(popup.y - at.y) <= 1,
+          `card ${card?.w}x${card?.h} at ${at?.x},${at?.y}; popup ` +
+              `${popup?.w}x${popup?.h} at ${popup?.x},${popup?.y}`);
+    check('...and inside the window on the screen',
+          popup && win.rect && popup.x >= win.rect.x && popup.y >= win.rect.y &&
+              popup.x + popup.w <= win.rect.x + win.rect.w &&
+              popup.y + popup.h <= win.rect.y + win.rect.h,
+          `popup ${JSON.stringify(popup)}, window ${JSON.stringify(win.rect)}`);
+    shot('second-window');
+  }
+}
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);

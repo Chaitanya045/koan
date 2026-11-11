@@ -36,7 +36,12 @@ async function pages() {
 }
 
 async function activePage() {
-  // The first listed page is the most recently active one.
+  // The page showing. (The first listed page is the most recently active one
+  // on Linux, not on macOS, where it can be a background tab, which a paste
+  // never reaches.)
+  for (const page of await pages()) {
+    if (await evalIn(page, 'document.visibilityState') === 'visible') return page;
+  }
   return (await pages())[0];
 }
 
@@ -131,10 +136,20 @@ await key(VK.S, ACCEL | ALT, 's');
 vs = await views();
 const strip = vs.find(v => v.cls === 'VerticalTabStripRegionView');
 check('Ctrl+Alt+S shows the sidebar in compact mode', strip && strip.w >= 200, `width ${strip?.w}`);
+// At the sidebar's own width (Zen's 230 by default), not upstream's 240.
+check('...at the sidebar\'s width', strip?.w === 230, `width ${strip?.w}`);
+// Zen's cmd_zenCompactModeShowSidebar toggles `zen-user-show`: the sidebar
+// stays out wherever the pointer is, until the key is pressed again.
 await sleep(4500);
 vs = await views();
+const held = vs.find(v => v.cls === 'VerticalTabStripRegionView');
+check('...and keeps it out while the pointer stays away (Zen\'s pin)', held && held.w >= 200,
+      `width ${held?.w}`);
+await key(VK.S, ACCEL | ALT, 's');
+await sleep(1500);
+vs = await views();
 const after = vs.find(v => v.cls === 'VerticalTabStripRegionView');
-check('...and hides it again when the pointer stays away', after && after.w === 0, `width ${after?.w}`);
+check('Ctrl+Alt+S again hides it', after && after.w === 0, `width ${after?.w}`);
 await key(VK.S, ACCEL, 's');
 vs = await views();
 check('Ctrl+S turns compact mode off', count(vs, 'KoanHotZone') === 1);

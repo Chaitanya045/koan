@@ -9,14 +9,20 @@
 // tab each one lands on), and Move To into an unloaded Space loading only
 // the moved tab.
 //
+// On macOS the Space header's and the tabs' menus are native NSMenus, which
+// UI DevTools can't reach (NATIVE_MENUS in lib/koan.mjs): the test_helper
+// extension (spaces_switching.flags) unloads the other Spaces' tabs and pins
+// the Essential instead, and the icon, theme and Move To steps are skipped.
+//
 //   scripts/e2e/run.sh spaces_switching
 import { spawn } from 'node:child_process';
 import { servePages } from '../perf/pages_server.mjs';
 import {
   CDP_PORT, CTRL, ALT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish, key,
   menuMouse, onPage, openMenus, pages, sleep, tabMenuCommand, viewEvent, viewMouse, viewTree,
-  visiblePage, waitFor, windowTints, ACCEL,
+  visiblePage, waitFor, windowTints, ACCEL, NATIVE_MENUS, NATIVE_MENU_WHY,
 } from './lib/koan.mjs';
+import { askTestHelper, skipped } from './lib/mac.mjs';
 
 const site = await servePages();
 const url = id => `${site.origin}/power.html?count=${id}`;
@@ -97,6 +103,20 @@ async function closePicker(view) {
   await sleep(1000);
 }
 
+// Unload All Other Spaces: the header menu's item, or on macOS the
+// test_helper extension unloading the tabs of the other Spaces (`others`:
+// page ids), asked from page `from`.
+async function unloadOthers(from, others) {
+  if (NATIVE_MENUS) {
+    await askTestHelper(await find(from), { discard: others.map(url) }, 2000);
+    return;
+  }
+  const menu = await headerMenu();
+  // ... Unload Space, Unload All Other Spaces, Create Space, Delete Space.
+  await menuMouse(menu, menu.items.at(-3));
+  await sleep(2000);
+}
+
 async function headerMenu() {
   const { header } = await sidebar();
   await viewMouse(header, 'mousePressed', 20, 20, 'right');
@@ -128,10 +148,7 @@ await click(s.buttons[0].view);
 s = await sidebar();
 check('The first Space shows its last active tab', s.name === 'Space' &&
       await isShown('a1'));
-let menu = await headerMenu();
-// ... Unload Space, Unload All Other Spaces, Create Space, Delete Space.
-await menuMouse(menu, menu.items.at(-3));
-await sleep(2000);
+await unloadOthers('a1', ['b1', 'b2', 'c1', 'c2']);
 let before = await loads('a1');
 
 // ---- A real wheel over the sidebar switches Space (upstream's swipe on
@@ -167,34 +184,40 @@ check('...on that tab, not the Space\'s last active one', await isShown('a2'));
 
 // ---- B gets an icon and a colour, then the browser restarts in "Space".
 await click(s.buttons[1].view);
-menu = await headerMenu();
-await menuMouse(menu, menu.items[1]);  // Change Icon...
-const emoji = (await viewTree()).find(v => v.cls === 'KoanEmojiCell' && v.shown);
-await click(emoji);
-await key(await find('b2'), 27, 0, 'Escape');  // close the picker
-await sleep(1000);
-menu = await headerMenu();
-await menuMouse(menu, menu.items[2]);  // Theme...: the theme picker
-const swatch = await waitFor(async () => (await viewTree()).find(
-    v => v.cls === 'KoanThemeSwatch' && v.shown && v.props.Index === '3'));
-if (swatch) await click(swatch);
-const theme = await pickerDots();
-await closePicker(swatch);
-s = await sidebar();
-const icon = s.icon;
-check('B has an icon and a theme', icon === emoji?.props.Label && !!theme,
-      `${icon} / ${theme}`);
-// G1 (Spaces lockdown): the colour is the window's. A new window, in its
-// default-theme Space, has none while this one keeps B's.
-const seed = await waitFor(async () => (await windowTints())[0]);
-const second = (await browserCall('Target.createTarget',
-                                  { url: 'about:blank', newWindow: true })).result.targetId;
-await sleep(2000);
-const tints = await windowTints();
-check('Two windows on different Spaces show different colours',
-      !!seed && tints.includes(seed) && tints.includes(0), JSON.stringify(tints));
-await browserCall('Target.closeTarget', { targetId: second });
-await sleep(1500);
+let icon = '', theme = '', seed = 0;
+if (NATIVE_MENUS) {
+  skipped('B\'s icon and theme, and the windows\' colours (the Space header\'s menu)',
+          NATIVE_MENU_WHY);
+} else {
+  let menu = await headerMenu();
+  await menuMouse(menu, menu.items[1]);  // Change Icon...
+  const emoji = (await viewTree()).find(v => v.cls === 'KoanEmojiCell' && v.shown);
+  await click(emoji);
+  await key(await find('b2'), 27, 0, 'Escape');  // close the picker
+  await sleep(1000);
+  menu = await headerMenu();
+  await menuMouse(menu, menu.items[2]);  // Theme...: the theme picker
+  const swatch = await waitFor(async () => (await viewTree()).find(
+      v => v.cls === 'KoanThemeSwatch' && v.shown && v.props.Index === '3'));
+  if (swatch) await click(swatch);
+  theme = await pickerDots();
+  await closePicker(swatch);
+  s = await sidebar();
+  icon = s.icon;
+  check('B has an icon and a theme', icon === emoji?.props.Label && !!theme,
+        `${icon} / ${theme}`);
+  // G1 (Spaces lockdown): the colour is the window's. A new window, in its
+  // default-theme Space, has none while this one keeps B's.
+  seed = await waitFor(async () => (await windowTints())[0]);
+  const second = (await browserCall('Target.createTarget',
+                                    { url: 'about:blank', newWindow: true })).result.targetId;
+  await sleep(2000);
+  const tints = await windowTints();
+  check('Two windows on different Spaces show different colours',
+        !!seed && tints.includes(seed) && tints.includes(0), JSON.stringify(tints));
+  await browserCall('Target.closeTarget', { targetId: second });
+  await sleep(1500);
+}
 // Back with Ctrl+Alt+Left. (Right after the theme menu, with the emoji
 // picker still open, a synthetic click on the bar can be dropped.)
 await key(await find('b2'), 37, ACCEL | ALT, 'ArrowLeft');
@@ -209,8 +232,12 @@ await browserCall('Target.createTarget', { url: url('e1') });
 await sleep(1500);
 await evalIn(await find('e1'), 'document.title = "Essential e1"');
 await sleep(500);
-await tabMenuCommand({ title: 'Essential e1' }, 'kKoanAddToEssentialsMenuItem');
-await sleep(1000);
+if (NATIVE_MENUS) {
+  await askTestHelper(await find('e1'), 'pin-tab', 1000);
+} else {
+  await tabMenuCommand({ title: 'Essential e1' }, 'kKoanAddToEssentialsMenuItem');
+  await sleep(1000);
+}
 check('An Essential is selected', await isShown('e1') &&
       (await viewTree()).some(v => v.cls === 'TabView' && v.shown &&
                                    v.path.includes('PinnedTabContainerView')));
@@ -240,22 +267,26 @@ s = await sidebar();
 check('After a restart the Spaces are back, in order, and no other',
       s.buttons.map(b => b.name).join() === 'Space,B,C',
       s.buttons.map(b => b.name).join());
-check('...with their icons', s.buttons[1]?.icon === icon,
-      s.buttons.map(b => b.icon).join(' '));
+if (!NATIVE_MENUS) {
+  check('...with their icons', s.buttons[1]?.icon === icon,
+        s.buttons.map(b => b.icon).join(' '));
+}
 check('...in the Space that was shown, with the Essential still selected',
       s.name === 'Space' && await isShown('e1'), s.name);
 await wheel('right');
 s = await sidebar();
 check('Swiping after a restart lands on the Space\'s last active tab',
       s.name === 'B' && await isShown('b2'), s.name);
-menu = await headerMenu();
-await menuMouse(menu, menu.items[2]);  // Theme...
-const restored = await waitFor(pickerDots);
-await closePicker((await viewTree()).find(v => v.cls === 'KoanThemeSwatch' && v.shown));
-check('...and B keeps its theme', !!theme && restored === theme, `${restored} vs ${theme}`);
-check('...and its colour',
-      await waitFor(async () => (await windowTints())[0] === seed),
-      `${(await windowTints())[0]} vs ${seed}`);
+if (!NATIVE_MENUS) {
+  const menu = await headerMenu();
+  await menuMouse(menu, menu.items[2]);  // Theme...
+  const restored = await waitFor(pickerDots);
+  await closePicker((await viewTree()).find(v => v.cls === 'KoanThemeSwatch' && v.shown));
+  check('...and B keeps its theme', !!theme && restored === theme, `${restored} vs ${theme}`);
+  check('...and its colour',
+        await waitFor(async () => (await windowTints())[0] === seed),
+        `${(await windowTints())[0]} vs ${seed}`);
+}
 await wheel('right');
 s = await sidebar();
 n = delta(await loads('e1'), before);
@@ -265,39 +296,41 @@ check('Swiping through restored Spaces loads only the tabs they land on',
 
 // ---- Move To into an unloaded Space loads only the moved tab: in C, unload
 // the others, then move c2 to B.
-menu = await headerMenu();
-await menuMouse(menu, menu.items.at(-3));  // Unload All Other Spaces
-await sleep(2000);
+await unloadOthers('c2', ['a1', 'a2', 'b1', 'b2']);
 before = await loads('c2');
-const spaceTabs = (await viewTree())
-    .filter(v => v.cls === 'TabView' && v.shown && v.h > 1 &&
-                 !v.path.includes('PinnedTabContainerView'))
-    .sort((a, b) => a.ay - b.ay);
-const moved = spaceTabs.at(-1);  // c2, the newest
-for (const type of ['mousePressed', 'mouseReleased']) {
-  viewEvent(moved, 'DOM.dispatchMouseEvent',
-            { type, x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false);
+if (NATIVE_MENUS) {
+  skipped('Move To into an unloaded Space (the tab\'s menu)', NATIVE_MENU_WHY);
+} else {
+  const spaceTabs = (await viewTree())
+      .filter(v => v.cls === 'TabView' && v.shown && v.h > 1 &&
+                   !v.path.includes('PinnedTabContainerView'))
+      .sort((a, b) => a.ay - b.ay);
+  const moved = spaceTabs.at(-1);  // c2, the newest
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    viewEvent(moved, 'DOM.dispatchMouseEvent',
+              { type, x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false);
+  }
+  await sleep(1500);
+  const tabMenu = openMenus(await viewTree())[0];
+  let moveTo = null;
+  // Move To's submenu lists the two other Spaces.
+  for (const item of tabMenu?.items ?? []) {
+    await menuMouse(tabMenu, item, ['mouseMoved']);
+    await sleep(700);
+    moveTo = openMenus(await viewTree())
+        .find(m => m.root !== tabMenu.root && m.items.length === 2);
+    if (moveTo) break;
+  }
+  if (moveTo) {
+    await menuMouse(moveTo, moveTo.items[1]);  // B
+  }
+  await sleep(1500);
+  s = await sidebar();
+  n = delta(await loads('c2'), before);
+  check('Move To into an unloaded Space shows it on the moved tab',
+        !!moveTo && s.name === 'B' && await isShown('c2'), s.name);
+  check('...and loads none of its other tabs', !n.b1 && !n.b2 && !n.c2, show(n));
 }
-await sleep(1500);
-const tabMenu = openMenus(await viewTree())[0];
-let moveTo = null;
-// Move To's submenu lists the two other Spaces.
-for (const item of tabMenu?.items ?? []) {
-  await menuMouse(tabMenu, item, ['mouseMoved']);
-  await sleep(700);
-  moveTo = openMenus(await viewTree())
-      .find(m => m.root !== tabMenu.root && m.items.length === 2);
-  if (moveTo) break;
-}
-if (moveTo) {
-  await menuMouse(moveTo, moveTo.items[1]);  // B
-}
-await sleep(1500);
-s = await sidebar();
-n = delta(await loads('c2'), before);
-check('Move To into an unloaded Space shows it on the moved tab',
-      !!moveTo && s.name === 'B' && await isShown('c2'), s.name);
-check('...and loads none of its other tabs', !n.b1 && !n.b2 && !n.c2, show(n));
 
 relaunched.kill();
 site.close();
