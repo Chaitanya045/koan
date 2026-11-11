@@ -22,7 +22,11 @@ class Profile;
 namespace content {
 class WebContents;
 }
-class Profile;
+
+namespace tabs {
+class TabInterface;
+struct TabData;
+}  // namespace tabs
 
 namespace koan {
 
@@ -75,6 +79,9 @@ class KoanWindowSync : public base::SupportsUserData::Data {
     // The page of `item` in this window (its tab's contents, placeholder or
     // not), or null.
     virtual content::WebContents* PageOf(const std::string& item) const = 0;
+    // The page of `item`, in another window, changed its title or favicon:
+    // the row of the placeholder here shows them (AdjustPlaceholderTabData()).
+    virtual void RefreshPlaceholder(const std::string& item) = 0;
   };
 
   explicit KoanWindowSync(Profile* profile);
@@ -123,6 +130,10 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   void SetLive(Window* window, const std::string& item);
   // The page of `item` in the window that has it, or null.
   content::WebContents* LivePage(const std::string& item) const;
+  // The page of `item` in `window` changed its title or favicon (Zen's
+  // ZenTabLabelChanged / ZenTabIconChanged, from the window with the page
+  // only): every other window's placeholder row follows.
+  void OnPageChanged(Window* window, const std::string& item);
   // `window` is closing (UnloadController::OnWindowClosing()): its pages go
   // to the most recently active other synced window, now, before its tabs
   // close. Not while quitting, nor from inside a reconcile or a move.
@@ -169,6 +180,14 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   bool flush_scheduled_ = false;
   base::WeakPtrFactory<KoanWindowSync> weak_factory_{this};
 };
+
+// Called from AdjustTabData() (koan_pinned_tabs_hooks.h) for every tab's
+// row: a placeholder's row shows the title and favicon of its page in the
+// window that has it, as Zen syncs a tab's label and icon to its copies.
+// Nothing for other tabs, or while no window has the page (the placeholder's
+// own copy of the page's history names it then).
+void AdjustPlaceholderTabData(const tabs::TabInterface* tab,
+                              tabs::TabData& data);
 
 // Zen's New Blank Window (cmd_zenNewNavigatorUnsynced, Accel+Shift+N): a
 // normal window of `profile`'s regular profile without Spaces and outside

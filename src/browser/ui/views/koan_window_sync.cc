@@ -194,6 +194,19 @@ content::WebContents* KoanWindowSync::LivePage(const std::string& item) const {
   return window ? window->PageOf(item) : nullptr;
 }
 
+void KoanWindowSync::OnPageChanged(Window* window, const std::string& item) {
+  if (model_.LiveWindow(item) != window->window_id()) {
+    return;
+  }
+  // Only schedules a repaint of the other windows' rows (no tab strip
+  // changes), so it may run inside `window`'s notification.
+  for (const raw_ptr<Window>& other : windows_) {
+    if (other.get() != window) {
+      other->RefreshPlaceholder(item);
+    }
+  }
+}
+
 void KoanWindowSync::OnWindowClosing(Window* window) {
   if (browser_shutdown::IsTryingToQuit() || applying_) {
     return;
@@ -238,6 +251,8 @@ void KoanWindowSync::MovePage(const std::string& item, Window* to) {
     if (std::unique_ptr<content::WebContents> page = from->TakePage(item)) {
       to->PutPage(item, std::move(page));
       model_.SetLive(item, to->window_id());
+      // The new placeholder's row was made while the page was still there.
+      from->RefreshPlaceholder(item);
     }
   } else {
     // No window has the page (the one that had it is gone): it loads here.
