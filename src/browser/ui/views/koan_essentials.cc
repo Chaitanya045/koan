@@ -14,6 +14,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/views/layout/layout_types.h"
 #include "ui/views/view.h"
 
 namespace koan {
@@ -31,6 +32,24 @@ int ClampEssentialsColumns(int columns) {
     return columns;
   }
   return std::min(columns, kMaxEssentialsColumns);
+}
+
+bool AnimatesEssentialsHeight(bool vertical) {
+  return vertical && features::IsSidebarEnabled();
+}
+
+int GetEmptyEssentialsWidth(const views::SizeBounds& size_bounds) {
+  if (!features::IsSidebarEnabled()) {
+    return 0;
+  }
+  return size_bounds.width().value_or(0);
+}
+
+int GetEssentialsMinHeight(int min_height, int preferred_height) {
+  if (!features::IsSidebarEnabled()) {
+    return min_height;
+  }
+  return std::min(min_height, preferred_height);
 }
 
 void PaintEssentialsTile(gfx::Canvas* canvas,

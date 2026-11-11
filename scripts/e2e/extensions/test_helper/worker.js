@@ -9,6 +9,7 @@
 const ACTIONS = {
   'close-window': tab => chrome.windows.remove(tab.windowId),
   'pin-tab': tab => chrome.tabs.update(tab.id, { pinned: true }),
+  'unpin-tab': tab => chrome.tabs.update(tab.id, { pinned: false }),
   'list-tabs': async tab => (await chrome.tabs.query({ windowId: tab.windowId })).map(t => ({
     id: t.id, index: t.index, url: t.url || t.pendingUrl || '', title: t.title ?? '',
     pinned: t.pinned, groupId: t.groupId, active: t.active, status: t.status,

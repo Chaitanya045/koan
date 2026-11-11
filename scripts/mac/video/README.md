@@ -14,6 +14,7 @@ tools (`ptr`, `keypress2`, `activate`, `inputok.sh`, `usergate.sh`, `screen-gran
 | `quit.sh <pid>` | quits that Koan by its exact pid. It refuses any process without a `--user-data-dir` under `rec-`. |
 | `record.sh start <out.mp4> --cdp 9741` / `record.sh stop <out.mp4>` | records the window's region from the screen (avfoundation, 30 fps, H.264 with the hardware encoder). Writes `<out>.rec.json` with the video's time 0 on the wall clock. |
 | `flows/clear.mjs` | the Clear button flow (below). Writes its marks and counts to `$MARKS`. |
+| `flows/essentials.mjs` | tabs becoming Essentials and going back, then compact mode on, the sidebar revealed, and off (below). Built on `flows/common.mjs` (the gates, the marks, the pages, the rows), which new flows share. |
 | `frames.sh <video> <out dir> --marks <marks.json>` | builds contact sheets around the action marks, plus `diff.tsv` / `sheets.tsv` / `changed.tsv` (below). `sheet.mjs` is its node half. |
 
 ## The gates (do not bypass)
@@ -46,6 +47,8 @@ env_out="$($H/launch.sh ~/work/koan-mac/koan/chromium/src/out/Koan/Koan.app)"; e
 set -a; eval "$env_out"; set +a                        # KOAN_PID, UI_PORT, CDP_PORT, REC_DIR, ...
 $H/record.sh start "$REC_DIR/clear.mp4" --cdp "$CDP_PORT"
 MARKS="$REC_DIR/clear.marks.json" node $H/flows/clear.mjs | tee "$REC_DIR/clear.log"   # or: ... clear.mjs 6,7
+# or the Essentials flow (same steps; its marks and log in essentials.*):
+# MARKS="$REC_DIR/essentials.marks.json" node $H/flows/essentials.mjs | tee "$REC_DIR/essentials.log"
 $H/record.sh stop "$REC_DIR/clear.mp4"
 $H/quit.sh "$KOAN_PID"
 $H/frames.sh "$REC_DIR/clear.mp4" "$REC_DIR/sheets" --marks "$REC_DIR/clear.marks.json"
@@ -93,6 +96,23 @@ The flow ends with one line per round. Run some rounds only with `node clear.mjs
 The marks are `{t (epoch ms), round, label, action, ...}`. Action marks (`round-start`, `space-switch-*`,
 `pin-in-space`, `make-essential`, `compact-on`, `reveal-sidebar`, `hover-clear`, `clear-click`, `clear-key` (Cmd+Shift+K when no Clear button shows, as in compact mode), `compact-off`,
 `calibrate`) are where `frames.sh` cuts. The `count-*` marks hold the counts at those moments.
+
+## `flows/essentials.mjs`: a tab becoming an Essential, and compact mode
+
+It re-checks what the first recording (2026-11-11) caught. From the anchor tab and 7 more tabs (one selected):
+
+| round | change (action mark) | what to look for in the sheets |
+|---|---|---|
+| 1 | the first Essential, the selected tab (`make-essential`; the grid was empty) | no frame with both the tile and the old row at full opacity; the Space header and the list slide down, never jump a row |
+| 2 | a second, beside it, selected | the same; the grid's height doesn't change |
+| 3-4 | a third and fourth, in the background | the same |
+| 5 | a fifth: a new row of tiles | the Space slides down a row |
+| 6-7 | two back to the Space (`remove-essential`, test_helper's `unpin-tab`) | the tile fades out as the row comes in; the last one out lets the Space slide up |
+| 8 | compact mode on (`compact-on`), the sidebar revealed at the window's edge (`reveal-sidebar`), compact mode off (`compact-off`) | the revealed sidebar has the separator with Clear above "+ New Tab"; as it comes back, no frame with the page over the sidebar or its edge |
+
+Each round records `after` (right away) and `after-1s`: `essentials` (the model's), `views` (shown rows of the tab: 1 once the
+transition is over), `inGrid`, `gridH`, `headerBelowGrid`, `clearShown`, `compact`; `ok` is the end state. The summary
+prints one line per round.
 
 ## `frames.sh`: contact sheets and the changed-pixels list
 

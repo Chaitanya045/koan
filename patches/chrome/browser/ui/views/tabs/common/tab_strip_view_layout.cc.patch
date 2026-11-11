@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 --- a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc
-@@ -16,6 +16,8 @@
+@@ -16,6 +16,9 @@
  #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
  #include "chrome/browser/ui/views/tabs/horizontal/horizontal_tab_closing_helper.h"
  #include "chrome/browser/ui/views/tabs/horizontal/tab_scroll_button_container.h"
++#include "koan/browser/ui/views/koan_essentials.h"
 +#include "koan/browser/ui/views/koan_sidebar_tabs.h"
 +#include "koan/browser/ui/views/koan_spaces.h"
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/controls/separator.h"
  #include "ui/views/view_utils.h"
-@@ -302,6 +304,9 @@
+@@ -302,6 +305,9 @@
        remaining_height -=
            tabs_separator->GetPreferredSize().height() + region_vertical_padding;
      }
@@ -20,7 +21,17 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chro
      // Clamp the remaining height to 0 if we have less space.
      remaining_height = std::max(remaining_height, 0);
    }
-@@ -347,6 +352,14 @@
+@@ -313,6 +319,9 @@
+     if (const auto* pinned_container =
+             tab_strip_view->GetPinnedTabsContainer()) {
+       min_pinned_height = pinned_container->GetMinimumSize().height();
++      // Koan: grows in with the Essentials grid's animation.
++      min_pinned_height = koan::GetEssentialsMinHeight(min_pinned_height,
++                                                       pinned_preferred_height);
+     }
+     pinned_container_height = CalculatePinnedContainerMainAxisSize(
+         pinned_preferred_height, unpinned_preferred_height, remaining_height,
+@@ -347,6 +356,14 @@
    }
    layouts.child_layouts.emplace_back(tabs_separator, should_show_separator,
                                       separator_bounds);
@@ -35,7 +46,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/tab_strip_view_layout.cc b/chro
  
    // Place the unpinned container using the entire available width, we do not
    // inset the x value by `region_horizontal_padding` here because, when the tab
-@@ -368,8 +381,13 @@
+@@ -368,8 +385,13 @@
                                       unpinned_tabs_scroll_view->GetVisible(),
                                       unpinned_container_bounds);
  

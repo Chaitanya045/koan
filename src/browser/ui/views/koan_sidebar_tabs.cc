@@ -767,9 +767,6 @@ void KoanSidebarTabsController::OnAddedToWidget() {
           browser_view_->browser())) {
     mode_subscription_ = state->RegisterOnModeChanged(base::BindRepeating(
         &KoanSidebarTabsController::OnModeChanged, base::Unretained(this)));
-    collapse_subscription_ = state->RegisterOnCollapseChanged(
-        base::BindRepeating(&KoanSidebarTabsController::OnCollapseChanged,
-                            base::Unretained(this)));
   }
   // Zen's "Show New Tab Button on Tab List" and "Move the new tab button to
   // the top", from chrome://koan-settings.
@@ -786,7 +783,6 @@ void KoanSidebarTabsController::OnAddedToWidget() {
 
 void KoanSidebarTabsController::OnBrowserViewDestroying() {
   mode_subscription_ = {};
-  collapse_subscription_ = {};
   pref_change_registrar_.RemoveAll();
   if (started_) {
     browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
@@ -821,11 +817,6 @@ void KoanSidebarTabsController::OnModeChanged(
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanSidebarTabsController::InstallRows,
                                 weak_factory_.GetWeakPtr()));
-}
-
-void KoanSidebarTabsController::OnCollapseChanged(
-    tabs::VerticalTabStripCollapseState state) {
-  UpdateClearRow();
 }
 
 TabStripView* KoanSidebarTabsController::GetVerticalTabStrip() const {
@@ -983,10 +974,11 @@ void KoanSidebarTabsController::UpdateClearRow() {
              !IsEmptyTab(model->GetTabAtIndex(i)) &&
              (!workspace || model->GetTabGroupForTab(i) == workspace);
   }
-  const auto* state =
-      tabs::VerticalTabStripStateController::From(browser_view_->browser());
-  // In the collapsed sidebar upstream's own separator is enough.
-  rows_->clear_row()->SetVisible(listed && !(state && state->IsCollapsed()));
+  // Also while compact mode hides the sidebar (upstream's "collapsed"
+  // state): its reveal shows the whole sidebar, Clear included, as Zen's
+  // does. (Zen hides Clear only in its icons-only sidebar, which Koan's
+  // sidebar doesn't have: koan::OwnsSidebar().)
+  rows_->clear_row()->SetVisible(listed);
   rows_->clear_row()->button()->SetVisible(!unpinned.empty());
   // Zen's arrow: Clear closes every unpinned tab, either because all can be
   // closed or because none can (then it closes them all).
