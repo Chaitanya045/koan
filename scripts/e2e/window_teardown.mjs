@@ -8,12 +8,15 @@
 // Layouts: single toolbar (the default), compact mode, native fullscreen,
 // compact + fullscreen, tabs on the right. The window closes with the Close
 // Window shortcut (Cmd+Shift+W on macOS; the red button runs the same
-// BrowserView::Close path), through the real keyboard when suite.sh allows
-// real input, else through CDP. Run by scripts/mac/suite.sh (or
-// scripts/e2e/run.sh window_teardown off macOS, without fullscreen).
-import { browserCall, check, finish, pages, setKoanPref, sleep, waitFor } from './lib/koan.mjs';
-import { ACCEL, IS_MAC, SHIFT, alive, countInLog, fatalInLog, key, openWindow, realInput,
-         realKey, setWindowState, startServer, windowOf, windows } from './lib/mac.mjs';
+// BrowserView::Close path) through the real keyboard when suite.sh allows
+// real input. Else, on macOS, through the window_closer test extension
+// (window_teardown.flags; synthetic keys don't reach the menu that owns the
+// key), and through CDP elsewhere; the quit, through CDP's Browser.close.
+// Run by scripts/mac/suite.sh (or scripts/e2e/run.sh window_teardown off
+// macOS, without fullscreen).
+import { browserCall, check, finish, onPage, pages, setKoanPref, sleep, waitFor } from './lib/koan.mjs';
+import { ACCEL, IS_MAC, SHIFT, alive, closeWindowOf, countInLog, fatalInLog, key, openWindow,
+         realInput, realKey, setWindowState, startServer, windowOf, windows } from './lib/mac.mjs';
 
 const server = await startServer();
 const TORN = /Koan: window torn down$/m;
@@ -25,7 +28,7 @@ check('The browser\'s log is readable (KOAN_LOG)', !!process.env.KOAN_LOG,
       process.env.KOAN_LOG ?? 'no KOAN_LOG');
 
 // Closes window `windowId` with the Close Window shortcut, typed into its
-// active page; waits until it is gone.
+// active page (or closeWindowOf() it); waits until it is gone.
 async function closeWindow(windowId) {
   const page = (await windows()).find(w => w.windowId === windowId)?.pages
       .find(p => !p.url.startsWith('devtools:'));
@@ -33,7 +36,7 @@ async function closeWindow(windowId) {
     // The real key goes to the key window, which is the one just opened.
     await realKey('w', 'cs', 800);
   } else {
-    await key(page, 'w', ACCEL | SHIFT, 800);
+    await closeWindowOf(page);
   }
   return waitFor(async () => !(await windows()).some(w => w.windowId === windowId), 10000);
 }
@@ -73,18 +76,33 @@ if (IS_MAC) {
 }
 await secondWindowCase('Tabs on the right', { right: true });
 
-// The last tab of a second window closed: the browser closes the window.
+// The last tab of a second window closed: like Zen (browser.tabs.
+// closeWindowWithLastTab is off), the window stays, on Zen's empty tab
+// (KeepWindowOnLastTabClosed()), and nothing is torn down. Then Close Window
+// from that tab (navigated to a local page, which can ask window_closer).
 {
   const tornBefore = torn(), goneBefore = gone();
   const w = await openWindow(server.url('/p?t=Last%20tab'));
   await browserCall('Target.closeTarget', { targetId: w.targetId });
-  const closed = await waitFor(async () => !(await windows()).some(x => x.windowId === w.windowId), 10000);
-  await sleep(1500);
-  check('Last tab of a second window: the window closes', !!closed);
+  const empty = await waitFor(async () => (await windows()).find(x => x.windowId === w.windowId)
+      ?.pages.find(p => !p.url.startsWith('devtools:')), 8000);
+  check('Last tab of a second window: the window stays, on a new tab', !!empty,
+        `${(await windows()).length} windows`);
   check('...Koan keeps running', await alive());
-  check('..."window torn down" once more, no "(widget gone)"',
-        torn() === tornBefore + 1 && gone() === goneBefore,
+  check('...nothing torn down', torn() === tornBefore && gone() === goneBefore,
         `torn ${tornBefore} -> ${torn()}, gone ${goneBefore} -> ${gone()}`);
+  if (empty) {
+    await onPage(empty, c => c.send('Page.navigate', { url: server.url('/p?t=Last%20tab%20again') }));
+    await sleep(1500);
+    const page = (await windows()).find(x => x.windowId === w.windowId)?.pages
+        .find(p => !p.url.startsWith('devtools:'));
+    const closed = page && await closeWindow(w.windowId);
+    await sleep(1500);
+    check('...Close Window then closes it', !!closed, `${(await windows()).length} windows left`);
+    check('..."window torn down" once more, no "(widget gone)"',
+          torn() === tornBefore + 1 && gone() === goneBefore,
+          `torn ${tornBefore} -> ${torn()}, gone ${goneBefore} -> ${gone()}`);
+  }
 }
 
 // Quit with two windows: both torn down in order, the browser exits.
@@ -95,9 +113,13 @@ await secondWindowCase('Tabs on the right', { right: true });
   const first = (await pages()).find(p => !p.url.includes('Quit%20two') && p.type === 'page');
   if (realInput()) {
     await realKey('q', 'c', 500);
+  } else if (IS_MAC) {
+    // Cmd+Q is the menu's too: CDP's Browser.close, which quits as the
+    // menu's Quit does (chrome::ExitIgnoreUnloadHandlers()).
+    await browserCall('Browser.close').catch(() => {});
   } else {
-    // Cmd+Q on macOS; Chromium's Ctrl+Shift+Q elsewhere.
-    await key(first, 'q', IS_MAC ? ACCEL : ACCEL | SHIFT, 500).catch(() => {});
+    // Chromium's Ctrl+Shift+Q.
+    await key(first, 'q', ACCEL | SHIFT, 500).catch(() => {});
   }
   const exited = await waitFor(async () => !(await alive()), 30000);
   check('Quit: Koan exits', !!exited);

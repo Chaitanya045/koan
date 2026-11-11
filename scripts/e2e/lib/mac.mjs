@@ -109,7 +109,10 @@ export async function alive() {
 
 // The browser's log so far (stderr, --enable-logging=stderr).
 export const log = () => (KOAN_LOG && fs.existsSync(KOAN_LOG) ? fs.readFileSync(KOAN_LOG, 'utf8') : '');
-export const countInLog = re => (log().match(new RegExp(re.source, 'g')) ?? []).length;
+// How often `re` matches the log (its own flags kept, e.g. m for a $ at each
+// line's end).
+export const countInLog = re =>
+  (log().match(new RegExp(re.source, re.flags.replace('g', '') + 'g')) ?? []).length;
 // The first fatal line in the log (FATAL, a failed CHECK or DCHECK), or ''.
 export const fatalInLog = () =>
   log().split('\n').find(l => /FATAL|Check failed|CHECK failed|DCHECK/.test(l)) ?? '';
@@ -136,6 +139,26 @@ export async function openWindow(url) {
   await waitFor(async () => (await pages()).some(p => p.id === targetId), 8000);
   await sleep(2500);
   return { targetId, windowId: (await windowOf(targetId))?.windowId };
+}
+// Close Window for `page` (a 127.0.0.1 page) without real input. On macOS
+// the Close Window and Close Tab keys belong to the main menu, which
+// synthetic (CDP) keys never reach, so the page asks the window_closer test
+// extension (the test's .flags loads it) to close its window:
+// chrome.windows.remove() runs BrowserView::Close(), as the menu item and the
+// red button do. Elsewhere it sends the key. Returns false when the page
+// can't ask (no extension).
+const WINDOW_CLOSER_ID = 'efmifboglkpejppaiocdcajnkhbfoofo';
+export async function closeWindowOf(page, settle = 800) {
+  if (!IS_MAC) {
+    await key(page, 'w', ACCEL | SHIFT, settle);
+    return true;
+  }
+  const asked = await onPage(page, c => c.send('Runtime.evaluate', {
+    expression: `!!globalThis.chrome?.runtime?.sendMessage &&
+        (chrome.runtime.sendMessage('${WINDOW_CLOSER_ID}', 'close-window').catch(() => {}), true)`,
+    returnByValue: true }));
+  await sleep(settle);
+  return asked.result?.result?.value === true;
 }
 export async function setWindowState(windowId, windowState) {
   await browserCall('Browser.setWindowBounds', { windowId, bounds: { windowState } });
