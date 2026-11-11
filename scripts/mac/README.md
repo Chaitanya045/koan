@@ -41,6 +41,13 @@ and read the view tree through UI DevTools (`--enable-ui-devtools=9340`) and the
 side through CDP (`--remote-debugging-port=9341`), both forwarded by an ssh ControlMaster
 (`/tmp/koan-cm.sock`, see `vtabs.sh`).
 
+## `video/`: screen recordings of a flow, reviewed as contact sheets
+
+`video/README.md`. A scripted flow (`video/flows/clear.mjs`: the sidebar's Clear button, clicked with the real
+pointer) runs on our own Koan (`video/launch.sh`) while `video/record.sh` records the window. `video/frames.sh` then
+cuts the video around the flow's marked actions into timestamped 4x4 contact sheets. It also writes a changed-pixels
+list, so an agent looks only at the sheets where something moved.
+
 ## Where the Mac is (not in the repo)
 
 `vtabs.sh` and `drv/vtabs.mjs` read `KOAN_MAC_HOST`, `KOAN_MAC_USER` and
