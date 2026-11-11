@@ -33,7 +33,9 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
+#include "koan/browser/ui/views/koan_library_motion.h"
 #include "koan/browser/ui/views/koan_library_view.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -46,11 +48,17 @@
 #include "ui/events/event_handler.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/animation/animation_container.h"
 #include "ui/gfx/geometry/cubic_bezier.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/geometry/transform_util.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/compositor_animation_runner.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/view_tracker.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 
@@ -58,11 +66,7 @@ namespace koan {
 
 namespace {
 
-// Zen's spring for opening and closing (stiffness 720, damping 47,
-// mass 1.2): slightly under-damped, settled after about 400ms.
-constexpr double kStiffness = 720;
-constexpr double kDamping = 47;
-constexpr double kMass = 1.2;
+// Zen's spring for opening and closing (LibrarySpring()) has settled by then.
 constexpr base::TimeDelta kSlideDuration = base::Milliseconds(450);
 // Zen: transition: width 0.3s cubic-bezier(.36, .06, 0, .94).
 constexpr base::TimeDelta kResizeDuration = base::Milliseconds(300);
@@ -70,16 +74,6 @@ constexpr base::TimeDelta kResizeDuration = base::Milliseconds(300);
 constexpr base::TimeDelta kCleanupDelay = base::Seconds(30);
 // The library never covers more than 95% of the window (95vw).
 constexpr float kMaxWidthFraction = 0.95f;
-
-// Where a spring released at 0 heads to 1 after `seconds`.
-double Spring(double seconds) {
-  const double omega = std::sqrt(kStiffness / kMass);
-  const double zeta = kDamping / (2 * std::sqrt(kStiffness * kMass));
-  const double omega_d = omega * std::sqrt(1 - zeta * zeta);
-  const double decay = std::exp(-zeta * omega * seconds);
-  return 1 - decay * (std::cos(omega_d * seconds) +
-                      zeta * omega / omega_d * std::sin(omega_d * seconds));
-}
 
 const char* SectionPrefValue(LibrarySection section) {
   switch (section) {
@@ -373,6 +367,8 @@ void KoanLibraryController::OnBrowserViewDestroying() {
   SetEscapeRegistered(false);
   slide_.Stop();
   resize_.Stop();
+  // (The sidebar goes with the window: its children keep their layers.)
+  sidebar_layered_.clear();
   DestroyWidget();
 }
 
@@ -392,7 +388,7 @@ void KoanLibraryController::AnimationProgressed(
     const gfx::Animation* animation) {
   if (animation == &slide_) {
     const double t = slide_.GetCurrentValue() * kSlideDuration.InSecondsF();
-    SetProgress(from_ + (target_ - from_) * Spring(t));
+    SetProgress(from_ + (target_ - from_) * LibrarySpring(t));
   } else if (animation == &resize_) {
     const double eased =
         gfx::CubicBezier(0.36, 0.06, 0, 0.94).Solve(resize_.GetCurrentValue());
@@ -459,6 +455,7 @@ void KoanLibraryController::DestroyWidget() {
 
 void KoanLibraryController::AnimateTo(double target) {
   slide_.Stop();
+  UseCompositorFrames();
   from_ = progress_;
   target_ = target;
   if (gfx::Animation::PrefersReducedMotion()) {
@@ -468,19 +465,116 @@ void KoanLibraryController::AnimateTo(double target) {
   slide_.Start();
 }
 
+void KoanLibraryController::UseCompositorFrames() {
+  // The spring steps with the window's frames (at the display's rate, e.g.
+  // 120 Hz on ProMotion) rather than on a 60 Hz timer. Only layers' transforms
+  // and opacities change on each step (SetProgress()): nothing is laid out.
+  if (frames_container_ || !browser_view_->GetWidget() ||
+      !browser_view_->GetWidget()->GetCompositor()) {
+    return;
+  }
+  frames_container_ = base::MakeRefCounted<gfx::AnimationContainer>();
+  frames_container_->SetAnimationRunner(
+      std::make_unique<views::CompositorAnimationRunner>(
+          browser_view_->GetWidget()));
+  slide_.SetContainer(frames_container_.get());
+}
+
 void KoanLibraryController::SetProgress(double progress) {
   progress_ = progress;
   if (!view_) {
     return;
   }
-  // It slides in from the sidebar's side of the window.
+  views::View* sidebar = GetSidebar();
+  float extent = 0;
+  if (sidebar) {
+    // How far it reaches in from the Library's edge of the window.
+    const gfx::Rect bounds =
+        sidebar->ConvertRectToWidget(sidebar->GetLocalBounds());
+    const gfx::Rect area = GetArea();
+    extent = static_cast<float>(on_screen_right_ ? area.right() - bounds.x()
+                                                 : bounds.right() - area.x());
+  }
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  const bool compact = controller && controller->compact_mode() &&
+                       controller->compact_mode()->hides_sidebar();
+  const LibraryMotion motion =
+      GetLibraryMotion(static_cast<float>(progress), static_cast<float>(width_),
+                       extent, compact);
+  // It comes in from the sidebar's side of the window.
+  const float outward = on_screen_right_ ? 1.f : -1.f;
   gfx::Transform transform;
-  transform.Translate((on_screen_right_ ? 1 : -1) * (1 - progress) * width_, 0);
+  transform.Translate(outward * motion.panel_offset, 0);
   view_->layer()->SetTransform(transform);
+  view_->layer()->SetOpacity(motion.panel_opacity);
+  if (sidebar) {
+    MoveSidebar(sidebar, motion);
+  }
+}
+
+views::View* KoanLibraryController::GetSidebar() const {
+  views::View* sidebar = browser_view_->tab_strip_view();
+  return sidebar && sidebar->GetVisible() && sidebar->width() > 0 &&
+                 sidebar->GetClassName() == "VerticalTabStripRegionView"
+             ? sidebar
+             : nullptr;
+}
+
+void KoanLibraryController::MoveSidebar(views::View* sidebar,
+                                        const LibraryMotion& motion) {
+  const bool at_rest = motion.sidebar_offset == 0 &&
+                       motion.sidebar_scale == 1 && motion.sidebar_opacity == 1;
+  if (at_rest && sidebar_layered_.empty()) {
+    return;
+  }
+  // The sidebar's children, not the sidebar itself: compact mode slides the
+  // sidebar's own layer in and out (koan_sidebar_animation.h), and the two
+  // add up. Each gets a layer for as long as the Library moves the sidebar
+  // (RestoreSidebar()).
+  const float outward = on_screen_right_ ? 1.f : -1.f;
+  const gfx::PointF center(sidebar->width() / 2.f, sidebar->height() / 2.f);
+  for (views::View* child : sidebar->children()) {
+    if (!child->layer()) {
+      if (!child->GetVisible() || at_rest) {
+        continue;
+      }
+      child->SetPaintToLayer();
+      child->layer()->SetFillsBoundsOpaquely(false);
+      sidebar_layered_.push_back(std::make_unique<views::ViewTracker>(child));
+    }
+    // Scaled about the sidebar's centre (Zen's toolbox transform-origin), in
+    // the child's layer's terms.
+    gfx::Transform transform;
+    transform.Translate(outward * motion.sidebar_offset * sidebar->width(), 0);
+    gfx::Transform scale;
+    scale.Scale(motion.sidebar_scale, motion.sidebar_scale);
+    transform.PreConcat(gfx::TransformAboutPivot(
+        center - gfx::Vector2dF(child->GetMirroredX(), child->y()), scale));
+    child->layer()->SetTransform(transform);
+    child->layer()->SetOpacity(motion.sidebar_opacity);
+  }
+}
+
+void KoanLibraryController::RestoreSidebar() {
+  // (Also a sidebar hidden since: it comes back at rest.)
+  views::View* sidebar = browser_view_->tab_strip_view();
+  if (sidebar && sidebar->GetClassName() == "VerticalTabStripRegionView") {
+    MoveSidebar(sidebar, LibraryMotion());
+  }
+  for (const std::unique_ptr<views::ViewTracker>& tracker :
+       std::exchange(sidebar_layered_, {})) {
+    if (views::View* view = tracker->view(); view && view->layer()) {
+      view->DestroyLayer();
+    }
+  }
 }
 
 void KoanLibraryController::Finish() {
   SetProgress(target_);
+  if (target_ == 0) {
+    RestoreSidebar();
+  }
   if (target_ == 0 && widget_) {
     widget_->Hide();
     ScheduleCleanup();

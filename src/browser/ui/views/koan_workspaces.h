@@ -520,10 +520,17 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Drags the sliding views (GetSlidingViews()) `offset` pixels from rest.
   void SetSlidingOffset(float offset);
   void OnSwipeTimeout();
-  // Lets the views the swipe dragged go back to rest.
+  // Lets the views the swipe dragged go back to rest, on the switch
+  // animation's timing (Zen's: the swipe animates back), then drops their
+  // layers. Whatever ended the swipe: fingers lifted short of switching or of
+  // the add-Space badge's threshold, the idle timeout, the window going
+  // inactive, the Library taking the swipe over.
   void SpringBackSwipe();
+  // The sliding views whose layers aren't (or won't be) at rest.
+  std::vector<views::View*> GetOffsetViews() const;
   void OnSlideOutDone(SlideOutLayers* slide_out);
-  // Drops the layers the animation gave the header and the tabs.
+  // Drops the layers the animation gave the header and the tabs, and puts
+  // any other sliding view back at rest at once.
   void DropSwitchLayers();
 
   void OnTintPrefChanged();
