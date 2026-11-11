@@ -79,6 +79,7 @@ source_set("browsertests_impl") {
     "//testing/gmock",
     "//testing/gtest",
     "//ui/actions",
+    "//ui/base",
     "//ui/base:types",
     "//ui/gfx/geometry",
     "//ui/views",

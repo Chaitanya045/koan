@@ -21,6 +21,7 @@
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/base/models/list_selection_model.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
@@ -240,6 +241,86 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, ManySpacesStayInTheSwitcher) {
     spaces->SwitchTo(infos[index].id);
     EXPECT_TRUE(base::test::RunUntil(active_shown)) << index;
   }
+}
+
+// Zen's tab drag across Spaces (koan_space_drag.h) moves the dragged tabs
+// into the Space it switches to while upstream's drag goes on. Upstream's
+// drag takes the selection to be its tabs: entering a container,
+// TabDragHandler::HandleDraggedTabsIntoNode() counts every dragged tab
+// before the index it moves to, then calls MoveSelectedTabsTo(). With only
+// the shown tab selected after the switch, that index fell inside the new
+// Space while the move was to no group, and
+// TabCollection::FindMovePositionRecursive() CHECKed (a crash on the Mac,
+// dragging two tabs to another Space). Guards that upstream behaviour too.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       DragToAnotherSpaceKeepsTheDraggedTabsSelected) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* model = browser()->GetTabStripModel();
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+        browser(), GURL(url::kAboutBlankURL),
+        WindowOpenDisposition::kNewForegroundTab,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  }
+  const tab_groups::TabGroupId home = spaces->GetSpaces()[0].id;
+  spaces->CreateSpace(u"Work", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  spaces->CreateSpace(u"Play", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  // Work is the middle Space, so tabs come after it.
+  const tab_groups::TabGroupId work = spaces->GetSpaces()[1].id;
+  spaces->SwitchTo(home);
+
+  // Two of Home's tabs (rows, not its empty tab) are dragged, the second one
+  // picked up.
+  std::vector<int> home_tabs = TabsOfSpace(model, home);
+  std::erase_if(home_tabs, [&](int index) {
+    return IsEmptyTab(model->GetTabAtIndex(index));
+  });
+  ASSERT_GE(home_tabs.size(), 2u);
+  tabs::TabInterface* first = model->GetTabAtIndex(home_tabs[0]);
+  tabs::TabInterface* picked = model->GetTabAtIndex(home_tabs[1]);
+  ui::ListSelectionModel selection;
+  selection.AddIndexToSelection(static_cast<size_t>(home_tabs[0]));
+  selection.AddIndexToSelection(static_cast<size_t>(home_tabs[1]));
+  selection.set_active(static_cast<size_t>(home_tabs[1]));
+  selection.set_anchor(static_cast<size_t>(home_tabs[1]));
+  model->SetSelectionFromModel(std::move(selection));
+  const std::vector<tabs::TabInterface*> dragged = {first, picked};
+
+  // Held over Work's Space button.
+  spaces->MoveDraggedTabsToSpace(dragged, work);
+  EXPECT_EQ(work, *spaces->GetActiveSpace());
+  EXPECT_EQ(picked, model->GetActiveTab());
+  EXPECT_EQ(work, first->GetGroup());
+  EXPECT_EQ(work, picked->GetGroup());
+  EXPECT_TRUE(model->IsTabSelected(model->GetIndexOfTab(first)));
+  EXPECT_TRUE(model->IsTabSelected(model->GetIndexOfTab(picked)));
+  EXPECT_EQ(2u, model->selection_model().size());
+
+  // What upstream's drag then does on entering the tab strip's container
+  // (not a group's) with the picked-up tab in a group: the dragged tabs go
+  // after that group.
+  const auto dragged_before = [&](int index) {
+    return static_cast<int>(std::ranges::count_if(
+        dragged, [&](auto* tab) { return model->GetIndexOfTab(tab) < index; }));
+  };
+  const int work_end = TabsOfSpace(model, work).back() + 1;
+  model->MoveSelectedTabsTo(
+      std::clamp(work_end - dragged_before(work_end), 0, model->count() - 1),
+      std::nullopt);
+  EXPECT_EQ(model->GetIndexOfTab(first) + 1, model->GetIndexOfTab(picked));
+  EXPECT_EQ(TabsOfSpace(model, work).back() + 1, model->GetIndexOfTab(first));
+
+  // And on entering Work's own container again, from after it: they go in
+  // at its end.
+  const int work_end_now = TabsOfSpace(model, work).back() + 1;
+  model->MoveSelectedTabsTo(work_end_now - dragged_before(work_end_now), work);
+  EXPECT_EQ(work, first->GetGroup());
+  EXPECT_EQ(work, picked->GetGroup());
+  EXPECT_EQ(model->GetIndexOfTab(first) + 1, model->GetIndexOfTab(picked));
 }
 
 }  // namespace koan

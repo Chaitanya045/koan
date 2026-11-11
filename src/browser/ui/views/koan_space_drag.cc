@@ -192,9 +192,9 @@ void KoanSpaceDrag::SwitchWithDraggedTabs(const tab_groups::TabGroupId& space) {
     controller_->SwitchTo(space);
     return;
   }
-  // (Moves them to the end of the Space and shows it on the picked-up tab;
-  // the drag then places them.)
-  controller_->MoveTabsToSpace(tabs, space);
+  // (Moves them to the end of the Space and shows it on the picked-up tab,
+  // keeping them the selection; the drag then places them.)
+  controller_->MoveDraggedTabsToSpace(tabs, space);
 }
 
 bool KoanSpaceDrag::IsOverEssentials(views::View* region,

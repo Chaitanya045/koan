@@ -270,6 +270,15 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // To" in the tab context menu).
   void MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
                        const tab_groups::TabGroupId& space);
+  // The same for the tabs of a tab drag that goes on in `space` (Zen's
+  // drag across Spaces, koan_space_drag.h): they stay the selection, with
+  // the last one active. Upstream's drag takes the selection to be the tabs
+  // it drags (TabDragHandler::HandleDraggedTabsIntoNode() counts every
+  // dragged tab before the index it moves to, then moves the selected ones);
+  // a selection of one of them would make that index point inside the
+  // Space, and TabStripCollection::GetMovePosition() CHECKs.
+  void MoveDraggedTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
+                              const tab_groups::TabGroupId& space);
 
   // Upstream's tab group command `command_id` (IDC_CREATE_NEW_TAB_GROUP,
   // IDC_CLOSE_TAB_GROUP, ...) as a Spaces window runs it: Zen's equivalent
