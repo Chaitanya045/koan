@@ -34,7 +34,12 @@ async function openNewTab() {
 const koan = 'chrome://koan-newtab/';
 let tab = await openNewTab();
 check('chrome://newtab shows Koan\'s page', tab.href === koan, tab.href);
-check('...titled New Tab', await evalIn(tab.page, 'document.title') === 'New Tab');
+{
+  const t = await evalIn(tab.page, '({ title: document.title, lang: document.documentElement.lang })');
+  // IDS_NEW_TAB_TITLE in the browser's locale: on macOS the system's
+  // (en-GB says "New tab").
+  check('...titled New Tab', /^New tab$/i.test(t?.title ?? ''), JSON.stringify(t));
+}
 
 const facts = await evalIn(tab.page, `({
     children: document.body.children.length,
@@ -148,13 +153,16 @@ await tab.close();
 
 // What the browser logged while new tabs opened and closed: nothing about a
 // refused chrome://newtab/, in-product help for Spaces, or the on-device
-// model service.
+// model service. (A promo asked for before the browser finished starting
+// logs "Attempting to show IPH ...; IPH will not be shown" before upstream
+// looks at whether the feature is on: Koan turns those off, so that line is
+// not one; see koan_feature_overrides.cc, O13.)
 const log = process.env.KOAN_LOG ? fs.readFileSync(process.env.KOAN_LOG, 'utf8') : '';
 for (const [what, pattern] of [
     ['a refused chrome://newtab/ load', /incorrect profile type/],
     ['in-product help for tab groups', /IPH_TabGroups/],
     ['the on-device model service', /on_device_model/]]) {
-  const lines = log.split('\n').filter(l => pattern.test(l));
+  const lines = log.split('\n').filter(l => pattern.test(l) && !/IPH will not be shown/.test(l));
   check(`The browser's log has nothing about ${what}`,
         process.env.KOAN_LOG && lines.length === 0, lines.slice(0, 2).join(' | '));
 }
