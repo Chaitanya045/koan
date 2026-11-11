@@ -9,7 +9,22 @@ diff --git a/chrome/browser/ui/views/omnibox/omnibox_popup_view_views.cc b/chrom
  #include "ui/accessibility/ax_node_data.h"
  #include "ui/base/metadata/metadata_impl_macros.h"
  #include "ui/compositor/closure_animation_observer.h"
-@@ -757,6 +758,11 @@
+@@ -347,7 +348,13 @@
+       // Drop stale metrics callbacks.
+       metrics_weak_factory_.InvalidateWeakPtrs();
+ 
+-      widget_->CloseAnimated();  // This will eventually delete the popup.
++      // Koan: no 82 ms fade-out (Zen's results close in a single frame). On
++      // macOS a popup opened while the previous one was still fading out was
++      // torn down with it, and `widget_` still pointed at it, so no
++      // suggestions showed again until the omnibox closed. Close() orders
++      // the window out now and deletes it in a posted task, ahead of
++      // whatever opens the next popup.
++      widget_->Close();  // This will eventually delete the popup.
+       widget_->RemoveObserver(&widget_observer_helper_);
+       widget_.reset();
+ 
+@@ -757,6 +764,11 @@
  
    // Finally, expand the widget to accommodate the custom-drawn shadows.
    content_rect.Inset(-RoundedOmniboxResultsFrame::GetShadowInsets());
