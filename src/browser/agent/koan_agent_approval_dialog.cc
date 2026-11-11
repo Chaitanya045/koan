@@ -99,15 +99,17 @@ void Allow(uint64_t id, ClientCapabilities requested) {
     return;
   }
   ui::DialogModel& model = *it->second.model;
-  auto checked = [&](ui::ElementIdentifier element) {
-    ui::DialogModelCheckbox* box = model.GetCheckboxByUniqueId(element);
-    return box && box->is_checked();
+  // Only the checkboxes that were added (one per capability asked for):
+  // GetCheckboxByUniqueId() CHECKs that the field exists, so asking for one
+  // that isn't there crashed Koan when the user pressed Allow.
+  auto checked = [&](bool requested_it, ui::ElementIdentifier element) {
+    return requested_it && model.GetCheckboxByUniqueId(element)->is_checked();
   };
   ClientCapabilities granted;
-  granted.observe = checked(kObserveId);
-  granted.read = checked(kReadId);
-  granted.drive = checked(kDriveId);
-  granted.keep_awake = checked(kKeepAwakeId);
+  granted.observe = checked(requested.observe, kObserveId);
+  granted.read = checked(requested.read, kReadId);
+  granted.drive = checked(requested.drive, kDriveId);
+  granted.keep_awake = checked(requested.keep_awake, kKeepAwakeId);
   ApprovalDecision decision;
   decision.approved = true;
   decision.granted = Intersect(requested, granted);
