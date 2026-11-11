@@ -1,4 +1,5 @@
 diff --git a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.cc b/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.cc
+index 962bd81c7b49428f12b7f487f35a60be791e480d..6721bad2673528bf2edfb05bfa4f033b85ee34a8 100644
 --- a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.cc
 +++ b/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.cc
 @@ -8,6 +8,7 @@
@@ -17,7 +18,37 @@ diff --git a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_liste
  
  namespace content {
  class WebContents;
-@@ -68,6 +70,11 @@
+@@ -29,6 +31,29 @@ class WebContents;
+ 
+ namespace tab_groups {
+ 
++namespace {
++
++// Koan: a Space that was one of an old profile's saved groups is disconnected
++// from it through the service's public RemoveLocalTabGroupMapping()
++// (KoanWorkspaceController::DisconnectSavedGroups()). DisconnectLocalTabGroup()
++// pairs that with dropping the group's listener, which a listener for a group
++// the service no longer maps needs before the next tab move, add or resume
++// (it CHECKs the saved group). So any such listener goes first.
++void DropKoanDisconnectedListeners(
++    std::unordered_map<TabGroupId, LocalTabGroupListener, TabGroupIdHash>&
++        listeners,
++    TabGroupSyncService* service,
++    Profile* profile) {
++  if (koan::SavesTabGroups(profile)) {
++    return;
++  }
++  std::erase_if(listeners, [service](const auto& entry) {
++    return !service->GetGroup(entry.first).has_value();
++  });
++}
++
++}  // namespace
++
+ SavedTabGroupModelListener::SavedTabGroupModelListener() = default;
+ 
+ SavedTabGroupModelListener::SavedTabGroupModelListener(
+@@ -68,6 +93,11 @@ void SavedTabGroupModelListener::OnTabGroupAdded(
        browser->GetTabStripModel()->IsEphemeralTabGroup(group_id)) {
      return;
    }
@@ -29,3 +60,67 @@ diff --git a/chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_liste
  
    auto group_and_tab_guid_mapping = CreateSavedTabGroupAndTabMapping(group_id);
  
+@@ -96,6 +126,7 @@ void SavedTabGroupModelListener::OnTabGroupWillBeRemoved(
+ 
+ void SavedTabGroupModelListener::OnTabGroupChanged(
+     const TabGroupChange& change) {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   if (!local_tab_group_listeners_.contains(change.group)) {
+     return;
+   }
+@@ -145,6 +176,7 @@ void SavedTabGroupModelListener::TabGroupedStateChanged(
+     std::optional<tab_groups::TabGroupId> new_local_group_id,
+     tabs::TabInterface* tab,
+     int index) {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   // Remove `contents` from its current saved group, if it's in one.
+   for (auto& [local_group_id, listener] : local_tab_group_listeners_) {
+     if (local_group_id != new_local_group_id) {
+@@ -177,6 +209,7 @@ void SavedTabGroupModelListener::OnTabStripModelChanged(
+     TabStripModel* tab_strip_model,
+     const TabStripModelChange& change,
+     const TabStripSelectionChange& selection) {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   switch (change.type()) {
+     case TabStripModelChange::kMoved: {
+       std::optional<tab_groups::TabGroupId> local_id =
+@@ -271,6 +304,7 @@ void SavedTabGroupModelListener::ConnectToLocalTabGroup(
+ 
+ void SavedTabGroupModelListener::PauseTrackingLocalTabGroup(
+     const tab_groups::TabGroupId& group_id) {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   if (!local_tab_group_listeners_.contains(group_id)) {
+     return;
+   }
+@@ -279,6 +313,7 @@ void SavedTabGroupModelListener::PauseTrackingLocalTabGroup(
+ 
+ void SavedTabGroupModelListener::ResumeTrackingLocalTabGroup(
+     const tab_groups::TabGroupId& group_id) {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   if (!local_tab_group_listeners_.contains(group_id)) {
+     return;
+   }
+@@ -286,6 +321,7 @@ void SavedTabGroupModelListener::ResumeTrackingLocalTabGroup(
+ }
+ 
+ void SavedTabGroupModelListener::PauseLocalObservation() {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   for (auto& pair : local_tab_group_listeners_) {
+     LocalTabGroupListener& listener = pair.second;
+     listener.PauseTracking();
+@@ -293,6 +329,7 @@ void SavedTabGroupModelListener::PauseLocalObservation() {
+ }
+ 
+ void SavedTabGroupModelListener::ResumeLocalObservation() {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   for (auto& pair : local_tab_group_listeners_) {
+     LocalTabGroupListener& listener = pair.second;
+     listener.ResumeTracking();
+@@ -320,6 +357,7 @@ void SavedTabGroupModelListener::RemoveLocalGroupFromSync(
+ 
+ void SavedTabGroupModelListener::UpdateLocalGroupFromSync(
+     tab_groups::TabGroupId local_group_id) {
++  DropKoanDisconnectedListeners(local_tab_group_listeners_, service_, profile_);
+   if (!local_tab_group_listeners_.contains(local_group_id)) {
+     return;
+   }

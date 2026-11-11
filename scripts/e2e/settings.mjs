@@ -1,6 +1,6 @@
 // End-to-end test of chrome://koan-settings against a real build: the page
 // lists Koan's settings like Zen's preferences, changes apply live (layout,
-// compact mode, workspace tint), incognito windows and the page agree, the
+// compact mode, Space themes), incognito windows and the page agree, the
 // page follows changes made elsewhere, the handler refuses what the page
 // can't set, and the shortcut editor rebinds, refuses conflicts, clears and
 // resets keys, each checked by what the keys then do.
@@ -13,7 +13,8 @@
 import {
   ALT, CTRL, SHIFT, browserCall, check, countViews, evalIn, finish,
   createSpace, front, key, menuMouse, onPage, openMenus, pages, readPref,
-  settingsCall, sleep, viewMouse, viewTree, visiblePage, waitFor,
+  settingsCall, sleep, viewEvent, viewMouse, viewTree, visiblePage, waitFor,
+  windowTints,
 } from './lib/koan.mjs';
 
 const SHOTS = process.env.SHOTS;
@@ -136,6 +137,13 @@ check('Tab Management has the tint, Zen\'s tab and pinned tab settings and the '
       rowLabels.some(l => l.startsWith('Close Tab Shortcut Behavior')) &&
       rowLabels.some(l => l.startsWith('When closing a tab, switch to the most recently used')) &&
       rowLabels.some(l => l.startsWith('Freeze background tabs')),
+      JSON.stringify(rowLabels));
+
+// The translucent window's settings exist on macOS only (the window glass is
+// a macOS feature), so this build, off macOS, has no such rows.
+check('No glass settings off macOS',
+      !rowLabels.some(l => l.startsWith('Translucent window') ||
+                           l.startsWith('Window tint')),
       JSON.stringify(rowLabels));
 
 // The freeze switch is Chromium's own (local-state) pref: on by default,
@@ -283,31 +291,49 @@ check('Ctrl+, with the page open on another pane switches to it, no second tab',
       (await settingsPages()).length === 1 && (await visiblePage())?.id === settings.id,
       `${(await settingsPages()).length} settings tab(s)`);
 
-// Workspace tint, live: off restores the user's colour, on tints again.
+// Space themes (the "tint" row): per window, so a Space's theme tints only
+// its window and leaves the profile's colour alone; the switch applies live
+// (scripts/e2e/theme.mjs checks the themes themselves).
 const tint = `document.querySelector('[data-pref="koan.workspaces.tint"] input')`;
 await waitFor(() => evalIn(settings, `!!document.querySelector('#category-tabs')`));
 await evalIn(settings, `document.querySelector('#category-tabs').click()`);
+const userColor = await readPref('browser.theme.user_color2');
 await front(other);
-// A new Space has Zen's default theme; Edit Theme... gives it a colour.
-await createSpace(other, 'Tinted');
+// A new Space gets a theme with Theme... (the theme picker): Space
+// themes are per window, so the profile's colour stays.
+await createSpace(other, 'Themed');
 const header = (await viewTree()).find(v => v.cls === 'KoanSpaceHeaderView' && v.shown);
 for (const type of ['mousePressed', 'mouseReleased']) {
   await viewMouse(header, type, 20, 20, 'right');
 }
 await sleep(1000);
-let [menu] = openMenus(await viewTree());
-await menuMouse(menu, menu.items[2]);  // Edit Theme...
-[menu] = openMenus(await viewTree());
-await menuMouse(menu, menu.items[1]);  // Blue
-const seed = await waitFor(() => readPref('koan.workspaces.tint_applied'));
-check('A Space with a colour tints the browser',
-      seed && await readPref('browser.theme.user_color2') === seed, `seed ${seed}`);
+const [menu] = openMenus(await viewTree());
+await menuMouse(menu, menu.items[2]);  // Theme...
+const swatch = await waitFor(async () => (await viewTree()).find(
+    v => v.cls === 'KoanThemeSwatch' && v.shown));
+check('Theme... opens the theme picker', !!swatch);
+if (swatch) {
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await viewMouse(swatch, type, 13, 13);
+  }
+  await sleep(800);
+  // Esc, in the picker, closes (and saves) it.
+  await viewEvent(swatch, 'DOM.dispatchKeyEvent', { type: 'keyPressed', keyCode: 27,
+    code: 0, flags: 0, key: 0, isChar: false });
+  await sleep(800);
+}
+const seed = await waitFor(async () => (await windowTints()).find(t => t));
+check("A Space's theme tints its window and leaves the browser's colour alone",
+      !!seed &&
+      await readPref('browser.theme.user_color2') === userColor &&
+      await readPref('koan.workspaces.tint_applied') === 0);
 await evalIn(settings, `${tint}.click()`);
-check('Switching the tint off restores the browser\'s colour at once',
-      await waitFor(async () => !await readPref('koan.workspaces.tint_applied')) &&
-      await readPref('browser.theme.user_color2') !== seed);
+check('Switching Space themes off gives the window the user\'s colour at once',
+      await waitFor(async () => await readPref('koan.workspaces.tint') === false &&
+                                (await windowTints()).every(t => !t)));
 await evalIn(settings, `${tint}.click()`);
-check('...and switching it on tints it again',
-      await waitFor(async () => await readPref('browser.theme.user_color2') === seed));
+check('...and switching them on tints it again',
+      await waitFor(async () => await readPref('koan.workspaces.tint') === true &&
+                                (await windowTints()).includes(seed)));
 
 finish();

@@ -132,7 +132,7 @@ class KoanDownloadTileView : public views::View {
     canvas->DrawRoundRect(tile, DownloadTileCornerRadius(), flags);
     // Zen's box shows the Library icon: the downloads live there.
     canvas->DrawImageInt(
-        gfx::CreateVectorIcon(kLibraryIcon, kDownloadTileIconSize,
+        gfx::CreateVectorIcon(kKoanLibraryIcon, kDownloadTileIconSize,
                               colors->GetColor(kColorKoanDownloadTileIcon)),
         (width() - kDownloadTileIconSize) / 2,
         (height() - kDownloadTileIconSize) / 2);

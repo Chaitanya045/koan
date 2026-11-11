@@ -1,0 +1,13 @@
+diff --git a/chrome/browser/ui/navigator/BUILD.gn b/chrome/browser/ui/navigator/BUILD.gn
+index 335b892348183e78450ddfb32974bf26480f8037..a3d25307407c0695c5de2d765c588c226b5b88d3 100644
+--- a/chrome/browser/ui/navigator/BUILD.gn
++++ b/chrome/browser/ui/navigator/BUILD.gn
+@@ -101,6 +101,8 @@ source_set("impl") {
+       "//chrome/browser/ui/web_applications",
+       "//chrome/browser/ui/web_applications:launch_utils",
+       "//chrome/browser/ui/window_feature_controller",
++      "//koan/browser/containers:partition",
++      "//koan/browser/ui/views",
+     ]
+   }
+ }

@@ -1,19 +1,20 @@
 // End-to-end test that the sidebar animates without laying anything out
 // again on every frame (a relayout storm flickers, most on macOS):
-// - expanding, collapsing and compact mode's hiding of the sidebar resize the
-//   page once, not on every frame (counted as the page's resize events);
+// - the sidebar button (it toggles compact mode) and compact mode's hiding and
+//   showing of the sidebar resize the page once, not on every frame (counted
+//   as the page's resize events);
 // - the hidden sidebar's reveal lays the strip out once, at the width it
 //   shows at, and slides it in with a layer transform (sampled as the strip's
 //   width while it slides in and out), and doesn't resize the page at all.
 //
 //   scripts/e2e/run.sh sidebar_animation
-import { CTRL, ALT, boundsOf, check, evalIn, finish, key, mouseOn, sleep, views, visiblePage }
+import { CTRL, boundsOf, check, evalIn, finish, key, mouseOn, sleep, views, visiblePage }
     from './lib/koan.mjs';
 
 const findShown = (vs, cls) => vs.find(v => v.cls === cls && v.shown);
-const VK = { S: 83, B: 66 };
+const VK = { S: 83 };
 // Upstream's expand-on-hover width, which compact mode's reveal slides in.
-const REVEAL_WIDTH = 240;
+const REVEAL_WIDTH = 230;  // koan::prefs::kSidebarDefaultWidth, Zen's
 // A frame at a time would be ~15 resizes for a 250 ms animation; a single
 // reflow gives one, plus what the layout switch around it adds.
 const MAX_RESIZES = 4;
@@ -52,14 +53,22 @@ async function sampleStripWidths(ms) {
 }
 const distinct = widths => [...new Set(widths)].sort((a, b) => a - b);
 
-// The sidebar's toggle collapses and expands it.
+// The sidebar's button toggles compact mode, as in Zen: the sidebar hides and
+// comes back (the slide is Koan's, the page resizes once).
 await resizes();
 let vs = await views();
 await clickOn(toggleOf(vs));
-check('Collapsing the sidebar resizes the page once, not on every frame',
+vs = await views();
+check('The sidebar button turns compact mode on: the sidebar takes no space',
+      !findShown(vs, 'VerticalTabStripRegionView') ||
+      findShown(vs, 'VerticalTabStripRegionView').w === 0);
+check('...resizing the page once, not on every frame',
       (await resizes()) <= MAX_RESIZES);
-await press(VK.B, CTRL | ALT, 'b');
-check('...and so does expanding it', (await resizes()) <= MAX_RESIZES);
+await press(VK.S, CTRL, 's');
+vs = await views();
+check('Compact mode off brings the sidebar back',
+      findShown(vs, 'VerticalTabStripRegionView')?.w >= 200);
+check('...resizing the page once', (await resizes()) <= MAX_RESIZES);
 
 // Compact mode hides it without a jump.
 await press(VK.S, CTRL, 's');

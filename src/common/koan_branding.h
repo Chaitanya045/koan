@@ -12,6 +12,24 @@ namespace koan {
 // noise. Checked in chrome/browser/ui/startup/infobar_utils.cc.
 inline constexpr bool kShowGoogleApiKeysInfoBar = false;
 
+// Chromium's own first run: the sign-in intro window ("Welcome to Chromium",
+// the profile picker's first-run flow). Zen has its own welcome (Koan's is
+// koan_welcome.cc, gated on first_run::IsChromeFirstRun()), so Koan registers
+// prefs::kFirstRunFinished as already true. Used by
+// chrome/browser/ui/startup/first_run_service.cc.
+inline constexpr bool kShowChromiumFirstRun = false;
+
+// The default-browser, pin and PDF-viewer infobars on later launches. Zen asks
+// once, in its welcome. Checked in
+// chrome/browser/ui/startup/infobar_utils.cc.
+inline constexpr bool kShowDefaultBrowserPrompts = false;
+
+// After a crash, Zen restores the previous session without asking
+// (SessionStartup / SessionStore patches). Chromium shows a "Restore pages?"
+// bubble and restores only when it is clicked. Checked in
+// chrome/browser/ui/startup/infobar_utils.cc.
+inline constexpr bool kRestoreAfterCrashWithoutAsking = true;
+
 // Like Zen, Koan reopens the previous session on startup by default, so
 // workspaces and Essentials survive restarts. Users can still change it in
 // Settings > On startup. Checked in

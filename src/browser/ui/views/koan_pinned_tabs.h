@@ -71,6 +71,12 @@ struct KoanTabState {
   // Moved to another Space, or restored: back at the end of its Space's
   // pinned tabs if it isn't among them.
   bool changed_group = false;
+  // Moved by a tab drag since the last check: Zen's drop rules apply. Other
+  // moves (the keyboard, an extension) stay in their section, as Zen keeps
+  // pinned and unpinned tabs apart (moveTabTo). (A move Koan didn't make
+  // while this window's drag is on, or one in the moments between a drop
+  // and the check, counts as dragged too: rare, and decided like a drop.)
+  bool dragged = false;
   // Got its pinned URL when it was added, before the session knew the tab.
   bool unsaved = false;
 
@@ -156,6 +162,13 @@ class KoanPinnedTabController : public TabStripModelObserver {
   void AddToEssentials(tabs::TabInterface* tab);
   // The tab becomes a normal tab of the active Space, as in Zen.
   void RemoveFromEssentials(tabs::TabInterface* tab);
+  // Duplicate (the tab menu, the menu bar, extensions) made `duplicate` from
+  // `source`: Zen's duplicate of a pinned tab or Essential is a normal tab of
+  // the active Space (SessionStore's duplicate path drops the pin), below the
+  // pinned tabs. Chromium's stays an Essential, and a pinned tab's lands in
+  // the pinned run.
+  void OnTabDuplicated(const tabs::TabInterface* source,
+                       tabs::TabInterface* duplicate);
 
   // Goes back to the pinned URL with a fresh history, like Zen's reset. A
   // tab that isn't loaded stays so and goes there when it is next shown.
@@ -191,6 +204,17 @@ class KoanPinnedTabController : public TabStripModelObserver {
 
   // Writes the tab's state to the session.
   void SaveTabState(content::WebContents* contents);
+
+  // Window sync (KoanWindowSyncClient): makes `tab` an Essential, or a
+  // pinned tab of the Space it is in, with `pinned_url` and the label and
+  // icon of "Change Label…" / "Change Icon…", as it is in another window.
+  // None of the user's pinning rules run, no toast shows and the tab doesn't
+  // navigate; the caller puts it in its place.
+  void SetSyncedPin(tabs::TabInterface* tab,
+                    bool essential,
+                    const GURL& pinned_url,
+                    const std::u16string& custom_title,
+                    const std::u16string& custom_icon);
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -251,6 +275,8 @@ class KoanPinnedTabController : public TabStripModelObserver {
   // is pinned, an Essential dropped there keeps its pinned URL) and the
   // Essentials' limit.
   void ScheduleNormalize(tabs::TabInterface* tab);
+  // A tab drag is on in this window (moving, or dragged in, here).
+  bool IsDraggingHere() const;
   void Normalize();
   // Clears the tab's pinned state (it stays where it is).
   void ClearPinnedState(tabs::TabInterface* tab);

@@ -31,6 +31,40 @@ jobs:
         env:
           KOAN_CHROMIUM_FILE_CACHE: ${{ runner.temp }}/koan-chromium-files
         run: scripts/ci/check_patches.sh
+      - name: Check agent control's method policy against the pinned protocol
+        env:
+          KOAN_CHROMIUM_FILE_CACHE: ${{ runner.temp }}/koan-chromium-files
+        run: scripts/ci/check_agent_policy.sh
+
+  patch-health:
+    name: Patch health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The whole history: the report compares with the PR's merge base.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch count, size, new and grown patches; a new patch needs a docs/REBASE.md row
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          args=(--summary "$GITHUB_STEP_SUMMARY")
+          if [[ -n $BASE_REF ]]; then
+            args+=(--base "$(git merge-base "origin/$BASE_REF" HEAD)")
+          fi
+          python3 -I scripts/ci/patch_report.py "${args[@]}"
+
+  private-details:
+    name: Private details
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # The repository is public: no .local host name, private IP address or
+      # ssh key path of the Mac bench in a tracked text file (scripts/mac/README.md).
+      - name: No private host names, addresses or key paths
+        run: python3 -I scripts/ci/check_private_info.py
 
   tests:
     name: Unit tests
@@ -43,6 +77,10 @@ jobs:
           python-version: "3.12"
       - name: Branding rules and the Chromium release watcher
         run: python -I -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      # No checkout needed: the inventory is of the pinned revision
+      # (scripts/agent/list_keyed_services.py writes it on a roll).
+      - name: Every per-profile service is decided for agent containers
+        run: python -I scripts/agent/check_agent_services.py
 
   lint:
     name: Lint
@@ -64,7 +102,38 @@ jobs:
             xargs clang-format --style=file --dry-run --Werror
       - name: shellcheck
         run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
+      # The friends' Mac build (docs/BUILDING-MAC.md): the scripts parse, and
+      # build.sh plans a fresh clone's build on a faked Mac without running
+      # or fetching anything.
+      - name: Mac build scripts (bash -n, build.sh --dry-run)
+        env:
+          KOAN_FAKE_OS: mac
+          KOAN_FAKE_ARCH: arm64
+          KOAN_FAKE_MACOS: "27.0"
+          KOAN_FAKE_XCODE: Xcode 27.1
+          KOAN_FAKE_XCODE_LICENSE: "0"
+          KOAN_FAKE_METAL: /fake/metal
+          KOAN_FAKE_DISK_GB: "200"
+          KOAN_FAKE_RAM_GB: "16"
+        run: |
+          for f in scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh; do bash -n "$f"; done
+          env -u CI scripts/build.sh --dry-run | tee "$RUNNER_TEMP/plan.txt"
+          if grep -q FAIL "$RUNNER_TEMP/plan.txt"; then exit 1; fi
+          grep -q 'fetch        would: fetch depot_tools and Chromium' "$RUNNER_TEMP/plan.txt"
+      # The workflows, with shellcheck on their run: scripts. The macOS build
+      # runs only nightly or when asked for (macos.yml), so this is all a
+      # pull request that changes it gets automatically.
+      - name: actionlint
+        run: |
+          v=1.7.12
+          f=actionlint_${v}_linux_amd64.tar.gz
+          curl -fsSL -o "$RUNNER_TEMP/$f" "https://github.com/rhysd/actionlint/releases/download/v$v/$f"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/$f" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
       - name: Node scripts parse
         run: for f in scripts/*.mjs scripts/e2e/*.mjs; do node --check "$f"; done
+      - name: GN files are gn-format clean
+        run: scripts/ci/check_gn_format.sh
       - name: Python compiles
-        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/tests/*.py
+        run: python -m py_compile scripts/*.py scripts/ci/*.py scripts/agent/*.py scripts/tests/*.py

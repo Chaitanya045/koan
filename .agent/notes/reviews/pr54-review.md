@@ -13,7 +13,7 @@ Branch `feat/zen-glance-split` at `3ca8a45`, diffed against `origin/develop` (`9
 - The hooks are small and sit where the REBASE.md table says they do.
 - The Linux build log for this branch (`.cache/agent-build-feat-zen-glance-split.log`) ends in a successful build.
 
-**The Mac:** it couldn't be reached over SSH: `chaitanyas-macbook-air` timed out and `192.168.0.104` gave "no route to host". The Mac-specific checks below were done against the Mac sources in the shared Chromium 158 tree instead.
+**The Mac:** it couldn't be reached over SSH: `<mac-host>` timed out and `<mac-ip>` gave "no route to host". The Mac-specific checks below were done against the Mac sources in the shared Chromium 158 tree instead.
 
 Paths are relative to the worktree. "Verified" means traced through the upstream code; nothing was reproduced at runtime.
 

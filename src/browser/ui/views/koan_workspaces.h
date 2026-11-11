@@ -22,6 +22,8 @@
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_color.h"
@@ -29,12 +31,15 @@
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 class ExpandOnHoverLock;
+class PrefService;
 class Profile;
 class TabStripModel;
 
@@ -53,8 +58,10 @@ class View;
 }
 
 namespace ui {
+class Event;
+class MouseEvent;
 class ScrollEvent;
-}
+}  // namespace ui
 
 namespace koan {
 
@@ -62,10 +69,11 @@ class KoanSpaceSwipe;
 
 class KoanCreateMenu;
 class KoanSpaceBarView;
+class KoanSpaceDrag;
+class KoanSpaceRouting;
 class KoanSpaceCreationView;
 class KoanSpaceHeaderView;
 class KoanSpaceMenu;
-class KoanThemeMenu;
 class SlideOutLayers;
 
 // Zen's Spaces for one window, built on upstream tab group focus mode
@@ -75,8 +83,17 @@ class SlideOutLayers;
 // always shows one Space: every unpinned tab belongs to one, and a Space
 // whose last tab closes gets a new tab instead of disappearing.
 //
-// A Space's name, icon and theme are stored in its tab group (see
-// ReadSpace()), so all of it is restored with the session.
+// A Space's name and icon are stored in its tab group, and its theme with
+// its tabs (see ReadSpace()), so all of it is restored with the session; the
+// list is also kept in a profile pref (prefs::kWorkspaceList), for a window
+// that opens without a session restore (RecreateStoredSpaces()).
+//
+// Upstream's focus mode is only the mechanism: its side effects in a Spaces
+// window are Koan's (the window colour, ApplySpaceColor(), which the Space
+// theme's KoanThemeController sets; no freezing of the other Spaces,
+// KeepsOtherSpacesRunning()), and upstream's tab group UI never runs there
+// (the group commands and menus, the group editor, collapsed groups). See
+// .agent/notes/upstream/tab-groups-omnibox-fullscreen.md.
 //
 // Owns the Space header above the tabs, the Create-a-Space form and the
 // bottom bar of the sidebar. Keyboard shortcuts live in
@@ -85,12 +102,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
                                 public views::ViewObserver,
                                 public views::WidgetObserver {
  public:
-  // A Space's theme. Zen gives each Space a gradient (its theme picker);
-  // Koan tints the browser with one colour while the Space is active, or
-  // keeps the user's theme (`color` unset, Zen's default theme).
+  // A Space's theme, Zen's gradient from its theme picker
+  // (KoanThemeController): a theme family's stored dict as JSON (see
+  // theme::GetTokens()), empty for Zen's default theme.
   struct SpaceTheme {
-    std::optional<tab_groups::TabGroupColorId> color;
+    std::string stored;
 
+    bool is_default() const { return stored.empty(); }
     bool operator==(const SpaceTheme&) const = default;
   };
 
@@ -130,6 +148,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
     // Null: always enabled.
     base::RepeatingCallback<bool()> is_enabled;
     base::RepeatingClosure run;
+    // Names the item for UI DevTools (e2e tests), if set.
+    ui::ElementIdentifier element_id;
   };
 
   explicit KoanWorkspaceController(BrowserView* browser_view);
@@ -148,10 +168,27 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // private).
   bool IsEnabled() const;
 
+  // The window's last tab closed and an empty tab is on its way (see
+  // KeepWindowOnLastTabClosed()): keep the closed Space's data meanwhile.
+  void ExpectEmptyTab() { expect_empty_tab_ = true; }
+  // The empty tab KeepWindowOnLastTabClosed() added: this very tab is the
+  // Space's empty tab (not one found by its URL, which a new tab page set by
+  // policy would not show, nor some other blank tab).
+  void AdoptEmptyTab(tabs::TabHandle tab) { empty_tab_ = tab; }
+  // Whether the tabs that left the strip last were closed (and not moved to
+  // another window, which Zen follows by closing this one).
+  bool LastTabsWereClosed() const { return last_removal_closed_; }
+
   // The Spaces in sidebar order, and the active one.
   std::vector<SpaceInfo> GetSpaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveSpace() const;
   std::optional<SpaceInfo> GetSpace(const tab_groups::TabGroupId& space) const;
+  // A Space's id in the stored Spaces (prefs::kWorkspaceList's "id"), made
+  // the first time it's asked for and kept while the window is open. A fresh
+  // start gives each Space it recreates its stored id back, so what other
+  // features store per Space (folders) finds its Space again rather than the
+  // one at its old place.
+  std::string GetStoredSpaceId(const tab_groups::TabGroupId& space);
   // Runs `callback` (soon, coalesced) whenever the Spaces or the active one
   // change.
   base::CallbackListSubscription AddSpacesChangedCallback(
@@ -161,6 +198,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void SwitchTo(const tab_groups::TabGroupId& space);
   // The next or previous Space, wrapping around like Zen.
   void Cycle(bool forward);
+  // The same for the user's own moves (shortcuts, the wheel, swipes), as
+  // Zen's settings say (koan_prefs.h kWorkspacesWrapAround): without
+  // wrap-around, nothing past the first or last Space. Returns whether it
+  // switched.
+  bool Navigate(bool forward);
+  // Zen's wrap-around-navigation setting.
+  bool WrapsAround() const;
   // The `number`th Space (from 1), Zen's "Switch to Workspace N". False if
   // there is none.
   bool SwitchToNumber(int number);
@@ -177,6 +221,16 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void CreateSpace(const std::u16string& name,
                    const std::u16string& icon,
                    const SpaceTheme& theme);
+  // Makes the ungrouped tab at `index` a new Space with `data`, without
+  // showing it or changing the active tab (an agent container's Space,
+  // koan/browser/containers/koan_agent_containers.h).
+  tab_groups::TabGroupId CreateBackgroundSpace(int index,
+                                               const SpaceData& data);
+  // Makes a Space of the tabs at `indices` (sorted), right after the active
+  // Space, and shows it on the last of them (folders' "Convert folder to
+  // Space").
+  tab_groups::TabGroupId CreateSpaceFromTabs(const std::vector<int>& indices,
+                                             const SpaceData& data);
   void RenameSpace(const tab_groups::TabGroupId& space,
                    const std::u16string& name);
   // `icon` empty removes the icon.
@@ -199,8 +253,16 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void UnloadAllOtherSpaces(const tab_groups::TabGroupId& space);
   // Zen keeps at least one Space.
   bool CanDeleteSpace() const;
+  // Has the window take its Space theme's colours again
+  // (koan::ApplySpaceColor(), upstream's focus mode): KoanThemeController is
+  // their one writer.
+  void ApplySpaceColor();
   // Asks, then closes the Space's tabs and shows another Space.
   void DeleteSpace(const tab_groups::TabGroupId& space);
+  // Window sync (KoanWindowSyncClient): `space` was deleted in another
+  // window. Closes its tabs at once, without asking and without adding them
+  // to Recently Closed (that window did).
+  void DeleteSpaceForSync(const tab_groups::TabGroupId& space);
   // Puts `space` at position `to` among the Spaces (dragging a card in the
   // Library's Spaces, like Zen's).
   void MoveSpace(const tab_groups::TabGroupId& space, int to);
@@ -208,6 +270,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // To" in the tab context menu).
   void MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
                        const tab_groups::TabGroupId& space);
+
+  // Upstream's tab group command `command_id` (IDC_CREATE_NEW_TAB_GROUP,
+  // IDC_CLOSE_TAB_GROUP, ...) as a Spaces window runs it: Zen's equivalent
+  // (the Create form, Delete Space, the Space cycle, Koan's new tab) or
+  // nothing. False for any other command. The window's ActionItems and the
+  // legacy browser command path both come here (koan_command_policy.cc).
+  bool RunGroupCommand(int command_id);
 
   // Zen's UI entry points.
   // The Create-a-Space form in the sidebar (Ctrl+Alt+N, "+" > Create Space).
@@ -236,10 +305,15 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // on the Space's header. Nothing without a visible header.
   void ShowIconPickerForActiveSpace();
   void EditActiveSpaceTheme();
-  // Zen's mouse wheel over the sidebar (horizontal, or vertical with Ctrl):
-  // one Space per notch, at most every 200 ms. Touchpad swipes are
-  // upstream's VerticalTabStripFocusSwipeController.
+  // Zen's mouse wheel over the sidebar (horizontal, or vertical with the
+  // modifier of kWorkspacesScrollModifierKey): one Space per notch, at most
+  // every 200 ms; `forward` is the wheel's way (down or right), which
+  // kWorkspacesNaturalScroll turns round. Touchpad swipes are
+  // KoanSpaceSwipe's on macOS, upstream's VerticalTabStripFocusSwipeController
+  // elsewhere.
   void OnSpaceWheel(bool forward);
+  // Whether a vertical wheel with these modifiers switches Space.
+  bool IsSpaceScrollModifierDown(const ui::Event& event) const;
   // Zen's two-finger swipe (koan_swipe_tracker.h, koan_space_swipe.h): the
   // Space follows the fingers by the gesture `amount` (positive: fingers moving
   // left; the strip moves the other way, as in Zen), then EndSwipe() when they
@@ -260,8 +334,14 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Keeps the tab context menu's "Move To" submenu alive while the menu is
   // open (until the next tab menu: there is one at a time).
   void KeepTabMenuSubmenu(std::unique_ptr<ui::SimpleMenuModel> submenu);
-  // Edit Theme...: Koan's colours until the theme picker lands.
-  void EditSpaceTheme(const tab_groups::TabGroupId& space, views::View* anchor);
+  // Theme...: Zen's theme picker for `space`, where Space themes are
+  // on (see KoanThemeController::IsEnabled()).
+  void EditSpaceTheme(const tab_groups::TabGroupId& space);
+  bool CanEditSpaceTheme() const;
+  // The Create-a-Space form's Theme...: the picker for a Space not
+  // created yet, from `theme`; `on_done` gets the theme when it closes.
+  void EditNewSpaceTheme(const SpaceTheme& theme,
+                         base::OnceCallback<void(const SpaceTheme&)> on_done);
 
   // Splits a group title into its emoji icon (empty for a plain-text name)
   // and name. A leading emoji is one grapheme cluster, so ZWJ sequences and
@@ -275,12 +355,35 @@ class KoanWorkspaceController : public TabStripModelObserver,
   TabStripModel* tab_strip_model() const;
   base::WeakPtr<KoanWorkspaceController> GetWeakPtr();
 
+  // The sidebar's Space views, while they are installed (null otherwise).
+  KoanSpaceHeaderView* space_header() const { return header_; }
+  KoanSpaceBarView* space_bar() const { return bar_; }
+  // Zen's tab drag across Spaces (koan_space_drag.h).
+  KoanSpaceDrag* space_drag() const { return space_drag_.get(); }
+  // A mouse event on its way to a view in the sidebar.
+  void OnSidebarMouseEvent(const ui::MouseEvent& event);
+
+  // Zen's Space routing (koan_space_routing.h).
+  KoanSpaceRouting* space_routing() const { return space_routing_.get(); }
+  // Makes `tab` the one switching to `space` lands on (a routed tab, Zen's
+  // lastSelectedWorkspaceTabs).
+  void SetLastActiveTab(const tab_groups::TabGroupId& space,
+                        tabs::TabInterface* tab);
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
   void OnTabGroupChanged(const TabGroupChange& change) override;
+  void OnTabGroupAdded(const tab_groups::TabGroupId& group_id) override;
+  void TabGroupedStateChanged(TabStripModel* tab_strip_model,
+                              std::optional<tab_groups::TabGroupId> old_group,
+                              std::optional<tab_groups::TabGroupId> new_group,
+                              tabs::TabInterface* tab,
+                              int index) override;
   void OnTabGroupFocusChanged(
       std::optional<tab_groups::TabGroupId> new_focused_group_id,
       std::optional<tab_groups::TabGroupId> old_focused_group_id) override;
@@ -320,6 +423,39 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // that is still one untouched new tab page: what restoring replaces.
   bool IsUntouchedStartupSpace(const tab_groups::TabGroupId& space) const;
   void OnSessionRestored(Profile* profile, int tab_count);
+  // Upstream's group state a Space can't have: collapsed (its tabs hidden,
+  // with no header to expand it), and a Chrome colour on a group that didn't
+  // come from Koan (an extension's tabs.group, Chrome's group shortcuts): it
+  // gets the default theme.
+  void NormalizeSpaces();
+  // Tabs reopened into a Space that is gone for good (deleted, or living in
+  // another window): they join the Space shown, so a deleted Space stays
+  // deleted and a group id stays in one window.
+  void AdoptResurrectedSpaces();
+  // For a window that opened with no Spaces while the profile has no other
+  // window (a start that restored no session: startup set to the New Tab page
+  // or to pages; macOS's new window after the last one closed): the Spaces
+  // from prefs::kWorkspaceList, the active one taking `loose` (the window's
+  // first tabs). True if it made any.
+  bool RecreateStoredSpaces(const std::vector<int>& loose);
+  // The tabs taken out of `space` that bring it back when it closed (its last
+  // tabs were ungrouped): the indices of one loose tab, or of a whole split;
+  // empty if none.
+  std::vector<int> ReclaimUngroupedTabs(const tab_groups::TabGroupId& space);
+  // Keeps prefs::kWorkspaceList up to date from the window the user is in.
+  void StoreSpaces();
+  // Drops the connection a Space has to a saved tab group (an old profile's,
+  // opened from the bookmarks bar or the everything menu): no sync, no
+  // Chrome "Delete group?" dialog.
+  void DisconnectSavedGroups();
+  // Closes upstream's tab group editor, which has nothing to edit here.
+  void CloseGroupEditors();
+  // Debug builds: fails loudly if upstream state leaked into the Spaces
+  // (G14 of .agent/notes/upstream/tab-groups-omnibox-fullscreen.md).
+  void CheckSpaces();
+  // Once, when the window first has tabs: marks the new tab page it opened
+  // on as Zen's empty tab (IsEmptyTab()).
+  void MarkStartupEmptyTab();
   // Once, when the window first has tabs: puts back the Essential it opened
   // on.
   void KeepStartupEssential();
@@ -348,15 +484,21 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Drops the layers the animation gave the header and the tabs.
   void DropSwitchLayers();
 
-  // Tints the browser with the active Space's theme, or restores the
-  // user's colour for a Space with the default theme. The tint is the
-  // profile's one colour, so only the window the user is in sets it, when
-  // its Space (or the Space's theme) changes or the window becomes active.
-  void UpdateTint();
-  bool DecidesTint() const;
   void OnTintPrefChanged();
+  // The theme the tabs of `space` other than `except` carry (see
+  // ReadSpace()), or nullopt if none does.
+  std::optional<std::string> ThemeOfTabs(
+      const tab_groups::TabGroupId& space,
+      const tabs::TabInterface* except) const;
+  // A swipe's travel or speed, turned round with Zen's natural-scroll
+  // setting, so the Space follows the way it will switch.
+  float SwipeAmount(float amount) const;
+  // The profile's prefs, also for an Incognito window (koan_prefs.h).
+  PrefService* GetPrefs() const;
 
   void OnDeleteConfirmed(const tab_groups::TabGroupId& space, bool confirmed);
+  void CloseSpaceTabs(const tab_groups::TabGroupId& space,
+                      uint32_t close_types);
 
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<KoanSpaceHeaderView> header_ = nullptr;
@@ -365,10 +507,35 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The sidebar (the vertical tab strip region), with the wheel handler.
   raw_ptr<views::View> region_ = nullptr;
   std::unique_ptr<ui::EventHandler> wheel_handler_;
+  std::unique_ptr<KoanSpaceDrag> space_drag_;
+  std::unique_ptr<KoanSpaceRouting> space_routing_;
   // Keeps a collapsed sidebar expanded while the Create form is open.
   std::unique_ptr<ExpandOnHoverLock> create_form_lock_;
 
   bool update_pending_ = false;
+  // The browser view is going away: no more updates.
+  bool destroying_ = false;
+  // Koan is creating a group for a Space, or writing a Space's data (so the
+  // group isn't foreign, the visuals are Koan's).
+  bool creating_space_ = false;
+  bool writing_space_ = false;
+  // Tabs taken out of a Space since the last update, and the Space each left
+  // (it gets them back).
+  std::map<tabs::TabHandle, tab_groups::TabGroupId> ungrouped_from_;
+  // Groups created outside Koan, still to get the default theme.
+  std::set<tab_groups::TabGroupId> foreign_groups_;
+  // Groups added with an id they had before (tab restore, a restored
+  // window, Koan's own empty Space), to check in the next update: the id of
+  // a Space gone for good (AdoptResurrectedSpaces()).
+  std::set<tab_groups::TabGroupId> resurrected_;
+  // What prefs::kWorkspaceList last got from this window, and whether this
+  // window may write it yet (not after a crash until its Spaces change: the
+  // user may still restore the session).
+  base::ListValue stored_spaces_;
+  std::optional<base::ListValue> first_spaces_;
+  bool may_store_spaces_ = true;
+  // GetStoredSpaceId()'s ids.
+  std::map<tab_groups::TabGroupId, std::string> stored_space_ids_;
   // Spaces in order with their data, as of the last update.
   std::vector<std::pair<tab_groups::TabGroupId, SpaceData>> spaces_snapshot_;
   std::vector<ClosedSpace> closed_spaces_;
@@ -386,6 +553,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Whether the first update with tabs ran, and the Essential selected
   // before it.
   bool started_ = false;
+  // The window's first tab while it is a fresh empty page: its startup tab.
+  tabs::TabHandle startup_tab_;
+  bool expect_empty_tab_ = false;
+  tabs::TabHandle empty_tab_;
+  bool last_removal_closed_ = false;
   tabs::TabHandle startup_essential_;
   // Each Space's last active tab (switching back restores it).
   std::map<tab_groups::TabGroupId, tabs::TabHandle> last_active_tabs_;
@@ -406,7 +578,6 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::unique_ptr<KoanCreateMenu> create_menu_;
   std::vector<CreateMenuEntry> create_menu_entries_;
   std::unique_ptr<KoanSpaceMenu> space_menu_;
-  std::unique_ptr<KoanThemeMenu> theme_menu_;
   std::unique_ptr<KoanEmojiPicker::Bubble> icon_picker_;
   std::unique_ptr<ui::SimpleMenuModel> tab_menu_submenu_;
 
@@ -415,11 +586,19 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The views above, which go away with the vertical tab strip.
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       view_observations_{this};
+  // Cancels a swipe when the window stops being key (#91).
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       widget_observation_{this};
 
   base::WeakPtrFactory<KoanWorkspaceController> weak_factory_{this};
 };
+
+#if BUILDFLAG(IS_MAC)
+// Whether the macOS menu bar's Tab > Group Selected Tab is the Option
+// alternate of Group Tab (upstream's menu), or a plain item that the menu
+// validation hides (a Spaces window is key). koan_workspaces_mac.mm.
+void SetTabGroupMenuAlternate(bool alternate);
+#endif
 
 }  // namespace koan
 

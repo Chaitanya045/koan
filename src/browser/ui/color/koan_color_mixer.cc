@@ -8,6 +8,7 @@
 //   zen-workspaces.css (the Spaces' colour values)
 //   zen-library.css (the Library's colour values)
 //   zen-omnibox.css, zen-popup.css (the floating URL bar card's colours)
+//   zen-single-components.css (the status bubble's colours)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
@@ -24,6 +25,7 @@
 #include "ui/color/color_provider_key.h"
 #include "ui/color/color_recipe.h"
 #include "ui/color/color_transform.h"
+#include "ui/gfx/color_utils.h"
 
 namespace koan {
 
@@ -76,6 +78,18 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanEssentialsTileHovered] =
       dark ? ui::ColorTransform(kColorKoanEssentialsTileSelected)
            : ui::ColorTransform(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)));
+
+  // The Essentials promo (zen-essentials-promo.css): --zen-primary-color at
+  // 60% (40% with a tab over it), bordered with it, the sidebar's text, a
+  // shadow of black at 10%.
+  mixer[kColorKoanEssentialsPromo] = {
+      SkColorSetA(ZenPrimaryColor(key), Alpha(0.6f))};
+  mixer[kColorKoanEssentialsPromoDragOver] = {
+      SkColorSetA(ZenPrimaryColor(key), Alpha(0.4f))};
+  mixer[kColorKoanEssentialsPromoBorder] = {ZenPrimaryColor(key)};
+  mixer[kColorKoanEssentialsPromoForeground] = {kColorToolbarText};
+  mixer[kColorKoanEssentialsPromoShadow] = {
+      SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
 
   // The URL pill (zen-omnibox.css .urlbar-background): the Essentials tiles'
   // tint (--zen-toolbar-element-bg), on hover --zen-toolbar-element-bg-hover
@@ -155,16 +169,41 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
 
   // Glance (zen-glance.css): Zen fades the page behind the card to 30% over
   // the window background, i.e. that background at 70% over the page; the
-  // card has --zen-big-shadow (black at 24%); the buttons are near-black
-  // (near-white in dark mode) with accent-coloured icons; the close button
-  // asking to confirm is rgb(220, 53, 69) with white.
+  // card has --zen-big-shadow (black at 24%); the buttons are
+  // color-mix(light-dark(rgb(24, 24, 24), rgb(231, 231, 231)) 96%,
+  // --zen-primary-color) with the icon in --zen-primary-color, hovered
+  // light-dark(rgb(41, 41, 41), rgb(204, 204, 204)); the close
+  // button asking to confirm is rgb(220, 53, 69) with white. (Not the
+  // kColorSysInverse* pair: in the Zen look's dark mode both are its text
+  // colour, which drew blank discs, #138.)
+  const SkColor primary = ZenPrimaryColor(key);
   mixer[kColorKoanGlanceBackdrop] = ui::SetAlpha(kColorToolbar, Alpha(0.7f));
   mixer[kColorKoanGlanceCardShadow] = {
       ui::kColorShadowValueAmbientShadowElevationFour};
-  mixer[kColorKoanGlanceButton] = {ui::kColorSysInverseSurface};
-  mixer[kColorKoanGlanceButtonIcon] = {ui::kColorSysInversePrimary};
+  mixer[kColorKoanGlanceButton] = {color_utils::AlphaBlend(
+      primary, dark ? SkColorSetRGB(231, 231, 231) : SkColorSetRGB(24, 24, 24),
+      0.04f)};
+  mixer[kColorKoanGlanceButtonHover] = {dark ? SkColorSetRGB(204, 204, 204)
+                                             : SkColorSetRGB(41, 41, 41)};
+  mixer[kColorKoanGlanceButtonIcon] = {primary};
   mixer[kColorKoanGlanceButtonConfirm] = {SkColorSetRGB(220, 53, 69)};
   mixer[kColorKoanGlanceButtonConfirmIcon] = {SK_ColorWHITE};
+
+  // The status bubble (zen-single-components.css, Zen's styled status
+  // panel): the accent mixed 70% towards white (black in dark mode), a
+  // hairline in black at 15% (rgb(225, 225, 225) at 15%), the text in black
+  // (white) at 80%. Zen doesn't dim it in an inactive window.
+  const SkColor status_bubble = color_utils::AlphaBlend(
+      dark ? SK_ColorBLACK : SK_ColorWHITE, primary, 0.7f);
+  const SkColor status_text = color_utils::AlphaBlend(
+      dark ? SK_ColorWHITE : SK_ColorBLACK, status_bubble, 0.8f);
+  mixer[kColorStatusBubbleBackgroundFrameActive] = {status_bubble};
+  mixer[kColorStatusBubbleBackgroundFrameInactive] = {status_bubble};
+  mixer[kColorStatusBubbleForegroundFrameActive] = {status_text};
+  mixer[kColorStatusBubbleForegroundFrameInactive] = {status_text};
+  mixer[kColorStatusBubbleShadow] = {
+      dark ? SkColorSetARGB(Alpha(0.15f), 225, 225, 225)
+           : SkColorSetA(SK_ColorBLACK, Alpha(0.15f))};
 
   // The Library (zen-library.css): on the window's surface, the side column
   // lightening to white at 8%; everything else shades of the text colour
@@ -232,13 +271,24 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanDownloadArcRing] =
       ui::AlphaBlend(kColorToolbarText, kColorToolbar, Alpha(0.15f));
   mixer[kColorKoanDownloadArcCircle] = {kColorToolbarText};
-  mixer[kColorKoanDownloadArcIcon] = {ui::kColorSysInversePrimary};
+  mixer[kColorKoanDownloadArcIcon] = {primary};
   mixer[kColorKoanDownloadArcShadow] = {
       SkColorSetA(SK_ColorBLACK, Alpha(0.24f))};
   mixer[kColorKoanDownloadTile] = {ui::kColorSysPrimaryContainer};
   mixer[kColorKoanDownloadTileIcon] = {ui::kColorSysOnPrimaryContainer};
   mixer[kColorKoanDownloadTileShadow] = {
       SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
+
+  // The page-load progress bar (#zen-loading-progress-bar): color-mix(in
+  // srgb, --zen-primary-color, light-dark(black, white) at 50% 70%), i.e.
+  // the primary colour at 30% and the half-transparent black (white) at 70%:
+  // 65% opaque, 46% of the way from that black (white) to the primary. The
+  // long load's track is black at 10% (white in dark mode).
+  const SkColor loading_mix = dark ? SK_ColorWHITE : SK_ColorBLACK;
+  mixer[kColorKoanLoadingBar] = {
+      SkColorSetA(color_utils::AlphaBlend(primary, loading_mix, 0.3f / 0.65f),
+                  Alpha(0.65f))};
+  mixer[kColorKoanLoadingBarTrack] = {SkColorSetA(loading_mix, Alpha(0.1f))};
 
   // The welcome screen (zen-welcome.css): Koan's calm green gradient where
   // Zen plays a video, white title, Zen's green start button; the pages in
@@ -273,28 +323,83 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanWelcomeAccentHovered] =
       ui::AlphaBlend(SK_ColorWHITE, kColorKoanWelcomeAccent, Alpha(0.1f));
   mixer[kColorKoanWelcomeOnAccent] = {ui::kColorSysOnPrimary};
-}
+  // Folders (zen-folders.css), from the accent colour (the active Space's
+  // tint): the folder behind is the accent at 60% over grey (#c1c1c1 in dark
+  // mode), its cover the accent at 30% over white (60% over black in dark
+  // mode), the outline the accent at 50% over black (15% over #ebebeb in
+  // dark mode). The tab count is the text colour at 60%; a highlighted
+  // search result the text colour at 10%.
+  mixer[kColorKoanFolderIconBack] = ui::AlphaBlend(
+      ui::kColorSysPrimary,
+      dark ? SkColorSetRGB(0xc1, 0xc1, 0xc1) : SkColorSetRGB(0x80, 0x80, 0x80),
+      Alpha(0.6f));
+  mixer[kColorKoanFolderIconFront] =
+      ui::AlphaBlend(ui::kColorSysPrimary, dark ? SK_ColorBLACK : SK_ColorWHITE,
+                     Alpha(dark ? 0.6f : 0.3f));
+  mixer[kColorKoanFolderIconStroke] =
+      ui::AlphaBlend(ui::kColorSysPrimary,
+                     dark ? SkColorSetRGB(0xeb, 0xeb, 0xeb) : SK_ColorBLACK,
+                     Alpha(dark ? 0.15f : 0.5f));
+  mixer[kColorKoanFolderCount] = ui::SetAlpha(kColorToolbarText, Alpha(0.6f));
+  mixer[kColorKoanFolderSearchItemSelected] =
+      ui::SetAlpha(ui::kColorPrimaryForeground, Alpha(0.1f));
 
-// Space themes are tab group colours (until #41's per-Space themes): the
-// Library's Space cards, in either look.
-void AddSpaceTintColors(ui::ColorMixer& mixer) {
-  mixer[kColorKoanLibrarySpaceTintGrey] = {
-      kColorTabGroupTabStripFrameActiveGrey};
-  mixer[kColorKoanLibrarySpaceTintBlue] = {
-      kColorTabGroupTabStripFrameActiveBlue};
-  mixer[kColorKoanLibrarySpaceTintRed] = {kColorTabGroupTabStripFrameActiveRed};
-  mixer[kColorKoanLibrarySpaceTintYellow] = {
-      kColorTabGroupTabStripFrameActiveYellow};
-  mixer[kColorKoanLibrarySpaceTintGreen] = {
-      kColorTabGroupTabStripFrameActiveGreen};
-  mixer[kColorKoanLibrarySpaceTintPink] = {
-      kColorTabGroupTabStripFrameActivePink};
-  mixer[kColorKoanLibrarySpaceTintPurple] = {
-      kColorTabGroupTabStripFrameActivePurple};
-  mixer[kColorKoanLibrarySpaceTintCyan] = {
-      kColorTabGroupTabStripFrameActiveCyan};
-  mixer[kColorKoanLibrarySpaceTintOrange] = {
-      kColorTabGroupTabStripFrameActiveOrange};
+  // Space themes: Zen's --zen-themed-toolbar-bg-transparent, its background
+  // without a theme (getGradient()) and getToolbarModifiedBaseRaw().
+  mixer[kColorKoanThemeWindow] = {dark ? SkColorSetRGB(0x17, 0x17, 0x17)
+                                       : SkColorSetRGB(0xe2, 0xe2, 0xe2)};
+  mixer[kColorKoanThemeDefaultBackground] = {
+      dark ? SkColorSetRGB(0x13, 0x13, 0x13) : SkColorSetRGB(0xe9, 0xe9, 0xe9)};
+  mixer[kColorKoanThemeTintBase] = {dark ? SkColorSetRGB(23, 23, 26)
+                                         : SkColorSetRGB(240, 240, 244)};
+  // An inactive translucent window (Zen's zen.view.grey-out-inactive-windows:
+  // InactiveCaption, flat and opaque). On macOS the controller paints the
+  // system's window background colour instead (koan_theme_platform.h); this
+  // is what that gave in Zen 1.24b on macOS 26, for the test glass.
+  mixer[kColorKoanThemeInactiveWindow] = {
+      dark ? SkColorSetRGB(0x18, 0x17, 0x17) : SkColorSetRGB(0xe5, 0xe5, 0xe5)};
+
+  // The theme picker, with zen-gradient-generator.css's light-dark() values;
+  // the panel is Firefox's --arrowpanel-background.
+  const auto light_dark = [dark](SkColor light, SkColor dark_color) {
+    return ui::ColorTransform(dark ? dark_color : light);
+  };
+  mixer[kColorKoanThemePickerBackground] =
+      light_dark(SkColorSetRGB(244, 244, 244), SkColorSetRGB(31, 31, 31));
+  mixer[kColorKoanThemePickerForeground] =
+      light_dark(SkColorSetRGB(50, 50, 55), SK_ColorWHITE);
+  mixer[kColorKoanThemePickerField] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.05f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.03f)));
+  mixer[kColorKoanThemePickerFieldGrid] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.05f)));
+  mixer[kColorKoanThemePickerIcon] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.7f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.9f)));
+  mixer[kColorKoanThemePickerButtonHovered] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.1f)));
+  mixer[kColorKoanThemePickerDotBorder] = {SK_ColorWHITE};
+  mixer[kColorKoanThemePickerWave] =
+      light_dark(SkColorSetRGB(90, 90, 90), SkColorSetRGB(161, 161, 161));
+  mixer[kColorKoanThemePickerWaveDim] =
+      light_dark(SkColorSetARGB(Alpha(0.5f), 77, 77, 77),
+                 SkColorSetARGB(Alpha(0.5f), 161, 161, 161));
+  mixer[kColorKoanThemePickerTrack] = {kColorKoanThemePickerButtonHovered};
+  mixer[kColorKoanThemePickerThumb] = light_dark(SK_ColorBLACK, SK_ColorWHITE);
+  mixer[kColorKoanThemePickerDialDot] =
+      light_dark(SkColorSetA(SK_ColorBLACK, Alpha(0.3f)),
+                 SkColorSetA(SK_ColorWHITE, Alpha(0.3f)));
+  mixer[kColorKoanThemePickerDialHandle] = light_dark(
+      SkColorSetRGB(0x75, 0x75, 0x75), SkColorSetRGB(0xd1, 0xd1, 0xd1));
+  // Zen's --zen-colors-border at 50%.
+  mixer[kColorKoanThemePickerDialBorder] =
+      light_dark(SkColorSetARGB(Alpha(0.25f), 128, 128, 128),
+                 SkColorSetARGB(Alpha(0.5f), 79, 79, 79));
+  mixer[kColorKoanThemePickerDialShine] = {kColorKoanThemePickerButtonHovered};
+  mixer[kColorKoanThemePickerSwatchShadow] = {
+      SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
 }
 
 }  // namespace
@@ -305,7 +410,13 @@ void AddKoanColorMixer(ui::ColorProvider* provider,
   // Chromium's leaves and the URL bar's card follow the active token set;
   // Koan's own views have their values per look.
   AddShadcnChromiumColors(mixer, key);
-  AddSpaceTintColors(mixer);
+  // Zen's default theme over a translucent window's blur
+  // (ZenGradientGenerator.mjs getBrowserBg() on macOS): black at 40% in dark
+  // mode, none in light mode.
+  mixer[kColorKoanGlassTint] = {key.color_mode ==
+                                        ui::ColorProviderKey::ColorMode::kDark
+                                    ? SkColorSetARGB(0x66, 0, 0, 0)
+                                    : SK_ColorTRANSPARENT};
   if (look::IsShadcnStyle()) {
     AddShadcnKoanColors(mixer, key);
   } else {

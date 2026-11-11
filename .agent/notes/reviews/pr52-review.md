@@ -71,7 +71,7 @@ None verified. I found nothing that would make `gn gen` or the compile and link 
   - depot_tools' `vpython3` creates `~/.vpython-root` (the copy inside the folder is about 2.7 GB with the CIPD cache);
   - plus `~/.cipd-cache`, `~/.gsutil`, Siso's `~/Library/Caches/...` state, and `tempfile`/`mktemp` under `/var/folders`;
   - `git` also stops seeing `home/.gitconfig`, and the other way round.
-- **Failure scenario:** a day later, the maintainer opens a new Terminal, `cd ~/work/koan-mac/koan`, and runs `scripts/build.sh`. Gigabytes of virtualenvs and CIPD packages are created under `/Users/chaitanya`, outside `~/work/koan-mac`, and nothing reports it.
+- **Failure scenario:** a day later, the maintainer opens a new Terminal, `cd ~/work/koan-mac/koan`, and runs `scripts/build.sh`. Gigabytes of virtualenvs and CIPD packages are created under `/Users/<user>`, outside `~/work/koan-mac`, and nothing reports it.
 - **Fix:** on `mac`, have `koan_platform.sh` refuse to run (or warn loudly) unless `KOAN_MAC` is set and `HOME` is under it, for example `[[ -n ${KOAN_MAC:-} && $HOME == "$KOAN_MAC"/* ]]`. Point the error at `source ~/work/koan-mac/env.sh`.
 - **Places outside the folder even with `env.sh` (by design, for the record):**
   - The running app (launched with `open`, so with the real `HOME`) writes:

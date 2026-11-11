@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/media/webrtc/display_media_access_handler.cc b/chrome/browser/media/webrtc/display_media_access_handler.cc
+--- a/chrome/browser/media/webrtc/display_media_access_handler.cc
++++ b/chrome/browser/media/webrtc/display_media_access_handler.cc
+@@ -37,6 +37,7 @@
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
+@@ -193,9 +194,11 @@
+     return;
+   }
+ 
+-  if (capture_policy::GetAllowedCaptureLevel(request.security_origin,
++  // Koan: an agent container never gets the screen-share picker.
++  if (koan::containers::IsAgentContents(web_contents) ||
++      capture_policy::GetAllowedCaptureLevel(request.security_origin,
+                                              web_contents) ==
+-      AllowedScreenCaptureLevel::kDisallowed) {
++          AllowedScreenCaptureLevel::kDisallowed) {
+     std::move(callback).Run(
+         blink::mojom::StreamDevicesSet(),
+         MediaStreamRequestResult::CAPTURE_NOT_ALLOWED_BY_POLICY,

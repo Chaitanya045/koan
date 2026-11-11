@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/ui/views/tabs/common/tab_view.cc b/chrome/browser/ui/views/tabs/common/tab_view.cc
-index 7ad4897a7557b7f5559a66356ec8b2078a1c3039..b444720fd192333e973ff7c07647e06815766980 100644
 --- a/chrome/browser/ui/views/tabs/common/tab_view.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view.cc
-@@ -65,6 +65,7 @@
+@@ -65,6 +65,9 @@
  #include "components/tabs/public/tab_collection_types.h"
  #include "components/tabs/public/tab_interface.h"
  #include "content/public/browser/navigation_controller.h"
 +#include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
++#include "koan/browser/ui/views/koan_sidebar_tabs.h"
++#include "koan/browser/ui/views/koan_spaces.h"
  #include "third_party/skia/include/core/SkPath.h"
  #include "third_party/skia/include/core/SkPathBuilder.h"
  #include "third_party/skia/include/core/SkRRect.h"
-@@ -417,6 +418,7 @@ TabView::TabView(TabCollectionNode* collection_node)
+@@ -417,6 +420,7 @@ TabView::TabView(TabCollectionNode* coll
              &TabView::OnCollapseStateChanged, base::Unretained(this)));
    }
    close_button_observation_.Observe(close_button_);
@@ -18,7 +19,20 @@ index 7ad4897a7557b7f5559a66356ec8b2078a1c3039..b444720fd192333e973ff7c07647e068
  }
  
  TabView::~TabView() = default;
-@@ -1261,6 +1263,7 @@ void TabView::UpdateColors() {
+@@ -475,6 +479,12 @@ void TabView::UpdateFocusFreezing() {
+   if (!tab) {
+     return;
+   }
++  // Koan: switching Space freezes nothing; Koan's background-tab policy
++  // decides (koan_spaces.h).
++  if (koan::KeepsOtherSpacesRunning(tab)) {
++    ReleaseFreezingVote(FreezingVoteReason::kFocusedGroup);
++    return;
++  }
+   const auto* controller =
+       collection_node_ ? collection_node_->GetController() : nullptr;
+   if (!controller) {
+@@ -1261,6 +1271,7 @@ void TabView::UpdateColors() {
    TabStyle::TabColors colors = tab_styling()->CalculateTargetColors();
    title_->SetEnabledColor(colors.foreground_color);
    close_button_->SetColors(colors);
@@ -26,3 +40,14 @@ index 7ad4897a7557b7f5559a66356ec8b2078a1c3039..b444720fd192333e973ff7c07647e068
    alert_indicator_->OnParentTabButtonColorChanged();
  
    UpdateBorder();
+@@ -1408,6 +1419,10 @@ void TabView::UpdateHoverCard(HoverCardA
+   if (!collection_node_ || !collection_node_->GetController()) {
+     return;
+   }
++  // Koan: Zen has no tab hover cards (browser.tabs.hoverPreview.enabled).
++  if (target && !koan::ShowsTabHoverCards()) {
++    return;
++  }
+ 
+   if (TabHoverCardController* hover_card_controller =
+           collection_node_->GetController()->GetHoverCardController()) {

@@ -1,0 +1,13 @@
+<!doctype html>
+<title>Glance keeper</title>
+<body style="font: 20px sans-serif; margin: 40px">
+  <p>This page calls preventDefault() on every key, ⌘W included. ⌘W must still
+     close the Glance: the browser takes reserved keys first.</p>
+  <p id="seen"></p>
+  <script>
+    addEventListener('keydown', e => {
+      e.preventDefault();
+      document.getElementById('seen').textContent = 'saw ' + e.key;
+    }, true);
+  </script>
+</body>

@@ -5,7 +5,11 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_HEADER_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_HEADER_H_
 
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+
+class BrowserWindowInterface;
 
 namespace views {
 class View;
@@ -43,6 +47,11 @@ void MirrorSidebarHeaderLayout(const views::View* host,
 // with the toolbar hidden (single toolbar); false elsewhere.
 bool HidesSidebarTrailingControls(const views::View* host);
 
+// Whether the header is laid out as an expanded sidebar's, in one row, though
+// the sidebar is collapsed in upstream's terms: compact mode's sidebar, which
+// only ever shows as the hover reveal at its full width.
+bool ShowsExpandedSidebarHeader(const views::View* host);
+
 // Where `bounds` (in `host`) would be under the macOS traffic lights, which
 // are over the window's leading corner whatever Chromium reserved for them
 // (it reserves nothing while the sidebar sits above the toolbar's row, or
@@ -50,6 +59,15 @@ bool HidesSidebarTrailingControls(const views::View* host);
 // them: to their right where the row has the room, else below them.
 // `bounds` itself elsewhere, and everywhere but on macOS.
 gfx::Rect AvoidTrafficLights(const views::View* host, const gfx::Rect& bounds);
+
+// Shows the sidebar menu (the one the rest of the sidebar has: Zen's toolbar
+// context menu) for a right click on the sidebar button `source`, at
+// `screen_point`. Upstream's menu for that button has the one item "Expand
+// tabs on hover", which Koan keeps on. Returns false if Koan has no menu for
+// this window (the caller then shows upstream's).
+bool ShowSidebarButtonContextMenu(BrowserWindowInterface* browser,
+                                  const gfx::Point& screen_point,
+                                  ui::mojom::MenuSourceType source_type);
 
 }  // namespace koan
 

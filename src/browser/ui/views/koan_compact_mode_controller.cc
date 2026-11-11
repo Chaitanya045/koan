@@ -6,22 +6,24 @@
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
@@ -30,6 +32,7 @@
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_features.h"
@@ -37,14 +40,20 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_content_card.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_outside_window_tracker.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
+#include "koan/browser/ui/views/koan_sidebar_curve.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
+#include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "koan/browser/ui/views/koan_traffic_lights_controller.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -63,6 +72,7 @@
 #include "ui/gfx/geometry/transform.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/animation_builder.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -81,12 +91,13 @@ namespace {
 
 constexpr base::TimeDelta kToolbarRevealDuration = base::Milliseconds(160);
 constexpr base::TimeDelta kToolbarHideDuration = base::Milliseconds(200);
-// How long the pointer must be away before the toolbar hides again (Zen's
-// zen.view.compact.toolbar-hide-after-hover.duration).
-constexpr base::TimeDelta kToolbarHideDelay = base::Milliseconds(1000);
-// Zen's zen.view.compact.sidebar-keep-hover.duration: how long the sidebar
-// stays out after the pointer leaves it.
-constexpr base::TimeDelta kSidebarKeepHover = base::Milliseconds(150);
+// How long the window buttons' strip stays once the pointer is off it: Zen's
+// zen.view.compact.toolbar-hide-after-hover.duration, the nearest value (Zen's
+// own buttons are hidden by the next mouseover elsewhere).
+constexpr base::TimeDelta kCaptionStripHideDelay = base::Milliseconds(1000);
+// How often to look again while a menu is open (a closing menu sends no
+// event). Koan's own, not a Zen value.
+constexpr base::TimeDelta kMenuPollInterval = base::Milliseconds(400);
 
 constexpr base::TimeDelta kCaptionButtonFadeDuration = base::Milliseconds(120);
 
@@ -100,6 +111,10 @@ constexpr int kFullscreenEdgeSize = 2;
 // Zen's flash popup (zen.view.compact.toolbar-flash-popup.duration).
 constexpr base::TimeDelta kFlashDuration = base::Milliseconds(800);
 
+// How often to look at where the pointer is while a hover lock was taken for a
+// hover the hot zone never reported (CheckHoverLock()). Koan's own.
+constexpr base::TimeDelta kHoverPollInterval = base::Milliseconds(100);
+
 // Zen's toolbar context menu (zen-vertical-tabs.ftl).
 enum ContextMenuCommand {
   kCommandCompactModeToggle = 1,
@@ -107,6 +122,7 @@ enum ContextMenuCommand {
   kCommandCompactModeHideToolbar,
   kCommandCompactModeHideBoth,
   kCommandTabsOnRight,
+  kCommandThemePicker,
 };
 
 // Returns the BrowserView's top-container overlay view: a child of the
@@ -257,12 +273,11 @@ KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
                           base::Unretained(this)));
   tabs_on_right_ =
       pref_change_registrar_.prefs()->GetBoolean(prefs::kTabsOnRight);
-  opened_in_compact_mode_ = GetPrefs()->GetBoolean(prefs::kCompactModeEnabled);
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
 #if BUILDFLAG(IS_MAC)
   traffic_lights_ = std::make_unique<KoanTrafficLightsController>(
       browser_view_,
-      base::BindRepeating(&KoanCompactModeController::UpdateCaptionButtons,
+      base::BindRepeating(&KoanCompactModeController::OnTrafficLightsChanged,
                           base::Unretained(this)));
 #endif
 }
@@ -301,31 +316,25 @@ void KoanCompactModeController::OnAddedToWidget() {
     }
   }
 #endif
+  if (!outside_tracker_) {
+    outside_tracker_ = std::make_unique<KoanOutsideWindowTracker>(
+        browser_view_,
+        base::BindRepeating(&KoanCompactModeController::OnPointerLeftWindow,
+                            base::Unretained(this)),
+        base::BindRepeating(&KoanCompactModeController::OnOutsideTrackingEnded,
+                            base::Unretained(this)));
+  }
   if (!focus_manager_ && browser_view_->GetFocusManager()) {
     focus_manager_ = browser_view_->GetFocusManager();
     focus_manager_->AddFocusChangeListener(this);
   }
-  // Collapsing the sidebar to icons switches between single toolbar and the
-  // collapsed layout.
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && !collapse_subscription_) {
-    resizing_subscription_ =
-        state->RegisterOnResizingChanged(base::BindRepeating(
-            [](KoanCompactModeController* self,
-               tabs::VerticalTabStripStateController* state, bool is_resizing) {
-              if (is_resizing) {
-                self->resizing_from_expanded_ = !state->IsCollapsed();
-              }
-            },
-            base::Unretained(this), base::Unretained(state)));
-    collapse_subscription_ = state->RegisterOnCollapseChanged(
-        base::IgnoreArgs<tabs::VerticalTabStripCollapseState>(
-            base::BindRepeating(
-                &KoanCompactModeController::OnSidebarCollapseChanged,
-                base::Unretained(this))));
-  }
   UpdateActiveSoon();
+}
+
+bool KoanCompactModeController::CanCompactMode() const {
+  return features::IsCompactModeEnabled() &&
+         GetTopContainerOverlayView(browser_view_) &&
+         UseContentCard(browser_view_);
 }
 
 void KoanCompactModeController::OnBrowserViewLayout() {
@@ -340,6 +349,9 @@ void KoanCompactModeController::OnBrowserViewLayout() {
   InstallContextMenu();
   if (mode_ != Mode::kNone) {
     LayoutHotZones();
+    // Every fullscreen transition lays out: the pointer monitor follows (this
+    // window's or the whole application's, see UpdatePointerMonitor()).
+    UpdatePointerMonitor();
     // The top container's height may have changed (e.g. bookmarks bar).
     if (hides_toolbar() && !toolbar_revealed_) {
       ApplyToolbarTransform(/*animate=*/false);
@@ -366,18 +378,20 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   // UpdateCaptionButtons(). Letting go of a lock makes the sidebar's region
   // decide again and collapse with an animation, so the locks are released
   // through ReleaseLock(), which defers that until the region is gone.
-  destroying_ = true;
+  // (KoanVerticalTabsPolicy::OnBrowserViewDestroying() ran first, so
+  // IsClosing() is true from here on.)
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
-  collapse_subscription_ = {};
-  resizing_subscription_ = {};
   // Order matters: resetting the menu runner may run OnContextMenuClosed(),
-  // which releases menu_lock_ again, so it is released (and null) first.
-  ReleaseLock(menu_lock_);
+  // which would keep the hold, so it is released (and null) first. (A hold's
+  // lock is let go of after the current task, see SidebarHold.)
+  menu_hold_.reset();
   menu_runner_.reset();
   if (mode_ != Mode::kNone) {
-    Deactivate(/*keep_sidebar_hidden=*/false);
+    Deactivate();
   }
   pointer_monitor_.reset();
+  EndOutsideTracking();
+  outside_tracker_.reset();
   if (focus_manager_) {
     focus_manager_->RemoveFocusChangeListener(this);
     focus_manager_ = nullptr;
@@ -392,20 +406,7 @@ void KoanCompactModeController::ToggleCompactMode() {
 
 void KoanCompactModeController::ToggleSingleToolbar() {
   PrefService* prefs = GetPrefs();
-  const bool single_toolbar = !DesiredSingleToolbar();
-  prefs->SetBoolean(prefs::kSingleToolbarEnabled, single_toolbar);
-  // Single toolbar needs an expanded sidebar (Zen's layout picker expands
-  // it too).
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      single_toolbar && state && IsSidebarCollapsedByUser()) {
-    if (collapsed_before_) {
-      collapsed_before_ = false;
-    } else {
-      expanding_sidebar_ = true;
-      state->RequestCollapse(false);
-    }
-  }
+  prefs->SetBoolean(prefs::kSingleToolbarEnabled, !DesiredSingleToolbar());
 }
 
 void KoanCompactModeController::ToggleTabsOnRight() {
@@ -453,7 +454,7 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
   // The hot zones and which window buttons hide depend on the side.
   if (mode_ != Mode::kNone) {
     const Mode mode = mode_;
-    Deactivate(/*keep_sidebar_hidden=*/hides_sidebar());
+    Deactivate();
     Activate(mode);
   }
   // Everything in the window is laid out again, mirrored or not; the
@@ -470,14 +471,105 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
   OnContentCardChanged();
 }
 
-void KoanCompactModeController::OnSidebarCollapseChanged() {
-  if (const auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && !state->IsCollapsed()) {
-    expanding_sidebar_ = false;
-    collapsed_by_drag_ = false;
+void KoanCompactModeController::OnSidebarCollapseSettled() {
+  if (IsClosing()) {
+    return;
   }
-  UpdateActiveSoon();
+  // The locks that were refused while the sidebar collapsed (see
+  // TakeExpandedLock()) are taken now. (Only the sidebar's: this also runs for
+  // the width changes of a resize drag and for expanded states, and
+  // ReconcileBubbleHold() has the toolbar's logic in it.)
+  const auto* state =
+      tabs::VerticalTabStripStateController::From(browser_view_->browser());
+  if (!hides_sidebar() || !state || !state->IsCollapsed()) {
+    return;
+  }
+  // An empty tab holds the sidebar out as compact mode hides it; the sidebar
+  // that was just hidden is not slid back in (Zen applies that state without
+  // animation).
+  UpdateEmptyTabLock(/*snap_reveal=*/true);
+  VLOG(1) << "Koan: sidebar settled collapsed (peek requested: "
+          << peek_requested_ << ", hover lock: " << !!hover_lock_
+          << ", edge hovered: " << edge_sidebar_hovered_ << ")";
+  if (!bubble_lock_) {
+    ReconcileBubbleHold();
+  }
+  if (peek_requested_ && !peek_lock_) {
+    peek_requested_ = false;
+    peek_lock_ = TakeExpandedLock();
+  }
+  // A flash asked for during the collapse (a tab selected right after compact
+  // mode went on) shows now, for what is left of its time.
+  if (!flash_lock_ && flash_timer_.IsRunning()) {
+    flash_lock_ = TakeExpandedLock();
+  }
+  // The pointer is at the edge: on the hot zone, or, in fullscreen, where the
+  // hot zone has no width and CheckFullscreenEdges() tells (only when it
+  // changes, so a refused lock would never be asked for again).
+  if (!hover_lock_ && IsPointerAtSidebarEdge()) {
+    hover_lock_ = TakeExpandedLock();
+    // The hot zone may never have been told of this hover: it appears under a
+    // pointer that doesn't move (the pointer rests at the edge as compact mode
+    // goes on), and views sends an enter only with a move. Its "left" would
+    // never come either, and the lock would stay. So the pointer's place is
+    // watched until it has left.
+    if (hover_lock_) {
+      hover_poll_timer_.Start(FROM_HERE, kHoverPollInterval, this,
+                              &KoanCompactModeController::CheckHoverLock);
+    }
+  }
+}
+
+void KoanCompactModeController::CheckHoverLock() {
+  if (!hover_lock_ || IsClosing()) {
+    hover_poll_timer_.Stop();
+    return;
+  }
+  if (IsPointerAtSidebarEdge()) {
+    return;
+  }
+  // Left, as the hot zone would have told: the lock goes after the keep-hover
+  // time, and upstream's hover tracking keeps the sidebar out while the
+  // pointer is on it. (Not again if the hot zone told already: its keep-hover
+  // timer would start over.)
+  hover_poll_timer_.Stop();
+  if (!hover_release_timer_.IsRunning()) {
+    OnSidebarHotZoneHovered(false);
+  }
+}
+
+bool KoanCompactModeController::IsPointerAtSidebarEdge() const {
+  // On the hot zone, and over this window: a pointer resting over another
+  // app's window above the hot zone's place doesn't count (as in
+  // CheckFullscreenEdges()). Or, in fullscreen, where the hot zone has no
+  // width, the edge CheckFullscreenEdges() tells of.
+  return edge_sidebar_hovered_ ||
+         (sidebar_hot_zone_ && sidebar_hot_zone_->IsMouseHovered() &&
+          IsPointerOverWindow(browser_view_));
+}
+
+std::unique_ptr<ExpandOnHoverLock>
+KoanCompactModeController::TakeExpandedLock() {
+  // Upstream starts its expand-on-hover animation as soon as such a lock is
+  // held. While the sidebar is still collapsing, that happens from inside the
+  // collapse animation's own ended notification (it is the one that marks the
+  // sidebar collapsed: the region view's UpdateExpandOnHoverState() runs from
+  // it). BrowserAnimationController::GroupData::OnAnimationEnded() then clears
+  // its current motion after notifying, which is the motion the new animation
+  // has just started: when that animation steps,
+  // UpdateCurrentValues() fails CHECK(current_motion_). So the lock waits until
+  // the sidebar is collapsed, and callers retry once it is
+  // (OnSidebarCollapseSettled()). Not in a closing window either: the
+  // browser's animation controller may be gone.
+  const auto* state =
+      tabs::VerticalTabStripStateController::From(browser_view_->browser());
+  auto* tab_strip = browser_view_->tab_strip_view();
+  if (IsClosing() || !state || !state->IsCollapsed() || !tab_strip) {
+    VLOG(1) << "Koan: sidebar lock refused (collapsing or closing)";
+    return nullptr;
+  }
+  VLOG(1) << "Koan: sidebar lock taken";
+  return tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
 }
 
 bool KoanCompactModeController::PeekSidebar() {
@@ -486,25 +578,23 @@ bool KoanCompactModeController::PeekSidebar() {
   }
   // Zen's cmd_zenCompactModeShowSidebar toggles `zen-user-show`: the sidebar
   // stays out, wherever the pointer is, until the shortcut is used again.
-  if (peek_lock_) {
-    peek_lock_.reset();
+  VLOG(1) << "Koan: peek sidebar key (held: " << !!peek_lock_
+          << ", requested: " << peek_requested_ << ")";
+  if (peek_lock_ || peek_requested_) {
+    peek_requested_ = false;
+    ReleaseLock(peek_lock_);
     return true;
   }
-  if (auto* tab_strip = browser_view_->tab_strip_view()) {
-    peek_lock_ =
-        tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
-  }
+  peek_lock_ = TakeExpandedLock();
+  // Refused while the sidebar collapses: taken once it has (the shortcut was
+  // used, so the next use unpins).
+  peek_requested_ = !peek_lock_ && !IsClosing();
   return true;
 }
 
 void KoanCompactModeController::FlashSidebar() {
-  auto* tab_strip = browser_view_->tab_strip_view();
-  if (!tab_strip) {
-    return;
-  }
   if (!flash_lock_) {
-    flash_lock_ =
-        tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    flash_lock_ = TakeExpandedLock();
   }
   // Once it ends, upstream's hover tracking keeps the sidebar open while the
   // pointer is over it.
@@ -519,7 +609,10 @@ void KoanCompactModeController::EndFlash() {
 
 void KoanCompactModeController::ReleaseLock(
     std::unique_ptr<ExpandOnHoverLock>& lock) {
-  if (destroying_) {
+  if (lock) {
+    VLOG(1) << "Koan: sidebar lock let go" << (IsClosing() ? " (closing)" : "");
+  }
+  if (IsClosing()) {
     ReleaseExpandOnHoverLockSoon(lock);
     return;
   }
@@ -542,6 +635,47 @@ void KoanCompactModeController::OnTabStripModelChanged(
   if (change.type() == TabStripModelChange::kInserted) {
     MaybeShowBackgroundTabToast(tab_strip_model, *change.GetInsert());
   }
+  if (selection.active_tab_changed() ||
+      change.type() != TabStripModelChange::kSelectionOnly) {
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::OnTabChangedAt(tabs::TabInterface* tab,
+                                               TabChangeType change_type) {
+  // The empty tab navigating away (or the active tab back to it) changes
+  // whether the lock is wanted.
+  if (change_type == TabChangeType::kAll &&
+      tab == browser_view_->browser()->GetActiveTabInterface()) {
+    UpdateEmptyTabLock();
+  }
+}
+
+void KoanCompactModeController::UpdateEmptyTabLock(bool snap_reveal) {
+  TabStripModel* model = browser_view_->browser()->GetTabStripModel();
+  // Closing the window or all of its tabs makes a new active tab per closed
+  // one (new tab pages): no hold for those, and each would start an animation.
+  const bool wanted = hides_sidebar() && !IsClosing() &&
+                      !model->closing_all() &&
+                      IsEmptyTab(model->GetActiveTab());
+  if (!wanted) {
+    ReleaseLock(empty_tab_lock_);
+    return;
+  }
+  if (!empty_tab_lock_) {
+    // Not yet while the sidebar collapses: OnSidebarCollapseSettled() asks
+    // again when it has. Then, the sidebar that was just hidden is not slid
+    // back in: with an empty tab Zen doesn't animate the hiding at all.
+    if (snap_reveal) {
+      SnapNextSidebarReveal(browser_view_, true);
+    }
+    empty_tab_lock_ = TakeExpandedLock();
+    if (snap_reveal && !empty_tab_lock_) {
+      SnapNextSidebarReveal(browser_view_, false);
+    }
+  } else if (!wanted) {
+    ReleaseLock(empty_tab_lock_);
+  }
 }
 
 void KoanCompactModeController::MaybeShowBackgroundTabToast(
@@ -552,7 +686,15 @@ void KoanCompactModeController::MaybeShowBackgroundTabToast(
   // button that switches to it.
   const views::View* region = browser_view_->tab_strip_view();
   const auto* strip = views::AsViewClass<VerticalTabStripRegionView>(region);
-  if (!hides_sidebar() || (strip && strip->is_expanded_on_hover())) {
+  // Not while the sidebar is out (isSidebarPotentiallyOpen(): hovered or
+  // pinned), with Zen's zen.view.compact.show-background-tab-toast off, or
+  // while Glance animates (gZenGlanceManager._animating).
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  if (!hides_sidebar() || peek_lock_ || empty_tab_lock_ ||
+      (strip && strip->is_expanded_on_hover()) || !controller ||
+      !GetPrefs()->GetBoolean(prefs::kCompactModeShowBackgroundTabToast) ||
+      controller->glance()->IsAnimating()) {
     return;
   }
   for (const TabStripModelChange::ContentsWithIndex& inserted :
@@ -560,11 +702,6 @@ void KoanCompactModeController::MaybeShowBackgroundTabToast(
     if (inserted.index == tab_strip_model->active_index() ||
         !tab_strip_model->GetOpenerOfTabAt(inserted.index)) {
       continue;
-    }
-    KoanBrowserViewController* controller =
-        KoanBrowserViewController::From(browser_view_);
-    if (!controller) {
-      return;
     }
     controller->toast()->ShowWithAction(
         kBackgroundTabOpenedToast, kTabIcon, u"Switch to tab",
@@ -624,13 +761,18 @@ void KoanCompactModeController::ShowContextMenu(
                                     compact_menu_model_.get());
   }
   context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+  // Zen's "Theme…" (ZenGradientGenerator.mjs initContextMenu()): the theme
+  // picker for the active Space, where Space themes are on.
+  if (KoanBrowserViewController* controller =
+          KoanBrowserViewController::From(browser_view_);
+      controller && controller->theme()->IsEnabled()) {
+    context_menu_model_->AddItem(kCommandThemePicker, u"Theme\u2026");
+    context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+  }
   context_menu_model_->AddCheckItem(kCommandTabsOnRight, u"Tabs on the right");
   // The sidebar stays out (it may be compact mode's overlay) while its menu
   // is open, as with upstream's menus on it.
-  if (auto* tab_strip = browser_view_->tab_strip_view()) {
-    menu_lock_ = tab_strip->GetExpandOnHoverLock(
-        ExpandOnHoverLockType::kKeepCurrentState);
-  }
+  menu_hold_ = HoldSidebarOpen(browser_view_);
   menu_runner_ = std::make_unique<views::MenuRunner>(
       context_menu_model_.get(),
       views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
@@ -641,12 +783,14 @@ void KoanCompactModeController::ShowContextMenu(
                           views::MenuAnchorPosition::kTopLeft, source_type);
   // No menu (e.g. another one was open), or it ran to its end (macOS).
   if (!menu_runner_->IsRunning()) {
-    ReleaseLock(menu_lock_);
+    OnContextMenuClosed();
   }
 }
 
 void KoanCompactModeController::OnContextMenuClosed() {
-  ReleaseLock(menu_lock_);
+  if (menu_hold_) {
+    menu_hold_->ReleaseWhenPointerMoves();
+  }
 }
 
 bool KoanCompactModeController::IsCommandIdChecked(int command_id) const {
@@ -669,11 +813,6 @@ bool KoanCompactModeController::IsCommandIdChecked(int command_id) const {
   }
 }
 
-bool KoanCompactModeController::IsCommandIdEnabled(int command_id) const {
-  return command_id != kCommandCompactModeHideToolbar ||
-         !IsHideToolbarOnlyBlocked();
-}
-
 void KoanCompactModeController::ExecuteCommand(int command_id,
                                                int event_flags) {
   switch (command_id) {
@@ -692,6 +831,22 @@ void KoanCompactModeController::ExecuteCommand(int command_id,
     case kCommandTabsOnRight:
       ToggleTabsOnRight();
       break;
+    case kCommandThemePicker:
+      // After the menu has closed, so the picker gets the focus.
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<KoanCompactModeController> self) {
+                if (self) {
+                  if (KoanBrowserViewController* controller =
+                          KoanBrowserViewController::From(
+                              self->browser_view_)) {
+                    controller->theme()->ShowThemePickerForActiveSpace();
+                  }
+                }
+              },
+              weak_factory_.GetWeakPtr()));
+      break;
   }
 }
 
@@ -702,8 +857,7 @@ void KoanCompactModeController::OnSidebarDragCollapsed() {
     return;
   }
   // ZenCustomizableUI.sys.mjs #collapseSidebarIntoCompactMode(): compact
-  // mode hides the sidebar; it was expanded, so it comes back expanded.
-  collapsed_by_drag_ = true;
+  // mode hides the sidebar; it comes back at the width it had.
   if (!PrefHidesSidebar()) {
     SetCompactModeHides(/*sidebar=*/true, /*toolbar=*/true);
   }
@@ -755,7 +909,6 @@ void KoanCompactModeController::OnUrlBarOpenChanged() {
     // The URL bar card replaces the toolbar row; its layer may have been
     // hidden while the toolbar was slid out.
     toolbar_revealed_ = false;
-    toolbar_unwanted_since_.reset();
     toolbar_hide_timer_.Stop();
     UpdatePointerMonitor();
     if (ui::Layer* layer = top_container->layer()) {
@@ -777,8 +930,90 @@ bool KoanCompactModeController::is_toolbar_away() const {
 }
 
 void KoanCompactModeController::OnEvent(const ui::Event& event) {
+  // (The application-wide monitor hears the other windows too, and a window
+  // that is closing is torn down by the browser's own tasks.)
+  if (IsClosing()) {
+    return;
+  }
+  // A leave through the revealed sidebar's or toolbar's edge keeps it out
+  // while the pointer stays near the window (Zen's mouse tracker): told first,
+  // so the toolbar's check below already sees it held. (Not in native
+  // fullscreen, whose monitor hears every window of the application, and
+  // whose window has no edge to leave through but the display's.)
+  if (event.type() == ui::EventType::kMouseExited &&
+      !pointer_monitor_is_application_wide_ && outside_tracker_) {
+    outside_tracker_->OnPointerExited();
+  }
+  if (pointer_monitor_exits_only_) {
+    return;
+  }
   CheckRevealedHides();
   CheckFullscreenEdges();
+  CheckLightsHold();
+}
+
+void KoanCompactModeController::HoldSidebarForTabDrag() {
+  if (tab_drag_lock_ || mode_ == Mode::kNone || !hides_sidebar() ||
+      IsClosing() || !TabDragController::IsActive()) {
+    return;
+  }
+  VLOG(1) << "Koan: sidebar held for a tab drag";
+  tab_drag_lock_ = TakeExpandedLock();
+  // (TabDragController tells nobody when it ends; a drag that left the window
+  // may end in AppKit's move loop, out of the sidebar's sight.)
+  tab_drag_timer_.Start(FROM_HERE, base::Milliseconds(100), this,
+                        &KoanCompactModeController::CheckTabDragHold);
+}
+
+void KoanCompactModeController::CheckTabDragHold() {
+  if (TabDragController::IsActive() && !IsClosing()) {
+    return;
+  }
+  tab_drag_timer_.Stop();
+  ReleaseLock(tab_drag_lock_);
+}
+
+bool KoanCompactModeController::WantsLightsHold() const {
+  // (Out of fullscreen: there AppKit's lights come with the menu bar, over
+  // the page, and the sidebar is revealed at the screen's edge.)
+  return traffic_lights_ && hides_sidebar() &&
+         !IsWindowFullscreen(browser_view_) &&
+         !IsSidebarOnRight(browser_view_) && traffic_lights_->IsSidebarShown();
+}
+
+void KoanCompactModeController::CheckLightsHold() {
+  if (IsClosing()) {
+    return;
+  }
+  if (WantsLightsHold() && IsPointerOverTrafficLights(browser_view_)) {
+    lights_release_timer_.Stop();
+    // (Refused while the sidebar collapses; the next pointer event asks
+    // again.)
+    if (!lights_lock_) {
+      lights_lock_ = TakeExpandedLock();
+    }
+    return;
+  }
+  if (lights_lock_ && !lights_release_timer_.IsRunning()) {
+    // Back on the sidebar within that time, upstream's hover tracking keeps
+    // it out.
+    lights_release_timer_.Start(FROM_HERE, kSidebarKeepHoverDuration,
+                                base::BindOnce(
+                                    [](KoanCompactModeController* self) {
+                                      self->ReleaseLock(self->lights_lock_);
+                                    },
+                                    base::Unretained(this)));
+  }
+}
+
+void KoanCompactModeController::OnTrafficLightsChanged() {
+  UpdateCaptionButtons();
+  if (IsClosing()) {
+    return;
+  }
+  // The pointer is watched while the revealed sidebar shows the lights (its
+  // events take the hold: not from here, which may be inside layout).
+  UpdatePointerMonitor();
 }
 
 bool KoanCompactModeController::WantsFullscreenEdges() const {
@@ -789,26 +1024,53 @@ bool KoanCompactModeController::WantsFullscreenEdges() const {
 
 void KoanCompactModeController::CheckFullscreenEdges() {
   if (!WantsFullscreenEdges()) {
-    edge_sidebar_hovered_ = false;
+    if (std::exchange(edge_sidebar_hovered_, false)) {
+      OnSidebarHotZoneHovered(false);
+    }
     return;
   }
-  gfx::Point pointer = display::Screen::Get()->GetCursorScreenPoint();
+  // The monitor hears the whole application (see UpdatePointerMonitor()):
+  // only a pointer over this window counts, not one on another display or
+  // over another window of ours.
+  const gfx::Point screen_pointer =
+      display::Screen::Get()->GetCursorScreenPoint();
+  if (!browser_view_->GetBoundsInScreen().Contains(screen_pointer)) {
+    // (The hover lock is let go of, not just forgotten: the pointer can leave
+    // for another display straight from the edge.)
+    if (std::exchange(edge_sidebar_hovered_, false)) {
+      OnSidebarHotZoneHovered(false);
+    }
+    return;
+  }
+  gfx::Point pointer = screen_pointer;
   views::View::ConvertPointFromScreen(browser_view_, &pointer);
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
+  // Nothing slides in under a menu or a tab drag in progress.
+  const bool busy = TabDragController::IsActive() ||
+                    views::MenuController::GetForOwnerWidget(
+                        browser_view_->GetWidget()) != nullptr;
   if (sidebar_hot_zone_) {
     const bool at_edge =
         IsSidebarOnRight(browser_view_)
             ? pointer.x() >= bounds.right() - kFullscreenEdgeSize
             : pointer.x() < bounds.x() + kFullscreenEdgeSize;
-    const bool hovered =
-        at_edge && pointer.y() >= bounds.y() && pointer.y() < bounds.bottom();
+    // (Only when it would change: the window under the pointer is looked up
+    // for that.)
+    const bool hovered = at_edge && !busy && pointer.y() >= bounds.y() &&
+                         pointer.y() < bounds.bottom() &&
+                         IsPointerOverWindow(browser_view_);
     if (hovered != edge_sidebar_hovered_) {
+      VLOG(1) << "Koan: fullscreen sidebar edge "
+              << (hovered ? "hovered" : "left") << " at " << pointer.x() << ","
+              << pointer.y();
       edge_sidebar_hovered_ = hovered;
       OnSidebarHotZoneHovered(hovered);
     }
   }
-  if (toolbar_hot_zone_ && pointer.y() < bounds.y() + kFullscreenEdgeSize &&
-      pointer.x() >= bounds.x() && pointer.x() < bounds.right()) {
+  if (toolbar_hot_zone_ && !busy && pointer.y() >= bounds.y() &&
+      pointer.y() < bounds.y() + kFullscreenEdgeSize &&
+      pointer.x() >= bounds.x() && pointer.x() < bounds.right() &&
+      IsPointerOverWindow(browser_view_)) {
     OnToolbarHotZoneHovered(true);
   }
 }
@@ -818,9 +1080,7 @@ KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
   // UseContentCard(): Chromium moves the top container to its own overlay
   // widget then, and Koan takes it back, see OnImmersiveFullscreenChanged().
   // Elsewhere fullscreen has no content card.)
-  if (!features::IsCompactModeEnabled() ||
-      !GetTopContainerOverlayView(browser_view_) ||
-      !UseContentCard(browser_view_)) {
+  if (!CanCompactMode()) {
     return Mode::kNone;
   }
   const PrefService* prefs = GetPrefs();
@@ -833,35 +1093,8 @@ KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
   return Mode::kNone;
 }
 
-bool KoanCompactModeController::IsSidebarCollapsedByUser() const {
-  // Compact mode collapsed it (and keeps it collapsed while it switches
-  // variants): what counts is how it was before.
-  if (collapsed_before_) {
-    return *collapsed_before_;
-  }
-  // A window opened while compact mode hides the sidebar starts collapsed
-  // by compact mode (Chromium keeps the collapse per profile): the other
-  // windows know how it was before.
-  const int before =
-      GetPrefs()->GetInteger(prefs::kCompactModeSidebarCollapsedBefore);
-  if (opened_in_compact_mode_ &&
-      before != prefs::kSidebarCollapsedBeforeUnknown) {
-    return before == prefs::kSidebarCollapsedBeforeYes;
-  }
-  // A drag of its edge from expanded collapses it on the way to hiding it
-  // (Zen decides on release), and Koan's own expanding is under way.
-  const auto* state =
-      tabs::VerticalTabStripStateController::From(browser_view_->browser());
-  if (!state || (state->IsResizing() && resizing_from_expanded_) ||
-      collapsed_by_drag_ || expanding_sidebar_) {
-    return false;
-  }
-  return state->IsCollapsed();
-}
-
 bool KoanCompactModeController::DesiredSingleToolbar() const {
-  return GetPrefs()->GetBoolean(prefs::kSingleToolbarEnabled) &&
-         !IsSidebarCollapsedByUser();
+  return GetPrefs()->GetBoolean(prefs::kSingleToolbarEnabled);
 }
 
 bool KoanCompactModeController::DesiredHideSidebar() const {
@@ -869,28 +1102,8 @@ bool KoanCompactModeController::DesiredHideSidebar() const {
 }
 
 bool KoanCompactModeController::DesiredHideToolbar() const {
-  // Single toolbar has no toolbar to show. Where hiding just the toolbar is
-  // blocked, this window hides the sidebar instead; the setting stays (Zen,
-  // with one window per setting, rewrites it).
-  return DesiredSingleToolbar() ||
-         (PrefHidesToolbar() &&
-          (PrefHidesSidebar() || !IsHideToolbarOnlyBlocked()));
-}
-
-bool KoanCompactModeController::IsHideToolbarOnlyBlocked() const {
-  // ZenCompactMode.mjs checkIfIllegalState(): with the sidebar collapsed to
-  // icons, the window buttons on its side sit in the toolbar's row, so
-  // hiding just the toolbar would take them away. Only where compact mode
-  // applies.
-  if (!features::IsCompactModeEnabled() || !UseContentCard(browser_view_) ||
-      !IsSidebarCollapsedByUser()) {
-    return false;
-  }
-  const gfx::Size leading = GetCaptionButtonAreaSize(browser_view_,
-                                                     /*leading=*/true);
-  const gfx::Size trailing = GetCaptionButtonAreaSize(browser_view_,
-                                                      /*leading=*/false);
-  return !(IsSidebarOnRight(browser_view_) ? trailing : leading).IsEmpty();
+  // Single toolbar has no toolbar to show.
+  return DesiredSingleToolbar() || PrefHidesToolbar();
 }
 
 void KoanCompactModeController::CancelSpaceSwipe() {
@@ -917,25 +1130,48 @@ void KoanCompactModeController::UpdateActive() {
         DesiredHideToolbar() == hide_toolbar_))) {
     // The URL bar behaviour pref may have changed.
     KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
+    SyncSidebar();
+    // The sidebar may have finished collapsing.
+    UpdateEmptyTabLock(/*snap_reveal=*/true);
+    // (Once compact mode can apply: before that the window is still being
+    // set up.)
+    applied_ = applied_ || CanCompactMode();
     return;
   }
+  // Zen's toggle animation (animateCompactMode()): a docked sidebar that
+  // compact mode now hides slides away over the page, in 0.1 s. Not as the
+  // window opens (Zen applies the saved state without it), and not with an
+  // empty tab, which holds the sidebar out (`zen-has-empty-tab`).
+  const views::View* region = browser_view_->tab_strip_view();
+  const bool slide_away = applied_ && !hides_sidebar() && region &&
+                          region->GetVisible() && region->width() > 0;
   if (mode_ != Mode::kNone) {
-    // A hidden sidebar that stays hidden isn't expanded in between.
-    Deactivate(/*keep_sidebar_hidden=*/hides_sidebar() &&
-               desired == Mode::kCompact && DesiredHideSidebar());
+    Deactivate();
   }
   if (desired != Mode::kNone) {
     Activate(desired);
   }
   UpdateFullscreenTopChrome();
-  // The sidebar is given back (a closing window leaves it for the others);
-  // from now on this window's sidebar state is its own.
-  if (!hides_sidebar()) {
-    GetPrefs()->ClearPref(prefs::kCompactModeSidebarCollapsedBefore);
-    opened_in_compact_mode_ = false;
-  }
   OnContentCardChanged();
   KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
+  UpdateEmptyTabLock(/*snap_reveal=*/true);
+  SyncSidebar();
+  TabStripModel* model = browser_view_->browser()->GetTabStripModel();
+  if (slide_away && hides_sidebar() && !IsEmptyTab(model->GetActiveTab())) {
+    SlideSidebarAway(browser_view_);
+  }
+  applied_ = applied_ || CanCompactMode();
+}
+
+void KoanCompactModeController::SyncSidebar() {
+  // The sidebar is collapsed while compact mode hides it, and only then: the
+  // one rule behind which the strip's state is Koan's (see
+  // KoanVerticalTabsPolicy). A hidden sidebar that stays hidden while the
+  // variant changes is not expanded in between.
+  KoanVerticalTabsPolicy* policy =
+      KoanBrowserViewController::From(browser_view_)->vertical_tabs();
+  policy->SetSidebarHidden(hides_sidebar());
+  policy->UpdateSidebarButtonText();
 }
 
 void KoanCompactModeController::OnContentCardChanged() {
@@ -955,10 +1191,8 @@ void KoanCompactModeController::OnContentCardChanged() {
 
 void KoanCompactModeController::Activate(Mode mode) {
   CancelSpaceSwipe();
-  // What compact mode hides; decided before `mode_` changes, as the sidebar's
-  // collapsed state means something else once compact mode hides it.
+  // What compact mode hides.
   const bool single_toolbar = DesiredSingleToolbar();
-  const bool collapsed_by_user = IsSidebarCollapsedByUser();
   hide_sidebar_ = mode == Mode::kCompact && DesiredHideSidebar();
   hide_toolbar_ = mode == Mode::kCompact && DesiredHideToolbar();
   mode_ = mode;
@@ -968,25 +1202,6 @@ void KoanCompactModeController::Activate(Mode mode) {
           << (hide_sidebar_ ? ", sidebar hidden" : "")
           << (hide_toolbar_ && !compact_keeps_sidebar_nav_ ? ", toolbar hidden"
                                                            : "");
-
-  // Hidden sidebar: collapse it; the layout then gives it zero width and
-  // upstream's expand-on-hover draws it over the page.
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && hide_sidebar_) {
-    // Kept when only the variant changed (see UpdateActive()).
-    if (!collapsed_before_) {
-      collapsed_before_ = collapsed_by_user;
-    }
-    GetPrefs()->SetInteger(prefs::kCompactModeSidebarCollapsedBefore,
-                           *collapsed_before_
-                               ? prefs::kSidebarCollapsedBeforeYes
-                               : prefs::kSidebarCollapsedBeforeNo);
-    if (!state->IsCollapsed()) {
-      state->RequestCollapse(true);
-    }
-  }
-  collapsed_by_drag_ = false;
 
   // Toolbar: move the top container into the overlay view, above the page.
   // Mirrors BrowserView::ReparentTopContainerForStartOfImmersive(); the
@@ -1043,9 +1258,17 @@ void KoanCompactModeController::Activate(Mode mode) {
   }
   UpdateCaptionButtons();
   UpdatePointerMonitor();
+  if (hides_toolbar() && !bubble_fallback_anchor_) {
+    auto anchor = std::make_unique<views::View>();
+    anchor->SetCanProcessEventsWithinSubtree(false);
+    bubble_fallback_anchor_ = browser_view_->AddChildView(std::move(anchor));
+  }
+  UpdateEmptyTabLock(/*snap_reveal=*/true);
 
   browser_view_->InvalidateLayout();
   LayoutHotZones();
+  // Turning compact mode on while the empty tab is selected keeps the sidebar.
+  UpdateEmptyTabLock();
 }
 
 void KoanCompactModeController::ParkTopContainer() {
@@ -1067,9 +1290,10 @@ void KoanCompactModeController::ParkTopContainer() {
 }
 
 bool KoanCompactModeController::IsClosing() const {
-  const BrowserWidget* widget = browser_view_->browser_widget();
-  return destroying_ || !widget || widget->IsClosed() ||
-         browser_view_->browser()->IsDeleteScheduled();
+  // One answer for the window: KoanVerticalTabsPolicy::IsClosing().
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return !controller || controller->vertical_tabs()->IsClosing();
 }
 
 void KoanCompactModeController::ClearHoverStates() {
@@ -1080,8 +1304,12 @@ void KoanCompactModeController::ClearHoverStates() {
   if (IsClosing()) {
     return;
   }
-  // Nothing stays revealed from before the change (Zen's sizemodechange).
+  // Nothing stays revealed from before the change (Zen's sizemodechange,
+  // which also stops the outside tracking).
   edge_sidebar_hovered_ = false;
+  if (outside_tracker_) {
+    outside_tracker_->Stop();
+  }
   hover_release_timer_.Stop();
   if (toolbar_revealed_) {
     SetToolbarRevealed(false, /*animate=*/false);
@@ -1095,6 +1323,7 @@ void KoanCompactModeController::ClearHoverStates() {
                        if (self && !self->IsClosing()) {
                          self->ReleaseLock(self->hover_lock_);
                          self->ReleaseLock(self->peek_lock_);
+                         self->ReleaseLock(self->outside_lock_);
                        }
                      },
                      weak_factory_.GetWeakPtr()));
@@ -1113,7 +1342,7 @@ void KoanCompactModeController::OnFullscreenStateChanged() {
 }
 
 void KoanCompactModeController::OnImmersiveFullscreenChanged() {
-  if (destroying_ || mode_ == Mode::kNone) {
+  if (IsClosing() || mode_ == Mode::kNone) {
     return;
   }
   ClearHoverStates();
@@ -1154,13 +1383,10 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
                                 : browser_view_->overlay_widget();
     contents->SetProperty(views::kWidgetForAnchoringKey, anchor);
   }
-  // AppKit's own title bar: nothing of it at the top edge but the menu bar
-  // while Koan hides its toolbar, else it has the lights, as usual.
-  if (HidesFullscreenTopChrome(browser_view_)) {
-    HideFullscreenTitlebar(browser_view_);
-  } else {
-    RestoreFullscreenTitlebar(browser_view_);
-    SetTrafficLightsShown(browser_view_, true);
+  // AppKit's own title bar slides in with the menu bar, with the traffic
+  // lights, as in Zen (even where compact mode hid them in the window).
+  if (!IsClosing()) {
+    ShowFullscreenTitlebar(browser_view_);
   }
   // The toolbar style: "none" while Koan hides its toolbar, else the user's.
   if (BrowserWidget* widget = browser_view_->browser_widget()) {
@@ -1187,12 +1413,192 @@ void KoanCompactModeController::InstallSidebarNav() {
           std::make_unique<KoanSidebarNavButtons>(browser_view_)));
       child->InvalidateLayout();
     }
-    // The URL pill at the top of the content area (a FlexLayoutView), above
-    // the separator and the tabs.
-    if (child->GetClassName() == "FlexLayoutView" && !sidebar_nav_.view()) {
-      sidebar_nav_.SetView(child->AddChildViewAt(
-          std::make_unique<KoanSidebarNavView>(browser_view_), 0));
+  }
+  // The URL pill at the top of the content area, above the separator and
+  // the tabs.
+  if (views::View* column = GetSidebarContentColumn(browser_view_);
+      column && !sidebar_nav_.view()) {
+    sidebar_nav_.SetView(column->AddChildViewAt(
+        std::make_unique<KoanSidebarNavView>(browser_view_), 0));
+  }
+}
+
+views::View* KoanCompactModeController::GetBubbleAnchor() {
+  if (IsClosing() || !hides_toolbar()) {
+    return nullptr;
+  }
+  // (Called from layout, and for anchors that never get a bubble: it only
+  // asks for a look at what is open a moment later.)
+  ScheduleBubbleCheck();
+  // Compact mode hides just the toolbar: it comes in under the bubble (see
+  // ReconcileBubbleHold()) and the anchor is upstream's.
+  if (can_reveal_toolbar()) {
+    return nullptr;
+  }
+  if (KoanSidebarNavView* nav = sidebar_nav()) {
+    if (views::View* anchor = nav->bubble_anchor()) {
+      return anchor;
     }
+  }
+  // The sidebar is hidden (compact mode keeps its header): the buttons.
+  views::View* buttons = sidebar_nav_buttons_.view();
+  if (buttons && buttons->IsDrawn() && !buttons->GetVisibleBounds().IsEmpty()) {
+    return buttons;
+  }
+  // Neither is on screen: a point that is, never the slid-away toolbar.
+  return bubble_fallback_anchor_;
+}
+
+namespace {
+
+// The open bubbles of `browser_view`'s window, with their anchors.
+std::vector<std::pair<views::Widget*, const views::View*>> OpenBubbles(
+    BrowserView* browser_view) {
+  std::vector<std::pair<views::Widget*, const views::View*>> bubbles;
+  views::Widget* widget = browser_view->GetWidget();
+  if (!widget) {
+    return bubbles;
+  }
+  for (views::Widget* owned :
+       views::Widget::GetAllOwnedWidgets(widget->GetNativeView())) {
+    const views::BubbleDialogDelegate* bubble =
+        owned->IsVisible() && owned->widget_delegate()
+            ? owned->widget_delegate()->AsBubbleDialogDelegate()
+            : nullptr;
+    if (const views::View* anchor =
+            bubble ? bubble->GetAnchorView() : nullptr) {
+      bubbles.emplace_back(owned, anchor);
+    }
+  }
+  return bubbles;
+}
+
+}  // namespace
+
+bool KoanCompactModeController::HasBubbleAnchoredToToolbar() const {
+  const views::View* top_container = browser_view_->top_container();
+  for (const auto& [widget, anchor] : OpenBubbles(browser_view_)) {
+    if (top_container && top_container->Contains(anchor)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void KoanCompactModeController::HoldSidebarForBubble() {
+  if (IsClosing() || !hides_sidebar()) {
+    return;
+  }
+  // (Not while the sidebar collapses: OnSidebarCollapseSettled() reconciles
+  // again when it has.)
+  if (!bubble_lock_) {
+    bubble_lock_ = TakeExpandedLock();
+  }
+  // The bubble is open when the checks run, and the lock goes when it closes.
+  ScheduleBubbleCheck();
+}
+
+void KoanCompactModeController::ScheduleBubbleCheck() {
+  // The bubble may be shown a moment after its anchor was asked for (a
+  // permission chip waits for its anchor). Anchors are asked on every layout
+  // while a prompt is pending (a live resize): one run of checks, not one per
+  // ask. A first check not yet run covers this ask too; a run further along
+  // starts again.
+  if (bubble_check_timer_.IsRunning() && bubble_check_step_ == 0) {
+    return;
+  }
+  bubble_check_step_ = 0;
+  bubble_check_timer_.Start(FROM_HERE, base::TimeDelta(), this,
+                            &KoanCompactModeController::RunBubbleCheck);
+}
+
+void KoanCompactModeController::RunBubbleCheck() {
+  ReconcileBubbleHold();
+  // 150 ms after the first check, 600 ms after the start.
+  if (bubble_check_step_ < 2) {
+    bubble_check_timer_.Start(
+        FROM_HERE, base::Milliseconds(bubble_check_step_ == 0 ? 150 : 450),
+        this, &KoanCompactModeController::RunBubbleCheck);
+    ++bubble_check_step_;
+  }
+}
+
+void KoanCompactModeController::ReconcileBubbleHold() {
+  if (IsClosing()) {
+    return;
+  }
+  views::View* top_container = browser_view_->top_container();
+  const KoanSidebarNavView* nav = sidebar_nav();
+  const views::View* strip = browser_view_->tab_strip_view();
+  bool on_toolbar = false;
+  bool on_peeked_sidebar = false;
+  std::vector<views::Widget*> bubbles;
+  for (const auto& [widget, anchor] : OpenBubbles(browser_view_)) {
+    const bool toolbar =
+        can_reveal_toolbar() && top_container->Contains(anchor);
+    // The pill, or a folder's row in the tab list (its search popup).
+    const bool sidebar =
+        hides_sidebar() &&
+        ((nav && nav->Contains(anchor)) ||
+         (strip && strip->Contains(anchor) && IsFolderRowView(anchor)));
+    if (!toolbar && !sidebar) {
+      continue;
+    }
+    on_toolbar |= toolbar;
+    on_peeked_sidebar |= sidebar;
+    bubbles.push_back(widget);
+    // To be told when it goes away (or is hidden), to let go again.
+    if (!bubble_widgets_.IsObservingSource(widget)) {
+      bubble_widgets_.AddObservation(widget);
+    }
+  }
+  ui::Layer* toolbar_layer = top_container->layer();
+  if (on_toolbar &&
+      (!toolbar_revealed_ ||
+       (toolbar_layer && toolbar_layer->GetAnimator()->is_animating()))) {
+    // The bubble was placed against the toolbar's place off the window (or
+    // against its place part way through sliding in), and an anchor follows
+    // its view's bounds, not a compositor animation of its layer: bring the
+    // toolbar in at once and place the bubbles again.
+    if (toolbar_layer) {
+      toolbar_layer->GetAnimator()->AbortAllAnimations();
+    }
+    SetToolbarRevealed(true, /*animate=*/false);
+    for (views::Widget* widget : bubbles) {
+      if (views::BubbleDialogDelegate* bubble =
+              widget->widget_delegate()->AsBubbleDialogDelegate()) {
+        bubble->OnAnchorBoundsChanged();
+      }
+    }
+  }
+  // The peeked sidebar stays out as long as a bubble points into it (Zen
+  // holds it with the bubble's has-popup-menu).
+  if (on_peeked_sidebar) {
+    if (!bubble_lock_) {
+      bubble_lock_ = TakeExpandedLock();
+    }
+  } else if (bubble_lock_) {
+    ReleaseLock(bubble_lock_);
+  }
+  // None open: the toolbar goes as it does without a bubble (at once inside the
+  // window, after Zen's delay after a leave through its edge).
+  if (!on_toolbar) {
+    CheckToolbarHide();
+  }
+}
+
+void KoanCompactModeController::OnWidgetDestroying(views::Widget* widget) {
+  if (bubble_widgets_.IsObservingSource(widget)) {
+    bubble_widgets_.RemoveObservation(widget);
+  }
+  // (A moment later: it is still there, and open, right now.)
+  ScheduleBubbleCheck();
+}
+
+void KoanCompactModeController::OnWidgetVisibilityChanged(views::Widget* widget,
+                                                          bool visible) {
+  if (!visible) {
+    ScheduleBubbleCheck();
   }
 }
 
@@ -1200,7 +1606,7 @@ KoanSidebarNavView* KoanCompactModeController::sidebar_nav() {
   return static_cast<KoanSidebarNavView*>(sidebar_nav_.view());
 }
 
-void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
+void KoanCompactModeController::Deactivate() {
   CancelSpaceSwipe();
   VLOG(1) << (mode_ == Mode::kCompact ? "Koan: compact mode off"
                                       : "Koan: single toolbar off");
@@ -1232,13 +1638,27 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   }
 
   toolbar_hide_timer_.Stop();
-  toolbar_unwanted_since_.reset();
   EndFlash();
   hover_release_timer_.Stop();
+  hover_poll_timer_.Stop();
   ReleaseLock(hover_lock_);
+  ReleaseLock(empty_tab_lock_);
   ReleaseLock(peek_lock_);
+  tab_drag_timer_.Stop();
+  ReleaseLock(tab_drag_lock_);
+  lights_release_timer_.Stop();
+  ReleaseLock(lights_lock_);
+  // (Zen drops `zen-user-show` when compact mode turns off.)
+  peek_requested_ = false;
   pointer_monitor_.reset();
+  EndOutsideTracking();
   edge_sidebar_hovered_ = false;
+  bubble_widgets_.RemoveAllObservations();
+  ReleaseLock(bubble_lock_);
+  if (bubble_fallback_anchor_) {
+    browser_view_->RemoveChildViewT(
+        std::exchange(bubble_fallback_anchor_, nullptr));
+  }
   if (sidebar_hot_zone_) {
     browser_view_->RemoveChildViewT(std::exchange(sidebar_hot_zone_, nullptr));
   }
@@ -1305,21 +1725,9 @@ void KoanCompactModeController::Deactivate(bool keep_sidebar_hidden) {
   top_container_index_.reset();
   toolbar_revealed_ = false;
 
-  // A closing window has no layout to do, and leaves the sidebar as it is for
-  // the others (expanding it again is an animation).
-  if (destroying_) {
+  // A closing window has no layout to do.
+  if (IsClosing()) {
     return;
-  }
-
-  if (auto* state =
-          tabs::VerticalTabStripStateController::From(browser_view_->browser());
-      state && !keep_sidebar_hidden) {
-    if (collapsed_before_.has_value() && !*collapsed_before_ &&
-        state->IsCollapsed()) {
-      expanding_sidebar_ = true;
-      state->RequestCollapse(false);
-    }
-    collapsed_before_.reset();
   }
 
   browser_view_->InvalidateLayout();
@@ -1343,7 +1751,6 @@ void KoanCompactModeController::SetToolbarRevealed(bool revealed,
     // The window buttons over the page come and go with the toolbar.
     UpdateCaptionButtons();
   }
-  toolbar_unwanted_since_.reset();
   toolbar_hide_timer_.Stop();
   UpdatePointerMonitor();
   CheckToolbarHide();
@@ -1409,6 +1816,10 @@ bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
       (toolbar_hot_zone_ && toolbar_hot_zone_->IsMouseHovered())) {
     return true;
   }
+  // The pointer left through the top edge and is still near the window.
+  if (outside_tracker_ && outside_tracker_->edge() == WindowEdge::kTop) {
+    return true;
+  }
   // The window buttons came with it. macOS' are AppKit's, over the window:
   // the pointer on them leaves its views.
   if (traffic_lights_ && IsPointerOverTrafficLights(browser_view_)) {
@@ -1423,6 +1834,10 @@ bool KoanCompactModeController::ShouldKeepToolbarRevealed() const {
         return true;
       }
     }
+  }
+  // Or a bubble anchored to it is open (a permission prompt, page info ...).
+  if (HasBubbleAnchoredToToolbar()) {
+    return true;
   }
   // Keep it while something in it has focus (omnibox editing) or a menu
   // (app menu, omnibox context menu, ...) is open.
@@ -1439,45 +1854,137 @@ void KoanCompactModeController::CheckToolbarHide() {
     return;
   }
   if (ShouldKeepToolbarRevealed()) {
-    toolbar_unwanted_since_.reset();
     toolbar_hide_timer_.Stop();
-    // A menu closing sends the window no event: look again later.
-    if (views::MenuController::GetForOwnerWidget(browser_view_->GetWidget())) {
-      toolbar_hide_timer_.Start(FROM_HERE, kToolbarHideDelay, this,
+    // A menu closing sends the window no event: look again later. Nor does a
+    // bubble that a toolbar button opened (not watched, see
+    // ReconcileBubbleHold()) closing by keyboard.
+    if (views::MenuController::GetForOwnerWidget(browser_view_->GetWidget()) ||
+        HasBubbleAnchoredToToolbar()) {
+      toolbar_hide_timer_.Start(FROM_HERE, kMenuPollInterval, this,
                                 &KoanCompactModeController::CheckToolbarHide);
     }
     return;
   }
-  const base::TimeTicks now = base::TimeTicks::Now();
-  if (!toolbar_unwanted_since_) {
-    toolbar_unwanted_since_ = now;
-  }
-  const base::TimeTicks hide_at = *toolbar_unwanted_since_ + kToolbarHideDelay;
-  if (now >= hide_at) {
-    SetToolbarRevealed(false, /*animate=*/true);
-    return;
-  }
-  if (!toolbar_hide_timer_.IsRunning()) {
-    toolbar_hide_timer_.Start(FROM_HERE, hide_at - now, this,
-                              &KoanCompactModeController::CheckToolbarHide);
-  }
+  // Zen's toolbar element collapses as soon as the pointer is off it; a
+  // leave through the window's top edge is the outside tracker's (above).
+  SetToolbarRevealed(false, /*animate=*/true);
 }
 
 void KoanCompactModeController::UpdatePointerMonitor() {
   const bool wanted =
       mode_ != Mode::kNone &&
-      (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges());
+      (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges() ||
+       WantsLightsHold() || lights_lock_);
+  // Otherwise, where compact mode hides the sidebar or the toolbar, only the
+  // pointer leaving the window is heard (the outside tracker's).
+  const bool exits_only = !wanted && WantsOutsideTracking();
   views::Widget* widget = browser_view_->GetWidget();
-  if (!wanted || !widget) {
+  if ((!wanted && !exits_only) || !widget) {
+    if (pointer_monitor_) {
+      VLOG(1) << "Koan: pointer monitor off";
+    }
+    // (Tracking outside the window, if any, ends by itself: the pointer
+    // comes back or goes away, or the window is deactivated, and any change
+    // of mode or fullscreen stops it, see Deactivate() and
+    // ClearHoverStates(). Not from here, which runs in layout.)
     pointer_monitor_.reset();
     return;
   }
-  if (!pointer_monitor_) {
-    pointer_monitor_ = views::EventMonitor::CreateWindowMonitor(
-        this, widget->GetNativeWindow(),
-        {ui::EventType::kMouseMoved, ui::EventType::kMouseDragged,
-         ui::EventType::kMouseEntered, ui::EventType::kMouseExited});
+  // At the screen's edge in native fullscreen the event goes to the window
+  // that is under the pointer, which is not always the browser window's
+  // (another window of the application can be there, as an invisible bubble's
+  // or the immersive overlay's), and a monitor of one window then never sees
+  // it: watch the whole application there, and decide by the pointer's place
+  // (CheckFullscreenEdges()).
+  const bool application_wide = WantsFullscreenEdges();
+  if (pointer_monitor_ &&
+      pointer_monitor_is_application_wide_ == application_wide &&
+      pointer_monitor_exits_only_ == exits_only) {
+    return;
   }
+  const std::set<ui::EventType> types =
+      exits_only
+          ? std::set<ui::EventType>{ui::EventType::kMouseExited}
+          : std::set<ui::EventType>{
+                ui::EventType::kMouseMoved, ui::EventType::kMouseDragged,
+                ui::EventType::kMouseEntered, ui::EventType::kMouseExited};
+  pointer_monitor_is_application_wide_ = application_wide;
+  pointer_monitor_exits_only_ = exits_only;
+  pointer_monitor_ = application_wide
+                         ? views::EventMonitor::CreateApplicationMonitor(
+                               this, widget->GetNativeWindow(), types)
+                         : views::EventMonitor::CreateWindowMonitor(
+                               this, widget->GetNativeWindow(), types);
+  VLOG(1) << "Koan: pointer monitor on ("
+          << (application_wide ? "application wide" : "this window")
+          << (exits_only ? ", leaves only" : "") << ")";
+}
+
+bool KoanCompactModeController::WantsOutsideTracking() const {
+  // (Native fullscreen: the window is the display.)
+  return mode_ == Mode::kCompact && (hides_sidebar() || can_reveal_toolbar()) &&
+         !IsClosing() && !IsWindowFullscreen(browser_view_) &&
+         !IsContentFullscreen(browser_view_);
+}
+
+std::optional<int> KoanCompactModeController::OnPointerLeftWindow(
+    WindowEdge edge,
+    const gfx::Point& point) {
+  if (!WantsOutsideTracking() || TabDragController::IsActive()) {
+    return std::nullopt;
+  }
+  // Zen's document mouseleave: the hidden element on the edge the pointer
+  // left through is revealed (if it wasn't: a pointer flung past the edge)
+  // and stays while the native tracker follows the pointer.
+  // (The window's side: the sidebar is on the right with tabs on the right
+  // or in a right-to-left UI, but not both.)
+  const WindowEdge sidebar_edge =
+      IsSidebarOnRight(browser_view_) != base::i18n::IsRTL()
+          ? WindowEdge::kRight
+          : WindowEdge::kLeft;
+  if (hides_sidebar() && edge == sidebar_edge) {
+    views::View* region = browser_view_->tab_strip_view();
+    // Its extent along the edge: the strip's, which keeps its height while
+    // it is hidden.
+    const gfx::Rect along = region && region->height() > 0
+                                ? region->GetBoundsInScreen()
+                                : browser_view_->GetBoundsInScreen();
+    if (!IsAlongElement(along, edge, point)) {
+      return std::nullopt;
+    }
+    if (!outside_lock_) {
+      // (Refused while the sidebar collapses: then nothing is tracked.)
+      outside_lock_ = TakeExpandedLock();
+    }
+    if (!outside_lock_) {
+      return std::nullopt;
+    }
+    return kOutsideWindowHorizontalOffset;
+  }
+  if (can_reveal_toolbar() && edge == WindowEdge::kTop &&
+      IsAlongElement(browser_view_->top_container()->GetBoundsInScreen(), edge,
+                     point)) {
+    // Kept while tracked (ShouldKeepToolbarRevealed()).
+    SetToolbarRevealed(true, /*animate=*/true);
+    return toolbar_revealed_ ? std::optional<int>(kOutsideWindowVerticalOffset)
+                             : std::nullopt;
+  }
+  return std::nullopt;
+}
+
+void KoanCompactModeController::OnOutsideTrackingEnded(bool back_in_window) {
+  // Back over the window, the hover there decides (upstream's for the
+  // sidebar, which keeps it out while the pointer is on it); otherwise it
+  // hides now.
+  ReleaseLock(outside_lock_);
+  CheckToolbarHide();
+}
+
+void KoanCompactModeController::EndOutsideTracking() {
+  if (outside_tracker_) {
+    outside_tracker_->Stop();
+  }
+  ReleaseLock(outside_lock_);
 }
 
 void KoanCompactModeController::CheckRevealedHides() {
@@ -1487,15 +1994,16 @@ void KoanCompactModeController::CheckRevealedHides() {
 
 void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   if (mode_ == Mode::kNone || IsContentFullscreen(browser_view_)) {
+    VLOG(1) << "Koan: sidebar hot zone ignored (mode "
+            << static_cast<int>(mode_) << ")";
     return;
   }
+  VLOG(1) << "Koan: sidebar hot zone " << (hovered ? "hovered" : "left")
+          << (hover_lock_ ? ", holding" : "");
   if (hovered) {
     hover_release_timer_.Stop();
     if (!hover_lock_) {
-      if (auto* tab_strip = browser_view_->tab_strip_view()) {
-        hover_lock_ = tab_strip->GetExpandOnHoverLock(
-            ExpandOnHoverLockType::kKeepExpanded);
-      }
+      hover_lock_ = TakeExpandedLock();
     }
     return;
   }
@@ -1503,7 +2011,7 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   // strip, and upstream's hover tracking keeps it open until it leaves; the
   // lock is kept for Zen's keep-hover time, so the hand-over between the two
   // doesn't close it for a moment.
-  hover_release_timer_.Start(FROM_HERE, kSidebarKeepHover,
+  hover_release_timer_.Start(FROM_HERE, kSidebarKeepHoverDuration,
                              base::BindOnce(
                                  [](KoanCompactModeController* self) {
                                    self->ReleaseLock(self->hover_lock_);
@@ -1563,7 +2071,8 @@ void KoanCompactModeController::CheckCaptionStripHide() {
   if (!caption_unwanted_since_) {
     caption_unwanted_since_ = now;
   }
-  const base::TimeTicks hide_at = *caption_unwanted_since_ + kToolbarHideDelay;
+  const base::TimeTicks hide_at =
+      *caption_unwanted_since_ + kCaptionStripHideDelay;
   if (now >= hide_at) {
     SetCaptionStripRevealed(false);
     return;
@@ -1594,10 +2103,13 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
   if (IsWindowFullscreen(browser_view_)) {
     return false;
   }
-  // The traffic lights are at the window's leading edge: over the page where
-  // the sidebar is hidden or on the right.
+  // The traffic lights are at the window's leading edge. With the sidebar on
+  // the left they are in its top row: they go and come with the sidebar, and
+  // the top edge reveals nothing (Zen: a hidden sidebar hides them, and the
+  // pointer at the top shows nothing and moves nothing). With it on the right
+  // they are over the page.
   if (traffic_lights_) {
-    return hides_sidebar() || IsSidebarOnRight(browser_view_);
+    return IsSidebarOnRight(browser_view_);
   }
   const BrowserWidget* widget = browser_view_->browser_widget();
   const BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
@@ -1614,7 +2126,7 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
 }
 
 void KoanCompactModeController::UpdateCaptionButtons() {
-  if (destroying_) {
+  if (IsClosing()) {
     // The window is going away: nothing to show or hide.
     return;
   }
@@ -1632,12 +2144,11 @@ void KoanCompactModeController::UpdateCaptionButtons() {
     const bool page_side_shown = !caption_strip_collapsible_ ||
                                  caption_strip_revealed_ ||
                                  (can_reveal_toolbar() && toolbar_revealed_);
-    // (With single toolbar, compact mode keeps the sidebar's header, which
-    // has the lights beside its buttons.)
+    // (With single toolbar the lights are in the sidebar's header, so they go
+    // and come with the sidebar: hidden with it, not drawn over the page.)
     SetTrafficLightsShown(
         browser_view_, page_side_shown || (!IsSidebarOnRight(browser_view_) &&
-                                           (traffic_lights_->IsSidebarShown() ||
-                                            keeps_sidebar_nav())));
+                                           traffic_lights_->IsSidebarShown()));
     return;
   }
 #endif
@@ -1699,6 +2210,17 @@ void KoanCompactModeController::LayoutHotZones() {
   }
   const gfx::Rect bounds = browser_view_->GetLocalBounds();
   const gfx::Insets gutter = ContentCardInsets(browser_view_);
+  // The fixed point for bubbles: at the end of the top row, off the lights.
+  if (bubble_fallback_anchor_) {
+    const int row = GetHiddenToolbarRowHeight(
+        GetCaptionButtonAreaSize(browser_view_).height());
+    constexpr int kWidth = 24;
+    constexpr int kInset = 72;
+    bubble_fallback_anchor_->SetBoundsRect(gfx::Rect(
+        IsSidebarOnRight(browser_view_) ? bounds.right() - kInset - kWidth
+                                        : bounds.x() + kInset,
+        row - 2, kWidth, 2));
+  }
   // Along the hidden sidebar's edge, where it slides in.
   if (sidebar_hot_zone_) {
     sidebar_hot_zone_->SetBoundsRect(

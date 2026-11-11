@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/media/webrtc/BUILD.gn b/chrome/browser/media/webrtc/BUILD.gn
+--- a/chrome/browser/media/webrtc/BUILD.gn
++++ b/chrome/browser/media/webrtc/BUILD.gn
+@@ -180,6 +180,7 @@
+     "//components/webrtc",
+     "//content/public/common",
+     "//content/public/common:buildflags",
++    "//koan/browser/containers:partition",
+     "//media",
+     "//media/webrtc",
+     "//net/traffic_annotation",

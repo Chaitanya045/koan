@@ -1,0 +1,21 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's heart-circle-fill.svg: Lucide (ISC), lucide.dev icon "heart" (filled), converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 0.522, 9.37,
+QUADRATIC_TO, 0.522, 4.733, 4.852, 3.073,
+QUADRATIC_TO, 8.986, 1.489, 11.999, 4.562,
+QUADRATIC_TO, 15.006, 1.465, 19.155, 3.055,
+QUADRATIC_TO, 23.5, 4.721, 23.478, 9.374,
+QUADRATIC_TO, 23.478, 12.396, 20.041, 15.833,
+LINE_TO, 14.279, 21.408,
+QUADRATIC_TO, 13.379, 22.417, 12.019, 22.425,
+QUADRATIC_TO, 10.656, 22.434, 9.742, 21.431,
+LINE_TO, 3.97, 15.844,
+QUADRATIC_TO, 0.522, 12.396, 0.522, 9.37,
+CLOSE,

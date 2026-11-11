@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Koan Spaces test extension",
+  "version": "1.0",
+  "description": "Spaces lockdown (PR #159): test 15's chrome.tabs/tabGroups cases, and the seeding of tests 6 and 11. Load unpacked in a throwaway profile only.",
+  "permissions": ["tabs", "tabGroups", "storage"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "Koan Spaces test (test 15)"}
+}

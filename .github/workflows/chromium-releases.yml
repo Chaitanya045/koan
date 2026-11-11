@@ -12,6 +12,10 @@
 # result. The issue closes itself once the pin has caught up. Nothing is
 # posted while the versions and the patches are the same as last time.
 #
+# It also checks the patches against the newest Beta of the NEXT milestone,
+# report only (issue label chromium-next-beta, no due date, no pin change):
+# a conflict shows about 4 weeks before that milestone reaches Stable.
+#
 # Cheap: one ubuntu job of a minute or two, most of it a couple of HTTP
 # requests; the patch check only runs when something changed.
 name: Chromium releases

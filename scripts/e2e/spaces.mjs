@@ -10,12 +10,23 @@
 //
 //   scripts/e2e/run.sh spaces
 import {
-  ALT, CTRL, check, evalIn, finish, key as pageKey, menuMouse, openMenus,
-  pages as pageTargets, sleep, typeInto, viewEvent, viewMouse, viewTree,
-  visiblePage,
+  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish,
+  key as pageKey, menuMouse, openMenus, pages as pageTargets, readPref, sleep,
+  typeInto, viewEvent, viewMouse, viewTree, visiblePage, waitFor, windowTints,
 } from './lib/koan.mjs';
 
 const views = viewTree;
+// The node of the view tagged with element identifier `id`, if one shows.
+async function elementNodeId(id) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('DOM.getDocument', { depth: -1 });
+  const search = (await ui.send('DOM.performSearch', { query: `id:${id}` })).result;
+  const [nodeId] = search?.resultCount ? (await ui.send('DOM.getSearchResults',
+      { searchId: search.searchId, fromIndex: 0, toIndex: 1 })).result.nodeIds : [];
+  ui.close();
+  return nodeId;
+}
 const shown = (vs, cls) => vs.filter(v => v.cls === cls && v.shown);
 const one = (vs, cls) => shown(vs, cls)[0];
 const mouse = viewMouse;
@@ -89,11 +100,11 @@ check('No tab group header or Unfocus pill in the Space',
       shown(s.vs, 'TabGroupHeaderView').every(v => v.h === 0 || v.w === 0) &&
       shown(s.vs, 'TabGroupUnfocusButton').length === 0);
 
-// ---- "+": Zen's Create menu (Create Space | New Split, New Tab; features
-// add theirs).
+// ---- "+": Zen's Create menu (Create Space, Create Folder | New Split, New
+// Tab; folders add Create Folder).
 await click(s.create);
 let plus = menus(await views())[0];
-check('"+" opens the Create menu', plus?.items.length === 3,
+check('"+" opens the Create menu', plus?.items.length === 4,
       `${plus?.items.length} item(s)`);
 if (plus) {
   await chooseMenuItem(plus, plus.items[0]);
@@ -218,7 +229,7 @@ async function headerMenu() {
   return menus(await views())[0];
 }
 let menu = await headerMenu();
-// Change Name..., Change Icon..., Edit Theme..., the Spaces, Unload Space,
+// Change Name..., Change Icon..., Theme..., the Spaces, Unload Space,
 // Unload All Other Spaces, Create Space, Delete Space.
 check('The header menu has Zen\'s entries and the Spaces',
       menu?.items.length === 9, `${menu?.items.length} item(s)`);
@@ -351,11 +362,15 @@ await sleep(1500);
 const tabMenu = menus(await views())[0];
 let moveTo = null;
 // Hovering an item opens its submenu: Move To is the one listing the two
-// other Spaces.
+// other Spaces. Folders' "Move to Folder" (just above it) is skipped: once
+// its submenu is open, it covers the next item here, so hovers can't reach
+// Move To.
+const moveToFolder = await elementNodeId('kKoanMoveToFolderItem');
 for (const item of tabMenu?.items ?? []) {
+  if (item.nodeId === moveToFolder) continue;
   await menuMouse(tabMenu, item, ['mouseMoved']);
   await sleep(700);
-  moveTo = menus(await views()).find(m => m.root !== tabMenu.root && m.items.length === 2);
+  moveTo = menus(await views()).find(m => m.items.length === 2);
   if (moveTo) break;
 }
 check('The tab context menu has Move To with the other Spaces', !!moveTo);
@@ -421,5 +436,85 @@ s = await sidebar();
 await rootClick(formButton('Cancel'));
 s = await sidebar();
 check('Clicking Cancel closes the form', !one(s.vs, 'KoanSpaceCreationView'));
+// ---- Spaces lockdown (.agent/notes/upstream/tab-groups-omnibox-fullscreen.md
+// section 1.3): upstream's tab group side effects and entry points stay out
+// of a Spaces window. The Spaces here: Home, Scratch, Clicked (shown). Chrome's group keys are Shift+Alt+P/W/X/Z/C here
+// (Cmd+Ctrl on a Mac). A DCHECK build also runs Koan's leak detector (G14)
+// after every update of the steps below.
+const KEY = { C: 67, P: 80, W: 87, X: 88, Z: 90 };
+const noEditor = vs => shown(vs, 'TabGroupEditorBubbleView').length === 0;
+const userColor = await readPref('browser.theme.user_color2');
+
+// G1: a Space with the default theme leaves the window its user colour; the
+// profile's colour is never the Space's.
+check('G1: a default-theme Space gives the window no colour of its own',
+      (await windowTints()).every(t => !t), JSON.stringify(await windowTints()));
+
+// G4: "New tab group" opens Zen's Create-a-Space form, with no group or
+// editor.
+await key(KEY.P, SHIFT | ALT, 'P');
+s = await sidebar();
+check('G4: New tab group opens the Create-a-Space form, not a group',
+      !!one(s.vs, 'KoanSpaceCreationView') && noEditor(s.vs) &&
+      shown(s.vs, 'KoanSpaceButton').length === 3,
+      JSON.stringify({ form: !!one(s.vs, 'KoanSpaceCreationView'),
+                       spaces: s.buttons.length }));
+const formCancel = shown(s.vs, 'MdTextButton')
+    .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel');
+if (formCancel) {
+  await click(formCancel);
+}
+// G4: next / previous group are the next / previous Space, wrapping.
+await key(KEY.X, SHIFT | ALT, 'X');
+s = await sidebar();
+check('G4: Focus next group goes to the next Space (wrapping around)',
+      s.header?.name === 'Home', s.header?.name);
+await key(KEY.Z, SHIFT | ALT, 'Z');
+s = await sidebar();
+check('G4: Focus previous group goes back', s.header?.name === 'Clicked',
+      s.header?.name);
+// G4: "Close group" asks to delete the Space (Zen's question); No keeps it.
+await key(KEY.W, SHIFT | ALT, 'W');
+vs = await views();
+const no = shown(vs, 'MdTextButton').find(b => b.props.Text === 'No') ??
+           shown(vs, 'LabelButton').find(b => b.props.Text === 'No');
+check('G4: Close group asks before deleting the Space', !!no);
+if (no) {
+  await click(no);
+}
+s = await sidebar();
+check('...and No keeps it, with its tabs', s.buttons.length === 3 &&
+      s.header?.name === 'Clicked' && s.tabs >= 1,
+      JSON.stringify({ spaces: s.buttons.map(b => b.name), tabs: s.tabs }));
+// G4: "New tab in group" is Koan's new tab (the URL bar), which opens no tab
+// by itself.
+const tabsBefore = s.tabs;
+await key(KEY.C, SHIFT | ALT, 'C');
+await key(VK.ESCAPE);
+s = await sidebar();
+check('G4: New tab in group opens Koan\'s new tab, not an NTP tab',
+      s.tabs === tabsBefore && noEditor(s.vs), `${tabsBefore} -> ${s.tabs}`);
+
+// G2: a tab in another Space keeps running (no focus-mode freezing vote;
+// Koan's background-tab policy keeps the 5 most recently used running).
+await click(s.buttons[0].view);  // Home
+const ticker = (await browserCall('Target.createTarget', {
+  url: 'data:text/html,<title>ticker</title><script>n=0;setInterval(()=>n++,100)</script>',
+})).result.targetId;
+const tickerPage = await waitFor(async () => (await pageTargets()).find(p => p.id === ticker));
+await sleep(1500);
+s = await sidebar();
+await click(s.buttons[1].view);  // Scratch, away from Home
+await sleep(3000);
+const n1 = await evalIn(tickerPage, 'n');
+await sleep(1500);
+const n2 = await evalIn(tickerPage, 'n');
+check('G2: a tab in another Space isn\'t frozen by switching Space',
+      typeof n1 === 'number' && n2 > n1, `${n1} -> ${n2}`);
+
+// G1: the profile's colour stays the user's (two windows on differently
+// coloured Spaces: spaces_switching.mjs).
+check('G1: no Space colour reached the profile',
+      await readPref('browser.theme.user_color2') === userColor);
 
 finish();

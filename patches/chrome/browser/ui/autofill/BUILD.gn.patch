@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/autofill/BUILD.gn b/chrome/browser/ui/autofill/BUILD.gn
+--- a/chrome/browser/ui/autofill/BUILD.gn
++++ b/chrome/browser/ui/autofill/BUILD.gn
+@@ -237,6 +237,7 @@
+     "//components/unified_consent",
+     "//components/variations/service",
+     "//components/vector_icons",
++    "//koan/browser/containers:partition",
+   ]
+ 
+   if (safe_browsing_mode != 0) {

@@ -1,0 +1,40 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's stand-in for Zen's container-tab.svg: Lucide (ISC), lucide.dev icon "box", converted by
+// scripts/gen_koan_icons.py. See third_party/icons and THIRD_PARTY_NOTICES.md.
+
+CANVAS_DIMENSIONS, 24,
+FILL_RULE_NONZERO,
+MOVE_TO, 22.034, 16.051,
+QUADRATIC_TO, 22.032, 17.75, 20.557, 18.601,
+LINE_TO, 13.473, 22.65,
+QUADRATIC_TO, 12, 23.5, 10.531, 22.652,
+LINE_TO, 3.439, 18.599,
+QUADRATIC_TO, 1.968, 17.75, 1.966, 16.05,
+LINE_TO, 1.966, 7.949,
+QUADRATIC_TO, 1.968, 6.25, 3.443, 5.399,
+LINE_TO, 10.527, 1.35,
+QUADRATIC_TO, 12, 0.5, 13.469, 1.348,
+LINE_TO, 20.561, 5.401,
+QUADRATIC_TO, 22.032, 6.25, 22.034, 7.949,
+CLOSE,
+MOVE_TO, 20.193, 8.353,
+LINE_TO, 12.921, 12.533,
+LINE_TO, 12.921, 20.845,
+LINE_TO, 19.644, 17.003,
+QUADRATIC_TO, 20.192, 16.686, 20.193, 16.049,
+CLOSE,
+MOVE_TO, 11.079, 12.533,
+LINE_TO, 3.807, 8.353,
+LINE_TO, 3.807, 16.05,
+QUADRATIC_TO, 3.808, 16.686, 4.36, 17.005,
+LINE_TO, 11.079, 20.845,
+CLOSE,
+MOVE_TO, 19.25, 6.772,
+LINE_TO, 12.556, 2.947,
+QUADRATIC_TO, 12, 2.626, 11.448, 2.945,
+LINE_TO, 4.75, 6.772,
+LINE_TO, 12, 10.938,
+CLOSE,

@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/history/BUILD.gn b/chrome/browser/history/BUILD.gn
+--- a/chrome/browser/history/BUILD.gn
++++ b/chrome/browser/history/BUILD.gn
+@@ -78,6 +78,7 @@
+     "//components/webapps/browser",
+     "//content/public/browser",
+     "//extensions/buildflags",
++    "//koan/browser/containers:partition",
+     "//net",
+     "//third_party/blink/public/common",
+     "//ui/base",

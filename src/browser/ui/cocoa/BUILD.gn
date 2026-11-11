@@ -8,25 +8,38 @@ assert(is_mac)
 # dependency-light so upstream targets can depend on it without cycles; the
 # definitions live in :impl, linked through //chrome/browser:browser.
 source_set("hooks") {
-  sources = [ "koan_main_menu.h" ]
+  sources = [
+    "koan_main_menu.h",
+    "koan_session_reopen.h",
+    "koan_swipe.h",
+  ]
   public_deps = [
     "//base",
     "//ui/base",
   ]
 }
 
-# Koan's items in the menu bar and the Dock menu.
+# Koan's items in the menu bar and the Dock menu, and the Dock click that
+# brings the last window back.
 source_set("impl") {
-  sources = [ "koan_main_menu_mac.mm" ]
+  sources = [
+    "koan_main_menu_mac.mm",
+    "koan_session_reopen.cc",
+  ]
   deps = [
     ":hooks",
     "//base",
     "//chrome/app:command_ids",
     "//chrome/browser:global_keyboard_shortcuts_mac",
+    "//chrome/browser/lifetime",
+    "//chrome/browser/prefs:util",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/sessions",
     "//chrome/browser/themes",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/cocoa",
+    "//chrome/browser/ui/startup",
+    "//chrome/browser/ui/startup:startup_tab",
     "//chrome/browser/ui/tabs:tab_strip",
     "//chrome/browser/ui/views/frame:browser_view_header",
     "//components/tabs:public",

@@ -1,0 +1,28 @@
+diff --git a/chrome/browser/ui/views/bubble_anchor_util_views.cc b/chrome/browser/ui/views/bubble_anchor_util_views.cc
+index 2d36e44a69c90300612a02369eee80fcba8e0dba..4d8fc749302d231df2dc82934bae350aa9915082 100644
+--- a/chrome/browser/ui/views/bubble_anchor_util_views.cc
++++ b/chrome/browser/ui/views/bubble_anchor_util_views.cc
+@@ -23,6 +23,7 @@
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ #include "chrome/browser/ui/webui/webui_embedding_context.h"
+ #include "components/payments/core/features.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "ui/base/interaction/element_highlighter.h"
+ #include "ui/views/bubble/bubble_border.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+@@ -39,6 +40,15 @@ AnchorConfiguration GetPageInfoAnchorConfiguration(
+   auto* location_bar_view =
+       browser_view ? browser_view->GetLocationBarView() : nullptr;
+ 
++  // Koan: where the toolbar is hidden (single toolbar), the pill (Zen
++  // anchors page info and permission icons to its identity box).
++  if (anchor == Anchor::kLocationBar && browser_view) {
++    if (views::View* koan_anchor = koan::GetBubbleAnchorView(browser_view)) {
++      return {views::BubbleAnchor(koan_anchor), std::nullopt,
++              views::BubbleBorder::TOP_LEFT};
++    }
++  }
++
+   if (location_bar_view) {
+     auto* permission_dashboard_view =
+         location_bar_view->permission_dashboard_view();

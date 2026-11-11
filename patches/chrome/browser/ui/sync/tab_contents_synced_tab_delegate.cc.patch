@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/ui/sync/tab_contents_synced_tab_delegate.cc b/chrome/browser/ui/sync/tab_contents_synced_tab_delegate.cc
+--- a/chrome/browser/ui/sync/tab_contents_synced_tab_delegate.cc
++++ b/chrome/browser/ui/sync/tab_contents_synced_tab_delegate.cc
+@@ -18,6 +18,7 @@
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "extensions/buildflags/buildflags.h"
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+@@ -143,6 +144,10 @@
+ 
+ bool TabContentsSyncedTabDelegate::ShouldSync(
+     sync_sessions::SyncSessionsClient* sessions_client) {
++  // Koan: an agent container's tabs aren't synced as open tabs.
++  if (koan::containers::IsAgentContents(web_contents_)) {
++    return false;
++  }
+   if (sessions_client->GetSyncedWindowDelegatesGetter()->FindById(
+           GetWindowId()) == nullptr) {
+     return false;

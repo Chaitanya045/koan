@@ -1,16 +1,20 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index f238f7139d7179ef4ffd13e66127a29fa45aef7d..74f055d519f1b9b76e889c1e6524112dbad0cc36 100644
+index 03111c8cb7cd0786314a448d01c358ae1b06a858..483280d740f30e73fce9bbce301877aa35917343 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -407,6 +407,7 @@
+@@ -410,6 +410,11 @@
  #include "google_apis/google_api_keys.h"
  #include "gpu/config/gpu_switches.h"
  #include "ipc/ipc_channel_proxy.h"
++#include "koan/browser/agent/koan_agent_tab_hooks.h"
 +#include "koan/browser/koan_renderer_switches.h"
++#include "koan/browser/containers/koan_container_partition.h"
++#include "koan/browser/ui/views/koan_glance.h"
++#include "koan/browser/ui/views/koan_window_background.h"
  #include "media/base/media_switches.h"
  #include "media/media_buildflags.h"
  #include "media/mojo/buildflags.h"
-@@ -3159,6 +3160,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3161,6 +3166,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -19,3 +23,89 @@ index f238f7139d7179ef4ffd13e66127a29fa45aef7d..74f055d519f1b9b76e889c1e6524112d
      }
  
  #if BUILDFLAG(IS_CHROMEOS)
+@@ -4126,6 +4133,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+                                        ui::ColorProviderKey::ColorMode::kLight
+                                    ? blink::mojom::PreferredColorScheme::kLight
+                                    : blink::mojom::PreferredColorScheme::kDark;
++      // Koan: unless a Space theme sets the window's mode; websites keep the
++      // appearance setting then.
++      if (const std::optional<bool> dark = koan::PrefersDarkWebColorScheme(
++              web_contents, security_principal.IsWebUI())) {
++        preferred_color_scheme = *dark
++                                     ? blink::mojom::PreferredColorScheme::kDark
++                                     : blink::mojom::PreferredColorScheme::kLight;
++      }
+     }
+     const auto effective_page_colors =
+         PageColorsController::GetEffectivePageColors(*profile.GetPrefs());
+@@ -4142,6 +4157,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+           web_contents->GetColorProvider().GetColor(kColorToolbar))
+           ? blink::mojom::PreferredColorScheme::kDark
+           : blink::mojom::PreferredColorScheme::kLight;
++  // Koan: unless a Space theme sets the window's mode; the page's
++  // scrollbars follow the appearance setting then, as its colour scheme.
++  if (const std::optional<bool> dark = koan::PrefersDarkWebColorScheme(
++          web_contents, security_principal.IsWebUI())) {
++    preferred_root_scrollbar_color_scheme =
++        *dark ? blink::mojom::PreferredColorScheme::kDark
++              : blink::mojom::PreferredColorScheme::kLight;
++  }
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_GUEST_VIEW)
+@@ -4636,6 +4659,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
+   }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
++  // Koan: a link from a pinned tab to another site opens in Glance, as in
++  // Zen (koan/browser/ui/views/koan_glance.h).
++  if (koan::OpenNewTabInGlance(opener, target_url, referrer, disposition,
++                               user_gesture, opener_suppressed)) {
++    return false;
++  }
++
+   const BlockedWindowParams blocked_params(
+       target_url, opener->GetGlobalFrameToken(), source_origin,
+       opener->GetSiteInstance(), referrer, frame_name, disposition, features,
+@@ -7338,6 +7368,11 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
+ bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
+     content::RenderFrameHost* rfh,
+     const url::Origin& caller_origin) {
++  // Koan: no passkey or security key sign-in in an agent container, refused
++  // before any UI.
++  if (koan::containers::IsAgentFrame(rfh)) {
++    return false;
++  }
+   const Profile* profile =
+       Profile::FromBrowserContext(rfh->GetBrowserContext());
+   if (profile->GetPrefs()->GetBoolean(
+@@ -7514,6 +7549,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
+   }
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
++  // Koan: in a tab an agent holds, the sign-in waits for the user in the agent
++  // indicator (koan/browser/agent/koan_agent_tab_hooks.h).
++  if (koan::agent::ShouldHoldHttpAuthForAgent(web_contents, guest,
++                                              do_not_prompt_for_login)) {
++    return koan::agent::HoldHttpAuthForAgent(
++        web_contents, browser_context, auth_info, request_id,
++        is_request_for_primary_main_frame_navigation, is_request_for_navigation,
++        url, response_headers, std::move(auth_required_callback));
++  }
+   if (!http_auth_coordinator_) {
+     http_auth_coordinator_ = CreateHttpAuthCoordinator();
+   }
+@@ -7594,6 +7638,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
+     // applications.
+     return false;
+   }
++  // Koan: in a tab an agent holds, the launch waits for the user in the agent
++  // indicator (koan/browser/agent/koan_agent_tab_hooks.h).
++  if (koan::agent::HoldExternalProtocolForAgent(
++          web_contents, url, page_transition, has_user_gesture,
++          is_in_fenced_frame_tree, initiating_origin, initiator_document)) {
++    return false;
++  }
+ #endif  //! BUILDFLAG(IS_ANDROID)
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS)

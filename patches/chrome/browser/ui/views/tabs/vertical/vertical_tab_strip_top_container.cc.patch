@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
-index 485aa1faf322a7cab9f33c029986c373caccaf8a..8dc72fd3ef5ad89fc98b72b4854b754851e70d87 100644
+index 485aa1faf322a7cab9f33c029986c373caccaf8a..45e8b937d25ee77f5ca94f42c1d2a2543e929ca3 100644
 --- a/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 +++ b/chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_top_container.cc
 @@ -24,6 +24,7 @@
@@ -10,7 +10,31 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..8dc72fd3ef5ad89fc98b72b4854b7548
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/base/metadata/metadata_impl_macros.h"
  #include "ui/compositor/layer.h"
-@@ -163,9 +164,12 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -61,6 +62,9 @@ VerticalTabStripTopContainer::VerticalTabStripTopContainer(
+   combo_button_->SetPaintToLayer();
+   combo_button_->layer()->SetFillsBoundsOpaquely(false);
+   combo_button_->SetClipLayerToVisibleBounds(true);
++  // Koan: Zen's sidebar has neither the tab groups nor the tab search button.
++  // Hidden for good: the layout below leaves it alone.
++  combo_button_->SetVisible(false);
+   combo_button_->SetOrientation(
+       combo_button_orientation_ = state_controller->IsCollapsed()
+                                       ? views::LayoutOrientation::kVertical
+@@ -115,8 +119,11 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+           ? host_size.width()
+           : parent()->GetAvailableSize(this).width().value_or(0);
+ 
+-  const bool is_collapsed =
+-      state_controller_ && state_controller_->IsCollapsed();
++  // Koan: compact mode's sidebar is collapsed in upstream's terms, but when it
++  // shows (revealed over the page) it has its expanded header: one row.
++  const bool is_collapsed = state_controller_ &&
++                            state_controller_->IsCollapsed() &&
++                            !koan::ShowsExpandedSidebarHeader(this);
+   const bool is_collapsing =
+       state_controller_ && state_controller_->GetCollapseState() ==
+                                tabs::VerticalTabStripCollapseState::kCollapsing;
+@@ -163,14 +170,17 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
                    ? 0
                    : std::max(0, (host_size.width() - pref_size.width()) / 2);
        gfx::Rect bounds(x, current_y, pref_size.width(), pref_size.height());
@@ -23,7 +47,13 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..8dc72fd3ef5ad89fc98b72b4854b7548
  
        current_y += pref_size.height();
      }
-@@ -264,6 +268,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+ 
+-    if (combo_button_) {
++    if (combo_button_ && combo_button_->GetVisible()) {
+       // In the case that neither of the combo button components are visible, we
+       // do not want to add any extra padding to the top container.
+       bool start_button_visible = combo_button_->start_button() &&
+@@ -264,6 +274,7 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        gfx::Rect bounds(left_alignment,
                         std::max(0, y_baseline - pref_size.height() / 2),
                         pref_size.width(), pref_size.height());
@@ -31,7 +61,7 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..8dc72fd3ef5ad89fc98b72b4854b7548
        layout.child_layouts.emplace_back(collapse_button_.get(),
                                          /*visible=*/true, bounds);
        current_y =
-@@ -295,7 +300,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -295,7 +306,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
          (is_collapsing || (is_collapsed && available_width <= collapsed_width));
  
      if (segmented_control_) {
@@ -41,17 +71,19 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..8dc72fd3ef5ad89fc98b72b4854b7548
        gfx::Rect bounds;
        if (visible) {
          const gfx::Size pref_size = segmented_control_->GetPreferredSize();
-@@ -311,7 +317,8 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -310,8 +322,9 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+       layout.child_layouts.emplace_back(segmented_control_.get(), visible,
                                          bounds);
      }
-     if (combo_button_) {
+-    if (combo_button_) {
 -      const bool visible = !hide_trailing_control && !show_segmented_control;
++    if (combo_button_ && combo_button_->GetVisible()) {
 +      const bool visible = !hide_trailing_control && !show_segmented_control &&
 +                           !koan::HidesSidebarTrailingControls(this);
        gfx::Rect bounds;
        if (visible) {
          const gfx::Size pref_size =
-@@ -327,7 +334,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
+@@ -327,7 +340,10 @@ views::ProposedLayout VerticalTabStripTopContainer::CalculateProposedLayout(
        }
        layout.child_layouts.emplace_back(combo_button_.get(), visible, bounds);
      }
@@ -62,7 +94,29 @@ index 485aa1faf322a7cab9f33c029986c373caccaf8a..8dc72fd3ef5ad89fc98b72b4854b7548
  
    layout.host_size = host_size;
  
-@@ -533,12 +543,15 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
+@@ -384,6 +400,12 @@ void VerticalTabStripTopContainer::ShowContextMenuForViewImpl(
+     views::View* source,
+     const gfx::Point& point,
+     ui::mojom::MenuSourceType source_type) {
++  // Koan: the sidebar button's menu is Koan's sidebar menu, not upstream's
++  // "Expand tabs on hover" (always on in Koan).
++  if (source == collapse_button_ &&
++      koan::ShowSidebarButtonContextMenu(browser_, point, source_type)) {
++    return;
++  }
+   if (source == collapse_button_) {
+     BrowserUserEducationInterface::From(browser_)
+         ->NotifyFeaturePromoFeatureUsed(
+@@ -523,7 +545,7 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
+   if (show_segmented_control && segmented_control_) {
+     return segmented_control_->GetPreferredSize();
+   }
+-  if (combo_button_) {
++  if (combo_button_ && combo_button_->GetVisible()) {
+     return combo_button_->GetPreferredSizeForOrientation(
+         views::LayoutOrientation::kHorizontal);
+   }
+@@ -533,12 +555,15 @@ gfx::Size VerticalTabStripTopContainer::GetTrailingControlPreferredSize(
  int VerticalTabStripTopContainer::GetPreferredWidth(
      bool show_segmented_control) const {
    int total_width =

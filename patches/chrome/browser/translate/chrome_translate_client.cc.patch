@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/translate/chrome_translate_client.cc b/chrome/browser/translate/chrome_translate_client.cc
+index 82d52651f23963106908f491e2a099a5fe5cded4..c5dc05edc8aa6cad1dcb869c499d8de247b28d80 100644
+--- a/chrome/browser/translate/chrome_translate_client.cc
++++ b/chrome/browser/translate/chrome_translate_client.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/profiles/profile_key.h"
+ #include "chrome/browser/translate/translate_ranker_factory.h"
+ #include "chrome/browser/translate/translate_service.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #if !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -270,8 +271,12 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
+       content::WebContentsUserData<ChromeTranslateClient>(*web_contents),
+       translate_driver_(new translate::ContentTranslateDriver(
+           *web_contents,
+-          UrlLanguageHistogramFactory::GetForBrowserContext(
+-              web_contents->GetBrowserContext()))),
++          // Koan: an agent container's page languages aren't counted into
++          // the user's (as in Incognito).
++          koan::containers::IsAgentContents(web_contents)
++              ? nullptr
++              : UrlLanguageHistogramFactory::GetForBrowserContext(
++                    web_contents->GetBrowserContext()))),
+       language_detection_driver_(
+           new language_detection::ContentLanguageDetectionDriver(
+               LanguageDetectionModelServiceFactory::GetForProfile(

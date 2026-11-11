@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/extensions/api/debugger/debugger_api.cc b/chrome/browser/extensions/api/debugger/debugger_api.cc
+--- a/chrome/browser/extensions/api/debugger/debugger_api.cc
++++ b/chrome/browser/extensions/api/debugger/debugger_api.cc
+@@ -54,6 +54,7 @@
+ #include "extensions/browser/extension_registry_observer.h"
+ #include "extensions/browser/extension_util.h"
+ #include "extensions/browser/extensions_browser_client.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/constants.h"
+ #include "extensions/common/error_utils.h"
+@@ -413,6 +414,11 @@
+                                      Profile* extension_profile,
+                                      WebContents& web_contents,
+                                      std::string* error) {
++  // Koan: no extension debugs an agent container's tab.
++  if (koan::containers::IsAgentContents(&web_contents)) {
++    *error = kRestrictedError;
++    return false;
++  }
+   content::RenderFrameHost* main = web_contents.GetPrimaryMainFrame();
+   content::RenderFrameHost* outer = main->GetOutermostMainFrameOrEmbedder();
+   if (outer != main) {

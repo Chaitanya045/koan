@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/visited_url_ranking/desktop_tab_model_url_visit_data_fetcher.cc b/chrome/browser/visited_url_ranking/desktop_tab_model_url_visit_data_fetcher.cc
+index b7bc33e139b146d21ec42cbfd2616d2c586dd7d4..747edce043ceada1105fecafd679db5a6e03e1fe 100644
+--- a/chrome/browser/visited_url_ranking/desktop_tab_model_url_visit_data_fetcher.cc
++++ b/chrome/browser/visited_url_ranking/desktop_tab_model_url_visit_data_fetcher.cc
+@@ -23,6 +23,7 @@
+ #include "content/public/browser/navigation_controller.h"
+ #include "content/public/browser/navigation_entry.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "url/url_constants.h"
+ 
+ namespace visited_url_ranking {
+@@ -67,6 +68,10 @@ void DesktopTabModelURLVisitDataFetcher::FetchURLVisitData(
+         TabStripModel* const tab_strip_model = browser->GetTabStripModel();
+         for (tabs::TabInterface* tab : *tab_strip_model) {
+           auto* web_contents = tab->GetContents();
++          // Koan: an agent container's tabs aren't offered to resume.
++          if (koan::containers::IsAgentContainerContents(web_contents)) {
++            continue;
++          }
+           auto* last_entry =
+               web_contents->GetController().GetLastCommittedEntry();
+           if (!last_entry || last_entry->GetTimestamp() < options.begin_time) {

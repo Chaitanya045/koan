@@ -297,7 +297,7 @@ void KoanWindowDragController::StartDrag(const blink::WebMouseEvent& event) {
   host->ConvertDIPToScreenInPixels(&point);
   handler->DispatchHostWindowDragMovement(HTCAPTION, point);
   aura::Env::GetInstance()->set_mouse_button_flags(0);
-#else
+#elif BUILDFLAG(IS_MAC)
   // macOS: AppKit moves the window while the button is down (as Zen does,
   // Zen's StartNativeWindowMove), so tiling at the screen's edges and the
   // drag to another Space work. Not Widget::RunMoveLoop: its release CHECKs
@@ -330,6 +330,9 @@ void KoanWindowDragController::StartDrag(const blink::WebMouseEvent& event) {
                        // button down, or the next press.)
                      },
                      weak_factory_.GetWeakPtr()));
+#else
+  // Koan ships on macOS (and tests on Linux): elsewhere the page keeps the
+  // gesture.
 #endif
 }
 

@@ -11,8 +11,11 @@
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
+#include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_lights_geometry.h"
 #include "koan/browser/ui/views/koan_traffic_lights.h"
+#include "ui/color/color_provider.h"
 #include "ui/views/view.h"
 
 namespace koan {
@@ -35,21 +38,13 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
   const bool fullscreen = IsWindowFullscreen(browser_view_);
   if (fullscreen != was_fullscreen_) {
     was_fullscreen_ = fullscreen;
-#if BUILDFLAG(IS_MAC)
-    if (!fullscreen) {
-      // The title bar comes back to the window with its lights.
-      RestoreFullscreenTitlebar(browser_view_);
-    }
-#endif
     applied_height_.reset();
     on_changed_.Run();
   }
   if (fullscreen) {
 #if BUILDFLAG(IS_MAC)
-    // Nothing of AppKit's title bar shows at the top edge but the menu bar.
-    if (HidesFullscreenTopChrome(browser_view_)) {
-      HideFullscreenTitlebar(browser_view_);
-    }
+    // AppKit's title bar slides in with the menu bar, with the lights.
+    ShowFullscreenTitlebar(browser_view_);
 #endif
     return;
   }
@@ -59,6 +54,14 @@ void KoanTrafficLightsController::OnBrowserViewLayout() {
     titlebar_cleared_ = true;
     ClearTitlebar(browser_view_);
   }
+  // Zen's mono window controls, in the toolbox's text colour.
+  const ui::ColorProvider* colors = browser_view_->GetColorProvider();
+  SetMonoTrafficLights(
+      browser_view_,
+      colors && browser_view_->GetWidget() && OwnsTitlebar(browser_view_)
+          ? std::optional<SkColor>(
+                MonoTrafficLightColor(colors->GetColor(kColorKoanToolboxText)))
+          : std::nullopt);
 #endif
   if (update_pending_ ||
       (applied_height_ && *applied_height_ == GetTrafficLightsTitlebarHeight(

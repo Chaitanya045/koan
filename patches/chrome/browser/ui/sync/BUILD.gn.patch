@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/sync/BUILD.gn b/chrome/browser/ui/sync/BUILD.gn
+--- a/chrome/browser/ui/sync/BUILD.gn
++++ b/chrome/browser/ui/sync/BUILD.gn
+@@ -47,6 +47,7 @@
+     "//components/tabs:public",
+     "//content/public/browser",
+     "//extensions/buildflags",
++    "//koan/browser/containers:partition",
+   ]
+ 
+   if (enable_extensions) {

@@ -1,19 +1,47 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 2ea589165ccac66b5d4043e60130e4bb26eaa359..194e78f08af8ca1c11fe9169df011a2c3841803b 100644
+index e4d0061b0e31a4cb72ef49fd6ac46c20b2438dfa..715d0571ca23eb4a19c5922f3e8aff9b15c5f465 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -88,6 +88,7 @@
+@@ -88,6 +88,10 @@
  #include "content/public/common/drop_data.h"
  #include "content/public/common/url_constants.h"
  #include "content/public/common/window_container_type.mojom-shared.h"
++#include "koan/browser/agent/koan_agent_tab_hooks.h"
++#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_glance.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
  #include "extensions/browser/extension_registry.h"
  #include "extensions/browser/extension_system.h"
  #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
-@@ -542,6 +543,23 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
+@@ -547,6 +551,11 @@ content::PreloadingEligibility
+ BrowserWebContentsDelegate::IsPrerender2Supported(
+     content::WebContents& web_contents,
+     content::PreloadingTriggerType trigger_type) {
++  // Koan: a prerendered page would be in the default partition, not the
++  // container's.
++  if (!koan::containers::AllowsPrerender(web_contents)) {
++    return content::PreloadingEligibility::kPreloadingDisabled;
++  }
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents.GetBrowserContext());
+   return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs());
+@@ -579,6 +588,36 @@ content::WebContents* BrowserWebContentsDelegate::OpenURLFromTab(
                                    std::move(navigation_handle_callback));
    }
  
++  // Koan agent control: what a page in an agent tab opens stays in the
++  // background (koan/browser/agent/koan_agent_tab_hooks.h). Before Glance, so
++  // that an agent's click never opens a card over the user's window.
++  if (WindowOpenDisposition koan_disposition = params.disposition;
++      koan::agent::OpensInBackgroundForAgent(source, &koan_disposition)) {
++    content::OpenURLParams background_params(params);
++    background_params.disposition = koan_disposition;
++    content::WebContents* opened = OpenURLFromTab(
++        source, background_params, std::move(navigation_handle_callback));
++    koan::agent::OnOpenedFromAgentTab(source, opened);
++    return opened;
++  }
++
 +  // Koan Glance: an activation click (Alt+click by default) opens the link
 +  // in a floating card; one Glance declines gets its modifier's usual
 +  // disposition (koan/browser/ui/views/koan_glance.h).
@@ -34,3 +62,84 @@ index 2ea589165ccac66b5d4043e60130e4bb26eaa359..194e78f08af8ca1c11fe9169df011a2c
    // If the source is already split, navigate the other pane instead of
    // creating a new tab. Return |source| so that WebContentsImpl::OpenURL()
    // sees new_contents == this and skips the DidOpenRequestedURL notification,
+@@ -719,6 +758,11 @@ content::WebContents* BrowserWebContentsDelegate::AddNewContents(
+     }
+   }
+ 
++  // Koan agent control: window.open() from an agent tab opens a background
++  // tab of the same agent (koan/browser/agent/koan_agent_tab_hooks.h).
++  koan::agent::OpensInBackgroundForAgent(source, &disposition);
++  koan::agent::OnOpenedFromAgentTab(source, new_contents.get());
++
+   FullscreenController* fullscreen_controller =
+       exclusive_access_manager_->fullscreen_controller();
+ #if BUILDFLAG(IS_MAC)
+@@ -790,6 +834,11 @@ content::WebContents* BrowserWebContentsDelegate::AddNewContents(
+ 
+ void BrowserWebContentsDelegate::ActivateContents(
+     content::WebContents* contents) {
++  // Koan: a page in a tab an agent holds never takes the user's focus; the
++  // agent indicator offers it (koan/browser/agent/koan_agent_tab_hooks.h).
++  if (koan::agent::HoldActivationForAgent(contents)) {
++    return;
++  }
+   // A WebContents can ask to activate after it's been removed from the
+   // TabStripModel. See https://crbug.com/40679349
+   int index = browser_->GetTabStripModel()->GetIndexOfWebContents(contents);
+@@ -927,6 +976,11 @@ bool BrowserWebContentsDelegate::ShouldFocusLocationBarByDefault(
+     return false;
+   }
+ 
++  // Koan: a new tab page doesn't open the floating URL bar by itself (Zen).
++  if (koan::SuppressesDefaultUrlBarFocus(&*browser_)) {
++    return false;
++  }
++
+   // This should be based on the pending entry if there is one, so that
+   // back/forward navigations to the NTP are handled.  The visible entry can't
+   // be used here, since back/forward navigations are not treated as visible
+@@ -1158,6 +1212,10 @@ void BrowserWebContentsDelegate::RendererResponsive(
+ content::JavaScriptDialogManager*
+ BrowserWebContentsDelegate::GetJavaScriptDialogManager(
+     content::WebContents* source) {
++  // Koan: dialogs of a tab an agent holds wait in the agent indicator.
++  if (auto* koan_manager = koan::agent::JavaScriptDialogManagerForAgent(source)) {
++    return koan_manager;
++  }
+   return javascript_dialogs::TabModalDialogManager::FromWebContents(source);
+ }
+ 
+@@ -1172,6 +1230,11 @@ void BrowserWebContentsDelegate::RunFileChooser(
+     content::RenderFrameHost* render_frame_host,
+     scoped_refptr<content::FileSelectListener> listener,
+     const blink::mojom::FileChooserParams& params) {
++  // Koan: no file picker for an agent container.
++  if (koan::containers::IsAgentFrame(render_frame_host)) {
++    listener->FileSelectionCanceled();
++    return;
++  }
+   FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
+                                    params);
+ }
+@@ -1180,6 +1243,10 @@ void BrowserWebContentsDelegate::EnumerateDirectory(
+     content::WebContents* web_contents,
+     scoped_refptr<content::FileSelectListener> listener,
+     const base::FilePath& path) {
++  if (koan::containers::IsAgentContents(web_contents)) {
++    listener->FileSelectionCanceled();
++    return;
++  }
+   FileSelectHelper::EnumerateDirectory(web_contents, std::move(listener), path);
+ }
+ 
+@@ -1367,6 +1434,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
+   if (context->IsOffTheRecord()) {
+     return;
+   }
++  // Koan: an agent container's pages never add protocol handlers.
++  if (koan::containers::IsAgentFrame(requesting_frame)) {
++    return;
++  }
+ 
+   auto* web_contents =
+       content::WebContents::FromRenderFrameHost(requesting_frame);

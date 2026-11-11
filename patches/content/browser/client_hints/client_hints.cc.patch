@@ -1,0 +1,28 @@
+diff --git a/content/browser/client_hints/client_hints.cc b/content/browser/client_hints/client_hints.cc
+index 73ed90c580c9d929d17a2b5c0a002ce8d7212834..070409ae7f9a8266fa85d2d7d21b21a9f7ee4a51 100644
+--- a/content/browser/client_hints/client_hints.cc
++++ b/content/browser/client_hints/client_hints.cc
+@@ -36,6 +36,7 @@
+ #include "content/public/common/content_client.h"
+ #include "content/public/common/content_features.h"
+ #include "content/public/common/content_switches.h"
++#include "koan/browser/containers/koan_partition_domain.h"
+ #include "net/base/url_util.h"
+ #include "net/http/http_request_headers.h"
+ #include "net/http/http_response_headers.h"
+@@ -1045,6 +1046,15 @@ void PersistAcceptCH(const url::Origin& origin,
+                      ClientHintsControllerDelegate* delegate,
+                      const std::vector<WebClientHintsType>& hints) {
+   CHECK(delegate, base::NotFatalUntil::M160);
++  // Koan: an agent container's Accept-CH isn't kept for the user's tabs.
++  if (koan::containers::IsAgentPartitionDomain(
++          frame_tree_node.current_frame_host()
++              ->GetProcess()
++              ->GetStoragePartition()
++              ->GetConfig()
++              .partition_domain())) {
++    return;
++  }
+ 
+   // For prerendering headers, it should not persist the client header until
+   // activation, considering user has not visited the page and allowed it to

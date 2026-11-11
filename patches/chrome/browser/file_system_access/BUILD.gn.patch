@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/file_system_access/BUILD.gn b/chrome/browser/file_system_access/BUILD.gn
+--- a/chrome/browser/file_system_access/BUILD.gn
++++ b/chrome/browser/file_system_access/BUILD.gn
+@@ -58,6 +58,7 @@
+     "//components/content_settings/core/browser",
+     "//components/guest_view/buildflags",
+     "//components/pdf/common:util",
++    "//koan/browser/containers:partition",
+   ]
+ 
+   if (is_android) {

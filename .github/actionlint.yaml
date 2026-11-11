@@ -1,0 +1,6 @@
+# actionlint (ci.yml's lint job): runner labels it doesn't know yet.
+self-hosted-runner:
+  labels:
+    # GitHub-hosted macOS 27 with Xcode 27 (public preview), used by the
+    # macOS build (macos.yml, macos-build.yml).
+    - xcode-27

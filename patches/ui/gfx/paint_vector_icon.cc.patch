@@ -1,0 +1,56 @@
+--- a/ui/gfx/paint_vector_icon.cc
++++ b/ui/gfx/paint_vector_icon.cc
+@@ -32,6 +32,15 @@
+ 
+ namespace {
+ 
++// Koan: swaps an icon for another before it is drawn (koan_icons.h).
++using KoanIconOverride = const VectorIcon& (*)(const VectorIcon&,
++                                               int dip_size);
++KoanIconOverride g_koan_icon_override = nullptr;
++
++const VectorIcon& KoanOverride(const VectorIcon& icon, int dip_size) {
++  return g_koan_icon_override ? g_koan_icon_override(icon, dip_size) : icon;
++}
++
+ // The default size of a single side of the square canvas to which path
+ // coordinates are relative, in device independent pixels.
+ constexpr int kReferenceSizeDip = 48;
+@@ -458,9 +467,10 @@
+ }
+ 
+ void PaintVectorIcon(Canvas* canvas,
+-                     const VectorIcon& icon,
++                     const VectorIcon& original_icon,
+                      int dip_size,
+                      SkColor color) {
++  const VectorIcon& icon = KoanOverride(original_icon, dip_size);
+   CHECK(!icon.is_empty());
+   for (const auto& rep : icon.reps) {
+     CHECK(!rep.path.empty());
+@@ -474,6 +484,11 @@
+   if (params.icon->is_empty())
+     return ImageSkia();
+ 
++  const VectorIcon& koan_icon = KoanOverride(*params.icon, params.dip_size);
++  if (&koan_icon != &*params.icon) {
++    return g_icon_cache.Get().GetOrCreateIcon(IconDescription(
++        koan_icon, params.dip_size, params.color, &*params.badge_icon));
++  }
+   return g_icon_cache.Get().GetOrCreateIcon(params);
+ }
+ 
+@@ -502,4 +517,13 @@
+                                                             color);
+ }
+ 
++// Koan: called by koan/browser/ui/vector_icons/koan_icons.cc, which declares
++// it too (a header of gfx would rebuild everything that draws icons).
++COMPONENT_EXPORT(GFX)
++void SetVectorIconOverrideForKoan(KoanIconOverride override_icon);
++
++void SetVectorIconOverrideForKoan(KoanIconOverride override_icon) {
++  g_koan_icon_override = override_icon;
++}
++
+ }  // namespace gfx

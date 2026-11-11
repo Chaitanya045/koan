@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/.
+   -
+   - Zen Browser 1.24b, src/browser/themes/shared/zen-icons/common/library/library.svg
+   - (github.com/zen-browser/desktop), reduced to its resting state in the frame of library-sprite.svg
+   - (viewBox 4 4 18 18, the size the Library button draws it at): the
+   - animation, the glow layers (transparent at rest) and the CSS removed, the
+   - box mask written as a clip path. The shapes are Zen's, unchanged. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="4 4 18 18" fill="black">
+  <defs>
+    <clipPath id="above-the-box"><rect width="40" height="21.635" x="-10" y="-10"/></clipPath>
+  </defs>
+  <g fill-rule="evenodd">
+    <path clip-path="url(#above-the-box)" d="M7.773 11.635c.363.228.467.44.445.659l-.182 1.788a.579.579 0 0 0 .946.503l1.38-1.153a.58.58 0 0 1 .604-.085l1.644.725a.578.578 0 0 0 .77-.745l-.679-1.692a.58.58 0 0 1 .115-.577l1.198-1.34a.578.578 0 0 0-.47-.962l-1.794.121a.58.58 0 0 1-.539-.286l-.904-1.553a.578.578 0 0 0-1.06.15l-.439 1.743a.58.58 0 0 1-.438.424l-1.757.38a.578.578 0 0 0-.186 1.055z"/>
+    <circle cx="14" cy="6.2" r="1"/>
+    <path transform="translate(17, 9.2)" d="M-1.1 1.8c-.3.2-.6 0-.6-.3v-3c0-.3.3-.5.6-.3L1.4-.4c.3.2.3.6 0 .8Z"/>
+    <path d="M7.218 13.287c0-.456.37-.826.826-.826h9.913c.457 0 .826.37.826.826v4.131a3.304 3.304 0 0 1-3.304 3.304h-4.956a3.305 3.305 0 0 1-3.305-3.304zm3.391 1.239c0-.456.37-.826.826-.826h3.304a.826.826 0 1 1 0 1.652h-3.304a.826.826 0 0 1-.826-.826"/>
+  </g>
+</svg>

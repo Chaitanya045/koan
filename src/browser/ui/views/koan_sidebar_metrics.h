@@ -130,8 +130,17 @@ inline constexpr int kFloatingUrlBarShadowBlur = 140;
 inline constexpr int kFloatingUrlBarShadowSpread = -15;
 // shadcn's softer shadow (shadow-lg: 0 10px 15px -3px) and text size
 // (text-base: 16px).
-// The shadcn card's magnifier (lucide's search, 16px).
+// The floating bar's magnifier and the pill's on an empty tab: Firefox's
+// search-glass.svg as Zen draws it in the identity box, a 16px box with a
+// 14px glyph at half opacity (kKoanUrlbarSearchGlassIcon).
 inline constexpr int kFloatingUrlBarMagnifierSize = 16;
+// Zen's input row on macOS (measured on Zen 1.24b, .agent/notes/
+// compare-2026-11-06.md section 4): the magnifier's glyph starts 19pt from the
+// card's left edge and the text 52pt from it (19.5pt after the glyph).
+inline constexpr int kFloatingUrlBarGlyphInset = 19;
+inline constexpr int kFloatingUrlBarTextInset = 52;
+// Where kKoanUrlbarSearchGlassIcon's glyph starts in its 16-unit canvas.
+inline constexpr float kSearchGlassGlyphStart = 1.f / 16.f;
 // The divider under the input stops short of the card's edges (Zen's input row
 // padding).
 inline constexpr int kFloatingUrlBarDividerInset = 20;
@@ -170,6 +179,23 @@ inline int FloatingUrlBarFontSize(int base_size) {
 // With "normal", the bar edits in place and widens over the page once the
 // user types (Zen's #urlbar[open] in the single toolbar: min(90%, 40rem)).
 inline constexpr int kUrlBarOpenMaxWidth = 640;
+
+// Folders (zen-folders.css): Zen's 28px folder icon near the row's start,
+// the name after it, 14px of indent per level (--zen-folder-indent), and
+// the folder search popup: 250px wide, 40px rows (6px radius) in at most
+// 263px.
+inline constexpr int kFolderIconSize = 28;
+inline constexpr int kFolderIconX = 4;
+inline constexpr int kFolderLabelX = 36;
+inline constexpr int kFolderTrailingPadding = 10;
+inline constexpr int kFolderCountGap = 8;
+inline constexpr int kFolderIndent = 14;
+inline constexpr int kFolderSearchWidth = 250;
+inline constexpr int kFolderSearchItemHeight = 40;
+inline constexpr int kFolderSearchItemCornerRadius = 6;
+inline constexpr int kFolderSearchListMaxHeight = 263;
+inline constexpr int kFolderSearchIconSize = 16;
+inline constexpr int kFolderSearchIconGap = 8;
 
 // Toasts, at the top right of the window: Zen's 42px with 6px padding
 // (48px and 8px on macOS), plus 4px around the text.
@@ -250,7 +276,7 @@ inline constexpr int kDownloadTileSize = 42;
 inline int DownloadTileCornerRadius() {
   return look::ScaleRadius(12);
 }
-inline constexpr int kDownloadTileIconSize = 24;
+inline constexpr int kDownloadTileIconSize = 18;
 inline constexpr int kDownloadTileShadowBlur = 6;
 inline constexpr int kDownloadTileEdge = 24;
 inline constexpr int kDownloadTileOvershoot = 34;
@@ -267,7 +293,7 @@ inline constexpr float kWelcomeTitleLineHeight = 1.05f;
 inline constexpr float kWelcomeTitleLetterSpacing = -0.03f;
 inline constexpr int kWelcomeStartButtonWidth = 100;
 inline constexpr int kWelcomeStartButtonHeight = 48;
-inline constexpr int kWelcomeStartButtonIconSize = 18;
+inline constexpr int kWelcomeStartButtonIconSize = 17;
 inline constexpr int kWelcomeStartButtonGap = 28;
 // On macOS the screen leaves the title bar row with the traffic lights
 // uncovered: Chromium places them in the top 38px (BrowserFrameViewMac::

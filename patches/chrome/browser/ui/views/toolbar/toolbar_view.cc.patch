@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 80b0e24263170de768a6684c8aabf106018710e7..2aa52083f3c371063e9e1afc4fda6f98110edf39 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -142,6 +142,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkPathBuilder.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "ui/accessibility/ax_node_data.h"
+ #include "ui/actions/actions.h"
+ #include "ui/base/interaction/element_identifier.h"
+@@ -2007,6 +2008,11 @@ views::AccessiblePaneView* ToolbarView::GetAsAccessiblePaneView() {
+ 
+ views::BubbleAnchor ToolbarView::GetBubbleAnchor(
+     std::optional<actions::ActionId> action_id) {
++  // Koan: where the toolbar is hidden (single toolbar), bubbles point at the
++  // URL pill, as Zen's at the identity box.
++  if (views::View* koan_anchor = koan::GetBubbleAnchorView(browser_view_)) {
++    return views::BubbleAnchor(koan_anchor);
++  }
+   // If a pinned toolbar actions button exists for the action_id, return that.
+   if (pinned_toolbar_actions_ && action_id.has_value() &&
+       pinned_toolbar_actions_->IsActionPinnedOrPoppedOut(action_id.value())) {

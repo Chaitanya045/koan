@@ -10,13 +10,15 @@ diff --git a/chrome/browser/ui/layout_constants.cc b/chrome/browser/ui/layout_co
  #include "ui/base/pointer/touch_ui_controller.h"
  #include "ui/base/ui_base_features.h"
  #include "ui/gfx/geometry/insets.h"
-@@ -19,6 +21,22 @@
+@@ -19,6 +21,26 @@
  
  int GetLayoutConstant(LayoutConstant constant) {
    const bool touch_ui = ui::TouchUiController::Get()->touch_ui();
 +  if (koan::features::IsSidebarEnabled()) {
 +    // Koan (Zen): the sidebar's tab rows (--tab-min-height), Essentials tiles
-+    // (46px, at least 48px wide) and their 14px radius (--border-radius-medium).
++    // (46px, at least 48px wide) and their 14px radius (--border-radius-medium),
++    // and the glyph of the top row's buttons (--zen-toolbar-button-size: 17px
++    // on macOS; Chromium draws the sidebar toggle at 20).
 +    switch (constant) {
 +      case LayoutConstant::kVerticalTabCornerRadius:
 +        return koan::look::StyleRadius(14, koan::look::Step::kMd);
@@ -26,6 +28,8 @@ diff --git a/chrome/browser/ui/layout_constants.cc b/chrome/browser/ui/layout_co
 +        return 46;
 +      case LayoutConstant::kVerticalTabMinWidth:
 +        return 48;
++      case LayoutConstant::kVerticalTabStripButtonIconSize:
++        return 17;
 +      default:
 +        break;
 +    }

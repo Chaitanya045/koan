@@ -1,0 +1,60 @@
+diff --git a/chrome/browser/ui/views/status_bubble_views.cc b/chrome/browser/ui/views/status_bubble_views.cc
+--- a/chrome/browser/ui/views/status_bubble_views.cc
++++ b/chrome/browser/ui/views/status_bubble_views.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/views/chrome_widget_sublevel.h"
+ #include "components/url_formatter/elide_url.h"
+ #include "components/url_formatter/url_formatter.h"
++#include "koan/browser/ui/views/koan_status_bubble.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "third_party/skia/include/core/SkRRect.h"
+ #include "third_party/skia/include/pathops/SkPathOps.h"
+@@ -72,7 +73,7 @@ constexpr int kMousePadding = 20;
+ 
+ // The minimum horizontal space between the edges of the text and the edges of
+ // the status bubble, not including the outer shadow ring.
+-constexpr int kTextHorizPadding = 5;
++constexpr int kTextHorizPadding = koan::kStatusBubbleTextHorizPadding;
+ 
+ // Delays before we start hiding or showing the bubble after we receive a
+ // show or hide request.
+@@ -93,7 +94,7 @@ constexpr auto kDestroyPopupDelay = base
+ 
+ const gfx::FontList& GetFont() {
+   return views::TypographyProvider::Get().GetFont(views::style::CONTEXT_LABEL,
+-                                                  views::style::STYLE_PRIMARY);
++                                                  koan::StatusBubbleTextStyle());
+ }
+ 
+ }  // namespace
+@@ -475,6 +476,12 @@ void StatusView::SetTextLabelColors(view
+ }
+ 
+ void StatusView::OnPaint(gfx::Canvas* canvas) {
++  // Koan: Zen's pill (koan_status_bubble.h).
++  if (koan::PaintStatusBubble(
++          canvas, size(), status_bubble_->base_view()->GetColorProvider(),
++          status_bubble_->base_view()->GetWidget()->ShouldPaintAsActive())) {
++    return;
++  }
+   gfx::ScopedCanvas scoped(canvas);
+   float scale = canvas->UndoDeviceScaleFactor();
+   const float radius = kBubbleCornerRadius * scale;
+@@ -789,7 +796,7 @@ void StatusBubbleViews::DestroyPopup() {
+ void StatusBubbleViews::Reposition() {
+   // Overlap the client edge that's shown in restored mode, or when there is no
+   // client edge this makes the bubble snug with the corner of the window.
+-  int overlap = kShadowThickness;
++  int overlap = -koan::kStatusBubbleMargin;
+   int height = GetPreferredHeight();
+   int base_view_height = base_view_->bounds().height();
+   gfx::Point origin(-overlap, base_view_height - height + overlap);
+@@ -809,7 +816,7 @@ void StatusBubbleViews::RepositionPopup(
+ }
+ 
+ int StatusBubbleViews::GetPreferredHeight() {
+-  return GetFont().GetHeight() + kTotalVerticalPadding;
++  return GetFont().GetHeight() + koan::kStatusBubbleVerticalPadding;
+ }
+ 
+ void StatusBubbleViews::SetBounds(int x, int y, int w, int h) {

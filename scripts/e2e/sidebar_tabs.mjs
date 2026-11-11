@@ -170,7 +170,7 @@ function check(name, ok, detail = '') {
 }
 
 const ALT = 1, CTRL = 2, SHIFT = 8;
-const VK = { D: 68, N: 78, T: 84, W: 87, LEFT: 37 };
+const VK = { D: 68, N: 78, S: 83, T: 84, W: 87, LEFT: 37 };
 // The views inside the pinned (Essentials) or the unpinned tab container.
 const inContainer = (vs, cls, container) =>
   vs.filter(v => v.cls === cls && v.shown && v.path.includes(container));
@@ -278,20 +278,20 @@ await click(find(await views(), 'KoanClearButton'));
 check('Clear keeps the selected tab', before === 5 && (await pages()) === 2,
       `${before} -> ${await pages()}`);
 
-// Collapsed, upstream's separator is the only line. (Collapsing leaves
-// single toolbar, so the views are looked up again afterwards.)
-const collapse = async () => click((await views()).find(
-    v => v.cls === 'TopContainerButton' && v.shown &&
-         v.path.includes('VerticalTabStripTopContainer')));
-await collapse();
-await sleep(1000);
+// Compact mode collapses the sidebar (the sidebar button toggles it, as in
+// Zen): upstream's separator is the only line, there is no Clear row. (The
+// views are looked up again afterwards.)
+const toggleCompact = async () => {
+  await key(VK.S, CTRL, 's');
+  await sleep(1000);
+};
+await toggleCompact();
 vs = await views();
 clear = find(vs, 'KoanClearTabsRow');
-check('Collapsed: no Clear row (upstream draws the line)', clear && !clear.shown,
+check('Compact: no Clear row (upstream draws the line)', clear && !clear.shown,
       JSON.stringify(clear && { shown: clear.shown }));
-await collapse();
-await sleep(1000);
-check('Expanded again: the Clear row is back', find(await views(), 'KoanClearTabsRow')?.shown);
+await toggleCompact();
+check('Compact off: the Clear row is back', find(await views(), 'KoanClearTabsRow')?.shown);
 
 // Horizontal tabs and back: the rows go with the vertical tab strip and come
 // back with it; tab changes in between are fine.

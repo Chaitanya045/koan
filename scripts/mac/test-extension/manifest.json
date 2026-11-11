@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Koan vertical tabs test extension",
+  "version": "1.0",
+  "description": "Audit tests 25 and 26 (#154): opens a normal window and a popup, and binds Command+Shift+L.",
+  "permissions": ["tabs", "tabGroups", "storage"],
+  "background": {"service_worker": "background.js"},
+  "commands": {
+    "ext-shift-l": {
+      "suggested_key": {"default": "Ctrl+Shift+L", "mac": "Command+Shift+L"},
+      "description": "Test 26: an extension command on the sidebar button's shortcut"
+    },
+    "_execute_action": {}
+  },
+  "action": {"default_title": "Koan vertical tabs test"}
+}

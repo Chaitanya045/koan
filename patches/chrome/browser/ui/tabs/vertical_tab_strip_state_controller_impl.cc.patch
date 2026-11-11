@@ -1,33 +1,110 @@
 diff --git a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
-index 4eb9220..d7bc4a6 100644
+index 4eb92203f69338bab1a918655d530660cc3117f3..4518e3ce35dd77b907fc1a7d617820b3f4710dc0 100644
 --- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
 +++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
 @@ -33,6 +33,7 @@
  #include "components/prefs/pref_notifier_impl.h"
  #include "components/prefs/pref_service.h"
  #include "components/sessions/core/session_id.h"
-+#include "koan/browser/koan_tab_hooks.h"
++#include "koan/browser/koan_vertical_tabs.h"
  #include "ui/actions/actions.h"
  #include "ui/base/accelerators/accelerator.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -57,6 +58,8 @@ VerticalTabStripStateControllerImpl::VerticalTabStripStateControllerImpl(
-       browser_window_(browser_window) {
-   pref_change_registrar_.Init(pref_service_);
+@@ -74,7 +75,11 @@ VerticalTabStripStateControllerImpl::VerticalTabStripStateControllerImpl(
+           &VerticalTabStripStateControllerImpl::OnExpandOnHoverEnabledChanged,
+           base::Unretained(this)));
  
-+  // Koan: Zen has no horizontal tabs; an old profile's pref is turned on.
-+  koan::KeepVerticalTabsOn(pref_service_);
-   is_vertical_tabs_enabled_ =
-       pref_service_->GetBoolean(prefs::kVerticalTabsEnabled);
+-  if (restored_state_collapsed.has_value()) {
++  if (koan::OwnsSidebar()) {
++    // Koan: only compact mode collapses the sidebar, and a window starts
++    // that way without an animation; what was saved is not used.
++    SetCollapsed(koan::InitialSidebarCollapsed(pref_service_));
++  } else if (restored_state_collapsed.has_value()) {
+     SetCollapsed(restored_state_collapsed.value());
+   }
+   if (restored_state_uncollapsed_width.has_value()) {
+@@ -161,10 +166,14 @@ void VerticalTabStripStateControllerImpl::SetDelegate(Delegate* delegate) {
+ }
  
-@@ -258,6 +261,11 @@ void VerticalTabStripStateControllerImpl::NotifyCollapseChanged() {
+ bool VerticalTabStripStateControllerImpl::ShouldDisplayVerticalTabs() const {
+-  return is_vertical_tabs_enabled_;
++  // Koan: the sidebar is always there.
++  return is_vertical_tabs_enabled_ || koan::OwnsSidebar();
+ }
+ 
+ void VerticalTabStripStateControllerImpl::SetVerticalTabsEnabled(bool enabled) {
++  if (koan::OwnsSidebar()) {
++    return;
++  }
+   // If the user already has a pending mode switch, but tries to change tab
+   // strip mode again, ensure the toast is displayed.
+   if (enable_state_lock_count_ > 0 && enabled != is_vertical_tabs_enabled_ &&
+@@ -195,6 +204,11 @@ void VerticalTabStripStateControllerImpl::RequestCollapse(bool collapse) {
+   if (!delegate_) {
+     return;
+   }
++  // Koan: only KoanVerticalTabsPolicy collapses or expands the sidebar (the
++  // legacy command path, with the actions flag off, would leave an icon rail).
++  if (koan::OwnsSidebar() && !koan::IsSidebarCollapseRequestAllowed()) {
++    return;
++  }
+ 
+   delegate_->RequestCollapse(collapse);
+ 
+@@ -225,7 +239,8 @@ void VerticalTabStripStateControllerImpl::SetUncollapsedWidth(int width) {
+ }
+ 
+ bool VerticalTabStripStateControllerImpl::IsExpandOnHoverEnabled() const {
+-  return is_expand_on_hover_enabled_;
++  // Koan: the compact mode's reveal rides on it.
++  return is_expand_on_hover_enabled_ || koan::OwnsSidebar();
+ }
+ 
+ void VerticalTabStripStateControllerImpl::SetExpandOnHoverEnabled(
+@@ -258,6 +273,9 @@ void VerticalTabStripStateControllerImpl::NotifyCollapseChanged() {
  }
  
  void VerticalTabStripStateControllerImpl::OnModeChanged() {
-+  // Koan: the pref went off (the settings page); it is on again, and that
-+  // change comes back here.
-+  if (koan::KeepVerticalTabsOn(pref_service_)) {
++  if (koan::OwnsSidebar()) {
 +    return;
 +  }
    const bool new_enabled =
        pref_service_->GetBoolean(prefs::kVerticalTabsEnabled);
    if (new_enabled &&
+@@ -313,7 +331,7 @@ void VerticalTabStripStateControllerImpl::OnLockDestroyed() {
+   CHECK_GT(enable_state_lock_count_, 0);
+   enable_state_lock_count_--;
+ 
+-  if (enable_state_lock_count_ == 0) {
++  if (enable_state_lock_count_ == 0 && !koan::OwnsSidebar()) {
+     bool new_state = pref_service_->GetBoolean(prefs::kVerticalTabsEnabled);
+     if (new_state != is_vertical_tabs_enabled_) {
+       is_vertical_tabs_enabled_ = new_state;
+@@ -325,8 +343,11 @@ void VerticalTabStripStateControllerImpl::OnLockDestroyed() {
+ 
+ void VerticalTabStripStateControllerImpl::UpdateSessionService() {
+   if (session_service_ && !browser_collection_observation_.IsObserving()) {
+-    session_service_->AddWindowExtraData(session_id_, kCollapsedKey,
+-                                         base::ToString(state_.collapsed));
++    // (Koan: collapsed only while compact mode hides the sidebar, never
++    // saved.)
++    session_service_->AddWindowExtraData(
++        session_id_, kCollapsedKey,
++        base::ToString(state_.collapsed && !koan::OwnsSidebar()));
+     session_service_->AddWindowExtraData(
+         session_id_, kUncollapsedWidthKey,
+         base::NumberToString(state_.uncollapsed_width));
+@@ -335,8 +356,11 @@ void VerticalTabStripStateControllerImpl::UpdateSessionService() {
+ 
+ void VerticalTabStripStateControllerImpl::UpdatePrefService() {
+   if (pref_service_) {
+-    pref_service_->SetBoolean(prefs::kVerticalTabsCollapsedState,
+-                              state_.collapsed);
++    // (Koan: the collapse is not saved, and not written as false either.)
++    if (!koan::OwnsSidebar()) {
++      pref_service_->SetBoolean(prefs::kVerticalTabsCollapsedState,
++                                state_.collapsed);
++    }
+     pref_service_->SetInteger(prefs::kVerticalTabsUncollapsedWidth,
+                               state_.uncollapsed_width);
+   }

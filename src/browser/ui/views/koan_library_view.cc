@@ -32,6 +32,7 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/vector_icons/vector_icons.h"
+#include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_icons.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
@@ -695,7 +696,7 @@ void KoanLibrarySearchSection::InitFilters() {
       u"Filter", gfx::Font::Weight::MEDIUM, gfx::Insets::VH(0, 12));
   filter->SetImageModel(
       views::Button::STATE_NORMAL,
-      ui::ImageModel::FromVectorIcon(vector_icons::kTuneIcon,
+      ui::ImageModel::FromVectorIcon(kKoanCircleBarsFilterIcon,
                                      kColorKoanLibraryForeground, 16));
   search_header_->AddChildView(std::move(filter));
   UpdateFilterPanel();

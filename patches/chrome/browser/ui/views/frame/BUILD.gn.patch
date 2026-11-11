@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb36867031d27a 100644
+index 41231752d903fec4f355a7b20037f5058904661c..c962d20c8ac910d7be32fdaebad814b58aaa3528 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
 @@ -566,6 +566,7 @@ source_set("vertical_tab_strip_region_view") {
@@ -10,7 +10,15 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//ui/base/dragdrop:types",
      "//ui/compositor",
      "//ui/display",
-@@ -959,6 +960,7 @@ source_set("browser_view") {
+@@ -629,6 +630,7 @@ source_set("glass_frame_service") {
+     "//components/feature_engagement/public:feature_constants",
+     "//components/metrics",
+     "//components/prefs",
++    "//koan/browser/ui/views",
+     "//media",
+     "//ui/base:features",
+     "//ui/base/unowned_user_data",
+@@ -959,6 +961,7 @@ source_set("browser_view") {
      "//content/public/browser",
      "//content/public/common",
      "//extensions/common",
@@ -18,7 +26,23 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//media/capture:capture_switches",
      "//third_party/blink/public/common:headers",
      "//ui/accessibility",
-@@ -1958,6 +1960,7 @@ if (is_mac) {
+@@ -1239,6 +1242,7 @@ source_set("themed_background_impl") {
+     "//chrome/browser/ui/color:color_headers",
+     "//chrome/browser/ui/views/frame:browser_view_header",
+     "//chrome/browser/ui/views/tabs:tab_strip",
++    "//koan/browser/ui/views",
+     "//ui/base",
+     "//ui/color",
+     "//ui/gfx",
+@@ -1635,6 +1639,7 @@ source_set("multi_contents_background_view_impl") {
+   public_deps = [ ":multi_contents_background_view" ]
+   deps = [
+     ":themed_background",
++    "//koan/browser/ui/views",
+     "//ui/base/metadata",
+     "//ui/compositor",
+     "//ui/gfx/geometry",
+@@ -1958,6 +1963,7 @@ if (is_mac) {
        "//chrome/browser/ui/window_feature_controller",
        "//chrome/common:constants",
        "//components/remote_cocoa/common:mojo",
@@ -26,7 +50,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
        "//ui/base",
        "//ui/base:features",
        "//ui/compositor",
-@@ -2023,6 +2026,7 @@ if (is_mac) {
+@@ -2023,6 +2029,7 @@ if (is_mac) {
        "//components/remote_cocoa/app_shim",
        "//components/remote_cocoa/common:mojo",
        "//components/web_modal",
@@ -34,7 +58,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
        "//skia",
        "//ui/accessibility",
        "//ui/actions",
-@@ -2953,6 +2957,7 @@ source_set("browser_view_layout_impl") {
+@@ -2953,6 +2960,7 @@ source_set("browser_view_layout_impl") {
      "//build:buildflag_header_h",
      "//chrome/browser/ui/immersive:immersive_mode_controller",
      "//chrome/browser/ui/views/bookmarks",
@@ -42,7 +66,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//ui/base:features",
    ]
  }
-@@ -3012,6 +3017,7 @@ source_set("browser_view_tabbed_layout_impl") {
+@@ -3012,6 +3020,7 @@ source_set("browser_view_tabbed_layout_impl") {
      "//ui/views",
    ]
    deps = [
@@ -50,7 +74,7 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      ":custom_corners",
      ":custom_corners_background",
      ":custom_floating_corner",
-@@ -3229,6 +3235,7 @@ source_set("multi_contents_view_impl") {
+@@ -3229,6 +3238,7 @@ source_set("multi_contents_view_impl") {
      "//components/tabs:public",
      "//content/public/browser",
      "//content/public/common",
@@ -58,3 +82,11 @@ index 41231752d903fec4f355a7b20037f5058904661c..6d58fb35e06a00790ba72e9d17bb3686
      "//ui/base:ozone_buildflags",
      "//ui/base/metadata",
      "//ui/compositor",
+@@ -3307,6 +3317,7 @@ source_set("browser_widget_impl") {
+     "//chrome/browser/ui/web_applications",
+     "//chrome/common:constants",
+     "//content/public/browser",
++    "//koan/browser/ui/views",
+     "//media/capture:capture_switches",
+     "//ui/base",
+     "//ui/base/mojom:ui_base_types",

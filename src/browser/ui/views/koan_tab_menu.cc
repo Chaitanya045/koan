@@ -8,9 +8,13 @@
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_vertical_tabs.h"
+#include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 
 namespace koan {
 
@@ -41,18 +45,66 @@ bool ExecuteSplitViewCommand(TabStripModel* tab_strip,
 // Spaces: "Move To" a Space in place of the tab group items
 // (koan_spaces.h). Its submenu runs its items through its own delegate, so
 // Spaces have no commands of their own here.
+// Zen's "Add Route for Domain(s)" (Space routing).
+constexpr int kAddRouteForDomain =
+    FirstTabMenuCommand(TabMenuFeatureId::kSpaces);
+
 void AddSpacesItems(TabMenuContext& context) {
   ReplaceTabGroupMenuItems(&*context.menu, &*context.tab_strip, context.index);
+  if (!HasSpaces(&*context.tab_strip)) {
+    return;
+  }
+  // At the end: Zen's goes after "Reopen Closed Tab", which Chromium's tab
+  // menu doesn't have.
+  ui::SimpleMenuModel* menu = &*context.menu;
+  menu->AddSeparator(ui::NORMAL_SEPARATOR);
+  menu->AddItem(kAddRouteForDomain, context.num_tabs > 1
+                                        ? u"Add Route for Domains"
+                                        : u"Add Route for Domain");
 }
 
 bool IsSpacesCommandEnabled(const TabStripModel* tab_strip,
                             int index,
                             int command_id) {
-  return false;
+  return command_id == kAddRouteForDomain;
 }
 
+// Upstream's tab group commands do nothing in a Spaces window: a tab is
+// always in one Space, and "Move To" moves it to another. Their menu items
+// are gone (ReplaceTabGroupMenuItems()), but the commands stay reachable
+// without them: Chrome's group shortcuts and Tab > Group Tab call them
+// (chrome::GroupTab(), CreateNewTabGroup()), as does any other caller of
+// ExecuteContextMenuCommand().
 bool ExecuteSpacesCommand(TabStripModel* tab_strip, int index, int command_id) {
-  return false;
+  if (command_id == kAddRouteForDomain) {
+    if (KoanWorkspaceController* spaces =
+            KoanWorkspaceController::FromTabStrip(tab_strip)) {
+      // The selected tabs if the menu's tab is one of them, as Zen's.
+      std::vector<tabs::TabInterface*> tabs;
+      const ui::ListSelectionModel& selection =
+          tab_strip->selection_model().GetListSelectionModel();
+      if (selection.IsSelected(static_cast<size_t>(index))) {
+        for (size_t selected : selection.selected_indices()) {
+          tabs.push_back(tab_strip->GetTabAtIndex(static_cast<int>(selected)));
+        }
+      } else {
+        tabs.push_back(tab_strip->GetTabAtIndex(index));
+      }
+      spaces->space_routing()->AddRouteForTabs(tabs);
+    }
+    return true;
+  }
+  switch (command_id) {
+    case TabStripModel::CommandToggleGrouped:
+    case TabStripModel::CommandAddToNewGroup:
+    case TabStripModel::CommandAddToNewGroupFromMenuItem:
+    case TabStripModel::CommandAddToExistingGroup:
+    case TabStripModel::CommandRemoveFromGroup:
+    case TabStripModel::CommandToggleFocusGroup:
+      return HasSpaces(tab_strip);
+    default:
+      return false;
+  }
 }
 
 // Every feature's part of the menu, in the order they add their items.
@@ -63,6 +115,8 @@ constexpr TabMenuFeature kFeatures[] = {
      &IsPinnedTabMenuCommandEnabled, &ExecutePinnedTabMenuCommand},
     {TabMenuFeatureId::kSpaces, &AddSpacesItems, &IsSpacesCommandEnabled,
      &ExecuteSpacesCommand},
+    {TabMenuFeatureId::kFolders, &AddFolderTabMenuItems,
+     &IsFolderTabMenuCommandEnabled, &ExecuteFolderTabMenuCommand},
 };
 
 // The feature whose range `command_id` is in, or null.
@@ -112,11 +166,21 @@ void AddKoanTabMenuItems(
   for (const TabMenuFeature& feature : kFeatures) {
     feature.add_items(context);
   }
-  // Zen has no horizontal tabs: no "Show tabs horizontally".
-  if (features::IsSidebarEnabled()) {
+  // Zen has no horizontal tabs: no "Show tabs horizontally", and not the
+  // separator that sat above it alone.
+  if (OwnsSidebar()) {
     if (const std::optional<size_t> toggle =
             menu->GetIndexOfCommandId(TabStripModel::CommandToggleVertical)) {
       menu->RemoveItemAt(*toggle);
+      const bool separator_before =
+          *toggle > 0 &&
+          menu->GetTypeAt(*toggle - 1) == ui::MenuModel::TYPE_SEPARATOR;
+      const bool nothing_after =
+          *toggle >= menu->GetItemCount() ||
+          menu->GetTypeAt(*toggle) == ui::MenuModel::TYPE_SEPARATOR;
+      if (separator_before && nothing_after) {
+        menu->RemoveItemAt(*toggle - 1);
+      }
     }
   }
 }

@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper.mm b/chrome/browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper.mm
+--- a/chrome/browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper.mm
++++ b/chrome/browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper.mm
+@@ -10,6 +10,7 @@
+ #include <optional>
+ 
+ #import "chrome/browser/ui/cocoa/history_overlay_controller.h"
++#include "koan/browser/ui/cocoa/koan_swipe.h"
+ #include "third_party/blink/public/common/input/web_gesture_event.h"
+ #include "ui/events/blink/did_overscroll_params.h"
+ 
+@@ -548,7 +549,8 @@ constexpr CGFloat kCancelEventVerticalLo
+     return NO;
+   }
+ 
+-  if (!NSEvent.swipeTrackingFromScrollEventsEnabled) {
++  if (!NSEvent.swipeTrackingFromScrollEventsEnabled &&
++      koan::PageSwipeFollowsSystemSetting()) {
+     return NO;
+   }
+ 

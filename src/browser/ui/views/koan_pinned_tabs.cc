@@ -64,17 +64,23 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/referrer.h"
+#include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_tab_hooks.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tab_views.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
+#include "ui/base/base_window.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/dialog_model.h"
@@ -264,10 +270,13 @@ ui::ImageModel EmojiIcon(const std::u16string& emoji) {
 }
 
 // Pinned tabs, like Essentials, are never frozen or discarded by Memory
-// Saver (both exempt the pages Chromium knows as pinned tabs).
+// Saver (both exempt the pages Chromium knows as pinned tabs). Neither is a
+// tab an agent holds a lease on (koan/browser/agent/koan_agent_lease.h): the
+// bit is the two composed, never one of them alone.
 void UpdateFreezingExemption(tabs::TabInterface* tab) {
   performance_manager::PageLiveStateDecorator::SetIsPinnedTab(
-      tab->GetContents(), IsPinnedForUser(tab));
+      tab->GetContents(),
+      IsPinnedForUser(tab) || agent::IsAgentLeased(tab->GetContents()));
 }
 
 // Zen's toast in `browser_view`'s window.
@@ -473,6 +482,9 @@ bool CloseButtonUnloads(const tabs::TabInterface* tab) {
 
 KoanPinnedTabController::KoanPinnedTabController(BrowserView* browser_view)
     : browser_view_(browser_view) {
+  // Releasing an agent's lease restores the user's own bit.
+  agent::SetUserPinnedQuery(
+      static_cast<bool (*)(content::WebContents*)>(&IsPinnedForUser));
   if (features::IsPinnedTabsEnabled()) {
     tab_strip_model()->AddObserver(this);
   }
@@ -734,6 +746,12 @@ void KoanPinnedTabController::ScheduleNormalize(tabs::TabInterface* tab) {
                          &KoanPinnedTabController::Normalize);
 }
 
+bool KoanPinnedTabController::IsDraggingHere() const {
+  // TabDragController is one per process: this window's strip is the one
+  // being dragged in.
+  return TabDragController::IsActive() && !browser_view_->IsTabStripEditable();
+}
+
 void KoanPinnedTabController::Normalize() {
   // Not during a tab drag (in any window: TabDragController is one per
   // process; the user may pause over a place as long as they like), nor while
@@ -764,10 +782,12 @@ void KoanPinnedTabController::Normalize() {
     KoanTabState& state = GetOrCreateTabState(tab->GetContents());
     bool was_essential = false;
     bool changed_group = false;
+    bool dragged = false;
     for (tabs::TabInterface* each : unit) {
       KoanTabState& each_state = GetOrCreateTabState(each->GetContents());
       was_essential |= std::exchange(each_state.was_essential, false);
       changed_group |= std::exchange(each_state.changed_group, false);
+      dragged |= std::exchange(each_state.dragged, false);
     }
     if (tab->IsPinned()) {
       // Dragged into the tiles, or duplicated from one, past Zen's limit:
@@ -796,21 +816,35 @@ void KoanPinnedTabController::Normalize() {
       }
       continue;
     }
-    if (changed_group && IsPinnedInSpace(tab)) {
-      // Moved to another Space, or restored: still pinned, and at the end of
-      // that Space's pinned tabs if it isn't among them.
+    if (changed_group && !dragged && IsPinnedInSpace(tab)) {
+      // Moved to another Space, put back into one, or restored: still pinned,
+      // and at the end of that Space's pinned tabs if it isn't among them. (A
+      // drag is decided by where it dropped.)
       MoveIntoPinnedTabs(tab);
       continue;
     }
-    // Zen's drop rules for a drag within the Space.
+    // Zen's drop rules for a drag within the Space. Any other move (the
+    // keyboard, an extension's tabs.move) keeps the tab in its section, as
+    // Zen's moveTabTo does: it is never pinned or unpinned by it.
     if (IsPinnedInSpace(tab) && !InPinnedRun(first)) {
-      for (tabs::TabInterface* each : unit) {
-        ClearPinnedState(each);
+      if (dragged) {
+        for (tabs::TabInterface* each : unit) {
+          ClearPinnedState(each);
+        }
+      } else {
+        MoveIntoPinnedTabs(tab);
       }
     } else if (!IsPinnedForUser(tab) && AbovePinnedTab(last)) {
-      PinInSpace(tab);
+      if (dragged) {
+        PinInSpace(tab);
+      } else {
+        MoveAfterPinnedTabs(tab);
+      }
     }
   }
+  // Folders' tabs stay together in the pinned section: the same pass, once
+  // things have settled (koan_folder_controller.h).
+  KoanBrowserViewController::From(browser_view_)->folders()->ArrangeFolders();
 }
 
 void KoanPinnedTabController::ClearPinnedState(tabs::TabInterface* tab) {
@@ -894,6 +928,20 @@ void KoanPinnedTabController::RemoveFromEssentials(tabs::TabInterface* tab) {
   }
   // A normal tab: below the Space's pinned tabs.
   MoveAfterPinnedTabs(tab);
+}
+
+void KoanPinnedTabController::OnTabDuplicated(const tabs::TabInterface* source,
+                                              tabs::TabInterface* duplicate) {
+  if (!IsPinnedForUser(source) ||
+      tab_strip_model()->GetIndexOfTab(duplicate) == TabStripModel::kNoTab) {
+    return;
+  }
+  if (duplicate->IsPinned()) {
+    RemoveFromEssentials(duplicate);
+    return;
+  }
+  // (The clone has none of Koan's state: it is already a normal tab.)
+  MoveAfterPinnedTabs(duplicate);
 }
 
 void KoanPinnedTabController::ResetToPinnedUrl(tabs::TabInterface* tab) {
@@ -1004,6 +1052,34 @@ void KoanPinnedTabController::SetPinnedUrl(tabs::TabInterface* tab,
   FetchPinnedIcon(tab->GetContents());
   SaveTabState(tab->GetContents());
   ResetToPinnedUrl(tab);
+}
+
+void KoanPinnedTabController::SetSyncedPin(tabs::TabInterface* tab,
+                                           bool essential,
+                                           const GURL& pinned_url,
+                                           const std::u16string& custom_title,
+                                           const std::u16string& custom_icon) {
+  TabStripModel* model = tab_strip_model();
+  const int index = model->GetIndexOfTab(tab);
+  if (index == TabStripModel::kNoTab) {
+    return;
+  }
+  KoanTabState& state = GetOrCreateTabState(tab->GetContents());
+  state.pinned_in_space = !essential;
+  if (state.pinned_url != pinned_url) {
+    state.pinned_url = pinned_url;
+    state.pinned_icon = ui::ImageModel();
+    FetchPinnedIcon(tab->GetContents());
+  }
+  state.custom_title = custom_title;
+  state.custom_icon = custom_icon;
+  if (tab->IsPinned() != essential) {
+    base::AutoReset<bool> changing(&changing_pin_, true);
+    model->SetTabPinned(index, essential);
+  }
+  UpdateFreezingExemption(tab);
+  SaveTabState(tab->GetContents());
+  UpdateTabView(tab);
 }
 
 void KoanPinnedTabController::StartRenaming(tabs::TabInterface* tab) {
@@ -1210,6 +1286,14 @@ void KoanPinnedTabController::OnTabStripModelChanged(
       std::vector<tabs::TabHandle> added;
       for (const auto& inserted : change.GetInsert()->contents) {
         tabs::TabInterface* tab = inserted.tab;
+        // Dragged in from another window: decided where it drops. (Also
+        // forgets a drag that left this window's check behind.)
+        if (IsDraggingHere()) {
+          GetOrCreateTabState(tab->GetContents()).dragged = true;
+          ScheduleNormalize(tab);
+        } else if (KoanTabState* state = GetTabState(tab)) {
+          state->dragged = false;
+        }
         if (tab->IsPinned()) {
           KoanTabState& state = GetOrCreateTabState(tab->GetContents());
           // Saved once the session knows the tab (OnTabsAdded()).
@@ -1238,6 +1322,10 @@ void KoanPinnedTabController::OnTabStripModelChanged(
       break;
     }
     case TabStripModelChange::kMoved:
+      if (IsDraggingHere()) {
+        GetOrCreateTabState(change.GetMove()->tab->GetContents()).dragged =
+            true;
+      }
       ScheduleNormalize(change.GetMove()->tab);
       break;
     case TabStripModelChange::kReplaced: {
@@ -1343,8 +1431,18 @@ void KoanPinnedTabController::TabGroupedStateChanged(
     std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {
-  if (new_group && old_group && IsPinnedInSpace(tab)) {
-    GetOrCreateTabState(tab->GetContents()).changed_group = true;
+  // Also a tab put back into a Space (Spaces regroup a tab that upstream or
+  // an extension ungrouped for a moment): still pinned, among the pinned
+  // tabs.
+  if (new_group && IsPinnedInSpace(tab)) {
+    // A drag that takes the tab out of its Space and back on the way (past
+    // the Space's end, over the Essentials) is decided where it drops.
+    KoanTabState& state = GetOrCreateTabState(tab->GetContents());
+    if (IsDraggingHere()) {
+      state.dragged = true;
+    } else {
+      state.changed_group = true;
+    }
     ScheduleNormalize(tab);
   }
 }
@@ -1545,8 +1643,29 @@ bool ExecutePinnedTabMenuCommand(TabStripModel* tab_strip,
 // --- Tab views and data ---
 
 bool HandleCloseTabCommand(tabs::TabInterface* tab) {
+  // Zen (zen.tabs.close-window-with-empty, on): Cmd+W on the empty tab closes
+  // the window. (Nothing in a split view, which Koan's split view isn't.)
+  if (IsEmptyTab(tab)) {
+    tab->GetBrowserWindowInterface()->GetWindow()->Close();
+    return true;
+  }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
   return controller && controller->HandleCloseShortcut(tab);
+}
+
+bool OnTabDuplicated(content::WebContents* source,
+                     content::WebContents* duplicate) {
+  tabs::TabInterface* duplicate_tab =
+      tabs::TabInterface::MaybeGetFromContents(duplicate);
+  if (!duplicate_tab) {
+    return false;
+  }
+  if (KoanPinnedTabController* controller =
+          KoanPinnedTabController::ForTab(duplicate_tab)) {
+    controller->OnTabDuplicated(
+        tabs::TabInterface::MaybeGetFromContents(source), duplicate_tab);
+  }
+  return duplicate_tab->IsPinned();
 }
 
 bool HandleTabCloseRequest(const tabs::TabInterface* tab) {
@@ -1556,6 +1675,22 @@ bool HandleTabCloseRequest(const tabs::TabInterface* tab) {
 }
 
 void AdjustTabData(const tabs::TabInterface* tab, tabs::TabData& data) {
+  // Zen's zen.theme.hide-tab-throbber (ShowsTabThrobber()): the favicon
+  // stays while the page loads, without Chromium's spinner or its 250 ms
+  // shrinking of the favicon; the page-load bar shows the load instead. A
+  // network error keeps its state (the tab's accessible name says so).
+  if (!ShowsTabThrobber(tab->GetContents()
+                            ? tab->GetContents()->GetBrowserContext()
+                            : nullptr)) {
+    data.should_hide_throbber = true;
+    if (data.network_state != tabs::TabNetworkState::kError) {
+      data.network_state = tabs::TabNetworkState::kNone;
+    }
+  }
+  // A synced tab whose page is in another window shows that page's title
+  // and favicon (window sync, Zen's label and icon sync); its own label and
+  // icon go on top.
+  AdjustPlaceholderTabData(tab, data);
   const KoanTabState* state =
       features::IsPinnedTabsEnabled() ? GetTabState(tab) : nullptr;
   if (!state) {

@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/page_load_metrics/BUILD.gn b/chrome/browser/page_load_metrics/BUILD.gn
+index 4ee2093b0993b99f19b659eaca85394aa7ddbca0..21e18d6ab00edb99ac2f8c51d3a5e353931dc3ed 100644
+--- a/chrome/browser/page_load_metrics/BUILD.gn
++++ b/chrome/browser/page_load_metrics/BUILD.gn
+@@ -154,6 +154,7 @@ source_set("impl") {
+     "//components/security_state/content",
+     "//components/site_engagement/content",
+     "//components/ukm",
++    "//koan/browser/containers:partition",
+     "//services/metrics/public/cpp:metrics_cpp",
+     "//third_party/blink/public/common",
+     "//ui/events/blink:blink_features",

@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/search/BUILD.gn b/chrome/browser/search/BUILD.gn
+index fe277ebe25f970a3750e699e61b30d07e25f2f85..412ec958e85239c8a7a4657d47983aef5006a582 100644
+--- a/chrome/browser/search/BUILD.gn
++++ b/chrome/browser/search/BUILD.gn
+@@ -30,6 +30,7 @@ source_set("search") {
+     "//components/supervised_user/core/browser",
+     "//components/supervised_user/core/common:buildflags",
+     "//content/public/browser",
++    "//koan/browser:new_tab_page",
+     "//ui/webui:buildflags",
+     "//url",
+   ]

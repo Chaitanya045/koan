@@ -216,26 +216,31 @@ void KoanToast::ShowWithAction(const std::u16string& text,
 
 void KoanToast::RunAction() {
   // Closing the toast destroys the button: after its click. The toast goes
-  // first, so that a toast the action shows stays.
+  // first, so that a toast the action shows stays. Only this toast: another
+  // one shown meanwhile stays too.
   base::OnceClosure action = std::move(action_);
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(
-                     [](base::WeakPtr<KoanToast> toast, base::OnceClosure run) {
+                     [](base::WeakPtr<KoanToast> toast, uint64_t shown,
+                        base::OnceClosure run) {
                        if (!toast) {
                          return;
                        }
-                       toast->Hide();
+                       if (toast->shown_ == shown) {
+                         toast->Hide();
+                       }
                        if (run) {
                          std::move(run).Run();
                        }
                      },
-                     weak_factory_.GetWeakPtr(), std::move(action)));
+                     weak_factory_.GetWeakPtr(), shown_, std::move(action)));
 }
 
 void KoanToast::ShowView(std::unique_ptr<KoanToastView> view,
                          const std::u16string& announcement,
                          base::TimeDelta timeout) {
   Close();
+  ++shown_;
   timeout_ = timeout;
   views::Widget* browser_widget = browser_view_->GetWidget();
   if (!browser_widget) {

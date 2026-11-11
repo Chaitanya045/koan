@@ -74,6 +74,9 @@ instead.
 
 ### macOS
 
+Just want Koan on your Mac? Follow [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md):
+clone, run `scripts/build.sh`, done. This section is the maintainer's setup.
+
 Koan is coming to macOS on Apple Silicon
 ([#51](https://github.com/Chaitanya045/koan/issues/51)). It builds from
 source with the same scripts, but the Mac build is new, so expect rough
@@ -81,6 +84,8 @@ edges. You need:
 
 - An Apple Silicon Mac with the full **Xcode** (not only the Command Line
   Tools). The scripts use `DEVELOPER_DIR`, not `xcode-select`.
+  Install its Metal toolchain too (a separate download since Xcode 26,
+  needed for ANGLE's shaders): `xcodebuild -downloadComponent MetalToolchain`.
 - About **60 GB** of free disk: roughly 30 GB for the checkout and the rest
   for `out/Koan`. `build/koan-mac.gn` builds without debug symbols to keep
   it small.
@@ -111,8 +116,9 @@ redirects `HOME`). Details, the Apple Development option and the static check
 **Everything stays in one folder**, e.g. `~/work/koan-mac`, so Chromium's
 tools (depot_tools, vpython, CIPD, siso) and Apple's don't scatter caches
 across your home directory. The folder's `env.sh` points `HOME`, `TMPDIR`
-and the tool caches into it, and every script refuses to run on macOS until
-it has been sourced:
+and the tool caches into it. Without it, the scripts use `.cache/mac` in the
+clone as the folder (what a friend's clone does), so source it on a Mac that
+has one:
 
 ```sh
 # ~/work/koan-mac/env.sh, with Koan cloned to ~/work/koan-mac/koan.
@@ -159,6 +165,46 @@ signature, so macOS asks again for access to the keychain item.
 `install_desktop.sh` and the off-screen test tools (`scripts/e2e/`,
 `shot_ui.sh`, ...) use Linux's headless Ozone platform, so test behaviour on
 Linux.
+
+### macOS nightly build
+
+[`.github/workflows/macos.yml`](.github/workflows/macos.yml) builds
+`Koan.app` on GitHub's free macOS runners every night from `develop`, and
+publishes `Koan-<version>-<sha>-arm64.dmg` as a run artifact and as the
+rolling `nightly` pre-release (see
+[Installing the macOS build](docs/USAGE.md#installing-the-macos-build)).
+It is the only place the Mac code is compiled without the maintainer's
+Mac, so it catches Mac-only build errors.
+
+- It uses the same scripts as above (`bootstrap.sh`, `apply_patches.sh`,
+  `apply_branding.sh`, `build.sh` with `build/koan-mac.gn`), with
+  `scripts/ci/mac_env.sh` as the runner's `env.sh`.
+- A first build takes much longer than GitHub's 6-hour job limit, so it
+  runs as a chain: a fetch job, then build jobs that each build for about
+  5 hours and hand `out/Koan` on to the next as an artifact, then a
+  packaging step and the release. A whole run takes about 16 hours
+  (4 build jobs).
+- **It never runs on pushes.** A run is a full build of about 16 hours,
+  so it runs only nightly or when asked for. To build a branch or pull
+  request with Mac-specific code (a compile check plus a .dmg to try):
+  - add the **`macos-build` label** to the pull request (builds its head
+    once; remove and add the label again for another run), or
+  - `gh workflow run macos.yml -f ref=<branch>` (or
+    `-f ref=refs/pull/<n>/head`), or "Run workflow" on the Actions tab.
+
+  Pull requests from forks are never built automatically. On every pull
+  request, `ci.yml` lints the workflows (actionlint) and scripts
+  (shellcheck), which is the cheap check for changes to the Mac build.
+- The nightly is skipped when nothing that goes into the app (`src/`,
+  `patches/`, `branding/`, `build/`, `scripts/`, `CHROMIUM_VERSION`, the
+  macOS workflows) changed since the commit the `nightly` release was built
+  from. Manual runs always build.
+- **If a job fails** for a reason outside the code (a network error, a
+  runner problem), use "Re-run failed jobs": the run carries on from the
+  last job that finished, with the same commit (the build artifacts are
+  kept for 2 days). A fix in the code needs a new run.
+
+How it works and what was measured: [.agent/notes/macos-ci.md](.agent/notes/macos-ci.md).
 
 ### Repository layout
 
@@ -207,6 +253,9 @@ version stays cheap.
   Koan patterns over new abstractions.
 - Format C++ with clang-format 22.1.8 and the repository's `.clang-format`:
   `git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file -i`.
+- Format GN files (`BUILD.gn`, `*.gni`) with `gn format`, never with clang-format (it reads them as C++ and corrupts
+  the comments; `.clang-format-ignore` stops it). `scripts/ci/check_gn_format.sh` checks them; files that predate it are
+  listed in `scripts/ci/gn_format_exceptions.txt`.
 - New files start with Koan's license header:
 
   ```cpp
@@ -246,8 +295,12 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every
 pull request. It checks that:
 
 - every patch applies to the Chromium revision in `CHROMIUM_VERSION`;
-- the unit tests pass;
+- the Python unit tests (the branding rules) pass;
 - clang-format, shellcheck and `node --check` find no problems.
+
+CI doesn't build Chromium on Linux, so the C++ tests (`koan_unittests` and
+`koan_browsertests`) run on your build instead, and the macOS CI can compile
+them (see below).
 
 Run the same checks locally before pushing:
 
@@ -255,7 +308,11 @@ Run the same checks locally before pushing:
 scripts/ci/check_patches.sh
 python3 -m unittest discover -s scripts/tests
 git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file --dry-run --Werror
+shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh
 ```
+
+The macOS build runs separately, every night and on demand
+([macOS nightly build](#macos-nightly-build)).
 
 Browser behaviour is tested against a real build, off-screen, so nothing
 opens on your desktop:
@@ -271,6 +328,62 @@ opens on your desktop:
 
 Add an end-to-end test for new behaviour, and keep the existing ones
 passing. For UI changes, compare your screenshots with Zen's.
+
+Icons (`.agent/notes/koan-icons.md`) have two tests of their own:
+
+- `koan_icons_unittests` (`src/browser/ui/vector_icons/koan_icons_unittest.cc`):
+  the registry table, the gfx hook (a Chromium icon paints pixel-equal to its
+  Koan icon) and the URL bar magnifier's ink. It is not in CI and not part of
+  another test binary: build it with `scripts/build.sh koan_icons_unittests`
+  and run `out/Koan/koan_icons_unittests`.
+- `scripts/e2e/icons.mjs` checks which icon each surface paints, at which
+  size. It reads `--koan-icon-trace=<file>`, a developer switch that only
+  builds with DCHECKs have (it does nothing in a release build); run it with
+  `scripts/e2e/run.sh icons`.
+
+### Which test to write
+
+Koan has three kinds of tests. Pick the cheapest one that can fail for the
+reason you care about.
+
+| Test | Use it for | Run it |
+| --- | --- | --- |
+| Unit test (`koan_unittests`, or the area's own target: `koan_shortcut_unittests`, `koan_views_unittests`, `koan_look_unittests`, `koan_icons_unittests`, `koan_agent_unittests`) | Pure logic: scoring and ordering, parsing and formatting, tables of data, colour maths, invariants of prefs. It must link without the browser. | `scripts/test_unit.sh`, a few seconds after a short build |
+| Browser test (`koan_browsertests`) | State that lives in the browser's own objects: Spaces, pinned tabs, what Koan keeps in the session and gets back after a restart. | `scripts/test_browser.sh`, on request: it starts a browser per test |
+| End-to-end test (`scripts/e2e`) | What the user sees and does: views, layout, input, menus, animations. | `scripts/e2e/run.sh <test>` |
+
+#### Adding a unit test
+
+1. Put the logic in a small `source_set` that depends on `//base` (and
+   `//ui/base` or the like) only, not on `//chrome/browser`. If it sits in a
+   big file next to views, move it out, as `koan_fuzzy_score.cc` and
+   `koan_space_title.cc` were moved out of the command palette and the
+   Spaces; keep the original call site a one-liner.
+2. Write `foo_unittest.cc` next to `foo.cc` with plain gtest. If its area
+   has a test target of its own (the shortcut table, views, colours, icons,
+   agent control), list it there; otherwise in the `sources` of
+   `koan_unittests` in `src/test/BUILD.gn`. Add the `source_set` to its
+   `deps`.
+3. Run `scripts/test_unit.sh --gtest_filter='Foo*'`.
+
+Test the edge cases that an end-to-end run can't reach cheaply: empty input,
+the largest and smallest values, malformed prefs, and each platform's branch
+(`BUILDFLAG(IS_MAC)`). A test that reads a table (like the shortcut table's)
+should check its invariants, so that a new row that breaks them fails at
+once.
+
+#### Adding a browser test
+
+Derive from `InProcessBrowserTest`, put the file in `src/test/browser/` and
+list it in `browsertests_impl` in `src/test/BUILD.gn`. `koan_browser_test_utils.h`
+has helpers for Koan's controllers. To test a restart, write a `PRE_Foo` test
+(the first browser, closed at the end) and a `Foo` test (the next one, on the
+same profile and with "continue where I left off" set), as
+`koan_session_restore_browsertest.cc` does. Use `chrome://` pages, which load
+without a server.
+
+Both targets also build for macOS (`is_mac`), and the macOS CI can compile
+them. Keep platform code in them behind `BUILDFLAG(IS_MAC)` too.
 
 ## Commits
 

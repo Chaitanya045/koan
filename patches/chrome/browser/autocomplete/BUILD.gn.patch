@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/autocomplete/BUILD.gn b/chrome/browser/autocomplete/BUILD.gn
+index c01ba2c923dd18f792786ffb1742121e61ff96c5..d71726c3637d620fc6a619cd891b4f56685ea69c 100644
+--- a/chrome/browser/autocomplete/BUILD.gn
++++ b/chrome/browser/autocomplete/BUILD.gn
+@@ -119,6 +119,7 @@ source_set("impl") {
+     "//components/unified_consent",
+     "//components/variations/service",
+     "//content/public/browser",
++    "//koan/browser/containers:partition",
+   ]
+ 
+   if (is_android) {
+@@ -141,6 +142,7 @@ source_set("impl") {
+       "//chrome/browser/ui/tabs:tab_strip",
+       "//chrome/browser/ui/views/side_panel",
+       "//chrome/browser/web_applications/app_service",
++      "//koan/browser/ui/views",
+     ]
+   }
+ 

@@ -43,15 +43,18 @@
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
+#include "components/omnibox/browser/page_classification_functions.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_fuzzy_score.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/omnibox/koan_omnibox_hooks.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_commands.h"
+#include "koan/browser/ui/views/koan_zero_suggest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/page_transition_types.h"
@@ -80,9 +83,6 @@ constexpr int kMinimumScore = 92;
 constexpr int kMinimumPrefixedScore = 30;
 constexpr size_t kMinimumQueryLength = 3;
 constexpr size_t kMaxQueryLength = 255;
-// Exact and prefix matches outrank any fuzzy match.
-constexpr int kExactMatchScore = 1'000'000;
-constexpr int kPrefixMatchScore = 100'000;
 // With ">", Enter runs the first action once this much is typed, as in Zen.
 constexpr size_t kMinimumPrefixedQueryForDefault = 2;
 // The learner's bounds (ZenUBResultsLearner), and how many actions it
@@ -174,13 +174,12 @@ std::u16string AccessibleName(const KoanCommand& command) {
 int Score(const KoanCommand& command, std::u16string_view query) {
   const std::u16string text = base::i18n::ToLower(
       command.target.empty() ? command.label : command.target);
-  int score = KoanCommandPalette::FuzzyScore(text, query);
+  int score = FuzzyScore(text, query);
   const size_t space = text.find(u' ');
   if (space != std::u16string::npos && !text.empty() &&
       !base::IsAsciiAlphaNumeric(text[0])) {
-    score = std::max(score,
-                     KoanCommandPalette::FuzzyScore(
-                         std::u16string_view(text).substr(space + 1), query));
+    score = std::max(
+        score, FuzzyScore(std::u16string_view(text).substr(space + 1), query));
   }
   return score;
 }
@@ -287,7 +286,9 @@ void KoanCommandProvider::Start(const AutocompleteInput& input,
   }
   PrefService* prefs = client_->GetPrefs();
   std::u16string_view text = input.text();
-  const bool prefixed = text.starts_with(kActionsModePrefix);
+  // Zen's Spaces mode is its actions mode with only the Spaces' actions.
+  const bool spaces_mode = text.starts_with(kSpacesModePrefix);
+  const bool prefixed = spaces_mode || text.starts_with(kActionsModePrefix);
   if (prefixed) {
     text.remove_prefix(1);
   } else if (!prefs->GetBoolean(prefs::kCommandPaletteSuggestions) ||
@@ -313,6 +314,9 @@ void KoanCommandProvider::Start(const AutocompleteInput& input,
   std::vector<Candidate> candidates;
   for (KoanCommand& command :
        controller->command_palette()->registry().GetAvailableCommands()) {
+    if (spaces_mode && !command.id.starts_with(kFocusSpaceCommandPrefix)) {
+      continue;
+    }
     const int score =
         query.empty() ? kMinimumPrefixedScore + 1 : Score(command, query);
     if (score > (prefixed ? kMinimumPrefixedScore : kMinimumScore)) {
@@ -415,9 +419,12 @@ void KoanCommandProvider::OnURLOpened(OmniboxLog* log) {
       seen.push_back(std::move(id));
     }
   }
-  // Like Zen, the full ">" list doesn't count as passing actions over.
+  // Like Zen, the full ">" (or "`") list doesn't count as passing actions
+  // over.
   std::u16string_view text = log->text;
-  if (text.starts_with(kActionsModePrefix) && text.size() < 3) {
+  if ((text.starts_with(kActionsModePrefix) ||
+       text.starts_with(kSpacesModePrefix)) &&
+      text.size() < 3) {
     seen.clear();
   }
   if (!used && seen.empty()) {
@@ -458,6 +465,7 @@ KoanCommandPalette::KoanCommandPalette(KoanBrowserViewController* controller)
     : controller_(controller) {
   AddGlobalCommands(registry_, *controller);
   AddWorkspaceCommands(registry_, *controller);
+  AddFolderCommands(registry_, *controller);
 }
 
 KoanCommandPalette::~KoanCommandPalette() {
@@ -504,51 +512,6 @@ void KoanCommandPalette::OnKeyEvent(ui::KeyEvent* event) {
   event->SetHandled();
 }
 
-// static
-int KoanCommandPalette::FuzzyScore(std::u16string_view target,
-                                   std::u16string_view query) {
-  // A VS Code-style score, as in Zen (ZenUBActionsProvider).
-  if (target.empty() || query.empty() || query.size() > target.size()) {
-    return 0;
-  }
-  if (target == query) {
-    return kExactMatchScore;
-  }
-  if (target.starts_with(query)) {
-    return kPrefixMatchScore + static_cast<int>(query.size());
-  }
-  int score = 0;
-  size_t matched = 0;
-  // -1 before the first match; Zen's run bonus then also counts a match at
-  // index 0 as continuing a run.
-  int last_match = -1;
-  int run = 0;
-  for (int i = 0; i < static_cast<int>(target.size()) && matched < query.size();
-       ++i) {
-    if (target[i] != query[matched]) {
-      continue;
-    }
-    int bonus = 10;
-    if (i == 0 || target[i - 1] == u' ' || target[i - 1] == u'-' ||
-        target[i - 1] == u'_') {
-      bonus += 15;  // Start of a word.
-    }
-    if (last_match == i - 1) {
-      ++run;
-      bonus += 20 * run;
-    } else {
-      run = 0;
-    }
-    if (last_match != -1) {
-      bonus -= std::min(i - last_match - 1, 10);  // Gap since the last match.
-    }
-    score += bonus;
-    last_match = i;
-    ++matched;
-  }
-  return matched == query.size() ? score : 0;
-}
-
 void AddAutocompleteProviders(
     AutocompleteController* controller,
     int provider_types,
@@ -558,6 +521,8 @@ void AddAutocompleteProviders(
   if (provider_types & static_cast<int>(AutocompleteProvider::Type::kBuiltin)) {
     providers.push_back(base::MakeRefCounted<KoanCommandProvider>(
         controller->autocomplete_provider_client()));
+    providers.push_back(
+        CreateZeroSuggestProvider(controller->autocomplete_provider_client()));
   }
 }
 

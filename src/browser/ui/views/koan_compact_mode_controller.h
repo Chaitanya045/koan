@@ -12,15 +12,19 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "koan/browser/ui/views/koan_sidebar_animation.h"
+#include "koan/browser/ui/views/koan_window_edges.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/events/event_observer.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view_tracker.h"
+#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 class PrefService;
@@ -39,6 +43,7 @@ namespace koan {
 
 class KoanCaptionButtonsTargeter;
 class KoanHotZone;
+class KoanOutsideWindowTracker;
 class KoanSidebarContextMenuController;
 class KoanSidebarNavButtons;
 class KoanSidebarNavView;
@@ -50,9 +55,9 @@ class KoanTrafficLightsController;
 // there is no top toolbar. The top container is hidden in the overlay
 // (below), the page card reaches the top of the window, and
 // KoanSidebarNavView at the top of the sidebar has the navigation buttons
-// and a URL pill. Like Zen, it needs an expanded sidebar: collapsing the
-// sidebar to icons gives Zen's "Collapsed Sidebar" layout (a toolbar above
-// the page) until it is expanded again.
+// and a URL pill. The sidebar is always expanded: Zen's "Collapsed Sidebar"
+// layout (icons only, a toolbar above the page) is not offered for now, and
+// Chromium's icon rail never shows (KoanVerticalTabsPolicy).
 //
 // Compact mode (Ctrl+S like Zen, pref koan.compact_mode.enabled) hides the
 // sidebar, the toolbar or both (Zen's "Compact Mode" submenu; with single
@@ -88,6 +93,7 @@ class KoanTrafficLightsController;
 // live in KoanShortcutController; right-clicking the sidebar opens Zen's
 // toolbar context menu (Compact Mode, Tabs on the right).
 class KoanCompactModeController : public views::FocusChangeListener,
+                                  public views::WidgetObserver,
                                   public ui::EventObserver,
                                   public TabStripModelObserver,
                                   public ui::SimpleMenuModel::Delegate {
@@ -125,6 +131,23 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // mode with the header kept). KoanUrlBarController edits over it.
   KoanSidebarNavView* sidebar_nav();
 
+  // Where a bubble about the page points while Koan hides the toolbar (see
+  // GetBubbleAnchorView() in koan_url_bar.h): the pill's site icon, else the
+  // header's buttons, else a fixed point at the window's top; null when the
+  // toolbar is there (or, with compact mode hiding just the toolbar, when it
+  // is to slide in under the bubble). Changes nothing but for scheduling a
+  // check of which bubbles are open (ReconcileBubbleHold()): it is called
+  // from layout and for bubbles that never open.
+  views::View* GetBubbleAnchor();
+
+  // A bubble is about to open in the peeked sidebar (Koan's own page info
+  // button at the pill, which doesn't ask GetBubbleAnchor(), or a folder's
+  // search popup at its row): hold the sidebar out from now, before it opens,
+  // so the view the bubble points at stays, and let go again when the bubble
+  // is gone (ReconcileBubbleHold()). Does nothing unless compact mode hides
+  // the sidebar.
+  void HoldSidebarForBubble();
+
   // Called by KoanUrlBarController when the omnibox is lifted out of the
   // toolbar or put back.
   void OnUrlBarOpenChanged();
@@ -133,6 +156,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnAddedToWidget();
   void OnBrowserViewLayout();
   void OnBrowserViewDestroying();
+  // The sidebar finished collapsing or expanding (from the vertical tabs
+  // policy, in a task of its own): locks that had to wait for it are taken.
+  void OnSidebarCollapseSettled();
 
   // Flip the profile prefs.
   void ToggleCompactMode();
@@ -148,6 +174,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   // A drag of the sidebar's edge collapsed it: like Zen, hide it in compact
   // mode instead, and say once how to bring it back.
+  // Z50: a tab drag runs from the sidebar: it stays out until the drag ends
+  // (Zen's _isTabBeingDragged ignores the hover leave), wherever the pointer
+  // goes. Called on each of the drag's pointer events in the sidebar.
+  void HoldSidebarForTabDrag();
   void OnSidebarDragCollapsed();
 
   // Zen's toolbar context menu, at `screen_point`.
@@ -159,6 +189,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool reveals_toolbar_beside_sidebar() const {
     return can_reveal_toolbar() && !hides_sidebar();
   }
+
+  // views::WidgetObserver (a bubble that holds the toolbar or the sidebar
+  // out):
+  void OnWidgetDestroying(views::Widget* widget) override;
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
 
   // views::FocusChangeListener:
   void OnDidChangeFocus(views::View* focused_before,
@@ -173,9 +208,11 @@ class KoanCompactModeController : public views::FocusChangeListener,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
 
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      TabChangeType change_type) override;
+
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
-  bool IsCommandIdEnabled(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
 
  private:
@@ -185,25 +222,23 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool PrefHidesSidebar() const;
   bool PrefHidesToolbar() const;
   Mode DesiredMode() const;
-  // Whether the user collapsed the sidebar to icons (not compact mode).
-  bool IsSidebarCollapsedByUser() const;
-  // Single toolbar is on and possible (the sidebar is expanded), as in Zen.
+  // Single toolbar is on (the pref; the sidebar is always expanded unless
+  // compact mode hides it).
   bool DesiredSingleToolbar() const;
   // What compact mode hides, from the prefs and the layout.
   bool DesiredHideSidebar() const;
   bool DesiredHideToolbar() const;
-  // Zen's check for a compact variant that would strand the window buttons:
-  // collapsed sidebar, buttons on its side, only the toolbar hidden.
-  bool IsHideToolbarOnlyBlocked() const;
+  // Whether compact mode can apply in this window (a normal window with
+  // Koan's sidebar, and a content card: not in fullscreen except on macOS).
+  bool CanCompactMode() const;
+  // The sidebar is collapsed while compact mode hides it, and only then.
+  void SyncSidebar();
   void UpdateActiveSoon();
   void CancelSpaceSwipe();
   void UpdateActive();
   void Activate(Mode mode);
-  // `keep_sidebar_hidden`: compact mode goes on hiding the sidebar (only
-  // what else it hides changes), so it isn't expanded in between.
-  void Deactivate(bool keep_sidebar_hidden);
+  void Deactivate();
   void OnTabsOnRightChanged();
-  void OnSidebarCollapseChanged();
 
   // Compact mode with the toolbar hidden in the overlay, revealed at the top
   // edge (not single toolbar, which has no toolbar to reveal).
@@ -221,6 +256,19 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool IsTopContainerShown() const;
   void HideAwayToolbarLayer();
   bool ShouldKeepToolbarRevealed() const;
+  // A bubble (permission prompt, page info, bookmark, download ...) anchored
+  // to the revealed toolbar is open.
+  bool HasBubbleAnchoredToToolbar() const;
+  // Looks (a moment after an anchor was asked for, and when a bubble goes
+  // away) at which bubbles are open: with compact mode hiding the toolbar,
+  // the toolbar comes in without animation and the bubbles are placed again;
+  // anchored to a peeked sidebar's pill, they hold the sidebar out; with
+  // none, both go as they would. Not from inside layout.
+  void ScheduleBubbleCheck();
+  void ReconcileBubbleHold();
+  // One check now, one after 150 ms and one after 600 ms (the bubble may open
+  // a moment after its anchor was asked for), whatever the number of asks.
+  void RunBubbleCheck();
   void CheckToolbarHide();
 
   // While the toolbar, the caption strip or a peeked sidebar is out, watches
@@ -228,6 +276,16 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // runs while they are hidden or while the pointer rests over them.
   void UpdatePointerMonitor();
   void CheckRevealedHides();
+  // Zen's native mouse tracker (KoanOutsideWindowTracker): wanted where
+  // compact mode hides the sidebar or the toolbar, outside fullscreen.
+  bool WantsOutsideTracking() const;
+  // The pointer left the window through `edge`: reveals and holds what is on
+  // that edge and returns how far outside to track the pointer, or nullopt.
+  std::optional<int> OnPointerLeftWindow(WindowEdge edge,
+                                         const gfx::Point& point);
+  void OnOutsideTrackingEnded(bool back_in_window);
+  // Stops tracking and lets go of its hold.
+  void EndOutsideTracking();
   // The page's own fullscreen (video) starts or ends, or the window's:
   // Koan's hover state is cleared (Zen's sizemodechange ->
   // _clearAllHoverStates) and the card is laid out again.
@@ -242,6 +300,17 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // instead of by the hot zones.
   bool WantsFullscreenEdges() const;
   void CheckFullscreenEdges();
+  // macOS: the traffic lights are shown in the revealed sidebar's top row
+  // (tabs on the left), so the pointer on them, which leaves the sidebar's
+  // views for AppKit's buttons, keeps it out, as Zen's onLeave does
+  // (ZenCompactMode.mjs). Let go of after the keep-hover time once the
+  // pointer is off them.
+  bool WantsLightsHold() const;
+  void CheckLightsHold();
+  // Z50: lets go of the tab drag's hold once no tab drag runs.
+  void CheckTabDragHold();
+  // The sidebar came or went, or the lights were laid out again.
+  void OnTrafficLightsChanged();
 
   // Hides the toolbar (single toolbar, compact mode): moves the top
   // container, if it is not there already, into the overlay view of this
@@ -266,11 +335,20 @@ class KoanCompactModeController : public views::FocusChangeListener,
 
   // Zen's flash popup: the hidden sidebar pops up for a moment.
   void FlashSidebar();
+  // Zen's `zen-has-empty-tab`: while the selected tab is Zen's empty tab
+  // (the one Koan marked, IsEmptyTab() in koan_spaces.h; not any blank page,
+  // as Zen keys on `zen-empty-tab`), the sidebar is out and can't hide.
+  void UpdateEmptyTabLock(bool snap_reveal = false);
   void MaybeShowBackgroundTabToast(TabStripModel* tab_strip_model,
                                    const TabStripModelChange::Insert& insert);
   void EndFlash();
   // Lets go of `lock`; deferred while the window is being destroyed.
   void ReleaseLock(std::unique_ptr<ExpandOnHoverLock>& lock);
+  // A keep-expanded lock on the sidebar, or null: not while the sidebar is
+  // still collapsing (it would start upstream's expand animation from inside
+  // the collapse's ended notification, which clears it: a CHECK), and not in a
+  // closing window.
+  std::unique_ptr<ExpandOnHoverLock> TakeExpandedLock();
 
   // The caption-button strip.
   void OnCaptionHotZoneHovered(bool hovered);
@@ -287,18 +365,19 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnContentCardChanged();
 
   void OnSidebarHotZoneHovered(bool hovered);
+  void CheckHoverLock();
+  bool IsPointerAtSidebarEdge() const;
   void OnToolbarHotZoneHovered(bool hovered);
   void LayoutHotZones();
 
   const raw_ptr<BrowserView> browser_view_;
   PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
-  base::CallbackListSubscription collapse_subscription_;
-  base::CallbackListSubscription resizing_subscription_;
-  // The sidebar was expanded when the current drag of its edge started.
-  bool resizing_from_expanded_ = false;
 
   Mode mode_ = Mode::kNone;
+  // The prefs were applied once (the window has opened): later changes are
+  // the user's, and animate.
+  bool applied_ = false;
   // In compact mode: what it hides.
   bool hide_sidebar_ = false;
   bool hide_toolbar_ = false;
@@ -306,15 +385,6 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool toolbar_revealed_ = false;
   // Whether compact mode keeps the sidebar header (single toolbar).
   bool compact_keeps_sidebar_nav_ = false;
-  // Compact mode hid the sidebar: whether it was collapsed before.
-  std::optional<bool> collapsed_before_;
-  // The window was opened while compact mode was on, and hasn't had its
-  // sidebar back since: its collapsed state may be compact mode's.
-  bool opened_in_compact_mode_ = false;
-  // A drag collapsed the sidebar into compact mode: it was expanded before.
-  bool collapsed_by_drag_ = false;
-  // Koan asked upstream to expand the sidebar (it animates).
-  bool expanding_sidebar_ = false;
   std::optional<size_t> top_container_index_;
   // macOS: told when native fullscreen starts and ends.
   class ImmersiveObserver;
@@ -343,19 +413,48 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // release each other's hold on the sidebar.
   std::unique_ptr<ExpandOnHoverLock> hover_lock_;
   std::unique_ptr<ExpandOnHoverLock> peek_lock_;
+  // The peek shortcut was used while the sidebar collapsed, which refuses the
+  // lock: taken once it has (OnSidebarCollapseSettled()).
+  bool peek_requested_ = false;
   std::unique_ptr<ExpandOnHoverLock> flash_lock_;
+  // Held while the pointer is on the traffic lights (CheckLightsHold()).
+  std::unique_ptr<ExpandOnHoverLock> lights_lock_;
+  base::OneShotTimer lights_release_timer_;
+  std::unique_ptr<ExpandOnHoverLock> empty_tab_lock_;
+  std::unique_ptr<ExpandOnHoverLock> tab_drag_lock_;
+  base::RepeatingTimer tab_drag_timer_;
 
   base::OneShotTimer toolbar_hide_timer_;
   base::OneShotTimer flash_timer_;
   // Keeps the sidebar out for a moment after the pointer leaves its hot zone.
   base::OneShotTimer hover_release_timer_;
-  std::optional<base::TimeTicks> toolbar_unwanted_since_;
+  // Watches the pointer while a hover lock was taken for a hover the hot zone
+  // never reported (CheckHoverLock()).
+  base::RepeatingTimer hover_poll_timer_;
   bool edge_sidebar_hovered_ = false;
+  // Bubbles that hold the toolbar or the sidebar out (see
+  // ReconcileBubbleHold()).
+  base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
+      bubble_widgets_{this};
+  std::unique_ptr<ExpandOnHoverLock> bubble_lock_;
+  base::OneShotTimer bubble_check_timer_;
+  int bubble_check_step_ = 0;
+  // A point at the window's top that is always on screen while Koan hides the
+  // toolbar: where bubbles point when neither the pill nor the header is.
+  raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
   // macOS: told when fullscreen of the window or of the page starts or ends.
   base::CallbackListSubscription fullscreen_subscription_;
-  // The window is being destroyed (OnBrowserViewDestroying()): no UI work.
-  bool destroying_ = false;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
+  // The monitor sees all the application's windows (fullscreen), not just the
+  // browser window's.
+  bool pointer_monitor_is_application_wide_ = false;
+  // The monitor hears only the pointer leaving the window (for the outside
+  // tracker): nothing is revealed that it would hide.
+  bool pointer_monitor_exits_only_ = false;
+  // Follows the pointer outside the window after it left through the hidden
+  // sidebar's or toolbar's edge; the sidebar's hold meanwhile.
+  std::unique_ptr<KoanOutsideWindowTracker> outside_tracker_;
+  std::unique_ptr<ExpandOnHoverLock> outside_lock_;
 
   // The sidebar's context menu.
   std::unique_ptr<KoanSidebarContextMenuController> context_menu_controller_;
@@ -365,7 +464,7 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // Declared after the models it shows, so it goes first.
   std::unique_ptr<views::MenuRunner> menu_runner_;
   // Keeps the sidebar out while its menu is open.
-  std::unique_ptr<ExpandOnHoverLock> menu_lock_;
+  std::unique_ptr<SidebarHold> menu_hold_;
 
   base::WeakPtrFactory<KoanCompactModeController> weak_factory_{this};
 };

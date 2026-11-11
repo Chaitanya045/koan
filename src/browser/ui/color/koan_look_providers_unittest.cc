@@ -16,6 +16,7 @@
 #include <array>
 #include <string>
 #include <tuple>
+#include <utility>
 
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -35,6 +36,7 @@
 #include "ui/color/color_provider_utils.h"
 #include "ui/color/color_recipe.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 
 namespace koan {
 
@@ -151,6 +153,34 @@ TEST_P(KoanLookProvidersTest, TheLookRestylesTheSystemColours) {
             provider_.GetColor(ui::kColorSysOnSurface));
   EXPECT_EQ(tokens[look::Token::kMutedForeground],
             provider_.GetColor(ui::kColorSysOnSurfaceVariant));
+}
+
+TEST_P(KoanLookProvidersTest, IconsStandOutFromTheirDiscs) {
+  Build();
+  // An icon drawn on a disc of its own colour is a blank disc: the Glance
+  // buttons in the Zen look's dark mode, whose disc and icon were both the
+  // text colour (#138). 3:1 is WCAG's minimum for non-text contrast.
+  constexpr std::array<std::pair<ui::ColorId, ui::ColorId>, 2> kPairs = {{
+      {kColorKoanGlanceButtonIcon, kColorKoanGlanceButton},
+      {kColorKoanDownloadArcIcon, kColorKoanDownloadArcCircle},
+  }};
+  for (const auto& [icon, disc] : kPairs) {
+    EXPECT_GE(color_utils::GetContrastRatio(provider_.GetColor(icon),
+                                            provider_.GetColor(disc)),
+              3.0f)
+        << ui::ColorIdName(icon) << " on " << ui::ColorIdName(disc);
+  }
+}
+
+TEST_P(KoanLookProvidersTest, StatusBubbleTextIsReadable) {
+  Build();
+  // Koan sets the bubble's colours from the accent (Zen's look) or the
+  // tokens (shadcn's), so a light accent or a pasted theme must still give
+  // readable text. 4.5:1 is WCAG's minimum for text.
+  EXPECT_GE(color_utils::GetContrastRatio(
+                provider_.GetColor(kColorStatusBubbleForegroundFrameActive),
+                provider_.GetColor(kColorStatusBubbleBackgroundFrameActive)),
+            4.5f);
 }
 
 TEST_P(KoanLookProvidersTest, SidebarOffBuildsToo) {

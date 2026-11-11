@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/favicon/BUILD.gn b/chrome/browser/favicon/BUILD.gn
+index 65a37ef127096ef2d716d333279c28d41552d533..cfd2df98b8736ed8d3fe216556d7e308f2cd1ec9 100644
+--- a/chrome/browser/favicon/BUILD.gn
++++ b/chrome/browser/favicon/BUILD.gn
+@@ -45,6 +45,7 @@ source_set("impl") {
+     "//components/image_fetcher/core",
+     "//components/password_manager/content/common",
+     "//components/search_engines",
++    "//koan/browser/containers:partition",
+     "//ui/native_theme",
+     "//ui/resources",
+   ]

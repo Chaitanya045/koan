@@ -1,7 +1,16 @@
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index ccf57b0..4e98ac9 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -205,6 +205,7 @@
+@@ -107,6 +107,7 @@ source_set("bubble_anchor_util_views_impl") {
+     "//components/payments/core",
+     "//components/tabs:public",
+     "//content/public/browser",
++    "//koan/browser/ui/views",
+     "//ui/base",
+     "//ui/views",
+   ]
+@@ -205,6 +206,7 @@ source_set("layout_provider_impl") {
      "//chrome/browser/ui/views/location_bar",
      "//components/omnibox/browser",
      "//components/omnibox/common",
@@ -9,3 +18,19 @@ diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
    ]
  }
  
+@@ -318,6 +320,7 @@ source_set("status_bubble") {
+     "//chrome/browser/ui:status_bubble",
+     "//chrome/browser/ui/color:color_headers",
+     "//components/url_formatter",
++    "//koan/browser/ui/views",
+     "//skia",
+     "//ui/base",
+     "//ui/display",
+@@ -1045,6 +1048,7 @@ source_set("javascript_tab_modal_dialog_view_views") {
+     "//chrome/browser/ui/javascript_dialogs",
+     "//chrome/browser/ui/tabs:tab_strip",
+     "//components/constrained_window",
++    "//koan/browser/ui/views",
+     "//ui/base",
+     "//ui/base/mojom:ui_base_types",
+     "//ui/strings:ui_strings",

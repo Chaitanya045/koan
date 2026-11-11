@@ -1,8 +1,8 @@
 # macOS
 
 Facts and rules for Koan's Mac build (issue #51). The Mac is the
-maintainer's daily laptop; Linux stays where agents develop and run the e2e
-tests.
+maintainer's daily laptop. No Linux builds or e2e (2026-11-03); Linux is only
+for editing and `clang -fsyntax-only`.
 
 ## Consent first
 
@@ -18,7 +18,16 @@ are allowed over SSH: `ls`, `cat`, `grep`, `sw_vers`, `which`,
   (~220 GB free when this was written).
 - macOS 27.0. Xcode 27.1 at `/Applications/Xcode.app` (SDK
   `MacOSX27.0.sdk`, which is Chromium 158's `mac_sdk_official_version`;
-  `actool` 27.1). The system-wide `xcode-select -p` is the Command Line
+  `actool` 27.1). Since Xcode 26 the **Metal toolchain** is a separate
+  component that ANGLE's Metal shaders need (`xcrun metal`); without it the
+  build stops at `angle_metal_internal_shaders_to_air` with "missing Metal
+  Toolchain". Check with `xcodebuild -showComponent MetalToolchain`
+  (read-only) and install it once with `xcodebuild -downloadComponent
+  MetalToolchain`; not yet checked on this Mac. xcrun can't find the toolchain under the
+  `CFFIXED_USER_HOME` that the scripts set (`xcodebuild -find metallib`
+  fails), so `build.sh` points ANGLE at it directly
+  (`angle_metal_toolchain_dir`, through `out/Koan/metal-toolchain`; see
+  .agent/notes/macos-ci.md). The system-wide `xcode-select -p` is the Command Line
   Tools, so builds must set `DEVELOPER_DIR`; the scripts default it to
   Xcode.app.
 - Tools: `/bin/bash` is 3.2; Homebrew bash 5.3 is at `/opt/homebrew/bin/bash`
@@ -29,7 +38,7 @@ are allowed over SSH: `ls`, `cat`, `grep`, `sw_vers`, `which`,
   ImageMagick don't, and aren't needed: the PNGs the Mac uses are rendered
   on Linux and committed (`branding/mac/rendered/`, refreshed with
   `apply_branding.sh --render-mac` after an SVG changes).
-- SSH: `ssh -i ~/.ssh/koan_mac_ed25519 chaitanya@chaitanyas-macbook-air`.
+- SSH: `ssh -i ~/.ssh/<ssh-key> <user>@<mac-host>`.
 
 ## One folder
 
@@ -44,7 +53,7 @@ Everything lives in `~/work/koan-mac`:
 ├── logs/         fetch.log, build logs
 └── koan/         the Koan clone
     ├── depot_tools/
-    └── chromium/src   Chromium 158.0.8111.0 @ 67e29b8, target_os ["mac"]
+    └── chromium/src   Chromium 158.0.8127.2, target_os ["mac"]
 ```
 
 `env.sh` points `HOME`, `TMPDIR`, `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`,
@@ -55,7 +64,9 @@ Everything lives in `~/work/koan-mac`:
 **The rule is that everything stays in the folder.** Every script (and
 `branding.py`) refuses to run on macOS unless `KOAN_MAC` is set and `HOME`
 and `TMPDIR` are inside it (`koan_require_mac_env` in
-`scripts/koan_platform.sh`). The scripts also export
+`scripts/koan_platform.sh`). With `KOAN_MAC` unset (a friend's clone,
+docs/BUILDING-MAC.md) the folder is `<clone>/.cache/mac`
+(`koan_use_clone_env`), so the rule holds without an env.sh. The scripts also export
 `CFFIXED_USER_HOME="$HOME"`: Apple's tools (`xcodebuild` from `gn gen`,
 `actool`, `ibtoold`) find the home directory through CoreFoundation, which
 ignores `HOME` but honours that.
@@ -77,6 +88,11 @@ Still outside the folder (by design or unavoidable):
 cache in `$KOAN_MAC/profile`, `--use-mock-keychain` (no keychain item;
 `KOAN_REAL_KEYCHAIN=1` to use the real one), the code-sign clone off, and
 started directly so it keeps the folder's `HOME`/`CFFIXED_USER_HOME`.
+The test instance does not touch the real-home preferences plist
+(`~/Library/Preferences/dev.koan.Koan.plist`): that file belongs to the
+daily-driver app opened from Finder. Because `CFFIXED_USER_HOME` points into
+the folder, a test instance's defaults go there, not into the real home. The
+plist in the real home is harmless and is left alone.
 
 ## Build
 
@@ -320,3 +336,81 @@ sign X, log in somewhere, quit; rebuild (Y), sign again; launch Y on the same
 profile: no keychain prompt, no infobar, the login is still there. Compare
 `codesign -d -r- X.app` and `Y.app`: the same requirement. The Mac harness
 does not run this.
+
+## Bench lessons (2026-11-03, the Mac test-bench loop)
+
+What the first day of running other threads' branches on the Mac taught us.
+The bench scripts live in `~/work/koan-mac` on the Mac, not in the repo. This
+section is the Mac build loop's own procedure: other agents never ssh to the
+Mac, build there or run Koan there.
+
+### Building
+
+- **Load.** `autoninja -j N` turns into siso `-local_jobs=N`, but the load
+  average still reached 27 at `-j 8` and froze the laptop. While the user is at
+  the Mac use `-j 3` (or 4) under `nice -n 10`, with `caffeinate -i`; `-k 0` keeps
+  going after a failed object, but anything that depends on it is blocked.
+  A killed siso resumes incrementally.
+- **Detached builds.** Run `nohup ./build-full.sh > log &` and poll for a line
+  starting `AGENT-BUILD-EXIT <rc>`; do not keep an ssh session open for a build
+  (the harness limit is 2 hours). An incremental rebuild (a few objects and the
+  link) takes 40-50 s at `-j 3`.
+- **Branches: one PR at a time.** The Mac loop builds `develop` alone first,
+  then adds one PR head at a time in dependency order, rebuilds incrementally and
+  runs the regression script after each. The first PR after which a crash appears
+  is the culprit. No stacked preview is given to the user. Mechanics: the head is
+  merged onto the current branch in a scratch worktree (Linux is only for
+  editing), shipped as a `git bundle`, and checked out on the Mac by
+  `switch-branch.sh OLD NEW bundle` (reverse the old branch's changed patch
+  files, `git checkout NEW`, `scripts/apply_patches.sh apply`, `gn gen`). Nothing
+  is pushed. Conflicts are mostly additive (BUILD.gn lists, feature flag
+  entries, patch hunks whose counts need recounting); check
+  `git grep '^<<<<<<<'` before every build, because a blanket `git commit -a`
+  mid-merge commits conflict markers.
+- **Env.** `CFFIXED_USER_HOME="$HOME"` must be exported (see above) or
+  `gn gen`/`actool` look in the real home; the Metal toolchain link change of
+  #70 is a local-only change in `scripts/build.sh` until it lands.
+
+### Running and capturing
+
+- **Flags for a test instance:** `--user-data-dir=<fresh> --use-mock-keychain
+  --disable-features=MacAppCodeSignClone --no-default-browser-check
+  --enable-ui-devtools=9340 --remote-debugging-port=9341
+  --enable-features=ui-debug-tools-enable-synthetic-events`; add
+  `--disable-features=KoanWelcome --no-first-run` to skip the welcome, or
+  `--force-first-run` to show it (`--enable-features=KoanWelcomeWebUI` for the
+  WebUI version). Do not seed `Default/Preferences` by hand: Koan then says
+  "Your preferences file is corrupt" and hangs.
+- **Driving it (Mac loop only):** an `ssh -L` tunnel to 9340 (UI DevTools: the Views
+  tree, synthetic mouse and key events) and 9341 (CDP). UI DevTools can stop
+  answering after the Library is opened and closed; CDP keeps working.
+- **Input.** Posted key chords (`CGEventPostToPid`, ⌘T, ⌘L, ⌘S, ⌃⌘F, Esc)
+  reach the Koan process; posted mouse clicks do not, and a global click moves
+  the pointer and can hit another app, so there are none. Activate Koan and check
+  that `lsappinfo front` is Koan before each key.
+- **Capture.** The user's own Zen is usually in a fullscreen Space of its own
+  and re-raises itself, so Koan's windows are normally on another Space and
+  region captures see nothing. List windows with `CGWindowListCopyWindowInfo`
+  (`kCGWindowListOptionAll`) and capture one by id with
+  `screencapture -x -o -l <id>`; it works on any Space without switching.
+  Limits: a captured window shows glass as flat grey, a fullscreen window has a
+  blank band at the top, and the overlay windows of the welcome (title bar and
+  scrim) are separate windows, so capture every Koan window wider than 200 pt.
+  Never record the screen: it captures the user's other windows.
+- **Processes.** Check with `ps -Ao command | grep "[M]acOS/Koan -"`;
+  `pgrep -f "Koan.app/..."` misses `Koan-preview.app`. Kill only by exact pid,
+  and only a process whose command line is under `~/work/koan-mac`
+  (`tmp/killkoan.sh`). The user's own Zen or Koan must never be signalled.
+- **No debugger.** Developer mode is off, so there is no lldb; read crashes from
+  `~/Library/Logs/DiagnosticReports/Koan-*.ips` (read-only) and, for an upstream
+  `CHECK`, add the view's class name to the message locally (revert after).
+
+### Crashes seen
+
+- **Colour cycle at launch** (#97 6de98f7e): a cyclic `ColorRecipe` overflowed
+  the stack in `ThemeSource::GenerateColorsCss`. #97 15565a45 computes the
+  colours from tokens instead of ids.
+- **⌘S and fullscreen on the glass stack:** `CustomCornersBackground`'s
+  `CHECK(!layer->fills_bounds_opaquely())` fired for `VerticalTabStripRegionView`
+  (`custom_corners_background.cc:160` and `:331`). Fixed on the glass side
+  (#105 8c5a986c guard, root cause in #41's `InvalidateBackground`).

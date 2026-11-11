@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/bluetooth/BUILD.gn b/chrome/browser/bluetooth/BUILD.gn
+--- a/chrome/browser/bluetooth/BUILD.gn
++++ b/chrome/browser/bluetooth/BUILD.gn
+@@ -38,6 +38,7 @@
+     "//components/guest_view/buildflags",
+     "//components/strings:components_strings",
+     "//components/strings:components_strings_grit",
++    "//koan/browser/containers:partition",
+     "//url",
+   ]
+   if (enable_extensions) {
