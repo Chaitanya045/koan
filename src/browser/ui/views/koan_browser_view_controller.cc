@@ -174,6 +174,10 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
   if (MultiContentsView* contents = browser_view->multi_contents_view()) {
     observations_.AddObservation(contents);
   }
+  browser_did_close_subscription_ =
+      browser_view->browser()->RegisterBrowserDidClose(
+          base::BindRepeating(&KoanBrowserViewController::OnBrowserDidClose,
+                              base::Unretained(this)));
   VLOG(1) << "Koan: window created (" << g_live_count << " open)";
   SetUpTestWindowData(this);
 }
@@ -303,6 +307,11 @@ void KoanBrowserViewController::OnViewBoundsChanged(
 }
 
 void KoanBrowserViewController::OnWidgetDestroying(views::Widget* widget) {
+  TearDown();
+}
+
+void KoanBrowserViewController::OnBrowserDidClose(
+    BrowserWindowInterface* browser) {
   TearDown();
 }
 
