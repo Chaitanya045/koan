@@ -12,20 +12,22 @@
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+#include "chrome/browser/ui/views/tabs/shared/rounded_scroll_bar.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/color/color_provider.h"
-#include "ui/gfx/canvas.h"
 #include "ui/base/class_property.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/tween.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 
 namespace koan {
 
@@ -41,6 +43,10 @@ struct EssentialsHeight {
   // layout: a new start (or a restart from 0) begins a new ease from `shown`.
   double starting_offset = 0.0;
   double last_offset = 1.0;
+  // The scroll bar's thumb is hidden while the grid is shorter than its
+  // tiles: upstream's thumb shows whenever its bounds change, and the grid is
+  // not scrolled, only revealed.
+  bool thumb_hidden = false;
 };
 
 }  // namespace koan
@@ -87,9 +93,14 @@ int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height) {
     height = scroll_view->SetProperty(kEssentialsHeightKey,
                                       std::make_unique<EssentialsHeight>());
   }
+  auto* scroll_bar = views::AsViewClass<tabs::RoundedScrollBar>(
+      scroll_view->vertical_scroll_bar());
   const double offset = coordinator.current_offset();
   if (offset >= 1.0 || height->shown < 0 ||
       !gfx::Animation::ShouldRenderRichAnimation()) {
+    if (height->thumb_hidden && scroll_bar) {
+      scroll_bar->SetIsAnimatingSize(false);
+    }
     *height = {.from = target_height,
                .to = target_height,
                .shown = target_height,
@@ -108,6 +119,10 @@ int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height) {
     height->starting_offset = coordinator.starting_offset();
   }
   height->last_offset = offset;
+  if (height->from != height->to && !height->thumb_hidden && scroll_bar) {
+    height->thumb_hidden = true;
+    scroll_bar->SetIsAnimatingSize(true);
+  }
   height->shown = gfx::Tween::IntValueBetween(coordinator.GetCurrentProgress(),
                                               height->from, height->to);
   LOG(INFO) << "KOANDBG ess-height target=" << target_height
@@ -124,8 +139,7 @@ int GetEmptyEssentialsWidth(const views::SizeBounds& size_bounds) {
   if (!features::IsSidebarEnabled()) {
     return 0;
   }
-  LOG(INFO) << "KOANDBG ess-empty-width "
-            << size_bounds.width().value_or(-1);
+  LOG(INFO) << "KOANDBG ess-empty-width " << size_bounds.width().value_or(-1);
   return size_bounds.width().value_or(0);
 }
 
@@ -139,8 +153,7 @@ views::SizeBounds GetEssentialsLayoutBounds(
   const views::ScrollView* scroll_view =
       views::ScrollView::GetScrollViewForContents(
           const_cast<views::View*>(grid));
-  const int width =
-      scroll_view ? scroll_view->GetContentsBounds().width() : 0;
+  const int width = scroll_view ? scroll_view->GetContentsBounds().width() : 0;
   if (width <= 0) {
     return size_bounds;
   }
@@ -156,12 +169,11 @@ int GetEssentialsMinHeight(int min_height, int preferred_height) {
 
 tabs::VerticalTabStripCollapseState GetEssentialsCollapseState(
     tabs::VerticalTabStripCollapseState state) {
-  return OwnsSidebar() ? tabs::VerticalTabStripCollapseState::kExpanded
-                       : state;
+  return OwnsSidebar() ? tabs::VerticalTabStripCollapseState::kExpanded : state;
 }
 
-bool ShowsPinnedTabTitle(bool shows) {
-  return shows && !features::IsSidebarEnabled();
+bool IsEssentialsTile(bool pinned) {
+  return pinned && features::IsSidebarEnabled();
 }
 
 void PaintEssentialsTile(gfx::Canvas* canvas,

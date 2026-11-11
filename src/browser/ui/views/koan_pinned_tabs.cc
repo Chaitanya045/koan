@@ -15,12 +15,12 @@
 #include <optional>
 #include <utility>
 
-#include "base/logging.h"  // KOANDBG
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"  // KOANDBG
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -1387,8 +1387,8 @@ void KoanPinnedTabController::OnTabStripModelChanged(
     }
     case TabStripModelChange::kMoved:
       LOG(INFO) << "KOANDBG moved " << change.GetMove()->from_index << "->"
-                << change.GetMove()->to_index << " group="
-                << change.GetMove()->tab->GetGroup().has_value();
+                << change.GetMove()->to_index
+                << " group=" << change.GetMove()->tab->GetGroup().has_value();
       if (IsDraggingHere()) {
         GetOrCreateTabState(change.GetMove()->tab->GetContents()).dragged =
             true;

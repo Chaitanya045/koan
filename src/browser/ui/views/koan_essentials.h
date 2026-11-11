@@ -40,9 +40,9 @@ int ClampEssentialsColumns(int columns);
 // the strip's shared tab animation (TabCollectionAnimatingLayoutManager's
 // AnimationCoordinator) runs, the height eases from the one shown when the
 // target last changed to the target, in step with the tiles and rows;
-// otherwise the target. Upstream's own interpolated height (`animate_host_size`)
-// counts a new tile's full height from the first frame (a tile grows in width
-// only), so it jumps a row; this one doesn't.
+// otherwise the target. Upstream's own interpolated height
+// (`animate_host_size`) counts a new tile's full height from the first frame (a
+// tile grows in width only), so it jumps a row; this one doesn't.
 int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height);
 
 // The width of the empty grid (pinned_tab_container_view_vertical_layout.cc):
@@ -80,10 +80,11 @@ int GetEssentialsMinHeight(int min_height, int preferred_height);
 tabs::VerticalTabStripCollapseState GetEssentialsCollapseState(
     tabs::VerticalTabStripCollapseState state);
 
-// Whether a pinned tab's title shows (tab_view_vertical_layout.cc), given
-// upstream's `shows` (in the collapsed strip's expand-on-hover). Essentials
-// tiles never show one with Koan's sidebar.
-bool ShowsPinnedTabTitle(bool shows);
+// Whether a tab view that is `pinned` is an Essentials tile (with Koan's
+// sidebar). Upstream lays a pinned tab out as a row with its title while the
+// collapsed strip is out on hover (TabView::IsInExpandOnHover()); a tile stays
+// a tile, its icon centred, in compact mode's reveal.
+bool IsEssentialsTile(bool pinned);
 
 // Paints the background of the pinned tab `tab` as an Essentials tile
 // (`selected`: active or multi-selected; `hover`: the hover animation's

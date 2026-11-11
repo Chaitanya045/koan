@@ -13,11 +13,11 @@
 #include <vector>
 
 #include "base/test/run_until.h"
+#include "chrome/browser/ui/animation/browser_animation_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
-#include "chrome/browser/ui/animation/browser_animation_controller.h"
 #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
@@ -302,8 +302,10 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
     compact->ToggleCompactMode();
     // Upstream's expand is over at once: the strip is docked and the page laid
     // out beside it in this turn.
-    ASSERT_TRUE(base::test::RunUntil([&] { return !compact->hides_sidebar(); }));
-    EXPECT_FALSE(animations->IsAnimating(TabStripAnimations::kVerticalTabStrip));
+    ASSERT_TRUE(
+        base::test::RunUntil([&] { return !compact->hides_sidebar(); }));
+    EXPECT_FALSE(
+        animations->IsAnimating(TabStripAnimations::kVerticalTabStrip));
     EXPECT_FALSE(state->IsCollapsed());
     views::test::RunScheduledLayout(browser_view());
     EXPECT_EQ(state->GetUncollapsedWidth(), region->width());

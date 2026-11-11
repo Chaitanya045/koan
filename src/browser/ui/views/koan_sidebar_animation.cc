@@ -462,16 +462,17 @@ void DockSidebarAfterCompact(views::View* browser_view, bool slide_in) {
   // once, now.
   BrowserAnimationController* controller =
       BrowserAnimationController::From(view->browser());
-  if (controller && controller->GetCurrentMotion(
-                        TabStripAnimations::kVerticalTabStrip) ==
-                        TabStripAnimations::kExpand) {
+  if (controller &&
+      controller->GetCurrentMotion(TabStripAnimations::kVerticalTabStrip) ==
+          TabStripAnimations::kExpand) {
     controller->Reset(TabStripAnimations::kVerticalTabStrip);
   }
   if (!slide_in || !region->layer() ||
       !gfx::Animation::ShouldRenderRichAnimation()) {
     return;
   }
-  const auto* state = tabs::VerticalTabStripStateController::From(view->browser());
+  const auto* state =
+      tabs::VerticalTabStripStateController::From(view->browser());
   if (!state) {
     return;
   }
