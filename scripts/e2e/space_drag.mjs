@@ -90,7 +90,8 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
     await rootMouse(root, ['mousePressed'], from.x, from.y);
     for (let i = 1; i <= 12; i++) {
       const f = i / 12;
-      await rootMouse(root, ['mouseDragged'], from.x + (via.x - from.x) * f, from.y + (via.y - from.y) * f);
+      await rootMouse(root, ['mouseDragged'], from.x + (via.x - from.x) * f,
+                      from.y + (via.y - from.y) * f);
       await sleep(30);
     }
     if (holdMs) {

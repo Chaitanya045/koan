@@ -35,7 +35,8 @@ const koan = 'chrome://koan-newtab/';
 let tab = await openNewTab();
 check('chrome://newtab shows Koan\'s page', tab.href === koan, tab.href);
 {
-  const t = await evalIn(tab.page, '({ title: document.title, lang: document.documentElement.lang })');
+  const t = await evalIn(tab.page,
+                         '({ title: document.title, lang: document.documentElement.lang })');
   // IDS_NEW_TAB_TITLE in the browser's locale: on macOS the system's
   // (en-GB says "New tab").
   check('...titled New Tab', /^New tab$/i.test(t?.title ?? ''), JSON.stringify(t));

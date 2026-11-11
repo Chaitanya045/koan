@@ -19,7 +19,8 @@
 // key), and through CDP elsewhere; the quit, through CDP's Browser.close.
 // Run by scripts/mac/suite.sh (or scripts/e2e/run.sh window_teardown off
 // macOS, without fullscreen).
-import { browserCall, check, finish, onPage, pages, setKoanPref, sleep, waitFor } from './lib/koan.mjs';
+import { browserCall, check, finish, onPage, pages, setKoanPref, sleep,
+         waitFor } from './lib/koan.mjs';
 import { ACCEL, IS_MAC, SHIFT, alive, closeWindowOf, countInLog, fatalInLog, key, openWindow,
          realInput, realKey, setWindowState, startServer, windowOf, windows } from './lib/mac.mjs';
 
@@ -97,7 +98,8 @@ await secondWindowCase('Tabs on the right', { right: true });
   check('...nothing torn down', torn() === tornBefore && gone() === goneBefore,
         `torn ${tornBefore} -> ${torn()}, gone ${goneBefore} -> ${gone()}`);
   if (empty) {
-    await onPage(empty, c => c.send('Page.navigate', { url: server.url('/p?t=Last%20tab%20again') }));
+    await onPage(empty, c => c.send('Page.navigate',
+                                    { url: server.url('/p?t=Last%20tab%20again') }));
     await sleep(1500);
     const page = (await windows()).find(x => x.windowId === w.windowId)?.pages
         .find(p => !p.url.startsWith('devtools:'));
