@@ -28,6 +28,7 @@
 #include "koan/browser/ui/views/koan_url_bar.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/actions/actions.h"
 #include "ui/base/window_open_disposition.h"
@@ -71,6 +72,9 @@ enum class Owner {
   // where Koan owns the sidebar, in a normal window; the policy keeps these
   // actions disabled and the button's key and text (InstallActions()).
   kSidebar,
+  // HandleNewWindowCommand(): Zen's prefer-unsynced-windows makes New Window
+  // a New Blank Window (koan_window_sync.h).
+  kNewWindow,
 };
 
 struct Row {
@@ -191,6 +195,13 @@ constexpr Row kRows[] = {
      Owner::kSidebar},
     {kActionTabSearch, IDC_TAB_SEARCH, Owner::kSidebar},
 
+    // Window sync: ⌘N and File > New Window in a window (with no window
+    // open, macOS's AppController opens one itself, synced).
+    {kActionNewWindow, IDC_NEW_WINDOW, Owner::kNewWindow,
+     [](BrowserWindowInterface* browser, WindowOpenDisposition) {
+       chrome::NewWindow(browser);
+     }},
+
 #if BUILDFLAG(IS_MAC)
     // Fullscreen: View > Always Show Toolbar in Full Screen, ⇧⌘F.
     {kActionToggleFullscreenToolbar, IDC_TOGGLE_FULLSCREEN_TOOLBAR,
@@ -223,6 +234,8 @@ bool Installs(Owner owner, BrowserView* browser_view) {
       return true;
     case Owner::kSidebar:
       return OwnsSidebar() && browser_view->GetIsNormalType();
+    case Owner::kNewWindow:
+      return browser_view->GetIsNormalType();
   }
 }
 
@@ -266,6 +279,8 @@ bool Takes(const Row& row, BrowserWindowInterface* browser) {
       }
       return true;
     }
+    case Owner::kNewWindow:
+      return HandleNewWindowCommand(browser);
   }
 }
 

@@ -10,6 +10,8 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/location.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/token.h"
 #include "base/uuid.h"
 #include "base/values.h"
@@ -71,6 +73,20 @@ KoanWindowSyncClient* KoanWindowSyncClient::From(
 
 void KoanWindowSyncClient::OnAddedToWidget() {
   if (sync_ || session_restored_subscription_) {
+    return;
+  }
+  // A blank window says so in its session entry, once the session tracks
+  // the window (a restored one has the mark from its entry already).
+  if (IsBlankWindow(browser_view_)) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<KoanWindowSyncClient> self) {
+                         if (self) {
+                           SetWindowSessionData(self->browser_view_->browser(),
+                                                kBlankWindowSessionKey, "1");
+                         }
+                       },
+                       weak_factory_.GetWeakPtr()));
     return;
   }
   KoanBrowserViewController* controller =

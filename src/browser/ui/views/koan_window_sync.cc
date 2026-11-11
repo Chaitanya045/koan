@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_window_sync_hooks.h"
@@ -33,6 +34,22 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kKoanBlankWindowKey, false)
 
 // The profile whose next window is a blank one, while it is being created.
 Profile* g_blank_window_profile = nullptr;
+
+// Zen's prefer-unsynced-windows for `profile`'s windows.
+bool PrefersBlankWindows(Profile* profile) {
+  return features::IsWorkspacesEnabled() &&
+         profile->GetOriginalProfile()->GetPrefs()->GetBoolean(
+             prefs::kWindowSyncPreferBlankWindows);
+}
+
+// A new normal window of `profile`'s regular profile, blank or synced.
+void OpenWindow(Profile* profile, bool blank) {
+  // A private window's New Blank Window opens a regular one, as Zen's.
+  Profile* regular = profile->GetOriginalProfile();
+  base::AutoReset<Profile*> request(&g_blank_window_profile,
+                                    blank ? regular : nullptr);
+  chrome::NewEmptyWindow(regular, /*should_trigger_session_restore=*/false);
+}
 
 }  // namespace
 
@@ -339,13 +356,18 @@ void KoanWindowSync::Store() {
 }
 
 void OpenBlankWindow(Profile* profile) {
-  if (!profile) {
-    return;
+  if (profile) {
+    OpenWindow(profile, /*blank=*/!PrefersBlankWindows(profile));
   }
-  // A private window's New Blank Window opens a regular one, as Zen's.
-  Profile* regular = profile->GetOriginalProfile();
-  base::AutoReset<Profile*> blank(&g_blank_window_profile, regular);
-  chrome::NewEmptyWindow(regular, /*should_trigger_session_restore=*/false);
+}
+
+bool HandleNewWindowCommand(BrowserWindowInterface* browser) {
+  Profile* profile = browser ? browser->GetProfile() : nullptr;
+  if (!profile || !PrefersBlankWindows(profile)) {
+    return false;
+  }
+  OpenWindow(profile, /*blank=*/true);
+  return true;
 }
 
 bool IsBlankWindow(const BrowserView* browser_view) {
@@ -369,6 +391,19 @@ base::ScopedClosureRunner WillOpenWindowForNavigation(Profile* profile) {
   if (!sync || !sync->MostRecentWindow(nullptr) ||
       !profile->GetPrefs()->GetBoolean(
           prefs::kWindowSyncOpenLinksInBlankWindow)) {
+    return base::ScopedClosureRunner();
+  }
+  g_blank_window_profile = profile;
+  return base::ScopedClosureRunner(
+      base::BindOnce([] { g_blank_window_profile = nullptr; }));
+}
+
+base::ScopedClosureRunner WillRestoreWindow(
+    Profile* profile,
+    const std::map<std::string, std::string>& extra_data) {
+  auto it = extra_data.find(kBlankWindowSessionKey);
+  if (!profile || profile->IsOffTheRecord() || it == extra_data.end() ||
+      it->second.empty()) {
     return base::ScopedClosureRunner();
   }
   g_blank_window_profile = profile;

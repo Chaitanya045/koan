@@ -5,6 +5,9 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_WINDOW_SYNC_HOOKS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WINDOW_SYNC_HOOKS_H_
 
+#include <map>
+#include <string>
+
 #include "base/functional/callback_helpers.h"
 
 class BrowserWindowInterface;
@@ -28,6 +31,15 @@ void OnWindowClosing(BrowserWindowInterface* browser);
 // window is a New Blank Window. Keep the result until the window exists.
 [[nodiscard]] base::ScopedClosureRunner WillOpenWindowForNavigation(
     Profile* profile);
+
+// SessionRestore's CreateRestoredBrowser() and BrowserLiveTabContext::
+// Create() (a reopened window), before the window is created from its
+// session entry's `extra_data`: a New Blank Window comes back blank, as Zen's
+// restore-unsynced-windows (on) brings unsynced windows back unsynced. Keep
+// the result until the window exists.
+[[nodiscard]] base::ScopedClosureRunner WillRestoreWindow(
+    Profile* profile,
+    const std::map<std::string, std::string>& extra_data);
 
 }  // namespace koan
 

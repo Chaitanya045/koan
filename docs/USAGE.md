@@ -511,8 +511,11 @@ no shared Essentials or pinned tabs, just its own tabs. A link opened in a
 new window (Shift+click, "Open Link in New Window") opens a blank window
 too while synced windows are open
 (`koan.window_sync.open_links_in_blank_window`, Zen's
-`open-link-in-new-unsynced-window`, on by default). After a restart a blank
-window comes back as a normal window, with its tabs in a Space.
+`open-link-in-new-unsynced-window`, on by default). A blank window comes
+back blank after a restart, and when you reopen it from Recently Closed.
+With `koan.window_sync.prefer_blank_windows` (Zen's
+`prefer-unsynced-windows`, off by default) the two swap: New Window (⌘N)
+opens a blank window and New Blank Window a synced one.
 
 Chrome's tab group commands do Zen's thing in a Space window: ⌘⌃P
 (New tab group) opens the Create-a-Space form, ⌘⌃W (Close group) asks to

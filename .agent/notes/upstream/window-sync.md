@@ -180,6 +180,23 @@ window is reconciled to the saved model: missing items get placeholders,
 and the one restored live tab stays live. Which window has a page is not
 saved.
 
+### Blank windows across restarts
+
+A blank window marks its session entry (window session data
+`koan.window_sync.blank`), like Zen's `isZenUnsynced`. Session restore and
+a reopened window (`BrowserLiveTabContext::Create`) call
+`koan::WillRestoreWindow()` before `CreateBrowserWindow`, so the window is
+marked blank before its controllers decide whether it has Spaces (the
+existing `OnRestoringWindow()` hook runs after creation). Zen's
+`restore-unsynced-windows` is on by default; Koan has no "off" (Zen then
+drops blank windows from the restore).
+
+`prefer-unsynced-windows` (Zen's `BrowserWindowTracker.openWindow` patch
+swaps the flag of every window it opens) is
+`koan.window_sync.prefer_blank_windows`: Koan's command policy takes
+`IDC_NEW_WINDOW` and opens a blank window, and New Blank Window opens a
+synced one.
+
 ## Upstream audit (Chromium 158)
 
 | Upstream | Decision | Why / test |
@@ -192,7 +209,8 @@ saved.
 | `TabGroupSyncService` / saved groups | **lock** (as before) | Spaces stay out of saved groups (`DisconnectSavedGroups`). |
 | `BrowserCollectionObserver` | **not used** | Activation comes from the window's widget, which Koan observes already. |
 | Session restore of windows | **reuse** | Placeholders have no entries and are dropped; the model reconciles. |
-| `chrome::NewEmptyWindow` / `IDC_NEW_WINDOW` | **reuse** (PR 4) | New Blank Window opens a normal window marked unsynced before its BrowserView exists. |
+| Session restore / reopened window creation (`CreateRestoredBrowser`, `BrowserLiveTabContext::Create`) | **hook** (2 lines each) | A blank window comes back blank: marked before the window exists. |
+| `chrome::NewEmptyWindow` / `IDC_NEW_WINDOW` | **reuse** (PR 4); **redirect** with `prefer_blank_windows` (command policy) | New Blank Window opens a normal window marked unsynced before its BrowserView exists. |
 | Incognito, popups, apps, devtools | **lock** | `KoanWindowSync::ShouldSync()`: normal windows of a regular profile only. |
 | macOS: Cmd+Shift+N (Chrome's Incognito) | **override** (PR 4) | Zen's New Blank Window; Koan already moves Private to Cmd+Shift+P. |
 | macOS: File menu | **override** (PR 4) | Adds New Blank Window under New Window. |
