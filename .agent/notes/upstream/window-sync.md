@@ -167,6 +167,16 @@ item's URL in place and becomes live.
   not quitting (`browser_shutdown::IsTryingToQuit()`). If a beforeunload
   dialog then cancels the close, the window keeps placeholders, which is
   harmless.
+- **A synced tab closed.** A window notes the synced tabs the user closed
+  (a removal that deletes the contents, outside `closing_all()` and outside
+  the sync's own changes) and sends them with its next report
+  (`ReportItems(..., closed)`). The model remembers them
+  (`WasClosed()`, until the item comes back: a reopened tab keeps its id),
+  and every other window closes its tab, page or placeholder, without
+  Recently Closed (Zen's `TabClose`). A Space left without tabs by it gets a
+  new tab first. An item that left the model otherwise (unpinned, out of
+  the Essentials, into a split view) stays as a normal tab where its page
+  is.
 - **Window gone.** `RemoveWindow` drops the window from every list and
   forgets the pages it had; queued moves from or to it are dropped when they
   run.

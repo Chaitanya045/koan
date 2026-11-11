@@ -163,6 +163,8 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   std::map<tab_groups::TabGroupId, std::string> space_ids_;
   base::CallbackListSubscription folders_changed_subscription_;
   std::set<std::string> synced_folders_;
+  // The synced tabs the user closed here since the last report.
+  std::set<std::string> closed_items_;
   base::OneShotTimer items_report_timer_;
   base::WeakPtrFactory<KoanWindowSyncClient> weak_factory_{this};
 };

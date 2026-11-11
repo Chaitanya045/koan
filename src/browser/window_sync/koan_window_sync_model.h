@@ -163,7 +163,17 @@ class WindowSyncModel {
   // (else it is dropped, with what is inside it); a window reports its
   // folders after its Spaces and before its items.
   bool SetFolders(std::vector<FolderRecord> folders);
-  bool SetItems(std::vector<ItemRecord> items);
+  // `closed`: the items whose tab the window closed (not unpinned, nor taken
+  // out of the Essentials or into a split: those stay as normal tabs there).
+  bool SetItems(std::vector<ItemRecord> items,
+                const std::set<std::string>& closed = {});
+  // Whether `item` left the model because a window closed its tab: every
+  // other window closes its tab too, also the one with the page (Zen's
+  // TabClose). Otherwise the window with the page keeps it as a normal tab.
+  // Until the item comes back (a reopened tab keeps its id).
+  bool WasClosed(const std::string& item) const {
+    return closed_.contains(item);
+  }
 
   // --- Which window has a synced tab's page (Zen's _zenContentsVisible) ---
 
@@ -206,6 +216,9 @@ class WindowSyncModel {
   std::vector<ItemRecord> items_;
   bool seeded_ = false;
   std::map<std::string, WindowId> live_;
+  // Items whose tab was closed (WasClosed()). Not saved: a window reconciled
+  // after a restart has no tab left of them to close.
+  std::set<std::string> closed_;
 };
 
 }  // namespace koan::window_sync

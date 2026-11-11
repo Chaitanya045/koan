@@ -22,6 +22,8 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/tab_list/tab_removed_reason.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -133,6 +135,27 @@ std::unique_ptr<content::WebContents> NewPlaceholder(
   SetTabSessionData(contents.get(), kItemIdSessionKey, record.id);
   Placeholder::CreateForWebContents(contents.get());
   return contents;
+}
+
+// Closes `tab`, a synced tab closed in another window: without Recently
+// Closed (that window has the entry). A Space (a tab group) goes away with
+// its last tab, so one that would be left empty gets a new tab first, as
+// Zen's Spaces keep one.
+void CloseSyncedTab(BrowserWindowInterface* browser, tabs::TabInterface* tab) {
+  TabStripModel* model = browser->GetTabStripModel();
+  const int index = model->GetIndexOfTab(tab);
+  if (index == TabStripModel::kNoTab) {
+    return;
+  }
+  if (std::optional<tab_groups::TabGroupId> group = tab->GetGroup();
+      group && model->group_model() &&
+      model->group_model()->ContainsTabGroup(*group) &&
+      model->group_model()->GetTabGroup(*group)->tab_count() == 1) {
+    chrome::AddTabAt(browser, GURL(), index + 1,
+                     /*foreground=*/tab->IsActivated(), group);
+  }
+  model->CloseWebContentsAt(model->GetIndexOfTab(tab),
+                            TabCloseTypes::CLOSE_NONE);
 }
 
 }  // namespace
@@ -265,6 +288,8 @@ void KoanWindowSyncClient::ScheduleItemsReport() {
 }
 
 void KoanWindowSyncClient::ReportItems() {
+  // What was closed counts only with the report it came before.
+  std::set<std::string> closed = std::exchange(closed_items_, {});
   if (!sync_ || !sync_->IsInSync(this) ||
       browser_view_->browser()->GetTabStripModel()->closing_all()) {
     return;
@@ -297,7 +322,7 @@ void KoanWindowSyncClient::ReportItems() {
       contents->GetController().LoadIfNecessary();
     }
   }
-  sync_->ReportItems(this, std::move(items));
+  sync_->ReportItems(this, std::move(items), closed);
 }
 
 void KoanWindowSyncClient::MaybeRequestActivePage() {
@@ -424,13 +449,14 @@ void KoanWindowSyncClient::ApplyItems(
       continue;
     }
     content::WebContents* contents = tab->GetContents();
-    if (IsPlaceholder(contents)) {
-      model->CloseWebContentsAt(model->GetIndexOfTab(tab),
-                                TabCloseTypes::CLOSE_NONE);
+    // Closed elsewhere (Zen's TabClose): it closes here too, page or not.
+    if (IsPlaceholder(contents) || sync_->model().WasClosed(id)) {
+      CloseSyncedTab(browser_view_->browser(), tab);
       continue;
     }
-    // The page is here: it stays, as a normal tab of the Space it is in (or
-    // the active one), rather than losing what it shows.
+    // Unpinned or out of the Essentials elsewhere, and the page is here: it
+    // stays, as a normal tab of the Space it is in (or the active one),
+    // rather than losing what it shows.
     SetTabSessionData(contents, kItemIdSessionKey, std::string());
     if (tab->IsPinned()) {
       pinned->RemoveFromEssentials(tab);
@@ -564,6 +590,19 @@ void KoanWindowSyncClient::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
+  // The user closed synced tabs (not the window's close, nor the sync's own
+  // changes; a tab dragged to another window isn't deleted).
+  if (change.type() == TabStripModelChange::kRemoved && !IsApplying() &&
+      !tab_strip_model->closing_all()) {
+    for (const TabStripModelChange::RemovedTab& removed :
+         change.GetRemove()->contents) {
+      std::string id = ItemIdOf(removed.contents);
+      if (!id.empty() &&
+          TabRemoveReasonUtils::WillDeleteWebContents(removed.remove_reason)) {
+        closed_items_.insert(std::move(id));
+      }
+    }
+  }
   if (change.type() != TabStripModelChange::kSelectionOnly) {
     ScheduleItemsReport();
   }

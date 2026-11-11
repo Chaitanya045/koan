@@ -418,8 +418,9 @@ reordering, a new pinned URL, label or icon in one window does the same in
 the others. Each such tab has one page: the window you select it in (or
 switch to with it selected) takes the page over, and the other windows keep
 its row with the last title and icon it had there, without loading it.
-Closing a window hands its pages to the window you used last. A tab
-unpinned or closed in one window stays, as a normal tab, in a window that
+Closing a window hands its pages to the window you used last. Closing
+such a tab closes it in every window, like Zen; one unpinned or taken out
+of the Essentials in one window stays, as a normal tab, in a window that
 has its page. Tabs in a split view, and an agent container's tabs, aren't
 synced.
 
