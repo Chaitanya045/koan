@@ -4,7 +4,8 @@
 // its copy-URL button and toast, its site icon (page info) and no page
 // actions. Then: the new-tab bar through a window switch, a pill edit in
 // compact mode's peeked sidebar, and the multiple-toolbars layout (Esc, the
-// tab strip's "+" button, Alt+Enter).
+// tab strip's "+" button, Alt+Enter), and last the card in a second, resized
+// window (sized and placed from that window, its suggestions inside it).
 //
 // TODO(#51): on macOS, ⌘T is a reserved command that runs before any
 // accelerator (koan::MaybeOpenUrlBarForNewTab() in BrowserCommandController
@@ -19,7 +20,8 @@
 // profile was started with. With SHOTS=<dir> (see run.sh) it saves
 // screenshots of each state there.
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
-import { browserCall, setKoanPref, visiblePage, waitFor, ACCEL, IS_MAC, sendKey } from './lib/koan.mjs';
+import { browserCall, setKoanPref, viewEvent, viewTree, visiblePage, waitFor, ACCEL, IS_MAC,
+         sendKey } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -184,6 +186,32 @@ async function propsOf(classes) {
       for (const prop of rule.rule.style.cssProperties) out[cls][prop.name] = prop.value;
     }
   }
+  ui.close();
+  return out;
+}
+
+// Each widget's bounds on the screen (a Widget node's X, Y, Width and Height
+// in UI DevTools: Widget::GetRestoredBounds()), numbered as viewTree()
+// numbers them.
+async function widgetRects() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const out = {};
+  let widget = 0;
+  const walk = async n => {
+    if (n.nodeName === 'Widget') {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+      const p = {};
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const prop of rule.rule.style.cssProperties) p[prop.name] = +prop.value;
+      }
+      out[++widget] = { x: p.X, y: p.Y, w: p.Width, h: p.Height };
+    }
+    for (const c of n.children ?? []) await walk(c);
+  };
+  await walk(doc);
   ui.close();
   return out;
 }
@@ -641,6 +669,104 @@ check('Alt+Enter opens one new tab, leaving the page alone',
           now.some(p => p.id === current.id &&
                         noScheme(p.url) === noScheme(current.url)),
       (now || await pages()).map(p => p.url).join(' '));
+
+// --- A second window, resized: the card is sized and placed from its window ---
+// Zen's card is min(window width / 1.5, 750) wide, centred in the window it
+// opens in, and its suggestions are part of it, whatever window that is and
+// however it was sized just before (#285: the Mac capture of a second
+// window measured and typed into the first one). Last: the window stays.
+if (BEHAVIOR !== 'normal') {
+  check('Back to the single toolbar', await setKoanPref('koan.single_toolbar', true) === true);
+  const SECOND = { left: 40, top: 60, width: 900, height: 640 };
+  const secondId = (await browserCall('Target.createTarget',
+      { url: 'https://example.com/?second', newWindow: true })).result?.targetId;
+  await waitFor(async () => (await pages()).some(p => p.id === secondId), 8000);
+  await sleep(2500);
+  const { windowId: secondWindow } = (await browserCall('Browser.getWindowForTarget',
+      { targetId: secondId })).result ?? {};
+  await browserCall('Browser.setWindowBounds',
+                    { windowId: secondWindow, bounds: { windowState: 'normal' } });
+  await browserCall('Browser.setWindowBounds', { windowId: secondWindow, bounds: SECOND });
+  await browserCall('Target.activateTarget', { targetId: secondId });
+  await sleep(1500);
+  // Each browser window's views and its widget's place on the screen.
+  const windowsNow = async () => {
+    const tree = await viewTree();
+    const rects = await widgetRects();
+    const ids = [...new Set(tree.filter(v => v.cls === 'BrowserView').map(v => v.widget))];
+    return { tree, rects, wins: ids.map(widget => ({
+      widget, rect: rects[widget], views: tree.filter(v => v.widget === widget) })) };
+  };
+  const ofSecond = now => now.wins.find(w => {
+    const root = w.views[0];
+    return root && root.w === SECOND.width && root.h === SECOND.height;
+  });
+  let now = await windowsNow();
+  let win = ofSecond(now);
+  check('Second window: resized (its root view is the size it was given)', !!win,
+        now.wins.map(w => `${w.views[0]?.w}x${w.views[0]?.h}`).join(' '));
+  const secondPage = (await pages()).find(p => p.id === secondId);
+  if (win && secondPage) {
+    const c = await connect(secondPage.webSocketDebuggerUrl);
+    await sendKey(c, VK.T, ACCEL, 't');
+    c.close();
+    await sleep(1200);
+    // A character at a time, finding the omnibox again: the suggestions'
+    // widget opens with the first one and moves the nodes after it.
+    for (const ch of 'koan') {
+      const field = ofSecond(await windowsNow())?.views.find(
+          v => v.cls === 'OmniboxViewViews' && v.shown);
+      if (!field) break;
+      await viewEvent(field, 'DOM.dispatchKeyEvent', { type: 'keyPressed',
+          keyCode: ch.codePointAt(0), code: 0, flags: 0, key: ch.codePointAt(0), isChar: true });
+    }
+    await waitFor(async () => {
+      const w = ofSecond(await windowsNow());
+      return w && find(w.views, 'TopContainerView')?.h > INPUT_ROW;
+    });
+    now = await windowsNow();
+    win = ofSecond(now);
+    const root = win.views[0];
+    const browserView = find(win.views, 'BrowserView');
+    const card = find(win.views, 'TopContainerView');
+    const width = Math.min(Math.floor(browserView.w * 2 / 3), 750);
+    check('...Cmd+T opens the card in that window, Zen-sized from its width, centred',
+          card?.w === width &&
+              card.ax - browserView.ax === Math.floor((browserView.w - width) / 2) &&
+              shown(win.views, 'KoanUrlBarBackdrop'),
+          `card ${card?.w} at ${card?.ax}, window ${browserView.w}, expected ${width}`);
+    check('...inside the window',
+          card && card.ax >= 0 && card.ay >= 0 && card.ax + card.w <= root.w &&
+              card.ay + card.h <= root.h,
+          `${card?.ax},${card?.ay} ${card?.w}x${card?.h} in ${root.w}x${root.h}`);
+    const typed = find(win.views, 'OmniboxViewViews')?.props.Text;
+    check('...with everything typed in its omnibox', typed === 'koan', JSON.stringify(typed));
+    // The other window's bar stays closed.
+    const first = now.wins.find(w => w !== win);
+    const firstBar = first && find(first.views, 'TopContainerView');
+    const firstWidth = first && find(first.views, 'BrowserView')?.w;
+    check('...and the first window\'s bar is not open',
+          !first || (firstBar?.w === firstWidth && !shown(first.views, 'KoanUrlBarBackdrop')),
+          `${firstBar?.w} in ${firstWidth}`);
+    // The suggestions: their widget is the card's part under its input row,
+    // on the screen too (a child window on macOS), inside the window.
+    const frame = now.tree.find(v => v.cls === 'RoundedOmniboxResultsFrame' && v.shown && v.h > 0);
+    const popup = frame && now.rects[frame.widget];
+    const at = card && win.rect &&
+        { x: win.rect.x + card.ax, y: win.rect.y + card.ay + INPUT_ROW };
+    check('...the suggestions are in the card: as wide as it, under its input row',
+          frame && card.h === INPUT_ROW + frame.h && popup?.w === card.w &&
+              Math.abs(popup.x - at.x) <= 1 && Math.abs(popup.y - at.y) <= 1,
+          `card ${card?.w}x${card?.h} at ${at?.x},${at?.y}; popup ` +
+              `${popup?.w}x${popup?.h} at ${popup?.x},${popup?.y}`);
+    check('...and inside the window on the screen',
+          popup && win.rect && popup.x >= win.rect.x && popup.y >= win.rect.y &&
+              popup.x + popup.w <= win.rect.x + win.rect.w &&
+              popup.y + popup.h <= win.rect.y + win.rect.h,
+          `popup ${JSON.stringify(popup)}, window ${JSON.stringify(win.rect)}`);
+    shot('second-window');
+  }
+}
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);
