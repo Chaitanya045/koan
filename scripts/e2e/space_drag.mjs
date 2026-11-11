@@ -80,15 +80,26 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
     if (esc) await realKey('Escape', '', 300);
     await ptr('up', X(to), Y(to));
   } else {
+    // A hold at an edge: the approach stays out of the edge's padding
+    // (kSpaceDragSwitchPadding, 20 px) until its last step, and the hold is
+    // timed by the clock. Each switch takes Zen's 500 ms there (and the next
+    // one another 500 ms), and every event here costs a UI DevTools round
+    // trip: a left edge reached halfway through the steps, held for 750 ms
+    // of sleeps, switched twice.
+    const via = holdMs ? { x: to.x + Math.sign(from.x - to.x) * 30, y: to.y } : to;
     await rootMouse(root, ['mousePressed'], from.x, from.y);
     for (let i = 1; i <= 12; i++) {
       const f = i / 12;
-      await rootMouse(root, ['mouseDragged'], from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f);
+      await rootMouse(root, ['mouseDragged'], from.x + (via.x - from.x) * f, from.y + (via.y - from.y) * f);
       await sleep(30);
     }
-    for (let t = 0; t < holdMs; t += 100) {
-      await rootMouse(root, ['mouseDragged'], to.x + (t / 100) % 2, to.y);
-      await sleep(100);
+    if (holdMs) {
+      await rootMouse(root, ['mouseDragged'], to.x, to.y);
+      const start = Date.now();
+      for (let t = 1; Date.now() - start < holdMs; t++) {
+        await sleep(100);
+        await rootMouse(root, ['mouseDragged'], to.x + t % 2, to.y);
+      }
     }
     await rootMouse(root, ['mouseReleased'], to.x, to.y);
   }
