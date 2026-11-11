@@ -85,7 +85,10 @@ source_set("window_edges") {
     "koan_window_edges.cc",
     "koan_window_edges.h",
   ]
-  public_deps = [ "//ui/gfx/geometry" ]
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
 }
 
 # Zen's content card radius from the OS window's (koan_content_radius.h): pure,

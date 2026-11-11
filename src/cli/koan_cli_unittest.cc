@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/files/scoped_file.h"
 #include "base/json/json_reader.h"
 #include "base/time/time.h"
@@ -169,8 +170,9 @@ TEST_F(KoanCliFramingTest, AFrameInPiecesAndAnOversizedOne) {
   ASSERT_EQ(write(a_->fd(), header, 4), 4);
   ASSERT_EQ(write(a_->fd(), payload.data(), 5), 5);
   EXPECT_FALSE(b_->Read(base::Milliseconds(10)));
-  ASSERT_EQ(write(a_->fd(), payload.data() + 5, payload.size() - 5),
-            static_cast<ssize_t>(payload.size() - 5));
+  const base::span<const char> rest = base::span(payload).subspan(5u);
+  ASSERT_EQ(write(a_->fd(), rest.data(), rest.size()),
+            static_cast<ssize_t>(rest.size()));
   EXPECT_EQ(b_->Read(base::Seconds(5)), payload);
 
   // More than the reader allows: it gives up on the connection.
