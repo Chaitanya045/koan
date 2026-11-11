@@ -57,6 +57,12 @@ class KoanWindowSync : public base::SupportsUserData::Data {
     // models. What the window changes on the way, it doesn't report.
     virtual void ApplySpaces(
         const std::vector<window_sync::SpaceRecord>& spaces) {}
+    // The first synced window of a start: its Spaces take back the ids of
+    // the `saved` ones (window_sync::AdoptSavedSpaces()), the others get new
+    // ids. Changes none of the window's Spaces. Returns them all, in order,
+    // for the model. Only called from Flush().
+    virtual std::vector<window_sync::SpaceRecord> AdoptSavedSpaces(
+        const std::vector<window_sync::SpaceRecord>& saved) = 0;
     virtual void ApplyItems(const std::vector<window_sync::ItemRecord>& items) {
     }
 
@@ -99,9 +105,15 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   // never do.
   static bool ShouldSync(BrowserView* browser_view);
 
-  // A synced window opened. If the model has state (other windows, or a
-  // past session), the window is reconciled to it soon and its reports
-  // count only after that; otherwise its first reports seed the model.
+  // A synced window opened. If the model has state, the window is brought in
+  // line with it soon and its reports count only after that; otherwise its
+  // first reports seed the model. Next to other synced windows, it is
+  // reconciled to the model: it takes their Spaces. As the only one (the
+  // first window of a start, or the next one after the last closed), its
+  // Spaces are the profile's (its session's, or prefs::kWorkspaceList's):
+  // they only take back their saved ids (Window::AdoptSavedSpaces()) and
+  // become the model's Spaces. Zen's restore makes no Space; a saved state
+  // that differs from the session never adds, renames or removes one.
   void AddWindow(Window* window);
   // The window is going away; after this it is never called.
   void RemoveWindow(Window* window);
@@ -174,7 +186,9 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   window_sync::WindowSyncModel model_;
   // The synced windows, most recently active first.
   std::vector<raw_ptr<Window>> windows_;
-  // Windows to reconcile, by what.
+  // Windows to reconcile, by what; first windows of a start, whose Spaces
+  // take back their saved ids instead.
+  std::set<raw_ptr<Window>> adopt_spaces_;
   std::set<raw_ptr<Window>> stale_spaces_;
   std::set<raw_ptr<Window>> stale_items_;
   // Requested page moves: item -> the window that shows it.

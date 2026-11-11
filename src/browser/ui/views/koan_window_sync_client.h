@@ -66,6 +66,8 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   KoanWindowSync::WindowId window_id() const override;
   void ApplySpaces(
       const std::vector<window_sync::SpaceRecord>& spaces) override;
+  std::vector<window_sync::SpaceRecord> AdoptSavedSpaces(
+      const std::vector<window_sync::SpaceRecord>& saved) override;
   void ApplyItems(const std::vector<window_sync::ItemRecord>& items) override;
   bool CanGivePage(const std::string& item) const override;
   bool CanTakePage(const std::string& item) const override;
@@ -115,7 +117,10 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   std::optional<tab_groups::TabGroupId> FindSpace(const std::string& id) const;
   void OnLocalSpacesChanged();
   // The window's map of tab groups to sync ids, kept with the window in the
-  // session (so a restored window's Spaces keep their ids).
+  // session. Only for its groups: a session restore gives the groups new ids
+  // (session_restore.cc relabels them), so a restored window's map names
+  // none of them, and its Spaces take their ids back by name (ApplySpaces(),
+  // AdoptSavedSpaces()).
   void LoadSpaceIds();
   void SaveSpaceIds();
 
