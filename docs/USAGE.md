@@ -1139,8 +1139,8 @@ next task). With Your logins on, turning Your extensions off can't stop your
 extensions' content scripts in agent tabs (they share your tabs' processes);
 it still keeps extensions from finding, debugging or watching them. Whatever
 the switches say, a site's permission prompt for an agent tab waits until you
-open that tab, and file and device pickers, screen sharing and passkeys are
-refused in agent tabs.
+open that tab, and passkeys and File System Access pickers
+(`showOpenFilePicker()`) are refused in agent tabs.
 
 With **Your logins** off, an agent's tabs open in a container of their own: a
 new, empty one for each task, cleared when the task ends. **Saved containers**
@@ -1165,10 +1165,15 @@ about: leaving that site then leaves the agent able to look at the tab only.
 What a page asks of you while an agent works in its tab (its own tab, or one
 of yours it controls) never pops up over your work: a "Leave site?" dialog,
 an `alert`/`confirm`/`prompt`, a link that opens an app, a sign-in prompt,
-`window.print()` or a request for focus waits in the pill instead ("a.test
-asks you to sign in · Open · Dismiss"). **Open** switches to the tab and shows
-it as Chrome would; **Dismiss** says no (stay on the page, no sign-in, no
-print). The agent is told, and can still answer a dialog itself.
+`window.print()`, a request for focus, a file picker, a device chooser (USB,
+Bluetooth, HID, serial) or a screen-share picker waits in the pill instead
+("a.test asks you to sign in · Open · Dismiss"). **Open** switches to the tab
+and shows it as Chrome would; **Dismiss** says no (stay on the page, no
+sign-in, no print, no file, no device, no screen). The agent is told, and can
+still answer a dialog itself. A picker still waiting when the agent is done
+with the tab is cancelled, and one goes when its page does. In an agent
+container (Your logins off) pickers, device choosers and screen sharing are
+refused.
 
 ### The `koan` tool
 

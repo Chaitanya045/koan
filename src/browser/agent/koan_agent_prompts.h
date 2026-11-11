@@ -36,7 +36,18 @@ enum class PageSurface {
   kPrint,
   // window.focus(), or a service worker's clients.focus().
   kFocus,
+  // <input type=file> (also webkitdirectory).
+  kFilePicker,
+  // A WebUSB, WebHID, Web Serial or Web Bluetooth device chooser, or a
+  // Bluetooth scanning prompt.
+  kDeviceChooser,
+  // getDisplayMedia()'s screen-share picker.
+  kScreenShare,
 };
+
+// Whether `surface` only makes sense with the user in front of its tab (a
+// picker): when the agent lets go of the tab it is cancelled, not shown.
+bool NeedsUserInFront(PageSurface surface);
 
 // The `reason` of the Koan.userNeeded event for `surface`.
 std::string_view ReasonFor(PageSurface surface);
@@ -98,7 +109,9 @@ class PromptQueue {
   void ForgetTab(uintptr_t tab);
   // The agent let go of the tab: its prompts leave the queue and are replayed
   // in the order they came, except kFocus, which is dropped (it would take the
-  // user's focus long after the page asked).
+  // user's focus long after the page asked), and the pickers
+  // (NeedsUserInFront()), which are dismissed (they would come up over the
+  // user's work).
   void ReplayTab(uintptr_t tab);
 
   // Oldest first.

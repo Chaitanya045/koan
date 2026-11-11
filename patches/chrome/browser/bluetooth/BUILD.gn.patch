@@ -1,10 +1,12 @@
 diff --git a/chrome/browser/bluetooth/BUILD.gn b/chrome/browser/bluetooth/BUILD.gn
+index 45f75a6..5a15823 100644
 --- a/chrome/browser/bluetooth/BUILD.gn
 +++ b/chrome/browser/bluetooth/BUILD.gn
-@@ -38,6 +38,7 @@
+@@ -38,6 +38,8 @@ source_set("impl") {
      "//components/guest_view/buildflags",
      "//components/strings:components_strings",
      "//components/strings:components_strings_grit",
++    "//koan/browser/agent:tab_hooks",
 +    "//koan/browser/containers:partition",
      "//url",
    ]

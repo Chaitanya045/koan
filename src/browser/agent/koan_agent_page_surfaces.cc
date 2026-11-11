@@ -11,6 +11,7 @@
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -22,11 +23,14 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/javascript_dialog_manager.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/visibility.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "koan/browser/agent/koan_agent_lease.h"
+#include "koan/browser/containers/koan_container_partition.h"
 #include "net/http/http_response_headers.h"
 #include "ui/base/base_window.h"
 #include "url/gurl.h"
@@ -91,9 +95,23 @@ javascript_dialogs::TabModalDialogManager* ChromeDialogs(
   return javascript_dialogs::TabModalDialogManager::FromWebContents(contents);
 }
 
+PageSurface SurfaceFor(HeldPicker picker) {
+  switch (picker) {
+    case HeldPicker::kFileChooser:
+      return PageSurface::kFilePicker;
+    case HeldPicker::kDeviceChooser:
+      return PageSurface::kDeviceChooser;
+    case HeldPicker::kScreenShare:
+      return PageSurface::kScreenShare;
+  }
+  return PageSurface::kFilePicker;
+}
+
 }  // namespace
 
-// Watches a tab that holds surfaces, so that they go when it closes.
+// Watches a tab that holds surfaces, so that they go when it closes (and a
+// picker when its page goes), and so that a picker the user opened is shown
+// once the tab is visible.
 class AgentPageSurfaces::TabWatch : public content::WebContentsObserver {
  public:
   TabWatch(AgentPageSurfaces* owner, content::WebContents* contents)
@@ -102,8 +120,29 @@ class AgentPageSurfaces::TabWatch : public content::WebContentsObserver {
   void WebContentsDestroyed() override {
     owner_->OnTabDestroyed(KeyFor(web_contents()));
   }
+  void OnVisibilityChanged(content::Visibility visibility) override {
+    if (visibility == content::Visibility::VISIBLE) {
+      owner_->OnTabVisible(KeyFor(web_contents()));
+    }
+  }
+  void DidFinishNavigation(content::NavigationHandle* handle) override {
+    if (handle->HasCommitted() && !handle->IsSameDocument()) {
+      PostSweep();
+    }
+  }
+  void RenderFrameDeleted(content::RenderFrameHost* frame) override {
+    PostSweep();
+  }
 
  private:
+  // Later: a page's WeakDocumentPtr is reset after these notifications.
+  void PostSweep() {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&AgentPageSurfaces::SweepPickers,
+                       base::Unretained(owner_.get()), KeyFor(web_contents())));
+  }
+
   const raw_ptr<AgentPageSurfaces> owner_;
 };
 
@@ -304,9 +343,19 @@ void AgentPageSurfaces::Open(uint64_t id) {
   }
   const uintptr_t tab = prompt->tab;
   const PageSurface surface = prompt->surface;
-  if (content::WebContents* contents = ContentsOf(tab)) {
+  content::WebContents* contents = ContentsOf(tab);
+  if (contents) {
     BringForward(contents);
   }
+  if (NeedsUserInFront(surface) && contents &&
+      contents->GetVisibility() != content::Visibility::VISIBLE) {
+    // A picker is refused for a tab that isn't visible: shown once it is
+    // (OnTabVisible()).
+    opening_.insert(id);
+    return;
+  }
+  pickers_.erase(id);
+  opening_.erase(id);
   queue_.Open(id);
   Notify(tab, surface, /*held=*/false);
 }
@@ -318,6 +367,8 @@ void AgentPageSurfaces::Dismiss(uint64_t id) {
   }
   const uintptr_t tab = prompt->tab;
   const PageSurface surface = prompt->surface;
+  pickers_.erase(id);
+  opening_.erase(id);
   queue_.Dismiss(id);
   Notify(tab, surface, /*held=*/false);
 }
@@ -414,7 +465,7 @@ std::unique_ptr<content::LoginDelegate> AgentPageSurfaces::HoldHttpAuth(
 
 bool AgentPageSurfaces::HoldPrint(content::WebContents* contents,
                                   base::OnceCallback<void(bool show)> show) {
-  if (showing_print_ == contents) {
+  if (showing_ == contents) {
     return false;
   }
   auto [replay, dismiss] = base::SplitOnceCallback(std::move(show));
@@ -427,7 +478,7 @@ bool AgentPageSurfaces::HoldPrint(content::WebContents* contents,
           return;
         }
         base::AutoReset<raw_ptr<content::WebContents>> showing(
-            &surfaces->showing_print_, contents.get());
+            &surfaces->showing_, contents.get());
         std::move(show).Run(true);
       },
       base::Unretained(this), contents->GetWeakPtr(), std::move(replay));
@@ -440,6 +491,57 @@ void AgentPageSurfaces::HoldActivation(content::WebContents* contents) {
   // Open brings the tab forward; nothing else to show.
   Hold(contents, PageSurface::kFocus, std::string(),
        {base::DoNothing(), base::DoNothing()});
+}
+
+bool AgentPageSurfaces::MayHoldPickers(content::WebContents* contents) {
+  return !koan::containers::IsAgentFrame(contents->GetPrimaryMainFrame());
+}
+
+bool AgentPageSurfaces::IsShowingHeld(content::WebContents* contents) {
+  return contents == showing_;
+}
+
+uint64_t AgentPageSurfaces::HoldPicker(
+    content::RenderFrameHost* frame,
+    HeldPicker picker,
+    base::OnceCallback<void(bool show)> show) {
+  content::WebContents* contents =
+      content::WebContents::FromRenderFrameHost(frame);
+  auto [replay, dismiss] = base::SplitOnceCallback(std::move(show));
+  PromptQueue::Actions actions;
+  actions.replay = base::BindOnce(
+      [](AgentPageSurfaces* surfaces,
+         base::WeakPtr<content::WebContents> contents,
+         base::OnceCallback<void(bool)> show) {
+        if (!contents) {
+          std::move(show).Run(false);
+          return;
+        }
+        base::AutoReset<raw_ptr<content::WebContents>> showing(
+            &surfaces->showing_, contents.get());
+        std::move(show).Run(true);
+      },
+      base::Unretained(this), contents->GetWeakPtr(), std::move(replay));
+  // Later, never inside the hook that asked (a refused picker is dismissed at
+  // once, while its requester is still being made).
+  actions.dismiss = base::BindOnce(
+      [](base::OnceCallback<void(bool)> show) {
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE, base::BindOnce(std::move(show), false));
+      },
+      std::move(dismiss));
+  const uint64_t id =
+      Hold(contents, SurfaceFor(picker), std::string(), std::move(actions));
+  if (id) {
+    pickers_[id] = frame->GetWeakDocumentPtr();
+  }
+  return id;
+}
+
+void AgentPageSurfaces::ForgetPicker(uint64_t id) {
+  pickers_.erase(id);
+  opening_.erase(id);
+  Forget(id);
 }
 
 uint64_t AgentPageSurfaces::Hold(content::WebContents* contents,
@@ -496,8 +598,41 @@ content::WebContents* AgentPageSurfaces::ContentsOf(uintptr_t tab) const {
 void AgentPageSurfaces::OnTabDestroyed(uintptr_t tab) {
   queue_.ForgetTab(tab);
   tabs_.erase(tab);
+  std::erase_if(pickers_, [this](const auto& picker) {
+    return !queue_.Find(picker.first);
+  });
+  std::erase_if(opening_, [this](uint64_t id) { return !queue_.Find(id); });
   if (on_changed_) {
     on_changed_.Run();
+  }
+}
+
+void AgentPageSurfaces::OnTabVisible(uintptr_t tab) {
+  std::vector<uint64_t> ids;
+  for (uint64_t id : opening_) {
+    const UserPrompt* prompt = queue_.Find(id);
+    if (prompt && prompt->tab == tab) {
+      ids.push_back(id);
+    }
+  }
+  for (uint64_t id : ids) {
+    Open(id);
+  }
+}
+
+void AgentPageSurfaces::SweepPickers(uintptr_t tab) {
+  std::vector<uint64_t> gone;
+  for (const auto& [id, document] : pickers_) {
+    const UserPrompt* prompt = queue_.Find(id);
+    if (!prompt ||
+        (prompt->tab == tab && !document.AsRenderFrameHostIfValid())) {
+      gone.push_back(id);
+    }
+  }
+  // Answered as cancelled: the request may still be waiting for it.
+  for (uint64_t id : gone) {
+    Dismiss(id);
+    pickers_.erase(id);
   }
 }
 

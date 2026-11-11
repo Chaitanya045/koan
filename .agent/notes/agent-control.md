@@ -733,7 +733,7 @@ apply only while the user has turned that switch off; site permissions apply in 
 | Surface | Block | Upstream decision point |
 |---|---|---|
 | Every permission (location, camera, microphone, notifications, clipboard, MIDI, sensors, storage access, ...) | denied, never prompted | `PermissionUtil::IsPermissionBlockedInPartition` (the one check `PermissionManager` makes for both requests and status, `permission_manager.cc`), true for agent partitions. Upstream already blocks *undelegated* permissions in any non-default partition; Brave overrides the same function the other way, to share (E§5). WebUSB, WebHID and Web Serial are already refused in non-default partitions upstream |
-| Choosers and pickers | file and directory pickers, File System Access pickers, Bluetooth chooser and scanning prompt, screen share (`getDisplayMedia`) cancelled (a `Koan.userNeeded` event for them is the gateway's, §9.4) instead of a native sheet | `BrowserWebContentsDelegate::RunFileChooser`, `EnumerateDirectory`; `ChromeFileSystemAccessPermissionContext::CanShowFilePicker`; `ChromeBluetoothDelegateImplClient::RunBluetoothChooser`, `ShowBluetoothScanningPrompt`; `DisplayMediaAccessHandler::HandleRequest` |
+| Choosers and pickers | file and directory pickers, File System Access pickers, Bluetooth chooser and scanning prompt, screen share (`getDisplayMedia`) cancelled instead of a native sheet, in an agent container and in an agent's tab no agent holds; in a tab an agent holds outside a container, the file picker, the device choosers and screen share wait in the indicator instead (§9.4) | `BrowserWebContentsDelegate::RunFileChooser`, `EnumerateDirectory`; `ChromeFileSystemAccessPermissionContext::CanShowFilePicker`; `ChromeBluetoothDelegateImplClient::RunBluetoothChooser`, `ShowBluetoothScanningPrompt`; `DisplayMediaAccessHandler::HandleRequest` |
 | Extensions (*switch*) | no content scripts or extension APIs in agent processes; no webRequest or declarativeNetRequest on agent traffic; no `chrome.debugger` attach; extension APIs cannot address an agent tab by id | `RendererStartupHelper::OnRenderProcessHostCreated` / `OnRenderProcessLaunched` (precedent: `kInitialWebUIWithoutExtensions`), `WebRequestAPI::MaybeProxyURLLoaderFactory`, `ExtensionMayAttachToWebContents` (debugger), `ExtensionTabUtil::GetTabById`. `chrome.cookies` reads only the default jar |
 | Passwords (*switch*) | no fill, no save, no Credential Management API | `ChromePasswordManagerClient::IsFillingEnabled` (saving requires it) |
 | Autofill (*switch*) | no addresses, cards or autocomplete | `ChromeAutofillClient::IsAutofillEnabled`, `IsAutocompleteEnabled` |
@@ -942,7 +942,8 @@ The agent controls CDP calls; the page controls what it does next. Everything be
 |---|---|
 | `window.open`, `target=_blank`, popups, a link click that opens a tab | opened **in the background in the agent Space**, owned by the same lease, never activated, no window raised (hook #2, §14); T-focus-3 |
 | `<select>` dropdowns, date and colour pickers | `ForbidExternalPopupMenus()` so no native NSMenu opens over the user's work (T-focus-4); the page renders them in-process |
-| File chooser | `Page.setInterceptFileChooserDialog` forced on; a `userNeeded {file-chooser}` prompt; a Koan-mediated, user-approved path upload later (T-focus-5) |
+| File chooser, device choosers (WebUSB, WebHID, Web Serial, Web Bluetooth and its scanning prompt), `getDisplayMedia` | held as `userNeeded {file-picker}`, `{device-chooser}`, `{screen-share}` prompts (#273); refused in agent containers; `Page.setInterceptFileChooserDialog` stays denied (T-focus-5, T-pick-1..5) |
+| Passkeys (WebAuthn), File System Access pickers | refused in every agent tab (B9, B2), not held: see "Built (#273)" below |
 | HTTP auth, client-certificate picker, external-protocol launch, print, `beforeunload` | `userNeeded` approval prompts, never a silent native sheet; `beforeunload` is handled explicitly (T-focus-6) |
 | Permission prompts (location, camera, microphone, notifications, USB, …) | the tab pauses and the normal permission bubble is anchored in the agent Space; the agent can never grant (`Browser.grantPermissions` does not exist); event reason keys as in §19.4 |
 | `alert`/`confirm`/`prompt` | held as `userNeeded {dialog}` prompts (maintainer, 2026-11-11); the agent can still answer with `Page.handleJavaScriptDialog` |
@@ -968,7 +969,37 @@ dialog blocks the page anyway. Not held: the client-certificate picker (agent co
 and a user tab's picker is tab-modal), and `window.print()` with print preview turned off by policy (the system dialog
 path, `PrintViewManagerBase::ScriptedPrint`).
 
-## 10. Snapshots built in the engine (ego's idea) and the tool surface
+**Built (#273, pickers):** with "Your logins" on an agent's tab is in the user's partition, and its pickers now wait
+like the surfaces above instead of being refused: `<input type=file>` (`userNeeded {file-picker}`), the WebUSB, WebHID,
+Web Serial and Web Bluetooth choosers and the Bluetooth scanning prompt (`{device-chooser}`) and `getDisplayMedia()`'s
+picker (`{screen-share}`). They are held in every tab an agent holds a lease on (its own, and a user tab it drives),
+except in an agent container, where they stay refused as before (B2; WebUSB, WebHID and Web Serial are refused for any
+non-default partition upstream). **Open** brings the tab forward and, once it is visible, runs Chrome's own path:
+`WebContentsImpl::RunFileChooser` and `FileSelectHelper`, `chrome::ShowDeviceChooserDialog` with the request's own
+`ChooserController`, `DisplayMediaAccessHandler::ShowMediaSelectionDialog`. **Dismiss** answers as the user's cancel
+would: the file input's `cancel`, the controller's `Close()` (the request rejects with `NotFoundError`),
+`PERMISSION_DENIED_BY_USER` (`NotAllowedError`). Unlike the surfaces above, a picker still held when the agent lets go of
+the tab is cancelled, not shown (it would come up over the user's work), and a held picker goes when its page does. Where
+each is held, and why there:
+- *File picker:* in content, at the top of `WebContentsImpl::RunFileChooser`, through a new delegate method
+  (`WebContentsDelegate::HoldFileChooser`): content cancels a chooser of a tab that isn't active and visible before
+  Chrome's delegate sees it, so no Chrome-side hook can hold it. The held run re-enters `RunFileChooser`, so content's
+  own checks (one chooser at a time, fullscreen dropped, the frame still current) run when it is shown. The `webkitdirectory`
+  enumeration (`EnumerateDirectory`, no UI) stays refused in agent tabs.
+- *Device choosers:* all four APIs reach `chrome::ShowDeviceChooserDialog`, which already shows nothing for a tab that
+  isn't the active one (the request hung). The held controller keeps collecting devices, so the dialog opens with
+  them.
+- *Screen share:* at the end of `DisplayMediaAccessHandler::HandleRequest`, after its checks (the page's user
+  activation, policy, the Mac's "not from a background page"): holding before them would make the shown request fail
+  the activation check, which a late replay can't pass.
+- *Not held:* **passkeys** stay refused (`IsSecurityLevelAcceptableForWebAuthn`, B9). Content starts the
+  authenticators and Chrome's sheet together in `StartGetAssertionRequest`/`StartMakeCredentialRequest`, and no
+  embedder call before it can pause one request: the async `IsUserVerifyingPlatformAuthenticatorAvailableOverride` and
+  `BrowserProvidedPasskeysAvailable` are shared with the capability queries or have no frame; holding only Chrome's sheet
+  would leave security keys and iCloud Keychain's system sheet live, and a timeout would raise the sheet over the
+  user's work. `create()` fails `NotFocused` in a background tab anyway. Holding them needs a content hook in
+  `AuthenticatorCommonImpl` (a follow-up). **File System Access pickers** (`showOpenFilePicker()` and the like) stay
+  refused: content shows them itself (`FileSystemChooser`) after a synchronous `CanShowFilePicker`. built in the engine (ego's idea) and the tool surface
 
 ego(lite) claims snapshots built *inside* the engine rather than by injected scripts, reaching cross-origin
 iframes, shadow DOM and embedded widgets, plus a multi-step script per call. Options for Koan, in order of cost:
@@ -1213,7 +1244,7 @@ each switch on and off:
 | T-access-5 | "Your extensions" on / off, with a content-script extension, a webRequest logger and an extension calling `chrome.tabs.get` / `chrome.debugger.attach` on the agent tab: (a) "Your logins" off (a container), (b) on | on, both: the content script runs, requests are logged, `tabs.get` and `debugger.attach` work. Off, (a): none of them (T-block-3). Off, (b): `tabs.get` and `debugger.attach` fail and no request is logged, **but the content script still runs** (as Settings and SECURITY.md say) |
 | T-access-6 | "History" on / off: visit pages in an agent tab | on: in History with their icons, suggested by the omnibox; off: neither (T-block-5). Either way `@tabs` doesn't list agent tabs and no other device sees them as open tabs |
 | T-access-7 | "Your logins" on: discard an agent tab (`chrome://discards`), then let the agent use it again | still the agent's (its Space, the indicator, ends with the task) |
-| T-access-8 | "Your logins" on, the user working in another tab: an agent tab asks for geolocation, a file input, `navigator.credentials.get` with a passkey, and FedCM sign-in | nothing shows over the user's tab: the permission prompt waits until the user opens the agent tab, then shows as the user's; the file picker is cancelled and the passkey refused; FedCM's dialog shows only on the agent tab, never over the user's |
+| T-access-8 | "Your logins" on, the user working in another tab: an agent tab asks for geolocation, a file input, `navigator.credentials.get` with a passkey, and FedCM sign-in | nothing shows over the user's tab: the permission prompt waits until the user opens the agent tab, then shows as the user's; the file picker waits in the indicator (T-pick-1) and the passkey is refused; FedCM's dialog shows only on the agent tab, never over the user's |
 | T-take-site-1 | "Limit a taken-over tab to its site" off (the default): take over a user tab on mail.example; the agent clicks a link to bank.example, follows a cross-site redirect, and `Page.navigate`s to a third site; a cross-site iframe in it | the prompt says "any site the tab goes to"; the tab stays driven throughout (no `Koan.siteLeft`, no `Koan.offSite`); the iframe is the agent's; a `chrome://` page or an interstitial is still refused |
 | T-take-site-2 | the same with the limit on | the prompt says "this site only"; `Page.navigate` off the site is `Koan.offSite`; the link makes the tab readable (`Koan.siteLeft`) and its password fields come back redacted; the cross-site iframe is detached |
 
@@ -1248,7 +1279,12 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-focus-2 | `Page.bringToFront`, `Target.activateTarget` from the client | no-op success; nothing raised |
 | T-focus-3 | a page in an agent tab calls `window.open`, has `target=_blank` links and a popup; the user types in another tab | the new tabs open in the background in the agent Space; the active tab, focus and frontmost app are unchanged |
 | T-focus-4 | click a `<select>` in an agent tab | no native menu appears over the user's work |
-| T-focus-5 | trigger a file chooser | no native sheet; a `userNeeded {file-chooser}` event and prompt; the tab pauses |
+| T-focus-5 | trigger a file chooser | no native sheet; a `userNeeded {file-picker}` event and prompt (T-pick-1) |
+| T-pick-1 | "Your logins" on, the user typing in another tab: an agent tab clicks an `<input type=file>` (and one with `webkitdirectory`, `multiple`); then Open; again, then Dismiss | nothing over the user's tab; `Koan.userNeeded {file-picker}` and the pill's "… wants you to choose a file"; Open brings the tab forward and the system open panel shows as in Chrome, the chosen file reaches the input; Dismiss fires the input's `cancel` event |
+| T-pick-2 | the same with `navigator.usb.requestDevice`, `navigator.hid.requestDevice`, `navigator.serial.requestPort`, `navigator.bluetooth.requestDevice` and `requestLEScan` (Bluetooth on, a device nearby) | `{device-chooser}`; Open shows Chrome's chooser bubble on the tab, listing the devices found while it waited; Dismiss rejects the promise with `NotFoundError` (the scan with its cancel error) |
+| T-pick-3 | the same with `getDisplayMedia({video: true})` (also `preferCurrentTab`) | `{screen-share}`; Open shows Chrome's screen-share picker on the tab and the chosen screen is shared; Dismiss rejects with `NotAllowedError` |
+| T-pick-4 | a picker waiting, then: the agent's page navigates; the agent ends the task (`koan end`) or the user takes the tab back; the tab closes | the prompt goes when the page goes (`Koan.userNeededDone`); on release the picker is cancelled, never shown; a closed tab leaves nothing |
+| T-pick-5 | "Your logins" off (a container), and a user tab driven in place: the steps of T-pick-1..3; and `navigator.credentials.get({publicKey})`, `showOpenFilePicker()` in an agent tab | in the container every picker is refused at once (no prompt), as before; in the driven user tab they wait like T-pick-1..3; the passkey request and `showOpenFilePicker()` are refused in agent tabs, nothing shows over the user's work |
 | T-focus-6 | HTTP auth, client-certificate request, an external-protocol link, `window.print()`, `beforeunload` | each becomes a `userNeeded` approval prompt, none a silent native sheet |
 | T-focus-7 | all of the above while the user is typing in a different window | the frontmost pid and the user's text are unchanged |
 | T-focus-8 | in an agent tab and in a driven user tab: `alert`, `confirm`, `prompt`, `window.focus()` from a timer, a service worker's `clients.focus()`; then Open and Dismiss each prompt; answer one dialog with `Page.handleJavaScriptDialog` instead; release a tab with a prompt waiting | no dialog, sheet or focus change until Open; Open brings the tab forward and shows Chrome's own dialog; Dismiss cancels (`confirm` returns false, the page stays on `beforeunload`, the 401 body shows); the agent's answer removes the prompt (`Koan.userNeededDone`); on release the dialog shows in its tab as in Chrome and the focus request is dropped |

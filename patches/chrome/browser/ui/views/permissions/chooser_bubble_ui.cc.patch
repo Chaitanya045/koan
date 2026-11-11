@@ -1,0 +1,35 @@
+diff --git a/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc b/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
+index d3672a7..01d4526 100644
+--- a/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
++++ b/chrome/browser/ui/views/permissions/chooser_bubble_ui.cc
+@@ -25,6 +25,7 @@
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/weak_document_ptr.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/agent/koan_agent_tab_hooks.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/mojom/dialog_button.mojom.h"
+ #include "ui/display/types/display_constants.h"
+@@ -355,6 +356,22 @@ base::OnceClosure ShowDeviceChooserDialogForExtension(
+ base::OnceClosure ShowDeviceChooserDialog(
+     content::RenderFrameHost* owner,
+     std::unique_ptr<permissions::ChooserController> controller) {
++  // Koan: the chooser of a tab an agent holds waits in the agent indicator,
++  // then shows here, or closes (null `frame`) as if the user closed it.
++  if (koan::agent::ShouldHoldPickerForAgent(owner)) {
++    return koan::agent::HoldDeviceChooserForAgent(
++        owner,
++        base::BindOnce(
++            [](std::unique_ptr<permissions::ChooserController> controller,
++               content::RenderFrameHost* frame) -> base::OnceClosure {
++              if (!frame) {
++                controller->Close();
++                return base::DoNothing();
++              }
++              return ShowDeviceChooserDialog(frame, std::move(controller));
++            },
++            std::move(controller)));
++  }
+   content::WeakDocumentPtr weak_document = owner->GetWeakDocumentPtr();
+   auto* contents = content::WebContents::FromRenderFrameHost(owner);
+ 

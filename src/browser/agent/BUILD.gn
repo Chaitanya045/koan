@@ -99,6 +99,7 @@ source_set("tab_hooks") {
     "//ui/base:types",
     "//url",
   ]
+  deps = [ "//third_party/blink/public/mojom:mojom_platform" ]
 }
 
 # What pages in agent tabs wait to show the user (design section 9.4): the

@@ -94,6 +94,19 @@ TEST_F(KoanAgentPromptsTest, ReplayTabReplaysInOrderAndDropsFocus) {
   EXPECT_EQ(queue_.List()[0].tab, 2u);
 }
 
+TEST_F(KoanAgentPromptsTest, ReplayTabDismissesPickers) {
+  // A picker shown after the agent let go would come up over the user's work.
+  queue_.Add(1, PageSurface::kFilePicker, "", "", Record("file"));
+  queue_.Add(1, PageSurface::kJavaScriptDialog, "", "", Record("a"));
+  queue_.Add(1, PageSurface::kDeviceChooser, "", "", Record("device"));
+  queue_.Add(1, PageSurface::kScreenShare, "", "", Record("screen"));
+  queue_.ReplayTab(1);
+  EXPECT_EQ(log_,
+            (std::vector<std::string>{"dismiss:file", "replay:a",
+                                      "dismiss:device", "dismiss:screen"}));
+  EXPECT_TRUE(queue_.empty());
+}
+
 TEST_F(KoanAgentPromptsTest, AReplayMayCallBackIntoTheQueue) {
   // Showing a dialog can make the page cancel another one (it navigates).
   uint64_t second = 0;
@@ -114,6 +127,9 @@ TEST_F(KoanAgentPromptsTest, ReasonsAndText) {
   EXPECT_EQ(ReasonFor(PageSurface::kBeforeUnload), "beforeunload");
   EXPECT_EQ(ReasonFor(PageSurface::kExternalProtocol), "external-protocol");
   EXPECT_EQ(ReasonFor(PageSurface::kHttpAuth), "http-auth");
+  EXPECT_EQ(ReasonFor(PageSurface::kFilePicker), "file-picker");
+  EXPECT_EQ(ReasonFor(PageSurface::kDeviceChooser), "device-chooser");
+  EXPECT_EQ(ReasonFor(PageSurface::kScreenShare), "screen-share");
   EXPECT_EQ(PromptTextFor(PageSurface::kExternalProtocol, "a.test", "mailto"),
             u"a.test wants to open a mailto: link");
   EXPECT_EQ(PromptTextFor(PageSurface::kPrint, "", ""),

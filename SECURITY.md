@@ -90,8 +90,9 @@ What that means, plainly:
 Whatever the switches say: every agent program needs your approval, the pill
 shows it and Stop ends it, the agent can't act on a security warning page,
 dialogs and prompts a page raises wait for you instead of popping up over your
-work, and agent tabs never get file or device pickers, screen sharing or
-passkeys, or add search engines, protocol handlers or app badges. A site
+work (so do file pickers, device choosers and screen-share pickers, which agent
+containers never get at all), and agent tabs never get passkeys or File System
+Access pickers, or add search engines, protocol handlers or app badges. A site
 permission an agent tab asks for is prompted only when you open that tab.
 
 With **Your logins** off, agents work in **containers**: storage partitions of
