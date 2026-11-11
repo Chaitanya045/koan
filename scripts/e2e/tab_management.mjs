@@ -4,13 +4,13 @@
 // past collapsed groups in a private window, which has tab groups instead
 // of Spaces); Ctrl+Tab can stay within the Essentials or the other tabs,
 // defers to Chromium's recently used order, and leaves popups alone. Each
-// with its setting on and off (set through chrome://koan-settings'
+// with its setting on and off (set through Koan's settings'
 // handler).
 //
 //   scripts/e2e/run.sh tab_management
 import {
   ALT, CTRL, SHIFT, browserCall, check, click, clickView, createSpace, evalIn, finish, front,
-  key, onPage, pages, settingsCall, sleep, tabMenuCommand, views, viewMouse, viewTree, waitFor,
+  key, onPage, pages, settingsCall, sleep, tabMenuCommand, views, viewMouse, viewTree, waitFor, showPane,
   skipOnMac,
 } from './lib/koan.mjs';
 skipOnMac();
@@ -21,11 +21,11 @@ const [opener] = await pages();
 
 // The settings page, in a window of its own so it doesn't count as a tab.
 const settingsId = (await browserCall('Target.createTarget',
-    { url: 'chrome://koan-settings', newWindow: true })).result.targetId;
+    { url: 'chrome://settings/koan/looks', newWindow: true })).result.targetId;
 const settings = await waitFor(async () => (await pages()).find(p => p.id === settingsId));
-await waitFor(() => evalIn(settings, `document.querySelectorAll('.category').length > 0`));
+await waitFor(() => evalIn(settings, `koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`));
 const setPref = async (pref, value) => {
-  const ok = await settingsCall(settings, 'setPref', pref, value);
+  const ok = await settingsCall(settings, 'koanSetPref', pref, value);
   await sleep(300);
   return ok;
 };
@@ -146,10 +146,10 @@ now = await waitFor(async () => {
 });
 check('With Chromium\'s recently used Ctrl+Tab on, Ctrl+Tab goes to the last tab shown',
       now?.id === opener.id, now ? await title(now) : 'none');
-await evalIn(settings, `document.querySelector('#category-tabs').click()`);
+await evalIn(settings, `${showPane('tabs')}`);
 check('...and the Koan row notes it, like Zen',
       await evalIn(settings, `(() => {
-        const n = document.querySelector('[data-note="koan.tabs.ctrl_tab_within_kind"]');
+        const n = koanSettingsRoot.querySelector('[data-note="koan.tabs.ctrl_tab_within_kind"]');
         return n && !n.hidden && n.textContent.startsWith('Ctrl+Tab will cycle by recently used');
       })()`));
 

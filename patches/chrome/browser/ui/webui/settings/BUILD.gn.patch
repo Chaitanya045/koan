@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index f048a85d885c216faf3c3b8a44367240c261a6b0..583b496812c85837b8e0b7e32e49b66c0acfcb77 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -351,6 +351,7 @@ source_set("impl") {
+     "//components/webapps/isolated_web_apps:scheme",
+     "//components/webauthn/core/browser:passkey_model",
+     "//extensions/browser",
++    "//koan/browser/ui/webui",
+     "//services/device/public/cpp:device_features",
+     "//ui/base",
+     "//ui/webui/tracked_element",

@@ -9,14 +9,35 @@
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
-// chrome://koan-settings, laid out like Zen's preferences. Everything shown
-// comes from the browser (koan_settings_rows.cc and koan_shortcut_table.cc);
-// add settings there, not here.
+// Koan's panes in chrome://settings, laid out like Zen's preferences: a
+// SettingsPlugin (chrome/browser/resources/settings/settings_main/
+// settings_plugin.ts) in the sections chrome://settings/koan/<pane>, so
+// Chromium's menu lists them and its search finds them (koan_settings_ui.h).
+// Everything shown comes from the browser (koan_settings_rows.cc and
+// koan_shortcut_table.cc); add settings there, not here.
 
+// Only chrome://resources modules the settings bundle keeps shared may be
+// imported here (BUNDLE_JS_EXCLUDES, ui/webui/resources/tools/
+// bundle_js_excludes.gni): the bundle has its own copy of every other one, and
+// a second copy defines its elements twice (cr-iconset, 2026-11-12: the whole
+// settings app failed to start).
 import {addWebUiListener, sendWithPromise} from 'chrome://resources/js/cr.js';
+
+// The page's router (chrome://settings/settings.js re-exports it). Imported
+// dynamically: settings_main.ts imports this module (hook patch), so it runs
+// before Chromium's settings app is defined, and the menu's koan: icons
+// exist when the menu first draws them.
+const settingsModule = import('./settings.js');
+
+// Koan's sections are chrome://settings/koan/<pane> (route.ts hook).
+const PANE_PATH = '/koan/';
 
 let settings;
 let currentPane;
+// The plugin's shadow root, where the panes are drawn.
+let root;
+// The search, from Chromium's toolbar; '' shows the current pane.
+let query = '';
 // Settings > Agent Control > Saved containers (KoanAgentContainersHandler);
 // null where agent control isn't built.
 let agentContainers = null;
@@ -65,7 +86,7 @@ function paneHasContent(pane) {
 }
 
 async function setPref(row, value) {
-  if (!await sendWithPromise('setPref', row.pref, value)) {
+  if (!await sendWithPromise('koanSetPref', row.pref, value)) {
     updateAll();
   }
 }
@@ -94,7 +115,9 @@ function renderRow(row) {
             onchange: () => setPref(row, row.options[select.selectedIndex].value),
           },
           ...row.options.map(option => h('option', {}, option.label)));
-      el = h('div', {class: 'row menu'}, h('span', {}, row.label), select);
+      // The wrapper draws the chevron (koan_settings.css, .select).
+      el = h('div', {class: 'row menu'}, h('span', {}, row.label),
+             h('span', {class: 'select'}, select));
       updaters.push(() => {
         select.selectedIndex =
             row.options.findIndex(o => o.value === prefValue(row.pref));
@@ -113,7 +136,7 @@ function renderRow(row) {
       });
       const status = h('span', {class: 'theme-status', role: 'status'});
       const apply = async () => {
-        const ok = await sendWithPromise('setPref', row.pref, area.value.trim());
+        const ok = await sendWithPromise('koanSetPref', row.pref, area.value.trim());
         status.classList.toggle('error', !ok);
         status.textContent = ok ?
             (area.value.trim() ? 'Theme applied' : 'Theme removed') :
@@ -129,7 +152,7 @@ function renderRow(row) {
                }}, 'Remove'),
                status));
       updaters.push(() => {
-        if (document.activeElement !== area) {
+        if (root.activeElement !== area) {
           area.value = prefValue(row.pref) || '';
         }
         area.disabled = disabled();
@@ -320,7 +343,7 @@ function onShortcutFocus(input, action) {
   input.classList.add('editing');
   setNote(input, null);
   // Let every key reach the page, even the browser's own shortcuts.
-  chrome.send('setEditing', [true]);
+  chrome.send('koanSetEditing', [true]);
 }
 
 // Saves `key` (what was typed) for `action`, or says why it can't be.
@@ -342,7 +365,7 @@ async function commitShortcut(input, action, key) {
   if (problem) {
     input.classList.add('invalid');
     setNote(input, 'conflict', problem);
-  } else if (await sendWithPromise('setShortcut', action.id, key)) {
+  } else if (await sendWithPromise('koanSetShortcut', action.id, key)) {
     input.classList.remove('invalid');
     input.classList.add('valid');
     setTimeout(() => input.classList.remove('valid'), 1000);
@@ -356,7 +379,7 @@ async function commitShortcut(input, action, key) {
 }
 
 function onShortcutBlur(input, action) {
-  chrome.send('setEditing', [false]);
+  chrome.send('koanSetEditing', [false]);
   input.classList.remove('editing');
   // Leaving the field with keys typed saves them too (Zen asks for Escape;
   // people click away).
@@ -404,7 +427,7 @@ async function onShortcutKeyDown(event, input, action) {
     input.value = 'Not set';
     input.classList.add('not-set');
     setNote(input, null);
-    sendWithPromise('setShortcut', action.id, null);
+    sendWithPromise('koanSetShortcut', action.id, null);
     return;
   }
   input.classList.remove('invalid', 'not-set');
@@ -463,7 +486,7 @@ function renderShortcuts(query) {
         onclick: () => {
           // Zen asks before resetting too.
           if (confirm('Reset all keyboard shortcuts to their defaults?')) {
-            sendWithPromise('resetShortcuts');
+            sendWithPromise('koanResetShortcuts');
           }
         },
       }, 'Reset to Default'),
@@ -497,7 +520,7 @@ function renderAgentContainers(query) {
     if (!value) {
       return;
     }
-    if (await sendWithPromise('createAgentContainer', value)) {
+    if (await sendWithPromise('koanCreateAgentContainer', value)) {
       name.value = '';
       status.textContent = '';
     } else {
@@ -518,7 +541,7 @@ function renderAgentContainers(query) {
           onclick: () => {
             if (confirm(`Delete “${container.name}”? Its logins, cookies ` +
                         'and site data are deleted too.')) {
-              sendWithPromise('deleteAgentContainer', container.name);
+              sendWithPromise('koanDeleteAgentContainer', container.name);
             }
           },
         }, 'Delete')),
@@ -528,7 +551,7 @@ function renderAgentContainers(query) {
                   type: 'checkbox',
                   checked: granted(client.id, container.id),
                   onchange: () => sendWithPromise(
-                      'setAgentContainerGrant', client.id, container.id,
+                      'koanSetAgentContainerGrant', client.id, container.id,
                       input.checked),
                 });
                 return h('label', {class: 'row checkbox indent'}, input,
@@ -555,6 +578,13 @@ function renderAgentContainers(query) {
 }
 
 function renderPane(pane, query) {
+  // Chromium's menu lists every pane (settings_menu.html hook); one whose
+  // rows are all hidden (agent control off by policy) says so.
+  if (!query && !paneHasContent(pane)) {
+    return [h('h1', {}, pane.title),
+            h('p', {class: 'empty'},
+              'Your organization has turned these settings off.')];
+  }
   if (pane.id === settings.shortcutsPane) {
     return renderShortcuts(query);
   }
@@ -565,77 +595,172 @@ function renderPane(pane, query) {
 
 // Page ------------------------------------------------------------------------
 
+// Returns how many settings match `query` across the panes (0 without one).
 function render() {
+  if (!root || !settings) {
+    return 0;
+  }
   updaters = [];
-  const pane = document.getElementById('pane');
-  const query = document.getElementById('search').value.trim().toLowerCase();
+  const pane = root.getElementById('pane');
+  let count = 0;
   if (query) {
-    const results = settings.panes.flatMap(p => renderPane(p, query));
-    pane.replaceChildren(
-        h('h1', {}, 'Search Results'),
-        ...(results.length ? results : [h('p', {class: 'empty'},
-            `Sorry! There are no results in Settings for “${query}”.`)]));
+    pane.replaceChildren(...settings.panes.flatMap(p => renderPane(p, query)));
+    // The settings found, for Chromium's results count and "No results".
+    count = pane.querySelectorAll('.row, .shortcut').length;
   } else {
     const current = settings.panes.find(p => p.id === currentPane);
-    pane.replaceChildren(...renderPane(current));
-  }
-  for (const button of document.querySelectorAll('#categories .category')) {
-    button.setAttribute('aria-selected',
-                        String(!query && button.dataset.pane === currentPane));
+    pane.replaceChildren(...(current ? renderPane(current) : []));
   }
   updateAll();
+  return count;
 }
 
-function selectPane(id) {
-  currentPane = id;
-  document.getElementById('search').value = '';
-  history.replaceState(null, '', `/${id}`);
-  render();
+// The pane a route shows: chrome://settings/koan/<pane>, and the first pane
+// at chrome://settings/ (Koan's Look and Feel is the top-level section).
+function paneForRoute(route, router) {
+  if (route === router.getRoutes().BASIC) {
+    return settings.panes[0]?.id;
+  }
+  if (!route.path.startsWith(PANE_PATH)) {
+    return null;
+  }
+  const id = route.path.slice(PANE_PATH.length);
+  return settings.panes.some(p => p.id === id) ? id : settings.panes[0]?.id;
 }
 
-async function main() {
-  settings = await sendWithPromise('getSettings');
+function reloadLookTokens() {
+  // The panes draw from the same tokens as the browser: fetch them again.
+  const href = `koan_tokens.css?${Date.now()}`;
+  for (const link of [document.getElementById('koan-look-tokens'),
+                      root?.getElementById('look-tokens')]) {
+    if (link) {
+      link.href = href;
+    }
+  }
+}
+
+const ready = (async () => {
+  settings = await sendWithPromise('koanGetSettings');
   // Not awaited: where agent control isn't built nothing answers.
-  sendWithPromise('getAgentContainers').then(containers => {
+  sendWithPromise('koanGetAgentContainers').then(containers => {
     agentContainers = containers;
     render();
   });
-  const panes = settings.panes.filter(paneHasContent);
-  settings.panes = panes;
-  document.getElementById('categories').replaceChildren(...panes.map(
-      pane => h('button', {
-        class: 'category',
-        role: 'tab',
-        id: `category-${pane.id}`,
-        dataset: {pane: pane.id},
-        onclick: () => selectPane(pane.id),
-      }, h('span', {class: `icon icon-${pane.id}`}), pane.title)));
-  const requested = location.pathname.slice(1);
-  currentPane = panes.some(p => p.id === requested) ? requested : panes[0].id;
-  document.getElementById('search').addEventListener('input', render);
-
-  addWebUiListener('pref-changed', (pref, value) => {
+  addWebUiListener('koan-pref-changed', (pref, value) => {
     settings.prefs[pref] = value;
     updateAll();
     if (pref.startsWith('koan.look.')) {
-      // The page draws from the same tokens as the browser: fetch them again.
-      document.getElementById('look-tokens').href =
-          `/koan_tokens.css?${Date.now()}`;
+      reloadLookTokens();
     }
   });
-  addWebUiListener('agent-containers-changed', containers => {
+  addWebUiListener('koan-agent-containers-changed', containers => {
     agentContainers = containers;
     // Don't take the text out of a name being typed.
-    if (currentPane === 'agents' &&
-        !document.activeElement?.classList.contains('container-name')) {
+    if ((query || currentPane === 'agents') &&
+        !root?.activeElement?.classList.contains('container-name')) {
       render();
     }
   });
-  addWebUiListener('shortcuts-changed', shortcuts => {
+  addWebUiListener('koan-shortcuts-changed', shortcuts => {
     settings.shortcuts = shortcuts;
     updateAll();
   });
-  render();
+})();
+
+// The look's tokens for the whole page too: its fonts, and Chromium's
+// sections in the look (koan_settings_ui.cc, LookStylesheet()).
+document.head.append(h('link', {
+  rel: 'stylesheet',
+  id: 'koan-look-tokens',
+  href: 'koan_tokens.css',
+}));
+
+// The menu items' icons (settings_menu.html hook: koan:<pane>), Zen's.
+const SVG = 'http://www.w3.org/2000/svg';
+const ICONS = {
+  looks: {fill: 'currentColor', d: 'M4 1h8v6.5H9.3V14a1.3 1.3 0 0 1-2.6 0V7.5H4z'},
+  tabs: {d: 'M3.1 2.6h9.8a1.6 1.6 0 0 1 1.6 1.6v7.6a1.6 1.6 0 0 1-1.6 1.6H3.1a1.6 1.6 0 0 1-1.6-1.6V4.2a1.6 1.6 0 0 1 1.6-1.6zM1.5 5.6h13'},
+  shortcuts: {d: 'M2.7 3.6h10.6a1.6 1.6 0 0 1 1.6 1.6v5.6a1.6 1.6 0 0 1-1.6 1.6H2.7a1.6 1.6 0 0 1-1.6-1.6V5.2a1.6 1.6 0 0 1 1.6-1.6zM4 6.6h.5M7.2 6.6h.5M10.4 6.6h.5M5 9.6h6'},
+  agents: {d: 'M4.6 5.1h6.8a2 2 0 0 1 2 2v4.3a2 2 0 0 1-2 2H4.6a2 2 0 0 1-2-2V7.1a2 2 0 0 1 2-2zM8 5.1V2.4M6 8.6v1.2M10 8.6v1.2M1 9h1.6M13.4 9H15'},
+};
+{
+  const defs = document.createElementNS(SVG, 'defs');
+  for (const [id, icon] of Object.entries(ICONS)) {
+    const g = document.createElementNS(SVG, 'g');
+    g.id = id;
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', icon.d);
+    // Presentation attributes win over cr-icon's inherited fill.
+    path.setAttribute('fill', icon.fill ?? 'none');
+    path.setAttribute('stroke', icon.fill ? 'none' : 'currentColor');
+    path.setAttribute('stroke-width', '1.25');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    g.append(path);
+    defs.append(g);
+  }
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.append(defs);
+  // Not defined yet: the settings bundle's own cr-iconset upgrades it when it
+  // loads, before the menu draws, and registers it where the menu's icons
+  // look. Attributes, which the element reads when it upgrades.
+  const iconset = document.createElement('cr-iconset');
+  iconset.setAttribute('name', 'koan');
+  iconset.setAttribute('size', '16');
+  iconset.append(svg);
+  document.head.append(iconset);
 }
 
-main();
+// <koan-settings-page> (settings_main.html hook): one plugin for every Koan
+// section, showing the pane of the current route.
+class KoanSettingsPageElement extends HTMLElement {
+  constructor() {
+    super();
+    root = this.attachShadow({mode: 'open'});
+    root.append(
+        h('link', {rel: 'stylesheet', href: 'koan_settings.css'}),
+        h('link', {rel: 'stylesheet', href: 'koan_tokens.css', id: 'look-tokens'}),
+        h('div', {id: 'pane'}));
+    // For the end-to-end tests, which can't reach into Chromium's shadow
+    // roots by themselves.
+    window.koanSettingsRoot = root;
+  }
+
+  async connectedCallback() {
+    const {Router} = await settingsModule;
+    await ready;
+    if (!this.isConnected) {
+      return;
+    }
+    this.router_ = Router.getInstance();
+    this.router_.addObserver(this);
+    this.currentRouteChanged(this.router_.getCurrentRoute());
+  }
+
+  disconnectedCallback() {
+    this.router_?.removeObserver(this);
+    this.router_ = null;
+  }
+
+  // RouteObserverMixinInterface.
+  currentRouteChanged(route) {
+    const pane = paneForRoute(route, this.router_);
+    if (pane && pane !== currentPane) {
+      currentPane = pane;
+      if (!query) {
+        render();
+      }
+    }
+  }
+
+  // SettingsPlugin: Chromium's search asks every section; this one filters
+  // Koan's settings, across its panes.
+  async searchContents(text) {
+    await ready;
+    query = text.trim().toLowerCase();
+    const count = render();
+    return {canceled: false, matchCount: count, wasClearSearch: !query};
+  }
+}
+
+customElements.define('koan-settings-page', KoanSettingsPageElement);

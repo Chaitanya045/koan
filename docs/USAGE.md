@@ -74,7 +74,7 @@ Zen's Firefox-based macOS differences are followed:
 | Bookmarks sidebar | ⌘B | |
 | Reading mode | ⌘⌥R | |
 | Library | ⌥⇧L | |
-| Koan settings | ⌘, | Preferences… (still in the Koan menu, no key) |
+| Settings (Koan's panes and Chromium's, one page) | ⌘, | Preferences… (hidden; it opened the same page) |
 | **Koan only:** single / multiple toolbars; create a Space | ⌃⌥B; ⌃⌥N | |
 
 Koan's shortcut takes the key where it is the same as Chrome's menu key, and
@@ -91,7 +91,7 @@ menus.
 Tools, Window, Help. Chrome's Tab menu is hidden and its Profiles menu removed (Zen sets `browser.profiles.enabled=false`), and the keys
 follow the shortcuts in effect (also after you change one in Settings):
 
-- **Zen** (app menu): Settings… (⌘,), which opens Koan's settings.
+- **Zen** (app menu): Settings… (⌘,), which opens Settings on Look and Feel.
 - **File:** New Blank Window (⌘⇧N, Zen's: a window without Spaces, outside
   window sync) after New Window, and New Private Window (⌘⇧P) for
   Chrome's Incognito.
@@ -794,9 +794,20 @@ only Chromium's own high-contrast paths still apply.
 
 ## Settings
 
-`chrome://koan-settings` (or Ctrl+,) has Koan's settings, laid out like
-Zen's preferences; everything else is in Chromium's own settings, linked
-from its sidebar.
+Settings is one page, `chrome://settings`, as Zen's are Firefox's
+about:preferences with Zen's panes added. Ctrl+, (⌘, on macOS), the ⋮ menu's
+Settings and every link to a Chromium setting open it. Koan's panes come first
+in its menu (`chrome://settings/koan/looks`, `/koan/tabs`, `/koan/shortcuts`,
+`/koan/agents`), laid out like Zen's preferences, and Chromium's sections
+follow (You and Google, Autofill, Privacy, Appearance, Search engine ...). A
+link to one of Chromium's sections (`chrome://settings/privacy`, page info's
+Site settings) opens that section in the same page, and Ctrl+, in a settings
+tab goes back to Look and Feel there. The old address `chrome://koan-settings`
+(and `chrome://koan-settings/<pane>`) still opens Koan's panes.
+
+**Search.** The box at the top searches everything: Koan's settings and
+shortcuts are listed first, then Chromium's sections with their matches
+highlighted; "No results" only when neither has any.
 
 - **Look and Feel**: the look (see "Look" above), the browser layout (Only
   Sidebar / Sidebar and Top Toolbar), tabs on the right, compact mode, what
@@ -828,6 +839,16 @@ share the regular profile's settings), and the page follows changes made
 elsewhere (e.g. Ctrl+S or Ctrl+Alt+B). From a private window, Ctrl+, opens
 the page in a regular one, like Chromium's settings.
 
+**Look.** In the shadcn style Koan's panes take the look's tokens and font,
+and so do Chromium's sections where they use Chromium's own text, card,
+border, link and accent colours; their layout and controls stay Chromium's
+(a full restyle is a follow-up). Drop-downs in Koan's panes show a chevron
+centred at their right, like shadcn's Select: on a filled button in the Zen
+style, on a bordered field in shadcn.
+
+Not hidden yet: the Chromium rows Zen hides in Firefox (the AI page, ad
+privacy, the theme and home-button rows, sign-in), a follow-up.
+
 ![Settings](screenshots/settings-look-and-feel.png)
 
 ## Memory and power
@@ -847,7 +868,7 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   (so media keys still work), are in a call, use a device or show
   notifications; that holds under energy saver too. Sites on Settings > Performance > "Always keep these
   sites active" never freeze either. Turn freezing off in Koan's settings
-  (`chrome://koan-settings`, Tab Management > Performance).
+  (Settings > Tab Management > Performance).
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
 
@@ -1002,7 +1023,7 @@ Koan has no binary releases: you build it from your clone, and updating is
 As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
 Space button passes another while you reorder them, and as the theme picker's
 sliders pass a step. Turn it off with "Haptic feedback on the trackpad" in
-`chrome://koan-settings` (Look and Feel, Theme Settings).
+Settings (Look and Feel, Theme Settings).
 
 ## Translucent window (macOS)
 
@@ -1010,12 +1031,12 @@ Like Zen's, the window is glass: the sidebar, the toolbar and the gutter
 around the page show the desktop through, blurred, and the page is an opaque
 card on top, with Zen's default theme's tint over the blur (dark: black at
 40%, light: none). Turn it off with "Translucent window" in
-`chrome://koan-settings` (Look and Feel, Theme Settings); it is off by itself
+Settings (Look and Feel, Theme Settings); it is off by itself
 while macOS's Reduce Transparency (System Settings, Accessibility, Display)
 is on, and while the window is being captured. An inactive window goes flat and opaque,
 like Zen's. It needs macOS 26 or later, and on an Intel Mac it is off until you turn it on; not on other platforms.
 
-Zen's `zen.theme.acrylic-urlbar` is "Glass URL bar" (`chrome://koan-settings`,
+Zen's `zen.theme.acrylic-urlbar` is "Glass URL bar" (Settings,
 URL Bar): the floating URL bar (⌘T / ⌘L) turns translucent with the page
 blurred behind it. Off by default, as in Zen; it also stays opaque while
 macOS's Reduce Transparency is on and in a window that isn't active (Zen's

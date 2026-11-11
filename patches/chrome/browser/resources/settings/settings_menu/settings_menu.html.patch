@@ -1,0 +1,37 @@
+diff --git a/chrome/browser/resources/settings/settings_menu/settings_menu.html b/chrome/browser/resources/settings/settings_menu/settings_menu.html
+index c35c985ddf3447612e803fc595cdae2b514953a7..0ee626fcd66315bb5ee537965e3a550a5f215c1a 100644
+--- a/chrome/browser/resources/settings/settings_menu/settings_menu.html
++++ b/chrome/browser/resources/settings/settings_menu/settings_menu.html
+@@ -2,6 +2,32 @@
+       <cr-menu-selector id="menu" selectable="a:not(#extensionsLink)"
+           attr-for-selected="href" @iron-activate="${this.onIronActivate_}"
+           @click="${this.onLinkClick_}" selected-attribute="selected">
++        <!-- Koan: its panes (route.ts); icons from koan_settings_page.js. -->
++        <a role="menuitem" id="koanLooks" href="/koan/looks"
++            class="cr-nav-menu-item">
++          <cr-icon icon="koan:looks"></cr-icon>
++          <span class="menu-label">$i18n{koanPaneLooks}</span>
++          <cr-ripple></cr-ripple>
++        </a>
++        <a role="menuitem" id="koanTabs" href="/koan/tabs"
++            class="cr-nav-menu-item">
++          <cr-icon icon="koan:tabs"></cr-icon>
++          <span class="menu-label">$i18n{koanPaneTabs}</span>
++          <cr-ripple></cr-ripple>
++        </a>
++        <a role="menuitem" id="koanShortcuts" href="/koan/shortcuts"
++            class="cr-nav-menu-item">
++          <cr-icon icon="koan:shortcuts"></cr-icon>
++          <span class="menu-label">$i18n{koanPaneShortcuts}</span>
++          <cr-ripple></cr-ripple>
++        </a>
++        <a role="menuitem" id="koanAgents" href="/koan/agents"
++            class="cr-nav-menu-item">
++          <cr-icon icon="koan:agents"></cr-icon>
++          <span class="menu-label">$i18n{koanPaneAgents}</span>
++          <cr-ripple></cr-ripple>
++        </a>
++        <div class="menu-separator"></div>
+         <a role="menuitem"
+             id="people" href="/people"
+             ?hidden="${this.shouldHideMenuItem_(this.pageVisibility_?.people)}"

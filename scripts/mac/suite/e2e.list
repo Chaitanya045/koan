@@ -33,6 +33,9 @@ newtab
 newtab_custom
 omnibox_trailing_space
 scrollbars
+# The one Settings page: Koan's panes in chrome://settings, its search,
+# deep links and the old chrome://koan-settings (#297).
+settings timeout=420
 shortcuts
 sidebar_animation
 sidebar_drag

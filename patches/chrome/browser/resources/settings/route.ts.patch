@@ -1,0 +1,33 @@
+diff --git a/chrome/browser/resources/settings/route.ts b/chrome/browser/resources/settings/route.ts
+index 257eee5f0e7f7b9a14f56041384ddd7b0ee0ba9d..0d487e62e6d1927a7385fa2e2dcab95aa8ea5412 100644
+--- a/chrome/browser/resources/settings/route.ts
++++ b/chrome/browser/resources/settings/route.ts
+@@ -143,6 +143,15 @@ function createRoutes(): SettingsRoutes {
+   // Root page.
+   r.BASIC = new Route('/');
+ 
++  // Koan: its panes, one plugin <koan-settings-page> in the view "koan"
++  // (koan/browser/ui/webui/koan_settings_ui.h).
++  const basic = r.BASIC;
++  for (const pane of ['Looks', 'Tabs', 'Shortcuts', 'Agents']) {
++    (r as Record<string, Route>)[`KOAN_${pane.toUpperCase()}`] =
++        basic.createSection(`/koan/${pane.toLowerCase()}`, 'koan',
++                            loadTimeData.getString(`koanPane${pane}`));
++  }
++
+   r.ABOUT = r.BASIC.createSection(
+       '/help', 'about', loadTimeData.getString('aboutPageTitle'));
+ 
+@@ -340,6 +349,12 @@ export let routes: SettingsRoutes = Router.getInstance().getRoutes();
+ 
+ // Returns the "effective" route when at chrome://settings/.
+ export function getTopLevelRoute(): Route {
++  // Koan: its first pane, as Zen's preferences open on theirs.
++  const koanFirstPane = Router.getInstance().getRouteForPath('/koan/looks');
++  if (koanFirstPane) {
++    return koanFirstPane;
++  }
++
+   if (!loadTimeData.getBoolean('isGuest')) {
+     return routes.PEOPLE;
+   }

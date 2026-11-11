@@ -30,7 +30,7 @@ remains MIT-licensed. Source for every file is in this repository.
 | `src/browser/ui/views/koan_commands.cc` | `ZenUBGlobalActions.sys.mjs`, `zen-command-palette.ftl` |
 | `src/browser/ui/views/koan_command_palette.cc` | `ZenUBActionsProvider.sys.mjs` (fuzzy scoring) |
 | `src/browser/ui/webui/koan_settings_rows.cc` | `zen-preferences.ftl` |
-| `src/browser/ui/webui/resources/koan_settings.js` | `zen-preferences.ftl` (strings), `ZenKeyboardShortcuts.mjs` (macOS key notation) |
+| `src/browser/ui/webui/resources/koan_settings_page.js` | `zen-preferences.ftl` (strings), `ZenKeyboardShortcuts.mjs` (macOS key notation) |
 | `src/browser/ui/cocoa/koan_main_menu_mac.mm` | `ZenMenubar.mjs` (the Spaces menu), `zen-menubar.ftl` and `zen-workspaces.ftl` (strings) |
 | `src/browser/ui/views/koan_pinned_tabs.cc` | `ZenPinnedTabManager.mjs`, `zen-general.ftl` (strings) |
 | `src/browser/ui/views/koan_sidebar_metrics.h` | Zen's sidebar, toolbar and URL bar stylesheets (sizes, shadows), `zen-workspaces.css` (Space sizes) |

@@ -231,12 +231,10 @@ async function settingsShortcut(id) {
   const v = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
   const b = await connect(v.webSocketDebuggerUrl);
   const { targetId } = (await b.send('Target.createTarget',
-      { url: 'chrome://koan-settings/', background: true })).result;
+      { url: 'chrome://settings/koan/shortcuts', background: true })).result;
   const page = await waitFor(async () => (await targets()).find(t => t.id === targetId), Boolean);
-  const value = await waitFor(() => evalIn(page, `(() => {
-    document.querySelector('#category-shortcuts')?.click();
-    return document.querySelector('#shortcut-${id}')?.value;
-  })()`), Boolean);
+  const value = await waitFor(() => evalIn(page,
+      `window.koanSettingsRoot?.querySelector('#shortcut-${id}')?.value`), Boolean);
   await b.send('Target.closeTarget', { targetId });
   b.close();
   return value;

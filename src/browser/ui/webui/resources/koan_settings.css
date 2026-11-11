@@ -2,10 +2,12 @@
  * Use of this source code is governed by the MIT license that can be
  * found in the LICENSE file. */
 
-/* Zen's preferences (Firefox's in-content pages plus zen-preferences.css):
- * sizes and colours measured from Zen 1.23 in light and dark mode. */
+/* Koan's panes in chrome://settings (koan_settings_page.js, in the plugin's
+ * shadow root), laid out like Zen's preferences (Firefox's in-content pages
+ * plus zen-preferences.css): sizes and colours measured from Zen 1.23 in
+ * light and dark mode. */
 
-:root {
+:host {
   /* Named like shadcn/ui's theme variables, so another style can supply
    * them (#48); the values are Zen's. */
   color-scheme: light dark;
@@ -29,171 +31,23 @@
   --r-field: 8px;
   --r-button: 5px;
   --r-card: 10px;
+  /* The drop-downs: Zen's menulist, a filled button. */
+  --select-background: var(--secondary);
+  --select-border: transparent;
+  --select-font-weight: 600;
   accent-color: var(--primary);
 }
 
-body {
-  margin: 0;
-  display: flex;
-  min-height: 100vh;
-  background: var(--background);
+/* A column as wide as Chromium's section cards, so the panes line up with
+ * its sections; the page's background shows through. */
+:host {
+  display: block;
+  box-sizing: border-box;
+  max-width: var(--cr-centered-card-max-width, 680px);
+  margin: 0 auto;
+  padding: 0 20px 64px;
   color: var(--foreground);
   font: 15px system-ui, sans-serif;
-}
-
-/* Sidebar ----------------------------------------------------------------- */
-
-#navigation {
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
-  box-sizing: border-box;
-  width: 272px;
-  flex-shrink: 0;
-  padding: 58px 0 24px 40px;
-}
-
-#brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 18px;
-  padding-inline: 10px;
-  font-size: 22px;
-  font-weight: 700;
-}
-
-#brand svg {
-  width: 17px;
-  height: 17px;
-}
-
-.category {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 36px;
-  margin-block: 2.8px;
-  padding: 0 12px;
-  border: none;
-  border-radius: var(--r-item);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.category:hover {
-  background: var(--muted);
-}
-
-.category[aria-selected="true"] {
-  background: var(--accent);
-  color: var(--primary);
-  font-weight: 600;
-}
-
-.category[aria-selected="true"]::before {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  width: 4px;
-  border-radius: 4px 0 0 4px;
-  background: var(--primary);
-}
-
-#navigation hr {
-  margin: 16px 0;
-  border: none;
-  border-top: 1px solid var(--border);
-}
-
-.icon {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  background-color: currentColor;
-  mask: center / contain no-repeat;
-}
-
-.icon-looks {
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 1h8v6.5H9.3V14a1.3 1.3 0 0 1-2.6 0V7.5H4z'/></svg>");
-}
-
-.icon-tabs {
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.25'><rect x='1.6' y='2.6' width='12.8' height='10.8' rx='1.6'/><path d='M1.6 5.6h12.8'/></svg>");
-}
-
-.icon-shortcuts {
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.25' stroke-linecap='round'><rect x='1.1' y='3.6' width='13.8' height='8.8' rx='1.6'/><path d='M4 6.6h.5M7.2 6.6h.5M10.4 6.6h.5M5 9.6h6'/></svg>");
-}
-
-.icon-agents {
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'><rect x='2.6' y='5.1' width='10.8' height='8.3' rx='2'/><path d='M8 5.1V2.4M6 8.6v1.2M10 8.6v1.2M1 9h1.6M13.4 9H15'/></svg>");
-}
-
-.icon-chromium {
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.25' stroke-linecap='round'><circle cx='8' cy='8' r='2.4'/><path d='M8 1.4v2.2M8 12.4v2.2M1.4 8h2.2M12.4 8h2.2M3.3 3.3l1.6 1.6M11.1 11.1l1.6 1.6M3.3 12.7l1.6-1.6M11.1 4.9l1.6-1.6'/></svg>");
-}
-
-.icon-extensions {
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.25' stroke-linejoin='round'><path d='M2.6 4.6h3a1.9 1.9 0 1 1 3.8 0h3v3a1.9 1.9 0 1 1 0 3.8v3H2.6z'/></svg>");
-}
-
-.icon-search {
-  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3' stroke-linecap='round'><circle cx='9.5' cy='6.5' r='4.7'/><path d='M6 10 1.6 14.4'/></svg>");
-}
-
-/* Content ----------------------------------------------------------------- */
-
-main {
-  flex: 1;
-  min-width: 0;
-  padding: 64px 28px 64px;
-}
-
-#search-box,
-#pane {
-  max-width: 604px;
-  margin-inline: auto;
-}
-
-#search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-#search-box .icon {
-  position: absolute;
-  inset-inline-start: 12px;
-  width: 14px;
-  height: 14px;
-  color: var(--muted-foreground);
-}
-
-#search {
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  padding: 0 12px 0 34px;
-  border: 1px solid var(--input);
-  border-radius: var(--r-field);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-
-#search:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: -1px;
 }
 
 h1 {
@@ -259,7 +113,6 @@ input[type="checkbox"] {
   gap: 12px;
 }
 
-select,
 button.reset-button {
   min-height: 32px;
   padding: 0 16px;
@@ -271,9 +124,61 @@ button.reset-button {
   font-weight: 600;
 }
 
-select:hover,
 button.reset-button:hover {
   background: var(--secondary-hover);
+}
+
+/* Drop-downs: the native arrow sat wherever the platform put it inside the
+ * padding. Like shadcn's SelectTrigger, the wrapper draws a 16px chevron,
+ * centred vertically at a fixed end inset, over a field with room for it. */
+.select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.select::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  background-color: currentColor;
+  opacity: 0.6;
+  mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>") center / contain no-repeat;
+  pointer-events: none;
+}
+
+select {
+  appearance: none;
+  box-sizing: border-box;
+  min-height: 32px;
+  margin: 0;
+  padding-block: 0;
+  padding-inline: 12px 36px;
+  border: 1px solid var(--select-border);
+  border-radius: var(--r-button);
+  background: var(--select-background);
+  color: inherit;
+  font: inherit;
+  font-weight: var(--select-font-weight);
+  line-height: normal;
+  cursor: pointer;
+}
+
+select:hover {
+  background: var(--secondary-hover);
+}
+
+select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+select:disabled {
+  cursor: default;
 }
 
 button.reset-button {

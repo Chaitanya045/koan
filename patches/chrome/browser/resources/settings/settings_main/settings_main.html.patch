@@ -1,0 +1,16 @@
+diff --git a/chrome/browser/resources/settings/settings_main/settings_main.html b/chrome/browser/resources/settings/settings_main/settings_main.html
+index 32851304a5dc087bb2f2c34c62e75d3f7bbd656a..b2766de4aab8218ad611bab146f5ed3e4c64e9f1 100644
+--- a/chrome/browser/resources/settings/settings_main/settings_main.html
++++ b/chrome/browser/resources/settings/settings_main/settings_main.html
+@@ -15,6 +15,11 @@ ${this.showResetProfileBanner_ ? html`
+ ` : ''}
+ 
+ <cr-view-manager id="switcher" ?show-all="${this.shouldShowAll_()}">
++  <!-- Koan: its panes, first in search results too. -->
++  <div slot="view" id="koan">
++    <koan-settings-page></koan-settings-page>
++  </div>
++
+   ${cache(this.showPage_(this.pageVisibility_?.people) ? html`
+     <div slot="view" id="people">
+       ${cache(this.renderPlugin_(this.routes_.PEOPLE) ? html`

@@ -2,8 +2,10 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
-# chrome://koan-settings, chrome://koan-newtab and chrome://koan-welcome. Linked
-# through //chrome/browser/ui/webui:configs, which registers them.
+# Koan's panes in chrome://settings (added by the hook in SettingsUI),
+# chrome://koan-newtab and chrome://koan-welcome. Linked through
+# //chrome/browser/ui/webui:configs, which registers the last two, and
+# //chrome/browser/ui/webui/settings:impl.
 source_set("webui") {
   sources = [
     "koan_new_tab_ui.cc",
@@ -81,23 +83,45 @@ source_set("webui") {
   }
 }
 
-# The page's files as C++ strings (koan_settings_resources.h).
+# chrome://koan-settings, the old page, as an alias of the panes (pure, unit
+# tested in //koan/test:koan_unittests).
+source_set("settings_url") {
+  sources = [
+    "koan_settings_url.cc",
+    "koan_settings_url.h",
+  ]
+  deps = [
+    "//base",
+    "//koan/common:url_constants",
+    "//url",
+  ]
+}
+
+# Its BrowserURLHandler pair, for //chrome/browser
+# (chrome_content_browser_client.cc).
+source_set("settings_url_handler") {
+  sources = [ "koan_settings_url_handler.cc" ]
+  public_deps = [ ":settings_url" ]
+  deps = [
+    "//content/public/browser",
+    "//url",
+  ]
+}
+
+# The panes' files as C++ strings (koan_settings_resources.h).
 action("resources") {
   script = "embed_resources.py"
   sources = [
     "resources/koan_settings.css",
-    "resources/koan_settings.html",
-    "resources/koan_settings.js",
+    "resources/koan_settings_page.js",
   ]
   outputs = [ "$target_gen_dir/koan_settings_resources.h" ]
   args = [
     rebase_path(outputs[0], root_build_dir),
-    "kKoanSettingsHtml=" +
-        rebase_path("resources/koan_settings.html", root_build_dir),
     "kKoanSettingsCss=" +
         rebase_path("resources/koan_settings.css", root_build_dir),
     "kKoanSettingsJs=" +
-        rebase_path("resources/koan_settings.js", root_build_dir),
+        rebase_path("resources/koan_settings_page.js", root_build_dir),
   ]
 }
 

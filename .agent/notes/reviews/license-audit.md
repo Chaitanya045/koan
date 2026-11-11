@@ -92,7 +92,7 @@ Criterion used:
 
 ### MEDIUM confidence
 
-#### 2.5 `src/browser/ui/webui/resources/koan_settings.js`
+#### 2.5 `src/browser/ui/webui/resources/koan_settings_page.js`
 
 - **Header:** MIT.
 - **Ported from:** `localization/zen-preferences.ftl`.

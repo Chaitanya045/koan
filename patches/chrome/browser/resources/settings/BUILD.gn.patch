@@ -1,0 +1,29 @@
+diff --git a/chrome/browser/resources/settings/BUILD.gn b/chrome/browser/resources/settings/BUILD.gn
+index 480df5a9f26699402414793653bc3b211f72ebc2..7f7756871fbb8e701d65db2b1256a4c4422e77ad 100644
+--- a/chrome/browser/resources/settings/BUILD.gn
++++ b/chrome/browser/resources/settings/BUILD.gn
+@@ -745,6 +745,9 @@ build_webui("build") {
+     "//tools/typescript/definitions/metrics_private.d.ts",
+     "//tools/typescript/definitions/pending.d.ts",
+     "//tools/typescript/definitions/settings_private.d.ts",
++
++    # Koan: its panes' module (settings_main.ts), served by the browser.
++    "//koan/browser/ui/webui/resources/koan_settings_page.d.ts",
+   ]
+   if (is_chromeos) {
+     ts_definitions +=
+@@ -796,8 +799,12 @@ build_webui("build") {
+       "settings.js",
+       "lazy_load.js",
+     ]
+-    optimize_webui_excludes =
+-        [ "chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js" ]
++    optimize_webui_excludes = [
++      "chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js",
++
++      # Koan: its panes' module, served by the browser (koan_settings_ui.h).
++      "chrome://settings/koan_settings_page.js",
++    ]
+     optimize_webui_external_paths =
+         [ "/shared/settings|" + rebase_path(
+               "$root_gen_dir/chrome/browser/resources/settings_shared/tsc",

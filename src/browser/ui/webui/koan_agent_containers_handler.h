@@ -17,13 +17,13 @@ namespace koan {
 
 // Settings > Agent Control > Saved containers (koan_agent_containers.h,
 // koan_container_grants.h). Messages from the page:
-//   getAgentContainers()                   -> AgentContainers()
-//   createAgentContainer(name)             -> bool
-//   deleteAgentContainer(name)
-//   setAgentContainerGrant(client, container, granted)
-// and the event "agent-containers-changed" (AgentContainers()) when a client
-// connects or disconnects. The clients listed are the connected ones and the
-// ones holding a grant; grants are in memory, like the pairings.
+//   koanGetAgentContainers()           -> AgentContainers()
+//   koanCreateAgentContainer(name)     -> bool
+//   koanDeleteAgentContainer(name)
+//   koanSetAgentContainerGrant(client, container, granted)
+// and the event "koan-agent-containers-changed" (AgentContainers()) when a
+// client connects or disconnects. The clients listed are the connected ones
+// and the ones holding a grant; grants are in memory, like the pairings.
 class KoanAgentContainersHandler : public content::WebUIMessageHandler,
                                    public agent::AgentControlService::Observer {
  public:

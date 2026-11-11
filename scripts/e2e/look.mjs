@@ -15,18 +15,19 @@ import {
 } from './lib/koan.mjs';
 
 const settingsPages = async () =>
-  (await pages()).filter(p => p.url.startsWith('chrome://koan-settings'));
+  (await pages()).filter(p => p.url.startsWith('chrome://settings'));
 
 let [other] = await pages();
 await front(other);
 await key(other, 188, ACCEL, ',');
 let [settings] = await waitFor(settingsPages);
-await waitFor(() => evalIn(settings, `document.querySelectorAll('.category').length > 0`));
+await waitFor(() => evalIn(settings, `koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`));
 
 const pref = name => evalIn(settings, `import('chrome://resources/js/cr.js').then(
-    m => m.sendWithPromise('getSettings')).then(s => s.prefs[${JSON.stringify(name)}])`);
-const set = (name, value) => settingsCall(settings, 'setPref', name, value);
-const bg = () => evalIn(settings, `getComputedStyle(document.body).backgroundColor`);
+    m => m.sendWithPromise('koanGetSettings')).then(s => s.prefs[${JSON.stringify(name)}])`);
+const set = (name, value) => settingsCall(settings, 'koanSetPref', name, value);
+// The page's background: the look paints it on the root (koan_tokens.css).
+const bg = () => evalIn(settings, `getComputedStyle(document.documentElement).backgroundColor`);
 const near = ([r, g, b], [er, eg, eb], tolerance = 3) =>
     Math.abs(r - er) <= tolerance && Math.abs(g - eg) <= tolerance &&
     Math.abs(b - eb) <= tolerance;
@@ -58,7 +59,7 @@ check('...and its borders #27272a',
 check('The page has the Look settings',
       await evalIn(settings, `['koan.look.style', 'koan.look.mode', 'koan.look.base',
           'koan.look.accent', 'koan.look.custom_css'].every(
-              p => document.querySelector('[data-pref="' + p + '"]'))`));
+              p => koanSettingsRoot.querySelector('[data-pref="' + p + '"]'))`));
 
 // Light mode, live.
 check('Setting the mode to light works', await set('koan.look.mode', 'light'));

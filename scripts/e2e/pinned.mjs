@@ -449,11 +449,11 @@ check('Close Tabs Below on a pinned tab leaves the pinned tabs below it',
 
 // --- Each of Zen's close behaviours (Settings > Pinned Tabs). ---
 const settingsId = (await browserCall('Target.createTarget',
-    { url: 'chrome://koan-settings', newWindow: true })).result.targetId;
+    { url: 'chrome://settings/koan/looks', newWindow: true })).result.targetId;
 const settings = await waitFor(async () => (await pages()).find(p => p.id === settingsId));
-await waitFor(() => evalIn(settings, `document.querySelectorAll('.category').length > 0`));
+await waitFor(() => evalIn(settings, `koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`));
 const setBehavior = async value => {
-  await settingsCall(settings, 'setPref', 'koan.pinned_tabs.close_shortcut_behavior', value);
+  await settingsCall(settings, 'koanSetPref', 'koan.pinned_tabs.close_shortcut_behavior', value);
   await sleep(300);
 };
 const OPENED_AWAY = `${OPENED_URL}&away`;

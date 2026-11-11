@@ -221,10 +221,10 @@ export async function navigateShowing(url) {
 
 export async function setKoanPref(pref, value) {
   const tab = (await browserCall('Target.createTarget',
-      { url: 'chrome://koan-settings', background: true })).result.targetId;
+      { url: 'chrome://settings/koan/looks', background: true })).result.targetId;
   await sleep(1500);
   const settings = (await pages()).find(page => page.id === tab);
-  const ok = await settingsCall(settings, 'setPref', pref, value) !== false;
+  const ok = await settingsCall(settings, 'koanSetPref', pref, value) !== false;
   await browserCall('Target.closeTarget', { targetId: tab });
   await sleep(800);
   return ok;
