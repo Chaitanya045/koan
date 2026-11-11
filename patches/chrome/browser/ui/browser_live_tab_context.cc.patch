@@ -1,17 +1,17 @@
 diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/browser_live_tab_context.cc
-index cc8786f..19bbef3 100644
 --- a/chrome/browser/ui/browser_live_tab_context.cc
 +++ b/chrome/browser/ui/browser_live_tab_context.cc
-@@ -61,6 +61,8 @@
+@@ -61,6 +61,9 @@
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/session_storage_namespace_handle.h"
  #include "content/public/browser/web_contents.h"
 +#include "koan/browser/koan_tab_hooks.h"
 +#include "koan/browser/ui/views/koan_session_data.h"
++#include "koan/browser/ui/views/koan_window_sync_hooks.h"
  #include "ui/base/mojom/window_show_state.mojom.h"
  #include "ui/base/window_open_disposition.h"
  
-@@ -207,6 +209,9 @@ std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
+@@ -207,6 +210,9 @@ std::map<std::string, std::string> Brows
                &browser_.get())) {
      extra_data.merge(contextual_tasks_controller->GetTabRestoreData(tab));
    }
@@ -21,7 +21,7 @@ index cc8786f..19bbef3 100644
  
    return extra_data;
  }
-@@ -232,6 +237,8 @@ BrowserLiveTabContext::GetExtraDataForWindow() const {
+@@ -232,6 +238,8 @@ BrowserLiveTabContext::GetExtraDataForWi
            focused_group->ToString();
      }
    }
@@ -30,7 +30,7 @@ index cc8786f..19bbef3 100644
  
    return data;
  }
-@@ -407,9 +414,12 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
+@@ -407,9 +415,12 @@ sessions::LiveTab* BrowserLiveTabContext
        // the visual metadata and save it manually.
        BrowserLiveTabContext::From(browser)->SetVisualDataForGroup(
            group_id.value(), tab.group_visual_data.value());
@@ -46,8 +46,12 @@ index cc8786f..19bbef3 100644
      }
    } else {
      std::optional<tab_groups::SavedTabGroup> saved_group =
-@@ -581,6 +591,9 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
+@@ -579,8 +590,13 @@ sessions::LiveTabContext* BrowserLiveTab
+     }
+   }
  
++  // Koan: a New Blank Window comes back blank (koan_window_sync_hooks.h).
++  auto koan_blank_window = koan::WillRestoreWindow(profile, extra_data);
    BrowserWindowInterface* browser =
        CreateBrowserWindow(std::move(*create_params));
 +  // Koan: its features' per-window data (koan_session_data.h).

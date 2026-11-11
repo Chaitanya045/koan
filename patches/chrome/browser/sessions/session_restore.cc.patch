@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/sessions/session_restore.cc
 --- a/chrome/browser/sessions/session_restore.cc
 +++ b/chrome/browser/sessions/session_restore.cc
-@@ -115,6 +115,8 @@
+@@ -115,6 +115,9 @@
  #include "content/public/browser/web_contents.h"
  #include "extensions/browser/extension_registry.h"
  #include "extensions/common/extension_set.h"
 +#include "koan/browser/koan_tab_hooks.h"
 +#include "koan/browser/ui/views/koan_session_data.h"
++#include "koan/browser/ui/views/koan_window_sync_hooks.h"
  #include "ui/base/mojom/window_show_state.mojom.h"
  #include "ui/base/page_transition_types.h"
  #include "ui/base/window_open_disposition.h"
-@@ -879,6 +881,9 @@
+@@ -879,6 +882,9 @@
            ShouldRestoreToExistingBrowser()) {
          // The first set of tabs is added to the existing browser.
          browser = browser_;
@@ -20,7 +21,7 @@ diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/session
        } else {
  #if BUILDFLAG(IS_CHROMEOS)
          ash::BootTimesRecorder::Get()->AddLoginTimeMarker(
-@@ -1311,6 +1316,11 @@
+@@ -1311,6 +1317,11 @@
    void ProcessSavedGroup(Profile* profile,
                           const tab_groups::LocalTabGroupID& local_id,
                           std::optional<std::string> sync_id) {
@@ -32,8 +33,12 @@ diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/session
      tab_groups::TabGroupSyncService* service =
          tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
      if (!service) {
-@@ -1399,6 +1409,9 @@
+@@ -1397,8 +1408,13 @@
+     }
+ 
      base::TimeTicks now = base::TimeTicks::Now();
++    // Koan: a New Blank Window comes back blank (koan_window_sync_hooks.h).
++    auto koan_blank_window = koan::WillRestoreWindow(profile_, extra_data);
      BrowserWindowInterface* browser_window =
          CreateBrowserWindow(std::move(params));
 +    // Koan: its features' per-window data (koan_session_data.h).

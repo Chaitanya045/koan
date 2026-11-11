@@ -17,6 +17,7 @@
 #include "koan/browser/window_sync/koan_window_sync_model.h"
 
 class BrowserView;
+class BrowserWindowInterface;
 class Profile;
 
 namespace content {
@@ -196,8 +197,19 @@ void AdjustPlaceholderTabData(const tabs::TabInterface* tab,
 // Zen's New Blank Window (cmd_zenNewNavigatorUnsynced, Accel+Shift+N): a
 // normal window of `profile`'s regular profile without Spaces and outside
 // the sync, like Zen's zen-unsynced-window (gZenWorkspaces.
-// privateWindowOrDisabled). Its tabs are a plain list.
+// privateWindowOrDisabled). Its tabs are a plain list. With Zen's
+// prefer-unsynced-windows (prefs::kWindowSyncPreferBlankWindows) it opens a
+// synced window instead.
 void OpenBlankWindow(Profile* profile);
+// Chrome's New Window (IDC_NEW_WINDOW, from Koan's command policy): with
+// prefer-unsynced-windows, opens a New Blank Window and returns true; false
+// lets upstream open a synced one.
+bool HandleNewWindowCommand(BrowserWindowInterface* browser);
+
+// A blank window's mark in its session data (koan_session_data.h), so it
+// comes back blank after a restart or when reopened (Zen's isZenUnsynced;
+// koan::WillRestoreWindow()).
+inline constexpr char kBlankWindowSessionKey[] = "koan.window_sync.blank";
 // Whether `browser_view`'s window is one.
 bool IsBlankWindow(const BrowserView* browser_view);
 // KoanBrowserViewController::CreateFor(), before the window's controllers
