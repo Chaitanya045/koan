@@ -67,9 +67,8 @@ class KoanTabSearchTest : public testing::Test {
   std::vector<std::string> Urls() {
     std::vector<std::string> urls;
     std::vector<AutocompleteMatch> matches = provider_->matches();
-    std::ranges::stable_sort(matches, {}, [](const AutocompleteMatch& m) {
-      return -m.relevance;
-    });
+    std::ranges::stable_sort(
+        matches, {}, [](const AutocompleteMatch& m) { return -m.relevance; });
     for (const AutocompleteMatch& match : matches) {
       urls.push_back(match.destination_url.spec());
     }
@@ -89,7 +88,8 @@ TEST_F(KoanTabSearchTest, EmptyQueryListsTheOpenTabsMostRecentFirst) {
   AddTab("chrome://newtab/", 2);
   AddTab("https://middle.example/", 20);
 
-  EXPECT_TRUE(IsEmptyTabSearch(Input(u"@tabs "), client_.GetTemplateURLService()));
+  EXPECT_TRUE(
+      IsEmptyTabSearch(Input(u"@tabs "), client_.GetTemplateURLService()));
   provider_->Start(Input(u"@tabs "), /*minimal_changes=*/false);
   // Not the page searched from, nor a new tab page; no "No results found".
   EXPECT_EQ(Urls(), (std::vector<std::string>{"https://recent.example/",
@@ -114,8 +114,8 @@ TEST_F(KoanTabSearchTest, TypedQueryStillFilters) {
 TEST_F(KoanTabSearchTest, OnlyTheTabsKeywordInKeywordMode) {
   const TemplateURLService* service = client_.GetTemplateURLService();
   EXPECT_FALSE(IsEmptyTabSearch(Input(u"@history "), service));
-  EXPECT_FALSE(IsEmptyTabSearch(Input(u"@tabs ", /*keyword_mode=*/false),
-                                service));
+  EXPECT_FALSE(
+      IsEmptyTabSearch(Input(u"@tabs ", /*keyword_mode=*/false), service));
   EXPECT_FALSE(IsEmptyTabSearch(Input(u"@tabs "), nullptr));
 }
 
@@ -124,7 +124,8 @@ TEST_F(KoanTabSearchTest, RelevanceFallsWithAgeAndStaysPositive) {
   const GURL url("https://a.example/");
   const base::Time now = base::Time::Now();
   const int fresh = EmptyTabSearchRelevance(input, url, now);
-  const int minute = EmptyTabSearchRelevance(input, url, now - base::Minutes(1));
+  const int minute =
+      EmptyTabSearchRelevance(input, url, now - base::Minutes(1));
   const int day = EmptyTabSearchRelevance(input, url, now - base::Days(1));
   EXPECT_GT(fresh, minute);
   EXPECT_GT(minute, day);
