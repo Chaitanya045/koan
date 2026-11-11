@@ -19,7 +19,7 @@
 // profile was started with. With SHOTS=<dir> (see run.sh) it saves
 // screenshots of each state there.
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
-import { browserCall, setKoanPref, visiblePage, waitFor, ACCEL, sendKey } from './lib/koan.mjs';
+import { browserCall, setKoanPref, visiblePage, waitFor, ACCEL, IS_MAC, sendKey } from './lib/koan.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -254,10 +254,13 @@ function check(name, ok, detail = '') {
 }
 
 const CTRL = 2, ALT = 1;
-// ui::EventFlags, for windowKey().
-const EF_ALT = 8;
+// ui::EventFlags, for windowKey(); EF_ACCEL is the platform's shortcut
+// modifier (Cmd on macOS: EF_COMMAND_DOWN), as ACCEL for page keys.
+const EF_ALT = 8, EF_ACCEL = IS_MAC ? 16 : 4;
 const VK = { T: 84, ESC: 27, ENTER: 13, S: 83 };
-const WINDOW_WIDTH = 1280;
+// The browser view's width: 1280 in run.sh's window, less on a Mac screen
+// that can't fit it (the suite's 1280-wide window comes up 1249 wide there).
+const WINDOW_WIDTH = find(await views(), 'BrowserView')?.w || 1280;
 // Zen's look (the default; ZenUIManager.mjs updateTabsToolbar):
 // min(window width / 1.5, 750), centred. (shadcn's: 55% of the window.)
 const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
@@ -266,7 +269,7 @@ const INPUT_ROW = 62;
 
 const bar = vs => find(vs, 'TopContainerView');
 const isFloating = vs => bar(vs)?.w === FLOAT_WIDTH &&
-    bar(vs).x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2 && shown(vs, 'KoanUrlBarBackdrop');
+    bar(vs).x === Math.floor((WINDOW_WIDTH - FLOAT_WIDTH) / 2) && shown(vs, 'KoanUrlBarBackdrop');
 const omniboxText = vs => find(vs, 'OmniboxViewViews')?.p.Text ?? '';
 
 // Zen: one Esc closes the bar.
@@ -413,13 +416,13 @@ if (BEHAVIOR !== 'normal') {
       `; backdrop ${backdrop?.ax},${backdrop?.ay} ${backdrop?.w}x${backdrop?.h}`);
 }
 // Holding Ctrl+T: like Chrome's New Tab, a repeated key does nothing.
-const EF_CONTROL = 4, EF_IS_REPEAT = 1 << 17;
-await windowKey(VK.T, EF_CONTROL | EF_IS_REPEAT);
+const EF_IS_REPEAT = 1 << 17;
+await windowKey(VK.T, EF_ACCEL | EF_IS_REPEAT);
 vs = await views();
 check('A repeated Ctrl+T (key held) leaves it open', bar(vs)?.w < WINDOW_WIDTH,
       `width ${bar(vs)?.w}`);
 // Only a plain Esc closes it.
-await windowKey(VK.ESC, EF_CONTROL);
+await windowKey(VK.ESC, EF_ACCEL);
 vs = await views();
 check('...and so does Ctrl+Esc', bar(vs)?.w < WINDOW_WIDTH, `width ${bar(vs)?.w}`);
 await key(VK.T, ACCEL, 't');
@@ -487,7 +490,7 @@ await key(VK.T, ACCEL, 't');
 vs = await views();
 const omnibox = find(vs, 'OmniboxViewViews');
 // Ctrl+A: replace any unfinished search.
-await windowKey(65, 4);
+await windowKey(65, EF_ACCEL);
 await type(omnibox, 'example.com/?typed');
 await viewKey(omnibox, VK.ENTER);
 await sleep(1000);
@@ -623,7 +626,7 @@ vs = await views();
 check('Ctrl+T opens the toolbar\'s URL bar for a new tab, with the unfinished search',
       omniboxText(vs) === 'foo', JSON.stringify(omniboxText(vs)));
 // Ctrl+A: replace it.
-await windowKey(65, 4);
+await windowKey(65, EF_ACCEL);
 await type(find(vs, 'OmniboxViewViews'), 'example.com/?alt');
 await windowKey(VK.ENTER, EF_ALT);
 now = await waitFor(async () => {

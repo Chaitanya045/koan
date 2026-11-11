@@ -11,8 +11,9 @@ import { openSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   ALT, CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, finish, key as keyTo,
-  pages, sleep, visiblePage, waitFor, ACCEL, IS_MAC, META,
+  pages, sleep, visiblePage, waitFor, ACCEL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY,
 } from './lib/koan.mjs';
+import { skipped } from './lib/mac.mjs';
 // Library History: Ctrl+H, on macOS Cmd+Y (koan_shortcut_table.cc).
 const HISTORY_KEY = IS_MAC ? [89, META, 'y'] : [72, CTRL, 'h'];
 
@@ -218,47 +219,52 @@ check('History lists the visits written into the database',
 }
 await key(KEY_L, ALT | SHIFT, 'L');  // Closes it.
 
-// --- Clear history → Last hour, after a confirmation naming the range. ---
-await key(KEY_L, ALT | SHIFT, 'L');
-await waitFor(async () => (await library()).open);
-{
-  const tab = shown(await views(), 'KoanLibraryTab', v => v.p.Label === 'History')[0];
-  await click(tab, 'right');
-  await sleep(800);
-  // Clear history ▸ Last hour.
-  const error = await pickMenu(0, 0);
-  check('The History tab\'s menu offers Clear history ▸ Last hour', !error, error ?? '');
-  const dialog = await waitFor(async () => {
-    const vs = await views();
-    return shown(vs, 'Label', v => v.p.Text === 'Clear history from the last hour?').length
-        ? vs : null;
-  });
-  check('...and asks first, naming the range', Boolean(dialog));
-  // Views ignores a dialog's buttons for a moment after it shows (input
-  // protection against clicks meant for what was there before), so wait,
-  // and click again while the dialog is still up.
-  step = 'accepting the Clear history dialog';
-  await sleep(1000);
-  for (let i = 0; i < 3; i++) {
-    const vs = await views();
-    const accept = shown(vs, 'MdTextButton', v => v.p.Text === 'Clear history')[0];
-    if (!accept) break;
-    await click(accept);
-    await sleep(1500);
+// --- Clear history → Last hour, after a confirmation naming the range
+// (the History tab's menu: not on macOS, see NATIVE_MENUS). ---
+if (NATIVE_MENUS) {
+  skipped('Clear history ▸ Last hour (the History tab\'s menu)', NATIVE_MENU_WHY);
+} else {
+  await key(KEY_L, ALT | SHIFT, 'L');
+  await waitFor(async () => (await library()).open);
+  {
+    const tab = shown(await views(), 'KoanLibraryTab', v => v.p.Label === 'History')[0];
+    await click(tab, 'right');
+    await sleep(800);
+    // Clear history ▸ Last hour.
+    const error = await pickMenu(0, 0);
+    check('The History tab\'s menu offers Clear history ▸ Last hour', !error, error ?? '');
+    const dialog = await waitFor(async () => {
+      const vs = await views();
+      return shown(vs, 'Label', v => v.p.Text === 'Clear history from the last hour?').length
+          ? vs : null;
+    });
+    check('...and asks first, naming the range', Boolean(dialog));
+    // Views ignores a dialog's buttons for a moment after it shows (input
+    // protection against clicks meant for what was there before), so wait,
+    // and click again while the dialog is still up.
+    step = 'accepting the Clear history dialog';
+    await sleep(1000);
+    for (let i = 0; i < 3; i++) {
+      const vs = await views();
+      const accept = shown(vs, 'MdTextButton', v => v.p.Text === 'Clear history')[0];
+      if (!accept) break;
+      await click(accept);
+      await sleep(1500);
+    }
   }
+  // Closed and opened again, it asks the history service again.
+  await key(KEY_L, ALT | SHIFT, 'L');
+  await key(KEY_L, ALT | SHIFT, 'L');
+  state = await waitFor(async () => {
+    const s = await library();
+    return s.open && !s.titles.includes('Seeded recent') ? s : null;
+  }, 8000) ?? await library();
+  check('Clearing the last hour deletes the visit from 10 minutes ago',
+        state.open && !state.titles.includes('Seeded recent'), state.titles.join(', '));
+  check('...and keeps the one from 3 hours ago', state.titles.includes('Seeded hours'),
+        state.titles.join(', '));
+  await key(KEY_L, ALT | SHIFT, 'L');
 }
-// Closed and opened again, it asks the history service again.
-await key(KEY_L, ALT | SHIFT, 'L');
-await key(KEY_L, ALT | SHIFT, 'L');
-state = await waitFor(async () => {
-  const s = await library();
-  return s.open && !s.titles.includes('Seeded recent') ? s : null;
-}, 8000) ?? await library();
-check('Clearing the last hour deletes the visit from 10 minutes ago',
-      state.open && !state.titles.includes('Seeded recent'), state.titles.join(', '));
-check('...and keeps the one from 3 hours ago', state.titles.includes('Seeded hours'),
-      state.titles.join(', '));
-await key(KEY_L, ALT | SHIFT, 'L');
 
 // --- A private window (Ctrl+Shift+P) has no Library; Ctrl+H does what
 // Chrome does there: its notice that history isn't saved (chrome_pages.cc
@@ -311,11 +317,15 @@ await waitFor(async () => (await library()).titles.includes('Seeded hours'));
   check('Without the right to delete history, a row has no Remove button',
         actions.includes('Reopen page') && !actions.includes('Remove from history'),
         actions.join(', '));
-  await click(row, 'right');
-  await sleep(800);
-  const items = shown(await views(), 'MenuItemView').length;
-  check('...and its menu only Reopen Page', items === 1, `${items} item(s)`);
-  await key(ESC, 0, 'Escape');
+  if (NATIVE_MENUS) {
+    skipped('...and its menu only Reopen Page', NATIVE_MENU_WHY);
+  } else {
+    await click(row, 'right');
+    await sleep(800);
+    const items = shown(await views(), 'MenuItemView').length;
+    check('...and its menu only Reopen Page', items === 1, `${items} item(s)`);
+    await key(ESC, 0, 'Escape');
+  }
 }
 
 finish();

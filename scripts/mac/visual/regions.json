@@ -9,7 +9,7 @@
     "space-bar": { "view": "KoanSpaceBarView" },
     "sidebar": { "view": "VerticalTabStripRegionView" },
     "content-corner": { "rect": [-120, -90, 120, 90] },
-    "url-card": { "view": "TopContainerView", "same": [[24, 2, -24, 4], [24, -6, -24, 4]] }
+    "url-card": { "view": "KoanUrlBarCardDecoration", "same": [[24, 2, -24, 4], [24, -6, -24, 4]] }
   },
   "states": {
     "default": ["traffic-lights", "sidebar-top", "url-pill", "space-header", "new-tab-row", "space-bar", "sidebar", "content-corner"],

@@ -40,6 +40,7 @@ async function closeWindow(w) {
   await sleep(1000);
 }
 const first = (await stripWidths())[0];
+const [firstPage] = await pages();
 
 // A plain close.
 let w = await openWindow();
@@ -66,20 +67,28 @@ await sleep(700);
 await closeWindow(w);
 check('A close with the sidebar pinned out doesn\'t crash', await alive());
 
-// Right after the compact toggle, while it animates.
+// Right after the compact toggle, while it animates. Compact mode is the
+// profile's (every window's), so the first window turns it back on.
 w = await openWindow();
 await key(w.page, VK.S, ACCEL, 's');
 await sleep(50);
 await closeWindow(w);
 check('A close during the compact toggle doesn\'t crash', await alive());
+await key(firstPage, VK.S, ACCEL, 's');
+await sleep(1000);
 
 // With the new-Space form open.
 w = await openWindow();
 await key(w.page, VK.N, CTRL | ALT, 'n');
-const form = await waitFor(async () => windows(await views()).at(-1)
+// The windows' order in UI DevTools isn't the windows' order on every
+// platform (on macOS the new one can come first): the form is the new
+// window's if it goes with it.
+const form = await waitFor(async () => (await views())
     .find(v => v.cls === 'KoanSpaceCreationView' && v.shown));
-check('The new-Space form opens in the new window', !!form);
 await closeWindow(w);
+const formLeft = (await views()).some(v => v.cls === 'KoanSpaceCreationView' && v.shown);
+check('The new-Space form opens in the new window', !!form && !formLeft,
+      form ? (formLeft ? 'it stayed: it was in the first window' : '') : 'no form');
 check('A close with the new-Space form open doesn\'t crash', await alive());
 
 check('The first window\'s sidebar is as it was',
