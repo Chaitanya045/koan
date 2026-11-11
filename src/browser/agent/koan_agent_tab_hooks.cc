@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <utility>
 
 #include "base/check.h"
@@ -13,7 +14,9 @@
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
+#include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
@@ -76,6 +79,50 @@ class HeldDeviceChooser : public base::RefCounted<HeldDeviceChooser> {
   base::OnceClosure close_;
   uint64_t id_ = 0;
 };
+
+// The frames making a WebAuthn request the user opened, and how many.
+std::map<content::GlobalRenderFrameHostId, int>& OpenedWebAuthn() {
+  static base::NoDestructor<std::map<content::GlobalRenderFrameHostId, int>>
+      opened;
+  return *opened;
+}
+
+void EndOpenedWebAuthn(content::GlobalRenderFrameHostId frame) {
+  auto it = OpenedWebAuthn().find(frame);
+  if (it != OpenedWebAuthn().end() && --it->second == 0) {
+    OpenedWebAuthn().erase(it);
+  }
+}
+
+// The user opened (`open`) or dismissed a held WebAuthn request.
+void RunHeldWebAuthn(content::WeakDocumentPtr document,
+                     WebAuthnRun run,
+                     bool open) {
+  content::RenderFrameHost* frame = document.AsRenderFrameHostIfValid();
+  if (!open || !frame) {
+    std::move(run).Run(false, base::OnceClosure());
+    return;
+  }
+  const content::GlobalRenderFrameHostId id = frame->GetGlobalId();
+  ++OpenedWebAuthn()[id];
+  // Ends when the request made again ends, or goes unanswered (its page went).
+  std::move(run).Run(
+      true, base::BindOnce([](base::ScopedClosureRunner) {},
+                           base::ScopedClosureRunner(
+                               base::BindOnce(&EndOpenedWebAuthn, id))));
+}
+
+void HoldWebAuthn(content::WeakDocumentPtr document, WebAuthnRun run) {
+  content::RenderFrameHost* frame = document.AsRenderFrameHostIfValid();
+  if (!frame || !g_surfaces) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(run), false, base::OnceClosure()));
+    return;
+  }
+  g_surfaces->HoldPicker(
+      frame, HeldPicker::kPasskey,
+      base::BindOnce(&RunHeldWebAuthn, document, std::move(run)));
+}
 
 }  // namespace
 
@@ -280,6 +327,24 @@ void HoldScreenShareForAgent(content::RenderFrameHost* frame,
           },
           frame->GetWeakDocumentPtr(), request, std::move(callback),
           std::move(show)));
+}
+
+base::OnceCallback<void(WebAuthnRun run)> HoldWebAuthnForAgent(
+    content::RenderFrameHost* frame) {
+  if (!ShouldHoldPickerForAgent(frame)) {
+    return {};
+  }
+  return base::BindOnce(&HoldWebAuthn, frame->GetWeakDocumentPtr());
+}
+
+void CancelHeldWebAuthnForAgent(content::RenderFrameHost* frame) {
+  if (g_surfaces) {
+    g_surfaces->DismissPickers(frame, HeldPicker::kPasskey);
+  }
+}
+
+bool IsOpenedWebAuthnRequestForAgent(content::RenderFrameHost* frame) {
+  return OpenedWebAuthn().contains(frame->GetGlobalId());
 }
 
 }  // namespace koan::agent

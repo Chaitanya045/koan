@@ -39,7 +39,9 @@ class WebContents;
 //  - window.focus(): the tab comes forward on open;
 //  - <input type=file>, the device choosers (WebUSB, WebHID, Web Serial, Web
 //    Bluetooth) and getDisplayMedia()'s picker: Chrome's own path once the tab
-//    is in front and visible (the file chooser checks both).
+//    is in front and visible (the file chooser checks both);
+//  - a modal passkey or security key request: made again from the start once
+//    the tab is in front and visible (create() needs focus).
 // When the agent lets go of the tab, what it held is shown as Chrome would
 // have (without bringing the tab forward), except the pickers, which are
 // cancelled; when the tab closes it goes, and a picker goes with its page.
@@ -98,6 +100,8 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
                       HeldPicker picker,
                       base::OnceCallback<void(bool show)> show) override;
   void ForgetPicker(uint64_t id) override;
+  void DismissPickers(content::RenderFrameHost* frame,
+                      HeldPicker picker) override;
 
  private:
   friend class base::NoDestructor<AgentPageSurfaces>;

@@ -120,6 +120,8 @@ enum class HeldPicker {
   kDeviceChooser,
   // getDisplayMedia().
   kScreenShare,
+  // A modal WebAuthn create() or get() (a passkey or a security key).
+  kPasskey,
 };
 
 struct HttpAuthRequest {
@@ -178,6 +180,9 @@ class PageSurfaceDelegate {
                               base::OnceCallback<void(bool show)> show) = 0;
   // The held picker `id` ended on its own (its request went away).
   virtual void ForgetPicker(uint64_t id) = 0;
+  // Answers the held `picker`s of the page in `frame` as cancelled.
+  virtual void DismissPickers(content::RenderFrameHost* frame,
+                              HeldPicker picker) = 0;
 };
 
 // Installs or (with null) removes the delegate. Not owned.
@@ -261,6 +266,27 @@ void HoldScreenShareForAgent(content::RenderFrameHost* frame,
                              const content::MediaStreamRequest& request,
                              content::MediaResponseCallback callback,
                              ShowScreenSharePicker show);
+
+// AuthenticatorCommonImpl::MakeCredential and GetCredential (a modal request),
+// through BrowserWebContentsDelegate::HoldWebAuthnRequest: what holds the
+// request `frame` makes now, or null if it isn't held (the replay of a held
+// one, or no agent holds the tab). Content gives it `run` (the type is
+// content::WebContentsDelegate::WebAuthnRun), which runs later: with true to
+// make the request again from the start, with false to answer NotAllowedError
+// as the user's cancel does.
+using WebAuthnRun = base::OnceCallback<void(bool run, base::OnceClosure done)>;
+base::OnceCallback<void(WebAuthnRun run)> HoldWebAuthnForAgent(
+    content::RenderFrameHost* frame);
+
+// AuthenticatorCommonImpl::Cancel (the page aborted): the held requests of the
+// page in `frame` are answered as cancelled.
+void CancelHeldWebAuthnForAgent(content::RenderFrameHost* frame);
+
+// ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn (B9, which
+// refuses WebAuthn in agent tabs): whether `frame` is making the request the
+// user opened from the agent indicator now (from when it is made again until
+// it ends).
+bool IsOpenedWebAuthnRequestForAgent(content::RenderFrameHost* frame);
 
 }  // namespace koan::agent
 

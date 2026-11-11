@@ -43,6 +43,8 @@ enum class PageSurface {
   kDeviceChooser,
   // getDisplayMedia()'s screen-share picker.
   kScreenShare,
+  // A modal WebAuthn request: a passkey or security key create() or get().
+  kPasskey,
 };
 
 // Whether `surface` only makes sense with the user in front of its tab (a
