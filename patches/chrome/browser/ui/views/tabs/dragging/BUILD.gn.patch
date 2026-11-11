@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/views/tabs/dragging/BUILD.gn b/chrome/browser/ui/views/tabs/dragging/BUILD.gn
+--- a/chrome/browser/ui/views/tabs/dragging/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/dragging/BUILD.gn
+@@ -90,6 +90,7 @@
+     "//components/viz/common",
+     "//content/public/browser",
+     "//content/public/common",
++    "//koan/browser/ui/views",
+     "//ui/base",
+     "//ui/base/clipboard",
+     "//ui/base/dragdrop:types",

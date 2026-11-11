@@ -427,6 +427,8 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanEssentialsPromoBorder] = {t[Token::kPrimary]};
   mixer[kColorKoanEssentialsPromoForeground] = {t[Token::kSidebarForeground]};
   mixer[kColorKoanEssentialsPromoShadow] = {SK_ColorTRANSPARENT};
+  // A drop indicator is the ring colour.
+  mixer[kColorKoanTabDropIndicator] = {t[Token::kRing]};
 
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.

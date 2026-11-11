@@ -90,6 +90,14 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanEssentialsPromoForeground] = {kColorToolbarText};
   mixer[kColorKoanEssentialsPromoShadow] = {
       SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
+  // The tab drop indicator (#zen-drag-indicator, vertical-tabs.css):
+  // --zen-primary-color mixed half and half with black at 85% (white at 95%
+  // in dark mode).
+  mixer[kColorKoanTabDropIndicator] = {
+      color_utils::AlphaBlend(ZenPrimaryColor(key),
+                              dark ? SkColorSetA(SK_ColorWHITE, Alpha(0.95f))
+                                   : SkColorSetA(SK_ColorBLACK, Alpha(0.85f)),
+                              0.5f)};
 
   // The URL pill (zen-omnibox.css .urlbar-background): the Essentials tiles'
   // tint (--zen-toolbar-element-bg), on hover --zen-toolbar-element-bg-hover

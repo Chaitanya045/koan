@@ -77,4 +77,29 @@ double SpaceStripScrollProgress(base::TimeDelta elapsed) {
   return 1 - (1 + wt) * std::exp(-wt);
 }
 
+size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
+                          const gfx::Point& point,
+                          bool rtl) {
+  for (size_t i = 0; i < tiles.size(); ++i) {
+    const gfx::Rect& tile = tiles[i];
+    if (!tile.Contains(point)) {
+      continue;
+    }
+    const bool far_half = rtl ? point.x() < tile.CenterPoint().x()
+                              : point.x() > tile.CenterPoint().x();
+    return far_half ? i + 1 : i;
+  }
+  return tiles.size();
+}
+
+size_t SpaceListDropSlot(const std::vector<gfx::Rect>& rows, int y) {
+  // The rows are top to bottom, so the slot is the number of rows whose
+  // middle is above the pointer.
+  size_t slot = 0;
+  while (slot < rows.size() && rows[slot].CenterPoint().y() < y) {
+    ++slot;
+  }
+  return slot;
+}
+
 }  // namespace koan

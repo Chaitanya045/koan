@@ -104,4 +104,50 @@ TEST(KoanSpaceDragLogicTest, StripScrollSettlesLikeFirefox) {
   EXPECT_EQ(1, SpaceStripScrollProgress(kSpaceStripScrollDuration));
 }
 
+// Zen's Essentials grid: a 2nd, 3rd... tab goes where it is dropped. Two
+// rows of tiles 50 wide and 44 high with 4 between them: [0 1 2] [3].
+TEST(KoanSpaceDragLogicTest, EssentialsDropGoesBeforeOrAfterTheTileUnderIt) {
+  const std::vector<gfx::Rect> tiles = {
+      {0, 0, 50, 44}, {54, 0, 50, 44}, {108, 0, 50, 44}, {0, 48, 50, 44}};
+  // The first tile's left half: first; its right half: second.
+  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {10, 20}, /*rtl=*/false));
+  EXPECT_EQ(1u, EssentialsDropSlot(tiles, {40, 20}, /*rtl=*/false));
+  // Between the second and third tiles, on the third's near half.
+  EXPECT_EQ(2u, EssentialsDropSlot(tiles, {110, 20}, /*rtl=*/false));
+  // The last tile of the first row, its far half: before the second row.
+  EXPECT_EQ(3u, EssentialsDropSlot(tiles, {150, 20}, /*rtl=*/false));
+  // The second row's tile.
+  EXPECT_EQ(3u, EssentialsDropSlot(tiles, {5, 60}, /*rtl=*/false));
+  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {45, 60}, /*rtl=*/false));
+  // Empty grid space (beside the last tile, in a gap): after the last.
+  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {120, 60}, /*rtl=*/false));
+  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {52, 20}, /*rtl=*/false));
+  // No tiles yet (the promo): the first.
+  EXPECT_EQ(0u, EssentialsDropSlot({}, {10, 10}, /*rtl=*/false));
+}
+
+TEST(KoanSpaceDragLogicTest, EssentialsDropMirrorsInRtl) {
+  // RTL: the first tile is on the right.
+  const std::vector<gfx::Rect> tiles = {{108, 0, 50, 44}, {54, 0, 50, 44}};
+  // The first tile's right half is its near half.
+  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {150, 20}, /*rtl=*/true));
+  EXPECT_EQ(1u, EssentialsDropSlot(tiles, {115, 20}, /*rtl=*/true));
+  EXPECT_EQ(2u, EssentialsDropSlot(tiles, {60, 20}, /*rtl=*/true));
+}
+
+TEST(KoanSpaceDragLogicTest, SpaceListDropGoesAboveOrBelowTheRowUnderIt) {
+  // Three rows 36 high with 2 between them.
+  const std::vector<gfx::Rect> rows = {
+      {0, 0, 200, 36}, {0, 38, 200, 36}, {0, 76, 200, 36}};
+  EXPECT_EQ(0u, SpaceListDropSlot(rows, -10));
+  EXPECT_EQ(0u, SpaceListDropSlot(rows, 10));
+  EXPECT_EQ(1u, SpaceListDropSlot(rows, 30));
+  // In the gap: below the first row's middle, above the second's.
+  EXPECT_EQ(1u, SpaceListDropSlot(rows, 37));
+  EXPECT_EQ(2u, SpaceListDropSlot(rows, 60));
+  EXPECT_EQ(3u, SpaceListDropSlot(rows, 100));
+  EXPECT_EQ(3u, SpaceListDropSlot(rows, 400));
+  EXPECT_EQ(0u, SpaceListDropSlot({}, 10));
+}
+
 }  // namespace koan

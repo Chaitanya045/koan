@@ -1,0 +1,26 @@
+diff --git a/chrome/browser/ui/views/tabs/dragging/tab_drag_controller.cc b/chrome/browser/ui/views/tabs/dragging/tab_drag_controller.cc
+--- a/chrome/browser/ui/views/tabs/dragging/tab_drag_controller.cc
++++ b/chrome/browser/ui/views/tabs/dragging/tab_drag_controller.cc
+@@ -64,6 +64,7 @@
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/content_features.h"
++#include "koan/browser/ui/views/koan_tab_drag_hooks.h"
+ #include "ui/base/base_window.h"
+ #include "ui/base/clipboard/clipboard_constants.h"
+ #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
+@@ -1097,6 +1098,14 @@
+     }
+   }
+ 
++  // Koan: no tab strip takes the tabs here (out of the sidebar, over the
++  // page, out of the window): they stay in this one rather than tearing off
++  // into a new window.
++  if (!target_context && current_state_ == DragState::kDraggingTabs &&
++      koan::KeepsTabDragInWindow(attached_context_->GetWidget())) {
++    target_context = attached_context_;
++  }
++
+   if (target_context != attached_context_) {
+     is_dragging_new_browser_ = false;
+     did_restore_window_ = false;

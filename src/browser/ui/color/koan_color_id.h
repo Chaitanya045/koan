@@ -55,6 +55,8 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanEssentialsPromoBorder,
   kColorKoanEssentialsPromoForeground,
   kColorKoanEssentialsPromoShadow,
+  // Zen's tab drop indicator (#zen-drag-indicator, koan_essentials_promo.h).
+  kColorKoanTabDropIndicator,
 
   // The URL bar (koan_sidebar_nav_view.cc, koan_url_bar_controller.cc): the
   // sidebar's URL pill (its fill, hovered fill and text) and the floating URL

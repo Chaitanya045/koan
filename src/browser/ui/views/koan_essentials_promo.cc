@@ -15,6 +15,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_list.h"
@@ -143,6 +144,40 @@ void KoanEssentialsPromoView::OnPaint(gfx::Canvas* canvas) {
 
 BEGIN_METADATA(KoanEssentialsPromoView)
 ADD_READONLY_PROPERTY_METADATA(bool, DragOver)
+END_METADATA
+
+KoanTabDropIndicatorView::KoanTabDropIndicatorView() {
+  // Above the tiles and rows, which scroll on layers of their own.
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+  SetCanProcessEventsWithinSubtree(false);
+  GetViewAccessibility().SetIsIgnored(true);
+  SetVisible(false);
+}
+
+KoanTabDropIndicatorView::~KoanTabDropIndicatorView() = default;
+
+void KoanTabDropIndicatorView::SetSlot(const gfx::Rect& slot) {
+  if (slot_ == slot) {
+    return;
+  }
+  slot_ = slot;
+  if (parent()) {
+    parent()->InvalidateLayout();
+  }
+}
+
+void KoanTabDropIndicatorView::OnPaint(gfx::Canvas* canvas) {
+  // Zen's background with border-radius 5px (a pill this thin).
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(GetColorProvider()->GetColor(kColorKoanTabDropIndicator));
+  const gfx::RectF bounds(GetLocalBounds());
+  canvas->DrawRoundRect(bounds, std::min(bounds.width(), bounds.height()) / 2,
+                        flags);
+}
+
+BEGIN_METADATA(KoanTabDropIndicatorView)
 END_METADATA
 
 }  // namespace koan

@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "base/time/time.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace koan {
 
@@ -83,6 +85,22 @@ int ScrollSpaceIntoView(int scroll,
 inline constexpr base::TimeDelta kSpaceStripScrollDuration =
     base::Milliseconds(600);
 double SpaceStripScrollProgress(base::TimeDelta elapsed);
+
+// Zen's drop of tabs on the Essentials grid
+// (ZenPinnedTabManager.moveToAnotherTabContainerIfNecessary()): the tile
+// under `point` takes them before it, or after it once `point` is past its
+// horizontal middle (the far half: its left half in RTL); anywhere else in
+// the grid they go after the last tile. `tiles` are the tiles' bounds in grid
+// order (a split view is one tile). Returns the slot, 0 to tiles.size().
+size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
+                          const gfx::Point& point,
+                          bool rtl);
+
+// The same for an Essential dropped on a Space's list of tabs: before the
+// row under `y`, after it once `y` is past its vertical middle; between rows
+// as for the nearest one, above the first first, below the last last.
+// `rows` are top to bottom. Returns the slot, 0 to rows.size().
+size_t SpaceListDropSlot(const std::vector<gfx::Rect>& rows, int y);
 
 }  // namespace koan
 
