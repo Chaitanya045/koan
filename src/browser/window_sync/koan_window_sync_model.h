@@ -172,9 +172,9 @@ class WindowSyncModel {
   bool SetItems(std::vector<ItemRecord> items,
                 const std::set<std::string>& closed = {});
   // Whether `item` left the model because a window closed or unpinned its
-  // tab: every other window closes its tab too, also the one with the page (Zen's
-  // TabClose). Otherwise the window with the page keeps it as a normal tab.
-  // Until the item comes back (a reopened tab keeps its id).
+  // tab: every other window closes its tab too, also the one with the page
+  // (Zen's TabClose). Otherwise the window with the page keeps it as a normal
+  // tab. Until the item comes back (a reopened tab keeps its id).
   bool WasClosed(const std::string& item) const {
     return closed_.contains(item);
   }
