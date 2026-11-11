@@ -51,6 +51,17 @@ int GetEssentialsHeight(const TabStripView* tab_strip_view, int target_height);
 // Essential would appear at once.
 int GetEmptyEssentialsWidth(const views::SizeBounds& size_bounds);
 
+// The size bounds the vertical Essentials grid `grid` is laid out in
+// (pinned_tab_container_view_vertical_layout.cc), given upstream's
+// `size_bounds` (the grid view's own width): while the grid is empty its
+// scroll view, 0 high, leaves the grid 0 wide, so its first tile would be laid
+// out at width 0 and then snap (no animation: upstream snaps a layout whose
+// width changes) when the grid gets its real width. With Koan's sidebar a
+// 0 width is the scroll view's width instead.
+views::SizeBounds GetEssentialsLayoutBounds(
+    const views::SizeBounds& size_bounds,
+    const views::View* grid);
+
 // The pinned container's minimum height in the vertical strip's layout
 // (tab_strip_view_layout.cc), given upstream's (`min_height`, a row once there
 // is a tile) and its `preferred_height` (GetEssentialsHeight(), while it

@@ -1464,8 +1464,49 @@ void KoanPinnedTabController::OnTabPinnedStateChanged(tabs::TabInterface* tab,
   } else {
     // Out of the Essentials: decided where it is dropped.
     state.was_essential = true;
+    // Not dragged: no drop decides it. (The model can't be changed from its
+    // own notification.)
+    if (!TabDragController::IsActive()) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&KoanPinnedTabController::PlaceUnpinnedEssential,
+                         weak_factory_.GetWeakPtr(), tab->GetHandle()));
+    }
   }
   ScheduleNormalize(tab);
+}
+
+void KoanPinnedTabController::PlaceUnpinnedEssential(tabs::TabHandle handle) {
+  tabs::TabInterface* tab = handle.Get();
+  TabStripModel* model = tab_strip_model();
+  const int index = tab ? model->GetIndexOfTab(tab) : TabStripModel::kNoTab;
+  // A split view, or a tab that has moved on since: Normalize() decides.
+  if (index == TabStripModel::kNoTab || tab->IsPinned() || tab->GetGroup() ||
+      tab->IsSplit() || TabDragController::IsActive()) {
+    return;
+  }
+  const std::optional<tab_groups::TabGroupId> space = model->GetFocusedGroup();
+  KoanTabState* state = GetTabState(tab);
+  if (!space || !model->group_model()->ContainsTabGroup(*space) || !state ||
+      !state->was_essential) {
+    return;
+  }
+  state->was_essential = false;
+  // To the Space's start: the top of its pinned tabs.
+  model->AddToExistingGroup({index}, *space, /*add_to_end=*/false);
+  // Keeps its pinned URL, as one of the Space's pinned tabs; without one (an
+  // Essential that never had one) a normal tab, below them.
+  if (state->pinned_url.is_valid()) {
+    InitPinnedState(tab, *state);
+    state->pinned_in_space = true;
+    UpdateFreezingExemption(tab);
+    SaveTabState(tab->GetContents());
+    UpdateTabView(tab);
+    MoveIntoPinnedTabs(tab);
+  } else {
+    ClearPinnedState(tab);
+    MoveAfterPinnedTabs(tab);
+  }
 }
 
 void KoanPinnedTabController::OnSplitTabChanged(const SplitTabChange& change) {

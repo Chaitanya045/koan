@@ -288,6 +288,14 @@ class KoanPinnedTabController : public TabStripModelObserver {
   // is pinned, an Essential dropped there keeps its pinned URL) and the
   // Essentials' limit.
   void ScheduleNormalize(tabs::TabInterface* tab);
+
+  // An Essential unpinned from outside Koan and not by a drag (an extension's
+  // chrome.tabs.update()): upstream leaves it outside every Space, hidden, at
+  // the end of the Essentials. It goes into the active Space at once, at the
+  // top of its pinned tabs (Zen's pinned-tabs `prepend()`, the place a drop
+  // there gives it), so that its row appears there as the tile leaves, with
+  // no gap and no detour through the end of the list.
+  void PlaceUnpinnedEssential(tabs::TabHandle handle);
   // A tab drag is on in this window (moving, or dragged in, here).
   bool IsDraggingHere() const;
   void Normalize();

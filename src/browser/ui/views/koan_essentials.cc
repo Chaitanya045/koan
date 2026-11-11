@@ -129,6 +129,24 @@ int GetEmptyEssentialsWidth(const views::SizeBounds& size_bounds) {
   return size_bounds.width().value_or(0);
 }
 
+views::SizeBounds GetEssentialsLayoutBounds(
+    const views::SizeBounds& size_bounds,
+    const views::View* grid) {
+  if (!features::IsSidebarEnabled() || !size_bounds.width().is_bounded() ||
+      size_bounds.width().value() > 0) {
+    return size_bounds;
+  }
+  const views::ScrollView* scroll_view =
+      views::ScrollView::GetScrollViewForContents(
+          const_cast<views::View*>(grid));
+  const int width =
+      scroll_view ? scroll_view->GetContentsBounds().width() : 0;
+  if (width <= 0) {
+    return size_bounds;
+  }
+  return views::SizeBounds(width, size_bounds.height());
+}
+
 int GetEssentialsMinHeight(int min_height, int preferred_height) {
   if (!features::IsSidebarEnabled()) {
     return min_height;
