@@ -153,8 +153,13 @@ IN_PROC_BROWSER_TEST_F(KoanEssentialsDropBrowserTest,
             model->GetIndexOfTab(tabs[2]));
   EXPECT_TRUE(base::test::RunUntil([&] { return IsPinnedInSpace(tabs[2]); }));
 
-  // Below the Space's last tab: a normal tab there.
+  // Below the Space's last tab: a normal tab there. The active tab, as a
+  // dragged one is: unpinning it makes upstream leave the Space's focus mode,
+  // and the window must still show the Space, on that tab.
+  ASSERT_EQ(tabs[3], model->GetActiveTab());
   pinned->DropEssentialInSpace(tabs[3], nullptr);
+  EXPECT_EQ(space, GetSpaces(browser())->GetActiveSpace());
+  EXPECT_EQ(tabs[3], model->GetActiveTab());
   EXPECT_FALSE(tabs[3]->IsPinned());
   EXPECT_EQ(space, tabs[3]->GetGroup());
   EXPECT_EQ(TabsOfSpace(model, space).back(), model->GetIndexOfTab(tabs[3]));

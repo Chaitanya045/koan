@@ -795,9 +795,16 @@ if (BEHAVIOR !== 'normal') {
           `popup ${JSON.stringify(popup)}, window ${JSON.stringify(win.rect)}`);
     shot('second-window');
 
-    // An address that is open in a tab of another window (Alt+Enter's tab,
+    // An address that is open in a tab of another window (the "?typed" tab,
     // in the first window) says Zen's "Switch to Tab" beside it: Chromium's
-    // tab switch button, relabelled (koan_omnibox_rows.h).
+    // tab switch button, relabelled (koan_omnibox_rows.h). Upstream's
+    // TabMatcherDesktop leaves out the active tab of the last active window
+    // (the current page). That is the window being typed in, unless macOS
+    // didn't activate it (Koan not frontmost, e.g. while someone uses the
+    // Mac), and then it's the first window: so the address of a background
+    // tab there, not Alt+Enter's tab, which the first window shows.
+    console.log('INFO  second window focused when typing: ' +
+                await evalIn(secondPage, 'document.hasFocus()'));
     const typeInSecond = async (keyCode, key, isChar) => {
       const field = ofSecond(await windowsNow())?.views.find(
           v => v.cls === 'OmniboxViewViews' && v.shown);
@@ -807,7 +814,7 @@ if (BEHAVIOR !== 'normal') {
       }
     };
     for (let i = 0; i < 'koan'.length; i++) await typeInSecond(8, 8, false);
-    for (const ch of 'example.com/?alt') {
+    for (const ch of 'example.com/?typed') {
       await typeInSecond(ch.codePointAt(0), ch.codePointAt(0), true);
     }
     const label = await waitFor(async () => (await viewTree()).find(

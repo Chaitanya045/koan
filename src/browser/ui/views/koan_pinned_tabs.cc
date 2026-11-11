@@ -681,6 +681,12 @@ void KoanPinnedTabController::SetEssential(tabs::TabInterface* tab,
     split_visuals = *model->GetSplitData(*split)->visual_data();
   }
   base::AutoReset<bool> changing(&changing_pin_, true);
+  // The active Space, read before unpinning: upstream leaves focus mode when
+  // the active tab is unpinned out of it (MaybeUpdateFocusModeForMovedTab(),
+  // kUnpinActiveTab), as a drag of the active Essential back to the Space
+  // does.
+  const std::optional<tab_groups::TabGroupId> space =
+      essential ? std::nullopt : model->GetFocusedGroup();
   // Upstream's SetTabPinned() takes a split view apart (its split-aware
   // pinning is private), so the split is put back together below. Unpinned
   // tabs go first after the Essentials: the last one goes first, to keep
@@ -703,11 +709,12 @@ void KoanPinnedTabController::SetEssential(tabs::TabInterface* tab,
     model->RestoreSplit(split_tabs::SplitTabId::GenerateNew(), indices,
                         *split_visuals);
   }
-  // Out of the Essentials: into the active Space, as in Zen.
-  if (!essential) {
-    if (std::optional<tab_groups::TabGroupId> space =
-            model->GetFocusedGroup()) {
-      model->AddToExistingGroup(indices, *space);
+  // Out of the Essentials: into the active Space, as in Zen, which stays
+  // shown (on the same tab, now in it).
+  if (space && model->group_model()->ContainsTabGroup(*space)) {
+    model->AddToExistingGroup(indices, *space);
+    if (model->GetFocusedGroup() != space) {
+      model->EnterFocusMode(*space);
     }
   }
 }
