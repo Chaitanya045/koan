@@ -603,7 +603,7 @@ void KoanUrlBarController::OpenOnStartup() {
   if (!features::IsUrlBarEnabled() || profile->IsOffTheRecord() ||
       browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
       !profile->GetPrefs()->GetBoolean(prefs::kUrlBarReplaceNewTab) ||
-      (welcome && welcome->is_showing()) ||
+      (welcome && welcome->is_pending()) ||
       SessionRestore::IsRestoring(profile) || !browser_view_->GetWidget()) {
     return;
   }

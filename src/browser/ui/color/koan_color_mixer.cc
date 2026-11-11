@@ -290,39 +290,6 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
                   Alpha(0.65f))};
   mixer[kColorKoanLoadingBarTrack] = {SkColorSetA(loading_mix, Alpha(0.1f))};
 
-  // The welcome screen (zen-welcome.css): Koan's calm green gradient where
-  // Zen plays a video, white title, Zen's green start button; the pages in
-  // Zen's light-dark() greys, the accent buttons in the browser's accent.
-  mixer[kColorKoanWelcomeBackdropTop] = {SkColorSetRGB(0x2f, 0x4f, 0x3c)};
-  mixer[kColorKoanWelcomeBackdropBottom] = {SkColorSetRGB(0x10, 0x1b, 0x16)};
-  mixer[kColorKoanWelcomeTitle] = {SK_ColorWHITE};
-  mixer[kColorKoanWelcomeStartButton] = {SkColorSetRGB(62, 115, 62)};
-  mixer[kColorKoanWelcomeStartButtonHovered] =
-      ui::AlphaBlend(SK_ColorWHITE, kColorKoanWelcomeStartButton, Alpha(0.1f));
-  mixer[kColorKoanWelcomeStartButtonIcon] = {SK_ColorWHITE};
-  mixer[kColorKoanWelcomeSidebar] = {dark ? SkColorSetRGB(0x1c, 0x1c, 0x1e)
-                                          : SK_ColorWHITE};
-  mixer[kColorKoanWelcomeContent] = {
-      dark ? SkColorSetARGB(0xed, 0x2b, 0x2b, 0x30)
-           : SkColorSetARGB(0xf5, 0xf6, 0xf6, 0xf8)};
-  mixer[kColorKoanWelcomeSurface] = {kColorKoanWelcomeSidebar};
-  mixer[kColorKoanWelcomeTile] = {dark ? SkColorSetRGB(0x33, 0x33, 0x38)
-                                       : SkColorSetRGB(0xec, 0xec, 0xee)};
-  mixer[kColorKoanWelcomeMockWindow] = {dark ? SkColorSetRGB(0x23, 0x23, 0x26)
-                                             : SkColorSetRGB(0xe3, 0xe3, 0xe5)};
-  mixer[kColorKoanWelcomeBorder] = {SkColorSetA(
-      dark ? SK_ColorWHITE : SK_ColorBLACK, Alpha(dark ? 0.16f : 0.14f))};
-  mixer[kColorKoanWelcomeShadow] = {SkColorSetA(SK_ColorBLACK, Alpha(0.05f))};
-  mixer[kColorKoanWelcomeText] = {dark ? SK_ColorWHITE
-                                       : SkColorSetRGB(0x11, 0x11, 0x11)};
-  mixer[kColorKoanWelcomeTextSecondary] =
-      ui::SetAlpha(kColorKoanWelcomeText, Alpha(0.6f));
-  mixer[kColorKoanWelcomeRadio] =
-      ui::SetAlpha(kColorKoanWelcomeText, Alpha(dark ? 0.5f : 0.45f));
-  mixer[kColorKoanWelcomeAccent] = {ui::kColorSysPrimary};
-  mixer[kColorKoanWelcomeAccentHovered] =
-      ui::AlphaBlend(SK_ColorWHITE, kColorKoanWelcomeAccent, Alpha(0.1f));
-  mixer[kColorKoanWelcomeOnAccent] = {ui::kColorSysOnPrimary};
   // Folders (zen-folders.css), from the accent colour (the active Space's
   // tint): the folder behind is the accent at 60% over grey (#c1c1c1 in dark
   // mode), its cover the accent at 30% over white (60% over black in dark

@@ -11,7 +11,7 @@ index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a77
  #include "media/capture/capture_switches.h"
  #include "third_party/blink/public/common/features.h"
  #include "third_party/blink/public/common/permissions/permission_utils.h"
-@@ -1117,9 +1119,13 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
+@@ -1117,9 +1119,13 @@ BrowserView::BrowserView(BrowserWindowIn
    auto* const animation_controller = BrowserAnimationController::From(browser_);
    CHECK(animation_controller);
    animation_controller->set_browser_view(this);
@@ -25,7 +25,7 @@ index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a77
    // Remove the layout manager to avoid dangling. This needs to be earlier than
    // other cleanups that destroy views referenced in the layout manager.
    SetLayoutManager(nullptr);
-@@ -1591,8 +1597,11 @@ float BrowserView::GetTopControlsSlideBehaviorShownRatio() const {
+@@ -1591,8 +1597,11 @@ float BrowserView::GetTopControlsSlideBe
  
  views::Widget* BrowserView::GetWidgetForAnchoring() {
  #if BUILDFLAG(IS_MAC)
@@ -38,7 +38,7 @@ index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a77
    }
  #endif
    return GetWidget();
-@@ -2306,9 +2315,10 @@ void BrowserView::FullscreenStateChanged() {
+@@ -2306,9 +2315,10 @@ void BrowserView::FullscreenStateChanged
    // In mac fullscreen the toolbar view is hosted in the overlay widget that has
    // a higher z-order level. This overlay widget should be used for anchoring
    // secondary UIs, otherwise they will be covered by the toolbar.
@@ -50,3 +50,16 @@ index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a77
            ? overlay_widget_.get()
            : nullptr;
  
+@@ -4632,6 +4642,12 @@ views::CloseRequestResult BrowserView::O
+ }
+ 
+ int BrowserView::NonClientHitTest(const gfx::Point& point) {
++  // Koan: a Koan view over the whole window (the first-run welcome) takes
++  // its points as client area, even where the window would drag.
++  if (koan::IsWindowCoveredAt(this, point)) {
++    return HTCLIENT;
++  }
++
+ #if BUILDFLAG(IS_MAC)
+   // The top container while in immersive fullscreen on macOS lives in another
+   // Widget (OverlayWidgetMac). This means that BrowserView does not need to

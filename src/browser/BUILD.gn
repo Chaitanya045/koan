@@ -69,6 +69,8 @@ source_set("shortcut_table") {
   sources = [
     "koan_shortcut_table.cc",
     "koan_shortcut_table.h",
+    "koan_welcome_shortcuts.cc",
+    "koan_welcome_shortcuts.h",
   ]
   public_deps = [
     "//base",
@@ -85,7 +87,10 @@ source_set("shortcut_table") {
 #   autoninja -C out/Koan koan/browser:koan_shortcut_unittests
 #   out/Koan/koan_shortcut_unittests
 test("koan_shortcut_unittests") {
-  sources = [ "koan_shortcut_table_unittest.cc" ]
+  sources = [
+    "koan_shortcut_table_unittest.cc",
+    "koan_welcome_shortcuts_unittest.cc",
+  ]
   deps = [
     ":shortcut_table",
     "//base",
@@ -155,6 +160,15 @@ source_set("space_title") {
   deps = [
     "//base:i18n",
     "//third_party/icu",
+  ]
+}
+
+# Which window shows the welcome screen, for upstream hooks (the search
+# engine choice dialog waits for it). No dependencies.
+source_set("welcome_state") {
+  sources = [
+    "koan_welcome_state.cc",
+    "koan_welcome_state.h",
   ]
 }
 

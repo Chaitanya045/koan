@@ -461,7 +461,6 @@ source_set("impl") {
     "koan_zen_compact_strings.h",
     "koan_zen_sidebar_notification.h",
     "koan_zen_toasts.h",
-    "koan_zen_welcome.h",
     "koan_zero_suggest.cc",
     "koan_zero_suggest.h",
   ]
@@ -605,6 +604,7 @@ source_set("impl") {
     "//koan/browser:space_title",
     "//koan/browser:tab_hooks",
     "//koan/browser:vertical_tabs",
+    "//koan/browser:welcome_state",
     "//koan/browser/agent:browser",
     "//koan/browser/containers",
     "//koan/browser/containers:impl",
@@ -613,6 +613,7 @@ source_set("impl") {
     "//koan/browser/ui/color",
     "//koan/browser/ui/fonts",
     "//koan/browser/ui/vector_icons",
+    "//koan/browser/ui/webui",
     "//koan/browser/updates:build_info",
     "//koan/browser/updates:update_logic",
     "//koan/browser/window_sync:model",
