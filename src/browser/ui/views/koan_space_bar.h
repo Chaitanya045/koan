@@ -10,8 +10,11 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "koan/browser/ui/views/koan_space_drag_logic.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/gfx/animation/animation_delegate.h"
+#include "ui/gfx/animation/linear_animation.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -21,6 +24,7 @@ class Button;
 namespace koan {
 
 class KoanSpaceButton;
+class KoanSpaceStripView;
 
 // Zen's sidebar bottom bar: an optional leading button (the Library's) at
 // the start, "+" with Zen's Create menu at the end, and between them the
@@ -29,7 +33,12 @@ class KoanSpaceButton;
 // until hovered. Like Zen, the Space buttons are hidden while there is only
 // one Space. In a sidebar too narrow for a row (icons only), they stack
 // above "+" at full size.
-class KoanSpaceBarView : public views::View {
+//
+// The switcher is a strip of its own that clips its buttons. When they don't
+// fit at their narrowest, it scrolls sideways like Zen's (overflow-x: auto,
+// no scrollbar, no fade): the wheel or touchpad over it scrolls it, and the
+// current Space and the hovered one scroll into view, smoothly.
+class KoanSpaceBarView : public views::View, public gfx::AnimationDelegate {
   METADATA_HEADER(KoanSpaceBarView, views::View)
 
  public:
@@ -76,19 +85,63 @@ class KoanSpaceBarView : public views::View {
     return reordering_ && reorder_button_ == button;
   }
 
+  // A wheel or touchpad scroll over the bar (`target` is the view under the
+  // pointer, `x` and `y` the event's offsets): scrolls the Space switcher if
+  // the pointer is over it and its buttons overflow. A mouse wheel
+  // (`precise` false) scrolls it only vertically: a horizontal one switches
+  // Space, as in Zen. Returns whether it scrolled (or would have, at an
+  // end).
+  bool ScrollStrip(const views::View* target, float x, float y, bool precise);
+  // Scrolls `button` into view (Zen's scrollIntoView with inline: nearest).
+  void ScrollButtonIntoView(const KoanSpaceButton* button);
+  // Paints the emoji of the switcher's buttons, under them (see OnPaint()).
+  void PaintStripIcons(gfx::Canvas* canvas) const;
+
+  // For tests: the switcher's bounds and a Space button's, in this view's
+  // coordinates (the button's as laid out, which the switcher clips), "+"'s,
+  // and whether the switcher clips what it holds.
+  gfx::Rect GetStripBoundsForTesting() const;
+  std::optional<gfx::Rect> GetSpaceButtonBoundsForTesting(
+      const tab_groups::TabGroupId& space) const;
+  gfx::Rect GetCreateButtonBoundsForTesting() const;
+  bool StripClipsForTesting() const;
+
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
-  void OnPaint(gfx::Canvas* canvas) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
+  // gfx::AnimationDelegate:
+  void AnimationProgressed(const gfx::Animation* animation) override;
+
  private:
+  // A point in this view's coordinates, in the switcher's.
+  gfx::Point ToStrip(const gfx::Point& point) const;
+  // Sets the scroll offset (clamped), now or smoothly.
+  void ScrollTo(int scroll, bool animate);
+  // Lays out the row: the buttons in the switcher, scrolled.
+  void LayoutRow(const gfx::Rect& area);
+
   const raw_ptr<KoanWorkspaceController> controller_;
   std::vector<raw_ptr<KoanSpaceButton>> buttons_;
   raw_ptr<views::Button> create_button_ = nullptr;
   raw_ptr<views::View> leading_ = nullptr;
+  // The Space switcher, which holds `buttons_`.
+  raw_ptr<KoanSpaceStripView> strip_ = nullptr;
   bool compact_ = true;
+  // How far the switcher is scrolled (from its start, in LTR terms), and how
+  // far it can be; a smooth scroll's way, the row's last layout, and whether
+  // the next layout scrolls the current Space into view (it changed, or the bar
+  // is new).
+  int scroll_ = 0;
+  int max_scroll_ = 0;
+  int scroll_from_ = 0;
+  int scroll_to_ = 0;
+  SpaceStripLayout strip_layout_;
+  gfx::LinearAnimation scroll_animation_{this};
+  std::optional<tab_groups::TabGroupId> active_space_;
+  bool scroll_to_active_ = true;
   // The button pressed for a reorder, where along the bar, and whether it
   // has moved far enough to be one.
   raw_ptr<KoanSpaceButton> reorder_button_ = nullptr;

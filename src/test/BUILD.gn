@@ -81,6 +81,7 @@ source_set("browsertests_impl") {
     "//ui/actions",
     "//ui/base:types",
     "//ui/gfx/geometry",
+    "//ui/views",
     "//url",
   ]
 }

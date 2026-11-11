@@ -4,6 +4,8 @@
 
 #include "koan/browser/ui/views/koan_space_drag_logic.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace koan {
@@ -34,6 +36,45 @@ size_t ReorderedSpaceIndex(const std::vector<SpaceButtonSpan>& spans,
     return target > dragged ? target - 1 : target;
   }
   return dragged;
+}
+
+SpaceStripLayout LayoutSpaceStrip(int room,
+                                  int count,
+                                  int min_width,
+                                  int max_width) {
+  if (count <= 0) {
+    return {};
+  }
+  room = std::max(0, room);
+  SpaceStripLayout layout;
+  layout.button_width = std::clamp(room / count, min_width, max_width);
+  const int content = count * layout.button_width;
+  layout.start = std::max(0, (room - content) / 2);
+  layout.max_scroll = std::max(0, content - room);
+  return layout;
+}
+
+int ScrollSpaceIntoView(int scroll,
+                        int room,
+                        int max_scroll,
+                        int start,
+                        int end) {
+  // "nearest": the start's side if it is cut off there, else the end's.
+  if (start - kSpaceStripScrollMargin < scroll) {
+    scroll = start - kSpaceStripScrollMargin;
+  } else if (end + kSpaceStripScrollMargin > scroll + room) {
+    scroll = end + kSpaceStripScrollMargin - room;
+  }
+  return std::clamp(scroll, 0, std::max(0, max_scroll));
+}
+
+double SpaceStripScrollProgress(base::TimeDelta elapsed) {
+  if (elapsed >= kSpaceStripScrollDuration) {
+    return 1;
+  }
+  // x(t) = 1 - (1 + wt) e^(-wt), w = sqrt(spring constant).
+  const double wt = std::sqrt(250.0) * std::max(0.0, elapsed.InSecondsF());
+  return 1 - (1 + wt) * std::exp(-wt);
 }
 
 }  // namespace koan

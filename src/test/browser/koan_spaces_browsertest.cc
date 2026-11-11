@@ -2,8 +2,11 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <optional>
 #include <vector>
 
+#include "base/strings/string_number_conversions.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -13,11 +16,14 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
+#include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -171,6 +177,69 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, NewWindowOpensOnTheEmptyTab) {
   ASSERT_TRUE(
       base::test::RunUntil([&] { return IsEmptyTab(model->GetActiveTab()); }));
   EXPECT_EQ(1, model->count());
+}
+
+// Many Spaces (30, from a bug that added one per launch, ran past "+" and
+// the sidebar's edge): the bottom bar's Space buttons stay in the switcher
+// between the Library button and "+", which clips them and scrolls, as Zen's
+// does, and the current Space stays in view.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, ManySpacesStayInTheSwitcher) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  constexpr size_t kCount = 30;
+  for (size_t i = 1; i < kCount; ++i) {
+    spaces->CreateSpace(u"Space " + base::NumberToString16(i), u"", {});
+  }
+  ASSERT_TRUE(WaitForSpaceCount(browser(), kCount));
+  KoanSpaceBarView* bar = spaces->space_bar();
+  ASSERT_TRUE(bar);
+  views::Widget* widget = bar->GetWidget();
+  ASSERT_TRUE(widget);
+  widget->LayoutRootViewIfNecessary();
+  // The expanded sidebar's row (not the icons-only column).
+  ASSERT_TRUE(bar->compact());
+  EXPECT_TRUE(bar->StripClipsForTesting());
+
+  const gfx::Rect strip = bar->GetStripBoundsForTesting();
+  const gfx::Rect create = bar->GetCreateButtonBoundsForTesting();
+  // The switcher is inside the bar and clear of "+", so nothing it clips
+  // reaches either.
+  EXPECT_TRUE(gfx::Rect(bar->size()).Contains(strip)) << strip.ToString();
+  EXPECT_FALSE(strip.Intersects(create))
+      << strip.ToString() << " " << create.ToString();
+  EXPECT_LE(strip.right(), create.x());
+
+  // Whether the current Space's button is wholly in the switcher (once a
+  // smooth scroll is over).
+  const auto active_shown = [&] {
+    widget->LayoutRootViewIfNecessary();
+    const std::optional<gfx::Rect> button =
+        bar->GetSpaceButtonBoundsForTesting(*spaces->GetActiveSpace());
+    return button && strip.Contains(*button);
+  };
+
+  // The buttons don't all fit: the switcher has to scroll.
+  const std::vector<KoanWorkspaceController::SpaceInfo> infos =
+      spaces->GetSpaces();
+  ASSERT_EQ(kCount, infos.size());
+  int left = strip.right();
+  int right = strip.x();
+  for (const KoanWorkspaceController::SpaceInfo& info : infos) {
+    const std::optional<gfx::Rect> button =
+        bar->GetSpaceButtonBoundsForTesting(info.id);
+    ASSERT_TRUE(button);
+    left = std::min(left, button->x());
+    right = std::max(right, button->right());
+  }
+  EXPECT_GT(right - left, strip.width());
+
+  // The new Space (the last) is shown, then the first, then one between.
+  EXPECT_TRUE(base::test::RunUntil(active_shown));
+  for (size_t index : {size_t{0}, kCount / 2, kCount - 1}) {
+    spaces->SwitchTo(infos[index].id);
+    EXPECT_TRUE(base::test::RunUntil(active_shown)) << index;
+  }
 }
 
 }  // namespace koan

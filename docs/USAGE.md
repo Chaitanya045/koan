@@ -359,7 +359,9 @@ and New Tab), and the Space switcher in the middle: one narrow button per
 Space, centred. The current Space shows its emoji (or a dot if it has none)
 in colour, the others a small grey dot that turns into their emoji while
 you hover it.
-The Space buttons only show once there is more than one Space.
+The Space buttons only show once there is more than one Space. With more
+Spaces than fit, the switcher scrolls sideways: scroll over it with the
+touchpad or the mouse wheel, and the current Space always scrolls into view.
 
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
 **Compact Mode** (below) and **Tabs on the right**. Dragging the sidebar's
