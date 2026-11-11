@@ -17,6 +17,7 @@
 import { check, finish, mouseOn, readPref, sleep, views } from './lib/koan.mjs';
 import { alive, checkKoanSidebar, leakLogged, promoBubbleShown, region, sampleWidths }
     from './lib/vertical_tabs.mjs';
+import { checkSlidesAway, realPointerHoldsSidebar, skipped } from './lib/mac.mjs';
 
 let vs = await views();
 checkKoanSidebar('Compact mode on an old profile', { hidden: true }, vs);
@@ -32,14 +33,19 @@ const widths = await sampleWidths(1200);
 check('The hot zone reveals the sidebar', Math.max(...widths) >= 200, widths.join(', '));
 await mouseOn(zone, 'mouseExited');
 await sleep(1500);
-check('...and it slides away again', region(await views())?.w === 0);
+const away = region(await views())?.w;
+await checkSlidesAway(check, '...and it slides away again', away === 0, `${away}`);
 
 await sleep(4000);
 check('No hint about expanding tabs on hover, 4 s after compact mode hid the sidebar',
       !promoBubbleShown(await views()));
 await sleep(7000);
 check('...nor 11 s after', !promoBubbleShown(await views()));
-checkKoanSidebar('After the wait', { hidden: true }, await views());
+vs = await views();
+// (Hidden: unless the real pointer holds it out, see checkSlidesAway().)
+const held = region(vs)?.w > 0 && await realPointerHoldsSidebar(region(vs).w);
+if (held) skipped('After the wait: hidden by compact mode', held);
+checkKoanSidebar('After the wait', { hidden: !held }, vs);
 
 check('Koan still answers', await alive());
 check('The leak detector is silent', !leakLogged());

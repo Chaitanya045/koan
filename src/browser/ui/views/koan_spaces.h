@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+class BrowserWindowInterface;
 class TabStripModel;
 
 namespace tab_groups {
@@ -70,6 +71,28 @@ bool IsEmptyTab(const tabs::TabInterface* tab);
 // into the new tab page later is an ordinary tab with a row, and Cmd+W
 // closes the tab, not the window. Called on every change of the tab.
 void ClearEmptyTabMarkIfNavigated(tabs::TabInterface* tab);
+
+// The one way Koan gives a Space a tab when it would otherwise have none
+// listed: Clear, a folder deleted or moved away, a synced tab closed in
+// another window, a new or recreated Space, the window's last tab closed.
+// Returns `space`'s empty tab, which it already has, or else a new blank page
+// added at `index` (-1: the Space's end) in `space` and marked as the empty
+// tab (no row). With `space` nullopt the tab is added loose, for the caller
+// to put into a Space. Selected if `foreground`. In a window without Spaces
+// it is a plain new tab, as there is no empty tab there. Returns nullptr if
+// no tab could be added.
+tabs::TabInterface* EnsureEmptyTab(
+    BrowserWindowInterface* browser,
+    const std::optional<tab_groups::TabGroupId>& space,
+    int index,
+    bool foreground);
+
+// Closing `tab` (its row's close button, Cmd+W) when it is its Space's only
+// tab and a blank page with no history: it becomes the Space's empty tab in
+// place and nothing closes. Zen closes it and selects its empty tab, which
+// looks the same; closing it here would empty the Space (a tab group) and
+// have Chromium and Koan add a tab back. Returns true if `tab` was kept.
+bool KeepAsEmptyTabInsteadOfClosing(tabs::TabInterface* tab);
 
 // TabGroupViewVerticalLayout: whether `view` is a tab row to hide (see
 // IsEmptyTab()).

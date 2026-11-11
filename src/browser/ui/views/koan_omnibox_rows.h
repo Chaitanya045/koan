@@ -4,7 +4,8 @@
 //
 // Contains material ported from Zen Browser, Copyright the Zen Browser
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
-//   zen-omnibox.css (the suggestion rows' height, radius and font)
+//   zen-omnibox.css (the suggestion rows' height, radius and font; an open
+//   tab's "Switch to Tab")
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
 
@@ -14,13 +15,16 @@
 #include "ui/color/color_id.h"
 #include "ui/gfx/font_list.h"
 
+class OmniboxAction;
+
 namespace gfx {
 class RoundedCornersF;
 }
 
 namespace views {
+class MdTextButton;
 class View;
-}
+}  // namespace views
 
 namespace koan {
 
@@ -53,6 +57,32 @@ gfx::FontList AdjustOmniboxRowFont(const views::View* view,
 // theirs. Called from OmniboxTextView::ApplyStyling()'s colour choice.
 ui::ColorId AdjustOmniboxRowTextColorId(const views::View* view,
                                         ui::ColorId id);
+
+// The button Chromium shows beside a suggestion for one of its actions
+// (OmniboxSuggestionButtonRowView). An open tab's match (has_tab_match) has
+// the tab switch action: Zen's row says "Switch to Tab" there (Firefox's
+// TAB_SWITCH result action), in both looks. Unlike the hooks above, the label
+// changes in every omnibox popup; the look only in Zen's card.
+
+// Gives `button` Koan's label for `action` (koan_omnibox_action_label.h) and
+// marks whether it is the tab switch button. Called from
+// OmniboxSuggestionButtonRowView::UpdateFromModel() once Chromium has labelled
+// it and before its icon is set: a button that changes action changes icon,
+// which runs StyleOmniboxActionButton() again.
+void LabelOmniboxActionButton(views::MdTextButton* button,
+                              const OmniboxAction& action);
+
+// In Zen's card the tab switch button takes Zen's look (zen-omnibox.css,
+// .urlbarView-action of a switchtab row): no pill, weight 600 in the row's
+// text colour (dimmer unless the row is `selected`), and Zen's arrow keycap
+// after the text. Any other button, or one outside the card, gets Chromium's
+// look back. Called at the end of OmniboxSuggestionRowButton::OnThemeChanged().
+void StyleOmniboxActionButton(views::MdTextButton* button, bool selected);
+
+// Whether `button` has Zen's look (StyleOmniboxActionButton()): then it has
+// no background and Chromium's pill is skipped. Called first in
+// OmniboxSuggestionRowButton::UpdateBackgroundColor().
+bool ClearsOmniboxActionButtonPill(views::MdTextButton* button);
 
 }  // namespace koan
 

@@ -91,7 +91,7 @@ Every round's record in `$MARKS` has `before`, `after` (three snapshots) and the
 The flow ends with one line per round. Run some rounds only with `node clear.mjs 6,7,10`.
 
 The marks are `{t (epoch ms), round, label, action, ...}`. Action marks (`round-start`, `space-switch-*`,
-`pin-in-space`, `make-essential`, `compact-on`, `reveal-sidebar`, `hover-clear`, `clear-click`, `compact-off`,
+`pin-in-space`, `make-essential`, `compact-on`, `reveal-sidebar`, `hover-clear`, `clear-click`, `clear-key` (Cmd+Shift+K when no Clear button shows, as in compact mode), `compact-off`,
 `calibrate`) are where `frames.sh` cuts. The `count-*` marks hold the counts at those moments.
 
 ## `frames.sh`: contact sheets and the changed-pixels list

@@ -86,7 +86,8 @@ idle="$("$TOOLS/usergate.sh" 2>/dev/null || echo 0)"
 [[ -e "$TOOLS/screen-granted" ]] || code=6 die "refusing: the screen is not granted ($TOOLS/screen-granted missing)"
 
 # The screen's avfoundation device ("Capture screen 0").
-dev="$("$FFMPEG" -hide_banner -f avfoundation -list_devices true -i "" 2>&1 |
+# (-list_devices always exits non-zero: "|| true", or pipefail ends the script.)
+dev="$({ "$FFMPEG" -hide_banner -f avfoundation -list_devices true -i "" 2>&1 || true; } |
        sed -n 's/.*\[\([0-9]*\)\] Capture screen 0.*/\1/p' | head -1)"
 [[ -n "$dev" ]] || die "no 'Capture screen 0' avfoundation device"
 

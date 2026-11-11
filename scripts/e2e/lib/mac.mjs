@@ -292,6 +292,52 @@ export const realClick = async (x, y, settle = 600) => {
   return ok;
 };
 
+// Where the real pointer is, in screen points from the main screen's top-left
+// (the coordinates of Browser.getWindowForTarget's bounds): {x, y}, read
+// without moving it or counting as input (AppKit's NSEvent.mouseLocation).
+// null off macOS, or if it can't be read.
+export function realPointer() {
+  if (!IS_MAC) return null;
+  try {
+    const out = execFileSync('osascript', ['-l', 'JavaScript', '-e',
+        'ObjC.import("AppKit"); const p = $.NSEvent.mouseLocation; ' +
+        'const h = $.NSScreen.screens.objectAtIndex(0).frame.size.height; `${p.x} ${h - p.y}`'],
+        { encoding: 'utf8', timeout: 5000 });
+    const [x, y] = out.trim().split(' ').map(Number);
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  } catch {
+    return null;
+  }
+}
+
+// Why a check that the sidebar slides away can't run: the real pointer rests
+// over the band of `width` the sidebar is out in, at the window's left (or
+// right, `onRight`) edge, in the window that shows the first page. Upstream's
+// expand-on-hover keeps the sidebar out while View::IsMouseHovered(), which
+// reads the real pointer, whatever synthetic events say: someone at the Mac
+// with the pointer left there holds it out. '' when the check can run
+// (always off macOS).
+export async function realPointerHoldsSidebar(width, onRight = false) {
+  const p = realPointer();
+  const page = p && (await pages())[0];
+  const b = page && (await windowOf(page.id))?.bounds;
+  if (!b) return '';
+  const x = p.x - b.left, y = p.y - b.top;
+  // (A few points more: the hot zone and the sidebar's resize area.)
+  const band = width + 8;
+  const over = y >= 0 && y < b.height && (onRight ? x >= b.width - band && x < b.width
+                                                   : x >= 0 && x < band);
+  return over ? `the real pointer rests over the sidebar (${Math.round(x)},${Math.round(y)} ` +
+                'in the window): upstream keeps it out under the pointer' : '';
+}
+// check(name, ok, detail), or a skip when the real pointer holds the
+// sidebar out (realPointerHoldsSidebar()).
+export async function checkSlidesAway(check, name, ok, detail, width = 230) {
+  const why = !ok && await realPointerHoldsSidebar(width);
+  if (why) skipped(name, why);
+  else check(name, ok, detail);
+}
+
 // Where a window's root view is on the screen, measured: the real pointer
 // moves over `page` (the window's active tab) and the page's own mousemove
 // gives screenX - clientX, the page's origin on screen; minus the page view's

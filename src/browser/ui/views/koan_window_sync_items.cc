@@ -23,7 +23,6 @@
 #include "base/uuid.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_list/tab_removed_reason.h"
-#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -42,6 +41,7 @@
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/page_transition_types.h"
@@ -141,7 +141,7 @@ std::unique_ptr<content::WebContents> NewPlaceholder(
 
 // Closes `tab`, a synced tab closed in another window: without Recently
 // Closed (that window has the entry). A Space (a tab group) goes away with
-// its last tab, so one that would be left empty gets a new tab first, as
+// its last tab, so one that would be left empty gets its empty tab first, as
 // Zen's Spaces keep one.
 void CloseSyncedTab(BrowserWindowInterface* browser, tabs::TabInterface* tab) {
   TabStripModel* model = browser->GetTabStripModel();
@@ -153,8 +153,8 @@ void CloseSyncedTab(BrowserWindowInterface* browser, tabs::TabInterface* tab) {
       group && model->group_model() &&
       model->group_model()->ContainsTabGroup(*group) &&
       model->group_model()->GetTabGroup(*group)->tab_count() == 1) {
-    chrome::AddTabAt(browser, GURL(), index + 1,
-                     /*foreground=*/tab->IsActivated(), group);
+    EnsureEmptyTab(browser, group, index + 1,
+                   /*foreground=*/tab->IsActivated());
   }
   model->CloseWebContentsAt(model->GetIndexOfTab(tab),
                             TabCloseTypes::CLOSE_NONE);

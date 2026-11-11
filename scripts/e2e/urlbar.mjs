@@ -5,7 +5,8 @@
 // actions. Then: the new-tab bar through a window switch, a pill edit in
 // compact mode's peeked sidebar, and the multiple-toolbars layout (Esc, the
 // tab strip's "+" button, Alt+Enter), and last the card in a second, resized
-// window (sized and placed from that window, its suggestions inside it).
+// window (sized and placed from that window, its suggestions inside it, an
+// address open in the first window's tab marked "Switch to Tab").
 //
 // TODO(#51): on macOS, ⌘T is a reserved command that runs before any
 // accelerator (koan::MaybeOpenUrlBarForNewTab() in BrowserCommandController
@@ -289,8 +290,10 @@ const VK = { T: 84, ESC: 27, ENTER: 13, S: 83 };
 // The browser view's width: 1280 in run.sh's window, less on a Mac screen
 // that can't fit it (the suite's 1280-wide window comes up 1249 wide there).
 const WINDOW_WIDTH = find(await views(), 'BrowserView')?.w || 1280;
-// Zen's look (the default; ZenUIManager.mjs updateTabsToolbar):
-// min(window width / 1.5, 750), centred. (shadcn's: 55% of the window.)
+const WINDOW_HEIGHT = find(await views(), 'BrowserView')?.h || 800;
+// Zen's look (ZenUIManager.mjs updateTabsToolbar): min(window width / 1.5,
+// 750), centred. (shadcn's, the default look: 55% of the window, checked
+// after Ctrl+T.)
 const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
 // Zen's input row in the card (--urlbar-container-height, 62pt).
 const INPUT_ROW = 62;
@@ -302,6 +305,10 @@ const omniboxText = vs => find(vs, 'OmniboxViewViews')?.p.Text ?? '';
 
 // Zen: one Esc closes the bar.
 const closeBar = () => windowKey(VK.ESC);
+
+// The pill, the card and the suggestions in it checked here are Zen's look:
+// set it, as the default look is shadcn's (#296).
+await setKoanPref('koan.look.style', 'zen');
 
 // --- The pill ----------------------------------------------------------------
 let vs = await views();
@@ -457,6 +464,28 @@ await key(VK.T, ACCEL, 't');
 vs = await views();
 check('Ctrl+T again closes it', bar(vs)?.w === WINDOW_WIDTH &&
       (await pages()).length === tabsBefore, `width ${bar(vs)?.w}`);
+
+// The shadcn look's card (KoanUrlBarController::CardBounds()): shadcn's
+// command dialog, 55% of the window wide, centred, a little above the middle.
+// Its suggestions stay in Chromium's popup frame (ZEN_PARITY, "Floating URL
+// bar look"), so the card checks below are Zen's only.
+if (BEHAVIOR !== 'normal') {
+  await setKoanPref('koan.look.style', 'shadcn');
+  await key(VK.T, ACCEL, 't');
+  vs = await views();
+  const width = Math.floor(WINDOW_WIDTH * 55 / 100);
+  check('In the shadcn look, Ctrl+T opens its command card: 55% of the window, centred, ' +
+            'above the middle',
+        bar(vs)?.w === width && bar(vs).x === Math.floor((WINDOW_WIDTH - width) / 2) &&
+            bar(vs).y > 0 && bar(vs).y + bar(vs).h / 2 < WINDOW_HEIGHT / 2 &&
+            omniboxText(vs) === '',
+        `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
+  await closeBar();
+  await setKoanPref('koan.look.style', 'zen');
+  vs = await views();
+  check('...and Esc closes it, without a tab', bar(vs)?.w === WINDOW_WIDTH &&
+        (await pages()).length === tabsBefore, `width ${bar(vs)?.w}`);
+}
 
 // The sidebar's "+ New Tab" row does the same as Ctrl+T.
 await click(find(await views(), 'KoanNewTabRow'));
@@ -765,6 +794,31 @@ if (BEHAVIOR !== 'normal') {
               popup.y + popup.h <= win.rect.y + win.rect.h,
           `popup ${JSON.stringify(popup)}, window ${JSON.stringify(win.rect)}`);
     shot('second-window');
+
+    // An address that is open in a tab of another window (Alt+Enter's tab,
+    // in the first window) says Zen's "Switch to Tab" beside it: Chromium's
+    // tab switch button, relabelled (koan_omnibox_rows.h).
+    const typeInSecond = async (keyCode, key, isChar) => {
+      const field = ofSecond(await windowsNow())?.views.find(
+          v => v.cls === 'OmniboxViewViews' && v.shown);
+      if (field) {
+        await viewEvent(field, 'DOM.dispatchKeyEvent',
+                        { type: 'keyPressed', keyCode, code: 0, flags: 0, key, isChar });
+      }
+    };
+    for (let i = 0; i < 'koan'.length; i++) await typeInSecond(8, 8, false);
+    for (const ch of 'example.com/?alt') {
+      await typeInSecond(ch.codePointAt(0), ch.codePointAt(0), true);
+    }
+    const label = await waitFor(async () => (await viewTree()).find(
+        v => v.shown && v.props.Text === 'Switch to Tab'), 8000);
+    const chromiums = (await viewTree()).filter(
+        v => v.shown && v.props.Text === 'Switch to this tab');
+    check('...an address open in another window\'s tab says "Switch to Tab" beside it',
+          !!label && label.cls === 'OmniboxSuggestionRowButton' && !chromiums.length,
+          `${label ? `${label.cls} ${label.w}x${label.h}` : 'no label'}, ` +
+              `${chromiums.length} "Switch to this tab"`);
+    shot('second-window-switch-to-tab');
   }
 }
 

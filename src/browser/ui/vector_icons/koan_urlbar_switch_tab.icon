@@ -1,0 +1,20 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+//
+// Koan's own drawing of the key hint Zen shows after an open tab's
+// "Switch to Tab" (its urlbar-arrow.svg): a 12-unit rounded keycap with a
+// right arrow cut out of it.
+
+CANVAS_DIMENSIONS, 16,
+ROUND_RECT, 2, 2, 12, 12, 1.5,
+MOVE_TO, 5, 7.4,
+LINE_TO, 8.55, 7.4,
+LINE_TO, 7.3, 6.15,
+LINE_TO, 8.15, 5.3,
+LINE_TO, 10.85, 8,
+LINE_TO, 8.15, 10.7,
+LINE_TO, 7.3, 9.85,
+LINE_TO, 8.55, 8.6,
+LINE_TO, 5, 8.6,
+CLOSE,

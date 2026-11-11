@@ -50,6 +50,7 @@ source_set("browsertests_impl") {
   sources = [
     "browser/koan_browser_test_utils.cc",
     "browser/koan_browser_test_utils.h",
+    "browser/koan_essentials_drop_browsertest.cc",
     "browser/koan_session_data_browsertest.cc",
     "browser/koan_session_restore_browsertest.cc",
     "browser/koan_spaces_browsertest.cc",

@@ -930,6 +930,59 @@ void KoanPinnedTabController::RemoveFromEssentials(tabs::TabInterface* tab) {
   MoveAfterPinnedTabs(tab);
 }
 
+void KoanPinnedTabController::DropInEssentials(
+    const std::vector<tabs::TabInterface*>& tabs,
+    tabs::TabInterface* before) {
+  TabStripModel* model = tab_strip_model();
+  for (tabs::TabInterface* tab : tabs) {
+    // (The other tab of a split already went with the first.)
+    if (tab->IsPinned()) {
+      continue;
+    }
+    // Appends it, or leaves it where it is when it doesn't fit (Zen's
+    // canEssentialBeAdded()).
+    AddToEssentials(tab);
+    if (!tab->IsPinned() || tab->IsSplit() || !before || !before->IsPinned()) {
+      continue;
+    }
+    // From the end of the Essentials to just before `before`, after the ones
+    // dropped before it.
+    model->MoveWebContentsAt(model->GetIndexOfTab(tab),
+                             model->GetIndexOfTab(before),
+                             /*select_after_move=*/false);
+  }
+}
+
+void KoanPinnedTabController::DropEssentialInSpace(tabs::TabInterface* tab,
+                                                   tabs::TabInterface* before) {
+  if (!tab->IsPinned()) {
+    return;
+  }
+  TabStripModel* model = tab_strip_model();
+  // Into the active Space, keeping its pinned URL for now.
+  SetEssential(tab, false);
+  const std::optional<tab_groups::TabGroupId> space = tab->GetGroup();
+  if (space && !tab->IsSplit() && (!before || before->GetGroup() == space)) {
+    const int from = model->GetIndexOfTab(tab);
+    int to =
+        before
+            ? model->GetIndexOfTab(before)
+            : static_cast<int>(
+                  model->group_model()->GetTabGroup(*space)->ListTabs().end());
+    // Counted without the tab itself.
+    if (from < to) {
+      --to;
+    }
+    model->MoveWebContentsAt(from, to, /*select_after_move=*/false, space);
+  }
+  // Zen's rule, decided by where it is now (Normalize()): among the pinned
+  // tabs, one of them; elsewhere a normal tab.
+  for (tabs::TabInterface* each : WithSplit(tab)) {
+    GetOrCreateTabState(each->GetContents()).was_essential = true;
+  }
+  ScheduleNormalize(tab);
+}
+
 void KoanPinnedTabController::OnTabDuplicated(const tabs::TabInterface* source,
                                               tabs::TabInterface* duplicate) {
   if (!IsPinnedForUser(source) ||
@@ -1155,8 +1208,8 @@ void KoanPinnedTabController::SelectAnotherTab(tabs::TabInterface* tab) {
       return;
     }
   }
-  chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
-                   /*foreground=*/true, space);
+  EnsureEmptyTab(browser_view_->browser(), space, /*index=*/-1,
+                 /*foreground=*/true);
 }
 
 void KoanPinnedTabController::Discard(content::WebContents* contents) {
@@ -1649,6 +1702,9 @@ bool HandleCloseTabCommand(tabs::TabInterface* tab) {
     tab->GetBrowserWindowInterface()->GetWindow()->Close();
     return true;
   }
+  if (!IsPinnedForUser(tab) && KeepAsEmptyTabInsteadOfClosing(tab)) {
+    return true;
+  }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
   return controller && controller->HandleCloseShortcut(tab);
 }
@@ -1669,6 +1725,12 @@ bool OnTabDuplicated(content::WebContents* source,
 }
 
 bool HandleTabCloseRequest(const tabs::TabInterface* tab) {
+  // The Space's only tab, a blank page: it hides as the empty tab rather
+  // than closing and having a tab added back.
+  if (!IsPinnedForUser(tab) &&
+      KeepAsEmptyTabInsteadOfClosing(const_cast<tabs::TabInterface*>(tab))) {
+    return true;
+  }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
   return controller &&
          controller->HandleCloseRequest(const_cast<tabs::TabInterface*>(tab));

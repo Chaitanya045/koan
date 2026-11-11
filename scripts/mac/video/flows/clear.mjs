@@ -144,9 +144,17 @@ async function closeTabs(page, ids) {
   await sleep(800);
 }
 // The sidebar's rows (KoanTabRow), and the Clear button, from the view tree.
+// A KoanTabRow is a hidden helper view inside its TabView (it carries the
+// tab's properties): the row is on screen when that TabView is. viewTree() is
+// in tree order, so the parent is the latest TabView before it.
 function sidebarRows(vs) {
-  const rows = vs.filter(v => v.cls === 'KoanTabRow');
-  const shown = rows.filter(v => v.shown && v.w > 0 && v.h > 0);
+  const rows = [];
+  let tabView = null;
+  for (const v of vs) {
+    if (v.cls === 'TabView') tabView = v;
+    else if (v.cls === 'KoanTabRow') rows.push({ ...v, tabView: v.path.at(-1) === 'TabView' ? tabView : null });
+  }
+  const shown = rows.filter(v => v.tabView?.shown && v.tabView.w > 0 && v.tabView.h > 0);
   const kind = v => (v.props.Essential === 'true' ? 'essential' : v.props.PinnedInSpace === 'true' ? 'pinned' : 'normal');
   const count = list => list.reduce((n, v) => ({ ...n, [kind(v)]: (n[kind(v)] ?? 0) + 1 }), {});
   return { shown: count(shown), all: count(rows), urls: shown.map(v => [kind(v), v.props.Url ?? '']) };
@@ -307,8 +315,14 @@ async function clickClear(compact) {
   let vs = await viewTree();
   let button = clearButtonOf(vs);
   if (!button) {
-    mark('no-clear-button', { compact: compactOn(vs), region: regionOf(vs) ? 'shown' : 'hidden' });
-    return false;
+    const row = vs.find(v => v.cls === 'KoanClearTabsRow');
+    mark('no-clear-button', { compact: compactOn(vs), region: regionOf(vs) ? 'shown' : 'hidden',
+                              clearRowVisible: row?.props.Visible });
+    // Still clear (Clear's own shortcut, Cmd+Shift+K: the same
+    // CloseUnpinnedTabs()), so the round has its counts and its video.
+    mark('clear-key', {}, true);
+    await key(await anchorPage(), 75, ACCEL | SHIFT, 'k');
+    return 'key';
   }
   let r = await screenRect(button);
   if (!r) {

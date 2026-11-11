@@ -66,6 +66,7 @@
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/koan_features.h"
@@ -849,17 +850,16 @@ PrefService* KoanWorkspaceController::GetPrefs() const {
 void KoanWorkspaceController::CreateSpace(const std::u16string& name,
                                           const std::u16string& icon,
                                           const SpaceTheme& theme) {
-  TabStripModel* model = tab_strip_model();
-  content::WebContents* contents = chrome::AddAndReturnTabAt(
-      browser_view_->browser(), GURL(), InsertionIndexAfter(GetActiveSpace()),
-      /*foreground=*/false);
-  const int index = model->GetIndexOfWebContents(contents);
-  if (index == TabStripModel::kNoTab) {
+  // Zen's new Space shows its empty state: the empty tab, with no row.
+  tabs::TabInterface* tab =
+      EnsureEmptyTab(browser_view_->browser(), std::nullopt,
+                     InsertionIndexAfter(GetActiveSpace()),
+                     /*foreground=*/false);
+  if (!tab) {
     return;
   }
-  // Zen's new Space shows its empty state: the empty tab, with no row.
-  MarkEmptyTab(model, index);
-  CreateSpaceFromTabs({index}, {.name = name, .icon = icon, .theme = theme});
+  CreateSpaceFromTabs({tab_strip_model()->GetIndexOfTab(tab)},
+                      {.name = name, .icon = icon, .theme = theme});
 }
 
 tab_groups::TabGroupId KoanWorkspaceController::CreateSpaceFromTabs(
@@ -1627,15 +1627,16 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
                                    /*select_after_move=*/false);
           new_index = target;
         }
+        MarkEmptyTab(model, new_index);
       } else {
-        content::WebContents* contents = chrome::AddAndReturnTabAt(
-            browser_view_->browser(), GURL(), index, /*foreground=*/false);
-        new_index = model->GetIndexOfWebContents(contents);
-        if (new_index == TabStripModel::kNoTab) {
+        tabs::TabInterface* tab =
+            EnsureEmptyTab(browser_view_->browser(), std::nullopt, index,
+                           /*foreground=*/false);
+        if (!tab) {
           continue;
         }
+        new_index = model->GetIndexOfTab(tab);
       }
-      MarkEmptyTab(model, new_index);
       indices = {new_index};
     }
     // Same id, so whatever refers to the Space still does.
@@ -1673,11 +1674,12 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
   }
   std::vector<SpaceInfo> spaces = GetSpaces();
   if (spaces.empty() && loose.empty()) {
-    // Only Essentials: the window still has a Space, with a new tab.
-    chrome::AddTabAt(browser_view_->browser(), GURL(), model->count(),
-                     /*foreground=*/false);
-    MarkEmptyTab(model, model->count() - 1);
-    loose.push_back(model->count() - 1);
+    // Only Essentials: the window still has a Space, with its empty tab.
+    if (tabs::TabInterface* tab =
+            EnsureEmptyTab(browser_view_->browser(), std::nullopt,
+                           model->count(), /*foreground=*/false)) {
+      loose.push_back(model->GetIndexOfTab(tab));
+    }
   }
   // A window that opened with no Spaces (none restored) while the profile has
   // no other: it takes the stored ones.
@@ -1927,15 +1929,13 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
   for (size_t i = 0; i < stored.size(); ++i) {
     std::vector<int> indices = i == active ? loose : std::vector<int>();
     if (indices.empty()) {
-      content::WebContents* contents = chrome::AddAndReturnTabAt(
-          browser_view_->browser(), GURL(), model->count(),
-          /*foreground=*/false);
-      const int index = model->GetIndexOfWebContents(contents);
-      if (index == TabStripModel::kNoTab) {
+      tabs::TabInterface* tab =
+          EnsureEmptyTab(browser_view_->browser(), std::nullopt, model->count(),
+                         /*foreground=*/false);
+      if (!tab) {
         return !ids.empty();
       }
-      MarkEmptyTab(model, index);
-      indices = {index};
+      indices = {model->GetIndexOfTab(tab)};
     }
     const tab_groups::TabGroupId id = NewSpaceGroup(indices);
     WriteSpace(id, stored[i].first);
@@ -2932,6 +2932,65 @@ void ClearEmptyTabMarkIfNavigated(tabs::TabInterface* tab) {
   }
 }
 
+tabs::TabInterface* EnsureEmptyTab(
+    BrowserWindowInterface* browser,
+    const std::optional<tab_groups::TabGroupId>& space,
+    int index,
+    bool foreground) {
+  TabStripModel* model = browser->GetTabStripModel();
+  const bool spaces = SpacesOf(browser) != nullptr;
+  const TabGroup* group = space && model->group_model() &&
+                                  model->group_model()->ContainsTabGroup(*space)
+                              ? model->group_model()->GetTabGroup(*space)
+                              : nullptr;
+  if (group) {
+    const gfx::Range tabs = group->ListTabs();
+    for (size_t i = tabs.start(); i < tabs.end(); ++i) {
+      if (IsEmptyTab(model->GetTabAtIndex(static_cast<int>(i)))) {
+        if (foreground) {
+          model->ActivateTabAt(static_cast<int>(i));
+        }
+        return model->GetTabAtIndex(static_cast<int>(i));
+      }
+    }
+    if (index < 0) {
+      index = static_cast<int>(tabs.end());
+    }
+  }
+  content::WebContents* contents = chrome::AddAndReturnTabAt(
+      browser, GURL(), index, foreground,
+      group ? space : std::optional<tab_groups::TabGroupId>());
+  const int new_index =
+      contents ? model->GetIndexOfWebContents(contents) : TabStripModel::kNoTab;
+  if (new_index == TabStripModel::kNoTab) {
+    return nullptr;
+  }
+  if (spaces) {
+    MarkEmptyTab(model, new_index);
+  }
+  return model->GetTabAtIndex(new_index);
+}
+
+bool KeepAsEmptyTabInsteadOfClosing(tabs::TabInterface* tab) {
+  if (!tab || tab->IsPinned() || IsEmptyTab(tab) ||
+      !SpacesOf(tab->GetBrowserWindowInterface())) {
+    return false;
+  }
+  const std::optional<tab_groups::TabGroupId> space = tab->GetGroup();
+  TabStripModel* model = tab->GetBrowserWindowInterface()->GetTabStripModel();
+  content::WebContents* contents = tab->GetContents();
+  if (!space || !model->group_model() ||
+      !model->group_model()->ContainsTabGroup(*space) ||
+      model->group_model()->GetTabGroup(*space)->tab_count() != 1 ||
+      !contents || !IsEmptyPageUrl(contents->GetVisibleURL()) ||
+      contents->GetController().CanGoBack() ||
+      contents->GetController().CanGoForward()) {
+    return false;
+  }
+  MarkEmptyTab(model, model->GetIndexOfTab(tab));
+  return true;
+}
+
 bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   if (!features::IsWorkspacesEnabled() ||
       browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
@@ -2957,24 +3016,22 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   controller->workspaces()->ExpectEmptyTab();
   // Not from inside the tab strip's close: it can't be modified there.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(
-                     [](base::WeakPtr<BrowserWindowInterface> window,
-                        base::WeakPtr<KoanBrowserViewController> controller) {
-                       if (!window || !controller ||
-                           !window->GetTabStripModel()->empty()) {
-                         return;
-                       }
-                       content::WebContents* contents =
-                           chrome::AddAndReturnTabAt(window.get(), GURL(), -1,
-                                                     /*foreground=*/true);
-                       TabStripModel* model = window->GetTabStripModel();
-                       const int index = model->GetIndexOfWebContents(contents);
-                       if (index != TabStripModel::kNoTab) {
-                         controller->workspaces()->AdoptEmptyTab(
-                             model->GetTabAtIndex(index)->GetHandle());
-                       }
-                     },
-                     browser->GetWeakPtr(), controller->GetWeakPtr()));
+      FROM_HERE,
+      base::BindOnce(
+          [](base::WeakPtr<BrowserWindowInterface> window,
+             base::WeakPtr<KoanBrowserViewController> controller) {
+            if (!window || !controller ||
+                !window->GetTabStripModel()->empty()) {
+              return;
+            }
+            // Marked at once, so it never shows a row.
+            if (tabs::TabInterface* tab =
+                    EnsureEmptyTab(window.get(), std::nullopt, -1,
+                                   /*foreground=*/true)) {
+              controller->workspaces()->AdoptEmptyTab(tab->GetHandle());
+            }
+          },
+          browser->GetWeakPtr(), controller->GetWeakPtr()));
   return true;
 }
 

@@ -257,11 +257,16 @@ check('...and the separator sits below them',
       `tile bottom ${tiles[0]?.y + tiles[0]?.h}, separator ${clear?.y}`);
 
 // Clear: the selected tab is the pinned one, so both test page tabs go, and
-// the Space, like Zen's, stays: with a fresh tab.
+// the Space, like Zen's, stays: on its hidden empty tab, with no row.
 await click(find(vs, 'KoanClearButton'));
 const toast = await sizeOf('KoanToastView');
-check('Clear closes the unpinned tabs, leaving the Space a fresh tab',
+check('Clear closes the unpinned tabs, leaving the Space its empty tab',
       (await pages()) === 2, `${await pages()} page(s)`);
+vs = await views();
+check('...which has no row, and there is nothing left to clear',
+      inContainer(vs, 'TabView', 'UnpinnedTabContainerView').length === 0 &&
+      !find(vs, 'KoanClearTabsRow')?.shown,
+      `${inContainer(vs, 'TabView', 'UnpinnedTabContainerView').length} row(s)`);
 check('...and toasts "Tabs Closed!"', toast?.visible && toast.h === 42 && toast.w > 0,
       JSON.stringify(toast));
 vs = await views();
@@ -269,12 +274,14 @@ await key(VK.T, CTRL | SHIFT, 't');
 check('Ctrl+Shift+T brings a closed tab back', (await pages()) === 3,
       `${await pages()} page(s)`);
 
-// Two new tabs; Clear keeps the selected one, like Zen.
+// Two new tabs; Clear keeps the selected one, like Zen (and the hidden
+// empty tab, which it never closes).
 await click(find(await views(), 'KoanNewTabRow'));
 await click(find(await views(), 'KoanNewTabRow'));
 before = await pages();
 await click(find(await views(), 'KoanClearButton'));
-check('Clear keeps the selected tab', before === 5 && (await pages()) === 2,
+check('Clear keeps the selected tab', before === 5 && (await pages()) === 3 &&
+      inContainer(await views(), 'TabView', 'UnpinnedTabContainerView').length === 1,
       `${before} -> ${await pages()}`);
 
 // Compact mode collapses the sidebar (the sidebar button toggles it, as in
@@ -307,7 +314,7 @@ check('Back to vertical tabs: the rows are back',
       !find(vs, 'NewTabButton')?.shown);
 
 // In a Space with an Essential selected, Clear empties the Space but keeps
-// it, with a fresh tab. (A window always shows one Space.)
+// it, on its empty tab: no row. (A window always shows one Space.)
 await click(find(await views(), 'KoanNewTabRow'));
 vs = await views();
 const space = find(vs, 'KoanSpaceHeaderView');
@@ -315,9 +322,9 @@ await click(inContainer(vs, 'TabView', 'PinnedTabContainerView')[0]);
 await click(find(await views(), 'KoanClearButton'));
 vs = await views();
 const left = inContainer(vs, 'TabView', 'UnpinnedTabContainerView');
-check('Clear in a Space keeps the Space, with a fresh tab',
-      space?.shown && find(vs, 'KoanSpaceHeaderView')?.shown && left.length === 1,
-      `${left.length} tab(s) left`);
+check('Clear in a Space keeps the Space, with no rows left',
+      space?.shown && find(vs, 'KoanSpaceHeaderView')?.shown && left.length === 0,
+      `${left.length} row(s) left`);
 
 // Ctrl+W (⌘W) on a window's last tab closes the window, with the rows in
 // its Space's tab list: their teardown once left a dangling pointer in the

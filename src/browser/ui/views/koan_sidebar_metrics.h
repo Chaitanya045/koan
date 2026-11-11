@@ -164,6 +164,10 @@ inline int FloatingUrlBarShadowSpread() {
 inline constexpr int kOmniboxRowHeight = 49;
 inline constexpr float kOmniboxRowCornerRadius = 8;
 inline constexpr int kOmniboxRowFontSize = 14;
+// The arrow keycap after an open tab's "Switch to Tab" (Zen's
+// urlbar-arrow.svg, measured at ~12pt): kKoanUrlbarSwitchTabIcon's 16-unit
+// canvas holds a 12-unit keycap.
+inline constexpr int kOmniboxActionKeycapSize = 16;
 // Zen's input row (--urlbar-container-height) is 62pt.
 inline constexpr int kFloatingUrlBarInputHeight = 62;
 // The floating bar's text size given the omnibox's own: shadcn's 16, Zen's
