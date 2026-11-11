@@ -9,8 +9,11 @@
 // I left off"). Pages are chrome:// ones, which load without a server.
 
 #include <algorithm>
+#include <map>
 #include <string>
 
+#include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -62,10 +65,50 @@ class KoanSessionRestoreBrowserTest : public InProcessBrowserTest {
   // Only for a state a fresh window isn't in (it has one tab and one Space),
   // else it returns before the session is restored; tests that restore
   // that much wait on what they restore.
+  //
+  // On failure it lists the window's tabs (index, Space, URL, pinned, Zen's
+  // empty tab, session data keys), so a Mac run shows what came back.
+  // TODO(#267): the first Mac run timed out here in SpacesComeBack,
+  // PinnedTabComesBack and SessionDataComesBack (each PRE_ leaves the
+  // window's startup about:blank, marked as Zen's empty tab since #252), but
+  // not in RestoredNewTabPageIsNotTheEmptyTab (whose first tab navigated
+  // away). The listing decides between a stale count and a restore bug.
   void WaitForRestore(int tabs, size_t spaces) {
-    ASSERT_TRUE(base::test::RunUntil(
-        [&] { return browser()->GetTabStripModel()->count() == tabs; }));
-    ASSERT_TRUE(WaitForSpaceCount(browser(), spaces));
+    TabStripModel* tab_strip = browser()->GetTabStripModel();
+    const bool restored =
+        base::test::RunUntil([&] { return tab_strip->count() == tabs; });
+    ASSERT_TRUE(restored) << "expected " << tabs << " tabs, got "
+                          << tab_strip->count() << ":\n"
+                          << DescribeTabs();
+    ASSERT_TRUE(WaitForSpaceCount(browser(), spaces)) << DescribeTabs();
+  }
+
+  std::string DescribeTabs() {
+    TabStripModel* tab_strip = browser()->GetTabStripModel();
+    std::map<int, std::u16string> space_of;
+    if (KoanWorkspaceController* spaces = GetSpaces(browser())) {
+      for (const auto& space : spaces->GetSpaces()) {
+        for (int index : TabsOfSpace(tab_strip, space.id)) {
+          space_of[index] = space.name;
+        }
+      }
+    }
+    std::string out;
+    for (int i = 0; i < tab_strip->count(); ++i) {
+      tabs::TabInterface* tab = tab_strip->GetTabAtIndex(i);
+      std::string keys;
+      for (const auto& [key, value] : GetTabSessionData(tab->GetContents())) {
+        keys += " " + key;
+      }
+      out += base::StringPrintf(
+          "  %d [%s] %s%s%s%s data:%s\n", i,
+          base::UTF16ToUTF8(space_of.contains(i) ? space_of[i] : u"-").c_str(),
+          tab->GetContents()->GetVisibleURL().spec().c_str(),
+          tab->IsPinned() ? " essential" : "",
+          IsPinnedInSpace(tab) ? " pinned" : "",
+          IsEmptyTab(tab) ? " empty-tab" : "", keys.c_str());
+    }
+    return out;
   }
 
   // The index of the tab in the Space called `name`, with the given URL, or

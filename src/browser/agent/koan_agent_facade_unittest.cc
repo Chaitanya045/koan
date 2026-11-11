@@ -313,9 +313,17 @@ TEST_F(KoanAgentFacadeTest, AUserTabTheAgentMayOnlyReadTakesNoInput) {
   Send(2, "Page.captureScreenshot", base::DictValue(), session);
   EXPECT_EQ(backend_.sent.size(), 1u);
 
-  registry_.Pause("U1");
+  // Input on a read-only tab is refused as not permitted.
   Send(3, "Input.insertText", base::DictValue().Set("text", "hi"), session);
-  EXPECT_EQ(ErrorCode(3), "Koan.paused");
+  EXPECT_EQ(ErrorCode(3), "Koan.notPermitted");
+  EXPECT_EQ(backend_.sent.size(), 1u);
+
+  // Pause() only pauses a driven tab. Once the user lets the agent drive it,
+  // pausing refuses input as paused.
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven);
+  ASSERT_TRUE(registry_.Pause("U1"));
+  Send(4, "Input.insertText", base::DictValue().Set("text", "hi"), session);
+  EXPECT_EQ(ErrorCode(4), "Koan.paused");
   EXPECT_EQ(backend_.sent.size(), 1u);
 }
 
