@@ -1,30 +1,34 @@
 diff --git a/chrome/browser/ui/autofill/chrome_autofill_client.cc b/chrome/browser/ui/autofill/chrome_autofill_client.cc
+index 788eb88..011e68f 100644
 --- a/chrome/browser/ui/autofill/chrome_autofill_client.cc
 +++ b/chrome/browser/ui/autofill/chrome_autofill_client.cc
-@@ -192,6 +192,7 @@
+@@ -192,6 +192,8 @@
  #include "content/public/browser/ssl_status.h"
  #include "content/public/browser/storage_partition.h"
  #include "content/public/common/content_features.h"
++#include "koan/browser/containers/koan_agent_access.h"
 +#include "koan/browser/containers/koan_container_partition.h"
  #include "services/network/public/cpp/shared_url_loader_factory.h"
  #include "third_party/blink/public/common/input/web_keyboard_event.h"
  #include "third_party/blink/public/mojom/content_extraction/ai_page_content.mojom.h"
-@@ -1079,6 +1080,10 @@
+@@ -1079,6 +1081,11 @@ int64_t ChromeAutofillClient::GetNavigationId() const {
  }
  
  bool ChromeAutofillClient::IsAutofillEnabled() const {
-+  // Koan: no autofill in an agent container.
-+  if (koan::containers::IsAgentContents(web_contents())) {
++  // Koan: no autofill in an agent tab unless the user lets agents use it.
++  if (koan::containers::BlocksAgent(
++          web_contents(), koan::containers::AgentCapability::kAutofill)) {
 +    return false;
 +  }
    if (IsAutofillProfileEnabled() || AutofillClient::GetPaymentsAutofillClient()
                                          ->IsAutofillPaymentMethodsEnabled()) {
      return true;
-@@ -1121,6 +1126,9 @@
+@@ -1121,6 +1128,10 @@ bool ChromeAutofillClient::IsAutofillTypeBlockedByPolicy(
  }
  
  bool ChromeAutofillClient::IsAutocompleteEnabled() const {
-+  if (koan::containers::IsAgentContents(web_contents())) {
++  if (koan::containers::BlocksAgent(
++          web_contents(), koan::containers::AgentCapability::kAutofill)) {
 +    return false;
 +  }
    return prefs::IsAutocompleteEnabled(GetPrefs());

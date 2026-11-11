@@ -45,8 +45,15 @@ struct TargetEntry {
   bool agent_owned = false;
   TabState state = TabState::kDriven;
   // For a user tab the agent drives: the site (scheme and registrable domain)
-  // the user allowed. Leaving it ends write access (SetReadable()).
+  // the user allowed. Leaving it ends write access (LeftGrantedSite()), unless
+  // `any_site`.
   std::string site;
+  // A user tab taken over while Settings > Agent Control > "Limit a
+  // taken-over tab to its site" was off (the default): the tab stays driven on
+  // any site it goes to, and its frames and workers of other sites are the
+  // agent's too (the reach rules still apply). `site` is only what the user
+  // was asked about.
+  bool any_site = false;
 };
 
 class TargetRegistry {
@@ -85,7 +92,8 @@ class TargetRegistry {
   AddResult GrantUserTab(std::string target_id,
                          std::string client_id,
                          TabState state,
-                         std::string site = std::string());
+                         std::string site = std::string(),
+                         bool any_site = false);
 
   // The user typed or clicked in the tab. False if it is not in the registry.
   bool Pause(std::string_view target_id);
@@ -94,6 +102,16 @@ class TargetRegistry {
   // A user tab left the site the user allowed: the agent may only read it
   // now. False if it is not a user tab, or was readable already.
   bool SetReadable(std::string_view target_id);
+  // The tab committed a page of `site` (SiteFor() of its URL; empty for a
+  // page with no site). For a user tab limited to its site that leaves it,
+  // SetReadable() and true; otherwise nothing and false (an agent tab, a tab
+  // with `any_site`, a readable one, the same site).
+  bool LeftGrantedSite(std::string_view target_id, std::string_view site);
+  // Whether the client may take the tab (its navigation, a frame or worker in
+  // it) to `site`: an agent tab and a user tab with `any_site` anywhere (the
+  // URL filter and the reach rules still decide), a user tab otherwise only
+  // to the site the user allowed. False for a tab not in the registry.
+  bool MayReachSite(std::string_view target_id, std::string_view site) const;
 
   // The tab closed, or was released or handed back to the user.
   bool Remove(std::string_view target_id);

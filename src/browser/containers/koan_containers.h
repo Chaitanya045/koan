@@ -50,6 +50,16 @@ void OnRestoringContainerTab(
 // koan_container_partition.h). A tab the user moves keeps its place.
 void PlaceInContainerSpace(content::WebContents* contents);
 
+// Marks `contents`, a tab in the user's own partition, as an agent's own tab
+// of `task` (SetAgentTab(), koan_container_partition.h): the agent tab opener
+// does it for a task with "Your logins" on. The mark then follows the tab's
+// pages into the tabs they open (links, window.open, target=_blank, the
+// context menu: WebContentsObserver::DidOpenRequestedURL), as a container
+// does through its partition, and into the tab that replaces it when it is
+// discarded (AboutToBeDiscarded). A tab already in a window records it in the
+// session at once (OnTabInserted()), so it is never restored.
+void MarkAgentTab(content::WebContents* contents, const ContainerId& task);
+
 // Installs the containers as agent control's koan::agent::AgentTabOpener
 // (koan/browser/agent/koan_agent_tab_hooks.h). Called by every window with
 // Spaces (KoanWorkspaceController); once is enough.

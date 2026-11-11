@@ -1,5 +1,5 @@
 diff --git a/components/subresource_filter/content/browser/profile_interaction_manager.cc b/components/subresource_filter/content/browser/profile_interaction_manager.cc
-index 63e1b6c386490a418d39c8bbe92ebac9de250820..df4b6b8e67e7de048fbc4cdfe62ab3f4abe099bf 100644
+index 63e1b6c..64c5eac 100644
 --- a/components/subresource_filter/content/browser/profile_interaction_manager.cc
 +++ b/components/subresource_filter/content/browser/profile_interaction_manager.cc
 @@ -20,6 +20,7 @@
@@ -14,9 +14,9 @@ index 63e1b6c386490a418d39c8bbe92ebac9de250820..df4b6b8e67e7de048fbc4cdfe62ab3f4
    if (ads_violation_triggered_for_last_committed_navigation_) {
      return;
    }
-+  // Koan: an agent container's ads never turn on ad blocking for the user's
++  // Koan: an agent tab's ads never turn on ad blocking for the user's
 +  // visits.
-+  if (koan::containers::IsAgentFrame(rfh)) {
++  if (koan::containers::IsAgentTabFrame(rfh)) {
 +    return;
 +  }
  

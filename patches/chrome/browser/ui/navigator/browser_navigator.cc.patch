@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
-index d5d5691f0b7dfdb1a8cc5671537826262c96addd..d99cd20f38f55e9320d0e866b53cd6c11a8e88b5 100644
+index d5d5691..e3f6b08 100644
 --- a/chrome/browser/ui/navigator/browser_navigator.cc
 +++ b/chrome/browser/ui/navigator/browser_navigator.cc
 @@ -77,6 +77,8 @@
@@ -36,7 +36,18 @@ index d5d5691f0b7dfdb1a8cc5671537826262c96addd..d99cd20f38f55e9320d0e866b53cd6c1
  
    WebContents::CreateParams create_params(
        params.browser->GetProfile(), initial_site_instance_for_new_contents);
-@@ -864,6 +877,13 @@ base::WeakPtr<content::NavigationHandle> NavigateImpl(
+@@ -600,7 +613,9 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+   }
+ #endif
+ 
+-  return WebContents::Create(create_params);
++  // Koan: a tab an agent's own tab opens is the agent's too.
++  return koan::containers::InheritAgentTab(params.source_contents,
++                                           WebContents::Create(create_params));
+ }
+ 
+ }  // namespace
+@@ -864,6 +879,14 @@ base::WeakPtr<content::NavigationHandle> NavigateImpl(
  
    std::unique_ptr<web_app::NavigationCapturingProcess> app_navigation =
        web_app::NavigationCapturingProcess::MaybeHandleAppNavigation(*params);
@@ -44,7 +55,8 @@ index d5d5691f0b7dfdb1a8cc5671537826262c96addd..d99cd20f38f55e9320d0e866b53cd6c1
 +  // is in the default partition.
 +  if (koan::containers::IsContainerSiteInstance(
 +          params->source_site_instance.get()) ||
-+      koan::containers::IsContainerContents(params->source_contents)) {
++      koan::containers::IsContainerContents(params->source_contents) ||
++      koan::containers::IsAgentTab(params->source_contents)) {
 +    app_navigation.reset();
 +  }
  

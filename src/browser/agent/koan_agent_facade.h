@@ -104,14 +104,17 @@ class FacadeBackend {
   // Closes an agent tab of the client. False if it could not.
   virtual bool CloseTab(const std::string& target_id) = 0;
   // Koan.takeOver: asks the user to let the client drive one of their tabs
-  // (`target_id`, or the tab they are looking at), limited to that tab's site.
+  // (`target_id`, or the tab they are looking at), limited to that tab's site
+  // only with Settings > Agent Control > "Limit a taken-over tab to its site".
   // On yes the tab is in the registry (kDriven) before `done` runs.
   virtual void TakeOver(const std::optional<std::string>& target_id,
                         OpenTabCallback done) = 0;
   // Koan.release: the client gives a user tab back. False if it is not one.
   virtual bool ReleaseUserTab(const std::string& target_id) = 0;
-  // Whether a navigation of a user tab to `url` stays on the site the user
-  // allowed (always true for an agent tab).
+  // Whether a user tab (its navigation, or a frame or worker in it) may go to
+  // `url`: on the site the user allowed, or anywhere for an agent tab and a
+  // user tab taken over without the site limit
+  // (TargetRegistry::MayReachSite()).
   virtual bool IsInGrantedSite(const std::string& target_id,
                                const GURL& url) = 0;
   // Koan.resume: the agent cannot resume a paused tab; this shows the user

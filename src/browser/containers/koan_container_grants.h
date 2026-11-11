@@ -92,6 +92,29 @@ ContainerChoice ChooseContainer(
     const std::map<std::string, std::string, std::less<>>& saved,
     const std::set<std::string, std::less<>>& in_use);
 
+// Where a task's tabs open (the agent tab opener, koan_agent_containers.cc).
+enum class TaskPlace {
+  // Nothing opens (ContainerChoice::Kind::kRefused).
+  kRefused,
+  // The saved container the agent asked for and may use.
+  kSaved,
+  // A throwaway container in a hidden profile of its own (strict mode).
+  kStrict,
+  // The user's own partition, with their logins ("Your logins" on), as
+  // agent tabs (SetAgentTab()).
+  kUserPartition,
+  // A new throwaway container.
+  kThrowaway,
+};
+
+// `choice` is ChooseContainer()'s; `strict` Settings > Agent Control >
+// Strict; `logins` "What agents can use" > Your logins. A saved container
+// the agent named wins (it asked for that account, not the user's); strict
+// mode wins over the user's logins (it shares nothing of the user's).
+TaskPlace ChooseTaskPlace(ContainerChoice::Kind choice,
+                          bool strict,
+                          bool logins);
+
 }  // namespace koan::containers
 
 #endif  // KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_GRANTS_H_

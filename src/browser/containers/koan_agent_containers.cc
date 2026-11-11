@@ -43,11 +43,13 @@
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/agent/koan_agent_policy.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "koan/browser/containers/koan_agent_access.h"
 #include "koan/browser/containers/koan_container_grants.h"
 #include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/koan_features.h"
@@ -70,7 +72,8 @@ constexpr char16_t kDefaultSpaceName[] = u"Agent";
 constexpr size_t kMaxSavedNameLength = 64;
 
 // The agent containers started in a profile and not yet ended, with their
-// Space's name. A throwaway container that isn't here can't get new tabs.
+// Space's name and whether they are in the user's partition (kUserPartition). A
+// throwaway container that isn't here can't get new tabs.
 class StartedContainers : public base::SupportsUserData::Data {
  public:
   static StartedContainers& For(Profile* profile) {
@@ -83,7 +86,12 @@ class StartedContainers : public base::SupportsUserData::Data {
     return *data;
   }
 
-  std::map<std::string, std::u16string>& names() { return names_; }
+  struct Started {
+    std::u16string space_name;
+    // A kUserPartition task: its tabs are in the user's partition.
+    bool user_partition = false;
+  };
+  std::map<std::string, Started>& started() { return started_; }
 
  private:
   static const void* Key() {
@@ -91,7 +99,7 @@ class StartedContainers : public base::SupportsUserData::Data {
     return &kKey;
   }
 
-  std::map<std::string, std::u16string> names_;
+  std::map<std::string, Started> started_;
 };
 
 // A client's task (AgentTabRequest's client id and task).
@@ -380,18 +388,29 @@ class ContainerTabOpener : public agent::AgentTabOpener {
     const ContainerChoice choice =
         ChooseContainer(ContainerGrants::Get(), request.client_id,
                         request.saved_container, saved, in_use);
-    if (choice.kind == ContainerChoice::Kind::kRefused) {
-      return std::nullopt;
-    }
     AgentContainerOptions options{
         .space_name = request.task.empty() ? std::u16string(kDefaultSpaceName)
                                            : base::UTF8ToUTF16(request.task)};
-    if (choice.kind == ContainerChoice::Kind::kSaved) {
-      options.mode = AgentMode::kSaved;
-      options.saved_name = request.saved_container;
-      *saved_id = choice.container_id;
-    } else if (profile->GetPrefs()->GetBoolean(prefs::kAgentControlStrict)) {
-      options.mode = AgentMode::kStrict;
+    switch (ChooseTaskPlace(
+        choice.kind,
+        profile->GetPrefs()->GetBoolean(prefs::kAgentControlStrict),
+        AgentMay(profile->GetPrefs(), AgentCapability::kLogins))) {
+      case TaskPlace::kRefused:
+        return std::nullopt;
+      case TaskPlace::kSaved:
+        options.mode = AgentMode::kSaved;
+        options.saved_name = request.saved_container;
+        *saved_id = choice.container_id;
+        break;
+      case TaskPlace::kStrict:
+        options.mode = AgentMode::kStrict;
+        break;
+      case TaskPlace::kUserPartition:
+        options.mode = AgentMode::kUserPartition;
+        break;
+      case TaskPlace::kThrowaway:
+        options.mode = AgentMode::kThrowaway;
+        break;
     }
     return options;
   }
@@ -444,14 +463,17 @@ void EndAgentTask(const std::string& client_id, const std::string& task) {
 
 namespace {
 
-// Records a started container of `profile` and its Space's name, and runs
-// `done` with it, asynchronously.
+// Records a started container of `profile`, its Space's name and whether its
+// tabs are in the user's partition, and runs `done` with it, asynchronously.
 void FinishStart(Profile* profile,
                  const ContainerId& container,
                  const std::u16string& space_name,
-                 base::OnceCallback<void(AgentContainerResult)> done) {
-  StartedContainers::For(profile).names()[container.id] =
-      space_name.empty() ? std::u16string(kDefaultSpaceName) : space_name;
+                 base::OnceCallback<void(AgentContainerResult)> done,
+                 bool user_partition = false) {
+  StartedContainers::For(profile).started()[container.id] = {
+      .space_name =
+          space_name.empty() ? std::u16string(kDefaultSpaceName) : space_name,
+      .user_partition = user_partition};
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(std::move(done),
@@ -478,6 +500,9 @@ void OnStrictProfileReady(std::u16string space_name,
   }
   // Nobody uses it but the agent: no welcome screen in its window.
   profile->GetPrefs()->SetBoolean(prefs::kWelcomeScreenSeen, true);
+  // It shares nothing of the user's: no "What agents can use" either (and so
+  // a container, never its own default partition).
+  DenyAllAgentAccess(profile->GetPrefs());
   // Alive until the task ends; then, with its windows closed, Chromium
   // deletes it (ProfileManager::RemoveKeepAlive() schedules an ephemeral
   // profile's deletion with its last keep-alive).
@@ -513,6 +538,13 @@ void StartAgentContainer(Profile* profile,
                   {.kind = ContainerKind::kAgent,
                    .id = NewContainerId(/*persistent=*/false)},
                   options.space_name, std::move(done));
+      return;
+    case AgentMode::kUserPartition:
+      FinishStart(profile,
+                  {.kind = ContainerKind::kAgent,
+                   .id = NewContainerId(/*persistent=*/false)},
+                  options.space_name, std::move(done),
+                  /*user_partition=*/true);
       return;
     case AgentMode::kSaved:
       if (!IsValidSavedName(options.saved_name)) {
@@ -563,25 +595,34 @@ content::WebContents* OpenAgentTab(Profile* profile,
       !agent::IsAllowedNavigationUrl(url)) {
     return nullptr;
   }
-  std::map<std::string, std::u16string>& started =
-      StartedContainers::For(profile).names();
-  auto name = started.find(container.id);
-  if (name == started.end()) {
+  std::map<std::string, StartedContainers::Started>& started =
+      StartedContainers::For(profile).started();
+  auto task = started.find(container.id);
+  if (task == started.end()) {
     return nullptr;
   }
+  const bool user_partition = task->second.user_partition;
   BrowserWindowInterface* browser = FindWindow(profile);
   if (!browser) {
     return nullptr;
   }
   TabStripModel* tab_strip = browser->GetTabStripModel();
 
+  // In the container, or in the user's partition (upstream's SiteInstance
+  // for a new tab), as the agent's.
   content::WebContents::CreateParams create_params(
-      profile, CreateSiteInstance(profile, container, url));
+      profile, user_partition ? scoped_refptr<content::SiteInstance>()
+                              : CreateSiteInstance(profile, container, url));
   // In the background: never the active tab, never shown.
   create_params.initially_hidden = true;
   std::unique_ptr<content::WebContents> owned =
       content::WebContents::Create(create_params);
   content::WebContents* contents = owned.get();
+  if (user_partition) {
+    // Before it loads or enters the window: its blocks, its Space and the
+    // session know it as the agent's.
+    MarkAgentTab(contents, container);
+  }
   // The size of the window's page, as upstream's TabStripModel::AddTab()
   // gives a tab added in the background (InsertWebContentsAt() doesn't). It
   // is never shown, and on macOS its view stays 0x0 otherwise: the page lays
@@ -605,7 +646,8 @@ content::WebContents* OpenAgentTab(Profile* profile,
   }
   const int index = tab_strip->InsertWebContentsAt(
       tab_strip->count(), std::move(owned), AddTabTypes::ADD_NONE);
-  if (!CreateBackgroundSpace(tab_strip, index, name->second, kAgentSpaceIcon)) {
+  if (!CreateBackgroundSpace(tab_strip, index, task->second.space_name,
+                             kAgentSpaceIcon)) {
     // The window lost its Spaces in between: never leave the agent's tab
     // loose among the user's.
     tab_strip->CloseWebContentsAt(index, TabCloseTypes::CLOSE_NONE);
@@ -639,7 +681,7 @@ void EndAgentContainer(Profile* profile, const ContainerId& container) {
   if (!IsAllowedProfile(profile) || container.kind != ContainerKind::kAgent) {
     return;
   }
-  StartedContainers::For(profile).names().erase(container.id);
+  StartedContainers::For(profile).started().erase(container.id);
   for (content::WebContents* contents : GetContainerTabs(profile, container)) {
     tabs::TabInterface* tab = tabs::TabInterface::GetFromContents(contents);
     TabStripModel* tab_strip =

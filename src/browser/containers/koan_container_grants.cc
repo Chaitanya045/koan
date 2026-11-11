@@ -94,4 +94,21 @@ ContainerChoice ChooseContainer(
   return {.kind = Kind::kSaved, .container_id = it->second};
 }
 
+TaskPlace ChooseTaskPlace(ContainerChoice::Kind choice,
+                          bool strict,
+                          bool logins) {
+  switch (choice) {
+    case ContainerChoice::Kind::kRefused:
+      return TaskPlace::kRefused;
+    case ContainerChoice::Kind::kSaved:
+      return TaskPlace::kSaved;
+    case ContainerChoice::Kind::kThrowaway:
+      break;
+  }
+  if (strict) {
+    return TaskPlace::kStrict;
+  }
+  return logins ? TaskPlace::kUserPartition : TaskPlace::kThrowaway;
+}
+
 }  // namespace koan::containers

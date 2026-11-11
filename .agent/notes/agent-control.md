@@ -621,20 +621,43 @@ is `.agent/notes/upstream/containers.md` (cited as E§n).
 The earlier draft of this section (a tab group sharing the user's cookie jar, with copy that said so plainly,
 decision 15) is withdrawn: decision 15's warning now applies only to the "Your tab" mode below.
 
-### 7.0 Spawn modes
+### 7.0 Spawn modes, and what agents can use
 
-The default mode is a setting (Settings > Agent control). The pairing and task prompts show the mode, and the user can
-change it or refuse the task.
+**Decision (user, 2026-11-11; supersedes the container-by-default part of the 2026-11-10 decision): agents use the
+browser as the user does.** Settings > Agent Control > **What agents can use** has five switches, profile prefs, all
+**on** by default, with no per-site list (`koan_agent_access_prefs.h`):
+
+| Switch | On (default) | Off |
+|---|---|---|
+| **Your logins** | the task's tabs open in the user's own partition, with their cookies and sessions (mode *Your logins* below) | a container: throwaway, or a saved one the agent may use |
+| **Saved passwords** | the password manager fills and saves in agent tabs | blocked (B4) |
+| **Addresses and cards** | autofill and autocomplete in agent tabs | blocked (B5) |
+| **Your extensions** | extensions run in agent tabs: content scripts and extension APIs in a container's processes, webRequest, `chrome.debugger`, tab ids, webNavigation | blocked (B3). With *Your logins* on the agent tab shares the user's processes, so only what is decided per tab is blocked (tab ids, debugger, webRequest by frame, webNavigation); **content scripts still run**, as Settings and SECURITY.md say |
+| **History** | agent visits go into History (with their icons) and history-based suggestions | blocked (B7, and the Favicons database) |
+
+A sixth switch in the same group, **Limit a taken-over tab to its site**, is **off** by default (§9.2).
+
+Every block the user can switch reads its switch through one helper, `koan::containers::BlocksAgent*(…, capability)`
+(`koan_agent_access.h`, unit-tested): a block applies only when the tab is an agent tab **and** its switch is off. A
+missing or unregistered pref fails closed (blocked). Strict mode turns all five off in its hidden profile. Kept
+whatever the switches say: approving each agent program, the indicator and Stop, the scrubber (cookies and tokens never
+go back to the agent), no acting on interstitials, page prompts routed to the user (§9.4), and strict mode as an option.
+The approval prompt says what the agent's tabs will get, from the switches (`DescribeAgentAccess()`).
+
+The mode a task gets is chosen when it starts (`ChooseTaskPlace()`, `koan_container_grants.h`, unit-tested): a saved
+container the agent named and may use, else strict mode if it is on, else *Your logins* if it is on, else a throwaway
+container. The pairing and task prompts show what the tabs get, and the user can change it or refuse the task.
 
 | Mode | What the agent gets | Data after the task | Status |
 |---|---|---|---|
-| **Throwaway** (default) | a new in-memory container for this task | cleared when the task ends (`StoragePartition::ClearData`, E§1); gone at quit at the latest | core PR |
+| **Throwaway** (the default with *Your logins* off) | a new in-memory container for this task | cleared when the task ends (`StoragePartition::ClearData`, E§1); gone at quit at the latest | core PR |
 | **Saved** | a named container on disk that keeps its cookies between tasks ("GitHub bot") | kept; made and deleted in Settings > Agent Control (never by an agent). A task gets it **only if the user granted it to that client** (Settings, per paired client, by its stable id; in memory, reset with the pairings) **and the agent asked for it by name** (`AgentTabRequest::saved_container`), and not while another task has it open (`ChooseContainer`, `koan_container_grants.h`) | core PR + grants PR |
-| **Your tab** | a lease on one of the user's own tabs, limited to that tab's site (§8, §9). Not a container: this is the only mode where the agent acts with the user's logins, and its prompt says so | n/a | another PR (lease + gateway) |
+| **Your logins** (the default) | no container: the task's tabs open in the user's own partition and carry a mark (`SetAgentTab()`, a `WebContents` user-data, the way `SetAgentLeased()` marks a leased tab) with the task's id, an agent `ContainerId` that no partition has. `ContainerOf()` returns it, so the Space, the session (`koan.container` = `agent:t…`, so the tab is never restored), the end of the task and window sync treat it as an agent container's tab. The mark follows the tab: into the tabs its pages open (`DidOpenRequestedURL`, for `window.open`, `target=_blank`, `noopener` and, marked before their tab helpers by `CreateTargetContents`, Cmd-click and the context menu) and into a discarded tab's replacement (`AboutToBeDiscarded`). Site permissions behave as the user's, but a prompt only shows when the user opens the tab (an agent tab is never the active one); file and device pickers, screen sharing and passkeys stay refused in every agent tab, because a picker or a Touch ID sheet for a background tab would show over the user's work (`IsAgentTabFrame()`); downloads, open-tab sync, `@tabs`, search engines, protocol handlers, badges and the other site-state blocks hold as in a container | nothing to clear: the agent's cookies are the user's | this PR |
+| **Your tab** | a lease on one of the user's own tabs, after the take-over prompt (§8, §9); limited to that tab's site only with *Limit a taken-over tab to its site* on. Not a container: the agent acts with the user's logins, and its prompt says so | n/a | another PR (lease + gateway) |
 | **Strict** | a separate hidden profile per task (`CreateMultiProfileAsync(is_hidden)`: ephemeral and omitted, `SetIsOmitted` again explicitly), with a throwaway agent container inside it so every block of §7.2 still applies: nothing of the user's profile is shared (settings, extensions, history service, permissions), the strongest wall. Its tabs open in a background window of that profile (§7.1); Settings > Agent Control > Strict makes it the default for tasks that ask for no saved container | the profile is kept alive (`kRemoteDebugging` keep-alive) until the task ends; then its windows close and Chromium deletes it (an ephemeral profile goes with its last keep-alive, one left by a crash at the next start). The launch picker counts only visible profiles | strict PR |
 
-There is **no free run in the user's own jar**: an agent never gets the default partition except through a per-tab,
-per-site lease the user approved.
+With *Your logins* off there is no free run in the user's own jar: an agent gets the default partition only through a
+per-tab lease the user approved.
 
 ### 7.1 How a container works (E§1-E§6)
 
@@ -696,23 +719,25 @@ per-site lease the user approved.
   shuts down (`browser_context.h`, E§1), so each throwaway task leaves an empty partition and its network context
   behind until quit: a known cost (T-cont-6 measures it). A partition is never reused for another task, because
   `ClearData` does not reset a network context's HTTP auth cache or sockets.
-* **What the user sees.** The Space's header and its tabs say "Agent · not your logins". Downloads from an agent tab go
+* **What the user sees.** The agent's Space has the agent icon and the task's name; with *Your logins* off its tabs are signed out. Downloads from an agent tab go
   to `~/Downloads/Koan Agent/` and show in the normal downloads UI (one `DownloadManager` per profile; each item
   remembers its partition, E§7).
 
 ### 7.2 What an agent container blocks
 
-Only **agent** containers block; user containers (#111) behave like the default partition. Each block is a few lines in
-the upstream decision function calling `koan::containers::IsAgent*` (§14 B-rows):
+Only **agent** tabs block (in an agent container, or an agent's own tab in the user's partition, §7.0); user containers
+(#111) behave like the default partition. Each block is a few lines in the upstream decision function calling
+`koan::containers::IsAgent*`, or `BlocksAgent*` for the five switches of §7.0 (§14 B-rows). Rows marked *switch*
+apply only while the user has turned that switch off; site permissions apply in containers only:
 
 | Surface | Block | Upstream decision point |
 |---|---|---|
 | Every permission (location, camera, microphone, notifications, clipboard, MIDI, sensors, storage access, ...) | denied, never prompted | `PermissionUtil::IsPermissionBlockedInPartition` (the one check `PermissionManager` makes for both requests and status, `permission_manager.cc`), true for agent partitions. Upstream already blocks *undelegated* permissions in any non-default partition; Brave overrides the same function the other way, to share (E§5). WebUSB, WebHID and Web Serial are already refused in non-default partitions upstream |
 | Choosers and pickers | file and directory pickers, File System Access pickers, Bluetooth chooser and scanning prompt, screen share (`getDisplayMedia`) cancelled (a `Koan.userNeeded` event for them is the gateway's, §9.4) instead of a native sheet | `BrowserWebContentsDelegate::RunFileChooser`, `EnumerateDirectory`; `ChromeFileSystemAccessPermissionContext::CanShowFilePicker`; `ChromeBluetoothDelegateImplClient::RunBluetoothChooser`, `ShowBluetoothScanningPrompt`; `DisplayMediaAccessHandler::HandleRequest` |
-| Extensions | no content scripts or extension APIs in agent processes; no webRequest or declarativeNetRequest on agent traffic; no `chrome.debugger` attach; extension APIs cannot address an agent tab by id | `RendererStartupHelper::OnRenderProcessHostCreated` / `OnRenderProcessLaunched` (precedent: `kInitialWebUIWithoutExtensions`), `WebRequestAPI::MaybeProxyURLLoaderFactory`, `ExtensionMayAttachToWebContents` (debugger), `ExtensionTabUtil::GetTabById`. `chrome.cookies` reads only the default jar |
-| Passwords | no fill, no save, no Credential Management API | `ChromePasswordManagerClient::IsFillingEnabled` (saving requires it) |
-| Autofill | no addresses, cards or autocomplete | `ChromeAutofillClient::IsAutofillEnabled`, `IsAutocompleteEnabled` |
-| History and omnibox | agent visits are not added to History, so not to history-based suggestions; `@tabs` and Switch to tab do not offer agent tabs | `HistoryTabHelper::DidFinishNavigation` (before `ShouldUpdateHistory()`); `TabMatcherDesktop::GetOpenWebContents` |
+| Extensions (*switch*) | no content scripts or extension APIs in agent processes; no webRequest or declarativeNetRequest on agent traffic; no `chrome.debugger` attach; extension APIs cannot address an agent tab by id | `RendererStartupHelper::OnRenderProcessHostCreated` / `OnRenderProcessLaunched` (precedent: `kInitialWebUIWithoutExtensions`), `WebRequestAPI::MaybeProxyURLLoaderFactory`, `ExtensionMayAttachToWebContents` (debugger), `ExtensionTabUtil::GetTabById`. `chrome.cookies` reads only the default jar |
+| Passwords (*switch*) | no fill, no save, no Credential Management API | `ChromePasswordManagerClient::IsFillingEnabled` (saving requires it) |
+| Autofill (*switch*) | no addresses, cards or autocomplete | `ChromeAutofillClient::IsAutofillEnabled`, `IsAutocompleteEnabled` |
+| History and omnibox | agent visits are not added to History, so not to history-based suggestions (*switch*); `@tabs` and Switch to tab do not offer agent tabs | `HistoryTabHelper::DidFinishNavigation` (before `ShouldUpdateHistory()`); `TabMatcherDesktop::GetOpenWebContents` |
 | Downloads | to `~/Downloads/Koan Agent/`, never a Save As prompt, Safe Browsing as usual | `DownloadTargetDeterminer::DoGenerateTargetPath` (where the prompt and the target directory are decided) |
 | Sync | agent tabs are not synced as open tabs (history and passwords are already out) | `TabContentsSyncedTabDelegate::ShouldSync` |
 | Passkeys / WebAuthn / Touch ID | refused before any UI | `ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn` (the existing Koan patch) |
@@ -880,8 +905,17 @@ Agent-Space tabs start `driven`.
   few milliseconds an injected sequence runs (B§7; note the `ShouldIgnoreInputEvents` effect is Aura-only, so
   Mac relies on the callback).
 
+**Site limit (user, 2026-11-11).** Settings > Agent Control > *Limit a taken-over tab to its site* is **off** by default:
+the user's yes covers wherever the tab goes. Off, a taken-over tab (`TargetRegistry::GrantUserTab(…, any_site)`) stays
+`driven` across navigations and redirects to other sites (no downgrade to `readable`, no `Koan.offSite` for
+`Page.navigate`), and its frames and workers of other sites (#247) are the agent's; the reach rules still cut
+privileged schemes and interstitials. On, the one-site behaviour below applies. The prompt says which (read when the
+user is asked; a grant keeps it). The decisions are `TargetRegistry::MayReachSite()` and `LeftGrantedSite()`, pure and
+unit-tested with both settings; redaction still applies only to a tab that is not `driven`.
+
 **Built (take-over PR):** `Koan.takeOver {targetId?}` (capability `drive`; the user's active tab by default) shows a browser-modal
-prompt in the tab's window, 60 s, default deny, and grants the tab `driven` **for its site only** (`net::SchemefulSite` at approval).
+prompt in the tab's window, 60 s, default deny, and grants the tab `driven` (with the limit on, **for its site only**:
+`net::SchemefulSite` at approval).
 The agent's own `Page.navigate` off that site is `Koan.offSite`; any committed navigation off it (a link, a redirect, the user) makes
 the tab `readable` (`Koan.siteLeft`), where DOM answers and events go through `RedactSecretInputs()` (#196 N1) and `Network.enable`
 is refused (N2). The user's own input (`DidGetUserInteraction` without `kFromDebugger`, plus wheel per widget) pauses any registry
@@ -1149,7 +1183,9 @@ REBASE rows must reference **symbols**, not lines (rule 3): `SetIsPinnedTab`, `S
 (a roll that adds a CDP method fails it). Behaviours to name in the rows: freezing/discard/priority stay exempt for a
 leased tab (T-keep-5, 6, 8), a `<select>` click opens no native menu (T-focus-4).
 
-**Container Mac tests** (part of the §15 plan, listed here with their hooks):
+**Container Mac tests** (part of the §15 plan, listed here with their hooks). T-cont-* and T-block-* run with
+"Your logins" off, and T-block-3, -4, -5 with their own switch off too (§7.0, "What agents can use"); T-access-* run
+each switch on and off:
 
 | ID | Test | Pass condition |
 |---|---|---|
@@ -1170,6 +1206,16 @@ leased tab (T-keep-5, 6, 8), a `<select>` click opens no native menu (T-focus-4)
 | T-block-5 | visit pages in an agent tab | not in History, not suggested by the omnibox, not listed by `@tabs`, not in another device's open tabs |
 | T-block-6 | a download in an agent tab | lands in `~/Downloads/Koan Agent/` with no prompt; shows in the downloads UI |
 | T-block-7 | a passkey sign-in in an agent tab | refused at once, no Touch ID sheet |
+| T-access-1 | defaults (every switch on); sign in to a site in a user tab; an agent opens it, then clicks a `target=_blank` link, a `rel=noopener` link and Cmd-clicks a third | every agent tab is signed in (the user's partition), in the agent's Space, background, leased, in the indicator; `chrome://process-internals` shows no `koanagent` partition; ending the task closes all four; quit and restart: none comes back (Reopen Closed Tab neither) |
+| T-access-2 | "Your logins" off, then a new task | the agent tab is signed out (a throwaway container, T-cont-1); a task started before the change keeps its place |
+| T-access-3 | "Saved passwords" on / off: a login form with a saved password in an agent tab | on: Chrome offers and fills it, and offers to save a new one; off: no fill, no save prompt (T-block-4) |
+| T-access-4 | "Addresses and cards" on / off: an address form and a card form | on: the autofill dropdown fills them; off: none (T-block-4) |
+| T-access-5 | "Your extensions" on / off, with a content-script extension, a webRequest logger and an extension calling `chrome.tabs.get` / `chrome.debugger.attach` on the agent tab: (a) "Your logins" off (a container), (b) on | on, both: the content script runs, requests are logged, `tabs.get` and `debugger.attach` work. Off, (a): none of them (T-block-3). Off, (b): `tabs.get` and `debugger.attach` fail and no request is logged, **but the content script still runs** (as Settings and SECURITY.md say) |
+| T-access-6 | "History" on / off: visit pages in an agent tab | on: in History with their icons, suggested by the omnibox; off: neither (T-block-5). Either way `@tabs` doesn't list agent tabs and no other device sees them as open tabs |
+| T-access-7 | "Your logins" on: discard an agent tab (`chrome://discards`), then let the agent use it again | still the agent's (its Space, the indicator, ends with the task) |
+| T-access-8 | "Your logins" on, the user working in another tab: an agent tab asks for geolocation, a file input, `navigator.credentials.get` with a passkey, and FedCM sign-in | nothing shows over the user's tab: the permission prompt waits until the user opens the agent tab, then shows as the user's; the file picker is cancelled and the passkey refused; FedCM's dialog shows only on the agent tab, never over the user's |
+| T-take-site-1 | "Limit a taken-over tab to its site" off (the default): take over a user tab on mail.example; the agent clicks a link to bank.example, follows a cross-site redirect, and `Page.navigate`s to a third site; a cross-site iframe in it | the prompt says "any site the tab goes to"; the tab stays driven throughout (no `Koan.siteLeft`, no `Koan.offSite`); the iframe is the agent's; a `chrome://` page or an interstitial is still refused |
+| T-take-site-2 | the same with the limit on | the prompt says "this site only"; `Page.navigate` off the site is `Koan.offSite`; the link makes the tab readable (`Koan.siteLeft`) and its password fields come back redacted; the cross-site iframe is detached |
 
 ## 15. Mac tests (phases 2-3; nothing runs on Linux except the pure-logic unit tests)
 

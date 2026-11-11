@@ -165,6 +165,8 @@ class AgentForwarder {
     uint64_t dialog_id = 0;
     std::string client_id;
     std::string site;
+    // "Limit a taken-over tab to its site" was off when the user was asked.
+    bool any_site = false;
     base::WeakPtr<content::WebContents> contents;
     FacadeBackend::OpenTabCallback done;
     base::OneShotTimer timer;

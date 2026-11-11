@@ -110,5 +110,36 @@ TEST(ContainerGrantsTest, ClientsKeepTheirLabel) {
   EXPECT_TRUE(grants.Clients().empty());
 }
 
+// "What agents can use" > Your logins (user, 2026-11-11): on, a task's tabs
+// open in the user's own partition; off, in a throwaway container.
+TEST(ContainerGrantsTest, LoginsChooseTheUserPartition) {
+  EXPECT_EQ(ChooseTaskPlace(Kind::kThrowaway, /*strict=*/false,
+                            /*logins=*/true),
+            TaskPlace::kUserPartition);
+  EXPECT_EQ(ChooseTaskPlace(Kind::kThrowaway, /*strict=*/false,
+                            /*logins=*/false),
+            TaskPlace::kThrowaway);
+}
+
+// A saved container the agent may use wins over the user's logins, strict
+// mode wins over them too, and a refusal stays one.
+TEST(ContainerGrantsTest, SavedAndStrictWinOverLogins) {
+  EXPECT_EQ(ChooseTaskPlace(Kind::kSaved, /*strict=*/false, /*logins=*/true),
+            TaskPlace::kSaved);
+  EXPECT_EQ(ChooseTaskPlace(Kind::kSaved, /*strict=*/true, /*logins=*/true),
+            TaskPlace::kSaved);
+  EXPECT_EQ(ChooseTaskPlace(Kind::kThrowaway, /*strict=*/true, /*logins=*/true),
+            TaskPlace::kStrict);
+  EXPECT_EQ(
+      ChooseTaskPlace(Kind::kThrowaway, /*strict=*/true, /*logins=*/false),
+      TaskPlace::kStrict);
+  for (bool strict : {false, true}) {
+    for (bool logins : {false, true}) {
+      EXPECT_EQ(ChooseTaskPlace(Kind::kRefused, strict, logins),
+                TaskPlace::kRefused);
+    }
+  }
+}
+
 }  // namespace
 }  // namespace koan::containers

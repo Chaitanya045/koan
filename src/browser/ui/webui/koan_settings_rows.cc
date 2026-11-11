@@ -17,6 +17,7 @@
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/prefs/pref_service.h"
+#include "koan/browser/containers/koan_agent_access_prefs.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
@@ -93,11 +94,15 @@ constexpr Group kGroups[] = {
      "and Energy Saver are in Chromium's settings (Performance)."},
     // Koan's own (.agent/notes/agent-control.md section 6.1).
     {"agent-control", "agents", "Agents", "Agent ready",
-     "Lets agents you approve open and work in background tabs. Tabs stay "
-     "awake only while an agent is using them. Every new program asks you "
-     "first, naming the program. Agent tabs are in containers of their own "
-     "and never get your logins or cookies. "
+     "Lets agents you approve open and work in background tabs, in a Space "
+     "of their own. Tabs stay awake only while an agent is using them. Every "
+     "new program asks you first, naming the program. Your cookies and "
+     "sign-in tokens are never sent to it. "
      "Turned off by your organisation's policy if remote debugging is."},
+    {"agent-access", "agents", "Agents", "What agents can use",
+     "Agents use the browser as you do. Turn off what they shouldn't have. "
+     "A change applies to the next task (Your logins) or the next page; "
+     "Strict mode shares none of it."},
     {"agent-limits", "agents", "Agents", "Limits",
      "A change applies to new connections and new awake tabs; nothing running "
      "is cut off."},
@@ -543,6 +548,43 @@ constexpr Row kRows[] = {
               "permissions)",
      .is_available = IsAgentControlAllowed,
      .indent = true},
+    // "What agents can use" (koan_agent_access_prefs.h; user, 2026-11-11).
+    {.group = "agent-access",
+     .control = Control::kCheckbox,
+     .pref = containers::kAgentMayUseLogins,
+     .label = "Your logins: agent tabs share your cookies and sessions (off: "
+              "each task gets a container of its own)",
+     .is_available = IsAgentControlAllowed},
+    {.group = "agent-access",
+     .control = Control::kCheckbox,
+     .pref = containers::kAgentMayUsePasswords,
+     .label = "Saved passwords: fill and save them in agent tabs",
+     .is_available = IsAgentControlAllowed},
+    {.group = "agent-access",
+     .control = Control::kCheckbox,
+     .pref = containers::kAgentMayUseAutofill,
+     .label = "Addresses and cards: fill them in agent tabs",
+     .is_available = IsAgentControlAllowed},
+    {.group = "agent-access",
+     .control = Control::kCheckbox,
+     .pref = containers::kAgentMayUseExtensions,
+     .label = "Your extensions: run them in agent tabs",
+     .is_available = IsAgentControlAllowed,
+     .note = "With Your logins on, agent tabs share your tabs' processes, so "
+             "turning this off can't stop your extensions' content scripts "
+             "there. Koan still keeps extensions from finding, debugging or "
+             "watching the requests of agent tabs."},
+    {.group = "agent-access",
+     .control = Control::kCheckbox,
+     .pref = containers::kAgentMayUseHistory,
+     .label = "History: agent visits go into your history and suggestions",
+     .is_available = IsAgentControlAllowed},
+    {.group = "agent-access",
+     .control = Control::kCheckbox,
+     .pref = containers::kAgentLimitTakeOverToSite,
+     .label = "Limit a taken-over tab to its site (off: once you allow it, "
+              "the agent keeps control wherever the tab goes)",
+     .is_available = IsAgentControlAllowed},
     {.group = "agent-limits",
      .control = Control::kMenu,
      .pref = prefs::kAgentControlMaxLeasedTabs,

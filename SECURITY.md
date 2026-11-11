@@ -62,26 +62,54 @@ It stops the silent, one-flag attack, not malware that already runs as you.
 Chrome's `chrome://inspect#remote-debugging` switch (a prompt for each
 connection) works as in Chromium.
 
-## Agent containers
+## What agents can use
 
-Agents you approve (Settings > Agents) work in **containers**: storage
-partitions of their own inside your profile, so their cookies, storage and
-cache are never yours. They are throwaway (cleared when the task ends) unless
-you saved one for an agent. In an agent container Koan refuses every site
-permission, file and device pickers, screen sharing, passkeys and security
-keys, password and address filling, history, open-tab sync and your
-extensions' content scripts, web requests and debugger
-(`.agent/notes/agent-control.md` section 7.2).
+Agents you approve (Settings > Agents) use the browser as you do, unless you
+turn a part off in **What agents can use**: your logins, saved passwords,
+addresses and cards, your extensions and history are all **on** by default.
+Each switch is read by every block it controls; with it off the block applies
+in agent tabs (`.agent/notes/agent-control.md` sections 7.0 and 7.2).
 
-Known gap: your own extensions with the "tabs" permission can still see agent
-tabs' URLs and titles (Chromium has no way to hide a tab from them). They
-can't script, debug or change those tabs, and nothing of yours reaches the
-agent through this.
+What that means, plainly:
+
+- **Your logins** on: an agent's tabs share your cookies and sessions, so the
+  agent acts on sites as you. It can read what those pages show you. Your
+  cookies and sign-in tokens are still never sent to the agent program (Koan's
+  scrubber drops them from what it reads), but a page signed in as you is
+  yours to the agent.
+- **Saved passwords** on: Chrome fills your saved passwords in agent tabs, and
+  a filled password is in the page, where the agent can read it.
+- **Your extensions** off while **Your logins** is on: agent tabs share your
+  tabs' renderer processes, so Koan can't stop your extensions' content scripts
+  there. It still keeps extensions from finding agent tabs by id, attaching
+  the debugger to them, watching their requests and getting their navigation
+  events.
+- Your own extensions with the "tabs" permission can always see agent tabs'
+  URLs and titles (Chromium has no way to hide a tab from them).
+
+Whatever the switches say: every agent program needs your approval, the pill
+shows it and Stop ends it, the agent can't act on a security warning page,
+dialogs and prompts a page raises wait for you instead of popping up over your
+work, and agent tabs never get file or device pickers, screen sharing or
+passkeys, or add search engines, protocol handlers or app badges. A site
+permission an agent tab asks for is prompted only when you open that tab.
+
+With **Your logins** off, agents work in **containers**: storage partitions of
+their own inside your profile, so their cookies, storage and cache are never
+yours. They are throwaway (cleared when the task ends) unless you saved one for
+an agent, and there Koan also refuses every site permission. **Strict** mode
+gives each task a hidden profile of its own, sharing none of your settings,
+extensions, history or permissions.
 
 The "Your tab" mode is different: there the agent drives one of your own tabs,
-with your logins, after you approve that tab. It may act only on that tab's
-site (frames from other sites are cut off), and while it holds the tab Koan
-doesn't fill your saved passwords or addresses there.
+after you approve that tab. By default it keeps control wherever the tab goes
+(other sites, redirects, frames of other sites in it), until you use the tab,
+take it back or press Stop; privileged pages and security warnings stay out of
+its reach. With **Limit a taken-over tab to its site** on, it may act only on
+the site you approved (frames from other sites are cut off, and leaving the
+site leaves it able only to read the tab, with password fields hidden). While
+it holds the tab, your saved passwords and addresses are filled there only if
+those switches are on.
 
 `koan agent-browser` connects agent-browser through `koan-relay`, a separate
 program you approve like any agent. The relay listens on 127.0.0.1 only, on a

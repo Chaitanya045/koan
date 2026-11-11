@@ -14,6 +14,8 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "koan/browser/agent/koan_agent_registry.h"
@@ -32,6 +34,8 @@ base::DictValue Parse(std::string_view json) {
 
 class FakeBackend : public FacadeBackend {
  public:
+  raw_ptr<const TargetRegistry> registry = nullptr;
+
   std::optional<TabFacts> DescribeTab(std::string_view target_id) override {
     auto it = tabs.find(std::string(target_id));
     if (it == tabs.end()) {
@@ -78,8 +82,14 @@ class FakeBackend : public FacadeBackend {
     released.push_back(target_id);
     return true;
   }
+  // As the forwarder: the registry decides, with a site as SiteFor() makes it
+  // (the test hosts are registrable domains).
   bool IsInGrantedSite(const std::string& target_id, const GURL& url) override {
-    return url.host() == "mail.example";
+    return registry &&
+           registry->MayReachSite(
+               target_id, url.SchemeIsHTTPOrHTTPS()
+                              ? base::StrCat({url.scheme(), "://", url.host()})
+                              : std::string());
   }
   void AskToResume(const std::string& target_id) override {
     resume_asked.push_back(target_id);
@@ -133,6 +143,7 @@ class KoanAgentFacadeTest : public testing::Test {
     backend_.tabs["U1"] = TabFacts{"User's", GURL("https://mail.example/")};
     registry_.AddAgentTab("T1", "alice", "task");
     registry_.AddAgentTab("T2", "bob", "task");
+    backend_.registry = &registry_;
   }
 
   void OnSend(std::string json) { received_.push_back(Parse(json)); }
@@ -710,9 +721,10 @@ TEST_F(KoanAgentFacadeTest, ChildrenGoWithTheirTabAndWithTheClient) {
 }
 
 TEST_F(KoanAgentFacadeTest, AUserTabsChildrenStayOnTheGrantedSite) {
-  // The user gave the agent U1 for mail.example only (the fake backend's
-  // grant): a cross-site widget in it is not the agent's.
-  registry_.GrantUserTab("U1", "alice", TabState::kDriven);
+  // "Limit a taken-over tab to its site" on: the user gave the agent U1 for
+  // mail.example only, so a cross-site widget in it is not the agent's.
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven,
+                         "https://mail.example");
   const std::string session = AttachTo("U1");
   ASSERT_FALSE(session.empty());
   auto attach = [&](const char* chromium_session, const char* target,
@@ -757,8 +769,7 @@ TEST_F(KoanAgentFacadeTest, AUserTabsChildrenStayOnTheGrantedSite) {
       "CR2");
   EXPECT_TRUE(Events("Target.targetInfoChanged").empty());
 
-  // An agent's own tab keeps a cross-site child (the fake backend grants
-  // mail.example only, so the facade must not ask it about an agent tab).
+  // An agent's own tab keeps a cross-site child.
   AttachTo("T1");
   TabEvent("T1", "Target.attachedToTarget",
            base::DictValue()
@@ -769,6 +780,46 @@ TEST_F(KoanAgentFacadeTest, AUserTabsChildrenStayOnTheGrantedSite) {
                  .back()
                  ->FindStringByDottedPath("params.targetInfo.targetId"),
             "F3");
+}
+
+// The default (the limit off): a taken-over tab's frames and workers of any
+// site are the agent's, but the reach rules still apply.
+TEST_F(KoanAgentFacadeTest, AUserTabsChildrenOfAnySiteWithoutTheLimit) {
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven,
+                         "https://mail.example", /*any_site=*/true);
+  const std::string session = AttachTo("U1");
+  ASSERT_FALSE(session.empty());
+  TabEvent("U1", "Target.attachedToTarget",
+           base::DictValue()
+               .Set("sessionId", "CR1")
+               .Set("targetInfo",
+                    ChildInfo("F1", "iframe", "https://pay.other.example/w")));
+  ASSERT_EQ(Events("Target.attachedToTarget").size(), 2u);
+  EXPECT_EQ(*Events("Target.attachedToTarget")
+                 .back()
+                 ->FindStringByDottedPath("params.targetInfo.targetId"),
+            "F1");
+  EXPECT_TRUE(backend_.sent.empty());
+
+  // Still not a privileged page.
+  TabEvent(
+      "U1", "Target.attachedToTarget",
+      base::DictValue()
+          .Set("sessionId", "CR2")
+          .Set("targetInfo", ChildInfo("F2", "iframe", "chrome://settings/")));
+  EXPECT_EQ(Events("Target.attachedToTarget").size(), 2u);
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  EXPECT_EQ(
+      *backend_.sent[0].command.FindStringByDottedPath("params.sessionId"),
+      "CR2");
+
+  // A child that moves to another site stays.
+  TabEvent(
+      "U1", "Target.targetInfoChanged",
+      base::DictValue().Set(
+          "targetInfo", ChildInfo("F1", "iframe", "https://third.example/")));
+  EXPECT_TRUE(Events("Target.detachedFromTarget").empty());
+  EXPECT_EQ(Events("Target.targetInfoChanged").size(), 1u);
 }
 
 TEST_F(KoanAgentFacadeTest, ClosesOnlyItsOwnAgentTabs) {
@@ -834,6 +885,22 @@ TEST_F(KoanAgentFacadeTest, AUserTabIsDrivenOnItsSiteOnly) {
   Send(3, "Page.navigate",
        base::DictValue().Set("url", "https://bank.example/"), own);
   EXPECT_EQ(backend_.sent.size(), 2u);
+}
+
+// The default: the user's yes covers wherever the tab goes.
+TEST_F(KoanAgentFacadeTest, AUserTabIsDrivenAnywhereWithoutTheLimit) {
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven,
+                         "https://mail.example", /*any_site=*/true);
+  const std::string session = AttachTo("U1");
+  Send(1, "Page.navigate",
+       base::DictValue().Set("url", "https://bank.example/transfer"), session);
+  EXPECT_EQ(ErrorCode(1), "");
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  // The URL filter still applies.
+  Send(2, "Page.navigate", base::DictValue().Set("url", "chrome://settings"),
+       session);
+  EXPECT_FALSE(ErrorCode(2).empty());
+  EXPECT_EQ(backend_.sent.size(), 1u);
 }
 
 TEST_F(KoanAgentFacadeTest, AReadableUserTabHidesSecretInputValues) {

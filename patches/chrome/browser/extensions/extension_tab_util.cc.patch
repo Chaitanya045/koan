@@ -1,21 +1,26 @@
 diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
+index aeb80f6..e8c3c7f 100644
 --- a/chrome/browser/extensions/extension_tab_util.cc
 +++ b/chrome/browser/extensions/extension_tab_util.cc
-@@ -54,6 +54,7 @@
+@@ -54,6 +54,8 @@
  #include "content/public/browser/web_contents.h"
  #include "extensions/browser/extension_function.h"
  #include "extensions/browser/extension_util.h"
++#include "koan/browser/containers/koan_agent_access.h"
 +#include "koan/browser/containers/koan_container_partition.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/constants.h"
  #include "extensions/common/error_utils.h"
-@@ -658,6 +659,11 @@
+@@ -658,6 +660,14 @@ bool ExtensionTabUtil::GetTabById(int tab_id,
        WebContents* target_contents = window->GetWebContentsAt(i);
        if (sessions::SessionTabHelper::IdForTab(target_contents).id() ==
            tab_id) {
-+        // Koan: extension APIs can't address an agent container's tab (they
-+        // still see it listed, accepted in agent-control.md section 7.2).
-+        if (koan::containers::IsAgentContents(target_contents)) {
++        // Koan: extension APIs can't address an agent tab (they still see it
++        // listed, agent-control.md section 7.2) unless the user lets agents
++        // use extensions.
++        if (koan::containers::BlocksAgent(
++                target_contents,
++                koan::containers::AgentCapability::kExtensions)) {
 +          return false;
 +        }
          if (out_window) {

@@ -206,7 +206,7 @@ std::vector<window_sync::ItemRecord> KoanWindowSyncClient::LocalItems(
     content::WebContents* contents = tab->GetContents();
     const bool essential = tab->IsPinned();
     if ((!essential && !IsPinnedInSpace(tab)) || tab->IsSplit() || !contents ||
-        containers::IsAgentContainerContents(contents)) {
+        containers::IsAgentTab(contents)) {
       continue;
     }
     std::string space_id;

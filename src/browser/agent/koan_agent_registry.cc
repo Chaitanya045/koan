@@ -109,7 +109,8 @@ TargetRegistry::AddResult TargetRegistry::AddAgentTab(std::string target_id,
 TargetRegistry::AddResult TargetRegistry::GrantUserTab(std::string target_id,
                                                        std::string client_id,
                                                        TabState state,
-                                                       std::string site) {
+                                                       std::string site,
+                                                       bool any_site) {
   if (target_id.empty() || client_id.empty() || state == TabState::kPaused) {
     return AddResult::kInvalid;
   }
@@ -123,11 +124,13 @@ TargetRegistry::AddResult TargetRegistry::GrantUserTab(std::string target_id,
     // user approve it.
     entry.state = state;
     entry.site = std::move(site);
+    entry.any_site = any_site;
     return AddResult::kOk;
   }
-  entries_.emplace(std::move(target_id),
-                   TargetEntry{std::move(client_id), std::string(),
-                               /*agent_owned=*/false, state, std::move(site)});
+  entries_.emplace(
+      std::move(target_id),
+      TargetEntry{std::move(client_id), std::string(),
+                  /*agent_owned=*/false, state, std::move(site), any_site});
   return AddResult::kOk;
 }
 
@@ -160,6 +163,28 @@ bool TargetRegistry::SetReadable(std::string_view target_id) {
   it->second.state = TabState::kReadable;
   it->second.site.clear();
   return true;
+}
+
+bool TargetRegistry::LeftGrantedSite(std::string_view target_id,
+                                     std::string_view site) {
+  auto it = entries_.find(target_id);
+  if (it == entries_.end() || it->second.agent_owned || it->second.any_site ||
+      it->second.state == TabState::kReadable || site == it->second.site) {
+    return false;
+  }
+  return SetReadable(target_id);
+}
+
+bool TargetRegistry::MayReachSite(std::string_view target_id,
+                                  std::string_view site) const {
+  const TargetEntry* entry = Find(target_id);
+  if (!entry) {
+    return false;
+  }
+  if (entry->agent_owned || entry->any_site) {
+    return true;
+  }
+  return !site.empty() && site == entry->site;
 }
 
 bool TargetRegistry::Remove(std::string_view target_id) {
