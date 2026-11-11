@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_ESSENTIALS_PROMO_H_
 
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/views/view.h"
 
 namespace koan {
@@ -36,6 +37,36 @@ class KoanEssentialsPromoView : public views::View {
 
  private:
   bool drag_over_ = false;
+};
+
+// Zen's #zen-drag-indicator (vertical-tabs.css): the line that shows where
+// a dragged tab drops, here between the Essentials tiles (upright) or between
+// a Space's rows when an Essential is dragged out to them. Upstream's drag
+// moves the dragged rows themselves within their own section; this marks
+// the drops Koan makes at the end of the drag (koan_space_drag.h). A child
+// of the TabStripView, laid out at `slot()` by PlaceSpaceHeader(), on a layer
+// above the tiles, and takes no events.
+class KoanTabDropIndicatorView : public views::View {
+  METADATA_HEADER(KoanTabDropIndicatorView, views::View)
+
+ public:
+  // Zen's --zen-drag-indicator-height.
+  static constexpr int kThickness = 2;
+
+  KoanTabDropIndicatorView();
+  KoanTabDropIndicatorView(const KoanTabDropIndicatorView&) = delete;
+  KoanTabDropIndicatorView& operator=(const KoanTabDropIndicatorView&) = delete;
+  ~KoanTabDropIndicatorView() override;
+
+  // Where it shows, in the TabStripView; empty hides it.
+  void SetSlot(const gfx::Rect& slot);
+  const gfx::Rect& slot() const { return slot_; }
+
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override;
+
+ private:
+  gfx::Rect slot_;
 };
 
 }  // namespace koan

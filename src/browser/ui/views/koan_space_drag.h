@@ -15,6 +15,11 @@
 #include "ui/gfx/geometry/point.h"
 
 class BrowserView;
+class TabStripView;
+
+namespace gfx {
+class Rect;
+}
 
 namespace ui {
 class MouseEvent;
@@ -27,6 +32,7 @@ class View;
 namespace koan {
 
 class KoanEssentialsPromoView;
+class KoanTabDropIndicatorView;
 class KoanWorkspaceController;
 
 // Zen's tab drag across Spaces for one window (ZenDragAndDrop.js):
@@ -38,10 +44,21 @@ class KoanWorkspaceController;
 //   once, but not for Essentials (handle_spaceIconDragOver());
 // - with no Essentials, a tab over the top of the sidebar shows the
 //   Essentials promo, and dropping it there makes it an Essential
-//   (ZenEssentialsPromo.mjs).
+//   (ZenEssentialsPromo.mjs);
+// - tabs dropped on the Essentials grid become Essentials where they drop,
+//   before or after the tile under the pointer, while Zen's 12 fit; and
+//   Essentials dropped on the Space's list leave the Essentials for that
+//   place, pinned to the Space among its pinned tabs, else normal tabs
+//   (ZenPinnedTabManager's moveToAnotherTabContainerIfNecessary()). A line
+//   shows where (#zen-drag-indicator).
 // The dragged tabs go with the switch, so the drag goes on in the new Space
 // and drops there (Zen moves them on the drop; Chromium's drag needs them in
-// the Space it shows).
+// the Space it shows). Upstream's drag keeps the tabs in their own section
+// (Essentials among the Essentials, Space tabs in the Space): moves between
+// the two are Koan's, made once the drag is over.
+//
+// A tab dragged out of the sidebar or the window never tears off into a new
+// window (KeepsTabDragInWindow(), koan_tab_drag_hooks.h).
 //
 // Upstream's tab drag (TabDragController) gets the mouse events through the
 // pressed tab's view; the sidebar's pre-target handler passes them here
@@ -76,8 +93,28 @@ class KoanSpaceDrag {
   bool IsOverEssentials(views::View* region, const gfx::Point& point) const;
   void UpdatePromo(views::View* region, const gfx::Point& point);
   void RemovePromo();
-  // After the drop: the dragged tabs become Essentials.
-  void AddDroppedToEssentials(std::vector<tabs::TabHandle> tabs);
+  // Where a drop at `point` (in `region`) goes, with its indicator.
+  void UpdateDropTarget(views::View* region, const gfx::Point& point);
+  // Whether `point` (in `region`) is over the active Space's list of tabs.
+  bool IsOverSpaceList(views::View* region, const gfx::Point& point) const;
+  // Shows the drop indicator at `bounds` (in `region`); empty hides it.
+  void ShowDropIndicator(views::View* region, const gfx::Rect& bounds);
+  void RemoveDropIndicator();
+  TabStripView* GetStrip() const;
+
+  // Zen's drops between the Essentials and the Space.
+  enum class DropTarget {
+    kNone,
+    // Normal tabs over the Essentials (the promo or the grid).
+    kEssentials,
+    // Essentials over the Space's list of tabs.
+    kSpace,
+  };
+  // After the drop, once upstream's drag is over: the dragged `tabs` go to
+  // `target`, before `before` (none: at the end).
+  void FinishDrop(DropTarget target,
+                  std::vector<tabs::TabHandle> tabs,
+                  tabs::TabHandle before);
   bool IsSidebarCollapsed() const;
 
   const raw_ptr<KoanWorkspaceController> controller_;
@@ -88,6 +125,10 @@ class KoanSpaceDrag {
   int edge_ = 0;
   bool dragging_ = false;
   raw_ptr<KoanEssentialsPromoView> promo_ = nullptr;
+  raw_ptr<KoanTabDropIndicatorView> indicator_ = nullptr;
+  // Where a drop at the pointer's last place goes.
+  DropTarget drop_target_ = DropTarget::kNone;
+  tabs::TabHandle drop_before_;
   base::WeakPtrFactory<KoanSpaceDrag> weak_factory_{this};
 };
 

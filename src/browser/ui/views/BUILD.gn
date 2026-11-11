@@ -33,6 +33,7 @@ source_set("views") {
     "koan_spaces.h",
     "koan_split_view.h",
     "koan_status_bubble.h",
+    "koan_tab_drag_hooks.h",
     "koan_tab_menu.h",
     "koan_traffic_lights.h",
     "koan_url_bar.h",
@@ -134,6 +135,7 @@ source_set("space_drag_logic") {
     "koan_space_drag_logic.h",
   ]
   deps = [ "//base" ]
+  public_deps = [ "//ui/gfx/geometry" ]
 }
 
 # Zen's Space routing rules (koan_space_routes.h): pure, for the unit tests.

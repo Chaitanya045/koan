@@ -350,6 +350,11 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
     } else if (auto* promo_view =
                    views::AsViewClass<KoanEssentialsPromoView>(child)) {
       promo = promo_view;
+    } else if (auto* indicator =
+                   views::AsViewClass<KoanTabDropIndicatorView>(child)) {
+      // Where the drag's drop goes (koan_space_drag.h), over the rest.
+      layouts.child_layouts.emplace_back(
+          indicator, !indicator->slot().IsEmpty(), indicator->slot());
     } else if (auto* form_view =
                    views::AsViewClass<KoanSpaceCreationView>(child)) {
       form = form_view;

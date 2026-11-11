@@ -162,6 +162,19 @@ class KoanPinnedTabController : public TabStripModelObserver {
   void AddToEssentials(tabs::TabInterface* tab);
   // The tab becomes a normal tab of the active Space, as in Zen.
   void RemoveFromEssentials(tabs::TabInterface* tab);
+  // Zen's drops (moveToAnotherTabContainerIfNecessary()), once a tab drag is
+  // over (koan_space_drag.h). `tabs` dropped on the Essentials grid become
+  // Essentials, in their order, before the Essential `before` (null: after
+  // the last one), while Zen's 12 fit; the others stay where they are. (A
+  // split view goes after the last one, kept together.)
+  void DropInEssentials(const std::vector<tabs::TabInterface*>& tabs,
+                        tabs::TabInterface* before);
+  // The Essential `tab` dropped on the active Space's list of tabs leaves
+  // the Essentials for that place, before the Space's tab `before` (null:
+  // after its last tab): among the Space's pinned tabs it becomes one of
+  // them, keeping its pinned URL; anywhere else, a normal tab.
+  void DropEssentialInSpace(tabs::TabInterface* tab,
+                            tabs::TabInterface* before);
   // Duplicate (the tab menu, the menu bar, extensions) made `duplicate` from
   // `source`: Zen's duplicate of a pinned tab or Essential is a normal tab of
   // the active Space (SessionStore's duplicate path drops the pin), below the
