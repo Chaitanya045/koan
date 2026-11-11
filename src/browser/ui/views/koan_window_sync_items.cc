@@ -22,11 +22,14 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/tab_ui_helper.h"
+#include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -132,6 +135,29 @@ std::unique_ptr<content::WebContents> NewPlaceholder(
 }
 
 }  // namespace
+
+void AdjustPlaceholderTabData(const tabs::TabInterface* tab,
+                              tabs::TabData& data) {
+  content::WebContents* contents = tab->GetContents();
+  if (!IsPlaceholder(contents)) {
+    return;
+  }
+  KoanWindowSync* sync = KoanWindowSync::ForProfile(
+      Profile::FromBrowserContext(contents->GetBrowserContext()));
+  content::WebContents* page =
+      sync ? sync->LivePage(ItemIdOf(contents)) : nullptr;
+  tabs::TabInterface* page_tab =
+      page && page != contents ? tabs::TabInterface::MaybeGetFromContents(page)
+                               : nullptr;
+  TabUIHelper* helper = page_tab ? TabUIHelper::From(page_tab) : nullptr;
+  if (!helper) {
+    return;
+  }
+  data.title = helper->GetTitle();
+  data.favicon = helper->GetFavicon();
+  data.should_themify_favicon = helper->ShouldThemifyFavicon();
+  data.is_monochrome_favicon = helper->IsMonochromeFavicon();
+}
 
 // static
 KoanWindowSyncClient* KoanWindowSyncClient::ForBrowser(
@@ -278,6 +304,16 @@ content::WebContents* KoanWindowSyncClient::PageOf(
     const std::string& item) const {
   tabs::TabInterface* tab = FindItemTab(item);
   return tab ? tab->GetContents() : nullptr;
+}
+
+void KoanWindowSyncClient::RefreshPlaceholder(const std::string& item) {
+  tabs::TabInterface* tab = FindItemTab(item);
+  content::WebContents* contents = tab ? tab->GetContents() : nullptr;
+  if (IsPlaceholder(contents)) {
+    // Browser's UI update for the tab: coalesced and run later, then the
+    // row asks AdjustPlaceholderTabData() again.
+    contents->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
+  }
 }
 
 bool KoanWindowSyncClient::CanGivePage(const std::string& item) const {
@@ -496,10 +532,15 @@ void KoanWindowSyncClient::OnTabStripModelChanged(
 
 void KoanWindowSyncClient::OnTabChangedAt(tabs::TabInterface* tab,
                                           TabChangeType change_type) {
+  const std::string item = ItemIdOf(tab->GetContents());
+  if (change_type != TabChangeType::kAll || item.empty()) {
+    return;
+  }
   // A label, an icon or a pinned URL changed.
-  if (change_type == TabChangeType::kAll &&
-      !ItemIdOf(tab->GetContents()).empty()) {
-    ScheduleItemsReport();
+  ScheduleItemsReport();
+  // The page's title or favicon: the other windows' rows show them.
+  if (sync_ && !IsPlaceholder(tab->GetContents())) {
+    sync_->OnPageChanged(this, item);
   }
 }
 
