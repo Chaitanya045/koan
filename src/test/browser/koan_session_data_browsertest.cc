@@ -23,25 +23,40 @@ namespace koan {
 
 using KoanSessionDataBrowserTest = InProcessBrowserTest;
 
+namespace {
+
+// The test's own keys of a tab's data. Features write theirs to every tab
+// too (Zen's empty-tab mark, window sync's ids, a Space's data), so only
+// these are compared.
+std::map<std::string, std::string> TestKeys(content::WebContents* contents) {
+  std::map<std::string, std::string> data = GetTabSessionData(contents);
+  std::erase_if(data, [](const auto& entry) {
+    return entry.first != "koan.one" && entry.first != "koan.two";
+  });
+  return data;
+}
+
+}  // namespace
+
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, TabDataIsPerFeatureAndTab) {
   TabStripModel* tab_strip = browser()->GetTabStripModel();
   // Not the window's first tab, which is Zen's empty tab (that is data too).
   chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
   content::WebContents* first = tab_strip->GetWebContentsAt(1);
   EXPECT_EQ("", GetTabSessionData(first, "koan.one"));
-  EXPECT_TRUE(GetTabSessionData(first).empty());
+  EXPECT_TRUE(TestKeys(first).empty());
 
   SetTabSessionData(first, "koan.one", "1");
   SetTabSessionData(first, "koan.two", "{\"a\":2}");
   EXPECT_EQ("1", GetTabSessionData(first, "koan.one"));
   EXPECT_EQ("{\"a\":2}", GetTabSessionData(first, "koan.two"));
-  EXPECT_THAT(GetTabSessionData(first),
+  EXPECT_THAT(TestKeys(first),
               testing::ElementsAre(testing::Pair("koan.one", "1"),
                                    testing::Pair("koan.two", "{\"a\":2}")));
 
   // Another tab has none of it.
   chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
-  EXPECT_TRUE(GetTabSessionData(tab_strip->GetWebContentsAt(2)).empty());
+  EXPECT_TRUE(TestKeys(tab_strip->GetWebContentsAt(2)).empty());
   EXPECT_EQ("1", GetTabSessionData(first, "koan.one"));
 }
 
@@ -52,7 +67,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, EmptyDataRemovesTheEntry) {
   SetTabSessionData(contents, "koan.one", "1");
   SetTabSessionData(contents, "koan.one", "");
   EXPECT_EQ("", GetTabSessionData(contents, "koan.one"));
-  EXPECT_TRUE(GetTabSessionData(contents).empty());
+  EXPECT_FALSE(GetTabSessionData(contents).contains("koan.one"));
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionDataBrowserTest, NullContentsHaveNoData) {
