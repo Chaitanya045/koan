@@ -303,8 +303,10 @@ void KoanWindowSyncClient::ReportItems() {
       sync_->SetLive(this, record.id);
     }
   }
-  // A tab that stopped being synced here (unpinned, out of the Essentials)
-  // loses its id; a placeholder of one loads its page.
+  // A tab that stopped being synced here (unpinned, out of the Essentials,
+  // into a split) loses its id; a placeholder of one loads its page. Unless
+  // it went into a split, the other windows close theirs (Zen's
+  // TabUnpinned).
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
   std::set<std::string> ids;
   for (const window_sync::ItemRecord& record : items) {
@@ -315,6 +317,9 @@ void KoanWindowSyncClient::ReportItems() {
     const std::string id = ItemIdOf(contents);
     if (id.empty() || ids.contains(id)) {
       continue;
+    }
+    if (!model->GetTabAtIndex(i)->IsSplit()) {
+      closed.insert(id);
     }
     SetTabSessionData(contents, kItemIdSessionKey, std::string());
     if (IsPlaceholder(contents)) {
@@ -454,9 +459,9 @@ void KoanWindowSyncClient::ApplyItems(
       CloseSyncedTab(browser_view_->browser(), tab);
       continue;
     }
-    // Unpinned or out of the Essentials elsewhere, and the page is here: it
-    // stays, as a normal tab of the Space it is in (or the active one),
-    // rather than losing what it shows.
+    // Taken into a split elsewhere, and the page is here: it stays, as a
+    // normal tab of the Space it is in (or the active one). (Unpinned or out
+    // of the Essentials elsewhere counts as closed, as in Zen.)
     SetTabSessionData(contents, kItemIdSessionKey, std::string());
     if (tab->IsPinned()) {
       pinned->RemoveFromEssentials(tab);

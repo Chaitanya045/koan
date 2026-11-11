@@ -116,7 +116,9 @@ Plan<SpaceRecord> PlanSpaces(const std::vector<SpaceRecord>& local,
 std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
                                      const std::vector<SpaceRecord>& target,
                                      const std::set<std::string>& taken);
-// The same for folders.
+// The same for folders, except that a folder's collapsed state isn't synced
+// live (Zen keeps it only in the session): `update` leaves out a folder that
+// differs only in it, which a new folder still takes from the target.
 Plan<FolderRecord> PlanFolders(const std::vector<FolderRecord>& local,
                                const std::vector<FolderRecord>& target);
 // The same for synced tabs. `order` is the target's ids in sidebar order
@@ -161,14 +163,16 @@ class WindowSyncModel {
   bool SetSpaces(std::vector<SpaceRecord> spaces);
   // A folder needs its Space, and its parent before it in the same Space
   // (else it is dropped, with what is inside it); a window reports its
-  // folders after its Spaces and before its items.
+  // folders after its Spaces and before its items. A folder's collapsed state
+  // is saved but doesn't count as a change (false if nothing else changed).
   bool SetFolders(std::vector<FolderRecord> folders);
-  // `closed`: the items whose tab the window closed (not unpinned, nor taken
-  // out of the Essentials or into a split: those stay as normal tabs there).
+  // `closed`: the items whose tab the window closed, unpinned or took out of
+  // the Essentials without pinning it (Zen's TabUnpinned closes it in the
+  // other windows). Not a tab taken into a split: it stays as a normal tab.
   bool SetItems(std::vector<ItemRecord> items,
                 const std::set<std::string>& closed = {});
-  // Whether `item` left the model because a window closed its tab: every
-  // other window closes its tab too, also the one with the page (Zen's
+  // Whether `item` left the model because a window closed or unpinned its
+  // tab: every other window closes its tab too, also the one with the page (Zen's
   // TabClose). Otherwise the window with the page keeps it as a normal tab.
   // Until the item comes back (a reopened tab keeps its id).
   bool WasClosed(const std::string& item) const {

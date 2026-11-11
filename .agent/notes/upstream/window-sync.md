@@ -59,7 +59,10 @@ Normal tabs stay per window, as the issue's
 tab strip work of each window for each window, and Koan's empty tab, Glance
 and split views would all need copies. Folders (#60) sync
 with the pinned tabs, through the same model: `FolderRecord`s (name,
-collapsed, Space, parent, in sidebar order) and each pinned item's
+collapsed, Space, parent, in sidebar order; `collapsed` isn't synced live, as
+in Zen (#262): `PlanFolders()` leaves a folder that differs only in it out of
+`update`, `SetFolders()` saves it without calling it a change, and only a
+folder a window creates (a new window, a restore) takes it) and each pinned item's
 `folder_id`. A folder's sync id is its session token, the same in every
 window (a folder made by the sync takes the other window's token), so a
 placeholder joins its folder through the page's copied session data, and
@@ -174,9 +177,11 @@ item's URL in place and becomes live.
   (`WasClosed()`, until the item comes back: a reopened tab keeps its id),
   and every other window closes its tab, page or placeholder, without
   Recently Closed (Zen's `TabClose`). A Space left without tabs by it gets a
-  new tab first. An item that left the model otherwise (unpinned, out of
-  the Essentials, into a split view) stays as a normal tab where its page
-  is.
+  new tab first. Unpinning a synced tab, or taking it out of the Essentials
+  without pinning it, counts as a close (#262, Zen's `on_TabUnpinned` calls
+  `on_TabClose` with only pinned tabs synced): `ReportItems()` adds every
+  tab that lost its id to `closed`, except one in a split view, which
+  stays as a normal tab where its page is.
 - **Window gone.** `RemoveWindow` drops the window from every list and
   forgets the pages it had; queued moves from or to it are dropped when they
   run.

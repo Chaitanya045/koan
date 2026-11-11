@@ -231,30 +231,69 @@ TEST(WindowSyncModelTest, TabsLeaveFoldersThatAreGone) {
   EXPECT_EQ("", model.items()[1].folder_id);
 }
 
-TEST(WindowSyncPlanTest, RenamingOrCollapsingAFolderIsAnUpdate) {
-  FolderRecord collapsed = Folder("f", "a");
-  collapsed.collapsed = true;
+TEST(WindowSyncPlanTest, RenamingAFolderIsAnUpdate) {
+  FolderRecord renamed = Folder("f", "a");
+  renamed.name = u"Renamed";
   const Plan<FolderRecord> plan = PlanFolders(
-      {Folder("f", "a"), Folder("g", "a")}, {Folder("g", "a"), collapsed});
+      {Folder("f", "a"), Folder("g", "a")}, {Folder("g", "a"), renamed});
   EXPECT_THAT(plan.remove, IsEmpty());
   EXPECT_THAT(plan.add, IsEmpty());
   ASSERT_EQ(1u, plan.update.size());
-  EXPECT_TRUE(plan.update[0].collapsed);
+  EXPECT_EQ(u"Renamed", plan.update[0].name);
   EXPECT_TRUE(plan.order);
 }
 
-// Zen's TabClose: a closed synced tab closes in every window; one that was
-// unpinned (or left the Essentials) stays where its page is.
-TEST(WindowSyncModelTest, ClosedItemsAreToldApartFromUnpinnedOnes) {
+// Zen keeps a folder's collapsed state only in the session: a window keeps
+// its own, and only a new folder (a new window, a restore) takes it.
+TEST(WindowSyncPlanTest, CollapsingAFolderIsNotSyncedLive) {
+  FolderRecord collapsed = Folder("f", "a");
+  collapsed.collapsed = true;
+  Plan<FolderRecord> plan = PlanFolders({Folder("f", "a")}, {collapsed});
+  EXPECT_TRUE(plan.empty());
+  // With another change it is an update; the client leaves the collapsed
+  // state of a folder it has.
+  collapsed.name = u"Renamed";
+  plan = PlanFolders({Folder("f", "a")}, {collapsed});
+  ASSERT_EQ(1u, plan.update.size());
+  // A new window gets the folder collapsed.
+  plan = PlanFolders({}, {collapsed});
+  ASSERT_EQ(1u, plan.add.size());
+  EXPECT_TRUE(plan.add[0].first.collapsed);
+}
+
+TEST(WindowSyncModelTest, CollapsingAFolderIsSavedButNotAChange) {
   WindowSyncModel model;
   model.SetSpaces({Space("a")});
-  model.SetItems({Essential("e"), Essential("f"), Pinned("p", "a")});
-  // `closed` names only what the window closed, and only what left counts.
-  EXPECT_TRUE(model.SetItems({Pinned("p", "a")}, {"e", "p"}));
+  EXPECT_TRUE(model.SetFolders({Folder("f", "a")}));
+  FolderRecord collapsed = Folder("f", "a");
+  collapsed.collapsed = true;
+  EXPECT_FALSE(model.SetFolders({collapsed}));
+  ASSERT_EQ(1u, model.folders().size());
+  EXPECT_TRUE(model.folders()[0].collapsed);
+  // And it is restored with the rest.
+  WindowSyncModel restored;
+  restored.FromValue(model.ToValue());
+  ASSERT_EQ(1u, restored.folders().size());
+  EXPECT_TRUE(restored.folders()[0].collapsed);
+}
+
+// Zen's TabClose and TabUnpinned: a synced tab closed, unpinned or taken out
+// of the Essentials in one window closes in every window. The window reports
+// all of those in `closed`, but not a tab taken into a split, which stays
+// where its page is.
+TEST(WindowSyncModelTest, ClosedOrUnpinnedItemsCloseEverywhere) {
+  WindowSyncModel model;
+  model.SetSpaces({Space("a")});
+  model.SetItems(
+      {Essential("e"), Essential("f"), Pinned("p", "a"), Pinned("s", "a")});
+  // "e" closed, "f" unpinned, "s" into a split (not in `closed`); "p" is
+  // still synced, so naming it doesn't count.
+  EXPECT_TRUE(model.SetItems({Pinned("p", "a")}, {"e", "f", "p"}));
   EXPECT_TRUE(model.WasClosed("e"));
-  EXPECT_FALSE(model.WasClosed("f"));
+  EXPECT_TRUE(model.WasClosed("f"));
   EXPECT_FALSE(model.WasClosed("p"));
-  // A reopened tab keeps its id: it is an item again, not closed.
+  EXPECT_FALSE(model.WasClosed("s"));
+  // A reopened (or re-pinned) tab keeps its id: it is an item again.
   EXPECT_TRUE(model.SetItems({Essential("e"), Pinned("p", "a")}));
   EXPECT_FALSE(model.WasClosed("e"));
 }
