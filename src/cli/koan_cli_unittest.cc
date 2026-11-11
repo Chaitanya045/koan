@@ -16,6 +16,7 @@
 #include "koan/browser/agent/koan_agent_frame.h"
 #include "koan/cli/koan_cli_admission.h"
 #include "koan/cli/koan_cli_args.h"
+#include "koan/cli/koan_cli_client.h"
 #include "koan/cli/koan_cli_io.h"
 #include "koan/cli/koan_cli_protocol.h"
 #include "koan/cli/koan_cli_router.h"
@@ -189,6 +190,20 @@ TEST_F(KoanCliFramingTest, TheOtherEndClosing) {
   EXPECT_TRUE(b_->closed());
 }
 
+// The holder (or the browser) turns a command away with a refusal and closes:
+// the command gets that as its answer, not "no answer".
+TEST_F(KoanCliFramingTest, ARefusalIsTheAnswer) {
+  ASSERT_TRUE(b_->Write(Refusal("Hold.refused", "not the paired agent")));
+  b_.reset();
+  Link link(std::move(a_));
+  std::optional<Message> answer =
+      link.Call("Koan.openTab", base::DictValue(), {}, base::Seconds(5));
+  ASSERT_TRUE(answer);
+  EXPECT_FALSE(answer->id);
+  EXPECT_EQ(answer->error_code, "Hold.refused");
+  EXPECT_EQ(Describe(answer), "Hold.refused: not the paired agent");
+}
+
 // --- Protocol ----------------------------------------------------------------
 
 TEST(KoanCliProtocolTest, Discovery) {
@@ -246,6 +261,12 @@ TEST(KoanCliProtocolTest, MessagesAndErrors) {
   EXPECT_FALSE(event->id);
   EXPECT_EQ(*event->params.FindString("reason"), "print");
   EXPECT_FALSE(ParseMessage("{}"));
+  // A refusal: an error with no id.
+  std::optional<Message> refusal = ParseMessage(Refusal("Koan.busy", "retry"));
+  ASSERT_TRUE(refusal);
+  EXPECT_FALSE(refusal->id);
+  EXPECT_EQ(refusal->error_code, "Koan.busy");
+  EXPECT_EQ(refusal->error_message, "retry");
 
   EXPECT_EQ(
       Dict(Request(7, "Koan.openTab", base::DictValue().Set("url", "x"), "S1")),
@@ -323,32 +344,32 @@ class KoanCliAdmissionTest : public testing::Test {
 };
 
 TEST_F(KoanCliAdmissionTest, OnlyThePairedAgentsKoan) {
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, Peer(koan_, claude_)),
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501, Peer(koan_, claude_)),
             LocalClientVerdict::kAllowed);
   // Another program of the same user: a script, a copy of koan elsewhere,
   // koan with another signature.
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501,
                               Peer({"/usr/bin/python3", ""}, claude_)),
             LocalClientVerdict::kOtherProgram);
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501,
                               Peer({"/tmp/koan", "ad-hoc:abc"}, claude_)),
             LocalClientVerdict::kOtherProgram);
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501,
                               Peer({koan_.path, "ad-hoc:evil"}, claude_)),
             LocalClientVerdict::kOtherProgram);
   // The right koan, run by something other than the paired agent.
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501,
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501,
                               Peer(koan_, {"/Applications/Other.app/o", "X"})),
             LocalClientVerdict::kAgentMissing);
   // Another user, or nobody the OS could name.
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, Peer(koan_, claude_, 502)),
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501, Peer(koan_, claude_, 502)),
             LocalClientVerdict::kOtherUser);
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, std::nullopt),
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501, std::nullopt),
             LocalClientVerdict::kUnresolved);
-  EXPECT_EQ(DecideLocalClient(koan_, claude_, 501, Peer({"", ""}, claude_)),
+  EXPECT_EQ(DecideLocalClient(koan_, {claude_}, 501, Peer({"", ""}, claude_)),
             LocalClientVerdict::kUnresolved);
   // A holder that could not name itself serves nobody.
-  EXPECT_EQ(DecideLocalClient({"", ""}, claude_, 501, Peer(koan_, claude_)),
+  EXPECT_EQ(DecideLocalClient({"", ""}, {claude_}, 501, Peer(koan_, claude_)),
             LocalClientVerdict::kUnresolved);
 }
 
@@ -360,11 +381,54 @@ TEST_F(KoanCliAdmissionTest, AnUnknownChainAtPairingStaysUnknown) {
   orphan.process = koan_;
   // Only a shell: nothing that counts as an agent.
   orphan.ancestors = {{"/bin/zsh", "com.apple.zsh"}};
-  EXPECT_EQ(DecideLocalClient(koan_, {}, 501, orphan),
+  EXPECT_EQ(DecideLocalClient(koan_, {agent::ProcessInfo()}, 501, orphan),
             LocalClientVerdict::kAllowed);
-  EXPECT_EQ(DecideLocalClient(koan_, {}, 501, Peer(koan_, claude_)),
+  EXPECT_EQ(DecideLocalClient(koan_, {agent::ProcessInfo()}, 501,
+                              Peer(koan_, claude_)),
             LocalClientVerdict::kAgentMissing);
   EXPECT_EQ(VerdictName(LocalClientVerdict::kAgentMissing), "agent-missing");
+}
+
+// The pass of 2026-11-11: `koan pair` was started by a launcher that had
+// exited by the time the user clicked Allow, so its record (read then, by
+// that koan) had no agent, while the browser had pinned the agent at connect
+// and let the holder in. Every later command was then turned away as
+// agent-missing.
+TEST_F(KoanCliAdmissionTest, TheHolderServesTheAgentTheBrowserLetIn) {
+  const agent::ProcessInfo sshd{"/usr/libexec/sshd-session", "apple"};
+  // The holder, started by `koan open` from the agent's shell.
+  agent::PeerIdentity holder;
+  holder.uid = 501;
+  holder.process = koan_;
+  holder.ancestors = {koan_, {"/bin/zsh", "com.apple.zsh"}, sshd};
+
+  // A record whose pin has no agent: the agent that started the holder is
+  // served too, and its commands are let in.
+  const agent::PinnedIdentity unknown{koan_, agent::ProcessInfo()};
+  const std::vector<agent::ProcessInfo> served = AgentsToServe(unknown, holder);
+  EXPECT_EQ(served, (std::vector<agent::ProcessInfo>{{}, sshd}));
+  EXPECT_EQ(DecideLocalClient(koan_, served, 501, Peer(koan_, sshd)),
+            LocalClientVerdict::kAllowed);
+  EXPECT_EQ(DecideLocalClient(koan_, served, 501, Peer(koan_, claude_)),
+            LocalClientVerdict::kAgentMissing);
+
+  // The pinned agent is in the holder's chain: only that one.
+  EXPECT_EQ(AgentsToServe(agent::PinnedIdentity{koan_, sshd}, holder),
+            std::vector<agent::ProcessInfo>{sshd});
+  // A changed chain the user approved in the browser: the paired agent and
+  // the one that started the holder.
+  EXPECT_EQ(AgentsToServe(agent::PinnedIdentity{koan_, claude_}, holder),
+            (std::vector<agent::ProcessInfo>{claude_, sshd}));
+  // A record without a pin (an older koan): the agent that started it.
+  EXPECT_EQ(AgentsToServe(std::nullopt, holder),
+            std::vector<agent::ProcessInfo>{sshd});
+
+  // Nothing served, nobody let in; another program is still another program.
+  EXPECT_EQ(DecideLocalClient(koan_, {}, 501, Peer(koan_, sshd)),
+            LocalClientVerdict::kAgentMissing);
+  EXPECT_EQ(DecideLocalClient(koan_, served, 501,
+                              Peer({"/usr/bin/python3", ""}, sshd)),
+            LocalClientVerdict::kOtherProgram);
 }
 
 // --- The holder's routing ----------------------------------------------------

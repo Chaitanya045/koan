@@ -9,6 +9,7 @@
 
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "koan/browser/agent/koan_agent_auth.h"
 
@@ -33,13 +34,26 @@ enum class LocalClientVerdict {
   kAgentMissing,
 };
 
+// The agents whose `koan` a holder serves, from the pairing's record
+// (`pinned`, nullopt for a record without one) and the holder's own identity
+// (`self`, read before it connected, as the browser reads it). The browser has
+// just let the holder in, so it accepts the holder's chain: either that chain
+// has the pinned agent, and only that agent is served, or the browser let it
+// in anyway (the user approved a changed chain, or the record's pin is not the
+// browser's, as with a koan that read it after the dialog), and the agent that
+// started the holder is served too. An entry may be empty: a chain with no
+// agent in it.
+std::vector<agent::ProcessInfo> AgentsToServe(
+    const std::optional<agent::PinnedIdentity>& pinned,
+    const agent::PeerIdentity& self);
+
 // `holder`: the holder's own executable as the OS describes it.
-// `paired_agent`: the agent ancestor recorded when the client paired (empty if
-// the chain was unknown then, which, as in the browser, then refuses a chain
-// that has an agent in it). `uid`: the holder's user.
+// `agents`: from AgentsToServe(). An empty agent stands for a chain that was
+// unknown at pairing, which, as in the browser, refuses a chain that has an
+// agent in it. `uid`: the holder's user.
 LocalClientVerdict DecideLocalClient(
     const agent::ProcessInfo& holder,
-    const agent::ProcessInfo& paired_agent,
+    const std::vector<agent::ProcessInfo>& agents,
     uint32_t uid,
     const std::optional<agent::PeerIdentity>& peer);
 

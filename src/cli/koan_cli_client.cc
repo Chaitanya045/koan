@@ -148,10 +148,12 @@ std::optional<Message> Link::Call(
     base::TimeDelta wait,
     base::RepeatingCallback<void(const Message&)> on_event) {
   const int id = next_id_++;
-  if (!channel_->Write(Request(id, method, std::move(params), session_id))) {
-    return std::nullopt;
-  }
-  const base::TimeTicks deadline = base::TimeTicks::Now() + wait;
+  // If the other end has closed already, it may have said why first: that is
+  // read below (a closed socket answers at once).
+  const bool sent =
+      channel_->Write(Request(id, method, std::move(params), session_id));
+  const base::TimeTicks deadline =
+      base::TimeTicks::Now() + (sent ? wait : std::min(wait, base::Seconds(1)));
   while (true) {
     const base::TimeDelta left = deadline - base::TimeTicks::Now();
     if (left <= base::TimeDelta()) {
@@ -165,7 +167,9 @@ std::optional<Message> Link::Call(
     if (!message) {
       continue;
     }
-    if (message->id == id) {
+    // A refusal: the browser or the holder says why it closes the
+    // connection, in an error without an id (nothing was read to answer).
+    if (message->id == id || (!message->id && message->is_error())) {
       return message;
     }
     if (!message->id && on_event) {
@@ -257,6 +261,18 @@ std::optional<base::DictValue> PairNewClient(
     *error = home.value() + " is not a private directory";
     return std::nullopt;
   }
+  // Who is pairing, as the browser pins it: the browser looks at this process
+  // when it accepts the connection, so this looks now, not after the user has
+  // answered. A chain read after the dialog can differ (a launcher that has
+  // exited by then leaves no ancestors) and the holder would then turn away
+  // the paired agent's own commands (koan_cli_admission.h).
+  ClientInfo record{std::string(), label, std::nullopt};
+  if (std::unique_ptr<agent::PeerResolver> resolver =
+          agent::CreatePlatformPeerResolver()) {
+    if (std::optional<agent::PeerIdentity> self = ResolveSelf(*resolver)) {
+      record.pinned = agent::PinPeer(*self);
+    }
+  }
   uint8_t seed[32];
   RAND_bytes(seed, sizeof(seed));
   Key key;
@@ -281,14 +297,7 @@ std::optional<base::DictValue> PairNewClient(
     *error = "Koan answered without a client id";
     return std::nullopt;
   }
-  // Who paired, as the browser pinned it (koan_cli_admission.h).
-  ClientInfo record{*client_id, label, std::nullopt};
-  if (std::unique_ptr<agent::PeerResolver> resolver =
-          agent::CreatePlatformPeerResolver()) {
-    if (std::optional<agent::PeerIdentity> self = ResolveSelf(*resolver)) {
-      record.pinned = agent::PinPeer(*self);
-    }
-  }
+  record.client_id = *client_id;
   const base::FilePath dir = ClientDir(home, *client_id);
   if (!PrivateDir(dir) ||
       !WritePrivateFile(dir.Append("key"), base::Base64Encode(seed)) ||

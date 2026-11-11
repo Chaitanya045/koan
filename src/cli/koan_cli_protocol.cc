@@ -225,6 +225,16 @@ std::string Request(int id,
   return Write(message);
 }
 
+std::string Refusal(std::string_view code, std::string_view message) {
+  base::DictValue error;
+  error.Set("code", -32000);
+  error.Set("message", message);
+  error.Set("data", code);
+  base::DictValue root;
+  root.Set("error", std::move(error));
+  return Write(root);
+}
+
 std::optional<Message> ParseMessage(std::string_view json) {
   std::optional<base::DictValue> dict = ParseDict(json);
   if (!dict) {
@@ -255,7 +265,8 @@ std::optional<Message> ParseMessage(std::string_view json) {
       message.error_message = *text;
     }
   }
-  if (!message.id && message.method.empty()) {
+  // An error without an id is a refusal (the connection is being closed).
+  if (!message.id && message.method.empty() && !message.is_error()) {
     return std::nullopt;
   }
   return message;

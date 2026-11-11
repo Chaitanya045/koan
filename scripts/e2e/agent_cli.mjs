@@ -15,7 +15,11 @@
 // - take-over of the user's tab (approved in its dialog the same way): a
 //   same-site navigate works, an off-site one is refused (Koan.offSite);
 //   then release;
-// - end: the tasks close; Koan alive, nothing fatal in its log.
+// - end: the tasks close;
+// - a second pairing whose launcher exits while the dialog is open (the
+//   2026-11-11 end-user pass): its agent's commands work, and a koan no agent
+//   started is refused with a reason;
+// - Koan alive, nothing fatal in its log.
 // local_state/agent_cli.json turns Agent ready on for the test profile (it
 // is off in a non-default --user-data-dir). macOS only: the CLI's holder
 // needs the Mac's peer resolver. Run by scripts/mac/suite.sh.
@@ -25,7 +29,7 @@ import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 import { browserCall, check, evalIn, finish, pages, sleep, viewTree, waitFor } from './lib/koan.mjs';
-import { IS_MAC, alive, fatalInLog, rootMouse, rootOf, skip, skipped, startServer } from './lib/mac.mjs';
+import { IS_MAC, KOAN_LOG, alive, fatalInLog, rootMouse, rootOf, skip, skipped, startServer } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('agent control\'s CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 const CLI = process.env.KOAN_CLI;
@@ -206,6 +210,49 @@ r = await koan(['end']);
 check('koan end', r.code === 0, brief(r));
 r = await koan(['status']);
 check('koan status after end: no connection', /connection: none/.test(r.out), brief(r));
+// --- A pairing whose launcher exits while its dialog is open (the end-user
+// pass of 2026-11-11): `koan pair` started in the background by a shell that
+// has gone by the time Allow is pressed. The browser pins the agent when the
+// connection comes in; koan must record the same one, or its holder turns
+// every later command of that agent away (agent-missing, which koan printed
+// as "no answer").
+{
+  const out = path.join(AGENT_HOME, 'pair-bg.out');
+  const printed = () => { try { return fs.readFileSync(out, 'utf8'); } catch { return ''; } };
+  const launcher = spawn('/bin/sh', ['-c', '"$0" pair --label "koan suite bg" --capabilities observe,read >"$1" 2>&1 & sleep 2',
+                                     CLI, out], { env, stdio: 'ignore' });
+  await new Promise(res => launcher.on('close', res));
+  const ok = await allow(/^Allow a program to control Koan\?$/, printed);
+  const id = (await waitFor(() => /paired as ([0-9a-f]{32})/.exec(printed()), 15000))?.[1];
+  check('A pairing whose launcher exited during the dialog: paired', ok && !!id, printed().trim().split('\n').at(-1));
+  if (id) {
+    r = await koan(['open', '--client', id, AGENT_URL]);
+    check('...its agent\'s koan open works (the holder serves it)',
+          r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(r.out.split('\n').at(-1)), brief(r));
+    // A koan with no agent above it (its own launcher gone) is turned away by
+    // the holder, and says so instead of "no answer".
+    const refusedOut = path.join(AGENT_HOME, 'tabs-orphan.out');
+    // The subshell outlives the shell that started it, then becomes koan.
+    const orphan = spawn('/bin/sh', ['-c', '(sleep 1; exec "$0" tabs --client "$1" >"$2" 2>&1) &',
+                                     CLI, id, refusedOut], { env, stdio: 'ignore' });
+    await new Promise(res => orphan.on('close', res));
+    const said = await waitFor(() => {
+      const text = fs.existsSync(refusedOut) ? fs.readFileSync(refusedOut, 'utf8') : '';
+      return /koan: /.test(text) && text;
+    }, 10000);
+    check('...a koan its agent did not start is refused, and says why (Hold.refused)',
+          /Hold\.refused/.test(said || '') && !/no answer/.test(said || ''), (said || '').trim());
+    r = await koan(['end', '--client', id]);
+    check('...koan end', r.code === 0, brief(r));
+  }
+}
+
+// `koan status` only checks that Koan answers (it connects and hangs up):
+// the gateway must not take that for a program it could not find.
+if (KOAN_LOG && fs.existsSync(KOAN_LOG)) {
+  const warned = fs.readFileSync(KOAN_LOG, 'utf8').split('\n').filter(l => /no audit token for a connection/.test(l));
+  check('koan status leaves no "no audit token" warning in Koan\'s log', warned.length === 0, warned[0]);
+}
 check('Koan is alive', await alive());
 check('Nothing fatal in the log', !fatalInLog(), fatalInLog());
 server.close();

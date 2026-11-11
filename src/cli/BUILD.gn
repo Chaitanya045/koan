@@ -121,6 +121,7 @@ test("koan_cli_unittests") {
   ]
   deps = [
     ":cli_lib",
+    ":client",
     ":relay_gate",
     "//base",
     "//base/test:run_all_unittests",

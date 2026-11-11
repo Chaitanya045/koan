@@ -156,6 +156,12 @@ class Gateway::Connection final : public SessionDelegate {
     std::optional<PeerToken> token =
         gateway_->resolver_->TokenForSocket(socket_->socket_fd());
     if (!token) {
+      if (PeerHasHungUp(socket_->socket_fd())) {
+        // `koan status` only checks that Koan answers: it is gone already.
+        VLOG(1) << "agent gateway: a connection closed before it was looked at";
+        Drop();
+        return;
+      }
       LOG(WARNING) << "agent gateway: no audit token for a connection";
       Refuse("Koan.peerUnresolved",
              "the connecting program could not be found");

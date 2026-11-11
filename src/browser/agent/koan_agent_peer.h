@@ -65,6 +65,13 @@ class PeerResolver {
 // one, and the gateway does not start without one).
 std::unique_ptr<PeerResolver> CreatePlatformPeerResolver();
 
+// Whether the other end has closed the connection without sending anything,
+// as a client that only checks that Koan answers does (`koan status`). Such a
+// socket has no peer left for TokenForSocket() to name (on macOS
+// LOCAL_PEERTOKEN needs the peer's socket, ENOTCONN once it has gone), so
+// there is nobody to look for and nothing to warn about.
+bool PeerHasHungUp(int fd);
+
 }  // namespace koan::agent
 
 #endif  // KOAN_BROWSER_AGENT_KOAN_AGENT_PEER_H_

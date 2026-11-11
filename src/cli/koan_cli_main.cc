@@ -89,6 +89,34 @@ void SayReady(int fd, const std::string& line) {
   }
 }
 
+// Says why a command is turned away, and closes its connection. Best effort:
+// a fresh socket has room for one small frame.
+void RefuseCommand(base::ScopedFD fd,
+                   std::string_view code,
+                   std::string_view message) {
+  FrameChannel(std::move(fd), agent::kMaxPayload).Write(Refusal(code, message));
+}
+
+std::string RefusalText(LocalClientVerdict verdict,
+                        const base::FilePath& log_path) {
+  std::string why;
+  switch (verdict) {
+    case LocalClientVerdict::kAgentMissing:
+      why =
+          "this koan was not started by the agent that this client's "
+          "connection serves; run it from that agent, or pair this one";
+      break;
+    case LocalClientVerdict::kOtherProgram:
+      why = "this is not the koan that holds the connection";
+      break;
+    default:
+      why = "the connection could not tell which program this is";
+      break;
+  }
+  return why + " (" + std::string(VerdictName(verdict)) + ", see " +
+         log_path.value() + ")";
+}
+
 int RunHolder(const Command& command) {
   std::string error;
   const std::vector<std::string> paired = PairedClients(KoanDir());
@@ -98,6 +126,20 @@ int RunHolder(const Command& command) {
   if (!client_id) {
     SayReady(ready_fd, "error " + error);
     return kNotConnected;
+  }
+  // Every command that connects is checked as the browser checks `koan`
+  // (koan_cli_admission.h): no resolver, or no identity of its own, and the
+  // holder serves nobody. Read before connecting, as the browser reads it, so
+  // that the chain is the one the browser lets in.
+  const std::unique_ptr<agent::PeerResolver> resolver =
+      agent::CreatePlatformPeerResolver();
+  const std::optional<agent::PeerIdentity> self =
+      resolver ? ResolveSelf(*resolver) : std::nullopt;
+  if (!self) {
+    SayReady(ready_fd,
+             "error this system cannot say which program connects to koan, "
+             "so koan cannot keep a connection open");
+    return kFailed;
   }
   std::unique_ptr<FrameChannel> browser =
       DialBrowser(UserDataDir(command.user_data_dir), &error);
@@ -114,26 +156,11 @@ int RunHolder(const Command& command) {
     SayReady(ready_fd, "error ~/.koan/run is not a private directory");
     return kFailed;
   }
-  // Every command that connects is checked as the browser checks `koan`
-  // (koan_cli_admission.h): no resolver, or no identity of its own, and the
-  // holder serves nobody.
-  const std::unique_ptr<agent::PeerResolver> resolver =
-      agent::CreatePlatformPeerResolver();
-  const std::optional<agent::PeerIdentity> self =
-      resolver ? ResolveSelf(*resolver) : std::nullopt;
-  if (!self) {
-    SayReady(ready_fd,
-             "error this system cannot say which program connects to koan, "
-             "so koan cannot keep a connection open");
-    return kFailed;
-  }
-  // The agent the pairing recorded; a pairing by an older koan has none, and
-  // the agent that started this holder (which the browser just accepted)
-  // stands in.
+  // The agent the pairing recorded, and the one that started this holder if
+  // the browser let the holder in without that one in its chain.
   const std::optional<ClientInfo> client = LoadClient(KoanDir(), *client_id);
-  const agent::ProcessInfo paired_agent = client && client->pinned
-                                              ? client->pinned->agent
-                                              : agent::AgentAncestor(*self);
+  const std::vector<agent::ProcessInfo> agents =
+      AgentsToServe(client ? client->pinned : std::nullopt, *self);
   const base::FilePath log_path =
       KoanDir().Append("run").Append(client_id->substr(0, 16) + ".log");
   auto log = [&](const std::string& line) {
@@ -214,18 +241,25 @@ int RunHolder(const Command& command) {
             resolver->TokenForSocket(fd.get());
         peer = token ? resolver->Resolve(*token) : std::nullopt;
         verdict = DecideLocalClient(
-            self->process, paired_agent, geteuid(),
+            self->process, agents, geteuid(),
             peer ? std::optional<agent::PeerIdentity>(peer->identity)
                  : std::nullopt);
         if (verdict == LocalClientVerdict::kAllowed &&
             commands.size() >= kMaxCommands) {
           log("refused busy");
-          fd.reset();
+          RefuseCommand(std::move(fd), "Hold.busy",
+                        "too many koan commands at once; retry");
         } else if (verdict != LocalClientVerdict::kAllowed) {
-          // Not the paired agent's koan: it never reaches the connection.
+          // Not the paired agent's koan: it never reaches the connection,
+          // and is told why (another user's process is told nothing).
           log("refused " + std::string(VerdictName(verdict)) + " " +
               (peer ? peer->identity.process.path : std::string("?")));
-          fd.reset();
+          if (verdict == LocalClientVerdict::kOtherUser) {
+            fd.reset();
+          } else {
+            RefuseCommand(std::move(fd), "Hold.refused",
+                          RefusalText(verdict, log_path));
+          }
         }
       }
       if (fd.is_valid()) {
