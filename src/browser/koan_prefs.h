@@ -217,6 +217,10 @@ inline constexpr char kWindowSyncState[] = "koan.window_sync.state";
 // new window (while synced windows are open) opens a New Blank Window.
 inline constexpr char kWindowSyncOpenLinksInBlankWindow[] =
     "koan.window_sync.open_links_in_blank_window";
+// Zen's zen.window-sync.prefer-unsynced-windows (off): New Window opens a
+// New Blank Window, and New Blank Window a synced window.
+inline constexpr char kWindowSyncPreferBlankWindows[] =
+    "koan.window_sync.prefer_blank_windows";
 
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
 // whether Glance is on, and which modifier+click previews a link: "alt"
