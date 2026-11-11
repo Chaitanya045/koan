@@ -1,0 +1,32 @@
+diff --git a/chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.cc b/chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.cc
+--- a/chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.cc
++++ b/chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.cc
+@@ -20,6 +20,7 @@
+ #include "chrome/browser/ui/views/omnibox/omnibox_popup_presenter_base.h"
+ #include "chrome/browser/ui/views/omnibox/omnibox_popup_webui_base_content.h"
+ #include "components/omnibox/common/omnibox_features.h"
++#include "koan/browser/ui/views/koan_url_bar.h"
+ #include "ui/base/cursor/cursor.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+@@ -243,6 +244,10 @@
+   // including transparent shadow pixels in the margin around the content.
+   draw_shadow_in_webui_ =
+       webui_content && webui_content->ShouldDrawShadowInWebUI();
++  // Koan: Zen's floating URL bar card paints the surface, shadow and cutout
++  // of its suggestions; the frame then draws none, as for such a WebUI.
++  const bool koan_card = koan::PaintsOmniboxPopupSurface(location_bar);
++  draw_shadow_in_webui_ = draw_shadow_in_webui_ || koan_card;
+   const bool masks_to_bounds =
+       webui_content && webui_content->ShouldSizeWebViewToPreferredHeight();
+   // Skipped entirely when the WebUI paints the background itself.
+@@ -285,6 +290,9 @@
+   }
+ 
+   AddChildView(std::move(contents_host));
++  if (koan_card) {
++    SetCutoutVisibility(false);
++  }
+ }
+ 
+ RoundedOmniboxResultsFrame::~RoundedOmniboxResultsFrame() = default;

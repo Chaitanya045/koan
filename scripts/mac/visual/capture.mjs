@@ -11,8 +11,8 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { browserCall, check, finish, pages, setKoanPref, sleep, viewTree }
-    from '../../e2e/lib/koan.mjs';
+import { ACCEL, browserCall, check, finish, key, pages, setKoanPref, sleep, typeInto,
+         viewTree } from '../../e2e/lib/koan.mjs';
 import { KOAN_PID, browserWidgets, startServer, windowOf } from '../../e2e/lib/mac.mjs';
 
 const spec = JSON.parse(fs.readFileSync(new URL('./regions.json', import.meta.url), 'utf8'));
@@ -49,8 +49,10 @@ async function regionsNow(names) {
   const [win] = await browserWidgets(vs);
   const root = win.views[0];
   const out = {};
+  const same = {};
   for (const name of names) {
     const r = spec.regions[name];
+    if (r.same) same[name] = r.same;
     if (r.rect) {
       let [x, y, w, h] = r.rect;
       if (x < 0) x = root.w + x;
@@ -63,21 +65,47 @@ async function regionsNow(names) {
     const pad = r.pad ?? 0;
     out[name] = [v.ax - pad, v.ay - pad, v.w + 2 * pad, v.h + 2 * pad];
   }
-  return { root: [root.w, root.h], regions: out };
+  return { root: [root.w, root.h], regions: out, same };
 }
 
+const omnibox = async () =>
+  (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown);
+// A setup returns true when it leaves the window as it should be captured
+// (the focus where it put it), else the page is activated after it.
 const setups = {
   default: async () => setKoanPref('koan.compact_mode.enabled', false),
   compact: async () => setKoanPref('koan.compact_mode.enabled', true),
+  // Zen's floating URL bar in place of a new tab, with suggestions: one card.
+  'url-card': async () => {
+    await setKoanPref('koan.compact_mode.enabled', false);
+    await browserCall('Target.activateTarget', { targetId: page.id });
+    await sleep(1500);
+    await key(page, 84, ACCEL, 't');
+    await sleep(800);
+    const field = await omnibox();
+    if (field) await typeInto(field, 'koan');
+    await sleep(1500);
+    return true;
+  },
+};
+const teardowns = {
+  'url-card': async () => {
+    const field = await omnibox();
+    if (field) await typeInto(field, '', 27);  // Esc closes the bar.
+  },
 };
 for (const [state, names] of Object.entries(spec.states)) {
-  await setups[state]?.();
-  // Back to the page, the pointer's hover gone, animations done.
-  await browserCall('Target.activateTarget', { targetId: page.id });
-  await sleep(2500);
+  if (!(await setups[state]?.())) {
+    // Back to the page, the pointer's hover gone, animations done.
+    await browserCall('Target.activateTarget', { targetId: page.id });
+    await sleep(2500);
+  }
   const id = windowNumber();
   check(`${state}: found the window (winid)`, !!id);
-  if (!id) continue;
+  if (!id) {
+    await teardowns[state]?.();
+    continue;
+  }
   const png = path.join(OUT, `${state}.png`);
   execFileSync('screencapture', ['-x', '-o', `-l${id}`, png]);
   const info = await regionsNow(names);
@@ -85,6 +113,7 @@ for (const [state, names] of Object.entries(spec.states)) {
   const missing = names.filter(n => !info.regions[n]);
   check(`${state}: captured, every region found`, fs.existsSync(png) && !missing.length,
         missing.length ? `missing ${missing.join(', ')}` : '');
+  await teardowns[state]?.();
 }
 await setKoanPref('koan.compact_mode.enabled', false);
 server.close();

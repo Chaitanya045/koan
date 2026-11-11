@@ -19,6 +19,12 @@ fails when more than --threshold percent (default 0.5) of its pixels differ,
 or when its size changed. The diff image is the reference greyed out with
 the differing pixels in red. --record writes the crops as the new references
 instead. Exit 1 if anything failed. Standard library only (zlib).
+
+A region with `same` bands (regions.json) is also checked without a reference:
+the bands' mean colours must match (one surface, not two):
+
+    PASS url-card/url-card one surface
+    FAIL url-card/url-card one surface: (19, 19, 19) vs (24, 24, 24)
 """
 
 import argparse
@@ -107,6 +113,41 @@ def crop(img, x, y, w, h):
     w, h = max(0, min(w, width - x)), max(0, min(h, height - y))
     rows = [rgb[((y + r) * width + x) * 3:((y + r) * width + x + w) * 3] for r in range(h)]
     return w, h, b''.join(rows)
+
+
+# --- One surface: bands of a region that must be one colour.
+
+# Largest channel difference between two bands' mean colours that is still
+# one surface (rounding, a blur's grain).
+SAME_TOLERANCE = 3
+
+
+def band_rect(region, band):
+    """`band` [x, y, w, h] of `region` [x, y, w, h], both in points: a
+    negative x or y counts from the region's right or bottom edge, a w or h
+    of 0 or less reaches its far edge less that much."""
+    rx, ry, rw, rh = region
+    x, y, w, h = band
+    if x < 0:
+        x += rw
+    if y < 0:
+        y += rh
+    if w <= 0:
+        w += rw - x
+    if h <= 0:
+        h += rh - y
+    return [rx + x, ry + y, w, h]
+
+
+def mean_colour(img):
+    w, h, data = img
+    n = max(1, w * h)
+    return tuple(round(sum(data[c::3]) / n) for c in range(3))
+
+
+def same_colour(colours, tolerance=SAME_TOLERANCE):
+    first = colours[0]
+    return all(max(abs(a - b) for a, b in zip(first, c)) <= tolerance for c in colours[1:])
 
 
 # --- The perceptual metric (pixelmatch's YIQ distance, without alpha).
@@ -198,8 +239,27 @@ def main(argv=None):
         # The root view is at the bottom of the captured frame (a title bar,
         # if any, is above it).
         top = shot[1] - round(info['root'][1] * scale)
+
+        def crop_points(x, y, w, h):
+            return crop(shot, round(x * scale), top + round(y * scale), round(w * scale),
+                        round(h * scale))
+
+        for name, bands in sorted(info.get('same', {}).items()):
+            label = f'{state}/{name} one surface'
+            region = info['regions'].get(name)
+            pieces = [crop_points(*band_rect(region, band)) for band in bands] if region else []
+            if not pieces or any(p[0] * p[1] == 0 for p in pieces):
+                failed += 1
+                print(f'FAIL {label}: region not captured')
+                continue
+            colours = [mean_colour(p) for p in pieces]
+            if same_colour(colours):
+                print(f'PASS {label}')
+            else:
+                failed += 1
+                print(f'FAIL {label}: ' + ' vs '.join(str(c) for c in colours))
         for name, (x, y, w, h) in sorted(info['regions'].items()):
-            piece = crop(shot, round(x * scale), top + round(y * scale), round(w * scale), round(h * scale))
+            piece = crop_points(x, y, w, h)
             label = f'{state}/{name}'
             ref_path = os.path.join(args.ref, f'{state}-{name}.png')
             if args.record:

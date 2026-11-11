@@ -1,5 +1,5 @@
 {
-  "_comment": "Named regions for scripts/mac/visual/capture.mjs: a region is the first shown view of class `view` in the browser window (its bounds, in points), or a fixed `rect` [x, y, w, h] in the window's root view (negative x or y count from the right or bottom). `pad` grows a view's bounds. diff.py crops each one from the window's screencapture and compares it with docs/screenshots/reference/<state>-<region>.png. `states` lists the window states that capture.mjs sets up, and the regions to take in each.",
+  "_comment": "Named regions for scripts/mac/visual/capture.mjs: a region is the first shown view of class `view` in the browser window (its bounds, in points), or a fixed `rect` [x, y, w, h] in the window's root view (negative x or y count from the right or bottom). `pad` grows a view's bounds. `same` lists bands of a region ([x, y, w, h] in points inside it; negative x or y count from its right or bottom, a w or h of 0 or less reaches its far edge less that much) that must be one colour, reference or not: one surface, not two. diff.py crops each one from the window's screencapture and compares it with docs/screenshots/reference/<state>-<region>.png. `states` lists the window states that capture.mjs sets up, and the regions to take in each.",
   "regions": {
     "traffic-lights": { "rect": [0, 0, 92, 44] },
     "sidebar-top": { "view": "KoanSidebarNavView" },
@@ -8,10 +8,12 @@
     "new-tab-row": { "view": "KoanNewTabRow" },
     "space-bar": { "view": "KoanSpaceBarView" },
     "sidebar": { "view": "VerticalTabStripRegionView" },
-    "content-corner": { "rect": [-120, -90, 120, 90] }
+    "content-corner": { "rect": [-120, -90, 120, 90] },
+    "url-card": { "view": "TopContainerView", "same": [[24, 2, -24, 4], [24, -6, -24, 4]] }
   },
   "states": {
     "default": ["traffic-lights", "sidebar-top", "url-pill", "space-header", "new-tab-row", "space-bar", "sidebar", "content-corner"],
-    "compact": ["traffic-lights", "content-corner"]
+    "compact": ["traffic-lights", "content-corner"],
+    "url-card": ["url-card"]
   }
 }
