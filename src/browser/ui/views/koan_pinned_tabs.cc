@@ -15,6 +15,7 @@
 #include <optional>
 #include <utility>
 
+#include "base/logging.h"  // KOANDBG
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -805,6 +806,9 @@ void KoanPinnedTabController::Normalize() {
       continue;
     }
     if (was_essential) {
+      LOG(INFO) << "KOANDBG normalize was_essential first=" << first
+                << " in_pinned_run=" << InPinnedRun(first)
+                << " section_start=" << SectionStart(first);
       // Zen: an Essential dropped among the pinned tabs becomes one of them,
       // keeping its pinned URL; dropped anywhere else, a normal tab.
       if (InPinnedRun(first) && state.pinned_url.is_valid()) {
@@ -1382,6 +1386,9 @@ void KoanPinnedTabController::OnTabStripModelChanged(
       break;
     }
     case TabStripModelChange::kMoved:
+      LOG(INFO) << "KOANDBG moved " << change.GetMove()->from_index << "->"
+                << change.GetMove()->to_index << " group="
+                << change.GetMove()->tab->GetGroup().has_value();
       if (IsDraggingHere()) {
         GetOrCreateTabState(change.GetMove()->tab->GetContents()).dragged =
             true;
@@ -1439,6 +1446,10 @@ void KoanPinnedTabController::OnTabChangedAt(tabs::TabInterface* tab,
 
 void KoanPinnedTabController::OnTabPinnedStateChanged(tabs::TabInterface* tab,
                                                       int index) {
+  LOG(INFO) << "KOANDBG pin-changed index=" << index
+            << " pinned=" << tab->IsPinned() << " changing=" << changing_pin_
+            << " group=" << tab->GetGroup().has_value()
+            << " drag=" << IsDraggingHere();
   if (changing_pin_) {
     return;
   }

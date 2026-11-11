@@ -22,12 +22,13 @@
 //
 //   set -a; . <rec dir>/koan.env; set +a
 //   MARKS=<rec dir>/essentials.marks.json node scripts/mac/video/flows/essentials.mjs
-import { ACCEL, browserCall, key, sleep, viewTree, waitFor } from '../../../e2e/lib/koan.mjs';
+import { ACCEL, ALT, CTRL, SHIFT, browserCall, key, sleep, viewTree, waitFor } from '../../../e2e/lib/koan.mjs';
 import { askTestHelper, windowOf } from '../../../e2e/lib/mac.mjs';
-import { activate, clearButtonOf, closeTabs, compactOn, findPage, finish, mark, modelTabs, out,
-         pointer, save, setRound, setup, sidebarRows, startFlow, startPages } from './common.mjs';
+import { activate, clearButtonOf, clickAt, closeTabs, compactOn, findPage, finish, mark, modelTabs,
+         out, pointer, save, screenRect, setRound, setup, sidebarRows, startFlow,
+         startPages } from './common.mjs';
 
-const VK_S = 83;
+const VK_S = 83, VK_D = 68, VK_N = 78, VK_ESCAPE = 27;
 const MARKS = startFlow('essentials');
 const { origin, pageUrl } = await startPages();
 mark('start', { origin });
@@ -41,6 +42,10 @@ async function snapshot(label, url) {
   const rows = sidebarRows(vs).filter(v => (v.props.Url ?? '') === url);
   const grid = vs.find(v => v.cls === 'PinnedTabContainerView' && v.shown);
   const header = vs.find(v => v.cls === 'KoanSpaceHeaderView' && v.shown);
+  // The grid's tiles: Zen keeps them a grid (at most four across), also in
+  // compact mode's revealed sidebar.
+  const tiles = vs.filter(v => v.cls === 'TabView' && v.shown && v.w > 0 &&
+                               v.path.includes('PinnedTabContainerView'));
   const s = {
     label,
     essentials: tabs.filter(t => t.pinned).length,
@@ -49,6 +54,10 @@ async function snapshot(label, url) {
     inGrid: rows.map(v => v.grid),
     gridH: grid?.h ?? 0,
     headerBelowGrid: !grid || !header || header.y >= grid.y + grid.h,
+    tiles: tiles.length,
+    tileRows: new Set(tiles.map(t => t.y)).size,
+    tileMaxW: Math.max(0, ...tiles.map(t => t.w)),
+    gridW: grid?.w ?? 0,
     clearShown: !!clearButtonOf(vs),
     compact: compactOn(vs),
   };
@@ -66,7 +75,9 @@ async function openTab(url, foreground) {
 
 // Makes the tab on `url` an Essential (`action` 'pin-tab', test_helper pins
 // it the Chrome way, which Koan makes an Essential, as in the recording) or
-// takes it out ('unpin-tab': back into the Space), and counts.
+// takes it out ('unpin-tab': back into the Space, as an extension or a drag
+// does; 'toggle-pin': the user's Toggle Pin, Cmd+Shift+D, on the selected
+// Essential, which is Remove from Essentials), and counts.
 async function change(name, url, action) {
   const page = await findPage(x => x.url === url);
   const rec = { round: out.rounds.length + 1, name, url, action };
@@ -76,8 +87,16 @@ async function change(name, url, action) {
     out.rounds.push(rec);
     return rec;
   }
-  mark(action === 'pin-tab' ? 'make-essential' : 'remove-essential', { name }, true);
-  await askTestHelper(page, action, 0);
+  if (action === 'toggle-pin') {
+    await activate(page);
+    await sleep(600);
+  }
+  mark(action === 'pin-tab' ? 'make-essential' : 'remove-essential', { name, action }, true);
+  if (action === 'toggle-pin') {
+    await key(page, VK_D, ACCEL | SHIFT, 'd');
+  } else {
+    await askTestHelper(page, action, 0);
+  }
   rec.after = [await snapshot('after', url)];
   await sleep(1000);
   rec.after.push(await snapshot('after-1s', url));
@@ -113,12 +132,16 @@ await change('fourth (background)', urls[3], 'pin-tab');
 await change('fifth, a new row (background)', urls[2], 'pin-tab');
 await change('back to the Space (row goes)', urls[2], 'unpin-tab');
 await change('the last one out', urls[3], 'unpin-tab');
+await change('Remove from Essentials (Toggle Pin)', urls[6], 'toggle-pin');
 
-// Compact mode with Essentials and a listed tab: the reveal shows Clear, and
-// turning it off brings the sidebar back without the page showing through.
+// Compact mode with Essentials and listed tabs: the revealed sidebar keeps
+// the Essentials a grid of tiles and shows Clear; turning compact mode off
+// with the sidebar out leaves it where it is, and with it hidden slides it in
+// once, over no page.
 setRound(out.rounds.length + 1);
+let compactRec = null;
 {
-  const rec = { round: out.rounds.length + 1, name: 'compact' };
+  const rec = compactRec = { round: out.rounds.length + 1, name: 'compact' };
   await activate(anchor);
   mark('compact-on', {}, true);
   await key(anchor, VK_S, ACCEL, 's');
@@ -129,15 +152,77 @@ setRound(out.rounds.length + 1);
   rec.hidden = await snapshot('compact-hidden', urls[0]);
   mark('reveal-sidebar', {}, true);
   await pointer('move', w.left + 2, Math.round(w.top + w.height / 2), 250);
+  await sleep(300);
+  await pointer('move', w.left + 60, Math.round(w.top + w.height / 2), 150);
   await sleep(900);
   rec.revealed = await snapshot('compact-revealed', urls[0]);
+  // Off with the sidebar out (the pointer on it): Zen leaves it there.
+  mark('compact-off-revealed', {}, true);
+  await key(anchor, VK_S, ACCEL, 's');
+  await sleep(1500);
+  rec.offRevealed = await snapshot('compact-off-revealed', urls[0]);
+  // On again, the sidebar hidden, then off: Zen slides it in once.
+  mark('compact-on', {}, true);
+  await key(anchor, VK_S, ACCEL, 's');
+  await sleep(600);
+  await pointer('move', Math.round(w.left + w.width * 0.7), Math.round(w.top + w.height / 2), 200);
+  await sleep(1200);
+  mark('compact-off', {}, true);
+  await key(anchor, VK_S, ACCEL, 's');
+  await sleep(1500);
+  rec.off = await snapshot('compact-off', urls[0]);
+  const grid = s => s.tiles === 0 || (s.tileRows === 1 && s.tileMaxW * 2 < s.gridW);
+  rec.ok = rec.revealed.compact && rec.revealed.clearShown && grid(rec.revealed) &&
+           !rec.offRevealed.compact && !rec.off.compact && rec.off.clearShown && grid(rec.off);
+  mark('round-result', { ok: rec.ok });
+  out.rounds.push(rec);
+  save();
+}
+
+// The lead on #295: a real Clear click in compact mode's reveal, compact mode
+// off, then Ctrl+Alt+N must still open the new-Space form.
+setRound(out.rounds.length + 1);
+{
+  const rec = { round: out.rounds.length + 1, name: 'clear in reveal, then Ctrl+Alt+N' };
+  await activate(anchor);
+  await key(anchor, VK_S, ACCEL, 's');
+  await sleep(1200);
+  const w = (await windowOf(anchor.id))?.bounds;
+  mark('reveal-sidebar', {}, true);
+  await pointer('move', w.left + 2, Math.round(w.top + w.height / 2), 250);
+  await sleep(900);
+  let vs = await viewTree();
+  const button = clearButtonOf(vs);
+  const r = button && await screenRect(button, anchor);
+  if (r) {
+    await pointer('move', Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2), 250);
+    await sleep(500);
+    mark('clear-click', {}, true);
+    await clickAt(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2));
+    await sleep(1000);
+  } else {
+    mark('no-clear-button');
+  }
   await pointer('move', Math.round(w.left + w.width * 0.7), Math.round(w.top + w.height / 2), 200);
   await sleep(800);
   mark('compact-off', {}, true);
   await key(anchor, VK_S, ACCEL, 's');
   await sleep(1500);
-  rec.off = await snapshot('compact-off', urls[0]);
-  rec.ok = rec.revealed.compact && rec.revealed.clearShown && !rec.off.compact && rec.off.clearShown;
+  rec.forms = [];
+  for (let i = 0; i < 3; i++) {
+    mark('new-space-key', { try: i + 1 }, true);
+    await key(anchor, VK_N, CTRL | ALT, 'n');
+    await sleep(1200);
+    vs = await viewTree();
+    const shown = vs.some(v => v.cls === 'KoanSpaceCreationView' && v.shown);
+    rec.forms.push(shown);
+    mark('count-new-space-form', { shown, any: vs.some(v => v.cls === 'KoanSpaceCreationView') });
+    if (shown) {
+      await key(anchor, VK_ESCAPE, 0, 'Escape');
+      await sleep(800);
+    }
+  }
+  rec.ok = rec.forms.every(Boolean);
   mark('round-result', { ok: rec.ok });
   out.rounds.push(rec);
   save();
@@ -147,7 +232,7 @@ setRound(out.rounds.length + 1);
 mark('end');
 console.log('\nround  change                              ok     views  essentials');
 for (const r of out.rounds) {
-  const last = r.after?.at(-1) ?? r.off;
+  const last = r.after?.at(-1) ?? r.off ?? {};
   console.log(`${String(r.round).padStart(5)}  ${r.name.padEnd(35)} ${String(r.ok ?? r.skipped).padEnd(6)} ` +
               `${String(last?.views ?? '-').padStart(5)}  ${last?.essentials ?? '-'}`);
 }

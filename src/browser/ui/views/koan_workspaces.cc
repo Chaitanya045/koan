@@ -13,6 +13,7 @@
 #include <string>
 #include <utility>
 
+#include "base/logging.h"  // KOANDBG
 #include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/containers/span.h"
@@ -1258,6 +1259,10 @@ void KoanWorkspaceController::ShowKeptLoadedToast(int kept) {
 // Zen's UI.
 
 void KoanWorkspaceController::ShowCreateForm() {
+  LOG(INFO) << "KOANDBG ShowCreateForm form=" << !!creation_form_
+            << " header=" << !!header_
+            << " form_visible=" << (creation_form_ && creation_form_->GetVisible())
+            << " form_drawn=" << (creation_form_ && creation_form_->IsDrawn());
   if (creation_form_ || !header_) {
     return;
   }
@@ -1721,6 +1726,8 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
       if (indices.empty()) {
         continue;
       }
+      LOG(INFO) << "KOANDBG loose regroup first=" << indices.front()
+                << " n=" << indices.size();
       if (space) {
         model->AddToExistingGroup(indices, *space, /*add_to_end=*/true);
       } else {

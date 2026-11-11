@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/logging.h"  // KOANDBG
 #include "base/functional/bind.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -168,6 +169,8 @@ void KoanShortcutController::OnBrowserViewDestroying() {
 
 bool KoanShortcutController::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
+  LOG(INFO) << "KOANDBG accelerator " << accelerator.key_code() << " mods="
+            << accelerator.modifiers();
   for (const Binding& binding : bindings_) {
     if (binding.accelerator == accelerator) {
       // Like Chrome's New Tab and New Window, a held key doesn't repeat: it

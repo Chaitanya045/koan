@@ -1,15 +1,17 @@
+diff --git a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 --- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-@@ -14,6 +14,8 @@
+@@ -14,6 +14,9 @@
  #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
  #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
  #include "chrome/browser/ui/views/tabs/tab_style_views.h"
 +#include "koan/browser/koan_features.h"
++#include "koan/browser/ui/views/koan_essentials.h"
 +#include "koan/browser/ui/views/koan_sidebar_tabs.h"
  #include "ui/views/view_utils.h"
  
  namespace {
-@@ -37,7 +39,8 @@
+@@ -37,7 +40,8 @@
                       /*align_leading=*/false,
                       /*expand=*/false,
                       /*decorate_on_collapse=*/true),
@@ -19,7 +21,18 @@
                       /*align_leading=*/true,
                       /*expand=*/false),
        TabChildConfig(TabView().title_, kTitleMinWidth, kDefaultPadding,
-@@ -186,7 +189,9 @@
+@@ -147,7 +151,9 @@
+   if (child_view == TabView().title_) {
+     // Pinned titles should be visible in the expand on hover state when the
+     // width is sufficient to show the title.
+-    return !TabView().pinned_ || TabView().IsInExpandOnHover(width);
++    // Koan: an Essentials tile never shows its title.
++    return !TabView().pinned_ ||
++           koan::ShowsPinnedTabTitle(TabView().IsInExpandOnHover(width));
+   }
+ 
+   if (child_view == TabView().alert_indicator_) {
+@@ -186,7 +192,9 @@
        return TabView().active_ && hovered_or_focused;
      }
  

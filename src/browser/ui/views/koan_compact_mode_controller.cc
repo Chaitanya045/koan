@@ -1149,6 +1149,11 @@ void KoanCompactModeController::UpdateActive() {
   const views::View* region = browser_view_->tab_strip_view();
   const bool slide_away = applied_ && !hides_sidebar() && region &&
                           region->GetVisible() && region->width() > 0;
+  // Turning it off: Zen slides a hidden sidebar in, in 0.1 s, and leaves one
+  // that is out where it is (DockSidebarAfterCompact()).
+  const bool docks_sidebar = applied_ && hides_sidebar();
+  const bool sidebar_was_out =
+      docks_sidebar && IsSidebarShownOut(browser_view_);
   if (mode_ != Mode::kNone) {
     Deactivate();
   }
@@ -1163,6 +1168,9 @@ void KoanCompactModeController::UpdateActive() {
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
   if (slide_away && hides_sidebar() && !IsEmptyTab(model->GetActiveTab())) {
     SlideSidebarAway(browser_view_);
+  }
+  if (docks_sidebar && !hides_sidebar()) {
+    DockSidebarAfterCompact(browser_view_, /*slide_in=*/!sidebar_was_out);
   }
   applied_ = applied_ || CanCompactMode();
 }
