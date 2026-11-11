@@ -454,9 +454,13 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreNoUrlBrowserTest,
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreNoUrlBrowserTest,
                        SplitViewComesBackShown) {
   TabStripModel* tab_strip = browser()->GetTabStripModel();
+  // The Essential, the Space's empty tab (Zen's, added when the Space's only
+  // tab became an Essential; hidden, but in the session) and the split's two
+  // tabs.
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return tab_strip->count() == 3 && !tab_strip->ListSplits().empty();
+    return tab_strip->count() == 4 && !tab_strip->ListSplits().empty();
   })) << DescribeTabs();
+  EXPECT_TRUE(IsEmptyTab(tab_strip->GetTabAtIndex(1))) << DescribeTabs();
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
   // Once the Spaces' first update (which puts back an Essential the window
   // opened on) has run.

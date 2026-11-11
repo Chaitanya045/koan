@@ -24,11 +24,13 @@
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/search_engines/search_engines_test_environment.h"
 #include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "koan/browser/omnibox/koan_omnibox_hooks.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -36,14 +38,48 @@ namespace {
 
 class KoanTabSearchTest : public testing::Test {
  protected:
-  KoanTabSearchTest() {
+  void SetUp() override {
+    // OpenTabProvider's matches ask for localised strings, which needs a
+    // ResourceBundle. This suite's launcher has none. With no locale pak
+    // (this test ships none) the bundle answers with empty strings: enough
+    // for the matches, but not for the starter pack's keywords, so the tests
+    // add those engines themselves.
+    if (!ui::ResourceBundle::HasSharedInstance()) {
+      ui::ResourceBundle::InitSharedInstanceWithLocale(
+          "en-US", /*delegate=*/nullptr,
+          ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+      owns_resource_bundle_ = true;
+    }
     client_.set_template_url_service(
         search_engines_test_environment_.template_url_service());
-    for (auto& data : template_url_starter_pack_data::GetStarterPackEngines()) {
-      client_.GetTemplateURLService()->Add(
-          std::make_unique<TemplateURL>(std::move(*data)));
-    }
+    AddStarterPackEngine(template_url_starter_pack_data::StarterPackId::kTabs,
+                         u"@tabs", "chrome://tabs/?q={searchTerms}");
+    AddStarterPackEngine(
+        template_url_starter_pack_data::StarterPackId::kHistory, u"@history",
+        "chrome://history/?q={searchTerms}");
     provider_ = base::MakeRefCounted<OpenTabProvider>(&client_);
+  }
+
+  void TearDown() override {
+    provider_.reset();
+    if (owns_resource_bundle_) {
+      ui::ResourceBundle::CleanupSharedInstance();
+    }
+  }
+
+  // A starter pack engine as upstream's en-US strings make it
+  // (TemplateURLDataFromStarterPackEngine).
+  void AddStarterPackEngine(template_url_starter_pack_data::StarterPackId id,
+                            const std::u16string& keyword,
+                            const std::string& url) {
+    TemplateURLData data;
+    data.SetShortName(keyword);
+    data.SetKeyword(keyword);
+    data.SetURL(url);
+    data.starter_pack_id = static_cast<int>(id);
+    data.safe_for_autoreplace = true;
+    data.is_active = TemplateURLData::ActiveStatus::kTrue;
+    client_.GetTemplateURLService()->Add(std::make_unique<TemplateURL>(data));
   }
 
   // `age` minutes since the tab was last shown.
@@ -79,6 +115,7 @@ class KoanTabSearchTest : public testing::Test {
   search_engines::SearchEnginesTestEnvironment search_engines_test_environment_;
   FakeAutocompleteProviderClient client_;
   scoped_refptr<OpenTabProvider> provider_;
+  bool owns_resource_bundle_ = false;
 };
 
 TEST_F(KoanTabSearchTest, EmptyQueryListsTheOpenTabsMostRecentFirst) {

@@ -144,8 +144,9 @@ s = await sidebar();
 check('Ctrl+Alt+N opens the Create-a-Space form', s.nameField !== null);
 await typeAndEnter(s.nameField, 'Work');
 s = await sidebar();
-check('Creating a Space shows it, with its tab only',
-      s.header === 'Work' && s.visibleTabs === 1 && s.buttons.length === 2 &&
+// The new Space opens on Zen's empty tab, which has no row.
+check('Creating a Space shows it, on the empty tab (no row)',
+      s.header === 'Work' && s.visibleTabs === 0 && s.buttons.length === 2 &&
       s.buttons[1].active, JSON.stringify(s));
 
 // Ctrl+T opens the URL bar (Zen's replace-newtab); the tab opens with what
@@ -153,7 +154,7 @@ check('Creating a Space shows it, with its tab only',
 await key(VK.T, ACCEL, 't');
 await openFromUrlBar('about:blank');
 s = await sidebar();
-check('A new tab joins the active Space', s.visibleTabs === 2, `${s.visibleTabs} tab(s)`);
+check('A new tab joins the active Space', s.visibleTabs === 1, `${s.visibleTabs} tab(s)`);
 
 await key(VK.N, CTRL | ALT, 'n');
 await typeAndEnter((await sidebar()).nameField, 'Play');
@@ -165,7 +166,8 @@ check('A third Space goes after the active one',
 await key(VK.LEFT, ACCEL | ALT);
 s = await sidebar();
 check('Ctrl+Alt+Left goes to the previous Space',
-      s.header === 'Work' && s.visibleTabs === 2, JSON.stringify(s.header));
+      s.header === 'Work' && s.visibleTabs === 1,
+      JSON.stringify({ header: s.header, tabs: s.visibleTabs }));
 await key(VK.RIGHT, ACCEL | ALT);
 await key(VK.RIGHT, ACCEL | ALT);
 s = await sidebar();
