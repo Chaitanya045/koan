@@ -29,8 +29,8 @@ namespace koan {
 
 // Koan's welcome on Chromium's first run (onboarding v2, #181; a deliberate
 // divergence from Zen's welcome): chrome://koan-welcome (koan_welcome_ui.h)
-// over the whole first window, in shadcn's look. "Welcome to a calmer
-// internet", then the shortcut set, import from another browser and the
+// over the whole first window, in shadcn's look. "The only browser you
+// need", then the shortcut set, import from another browser and the
 // search engine (Brave Search chosen); every step can be skipped, and Skip
 // setup or Esc leaves at any point.
 //
