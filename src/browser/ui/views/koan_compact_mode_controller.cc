@@ -381,6 +381,14 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   // (KoanVerticalTabsPolicy::OnBrowserViewDestroying() ran first, so
   // IsClosing() is true from here on.)
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
+  // Before Deactivate(): moving the views back can move focus, and a focus
+  // change opens or closes the URL bar (OnDidChangeFocus()), which rebuilds
+  // views inside the removal's notifications. Teardown runs while the widget
+  // is whole (KoanBrowserViewController::TearDown()), so focus still moves.
+  if (focus_manager_) {
+    focus_manager_->RemoveFocusChangeListener(this);
+    focus_manager_ = nullptr;
+  }
   // Order matters: resetting the menu runner may run OnContextMenuClosed(),
   // which would keep the hold, so it is released (and null) first. (A hold's
   // lock is let go of after the current task, see SidebarHold.)
@@ -392,10 +400,6 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   pointer_monitor_.reset();
   EndOutsideTracking();
   outside_tracker_.reset();
-  if (focus_manager_) {
-    focus_manager_->RemoveFocusChangeListener(this);
-    focus_manager_ = nullptr;
-  }
 }
 
 void KoanCompactModeController::ToggleCompactMode() {
