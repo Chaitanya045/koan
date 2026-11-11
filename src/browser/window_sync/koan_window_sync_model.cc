@@ -120,6 +120,11 @@ std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
   return adopted;
 }
 
+Plan<FolderRecord> PlanFolders(const std::vector<FolderRecord>& local,
+                               const std::vector<FolderRecord>& target) {
+  return PlanRecords(local, target);
+}
+
 Plan<ItemRecord> PlanItems(const std::vector<ItemRecord>& local,
                            const std::vector<ItemRecord>& target) {
   return PlanRecords(local, target);
@@ -145,6 +150,16 @@ bool WindowSyncModel::SetSpaces(std::vector<SpaceRecord> spaces) {
   return true;
 }
 
+bool WindowSyncModel::SetFolders(std::vector<FolderRecord> folders) {
+  DropDuplicateIds(folders);
+  const std::vector<FolderRecord> folders_before = std::move(folders_);
+  const std::vector<ItemRecord> items_before = items_;
+  folders_ = std::move(folders);
+  // (Tabs in a folder that went leave it.)
+  DropOrphans();
+  return folders_ != folders_before || items_ != items_before;
+}
+
 bool WindowSyncModel::SetItems(std::vector<ItemRecord> items) {
   DropDuplicateIds(items);
   // An item's Space must be in the model (the window reports its Spaces
@@ -158,12 +173,29 @@ bool WindowSyncModel::SetItems(std::vector<ItemRecord> items) {
                ? !space_ids.contains(item.space_id)
                : !item.space_id.empty();
   });
+  // So must its folder (reported before it), in its Space.
+  ClearUnknownFolders(items);
   if (items == items_) {
     return false;
   }
   items_ = std::move(items);
   DropOrphans();
   return true;
+}
+
+void WindowSyncModel::ClearUnknownFolders(
+    std::vector<ItemRecord>& items) const {
+  std::map<std::string, std::string> folder_spaces;
+  for (const FolderRecord& folder : folders_) {
+    folder_spaces[folder.id] = folder.space_id;
+  }
+  for (ItemRecord& item : items) {
+    auto it = folder_spaces.find(item.folder_id);
+    if (item.kind != ItemRecord::Kind::kPinned || it == folder_spaces.end() ||
+        it->second != item.space_id) {
+      item.folder_id.clear();
+    }
+  }
 }
 
 WindowId WindowSyncModel::LiveWindow(const std::string& item) const {
@@ -235,11 +267,22 @@ base::DictValue WindowSyncModel::ToValue() const {
                      .Set("url", item.url)
                      .Set("title", item.custom_title)
                      .Set("icon", item.custom_icon)
-                     .Set("container", item.container));
+                     .Set("container", item.container)
+                     .Set("folder", item.folder_id));
+  }
+  base::ListValue folders;
+  for (const FolderRecord& folder : folders_) {
+    folders.Append(base::DictValue()
+                       .Set("id", folder.id)
+                       .Set("name", folder.name)
+                       .Set("collapsed", folder.collapsed)
+                       .Set("space", folder.space_id)
+                       .Set("parent", folder.parent_id));
   }
   base::DictValue value;
   if (seeded_) {
     value.Set("spaces", std::move(spaces));
+    value.Set("folders", std::move(folders));
     value.Set("items", std::move(items));
   }
   return value;
@@ -247,6 +290,7 @@ base::DictValue WindowSyncModel::ToValue() const {
 
 void WindowSyncModel::FromValue(const base::DictValue& value) {
   spaces_.clear();
+  folders_.clear();
   items_.clear();
   live_.clear();
   seeded_ = false;
@@ -273,6 +317,22 @@ void WindowSyncModel::FromValue(const base::DictValue& value) {
   if (!SetSpaces(std::move(space_records))) {
     return;
   }
+  std::vector<FolderRecord> folder_records;
+  if (const base::ListValue* folders = value.FindList("folders")) {
+    for (const base::Value& entry : *folders) {
+      const base::DictValue* dict = entry.GetIfDict();
+      if (!dict) {
+        continue;
+      }
+      folder_records.push_back(
+          {.id = string_of(*dict, "id"),
+           .name = base::UTF8ToUTF16(string_of(*dict, "name")),
+           .collapsed = dict->FindBool("collapsed").value_or(false),
+           .space_id = string_of(*dict, "space"),
+           .parent_id = string_of(*dict, "parent")});
+    }
+  }
+  SetFolders(std::move(folder_records));
   std::vector<ItemRecord> item_records;
   if (const base::ListValue* items = value.FindList("items")) {
     for (const base::Value& entry : *items) {
@@ -294,7 +354,8 @@ void WindowSyncModel::FromValue(const base::DictValue& value) {
            .url = string_of(*dict, "url"),
            .custom_title = base::UTF8ToUTF16(string_of(*dict, "title")),
            .custom_icon = base::UTF8ToUTF16(string_of(*dict, "icon")),
-           .container = string_of(*dict, "container")});
+           .container = string_of(*dict, "container"),
+           .folder_id = string_of(*dict, "folder")});
     }
   }
   SetItems(std::move(item_records));
@@ -305,10 +366,23 @@ void WindowSyncModel::DropOrphans() {
   for (const SpaceRecord& space : spaces_) {
     space_ids.insert(space.id);
   }
+  // A folder's parent comes before it, in the same Space.
+  std::map<std::string, std::string> kept_folders;
+  std::erase_if(folders_, [&](const FolderRecord& folder) {
+    const bool keep = space_ids.contains(folder.space_id) &&
+                      (folder.parent_id.empty() ||
+                       (kept_folders.contains(folder.parent_id) &&
+                        kept_folders[folder.parent_id] == folder.space_id));
+    if (keep) {
+      kept_folders[folder.id] = folder.space_id;
+    }
+    return !keep;
+  });
   std::erase_if(items_, [&space_ids](const ItemRecord& item) {
     return item.kind == ItemRecord::Kind::kPinned &&
            !space_ids.contains(item.space_id);
   });
+  ClearUnknownFolders(items_);
   std::set<std::string> item_ids;
   for (const ItemRecord& item : items_) {
     item_ids.insert(item.id);

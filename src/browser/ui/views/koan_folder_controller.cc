@@ -1902,9 +1902,11 @@ void KoanFolderController::StartAnimation() {
 
 void KoanFolderController::Save() {
   BrowserWindowInterface* browser = browser_view_->browser();
+  bool changed = false;
   if (std::string data = Serialize(); data != saved_) {
     SetWindowSessionData(browser, kFolderSessionKey, data);
     saved_ = std::move(data);
+    changed = true;
   }
   if (stores_folders_) {
     StoreFolders();
@@ -1915,8 +1917,109 @@ void KoanFolderController::Save() {
     const std::string token = folder ? folder->token : std::string();
     if (GetTabSessionData(tab->GetContents(), kFolderSessionKey) != token) {
       SetTabSessionData(tab->GetContents(), kFolderSessionKey, token);
+      changed = true;
     }
   }
+  if (changed) {
+    folders_changed_.Notify();
+  }
+}
+
+int KoanFolderController::FindFolderByToken(const std::string& token) const {
+  const auto it = std::ranges::find(folders_, token, &KoanFolder::token);
+  return token.empty() || it == folders_.end() ? 0 : it->id;
+}
+
+int KoanFolderController::AddSyncedFolder(std::string token,
+                                          std::u16string name,
+                                          bool collapsed,
+                                          int parent,
+                                          const tab_groups::TabGroupId& space) {
+  if (token.empty() || FindFolderByToken(token)) {
+    return FindFolderByToken(token);
+  }
+  KoanFolder folder;
+  folder.id = next_id_++;
+  folder.token = std::move(token);
+  folder.name = CapName(std::move(name));
+  folder.collapsed = collapsed;
+  folder.parent = GetFolder(parent) ? parent : 0;
+  folder.space = space;
+  const int id = folder.id;
+  folders_.push_back(std::move(folder));
+  had_folders_ = true;
+  arrange_ = true;
+  Changed();
+  return id;
+}
+
+void KoanFolderController::UpdateSyncedFolder(
+    int id,
+    std::u16string name,
+    bool collapsed,
+    int parent,
+    const tab_groups::TabGroupId& space) {
+  KoanFolder* folder = GetMutableFolder(id);
+  if (!folder) {
+    return;
+  }
+  // Never into itself (the other window's tree has no cycle, but this one
+  // may still be on its way there).
+  for (const KoanFolder* up = GetFolder(parent); up;
+       up = GetFolder(up->parent)) {
+    if (up->id == id) {
+      parent = folder->parent;
+      break;
+    }
+  }
+  folder->name = CapName(std::move(name));
+  folder->collapsed = collapsed;
+  folder->parent = GetFolder(parent) ? parent : 0;
+  if (folder->space != space) {
+    SetSpace(id, space);
+  }
+  arrange_ = true;
+  Changed();
+}
+
+void KoanFolderController::OrderSyncedFolders(const std::vector<int>& ids) {
+  std::vector<int> wanted;
+  for (int id : ids) {
+    if (GetFolder(id) && !std::ranges::contains(wanted, id)) {
+      wanted.push_back(id);
+    }
+  }
+  // The places the folders take, in their current order...
+  std::vector<size_t> slots;
+  for (size_t i = 0; i < folders_.size(); ++i) {
+    if (std::ranges::contains(wanted, folders_[i].id)) {
+      slots.push_back(i);
+    }
+  }
+  // ...get them in the wanted order.
+  std::vector<KoanFolder> moved;
+  for (int id : wanted) {
+    moved.push_back(
+        std::move(*std::ranges::find(folders_, id, &KoanFolder::id)));
+  }
+  for (size_t i = 0; i < slots.size(); ++i) {
+    folders_[slots[i]] = std::move(moved[i]);
+  }
+  arrange_ = true;
+  Changed();
+}
+
+void KoanFolderController::SetSyncedFolderOf(tabs::TabInterface* tab, int id) {
+  if (GetFolderOf(tab) == id) {
+    return;
+  }
+  SetFolder({tab}, GetFolder(id) ? id : 0);
+  Changed();
+}
+
+base::CallbackListSubscription KoanFolderController::AddFoldersChangedCallback(
+    base::RepeatingClosure callback) {
+  return folders_changed_.Add(std::move(callback));
 }
 
 std::string KoanFolderController::Serialize() const {

@@ -114,6 +114,10 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   void ReportSpaces(Window* window,
                     std::vector<window_sync::SpaceRecord> spaces);
   void ReportItems(Window* window, std::vector<window_sync::ItemRecord> items);
+  // Its folders, right before its items (which name them). They are
+  // applied with the items (ApplyItems()).
+  void ReportFolders(Window* window,
+                     std::vector<window_sync::FolderRecord> folders);
 
   // `window` shows the synced tab `item` (selected it, or was activated with
   // it selected) and has a placeholder for it: its page comes over soon,

@@ -25,6 +25,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/gfx/range/range.h"
@@ -38,6 +39,8 @@ namespace {
 // The window's session data (koan_session_data.h): {"<tab group token>":
 // "<Space sync id>"}.
 constexpr char kSpaceIdsSessionKey[] = "koan.window_sync.spaces";
+// And ["<folder token>", ...]: its synced folders.
+constexpr char kFolderIdsSessionKey[] = "koan.window_sync.folders";
 
 std::string NewSyncId() {
   return base::Uuid::GenerateRandomV4().AsLowercaseString();
@@ -110,6 +113,14 @@ void KoanWindowSyncClient::Join() {
     widget_observation_.Observe(widget);
   }
   LoadSpaceIds();
+  LoadFolderIds();
+  if (KoanFolderController* folders =
+          KoanBrowserViewController::From(browser_view_)->folders()) {
+    // Folder changes report with the items (their tabs name them).
+    folders_changed_subscription_ = folders->AddFoldersChangedCallback(
+        base::BindRepeating(&KoanWindowSyncClient::ScheduleItemsReport,
+                            weak_factory_.GetWeakPtr()));
+  }
   spaces_changed_subscription_ =
       KoanBrowserViewController::From(browser_view_)
           ->workspaces()
@@ -130,6 +141,7 @@ void KoanWindowSyncClient::Join() {
 void KoanWindowSyncClient::OnBrowserViewDestroying() {
   session_restored_subscription_ = base::CallbackListSubscription();
   spaces_changed_subscription_ = base::CallbackListSubscription();
+  folders_changed_subscription_ = base::CallbackListSubscription();
   widget_observation_.Reset();
   items_report_timer_.Stop();
   if (sync_) {
@@ -310,6 +322,129 @@ void KoanWindowSyncClient::ApplySpaces(
     }
   }
   SaveSpaceIds();
+}
+
+// --- Folders ---
+
+std::vector<window_sync::FolderRecord> KoanWindowSyncClient::LocalFolders(
+    bool assign_ids) {
+  std::vector<window_sync::FolderRecord> records;
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  KoanFolderController* folders = controller->folders();
+  if (!folders || !folders->IsEnabled()) {
+    return records;
+  }
+  std::set<std::string> present;
+  for (const KoanWorkspaceController::SpaceInfo& space :
+       controller->workspaces()->GetSpaces()) {
+    auto space_id = space_ids_.find(space.id);
+    if (space_id == space_ids_.end()) {
+      continue;
+    }
+    for (const KoanFolderController::Entry& entry :
+         folders->GetFolders(space.id)) {
+      const KoanFolder* folder = folders->GetFolder(entry.id);
+      const KoanFolder* parent = folders->GetFolder(folder->parent);
+      if (!synced_folders_.contains(folder->token)) {
+        if (!assign_ids) {
+          continue;
+        }
+        synced_folders_.insert(folder->token);
+      }
+      // A synced folder in one that isn't (only while a joining window's
+      // folders wait for its report).
+      if (parent && !synced_folders_.contains(parent->token)) {
+        continue;
+      }
+      present.insert(folder->token);
+      records.push_back({.id = folder->token,
+                         .name = folder->name,
+                         .collapsed = folder->collapsed,
+                         .space_id = space_id->second,
+                         .parent_id = parent ? parent->token : std::string()});
+    }
+  }
+  // Folders that are gone (or whose Space is) lose their id.
+  if (assign_ids && present != synced_folders_) {
+    synced_folders_ = std::move(present);
+    SaveFolderIds();
+  }
+  return records;
+}
+
+void KoanWindowSyncClient::ApplyFolders(
+    const std::vector<window_sync::FolderRecord>& target) {
+  KoanFolderController* folders =
+      KoanBrowserViewController::From(browser_view_)->folders();
+  TabStripModel* model = browser_view_->browser()->GetTabStripModel();
+  if (!folders || !folders->IsEnabled()) {
+    return;
+  }
+  const window_sync::Plan<window_sync::FolderRecord> plan =
+      window_sync::PlanFolders(LocalFolders(/*assign_ids=*/false), target);
+  // A folder deleted elsewhere: its tabs stay here, a level up, until the
+  // items say where they go (Zen deletes the other windows' folders, whose
+  // tabs Zen closes in every window as their own TabClose).
+  for (const std::string& id : plan.remove) {
+    if (int folder = folders->FindFolderByToken(id)) {
+      folders->Unpack(folder);
+    }
+    synced_folders_.erase(id);
+  }
+  // In target order: a parent before its folders.
+  std::vector<int> order;
+  for (const window_sync::FolderRecord& record : target) {
+    std::optional<tab_groups::TabGroupId> space = FindSpace(record.space_id);
+    const int parent = folders->FindFolderByToken(record.parent_id);
+    if (!space || !model->group_model()->ContainsTabGroup(*space) ||
+        (!record.parent_id.empty() && !parent)) {
+      continue;
+    }
+    int folder = folders->FindFolderByToken(record.id);
+    if (!folder) {
+      folder = folders->AddSyncedFolder(record.id, record.name,
+                                        record.collapsed, parent, *space);
+    } else if (const KoanFolder* local = folders->GetFolder(folder);
+               local->name != record.name ||
+               local->collapsed != record.collapsed ||
+               local->parent != parent || local->space != *space) {
+      folders->UpdateSyncedFolder(folder, record.name, record.collapsed, parent,
+                                  *space);
+    }
+    synced_folders_.insert(record.id);
+    order.push_back(folder);
+  }
+  if (plan.order || !plan.add.empty()) {
+    folders->OrderSyncedFolders(order);
+  }
+  SaveFolderIds();
+}
+
+void KoanWindowSyncClient::LoadFolderIds() {
+  synced_folders_.clear();
+  std::optional<base::Value> value = base::JSONReader::Read(
+      GetWindowSessionData(browser_view_->browser(), kFolderIdsSessionKey),
+      base::JSON_PARSE_RFC);
+  if (!value || !value->is_list()) {
+    return;
+  }
+  for (const base::Value& token : value->GetList()) {
+    if (token.is_string() && !token.GetString().empty()) {
+      synced_folders_.insert(token.GetString());
+    }
+  }
+}
+
+void KoanWindowSyncClient::SaveFolderIds() {
+  base::ListValue list;
+  for (const std::string& token : synced_folders_) {
+    list.Append(token);
+  }
+  SetWindowSessionData(browser_view_->browser(), kFolderIdsSessionKey,
+                       list.empty()
+                           ? std::string()
+                           : base::WriteJson(list).value_or(std::string()));
 }
 
 void KoanWindowSyncClient::LoadSpaceIds() {

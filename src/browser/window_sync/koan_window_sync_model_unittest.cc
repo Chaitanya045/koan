@@ -32,6 +32,23 @@ ItemRecord Pinned(std::string id, std::string space) {
           .url = "https://example.org/"};
 }
 
+FolderRecord Folder(std::string id,
+                    std::string space,
+                    std::string parent = std::string()) {
+  return {.id = std::move(id),
+          .name = u"Folder",
+          .space_id = std::move(space),
+          .parent_id = std::move(parent)};
+}
+
+std::vector<std::string> FolderIds(const WindowSyncModel& model) {
+  std::vector<std::string> ids;
+  for (const FolderRecord& folder : model.folders()) {
+    ids.push_back(folder.id);
+  }
+  return ids;
+}
+
 std::vector<std::string> AddedIds(const Plan<SpaceRecord>& plan) {
   std::vector<std::string> ids;
   for (const auto& [record, index] : plan.add) {
@@ -177,6 +194,55 @@ TEST(WindowSyncModelTest, ClosingWindowHandsItsPagesOver) {
   EXPECT_EQ(2, model.LiveWindow("f"));
 }
 
+// A folder lives in a Space's pinned section, inside its parent.
+TEST(WindowSyncModelTest, FoldersNeedTheirSpaceAndParent) {
+  WindowSyncModel model;
+  model.SetSpaces({Space("a"), Space("b")});
+  EXPECT_TRUE(model.SetFolders(
+      {Folder("f", "a"), Folder("sub", "a", "f"),
+       Folder("other-space", "b", "f"), Folder("lost", "a", "nope"),
+       Folder("gone", "c"), Folder("child-first", "a", "late"),
+       Folder("late", "a")}));
+  EXPECT_THAT(FolderIds(model), ElementsAre("f", "sub", "late"));
+  EXPECT_FALSE(model.SetFolders(
+      {Folder("f", "a"), Folder("sub", "a", "f"), Folder("late", "a")}));
+  // Deleting the Space deletes its folders.
+  model.SetSpaces({Space("b")});
+  EXPECT_THAT(model.folders(), IsEmpty());
+}
+
+TEST(WindowSyncModelTest, TabsLeaveFoldersThatAreGone) {
+  WindowSyncModel model;
+  model.SetSpaces({Space("a"), Space("b")});
+  model.SetFolders({Folder("f", "a")});
+  ItemRecord in_folder = Pinned("p", "a");
+  in_folder.folder_id = "f";
+  ItemRecord wrong_space = Pinned("q", "b");
+  wrong_space.folder_id = "f";
+  ItemRecord essential = Essential("e");
+  essential.folder_id = "f";
+  model.SetItems({essential, in_folder, wrong_space});
+  ASSERT_EQ(3u, model.items().size());
+  EXPECT_EQ("", model.items()[0].folder_id);
+  EXPECT_EQ("f", model.items()[1].folder_id);
+  EXPECT_EQ("", model.items()[2].folder_id);
+  // The folder went in another window: its tabs stay, out of it.
+  EXPECT_TRUE(model.SetFolders({}));
+  EXPECT_EQ("", model.items()[1].folder_id);
+}
+
+TEST(WindowSyncPlanTest, RenamingOrCollapsingAFolderIsAnUpdate) {
+  FolderRecord collapsed = Folder("f", "a");
+  collapsed.collapsed = true;
+  const Plan<FolderRecord> plan = PlanFolders(
+      {Folder("f", "a"), Folder("g", "a")}, {Folder("g", "a"), collapsed});
+  EXPECT_THAT(plan.remove, IsEmpty());
+  EXPECT_THAT(plan.add, IsEmpty());
+  ASSERT_EQ(1u, plan.update.size());
+  EXPECT_TRUE(plan.update[0].collapsed);
+  EXPECT_TRUE(plan.order);
+}
+
 TEST(WindowSyncModelTest, RoundTripsThroughPrefs) {
   WindowSyncModel model;
   model.SetSpaces(
@@ -185,6 +251,11 @@ TEST(WindowSyncModelTest, RoundTripsThroughPrefs) {
   pinned.custom_title = u"Mail";
   pinned.custom_icon = u"✉️";
   pinned.container = "user:s1";
+  pinned.folder_id = "f";
+  FolderRecord folder = Folder("f", "b");
+  folder.name = u"Reading";
+  folder.collapsed = true;
+  model.SetFolders({folder, Folder("g", "b", "f")});
   model.SetItems({Essential("e"), pinned});
   model.SetLive("e", 3);
 
@@ -192,7 +263,9 @@ TEST(WindowSyncModelTest, RoundTripsThroughPrefs) {
   restored.FromValue(model.ToValue());
   EXPECT_TRUE(restored.seeded());
   EXPECT_EQ(model.spaces(), restored.spaces());
+  EXPECT_EQ(model.folders(), restored.folders());
   EXPECT_EQ(model.items(), restored.items());
+  EXPECT_EQ("f", restored.items()[1].folder_id);
   // Which window had a page isn't saved: the session decides.
   EXPECT_EQ(kNoWindow, restored.LiveWindow("e"));
 }

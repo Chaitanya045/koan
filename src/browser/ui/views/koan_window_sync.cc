@@ -131,6 +131,17 @@ void KoanWindowSync::ReportItems(Window* window,
   }
 }
 
+void KoanWindowSync::ReportFolders(
+    Window* window,
+    std::vector<window_sync::FolderRecord> folders) {
+  if (!IsInSync(window) || !model_.seeded()) {
+    return;
+  }
+  if (model_.SetFolders(std::move(folders))) {
+    MarkOthersOutOfDate(window, /*spaces=*/false, /*items=*/true);
+  }
+}
+
 KoanWindowSync::Window* KoanWindowSync::MostRecentWindow(
     const Window* except) const {
   for (const raw_ptr<Window>& window : windows_) {

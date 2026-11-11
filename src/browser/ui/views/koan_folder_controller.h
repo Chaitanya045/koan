@@ -199,6 +199,36 @@ class KoanFolderController : public TabStripModelObserver,
   // drop and prunes first); nothing while the window closes.
   void ArrangeFolders();
 
+  // --- Window sync (koan_window_sync_client.h) ---
+  // A synced folder's sync id is its token, the same in every window, so a
+  // synced tab's copy joins its folder by the session data it carries.
+
+  // The folder with `token`, or 0.
+  int FindFolderByToken(const std::string& token) const;
+  // Another window's folder, as it is there: `token`, `name`, `collapsed`,
+  // in `space` under `parent` (0: at the top). No renaming, no expanding.
+  int AddSyncedFolder(std::string token,
+                      std::u16string name,
+                      bool collapsed,
+                      int parent,
+                      const tab_groups::TabGroupId& space);
+  // What another window changed, without Zen's side effects of the user's
+  // actions (switching to the Space, expanding).
+  void UpdateSyncedFolder(int id,
+                          std::u16string name,
+                          bool collapsed,
+                          int parent,
+                          const tab_groups::TabGroupId& space);
+  // Puts the folders `ids` in this order among themselves (subfolders show
+  // in it); the others keep their places.
+  void OrderSyncedFolders(const std::vector<int>& ids);
+  // Puts `tab`, a pinned tab of its Space, in folder `id` (0: in none).
+  void SetSyncedFolderOf(tabs::TabInterface* tab, int id);
+  // Runs once the folders, or which tabs they hold, changed (when they are
+  // written to the session).
+  base::CallbackListSubscription AddFoldersChangedCallback(
+      base::RepeatingClosure callback);
+
   // The window's folders as session data (JSON), and bringing them back
   // before the window's tabs are restored: each tab joins its folder by its
   // own session data as it comes back.
@@ -370,6 +400,7 @@ class KoanFolderController : public TabStripModelObserver,
   std::unique_ptr<views::MenuRunner> menu_runner_;
   std::unique_ptr<KoanFolderSearch> search_;
   base::CallbackListSubscription spaces_subscription_;
+  base::RepeatingClosureList folders_changed_;
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       widget_observation_{this};
   // Counts popups, so a closed one's cleanup leaves a newer one alone; and
