@@ -422,10 +422,11 @@ void KoanWindowSyncClient::ApplyFolders(
       folder = folders->AddSyncedFolder(record.id, record.name,
                                         record.collapsed, parent, *space);
     } else if (const KoanFolder* local = folders->GetFolder(folder);
-               local->name != record.name ||
-               local->collapsed != record.collapsed ||
-               local->parent != parent || local->space != *space) {
-      folders->UpdateSyncedFolder(folder, record.name, record.collapsed, parent,
+               local->name != record.name || local->parent != parent ||
+               local->space != *space) {
+      // A folder here keeps its own collapsed state (Zen doesn't sync it
+      // live); a new one, above, takes the saved one.
+      folders->UpdateSyncedFolder(folder, record.name, local->collapsed, parent,
                                   *space);
     }
     synced_folders_.insert(record.id);

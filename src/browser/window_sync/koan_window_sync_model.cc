@@ -120,9 +120,28 @@ std::vector<std::string> AdoptSpaces(const std::vector<SpaceRecord>& local,
   return adopted;
 }
 
+namespace {
+
+// Two records of one folder that differ at most in `collapsed`, which Zen
+// doesn't sync live (only through the session: new windows and restores).
+bool SameButCollapsed(FolderRecord a, const FolderRecord& b) {
+  a.collapsed = b.collapsed;
+  return a == b;
+}
+
+}  // namespace
+
 Plan<FolderRecord> PlanFolders(const std::vector<FolderRecord>& local,
                                const std::vector<FolderRecord>& target) {
-  return PlanRecords(local, target);
+  Plan<FolderRecord> plan = PlanRecords(local, target);
+  // An existing folder keeps its own collapsed state; a new one takes the
+  // target's.
+  std::erase_if(plan.update, [&local](const FolderRecord& record) {
+    return std::ranges::any_of(local, [&record](const FolderRecord& mine) {
+      return mine.id == record.id && SameButCollapsed(mine, record);
+    });
+  });
+  return plan;
 }
 
 Plan<ItemRecord> PlanItems(const std::vector<ItemRecord>& local,
@@ -157,7 +176,10 @@ bool WindowSyncModel::SetFolders(std::vector<FolderRecord> folders) {
   folders_ = std::move(folders);
   // (Tabs in a folder that went leave it.)
   DropOrphans();
-  return folders_ != folders_before || items_ != items_before;
+  // Only collapsing or expanding a folder is kept (for new windows and
+  // restores) but isn't a change the other windows apply.
+  return !std::ranges::equal(folders_, folders_before, SameButCollapsed) ||
+         items_ != items_before;
 }
 
 bool WindowSyncModel::SetItems(std::vector<ItemRecord> items,

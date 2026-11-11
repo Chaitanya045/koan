@@ -419,9 +419,9 @@ the others. Each such tab has one page: the window you select it in (or
 switch to with it selected) takes the page over, and the other windows keep
 its row with the last title and icon it had there, without loading it.
 Closing a window hands its pages to the window you used last. Closing
-such a tab closes it in every window, like Zen; one unpinned or taken out
-of the Essentials in one window stays, as a normal tab, in a window that
-has its page. Tabs in a split view, and an agent container's tabs, aren't
+such a tab closes it in every window, like Zen, and so does unpinning it or
+taking it out of the Essentials in one window: it stays there as a normal
+tab and closes in the others. Tabs in a split view, and an agent container's tabs, aren't
 synced.
 
 ## Spaces
@@ -567,11 +567,13 @@ the folders of the window you were in still come back, with their tabs
 (unloaded until you open them), as in Zen.
 
 Every synced window has the same folders (Zen's window sync): creating,
-renaming, collapsing or expanding, nesting, moving to another Space,
-reordering or deleting a folder in one window does the same in the others,
+renaming, nesting, moving to another Space, reordering or deleting a folder
+in one window does the same in the others,
 and its tabs are the same synced pinned tabs, in the same folders. Deleting a
 folder in another window leaves its tabs here (the tabs that closed there go
-with their own sync). A New Blank Window has no folders.
+with their own sync). Collapsing or expanding a folder stays in its window,
+as in Zen: a new window, and the next restart, open it the way you last
+left it. A New Blank Window has no folders.
 
 ## Space themes
 
