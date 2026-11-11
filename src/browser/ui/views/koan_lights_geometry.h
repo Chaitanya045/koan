@@ -24,6 +24,22 @@ gfx::Rect MoveClearOf(const gfx::Rect& bounds,
 // 8% over a light toolbox and 15% over a dark one (light text).
 SkColor MonoTrafficLightColor(SkColor toolbox_text);
 
+// What the mono window controls show: AppKit's coloured buttons (opaque) or
+// the three dots in their place, never both. AppKit's buttons come back while
+// the pointer is over them or the window has a sheet (Zen: not with
+// window-modal-open); with the buttons hidden (compact mode), neither shows.
+// Only a change of an input changes the result: the view that tracks the
+// pointer stays shown whatever this says (it only stops drawing), since hiding
+// it would end its own hover and bring the dots straight back.
+struct MonoLightsState {
+  bool buttons_opaque = false;
+  bool dots_drawn = false;
+  bool operator==(const MonoLightsState&) const = default;
+};
+MonoLightsState GetMonoLightsState(bool pointer_over_buttons,
+                                   bool has_sheet,
+                                   bool buttons_hidden);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_LIGHTS_GEOMETRY_H_

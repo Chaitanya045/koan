@@ -11,6 +11,7 @@ window_teardown timeout=420
 window_sync timeout=420
 space_drag timeout=420
 welcome_input timeout=240
+lights_hover_steady timeout=120
 agent_cli timeout=420
 # Existing scripts. lib/koan.mjs key() sends Mac key codes on macOS (and the
 # scripts ACCEL, Cmd there), so these mean the same on the Mac. Scripts that
