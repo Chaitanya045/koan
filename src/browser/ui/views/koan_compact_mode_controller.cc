@@ -1610,8 +1610,15 @@ void KoanCompactModeController::Deactivate() {
   CancelSpaceSwipe();
   VLOG(1) << (mode_ == Mode::kCompact ? "Koan: compact mode off"
                                       : "Koan: single toolbar off");
-  // The URL bar lets go of the top container before it moves back.
-  KoanBrowserViewController::From(browser_view_)->url_bar()->EndEditing();
+  // The URL bar lets go of the top container before it moves back. Not while
+  // the window closes: then this runs from the widget's destruction
+  // (KoanBrowserViewController::TearDown()), and putting the URL bar's views
+  // back touches a widget that is going away (a SEGV in SetPlacement() when a
+  // window closes with the floating URL bar open, e.g. on its startup empty
+  // tab).
+  if (!IsClosing()) {
+    KoanBrowserViewController::From(browser_view_)->url_bar()->EndEditing();
+  }
   mode_ = Mode::kNone;
   hide_sidebar_ = false;
   hide_toolbar_ = false;
