@@ -20,16 +20,19 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -80,6 +83,17 @@ class KoanSessionRestoreBrowserTest : public InProcessBrowserTest {
                           << tab_strip->count() << ":\n"
                           << DescribeTabs();
     ASSERT_TRUE(WaitForSpaceCount(browser(), spaces)) << DescribeTabs();
+  }
+
+  // Saves the session once every tab has loaded: a tab still on its initial
+  // entry (one just added, its navigation not committed) isn't saved, as
+  // upstream skips that entry.
+  void SaveSession() {
+    TabStripModel* tab_strip = browser()->GetTabStripModel();
+    for (int i = 0; i < tab_strip->count(); ++i) {
+      EXPECT_TRUE(content::WaitForLoadStop(tab_strip->GetWebContentsAt(i)));
+    }
+    FlushSession(browser());
   }
 
   std::string DescribeTabs() {
@@ -152,7 +166,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, PRE_SpacesComeBack) {
   spaces->CreateSpace(u"Play", u"", {});
   ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
   spaces->SwitchTo(spaces->GetSpaces()[1].id);
-  FlushSession(browser());
+  SaveSession();
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SpacesComeBack) {
@@ -167,6 +181,11 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SpacesComeBack) {
   // One of them is shown.
   EXPECT_EQ(1, std::ranges::count_if(
                    infos, &KoanWorkspaceController::SpaceInfo::active));
+  // The window joins window sync once the restore is done (upstream tells
+  // its end while it still counts as restoring).
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return KoanWindowSyncClient::From(browser_view) != nullptr; }));
 }
 
 // Pinned in the Space, and away from the pinned URL.
@@ -186,7 +205,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, PRE_PinnedTabComesBack) {
   // Then away from it.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), OtherUrl()));
   EXPECT_TRUE(IsAwayFromPinnedUrl(tab_strip->GetActiveTab()));
-  FlushSession(browser());
+  SaveSession();
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, PinnedTabComesBack) {
@@ -219,7 +238,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), OtherUrl()));
   // A second tab, so the restored window differs from a fresh one.
   chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
-  FlushSession(browser());
+  SaveSession();
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
@@ -243,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
   EXPECT_EQ("window data", GetWindowSessionData(browser(), kWindowDataKey));
   // A second tab, so the restored window differs from a fresh one.
   chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
-  FlushSession(browser());
+  SaveSession();
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest, SessionDataComesBack) {
@@ -271,7 +290,7 @@ IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
   // The user's own new tab page.
   chrome::AddTabAt(browser(), GURL(), -1, /*foreground=*/false);
   ASSERT_FALSE(IsEmptyTab(tab_strip->GetTabAtIndex(1)));
-  FlushSession(browser());
+  SaveSession();
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSessionRestoreBrowserTest,
