@@ -5,11 +5,18 @@
 // revealed by Koan itself: the hot zones exist, and the pointer at the
 // screen's edge (which can't be simulated here; the Mac bench moves a real
 // one) is watched by the compact controller. Then a window closed in
-// fullscreen with compact mode on.
+// fullscreen with compact mode on (Close Window, through the test_helper
+// extension: fullscreen_compact.flags).
+//
+// "Its header stays": the sidebar's navigation buttons stay in its top row
+// while compact mode hides it. They aren't shown there: the row is 0 wide
+// then, and its trailing views are laid out only where they fit
+// (LayoutSidebarHeaderTrailingViews()); the reveal lays it out at full width.
 //
 //   scripts/e2e/run.sh fullscreen_compact
-import { browserCall, check, finish, sleep, views } from './lib/koan.mjs';
+import { browserCall, check, finish, pages, sleep, views, waitFor } from './lib/koan.mjs';
 import { alive, goFullscreen, isMac } from './lib/fullscreen.mjs';
+import { closeWindowOf, startServer, windows } from './lib/mac.mjs';
 
 if (!(await isMac())) {
   console.log('(not macOS: no fullscreen checks)');
@@ -26,7 +33,8 @@ async function checkCompact(when, fullscreen) {
       .sort((a, b) => b.w * b.h - a.w * a.h)[0];
   const top = find(vs, 'TopContainerView');
   check(`${when}: the sidebar is hidden, its header stays`,
-        find(vs, 'VerticalTabStripRegionView')?.w === 0 && findShown(vs, 'KoanSidebarNavButtons'),
+        find(vs, 'VerticalTabStripRegionView')?.w === 0 &&
+            find(vs, 'KoanSidebarNavButtons')?.path.includes('VerticalTabStripTopContainer'),
         `sidebar ${find(vs, 'VerticalTabStripRegionView')?.w}`);
   check(`${when}: the top container is in Koan's overlay`,
         top?.path[0] === 'BrowserRootView' && top.path.includes('TopContainerOverlayView'));
@@ -51,13 +59,19 @@ await goFullscreen(false);
 await checkCompact('Windowed again', false);
 
 // A second window in compact mode, fullscreen, closed there.
+const server = await startServer();
 const second = (await browserCall('Target.createTarget',
-    { url: 'about:blank', newWindow: true })).result.targetId;
+    { url: server.url('/p?t=Second'), newWindow: true })).result.targetId;
 await sleep(1500);
 await goFullscreen(true, second);
-await browserCall('Target.closeTarget', { targetId: second });
+const secondPage = (await pages()).find(p => p.id === second);
+const closed = secondPage && await closeWindowOf(secondPage) &&
+    await waitFor(async () => (await windows()).length === 1, 10000);
 await sleep(2500);
-check('Closing a compact-mode window in fullscreen: the browser lives', await alive());
+check('Closing a compact-mode window in fullscreen: it closes', !!closed,
+      `${(await windows()).length} windows`);
+check('...the browser lives', await alive());
 await checkCompact('The first window after that', false);
 
+server.close();
 finish();
