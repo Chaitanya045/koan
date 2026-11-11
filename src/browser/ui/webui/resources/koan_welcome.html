@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Copyright 2026 The Koan Authors
+     Use of this source code is governed by the MIT license that can be
+     found in the LICENSE file. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Welcome to Koan</title>
+  <link rel="stylesheet" href="koan_tokens.css">
+  <link rel="stylesheet" href="koan_welcome.css">
+  <script type="module" src="koan_welcome.js"></script>
+</head>
+<body>
+  <div id="welcome" hidden>
+    <header id="welcome-header">
+      <ol id="welcome-steps" aria-label="Setup steps"></ol>
+      <button id="welcome-skip" class="button ghost" type="button">
+        <span class="icon" data-icon="x" aria-hidden="true"></span>
+        <span>Skip setup</span>
+      </button>
+    </header>
+    <main id="welcome-main">
+      <section id="welcome-card" aria-live="polite"></section>
+    </main>
+  </div>
+</body>
+</html>

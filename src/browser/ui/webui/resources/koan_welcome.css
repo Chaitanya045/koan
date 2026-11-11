@@ -1,0 +1,514 @@
+/* Copyright 2026 The Koan Authors
+ * Use of this source code is governed by the MIT license that can be
+ * found in the LICENSE file. */
+
+/* Koan's welcome (onboarding v2, #181) in shadcn/ui's look: the tokens come
+ * from koan_tokens.css (koan::look, shadcn style), the sizes from shadcn's
+ * components (card, button, radio group, toggle group). */
+
+:root {
+  --r-sm: calc(var(--radius) - 4px);
+  --r-md: calc(var(--radius) - 2px);
+  --r-lg: var(--radius);
+  --r-xl: calc(var(--radius) + 4px);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* (Over the components' own display.) */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Geist', Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+kbd {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+}
+
+/* A Lucide icon (welcome_icons/), drawn in the text colour. */
+.icon {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  mask: var(--icon) center / contain no-repeat;
+}
+
+.icon[data-icon='sparkles'] {
+  --icon: url(icons/sparkles.svg);
+}
+
+.icon[data-icon='keyboard'] {
+  --icon: url(icons/keyboard.svg);
+}
+
+.icon[data-icon='hard-drive-download'] {
+  --icon: url(icons/hard-drive-download.svg);
+}
+
+.icon[data-icon='search'] {
+  --icon: url(icons/search.svg);
+}
+
+.icon[data-icon='circle-check-big'] {
+  --icon: url(icons/circle-check-big.svg);
+}
+
+.icon[data-icon='arrow-left'] {
+  --icon: url(icons/arrow-left.svg);
+}
+
+.icon[data-icon='arrow-right'] {
+  --icon: url(icons/arrow-right.svg);
+}
+
+.icon[data-icon='x'] {
+  --icon: url(icons/x.svg);
+}
+
+.icon[data-icon='check'] {
+  --icon: url(icons/check.svg);
+}
+
+#welcome {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#welcome[hidden] {
+  display: none;
+}
+
+/* The top row: the steps, Skip setup. Empty space here drags the window; on
+ * macOS it leaves the traffic lights, above the page, their corner. */
+#welcome-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  height: 52px;
+  padding: 0 16px;
+}
+
+:root[data-mac] #welcome-header {
+  padding-left: 88px;
+}
+
+#welcome-steps {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#welcome-steps li {
+  width: 24px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--muted);
+  transition: background-color 0.2s ease, width 0.2s ease;
+}
+
+#welcome-steps li[done] {
+  background: color-mix(in srgb, var(--primary) 45%, var(--muted));
+}
+
+#welcome-steps li[current] {
+  width: 36px;
+  background: var(--primary);
+}
+
+#welcome-skip {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+}
+
+#welcome-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 8px 24px 32px;
+  overflow-y: auto;
+}
+
+/* The step: shadcn's card. */
+#welcome-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+/* (Until the page's data has come.) */
+#welcome-card:empty {
+  display: none;
+}
+
+#welcome-card[entering] {
+  animation: welcome-enter 0.2s ease-out;
+}
+
+@keyframes welcome-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #welcome-card[entering] {
+    animation: none;
+  }
+}
+
+.step-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 10px;
+  border-radius: var(--r-lg);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.step-badge .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.step-head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.step-head p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+/* The welcome step: larger, centred. */
+#welcome-card[step='welcome'],
+#welcome-card[step='done'] {
+  align-items: center;
+  text-align: center;
+  padding: 40px 32px 32px;
+}
+
+#welcome-card[step='welcome'] .step-head,
+#welcome-card[step='done'] .step-head {
+  align-items: center;
+}
+
+#welcome-card[step='welcome'] h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.step-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+.step-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-foot .spacer {
+  flex: 1;
+}
+
+#welcome-card[step='welcome'] .step-foot,
+#welcome-card[step='done'] .step-foot {
+  flex-direction: column;
+  align-self: stretch;
+}
+
+#welcome-card[step='welcome'] .step-foot .button,
+#welcome-card[step='done'] .step-foot .button {
+  width: 100%;
+}
+
+/* shadcn's button: default (primary), outline and ghost, size default. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.button.primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.button.primary:hover {
+  background: color-mix(in srgb, var(--primary) 90%, transparent);
+}
+
+.button.outline {
+  border-color: var(--border);
+  background: var(--background);
+  box-shadow: var(--shadow-xs);
+}
+
+.button.outline:hover,
+.button.ghost:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.button.ghost {
+  height: 32px;
+  padding: 0 10px;
+  color: var(--muted-foreground);
+}
+
+.button:focus-visible,
+.choice:has(input:focus-visible),
+.segment:has(input:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+  border-color: var(--ring);
+}
+
+/* A choice: shadcn's radio group item as a card. */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--background);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.choice:hover {
+  background: var(--accent);
+}
+
+.choice:has(input:checked) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--background));
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.choice-title {
+  font-weight: 500;
+}
+
+.choice-detail {
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+
+/* The radio circle, then its dot. */
+.radio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--input);
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+}
+
+.choice:has(input:checked) .radio {
+  border-color: var(--primary);
+}
+
+.choice:has(input:checked) .radio::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+/* A browser's or an engine's mark: its initial on a muted tile (Chromium
+ * ships engine logos only in Google Chrome builds; nothing is fetched). */
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.tile .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+/* The shortcuts: a key per row, its two meanings as a toggle group. */
+.key-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.key-row + .key-row {
+  border-top: 1px solid var(--border);
+}
+
+.key-row-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.segments {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--muted);
+}
+
+.segment {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 108px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.segment:has(input:checked) {
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.segment input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segment kbd {
+  font-size: 11px;
+}

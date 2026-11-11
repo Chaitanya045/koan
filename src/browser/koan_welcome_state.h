@@ -1,0 +1,29 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+
+#ifndef KOAN_BROWSER_KOAN_WELCOME_STATE_H_
+#define KOAN_BROWSER_KOAN_WELCOME_STATE_H_
+
+class BrowserWindowInterface;
+
+namespace koan {
+
+// Which window Koan's welcome screen (KoanWelcome) is about to show in or
+// shows in: at most one, for the browser session. Kept apart from the views
+// code so that upstream hooks can ask it cheaply. SetWelcomeWindow() marks
+// `browser`; ClearWelcomeWindow() unmarks it, and only it (another window's
+// mark stays).
+void SetWelcomeWindow(const BrowserWindowInterface* browser);
+void ClearWelcomeWindow(const BrowserWindowInterface* browser);
+
+// Hook for SearchEngineChoiceDialogService::ComputeDialogConditions() (a
+// hook patch): whether the welcome is pending or showing, in any window. Its
+// search engine page is Zen's choice screen, so Chromium's own dialog waits
+// in every window, a second one opened with Cmd+N too (and once Next there
+// has recorded the choice, never shows).
+bool IsWelcomePending();
+
+}  // namespace koan
+
+#endif  // KOAN_BROWSER_KOAN_WELCOME_STATE_H_

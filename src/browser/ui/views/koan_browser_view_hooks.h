@@ -7,6 +7,10 @@
 
 class BrowserView;
 
+namespace gfx {
+class Point;
+}  // namespace gfx
+
 namespace koan {
 
 // Called at the end of the BrowserView constructor, once all child views
@@ -27,6 +31,15 @@ void OnSidebarDragCollapsed(BrowserView* browser_view);
 // "download started" animation is skipped then (it would fly from the
 // toolbar's downloads button, which the single toolbar hides).
 bool ShowsDownloadAnimation(BrowserView* browser_view);
+
+// Called first in BrowserView::NonClientHitTest(), with its `point` (in the
+// BrowserView's parent's coordinates): whether a Koan view covering the
+// window is there (the first-run welcome, KoanWelcome), so that the point is
+// client area. Otherwise the tab strip's and toolbar's empty space under it
+// would be the window's caption, and on macOS a caption hit wins over the
+// views under the point (NativeWidgetMacNSWindowHost::GetHitTestResult()):
+// AppKit would drag the window instead of the page getting the click.
+bool IsWindowCoveredAt(BrowserView* browser_view, const gfx::Point& point);
 
 }  // namespace koan
 
