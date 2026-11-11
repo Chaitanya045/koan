@@ -293,6 +293,8 @@ test("koan_views_unittests") {
 #   out/Koan/koan_omnibox_unittests
 test("koan_omnibox_unittests") {
   sources = [
+    "koan_omnibox_action_label.h",
+    "koan_omnibox_action_label_unittest.cc",
     "koan_omnibox_disposition.h",
     "koan_omnibox_disposition_unittest.cc",
     "koan_omnibox_upstream_unittest.cc",
@@ -394,6 +396,7 @@ source_set("impl") {
     "koan_media_controller.cc",
     "koan_media_controller.h",
     "koan_move_to_space.cc",
+    "koan_omnibox_action_label.h",
     "koan_omnibox_rows.cc",
     "koan_outside_window_tracker.cc",
     "koan_outside_window_tracker.h",

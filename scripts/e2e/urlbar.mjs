@@ -5,7 +5,8 @@
 // actions. Then: the new-tab bar through a window switch, a pill edit in
 // compact mode's peeked sidebar, and the multiple-toolbars layout (Esc, the
 // tab strip's "+" button, Alt+Enter), and last the card in a second, resized
-// window (sized and placed from that window, its suggestions inside it).
+// window (sized and placed from that window, its suggestions inside it, an
+// address open in the first window's tab marked "Switch to Tab").
 //
 // TODO(#51): on macOS, ⌘T is a reserved command that runs before any
 // accelerator (koan::MaybeOpenUrlBarForNewTab() in BrowserCommandController
@@ -765,6 +766,31 @@ if (BEHAVIOR !== 'normal') {
               popup.y + popup.h <= win.rect.y + win.rect.h,
           `popup ${JSON.stringify(popup)}, window ${JSON.stringify(win.rect)}`);
     shot('second-window');
+
+    // An address that is open in a tab of another window (Alt+Enter's tab,
+    // in the first window) says Zen's "Switch to Tab" beside it: Chromium's
+    // tab switch button, relabelled (koan_omnibox_rows.h).
+    const typeInSecond = async (keyCode, key, isChar) => {
+      const field = ofSecond(await windowsNow())?.views.find(
+          v => v.cls === 'OmniboxViewViews' && v.shown);
+      if (field) {
+        await viewEvent(field, 'DOM.dispatchKeyEvent',
+                        { type: 'keyPressed', keyCode, code: 0, flags: 0, key, isChar });
+      }
+    };
+    for (let i = 0; i < 'koan'.length; i++) await typeInSecond(8, 8, false);
+    for (const ch of 'example.com/?alt') {
+      await typeInSecond(ch.codePointAt(0), ch.codePointAt(0), true);
+    }
+    const label = await waitFor(async () => (await viewTree()).find(
+        v => v.shown && v.props.Text === 'Switch to Tab'), 8000);
+    const chromiums = (await viewTree()).filter(
+        v => v.shown && v.props.Text === 'Switch to this tab');
+    check('...an address open in another window\'s tab says "Switch to Tab" beside it',
+          !!label && label.cls === 'OmniboxSuggestionRowButton' && !chromiums.length,
+          `${label ? `${label.cls} ${label.w}x${label.h}` : 'no label'}, ` +
+              `${chromiums.length} "Switch to this tab"`);
+    shot('second-window-switch-to-tab');
   }
 }
 

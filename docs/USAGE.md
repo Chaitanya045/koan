@@ -194,7 +194,9 @@ grows over the page as you type and never floats (Behavior "Normal" does that
 for the keyboard too). The box is empty after Ctrl+T, and an empty box lists
 your open tabs (most recent first, each with **Switch to Tab**; Enter
 switches to it) and then your most visited sites, all from the browser itself
-with no request to a search engine. On an empty box, **Tab** enters the
+with no request to a search engine. As you type, a site that is already
+open in a tab (in any window or Space) also says **Switch to Tab** beside
+its address, and opening it goes to that tab. On an empty box, **Tab** enters the
 command palette (the ">" mode). The pill is empty meanwhile. Esc, a click
 outside the card or opening a result (or running an action) closes it;
 switching to another window and back leaves it as it was. In compact mode,
@@ -471,7 +473,7 @@ belongs to a Space, and new tabs open in the active one.
   `koan.workspaces.swipe_actions.edge_actions` (Zen's about:config
   `zen.workspaces.swipe-actions.edge-actions`), as in Zen there is no
   setting for it. Going straight to a tab of another Space (the
-  address bar's "Switch to this tab", tab search) shows that tab.
+  address bar's "Switch to Tab", tab search) shows that tab.
 - **Move To**: right-click a tab > Move To moves it (and the other
   selected tabs) to another Space and shows it. Or drag it: hold a dragged
   tab at the sidebar's left or right edge for half a second to go to the
