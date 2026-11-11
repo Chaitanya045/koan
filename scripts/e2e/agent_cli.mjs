@@ -237,6 +237,21 @@ r = await koan(['end']);
 check('koan end', r.code === 0, brief(r));
 r = await koan(['status']);
 check('koan status after end: no connection', /connection: none/.test(r.out), brief(r));
+// --- Every switch off, the site limit on: a new task's tab is in a
+// container (Your logins is read when a task starts).
+for (const pref of ['logins', 'passwords', 'autofill', 'extensions', 'history']) {
+  await setKoanPref(`koan.agent_control.use.${pref}`, false);
+}
+await setKoanPref('koan.agent_control.limit_take_over_to_site', true);
+r = await koan(['open', AGENT_URL]);
+const boxed = r.out.split('\n').at(-1);
+check('Switches off: koan open: a new task\'s tab', r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(boxed), brief(r));
+await sleep(2500);
+await extensionsAndPermissions('Switches off', boxed, false);
+await takeOver('Switches off', true);
+r = await koan(['end']);
+check('Switches off: koan end', r.code === 0, brief(r));
+
 // --- A pairing whose launcher exits while its dialog is open (the end-user
 // pass of 2026-11-11): `koan pair` started in the background by a shell that
 // has gone by the time Allow is pressed. The browser pins the agent when the
@@ -280,21 +295,6 @@ if (KOAN_LOG && fs.existsSync(KOAN_LOG)) {
   const warned = fs.readFileSync(KOAN_LOG, 'utf8').split('\n').filter(l => /no audit token for a connection/.test(l));
   check('koan status leaves no "no audit token" warning in Koan\'s log', warned.length === 0, warned[0]);
 }
-
-// --- Every switch off, the site limit on: a new task's tab is in a
-// container (Your logins is read when a task starts).
-for (const pref of ['logins', 'passwords', 'autofill', 'extensions', 'history']) {
-  await setKoanPref(`koan.agent_control.use.${pref}`, false);
-}
-await setKoanPref('koan.agent_control.limit_take_over_to_site', true);
-r = await koan(['open', AGENT_URL]);
-const boxed = r.out.split('\n').at(-1);
-check('Switches off: koan open: a new task\'s tab', r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(boxed), brief(r));
-await sleep(2500);
-await extensionsAndPermissions('Switches off', boxed, false);
-await takeOver('Switches off', true);
-r = await koan(['end']);
-check('Switches off: koan end', r.code === 0, brief(r));
 check('Koan is alive', await alive());
 check('Nothing fatal in the log', !fatalInLog(), fatalInLog());
 server.close();

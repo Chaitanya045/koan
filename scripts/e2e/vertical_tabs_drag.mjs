@@ -8,8 +8,9 @@
 //   drag; Right many times widens to the 500 maximum.
 //
 //   scripts/e2e/run.sh vertical_tabs_drag
-import { ACCEL, ALT, CTRL, check, finish, key, mouseOn, readPref, setKoanPref, sidebarMenu, sleep, views,
+import { ACCEL, ALT, CTRL, IS_MAC, check, finish, key, mouseOn, readPref, setKoanPref, sidebarMenu, sleep, views,
          visiblePage } from './lib/koan.mjs';
+import { skipped } from './lib/mac.mjs';
 import { VK, alive, checkKoanSidebar, leakLogged, press, railShown, region }
     from './lib/vertical_tabs.mjs';
 
@@ -66,31 +67,39 @@ await press(VK.S, ACCEL, 's', 1500);
 await setKoanPref('koan.tabs.on_right', false);
 await sleep(1500);
 
-// 19: the keyboard. Focus the resize area (it is a focusable view) and press
-// Left until the width would be below the snap width.
-const focus = async () => {
-  const resize = resizeArea(await views());
-  await mouseOn(resize, 'mousePressed', 2, 300);
-  await mouseOn(resize, 'mouseReleased', 2, 300);
-};
-await focus();
-const page = await visiblePage();
-for (let i = 0; i < 8; i++) {
-  await key(page, 37, 0, 'ArrowLeft');
+// 19: the keyboard. The resize area is focusable for accessibility only
+// (upstream's ACCESSIBLE_ONLY), which on macOS needs Full Keyboard Access, and
+// the arrow keys resize only while it has focus.
+if (IS_MAC) {
+  skipped('The keyboard on the resize area (Left, Right)',
+          'the resize area takes focus only with macOS\'s Full Keyboard Access');
+} else {
+  // Focus the resize area (it is a focusable view) and press
+  // Left until the width would be below the snap width.
+  const focus = async () => {
+    const resize = resizeArea(await views());
+    await mouseOn(resize, 'mousePressed', 2, 300);
+    await mouseOn(resize, 'mouseReleased', 2, 300);
+  };
+  await focus();
+  const page = await visiblePage();
+  for (let i = 0; i < 8; i++) {
+    await key(page, 37, 0, 'ArrowLeft');
+  }
+  await sleep(1500);
+  vs = await views();
+  check('Left on the resize area many times hides the sidebar with compact mode, no rail',
+        !railShown(vs) && region(vs)?.w === 0, `${region(vs)?.w}`);
+  await press(VK.S, ACCEL, 's', 1500);
+  await focus();
+  for (let i = 0; i < 8; i++) {
+    await key(page, 39, 0, 'ArrowRight');
+  }
+  await sleep(1000);
+  vs = await views();
+  check('Right many times widens the sidebar to at most 500',
+        region(vs)?.w > 230 && region(vs)?.w <= 500, `${region(vs)?.w}`);
 }
-await sleep(1500);
-vs = await views();
-check('Left on the resize area many times hides the sidebar with compact mode, no rail',
-      !railShown(vs) && region(vs)?.w === 0, `${region(vs)?.w}`);
-await press(VK.S, ACCEL, 's', 1500);
-await focus();
-for (let i = 0; i < 8; i++) {
-  await key(page, 39, 0, 'ArrowRight');
-}
-await sleep(1000);
-vs = await views();
-check('Right many times widens the sidebar to at most 500',
-      region(vs)?.w > 230 && region(vs)?.w <= 500, `${region(vs)?.w}`);
 
 check('Koan still answers', await alive());
 check('The leak detector is silent', !leakLogged());

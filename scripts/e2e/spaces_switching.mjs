@@ -22,7 +22,7 @@ import {
   menuMouse, onPage, openMenus, pages, sleep, tabMenuCommand, viewEvent, viewMouse, viewTree,
   visiblePage, waitFor, windowTints, ACCEL, NATIVE_MENUS, NATIVE_MENU_WHY,
 } from './lib/koan.mjs';
-import { askTestHelper, skipped } from './lib/mac.mjs';
+import { IS_MAC, askTestHelper, skipped } from './lib/mac.mjs';
 
 const site = await servePages();
 const url = id => `${site.origin}/power.html?count=${id}`;
@@ -74,7 +74,16 @@ async function click(view, button = 'left') {
 // Mouse wheel notches over the sidebar, sent to the window's root view so
 // they go through the event pipeline (pre-target handlers included), in one
 // burst: one gesture for upstream's swipe controller.
+// On macOS the sidebar takes only native wheel events (scroll events with
+// wheel ticks), which UI DevTools can't send: there the switch goes through
+// Cmd+Alt+Right / Left, the same Navigate() as the wheel's, one Space a call.
 async function wheel(direction, notches = 1) {
+  if (IS_MAC) {
+    const right = direction === 'right';
+    await key(await visiblePage(), right ? 39 : 37, ACCEL | ALT, right ? 'ArrowRight' : 'ArrowLeft');
+    await sleep(1500);
+    return;
+  }
   const { root, header } = await sidebar();
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
@@ -160,7 +169,12 @@ check('A wheel notch over the sidebar goes to the next Space', s.name === 'B', s
 check('...on its last active tab', await isShown('b2'));
 await wheel('right', 3);
 s = await sidebar();
-check('A swipe (a burst of wheel events) moves one Space', s.name === 'C', s.name);
+if (IS_MAC) {
+  skipped('A swipe (a burst of wheel events) moves one Space',
+          'needs native wheel events, which UI DevTools can\'t send on macOS');
+} else {
+  check('A swipe (a burst of wheel events) moves one Space', s.name === 'C', s.name);
+}
 let n = delta(await loads('a1'), before);
 check('Swiping past an unloaded Space loads only the tab it lands on',
       n.b2 === 1 && n.c2 === 1 && !n.b1 && !n.c1 && !n.a1 && !n.a2, show(n));

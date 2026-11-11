@@ -14,7 +14,7 @@
 //   scripts/e2e/run.sh compact_close
 import { ACCEL } from './lib/koan.mjs';
 import { spawn } from 'node:child_process';
-import { ALT, CDP_PORT, CTRL, browserCall, check, connect, finish, key, mouseOn, pages,
+import { ALT, CDP_PORT, CTRL, browserCall, check, connect, finish, front, key, mouseOn, pages,
          sleep, views, waitFor }
     from './lib/koan.mjs';
 
@@ -33,7 +33,12 @@ async function openWindow() {
       { url: `https://example.com/?close${++serial}`, newWindow: true });
   const id = r.result.targetId;
   await sleep(2000);
-  return { id, page: (await pages()).find(p => p.id === id) };
+  const page = (await pages()).find(p => p.id === id);
+  // On macOS a window made through CDP isn't always the key window, and keys
+  // sent to an unfocused window's page don't reach the browser's shortcuts.
+  await front(page);
+  await sleep(300);
+  return { id, page };
 }
 async function closeWindow(w) {
   await browserCall('Target.closeTarget', { targetId: w.id });
