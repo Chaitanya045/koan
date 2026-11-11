@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -628,7 +629,7 @@ TEST_F(KoanAgentFacadeTest, ChildrenTheAgentMayNotReachAreDetached) {
               "Target.detachFromTarget");
     EXPECT_EQ(
         *backend_.sent[i].command.FindStringByDottedPath("params.sessionId"),
-        kRefused[i].session);
+        base::span(kRefused)[i].session);
   }
   // Messages of a child the facade did not accept go nowhere.
   const size_t received = received_.size();

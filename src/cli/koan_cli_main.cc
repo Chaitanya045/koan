@@ -828,7 +828,7 @@ int Run(const Command& command) {
       printf("%s", UsageText().c_str());
       return kOk;
     case CommandKind::kVersion:
-      printf("koan %s\n", kVersion);
+      printf("%s\n", (std::string("koan ") + kVersion).c_str());
       return kOk;
     case CommandKind::kSkill:
       printf("%s", SkillGuide().c_str());

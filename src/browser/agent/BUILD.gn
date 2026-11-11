@@ -235,7 +235,7 @@ if (is_posix) {
       "//koan/browser/containers",
       "//koan/browser/containers:partition",
       "//net",
-      "//third_party/blink/public/common:headers",
+      "//third_party/blink/public/common",
       "//ui/base",
       "//ui/gfx/geometry",
       "//ui/views",

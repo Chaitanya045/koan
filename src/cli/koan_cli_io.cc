@@ -13,6 +13,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -27,13 +28,14 @@ namespace {
 bool FillAddress(const std::string& path,
                  sockaddr_un* address,
                  std::string* error) {
-  memset(address, 0, sizeof(*address));
+  *address = sockaddr_un{};
   address->sun_family = AF_UNIX;
   if (path.empty() || path.size() >= sizeof(address->sun_path)) {
     *error = "the socket path is too long: " + path;
     return false;
   }
-  memcpy(address->sun_path, path.data(), path.size());
+  // (The rest stays zero: the path is NUL-terminated.)
+  base::span(address->sun_path).copy_prefix_from(base::span(path));
   return true;
 }
 
@@ -112,12 +114,12 @@ bool FrameChannel::Write(std::string_view payload) {
   }
   size_t written = 0;
   while (written < frame->size()) {
+    const base::span<const uint8_t> rest = base::span(*frame).subspan(written);
 #if BUILDFLAG(IS_APPLE)
-    const ssize_t n = HANDLE_EINTR(
-        write(fd_.get(), frame->data() + written, frame->size() - written));
+    const ssize_t n = HANDLE_EINTR(write(fd_.get(), rest.data(), rest.size()));
 #else
-    const ssize_t n = HANDLE_EINTR(send(fd_.get(), frame->data() + written,
-                                        frame->size() - written, MSG_NOSIGNAL));
+    const ssize_t n =
+        HANDLE_EINTR(send(fd_.get(), rest.data(), rest.size(), MSG_NOSIGNAL));
 #endif
     if (n <= 0) {
       closed_ = true;
@@ -129,9 +131,10 @@ bool FrameChannel::Write(std::string_view payload) {
 }
 
 bool FrameChannel::ReadAvailable() {
-  uint8_t buffer[64 * 1024];
-  const ssize_t n = HANDLE_EINTR(read(fd_.get(), buffer, sizeof(buffer)));
-  if (n <= 0 || !decoder_.Append(base::span(buffer, static_cast<size_t>(n)))) {
+  std::array<uint8_t, 64 * 1024> buffer;
+  const ssize_t n = HANDLE_EINTR(read(fd_.get(), buffer.data(), buffer.size()));
+  if (n <= 0 ||
+      !decoder_.Append(base::span(buffer).first(static_cast<size_t>(n)))) {
     closed_ = true;
     return false;
   }
