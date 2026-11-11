@@ -134,6 +134,50 @@ TEST(KoanAgentRegistryTest, LeavingTheAllowedSiteEndsWriteAccess) {
   EXPECT_EQ(registry.Find("T1")->state, TabState::kDriven);
 }
 
+// "Limit a taken-over tab to its site" on: what the forwarder does when the
+// tab commits a page, and where its navigations and children may go.
+TEST(KoanAgentRegistryTest, LimitedTakeOverLeavesWithItsSite) {
+  TargetRegistry registry;
+  ASSERT_EQ(registry.AddAgentTab("T1", "alice", ""), AddResult::kOk);
+  ASSERT_EQ(registry.GrantUserTab("U1", "alice", TabState::kDriven,
+                                  "https://example.com"),
+            AddResult::kOk);
+  EXPECT_FALSE(registry.Find("U1")->any_site);
+  EXPECT_TRUE(registry.MayReachSite("U1", "https://example.com"));
+  EXPECT_FALSE(registry.MayReachSite("U1", "https://bank.example"));
+  EXPECT_FALSE(registry.MayReachSite("U1", ""));
+  EXPECT_FALSE(registry.LeftGrantedSite("U1", "https://example.com"));
+  EXPECT_EQ(registry.Find("U1")->state, TabState::kDriven);
+  EXPECT_TRUE(registry.LeftGrantedSite("U1", "https://bank.example"));
+  EXPECT_EQ(registry.Find("U1")->state, TabState::kReadable);
+  EXPECT_FALSE(registry.LeftGrantedSite("U1", "https://other.example"));
+  // An agent's own tab goes anywhere.
+  EXPECT_TRUE(registry.MayReachSite("T1", "https://bank.example"));
+  EXPECT_FALSE(registry.LeftGrantedSite("T1", "https://bank.example"));
+  EXPECT_FALSE(registry.MayReachSite("U9", "https://example.com"));
+}
+
+// The default (the limit off, user, 2026-11-11): the user's yes covers
+// wherever the tab goes; it stays driven across sites and redirects.
+TEST(KoanAgentRegistryTest, UnlimitedTakeOverStaysDriven) {
+  TargetRegistry registry;
+  ASSERT_EQ(registry.GrantUserTab("U1", "alice", TabState::kDriven,
+                                  "https://example.com", /*any_site=*/true),
+            AddResult::kOk);
+  EXPECT_TRUE(registry.Find("U1")->any_site);
+  EXPECT_TRUE(registry.MayReachSite("U1", "https://bank.example"));
+  EXPECT_TRUE(registry.MayReachSite("U1", ""));
+  EXPECT_FALSE(registry.LeftGrantedSite("U1", "https://bank.example"));
+  EXPECT_FALSE(registry.LeftGrantedSite("U1", ""));
+  EXPECT_EQ(registry.Find("U1")->state, TabState::kDriven);
+  EXPECT_TRUE(registry.MaySend("alice", "U1", "Input.dispatchKeyEvent"));
+  // Asked again with the limit on, the new grant is limited.
+  ASSERT_EQ(registry.GrantUserTab("U1", "alice", TabState::kDriven,
+                                  "https://example.com"),
+            AddResult::kOk);
+  EXPECT_FALSE(registry.MayReachSite("U1", "https://bank.example"));
+}
+
 TEST(KoanAgentRegistryTest, RemovingAClientOrATask) {
   TargetRegistry registry;
   registry.AddAgentTab("T1", "alice", "one");

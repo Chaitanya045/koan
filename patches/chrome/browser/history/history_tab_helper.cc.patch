@@ -1,23 +1,26 @@
 diff --git a/chrome/browser/history/history_tab_helper.cc b/chrome/browser/history/history_tab_helper.cc
+index 1392d58..35ce47b 100644
 --- a/chrome/browser/history/history_tab_helper.cc
 +++ b/chrome/browser/history/history_tab_helper.cc
-@@ -30,6 +30,7 @@
+@@ -30,6 +30,8 @@
  #include "content/public/browser/navigation_handle.h"
  #include "content/public/browser/page.h"
  #include "content/public/browser/render_frame_host.h"
++#include "koan/browser/containers/koan_agent_access.h"
 +#include "koan/browser/containers/koan_container_partition.h"
  #include "content/public/browser/web_contents.h"
  #include "net/http/http_response_headers.h"
  #include "third_party/blink/public/common/features.h"
-@@ -529,7 +530,10 @@
+@@ -529,7 +531,11 @@ void HistoryTabHelper::DidFinishNavigation(
    // which WillNavigate[Main,Sub]Frame will do before this function is called.
    UMA_HISTOGRAM_BOOLEAN("History.ShouldUpdateHistory",
                          navigation_handle->ShouldUpdateHistory());
 -  if (!navigation_handle->ShouldUpdateHistory()) {
-+  // Koan: an agent container's visits stay out of History, and so out of the
-+  // omnibox's suggestions.
++  // Koan: an agent tab's visits stay out of History, and so out of the
++  // omnibox's suggestions, unless the user lets agents use history.
 +  if (!navigation_handle->ShouldUpdateHistory() ||
-+      koan::containers::IsAgentContents(web_contents())) {
++      koan::containers::BlocksAgent(
++          web_contents(), koan::containers::AgentCapability::kHistory)) {
      return;
    }
  

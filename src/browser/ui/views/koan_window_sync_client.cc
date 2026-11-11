@@ -225,7 +225,7 @@ std::vector<window_sync::SpaceRecord> KoanWindowSyncClient::LocalSpaces(
       for (size_t i = range.start(); i < range.end(); ++i) {
         content::WebContents* contents =
             model->GetWebContentsAt(static_cast<int>(i));
-        if (contents && containers::IsAgentContainerContents(contents)) {
+        if (contents && containers::IsAgentTab(contents)) {
           agent = true;
           break;
         }

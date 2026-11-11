@@ -26,7 +26,10 @@ enum class ServiceVerdict {
   // gets tab data through a surface that is blocked (the reason says which).
   kSafe,
   // One of the agent blocks makes it unreachable from agent tabs (the reason
-  // names the block, B1-B9).
+  // names the block, B1-B9). The extensions, password, autofill and history
+  // blocks (B3, B4, B5, B7) apply while the user's "What agents can use"
+  // switch for them is off (koan_agent_access.h): with it on, the service is
+  // the user's in agent tabs, by the user's choice.
   kBlocked,
   // It can still carry data between agent tabs and the user's profile, and
   // no block covers it yet: a known gap, tracked in the design.

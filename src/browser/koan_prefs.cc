@@ -19,6 +19,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/universal_optout/prefs.h"
 #include "koan/browser/agent/koan_agent_limits.h"
+#include "koan/browser/containers/koan_agent_access_prefs.h"
 #include "koan/browser/koan_features.h"
 
 namespace koan::prefs {
@@ -84,6 +85,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterTimePref(kLastResumedTime, base::Time());
   registry->RegisterDictionaryPref(kAgentSavedContainers);
   registry->RegisterBooleanPref(kAgentControlStrict, false);
+  containers::RegisterAgentAccessPrefs(registry);
 }
 
 bool AgentReadyByDefault() {

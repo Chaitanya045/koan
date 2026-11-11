@@ -17,7 +17,7 @@ index 2d4396ffb564e7a7a1965032f39d6ee08e2e7fd6..40b2f01c9262aa224df4d9167a16897b
  bool ContentLiveTab::IsInitialBlankNavigation() {
 +  // Koan: an agent container's tab has nothing to restore, so Recently Closed
 +  // (and chrome.sessions) never lists it, nor a Space of only agent tabs.
-+  if (koan::containers::IsAgentContainerContents(&GetWebContents())) {
++  if (koan::containers::IsAgentTab(&GetWebContents())) {
 +    return true;
 +  }
    return navigation_controller().IsInitialBlankNavigation();

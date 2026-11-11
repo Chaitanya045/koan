@@ -1127,9 +1127,24 @@ Mode), approval requests per minute (3) and failed attempts before a 5-minute
 block (5). Approvals last until Koan quits for now. The command line tool and
 the tab features come next (see `.agent/notes/agent-control.md`).
 
-An agent's tabs open in a container of their own: a new, empty one for each
-task, cleared when the task ends. **Saved containers** (Settings > Agent
-Control) keep their logins between tasks, for an agent you sign in once
+Agents use the browser as you do. **What agents can use** (Settings > Agent
+Control) has a switch for each part, all on: **Your logins** (agent tabs are
+signed in as you: they share your cookies and sessions), **Saved passwords**,
+**Addresses and cards**, **Your extensions** and **History** (agent visits go
+into your history and suggestions). Agent tabs are still the agent's: they
+open in the background in a Space of their own, show in the pill, and close
+when the task ends; they never come back after a restart. Turning a switch off
+blocks that part in agent tabs from the next page on (Your logins: from the
+next task). With Your logins on, turning Your extensions off can't stop your
+extensions' content scripts in agent tabs (they share your tabs' processes);
+it still keeps extensions from finding, debugging or watching them. Whatever
+the switches say, a site's permission prompt for an agent tab waits until you
+open that tab, and file and device pickers, screen sharing and passkeys are
+refused in agent tabs.
+
+With **Your logins** off, an agent's tabs open in a container of their own: a
+new, empty one for each task, cleared when the task ends. **Saved containers**
+(Settings > Agent Control) keep their logins between tasks, for an agent you sign in once
 ("GitHub bot"). Add one by name and tick the agents that may use it; an agent
 gets it only if you ticked it **and** it asks for that container by name, and
 never while another task has it open. Delete removes its cookies and site data.
@@ -1140,6 +1155,12 @@ profile of its own, with none of your settings, extensions or permissions, in
 a background window of that profile. It takes a moment longer to start, and
 the profile is deleted when the task ends. Hidden profiles never show in the
 profile menu or bring up the profile picker at launch.
+
+An agent can ask to control one of your own tabs; Koan asks you first, every
+time. Once you allow it, the agent keeps control wherever the tab goes, until
+you use the tab yourself (that pauses it), take it back, or press Stop. Turn on
+**Limit a taken-over tab to its site** to keep it to the site you were asked
+about: leaving that site then leaves the agent able to look at the tab only.
 
 What a page asks of you while an agent works in its tab (its own tab, or one
 of yours it controls) never pops up over your work: a "Leave site?" dialog,

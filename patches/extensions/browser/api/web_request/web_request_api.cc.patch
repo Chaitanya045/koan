@@ -1,44 +1,51 @@
 diff --git a/extensions/browser/api/web_request/web_request_api.cc b/extensions/browser/api/web_request/web_request_api.cc
+index 55ebd64..6402ae7 100644
 --- a/extensions/browser/api/web_request/web_request_api.cc
 +++ b/extensions/browser/api/web_request/web_request_api.cc
-@@ -60,6 +60,7 @@
+@@ -60,6 +60,8 @@
  #include "extensions/browser/process_map.h"
  #include "extensions/browser/warning_service.h"
  #include "extensions/browser/warning_set.h"
++#include "koan/browser/containers/koan_agent_access.h"
 +#include "koan/browser/containers/koan_container_partition.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/api/web_request.h"
  #include "extensions/common/constants.h"
-@@ -790,6 +791,13 @@
+@@ -790,6 +792,15 @@ bool WebRequestAPI::MaybeProxyURLLoaderFactory(
          header_client,
      scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
      const url::Origin& request_initiator) {
 +  // Koan: extensions' webRequest and declarativeNetRequest never see an agent
-+  // container's traffic.
-+  if (koan::containers::IsAgentFrame(frame) ||
-+      koan::containers::IsAgentProcess(
-+          content::RenderProcessHost::FromID(render_process_id))) {
++  // tab's traffic unless the user lets agents use extensions.
++  if (koan::containers::BlocksAgentFrame(
++          frame, koan::containers::AgentCapability::kExtensions) ||
++      koan::containers::BlocksAgentProcess(
++          content::RenderProcessHost::FromID(render_process_id),
++          koan::containers::AgentCapability::kExtensions)) {
 +    return false;
 +  }
    const ProxyDecision decision = MaybeProxyURLLoaderFactoryInternal(
        browser_context, frame, render_process_id, type, navigation_id,
        ukm_source_id, factory_builder, header_client,
-@@ -993,7 +1001,8 @@
+@@ -993,7 +1004,10 @@ void WebRequestAPI::ProxyWebTransport(
          handshake_client,
      content::ContentBrowserClient::WillCreateWebTransportCallback callback) {
    DCHECK_CURRENTLY_ON(BrowserThread::UI);
 -  if (!MayHaveProxiesForFrame(content::RenderFrameHost::FromID(
-+  if (koan::containers::IsAgentProcess(&render_process_host) ||
++  if (koan::containers::BlocksAgentProcess(
++          &render_process_host,
++          koan::containers::AgentCapability::kExtensions) ||
 +      !MayHaveProxiesForFrame(content::RenderFrameHost::FromID(
            render_process_host.GetDeprecatedID(), frame_routing_id))) {
      std::move(callback).Run(std::move(handshake_client), std::nullopt);
      return;
-@@ -1025,6 +1034,10 @@
+@@ -1025,6 +1039,11 @@ bool WebRequestAPI::MayHaveProxies() const {
  
  bool WebRequestAPI::MayHaveProxiesForFrame(
      content::RenderFrameHost* render_frame_host) const {
 +  // Koan: nor its WebSockets and WebTransports.
-+  if (koan::containers::IsAgentFrame(render_frame_host)) {
++  if (koan::containers::BlocksAgentFrame(
++          render_frame_host, koan::containers::AgentCapability::kExtensions)) {
 +    return false;
 +  }
    if (base::FeatureList::IsEnabled(

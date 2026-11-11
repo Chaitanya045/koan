@@ -46,8 +46,10 @@ class WebContents;
 // Every tab opened here is in the background: the active tab, the focused
 // window and the frontmost app never change. Pages the agent opens from these
 // tabs (links, window.open, target=_blank) stay in the container, also in the
-// background. Agent containers block permissions, passwords, autofill,
-// extensions, history and sync (koan_agent_blocks.h).
+// background. Agent tabs block what the user turned off in "What agents can
+// use" (passwords, autofill, extensions, history: koan_agent_access.h) and,
+// in a container, site permissions; pickers, passkeys and open-tab sync are
+// blocked in every agent tab (agent-control.md section 7.2).
 //
 // The "your tab" mode (a lease on one of the user's tabs) is not a container
 // and is not here: see the lease in agent-control.md section 8.
@@ -68,6 +70,14 @@ enum class AgentMode {
   // Strict (prefs::kAgentControlStrict) makes it the default for tasks that
   // ask for no saved container.
   kStrict,
+  // No container: the task's tabs open in the user's own partition, with
+  // their cookies and sessions, and are marked as the agent's own
+  // (MarkAgentTab(), koan_containers.h), so they still get the agent's Space,
+  // lease, indicator, session and end-of-task handling. "What agents can
+  // use" > Your logins (koan_agent_access_prefs.h, on by default) makes it
+  // the default for tasks that ask for no saved container, unless strict
+  // mode is on. The id is the task's, and no partition has it.
+  kUserPartition,
 };
 
 struct AgentContainerOptions {
@@ -113,7 +123,8 @@ void StartAgentContainer(Profile* profile,
 void EnsureAgentWindow(Profile* profile, base::OnceClosure ready);
 
 // Opens `url` in a new background tab of `container`'s Space (creating the
-// Space with the container's first tab). Returns the tab, or null if
+// Space with the container's first tab): in the container, or for a
+// kUserPartition task in the user's partition. Returns the tab, or null if
 // `container` isn't a started agent container of `profile` or `url` isn't one
 // an agent may open (http, https, about:blank).
 content::WebContents* OpenAgentTab(Profile* profile,

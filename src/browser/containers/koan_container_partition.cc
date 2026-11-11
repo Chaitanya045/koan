@@ -6,6 +6,7 @@
 
 #include <iterator>
 #include <memory>
+#include <utility>
 
 #include "base/check.h"
 #include "base/rand_util.h"
@@ -35,6 +36,21 @@ constexpr std::string_view kAgentSessionPrefix = "agent:";
 constexpr std::string_view kUserSessionPrefix = "user:";
 // The mark SetAgentLeased() puts on a user's tab while an agent leases it.
 const int kAgentLeasedKey = 0;
+// The mark SetAgentTab() puts on an agent's own tab in the user's partition.
+const int kAgentTabKey = 0;
+
+class AgentTabMark : public base::SupportsUserData::Data {
+ public:
+  explicit AgentTabMark(ContainerId task) : task_(std::move(task)) {}
+  const ContainerId& task() const { return task_; }
+
+ private:
+  const ContainerId task_;
+};
+
+const AgentTabMark* MarkOf(const content::WebContents* contents) {
+  return static_cast<const AgentTabMark*>(contents->GetUserData(&kAgentTabKey));
+}
 
 std::string_view DomainPrefix(ContainerKind kind) {
   return kind == ContainerKind::kAgent ? kAgentPartitionDomainPrefix
@@ -136,12 +152,28 @@ bool IsAgentFrame(content::RenderFrameHost* frame) {
 }
 
 bool IsAgentContents(const content::WebContents* contents) {
-  return contents && (IsAgentPartition(ConfigOf(contents)) ||
-                      contents->GetUserData(&kAgentLeasedKey));
+  return IsAgentTab(contents) ||
+         (contents && contents->GetUserData(&kAgentLeasedKey));
 }
 
-bool IsAgentContainerContents(const content::WebContents* contents) {
-  return contents && IsAgentPartition(ConfigOf(contents));
+bool IsAgentTab(const content::WebContents* contents) {
+  return contents && (IsAgentPartition(ConfigOf(contents)) || MarkOf(contents));
+}
+
+bool IsAgentTabFrame(content::RenderFrameHost* frame) {
+  return IsAgentFrame(frame) ||
+         (frame &&
+          IsAgentTab(content::WebContents::FromRenderFrameHost(frame)));
+}
+
+void SetAgentTab(content::WebContents* contents, const ContainerId& task) {
+  CHECK_EQ(task.kind, ContainerKind::kAgent);
+  // Only a tab in the user's partition: a container's tab is its
+  // container's.
+  if (!contents || IsContainerContents(contents) || MarkOf(contents)) {
+    return;
+  }
+  contents->SetUserData(&kAgentTabKey, std::make_unique<AgentTabMark>(task));
 }
 
 void SetAgentLeased(content::WebContents* contents, bool leased) {
@@ -173,6 +205,9 @@ bool IsContainerSiteInstance(content::SiteInstance* site_instance) {
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents) {
   if (!contents) {
     return std::nullopt;
+  }
+  if (const AgentTabMark* mark = MarkOf(contents)) {
+    return mark->task();
   }
   return ContainerFromPartitionConfig(ConfigOf(contents));
 }
@@ -223,6 +258,15 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
   }
   return content::SiteInstance::CreateForFixedStoragePartition(context, url,
                                                                config);
+}
+
+std::unique_ptr<content::WebContents> InheritAgentTab(
+    const content::WebContents* source,
+    std::unique_ptr<content::WebContents> contents) {
+  if (const AgentTabMark* mark = source ? MarkOf(source) : nullptr) {
+    SetAgentTab(contents.get(), mark->task());
+  }
+  return contents;
 }
 
 scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(

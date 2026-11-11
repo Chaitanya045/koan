@@ -1,22 +1,25 @@
 diff --git a/chrome/browser/favicon/favicon_utils.cc b/chrome/browser/favicon/favicon_utils.cc
-index 398c6080a56ea0f7d7590ff18ef15f2e590b065f..957d762afdf83e61ea178f4beac8a95020bfaf87 100644
+index 398c608..e7460cc 100644
 --- a/chrome/browser/favicon/favicon_utils.cc
 +++ b/chrome/browser/favicon/favicon_utils.cc
-@@ -18,6 +18,7 @@
+@@ -18,6 +18,8 @@
  #include "content/public/browser/favicon_status.h"
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/navigation_entry.h"
++#include "koan/browser/containers/koan_agent_access.h"
 +#include "koan/browser/containers/koan_container_partition.h"
  #include "ui/base/l10n/l10n_util.h"
  #include "ui/base/resource/resource_bundle.h"
  #include "ui/color/color_provider.h"
-@@ -68,6 +69,11 @@ void CreateContentFaviconDriverForWebContents(
+@@ -68,6 +70,13 @@ void CreateContentFaviconDriverForWebContents(
    CHECK(web_contents, base::NotFatalUntil::M161);
    if (ContentFaviconDriver::FromWebContents(web_contents))
      return;
-+  // Koan: an agent container's icons show in its tabs but aren't stored in
-+  // (or read from) the user's Favicons database.
-+  if (koan::containers::IsAgentContents(web_contents)) {
++  // Koan: an agent tab's icons show in its tabs but aren't stored in (or
++  // read from) the user's Favicons database, unless its visits go into
++  // History.
++  if (koan::containers::BlocksAgent(
++          web_contents, koan::containers::AgentCapability::kHistory)) {
 +    return ContentFaviconDriver::CreateForWebContents(web_contents, nullptr);
 +  }
  

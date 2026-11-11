@@ -22,13 +22,17 @@
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/dialogs/browser_dialogs.h"
+#include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/agent/koan_agent_auth.h"
 #include "koan/browser/agent/koan_agent_service.h"
+#include "koan/browser/containers/koan_agent_access.h"
+#include "koan/browser/koan_prefs.h"
 #include "ui/base/base_window.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/models/dialog_model.h"
@@ -148,6 +152,7 @@ void AnswerTakeOver(uint64_t id, bool allowed) {
 uint64_t ShowTakeOverDialog(content::WebContents* contents,
                             const std::string& label,
                             const std::string& site,
+                            bool any_site,
                             base::OnceCallback<void(bool)> answer) {
   tabs::TabInterface* tab =
       contents ? tabs::TabInterface::MaybeGetFromContents(contents) : nullptr;
@@ -165,9 +170,13 @@ uint64_t ShowTakeOverDialog(content::WebContents* contents,
       .AddParagraph(ui::DialogModelLabel(base::StrCat(
           {u"“", contents->GetTitle(), u"” on ", base::UTF8ToUTF16(site)})))
       .AddParagraph(ui::DialogModelLabel(
-          u"It can click and type in this tab while you are signed in, on "
-          u"this site only. Using the tab yourself pauses it; leaving the "
-          u"site ends its control."))
+          any_site
+              ? u"It can click and type in this tab while you are signed in, "
+                u"on this site and any site the tab goes to. Using the tab "
+                u"yourself pauses it."
+              : u"It can click and type in this tab while you are signed in, "
+                u"on this site only. Using the tab yourself pauses it; leaving "
+                u"the site ends its control."))
       .AddOkButton(base::BindOnce(&AnswerTakeOver, id, true),
                    ui::DialogModel::Button::Params().SetLabel(u"Allow"))
       .AddCancelButton(base::BindOnce(&AnswerTakeOver, id, false),
@@ -245,11 +254,12 @@ void ShowApprovalDialog(const ApprovalRequest& request,
                                           Describe(request.previous.agent)}),
                       u"."})));
   }
-  builder.AddParagraph(ui::DialogModelLabel(
-      u"It can open and work in its own background tabs, in a container "
-      u"of their own: a throwaway one that is cleared when its task ends, "
-      u"or one you saved for it. They never get your logins, cookies, "
-      u"saved passwords or site permissions."));
+  // What its tabs get: "What agents can use", in the profile agents' tabs
+  // open in (the last active window's, as here).
+  const PrefService* prefs =
+      browser->GetProfile()->GetOriginalProfile()->GetPrefs();
+  builder.AddParagraph(ui::DialogModelLabel(containers::DescribeAgentAccess(
+      prefs, prefs->GetBoolean(prefs::kAgentControlStrict))));
   // The capabilities it asked for, on unless the user turns them off.
   struct Choice {
     bool requested;

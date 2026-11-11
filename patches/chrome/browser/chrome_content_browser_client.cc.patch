@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 565bd580ba6172469d31079a4e455eb05020488c..3b44cfc488efa37eebdec74896729cb98086b0c1 100644
+index 565bd58..144c525 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -411,6 +411,11 @@
@@ -71,9 +71,9 @@ index 565bd580ba6172469d31079a4e455eb05020488c..3b44cfc488efa37eebdec74896729cb9
  bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
      content::RenderFrameHost* rfh,
      const url::Origin& caller_origin) {
-+  // Koan: no passkey or security key sign-in in an agent container, refused
-+  // before any UI.
-+  if (koan::containers::IsAgentFrame(rfh)) {
++  // Koan: no passkey or security key sign-in in an agent tab, refused before
++  // any UI (it would show over the user's work: an assertion needs no focus).
++  if (koan::containers::IsAgentTabFrame(rfh)) {
 +    return false;
 +  }
    const Profile* profile =

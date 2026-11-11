@@ -15,7 +15,7 @@ index b7bc33e139b146d21ec42cbfd2616d2c586dd7d4..747edce043ceada1105fecafd679db5a
          for (tabs::TabInterface* tab : *tab_strip_model) {
            auto* web_contents = tab->GetContents();
 +          // Koan: an agent container's tabs aren't offered to resume.
-+          if (koan::containers::IsAgentContainerContents(web_contents)) {
++          if (koan::containers::IsAgentTab(web_contents)) {
 +            continue;
 +          }
            auto* last_entry =

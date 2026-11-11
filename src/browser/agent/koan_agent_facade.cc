@@ -273,9 +273,10 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
     return;
   }
 
-  // The user allowed one site in their tab (design section 9.2): the agent's
-  // own navigation may not leave it. (A link that leaves it ends write
-  // access when it commits.)
+  // With "Limit a taken-over tab to its site" on, the user allowed one site
+  // in their tab (design section 9.2): the agent's own navigation may not
+  // leave it. (A link that leaves it ends write access when it commits.) Off
+  // (the default), the backend allows any site.
   if (!entry->agent_owned && method == "Page.navigate") {
     const std::string* url = message.params.FindString("url");
     if (!url || !backend_->IsInGrantedSite(session.target_id, GURL(*url))) {
@@ -1072,8 +1073,8 @@ bool CdpFacade::HandleChildTargetEvent(TabSession& session,
     for (const auto& [id, child] : sessions_) {
       if (target && child->is_child() && child->child_target_id == *target &&
           child->parent_session_id == session.session_id) {
-        // A child of a user's tab that went to another site leaves the
-        // agent's reach with it.
+        // A child of a user's tab limited to its site that went to another
+        // site leaves the agent's reach with it.
         if (url && !url->empty() &&
             !ChildOnGrantedSite(child->target_id, GURL(*url))) {
           base::DictValue detach;
@@ -1114,10 +1115,10 @@ void CdpFacade::OnChildAttached(TabSession& parent,
   // MayAttachToURL); the facade checks the child again by what it is, and a
   // refused one is detached (which also lets one waiting for the debugger
   // run).
-  // In a user's tab the agent was given one site (design section 9.2): a
-  // frame or worker of another site in it (a payment or sign-in widget) is
-  // not the agent's, to read or to drive. An agent's own tab keeps every
-  // reachable child.
+  // In a user's tab limited to one site (design section 9.2), a frame or
+  // worker of another site in it (a payment or sign-in widget) is not the
+  // agent's, to read or to drive. An agent's own tab, and a user's tab taken
+  // over without the limit, keep every reachable child.
   if (!type || !IsChildType(*type) || !url ||
       !IsReachableFrameUrl(GURL(*url)) ||
       !ChildOnGrantedSite(parent.target_id, GURL(*url)) || !child_target ||

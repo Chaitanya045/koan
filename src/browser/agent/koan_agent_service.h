@@ -129,12 +129,14 @@ void ShowApprovalDialog(const ApprovalRequest& request,
 void CancelApprovalDialog(uint64_t request_id);
 
 // The take-over prompt (design section 9.2) in the window of `contents`:
-// "<label> wants to control this tab on <site>". Runs `answer` once with the
+// "<label> wants to control this tab on <site>", and whether that is on this
+// site only or wherever the tab goes (`any_site`). Runs `answer` once with the
 // user's choice (Esc and closing deny), unless cancelled first. Returns the id
 // to cancel it with.
 uint64_t ShowTakeOverDialog(content::WebContents* contents,
                             const std::string& label,
                             const std::string& site,
+                            bool any_site,
                             base::OnceCallback<void(bool)> answer);
 void CancelTakeOverDialog(uint64_t dialog_id);
 

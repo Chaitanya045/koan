@@ -22,6 +22,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/referrer.h"
 #include "koan/browser/containers/koan_container_partition.h"
@@ -29,6 +30,7 @@
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -51,6 +53,41 @@ class BlankedContainerTab
 };
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(BlankedContainerTab);
+
+// Follows an agent's own tab in the user's partition (MarkAgentTab()): the
+// tabs it opens, and its replacement on a discard, are the agent's too.
+class AgentTabWatch : public content::WebContentsUserData<AgentTabWatch>,
+                      public content::WebContentsObserver {
+ public:
+  ~AgentTabWatch() override = default;
+
+  // content::WebContentsObserver:
+  void DidOpenRequestedURL(content::WebContents* new_contents,
+                           content::RenderFrameHost* source_render_frame_host,
+                           const GURL& url,
+                           const content::Referrer& referrer,
+                           WindowOpenDisposition disposition,
+                           ui::PageTransition transition,
+                           bool started_from_context_menu,
+                           bool renderer_initiated) override {
+    MarkAgentTab(new_contents, task_);
+  }
+  void AboutToBeDiscarded(content::WebContents* new_contents) override {
+    MarkAgentTab(new_contents, task_);
+  }
+
+ private:
+  friend WebContentsUserData;
+  AgentTabWatch(content::WebContents* contents, ContainerId task)
+      : WebContentsUserData(*contents),
+        content::WebContentsObserver(contents),
+        task_(std::move(task)) {}
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+
+  const ContainerId task_;
+};
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(AgentTabWatch);
 
 void CloseBlankedTab(base::WeakPtr<content::WebContents> contents) {
   if (!contents) {
@@ -96,6 +133,25 @@ void OnTabInserted(content::WebContents* contents) {
                          }
                        },
                        contents->GetWeakPtr()));
+  }
+}
+
+void MarkAgentTab(content::WebContents* contents, const ContainerId& task) {
+  if (!contents || task.kind != ContainerKind::kAgent ||
+      AgentTabWatch::FromWebContents(contents)) {
+    return;
+  }
+  SetAgentTab(contents, task);
+  // A tab in a container is its container's (SetAgentTab() leaves it).
+  if (ContainerOf(contents) != task) {
+    return;
+  }
+  AgentTabWatch::CreateForWebContents(contents, task);
+  // Opened by a click that the browser put in a window before the page heard
+  // of it (OpenURL()): the session and the Space learn of it now.
+  tabs::TabInterface* tab = tabs::TabInterface::MaybeGetFromContents(contents);
+  if (tab && tab->GetBrowserWindowInterface()) {
+    OnTabInserted(contents);
   }
 }
 

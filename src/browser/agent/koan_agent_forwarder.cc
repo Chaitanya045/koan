@@ -34,6 +34,7 @@
 #include "koan/browser/agent/koan_agent_reach_content.h"
 #include "koan/browser/agent/koan_agent_service.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "koan/browser/containers/koan_agent_access.h"
 #include "koan/browser/containers/koan_agent_containers.h"
 #include "net/base/schemeful_site.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -301,15 +302,7 @@ class AgentForwarder::Connection final : public FacadeBackend {
   }
 
   bool IsInGrantedSite(const std::string& target_id, const GURL& url) override {
-    const TargetEntry* entry = forwarder_->registry_.Find(target_id);
-    if (!entry) {
-      return false;
-    }
-    if (entry->agent_owned) {
-      return true;
-    }
-    const std::string site = SiteFor(url);
-    return !site.empty() && site == entry->site;
+    return forwarder_->registry_.MayReachSite(target_id, SiteFor(url));
   }
 
   void AskToResume(const std::string& target_id) override {
@@ -766,6 +759,8 @@ void AgentForwarder::RequestTakeOver(
   request.request_id = request_id;
   request.client_id = client_id;
   request.site = site;
+  request.any_site =
+      !containers::LimitsTakeOverToSite(contents->GetBrowserContext());
   request.contents = contents->GetWeakPtr();
   request.done = std::move(done);
   request.timer.Start(
@@ -776,6 +771,7 @@ void AgentForwarder::RequestTakeOver(
   AuditEvent("take-over-asked", id, client_id);
   const uint64_t dialog_id = ShowTakeOverDialog(
       contents, label == labels_.end() ? std::string() : label->second, site,
+      request.any_site,
       base::BindOnce(&AgentForwarder::OnTakeOverAnswer,
                      weak_factory_.GetWeakPtr(), id, request_id));
   // With no window to ask in, the answer (a no) has come already.
@@ -821,7 +817,8 @@ void AgentForwarder::OnTakeOverAnswer(std::string target_id,
     return;
   }
   if (registry_.GrantUserTab(target_id, request.client_id, TabState::kDriven,
-                             request.site) != TargetRegistry::AddResult::kOk) {
+                             request.site, request.any_site) !=
+      TargetRegistry::AddResult::kOk) {
     std::move(request.done)
         .Run(std::nullopt, "Koan.notPermitted",
              "another agent controls that tab");
@@ -869,15 +866,13 @@ void AgentForwarder::OnUserInput(const std::string& target_id) {
 
 void AgentForwarder::OnTabNavigated(const std::string& target_id,
                                     const GURL& url) {
-  const TargetEntry* entry = registry_.Find(target_id);
-  if (!entry || entry->agent_owned || entry->state == TabState::kReadable ||
-      SiteFor(url) == entry->site) {
+  // With "Limit a taken-over tab to its site" on, the user allowed one site;
+  // leaving it (a link, a redirect, the user typing in the omnibox) ends
+  // write access. The agent may still read it.
+  if (!registry_.LeftGrantedSite(target_id, SiteFor(url))) {
     return;
   }
-  // The user allowed one site; leaving it (a link, a redirect, the user
-  // typing in the omnibox) ends write access. The agent may still read it.
-  registry_.SetReadable(target_id);
-  const std::string client_id = entry->client_id;
+  const std::string client_id = registry_.Find(target_id)->client_id;
   AuditEvent("site-left", target_id, client_id);
   ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
     facade.OnTargetStateChanged(target_id, "Koan.siteLeft", "navigation");

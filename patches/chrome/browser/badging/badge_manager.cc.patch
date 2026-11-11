@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/badging/badge_manager.cc b/chrome/browser/badging/badge_manager.cc
-index 8d2c7681aee83dfeee87b241e8a69470f572671e..1db96e6be31f93cfcd2144f1d3008c9079938298 100644
+index 8d2c768..b354cb6 100644
 --- a/chrome/browser/badging/badge_manager.cc
 +++ b/chrome/browser/badging/badge_manager.cc
 @@ -24,6 +24,7 @@
@@ -14,8 +14,8 @@ index 8d2c7681aee83dfeee87b241e8a69470f572671e..1db96e6be31f93cfcd2144f1d3008c90
    if (frame->GetStorageKey().IsThirdPartyContext()) {
      return;
    }
-+  // Koan: an agent container's pages never badge the user's installed apps.
-+  if (koan::containers::IsAgentFrame(frame)) {
++  // Koan: an agent tab's pages never badge the user's installed apps.
++  if (koan::containers::IsAgentTabFrame(frame)) {
 +    return;
 +  }
  

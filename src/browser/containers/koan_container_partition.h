@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_PARTITION_H_
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -91,20 +92,37 @@ bool IsAgentPartition(const content::StoragePartitionConfig& config);
 // IsAgentContents() asks the primary main frame, which a tab always has.
 // The agent blocks call these from upstream (agent-control.md section 7.2):
 // permissions, choosers and pickers, extensions, passwords, autofill,
-// downloads, history and the omnibox, open-tab sync, WebAuthn.
+// downloads, history and the omnibox, open-tab sync, WebAuthn. Those the user
+// can switch off in Settings call them through BlocksAgent*()
+// (koan_agent_access.h).
 bool IsAgentProcess(content::RenderProcessHost* process);
 bool IsAgentFrame(content::RenderFrameHost* frame);
-// Also true for a user's own tab while an agent holds a lease on it (a
-// take-over, SetAgentLeased()): its password, autofill, history, downloads and
-// sync blocks apply there too, so the user's saved password is never filled
-// into a page the agent can read. (Permissions and extensions, keyed on the
-// process, stay the user's in their own tab.)
+// True for an agent's own tab (IsAgentTab()), and for a user's own tab while
+// an agent holds a lease on it (a take-over, SetAgentLeased()): its password,
+// autofill, history, downloads and sync blocks apply there too. (Permissions
+// and extensions, keyed on the process, stay the user's in their own tab.)
 bool IsAgentContents(const content::WebContents* contents);
 
-// Whether `contents` itself is in an agent container: false for a user's tab
-// an agent leases. For surfaces that list the agent's own tabs (Recently
-// Closed, tab resumption), where a leased tab is still the user's.
-bool IsAgentContainerContents(const content::WebContents* contents);
+// Whether `contents` is an agent's own tab: in an agent container, or opened
+// for an agent in the user's own partition (SetAgentTab(), "Your logins" on).
+// False for a user's tab an agent leases. For surfaces that list the agent's
+// own tabs (Recently Closed, tab resumption, window sync), where a leased tab
+// is still the user's.
+bool IsAgentTab(const content::WebContents* contents);
+
+// Whether `frame` is in an agent container (IsAgentFrame()) or in an agent's
+// own tab in the user's partition. For the frame-keyed blocks that must also
+// hold in the user's partition: pickers, passkeys, protocol handlers, search
+// engines.
+bool IsAgentTabFrame(content::RenderFrameHost* frame);
+
+// Marks `contents`, a tab in the user's own partition, as an agent's own tab
+// of the task whose id is `task` (an agent ContainerId that no partition has:
+// ContainerOf() returns it). Called by the agent tab opener for a task with
+// "Your logins" on, and for the tabs such a tab opens
+// (koan::containers::MarkAgentTab(), koan_containers.h). A tab stays marked
+// for life.
+void SetAgentTab(content::WebContents* contents, const ContainerId& task);
 
 // Marks `contents`, a user's tab, as leased to an agent, or not. Called by
 // agent control's lease (koan_agent_lease.cc) for tabs the agent doesn't own.
@@ -118,7 +136,9 @@ bool IsContainerFrame(content::RenderFrameHost* frame);
 bool IsContainerContents(const content::WebContents* contents);
 bool IsContainerSiteInstance(content::SiteInstance* site_instance);
 
-// The container `contents` is in, or nullopt.
+// The container `contents` is in, or for an agent's own tab in the user's
+// partition its task's id (SetAgentTab()); otherwise nullopt. What a Space,
+// the session and the end of a task group an agent's tabs by.
 std::optional<ContainerId> ContainerOf(const content::WebContents* contents);
 
 // The session form of a ContainerId ("agent:t..." / "user:s...") and back.
@@ -148,6 +168,15 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
     content::BrowserContext* context,
     content::SiteInstance* source,
     const GURL& url);
+
+// CreateTargetContents() in browser_navigator.cc, for every new tab it makes:
+// a tab that an agent's own tab in the user's partition opened (Cmd-click,
+// middle-click, the context menu) is the agent's too, marked here before its
+// tab helpers are attached (MarkAgentTab() then follows it, from the source's
+// DidOpenRequestedURL). Returns `contents`.
+std::unique_ptr<content::WebContents> InheritAgentTab(
+    const content::WebContents* source,
+    std::unique_ptr<content::WebContents> contents);
 
 // TabLifecycleUnit::FinishDiscard(): the SiteInstance for the WebContents that
 // replaces a discarded `old_contents`, so the tab reloads in its container;

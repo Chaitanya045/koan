@@ -14,19 +14,36 @@ source_set("domain") {
   sources = [ "koan_partition_domain.h" ]
 }
 
-# What a container is, and the SiteInstances upstream's hooks put new tabs
-# in. Depends on //base and //content/public/browser only, so upstream
-# targets in components/ and extensions/ can depend on it.
+# "What agents can use": the switches' prefs (koan_agent_access_prefs.h).
+# //components/prefs only, for //koan/browser:prefs, which registers them.
+source_set("access_prefs") {
+  sources = [
+    "koan_agent_access_prefs.cc",
+    "koan_agent_access_prefs.h",
+  ]
+  deps = [ "//components/prefs" ]
+}
+
+# What a container is, the SiteInstances upstream's hooks put new tabs in, and
+# the blocks' check of the user's switches (koan_agent_access.h). Depends on
+# //base, //components/prefs, //components/user_prefs and
+# //content/public/browser only, so upstream targets in components/ and
+# extensions/ can depend on it.
 source_set("partition") {
   sources = [
+    "koan_agent_access.cc",
+    "koan_agent_access.h",
     "koan_container_partition.cc",
     "koan_container_partition.h",
   ]
   public_deps = [
+    ":access_prefs",
     ":domain",
     "//base",
   ]
   deps = [
+    "//components/prefs",
+    "//components/user_prefs",
     "//content/public/browser",
     "//url",
   ]
@@ -109,6 +126,7 @@ source_set("impl") {
 #   out/Koan/koan_containers_unittests
 test("koan_containers_unittests") {
   sources = [
+    "koan_agent_access_unittest.cc",
     "koan_container_grants_unittest.cc",
     "koan_container_partition_unittest.cc",
     "koan_container_restore_unittest.cc",
@@ -118,6 +136,9 @@ test("koan_containers_unittests") {
     ":partition",
     "//base",
     "//base/test:test_support",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/user_prefs",
     "//content/public/browser",
     "//content/test:run_all_unittests",
     "//content/test:test_support",
