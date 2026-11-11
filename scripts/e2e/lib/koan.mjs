@@ -198,11 +198,38 @@ export async function boundsOf(cls) {
 // Sends a native mouse event to `view` (from views()) at `x`, `y` in its own
 // coordinates. The view gets it directly; sent to a root view, it is routed
 // like real input.
+// Sends a mouse event to `view` (from views()), at (x, y) in it.
+//
+// Node ids are handed out again in tree order on each DOM.getDocument, so
+// once the tree changed (a view added or removed anywhere before it) the id
+// views() saw is another view's, often one of the same class: on macOS the
+// sidebar's hot zone's id named the top edge's. The view is found again in
+// this session, by its class and its bounds.
 export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
-  await ui.send('DOM.getDocument', { depth: -1 });
-  await ui.send('DOM.dispatchMouseEvent', { nodeId: view.nodeId,
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const same = [];
+  const walk = n => {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'View' && a[a.indexOf('class') + 1] === view.cls) same.push(n.nodeId);
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(doc);
+  let nodeId = same.length === 1 ? same[0] : null;
+  for (const id of same.length > 1 ? same : []) {
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: id });
+    const p = {};
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+    }
+    if (['X', 'Y', 'Width', 'Height'].every(k => p[k] === view.props?.[k])) {
+      nodeId = id;
+      break;
+    }
+  }
+  await ui.send('DOM.dispatchMouseEvent', { nodeId: nodeId ?? view.nodeId,
       event: { type, x, y, button, wheelDirection: 'none' } });
   ui.close();
 }
