@@ -62,6 +62,18 @@ async function copyFromPalette(from) {
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
   if (!field) return { error: 'no URL bar' };
+  // A pill click edits the page's URL in place, caret in it and nothing
+  // selected (on macOS), so a typed ">" lands inside the URL: empty the
+  // field first with Backspace and Delete.
+  const url = field.props?.Text ?? '';
+  for (let i = 0; i < url.length + 4; i++) {
+    for (const keyCode of [8, 46]) {
+      await viewEvent(field, 'DOM.dispatchKeyEvent',
+                      { type: 'keyPressed', keyCode, code: 0, flags: 0, key: 0, isChar: false });
+    }
+  }
+  const left = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown)?.props?.Text;
+  if (left) return { error: 'URL bar not emptied', left };
   await typeInto(field, '>Copy Current URL');
   const rows = await waitFor(async () => {
     const rs = await rowLabels();
