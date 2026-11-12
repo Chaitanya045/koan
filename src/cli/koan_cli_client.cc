@@ -19,9 +19,11 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/functional/bind.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_util.h"
 #include "koan/browser/agent/koan_agent_frame.h"
+#include "koan/cli/koan_cli_actions.h"
 #include "third_party/boringssl/src/include/openssl/curve25519.h"
 #include "third_party/boringssl/src/include/openssl/rand.h"
 
@@ -182,7 +184,8 @@ std::string Describe(const std::optional<Message>& answer) {
   if (!answer) {
     return "no answer (Koan quit, or it took too long)";
   }
-  return answer->error_code + ": " + answer->error_message;
+  const AgentError error = MapError(answer->error_code, answer->error_message);
+  return error.code + ": " + error.message;
 }
 
 std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
@@ -216,7 +219,8 @@ std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
 bool Authenticate(Link& link,
                   const base::FilePath& home,
                   const std::string& client_id,
-                  std::string* error) {
+                  std::string* error,
+                  base::RepeatingCallback<void(const std::string&)> on_asked) {
   std::optional<Key> key = LoadKey(home, client_id);
   if (!key) {
     *error = "the key of client " + client_id + " is missing or unreadable";
@@ -239,9 +243,19 @@ bool Authenticate(Link& link,
   base::DictValue proof;
   proof.Set("clientId", client_id);
   proof.Set("signature", Sign(*key, agent::ProofMessage(client_id, *nonce)));
-  // A changed program or chain is asked about in Koan: wait for the user.
-  std::optional<Message> answer =
-      link.Call("Koan.authenticate", std::move(proof), {}, kApprovalWait);
+  // A changed program or chain is asked about in Koan: wait for the user. The
+  // browser says why it asks (Koan.approvalPending) before it waits.
+  std::optional<Message> answer = link.Call(
+      "Koan.authenticate", std::move(proof), {}, kApprovalWait,
+      base::BindRepeating(
+          [](const base::RepeatingCallback<void(const std::string&)>& on_asked,
+             const Message& event) {
+            const std::string* why = event.params.FindString("message");
+            if (on_asked && event.method == "Koan.approvalPending" && why) {
+              on_asked.Run(*why);
+            }
+          },
+          on_asked));
   if (!answer || answer->is_error() || !answer->result) {
     *error = answer && answer->error_code == "Koan.authFailed"
                  ? "Koan does not know this client any more: pair it again"

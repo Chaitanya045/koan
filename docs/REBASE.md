@@ -299,6 +299,18 @@ the whole page (up to 128K a side) with `captureBeyondViewport`; `Page.createIso
 only way a world gets universal access; a header map is always an object named `*headers` and raw header text is always
 `*headersText`, and `Runtime.enable` reports every world of a tab's frames, extension content-script worlds included.
 
+The `koan` tool's `snapshot` and `act` (`src/cli/koan_cli_snapshot.*`, `koan_cli_actions.*`, issue #340) add no patch but
+read upstream output whose shape a roll can change: `Accessibility.getFullAXTree` names roles as ARIA does where it can and
+by Blink's internal names otherwise (`StaticText`, `InlineTextBox`, `LineBreak`, `LabelText`, `ListMarker`, `MenuListPopup`,
+`RootWebArea`), names its states as `properties` (`checked`, `pressed`, `selected`, `expanded`, `disabled`, `required`,
+`readonly`, `invalid`, `focused`, `modal`, `level`, `focusable`, `editable`), and gives a `StaticText` the text as rendered,
+spaces kept (the compact outline joins runs as they are); `Page.getFrameTree`'s main-frame `loaderId` is new for every
+document, and backend DOM node ids are numbered per renderer process (why a ref is checked against the document it came
+from); `MapError()` matches DOM and Runtime error texts ("No node with given id found", "Node does not have a layout
+object", ...), and an unmatched one still comes out as `Koan.pageError` with the text. Guards: koan_cli_unittests
+`KoanCliSnapshotTest.*` and `KoanCliActionsTest.*` (the shapes Koan expects), and `scripts/e2e/agent_cli.mjs` (the form,
+stale-ref and compact-snapshot checks, against the real tree).
+
 The gateway (`src/browser/agent/koan_agent_gateway.*`, `koan_agent_socket.*`, `koan_agent_peer.*`) adds no patch but relies on
 upstream behaviour that the code cannot check; re-read these when `net/` or the Security-facing code moves:
 `net::UnixDomainServerSocket::AcceptSocketDescriptor` accepts the next connection by itself when its auth callback says

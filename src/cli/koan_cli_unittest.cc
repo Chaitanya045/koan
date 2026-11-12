@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -14,12 +15,14 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_frame.h"
+#include "koan/cli/koan_cli_actions.h"
 #include "koan/cli/koan_cli_admission.h"
 #include "koan/cli/koan_cli_args.h"
 #include "koan/cli/koan_cli_client.h"
 #include "koan/cli/koan_cli_io.h"
 #include "koan/cli/koan_cli_protocol.h"
 #include "koan/cli/koan_cli_router.h"
+#include "koan/cli/koan_cli_snapshot.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace koan::cli {
@@ -84,6 +87,21 @@ TEST(KoanCliArgsTest, Actions) {
   EXPECT_FALSE(ErrorOf({"act", "abcd", "click", "12"}).empty());
   EXPECT_FALSE(ErrorOf({"act", "abcd", "scroll", "0"}).empty());
   EXPECT_FALSE(ErrorOf({"act", "abcd", "wiggle"}).empty());
+
+  // A dropdown's option, by label or value.
+  Command select = Parse({"act", "abcd", "select", "@7", "Pro plan"});
+  EXPECT_EQ(select.act, ActKind::kSelect);
+  EXPECT_EQ(select.ref, "@7");
+  EXPECT_EQ(select.text, "Pro plan");
+  EXPECT_FALSE(ErrorOf({"act", "abcd", "select", "@7"}).empty());
+  EXPECT_FALSE(ErrorOf({"act", "abcd", "select", "@7", ""}).empty());
+  EXPECT_FALSE(ErrorOf({"act", "abcd", "select", "7", "Pro"}).empty());
+
+  // --full is the snapshot's; an act's text may be "--full".
+  EXPECT_TRUE(Parse({"snapshot", "abcd", "--full"}).full);
+  EXPECT_FALSE(Parse({"snapshot", "abcd"}).full);
+  EXPECT_NE(ErrorOf({"tabs", "--full"}).find("--full"), std::string::npos);
+  EXPECT_EQ(Parse({"act", "abcd", "fill", "@3", "--full"}).text, "--full");
 }
 
 TEST(KoanCliArgsTest, Refusals) {
@@ -274,7 +292,9 @@ TEST(KoanCliProtocolTest, MessagesAndErrors) {
                      "sessionId":"S1"})"));
 }
 
-TEST(KoanCliProtocolTest, SnapshotOutline) {
+// --- Snapshots ---------------------------------------------------------------
+
+TEST(KoanCliSnapshotTest, Outline) {
   const base::DictValue tree = Dict(R"({"nodes":[
     {"nodeId":"1","role":{"value":"RootWebArea"},"name":{"value":"Shop"},
      "childIds":["2","5"],"backendDOMNodeId":1},
@@ -286,14 +306,323 @@ TEST(KoanCliProtocolTest, SnapshotOutline) {
      "value":{"value":"a@b.test"},"backendDOMNodeId":34},
     {"nodeId":"5","role":{"value":"StaticText"},"name":{"value":"Total"}}
   ]})");
-  EXPECT_EQ(SnapshotText(tree, 100),
+  EXPECT_EQ(BuildSnapshot(tree, {}).text,
             "RootWebArea \"Shop\" @1\n"
             "  button \"Buy \\\"now\\\"\" @12\n"
             "  textbox \"Email\" = \"a@b.test\" @34\n"
             "  \"Total\"\n");
-  EXPECT_EQ(SnapshotText(tree, 1),
+  EXPECT_EQ(BuildSnapshot(tree, {.full = true}).text,
+            "RootWebArea \"Shop\" @1\n"
+            "  button \"Buy \\\"now\\\"\" @12\n"
+            "  textbox \"Email\" = \"a@b.test\" @34\n"
+            "  StaticText \"Total\"\n");
+  EXPECT_EQ(BuildSnapshot(tree, {.max_lines = 1}).text,
             "RootWebArea \"Shop\" @1\n... (more; the page is long)\n");
-  EXPECT_EQ(SnapshotText(base::DictValue(), 10), "");
+  EXPECT_EQ(BuildSnapshot(tree, {}).refs, (std::vector<int>{1, 12, 34}));
+  EXPECT_EQ(BuildSnapshot(base::DictValue(), {}).text, "");
+}
+
+// A sign-up form as Accessibility.getFullAXTree gives it: inline text boxes,
+// split text runs, labels next to their controls, a closed dropdown.
+constexpr char kFormTree[] = R"({"nodes":[
+  {"nodeId":"1","role":{"value":"RootWebArea"},"name":{"value":"Sign up"},
+   "childIds":["2"],"backendDOMNodeId":1},
+  {"nodeId":"2","role":{"value":"main"},"childIds":["3","4","10","13","20"],
+   "backendDOMNodeId":2},
+  {"nodeId":"3","role":{"value":"heading"},"name":{"value":"Sign up"},
+   "properties":[{"name":"level","value":{"type":"integer","value":1}}],
+   "childIds":["31"],"backendDOMNodeId":3},
+  {"nodeId":"31","role":{"value":"StaticText"},"name":{"value":"Sign up"},
+   "childIds":["32"],"backendDOMNodeId":31},
+  {"nodeId":"32","role":{"value":"InlineTextBox"},"name":{"value":"Sign up"}},
+  {"nodeId":"4","role":{"value":"paragraph"},
+   "childIds":["41","42","43","44","45"],"backendDOMNodeId":4},
+  {"nodeId":"41","role":{"value":"StaticText"},"name":{"value":"Fill in "},
+   "backendDOMNodeId":41},
+  {"nodeId":"42","role":{"value":"generic"},"childIds":["421"],
+   "backendDOMNodeId":42},
+  {"nodeId":"421","role":{"value":"StaticText"},"name":{"value":"all"},
+   "backendDOMNodeId":421},
+  {"nodeId":"43","role":{"value":"StaticText"},"name":{"value":" fields"},
+   "backendDOMNodeId":43},
+  {"nodeId":"44","role":{"value":"LineBreak"},"name":{"value":"\n"},
+   "backendDOMNodeId":44},
+  {"nodeId":"45","role":{"value":"StaticText"},"name":{"value":"please."},
+   "backendDOMNodeId":45},
+  {"nodeId":"10","role":{"value":"LabelText"},"childIds":["11","12"],
+   "backendDOMNodeId":10},
+  {"nodeId":"11","role":{"value":"radio"},"name":{"value":"Email"},
+   "properties":[{"name":"focusable","value":{"type":"booleanOrUndefined","value":true}},
+                 {"name":"checked","value":{"type":"tristate","value":"true"}}],
+   "backendDOMNodeId":11},
+  {"nodeId":"12","role":{"value":"StaticText"},"name":{"value":"Email"},
+   "backendDOMNodeId":12},
+  {"nodeId":"13","role":{"value":"LabelText"},"childIds":["14","15"],
+   "backendDOMNodeId":13},
+  {"nodeId":"14","role":{"value":"StaticText"},"name":{"value":"Plan "},
+   "backendDOMNodeId":14},
+  {"nodeId":"15","role":{"value":"combobox"},"name":{"value":"Plan"},
+   "value":{"type":"string","value":"Free"},
+   "properties":[{"name":"expanded","value":{"type":"booleanOrUndefined","value":false}},
+                 {"name":"required","value":{"type":"boolean","value":false}}],
+   "childIds":["16"],"backendDOMNodeId":15},
+  {"nodeId":"16","role":{"value":"MenuListPopup"},"childIds":["17","18"]},
+  {"nodeId":"17","role":{"value":"option"},"name":{"value":"Free"},
+   "properties":[{"name":"selected","value":{"type":"booleanOrUndefined","value":true}}],
+   "backendDOMNodeId":17},
+  {"nodeId":"18","role":{"value":"option"},"name":{"value":"Pro"},
+   "properties":[{"name":"selected","value":{"type":"booleanOrUndefined","value":false}},
+                 {"name":"disabled","value":{"type":"boolean","value":true}}],
+   "backendDOMNodeId":18},
+  {"nodeId":"20","role":{"value":"button"},"name":{"value":"Send"},
+   "properties":[{"name":"disabled","value":{"type":"boolean","value":true}}],
+   "childIds":["21"],"backendDOMNodeId":20},
+  {"nodeId":"21","role":{"value":"StaticText"},"name":{"value":"Send"},
+   "backendDOMNodeId":21}
+]})";
+
+TEST(KoanCliSnapshotTest, CompactJoinsTextAndShowsStates) {
+  const base::DictValue tree = Dict(kFormTree);
+  const Snapshot compact = BuildSnapshot(tree, {});
+  EXPECT_EQ(compact.text,
+            "RootWebArea \"Sign up\" @1\n"
+            "  main @2\n"
+            "    heading \"Sign up\" [level 1] @3\n"
+            "    \"Fill in all fields please.\"\n"
+            "    radio \"Email\" [checked] @11\n"
+            "    combobox \"Plan\" = \"Free\" [collapsed] @15\n"
+            "      option \"Free\" [selected] @17\n"
+            "      option \"Pro\" [disabled] @18\n"
+            "    button \"Send\" [disabled] @20\n");
+
+  // --full: the raw tree, inline text boxes and every run, a ref on each
+  // node; the same refs.
+  const Snapshot full = BuildSnapshot(tree, {.full = true});
+  EXPECT_NE(full.text.find("      StaticText \"Sign up\" @31\n"
+                           "        InlineTextBox \"Sign up\"\n"),
+            std::string::npos)
+      << full.text;
+  EXPECT_NE(full.text.find("    LabelText @10\n"
+                           "      radio \"Email\" [checked] @11\n"),
+            std::string::npos);
+  EXPECT_NE(full.text.find("StaticText \"all\" @421"), std::string::npos);
+  EXPECT_GT(std::count(full.text.begin(), full.text.end(), '\n'),
+            std::count(compact.text.begin(), compact.text.end(), '\n') + 8);
+  EXPECT_EQ(full.refs, compact.refs);
+  EXPECT_TRUE(std::ranges::contains(compact.refs, 421));
+}
+
+TEST(KoanCliSnapshotTest, Text) {
+  // Two blocks do not run into each other; two wrappers (divs or spans) are
+  // two words, but not before punctuation; inline elements flow on.
+  const base::DictValue tree = Dict(R"({"nodes":[
+    {"nodeId":"1","role":{"value":"RootWebArea"},"childIds":["2","3","4","5"]},
+    {"nodeId":"2","role":{"value":"generic"},"childIds":["21"]},
+    {"nodeId":"21","role":{"value":"StaticText"},"name":{"value":"One"}},
+    {"nodeId":"3","role":{"value":"generic"},"childIds":["31","32"]},
+    {"nodeId":"31","role":{"value":"StaticText"},"name":{"value":"Two"}},
+    {"nodeId":"32","role":{"value":"strong"},"childIds":["321"]},
+    {"nodeId":"321","role":{"value":"StaticText"},"name":{"value":"fold"}},
+    {"nodeId":"4","role":{"value":"paragraph"},"childIds":["41","42","43"]},
+    {"nodeId":"41","role":{"value":"StaticText"},"name":{"value":"Three"}},
+    {"nodeId":"42","role":{"value":"generic"},"childIds":["421"]},
+    {"nodeId":"421","role":{"value":"StaticText"},"name":{"value":"(four"}},
+    {"nodeId":"43","role":{"value":"StaticText"},"name":{"value":")."}},
+    {"nodeId":"5","role":{"value":"link"},"name":{"value":"Home"},
+     "childIds":["51"],"backendDOMNodeId":5},
+    {"nodeId":"51","role":{"value":"StaticText"},"name":{"value":"Home"}}
+  ]})");
+  EXPECT_EQ(BuildSnapshot(tree, {}).text,
+            "RootWebArea\n"
+            "  \"One Twofold\"\n"
+            "  \"Three (four).\"\n"
+            "  link \"Home\" @5\n");
+}
+
+TEST(KoanCliSnapshotTest, States) {
+  const base::DictValue node = Dict(R"({"role":{"value":"checkbox"},
+    "properties":[
+      {"name":"checked","value":{"type":"tristate","value":"mixed"}},
+      {"name":"expanded","value":{"type":"booleanOrUndefined","value":true}},
+      {"name":"readonly","value":{"type":"boolean","value":false}},
+      {"name":"required","value":{"type":"boolean","value":true}},
+      {"name":"invalid","value":{"type":"token","value":"true"}},
+      {"name":"focused","value":{"type":"booleanOrUndefined","value":true}},
+      {"name":"level","value":{"type":"integer","value":2}}]})");
+  EXPECT_EQ(StatesText(node), "[mixed, expanded, required, invalid, focused]");
+  EXPECT_EQ(StatesText(Dict(R"({"role":{"value":"button"},"properties":[
+      {"name":"pressed","value":{"type":"tristate","value":"true"}},
+      {"name":"invalid","value":{"type":"token","value":"false"}}]})")),
+            "[pressed]");
+  EXPECT_EQ(StatesText(Dict(R"({"role":{"value":"radio"},"properties":[
+      {"name":"checked","value":{"type":"tristate","value":"false"}}]})")),
+            "");
+  EXPECT_EQ(StatesText(base::DictValue()), "");
+}
+
+TEST(KoanCliSnapshotTest, RefsBelongToOnePage) {
+  RefBook book;
+  EXPECT_EQ(book.Check("T", "D1", 5), RefVerdict::kNoSnapshot);
+  book.Remember("T", "D1", {5, 6});
+  EXPECT_EQ(book.Check("T", "D1", 5), RefVerdict::kOk);
+  EXPECT_EQ(book.Check("T", "D1", 7), RefVerdict::kUnknown);
+  // The tab navigated: the same number names a node of another page.
+  EXPECT_EQ(book.Check("T", "D2", 5), RefVerdict::kOtherDocument);
+  EXPECT_EQ(book.Check("T", "", 5), RefVerdict::kOtherDocument);
+  // Another tab's refs are not this one's.
+  EXPECT_EQ(book.Check("U", "D1", 5), RefVerdict::kNoSnapshot);
+  // A second snapshot of the same page adds to the first (--full and compact
+  // share refs).
+  book.Remember("T", "D1", {7});
+  EXPECT_EQ(book.Check("T", "D1", 5), RefVerdict::kOk);
+  EXPECT_EQ(book.Check("T", "D1", 7), RefVerdict::kOk);
+  // Of a new page, it replaces them.
+  book.Remember("T", "D2", {8});
+  EXPECT_EQ(book.Check("T", "D2", 5), RefVerdict::kUnknown);
+  EXPECT_EQ(book.Check("T", "D2", 8), RefVerdict::kOk);
+  EXPECT_EQ(book.Check("T", "D1", 8), RefVerdict::kOtherDocument);
+  book.Forget("T");
+  EXPECT_EQ(book.Check("T", "D2", 8), RefVerdict::kNoSnapshot);
+
+  for (RefVerdict verdict :
+       {RefVerdict::kOk, RefVerdict::kNoSnapshot, RefVerdict::kOtherDocument,
+        RefVerdict::kUnknown}) {
+    EXPECT_EQ(RefVerdictFromName(RefVerdictName(verdict)), verdict);
+  }
+  EXPECT_FALSE(RefVerdictFromName("maybe"));
+  const std::string refusal =
+      RefRefusal(RefVerdict::kOtherDocument, "@5", "abcd");
+  EXPECT_TRUE(refusal.starts_with("Koan.staleRef: @5 "));
+  EXPECT_NE(refusal.find("koan snapshot abcd"), std::string::npos);
+  EXPECT_EQ(RefRefusal(RefVerdict::kOk, "@5", "abcd"), "");
+}
+
+// --- Actions -----------------------------------------------------------------
+
+base::Value Returned(std::string_view json) {
+  return std::move(*base::JSONReader::Read(json, base::JSON_PARSE_RFC));
+}
+
+TEST(KoanCliActionsTest, ReturnedValues) {
+  EXPECT_EQ(*ReturnedValue(Dict(R"({"result":{"type":"string","value":"x"}})")),
+            base::Value("x"));
+  EXPECT_FALSE(ReturnedValue(Dict(
+      R"({"result":{"type":"object"},"exceptionDetails":{"text":"boom"}})")));
+  EXPECT_FALSE(ReturnedValue(Dict(R"({"result":{"type":"undefined"}})")));
+}
+
+TEST(KoanCliActionsTest, Select) {
+  base::Value chosen = Returned(
+      R"({"ok":true,"already":false,"held":true,"label":"Pro","value":"pro"})");
+  SelectOutcome outcome = ReadSelectOutcome(&chosen, "@7");
+  EXPECT_TRUE(outcome.ok);
+  EXPECT_EQ(outcome.text, "ok: selected \"Pro\"");
+  EXPECT_EQ(outcome.value, "pro");
+
+  base::Value already = Returned(
+      R"({"ok":true,"already":true,"held":true,"label":"Pro","value":"pro"})");
+  EXPECT_EQ(ReadSelectOutcome(&already, "@7").text,
+            "ok: \"Pro\" was already selected");
+
+  // Never "ok" when it did not take.
+  base::Value put_back = Returned(
+      R"({"ok":true,"already":false,"held":false,"label":"Pro","value":"pro"})");
+  outcome = ReadSelectOutcome(&put_back, "@7");
+  EXPECT_FALSE(outcome.ok);
+  EXPECT_TRUE(outcome.text.starts_with("Koan.notSelected: "));
+
+  base::Value missing =
+      Returned(R"({"error":"noOption","options":["Free","Pro"],"more":3})");
+  EXPECT_EQ(ReadSelectOutcome(&missing, "@7").text,
+            "Koan.noOption: @7 has no option with that label or value; its "
+            "options: \"Free\", \"Pro\" and 3 more");
+  base::Value not_select =
+      Returned(R"({"error":"notSelect","what":"<input>"})");
+  EXPECT_TRUE(IsNotSelect(&not_select));
+  EXPECT_TRUE(ReadSelectOutcome(&not_select, "@7")
+                  .text.starts_with("Koan.notSelect: @7 is <input>, "));
+  base::Value disabled = Returned(R"({"error":"disabled","label":"Gold"})");
+  EXPECT_TRUE(ReadSelectOutcome(&disabled, "@7")
+                  .text.starts_with("Koan.disabled: \"Gold\""));
+  EXPECT_FALSE(IsNotSelect(&disabled));
+  EXPECT_FALSE(ReadSelectOutcome(nullptr, "@7").ok);
+  EXPECT_FALSE(IsNotSelect(nullptr));
+}
+
+TEST(KoanCliActionsTest, Fill) {
+  base::Value text = Returned(R"({"kind":"text","before":"old"})");
+  FillTarget target = ReadFillTarget(&text, "@3");
+  EXPECT_EQ(target.kind, FillKind::kText);
+  EXPECT_EQ(target.before, "old");
+  EXPECT_FALSE(target.secret);
+  base::Value password =
+      Returned(R"({"kind":"text","before":"","secret":true})");
+  EXPECT_TRUE(ReadFillTarget(&password, "@3").secret);
+  base::Value select = Returned(R"({"kind":"select"})");
+  EXPECT_EQ(ReadFillTarget(&select, "@3").kind, FillKind::kSelect);
+  base::Value checkbox =
+      Returned(R"({"kind":"notText","what":"<input type=checkbox>"})");
+  target = ReadFillTarget(&checkbox, "@3");
+  EXPECT_EQ(target.kind, FillKind::kRefused);
+  EXPECT_TRUE(target.refusal.starts_with(
+      "Koan.notEditable: @3 is <input type=checkbox>, "));
+  base::Value disabled = Returned(R"({"kind":"disabled","what":"<input>"})");
+  EXPECT_TRUE(
+      ReadFillTarget(&disabled, "@3").refusal.starts_with("Koan.disabled: "));
+  EXPECT_EQ(ReadFillTarget(nullptr, "@3").kind, FillKind::kRefused);
+
+  EXPECT_EQ(CheckFill("old", "new", "new"), FillOutcome::kFilled);
+  EXPECT_EQ(CheckFill("", "(555) 123", "555123"), FillOutcome::kAltered);
+  EXPECT_EQ(CheckFill("", "", "abc"), FillOutcome::kUnchanged);
+  EXPECT_EQ(CheckFill("x", "", ""), FillOutcome::kFilled);
+  EXPECT_EQ(CheckFill("x", "x", ""), FillOutcome::kUnchanged);
+  EXPECT_EQ(FillOutcomeText(FillOutcome::kFilled, "@3", "new", false), "ok");
+  EXPECT_EQ(FillOutcomeText(FillOutcome::kAltered, "@3", "(555) 123", false),
+            "ok: @3 now holds \"(555) 123\" (the page changed what was typed)");
+  const std::string unchanged =
+      FillOutcomeText(FillOutcome::kUnchanged, "@3", "", false);
+  EXPECT_TRUE(unchanged.starts_with("Koan.notFilled: @3 still holds \"\": "))
+      << unchanged;
+  // A password field's content is never printed.
+  EXPECT_EQ(FillOutcomeText(FillOutcome::kAltered, "@3", "hunter2", true)
+                .find("hunter2"),
+            std::string::npos);
+}
+
+TEST(KoanCliActionsTest, ErrorsAgentsAreShown) {
+  // Koan's own pass as they are.
+  AgentError error = MapError("Koan.notGranted", "only the user can");
+  EXPECT_EQ(error.code, "Koan.notGranted");
+  EXPECT_EQ(error.message, "only the user can");
+  EXPECT_EQ(MapError("Hold.refused", "x").code, "Hold.refused");
+  // Raw CDP errors become Koan's, with what to do.
+  error = MapError("-32000", "No node with given id found");
+  EXPECT_EQ(error.code, "Koan.staleRef");
+  EXPECT_NE(error.message.find("take a new snapshot"), std::string::npos);
+  EXPECT_NE(error.message.find("(No node with given id found)"),
+            std::string::npos);
+  error = MapError("-32000", "Node does not have a layout object");
+  EXPECT_EQ(error.code, "Koan.notVisible");
+  EXPECT_NE(error.message.find("select @ref"), std::string::npos);
+  EXPECT_EQ(MapError("-32000", "Could not compute content quads.").code,
+            "Koan.notVisible");
+  EXPECT_EQ(MapError("-32000", "Element is not focusable").code,
+            "Koan.notFocusable");
+  EXPECT_EQ(MapError("-32000", "Cannot find context with specified id").code,
+            "Koan.pageChanged");
+  EXPECT_EQ(MapError("-32000", "Cannot navigate to invalid URL").code,
+            "Koan.badUrl");
+  EXPECT_EQ(MapError("-32601", "'DOM.frob' wasn't found").code,
+            "Koan.notSupported");
+  // Anything else still says what happened.
+  error = MapError("Failed to deserialize params.url", "Invalid parameters");
+  EXPECT_EQ(error.code, "Koan.pageError");
+  EXPECT_NE(error.message.find("Invalid parameters: Failed to deserialize"),
+            std::string::npos);
+  error = MapError("-32000", "Something odd");
+  EXPECT_EQ(error.code, "Koan.pageError");
+  EXPECT_NE(error.message.find("(Something odd)"), std::string::npos);
+  EXPECT_EQ(error.message.find("-32000"), std::string::npos);
 }
 
 TEST(KoanCliProtocolTest, KeysAndQuads) {

@@ -1111,6 +1111,57 @@ TEST_F(KoanAgentSessionTest,
   EXPECT_NE(session->state(), Session::State::kAuthenticated);
 }
 
+// The client waits while the user is asked again: it is told why (the issue
+// #340 pass: it saw only "the user did not answer in time").
+TEST_F(KoanAgentSessionTest, AChangedChainSaysWhyWhileAskingAndWhenItTimesOut) {
+  Client client;
+  const std::string id = Pair(client);
+  PeerIdentity other_chain = Peer();
+  other_chain.ancestors[1] = Process("/opt/tools/codex", "OPENAI");
+  auto session = NewSession(other_chain);
+  ASSERT_TRUE(SendProof(*session, client, id));
+  ASSERT_EQ(delegate().approvals.size(), 1u);
+  const base::DictValue& event = delegate().Last();
+  EXPECT_FALSE(event.Find("id"));
+  EXPECT_EQ(*event.FindString("method"), "Koan.approvalPending");
+  EXPECT_EQ(*event.FindStringByDottedPath("params.reason"), "chainChanged");
+  const std::string why = *event.FindStringByDottedPath("params.message");
+  EXPECT_NE(why.find("started by codex"), std::string::npos) << why;
+  EXPECT_NE(why.find("(claude)"), std::string::npos) << why;
+  // File names only, never paths.
+  EXPECT_EQ(why.find('/'), std::string::npos) << why;
+
+  ticks_.Advance(Session::kApprovalTimeout + base::Seconds(1));
+  session->CheckTimeouts();
+  EXPECT_EQ(delegate().LastError(), "Koan.pairingTimeout");
+  const std::string timeout =
+      *delegate().Last().FindStringByDottedPath("error.message");
+  EXPECT_NE(timeout.find("started by codex"), std::string::npos) << timeout;
+  EXPECT_NE(timeout.find("approve it in Koan"), std::string::npos) << timeout;
+}
+
+TEST(KoanAgentReapprovalTest, ReasonsNameTheProgramsOnly) {
+  PinnedIdentity paired = PinPeer(Peer());
+  PeerIdentity moved = Peer();
+  moved.process.path = "/tmp/x/koan\x1b[31m";
+  const std::string program =
+      ReapprovalReason(ApprovalKind::kPeerChanged, paired, moved);
+  EXPECT_NE(program.find("from koan?[31m, not the koan"), std::string::npos)
+      << program;
+  // A pairing whose chain was unknown, and a chain with no agent now.
+  PeerIdentity orphan = Peer();
+  orphan.ancestors.clear();
+  PinnedIdentity unknown = paired;
+  unknown.agent = ProcessInfo();
+  EXPECT_NE(ReapprovalReason(ApprovalKind::kChainChanged, paired, orphan)
+                .find("started by no known program"),
+            std::string::npos);
+  EXPECT_NE(ReapprovalReason(ApprovalKind::kChainChanged, unknown, Peer())
+                .find("(no known program)"),
+            std::string::npos);
+  EXPECT_EQ(ReapprovalReason(ApprovalKind::kNewClient, paired, Peer()), "");
+}
+
 TEST_F(KoanAgentSessionTest, AChangedChainIsAskedAboutOncePerClientAndChain) {
   Client client;
   const std::string id = Pair(client);

@@ -1344,7 +1344,27 @@ Agents use Koan through `koan`, in `Koan.app/Contents/Resources/bin/`
 (`out/Koan/koan` in a build). `koan pair --label "Claude Code"` asks you to
 approve the agent; then `koan open <url>`, `koan snapshot <tab>`,
 `koan act <tab> click @12`, `koan screenshot <tab>`, `koan take-over` (asks
-you for the tab you're on) and `koan end`. `koan skill` prints the guide
+you for the tab you're on) and `koan end`.
+
+`koan snapshot` prints the page as a compact outline: controls, links,
+landmarks and headings with `@refs`, each block's text on one line, and
+states such as `[checked]`, `[selected]`, `[expanded]`, `[disabled]` and
+`[required]`. `koan snapshot <tab> --full` prints every node of the
+accessibility tree instead (inline text boxes and every text run); the refs
+are the same in both. `koan act <tab> fill @ref <text>` types into a field,
+`koan act <tab> select @ref <option>` chooses a dropdown's option by its
+label or value (without opening its menu, so it works in a background tab;
+`fill` on a dropdown does the same), and `click` on an option of a closed
+dropdown chooses it. An action that changes nothing fails with a reason
+instead of printing `ok` (`fill` on a checkbox, an option the list lacks, a
+field that would not take the text). A ref belongs to the page its snapshot
+read: once the tab has navigated or reloaded, an old ref is refused with
+`Koan.staleRef` (take a new snapshot) rather than acting on whatever node
+of the new page has that number. Errors are Koan's, with what to do next
+(`Koan.notVisible`, `Koan.pageChanged`, ...), never raw DevTools errors.
+If `koan` is started by another program than the agent you approved (the
+approval pins that agent), Koan asks you again and `koan` says why while it
+waits. `koan skill` prints the guide
 agents follow; `src/cli/skill/SKILL.md` is the entry for an agent's skills
 folder. The agent's tabs stay open between its commands, for as long as its
 task lasts: `koan end`, or 30 minutes without a command, closes them.

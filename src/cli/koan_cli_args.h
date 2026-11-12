@@ -48,6 +48,8 @@ enum class CommandKind {
 enum class ActKind {
   kClick,
   kFill,
+  // Chooses an option of a dropdown (<select>), by its label or value.
+  kSelect,
   kPress,
   kScroll,
   kNavigate,
@@ -78,12 +80,14 @@ struct Command {
   std::string tab;
   // screenshot: -o / --output.
   std::string output;
+  // snapshot: --full, every node of the tree instead of the compact outline.
+  bool full = false;
 
   // act.
   ActKind act = ActKind::kClick;
-  // click, fill: "@123" from a snapshot.
+  // click, fill, select: "@123" from a snapshot.
   std::string ref;
-  // fill: the text; press: the key; navigate: the URL.
+  // fill: the text; select: the option; press: the key; navigate: the URL.
   std::string text;
   // scroll: pixels down (negative: up).
   int scroll_by = 0;
