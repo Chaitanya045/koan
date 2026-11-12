@@ -4,6 +4,7 @@
 // use the real keyboard and pointer (keypress2 to Koan's pid, ptr), which go
 // through AppKit like a person's. Steps W-1r, W-1c and W-14b of
 // scripts/mac/steps/welcome.md:
+// - the keyboard stays on the page when the tab under it is focused;
 // - Tab moves the page's focus, arrows change a radio, Space picks it;
 // - a click on Get started and on Next moves to the next step;
 // - a click in the window's top band over the page reaches the page and
@@ -59,8 +60,12 @@ if (real) {
   // doesn't know it (so its window is the tab's: a first run has one).
   tab = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
       .find(t => t.type === 'page' && !t.url.startsWith('chrome://koan-welcome')) ?? null;
+  // (Page.bringToFront also gives the tab's page the keyboard, under the
+  // welcome, as BrowserView::RestoreFocus() does on the window's first
+  // activation: the welcome takes it back, KoanWelcome::OnDidChangeFocus().)
   await makeKey(tab);
-  console.log(`  (the welcome has the focus: ${await js('document.hasFocus()')})`);
+  const back = await waitFor(() => js('document.hasFocus()'), 3000);
+  check('The welcome takes the keyboard back from the tab under it', !!back);
   // Where a real move lands if not on the welcome: the tab under it (its
   // native view above the welcome's), or nowhere in Koan (the point is off).
   const tabMove = tab && (async expression => (await onPage(tab, c => c.send('Runtime.evaluate',
