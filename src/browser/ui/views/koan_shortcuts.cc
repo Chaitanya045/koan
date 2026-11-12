@@ -641,7 +641,7 @@ bool KoanShortcutController::CopyUrl(bool markdown) {
   if (!browser_view_->browser()->GetTabStripModel()->GetActiveWebContents()) {
     return false;
   }
-  CopyCurrentUrl(browser_view_, markdown);
+  CopySelectedTabUrls(browser_view_, markdown);
   return true;
 }
 

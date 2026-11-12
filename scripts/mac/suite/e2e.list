@@ -15,6 +15,8 @@ space_drag timeout=420
 welcome_input timeout=240
 lights_hover_steady timeout=120
 agent_cli timeout=420
+# Copy current URL with several tabs selected (palette, test_helper).
+copy_urls timeout=180
 # Existing scripts. lib/koan.mjs key() sends Mac key codes on macOS (and the
 # scripts ACCEL, Cmd there), so these mean the same on the Mac. Scripts that
 # need a main-menu key (Cmd+W, Cmd+Shift+W, Cmd+Q, Cmd+L, Cmd+Shift+T: CDP

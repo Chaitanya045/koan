@@ -23,7 +23,7 @@ Chrome.
 | Unsplit | Ctrl+Alt+U (⌘⌥U) | macOS: View Source (still in the View menu) |
 | New split with an empty tab | Ctrl+Shift+* (⌘⇧*) | |
 | New tab (opens the URL bar; the tab opens with what you pick) | Ctrl+T (⌘T) | New-tab page |
-| Copy the page's URL | Ctrl+Shift+C (⌘⇧C) | Inspect element (now Ctrl+Shift+L) |
+| Copy the page's URL (every selected tab's, one per line) | Ctrl+Shift+C (⌘⇧C) | Inspect element (now Ctrl+Shift+L) |
 | Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
 | Pin / unpin tab (pinned to its Space) | Ctrl+Shift+D | Bookmark all tabs |
 | Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | Ctrl+W, Ctrl+F4 (⌘W) | |
@@ -62,7 +62,7 @@ Zen's Firefox-based macOS differences are followed:
 | Space 1 to 10 | ⌃1 … ⌃9, ⌃0 | macOS's Switch to Desktop 1-4, if you turned those on in System Settings |
 | Split view | ⌘⌥V / ⌘⌥H / ⌘⌥G / ⌘⌥U, ⌘⇧* | ⌘⌥H is Hide Others, ⌘⌥U View Source |
 | New tab (opens the URL bar) | ⌘T | |
-| Copy the page's URL (as Markdown) | ⌘⇧C (⌘⇧⌥C) | Inspect element (now ⌘⌥L; ⌘⌥C still works) |
+| Copy the page's URL (as Markdown); with several tabs selected, every selected tab's, one per line | ⌘⇧C (⌘⇧⌥C) | Inspect element (now ⌘⌥L; ⌘⌥C still works) |
 | Pin / unpin tab; close all unpinned tabs | ⌘⇧D; ⌘⇧K | Bookmark All Tabs |
 | New window; New Blank Window | ⌘N (Chrome's); ⌘⇧N | New Incognito Window (now ⌘⇧P) |
 | New private window | ⌘⇧P | |

@@ -21,11 +21,13 @@
 #include <cmath>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -56,6 +58,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "koan/browser/koan_copy_urls.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -1665,6 +1668,49 @@ void CopyCurrentUrl(BrowserView* browser_view, bool markdown) {
     return;
   }
   controller->toast()->Show(done);
+}
+
+void CopySelectedTabUrls(BrowserView* browser_view, bool markdown) {
+  TabStripModel* model = browser_view->browser()->GetTabStripModel();
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view);
+  // Over a Glance card the Glance page is the current one.
+  const bool glance = controller && controller->glance()->is_open() &&
+                      !controller->glance()->is_closing();
+  if (glance || model->selection_model().size() < 2) {
+    CopyCurrentUrl(browser_view, markdown);
+    return;
+  }
+  // The strip's order is the sidebar's: Essentials, pinned, then the Space's
+  // tabs, a split's tabs side by side.
+  std::vector<CopiedTab> tabs;
+  for (int i = 0; i < model->count(); ++i) {
+    content::WebContents* contents = model->GetWebContentsAt(i);
+    if (!model->IsTabSelected(i) || !contents) {
+      continue;
+    }
+    const GURL url = StripTrackingParameters(contents->GetVisibleURL());
+    tabs.push_back({contents->GetTitle(), url.is_valid()
+                                              ? base::UTF8ToUTF16(url.spec())
+                                              : std::u16string()});
+  }
+  size_t count = 0;
+  const std::u16string text = FormatCopiedUrls(tabs, markdown, &count);
+  if (count < 2) {
+    CopyCurrentUrl(browser_view, markdown);
+    return;
+  }
+  {
+    ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
+    writer.WriteText(text);
+  }
+  if (controller) {
+    // Zen's toast, in the plural (zen-general.ftl has the singular only).
+    const std::u16string n = base::NumberToString16(count);
+    controller->toast()->Show(
+        markdown ? base::StrCat({u"Copied ", n, u" URLs as Markdown!"})
+                 : base::StrCat({u"Copied ", n, u" URLs!"}));
+  }
 }
 
 // The koan_url_bar.h hooks.

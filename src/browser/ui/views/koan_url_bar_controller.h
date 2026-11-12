@@ -330,6 +330,12 @@ class KoanUrlBarController
 // Zen's toast. Ctrl+Shift+C, Ctrl+Shift+Alt+C and the pill's copy button.
 void CopyCurrentUrl(BrowserView* browser_view, bool markdown);
 
+// Copy current URL for the tabs selected in the sidebar: with several
+// selected, every selected tab's URL (or Markdown link), one per line in the
+// sidebar's order, with a plural toast; otherwise CopyCurrentUrl(). The
+// shortcuts and the command palette's "Copy Current URL".
+void CopySelectedTabUrls(BrowserView* browser_view, bool markdown);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_URL_BAR_CONTROLLER_H_
