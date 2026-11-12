@@ -59,16 +59,24 @@
   `//koan/browser:features` (component build), so a Koan feature must only
   be read in one process type (browser *or* renderer) unless the target is
   made a proper exported component.
-- **The Glance settings reach blink on the command line** (#37):
-  Zen's `zen.glance.enabled` and `zen.glance.activation-method` are the
-  profile prefs `koan.glance.enabled` / `koan.glance.activation_method`
-  (settings rows). Blink decides the click's disposition, so it needs the
-  method: `koan::AppendRendererSwitches` (hook in
-  `ChromeContentBrowserClient::AppendExtraCommandLineSwitches`) passes it
-  (or "off") to each renderer. A change reaches renderer processes started
-  afterwards (the settings row says so). Live updates would need a
-  `blink::RendererPreferences` field (mojom + traits, a widely included
-  header); a feature parameter (the first version) can't be a setting. The
+- **The Glance settings reach blink on the command line, then pushed**
+  (#37, #326): Zen's `zen.glance.enabled` and `zen.glance.activation-method`
+  are the profile prefs `koan.glance.enabled` /
+  `koan.glance.activation_method` (settings rows). Blink decides the click's
+  disposition, so it needs the method: `koan::AppendRendererSwitches` (hook
+  in `ChromeContentBrowserClient::AppendExtraCommandLineSwitches`) passes it
+  (or "off") to each renderer when it starts, and on a change
+  `koan::UpdateRendererSettings()` pushes it to every renderer process over
+  Koan's channel-associated `koan.mojom.RendererSettings` (one hook in
+  `ChromeContentRendererClient::RenderThreadStarted`), so open pages follow
+  it at once, as in Zen. Not `blink::RendererPreferences`: a new field is a
+  mojom + traits + struct patch, it is per WebContents (every tab, Glance
+  page and extension page would need a sync), and the navigation-policy
+  hook has no frame to read it from. The value is per process anyway (a
+  process has one profile). It lives in the `//koan/common:glance_trigger`
+  component, so blink core and chrome/renderer share one copy in component
+  builds (see the constraint above). A feature parameter (the first
+  version) can't be a setting. The
   browser side reads the prefs live: a click Glance declines (Glance off,
   not a web link, not the active tab of a normal window) is reopened with
   what its modifier means without Glance, so a stale renderer or an odd

@@ -60,8 +60,8 @@ async function openTab(url, background = false) {
   return page;
 }
 const closeTab = page => page && browserCall('Target.closeTarget', { targetId: page.id });
-// A fresh test page, in a renderer process started after the settings
-// changed so far (Glance's trigger is read when the process starts).
+// A fresh test page, in a renderer process of its own (a page opened after a
+// settings change; Glance's settings also reach the pages open before).
 let testPage = null;
 async function freshTestPage() {
   await closeTab(testPage);
@@ -549,24 +549,35 @@ async function closeGlance() {
   await waitFor(async () => !(await viewTree()).some(v => v.cls === 'KoanGlanceView'), 4000);
   await sleep(500);
 }
+// Glance's settings apply to the pages already open, as in Zen (#326: the
+// renderers get them pushed; a page used to keep its process's first ones).
 check('Glance: off in the page', await setCheckbox('koan.glance.enabled', false));
 check('...greys out its trigger', await isDisabled('koan.glance.activation_method') === true);
-await freshTestPage();
+await freshTestPage();   // opened while Glance is off
 await clickLink(testPage, 'glance', ALT);
 check('...Alt+click in a page then opens no Glance', !(await glanceOpen(1500)));
 check('Glance: on again', await setCheckbox('koan.glance.enabled', true));
-await freshTestPage();
 await clickLink(testPage, 'glance', ALT);
-check('...Alt+click in a page opened since opens Glance', await glanceOpen());
+check('...Alt+click in the page opened while it was off opens Glance', await glanceOpen());
 await closeGlance();
 check('Trigger method: Shift + Click in the page',
       await setMenu('koan.glance.activation_method', 'shift'));
+await clickLink(testPage, 'glance', SHIFT);
+check('...Shift+click in the page opened before the change opens Glance', await glanceOpen());
+await closeGlance();
+const openPage = testPage;
+testPage = null;   // keep it open: freshTestPage() closes the one before
 await freshTestPage();
 await clickLink(testPage, 'glance', SHIFT);
-check('...Shift+click then opens Glance', await glanceOpen());
+check('...and in a page opened since', await glanceOpen());
 await closeGlance();
-await setMenu('koan.glance.activation_method', 'alt');
-await freshTestPage();
+await closeTab(openPage);
+await front(testPage);
+check('Trigger method: back to Alt + Click',
+      await setMenu('koan.glance.activation_method', 'alt'));
+await clickLink(testPage, 'glance', ALT);
+check('...Alt+click in the open page opens Glance again', await glanceOpen());
+await closeGlance();
 
 // Links from a pinned tab to another site open in Glance.
 const external = 'koan.glance.open_essential_external_links';

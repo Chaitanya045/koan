@@ -1,0 +1,22 @@
+diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
+index 792412915da65daf1ba2ab756c0292cc42eb865f..35edbf3a1d838e45b03b9b4ab67bd963adc75f85 100644
+--- a/chrome/renderer/chrome_content_renderer_client.cc
++++ b/chrome/renderer/chrome_content_renderer_client.cc
+@@ -145,6 +145,7 @@
+ #include "content/public/renderer/worker_thread.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/renderer/extensions_renderer_api_provider.h"
++#include "koan/renderer/koan_render_thread_observer.h"
+ #include "media/base/media_switches.h"
+ #include "media/media_buildflags.h"
+ #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
+@@ -493,6 +494,9 @@ void ChromeContentRendererClient::RenderThreadStarted() {
+ #endif
+ 
+   thread->AddObserver(chrome_observer_.get());
++  // Koan: the settings the browser pushes
++  // (koan/renderer/koan_render_thread_observer.h).
++  koan::AddRenderThreadObservers(thread);
+   thread->AddObserver(subresource_filter_ruleset_dealer_.get());
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+   thread->AddObserver(phishing_model_setter_.get());

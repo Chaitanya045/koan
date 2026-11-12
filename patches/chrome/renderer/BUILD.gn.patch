@@ -1,0 +1,12 @@
+diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
+index dab2e49bb9720a5392e35750489ae55d923e162d..12357f5eaaae45b04a1c4ec6c793276cc827a0c2 100644
+--- a/chrome/renderer/BUILD.gn
++++ b/chrome/renderer/BUILD.gn
+@@ -216,6 +216,7 @@ static_library("renderer") {
+     "//content/public/renderer",
+     "//extensions/buildflags",
+     "//gin",
++    "//koan/renderer",
+     "//media",
+     "//media:media_buildflags",
+     "//media/capture",

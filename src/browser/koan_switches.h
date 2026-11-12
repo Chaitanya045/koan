@@ -7,14 +7,7 @@
 
 namespace koan::switches {
 
-// Renderer switch: the Glance trigger method from the profile's
-// koan.glance.activation_method pref ("alt", "ctrl", "shift" or "meta"), or
-// "off" with Glance turned off in Koan's settings. Set by
-// koan::AppendRendererSwitches, read by koan::features::
-// IsGlanceActivationClick.
-inline constexpr char kGlanceActivationMethod[] =
-    "koan-glance-activation-method";
-inline constexpr char kGlanceOff[] = "off";
+// The Glance trigger's renderer switch is in koan/common/koan_glance_trigger.h.
 
 // For e2e tests of the per-window session data (koan_session_data.h): each
 // window without test data gets a random value of its own under

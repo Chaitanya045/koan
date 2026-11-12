@@ -16,18 +16,18 @@ class RenderProcessHost;
 namespace koan {
 
 // Adds the Koan settings that blink reads to a renderer's command line:
-// the Glance trigger method (koan_features.h), from the profile of
-// `process`. Called by the hook in
+// the Glance trigger method (koan/common/koan_glance_trigger.h), from the
+// profile of `process`: its value until the next UpdateRendererSettings().
+// Called by the hook in
 // ChromeContentBrowserClient::AppendExtraCommandLineSwitches().
 void AppendRendererSwitches(base::CommandLine* command_line,
                             content::RenderProcessHost& process);
 
 // Called when a setting AppendRendererSwitches() passes on changes (Glance
-// on or off, its trigger). A page sees it only in a renderer process started
-// after the change, and content keeps a spare process started in advance,
-// with the old switches, for the next page: this drops it, so the next page
-// gets a process with the new ones, as the settings page says.
-void DropSpareRenderers();
+// on or off, its trigger): pushes it to every renderer process
+// (koan/common/koan_renderer_settings.mojom), so pages already open follow
+// it at once, as in Zen.
+void UpdateRendererSettings();
 
 }  // namespace koan
 

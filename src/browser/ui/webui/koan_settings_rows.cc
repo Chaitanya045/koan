@@ -399,20 +399,18 @@ constexpr Row kRows[] = {
      .control = Control::kCheckbox,
      .pref = prefs::kGlanceEnabled,
      .label = "Enable Glance",
-     .is_available = features::IsGlanceEnabled,
-     // As the trigger: Blink reads it when a page's renderer process starts
-     // (koan_renderer_switches.cc); turned off, the browser declines at once.
-     .note = "Turned on, it applies to pages opened after the change"},
+     // Applies at once in every page, as in Zen: the renderers get it pushed
+     // (koan::UpdateRendererSettings()), and the browser checks it on each
+     // click.
+     .is_available = features::IsGlanceEnabled},
     {.group = "glance",
      .control = Control::kMenu,
      .pref = prefs::kGlanceActivationMethod,
      .label = "Trigger method",
      .options = kGlanceTriggers,
      .depends_on = prefs::kGlanceEnabled,
-     .is_available = features::IsGlanceEnabled,
-     // Blink reads it when a page's renderer process starts.
-     .note = "Applies to pages opened after the change; reload others in a "
-             "new tab or restart Koan"},
+     // Applies at once in every page, as Enable Glance.
+     .is_available = features::IsGlanceEnabled},
     // Zen's about:config prefs zen.glance.open-essential-external-links and
     // zen.glance.enable-contextmenu-search (both on).
     {.group = "glance",

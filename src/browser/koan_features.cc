@@ -4,11 +4,7 @@
 
 #include "koan/browser/koan_features.h"
 
-#include <string>
-
-#include "base/command_line.h"
-#include "base/no_destructor.h"
-#include "koan/browser/koan_switches.h"
+#include "koan/common/koan_glance_trigger.h"
 
 namespace koan::features {
 
@@ -74,28 +70,8 @@ bool IsNewTabEnabled() {
 }
 
 bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta) {
-  if (ctrl + shift + alt + meta != 1 || !IsGlanceEnabled()) {
-    return false;
-  }
-  // The command line doesn't change, so parse it once.
-  static const base::NoDestructor<std::string> parsed(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kGlanceActivationMethod));
-  const std::string& method = *parsed;
-  if (method == switches::kGlanceOff) {
-    return false;
-  }
-  if (method == "ctrl") {
-    return ctrl;
-  }
-  if (method == "shift") {
-    return shift;
-  }
-  if (method == "meta") {
-    return meta;
-  }
-  // Zen's default.
-  return alt;
+  return IsGlanceEnabled() &&
+         IsGlanceTriggerClick(GetGlanceTrigger(), ctrl, shift, alt, meta);
 }
 
 bool IsCommandPaletteEnabled() {

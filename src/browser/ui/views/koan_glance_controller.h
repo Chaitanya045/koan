@@ -336,8 +336,9 @@ class KoanGlanceController : public content::WebContentsDelegate,
   bool reapply_pending_ = false;
   std::vector<base::CallbackListSubscription> command_subscriptions_;
 
-  // Glance on or off and its trigger, which pages read when their renderer
-  // starts (koan::DropSpareRenderers()).
+  // Glance on or off and its trigger, which the renderers get pushed on a
+  // change (koan::UpdateRendererSettings(); once per window, an idempotent
+  // message per process).
   PrefChangeRegistrar pref_change_registrar_;
 
   base::WeakPtrFactory<KoanGlanceController> weak_factory_{this};

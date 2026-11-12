@@ -1,0 +1,15 @@
+// Copyright 2026 The Koan Authors
+// Use of this source code is governed by the MIT license that can be
+// found in the LICENSE file.
+
+module koan.mojom;
+
+// Koan's settings a renderer process reads, pushed by the browser to every
+// renderer process when one changes (koan::UpdateRendererSettings()), so open
+// pages follow it, as in Zen. A process starts with them on its command line
+// (koan::AppendRendererSwitches()). Associated with the process's IPC channel.
+interface RendererSettings {
+  // Glance's trigger (koan.glance.activation_method), or "off" with Glance
+  // turned off: the values of koan::switches::kGlanceActivationMethod.
+  SetGlanceActivationMethod(string method);
+};

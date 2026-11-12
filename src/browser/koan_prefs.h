@@ -234,9 +234,10 @@ inline constexpr char kWindowSyncPreferBlankWindows[] =
 // Zen's Glance settings (zen.glance.enabled, zen.glance.activation-method):
 // whether Glance is on, and which modifier+click previews a link: "alt"
 // (Zen's default on every platform, Option on macOS), "ctrl", "shift" or
-// "meta" (Cmd on macOS). Renderers get them on their command line
-// (koan_renderer_switches.h), so a change reaches pages in renderer
-// processes started afterwards; the browser side applies it at once.
+// "meta" (Cmd on macOS). Renderers get them on their command line when they
+// start and pushed on a change (koan_renderer_switches.h), so a change
+// reaches the pages already open, as in Zen; the browser side reads them on
+// each click.
 inline constexpr char kGlanceEnabled[] = "koan.glance.enabled";
 inline constexpr char kGlanceActivationMethod[] =
     "koan.glance.activation_method";

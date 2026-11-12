@@ -1,0 +1,20 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Koan's code in renderer processes, started from
+# ChromeContentRendererClient::RenderThreadStarted() (chrome/renderer).
+source_set("renderer") {
+  sources = [
+    "koan_render_thread_observer.cc",
+    "koan_render_thread_observer.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/renderer",
+    "//koan/common:glance_trigger",
+    "//koan/common:renderer_settings_mojom",
+    "//mojo/public/cpp/bindings",
+    "//third_party/blink/public/common",
+  ]
+}
