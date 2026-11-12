@@ -30,6 +30,9 @@ compact_close
 compact_flash
 compact_single
 download_animation
+# Tab folders: the tab and folder menus are native NSMenus, picked through
+# Accessibility (System Events), with a real right-click when real input is on.
+folders timeout=600
 fullscreen_compact
 fullscreen_multiple
 fullscreen_single
@@ -40,6 +43,10 @@ glance_activation
 glance_split timeout=420
 library
 library_history
+# The Library's downloads: a dangerous download kept never opens by itself
+# (opened flags from the History database once Koan has quit; the row menu
+# through Accessibility).
+library_downloads timeout=300
 newtab
 newtab_custom
 omnibox_trailing_space
