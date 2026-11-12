@@ -44,6 +44,8 @@ constexpr float kRotation = -30;
 // with colours; for the default theme from Zen's default opacity on.
 constexpr double kZenMaxOpacity = 0.8;
 constexpr double kDefaultOpacity = 0.5;
+// Zen's getToolbarColor() text opacity.
+constexpr double kTextOpacity = 0.9;
 
 // Zen's blendWithWhiteOverlay(): on macOS a transparent window's colours are
 // washed with white (60%, plus the slider's minimum), the alpha stays the
@@ -115,10 +117,12 @@ double HueToRgb(double p, double q, double t) {
 
 // The colour a theme colour paints (Zen's #getSingleRGBColor). Koan's window
 // is opaque, so the colour is blended into the base by the theme's opacity,
-// fully opaque, as Zen does for an opaque window.
+// fully opaque, as Zen does for an opaque window. `opacity_floor`: see
+// LightThemeOpacityFloor().
 SkColor4f SingleColor(const Environment& env,
                       const SpaceTheme& theme,
-                      const ThemeColor& color) {
+                      const ThemeColor& color,
+                      double opacity_floor) {
   if (color.is_custom) {
     return SkColor4f::FromColor(color.custom);
   }
@@ -126,7 +130,7 @@ SkColor4f SingleColor(const Environment& env,
   if (env.transparent) {
     // A transparent window: the colour itself, at the opacity, over the
     // blurred desktop.
-    return WithWhiteOverlay(env, color.c, opacity);
+    return WithWhiteOverlay(env, color.c, std::max(opacity, opacity_floor));
   }
   return SkColor4f::FromColor(
       ToSkColor(BlendColors(color.c, ToolbarBase(env, theme), opacity * 100)));
@@ -504,7 +508,6 @@ bool ShouldBeDarkMode(const Environment& env,
           ? accent
           : BlendColors(ToolbarBase(env, theme), accent,
                         (1 - std::min(theme.opacity, kZenMaxOpacity)) * 100);
-  constexpr double kTextOpacity = 0.9;
   // Zen's getToolbarColor() text, composited over the background. A
   // transparent window leans towards dark text by the dark-mode bias.
   const double light_text_opacity =
@@ -546,6 +549,54 @@ Appearance GetAppearance(const Environment& env, const SpaceTheme& theme) {
   }
   appearance.primary = AccentColorForUI(env, *dominant, appearance.dark);
   return appearance;
+}
+
+double LightTextContrastOverBlur(const Environment& env,
+                                 const Rgb& color,
+                                 double opacity) {
+  const Rgb painted = FromSkColor(
+      WithWhiteOverlay(env, color, opacity).makeOpaque().toSkColor());
+  const Rgb background = BlendColors(painted, env.window, opacity * 100);
+  const Rgb text = BlendColors(background, kBlack, (1 - kTextOpacity) * 100);
+  return ContrastRatio(background, text);
+}
+
+double LightThemeOpacityFloor(const Environment& env, const SpaceTheme& theme) {
+  if (!env.transparent || !env.dark) {
+    return 0;
+  }
+  const Appearance appearance = GetAppearance(env, theme);
+  if (!appearance.explicit_mode || appearance.dark) {
+    return 0;
+  }
+  double floor = 0;
+  for (const ThemeColor& color : theme.colors) {
+    // Custom colours are painted as given. A colour no opacity in Zen's range
+    // helps (one too dark for light mode, beside the colour that set it, off
+    // macOS where nothing washes it) keeps the others' floor.
+    if (color.is_custom ||
+        LightTextContrastOverBlur(env, color.c, 0) >= kLightTextMinContrast ||
+        LightTextContrastOverBlur(env, color.c, kZenMaxOpacity) <
+            kLightTextMinContrast) {
+      continue;
+    }
+    // The contrast grows with the opacity (more of the washed colour, which
+    // is lighter than the blur): the least opacity that reaches it, to a
+    // thousandth.
+    double low = 0;
+    double high = kZenMaxOpacity;
+    while (high - low > 0.001) {
+      const double mid = (low + high) / 2;
+      if (LightTextContrastOverBlur(env, color.c, mid) >=
+          kLightTextMinContrast) {
+        high = mid;
+      } else {
+        low = mid;
+      }
+    }
+    floor = std::max(floor, high);
+  }
+  return floor;
 }
 
 GradientLayer::GradientLayer() = default;
@@ -616,7 +667,13 @@ Background GetZenBackground(const Environment& env, const SpaceTheme& theme) {
     return background;
   }
 
-  auto single = [&](size_t i) { return SingleColor(env, theme, colors[i]); };
+  const double opacity_floor = LightThemeOpacityFloor(env, theme);
+  if (opacity_floor > std::min(theme.opacity, kZenMaxOpacity)) {
+    background.opacity_floor = static_cast<float>(opacity_floor);
+  }
+  auto single = [&](size_t i) {
+    return SingleColor(env, theme, colors[i], opacity_floor);
+  };
   if (colors.size() == 1) {
     background.layers.push_back(Solid(single(0)));
     return background;
@@ -720,6 +777,11 @@ std::string DescribeBackground(const Background& background) {
     description = base::StrCat({description, " / cover ",
                                 DescribePercent(background.cover), ": ",
                                 DescribeLayers(background.cover_layers)});
+  }
+  // The contrast floor for a light theme over a dark blur (#291).
+  if (background.opacity_floor > 0) {
+    description = base::StrCat(
+        {description, " / floor ", DescribePercent(background.opacity_floor)});
   }
   return description;
 }
