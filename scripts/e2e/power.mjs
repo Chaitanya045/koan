@@ -194,8 +194,11 @@ await sleep(1000);
 for (const id of ['r2', 'r3']) {
   await browser.send('Target.createTarget', { url: count(id), background: true });
 }
-// A new Space (Ctrl+Alt+N opens Zen's Create-a-Space form).
-await createSpace((await pageTargets(CDP_PORT)).find(byUrl('count=r1')), 'S');
+// A new Space (Ctrl+Alt+N opens Zen's Create-a-Space form; on macOS in the
+// key window only, which lib/koan.mjs createSpace() makes the page's).
+check('A second Space can be created (Ctrl+Alt+N)',
+      await createSpace((await pageTargets(CDP_PORT)).find(byUrl('count=r1')), 'S'),
+      `pages: ${(await pageTargets(CDP_PORT)).map(t => t.url).join(' ')}`);
 await browser.send('Target.createTarget', { url: count('s') });  // joins the Space
 await sleep(2000);
 await browser.send('Target.activateTarget', { targetId: other });  // back to r1

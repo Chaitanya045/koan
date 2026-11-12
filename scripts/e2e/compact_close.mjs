@@ -14,11 +14,11 @@
 //   scripts/e2e/run.sh compact_close
 import { ACCEL } from './lib/koan.mjs';
 import { spawn } from 'node:child_process';
-import { ALT, CDP_PORT, CTRL, browserCall, check, connect, finish, front, key, mouseOn, pages,
-         sleep, views, waitFor }
+import { ALT, CDP_PORT, browserCall, check, connect, finish, front, key, mouseOn, openSpaceForm,
+         pages, sleep, views, waitFor }
     from './lib/koan.mjs';
 
-const VK = { S: 83, N: 78 };
+const VK = { S: 83 };
 const alive = async () => !!(await browserCall('Browser.getVersion')).result?.product;
 const windows = vs => {
   const roots = vs.flatMap((v, i) => (v.cls === 'BrowserRootView' ? [i] : []));
@@ -82,18 +82,22 @@ check('A close during the compact toggle doesn\'t crash', await alive());
 await key(firstPage, VK.S, ACCEL, 's');
 await sleep(1000);
 
-// With the new-Space form open.
+// With the new-Space form open. (On macOS a CDP key reaches Koan's
+// shortcuts in the key window only, and a window CDP opened isn't key:
+// lib/koan.mjs openSpaceForm() makes it key, and with real input presses a
+// real Ctrl+Option+N if the CDP key did nothing, #295.)
 w = await openWindow();
-await key(w.page, VK.N, CTRL | ALT, 'n');
+const opened = await openSpaceForm(w.page);
 // The windows' order in UI DevTools isn't the windows' order on every
 // platform (on macOS the new one can come first): the form is the new
 // window's if it goes with it.
-const form = await waitFor(async () => (await views())
-    .find(v => v.cls === 'KoanSpaceCreationView' && v.shown));
+const form = opened.field || await waitFor(async () => (await views())
+    .find(v => v.cls === 'KoanSpaceCreationView' && v.shown), 1000);
 await closeWindow(w);
 const formLeft = (await views()).some(v => v.cls === 'KoanSpaceCreationView' && v.shown);
 check('The new-Space form opens in the new window', !!form && !formLeft,
-      form ? (formLeft ? 'it stayed: it was in the first window' : '') : 'no form');
+      form ? (formLeft ? 'it stayed: it was in the first window' : opened.how)
+           : `no form: ${opened.why}`);
 check('A close with the new-Space form open doesn\'t crash', await alive());
 
 check('The first window\'s sidebar is as it was',

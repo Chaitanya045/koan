@@ -29,7 +29,8 @@ import {
   pages, sleep, visiblePage, waitFor, IS_MAC, META, NATIVE_MENUS,
 } from './lib/koan.mjs';
 import {
-  KOAN_PID, closeNativeMenu, nativeMenusWhyNot, pickNativeMenu, skipped, waitNativeMenu,
+  KOAN_PID, closeNativeMenu, nativeMenuReport, nativeMenusWhyNot, pickNativeMenu, skipped,
+  waitNativeMenu,
 } from './lib/mac.mjs';
 // Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
 const DOWNLOADS_KEY = IS_MAC ? [74, META, 'j'] : [89, CTRL | SHIFT, 'Y'];
@@ -260,15 +261,37 @@ const nativeWhyNot = NATIVE_MENUS ? nativeMenusWhyNot() : '';
 if (safe && NATIVE_MENUS && !nativeWhyNot) {
   // A native menu: its press is answered once the menu has closed, its
   // release goes after (lib/folders.mjs openNativeMenu()).
+  // The row is found again in the session that clicks it: node ids are
+  // handed out again on each DOM.getDocument, and the Library's rows change.
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
-  await ui.send('DOM.getDocument', { depth: -1 });
-  const event = type => ({ nodeId: safe.nodeId,
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const rowNodes = [];
+  (function walk(n) {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'View' && a[a.indexOf('class') + 1] === 'KoanLibraryRow') rowNodes.push(n.nodeId);
+    for (const ch of n.children ?? []) walk(ch);
+  })(doc);
+  let nodeId = null;
+  for (const id of rowNodes) {
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: id });
+    const title = (r.result?.matchedCSSRules ?? []).flatMap(rule => rule.rule.style.cssProperties)
+        .find(prop => prop.name === 'Title')?.value?.replace(/^"(.*)"$/, '$1');
+    if (title === SAFE) {
+      nodeId = id;
+      break;
+    }
+  }
+  const event = type => ({ nodeId: nodeId ?? safe.nodeId,
                            event: { type, x: 20, y: 20, button: 'right', wheelDirection: 'none' } });
   ui.send('DOM.dispatchMouseEvent', event('mousePressed'));
   const menu = await waitNativeMenu(true);
   // The menu of a finished download: "Open koan-safe.html" first.
   const picked = menu ? await pickNativeMenu([`Open ${SAFE}`])
-                      : { ok: false, detail: 'no native menu opened' };
+                      : { ok: false, detail: `no native menu opened by a right press on the row (` +
+                              `${nodeId ? 'found again' : `not found again of ${rowNodes.length}`}): ` +
+                              await nativeMenuReport() };
   await closeNativeMenu();
   await ui.send('DOM.dispatchMouseEvent', event('mouseReleased'));
   ui.close();

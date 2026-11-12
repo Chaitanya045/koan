@@ -12,10 +12,10 @@
 // like Ctrl+PageDown, which a CDP key was seen not to reach on the Mac); with
 // real input off those steps are SKIPs.
 import {
-  ACCEL, CTRL, SHIFT, check, finish, front, key, pages, shownViews, sleep, typeInto, viewTree,
-  views, waitFor, browserCall, onPage, evalIn,
+  ACCEL, CTRL, SHIFT, check, finish, front, key, pageList, pages, shownViews, sleep, typeInto,
+  viewTree, views, waitFor, browserCall, onPage, evalIn,
 } from './lib/koan.mjs';
-import { menuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
+import { keyWindowReport, menuKey, menuKeyWhyNot, skipped, windows } from './lib/mac.mjs';
 
 const VK = { T: 84, RETURN: 13, TAB: 9, ONE: 49 };
 // ACCEL (lib/koan.mjs): Cmd+1-9 select a tab on macOS (Ctrl+1-9 there
@@ -51,7 +51,8 @@ await front(page);
 await key(page, VK.T, ACCEL, 't');
 const omnibox = await waitFor(async () => (await viewTree()).find(
     v => v.cls === 'OmniboxViewViews' && v.shown));
-await typeInto(omnibox, 'example.com/?opened', VK.RETURN);
+check('Cmd+T on the empty tab opens the URL bar', !!omnibox, omnibox ? '' : 'no shown omnibox');
+if (omnibox) await typeInto(omnibox, 'example.com/?opened', VK.RETURN);
 await sleep(1500);
 const after = await pages();
 check('Opening a page from the empty state opens it in a new tab',
@@ -64,6 +65,10 @@ check('...and the sidebar lists just that one (the empty tab has no row)',
 // The hidden empty tab is out of Ctrl+Tab and Cmd+1-9 (#177): with it and the
 // opened page in the Space, neither leaves the opened page.
 const opened = after.find(p => p.url.includes('?opened'));
+if (!opened) {
+  check('The opened page is there for the rest', false, `pages: ${await pageList()}`);
+  finish();
+}
 await key(opened, VK.TAB, CTRL, 'Tab');
 await sleep(500);
 check('Ctrl+Tab skips the hidden empty tab', await isShown(opened));
@@ -92,8 +97,20 @@ if (!await closeTab(opened)) {
   finish();
 }
 await sleep(1000);
+// (On the Mac a real Cmd+W closed the window here once, leaving no page:
+// the window is checked to still be there, with its empty tab.)
 check('Closing it shows the empty state again, with no row',
-      await tabRows() === 0, String(await tabRows()));
+      (await pages()).length === 1 && await tabRows() === 0,
+      `${await tabRows()} row(s); pages: ${await pageList()}; ` +
+      `${(await windows()).length} window(s); ${await keyWindowReport()}`);
+if (!(await pages()).length) {
+  for (const what of ['Back into the once-empty tab: it has its row (it is a tab now)',
+                      '...and Cmd+W closes that tab only: the window stays, with the empty tab',
+                      'Cmd+W on the empty tab closes the window']) {
+    check(what, false, 'no page left: Cmd+W closed the window instead of the tab');
+  }
+  finish();
+}
 // The empty tab that navigates in place (a bookmark, the Library, a dropped
 // link, chrome.tabs.update) is an ordinary tab then: Back into the new tab
 // page does not make it the empty tab again (no vanishing row, and Cmd+W

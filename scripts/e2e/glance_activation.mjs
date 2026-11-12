@@ -115,16 +115,35 @@ function check(name, ok, detail = '') {
 }
 
 // The test page is glance.mjs's (run.sh opens example.com tabs for a test
-// without a page of its own).
-await withPage((await tabs())[0], c => c.send('Page.navigate', {
+// without a page of its own). Glance opens from the window's active tab
+// only (MaybeOpenGlance()), and /json/list's first page needn't be the
+// active one (the Mac's order differs): the test page is brought to the
+// front.
+const testTab = (await tabs())[0];
+await withPage(testTab, c => c.send('Page.navigate', {
   url: new URL('pages/glance.html', import.meta.url).href,
 }));
 await sleep(2000);
+await withPage(testTab, c => c.send('Page.bringToFront'));
+await sleep(800);
+// What a click had to work with, for failure details.
+const clickState = async () => {
+  const page = (await tabs()).find(t => t.url.endsWith('/glance.html'));
+  const state = page && await withPage(page, async c => (await c.send('Runtime.evaluate', {
+    expression: `JSON.stringify({ visibility: document.visibilityState, focus: document.hasFocus() })`,
+    returnByValue: true })).result?.result?.value);
+  return `test page ${state ?? 'missing'}; ${(await tabs()).length} tab(s): ` +
+      (await tabs()).map(t => t.url.replace(/^.*\//, '')).join(' ');
+};
 
 // Ctrl+click (Cmd+click) opens Glance (the activation method), and Esc
 // closes it.
+const beforeTrigger = await clickState();
 await clickLink('glance', TRIGGER);
-check(`${TRIGGER_NAME}+click opens Glance`, await glanceOpen());
+const triggered = await glanceOpen();
+check(`${TRIGGER_NAME}+click opens Glance`, triggered,
+      triggered ? '' : `before: ${beforeTrigger}; after: ${await clickState()}; ` +
+                       `seeded method: ${await readPref('koan.glance.activation_method')}`);
 const glancePage = (await targets()).find(t => t.url.includes('glance=1'));
 check('Glance hosts the linked page', !!glancePage, glancePage?.url ?? 'no target');
 if (glancePage) {

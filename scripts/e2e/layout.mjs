@@ -124,11 +124,21 @@ function check(name, ok, detail = '') {
 
 const CTRL = 2, ALT = 1;
 const VK = { L: 76, B: 66, ESC: 27 };
-const WINDOW_WIDTH = 1280;
-// Zen: min(window width / 1.5, 750), centred.
-const FLOAT_WIDTH = Math.min(Math.floor(WINDOW_WIDTH * 2 / 3), 750);
 
 let vs = await views();
+// The browser view's width: 1280 in run.sh's window, less on a Mac screen
+// that can't fit it (the suite's 1280-wide window comes up about 1248 wide
+// there), as urlbar.mjs measures it.
+const WINDOW_WIDTH = find(vs, 'BrowserView')?.w || 1280;
+const WINDOW_HEIGHT = find(vs, 'BrowserView')?.h || 800;
+// The floating card in the default look, shadcn's (#296;
+// KoanUrlBarController::CardBounds()): shadcn's command dialog, 55% of the
+// window wide, centred, a little above the middle. (Zen's look, min(window
+// width / 1.5, 750) and centred, is checked by urlbar.mjs.)
+const FLOAT_WIDTH = Math.floor(WINDOW_WIDTH * 55 / 100);
+const FLOAT_X = Math.floor((WINDOW_WIDTH - FLOAT_WIDTH) / 2);
+const isFloatingCard = bar => bar?.w === FLOAT_WIDTH && bar.x === FLOAT_X && bar.y > 0 &&
+    bar.y + bar.h / 2 < WINDOW_HEIGHT / 2;
 const buttons = find(vs, 'KoanSidebarNavButtons');
 check('Single toolbar by default: navigation buttons in the sidebar top row',
       buttons?.shown && buttons.path.includes('VerticalTabStripTopContainer'),
@@ -149,9 +159,10 @@ let bar;
 if (await openLocation()) {
   vs = await views();
   bar = find(vs, 'TopContainerView');
-  check('Ctrl+L opens the floating URL bar, centred and Zen-sized (Zen: the keyboard floats)',
-        bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
-        `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
+  check('Ctrl+L opens the floating URL bar (Zen: the keyboard floats), the default look\'s ' +
+            'card: 55% of the window, centred, above the middle',
+        isFloatingCard(bar),
+        `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y} in ${WINDOW_WIDTH}x${WINDOW_HEIGHT}`);
   const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown);
   check('...showing just the location bar',
         toolbarChildren.length === 1 && toolbarChildren[0].cls === 'LocationBarView',
@@ -163,8 +174,7 @@ if (await openLocation()) {
   await sleep(1000);
   vs = await views();
   bar = find(vs, 'TopContainerView');
-  check('...and typing keeps it so',
-        bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
+  check('...and typing keeps it so', isFloatingCard(bar),
         `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
   await windowKey(VK.ESC);
   vs = await views();
@@ -189,7 +199,7 @@ await sleep(1000);
 vs = await views();
 bar = find(vs, 'TopContainerView');
 check('...and typing keeps it in place, not floating',
-      bar?.x === urlPill?.x && bar?.x !== (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
+      bar?.x === urlPill?.x && bar?.x !== FLOAT_X,
       `${bar?.w} at ${bar?.x}`);
 await windowKey(VK.ESC);
 

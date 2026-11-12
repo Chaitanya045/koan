@@ -21,7 +21,7 @@
 import { execSync, spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { IS_MAC, createSpace, views } from './lib/koan.mjs';
-import { focusUrlBar, makeKey, realInput, realKey } from './lib/mac.mjs';
+import { focusUrlBar, keyWindowReport, makeKey, realInput, realKey } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -146,19 +146,23 @@ const label = row => row?.texts[0];
 const indexOf = (rs, name) => rs.findIndex(r => label(r) === name);
 const rowsText = rs => rs.map(r => r.texts.join(' | ')).join(' / ');
 
-async function uiKey(nodeId, event) {
+// A key for the browser window, like a real key press. The widget is looked
+// up in the session that sends the key: node ids are handed out again on
+// each DOM.getDocument, and the popup's rows come and go in between.
+async function press(keyCode, flags = 0) {
   const c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await c.send('DOM.enable');
-  await c.send('DOM.getDocument', { depth: -1 });
-  for (const type of event.isChar ? ['keyPressed'] : ['keyPressed', 'keyReleased']) {
-    await c.send('DOM.dispatchKeyEvent', { nodeId, event: { code: 0, flags: 0, key: 0, isChar: false, ...event, type } });
+  const doc = (await c.send('DOM.getDocument', { depth: -1 })).result.root;
+  const hasBrowserView = n => (n.children ?? []).some(
+      ch => (ch.attributes ?? []).includes('BrowserView') || hasBrowserView(ch));
+  const findWidget = n => (n.nodeName === 'Widget' && hasBrowserView(n) ? n.nodeId
+      : (n.children ?? []).map(findWidget).find(Boolean));
+  const widget = findWidget(doc);
+  for (const type of ['keyPressed', 'keyReleased']) {
+    await c.send('DOM.dispatchKeyEvent', { nodeId: widget,
+        event: { code: 0, flags, key: 0, isChar: false, keyCode, type } });
   }
   c.close();
-}
-
-// A key for the browser window, like a real key press.
-async function press(keyCode, flags = 0) {
-  await uiKey((await ui()).widget, { keyCode, flags });
 }
 
 // The omnibox's node in a UI DevTools document. Node ids are handed out in
@@ -373,7 +377,11 @@ check('...listing actions', ours(rs).length >= 6, rowsText(rs));
 check('...none of which Enter would run yet', !ours([rs[0]]).length, rowsText(rs));
 await press(VK.TAB);
 u = await waitFor(ui, u => u.omnibox?.text === '');
-check('A second Tab leaves', u.omnibox?.text === '', JSON.stringify(u.omnibox?.text));
+// (The rows, which is selected, and who has the keyboard tell a Tab that
+// Chromium's popup took, moving the selection, from one that went nowhere.)
+check('A second Tab leaves', u.omnibox?.text === '', u.omnibox?.text === '' ? '' :
+      `${JSON.stringify(u.omnibox?.text)}; rows: ${(await rows()).map(
+          r => `${r.selected ? '*' : ''}${r.texts[0]}`).join(' / ')}; ${await keyWindowReport()}`);
 await press(VK.TAB);
 rs = await suggest('c', rs => indexOf(rs, 'Copy Current URL') >= 0);
 check('One character doesn\'t pick an action', !ours([rs[0]]).length, rowsText(rs));

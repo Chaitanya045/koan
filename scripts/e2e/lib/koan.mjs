@@ -41,6 +41,31 @@ export async function pages() {
       .filter(t => t.type === 'page');
 }
 
+// The pages now, for failure details: "url (id)" each, or why not.
+export async function pageList() {
+  try {
+    const list = await pages();
+    return list.length ? list.map(p => `${p.url} (${p.id.slice(0, 6)})`).join(' ') : 'none';
+  } catch (e) {
+    return `unknown (${e.message})`;
+  }
+}
+
+// A script that throws (a page or view it looked up was gone) ends with a
+// FAIL line naming where, which scripts/mac/suite.sh reports as the failure:
+// otherwise it reports the bare error, with no line to look at.
+function reportCrash(e) {
+  const err = e instanceof Error ? e : new Error(String(e));
+  const frames = (err.stack ?? '').split('\n').slice(1)
+      .map(l => l.trim().replace(/^at /, '').replace(/file:\/\/\S*\/scripts\/e2e\//, ''))
+      .filter(l => /\.m?js:\d+/.test(l)).slice(0, 4);
+  console.log(`FAIL  The script stopped: ${err.message}  (at ${frames.join(' < ') || 'unknown'})`);
+  console.log(err.stack ?? '');
+  process.exit(1);
+}
+process.on('uncaughtException', reportCrash);
+process.on('unhandledRejection', reportCrash);
+
 export async function browserCall(method, params = {}) {
   const v = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
   const c = await connect(v.webSocketDebuggerUrl);
@@ -50,6 +75,13 @@ export async function browserCall(method, params = {}) {
 }
 
 export async function onPage(page, fn) {
+  // A page looked up a moment ago can be gone (closed, its window closed)
+  // or never have come: say so, with the caller's line (reportCrash()
+  // prints it), not "reading 'webSocketDebuggerUrl'".
+  if (!page?.webSocketDebuggerUrl) {
+    throw new Error(`onPage(): no such page (${page === undefined ? 'undefined' :
+        JSON.stringify(page)}); the pages now: ${await pageList()}`);
+  }
   const c = await connect(page.webSocketDebuggerUrl);
   try {
     return await fn(c);
@@ -563,12 +595,43 @@ export async function viewTree() {
 // DOM.dispatchMouseEvent or DOM.dispatchKeyEvent. Fire-and-forget when
 // `wait` is false.
 export async function viewEvent(view, method, event, wait = true) {
+  if (!view?.nodeId) {
+    throw new Error(`viewEvent(): no view to send ${method} ${event?.type} to (not found)`);
+  }
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('DOM.getDocument', { depth: -1 });
   const p = ui.send(method, { nodeId: view.nodeId, event });
   if (wait) await p;
   ui.close();
+}
+
+// A plain key (Enter, Esc, arrows) to the innermost widget holding a view of
+// class `cls` (a browser window's: BrowserView; the theme picker's:
+// KoanThemePickerView), like a real key press: the widget's focus manager,
+// then its focused view and that view's pre-target handlers. The widget is
+// looked up in the session that sends the key: node ids are handed out
+// again on each DOM.getDocument, and the URL bar's suggestion rows come and
+// go in between. Whether there was such a widget.
+export async function keyToWidget(cls, keyCode) {
+  const c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await c.send('DOM.enable');
+  const doc = (await c.send('DOM.getDocument', { depth: -1 })).result.root;
+  const holds = n => (n.attributes ?? []).includes(cls) || (n.children ?? []).some(holds);
+  const find = n => {
+    for (const child of n.children ?? []) {
+      const inner = find(child);
+      if (inner) return inner;
+    }
+    return n.nodeName === 'Widget' && holds(n) ? n.nodeId : null;
+  };
+  const widget = find(doc);
+  for (const type of widget ? ['keyPressed', 'keyReleased'] : []) {
+    await c.send('DOM.dispatchKeyEvent', { nodeId: widget,
+        event: { type, keyCode, code: 0, flags: 0, key: 0, isChar: false } });
+  }
+  c.close();
+  return !!widget;
 }
 
 export const viewMouse = (view, type, x, y, button = 'left', wheelDirection = 'none') =>
@@ -614,13 +677,49 @@ export async function menuMouse(menu, item,
   await sleep(1200);
 }
 
+// Opens Zen's Create-a-Space form (Ctrl+Alt+N, Ctrl on macOS too) in
+// `page`'s window. On macOS a CDP key reaches Koan's shortcuts only in the key
+// window (CommandDispatcher's redispatchKeyEvent: drops it for any other,
+// crbug.com/514063409), and a window CDP opened isn't made key: the page's
+// window is made key first, and with real input the key is a real one if the
+// CDP key opened nothing. Returns {field, how, why}: the form's name field
+// (viewTree()) or null, how the key went, and why there's no form.
+export async function openSpaceForm(page) {
+  const formField = async () => (await viewTree()).find(
+      v => v.cls === 'Textfield' && v.shown && v.path.includes('KoanSpaceCreationView'));
+  if (!page) {
+    return { field: null, how: '', why: `no page to send Ctrl+Alt+N to; pages: ${await pageList()}` };
+  }
+  if (!IS_MAC) {
+    await key(page, 78, CTRL | ALT, 'n');
+    const field = await waitFor(formField);
+    return { field: field || null, how: 'Ctrl+Alt+N', why: field ? '' : 'no form' };
+  }
+  // (lib/mac.mjs imports this file: imported when called, not at load.)
+  const mac = await import('./mac.mjs');
+  const shown = await mac.shownTabOf(page) ?? page;
+  const focused = await mac.makeKey(shown);
+  await key(shown, 78, CTRL | ALT, 'n');
+  let field = await waitFor(formField, 3000);
+  let how = `a CDP Ctrl+Option+N${focused ? '' : ' (the window never got the focus)'}`;
+  if (!field && mac.realInput() && await mac.realKey('n', 'ka', 800)) {
+    how += ', then a real one';
+    field = await waitFor(formField, 3000);
+  }
+  return { field: field || null, how,
+           why: field ? '' : `no form after ${how}; ${await mac.keyWindowReport()}` };
+}
+
 // Creates a Space named `name` with Zen's Create-a-Space form (Ctrl+Alt+N
-// from `page`, the name, Enter).
+// from `page`, the name, Enter). Whether the form came up; why not is printed.
 export async function createSpace(page, name) {
-  await key(page, 78, CTRL | ALT, 'n');
-  const field = await waitFor(async () => (await viewTree()).find(
-      v => v.cls === 'Textfield' && v.shown && v.path.includes('KoanSpaceCreationView')));
+  const { field, why } = await openSpaceForm(page);
+  if (!field) {
+    console.log(`  (createSpace(${JSON.stringify(name)}): ${why})`);
+    return false;
+  }
   await typeInto(field, name, 13);
+  return true;
 }
 
 // Each window's Space tint (its user colour override, an ARGB number; 0 for

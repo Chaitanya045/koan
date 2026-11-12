@@ -5,7 +5,8 @@
 // (lib/mac.mjs nativeMenu()).
 import { NATIVE_MENUS, UI_PORT, browserCall, connect, pages, sendKey, sleep } from './koan.mjs';
 import {
-  KOAN_PID, closeNativeMenu, pickNativeMenu, ptr, realInput, waitNativeMenu, windowOf,
+  KOAN_PID, closeNativeMenu, nativeMenuReport, pickNativeMenu, ptr, realInput, waitNativeMenu,
+  windowOf,
 } from './mac.mjs';
 
 // Koan's pid, for the native menus (folders.mjs restarts Koan).
@@ -97,7 +98,8 @@ async function openNativeMenu(event, at) {
   // (Real input is Koan's first pid's only: the gate checks that pid.)
   const bounds = realInput() && menuPid === KOAN_PID &&
       (await windowOf((await pages())[0]?.id).catch(() => null))?.bounds;
-  if (!bounds || !(await ptr('rclick', bounds.left + at.x, bounds.top + at.y))) {
+  const real = !!bounds && await ptr('rclick', bounds.left + at.x, bounds.top + at.y);
+  if (!real) {
     c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
     await c.send('DOM.getDocument', { depth: -1 });
     c.send('DOM.dispatchMouseEvent', event('mousePressed'));
@@ -108,7 +110,9 @@ async function openNativeMenu(event, at) {
   const away = !c && [bounds.left + bounds.width - 60, bounds.top + bounds.height / 2];
   nativeOpen = { items: menu?.items ?? null, c, release: event('mouseReleased'), away };
   if (!menu) {
-    console.log('  (no native menu opened)');
+    console.log(`  (no native menu opened by ${real ? `a real right-click at ${
+        Math.round(bounds.left + at.x)},${Math.round(bounds.top + at.y)}` : 'a UI DevTools press'}: ` +
+                `${await nativeMenuReport(menuPid)})`);
     await endNativeMenu();
   }
 }
