@@ -58,6 +58,7 @@ source_set("browsertests_impl") {
     "browser/koan_sidebar_transitions_browsertest.cc",
     "browser/koan_spaces_browsertest.cc",
     "browser/koan_split_view_browsertest.cc",
+    "browser/koan_tab_management_browsertest.cc",
     "browser/koan_toolbar_browsertest.cc",
   ]
   deps = [
