@@ -392,11 +392,20 @@ As in Zen there are two kinds of pinned tab:
   tab moves below New Tab. Pin a tab with Ctrl+Shift+D or "Pin" in its
   context menu. While a pinned tab is loaded, pointing at it shows a dash
   ("Unload and switch to tab") where other tabs have their close button.
+  Or drag a tab across the line: dropped above it (on the line, among the
+  pinned tabs or on the Space header) it is pinned; dropped below it (on
+  **+ New Tab**, among the other tabs or below them) it is a normal tab
+  again. While you hold it, the line moves past the tab to show which side
+  it lands on.
 - **Essentials** are shared by all Spaces, up to 12: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
   Dragging a tab into the grid also makes it an Essential. With no
   Essentials yet, dragging a tab to the top of the sidebar shows Zen's
-  "Add to Essentials" drop target; drop it there. An Essential that plays
+  "Add to Essentials" drop target; drop it there. Drag an Essential out of
+  the grid onto the Space's list to take it out: above the line it becomes
+  one of the Space's pinned tabs (keeping its pinned URL), below it a
+  normal tab; a line shows where it goes. Several selected Essentials go
+  together. An Essential that plays
   sound keeps its icon, with a small speaker badge on its corner: click
   the badge to mute or unmute the tab (it doesn't switch to it).
 
@@ -417,8 +426,10 @@ Pinned Tabs has Zen's choices for what closing does, and "Restore pinned
 tabs to their originally pinned URL on startup" (off by default, as in
 Zen). Pinned tabs, like Essentials, are never frozen in the background,
 and Close Other Tabs, Close Tabs Below and Back in a tab with no history
-leave them open. Drag a pinned tab below the other tabs to unpin it, or a
-tab among the pinned ones to pin it. With several pinned tabs selected,
+leave them open. Drag a pinned tab below the line to unpin it (it forgets
+its pinned URL, as in Zen), or a tab above the line to pin it on its
+current page; dragging within either part only reorders. Moving a tab with
+Ctrl+Shift+PageUp / PageDown never pins or unpins it. With several pinned tabs selected,
 Ctrl+W does the same to each of them and closes none of the others.
 
 Any tab's context menu has "Change Label…" (edit the name in place; Enter

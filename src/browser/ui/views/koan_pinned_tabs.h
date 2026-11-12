@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -79,6 +80,10 @@ struct KoanTabState {
   bool dragged = false;
   // Got its pinned URL when it was added, before the session knew the tab.
   bool unsaved = false;
+  // While a tab drag holds the tab over its Space's list: the section it
+  // would drop in (true: pinned), where the sidebar shows it, the separator
+  // moving past it as Zen's does (ShowsInPinnedSection()). Unset otherwise.
+  std::optional<bool> drop_pinned;
 
   bool empty() const;
   std::string Serialize() const;
@@ -93,6 +98,9 @@ KoanTabState* GetTabState(content::WebContents* contents);
 bool IsPinnedInSpace(const tabs::TabInterface* tab);
 // Whether `tab` is pinned and has navigated away from its pinned URL.
 bool IsAwayFromPinnedUrl(const tabs::TabInterface* tab);
+// Whether the sidebar shows `tab` in its Space's pinned section: pinned to
+// it, or a dragged tab that would drop there (KoanTabState::drop_pinned).
+bool ShowsInPinnedSection(const tabs::TabInterface* tab);
 // Whether `tab` isn't loaded: unloaded, or restored and not shown yet.
 bool IsPendingTab(const tabs::TabInterface* tab);
 // Whether the close button of `tab` runs the close behaviour rather than
@@ -171,10 +179,28 @@ class KoanPinnedTabController : public TabStripModelObserver {
                         tabs::TabInterface* before);
   // The Essential `tab` dropped on the active Space's list of tabs leaves
   // the Essentials for that place, before the Space's tab `before` (null:
-  // after its last tab): among the Space's pinned tabs it becomes one of
-  // them, keeping its pinned URL; anywhere else, a normal tab.
+  // after its last tab), in the section it was dropped in (Zen's
+  // removeEssentials(tab, unpin)): in the pinned one (`pinned`) one of the
+  // Space's pinned tabs, keeping its pinned URL; in the normal one a normal
+  // tab, which forgets it.
   void DropEssentialInSpace(tabs::TabInterface* tab,
-                            tabs::TabInterface* before);
+                            tabs::TabInterface* before,
+                            bool pinned);
+  // Space tabs dragged within their Space, where Chromium's drag places them
+  // among its tabs (koan_space_drag.h). Zen pins or unpins them by the
+  // section they are dropped in: between two pinned tabs pinned, after a
+  // normal tab normal, and at the separator (where Chromium's place is the
+  // same for both sides) by the section under the pointer, `pointer_pinned`
+  // (DragDropsPinned()). While the drag goes on, PreviewDropInSpace() shows
+  // each tab in that section (nullopt: in its own, e.g. the pointer is
+  // elsewhere) and returns whether any moved section; DropInSpace() makes it
+  // so once the drag is over: a tab dropped pinned keeps its pinned URL or
+  // gets its current one (gBrowser.pinTab()), one dropped normal forgets it
+  // (unpinTab()). Split views go as one.
+  bool PreviewDropInSpace(const std::vector<tabs::TabInterface*>& tabs,
+                          std::optional<bool> pointer_pinned);
+  void DropInSpace(const std::vector<tabs::TabInterface*>& tabs,
+                   bool pointer_pinned);
   // Duplicate (the tab menu, the menu bar, extensions) made `duplicate` from
   // `source`: Zen's duplicate of a pinned tab or Essential is a normal tab of
   // the active Space (SessionStore's duplicate path drops the pin), below the
@@ -265,6 +291,15 @@ class KoanPinnedTabController : public TabStripModelObserver {
   // section (they are all before it), or above one of them.
   bool InPinnedRun(int index) const;
   bool AbovePinnedTab(int index) const;
+  // `tabs` with the other tab of each split view, in tab strip order, without
+  // Essentials.
+  std::vector<tabs::TabInterface*> SpaceTabsWithSplits(
+      const std::vector<tabs::TabInterface*>& tabs) const;
+  // Whether the Space tab `tab`, one of the dragged `dragged`, drops pinned
+  // where it is (DropInSpace()).
+  bool DropsPinned(tabs::TabInterface* tab,
+                   const std::vector<tabs::TabInterface*>& dragged,
+                   bool pointer_pinned) const;
   // Moves `tab` (with its split) right after the other pinned tabs at the
   // top of its Space, up or down: to the top of the normal tabs (unpinned
   // tabs and new tabs opened among the pinned ones).

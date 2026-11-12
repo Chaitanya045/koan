@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -50,6 +51,7 @@
 #include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_haptics.h"
 #include "koan/browser/ui/views/koan_pinned.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
@@ -144,20 +146,21 @@ void PaintSeparatorLine(gfx::Canvas* canvas,
 // Whether `view`, a child of a Space's tab group view, is in the Space's
 // pinned section: a pinned tab's row, a split view of pinned tabs (a split
 // view's tabs are pinned together), or a folder's row (folder tabs are
-// pinned, koan_folders.h).
+// pinned, koan_folders.h). A dragged tab is where it would drop
+// (ShowsInPinnedSection()).
 bool IsInPinnedSection(const views::View* view) {
   if (IsFolderRowView(view)) {
     return true;
   }
   if (const auto* tab_view = views::AsViewClass<TabView>(view)) {
-    return IsPinnedForUser(tab_view->GetTabInterface());
+    return ShowsInPinnedSection(tab_view->GetTabInterface());
   }
   if (!views::IsViewClass<SplitTabView>(view)) {
     return false;
   }
   return std::ranges::any_of(view->children(), [](const views::View* child) {
     const auto* tab_view = views::AsViewClass<TabView>(child);
-    return tab_view && IsPinnedForUser(tab_view->GetTabInterface());
+    return tab_view && ShowsInPinnedSection(tab_view->GetTabInterface());
   });
 }
 
@@ -681,6 +684,33 @@ int PlaceSpaceTabRows(const views::View* tab_group_view,
     }
   }
   return moved;
+}
+
+std::optional<SpaceSeparatorRows> GetSpaceSeparatorRows(
+    const TabStripView* tab_strip_view,
+    const views::View* target) {
+  const UnpinnedTabContainerView* container =
+      tab_strip_view->GetUnpinnedTabsContainer();
+  if (!container) {
+    return std::nullopt;
+  }
+  for (const views::View* child : container->children()) {
+    const auto* group = views::AsViewClass<TabGroupView>(child);
+    auto* rows = group && group->IsGroupFocused()
+                     ? views::AsViewClass<KoanSidebarTabRowsView>(
+                           FindRows(group, /*at_end=*/false))
+                     : nullptr;
+    if (!rows || !rows->IsDrawn()) {
+      continue;
+    }
+    const views::View* separator = rows->clear_row();
+    return SpaceSeparatorRows{
+        .rows = views::View::ConvertRectToTarget(rows, target,
+                                                 rows->GetLocalBounds()),
+        .separator_height =
+            separator->GetVisible() ? separator->bounds().bottom() : 0};
+  }
+  return std::nullopt;
 }
 
 bool IsEmptyTabView(const views::View* view) {
