@@ -5,7 +5,8 @@
 // through AppKit like a person's. Steps W-1r, W-1c and W-14b of
 // scripts/mac/steps/welcome.md:
 // - the keyboard stays on the page when the tab under it is focused;
-// - Tab moves the page's focus, arrows change a radio, Space picks it;
+// - Tab moves the page's focus and wraps within the page, arrows change a
+//   radio, Space picks it;
 // - a click on Get started and on Next moves to the next step;
 // - a click in the window's top band over the page reaches the page and
 //   doesn't move the window (W-1c, the caption hit-test hook);
@@ -116,6 +117,10 @@ let s = await seen();
 check(`Tab (${via}) reaches the page`, s.keydown.filter(k => k === 'Tab').length === 2,
       JSON.stringify(s.keydown));
 check(`...and moves the focus`, f1 !== f0 || f2 !== f1, `${f0} -> ${f1} -> ${f2}`);
+// Tab wraps within the page, as in a modal dialog: past its last control
+// it went on to the browser's views under it (BODY here), and the URL bar
+// that then opened over the page took the next click.
+check('...and keeps it in the page', !!f2 && f2 !== 'BODY' && await js('document.hasFocus()'), f2);
 
 // Clicks: Get started moves to the next step.
 const before = await step();
