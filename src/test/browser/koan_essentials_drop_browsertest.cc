@@ -313,4 +313,39 @@ IN_PROC_BROWSER_TEST_F(KoanEssentialsDropBrowserTest,
   EXPECT_FALSE(pinned->PreviewDropInSpace({}, std::nullopt));
 }
 
+// Zen's addToEssentials() for a pinned tab dropped on the grid: Koan's
+// Space-pinned tabs are not Chromium-pinned, so the drag counts them with the
+// Space's tabs (not Essentials) and the drop makes them Essentials like any
+// other, out of the Space's pinned section, keeping the pinned URL they had
+// (not the page they show now).
+IN_PROC_BROWSER_TEST_F(KoanEssentialsDropBrowserTest,
+                       APinnedTabDroppedOnTheGridKeepsItsPinnedUrl) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanPinnedTabController* pinned = GetPinnedTabs(browser());
+  ASSERT_TRUE(pinned);
+  const std::vector<tabs::TabInterface*> tabs = OpenTabs(3);
+  pinned->PinInSpace(tabs[0]);
+  pinned->PinInSpace(tabs[1]);
+  ASSERT_TRUE(IsPinnedInSpace(tabs[0]) && IsPinnedInSpace(tabs[1]));
+  // A pinned URL of its own ("Edit Pinned URL…").
+  pinned->SetPinnedUrl(tabs[0], GURL("chrome://version/?pinned"));
+  ASSERT_TRUE(GetTabState(tabs[0]));
+  const GURL kept = GetTabState(tabs[0])->pinned_url;
+  ASSERT_TRUE(kept.is_valid());
+
+  // No Essentials yet (the promo's drop): the first one.
+  ASSERT_EQ(0, pinned->EssentialsCount());
+  pinned->DropInEssentials({tabs[0]}, nullptr);
+  EXPECT_TRUE(tabs[0]->IsPinned());
+  EXPECT_FALSE(IsPinnedInSpace(tabs[0]));
+  EXPECT_FALSE(tabs[0]->GetGroup());
+  EXPECT_EQ(kept, GetTabState(tabs[0])->pinned_url);
+  EXPECT_THAT(Essentials(), testing::ElementsAre(tabs[0]));
+  // The other pinned tab, on the tile's near half: before it.
+  pinned->DropInEssentials({tabs[1]}, tabs[0]);
+  EXPECT_THAT(Essentials(), testing::ElementsAre(tabs[1], tabs[0]));
+  EXPECT_FALSE(IsPinnedInSpace(tabs[1]));
+  EXPECT_TRUE(GetTabState(tabs[1])->pinned_url.is_valid());
+}
+
 }  // namespace koan

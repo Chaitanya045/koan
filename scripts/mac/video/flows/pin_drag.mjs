@@ -26,7 +26,12 @@
 //                  it a pinned tab: the same place as the pinned tabs' end)
 //   7 ess-pinned   an Essential down onto the separator: a pinned tab, last
 //                  of them, its pinned URL kept
-//   8 to-grid      a pinned row up over the Essentials grid: an Essential
+//   8 to-promo     with no Essentials, a pinned row up over the Space
+//                  header's top quarter (#319's zone): the promo shows, lit,
+//                  and the drop makes it the first Essential, its pinned URL
+//                  kept
+//   9 to-grid      the other pinned row onto the Essential's tile: the
+//                  second Essential, after or before it
 // While held, `over` records how far the separator moved since the pick-up
 // (Zen's separator moves past a row that would drop on its other side: down
 // for one going into the pinned section, up for one leaving it) and, for an
@@ -71,8 +76,7 @@ function space(vs) {
       .sort((a, b) => a.tabView.ay - b.tabView.ay);
   const tiles = sidebarRows(vs).filter(r => r.grid).map(r => ({ url: r.props.Url, tabView: r.tabView }));
   return { rows, tiles, separator: shown(vs, 'KoanClearTabsRow'), newTab: shown(vs, 'KoanNewTabRow'),
-           header: shown(vs, 'KoanSpaceHeaderView'),
-           grid: vs.find(v => v.cls === 'PinnedTabContainerView' && v.shown && v.h > 0) };
+           header: shown(vs, 'KoanSpaceHeaderView') };
 }
 
 // The separator's top (the New Tab row's without it).
@@ -84,8 +88,11 @@ async function over(label, pickedUp) {
   const s = space(vs);
   const indicator = shown(vs, 'KoanTabDropIndicatorView');
   const top = separatorTop(s);
+  const promo = shown(vs, 'KoanEssentialsPromoView');
   const r = {
     label,
+    promo: !!promo,
+    promoLit: promo ? String(promo.props.DragOver) === 'true' : false,
     separatorShift: top !== null && pickedUp !== null ? top - pickedUp : null,
     indicator: indicator ? { y: indicator.ay, h: indicator.h, w: indicator.w } : null,
     separator: s.separator ? [s.separator.ay, s.separator.h] : null,
@@ -151,7 +158,7 @@ async function dragRound(name, pick, target, check) {
     save();
     return rec;
   }
-  mark('drag-over', { to }, true);
+  mark('drag-over', { to, header: s.header && (await at(s.header)), tiles: s.tiles.length }, true);
   await drag('to', to.x, to.y, 700);
   await sleep(700);
   rec.over = await over('over', pickedUp);
@@ -234,21 +241,35 @@ await dragRound('ess-pinned', s => s.tiles[0], (s, from) => down(s.separator, 0.
                 r => r.after.essential === false && r.after.pinned === true && r.after.hasPinnedUrl &&
                      r.after.index === r.after.pinnedCount - 1 && !!r.over.indicator);
 
-// 8: a pinned row up over the Essentials grid (empty now: the promo, over
-// the Space header's top half).
-await dragRound('to-grid', lastPinned, async (s, from) => {
-  if (s.grid) return down(s.grid, 0.5, from);
+// 8: no Essentials now (the grid is 0 px tall): a pinned row up over the
+// Space header's top quarter, where #319's zone shows the promo. (Run 1 aimed
+// at the PinnedTabContainerView whenever the view tree gave it a height,
+// else here, and the promo never showed: the separator didn't move, the tab
+// was only reordered. This aims at the zone only, and records the target,
+// the header and whether the promo showed and was lit.)
+await dragRound('to-promo', lastPinned, async (s, from) => {
+  if (s.tiles.length) return null;
   const h = s.header && await at(s.header);
   return h ? { x: from.x, y: h.y + h.h * 0.25 } : null;
-}, r => r.after.essential === true && r.after.hasPinnedUrl !== false);
+}, r => r.over.promo && r.over.promoLit && r.after.essential === true && r.after.index === -1 &&
+        r.after.pinnedCount === r.before.pinnedCount - 1);
+
+// 9: the other pinned row onto the Essential's tile (its left half: before
+// it, its right half: after it; either way an Essential).
+await dragRound('to-grid', lastPinned, (s, from) => {
+  const tile = s.tiles[0]?.tabView;
+  return tile ? at(tile).then(r => ({ x: r.x + r.w * 0.75, y: r.mid.y })) : null;
+}, r => !r.over.promo && !!r.over.indicator && r.after.essential === true &&
+        r.after.pinnedCount === r.before.pinnedCount - 1);
 
 // --- Summary: one line per round.
 mark('end');
-console.log('\nround  drag        ok     sep-shift  line  kind-after  index  order');
+console.log('\nround  drag        ok     sep-shift  line  promo  kind-after  index  order');
 for (const r of out.rounds) {
   const kind = r.after ? (r.after.essential ? 'essential' : r.after.pinned ? 'pinned' : 'normal') : '-';
   console.log(`${String(r.round).padStart(5)}  ${r.name.padEnd(10)}  ${String(r.ok ?? r.skipped).padEnd(6)} ` +
               `${String(r.over?.separatorShift ?? '-').padEnd(10)} ${String(!!r.over?.indicator).padEnd(5)} ` +
+              `${String(r.over ? (r.over.promo ? (r.over.promoLit ? 'lit' : 'shown') : 'no') : '-').padEnd(6)} ` +
               `${kind.padEnd(11)} ${String(r.after?.index ?? '-').padEnd(6)} ${(r.after?.order ?? []).join(' ')}`);
 }
 console.log(out.rounds.every(r => r.ok) ? 'PASS' : 'FAIL');
