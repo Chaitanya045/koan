@@ -378,6 +378,12 @@ if (BEHAVIOR === 'float') {
         `bar ${bar(vs)?.x}+${bar(vs)?.w}, pill ${pillNow.x}+${pillNow.w}`);
   check('...with the address to edit', omniboxText(vs).includes('example.com'),
         JSON.stringify(omniboxText(vs)));
+  // Zen (browser.urlbar.clickSelectsAll): all of it selected, so typing
+  // replaces it.
+  const pillSel = (find(vs, 'OmniboxViewViews')?.p.SelectedRange ?? '').match(/\d+/g)?.map(Number) ?? [];
+  check('...all of it selected, so typing replaces it',
+        Math.min(...pillSel) === 0 && Math.max(...pillSel) === omniboxText(vs).length,
+        `${find(vs, 'OmniboxViewViews')?.p.SelectedRange} of ${omniboxText(vs).length}`);
   const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown);
   check('...showing just the location bar',
         toolbarChildren.length === 1 && toolbarChildren[0].cls === 'LocationBarView',

@@ -236,6 +236,8 @@ class KoanUrlBarController
   void RetryEmptyList(int retries_left);
   void OpenOnStartup();
   void FloatIfOpenInPill();
+  // After a pill click: select the whole address (Zen's clickSelectsAll).
+  void SelectAllIfUntouched();
   // A popup opened in the pill keeps Chromium's frame: once the bar is Zen's
   // card, closes it and asks for its suggestions again, in the card.
   void RebuildPopupForCard();

@@ -59,10 +59,20 @@ async function copyFromPalette(from) {
   const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown);
   if (!pill) return { error: 'no URL pill' };
   await clickThroughRoot(vs, pill);
+  await sleep(400);  // the click's select-all is posted
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
   if (!field) return { error: 'no URL bar' };
+  // Zen's clickSelectsAll: the click selects the whole address, so the
+  // query replaces it (urlbar.mjs checks the selection too).
+  const text = field.props?.Text ?? '';
+  const sel = (field.props?.SelectedRange ?? '').match(/\d+/g)?.map(Number) ?? [];
+  if (!text || Math.min(...sel) !== 0 || Math.max(...sel) !== text.length) {
+    return { error: 'the pill click did not select the address', text, sel: field.props?.SelectedRange };
+  }
   await typeInto(field, '>Copy Current URL');
+  const typed = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown)?.props?.Text;
+  if (typed !== '>Copy Current URL') return { error: 'typing did not replace the address', typed };
   const rows = await waitFor(async () => {
     const rs = await rowLabels();
     return rs[0] === 'Copy Current URL' && rs;

@@ -867,7 +867,25 @@ void KoanUrlBarController::FocusLocationInPill() {
   // next keyboard-only focus (Ctrl+K, F6) editing in the pill.
   if (!bar->omnibox_view() || !bar->omnibox_view()->HasFocus()) {
     edit_in_pill_ = false;
+    return;
   }
+  // Zen (Firefox's browser.urlbar.clickSelectsAll): a click on the pill
+  // selects the whole address, so typing replaces it. SetFocus() selects all
+  // already, but the rest of the click (its release, the in-pill layout, a
+  // window activation on macOS) can move the caret, so select again once
+  // it's done, unless typing has started.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KoanUrlBarController::SelectAllIfUntouched,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void KoanUrlBarController::SelectAllIfUntouched() {
+  LocationBarView* bar = location_bar();
+  if (!bar || !bar->omnibox_view() || !bar->omnibox_view()->HasFocus() ||
+      bar->GetOmniboxController()->edit_model()->user_input_in_progress()) {
+    return;
+  }
+  bar->omnibox_view()->SelectAll(/*reversed=*/true);
 }
 
 void KoanUrlBarController::EndEditing() {
