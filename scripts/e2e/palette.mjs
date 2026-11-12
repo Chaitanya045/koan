@@ -13,9 +13,15 @@
 // the end Koan is restarted on
 // the same profile to check the opt-outs. Prints one PASS/FAIL line per
 // check; exits non-zero on any failure.
-import { spawn } from 'node:child_process';
+//
+// On macOS (scripts/mac/suite.sh) the URL bar opens with a click on the URL
+// pill (Cmd+L is a main-menu key that CDP keys never reach), or with a real
+// Cmd+L while compact mode hides the sidebar (lib/mac.mjs focusUrlBar());
+// the new tab is a real Cmd+T, and the clipboard is read with pbpaste.
+import { execSync, spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createSpace, views, visiblePage } from './lib/koan.mjs';
+import { IS_MAC, createSpace, views } from './lib/koan.mjs';
+import { focusUrlBar, makeKey, realInput, realKey } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -192,17 +198,45 @@ async function suggest(text, ok) {
 // Sends a key press to the active page; unhandled keys reach the browser's
 // accelerators. Modifiers: Alt=1 Ctrl=2 Shift=8.
 async function pageKey(code, modifiers, keyName = '') {
-  const c = await connect((await pages())[0].webSocketDebuggerUrl);
+  const c = await connect((await shownPage()).webSocketDebuggerUrl);
   const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key: keyName };
   await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
   await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
   c.close();
 }
 
+// The tab on screen (a page of the window that is visible). The suite
+// starts with two tabs, so pages()[0] may be the other one.
+async function shownPage() {
+  for (const page of await pages()) {
+    if (await evalIn(page, 'document.visibilityState') === 'visible') return page;
+  }
+  return (await pages())[0];
+}
+
+// The URL bar, editing with the address selected (lib/mac.mjs
+// focusUrlBar(): Ctrl+L, or on macOS a pill click or a real Cmd+L). A
+// failure to get there is reported once per way, as it explains every
+// check after it.
+const urlBarFailures = new Set();
 async function openUrlBar() {
-  await pageKey(VK.L, CTRL, 'l');
+  const { field, how, selectedAll } = await focusUrlBar(await shownPage());
+  if ((!field || !selectedAll) && !urlBarFailures.has(how)) {
+    urlBarFailures.add(how);
+    check(`The URL bar opens for editing, address selected (${how})`, false,
+          field ? `${field.props?.SelectedRange} of ${JSON.stringify(field.props?.Text)}` : 'no URL bar');
+  }
   await waitFor(ui, u => u.omnibox?.text !== undefined);
   await sleep(300);
+}
+
+// A new tab in the active Space: Ctrl+T, or on macOS a real Cmd+T (a
+// main-menu key there).
+async function newTab() {
+  const page = await shownPage();
+  if (!IS_MAC) return pageKey(VK.T, CTRL, 't');
+  if (realInput() && await makeKey(page) && await realKey('t', 'c')) return true;
+  return false;
 }
 
 async function closeUrlBar() {
@@ -211,9 +245,11 @@ async function closeUrlBar() {
   await waitFor(rows, rs => rs.length === 0, 3000);
 }
 
-// Reads the clipboard by pasting (Ctrl+V) into a fresh textarea on the page.
+// Reads the clipboard by pasting (Ctrl+V) into a fresh textarea on the page;
+// on macOS with pbpaste (a page's paste needs its window to be key).
 async function clipboard() {
-  const page = (await pages())[0];
+  if (IS_MAC) return execSync('pbpaste', { encoding: 'utf8' });
+  const page = await shownPage();
   await evalIn(page, `(() => {
     const t = document.createElement('textarea');
     t.id = 'koan-paste';
@@ -300,7 +336,7 @@ check('...and Enter runs it (compact mode off)', await waitFor(compactOn, on => 
 await openUrlBar();
 await suggest('example.com/?typed', rs => rs[0]?.texts[0]?.includes('example.com'));
 await press(VK.ENTER);
-const url = await waitFor(async () => (await pages())[0]?.url, u => u?.endsWith('?typed'));
+const url = await waitFor(async () => (await shownPage())?.url, u => u?.endsWith('?typed'));
 check('A typed address opens as usual', /^https?:\/\/example\.com\/\?typed$/.test(url), url);
 
 // Short or URL-like text suggests no actions.
@@ -345,7 +381,8 @@ check('One character doesn\'t pick an action', !ours([rs[0]]).length, rowsText(r
 rs = await suggest('o', rs => ours([rs[0]]).length > 0);
 check('Two do', ours([rs[0]]).length > 0, rowsText(rs));
 rs = await suggest('py', rs => label(rs[0]) === 'Copy Current URL');
-const pageUrl = (await pages())[0].url;
+const pageUrl = (await shownPage()).url;
+if (IS_MAC) execSync('pbcopy', { input: '' });
 await press(VK.ENTER);
 await sleep(500);
 const clip = await clipboard();
@@ -365,11 +402,11 @@ await closeUrlBar();
 
 // "Focus on" another Space, found by its name, announced with it.
 const tabsShown = async () => (await ui()).views.filter(v => v.cls === 'TabView' && v.shown && v.h > 1).length;
-await createSpace(await visiblePage(), 'Space 1');  // Zen's Create form
+await createSpace(await shownPage(), 'Space 1');  // Zen's Create form
 await waitFor(tabsShown, n => n === 1);
-await pageKey(VK.T, CTRL, 't');         // a second tab in it
+const opened = await newTab();          // a second tab in it
 await waitFor(tabsShown, n => n === 2);
-await createSpace(await visiblePage(), 'Space 2');  // now active
+await createSpace(await shownPage(), 'Space 2');  // now active
 await waitFor(tabsShown, n => n === 1);
 await openUrlBar();
 rs = await suggest('space 1', rs => rs.some(r => label(r) === 'Focus on'));
@@ -380,7 +417,12 @@ check('...announced with the Space\'s name', rs[focus]?.a11y.includes('Focus on'
 for (let i = 0; i < focus; i++) await press(VK.DOWN);
 await waitFor(rows, rs => rs[focus]?.selected);
 await press(VK.ENTER);
-check('...and Enter switches to it', await waitFor(tabsShown, n => n === 2) === 2);
+if (opened === false) {
+  console.log('SKIP  ...and Enter switches to it: its second tab needs real input on macOS ' +
+              '(Cmd+T is a main-menu key)');
+} else {
+  check('...and Enter switches to it', await waitFor(tabsShown, n => n === 2) === 2);
+}
 
 // Folder actions (#42): "New Folder" makes one in the active Space; then
 // only "Collapse All Folders" is offered, and after it only "Expand All".

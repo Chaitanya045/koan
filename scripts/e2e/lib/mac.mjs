@@ -18,8 +18,10 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
-import { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT, browserCall, connect, onPage, pages, sleep, typeInto, viewTree,
-         waitFor } from './koan.mjs';
+import os from 'node:os';
+import path from 'node:path';
+import { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT, browserCall, connect, decodePng, onPage, pages, sleep,
+         typeInto, viewTree, waitFor } from './koan.mjs';
 
 export { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT };
 
@@ -213,6 +215,44 @@ export async function rootMouse(root, types, x, y, button = 'left') {
         event: { type, x: Math.round(x), y: Math.round(y), button, wheelDirection: 'none' } });
   }
   ui.close();
+}
+
+// --- The URL bar.
+
+// Puts the URL bar into editing with the whole address selected, as a
+// person does, so typed text replaces the address. Off macOS: Ctrl+L, which
+// a CDP key reaches. On macOS Cmd+L is a main-menu key that CDP keys never
+// reach, so: a click on the URL pill's middle, which selects the whole
+// address (Zen's clickSelectsAll, #328; the pill's first ~30 px are the
+// site-icon button, which opens the site panel instead); with the sidebar
+// hidden (compact mode: no pill to click), a real Cmd+L in `page`'s window
+// when real input is on. Returns {field, how, selectedAll}: the shown
+// OmniboxViewViews (viewTree()) or null, and whether all its text was
+// selected.
+export async function focusUrlBar(page) {
+  let how = 'Ctrl+L';
+  if (!IS_MAC) {
+    await key(page, 'l', CTRL, 300);
+  } else {
+    const vs = await viewTree();
+    const sidebarOut = vs.some(v => v.cls === 'VerticalTabStripRegionView' && v.shown && v.w > 0);
+    const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown && v.w > 0 && v.h > 0);
+    if (sidebarOut && pill) {
+      how = 'a click on the pill';
+      await clickThroughRoot(vs, pill, { at: { x: Math.round(pill.w / 2), y: Math.round(pill.h / 2) } });
+    } else if (realInput() && await makeKey(page) && await realKey('l', 'c', 300)) {
+      how = 'a real Cmd+L';
+    } else {
+      return { field: null, how: `no pill to click and ${realInputWhyNot() || 'no key window'}`,
+               selectedAll: false };
+    }
+  }
+  await sleep(400);  // the click's select-all is posted
+  const field = await waitFor(async () => (await viewTree()).find(
+      v => v.cls === 'OmniboxViewViews' && v.shown), 4000) || null;
+  const text = field?.props?.Text ?? '';
+  const sel = (field?.props?.SelectedRange ?? '').match(/\d+/g)?.map(Number) ?? [];
+  return { field, how, selectedAll: !text || (Math.min(...sel) === 0 && Math.max(...sel) === text.length) };
 }
 
 // --- Spaces.
@@ -506,6 +546,52 @@ export async function calibrate(page, vs, webview, windowTarget) {
       { expression: 'window.__koanMove', returnByValue: true }))).result?.result?.value;
   if (!m) return null;
   return { x: m.sx - m.cx - webview.ax, y: m.sy - m.cy - webview.ay };
+}
+
+// --- The window's pixels (for the checks that read headless Ozone's frame
+// dumps off macOS).
+
+// The bench's winid tool (scripts/mac/tools/winid.m: a pid's on-screen
+// windows), built into a temporary directory if the bench has none.
+let winidPath = null;
+function winidTool() {
+  if (winidPath) return winidPath;
+  const bench = TOOLS && `${TOOLS}/winid`;
+  if (bench && fs.existsSync(bench)) return (winidPath = bench);
+  const built = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'koan-winid-')), 'winid');
+  execFileSync('clang', ['-fobjc-arc', '-framework', 'CoreGraphics', '-framework', 'Foundation',
+                         '-o', built, new URL('../../mac/tools/winid.m', import.meta.url).pathname],
+               { stdio: 'ignore', timeout: 60000 });
+  return (winidPath = built);
+}
+
+// The window showing `page` as the screen has it: `screencapture -x -o
+// -l<window>` (that window alone, no shadow, no sound), converted from the
+// display's colour space to sRGB (sips), decoded (decodePng()) with `scale`,
+// the pixels per point. The window is found by its bounds among Koan's pid's
+// windows. {frame} or {error}. Needs the screen-recording grant the bench's
+// visual checks have; a translucent (glass) window shows the desktop through.
+export async function captureWindow(page) {
+  if (!IS_MAC || !KOAN_PID) return { error: 'macOS only, with KOAN_PID' };
+  const b = (await windowOf(page.id))?.bounds;
+  if (!b) return { error: 'no window for the page' };
+  try {
+    const near = (x, y) => Math.abs(x - y) <= 2;
+    const lines = execFileSync(winidTool(), [String(KOAN_PID)], { encoding: 'utf8', timeout: 10000 })
+        .trim().split('\n').map(l => l.split(' ').map(Number));
+    const w = lines.find(f => f[5] === 0 && near(f[1], b.left) && near(f[2], b.top) &&
+                              near(f[3], b.width) && near(f[4], b.height));
+    if (!w) return { error: `no on-screen window at ${JSON.stringify(b)}: ${lines.join('; ')}` };
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'koan-shot-')), 'window.png');
+    execFileSync('screencapture', ['-x', '-o', `-l${w[0]}`, file], { stdio: 'ignore', timeout: 15000 });
+    execFileSync('sips', ['--matchTo', '/System/Library/ColorSync/Profiles/sRGB Profile.icc', file],
+                 { stdio: 'ignore', timeout: 15000 });
+    const frame = decodePng(file);
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+    return { frame: { ...frame, scale: frame.width / b.width } };
+  } catch (e) {
+    return { error: String(e.message ?? e).split('\n')[0] };
+  }
 }
 
 // --- A local web server (no network needed). /p?t=<title>&b=<colour>

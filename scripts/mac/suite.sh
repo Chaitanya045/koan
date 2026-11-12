@@ -238,9 +238,11 @@ fi
 # --- Koan for one e2e script.
 # Whether a script's .flags need Linux's headless Ozone ({dump}, --ozone-*),
 # unless the file says the script runs on macOS without them (a line
-# "# macos: without frame dumps"; the script checks KOAN_DUMP_DIR itself).
+# "# macos: without frame dumps" or "# macOS: run"; the script reads the
+# window another way there, e.g. KOAN_DUMP_DIR or a screen capture).
 needs_ozone() {  # <flags file>
-  [[ -f "$1" ]] && grep -qE '\{dump\}|--ozone' "$1" && ! grep -qx '# macos: without frame dumps' "$1"
+  [[ -f "$1" ]] && grep -qE '\{dump\}|--ozone' "$1" &&
+    ! grep -qxiE '# macos: (without frame dumps|run)' "$1"
 }
 serial=0
 # Launches Koan with a fresh profile for test <name>, runs node <script>
@@ -369,7 +371,14 @@ if [[ $skip_e2e == 0 ]]; then
       secs=300
       [[ "$entry" == *timeout=* ]] && secs="${entry##*timeout=}" && secs="${secs%% *}"
       wanted "$name" || continue
-      if needs_ozone "$ROOT/scripts/e2e/$name.flags"; then
+      # A script's .flags may say what it does here: "# macOS: skip: <why>",
+      # or that it runs without Linux's headless Ozone (needs_ozone()).
+      flags_file="$ROOT/scripts/e2e/$name.flags"
+      if [[ -f "$flags_file" ]] && grep -q '^# macOS: skip: ' "$flags_file"; then
+        report SKIP "$name" "$(grep -m1 '^# macOS: skip: ' "$flags_file" | sed 's/^# macOS: skip: //')"
+        continue
+      fi
+      if needs_ozone "$flags_file"; then
         report SKIP "$name" "needs Linux's headless Ozone (its .flags)"
         continue
       fi
