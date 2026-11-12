@@ -177,6 +177,30 @@ struct Appearance {
 };
 Appearance GetAppearance(const Environment& env, const SpaceTheme& theme);
 
+// Koan, not Zen (#291): the contrast of the light mode's text (black at 90%,
+// as Zen's shouldBeDarkMode() composites it) on `color` painted at `opacity`
+// on a transparent window (Zen's white wash, at that alpha) over a dark blur
+// (`env.window`: the window's colour in its dark scheme, which is what the
+// blur shows over a dark desktop).
+double LightTextContrastOverBlur(const Environment& env,
+                                 const Rgb& color,
+                                 double opacity);
+// The contrast the light mode's text keeps over the blur: WCAG's AA for
+// normal text.
+inline constexpr double kLightTextMinContrast = 4.5;
+// Koan, not Zen (#291): the least opacity a theme's colours are painted at
+// on a transparent window in a dark system scheme (`env.dark`) when the
+// theme gives the window light mode. Zen decides the mode on the theme's
+// colour alone (the accent is the background on a transparent window) but
+// paints the colour at the slider's opacity over the blur, which is dark
+// there: at a low opacity the sidebar is mid-grey, and its dark text and
+// icons fade into it. Each colour is painted at least as opaque as it takes
+// for LightTextContrastOverBlur() to reach kLightTextMinContrast (at most
+// Zen's maximum, 0.8). 0 when no floor applies: an opaque window, a light
+// system, the default theme, a dark mode, custom colours (painted as
+// given).
+double LightThemeOpacityFloor(const Environment& env, const SpaceTheme& theme);
+
 // A CSS background layer: a solid colour (one stop), or a
 // linear-gradient(<angle>) / radial-gradient(circle at <x>% <y>%) with
 // colour stops at fractions of the gradient line (which may lie outside
@@ -229,6 +253,9 @@ struct Background {
   float cover = 0;
   SkColor cover_base = SK_ColorTRANSPARENT;
   std::vector<GradientLayer> cover_layers;
+  // The alpha the theme's colours are painted at instead of the slider's
+  // lower opacity (LightThemeOpacityFloor()); 0 when they take the slider's.
+  float opacity_floor = 0;
 };
 
 // Zen's getGradient() for the browser background. Koan paints it across the

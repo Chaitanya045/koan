@@ -1213,6 +1213,11 @@ while macOS's Reduce Transparency (System Settings, Accessibility, Display)
 is on, and while the window is being captured. An inactive window goes flat and opaque,
 like Zen's. It needs macOS 26 or later, and on an Intel Mac it is off until you turn it on; not on other platforms.
 
+In the dark scheme a Space theme that makes the window light (dark text) is
+painted at least as opaque as its text needs to read over the dark desktop
+(4.5:1), even with the opacity slider lower; from that point up the slider
+works as in Zen.
+
 Zen's `zen.theme.acrylic-urlbar` is "Glass URL bar" (Settings,
 URL Bar): the floating URL bar (⌘T / ⌘L) turns translucent with the page
 blurred behind it. Off by default, as in Zen; it also stays opaque while

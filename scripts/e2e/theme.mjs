@@ -268,6 +268,11 @@ check("A light preset: Zen's dot and window colour",
       p?.p.Dots === ZEN_LIGHT_DOT && p?.p.WindowBackground === ZEN_LIGHT_BACKGROUND,
       `${p?.p.Dots} ${p?.p.WindowBackground}`);
 check('...and it makes the window light, as in Zen', p?.p.WindowMode === 'light', p?.p.WindowMode);
+// #291's contrast floor is for a translucent window over a dark blur only:
+// an opaque window blends the theme into its own colour and decides the mode
+// on that (theme_glass.mjs checks the floor).
+check('...at the slider\'s opacity on an opaque window, with no contrast floor',
+      !(p?.p.WindowBackground ?? '').includes(' / floor '), p?.p.WindowBackground);
 check('...while websites keep the Dark appearance', await pagePrefersDark() === true,
       await appearance());
 await closePicker();
