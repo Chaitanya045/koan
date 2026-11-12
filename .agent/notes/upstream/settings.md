@@ -71,6 +71,8 @@ or the settings hook patches.
 | Framing chrome://settings in Koan's page | **rejected** | no `chrome.send` in WebUI subframes (above) |
 | Re-implementing Chromium's settings | **rejected** | hundreds of rows that change every milestone |
 | Rows Zen hides (Z28: AI page, ad privacy, theme / home rows, sign-in) | **lock, follow-up** | issue filed; this PR builds the shell, routing and search |
+| Chromium rows that Koan's layout makes do nothing (Appearance: Show bookmarks bar and its visibility menu, Show tab search button, Auto-pin new tab groups, hover card rows) | **lock** (hidden) | `hidden` in the `appearance_page.html.ts` patch, next to the tab strip position row; docs/SETTINGS_AUDIT.md |
+| Chromium's Appearance > Mode (`browser.theme.color_scheme2`) vs the look's mode in the shadcn style | **reuse**, kept in step | `KoanColorSchemeSync` (no patch): one setting in two places |
 | Chromium sections' look in the shadcn style | **override, partial** | document-level tokens (font, background, text, borders, accent) over cr variables; a full restyle is a follow-up |
 
 ## Hooks (all in `patches/`, see docs/REBASE.md "Settings page")

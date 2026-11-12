@@ -30,16 +30,17 @@ const MAC_VK = {
   9: 25, 7: 26, 8: 28, 0: 29, o: 31, u: 32, i: 34, p: 35, l: 37, j: 38,
   k: 40, n: 45, m: 46, Enter: 36, Tab: 48, ' ': 49, Backspace: 51,
   Escape: 53, ArrowLeft: 123, ArrowRight: 124, ArrowDown: 125, ArrowUp: 126,
+  PageUp: 116, PageDown: 121,
 };
 // Windows virtual key codes (what windowsVirtualKeyCode wants).
 const WIN_VK = {
   Enter: 13, Tab: 9, ' ': 32, Backspace: 8, Escape: 27, ArrowLeft: 37,
-  ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
+  ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, PageUp: 33, PageDown: 34,
 };
 const CODE = {
   Enter: 'Enter', Tab: 'Tab', ' ': 'Space', Backspace: 'Backspace',
   Escape: 'Escape', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight',
-  ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp',
+  ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', PageUp: 'PageUp', PageDown: 'PageDown',
 };
 export const macKeyCode = name => MAC_VK[name.length === 1 ? name.toLowerCase() : name];
 

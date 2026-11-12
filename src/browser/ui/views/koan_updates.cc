@@ -234,7 +234,9 @@ class Updater {
       complete_pending_ = !ShowUpdateComplete(browser_view);
       return;
     }
-    if (update_pending_ &&
+    // Not while Check for updates is off, also for a newer commit found
+    // before it was turned off (it shows after the next check once it is on).
+    if (update_pending_ && CanCheck() &&
         ShowUpdateAvailable(browser_view, *update_pending_)) {
       local_state()->SetString(prefs::kUpdatesNotifiedCommit, *update_pending_);
       update_pending_.reset();

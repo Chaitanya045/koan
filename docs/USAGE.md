@@ -851,8 +851,18 @@ border, link and accent colours; their layout and controls stay Chromium's
 centred at their right, like shadcn's Select: on a filled button in the Zen
 style, on a bordered field in shadcn.
 
-Not hidden yet: the Chromium rows Zen hides in Firefox (the AI page, ad
-privacy, the theme and home-button rows, sign-in), a follow-up.
+**Chromium's rows Koan replaces.** Rows that would do nothing in Koan are
+hidden: Appearance > Show bookmarks bar (Look and Feel > Bookmarks bar
+decides), Show tab search button (the sidebar has none), Automatically pin
+new tab groups (Spaces are never saved tab groups), the tab hover card rows
+(the sidebar shows no hover cards) and the tab strip position. In the shadcn
+style, Chromium's Appearance > Mode, Koan's Look and Feel > Mode and the
+macOS View > Appearance menu are one setting: changing one changes the
+others (and a switch to the Zen style keeps that mode). Until you change
+one, Chromium's row shows Device: Koan doesn't change it by itself, since
+websites follow it too. Not hidden yet: the Chromium rows Zen hides in Firefox (the AI page,
+ad privacy, the theme and home-button rows, sign-in), a follow-up (#300).
+Every row's audit: `docs/SETTINGS_AUDIT.md`.
 
 ![Settings](screenshots/settings-look-and-feel.png)
 
@@ -1202,7 +1212,8 @@ The ticks last until Koan quits or you press Stop, like the approvals.
 profile of its own, with none of your settings, extensions or permissions, in
 a background window of that profile. It takes a moment longer to start, and
 the profile is deleted when the task ends. Hidden profiles never show in the
-profile menu or bring up the profile picker at launch.
+profile menu or bring up the profile picker at launch. Its row is greyed out
+while Agent ready is off.
 
 An agent can ask to control one of your own tabs; Koan asks you first, every
 time. Once you allow it, the agent keeps control wherever the tab goes, until

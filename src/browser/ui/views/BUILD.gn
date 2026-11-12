@@ -347,6 +347,8 @@ source_set("impl") {
     "koan_browser_view_controller.cc",
     "koan_browser_view_controller.h",
     "koan_browser_view_hooks.cc",
+    "koan_color_scheme_sync.cc",
+    "koan_color_scheme_sync.h",
     "koan_command_palette.cc",
     "koan_command_palette.h",
     "koan_command_policy.cc",

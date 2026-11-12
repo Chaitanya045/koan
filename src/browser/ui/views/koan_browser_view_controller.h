@@ -26,6 +26,7 @@ namespace koan {
 
 class AiStarterPackFilter;
 class KoanAgentIndicator;
+class KoanColorSchemeSync;
 class KoanCommandPalette;
 class KoanCompactModeController;
 class KoanDownloadAnimation;
@@ -149,6 +150,7 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanPinnedTabController> pinned_tabs_;
   std::unique_ptr<KoanFolderController> folders_;
   std::unique_ptr<KoanThemeController> theme_;
+  std::unique_ptr<KoanColorSchemeSync> color_scheme_sync_;
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanLibraryController> library_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
