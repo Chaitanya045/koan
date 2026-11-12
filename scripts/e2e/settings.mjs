@@ -70,6 +70,40 @@ check('...Look and Feel shows the browser layout and compact mode groups',
       headings?.includes('Browser Layout') && headings?.includes('Show in compact view'),
       JSON.stringify(headings));
 await shot(settings, 'settings-look-and-feel');
+
+// Koan's branding over Chromium's (#349). The toolbar's dark-mode logo (the
+// default look is dark) is a Chromium SVG that scripts/branding.py replaces
+// with Koan's logo (branding/logo.svg); the light one is
+// chrome://theme/current-channel-logo.
+// (As an image: Chromium's has a 24 by 24 size of its own, Koan's only a
+// viewBox.)
+const logo = await evalIn(settings, `new Promise(resolve => {
+  const img = new Image();
+  img.onload = () => resolve(img.naturalWidth + 'x' + img.naturalHeight);
+  img.onerror = () => resolve('error');
+  img.src = 'chrome://resources/images/chrome_logo_dark.svg';
+})`);
+check('The Settings header\'s dark-mode logo is Koan\'s', !!logo && logo !== 'error' &&
+      logo !== '24x24', logo);
+const ui = `document.querySelector('settings-ui').shadowRoot`;
+const menu = `${ui}.querySelector('settings-menu').shadowRoot`;
+const people = await evalIn(settings,
+    `${menu}.querySelector('#people')?.textContent.trim()`);
+check('...the People item is the profile\'s, not "You and Google" (no Google account)',
+      people === 'Profile', JSON.stringify(people));
+// The selected menu item: shadcn's sidebar item (--sidebar-accent), not
+// Chromium's light blue.
+const selected = await evalIn(settings, `(() => {
+  const item = ${menu}.querySelector('.cr-nav-menu-item[selected]');
+  const probe = document.createElement('div');
+  probe.style.background = 'var(--sidebar-accent)';
+  document.body.append(probe);
+  const want = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return item && { have: getComputedStyle(item).backgroundColor, want };
+})()`);
+check('...and the selected menu item has the look\'s sidebar accent',
+      !!selected && selected.have === selected.want, JSON.stringify(selected));
 check(IS_MAC ? '...with the macOS-only Haptic feedback row' : '...and no macOS-only rows',
       await evalIn(settings,
           `!!koanSettingsRoot.querySelector('[data-pref="koan.haptic_feedback"]')`) === IS_MAC);

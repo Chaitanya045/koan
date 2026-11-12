@@ -143,6 +143,14 @@ class ManifestTest(unittest.TestCase):
         self.assertLessEqual(set(branding.logos_for(platform)),
                              set(branding.BRANDED_FILES))
 
+  def test_webui_dark_logo_is_koans(self):
+    # cr-toolbar's dark-mode logo (Settings, History, Downloads, Extensions).
+    rel = 'ui/webui/resources/images/chrome_logo_dark.svg'
+    self.assertEqual(branding.SVG_LOGOS[rel], 'logo.svg')
+    self.assertIn(rel, branding.BRANDED_FILES)
+    for source in branding.SVG_LOGOS.values():
+      self.assertTrue((ROOT / 'branding' / source).is_file(), source)
+
   def test_branded_files_are_unique(self):
     self.assertEqual(len(branding.BRANDED_FILES),
                      len(set(branding.BRANDED_FILES)))
