@@ -8,13 +8,23 @@
 // tab closes coming back with a new tab. (The wheel, swipes and restarts:
 // spaces_switching.mjs.)
 //
+// On macOS (#270): ⌘T and ⌘W are main-menu keys, which CDP keys never reach,
+// so they are real keys there (lib/mac.mjs menuKey(), KOAN_INPUT=real);
+// without real input their checks skip, and the New Tab row and a CDP close
+// stand in so the steps after them run. The Create menu ("+"), the Space
+// header's menu and the tab's menu are native NSMenus that UI DevTools can't
+// see (and that keep it from answering while open), so their checks skip
+// there (NATIVE_MENUS); the header's rename takes F2 instead of Change
+// Name..., and Delete Space Chromium's Close group key (⌘⌃W), which runs
+// the same Delete Space. Chromium's group keys are Cmd+Ctrl there.
+//
 //   scripts/e2e/run.sh spaces
 import {
-  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, key as pageKey,
-  menuMouse, openMenus, pages as pageTargets, readPref, sleep, typeInto, viewEvent, viewMouse,
-  viewTree, visiblePage, waitFor, windowTints, skipOnMac,
+  ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
+  check, connect, evalIn, finish, key as pageKey, menuMouse, openMenus, pages as pageTargets,
+  readPref, sleep, typeInto, viewEvent, viewMouse, viewTree, visiblePage, waitFor, windowTints,
 } from './lib/koan.mjs';
-skipOnMac();
+import { menuKey as macMenuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
 
 const views = viewTree;
 // The node of the view tagged with element identifier `id`, if one shows.
@@ -53,6 +63,31 @@ async function viewKey(view, keyCode) {
 async function key(code, modifiers = 0, keyName = '') {
   await pageKey(await visiblePage(), code, modifiers, keyName);
   await sleep(1200);
+}
+// Ctrl+T / Ctrl+W on the shown page; on macOS a real ⌘T / ⌘W, the main
+// menu's. Whether it was sent.
+async function menuKey(code, name) {
+  const sent = await macMenuKey(await visiblePage(), name, 'c', () => key(code, CTRL, name), 1200);
+  if (sent && IS_MAC) await sleep(500);
+  return sent;
+}
+// Ctrl+T, or without real input on macOS the sidebar's New Tab row (which
+// also opens a tab in the Space; the profile turns off replace-newtab), the
+// check `name` skipped. Whether Ctrl+T was sent.
+async function newTabKey(name) {
+  if (await menuKey(VK.T, 't')) return true;
+  skipped(name, menuKeyWhyNot());
+  await click(one(await views(), 'KoanNewTabRow'));
+  return false;
+}
+// Ctrl+W, or without real input on macOS a CDP close of the shown tab, the
+// check `name` (if any) skipped. Whether Ctrl+W was sent.
+async function closeTabKey(name) {
+  if (await menuKey(VK.W, 'w')) return true;
+  if (name) skipped(name, menuKeyWhyNot());
+  await browserCall('Target.closeTarget', { targetId: (await visiblePage()).id });
+  await sleep(1500);
+  return false;
 }
 
 // The pages that still have a renderer (not discarded), and the visible
@@ -103,19 +138,24 @@ check('No tab group header or Unfocus pill in the Space',
 
 // ---- "+": Zen's Create menu (Create Space, Create Folder | New Split, New
 // Tab; folders add Create Folder).
-await click(s.create);
-let plus = menus(await views())[0];
-check('"+" opens the Create menu', plus?.items.length === 4,
-      `${plus?.items.length} item(s)`);
-if (plus) {
-  await chooseMenuItem(plus, plus.items[0]);
-}
-s = await sidebar();
-const plusForm = one(s.vs, 'KoanSpaceCreationView');
-check('...whose Create Space opens the Create-a-Space form', !!plusForm);
-if (plusForm) {
-  await click(shown(s.vs, 'MdTextButton')
-      .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel'));
+if (NATIVE_MENUS) {
+  skipped('"+" opens the Create menu, whose Create Space opens the Create-a-Space form',
+          NATIVE_MENU_WHY);
+} else {
+  await click(s.create);
+  const plus = menus(await views())[0];
+  check('"+" opens the Create menu', plus?.items.length === 4,
+        `${plus?.items.length} item(s)`);
+  if (plus) {
+    await chooseMenuItem(plus, plus.items[0]);
+  }
+  s = await sidebar();
+  const plusForm = one(s.vs, 'KoanSpaceCreationView');
+  check('...whose Create Space opens the Create-a-Space form', !!plusForm);
+  if (plusForm) {
+    await click(shown(s.vs, 'MdTextButton')
+        .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel'));
+  }
 }
 
 // ---- The Create-a-Space form (Ctrl+Alt+N), with the emoji picker.
@@ -200,9 +240,11 @@ check('The bottom bar shows both Spaces, the new one active',
         JSON.stringify(s.buttons.map(b => [b.name, b.view.props.Collapsed])));
 }
 
-await key(VK.T, CTRL, 't');
+if (await newTabKey('A new tab opens in the active Space')) {
+  s = await sidebar();
+  check('A new tab opens in the active Space', s.tabs === 1, `${s.tabs} tab(s)`);
+}
 s = await sidebar();
-check('A new tab opens in the active Space', s.tabs === 1, `${s.tabs} tab(s)`);
 
 // ---- Switching: the bottom bar, keys (wrapping around), the wheel.
 await click(s.buttons[0].view);
@@ -215,10 +257,11 @@ check('Clicking a Space in the bottom bar shows it',
 // leave and come back.
 await click(shown(s.vs, 'TabView')[0]);
 const remembered = (await pages()).visible;
-await key(VK.RIGHT, CTRL | ALT);
+// (Accel+Alt: Cmd+Option on macOS.)
+await key(VK.RIGHT, ACCEL | ALT);
 s = await sidebar();
 check('Ctrl+Alt+Right goes to the next Space', s.header?.name === 'Research');
-await key(VK.RIGHT, CTRL | ALT);
+await key(VK.RIGHT, ACCEL | ALT);
 s = await sidebar();
 check('...and wraps around to the first', s.header?.name === 'Space');
 check('Coming back lands on the Space\'s last active tab',
@@ -232,17 +275,27 @@ async function headerMenu() {
   await sleep(1500);
   return menus(await views())[0];
 }
-let menu = await headerMenu();
+let menu;
 // Change Name..., Change Icon..., Theme..., the Spaces, Unload Space,
 // Unload All Other Spaces, Create Space, Delete Space.
-check('The header menu has Zen\'s entries and the Spaces',
-      menu?.items.length === 9, `${menu?.items.length} item(s)`);
+if (NATIVE_MENUS) {
+  skipped('The header menu has Zen\'s entries and the Spaces', NATIVE_MENU_WHY);
+} else {
+  menu = await headerMenu();
+  check('The header menu has Zen\'s entries and the Spaces',
+        menu?.items.length === 9, `${menu?.items.length} item(s)`);
+}
 
-// Change Name...: rename in place.
-await chooseMenuItem(menu, menu.items[0]);
+// Change Name...: rename in place. (On macOS F2 on the header, as below.)
+const VIA_F2 = NATIVE_MENUS ? ' (macOS: F2, the menu is native)' : '';
+if (NATIVE_MENUS) {
+  await viewKey((await sidebar()).header.view, VK.F2);
+} else {
+  await chooseMenuItem(menu, menu.items[0]);
+}
 vs = await views();
 const rename = shown(vs, 'Textfield').find(t => t.path.includes('KoanSpaceHeaderView'));
-check('Change Name... edits the name in the header', !!rename);
+check(`Change Name... edits the name in the header${VIA_F2}`, !!rename);
 if (rename) {
   await type(rename, 'Home', VK.RETURN);
 }
@@ -254,18 +307,23 @@ check('...with Zen\'s toast', renamedToast === 'Workspace has been successfully 
       renamedToast);
 
 // Change Icon...: Zen's picker, applied right away.
-menu = await headerMenu();
-await chooseMenuItem(menu, menu.items[1]);
-vs = await views();
-const picked = shown(vs, 'KoanEmojiCell')[0];
-check('Change Icon... opens the emoji picker', !!picked);
-if (picked) {
-  await click(picked);
+if (NATIVE_MENUS) {
+  skipped('Change Icon... opens the emoji picker, and picking sets the Space\'s icon',
+          NATIVE_MENU_WHY);
+} else {
+  menu = await headerMenu();
+  await chooseMenuItem(menu, menu.items[1]);
+  vs = await views();
+  const picked = shown(vs, 'KoanEmojiCell')[0];
+  check('Change Icon... opens the emoji picker', !!picked);
+  if (picked) {
+    await click(picked);
+  }
+  s = await sidebar();
+  check('...and picking sets the Space\'s icon',
+        s.header?.icon === picked?.props.Label && s.buttons[0].label === s.header?.icon,
+        JSON.stringify([s.header?.icon, picked?.props.Label]));
 }
-s = await sidebar();
-check('...and picking sets the Space\'s icon',
-      s.header?.icon === picked?.props.Label && s.buttons[0].label === s.header?.icon,
-      JSON.stringify([s.header?.icon, picked?.props.Label]));
 await key(VK.ESCAPE);
 
 // The keyboard path: the header takes focus; F2 renames, Enter opens the
@@ -284,10 +342,16 @@ s = await sidebar();
 check('...and Escape keeps the name', s.header?.name === 'Home' &&
       !shown(s.vs, 'Textfield').some(t => t.path.includes('KoanSpaceHeaderView')),
       s.header?.name);
-await viewKey(s.header.view, VK.RETURN);
-menu = menus(await views())[0];
-check('Enter on the header opens the Space menu', menu?.items.length === 9,
-      `${menu?.items.length} item(s)`);
+if (NATIVE_MENUS) {
+  // (Not pressed: the open native menu would keep UI DevTools from answering.)
+  skipped('Enter on the header opens the Space menu', NATIVE_MENU_WHY);
+  menu = null;
+} else {
+  await viewKey(s.header.view, VK.RETURN);
+  menu = menus(await views())[0];
+  check('Enter on the header opens the Space menu', menu?.items.length === 9,
+        `${menu?.items.length} item(s)`);
+}
 if (menu) {
   await chooseMenuItem(menu, menu.items[0]);  // Change Name..., to close it
   field = shown(await views(), 'Textfield').find(t => t.path.includes('KoanSpaceHeaderView'));
@@ -297,14 +361,18 @@ if (menu) {
 }
 
 // Unload Space frees the Space's other tabs; the active one stays.
-const before = await pages();
-menu = await headerMenu();
-await chooseMenuItem(menu, menu.items[5]);
-await sleep(1500);
-const after = await pages();
-check('Unload Space discards the Space\'s background tabs',
-      after.live.length === before.live.length - 1 && after.visible === before.visible,
-      `${before.live.length} -> ${after.live.length} live page(s)`);
+if (NATIVE_MENUS) {
+  skipped('Unload Space discards the Space\'s background tabs', NATIVE_MENU_WHY);
+} else {
+  const before = await pages();
+  menu = await headerMenu();
+  await chooseMenuItem(menu, menu.items[5]);
+  await sleep(1500);
+  const after = await pages();
+  check('Unload Space discards the Space\'s background tabs',
+        after.live.length === before.live.length - 1 && after.visible === before.visible,
+        `${before.live.length} -> ${after.live.length} live page(s)`);
+}
 
 // ---- A Space whose last tab closes comes back with a new tab. (Zen puts a
 // new Space after the active one: Home, Scratch, Research.)
@@ -317,13 +385,15 @@ check('A third Space, after the active one',
       s.buttons.map(b => b.name).join() === 'Home,Scratch,Research' &&
       s.header?.name === 'Scratch', s.buttons.map(b => b.name).join());
 // (A tab of its own first: Cmd+W on the empty tab would close the window.)
-await key(VK.T, CTRL, 't');
-await key(VK.W, CTRL, 'w');
-await sleep(1000);
-s = await sidebar();
-check('Closing its last tab keeps the Space, with the empty tab (no row)',
-      s.buttons.length === 3 && s.header?.name === 'Scratch' && s.tabs === 0,
-      JSON.stringify({ spaces: s.buttons.length, header: s.header?.name, tabs: s.tabs }));
+const CLOSE_LAST = 'Closing its last tab keeps the Space, with the empty tab (no row)';
+const opened = await newTabKey(CLOSE_LAST);
+if (await closeTabKey(opened ? CLOSE_LAST : null) && opened) {
+  await sleep(1000);
+  s = await sidebar();
+  check(CLOSE_LAST,
+        s.buttons.length === 3 && s.header?.name === 'Scratch' && s.tabs === 0,
+        JSON.stringify({ spaces: s.buttons.length, header: s.header?.name, tabs: s.tabs }));
+}
 
 // ---- The Create form from a collapsed sidebar: the sidebar expands over
 // the page while the form is open.
@@ -352,56 +422,67 @@ s = await sidebar();
 check('...and the sidebar expands again', !!s.header, JSON.stringify(s.header?.name));
 
 // ---- Move To (tab context menu) moves the tab and shows its Space.
-await click(s.buttons[0].view);
-s = await sidebar();
-// The Space's first tab, made active (Ctrl+1) so that it is the one the
-// Space remembers. (A synthetic click on a tab would leave its drag
-// handling pressed, and the context menu wouldn't open.)
-await key(49, CTRL, '1');
-s = await sidebar();
-const tab = shown(s.vs, 'TabView')[0];
-viewEvent(tab, 'DOM.dispatchMouseEvent',
-          { type: 'mousePressed', x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false);
-viewEvent(tab, 'DOM.dispatchMouseEvent',
-          { type: 'mouseReleased', x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false);
-await sleep(1500);
-const tabMenu = menus(await views())[0];
-let moveTo = null;
-// Hovering an item opens its submenu: Move To is the one listing the two
-// other Spaces. Folders' "Move to Folder" (just above it) is skipped: once
-// its submenu is open, it covers the next item here, so hovers can't reach
-// Move To.
-const moveToFolder = await elementNodeId('kKoanMoveToFolderItem');
-for (const item of tabMenu?.items ?? []) {
-  if (item.nodeId === moveToFolder) continue;
-  await menuMouse(tabMenu, item, ['mouseMoved']);
-  await sleep(700);
-  moveTo = menus(await views()).find(m => m.items.length === 2);
-  if (moveTo) break;
+if (NATIVE_MENUS) {
+  skipped('Move To (the tab\'s menu) moves the tab and shows its new Space', NATIVE_MENU_WHY);
+} else {
+  await click(s.buttons[0].view);
+  s = await sidebar();
+  // The Space's first tab, made active (Ctrl+1, Cmd+1 on macOS) so that it
+  // is the one the Space remembers. (A synthetic click on a tab would leave
+  // its drag handling pressed, and the context menu wouldn't open.)
+  await key(49, ACCEL, '1');
+  s = await sidebar();
+  const tab = shown(s.vs, 'TabView')[0];
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    viewEvent(tab, 'DOM.dispatchMouseEvent',
+              { type, x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false);
+  }
+  await sleep(1500);
+  const tabMenu = menus(await views())[0];
+  let moveTo = null;
+  // Hovering an item opens its submenu: Move To is the one listing the two
+  // other Spaces. Folders' "Move to Folder" (just above it) is skipped: once
+  // its submenu is open, it covers the next item here, so hovers can't reach
+  // Move To.
+  const moveToFolder = await elementNodeId('kKoanMoveToFolderItem');
+  for (const item of tabMenu?.items ?? []) {
+    if (item.nodeId === moveToFolder) continue;
+    await menuMouse(tabMenu, item, ['mouseMoved']);
+    await sleep(700);
+    moveTo = menus(await views()).find(m => m.items.length === 2);
+    if (moveTo) break;
+  }
+  check('The tab context menu has Move To with the other Spaces', !!moveTo);
+  if (moveTo) {
+    await chooseMenuItem(moveTo, moveTo.items[1]);  // Research
+  }
+  s = await sidebar();
+  check('Move To moves the tab and shows its new Space',
+        s.header?.name === 'Research' && s.tabs === 2,
+        JSON.stringify({ header: s.header?.name, tabs: s.tabs }));
+  // The Space it left no longer has the tab it remembered.
+  await click(s.buttons[0].view);
+  s = await sidebar();
+  check('...and the Space it left still shows, on one of its own tabs',
+        s.header?.name === 'Home' && s.tabs >= 1,
+        JSON.stringify({ header: s.header?.name, tabs: s.tabs }));
 }
-check('The tab context menu has Move To with the other Spaces', !!moveTo);
-if (moveTo) {
-  await chooseMenuItem(moveTo, moveTo.items[1]);  // Research
-}
-s = await sidebar();
-check('Move To moves the tab and shows its new Space',
-      s.header?.name === 'Research' && s.tabs === 2,
-      JSON.stringify({ header: s.header?.name, tabs: s.tabs }));
-// The Space it left no longer has the tab it remembered.
-await click(s.buttons[0].view);
-s = await sidebar();
-check('...and the Space it left still shows, on one of its own tabs',
-      s.header?.name === 'Home' && s.tabs >= 1,
-      JSON.stringify({ header: s.header?.name, tabs: s.tabs }));
-await click(s.buttons[2].view);
+await click((await sidebar()).buttons[2].view);
 
-// ---- Delete Space asks first, then shows the Space before it.
-menu = await headerMenu();
-await chooseMenuItem(menu, menu.items.at(-1));
+// ---- Delete Space asks first, then shows the Space before it. (On macOS
+// the menu is native: Chromium's Close group key, ⌘⌃W, which Koan runs as
+// Delete Space, KoanWorkspaceController's IDC_CLOSE_TAB_GROUP.)
+const VIA_KEY = NATIVE_MENUS ? ' (macOS: ⌘⌃W, the menu is native)' : '';
+if (NATIVE_MENUS) {
+  await key(87, META | CTRL, 'W');
+} else {
+  menu = await headerMenu();
+  await chooseMenuItem(menu, menu.items.at(-1));
+}
 vs = await views();
 const yes = shown(vs, 'MdTextButton').find(b => b.props.Text === 'Yes') ??
             shown(vs, 'LabelButton').find(b => b.props.Text === 'Yes');
-check('Delete Space asks for confirmation', !!yes);
+check(`Delete Space asks for confirmation${VIA_KEY}`, !!yes);
 if (yes) {
   await click(yes);
 }
@@ -444,10 +525,12 @@ s = await sidebar();
 check('Clicking Cancel closes the form', !one(s.vs, 'KoanSpaceCreationView'));
 // ---- Spaces lockdown (.agent/notes/upstream/tab-groups-omnibox-fullscreen.md
 // section 1.3): upstream's tab group side effects and entry points stay out
-// of a Spaces window. The Spaces here: Home, Scratch, Clicked (shown). Chrome's group keys are Shift+Alt+P/W/X/Z/C here
+// of a Spaces window. The Spaces here: Home, Scratch, Clicked (shown).
+// Chrome's group keys are Shift+Alt+P/W/X/Z/C here
 // (Cmd+Ctrl on a Mac). A DCHECK build also runs Koan's leak detector (G14)
 // after every update of the steps below.
 const KEY = { C: 67, P: 80, W: 87, X: 88, Z: 90 };
+const GROUP = IS_MAC ? META | CTRL : SHIFT | ALT;
 const noEditor = vs => shown(vs, 'TabGroupEditorBubbleView').length === 0;
 const userColor = await readPref('browser.theme.user_color2');
 
@@ -458,7 +541,7 @@ check('G1: a default-theme Space gives the window no colour of its own',
 
 // G4: "New tab group" opens Zen's Create-a-Space form, with no group or
 // editor.
-await key(KEY.P, SHIFT | ALT, 'P');
+await key(KEY.P, GROUP, 'P');
 s = await sidebar();
 check('G4: New tab group opens the Create-a-Space form, not a group',
       !!one(s.vs, 'KoanSpaceCreationView') && noEditor(s.vs) &&
@@ -471,16 +554,16 @@ if (formCancel) {
   await click(formCancel);
 }
 // G4: next / previous group are the next / previous Space, wrapping.
-await key(KEY.X, SHIFT | ALT, 'X');
+await key(KEY.X, GROUP, 'X');
 s = await sidebar();
 check('G4: Focus next group goes to the next Space (wrapping around)',
       s.header?.name === 'Home', s.header?.name);
-await key(KEY.Z, SHIFT | ALT, 'Z');
+await key(KEY.Z, GROUP, 'Z');
 s = await sidebar();
 check('G4: Focus previous group goes back', s.header?.name === 'Clicked',
       s.header?.name);
 // G4: "Close group" asks to delete the Space (Zen's question); No keeps it.
-await key(KEY.W, SHIFT | ALT, 'W');
+await key(KEY.W, GROUP, 'W');
 vs = await views();
 const no = shown(vs, 'MdTextButton').find(b => b.props.Text === 'No') ??
            shown(vs, 'LabelButton').find(b => b.props.Text === 'No');
@@ -495,7 +578,7 @@ check('...and No keeps it, with its tabs', s.buttons.length === 3 &&
 // G4: "New tab in group" is Koan's new tab (the URL bar), which opens no tab
 // by itself.
 const tabsBefore = s.tabs;
-await key(KEY.C, SHIFT | ALT, 'C');
+await key(KEY.C, GROUP, 'C');
 await key(VK.ESCAPE);
 s = await sidebar();
 check('G4: New tab in group opens Koan\'s new tab, not an NTP tab',

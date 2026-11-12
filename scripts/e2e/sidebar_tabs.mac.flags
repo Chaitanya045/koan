@@ -1,0 +1,5 @@
+# macOS (scripts/mac/suite.sh reads <name>.mac.flags): the test_helper
+# extension, for askTestHelper() in lib/mac.mjs, which pins the tab for "Add
+# to Essentials" (the tab's menu is a native NSMenu there). {root} is the
+# repo; suite.sh expands it.
+--load-extension={root}/scripts/e2e/extensions/test_helper

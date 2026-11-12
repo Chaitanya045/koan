@@ -10,8 +10,16 @@
 // The profile (prefs/sidebar_tabs.json) turns off Zen's replace-newtab, so
 // the New Tab row and Ctrl+T open tabs right away; urlbar.mjs tests them
 // with it on.
-import { tabMenuCommand, sendKey, skipOnMac } from './lib/koan.mjs';
-skipOnMac('needs Cmd+Shift+T (Reopen Closed Tab), a main-menu key CDP keys never reach on macOS; port it to the test_helper extension or real input (#270)');
+//
+// On macOS (#270): ⇧⌘T, ⌘T and ⌘W are main-menu keys, which CDP keys never
+// reach, so they are real keys there (lib/mac.mjs menuKey(), with
+// KOAN_INPUT=real), and their checks skip without real input; the tab's
+// menu is a native NSMenu, so the test_helper extension (sidebar_tabs.mac.flags)
+// pins the tab for "Add to Essentials" (an Essential is a pinned tab), from
+// a local page it can hear.
+import { ACCEL, IS_MAC, NATIVE_MENUS, tabMenuCommand, sendKey, visiblePage } from './lib/koan.mjs';
+import { askTestHelper, menuKey as macMenuKey, menuKeyWhyNot, skipped, startServer, windowOf }
+    from './lib/mac.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -126,7 +134,7 @@ async function props(view) {
   return p;
 }
 
-// Sends a key press to the active page. Modifiers: Alt=1 Ctrl=2 Shift=8.
+// Sends a key press to the first page. Modifiers: Alt=1 Ctrl=2 Shift=8.
 async function key(code, modifiers, keyName = '') {
   const page = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
       .filter(t => t.type === 'page')[0];
@@ -174,16 +182,25 @@ const VK = { D: 68, N: 78, S: 83, T: 84, W: 87, LEFT: 37 };
 const inContainer = (vs, cls, container) =>
   vs.filter(v => v.cls === cls && v.shown && v.path.includes(container));
 
-// Two tabs with the local test page, nothing pinned.
-{
-  const [first] = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .filter(t => t.type === 'page');
+// A main-menu key on macOS (Mac key `name` with keypress2 `flags`, real
+// input), elsewhere Windows key `code` with `modifiers` on the first page
+// (key()). Whether it was sent.
+const menuKey = (page, code, modifiers, name, flags) =>
+  macMenuKey(page, name, flags, () => key(code, modifiers, name), 1200);
+// Target.createTarget with `params`; its target id.
+async function newTarget(params) {
   const version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
   const browser = await connect(version.webSocketDebuggerUrl);
-  await browser.send('Target.createTarget', { url: `${first.url}#two` });
+  const { targetId } = (await browser.send('Target.createTarget', params)).result;
   browser.close();
   await sleep(1500);
+  return targetId;
 }
+
+// Two tabs with the local test page, nothing pinned.
+const testPage = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
+    .filter(t => t.type === 'page')[0].url.replace(/#.*/, '');
+await newTarget({ url: `${testPage}#two` });
 let vs = await views();
 const rows = find(vs, 'KoanSidebarTabRowsView');
 check('The rows sit in the Space\'s tab list, scrolling with the tabs (Zen)',
@@ -243,10 +260,24 @@ check('The New Tab row opens a tab at the top, like Zen',
       `${before} -> ${await pages()} page(s), titles ${JSON.stringify(titles)}`);
 
 // Make the new tab an Essential ("Add to Essentials"; Ctrl+Shift+D pins a
-// tab to its workspace): a tile.
-await tabMenuCommand(vs.filter(v => v.cls === 'TabView' && v.shown &&
-                                    v.path.includes('UnpinnedTabContainerView'))
-                         .sort((a, b) => a.y - b.y)[0], 'kKoanAddToEssentialsMenuItem');
+// tab to its workspace): a tile. On macOS the tab, on a local page first
+// (one test_helper hears), pins itself.
+if (NATIVE_MENUS) {
+  const server = await startServer();
+  const essential = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
+      .find(t => t.type === 'page' && !t.url.includes('sidebar_tabs.html'));
+  const url = server.url('/p?t=Essential');
+  const c = await connect(essential.webSocketDebuggerUrl);
+  await c.send('Page.navigate', { url });
+  c.close();
+  await sleep(1500);
+  check('...(macOS: the tab pins itself through test_helper)',
+        await askTestHelper({ ...essential, url }, 'pin-tab', 1500));
+} else {
+  await tabMenuCommand(vs.filter(v => v.cls === 'TabView' && v.shown &&
+                                      v.path.includes('UnpinnedTabContainerView'))
+                           .sort((a, b) => a.y - b.y)[0], 'kKoanAddToEssentialsMenuItem');
+}
 vs = await views();
 const tiles = inContainer(vs, 'TabView', 'PinnedTabContainerView');
 check('Pinned tabs are 46px Essentials tiles', tiles.length === 1 && tiles[0].h === 46,
@@ -270,9 +301,14 @@ check('...which has no row, and there is nothing left to clear',
 check('...and toasts "Tabs Closed!"', toast?.visible && toast.h === 42 && toast.w > 0,
       JSON.stringify(toast));
 vs = await views();
-await key(VK.T, CTRL | SHIFT, 't');
-check('Ctrl+Shift+T brings a closed tab back', (await pages()) === 3,
-      `${await pages()} page(s)`);
+const REOPEN = IS_MAC ? '⇧⌘T' : 'Ctrl+Shift+T';
+if (await menuKey(await visiblePage(), VK.T, CTRL | SHIFT, 't', 'cs')) {
+  check(`${REOPEN} brings a closed tab back`, (await pages()) === 3, `${await pages()} page(s)`);
+} else {
+  skipped(`${REOPEN} brings a closed tab back`, menuKeyWhyNot());
+  // What follows counts the tabs: a test page tab in its place.
+  await newTarget({ url: `${testPage}#reopened` });
+}
 
 // Two new tabs; Clear keeps the selected one, like Zen (and the hidden
 // empty tab, which it never closes).
@@ -289,7 +325,7 @@ check('Clear keeps the selected tab', before === 5 && (await pages()) === 3 &&
 // itself stays visible (koan_sidebar_transitions_browsertest.cc checks it on
 // screen in the reveal). (The views are looked up again afterwards.)
 const toggleCompact = async () => {
-  await key(VK.S, CTRL, 's');
+  await key(VK.S, ACCEL, 's');
   await sleep(1000);
 };
 await toggleCompact();
@@ -307,8 +343,11 @@ check('Switching to horizontal tabs', (await setPref('vertical_tabs.enabled', fa
 vs = await views();
 check('...removes the rows', !find(vs, 'KoanSidebarTabRowsView')?.shown);
 before = await pages();
-await key(VK.T, CTRL, 't');
-check('...and tabs still open', (await pages()) === before + 1, `${before} -> ${await pages()}`);
+if (await menuKey(await visiblePage(), VK.T, CTRL, 't', 'c')) {
+  check('...and tabs still open', (await pages()) === before + 1, `${before} -> ${await pages()}`);
+} else {
+  skipped('...and tabs still open (⌘T)', menuKeyWhyNot());
+}
 check('...and back', (await setPref('vertical_tabs.enabled', true)) === true);
 vs = await views();
 check('Back to vertical tabs: the rows are back',
@@ -328,30 +367,49 @@ check('Clear in a Space keeps the Space, with no rows left',
       space?.shown && find(vs, 'KoanSpaceHeaderView')?.shown && left.length === 0,
       `${left.length} row(s) left`);
 
-// Ctrl+W (⌘W) on a window's last tab closes the window, with the rows in
-// its Space's tab list: their teardown once left a dangling pointer in the
-// Space's layout (Mac DCHECK build). Koan must keep running.
+// Closing a window with the rows in its Space's tab list: their teardown
+// once left a dangling pointer in the Space's layout (Mac DCHECK build).
+// Koan must keep running. Ctrl+W (⌘W) on a window's only tab, a blank page,
+// keeps the window, on its empty tab, and Ctrl+W there closes it (Zen:
+// browser.tabs.closeWindowWithLastTab off, zen.tabs.close-window-with-empty
+// on; HandleCloseTabCommand() in koan_pinned_tabs.cc).
 {
-  const version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
-  const browser = await connect(version.webSocketDebuggerUrl);
-  const { targetId } = (await browser.send('Target.createTarget',
-                                           { url: 'about:blank', newWindow: true })).result;
-  browser.close();
-  await sleep(2500);
-  const target = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .find(t => t.id === targetId);
-  const c = await connect(target.webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: VK.W, nativeVirtualKeyCode: VK.W, modifiers: CTRL, key: 'w' };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
-  c.close();
-  await sleep(3000);
-  const after = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)
+  const CLOSE = IS_MAC ? '⌘W' : 'Ctrl+W';
+  const targetId = await newTarget({ url: 'about:blank', newWindow: true });
+  await sleep(1000);
+  const { windowId } = await windowOf(targetId);
+  const list = () => fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)
       .then(r => r.json()).catch(() => null);
-  check('Ctrl+W on a window\'s last tab closes the window, and Koan keeps running',
-        after && !after.some(t => t.id === targetId) &&
-        find(await views(), 'KoanSidebarTabRowsView')?.shown,
-        after ? `${after.filter(t => t.type === 'page').length} page(s) left` : 'no CDP');
+  // The window's page (its active tab), or null once the window is gone.
+  const pageOfWindow = async () => {
+    for (const t of (await list() ?? []).filter(t => t.type === 'page')) {
+      if ((await windowOf(t.id).catch(() => null))?.windowId === windowId) return t;
+    }
+    return null;
+  };
+  // Ctrl+W on the window's page; on macOS a real ⌘W.
+  const close = async () => {
+    const page = await pageOfWindow();
+    if (!page) return false;
+    return macMenuKey(page, 'w', 'c', async () => {
+      const c = await connect(page.webSocketDebuggerUrl);
+      await sendKey(c, VK.W, CTRL, 'w');
+      c.close();
+      await sleep(3000);
+    }, 3000);
+  };
+  if (!await close()) {
+    skipped(`${CLOSE} on a window's only tab, then on its empty tab`, menuKeyWhyNot());
+  } else {
+    check(`${CLOSE} on a window's only tab (a blank page) keeps the window, on its empty tab`,
+          !!await pageOfWindow(), `window ${windowId}`);
+    const sent = await close();
+    const after = await list();
+    check(`...and ${CLOSE} on the empty tab closes the window, and Koan keeps running`,
+          sent && after && !await pageOfWindow() &&
+          find(await views(), 'KoanSidebarTabRowsView')?.shown,
+          after ? `${after.filter(t => t.type === 'page').length} page(s) left` : 'no CDP');
+  }
 }
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');

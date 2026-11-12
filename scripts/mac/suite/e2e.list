@@ -37,11 +37,15 @@ colors
 compact_close
 compact_flash
 compact_single
+# Ported (#270): compact_variants, empty_tab, layout, omnibox_lockdown,
+# pinned, power, sidebar_tabs, spaces, tab_management, tabs_right_rtl. Their
+# main-menu keys (Cmd+W, Cmd+Shift+W, Cmd+L, Cmd+T, Cmd+Shift+T, Ctrl+Tab)
+# are real keys (lib/mac.mjs menuKey()), SKIPs with real input off; their
+# native-menu steps are SKIPs, test_helper's (<name>.mac.flags loads it) or
+# the menu's pref; Linux's frame dumps become a window capture
+# (captureWindow(), "# macOS: run" in the .flags).
+compact_variants
 download_animation
-# empty_tab, layout, omnibox_lockdown, pinned and power are ported (#270):
-# their main-menu keys (Cmd+W, Cmd+Shift+W, Cmd+L, Cmd+Shift+T) are real keys
-# (lib/mac.mjs menuKey()), SKIPs with real input off; their tab-menu steps
-# are SKIPs (a native NSMenu) or test_helper's.
 empty_tab timeout=180
 # Tab folders: the tab and folder menus are native NSMenus, picked through
 # Accessibility (System Events), with a real right-click when real input is on.
@@ -82,10 +86,14 @@ settings_effects_visual timeout=600
 shortcuts
 sidebar_animation
 sidebar_drag
+sidebar_tabs timeout=300
 # Zen's audio badge on an Essentials tile (favicon kept, click mutes).
 essentials_audio
+spaces timeout=420
 spaces_switching
+tab_management timeout=420
 tabs_right
+tabs_right_rtl timeout=180
 urlbar
 vertical_tabs_drag
 vertical_tabs_hover

@@ -9,7 +9,8 @@
 #       koan_browsertests) with --gtest_brief=1;
 #   (b) the e2e scripts of scripts/mac/suite/e2e.list against a fresh
 #       --user-data-dir each (--use-mock-keychain), through CDP and UI
-#       DevTools;
+#       DevTools; scripts/e2e/<name>.mac.flags, if it exists, replaces
+#       <name>.flags (see flags_file_of());
 #   (v) the visual checks: scripts/mac/visual/capture.mjs, then diff.py
 #       against docs/screenshots/reference/ (--record writes them);
 #   (c) crash reports: new .ips files under ~/Library/Logs/DiagnosticReports
@@ -236,6 +237,14 @@ if [[ $skip_cxx == 0 ]]; then
 fi
 
 # --- Koan for one e2e script.
+# The flags file of e2e script <name> on the Mac: scripts/e2e/<name>.mac.flags
+# if it exists (flags only the Mac run takes, e.g. the test_helper
+# extension), else <name>.flags (which may not exist). The skip markers and
+# needs_ozone() below read the same file.
+flags_file_of() {  # <name>
+  local mac="$ROOT/scripts/e2e/$1.mac.flags"
+  if [[ -f "$mac" ]]; then echo "$mac"; else echo "$ROOT/scripts/e2e/$1.flags"; fi
+}
 # Whether a script's .flags need Linux's headless Ozone ({dump}, --ozone-*),
 # unless the file says the script runs on macOS without them (a line
 # "# macos: without frame dumps" or "# macOS: run"; the script reads the
@@ -262,7 +271,8 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   [[ -f "$prefs" ]] && sed "s|{profile}|$prof|g" "$prefs" >"$prof/Default/Preferences"
   [[ -f "$local_state" ]] && cp "$local_state" "$prof/Local State"
   local enable="ui-debug-tools-enable-synthetic-events" disable="MacAppCodeSignClone" extra=() flag
-  local flags_file="$ROOT/scripts/e2e/$name.flags"
+  local flags_file
+  flags_file="$(flags_file_of "$name")"
   local file_flags=() updates=(--disable-component-update)
   if [[ -f "$flags_file" ]]; then
     while IFS= read -r flag || [[ -n "$flag" ]]; do
@@ -373,7 +383,7 @@ if [[ $skip_e2e == 0 ]]; then
       wanted "$name" || continue
       # A script's .flags may say what it does here: "# macOS: skip: <why>",
       # or that it runs without Linux's headless Ozone (needs_ozone()).
-      flags_file="$ROOT/scripts/e2e/$name.flags"
+      flags_file="$(flags_file_of "$name")"
       if [[ -f "$flags_file" ]] && grep -q '^# macOS: skip: ' "$flags_file"; then
         report SKIP "$name" "$(grep -m1 '^# macOS: skip: ' "$flags_file" | sed 's/^# macOS: skip: //')"
         continue
