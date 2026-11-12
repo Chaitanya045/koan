@@ -1,0 +1,36 @@
+diff --git a/chrome/browser/metrics/tab_stats/tab_stats_tracker.cc b/chrome/browser/metrics/tab_stats/tab_stats_tracker.cc
+--- a/chrome/browser/metrics/tab_stats/tab_stats_tracker.cc
++++ b/chrome/browser/metrics/tab_stats/tab_stats_tracker.cc
+@@ -732,6 +732,15 @@
+   if (!web_contents_usage_observers_.contains(web_contents)) {
+     for (TabStatsObserver& tab_stats_observer : tab_stats_observers_) {
+       tab_stats_observer.OnTabAdded(web_contents);
++      // Koan: a live page can join the strip while it plays (a Glance opened
++      // as a tab or in a split, #347). The usage observer below starts from
++      // its state, so say what AddObserverAndSetInitialState() would.
++      if (web_contents->GetCurrentlyPlayingVideoCount()) {
++        tab_stats_observer.OnVideoStartedPlaying(web_contents);
++      }
++      if (web_contents->IsCurrentlyAudible()) {
++        tab_stats_observer.OnTabIsAudibleChanged(web_contents);
++      }
+     }
+     web_contents_usage_observers_.insert(std::make_pair(
+         web_contents,
+@@ -742,8 +751,16 @@
+ void TabStatsTracker::OnTabReplaced(content::WebContents* old_contents,
+                                     content::WebContents* new_contents) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  // Koan: the same for a live page swapped in (window sync's move, #347);
++  // OnTabReplaced() observers already look at its audible state.
++  const bool koan_playing_video =
++      !web_contents_usage_observers_.contains(new_contents) &&
++      new_contents->GetCurrentlyPlayingVideoCount() > 0;
+   for (TabStatsObserver& tab_stats_observer : tab_stats_observers_) {
+     tab_stats_observer.OnTabReplaced(old_contents, new_contents);
++    if (koan_playing_video) {
++      tab_stats_observer.OnVideoStartedPlaying(new_contents);
++    }
+   }
+   web_contents_usage_observers_.insert(std::make_pair(
+       new_contents,
