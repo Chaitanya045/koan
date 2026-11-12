@@ -13,9 +13,18 @@
 // in the PR's screenshots.
 //
 // glance_split.flags dumps frames (KOAN_DUMP_DIR), to look at the page.
+//
+// On macOS (scripts/mac/suite.sh, without the frame dumps): the context
+// menus are native NSMenus there, which UI DevTools can't see or click, so
+// their steps are skipped; the split comes from the card's Split Glance
+// button instead of "Split Link to New Tab", the tab menu's "Split Out Tab"
+// is skipped and Unsplit (Cmd+Option+U) separates the split; and the last
+// step checks the expanded page's size instead of its pixels.
 import http from 'node:http';
 
-import { windowFrame } from './lib/koan.mjs';
+import { ACCEL, ALT, NATIVE_MENUS, NATIVE_MENU_WHY, keyEventParams, sendKey, windowFrame }
+    from './lib/koan.mjs';
+import { skipped } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -161,12 +170,10 @@ async function clickLink(target, id, modifiers, button = 'left') {
   await sleep(2000);
 }
 
+// Presses a key in `target`'s page (Windows key code `code`; lib/koan.mjs
+// sends the Mac key code and characters on macOS).
 async function keyTo(target, code, modifiers, key = '') {
-  await withPage(target, async c => {
-    const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key };
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
-  });
+  await withPage(target, c => sendKey(c, code, modifiers, key || undefined));
   await sleep(1500);
 }
 
@@ -176,7 +183,6 @@ function check(name, ok, detail = '') {
   if (!ok) failures++;
 }
 
-const ALT = 1;
 const glanceOpen = async () => shown(await views(), 'KoanGlanceView').length === 1;
 const pageAt = async path => (await tabs()).find(t => t.url === `${BASE}${path}`);
 
@@ -217,7 +223,7 @@ if (overlay && cardBox) {
 }
 
 // In compact mode the card sits over the contents area all the same.
-await keyTo(tab, 83, 2, 's');  // Ctrl+S
+await keyTo(tab, 83, ACCEL, 's');  // Ctrl+S (Cmd+S)
 await clickLink(tab, 'glance', ALT);
 vs = await views();
 {
@@ -235,7 +241,7 @@ const compactGlance = (await targets()).find(t => t.url === `${BASE}/b`);
 if (compactGlance) {
   await keyTo(compactGlance, 27, 0, 'Escape');
 }
-await keyTo(tab, 83, 2, 's');  // Ctrl+S: compact mode off
+await keyTo(tab, 83, ACCEL, 's');  // Ctrl+S (Cmd+S): compact mode off
 await clickLink(tab, 'glance', ALT);
 
 // An activation click in the Glance page shows that link in the card.
@@ -255,48 +261,54 @@ check('Esc closes Glance', !(await glanceOpen()));
 
 // A link's context menu inside the Glance page: "Open Link in Glance" shows
 // the link in the card (the page isn't a tab; the menu used to crash).
-await clickLink(tab, 'glance', ALT);
-let inGlance = (await targets()).find(t => t.url === `${BASE}/b`);
-if (inGlance) {
-  await clickLink(inGlance, 'next', 0, 'right');
-  const items = await menuItems();
-  const separators = shown(await views(), 'MenuSeparator').map(s => s.ay);
-  const section = items.filter(i => !separators.length || i.ay < Math.min(...separators));
-  if (section.at(-1)) {
-    await clickView(section.at(-1));
+let inGlance;
+if (NATIVE_MENUS) {
+  skipped('"Open Link in Glance" in the Glance page shows the link in the card', NATIVE_MENU_WHY);
+  skipped('"Open Link in Glance" from a closing card opens a new card', NATIVE_MENU_WHY);
+} else {
+  await clickLink(tab, 'glance', ALT);
+  inGlance = (await targets()).find(t => t.url === `${BASE}/b`);
+  if (inGlance) {
+    await clickLink(inGlance, 'next', 0, 'right');
+    const items = await menuItems();
+    const separators = shown(await views(), 'MenuSeparator').map(s => s.ay);
+    const section = items.filter(i => !separators.length || i.ay < Math.min(...separators));
+    if (section.at(-1)) {
+      await clickView(section.at(-1));
+    }
   }
-}
-const shownInCard = (await targets()).find(t => t.url === `${BASE}/c`);
-check('"Open Link in Glance" in the Glance page shows the link in the card',
-      (await glanceOpen()) && !!shownInCard && (await pages()) === 2,
-      `glance ${await glanceOpen()}, pages ${await urls()}`);
-if (shownInCard) {
-  await keyTo(shownInCard, 27, 0, 'Escape');
-}
+  const shownInCard = (await targets()).find(t => t.url === `${BASE}/c`);
+  check('"Open Link in Glance" in the Glance page shows the link in the card',
+        (await glanceOpen()) && !!shownInCard && (await pages()) === 2,
+        `glance ${await glanceOpen()}, pages ${await urls()}`);
+  if (shownInCard) {
+    await keyTo(shownInCard, 27, 0, 'Escape');
+  }
 
-// The card's own menu while the card closes (the page calls
-// window.close()): "Open Link in Glance" opens a new card for the tab, and
-// closing that one is fine.
-await clickLink(tab, 'glance', ALT);
-inGlance = (await targets()).find(t => t.url === `${BASE}/b`);
-if (inGlance) {
-  await clickLink(inGlance, 'next', 0, 'right');
-  const items = await menuItems();
-  const separators = shown(await views(), 'MenuSeparator').map(s => s.ay);
-  const section = items.filter(i => !separators.length || i.ay < Math.min(...separators));
-  await withPage(inGlance, c => c.send('Runtime.evaluate', { expression: 'window.close()' }));
-  if (section.at(-1)) {
-    await clickView(section.at(-1));
+  // The card's own menu while the card closes (the page calls
+  // window.close()): "Open Link in Glance" opens a new card for the tab, and
+  // closing that one is fine.
+  await clickLink(tab, 'glance', ALT);
+  inGlance = (await targets()).find(t => t.url === `${BASE}/b`);
+  if (inGlance) {
+    await clickLink(inGlance, 'next', 0, 'right');
+    const items = await menuItems();
+    const separators = shown(await views(), 'MenuSeparator').map(s => s.ay);
+    const section = items.filter(i => !separators.length || i.ay < Math.min(...separators));
+    await withPage(inGlance, c => c.send('Runtime.evaluate', { expression: 'window.close()' }));
+    if (section.at(-1)) {
+      await clickView(section.at(-1));
+    }
   }
+  const reopened = (await targets()).find(t => t.url === `${BASE}/c`);
+  check('"Open Link in Glance" from a closing card opens a new card',
+        (await glanceOpen()) && !!reopened, `pages ${await urls()}`);
+  if (reopened) {
+    await keyTo(reopened, 27, 0, 'Escape');
+  }
+  check('...which closes with Esc', !(await glanceOpen()) && (await pages()) === 1,
+        `pages ${await urls()}`);
 }
-const reopened = (await targets()).find(t => t.url === `${BASE}/c`);
-check('"Open Link in Glance" from a closing card opens a new card',
-      (await glanceOpen()) && !!reopened, `pages ${await urls()}`);
-if (reopened) {
-  await keyTo(reopened, 27, 0, 'Escape');
-}
-check('...which closes with Esc', !(await glanceOpen()) && (await pages()) === 1,
-      `pages ${await urls()}`);
 
 // Popups without a user gesture are blocked in a Glance page, as in a tab.
 await clickLink(tab, 'glance', ALT);
@@ -351,20 +363,38 @@ async function linkMenuItem(name) {
   }
   return !!item;
 }
-check('The link context menu opens', await linkMenuItem('glance'));
-const fromMenu = (await targets()).find(t => t.url === `${BASE}/b`);
-check('"Open Link in Glance" opens the link in Glance',
-      (await glanceOpen()) && !!fromMenu && (await pages()) === 2,
-      `glance ${await glanceOpen()}, pages ${await urls()}`);
-if (fromMenu) {
-  await keyTo(fromMenu, 27, 0, 'Escape');
-}
+if (NATIVE_MENUS) {
+  skipped('The link context menu: "Open Link in Glance" and "Split Link to New Tab"',
+          NATIVE_MENU_WHY);
+  // The split from the card's Split Glance button instead (Zen's
+  // zen-glance-split): the tab and the Glance page side by side.
+  await clickLink(tab, 'glance', ALT);
+  vs = await views();
+  const split = shown(inside(vs, 'KoanGlanceView'), 'ImageButton')[2];
+  if (split) {
+    await clickView(split);
+  }
+  vs = await views();
+  check('Split Glance splits the tab with the Glance page',
+        !(await glanceOpen()) && shown(vs, 'SplitTabView').length === 1 && (await pages()) === 2,
+        `glance ${await glanceOpen()}, ${shown(vs, 'SplitTabView').length} split(s), ` +
+            `pages ${await urls()}`);
+} else {
+  check('The link context menu opens', await linkMenuItem('glance'));
+  const fromMenu = (await targets()).find(t => t.url === `${BASE}/b`);
+  check('"Open Link in Glance" opens the link in Glance',
+        (await glanceOpen()) && !!fromMenu && (await pages()) === 2,
+        `glance ${await glanceOpen()}, pages ${await urls()}`);
+  if (fromMenu) {
+    await keyTo(fromMenu, 27, 0, 'Escape');
+  }
 
-await linkMenuItem('split');
-vs = await views();
-check('"Split Link to New Tab" splits the tab with the link',
-      shown(vs, 'SplitTabView').length === 1 && (await pages()) === 2,
-      `${shown(vs, 'SplitTabView').length} split(s), pages ${await urls()}`);
+  await linkMenuItem('split');
+  vs = await views();
+  check('"Split Link to New Tab" splits the tab with the link',
+        shown(vs, 'SplitTabView').length === 1 && (await pages()) === 2,
+        `${shown(vs, 'SplitTabView').length} split(s), pages ${await urls()}`);
+}
 
 // Glance over a split: "Split Glance" would be a third panel, so Zen's limit
 // toast shows and the page opens as a tab instead.
@@ -389,17 +419,29 @@ if (tab) {
 // separates the split.
 vs = await views();
 const wasSplit = shown(vs, 'SplitTabView').length === 1;
-const splitTab = inside(vs, 'SplitTabView').find(v => v.cls === 'TabView' && v.shown);
-if (splitTab) {
-  await clickView(splitTab, 'right');
-  const items = await menuItems();
-  console.log(`  tab menu: ${items.length} item(s)`);
-  if (items[1]) {
-    await clickView(items[1]);
+if (NATIVE_MENUS) {
+  skipped('"Split Out Tab" separates the split', NATIVE_MENU_WHY);
+  // Zen's Unsplit key instead (split-view-unsplit, Cmd+Option+U), from a
+  // tab of the split.
+  const inSplit = await pageAt('/b');
+  if (inSplit) {
+    await keyTo(inSplit, 85, ACCEL | ALT, 'u');
   }
+  check('Unsplit (Cmd+Option+U) separates the split',
+        wasSplit && shown(await views(), 'SplitTabView').length === 0);
+} else {
+  const splitTab = inside(vs, 'SplitTabView').find(v => v.cls === 'TabView' && v.shown);
+  if (splitTab) {
+    await clickView(splitTab, 'right');
+    const items = await menuItems();
+    console.log(`  tab menu: ${items.length} item(s)`);
+    if (items[1]) {
+      await clickView(items[1]);
+    }
+  }
+  check('"Split Out Tab" separates the split',
+        wasSplit && shown(await views(), 'SplitTabView').length === 0);
 }
-check('"Split Out Tab" separates the split',
-      wasSplit && shown(await views(), 'SplitTabView').length === 0);
 
 // Expand a Glance while it still grows: the page in its new tab fills the
 // tab, also after the window is resized (the grow animation's transform
@@ -417,8 +459,8 @@ for (const t of (await tabs()).filter(t => t.url === `${BASE}/a`).slice(0, 1)) {
                    clickCount: 1, buttons: 1 };
     await c.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed' });
     await c.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased', buttons: 0 });
-    // Ctrl+O at once, from the tab (the overlay is still growing).
-    const key = { windowsVirtualKeyCode: 79, nativeVirtualKeyCode: 79, modifiers: 2, key: 'o' };
+    // Ctrl+O (Cmd+O) at once, from the tab (the overlay is still growing).
+    const key = keyEventParams(79, ACCEL, 'o');
     await c.send('Input.dispatchKeyEvent', { ...key, type: 'rawKeyDown' });
     await c.send('Input.dispatchKeyEvent', { ...key, type: 'keyUp' });
   });
@@ -434,16 +476,29 @@ if (windowId !== undefined) {
 await sleep(2000);
 vs = await views();
 const page = shown(vs, 'ContentsWebView').find(v => v.w > 300);
-let samples = [];
-if (page && process.env.KOAN_DUMP_DIR) {
-  const frame = windowFrame();
-  samples = [[0.5, 0.5], [0.9, 0.9], [0.1, 0.9]].map(([fx, fy]) =>
-      frame.pixel(Math.round(page.ax + page.w * fx), Math.round(page.ay + page.h * fy)));
+if (process.env.KOAN_DUMP_DIR) {
+  let samples = [];
+  if (page) {
+    const frame = windowFrame();
+    samples = [[0.5, 0.5], [0.9, 0.9], [0.1, 0.9]].map(([fx, fy]) =>
+        frame.pixel(Math.round(page.ax + page.w * fx), Math.round(page.ay + page.h * fy)));
+  }
+  check('A Glance expanded while it grows fills its tab after a resize',
+        !(await glanceOpen()) && !!green && samples.length === 3 &&
+            samples.every(([r, g, b]) => r < 40 && g > 215 && b < 40),
+        `page ${page?.w}x${page?.h}, pixels ${JSON.stringify(samples)}`);
+} else {
+  // No frame dumps (macOS): the page's own viewport against its view. A
+  // grow transform left on the page's layer wouldn't show here.
+  const viewport = green && await withPage(green, async c => (await c.send('Runtime.evaluate', {
+    expression: '`${innerWidth}x${innerHeight}`', returnByValue: true,
+  })).result?.result?.value);
+  check('A Glance expanded while it grows: its page fills its tab after a resize',
+        !(await glanceOpen()) && !!green && !!page && viewport === `${page.w}x${page.h}`,
+        `page view ${page?.w}x${page?.h}, viewport ${viewport}`);
+  skipped('...its pixels (the grow transform is gone)',
+          'needs the frame dumps of Linux\'s headless Ozone');
 }
-check('A Glance expanded while it grows fills its tab after a resize',
-      !(await glanceOpen()) && !!green && samples.length === 3 &&
-          samples.every(([r, g, b]) => r < 40 && g > 215 && b < 40),
-      `page ${page?.w}x${page?.h}, pixels ${JSON.stringify(samples)}`);
 
 browser.close();
 server.close();

@@ -33,6 +33,11 @@ download_animation
 fullscreen_compact
 fullscreen_multiple
 fullscreen_single
+# Glance: Alt+click, Cmd+O, the trigger setting (Cmd+click on the Mac,
+# prefs/glance_activation.mac.json), the card, split and Glance's menus.
+glance
+glance_activation
+glance_split timeout=420
 library
 library_history
 newtab

@@ -1,8 +1,13 @@
 // End-to-end test of Glance against a real build: Alt+click opens it,
-// Ctrl+O expands it to a tab, Esc closes it, Shift+click still opens a
-// window, and download links are left alone.
+// Ctrl+O (Cmd+O on macOS: Zen's zen-glance-expand is accel+O) expands it to
+// a tab, Esc closes it, Shift+click still opens a window, and download links
+// are left alone.
 //
 //   scripts/e2e/run.sh glance        (opens scripts/e2e/pages/glance.html)
+//   scripts/mac/suite.sh --only glance <Koan.app>
+import { ACCEL, IS_MAC, sendKey } from './lib/koan.mjs';
+import { makeKey, realInput, realInputWhyNot, realKey, skipped } from './lib/mac.mjs';
+
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -102,12 +107,10 @@ async function clickLink(id, modifiers) {
   await sleep(2000);
 }
 
+// Presses a key in `target`'s page (Windows key code `code`; lib/koan.mjs
+// sends the Mac key code and characters on macOS).
 async function keyTo(target, code, modifiers, key = '') {
-  await withPage(target, async c => {
-    const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key };
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
-  });
+  await withPage(target, c => sendKey(c, code, modifiers, key || undefined));
   await sleep(1500);
 }
 
@@ -117,7 +120,18 @@ function check(name, ok, detail = '') {
   if (!ok) failures++;
 }
 
-const ALT = 1, CTRL = 2, SHIFT = 8;
+const ALT = 1, SHIFT = 8;
+const EXPAND = IS_MAC ? 'Cmd+O' : 'Ctrl+O';
+
+// Closes a Glance a failed check left open, so the next checks start clean.
+// (Esc to every page of the link: the Glance page is one, an expanded tab
+// may be another.)
+async function closeLeftover() {
+  if (!(await glanceOpen())) return;
+  for (const page of (await targets()).filter(t => t.url.includes('glance=1'))) {
+    await keyTo(page, 27, 0, 'Escape');
+  }
+}
 
 // Alt+click opens Glance; Esc (sent to the Glance page) closes it.
 await clickLink('glance', ALT);
@@ -143,18 +157,43 @@ if (glancePage) {
   check('Esc closes Glance', !(await glanceOpen()));
 }
 
-// Alt+click again, then Ctrl+O expands it into a tab.
+// Alt+click again, then Ctrl+O (Cmd+O) expands it into a tab.
 const before = (await tabs()).length;
 await clickLink('glance', ALT);
 const glance2 = (await targets()).find(t => t.url.includes('glance=1'));
 if (glance2) {
-  await keyTo(glance2, 79, CTRL, 'o');
+  await keyTo(glance2, 79, ACCEL, 'o');
 }
 const after = await tabs();
-check('Ctrl+O expands Glance into a tab',
+check(`${EXPAND} expands Glance into a tab`,
       !(await glanceOpen()) && after.length === before + 1 &&
           after.some(t => t.url.includes('glance=1')),
       `${before} -> ${after.length} tab(s)`);
+await closeLeftover();
+
+// On macOS a real Cmd+O goes through AppKit first (the key window, then the
+// menu bar, whose File > Open File Koan leaves without the key): it expands
+// the Glance as well, and opens no file dialog.
+if (IS_MAC) {
+  if (!realInput()) {
+    skipped('A real Cmd+O expands Glance into a tab', realInputWhyNot());
+  } else {
+    // keypress2 posts to Koan's pid: the window has to be key.
+    await makeKey((await tabs()).find(t => t.url.endsWith('/glance.html')));
+    const realBefore = (await tabs()).length;
+    await clickLink('glance', ALT);
+    const opened = await glanceOpen();
+    if (!(await realKey('o', 'c', 1500))) {
+      skipped('A real Cmd+O expands Glance into a tab', realInputWhyNot());
+    } else {
+      const realAfter = (await tabs()).length;
+      check('A real Cmd+O expands Glance into a tab',
+            opened && !(await glanceOpen()) && realAfter === realBefore + 1,
+            `glance opened ${opened}, ${realBefore} -> ${realAfter} tab(s)`);
+    }
+    await closeLeftover();
+  }
+}
 
 // Shift+click opens a new window, as in Zen/Firefox, not Glance.
 const windows = await windowCount();

@@ -12,6 +12,10 @@ go to `<logs>/summary.txt`, and an agent reads only that file. Every test's full
    `window_teardown` (#193), `window_sync` (#75), `space_drag` (#224), `welcome_input` (#174) and `agent_cli` (#180,
    through the `koan` CLI). Then the existing scripts: `lib/koan.mjs` `key()` sends Mac key codes on macOS; scripts that
    need a main-menu key (Cmd+W, Cmd+Shift+W, Cmd+Q, Cmd+L: CDP keys never reach the menu bar) SKIP there (#270).
+   `scripts/e2e/prefs/<name>.mac.json`, if it exists, seeds the profile instead of `prefs/<name>.json` (a setting that
+   means something else on a Mac, e.g. Glance's trigger: Ctrl+click is a right-click there). Scripts whose `.flags`
+   need headless Ozone (`{dump}`, `--ozone-*`) SKIP, unless the file has the line `# macos: without frame dumps`: then
+   those flags are dropped and the script checks `KOAN_DUMP_DIR` itself (`glance_split`).
 3. **Visual:** `visual/capture.mjs` takes `screencapture -l<window>` shots in fixed states, and `visual/diff.py` compares
    the named regions (`visual/regions.json`) with `docs/screenshots/reference/`. `--record` writes those references,
    which is the first run's job.
