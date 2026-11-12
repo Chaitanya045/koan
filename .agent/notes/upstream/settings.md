@@ -70,13 +70,18 @@ or the settings hook patches.
 | Message and listener names on the shared WebUI | **avoid silent collision** | `WebUIImpl::RegisterMessageCallback` keeps the first handler for a name, so Koan's are prefixed `koan…` / `koan-…` |
 | Framing chrome://settings in Koan's page | **rejected** | no `chrome.send` in WebUI subframes (above) |
 | Re-implementing Chromium's settings | **rejected** | hundreds of rows that change every milestone |
-| Rows Zen hides (Z28: AI page, ad privacy, theme / home rows, sign-in) | **lock, follow-up** | issue filed; this PR builds the shell, routing and search |
+| Rows Zen hides (Z28: AI page, theme / home rows, sign-in) | **lock** (hidden) | #300: `showAiPage` and, while sign-in is off, `signinAvailable` false from `ExtendSettingsUI()` (no patch); Theme and Show home button through `pageVisibility` (`page_visibility.ts` patch; home only while the URL bar replaces the new tab page, Zen's rule). Ad privacy is gone upstream in 158; the metrics row is Google Chrome only. docs/SETTINGS_AUDIT.md |
 | Chromium rows that Koan's layout makes do nothing (Appearance: Show bookmarks bar and its visibility menu, Show tab search button, Auto-pin new tab groups, hover card rows) | **lock** (hidden) | `hidden` in the `appearance_page.html.ts` patch, next to the tab strip position row; docs/SETTINGS_AUDIT.md |
 | Chromium's Appearance > Mode (`browser.theme.color_scheme2`) vs the look's mode in the shadcn style | **reuse**, kept in step | `KoanColorSchemeSync` (no patch): one setting in two places |
-| Chromium sections' look in the shadcn style | **override, partial** | document-level tokens (font, background, text, borders, accent) over cr variables; a full restyle is a follow-up |
+| Chromium sections' look in the shadcn style | **override** | #301: tokens over the `--cr-*` variables in the document (`LookStylesheet()`), and `koan_chromium.css` (shadcn's Card, Switch, Select, Button, Input, sidebar menu) adopted into every shadow root by `koan_settings_page.js`; empty in the Zen style. At `/` the menu selects Look and Feel (`settings_menu.ts` patch) |
 
 ## Hooks (all in `patches/`, see docs/REBASE.md "Settings page")
 
+- `chrome/browser/resources/settings/page_visibility.ts`: the Appearance rows
+  Zen hides (Theme; Show home button while the URL bar replaces the new tab
+  page).
+- `chrome/browser/resources/settings/settings_menu/settings_menu.ts`: at `/`
+  the top-level section's item is selected.
 - `chrome/browser/ui/webui/settings/settings_ui.cc` (+ `settings/BUILD.gn`):
   `koan::settings::ExtendSettingsUI()` at the end of the constructor: Koan's
   handlers, the pane titles as strings, a request filter serving `koan/*`.

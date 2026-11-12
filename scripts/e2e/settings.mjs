@@ -452,6 +452,192 @@ check('chrome://koan-settings/shortcuts opens chrome://settings/koan/shortcuts',
       legacyPage?.url === 'chrome://settings/koan/shortcuts', legacyPage?.url);
 await browserCall('Target.closeTarget', { targetId: legacy });
 
+// ---- Chromium's rows that Zen hides (#300, Z28; docs/SETTINGS_AUDIT.md).
+// Through every shadow root of the page (Koan's panes' excluded).
+const DEEP = `const find = (root, s) => root.querySelector(s) ??
+    [...root.querySelectorAll('*')].filter(el => el.shadowRoot !== window.koanSettingsRoot)
+        .map(el => el.shadowRoot && find(el.shadowRoot, s)).find(Boolean) ?? null;
+  const findAll = (root, s) => [...root.querySelectorAll(s),
+    ...[...root.querySelectorAll('*')].filter(el => el.shadowRoot &&
+        el.shadowRoot !== window.koanSettingsRoot).flatMap(el => findAll(el.shadowRoot, s))];`;
+const rowState = selector => evalIn(settings, `(() => { ${DEEP}
+  const el = find(document, ${JSON.stringify(selector)});
+  return !el ? 'absent' : el.checkVisibility() ? 'shown' : 'hidden';
+})()`);
+const goTo = async path => {
+  await onPage(settings, c => c.send('Page.navigate', { url: `chrome://settings${path}` }));
+  await waitFor(() => evalIn(settings,
+      `!!document.querySelector('settings-ui')?.shadowRoot?.querySelector('#main')`), 8000);
+};
+await goTo('/appearance');
+check('Chromium\'s Appearance draws (for the rows below)',
+      await waitFor(async () => await rowState('#colorSchemeModeSelect') === 'shown', 8000));
+for (const [selector, what] of [
+    ['#openTheme', 'Theme (Chrome themes, Customize Chrome)'],
+    ['#useDefault', 'Reset to default theme'],
+    ['settings-toggle-button[pref-key="browser.show_home_button"]',
+     'Show home button (the URL bar replaces the new tab page)']]) {
+  const s = await rowState(selector);
+  check(`Chromium's Appearance: "${what}" is not shown`, s !== 'shown', s);
+}
+const aiItem = await evalIn(settings, `(() => {
+  const item = ${menu}.querySelector('a[href="/ai"]');
+  return !item ? 'absent' : item.checkVisibility() ? 'shown' : 'hidden';
+})()`);
+check('The menu has no AI item (Zen turns AI controls off)', aiItem !== 'shown', aiItem);
+await goTo('/ai');
+check('...and chrome://settings/ai shows no AI section',
+      await rowState('settings-ai-page-index') !== 'shown' &&
+      await rowState('settings-ai-page') !== 'shown');
+await goTo('/syncSetup');
+await waitFor(async () => await rowState('settings-personalization-options') === 'shown', 8000);
+const signinRow = await rowState('#signinAllowedToggle');
+check('People > Google services: no "Allow sign-in" switch (sign-in is off)',
+      signinRow !== 'shown', signinRow);
+const metricsRow = await rowState('#metricsReportingControl');
+check('...nor a "Help improve" metrics row (Google Chrome only)', metricsRow !== 'shown',
+      metricsRow);
+const urlCollection = await rowState('#urlCollectionToggle');
+check('...where "Make searches and browsing better" stays', urlCollection === 'shown',
+      urlCollection);
+await goTo('/people');
+const syncLabel = await waitFor(() => evalIn(settings, `(() => { ${DEEP}
+  const row = find(document, '#sync-setup');
+  return row?.checkVisibility() ? row.label : null;
+})()`), 8000);
+check('...and the People row to it says Google services, not sync',
+      syncLabel === 'Google services', JSON.stringify(syncLabel));
+// Chromium's search finds none of them. (Koan's own rows, such as its theme
+// ones, may match "theme": only Chromium's highlights count.)
+for (const text of ['Gemini', 'ad privacy', 'Show home button']) {
+  await evalIn(settings, searchSettings(text));
+  await sleep(1500);
+  const hits = await evalIn(settings, `(() => { ${DEEP}
+    return findAll(document, '.search-highlight-wrapper')
+        .filter(el => el.checkVisibility()).map(el => el.textContent.trim());
+  })()`);
+  check(`A search for "${text}" finds none of Chromium's rows`, hits?.length === 0,
+        JSON.stringify(hits));
+}
+
+// ---- Chromium's sections in the shadcn look (#301; koan_chromium.css).
+// The default look is shadcn's. Each check reads the computed style of one
+// of Chromium's controls and compares it with the look's token, so it fails
+// if upstream renames what koan_chromium.css relies on.
+await goTo('/');
+const selectedItem = await waitFor(() => evalIn(settings,
+    `${menu}.querySelector('.cr-nav-menu-item[selected]')?.id`), 5000);
+check('At chrome://settings/ (Look and Feel), its menu item is the selected one',
+      selectedItem === 'koanLooks', selectedItem);
+await goTo('/appearance');
+await waitFor(async () => await rowState('#colorSchemeModeSelect') === 'shown', 8000);
+const restyle = () => evalIn(settings, `(() => { ${DEEP}
+  // A token's value as the page resolves it.
+  const token = (property, value) => {
+    const probe = document.createElement('div');
+    probe.style.setProperty(property, value);
+    document.body.append(probe);
+    const v = getComputedStyle(probe).getPropertyValue(property);
+    probe.remove();
+    return v;
+  };
+  const style = el => el && getComputedStyle(el);
+  // Fresh controls, so the check doesn't depend on which rows show.
+  const make = (tag, cls) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    document.body.append(el);
+    return el;
+  };
+  const toggle = make('cr-toggle');
+  const button = make('cr-button');
+  const action = make('cr-button', 'action-button');
+  const input = make('cr-input');
+  const bar = style(toggle.shadowRoot?.querySelector('#bar'));
+  const knob = style(toggle.shadowRoot?.querySelector('#knob'));
+  const inputBox = style(input.shadowRoot?.querySelector('#input-container'));
+  const r = {
+    switchTrack: bar && [bar.width, bar.backgroundColor],
+    switchThumb: knob?.width,
+    button: [style(button).height, style(button).borderTopLeftRadius,
+             style(button).backgroundColor],
+    actionButton: style(action).backgroundColor,
+    input: inputBox && [inputBox.borderTopWidth, inputBox.borderTopLeftRadius],
+    select: (s => s && [s.height, s.borderTopLeftRadius,
+                        s.backgroundImage.startsWith('url("data:image/svg+xml')])(
+        style(find(document, '#colorSchemeModeSelect'))),
+    card: (s => s && [s.boxShadow, s.backgroundColor])(
+        style(find(document, 'settings-section')?.shadowRoot?.querySelector('#card'))),
+    menuItem: (s => s && [s.minHeight, s.borderTopLeftRadius])(
+        style(${menu}.querySelector('.cr-nav-menu-item'))),
+    search: (s => s && s.borderTopLeftRadius)(
+        style(find(document, 'cr-toolbar-search-field'))),
+    want: {
+      track: token('background-color', 'var(--koan-switch-track)'),
+      outline: token('background-color', 'var(--koan-outline-background)'),
+      primary: token('background-color', 'var(--primary)'),
+      card: token('background-color', 'var(--card)'),
+      ring: token('box-shadow', '0 0 0 1px var(--border)'),
+      field: token('border-top-left-radius', 'var(--r-field)'),
+      item: token('border-top-left-radius', 'var(--r-item)'),
+    },
+  };
+  for (const el of [toggle, button, action, input]) el.remove();
+  return r;
+})()`);
+const s = await restyle();
+check('shadcn look: cr-toggle is shadcn\'s Switch (32 px track, 16 px thumb, --input)',
+      s?.switchTrack?.[0] === '32px' && s.switchTrack[1] === s.want.track &&
+      s.switchThumb === '16px', JSON.stringify([s?.switchTrack, s?.switchThumb, s?.want?.track]));
+check('...cr-button its outline Button (36 px, rounded-md), .action-button the primary one',
+      s?.button?.[0] === '36px' && s.button[1] === s.want.field &&
+      s.button[2] === s.want.outline && s.actionButton === s.want.primary,
+      JSON.stringify([s?.button, s?.actionButton, s?.want]));
+check('...cr-input its Input (a 1 px border, rounded-md, no underline)',
+      s?.input?.[0] === '1px' && s.input[1] === s.want.field, JSON.stringify(s?.input));
+check('...the drop-downs its Select (36 px, rounded-md, Lucide\'s chevron)',
+      s?.select?.[0] === '36px' && s.select[1] === s.want.field && s.select[2] === true,
+      JSON.stringify(s?.select));
+check('...the section cards its Card (bg-card, a 1 px border, no elevation)',
+      s?.card?.[0] === s.want.ring && s.card[1] === s.want.card,
+      JSON.stringify([s?.card, s?.want?.ring]));
+check('...the menu items its sidebar menu buttons (32 px, rounded)',
+      s?.menuItem?.[0] === '32px' && s.menuItem[1] === s.want.item, JSON.stringify(s?.menuItem));
+check('...and the toolbar\'s search box an Input', s?.search === s?.want?.field,
+      JSON.stringify(s?.search));
+// The colours Chromium takes from chrome://theme/colors.css are Koan's
+// mixers' (the shadcn colour mixer maps the tokens onto kColorSys*), in dark
+// and light mode.
+const sysColors = () => evalIn(settings, `(() => {
+  const probe = document.createElement('div');
+  document.body.append(probe);
+  const get = v => (probe.style.color = v, getComputedStyle(probe).color);
+  const r = [['--color-sys-primary', '--primary'], ['--color-sys-on-surface', '--foreground'],
+             ['--color-sys-error', '--destructive']]
+      .map(([sys, token]) => [sys, get('var(' + sys + ')'), get('var(' + token + ')')]);
+  probe.remove();
+  return r;
+})()`);
+const sameColors = r => r?.length && r.every(([, have, want]) => have === want);
+const lookMode = (await settingsCall(settings, 'koanGetSettings'))?.prefs?.['koan.look.mode'];
+for (const mode of ['dark', 'light']) {
+  await settingsCall(settings, 'koanSetPref', 'koan.look.mode', mode);
+  const r = await waitFor(async () => { const c = await sysColors(); return sameColors(c) && c; },
+                          5000) || await sysColors();
+  check(`shadcn ${mode}: colors.css's sys colours are the look's tokens`, sameColors(r),
+        JSON.stringify(r));
+}
+await settingsCall(settings, 'koanSetPref', 'koan.look.mode', lookMode ?? 'dark');
+// The Zen look keeps Chromium's own controls (#297), and shadcn's come back.
+await settingsCall(settings, 'koanSetPref', 'koan.look.style', 'zen');
+check('Zen look: Chromium\'s controls keep their own look (a 26 px cr-toggle)',
+      await waitFor(async () => (await restyle())?.switchTrack?.[0] === '26px', 5000),
+      JSON.stringify((await restyle())?.switchTrack));
+await settingsCall(settings, 'koanSetPref', 'koan.look.style', 'shadcn');
+check('...and back in the shadcn look, shadcn\'s Switch again',
+      await waitFor(async () => (await restyle())?.switchTrack?.[0] === '32px', 5000));
+await shot(settings, 'settings-chromium-appearance', 'dark');
+
 // Koan's module runs inside Chromium's settings app: an error there stops the
 // whole page (2026-11-12: a second copy of cr-iconset).
 const log = process.env.KOAN_LOG ? fs.readFileSync(process.env.KOAN_LOG, 'utf8') : '';

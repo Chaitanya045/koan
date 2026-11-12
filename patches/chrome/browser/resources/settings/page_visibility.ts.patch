@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/resources/settings/page_visibility.ts b/chrome/browser/resources/settings/page_visibility.ts
+--- a/chrome/browser/resources/settings/page_visibility.ts
++++ b/chrome/browser/resources/settings/page_visibility.ts
+@@ -44,7 +44,17 @@
+ 
+ function createPageVisibility(): PageVisibility|undefined {
+   if (!loadTimeData.getBoolean('isGuest')) {
+-    return undefined;
++    // Koan: the rows Zen hides (koan_settings_ui.cc, docs/SETTINGS_AUDIT.md).
++    return {
++      appearance: {
++        bookmarksBar: true,
++        homeButton: loadTimeData.getBoolean('koanShowHomeButtonRow'),
++        hoverCard: true,
++        pageZoom: true,
++        setTheme: false,
++        sidePanel: true,
++      },
++    };
+   }
+ 
+   // <if expr="not is_chromeos">

@@ -1,0 +1,334 @@
+/* Copyright 2026 The Koan Authors
+ * Use of this source code is governed by the MIT license that can be
+ * found in the LICENSE file. */
+
+/* Chromium's settings sections in the shadcn look (#301): its cards and
+ * controls drawn as shadcn/ui's Card, Switch, Select, Button and Input, its
+ * menu as shadcn's sidebar menu, its search box as an Input.
+ *
+ * Served only in the shadcn style (koan_settings_ui.cc: empty in the Zen
+ * style, which keeps Chromium's look). koan_settings_page.js adopts it into
+ * every shadow root of the page, since Chromium's controls set their sizes
+ * on `:host` or inside their own shadow roots, out of reach of the
+ * document's variables. So every rule names the element whose shadow root
+ * it is for (`:host(cr-toggle) #bar`), or a class Chromium's templates put
+ * on a control (`.md-select`), and nothing else matches elsewhere.
+ *
+ * Colours are the look's tokens (koan_tokens.css, LookStylesheet()); the
+ * `--koan-*` ones are the tokens shadcn varies with dark mode (`dark:`).
+ * Selectors and ids are upstream's (cr_elements, settings): settings.mjs
+ * checks the computed styles, so a rename upstream fails there.
+ */
+
+/* Card: rounded-xl, bg-card. Its 1px border and no elevation come from
+ * --cr-card-shadow (a 1px ring, LookStylesheet()), which every card of the
+ * page draws with: sections, subpages, Autofill's and Safety Hub's. */
+:host(settings-section) #card {
+  border-radius: var(--r-card);
+  background-color: var(--card);
+  color: var(--card-foreground);
+}
+
+:host(settings-section) #header .title {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+/* Switch: a 32 by 18.4 px track (h-[1.15rem] w-8) with a 16 px thumb, no
+ * ripple; the thumb moves 14 px. */
+:host(cr-toggle) #bar {
+  box-sizing: border-box;
+  width: 32px;
+  height: 1.15rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background-color: var(--koan-switch-track);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: background-color 150ms, box-shadow 150ms;
+}
+
+:host(cr-toggle[checked]) #bar {
+  background-color: var(--primary);
+}
+
+:host(cr-toggle) #knob {
+  /* The thumb's centre, 1 px border + half the thumb from the edge
+   * (cr_toggle.css: the knob's travel is derived from it). */
+  --cr-toggle-knob-center-edge-distance_: 9px;
+  width: 16px;
+  height: 16px;
+  background-color: var(--koan-switch-thumb);
+  transition: transform 150ms;
+}
+
+:host(cr-toggle[checked]) #knob {
+  background-color: var(--koan-switch-thumb-checked);
+}
+
+:host(cr-toggle:hover) #knob::before {
+  display: none;
+}
+
+:host(cr-toggle:focus-visible) #bar {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+:host(cr-toggle[disabled]) {
+  opacity: 0.5;
+}
+
+/* Button: h-9, rounded-md, text-sm font-medium. The plain cr-button is
+ * shadcn's outline variant, .action-button the default (primary) one,
+ * .tonal-button and .floating-button the secondary one. */
+:host(cr-button) {
+  height: 36px;
+  min-width: 0;
+  padding: 8px 16px;
+  border: 1px solid var(--koan-outline-border);
+  border-radius: var(--r-button);
+  background: var(--koan-outline-background);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+:host(cr-button.action-button) {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+:host(cr-button.action-button),
+:host(cr-button.cancel-button) {
+  line-height: 20px;
+}
+
+:host(cr-button.tonal-button),
+:host(cr-button.floating-button) {
+  height: 36px;
+  border-color: transparent;
+  border-radius: var(--r-button);
+  background: var(--secondary);
+  box-shadow: none;
+  color: var(--secondary-foreground);
+}
+
+:host(cr-button[disabled]) {
+  border: 1px solid var(--koan-outline-border);
+  background: var(--koan-outline-background);
+  color: var(--foreground);
+  opacity: 0.5;
+}
+
+:host(cr-button.action-button[disabled]) {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+:host(cr-button:hover) #hoverBackground {
+  background: var(--koan-outline-hover);
+}
+
+:host(cr-button.action-button:hover) #hoverBackground {
+  /* hover:bg-primary/90 */
+  background: color-mix(in srgb, var(--background) 10%, transparent);
+}
+
+:host(cr-button.tonal-button:hover) #hoverBackground,
+:host(cr-button.floating-button:hover) #hoverBackground {
+  /* hover:bg-secondary/80 */
+  background: color-mix(in srgb, var(--background) 20%, transparent);
+}
+
+:host(cr-button) cr-ripple {
+  display: none;
+}
+
+/* Select: the trigger, h-9, rounded-md, border-input, with Lucide's chevron
+ * at 12 px from the end (as Koan's panes' drop-downs). */
+.md-select {
+  --md-select-option-bg-color: var(--popover);
+  height: 36px;
+  padding-inline: 12px 36px;
+  border: 1px solid var(--input);
+  border-radius: var(--r-field);
+  background-color: var(--koan-field-background);
+  background-image: var(--koan-chevron);
+  background-position: right 12px center;
+  background-size: 16px;
+  background-repeat: no-repeat;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+:host-context([dir=rtl]) .md-select {
+  background-position: left 12px center;
+}
+
+.md-select:hover {
+  background-color: var(--koan-field-hover);
+}
+
+.md-select:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+.md-select[disabled] {
+  border-color: var(--input);
+  background-color: var(--koan-field-background);
+  color: var(--foreground);
+  opacity: 0.5;
+}
+
+/* Input: h-9, rounded-md, border-input, px-3, no underline. */
+:host(cr-input),
+:host(cr-input[readonly]) {
+  --cr-input-background-color: var(--koan-field-background);
+  --cr-input-border-bottom: none;
+  --cr-input-border-radius: var(--r-field);
+  --cr-input-color: var(--foreground);
+  --cr-input-focus-color: var(--ring);
+  --cr-input-font-size: 14px;
+  --cr-input-hover-background-color: transparent;
+  --cr-input-label-color: var(--foreground);
+  --cr-input-padding-bottom: 9px;
+  --cr-input-padding-end: 12px;
+  --cr-input-padding-start: 12px;
+  --cr-input-padding-top: 9px;
+  --cr-input-placeholder-color: var(--muted-foreground);
+}
+
+:host(cr-input) #input-container {
+  box-sizing: border-box;
+  border: 1px solid var(--input);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+:host(cr-input[focused_]) #input-container {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+:host(cr-input[disabled]) {
+  --cr-input-background-color: var(--koan-field-background);
+  --cr-input-border-bottom: none;
+  opacity: 0.5;
+}
+
+:host(cr-input[invalid]) #input-container {
+  border-color: var(--destructive);
+}
+
+:host(cr-input) #underline {
+  display: none;
+}
+
+:host(cr-input) #label {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  margin-bottom: 6px;
+}
+
+/* The left menu: shadcn's SidebarMenuButton (h-8, rounded-md, p-2, gap-2,
+ * text-sm, 16 px icons). The selected and hovered colours are
+ * settings_menu.css.patch's. */
+:host(settings-menu) .cr-nav-menu-item {
+  --cr-nav-menu-item-color: var(--sidebar-foreground);
+  --cr-nav-menu-item-icon-color: var(--sidebar-foreground);
+  --cr-nav-menu-item-icon-color-hover: var(--sidebar-accent-foreground);
+  --iron-icon-height: 16px;
+  --iron-icon-width: 16px;
+  min-height: 32px;
+  margin-block: 1px;
+  margin-inline: 8px;
+  padding: 8px;
+  border-radius: var(--r-item);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+:host(settings-menu) .cr-nav-menu-item:hover {
+  color: var(--sidebar-accent-foreground);
+}
+
+:host(settings-menu) .cr-nav-menu-item[selected] {
+  font-weight: 500;
+}
+
+:host(settings-menu) .cr-nav-menu-item:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:host(settings-menu) .cr-nav-menu-item:focus-visible {
+  outline: 2px solid var(--sidebar-ring);
+  outline-offset: -2px;
+}
+
+:host(settings-menu) .cr-nav-menu-item cr-icon {
+  width: 16px;
+  height: 16px;
+  margin-inline-end: 8px;
+}
+
+:host(settings-menu) .cr-nav-menu-item cr-ripple {
+  display: none;
+}
+
+:host(settings-menu) .menu-separator {
+  margin-inline: 8px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+/* The toolbar: the title in the foreground colour, the search box as an
+ * Input (h-9, rounded-md, border-input) instead of a filled pill. */
+:host(cr-toolbar) {
+  color: var(--muted-foreground);
+}
+
+:host(cr-toolbar) h1 {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+:host(cr-toolbar-search-field:not([narrow])) {
+  box-sizing: border-box;
+  height: 36px;
+  border: 1px solid var(--input);
+  border-radius: var(--r-field);
+  background: var(--koan-field-background);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+:host(cr-toolbar-search-field:not([narrow])) #background {
+  background: transparent;
+}
+
+:host(cr-toolbar-search-field:hover:not([search-focused_], [narrow]))
+    #stateBackground {
+  background: transparent;
+}
+
+:host(cr-toolbar-search-field[search-focused_]:not([narrow])) {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+:host(cr-toolbar-search-field) input {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+:host(cr-toolbar-search-field) #prompt {
+  color: var(--muted-foreground);
+}

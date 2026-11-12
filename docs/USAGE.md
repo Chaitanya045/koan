@@ -844,7 +844,12 @@ about:preferences with Zen's panes added. Ctrl+, (⌘, on macOS), the ⋮ menu's
 Settings and every link to a Chromium setting open it. Koan's panes come first
 in its menu (`chrome://settings/koan/looks`, `/koan/tabs`, `/koan/shortcuts`,
 `/koan/agents`), laid out like Zen's preferences, and Chromium's sections
-follow (You and Google, Autofill, Privacy, Appearance, Search engine ...). A
+follow (Profile, Autofill, Privacy, Appearance, Search engine ...). In the
+shadcn look Chromium's sections are drawn with shadcn's components too
+(cards, switches, drop-downs, buttons, fields, the menu); in the Zen look they
+keep Chromium's own. The rows Zen hides in Firefox aren't shown either: the
+AI section, Appearance's Theme row and Show home button (while the URL bar
+replaces the new tab page), and the browser sign-in switch. A
 link to one of Chromium's sections (`chrome://settings/privacy`, page info's
 Site settings) opens that section in the same page, and Ctrl+, in a settings
 tab goes back to Look and Feel there. The old address `chrome://koan-settings`

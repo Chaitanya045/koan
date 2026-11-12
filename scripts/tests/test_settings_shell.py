@@ -81,6 +81,7 @@ class SettingsShellTest(unittest.TestCase):
     served = set(re.findall(r'\{"(koan_[\w.]+)", File::', ui))
     used = {'koan_settings_page.js'}
     used |= set(re.findall(r"href: '(koan_[\w.]+)'", JS))
+    used |= set(re.findall(r"fetch\(`(koan_[\w.]+)", JS))
     used |= set(re.findall(r'url\(/(koan_[\w.]+)\)', ui))
     self.assertEqual(used, served)
     self.assertIn('<koan-settings-page>',

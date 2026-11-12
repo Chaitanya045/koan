@@ -104,7 +104,8 @@ bench's keypress tools (`KOAN_INPUT=real`).
 | Tab hover cards: previews / memory usage (Appearance) | `browser.hovercard.image_previews_enabled`, `browser.hovercard.memory_usage_enabled` | the sidebar shows no hover cards (Zen: `browser.tabs.hoverPreview.enabled`=false; `koan::ShowsTabHoverCards()`) | **Yes**: did nothing | hidden | e2e: not shown |
 | Tab strip position, Expand tabs on hover (Appearance) | `vertical_tabs.enabled`, `vertical_tabs.expand_on_hover` | always the sidebar | No (hidden before, #154) | - | e2e: not shown |
 | Mode: Light / Dark / Device (Appearance), and Koan's macOS View > Appearance menu | `browser.theme.color_scheme2` | in the shadcn style (the default) the look's mode (Look and Feel > Mode, `koan.look.mode`, default Dark) set every window's colour mode over it | **Yes**: in the default look both did nothing, and the row showed Device while the windows were dark | `KoanColorSchemeSync` keeps them in step both ways while the shadcn style is on, from the first change of either (one setting, two places); the Zen style uses Chromium's alone, as before. Nothing is written at start, because the scheme is also web pages' `prefers-color-scheme` and the look's default (Dark) would turn sites dark on a Mac in light mode: until the user changes a mode, Chromium's row shows Device while the shadcn windows are dark (accepted, maintainer 2026-11-12) | e2e: Koan's Light → Chromium's Light; Chromium's Dark → Koan's Dark |
-| Theme / Reset to default, Show home button (Appearance) | `extensions.theme.id`, `browser.show_home_button` | issue #300 (Z28) hides them | - | #300 (not duplicated here) | - |
+| Theme / Reset to default (Appearance) | `extensions.theme.id` (and Customize Chrome's colours) | Koan's look is its Look and Feel; a Chrome theme or Customize Chrome's colour is masked by the look's colour mixers (`themes-glass-ntp.md` T4), and Zen hides Firefox's browser theme group | Yes: it opened the Web Store or Customize Chrome, whose choices the look then hid | hidden (`page_visibility.ts` patch: `setTheme`, which also hides Reset to default; #300). An old profile's Chrome theme can't be reset from here any more (accepted: the look draws over it) | `settings.mjs`: not shown, no search hit |
+| Show home button (Appearance) | `browser.show_home_button` | the single toolbar (the default) has no home button; in the multiple-toolbars layout Chromium's toolbar shows it. Zen hides its Home pane while its URL bar replaces the new tab page | did nothing in the default layout | hidden while Koan's "Open the URL bar instead of a new tab page" (`koan.urlbar.replace_newtab`, default on) is on, Zen's rule (`page_visibility.ts` patch, `koanShowHomeButtonRow` from `koan_settings_ui.cc`; read when the page loads; #300) | `settings.mjs`: not shown, no search hit |
 | Cycle through the most recently used tabs with Ctrl+Tab (Appearance) | `browser.ctrl_tab_mru` | Koan walks its own recently used list (the Space's tabs and the Essentials) while it is on; Koan's Ctrl+Tab rows note it | No (the macOS key path is the Ctrl+Tab fix above) | - | e2e |
 | Side panel position (Appearance) | `side_panel.is_right_aligned` | upstream lays the side panel out on either side, next to Koan's sidebar | No | - | Mac step (below) |
 | Font size, Customize fonts, Page zoom, Warn before quitting (Appearance) | `webkit.webprefs.*`, zoom, `browser.confirm_to_quit` | untouched | No | - | - |
@@ -117,3 +118,49 @@ Mac steps for the rows no script can drive: put the side panel on the left
 and on the right with tabs on the left and on the right (it opens beside the
 sidebar, on the side it says); drag a tab from the sidebar onto the page with
 "Allow dragging..." on and off (a split only while on).
+
+### Chromium's rows that Zen hides (#300, Z28)
+
+Zen hides the Firefox preferences it replaces or doesn't want
+(`zen-preferences.css` :403-432: data collection, website advertising, the
+theme group, Home while its URL bar replaces the new tab page; prefs
+`browser.preferences.aiControls` and `moreFromMozilla` false;
+`config/aiFeatures-mjs.patch`). Their Chromium 158 equivalents, each hidden
+at one upstream switch:
+
+| Chromium row (section) | Zen's | Chromium 158 | Koan | Checked by |
+|---|---|---|---|---|
+| The AI section (Gemini, AI mode search, history search, help me write, tab organisation, inline cue menu, skills, dictation) and its menu item | AI controls (`browser.preferences.aiControls` false) and the deleted AI rows | `showAiPage` (`settings_ui.cc`) gates the route, the menu item, the section and the Privacy Guide's link to it | `showAiPage` false (`koan_settings_ui.cc`, no patch). Its features were off already (#96, #158: `koan_feature_overrides.cc`); `UpdateShowGlicState()` turns it back on only with Glic enabled, which Koan's overrides keep off | `settings.mjs`: no menu item, no section at chrome://settings/ai, no search hit for "Gemini" |
+| Ad privacy (Privacy and security) | Website advertising | **gone upstream**: Chromium 158's Privacy section has no Privacy Sandbox / Ad privacy rows or routes | nothing to hide | `settings.mjs`: no search hit for "ad privacy" |
+| Theme, Reset to default, Show home button (Appearance) | browser theme group; Home | see the table above | hidden (`page_visibility.ts` patch) | `settings.mjs` |
+| Allow Chrome sign-in (People > Sync and Google services) | no browser account rows (Firefox account sync is Zen's, Koan has none) | `signinAvailable` (`settings_localized_strings_provider.cc`) shows only that switch; the sync account control and the sync rows already hide while sign-in is off (`kSigninAllowed`, off by default in Koan: Z15) | `signinAvailable` false while sign-in is off, and the row and its subpage are "Google services" (`syncAndNonPersonalizedServices`, `syncPageTitle`), not sync (`koan_settings_ui.cc`, no patch). The subpage stays: it holds "Autocomplete searches and URLs" and "Make searches and browsing better". The `SigninAllowed` / `BrowserSignin` policies still turn sign-in on | `settings.mjs`: no switch, the row's label, the subpage's other rows stay |
+| Help improve Chrome's features and performance (metrics reporting) | Data collection | `<if expr="_google_chrome">` only (`personalization_options.html`): not built into Chromium or Koan | nothing to hide | `settings.mjs`: `#metricsReportingControl` absent |
+| Customize toolbar (Appearance) | Customize mode's toolbar part (low) | opens Customize Chrome's toolbar editor | **kept**: Chromium's toolbar shows in the multiple-toolbars layout, where pinning actions works. Redirecting Customize Chrome is T4's (`themes-glass-ntp.md`) | - |
+
+## Chromium's sections in the shadcn look (#301)
+
+In the shadcn style (the default) Chromium's sections are drawn as shadcn/ui's
+components, from the look's tokens: cards as its Card (bg-card, rounded-xl,
+a 1 px border, no elevation), `cr-toggle` as its Switch, `md-select`
+drop-downs as its Select (Lucide's chevron, as Koan's panes), `cr-button` as
+its outline Button (`.action-button` the default one, `.tonal-button` the
+secondary one), `cr-input` as its Input, the left menu as its sidebar menu and
+the toolbar's search box as an Input. At chrome://settings/ (Koan's Look and
+Feel) the Look and Feel menu item is the selected one (`settings_menu.ts`
+patch). In the Zen style nothing changes: Chromium's sections keep their own
+look, as #297 left them.
+
+How: one stylesheet, `src/browser/ui/webui/resources/koan_chromium.css`,
+served by `koan_settings_ui.cc` in the shadcn style only (empty in Zen's).
+Chromium's controls set their sizes on `:host` or inside their own shadow
+roots, which the document's variables don't reach, so `koan_settings_page.js`
+adopts that one sheet into every shadow root of the page (when a root is
+attached, and again, last, whenever its adopted sheets are set, as Lit does).
+Every rule names the element whose shadow root it styles. Colours Chromium
+takes from `--cr-*` variables are mapped onto the tokens in the document
+(`LookStylesheet()`); the `--color-*` ones from `chrome://theme/colors.css` are
+Koan's colour mixers' (`koan_shadcn_color_mixer.cc` maps the tokens onto
+`kColorSys*`), which `settings.mjs` checks in light and dark mode.
+`settings.mjs` reads the computed styles of each control, so an upstream
+rename (`#bar`, `#knob`, `#card`, `#input-container`, `.md-select`,
+`.cr-nav-menu-item`) fails there.

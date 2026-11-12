@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,11 +22,14 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_look.h"
+#include "koan/browser/ui/color/koan_tokens.h"
 #include "koan/browser/ui/fonts/koan_fonts.h"
 #include "koan/browser/ui/webui/koan_settings_handler.h"
 #include "koan/browser/ui/webui/koan_settings_resources.h"
 #include "koan/browser/ui/webui/koan_settings_rows.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 #if BUILDFLAG(IS_POSIX)
 #include "koan/browser/ui/webui/koan_agent_containers_handler.h"
@@ -39,11 +43,12 @@ namespace {
 // or .pak changes upstream), served from chrome://settings by these exact
 // names: every other path is Chromium's (its files and its routes, such as
 // koan/looks).
-enum class File { kJs, kCss, kTokens, kSans, kMono };
+enum class File { kJs, kCss, kTokens, kChromium, kSans, kMono };
 constexpr auto kFiles = base::MakeFixedFlatMap<std::string_view, File>({
     {"koan_settings_page.js", File::kJs},
     {"koan_settings.css", File::kCss},
     {"koan_tokens.css", File::kTokens},
+    {"koan_chromium.css", File::kChromium},
     {"koan_geist.woff2", File::kSans},
     {"koan_geist_mono.woff2", File::kMono},
 });
@@ -52,6 +57,47 @@ constexpr auto kFiles = base::MakeFixedFlatMap<std::string_view, File>({
 // with "?<time>" when the look changes, to get past the cache.
 std::string_view FileName(std::string_view request_path) {
   return request_path.substr(0, request_path.find_first_of("?#"));
+}
+
+// What shadcn's components change in dark mode (their `dark:` classes), for
+// koan_chromium.css: fields and outline buttons over a tint of --input, and
+// the Switch's thumb.
+std::string DarkVariants(bool dark) {
+  if (dark) {
+    return "--koan-field-background: color-mix(in srgb, var(--input) 30%, "
+           "transparent);\n"
+           "--koan-field-hover: color-mix(in srgb, var(--input) 50%, "
+           "transparent);\n"
+           "--koan-outline-border: var(--input);\n"
+           "--koan-outline-background: var(--koan-field-background);\n"
+           "--koan-outline-hover: var(--koan-field-hover);\n"
+           "--koan-switch-track: color-mix(in srgb, var(--input) 80%, "
+           "transparent);\n"
+           "--koan-switch-thumb: var(--foreground);\n"
+           "--koan-switch-thumb-checked: var(--primary-foreground);\n";
+  }
+  return "--koan-field-background: transparent;\n"
+         "--koan-field-hover: var(--accent);\n"
+         "--koan-outline-border: var(--border);\n"
+         "--koan-outline-background: var(--background);\n"
+         "--koan-outline-hover: var(--accent);\n"
+         "--koan-switch-track: var(--input);\n"
+         "--koan-switch-thumb: var(--background);\n"
+         "--koan-switch-thumb-checked: var(--background);\n";
+}
+
+// Lucide's chevron-down in the muted text colour at half opacity (shadcn's
+// SelectTrigger), as an image Chromium's drop-downs can draw: a background
+// image can't take its colour from CSS.
+std::string Chevron(const look::TokenSet& tokens) {
+  const SkColor color = tokens[look::Token::kMutedForeground];
+  return base::StringPrintf(
+      "--koan-chevron: url(\"data:image/svg+xml,<svg "
+      "xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' "
+      "stroke='%%23%02x%02x%02x' stroke-opacity='0.5' stroke-width='2' "
+      "stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 "
+      "6-6'/></svg>\");\n",
+      SkColorGetR(color), SkColorGetG(color), SkColorGetB(color));
 }
 
 // The look's stylesheet draws Koan's panes from the same tokens as the native
@@ -64,14 +110,15 @@ std::string_view FileName(std::string_view request_path) {
 // Chromium's own variables, so its sections take the look too) and in the
 // panes' shadow root (where `:host` overrides the panes' Zen defaults).
 std::string LookStylesheet() {
-  const look::Look& current = look::CurrentLook();
-  if (current.style != look::Style::kShadcn) {
+  if (!look::IsShadcnStyle()) {
     return std::string();
   }
+  const look::Look& current = look::CurrentLook();
   const auto block = [](bool dark) {
+    const look::TokenSet& tokens = look::CurrentTokens(dark);
     return base::StrCat(
         {":root, :host {\n  color-scheme: ", dark ? "dark" : "light", ";\n",
-         look::TokensToCss(look::CurrentTokens(dark)),
+         look::TokensToCss(tokens), DarkVariants(dark), Chevron(tokens),
          // Hover surface and the field border the page derives from tokens.
          "--secondary-hover: color-mix(in srgb, var(--secondary), "
          "var(--foreground) 8%);\n"
@@ -123,6 +170,18 @@ std::string LookStylesheet() {
       "  --cr-focus-outline-color: var(--ring);\n"
       "  --cr-hover-background-color: var(--accent);\n"
       "  --cr-menu-background-color: var(--popover);\n"
+      // shadcn's popover shadow (shadow-md).
+      "  --cr-menu-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), "
+      "0 2px 4px -2px rgb(0 0 0 / 0.1);\n"
+      // Cards: a 1px border (as a ring, which every card of the page draws
+      // with) and no elevation (#301).
+      "  --cr-card-shadow: 0 0 0 1px var(--border);\n"
+      "  --cr-title-text-color: var(--foreground);\n"
+      "  --cr-form-field-label-color: var(--muted-foreground);\n"
+      "  --cr-active-background-color: var(--accent);\n"
+      "  --cr-hover-on-subtle-background-color: var(--accent);\n"
+      "  --iron-icon-fill-color: var(--muted-foreground);\n"
+      "  --settings-error-color: var(--destructive);\n"
       // The left menu's selected and hovered item: shadcn's sidebar menu
       // item (settings_menu.css.patch), not Chromium's light blue.
       "  --koan-nav-item-selected-background: var(--sidebar-accent);\n"
@@ -144,6 +203,12 @@ void ServeFile(const std::string& request_path,
       break;
     case File::kTokens:
       data = LookStylesheet();
+      break;
+    case File::kChromium:
+      // Chromium's sections keep their own look in the Zen style.
+      if (look::IsShadcnStyle()) {
+        data = kKoanChromiumCss;
+      }
       break;
     case File::kSans:
       data = std::string(fonts::SansWoff2());
@@ -176,11 +241,28 @@ void ExtendSettingsUI(content::WebUI& web_ui,
   // Koan has no Google account (browser sign-in is off by default,
   // koan_prefs.cc): the People section and its menu item are the profile's,
   // not "You and Google" (IDS_SETTINGS_PEOPLE, which this replaces: the
-  // localized strings are added before this hook runs). Its rows stay (#300):
-  // "Sync and Google services" holds the switch that turns sign-in on.
+  // localized strings are added before this hook runs). Zen has no browser
+  // account rows either (#300): "Allow Chrome sign-in" goes (it is the only
+  // row `signinAvailable` shows), and the subpage that held it is "Google
+  // services", since sync can't be set up. That subpage stays: it has
+  // "Autocomplete searches and URLs" and "Make searches and browsing better".
   if (!profile->GetPrefs()->GetBoolean(::prefs::kSigninAllowed)) {
     source.AddString("peoplePageTitle", "Profile");
+    source.AddBoolean("signinAvailable", false);
+    source.AddString("syncAndNonPersonalizedServices", "Google services");
+    source.AddString("syncPageTitle", "Google services");
   }
+  // Zen turns AI controls off and deletes its AI rows (Z28): no AI section,
+  // menu item or route, and no link to it from the Privacy Guide. Its
+  // features are off already (koan_feature_overrides.cc).
+  source.AddBoolean("showAiPage", false);
+  // Appearance (page_visibility.ts patch): no Theme row, since Koan's look is
+  // its Look and Feel and Chrome themes and Customize Chrome are what Zen
+  // hides (its browser theme group); and no Show home button row while the
+  // URL bar replaces the new tab page, the rule for Zen's Home pane
+  // (zen-preferences.css).
+  source.AddBoolean("koanShowHomeButtonRow", !profile->GetPrefs()->GetBoolean(
+                                                 prefs::kUrlBarReplaceNewTab));
   web_ui.AddMessageHandler(std::make_unique<KoanSettingsHandler>(
       *profile->GetPrefs(), *g_browser_process->local_state()));
 #if BUILDFLAG(IS_POSIX)
