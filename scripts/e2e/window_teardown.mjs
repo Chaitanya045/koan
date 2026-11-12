@@ -14,15 +14,17 @@
 // compact + fullscreen, tabs on the right. The window closes with the Close
 // Window shortcut (Cmd+Shift+W on macOS; the red button runs the same
 // BrowserView::Close path) through the real keyboard when suite.sh allows
-// real input. Else, on macOS, through the test_helper extension
+// real input, after making that window key (makeKey(): a window opened
+// through CDP isn't). Else, on macOS, through the test_helper extension
 // (window_teardown.flags; synthetic keys don't reach the menu that owns the
 // key), and through CDP elsewhere; the quit, through CDP's Browser.close.
 // Run by scripts/mac/suite.sh (or scripts/e2e/run.sh window_teardown off
 // macOS, without fullscreen).
 import { browserCall, check, finish, onPage, pages, setKoanPref, sleep,
          waitFor } from './lib/koan.mjs';
-import { ACCEL, IS_MAC, SHIFT, alive, closeWindowOf, countInLog, fatalInLog, key, openWindow,
-         realInput, realKey, setWindowState, startServer, windowOf, windows } from './lib/mac.mjs';
+import { ACCEL, IS_MAC, SHIFT, alive, closeWindowOf, countInLog, fatalInLog, key, makeKey,
+         openWindow, realInput, realKey, setWindowState, startServer, windowOf,
+         windows } from './lib/mac.mjs';
 
 const server = await startServer();
 const TORN = /Koan: window torn down$/m;
@@ -39,7 +41,9 @@ async function closeWindow(windowId) {
   const page = (await windows()).find(w => w.windowId === windowId)?.pages
       .find(p => !p.url.startsWith('devtools:'));
   if (realInput()) {
-    // The real key goes to the key window, which is the one just opened.
+    // The real key goes to the key window: make it this one (a window opened
+    // through CDP isn't key).
+    if (!(await makeKey(page))) console.log(`  (window ${windowId}'s page never got the focus)`);
     await realKey('w', 'cs', 800);
   } else {
     await closeWindowOf(page);
@@ -119,6 +123,8 @@ await secondWindowCase('Tabs on the right', { right: true });
   check('Quit: two windows open', (await windows()).length === 2);
   const first = (await pages()).find(p => !p.url.includes('Quit%20two') && p.type === 'page');
   if (realInput()) {
+    // (Cmd+Q is the main menu's: some window of Koan's must be key.)
+    if (!(await makeKey(first))) console.log('  (the first window\'s page never got the focus)');
     await realKey('q', 'c', 500);
   } else if (IS_MAC) {
     // Cmd+Q is the menu's too: CDP's Browser.close, which quits as the

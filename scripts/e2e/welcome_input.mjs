@@ -14,8 +14,8 @@
 // (the page's side only) and the AppKit checks are reported as skipped.
 // welcome_input.flags forces the first run. Run by scripts/mac/suite.sh.
 import { CDP_PORT, check, evalIn, finish, onPage, sleep, viewTree, waitFor } from './lib/koan.mjs';
-import { IS_MAC, alive, calibrate, fatalInLog, key, realClick, realInput, realInputWhyNot,
-         realKey, skipped, windowOf } from './lib/mac.mjs';
+import { IS_MAC, alive, calibrate, fatalInLog, key, makeKey, realClick, realInput,
+         realInputWhyNot, realKey, skipped, windowOf } from './lib/mac.mjs';
 
 async function welcomePage() {
   return waitFor(async () => (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
@@ -48,6 +48,18 @@ const overlay = async () => (await viewTree()).find(
 const real = realInput();
 let origin = null;
 if (real) {
+  // A page in a window that isn't key sees no mouse moves (and the window's
+  // keys go elsewhere): make the welcome's window key first, through its
+  // tab (the welcome's own view isn't a tab).
+  const windowId = (await windowOf(page.id))?.windowId;
+  const tabs = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
+      .filter(t => t.type === 'page' && !t.url.startsWith('chrome://koan-welcome'));
+  let tab = null;
+  for (const t of tabs) {
+    if ((await windowOf(t.id))?.windowId === windowId) { tab = t; break; }
+  }
+  await makeKey(tab);
+  console.log(`  (the welcome has the focus: ${await js('document.hasFocus()')})`);
   origin = await calibrate(page, await viewTree(), await overlay());
   check('Real pointer: the page saw the pointer move (calibration)', !!origin);
 }
