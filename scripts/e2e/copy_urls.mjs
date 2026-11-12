@@ -4,13 +4,14 @@
 // plural toast; with one tab selected it copies that tab's URL as before.
 // Tabs are selected through the test_helper extension (chrome.tabs.highlight,
 // the model's multi-selection) and the action runs from the palette in the
-// sidebar's URL bar (no menu-bar key: those don't reach on macOS).
+// sidebar's URL bar (synthetic menu-bar keys don't reach on macOS), or,
+// with real input, from a real Cmd+Shift+C.
 //
 //   scripts/mac/suite.sh copy_urls   (its .flags load test_helper)
 import { execSync } from 'node:child_process';
 import { IS_MAC, browserCall, check, evalIn, finish, front, pages, sleep, typeInto,
          viewEvent, viewMouse, viewTree, waitFor } from './lib/koan.mjs';
-import { askTestHelper, startServer } from './lib/mac.mjs';
+import { askTestHelper, realInput, realKey, startServer } from './lib/mac.mjs';
 
 const server = await startServer();
 const url = t => server.url(`/p?t=${t}`);
@@ -54,7 +55,9 @@ async function clipboardText(from) {
 // Enter goes in only once it is. Returns the clipboard and the toast.
 async function copyFromPalette(from) {
   if (IS_MAC) execSync('pbcopy', { input: '' });
-  await front(from);
+  // No front(): Page.bringToFront activates the tab, and activating a tab
+  // collapses the multi-selection to it (TabStripModel::ActivateTabAt).
+  // The asking page is already the active tab.
   const vs = await viewTree();
   const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown);
   if (!pill) return { error: 'no URL pill' };
@@ -62,8 +65,7 @@ async function copyFromPalette(from) {
   // the root view at 24 px in lands on the site's icon, which opens the site
   // panel instead of editing the address.
   for (const type of ['mousePressed', 'mouseReleased']) await viewMouse(pill, type, 10, 10);
-  await sleep(1000);
-  await sleep(400);  // the click's select-all is posted
+  await sleep(1400);  // the click's select-all is posted
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
   if (!field) return { error: 'no URL bar' };
@@ -91,11 +93,22 @@ async function copyFromPalette(from) {
   return { text: await clipboardText(from), toast };
 }
 
+// With real input (suite.sh's KOAN_INPUT=real): the user's path, a real
+// Cmd+Shift+C (the main menu's key on macOS). Otherwise the palette.
+async function copySelected(from) {
+  if (!realInput()) return copyFromPalette(from);
+  execSync('pbcopy', { input: '' });
+  if (!await realKey('c', 'cs', 300)) return copyFromPalette(from);
+  const toast = await waitFor(async () => (await viewTree()).find(v => v.cls === 'Label' &&
+      v.shown && /^Copied /.test(v.props?.Text ?? ''))?.props.Text, 2500) ?? '';
+  return { via: 'Cmd+Shift+C', text: await clipboardText(from), toast };
+}
+
 // Two tabs selected, picked in reverse: the clipboard keeps the sidebar's order.
 let page = await pageAt(C);
 check('test_helper selected Gamma and Alpha',
       await askTestHelper(page, { highlight: [C, A] }, 1200));
-let r = await copyFromPalette(await pageAt(C));
+let r = await copySelected(await pageAt(C));
 check('Two selected tabs: both URLs, one per line, in the sidebar\'s order',
       r.text === `${A}\n${C}`, JSON.stringify(r));
 check('...with the plural toast', r.toast === 'Copied 2 URLs!',
@@ -104,7 +117,7 @@ check('...with the plural toast', r.toast === 'Copied 2 URLs!',
 // One tab selected: just its URL, Zen's toast.
 page = await pageAt(B);
 await askTestHelper(page, { highlight: [B] }, 1200);
-r = await copyFromPalette(await pageAt(B));
+r = await copySelected(await pageAt(B));
 check('One selected tab: only its URL', r.text === B, JSON.stringify(r));
 check('...with Zen\'s toast', r.toast === 'Copied current URL!',
       JSON.stringify(r.toast));
