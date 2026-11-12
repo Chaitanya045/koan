@@ -39,6 +39,7 @@
 //   scripts/e2e/run.sh settings_effects_behaviour
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import {
   ACCEL, ALT, CDP_PORT, CTRL, IS_MAC, UI_PORT, browserCall, check, click, connect, evalIn,
@@ -492,8 +493,18 @@ if (!pinned || !hasHelper) {
 }
 
 // ---- 5b. Open other sites from a pinned tab's URL bar in a new tab.
-// Another site: localhost, where the pages are 127.0.0.1.
-const otherSite = `http://localhost:${server.port}/p?t=Other`;
+// Another site: localhost, where the pages are 127.0.0.1. Its own server,
+// on every address: on macOS localhost is ::1 first, which the 127.0.0.1
+// server doesn't answer (the tab then shows an error page, at another URL).
+const otherServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+  res.end('<!doctype html><title>Other</title><h1>Other</h1>');
+});
+await new Promise(r => otherServer.listen(0, '::', r));
+const otherSite = `http://localhost:${otherServer.address().port}/other`;
+const isOther = u => u?.startsWith(`http://localhost:${otherServer.address().port}/`);
+// Where a page target is now (its id stays across navigations).
+const urlOf = async id => (await pages()).find(p => p.id === id)?.url;
 async function typeInUrlBar(from, text) {
   await front(from);
   const vs = await viewTree();
@@ -539,19 +550,27 @@ if (!pinned || !essentialE) {
 } else if (!await typeInUrlBar(essentialE, otherSite)) {
   skipped('Open other sites from a pinned tab in a new tab', 'no sidebar URL bar on screen');
 } else {
-  const opened = await waitFor(() => pageAt(otherSite), 5000);
+  const where = async () => `E at ${await urlOf(essentialE.id)}; tabs: ${
+      (await pages()).filter(p => p.type === 'page').map(p => p.url).join(' ')}`;
+  const opened = await waitFor(async () => (await pages()).find(
+      p => p.type === 'page' && p.id !== essentialE.id && isOther(p.url)), 5000);
   check('"Open other sites from a pinned tab" on (default): another site opens in a new tab',
-        !!opened && !!await pageAt(url('E')), opened ? 'E navigated' : 'no new tab');
+        !!opened && await urlOf(essentialE.id) === url('E'), await where());
   if (opened) await browserCall('Target.closeTarget', { targetId: opened.id });
+  // Whatever happened, E back at its page for the steps after.
+  const restoreE = async () => {
+    if (await urlOf(essentialE.id) !== url('E')) {
+      await onPage(essentialE, cdp => cdp.send('Page.navigate', { url: url('E') }));
+      await waitFor(async () => await urlOf(essentialE.id) === url('E'), 5000);
+    }
+  };
+  await restoreE();
   await sleep(800);
   await change('koan.tabs.open_pinned_in_new_tab', false);
-  await typeInUrlBar(await pageAt(url('E')), otherSite);
-  const navigated = await waitFor(async () => !await pageAt(url('E')) && pageAt(otherSite), 5000);
-  check('...off: the pinned tab goes there itself', !!navigated);
-  if (navigated) {
-    await onPage(navigated, cdp => cdp.send('Page.navigate', { url: url('E') }));
-    await waitFor(() => pageAt(url('E')), 5000);
-  }
+  await typeInUrlBar(essentialE, otherSite);
+  check('...off: the pinned tab goes there itself',
+        await waitFor(async () => isOther(await urlOf(essentialE.id)), 5000), await where());
+  await restoreE();
   await change('koan.tabs.open_pinned_in_new_tab', true);
 }
 
@@ -813,4 +832,5 @@ if (!pinned || !hasHelper || !args.length) {
 check('Nothing fatal in the log', !fatalInLog(), fatalInLog());
 if (relaunched) await quit();
 server.close();
+otherServer.close();
 finish();
