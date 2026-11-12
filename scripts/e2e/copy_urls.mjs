@@ -59,22 +59,20 @@ async function copyFromPalette(from) {
   const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown);
   if (!pill) return { error: 'no URL pill' };
   await clickThroughRoot(vs, pill);
+  await sleep(400);  // the click's select-all is posted
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
   if (!field) return { error: 'no URL bar' };
-  // A pill click edits the page's URL in place, caret in it and nothing
-  // selected (on macOS), so a typed ">" lands inside the URL: empty the
-  // field first with Backspace and Delete.
-  const url = field.props?.Text ?? '';
-  for (let i = 0; i < url.length + 4; i++) {
-    for (const keyCode of [8, 46]) {
-      await viewEvent(field, 'DOM.dispatchKeyEvent',
-                      { type: 'keyPressed', keyCode, code: 0, flags: 0, key: 0, isChar: false });
-    }
+  // Zen's clickSelectsAll: the click selects the whole address, so the
+  // query replaces it (urlbar.mjs checks the selection too).
+  const text = field.props?.Text ?? '';
+  const sel = (field.props?.SelectedRange ?? '').match(/\d+/g)?.map(Number) ?? [];
+  if (!text || Math.min(...sel) !== 0 || Math.max(...sel) !== text.length) {
+    return { error: 'the pill click did not select the address', text, sel: field.props?.SelectedRange };
   }
-  const left = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown)?.props?.Text;
-  if (left) return { error: 'URL bar not emptied', left };
   await typeInto(field, '>Copy Current URL');
+  const typed = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown)?.props?.Text;
+  if (typed !== '>Copy Current URL') return { error: 'typing did not replace the address', typed };
   const rows = await waitFor(async () => {
     const rs = await rowLabels();
     return rs[0] === 'Copy Current URL' && rs;
