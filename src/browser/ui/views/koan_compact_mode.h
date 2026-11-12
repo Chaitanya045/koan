@@ -46,15 +46,28 @@ bool KeepsSidebarNav(const views::View* browser_view);
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);
 
-// macOS: whether the window is in native fullscreen with Koan's toolbar
-// hidden (single toolbar, or compact mode hiding the toolbar). Like Zen,
-// none of Chromium's top chrome is revealed from the top edge then (its
-// toolbar, bookmarks bar; AppKit's thin title bar with the traffic lights
-// still slides in with the menu bar, as in Zen): Koan's own layout stays, with
-// the sidebar's header and the URL pill, or in compact mode the toolbar's
-// own slide. Called from the BrowserView and BrowserFrameViewMac hooks, so
-// that Chromium's fullscreen toolbar style is "none" and its dialogs anchor
-// to the window. False elsewhere.
+// macOS: whether Koan's layout keeps the window's top container (the
+// toolbar) through native fullscreen, as in a window: a normal window with
+// Koan's sidebar (UseContentCard()). Zen on macOS keeps its toolbars in
+// fullscreen (Firefox's mac default browser.fullscreen.autohide false), and
+// its compact mode works there as in a window. So Chromium's immersive mode
+// doesn't take the top container into its overlay widget (which would only
+// reveal it from the top edge): the BrowserView hook asks this as the
+// fullscreen starts, and Koan's compact controller places it from then on
+// (the BrowserView with the toolbar shown, Koan's overlay where compact mode
+// or single toolbar hides it, out of sight while the page is fullscreen).
+// False elsewhere.
+bool KeepsTopContainerInFullscreen(const BrowserView* browser_view);
+
+// macOS: whether the window is in native fullscreen with Koan's layout
+// (KeepsTopContainerInFullscreen()). Like Zen, none of Chromium's fullscreen
+// top chrome is revealed from the top edge then (its toolbar, bookmarks bar;
+// AppKit's thin title bar with the traffic lights still slides in with the
+// menu bar, as in Zen): Koan's own layout stays, the toolbar above the page
+// unless compact mode or single toolbar hides it (then the sidebar's header
+// and the URL pill, or compact mode's own slide). Called from the BrowserView
+// and BrowserFrameViewMac hooks, so that Chromium's fullscreen toolbar style
+// is "none" and its dialogs anchor to the window. False elsewhere.
 bool HidesFullscreenTopChrome(const views::View* browser_view);
 
 // Whether the strip at the top of the window where the frame draws its

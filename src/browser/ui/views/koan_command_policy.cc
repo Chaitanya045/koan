@@ -58,7 +58,7 @@ enum class Owner {
   // place of a new tab.
   kNewTab,
   // IgnoresFullscreenToolbarToggle(): no "Always Show Toolbar in Full
-  // Screen" while Koan's toolbar is hidden (fullscreen F3).
+  // Screen" in Koan's layout, which stays in fullscreen (fullscreen F3, F9).
   kFullscreenToolbar,
   // Esc: Zen leaves it unbound as Stop, so it only closes the find bar; the
   // page gets it otherwise (#90; the stop button and ⌘. still stop). The
@@ -370,13 +370,14 @@ std::optional<bool> HidesMenuCommand(BrowserView* browser_view,
     case IDC_WINDOW_GROUP_TAB:
     case IDC_GROUP_TARGET_TAB:
       return controller && controller->workspaces()->IsEnabled();
-    // View > Always Show Toolbar in Full Screen: with Koan's toolbar hidden
-    // (single toolbar) fullscreen reveals nothing at the top edge, whatever
-    // the setting (Chromium's, synced) says, so it isn't offered, neither
-    // greyed out nor there. (The command itself is ignored there: the
-    // kFullscreenToolbar row.)
+    // View > Always Show Toolbar in Full Screen: Koan's layout stays in
+    // fullscreen as in a window, as Zen's does on macOS (its toolbar shown
+    // unless compact mode or single toolbar hides it, nothing revealed by
+    // Chromium at the top edge), whatever the setting (Chromium's, synced)
+    // says, so it isn't offered, neither greyed out nor there. (The command
+    // itself is ignored there: the kFullscreenToolbar row.)
     case IDC_TOGGLE_FULLSCREEN_TOOLBAR:
-      return browser_view && IsToolbarHidden(browser_view);
+      return browser_view && KeepsTopContainerInFullscreen(browser_view);
     // View > "Show Tabs Vertically": Koan owns the sidebar, which is always
     // vertical (#154). Upstream's validation sets this item's hidden state
     // itself (hidden only in immersive fullscreen), so a hide at menu build

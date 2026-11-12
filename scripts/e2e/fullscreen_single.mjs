@@ -14,26 +14,38 @@
 //     edge, with a title bar strip and the traffic lights);
 //   - the sidebar's top row has the navigation buttons after the toggle;
 //   - no bookmarks bar, no toolbar above the page;
-//   - Ctrl+Alt+B (multiple toolbars) hands the top container to Chromium's
-//     overlay widget, and the next one takes it back;
+//   - Ctrl+Alt+B (multiple toolbars) puts the top container back in the
+//     BrowserView, the toolbar shown above the page as in a window (Zen on
+//     macOS keeps its toolbars in fullscreen; fullscreen_multiple.mjs has the
+//     rest), and the next one parks it in Koan's overlay again;
 //   - the URL bar open when fullscreen ends is closed;
 //   - a second window made fullscreen and closed there: the browser lives;
 //   - leaving fullscreen is as before.
 // The top-edge hover itself is AppKit's and can't be simulated here: the Mac
 // bench checks it with a real pointer (see docs/REBASE.md, "Toolbar hidden in
-// macOS fullscreen").
+// macOS fullscreen"). The URL bar opens from the pill (a click through UI
+// DevTools): ⌘L is the main menu's on macOS, which CDP keys never reach.
 //
 //   scripts/e2e/run.sh fullscreen_single
 import {
-  ALT, CTRL, browserCall, check, finish, key, pages, readPref, sleep, views, visiblePage,
-  waitFor, skipOnMac,
+  ALT, CTRL, browserCall, check, finish, key, pages, readPref, sleep, viewMouse, views,
+  visiblePage, waitFor,
 } from './lib/koan.mjs';
-import { alive, goFullscreen, isMac, primary } from './lib/fullscreen.mjs';
-skipOnMac();
+import { alive, goFullscreen, isMac } from './lib/fullscreen.mjs';
 
 const find = (vs, cls) => vs.find(v => v.cls === cls);
 const findShown = (vs, cls) => vs.find(v => v.cls === cls && v.shown);
-const VK = { B: 66, L: 76 };
+const VK = { B: 66 };
+
+// Opens the URL bar from the sidebar's pill (Zen's single toolbar).
+async function openUrlBar() {
+  const pill = findShown(await views(), 'KoanUrlPill');
+  check('The URL pill is there', !!pill);
+  if (!pill) return;
+  await viewMouse(pill, 'mousePressed', 10, 10);
+  await viewMouse(pill, 'mouseReleased', 10, 10);
+  await sleep(800);
+}
 
 const barShown = vs => vs.some(v => v.cls === 'BookmarkBarView' && v.shown && v.h > 0);
 
@@ -53,12 +65,14 @@ if (!(await isMac())) {
   finish();
 }
 
-// The top container is in the window's own widget (Koan's overlay) rather
-// than in another one, whose root view isn't the browser's.
+// Where the top container is: in the window's own widget, in Koan's overlay
+// or in the BrowserView (the toolbar shown), or in another widget (Chromium's
+// overlay, whose root view isn't the browser's).
 const topContainerIn = vs => {
   const top = find(vs, 'TopContainerView');
-  return top && top.path[0] === 'BrowserRootView' &&
-         top.path.includes('TopContainerOverlayView') ? 'Koan' : 'Chromium';
+  if (!top || top.path[0] !== 'BrowserRootView') return 'Chromium';
+  if (top.path.includes('TopContainerOverlayView')) return 'Koan';
+  return top.path.at(-1) === 'BrowserView' ? 'BrowserView' : top.path.join('>');
 };
 
 async function checkKoanLayout(when) {
@@ -85,27 +99,31 @@ check('Fullscreen: the page starts at the top gutter, no strip above it',
 check('Fullscreen: no other widget has a toolbar',
       vs.filter(v => v.cls === 'ToolbarView' && v.path[0] !== 'BrowserRootView').length === 0);
 
-// Multiple toolbars: Chromium hosts the top container in its overlay widget
-// (revealed at the top edge); single toolbar takes it back.
+// Multiple toolbars: the toolbar shows above the page, in the window, as in a
+// window (not in Chromium's overlay widget, revealed at the top edge only);
+// single toolbar parks it again.
 await key(await visiblePage(), VK.B, CTRL | ALT, 'b');
 await sleep(1500);
-check('Fullscreen, multiple toolbars: Chromium\'s overlay widget has the top container',
-      topContainerIn(await views()) === 'Chromium', topContainerIn(await views()));
+const multiple = await views();
+const toolbar = findShown(multiple, 'ToolbarView');
+check('Fullscreen, multiple toolbars: the top container is in the BrowserView',
+      topContainerIn(multiple) === 'BrowserView', topContainerIn(multiple));
+check('...the toolbar is shown at the top, in the window',
+      toolbar && toolbar.h > 0 && toolbar.path[0] === 'BrowserRootView',
+      toolbar && `${toolbar.y} ${toolbar.h}`);
 await key(await visiblePage(), VK.B, CTRL | ALT, 'b');
 await sleep(1500);
 await checkKoanLayout('Fullscreen, single toolbar again');
 
 // The URL bar open while fullscreen ends: closed, the top container hidden.
-await key(await visiblePage(), VK.L, await primary(), 'l');
-await sleep(800);
+await openUrlBar();
 await goFullscreen(false);
 const after = await checkKoanLayout('Windowed again, after the URL bar was open');
 check('...with the URL bar closed',
       !after.some(v => (v.cls === 'KoanUrlBarBackdrop' || v.cls === 'KoanUrlBarCardDecoration') && v.shown));
 
 // The same toggle with the URL bar open when fullscreen starts.
-await key(await visiblePage(), VK.L, await primary(), 'l');
-await sleep(800);
+await openUrlBar();
 await goFullscreen(true);
 const entered = await checkKoanLayout('Fullscreen, entered with the URL bar open');
 check('...with the URL bar closed',

@@ -27,6 +27,8 @@ compact_flash
 compact_single
 download_animation
 fullscreen_compact
+fullscreen_multiple
+fullscreen_single
 library
 library_history
 newtab

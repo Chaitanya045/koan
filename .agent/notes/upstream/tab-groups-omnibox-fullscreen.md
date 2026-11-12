@@ -799,3 +799,16 @@ Related issues:
 
 - **#146** (compact dropped in fullscreen, Chromium toolbar in the peek) was filed on 09d39ad9, before #128. #128 is its fix, but the issue is still open: re-test on develop + #152.
 - **#133 / #149** are windowed traffic-light issues (#144 / #128's tabs-on-right fix). Fullscreen is not involved, because `UpdateCaptionButtons` returns early in fullscreen.
+
+### F9 decided (2026-11-12): multiple toolbars keep the toolbar in macOS fullscreen
+
+**Zen 1.24b.** The shipped defaults set `browser.fullscreen.autohide` false on macOS (`.cache/zen-src-1.24b/defaults/preferences/firefox.js:108`, Firefox's mac branch) and `zen.view.borderless-fullscreen` true (`:1829`, `prefs/zen/view.yaml:55`). Zen's compact-mode rules are gated on `inDOMFullscreen` only (`src/zen/compact-mode/zen-compact-mode.css:47`, hide-tabbar / hide-toolbar includes below it), the toolbox is hidden only in DOM fullscreen (`src/zen/common/styles/zen-browser-ui.css:23`), browser fullscreen (`inFullscreen`) only drops the element separation with compact mode on (`src/zen/common/zenThemeModifier.js:161-170`), and `browser-fullScreenAndPointerLock-js.patch` stops the toolbox moving down when the menu bar slides in. So in Zen on a Mac native fullscreen keeps the windowed layout: toolbars shown unless compact mode hides them, compact mode's choice revealed at the screen's edge as in a window.
+
+**Chromium 158.** `BrowserView::OnImmersiveFullscreenEntered()` always runs `ReparentTopContainerForStartOfImmersive()` (top container and horizontal tab strip into `overlay_view()`, in `overlay_widget()`); `BrowserFrameViewMac::UpdateFullscreenTopUI()` maps `kShowFullscreenToolbar` to `kAlways` / `kAutohide`. With Koan's default false, "Sidebar and Top Toolbar" had no toolbar at all in fullscreen (the overlay only revealed at the top edge), and compact "hide sidebar" hid both.
+
+**Decision.**
+- **Override** the reparent: one hook in `OnImmersiveFullscreenEntered()` skips it in Koan windows (`koan::KeepsTopContainerInFullscreen()` = `UseContentCard()`, macOS only). The top container stays in the BrowserView (toolbar shown, laid out as in a window) or Koan's overlay (toolbar hidden; also, out of sight, over the page's own fullscreen). `ReparentTopContainerForEndOfImmersive()` restores it from either place; Koan's observer re-parks it (`PlaceTopContainer()`).
+- **Lock** the toolbar style: `HidesFullscreenTopChrome()` (`TOOLBAR_NONE`, anchoring to the window, Koan's reserved keys) now holds in every Koan window in fullscreen, not just where the toolbar is hidden.
+- **Lock** "Always Show Toolbar in Full Screen": hidden and ignored in Koan windows (already hidden in the View menu table), since the windowed layout decides. The pref stays registered false; it still selects `kFullscreenWithToolbar` in `GetBrowserWindowState()` for an old profile that has it true (separator/corner details only).
+- **Reuse** compact mode: no fullscreen-specific branch; the content card's fullscreen gutter for the "Chromium reveals the toolbar" case is gone.
+- Open: the 1 px top-container separator `kFullscreen` adds under a shown toolbar (`CalculateSeparatorInfo`), and F7's infobar offset. Check on the Mac.
