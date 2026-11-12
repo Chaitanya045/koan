@@ -29,47 +29,6 @@ std::string Write(const base::DictValue& dict) {
   return base::WriteJson(dict).value_or("{}");
 }
 
-// An AX property's value: {"type": ..., "value": ...}.
-std::string AxString(const base::DictValue& node, std::string_view key) {
-  const base::DictValue* property = node.FindDict(key);
-  if (!property) {
-    return std::string();
-  }
-  if (const std::string* value = property->FindString("value")) {
-    return *value;
-  }
-  return std::string();
-}
-
-// Roles that only group: shown only when they have a name.
-bool IsQuietRole(std::string_view role) {
-  return role.empty() || role == "generic" || role == "none" ||
-         role == "presentation" || role == "InlineTextBox" ||
-         role == "LineBreak";
-}
-
-std::string Quoted(std::string_view text) {
-  constexpr size_t kMaxText = 120;
-  std::string out = "\"";
-  size_t count = 0;
-  for (char c : text) {
-    if (count++ == kMaxText) {
-      out += "...";
-      break;
-    }
-    if (c == '"' || c == '\\') {
-      out += '\\';
-      out += c;
-    } else if (c == '\n' || c == '\r' || c == '\t') {
-      out += ' ';
-    } else {
-      out += c;
-    }
-  }
-  out += '"';
-  return out;
-}
-
 }  // namespace
 
 std::optional<Discovery> ParseDiscovery(std::string_view json) {
@@ -279,88 +238,6 @@ std::optional<std::string> WithId(std::string_view json, int id) {
   }
   dict->Set("id", id);
   return Write(*dict);
-}
-
-std::string SnapshotText(const base::DictValue& ax_tree, size_t max_lines) {
-  const base::ListValue* nodes = ax_tree.FindList("nodes");
-  if (!nodes || nodes->empty()) {
-    return std::string();
-  }
-  std::map<std::string, const base::DictValue*> by_id;
-  for (const base::Value& value : *nodes) {
-    if (const base::DictValue* node = value.GetIfDict()) {
-      if (const std::string* id = node->FindString("nodeId")) {
-        by_id[*id] = node;
-      }
-    }
-  }
-  const base::DictValue* root = (*nodes)[0].GetIfDict();
-  if (!root) {
-    return std::string();
-  }
-  std::string out;
-  size_t lines = 0;
-  bool truncated = false;
-  // Depth-first, without recursion (a hostile page can nest deeply).
-  std::vector<std::pair<const base::DictValue*, int>> stack = {{root, 0}};
-  std::map<const base::DictValue*, bool> seen;
-  while (!stack.empty()) {
-    auto [node, depth] = stack.back();
-    stack.pop_back();
-    if (seen[node]) {
-      continue;
-    }
-    seen[node] = true;
-    const bool ignored = node->FindBool("ignored").value_or(false);
-    const std::string role = AxString(*node, "role");
-    const std::string name = AxString(*node, "name");
-    const std::string value = AxString(*node, "value");
-    int child_depth = depth;
-    if (!ignored && !(IsQuietRole(role) && name.empty() && value.empty()) &&
-        role != "StaticText") {
-      if (lines == max_lines) {
-        truncated = true;
-        break;
-      }
-      out.append(static_cast<size_t>(depth) * 2, ' ');
-      out += role;
-      if (!name.empty()) {
-        out += " " + Quoted(name);
-      }
-      if (!value.empty()) {
-        out += " = " + Quoted(value);
-      }
-      if (std::optional<int> backend = node->FindInt("backendDOMNodeId")) {
-        out += " @" + base::NumberToString(*backend);
-      }
-      out += "\n";
-      ++lines;
-      child_depth = depth + 1;
-    } else if (!ignored && role == "StaticText" && !name.empty()) {
-      // Text that is not a control's own name.
-      if (lines == max_lines) {
-        truncated = true;
-        break;
-      }
-      out.append(static_cast<size_t>(depth) * 2, ' ');
-      out += Quoted(name) + "\n";
-      ++lines;
-      continue;
-    }
-    if (const base::ListValue* children = node->FindList("childIds")) {
-      for (auto it = children->rbegin(); it != children->rend(); ++it) {
-        if (const std::string* child_id = it->GetIfString()) {
-          if (auto child = by_id.find(*child_id); child != by_id.end()) {
-            stack.emplace_back(child->second, child_depth);
-          }
-        }
-      }
-    }
-  }
-  if (truncated) {
-    out += "... (more; the page is long)\n";
-  }
-  return out;
 }
 
 std::optional<base::DictValue> KeyDownFor(std::string_view key) {

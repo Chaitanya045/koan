@@ -84,11 +84,15 @@ std::string Describe(const std::optional<Message>& answer);
 std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
                                           std::string* error);
 
-// Proves the client to the browser (design section 5.2).
-bool Authenticate(Link& link,
-                  const base::FilePath& home,
-                  const std::string& client_id,
-                  std::string* error);
+// Proves the client to the browser (design section 5.2). If the browser asks
+// the user first (the program or the agent that started it is not the one
+// that paired), `on_asked` gets the browser's reason while the user decides.
+bool Authenticate(
+    Link& link,
+    const base::FilePath& home,
+    const std::string& client_id,
+    std::string* error,
+    base::RepeatingCallback<void(const std::string&)> on_asked = {});
 
 // Pairs a new client (the user approves it in Koan) and stores its key and
 // record, with the pin of this process, under `home`. The browser's answer,

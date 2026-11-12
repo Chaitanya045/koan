@@ -21,18 +21,32 @@ not yours unless they give you one. Every command is `koan ...`.
    task; `--saved <name>` uses a saved container the user allowed you (it
    keeps logins). If that is refused (Koan.notGranted), tell the user: only
    they can allow it, in Settings > Agent Control.
-3. Look: `koan snapshot <tab>` prints the page as an outline with @refs;
-   `koan screenshot <tab> -o shot.png` saves what it shows.
+3. Look: `koan snapshot <tab>` prints the page as a compact outline:
+   controls, links, landmarks and headings with @refs, each block's text on
+   one line, states in brackets ([checked], [selected], [expanded],
+   [collapsed], [disabled], [required], ...). `--full` prints every node of
+   the tree (same refs) when you need more. `koan screenshot <tab> -o
+   shot.png` saves what it shows.
 4. Act: `koan act <tab> click @12`, `koan act <tab> fill @34 "text"`,
-   `koan act <tab> press Enter`, `koan act <tab> scroll 600`,
-   `koan act <tab> navigate <url>`. Take a new snapshot after each change:
-   refs belong to the page as it was.
+   `koan act <tab> select @56 "Option label or value"` (a dropdown:
+   <select>; fill on one does the same), `koan act <tab> press Enter`,
+   `koan act <tab> scroll 600`, `koan act <tab> navigate <url>`. An action
+   that changed nothing fails and says why; it never prints "ok". Take a new
+   snapshot after each change: refs belong to the page as it was, and a ref
+   from before a navigation or reload fails with Koan.staleRef (take a new
+   snapshot and use its refs). Other errors say what to do next
+   (Koan.notVisible: open or scroll to what hides it; Koan.pageChanged:
+   snapshot again).
    With agent-browser installed, `koan agent-browser <its usual args>` runs
    it against Koan instead (the first time, the user approves koan-relay).
 5. A tab of the user's: `koan take-over` asks them for the tab they are on
    (only its site); `koan release <tab>` gives it back when you are done.
 6. When you are done: `koan end` closes your tabs and clears what they
    stored. `koan end --task <name>` ends one task.
+
+If koan says Koan asks the user to approve it again (it was started by
+another program than the one that paired), tell the user to look in Koan,
+and wait; or run koan from the agent that paired.
 
 If a command fails with Koan.paused, the user is using that tab: stop and
 wait for them to hand it back. If `koan status` or `koan watch` shows

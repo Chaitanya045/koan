@@ -101,6 +101,14 @@ struct ApprovalRequest {
   PinnedIdentity previous;
 };
 
+// Why a paired client is asked about again (kPeerChanged or kChainChanged),
+// as the client is told while the dialog is open and when it is refused or
+// times out (Koan.approvalPending, Koan.pairingTimeout): which program, by
+// its file name, is not the one that paired. Empty for a new client.
+std::string ReapprovalReason(ApprovalKind kind,
+                             const PinnedIdentity& previous,
+                             const PeerIdentity& peer);
+
 // A message from an authenticated client that is not the session's own: the
 // parsed JSON, which the facade judges and re-serialises (never the bytes the
 // client sent).

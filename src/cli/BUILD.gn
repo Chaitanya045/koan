@@ -13,9 +13,11 @@ import("//testing/test.gni")
 assert(is_posix)
 
 # What the tool decides, without I/O: arguments, messages, the snapshot
-# outline, the holder's routing.
+# outline and its refs, actions' answers and errors, the holder's routing.
 source_set("cli_lib") {
   sources = [
+    "koan_cli_actions.cc",
+    "koan_cli_actions.h",
     "koan_cli_admission.cc",
     "koan_cli_admission.h",
     "koan_cli_args.cc",
@@ -28,6 +30,8 @@ source_set("cli_lib") {
     "koan_cli_router.h",
     "koan_cli_skill.cc",
     "koan_cli_skill.h",
+    "koan_cli_snapshot.cc",
+    "koan_cli_snapshot.h",
   ]
   public_deps = [
     "//base",

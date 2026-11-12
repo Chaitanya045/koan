@@ -7,6 +7,12 @@
 //   no auto-approve switch, and none is added);
 // - open, snapshot (an outline with @refs), act (click lands), screenshot
 //   (a PNG), on a local page, in the agent's own background tab;
+// - a form (#340): act select sets a dropdown (and fill on it does too), the
+//   form submits the value; fill on a checkbox fails instead of "ok";
+//   checkbox and radio states show in the snapshot; a ref from before a
+//   navigate (same site, and cross-site where the new renderer numbers its
+//   nodes from 1 again) is refused (Koan.staleRef); the compact snapshot of
+//   a long page is much shorter than --full, with the same refs, which work;
 // - "What agents can use" at its defaults (#272: every switch on, the
 //   take-over site limit off): the content-marker extension
 //   (agent_cli.flags) runs in the agent's tab as in a user tab, and its
@@ -24,6 +30,9 @@
 // - a second pairing whose launcher exits while the dialog is open (the
 //   2026-11-11 end-user pass): its agent's commands work, and a koan no agent
 //   started is refused with a reason;
+// - a koan started by another program than the paired agent, with no
+//   connection open: Koan asks the user again, and koan says why while it
+//   waits (#340);
 // - Koan alive, nothing fatal in its log.
 // local_state/agent_cli.json turns Agent ready on for the test profile (it
 // is off in a non-default --user-data-dir). macOS only: the CLI's holder
@@ -95,8 +104,28 @@ async function allow(title, printed) {
   return true;
 }
 
-// Pages: /agent says what it may use and has a button to click.
+// Pages: /agent says what it may use and has a button to click; /form is a
+// sign-up form whose submissions /done records; /long is a long text page.
+const submitted = [];
 const server = await startServer({
+  '/form': `<!doctype html><title>Sign up</title><h1>Sign up</h1>
+    <form action=/done method=get>
+      <label>Plan <select name=plan><option value=free>Free</option>
+        <option value=pro>Pro</option><option value=team>Team</option></select></label>
+      <label><input type=radio name=contact value=email checked> Email</label>
+      <label><input type=radio name=contact value=sms> SMS</label>
+      <label><input type=checkbox name=news> News</label>
+      <label>Name <input name=who></label>
+      <button>Send</button>
+    </form>`,
+  '/done': req => {
+    submitted.push(new URL(req.url, 'http://x').search);
+    return '<!doctype html><title>Done</title><h1>Thanks</h1><button>Again</button>';
+  },
+  '/long': `<!doctype html><title>Long</title><h1 id=h>Long page</h1>${
+    Array.from({ length: 40 }, (_, i) =>
+      `<p>Paragraph ${i} has <b>bold</b>, <i>italic</i> and <span>split</span> text<br>over two lines.</p>`).join('')}
+    <button onclick="document.getElementById('h').textContent='Pressed'">Press here</button>`,
   '/agent': `<!doctype html><title>Agent page</title><h1 id=h>Ready</h1>
     <button onclick="document.getElementById('h').textContent='Clicked'">Press me</button>
     <p id=perm>checking</p>
@@ -145,6 +174,106 @@ r = await koan(['screenshot', tab, '-o', shot]);
 const png = fs.existsSync(shot) ? fs.readFileSync(shot) : Buffer.alloc(0);
 check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).toString() === 'PNG' &&
       png.readUInt32BE(16) > 100, brief(r));
+
+// --- A form: dropdowns, states, stale refs (#340).
+{
+  r = await koan(['open', server.url('/form')]);
+  const form = r.out.split('\n').at(-1);
+  await sleep(2000);
+  r = await koan(['snapshot', form]);
+  const refOf = (text, re) => text.split('\n').find(l => re.test(l))?.match(/@(\d+)\s*$/)?.[0];
+  const plan = refOf(r.out, /^\s*combobox "Plan"/);
+  const news = refOf(r.out, /^\s*checkbox "News"/);
+  const who = refOf(r.out, /^\s*textbox "Name"/);
+  const send = refOf(r.out, /^\s*button "Send"/);
+  check('Form: the snapshot has the dropdown, checkbox, field and button with refs',
+        r.code === 0 && !!(plan && news && who && send), brief(r));
+  check('Form: ...the default radio shows [checked], the others not',
+        /radio "Email" \[checked[,\]]/.test(r.out) && /radio "SMS" (\[(?!checked)[^\]]*\] )?@/.test(r.out) &&
+        /checkbox "News" (\[(?!checked)[^\]]*\] )?@/.test(r.out), r.out.split('\n').filter(l => /radio|checkbox/.test(l)).join(' | '));
+  r = await koan(['act', form, 'select', plan ?? '@0', 'Pro']);
+  check('Form: act select sets the dropdown by its label', r.code === 0 && /selected "Pro"/.test(r.out), brief(r));
+  r = await koan(['act', form, 'fill', plan ?? '@0', 'Team']);
+  check('Form: ...fill on a dropdown sets it too', r.code === 0 && /selected "Team"/.test(r.out), brief(r));
+  r = await koan(['act', form, 'select', plan ?? '@0', 'pro']);
+  check('Form: ...select by value', r.code === 0 && /selected "Pro"/.test(r.out), brief(r));
+  r = await koan(['act', form, 'select', plan ?? '@0', 'Gold']);
+  check('Form: ...an option it lacks fails, naming its options (Koan.noOption)',
+        r.code !== 0 && /Koan\.noOption/.test(r.err) && /"Free", "Pro", "Team"/.test(r.err), brief(r));
+  r = await koan(['act', form, 'fill', news ?? '@0', 'yes']);
+  check('Form: fill on a checkbox fails (Koan.notEditable), never "ok"',
+        r.code !== 0 && /Koan\.notEditable/.test(r.err) && !/^ok/.test(r.out), brief(r));
+  r = await koan(['act', form, 'click', news ?? '@0']);
+  check('Form: act click on the checkbox', r.code === 0, brief(r));
+  r = await koan(['act', form, 'fill', who ?? '@0', 'Ada']);
+  check('Form: act fill on the text field', r.code === 0 && /^ok/.test(r.out), brief(r));
+  await sleep(300);
+  r = await koan(['snapshot', form]);
+  check('Form: the snapshot shows the checkbox [checked] and the dropdown\'s value',
+        /checkbox "News" \[checked[,\]]/.test(r.out) && /combobox "Plan" = "Pro"/.test(r.out),
+        r.out.split('\n').filter(l => /combobox|checkbox/.test(l)).join(' | '));
+  r = await koan(['act', form, 'click', send ?? '@0']);
+  const sent = await waitFor(() => submitted.length > 0, 8000);
+  check('Form: Send submits what was set (plan=pro, news, Ada, email)',
+        r.code === 0 && sent && /plan=pro/.test(submitted.at(-1)) && /news=on/.test(submitted.at(-1)) &&
+        /who=Ada/.test(submitted.at(-1)) && /contact=email/.test(submitted.at(-1)),
+        `${brief(r)}; ${submitted.at(-1)}`);
+  await sleep(1000);
+  // The tab shows /done now: the form's refs belong to the page before.
+  r = await koan(['act', form, 'click', send ?? '@0']);
+  check('Stale ref: a ref from before a same-site navigate is refused (Koan.staleRef)',
+        r.code !== 0 && /Koan\.staleRef/.test(r.err) && /koan snapshot/.test(r.err), brief(r));
+  check('...and nothing was submitted again', submitted.length === 1, `${submitted.length} submissions`);
+  // Cross-site (127.0.0.1 to localhost): a new renderer, whose node ids
+  // start again, so the same form's ref would name the new page's dropdown
+  // unless it is refused.
+  r = await koan(['act', form, 'navigate', server.url('/form')]);
+  await sleep(2000);
+  r = await koan(['snapshot', form]);
+  const plan2 = refOf(r.out, /^\s*combobox "Plan"/);
+  r = await koan(['act', form, 'navigate', `http://localhost:${server.port}/form`]);
+  await sleep(2000);
+  r = await koan(['act', form, 'select', plan2 ?? '@0', 'Team']);
+  check('Stale ref: a ref from before a cross-site navigate is refused (Koan.staleRef)',
+        r.code !== 0 && /Koan\.staleRef/.test(r.err), brief(r));
+  r = await koan(['act', form, 'click', '@999999']);
+  check('Stale ref: a ref no snapshot showed is refused too', r.code !== 0 && /Koan\.staleRef/.test(r.err),
+        brief(r));
+  // An option of a closed dropdown has no box: a click on it chooses it
+  // instead of failing with a raw CDP error. Its ref from the raw tree (the
+  // outline may leave a closed list's options out).
+  r = await koan(['snapshot', form, '--json']);
+  let option;
+  try {
+    option = JSON.parse(r.out).nodes.find(n => n.role?.value === 'option' && n.name?.value === 'Team')
+      ?.backendDOMNodeId;
+  } catch {}
+  option = option && `@${option}`;
+  r = await koan(['act', form, 'click', option ?? '@0']);
+  check('Form: a click on an option of a closed dropdown chooses it (no "Node does not have a layout object")',
+        r.code === 0 && /selected "Team"/.test(r.out) && !/-32000/.test(r.err), brief(r));
+
+  // Compact against --full on a long page; refs are the same in both.
+  r = await koan(['act', form, 'navigate', server.url('/long')]);
+  await sleep(2000);
+  const compact = await koan(['snapshot', form]);
+  const full = await koan(['snapshot', form, '--full']);
+  const lines = t => t.split('\n').length;
+  check('Compact snapshot: much shorter than --full (under half)',
+        compact.code === 0 && full.code === 0 && lines(compact.out) * 2 < lines(full.out),
+        `${lines(compact.out)} vs ${lines(full.out)} lines`);
+  check('Compact snapshot: no InlineTextBox lines, text runs joined',
+        !/InlineTextBox/.test(compact.out) && /"Paragraph 0 has bold, italic and split text over two lines\."/.test(compact.out) &&
+        /InlineTextBox/.test(full.out), compact.out.split('\n').slice(0, 4).join(' | '));
+  const press = refOf(compact.out, /^\s*button "Press here"/);
+  check('Compact snapshot: the button\'s ref is the same in --full',
+        !!press && refOf(full.out, /^\s*button "Press here"/) === press, `${press}`);
+  r = await koan(['act', form, 'click', press ?? '@0']);
+  await sleep(500);
+  const after = await koan(['snapshot', form]);
+  check('Compact snapshot: its ref works (the heading says Pressed)',
+        r.code === 0 && /heading "Pressed"/.test(after.out), brief(r));
+}
 
 // --- Extensions and permissions in an agent tab (`agentTab`), against a
 // user tab. `shared`: the switches are on, so the agent tab runs the user's
@@ -251,6 +380,28 @@ await extensionsAndPermissions('Switches off', boxed, false);
 await takeOver('Switches off', true);
 r = await koan(['end']);
 check('Switches off: koan end', r.code === 0, brief(r));
+
+// --- A koan that another program started (#340): no connection is open,
+// so it starts one, whose chain lacks the agent that paired. Koan asks the
+// user again (the pairing pins the agent), and koan says why while it waits
+// instead of only "the user did not answer in time" after a minute.
+{
+  const out = path.join(AGENT_HOME, 'rechain.out');
+  const printed = () => { try { return fs.readFileSync(out, 'utf8'); } catch { return ''; } };
+  // The subshell outlives the shell that started it, so this test is not
+  // among koan's ancestors.
+  const orphan = spawn('/bin/sh', ['-c', '(sleep 1; "$0" tabs >"$1" 2>&1; echo "exit=$?" >>"$1") &', CLI, out],
+                       { env, stdio: 'ignore' });
+  await new Promise(res => orphan.on('close', res));
+  const ok = await allow(/^A paired agent was started by a different program$/, printed);
+  check('Another program\'s koan: koan says why Koan asks again, while it waits',
+        /not by the agent that paired it/.test(printed()) && /approve it in Koan\.\.\./.test(printed()),
+        printed().trim().split('\n')[0]);
+  check('...and, allowed, its command runs', ok && !!await waitFor(() => /exit=0/.test(printed()), 15000),
+        printed().trim().split('\n').at(-1));
+  r = await koan(['end']);
+  check('...koan end', r.code === 0, brief(r));
+}
 
 // --- A pairing whose launcher exits while its dialog is open (the end-user
 // pass of 2026-11-11): `koan pair` started in the background by a shell that

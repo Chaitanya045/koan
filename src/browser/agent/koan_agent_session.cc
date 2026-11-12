@@ -120,9 +120,53 @@ struct Session::Pending {
   std::vector<uint8_t> public_key;
   std::string label;
   ClientCapabilities requested;
-  // A change.
+  // A change, and why it is asked about (ReapprovalReason()).
   ClientRecord record;
+  std::string reason;
 };
+
+namespace {
+
+// A program's file name, as plain text: at most 64 printable ASCII
+// characters (it goes to the client's terminal).
+std::string ProgramName(const ProcessInfo& process) {
+  if (process.path.empty()) {
+    return "no known program";
+  }
+  std::string_view name = process.path;
+  if (const size_t slash = name.find_last_of('/');
+      slash != std::string_view::npos) {
+    name.remove_prefix(slash + 1);
+  }
+  std::string out;
+  for (char c : name.substr(0, 64)) {
+    out += (c >= 0x20 && c < 0x7f) ? c : '?';
+  }
+  return out.empty() ? "an unnamed program" : out;
+}
+
+}  // namespace
+
+std::string ReapprovalReason(ApprovalKind kind,
+                             const PinnedIdentity& previous,
+                             const PeerIdentity& peer) {
+  switch (kind) {
+    case ApprovalKind::kNewClient:
+      return std::string();
+    case ApprovalKind::kPeerChanged:
+      return "this client connects from " + ProgramName(peer.process) +
+             ", not the " + ProgramName(previous.process) +
+             " that paired it (or its signature changed), so Koan asks the "
+             "user again";
+    case ApprovalKind::kChainChanged:
+      return "this koan was started by " + ProgramName(AgentAncestor(peer)) +
+             ", not by the agent that paired it (" +
+             ProgramName(previous.agent) +
+             "): the pairing pins the agent, so Koan asks the user again "
+             "(once while Koan runs)";
+  }
+  return std::string();
+}
 
 SessionDelegate::~SessionDelegate() = default;
 
@@ -416,7 +460,21 @@ void Session::FinishProof(int id, const base::DictValue& params) {
     pending.kind = request.kind;
     pending.message_id = id;
     pending.record = *record;
-    Ask(id, std::move(request), std::move(pending));
+    pending.reason = ReapprovalReason(request.kind, record->pinned, peer_);
+    const std::string reason = pending.reason;
+    if (Ask(id, std::move(request), std::move(pending))) {
+      // The client waits for the answer: it is told why, so that it can tell
+      // its user where to look.
+      base::DictValue why;
+      why.Set("reason", change == IdentityChange::kProcessChanged
+                            ? "programChanged"
+                            : "chainChanged");
+      why.Set("message", reason);
+      base::DictValue event;
+      event.Set("method", "Koan.approvalPending");
+      event.Set("params", std::move(why));
+      Send(event);
+    }
     return;
   }
   CompleteAuthentication(id, *record);
@@ -562,7 +620,9 @@ void Session::OnApprovalDecision(uint64_t request_id,
   }
   if (!decision.approved) {
     ReplyError(pending->message_id, "Koan.pairingDenied",
-               "the user did not approve");
+               pending->reason.empty()
+                   ? std::string("the user did not approve")
+                   : "the user did not approve: " + pending->reason);
     CountDenial();
     Close(CloseReason::kPairingDenied);
     return;
@@ -627,7 +687,11 @@ void Session::CheckTimeouts() {
   if (state_ == State::kAwaitingApproval && pending_ &&
       now > pending_->deadline) {
     ReplyError(pending_->message_id, "Koan.pairingTimeout",
-               "the user did not answer in time");
+               pending_->reason.empty()
+                   ? std::string("the user did not answer in time")
+                   : "the user did not answer in time: " + pending_->reason +
+                         "; ask them to approve it in Koan, or run koan "
+                         "from the agent that paired");
     CountDenial();
     Close(CloseReason::kTimeout);
     return;

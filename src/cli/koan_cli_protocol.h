@@ -7,7 +7,6 @@
 
 #include <stdint.h>
 
-#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -92,11 +91,6 @@ std::optional<Message> ParseMessage(std::string_view json);
 // An answer's id rewritten (the holder hands requests on with ids of its
 // own). nullopt if `json` is not an object.
 std::optional<std::string> WithId(std::string_view json, int id);
-
-// Accessibility.getFullAXTree's result as an outline an agent can read: one
-// line per node that says something, indented by depth, with "@<backend DOM
-// node id>" to act on. At most `max_lines`.
-std::string SnapshotText(const base::DictValue& ax_tree, size_t max_lines);
 
 // The Input.dispatchKeyEvent params (keyDown, then keyUp with "type" changed)
 // for a key name ("Enter", "Tab", "Escape", "Backspace", "ArrowDown", ...) or

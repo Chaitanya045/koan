@@ -158,6 +158,12 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       command.json = true;
       continue;
     }
+    // (An act's text may be "--full".)
+    if (arg == "--full" &&
+        !(positional.size() >= 3 && positional[0] == "act")) {
+      command.full = true;
+      continue;
+    }
     if (arg == "-h" || arg == "--help") {
       command.kind = CommandKind::kHelp;
       return {command, ""};
@@ -199,6 +205,9 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   }
   if (!command.label.empty() && command.label.size() > 64) {
     return Error("--label must be at most 64 characters");
+  }
+  if (command.full && command.kind != CommandKind::kSnapshot) {
+    return Error("--full is koan snapshot's");
   }
 
   switch (command.kind) {
@@ -255,22 +264,27 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
     case CommandKind::kAct: {
       if (rest.size() < 2) {
         return Error(
-            "usage: koan act <tab> click @ref | fill @ref <text> | press "
-            "<key> | scroll <pixels> | navigate <url>");
+            "usage: koan act <tab> click @ref | fill @ref <text> | select "
+            "@ref <option> | press <key> | scroll <pixels> | navigate <url>");
       }
       command.tab = rest[0];
       const std::string& verb = rest[1];
       const std::vector<std::string> act_args(rest.begin() + 2, rest.end());
-      if (verb == "click" || verb == "fill") {
+      if (verb == "click" || verb == "fill" || verb == "select") {
         const size_t want = verb == "click" ? 1 : 2;
-        if (act_args.size() != want || !ParseRef(act_args[0])) {
-          return Error(verb == "click"
-                           ? "usage: koan act <tab> click @ref"
-                           : "usage: koan act <tab> fill @ref <text>");
+        if (act_args.size() != want || !ParseRef(act_args[0]) ||
+            (verb == "select" && act_args[1].empty())) {
+          return Error(verb == "click" ? "usage: koan act <tab> click @ref"
+                       : verb == "fill"
+                           ? "usage: koan act <tab> fill @ref <text>"
+                           : "usage: koan act <tab> select @ref "
+                             "<option label or value>");
         }
-        command.act = verb == "click" ? ActKind::kClick : ActKind::kFill;
+        command.act = verb == "click"  ? ActKind::kClick
+                      : verb == "fill" ? ActKind::kFill
+                                       : ActKind::kSelect;
         command.ref = act_args[0];
-        command.text = verb == "fill" ? act_args[1] : "";
+        command.text = verb == "click" ? "" : act_args[1];
       } else if (verb == "press") {
         if (act_args.size() != 1 || act_args[0].empty()) {
           return Error("usage: koan act <tab> press <key>");
@@ -292,7 +306,7 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
         command.text = act_args[0];
       } else {
         return Error("unknown action \"" + verb +
-                     "\" (click, fill, press, scroll, navigate)");
+                     "\" (click, fill, select, press, scroll, navigate)");
       }
       break;
     }
@@ -310,10 +324,12 @@ std::string UsageText() {
   koan open [url] [--task T] [--saved NAME]
                          open a background tab in the agent's Space; prints
                          its id. --saved uses a saved container you allowed
-  koan snapshot <tab>    the page as an outline, with @refs for act
+  koan snapshot <tab> [--full]
+                         the page as an outline, with @refs for act; --full
+                         shows every node of the tree (same refs)
   koan screenshot <tab> [-o file.png]
-  koan act <tab> click @ref | fill @ref <text> | press <key>
-               | scroll <pixels> | navigate <url>
+  koan act <tab> click @ref | fill @ref <text> | select @ref <option>
+               | press <key> | scroll <pixels> | navigate <url>
   koan take-over [tab]   ask to control a tab of yours (you approve in Koan)
   koan release <tab>     give a tab of yours back
   koan end [--task T]    end one task, or (no --task) every task: its tabs

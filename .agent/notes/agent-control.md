@@ -1134,7 +1134,8 @@ koan revoke [id|--all]
 ```
 
 **Built (CLI PR, `src/cli/`, `//koan/cli:koan`):** `pair`, `status`, `tabs`, `open [url] [--task T] [--saved NAME]`,
-`snapshot`, `screenshot [-o f]`, `act <tab> click @ref | fill @ref text | press key | scroll px | navigate url`, `take-over [tab]`,
+`snapshot [--full]`, `screenshot [-o f]`, `act <tab> click @ref | fill @ref text | select @ref option | press key | scroll px |
+navigate url`, `take-over [tab]`,
 `release` (alias `hand-back`), `end [--task T]`, `watch`, `skill`. **One connection for a task's life:** the first command that
 needs a task starts `koan __hold`, which authenticates (while the starting `koan` is still alive, so the agent is among its
 ancestors as at pairing), listens on `~/.koan/run/<id>.sock` (0700 dir, 0600 socket) and admits a command only as the browser
@@ -1158,7 +1159,19 @@ resolved node); phase 3's in-browser `Koan.snapshot`/`act` replaces them. Keys: 
 `~/.koan/clients/<id>/key` (0600), never the label as a path. Copied into `Koan.app/Contents/Resources/bin/` (a 3-line hook
 in `chrome/BUILD.gn`) and signed by `mac_package.sh`. **Saved containers (#219):** `Koan.openTab`/`Target.createTarget` take
 `savedContainer` (the task defaults to its name); a refused choice, or a task already open in another container, is
-`Koan.notGranted`, never a throwaway tab. Not built: `watch` filtering, `log`, `revoke`, `relay`/`agent-browser` (§11),
+`Koan.notGranted`, never a throwaway tab. **Agent pass fixes (#340):** the snapshot is a compact outline by default (`koan_cli_snapshot.*`:
+no inline text boxes or line breaks, a block's text runs joined on one line, text that repeats a control's name or label
+left out, refs only on controls, focusable and editable nodes, landmarks, headings and frames, AX states in brackets);
+`--full` prints every node with a ref on each, the same refs (backend DOM node ids). The holder keeps a `RefBook` per tab
+(`Hold.rememberRefs` after a snapshot, `Hold.checkRef` before a ref action): the document the snapshot read (the main
+frame's `loaderId`, read before and after the tree) and every backend id of its tree; an action's ref must be one of those
+and the tab must still show that document, else `Koan.staleRef` (a new renderer after a cross-site navigation numbers its
+nodes from 1, so an old ref would name some node of the new page). `select` (and `fill` on a `<select>`, and `click` on an
+`<option>` that has no box) chooses the option in the page with `Runtime.callFunctionOn`, firing input and change, so no
+popup is needed; `fill` checks the node takes text first and reads the field back, and fails (`Koan.notFilled`) when
+nothing changed. Raw CDP errors go through `MapError()` (`koan_cli_actions.*`) into Koan codes with a hint. A changed
+program or chain sends `Koan.approvalPending {reason, message}` while the dialog is open, which `koan` prints (the holder
+passes it up its ready pipe), and the timeout and denial errors carry the same reason. Not built: `watch` filtering, `log`, `revoke`, `relay`/`agent-browser` (§11),
 and the settings button that installs `~/.local/bin/koan` and the skill.
 
 **Skill file** (ego's integration model: shell commands, no SDK, no remote-debugging setup). The installed entry skill
