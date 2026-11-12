@@ -642,6 +642,8 @@ function reloadLookTokens() {
       link.href = href;
     }
   }
+  // Chromium's controls: the style (shadcn or Zen) may have changed.
+  reloadChromiumSheet();
 }
 
 const ready = (async () => {
@@ -679,6 +681,52 @@ document.head.append(h('link', {
   id: 'koan-look-tokens',
   href: 'koan_tokens.css',
 }));
+
+// Chromium's controls in the look (koan_chromium.css: shadcn's Card, Switch,
+// Select, Button, Input and sidebar menu; empty in the Zen style). They set
+// their sizes inside their own shadow roots, which the document's styles
+// don't reach, so this one sheet is adopted into every shadow root of the
+// page, after the element's own styles: when the root is attached (Polymer's
+// elements add <style>s to it, which adopted sheets follow), and again, last,
+// whenever its adopted sheets are set (Lit's elements set theirs right after).
+const chromiumSheet = new CSSStyleSheet();
+const adopted =
+    Object.getOwnPropertyDescriptor(ShadowRoot.prototype, 'adoptedStyleSheets');
+// (settings.mjs fails if the restyle is missing, so a Blink change here is
+// loud; the page itself must still start.)
+if (adopted?.set) {
+  Object.defineProperty(ShadowRoot.prototype, 'adoptedStyleSheets', {
+    configurable: true,
+    enumerable: adopted.enumerable,
+    get() {
+      return adopted.get.call(this);
+    },
+    set(sheets) {
+      const others = [...sheets].filter(s => s !== chromiumSheet);
+      adopted.set.call(this, [...others, chromiumSheet]);
+    },
+  });
+  const attachShadow = Element.prototype.attachShadow;
+  Element.prototype.attachShadow = function(init) {
+    const shadowRoot = attachShadow.call(this, init);
+    adopted.set.call(shadowRoot, [chromiumSheet]);
+    return shadowRoot;
+  };
+}
+
+async function reloadChromiumSheet() {
+  try {
+    const response = await fetch(`koan_chromium.css?${Date.now()}`);
+    await chromiumSheet.replace(response.ok ? await response.text() : '');
+  } catch (e) {
+    console.warn('Koan: koan_chromium.css', e);
+  }
+}
+
+// Before Chromium's settings app draws (this module's importers wait for it),
+// so its sections never flash in Chromium's look; never longer than a second.
+await Promise.race(
+    [reloadChromiumSheet(), new Promise(resolve => setTimeout(resolve, 1000))]);
 
 // The menu items' icons (settings_menu.html hook: koan:<pane>), Zen's.
 const SVG = 'http://www.w3.org/2000/svg';

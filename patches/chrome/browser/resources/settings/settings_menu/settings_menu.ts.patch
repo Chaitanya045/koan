@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/resources/settings/settings_menu/settings_menu.ts b/chrome/browser/resources/settings/settings_menu/settings_menu.ts
+--- a/chrome/browser/resources/settings/settings_menu/settings_menu.ts
++++ b/chrome/browser/resources/settings/settings_menu/settings_menu.ts
+@@ -25,6 +25,7 @@
+ import {AutofillSettingsReferrer, MetricsBrowserProxyImpl} from '../metrics_browser_proxy.js';
+ import {pageVisibility} from '../page_visibility.js';
+ import type {PageVisibility} from '../page_visibility.js';
++import {getTopLevelRoute, routes} from '../route.js';
+ import type {Route} from '../router.js';
+ import {RouteObserverMixinLit, Router} from '../router.js';
+ 
+@@ -105,6 +106,12 @@
+   }
+ 
+   override currentRouteChanged(newRoute: Route) {
++    // Koan: chrome://settings/ shows the top-level section (route.ts), so its
++    // item is the selected one, except under a search's results.
++    if (newRoute === routes.BASIC &&
++        !Router.getInstance().getQueryParameters().has('search')) {
++      newRoute = getTopLevelRoute();
++    }
+     // Focus the initially selected path.
+     const anchors = this.shadowRoot.querySelectorAll('a');
+     for (let i = 0; i < anchors.length; ++i) {

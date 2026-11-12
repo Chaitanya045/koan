@@ -142,8 +142,9 @@ void OverrideServiceProfilePrefDefaults(
   // Factory; kSigninAllowed follows it at the next start). Koan has no Google
   // sync, and Zen no such account rows: the app menu's "Sign in to Koan" and
   // sync rows, the avatar menu's and the bookmark bubble's sign-in promos go.
-  // Signing in to Google on the web still works. Settings' sign-in switch
-  // turns it back on.
+  // Signing in to Google on the web still works. Settings shows no sign-in
+  // switch while sign-in is off (#300, koan_settings_ui.cc); the SigninAllowed
+  // policy still turns it on.
   registry->SetDefaultPrefValue(::prefs::kSigninAllowedOnNextStartup,
                                 base::Value(false));
 }

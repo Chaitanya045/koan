@@ -110,16 +110,20 @@ source_set("settings_url_handler") {
   ]
 }
 
-# The panes' files as C++ strings (koan_settings_resources.h).
+# The panes' files and the stylesheet for Chromium's sections as C++ strings
+# (koan_settings_resources.h).
 action("resources") {
   script = "embed_resources.py"
   sources = [
+    "resources/koan_chromium.css",
     "resources/koan_settings.css",
     "resources/koan_settings_page.js",
   ]
   outputs = [ "$target_gen_dir/koan_settings_resources.h" ]
   args = [
     rebase_path(outputs[0], root_build_dir),
+    "kKoanChromiumCss=" +
+        rebase_path("resources/koan_chromium.css", root_build_dir),
     "kKoanSettingsCss=" +
         rebase_path("resources/koan_settings.css", root_build_dir),
     "kKoanSettingsJs=" +
