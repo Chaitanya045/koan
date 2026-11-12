@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/frame/browser_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
@@ -355,6 +356,16 @@ void KoanCompactModeController::OnBrowserViewLayout() {
     // The top container's height may have changed (e.g. bookmarks bar).
     if (hides_toolbar() && !toolbar_revealed_) {
       ApplyToolbarTransform(/*animate=*/false);
+    }
+    // The bookmarks bar came or went where it docks above the page: the
+    // card moves (outside of layout, see OnContentCardChanged()).
+    const int docked = docked_bookmarks_bar_height();
+    if (docked != docked_bookmarks_height_) {
+      docked_bookmarks_height_ = docked;
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&KoanCompactModeController::OnContentCardChanged,
+                         weak_factory_.GetWeakPtr()));
     }
     KoanBrowserViewController::From(browser_view_)
         ->url_bar()
@@ -927,6 +938,26 @@ void KoanCompactModeController::OnUrlBarOpenChanged() {
 bool KoanCompactModeController::IsUrlBarOpen() const {
   auto* controller = KoanBrowserViewController::From(browser_view_);
   return controller && controller->url_bar()->is_open();
+}
+
+int KoanCompactModeController::docked_bookmarks_bar_height() const {
+  // Zen's top bar is there in single-toolbar mode while the bookmarks
+  // toolbar shows (ZenUIManager.mjs `zen-has-bookmarks`), and not over the
+  // page's own fullscreen (`inDOMFullscreen`).
+  if (!hides_toolbar() ||
+      (mode_ != Mode::kSingleToolbar && !compact_keeps_sidebar_nav_) ||
+      IsContentFullscreen(browser_view_) ||
+      !browser_view_->IsBookmarkBarVisible()) {
+    return 0;
+  }
+  const views::View* bar = browser_view_->GetBookmarkBarView();
+  if (!bar || bar->parent() != browser_view_->top_container()) {
+    return 0;
+  }
+  // vertical-tabs-topbar.inc.css: --zen-toolbar-height, 34px, around the
+  // 30px bookmarks toolbar.
+  constexpr int kZenTopBarHeight = 34;
+  return std::max(kZenTopBarHeight, bar->GetPreferredSize().height());
 }
 
 bool KoanCompactModeController::is_toolbar_away() const {
@@ -1800,9 +1831,19 @@ void KoanCompactModeController::ApplyToolbarTransform(bool animate) {
     return;
   }
   gfx::Transform target;
-  if (is_toolbar_away()) {
-    // Slide fully above the window, including any drop shadow.
+  const int docked = docked_bookmarks_bar_height();
+  if (is_toolbar_away() && docked) {
+    // Only the toolbar above the bookmarks bar leaves the window: the bar
+    // stays, centred in Zen's top bar above the page, and takes clicks.
+    const views::View* bar = browser_view_->GetBookmarkBarView();
+    target.Translate(0, -(bar->y() - (docked - bar->height()) / 2));
+    top_container->SetCanProcessEventsWithinSubtree(true);
+    layer->SetVisible(IsTopContainerShown());
+  } else if (is_toolbar_away()) {
+    // Slide fully above the window, including any drop shadow. (No clicks,
+    // also after the bookmarks bar above has gone.)
     target.Translate(0, -top_container->height());
+    top_container->SetCanProcessEventsWithinSubtree(false);
   } else {
     layer->SetVisible(IsTopContainerShown());
   }
@@ -1842,7 +1883,8 @@ void KoanCompactModeController::HideAwayToolbarLayer() {
   // load change unless its layer is hidden; the views stay visible, so the
   // omnibox can still take focus (Ctrl+L).
   ui::Layer* layer = browser_view_->top_container()->layer();
-  if (mode_ != Mode::kNone && is_toolbar_away() && layer) {
+  if (mode_ != Mode::kNone && is_toolbar_away() && layer &&
+      !docked_bookmarks_bar_height()) {
     layer->SetVisible(false);
   }
 }

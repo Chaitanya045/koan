@@ -15,7 +15,11 @@ import {
   ACCEL, ALT, CTRL, IS_MAC, SHIFT, browserCall, check, evalIn, finish, front, key, onPage,
   pages, showPane, sleep, typeInto, viewEvent, viewMouse, viewTree, waitFor,
 } from './lib/koan.mjs';
-import { browserWidgets, skipped, startServer } from './lib/mac.mjs';
+import { goFullscreen } from './lib/fullscreen.mjs';
+import {
+  KOAN_PID, browserWidgets, realInputWhyNot, realKey, skipped, startServer,
+} from './lib/mac.mjs';
+import { execFileSync } from 'node:child_process';
 
 // --- A local server for the pages (no network needed).
 const routes = {};
@@ -339,27 +343,96 @@ await setCheckbox(compact, false);
 await waitFor(async () => await sidebarWidth() > 100);
 
 // =========================================================================
-// Show the bookmarks bar.
+// Show the bookmarks bar: below the toolbar with Sidebar and Top Toolbar;
+// docked above the page with Only Sidebar (Zen's top bar, 34 high), beside
+// the sidebar. (UI DevTools gives a view's bounds without its layer's
+// transform: with Only Sidebar the top container is shifted up so only the
+// bar shows, so there the bar's room is read from the card and the sidebar.)
 const bookmarks = 'koan.bookmarks_bar.show';
+const barOf = v => v.shown('BookmarkBarView');
+async function checkBar(when, single) {
+  const v = await waitWin(x => barOf(x) && x);
+  const bar = v && barOf(v), card = v && v.shown('ContentsContainerView');
+  const bv = v && v.shown('BrowserView');
+  if (!single) {
+    const toolbar = v && v.shown('ToolbarView');
+    check(`${when}: the bar shows below the toolbar, above the page`,
+          bar && toolbar && bar.h > 0 && bar.ay >= toolbar.ay + toolbar.h - 1 &&
+          bar.ay + bar.h <= card.ay,
+          `bar ${bar?.ay}+${bar?.h}, toolbar ${toolbar?.ay}+${toolbar?.h}, card ${card?.ay}`);
+  } else {
+    check(`${when}: the bar shows docked above the page, beside the sidebar`,
+          bar && bar.h > 0 && card.ay - bv.ay >= bar.h && bar.ax >= sidebarRight(v) - 1,
+          `bar ${bar?.ax},${bar?.h}, card top ${card && card.ay - bv.ay}, ` +
+          `sidebar right ${v && sidebarRight(v)}`);
+  }
+}
 await pickLayout('Sidebar and Top Toolbar', false);
 await waitWin(v => v.shown('ToolbarView'));
 const noBar = await cardY();
-check('Bookmarks bar: none by default', !(await win()).shown('BookmarkBarView'));
-check('...on in the page shows it above the page (Sidebar and Top Toolbar)',
-      await setCheckbox(bookmarks, true) &&
-      !!await waitWin(v => v.shown('BookmarkBarView')) && await cardY() > noBar,
-      `card y ${await cardY()} (without ${noBar})`);
+check('Bookmarks bar: none by default', !barOf(await win()));
+check('...on in the page', await setCheckbox(bookmarks, true));
+await checkBar('...Sidebar and Top Toolbar', false);
+check('...the page moves down for it', await cardY() > noBar, `${await cardY()} (${noBar})`);
 await pickLayout('Only Sidebar', true);
 await waitWin(v => v.shown('KoanUrlPill'));
+await checkBar('...Only Sidebar', true);
 const singleWith = await cardY();
+await setCheckbox(compact, true);
+await sleep(1200);
+await checkBar('...Only Sidebar in compact mode', true);
+await setCheckbox(compact, false);
+await waitFor(async () => await sidebarWidth() > 100);
+// macOS fullscreen keeps it in both layouts (Koan's layout keeps the top
+// container in the window, browser_view.cc.patch IsBookmarkBarVisible()).
+if (IS_MAC) {
+  for (const [label, single] of [['Only Sidebar', true], ['Sidebar and Top Toolbar', false]]) {
+    await pickLayout(label, single);
+    await sleep(1000);
+    await goFullscreen(true, testPage.id);
+    await checkBar(`...${label} in fullscreen`, single);
+    await goFullscreen(false, testPage.id);
+  }
+  await pickLayout('Only Sidebar', true);
+  await waitWin(v => v.shown('KoanUrlPill'));
+} else {
+  skipped('Bookmarks bar in fullscreen', 'macOS only (Koan keeps its card there)');
+}
+check('...off in the page: gone, the page back at the top',
+      await setCheckbox(bookmarks, false) && !!await waitWin(v => !barOf(v)) &&
+      await cardY() < singleWith, `${await cardY()} (with the bar ${singleWith})`);
+
+// ⇧⌘B is View > Always Show Bookmarks Bar's key: run that menu item (the
+// command, IDC_SHOW_BOOKMARK_BAR) as AppKit does, through the menu bar
+// (System Events), or with a real ⇧⌘B; CDP keys never reach the menu bar.
+async function menuShowBookmarksBar() {
+  if (!IS_MAC || !KOAN_PID) return false;
+  try {
+    execFileSync('osascript', ['-e', `tell application "System Events"
+      set p to first process whose unix id is ${KOAN_PID}
+      set frontmost of p to true
+      tell p to click (first menu item of menu 1 of menu bar item "View" of menu bar 1 ` +
+        `whose name contains "Bookmarks Bar")
+    end tell`], { stdio: 'ignore', timeout: 8000 });
+    return true;
+  } catch {
+    return realKey('b', 'cs', 800);
+  }
+}
+if (await menuShowBookmarksBar()) {
+  check('⇧⌘B (View > Always Show Bookmarks Bar) turns Koan\'s setting on',
+        await waitFor(async () => await prefOf(bookmarks) === true) &&
+        !!await waitWin(v => barOf(v)));
+  check('...the settings page shows it',
+        await waitFor(() => evalIn(settings, `${row(bookmarks)}.querySelector('input').checked`)));
+  await menuShowBookmarksBar();
+  check('...and again off', await waitFor(async () => await prefOf(bookmarks) === false));
+} else {
+  skipped('⇧⌘B / View > Always Show Bookmarks Bar',
+          IS_MAC ? `neither System Events nor real input can reach the menu bar (${realInputWhyNot()})`
+                 : 'the macOS menu bar item');
+}
 await setCheckbox(bookmarks, false);
-await sleep(1000);
-const singleWithout = await cardY();
-// Known gap (the row's note, docs/SETTINGS_AUDIT.md): the bar is in the top
-// container, which Only Sidebar keeps out of the window.
-check('...with Only Sidebar there is no room for it (the row\'s note; a known gap)',
-      singleWith === singleWithout && await noteShown(bookmarks),
-      `card y ${singleWith} with, ${singleWithout} without`);
 
 // =========================================================================
 // Sidebar and tabs layout: the New Tab row, its place, tabs on the right.

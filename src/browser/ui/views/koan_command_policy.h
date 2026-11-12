@@ -44,6 +44,13 @@ bool HandlesBrowserCommand(BrowserWindowInterface* browser, int command_id);
 // must not run from the keyboard either.)
 std::optional<bool> HidesMenuCommand(BrowserView* browser_view, int command_id);
 
+// BrowserNativeWidgetMac::ValidateUserInterfaceItem(), after upstream: the
+// check mark of a macOS menu bar item whose command Koan redirects to its own
+// setting (View > Always Show Bookmarks Bar: Koan's bookmarks bar setting),
+// in `browser_view`'s window; nullopt for every other item.
+std::optional<bool> MenuCommandCheckState(BrowserView* browser_view,
+                                          int command_id);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_COMMAND_POLICY_H_

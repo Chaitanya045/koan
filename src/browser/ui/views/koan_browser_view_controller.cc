@@ -414,13 +414,27 @@ int GetHiddenToolbarRowHeight(int caption_buttons_height) {
 #endif
 }
 
+int GetDockedBookmarksBarHeight(const views::View* browser_view) {
+  const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  const KoanBrowserViewController* controller =
+      view ? KoanBrowserViewController::From(view) : nullptr;
+  return controller ? controller->compact_mode()->docked_bookmarks_bar_height()
+                    : 0;
+}
+
 int GetRevealedToolbarSidebarInset(const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
   const KoanBrowserViewController* controller =
       view ? KoanBrowserViewController::From(view) : nullptr;
   const views::View* region = view ? view->tab_strip_view() : nullptr;
-  return controller &&
-                 controller->compact_mode()->reveals_toolbar_beside_sidebar() &&
+  // Also the bookmarks bar docked above the page (Zen's top bar) beside a
+  // visible sidebar.
+  const KoanCompactModeController* compact =
+      controller ? controller->compact_mode() : nullptr;
+  return compact &&
+                 (compact->reveals_toolbar_beside_sidebar() ||
+                  (compact->docked_bookmarks_bar_height() &&
+                   !compact->hides_sidebar())) &&
                  region && region->GetVisible()
              ? region->width()
              : 0;

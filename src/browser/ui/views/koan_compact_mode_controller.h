@@ -122,6 +122,13 @@ class KoanCompactModeController : public views::FocusChangeListener,
            (mode_ == Mode::kCompact && hide_toolbar_);
   }
   bool is_toolbar_revealed() const { return toolbar_revealed_; }
+  // Zen's top bar for the bookmarks in the single-toolbar layout
+  // (vertical-tabs-topbar.inc.css, `zen-has-bookmarks`): where Koan hides the
+  // toolbar in that layout (Only Sidebar, and compact mode with it) and the
+  // bookmarks bar is on, the top container stays in the window with only the
+  // bookmarks bar showing, in a strip above the page. The strip's height, or
+  // 0 without it.
+  int docked_bookmarks_bar_height() const;
   // The caption-button strip above the page is collapsed (the card starts at
   // the gutter).
   bool caption_strip_collapsed() const;
@@ -394,6 +401,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool toolbar_revealed_ = false;
   // Whether compact mode keeps the sidebar header (single toolbar).
   bool compact_keeps_sidebar_nav_ = false;
+  // docked_bookmarks_bar_height() at the last layout.
+  int docked_bookmarks_height_ = 0;
   std::optional<size_t> top_container_index_;
   // macOS: told when native fullscreen starts and ends.
   class ImmersiveObserver;

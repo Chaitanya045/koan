@@ -22,6 +22,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRRect.h"
@@ -255,9 +256,11 @@ void KoanLoadingIndicator::OnBrowserViewLayout() {
                       : 0;
   const bool single_toolbar =
       pref_change_registrar_.prefs()->GetBoolean(prefs::kSingleToolbarEnabled);
-  const float anchor_y = single_toolbar && gap > 0
-                             ? page_bounds.y() - gap / 2.f
-                             : page_bounds.y() + kInsidePageOffset;
+  // (Not over the bookmarks bar docked in that gap, Zen's top bar.)
+  const float anchor_y =
+      single_toolbar && gap > 0 && !GetDockedBookmarksBarHeight(browser_view_)
+          ? page_bounds.y() - gap / 2.f
+          : page_bounds.y() + kInsidePageOffset;
   const int width = std::ceil(KoanLoadingBar::kMaxWidth) + 2;
   const int height = std::ceil(KoanLoadingBar::kHeight) + 2;
   widget_->SetBounds(gfx::Rect(page_bounds.CenterPoint().x() - width / 2,

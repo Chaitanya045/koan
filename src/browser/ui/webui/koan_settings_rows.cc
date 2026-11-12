@@ -49,10 +49,12 @@ constexpr Group kGroups[] = {
     {"look-colors", "looks", "Appearance", "shadcn colours",
      "For the shadcn style: light or dark, a base colour, an accent colour, "
      "or a theme of your own from ui.shadcn.com/themes or tweakcn.com."},
-    // Koan's own: Zen has no bookmarks bar.
+    // Koan's own: Zen's bookmarks toolbar is off (never shown) unless turned
+    // on from its View menu.
     {"bookmarks-bar", "looks", "Appearance", "Bookmarks bar",
-     "Zen has no bookmarks bar, so Koan shows none, also on the new tab page "
-     "and after importing bookmarks. Turn it on to see Chromium's."},
+     "Like Zen, none unless you turn it on, also on the new tab page and "
+     "after importing bookmarks. Turned on, it shows above every page; View > "
+     "Always Show Bookmarks Bar (\u21e7\u2318B on a Mac) switches it too."},
     {"layout", "looks", "Sidebar and tabs layout", "Browser Layout",
      "Choose the layout that suits you best"},
     {"vertical-tabs", "looks", "Sidebar and tabs layout", "Vertical Tabs",
@@ -345,13 +347,8 @@ constexpr Row kRows[] = {
     {.group = "bookmarks-bar",
      .control = Control::kCheckbox,
      .pref = prefs::kBookmarksBarShow,
-     .label = "Show the bookmarks bar",
-     // It is in the top container, which the Only Sidebar layout keeps out
-     // of the window (koan_compact_mode_controller.cc
-     // ApplyToolbarTransform()); Zen adds a bar above the page for it.
-     .note = "Shown above the page with the Sidebar and Top Toolbar layout "
-             "(in compact mode, with the toolbar when it shows). The Only "
-             "Sidebar layout has no bar for it yet"},
+     // Also ⇧⌘B, View > Always Show Bookmarks Bar (koan_command_policy.cc).
+     .label = "Show the bookmarks bar"},
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kShowNewTabVertical,
