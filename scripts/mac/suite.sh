@@ -10,7 +10,8 @@
 #   (b) the e2e scripts of scripts/mac/suite/e2e.list against a fresh
 #       --user-data-dir each (--use-mock-keychain), through CDP and UI
 #       DevTools; scripts/e2e/<name>.mac.flags, if it exists, replaces
-#       <name>.flags (see flags_file_of());
+#       <name>.flags (see flags_file_of()); scripts/e2e/setup/<name>.mjs, if
+#       it exists, runs first, before Koan starts;
 #   (v) the visual checks: scripts/mac/visual/capture.mjs, then diff.py
 #       against docs/screenshots/reference/ (--record writes them);
 #   (c) crash reports: new .ips files under ~/Library/Logs/DiagnosticReports
@@ -270,6 +271,17 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   [[ -f "$ROOT/scripts/e2e/prefs/$name.mac.json" ]] && prefs="$ROOT/scripts/e2e/prefs/$name.mac.json"
   [[ -f "$prefs" ]] && sed "s|{profile}|$prof|g" "$prefs" >"$prof/Default/Preferences"
   [[ -f "$local_state" ]] && cp "$local_state" "$prof/Local State"
+  # scripts/e2e/setup/<name>.mjs, if it exists, prepares what Koan must find
+  # when it starts (e.g. import_sources' fixture profiles), in this run's
+  # profile (KOAN_PROFILE).
+  local setup="$ROOT/scripts/e2e/setup/$name.mjs"
+  if [[ -f "$setup" ]] && ! run_timeout 60 "$logs/setup-$name.log" \
+      env KOAN_PROFILE="$prof" KOAN_ROOT="$ROOT" node "$setup"; then
+    { echo "suite.sh: setup/$name.mjs failed"; tail -n 20 "$logs/setup-$name.log"; } >"$e2e_log"
+    e2e_status=92
+    rm -rf "$prof" "$agent_home"
+    return
+  fi
   local enable="ui-debug-tools-enable-synthetic-events" disable="MacAppCodeSignClone" extra=() flag
   local flags_file
   flags_file="$(flags_file_of "$name")"
@@ -353,7 +365,7 @@ report_e2e() {  # <name> <secs>
   case "$e2e_status" in
     0) report PASS "$name" "$([[ ${skips:-0} -gt 0 ]] && echo "$skips skipped: $(grep -m1 '^SKIP' "$e2e_log" | sed 's/^SKIP *//')")" ;;
     77) report SKIP "$name" "$(grep -m1 '^SKIP' "$e2e_log" | sed 's/^SKIP *//')" ;;
-    90|91) report FAIL "$name" "$(head -1 "$e2e_log")" ;;
+    90|91|92) report FAIL "$name" "$(head -1 "$e2e_log")" ;;
     *)
       first="$(grep -m1 -E '^FAIL' "$e2e_log" | sed -E 's/^FAIL +//')"
       [[ -z "$first" ]] && first="$(crash_line "$logs/koan-$name.log")"

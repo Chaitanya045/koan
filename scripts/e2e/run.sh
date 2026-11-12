@@ -46,6 +46,11 @@ fi
 chrome="$KOAN_ROOT/chromium/src/${KOAN_OUT:-out/Koan}/chrome"
 export UI_PORT=${UI_PORT:-9600} CDP_PORT=${CDP_PORT:-9601}
 prof=$(koan_new_profile)
+# scripts/e2e/setup/<test>.mjs, if it exists, prepares what Koan must find
+# when it starts, in the profile (KOAN_PROFILE).
+if [[ -f $KOAN_ROOT/scripts/e2e/setup/$test_name.mjs ]]; then
+  KOAN_PROFILE="$prof" node "$KOAN_ROOT/scripts/e2e/setup/$test_name.mjs"
+fi
 dump=()
 if [[ -n ${SHOTS:-} ]]; then
   mkdir -p "$SHOTS/frames"
