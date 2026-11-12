@@ -673,8 +673,11 @@ for (const n of [1, 2, 3, 4, 5]) {
 }
 await sleep(1500);
 
-// --- A tab moved among the pinned tabs is pinned where it is, as Zen pins in
-// place (Ctrl+Shift+PageUp moves it up past the last pinned tab). ---
+// --- A keyboard move never pins or unpins a tab, as Zen's moveTabTo keeps
+// pinned and normal tabs apart (Firefox's clamp at pinnedTabCount): the
+// first normal tab moved up with Ctrl+Shift+PageUp stays below the pinned
+// tab, normal. (Pinning by moving is a drag's: scripts/mac/video/flows/
+// pin_drag.mjs.) ---
 const Y = n => `${PIN_URL}?y${n}`;
 for (const n of [1, 2]) {
   await browserCall('Target.createTarget', { url: Y(n), background: true });
@@ -686,21 +689,25 @@ await activate(await pageByUrl(Y(2)));
 // Ctrl+Shift+PageUp (Chrome's Move Tab Up, Ctrl on macOS too).
 if (await realKeyTo(await pageByUrl(Y(2)), 'PageUp', 'ks', VK.PAGE_UP, CTRL | SHIFT, 'PageUp')) {
   await sleep(1500);
-  st = await statesOf([Y(2), Y(1)]);
+  st = await statesOf([Y(1), Y(2)]);
   order = (await sidebarOrder()).filter(u => u.includes('?y'));
-  check('A tab moved among the pinned tabs is pinned in place',
-        allAre(st, { pinned: true }) &&
-        JSON.stringify(order) === JSON.stringify([Y(2), Y(1)]),
+  check('A tab moved up past the pinned tabs stays a normal tab below them',
+        st[0]?.pinned === true && st[1]?.pinned === false &&
+        JSON.stringify(order) === JSON.stringify([Y(1), Y(2)]) && await pinnedRunOk(),
         JSON.stringify({ st, order }));
-  // Unpinned, it moves down past the divider and the New Tab row, live.
+  // Pinned, then the first pinned tab unpinned: it moves down past the
+  // divider and the New Tab row, live.
   await keyTo(await pageByUrl(Y(2)), VK.D, ACCEL | SHIFT, 'd');
+  await sleep(1000);
+  await activate(await pageByUrl(Y(1)));
+  await keyTo(await pageByUrl(Y(1)), VK.D, ACCEL | SHIFT, 'd');
   await sleep(1000);
   const l = await sidebarLayout();
   check('Unpinning moves the tab below the divider and the New Tab row',
-        inZenOrder(l) && l.normal.some(t => t.url === Y(2)) &&
-        l.pinned.some(t => t.url === Y(1)), JSON.stringify(layoutSummary(l)));
+        inZenOrder(l) && l.normal.some(t => t.url === Y(1)) &&
+        l.pinned.some(t => t.url === Y(2)), JSON.stringify(layoutSummary(l)));
 } else {
-  skipAll(['A tab moved among the pinned tabs is pinned in place',
+  skipAll(['A tab moved up past the pinned tabs stays a normal tab below them',
            'Unpinning moves the tab below the divider and the New Tab row']);
 }
 for (const n of [1, 2]) {

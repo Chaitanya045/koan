@@ -20,13 +20,17 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+#include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+#include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "components/tabs/public/tab_group.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_essentials_promo.h"
+#include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_drag_logic.h"
 #include "koan/browser/ui/views/koan_space_header.h"
@@ -163,6 +167,8 @@ void KoanSpaceDrag::Reset() {
   drop_target_ = DropTarget::kNone;
   RemoveDropIndicator();
   RemovePromo();
+  // (A drop preview stays on the window's tabs: only its sidebar showed it,
+  // and that is going.)
 }
 
 void KoanSpaceDrag::OnTabDragged(views::View* region, const gfx::Point& point) {
@@ -317,8 +323,15 @@ TabStripView* KoanSpaceDrag::GetStrip() const {
   return header ? views::AsViewClass<TabStripView>(header->parent()) : nullptr;
 }
 
-bool KoanSpaceDrag::IsOverSpaceList(views::View* region,
-                                    const gfx::Point& point) const {
+bool KoanSpaceDrag::IsOverSpace(views::View* region,
+                                const gfx::Point& point) const {
+  // The Space header counts as its pinned section (Zen's
+  // .zen-current-workspace-indicator).
+  if (KoanSpaceHeaderView* header = controller_->space_header();
+      header && header->IsDrawn() &&
+      header->HitTestPoint(InView(region, header, point))) {
+    return true;
+  }
   TabStripView* strip = GetStrip();
   views::ScrollView* list =
       strip ? strip->unpinned_tabs_scroll_view() : nullptr;
@@ -330,6 +343,7 @@ void KoanSpaceDrag::UpdateDropTarget(views::View* region,
                                      const gfx::Point& point) {
   drop_target_ = DropTarget::kNone;
   drop_before_ = tabs::TabHandle();
+  drop_pinned_ = false;
   TabStripModel* model = controller_->tab_strip_model();
   const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
   KoanPinnedTabController* pinned =
@@ -338,11 +352,13 @@ void KoanSpaceDrag::UpdateDropTarget(views::View* region,
   TabDragContext* context = tab_strip ? tab_strip->GetDragContext() : nullptr;
   if (!pinned || !context || IsSidebarCollapsed()) {
     RemoveDropIndicator();
+    ShowDropPreview(pinned, tabs, std::nullopt);
     return;
   }
   // (Upstream's drag takes Essentials or Space tabs, never both.)
   const bool essentials =
       std::ranges::all_of(tabs, &tabs::TabInterface::IsPinned);
+  const bool over_space = IsOverSpace(region, point);
   gfx::Rect indicator;
   if (!essentials && IsOverEssentials(region, point)) {
     // Zen: only while one more fits (canEssentialBeAdded()); a tab over a
@@ -369,31 +385,91 @@ void KoanSpaceDrag::UpdateDropTarget(views::View* region,
         }
       }
     }
-  } else if (essentials && IsOverSpaceList(region, point)) {
+  } else if (over_space) {
     const std::optional<tab_groups::TabGroupId> space =
         controller_->GetActiveSpace();
     const TabGroup* group =
         space ? model->group_model()->GetTabGroup(*space) : nullptr;
     if (group) {
-      drop_target_ = DropTarget::kSpace;
       const std::vector<DropUnit> rows =
           DropUnits(model, context, region, group->ListTabs());
-      if (!rows.empty()) {
-        const size_t slot = SpaceListDropSlot(UnitBounds(rows), point.y());
-        // Across the list, above the slot's row or below the last one.
-        const bool after = slot == rows.size();
-        const gfx::Rect& row = rows[after ? slot - 1 : slot].bounds;
-        const int edge = after ? row.bottom() : row.y();
-        indicator =
-            gfx::Rect(row.x(), edge - KoanTabDropIndicatorView::kThickness / 2,
-                      row.width(), KoanTabDropIndicatorView::kThickness);
-        if (!after) {
-          drop_before_ = rows[slot].first;
+      const size_t pinned_count = static_cast<size_t>(
+          std::ranges::find_if_not(rows,
+                                   [](const DropUnit& unit) {
+                                     return IsPinnedForUser(unit.first.Get());
+                                   }) -
+          rows.begin());
+      // The separator's bottom ends the pinned section; without the rows
+      // (none drawn yet), the last pinned row's does.
+      gfx::Rect separator;
+      int normal_start = 0;
+      if (const std::optional<SpaceSeparatorRows> separator_rows =
+              GetStrip() ? GetSpaceSeparatorRows(GetStrip(), region)
+                         : std::nullopt) {
+        separator = separator_rows->rows;
+        separator.set_height(separator_rows->separator_height);
+        normal_start = separator_rows->rows.bottom();
+      } else {
+        const int y = pinned_count   ? rows[pinned_count - 1].bounds.bottom()
+                      : rows.empty() ? 0
+                                     : rows.front().bounds.y();
+        separator = gfx::Rect(0, y, region->width(), 0);
+        normal_start = y;
+      }
+      if (essentials) {
+        // Zen: an Essential leaves the grid for the section it is dropped in,
+        // at the row under the pointer (a line across the list shows where).
+        drop_target_ = DropTarget::kSpace;
+        const SpaceDropPlace place = SpaceListDropPlace(
+            UnitBounds(rows), pinned_count, separator, normal_start, point.y());
+        drop_pinned_ = place.pinned;
+        if (place.slot < rows.size()) {
+          drop_before_ = rows[place.slot].first;
         }
+        const gfx::Rect across = rows.empty() ? separator : rows.front().bounds;
+        indicator = gfx::Rect(
+            across.x(), place.line_y - KoanTabDropIndicatorView::kThickness / 2,
+            across.width(), KoanTabDropIndicatorView::kThickness);
+      } else {
+        // Space tabs: upstream's drag places them among the rows as they go;
+        // the section under the pointer decides at the separator, where the
+        // sidebar shows them in it (ShowDropPreview()).
+        drop_target_ = DropTarget::kWithinSpace;
+        drop_pinned_ = IsInPinnedDropSection(point.y(), separator.bottom());
       }
     }
   }
   ShowDropIndicator(region, indicator);
+  ShowDropPreview(pinned, tabs,
+                  drop_target_ == DropTarget::kWithinSpace
+                      ? std::make_optional(drop_pinned_)
+                      : std::nullopt);
+}
+
+void KoanSpaceDrag::ShowDropPreview(
+    KoanPinnedTabController* pinned,
+    const std::vector<tabs::TabInterface*>& tabs,
+    std::optional<bool> pointer_pinned) {
+  if (!pinned || !pinned->PreviewDropInSpace(tabs, pointer_pinned)) {
+    return;
+  }
+  RelayoutSpace();
+}
+
+void KoanSpaceDrag::RelayoutSpace() {
+  // The Space's group view lays out its pinned section, the separator and its
+  // normal tabs (koan_folders.h SpaceGroupRows).
+  TabStripView* strip = GetStrip();
+  views::View* container = strip ? strip->GetUnpinnedTabsContainer() : nullptr;
+  if (!container) {
+    return;
+  }
+  for (views::View* child : container->children()) {
+    if (auto* group = views::AsViewClass<TabGroupView>(child);
+        group && group->IsGroupFocused()) {
+      group->InvalidateLayout();
+    }
+  }
 }
 
 void KoanSpaceDrag::ShowDropIndicator(views::View* region,
@@ -492,12 +568,13 @@ void KoanSpaceDrag::OnDragEnded(bool dropped) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&KoanSpaceDrag::FinishDrop, weak_factory_.GetWeakPtr(),
-                     target, std::move(handles), drop_before_));
+                     target, std::move(handles), drop_before_, drop_pinned_));
 }
 
 void KoanSpaceDrag::FinishDrop(DropTarget target,
                                std::vector<tabs::TabHandle> handles,
-                               tabs::TabHandle before) {
+                               tabs::TabHandle before,
+                               bool pinned_section) {
   RemovePromo();
   std::vector<tabs::TabInterface*> tabs;
   for (const tabs::TabHandle& handle : handles) {
@@ -505,21 +582,35 @@ void KoanSpaceDrag::FinishDrop(DropTarget target,
       tabs.push_back(tab);
     }
   }
+  TabStripModel* model = controller_->tab_strip_model();
   KoanPinnedTabController* pinned =
-      tabs.empty() ? nullptr : KoanPinnedTabController::ForTab(tabs.front());
+      model->empty() ? nullptr
+                     : KoanPinnedTabController::ForTab(model->GetTabAtIndex(0));
   if (!pinned) {
     return;
   }
   switch (target) {
     case DropTarget::kNone:
+      // Not dropped on the Space: each tab stays as it is (or as its place
+      // says, KoanPinnedTabController::Normalize()).
+      if (pinned->PreviewDropInSpace({}, std::nullopt)) {
+        RelayoutSpace();
+      }
       return;
     case DropTarget::kEssentials:
-      pinned->DropInEssentials(tabs, before.Get());
+      pinned->PreviewDropInSpace({}, std::nullopt);
+      if (!tabs.empty()) {
+        pinned->DropInEssentials(tabs, before.Get());
+      }
       return;
     case DropTarget::kSpace:
       for (tabs::TabInterface* tab : tabs) {
-        pinned->DropEssentialInSpace(tab, before.Get());
+        pinned->DropEssentialInSpace(tab, before.Get(), pinned_section);
       }
+      return;
+    case DropTarget::kWithinSpace:
+      pinned->DropInSpace(tabs, pinned_section);
+      RelayoutSpace();
       return;
   }
 }

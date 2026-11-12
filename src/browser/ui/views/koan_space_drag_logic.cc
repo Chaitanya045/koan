@@ -125,4 +125,41 @@ size_t SpaceListDropSlot(const std::vector<gfx::Rect>& rows, int y) {
   return slot;
 }
 
+SpaceDropPlace SpaceListDropPlace(const std::vector<gfx::Rect>& rows,
+                                  size_t pinned_count,
+                                  const gfx::Rect& separator,
+                                  int normal_start,
+                                  int y) {
+  pinned_count = std::min(pinned_count, rows.size());
+  SpaceDropPlace place;
+  place.pinned = IsInPinnedDropSection(y, separator.bottom());
+  const auto first = rows.begin() + (place.pinned ? 0 : pinned_count);
+  const auto last = place.pinned ? rows.begin() + pinned_count : rows.end();
+  const std::vector<gfx::Rect> section(first, last);
+  const size_t slot = SpaceListDropSlot(section, y);
+  place.slot = static_cast<size_t>(first - rows.begin()) + slot;
+  if (slot < section.size()) {
+    place.line_y = section[slot].y();
+  } else if (!section.empty()) {
+    place.line_y = section.back().bottom();
+  } else {
+    place.line_y = place.pinned ? separator.y() : normal_start;
+  }
+  return place;
+}
+
+bool DragDropsPinned(std::optional<bool> prev_pinned,
+                     std::optional<bool> next_pinned,
+                     bool pointer_pinned) {
+  // (Checked in this order, as KoanPinnedTabController::Normalize() does: a
+  // pinned tab below a normal one leaves the pinned tabs first.)
+  if (prev_pinned == false) {
+    return false;
+  }
+  if (next_pinned == true) {
+    return true;
+  }
+  return pointer_pinned;
+}
+
 }  // namespace koan

@@ -76,6 +76,7 @@
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_space_drag_logic.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_toast.h"
@@ -459,6 +460,12 @@ bool IsPinnedForUser(content::WebContents* contents) {
          IsPinnedForUser(tabs::TabInterface::MaybeGetFromContents(contents));
 }
 
+bool ShowsInPinnedSection(const tabs::TabInterface* tab) {
+  const KoanTabState* state = GetTabState(tab);
+  return state && state->drop_pinned && !tab->IsPinned() ? *state->drop_pinned
+                                                         : IsPinnedForUser(tab);
+}
+
 bool IsAwayFromPinnedUrl(const tabs::TabInterface* tab) {
   const KoanTabState* state = GetTabState(tab);
   return IsPinnedForUser(tab) && state && state->pinned_url.is_valid() &&
@@ -636,6 +643,105 @@ bool KoanPinnedTabController::AbovePinnedTab(int index) const {
     }
   }
   return false;
+}
+
+std::vector<tabs::TabInterface*> KoanPinnedTabController::SpaceTabsWithSplits(
+    const std::vector<tabs::TabInterface*>& tabs) const {
+  std::vector<tabs::TabInterface*> all;
+  for (tabs::TabInterface* tab : tabs) {
+    for (tabs::TabInterface* each : WithSplit(tab)) {
+      if (!each->IsPinned() && !std::ranges::contains(all, each) &&
+          tab_strip_model()->GetIndexOfTab(each) != TabStripModel::kNoTab) {
+        all.push_back(each);
+      }
+    }
+  }
+  std::ranges::sort(all, {}, [this](const tabs::TabInterface* tab) {
+    return tab_strip_model()->GetIndexOfTab(tab);
+  });
+  return all;
+}
+
+bool KoanPinnedTabController::DropsPinned(
+    tabs::TabInterface* tab,
+    const std::vector<tabs::TabInterface*>& dragged,
+    bool pointer_pinned) const {
+  TabStripModel* model = tab_strip_model();
+  const std::vector<tabs::TabInterface*> unit = WithSplit(tab);
+  const std::optional<tab_groups::TabGroupId> group = tab->GetGroup();
+  // Whether the nearest tab of its Space from `index` on, going by `step`,
+  // that isn't dragged (nor the Space's hidden empty tab) is pinned; nullopt
+  // past the Space's end (or at the Essentials).
+  const auto neighbour = [&](int index, int step) -> std::optional<bool> {
+    for (int i = index; model->ContainsIndex(i); i += step) {
+      tabs::TabInterface* other = model->GetTabAtIndex(i);
+      if (other->IsPinned() || model->GetTabGroupForTab(i) != group) {
+        return std::nullopt;
+      }
+      if (!std::ranges::contains(dragged, other) &&
+          !std::ranges::contains(unit, other) && !IsEmptyTab(other)) {
+        return IsPinnedForUser(other);
+      }
+    }
+    return std::nullopt;
+  };
+  return DragDropsPinned(neighbour(model->GetIndexOfTab(unit.front()) - 1, -1),
+                         neighbour(model->GetIndexOfTab(unit.back()) + 1, 1),
+                         pointer_pinned);
+}
+
+bool KoanPinnedTabController::PreviewDropInSpace(
+    const std::vector<tabs::TabInterface*>& tabs,
+    std::optional<bool> pointer_pinned) {
+  const std::vector<tabs::TabInterface*> dragged = SpaceTabsWithSplits(tabs);
+  bool changed = false;
+  // (Every tab, so that none keeps a preview from an earlier selection.)
+  for (tabs::TabInterface* tab : *tab_strip_model()) {
+    std::optional<bool> pinned;
+    if (pointer_pinned && std::ranges::contains(dragged, tab)) {
+      pinned = DropsPinned(tab, dragged, *pointer_pinned);
+      // In its own section: nothing to show.
+      if (*pinned == IsPinnedInSpace(tab)) {
+        pinned.reset();
+      }
+    }
+    KoanTabState* state =
+        pinned ? &GetOrCreateTabState(tab->GetContents()) : GetTabState(tab);
+    if (state && state->drop_pinned != pinned) {
+      state->drop_pinned = pinned;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+void KoanPinnedTabController::DropInSpace(
+    const std::vector<tabs::TabInterface*>& tabs,
+    bool pointer_pinned) {
+  const std::vector<tabs::TabInterface*> dragged = SpaceTabsWithSplits(tabs);
+  // Decided for all first, from where the drag left them.
+  std::vector<std::pair<tabs::TabInterface*, bool>> drops;
+  for (tabs::TabInterface* tab : dragged) {
+    drops.emplace_back(tab, DropsPinned(tab, dragged, pointer_pinned));
+  }
+  PreviewDropInSpace({}, std::nullopt);
+  for (const auto& [tab, pinned] : drops) {
+    KoanTabState& state = GetOrCreateTabState(tab->GetContents());
+    // Decided here: Normalize() then only keeps the sections in order.
+    state.dragged = false;
+    if (pinned == IsPinnedInSpace(tab)) {
+      continue;
+    }
+    if (!pinned) {
+      ClearPinnedState(tab);
+      continue;
+    }
+    InitPinnedState(tab, state);
+    state.pinned_in_space = true;
+    UpdateFreezingExemption(tab);
+    SaveTabState(tab->GetContents());
+    UpdateTabView(tab);
+  }
 }
 
 void KoanPinnedTabController::MoveAfterPinnedTabs(tabs::TabInterface* tab) {
@@ -830,7 +936,9 @@ void KoanPinnedTabController::Normalize() {
       MoveIntoPinnedTabs(tab);
       continue;
     }
-    // Zen's drop rules for a drag within the Space. Any other move (the
+    // Zen's drop rules for a drag within the Space, by where it is (a drop
+    // on the Space's list is decided by DropInSpace() first, also at the
+    // separator, which the place alone can't tell). Any other move (the
     // keyboard, an extension's tabs.move) keeps the tab in its section, as
     // Zen's moveTabTo does: it is never pinned or unpinned by it.
     if (IsPinnedInSpace(tab) && !InPinnedRun(first)) {
@@ -961,7 +1069,8 @@ void KoanPinnedTabController::DropInEssentials(
 }
 
 void KoanPinnedTabController::DropEssentialInSpace(tabs::TabInterface* tab,
-                                                   tabs::TabInterface* before) {
+                                                   tabs::TabInterface* before,
+                                                   bool pinned) {
   if (!tab->IsPinned()) {
     return;
   }
@@ -982,12 +1091,28 @@ void KoanPinnedTabController::DropEssentialInSpace(tabs::TabInterface* tab,
     }
     model->MoveWebContentsAt(from, to, /*select_after_move=*/false, space);
   }
-  // Zen's rule, decided by where it is now (Normalize()): among the pinned
-  // tabs, one of them; elsewhere a normal tab.
+  // Zen's removeEssentials(tab, unpin), by the section it was dropped in
+  // (the place alone can't tell the end of the pinned tabs from the top of
+  // the normal ones).
   for (tabs::TabInterface* each : WithSplit(tab)) {
-    GetOrCreateTabState(each->GetContents()).was_essential = true;
+    if (!pinned) {
+      ClearPinnedState(each);
+      continue;
+    }
+    KoanTabState& state = GetOrCreateTabState(each->GetContents());
+    InitPinnedState(each, state);
+    state.pinned_in_space = true;
+    UpdateFreezingExemption(each);
+    SaveTabState(each->GetContents());
+    UpdateTabView(each);
   }
-  ScheduleNormalize(tab);
+  // A split view stays where leaving the Essentials put it (moves never cut
+  // one): into its section.
+  if (pinned) {
+    MoveIntoPinnedTabs(tab);
+  } else if (AbovePinnedTab(model->GetIndexOfTab(WithSplit(tab).back()))) {
+    MoveAfterPinnedTabs(tab);
+  }
 }
 
 void KoanPinnedTabController::OnTabDuplicated(const tabs::TabInterface* source,

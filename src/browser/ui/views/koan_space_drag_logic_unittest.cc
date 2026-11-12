@@ -4,6 +4,9 @@
 
 #include "koan/browser/ui/views/koan_space_drag_logic.h"
 
+#include <optional>
+#include <vector>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace koan {
@@ -228,6 +231,108 @@ TEST(KoanSpaceDragLogicTest, EmptyEssentialsZoneStaysInTheSidebar) {
   EXPECT_EQ(
       gfx::Rect(0, 0, 230, 400),
       EmptyEssentialsDropZone({230, 400}, gfx::Rect(0, 900, 230, 44), {}));
+}
+
+// A Space's list as Koan lays it out: two pinned rows (0-36, 38-74), the
+// separator (76-98), the New Tab row (98-134), two normal rows (136-172,
+// 174-210).
+namespace {
+std::vector<gfx::Rect> SpaceRows() {
+  return {
+      {0, 0, 200, 36}, {0, 38, 200, 36}, {0, 136, 200, 36}, {0, 174, 200, 36}};
+}
+constexpr gfx::Rect kSeparator(0, 76, 200, 22);
+constexpr int kNormalStart = 134;
+}  // namespace
+
+TEST(KoanSpaceDragLogicTest, PinnedSectionEndsAtTheSeparatorsBottom) {
+  // The Space header and the pinned rows, and the separator (Zen keeps it in
+  // the pinned section).
+  EXPECT_TRUE(IsInPinnedDropSection(-30, kSeparator.bottom()));
+  EXPECT_TRUE(IsInPinnedDropSection(50, kSeparator.bottom()));
+  EXPECT_TRUE(IsInPinnedDropSection(97, kSeparator.bottom()));
+  // The New Tab row, the normal rows and the empty space below.
+  EXPECT_FALSE(IsInPinnedDropSection(98, kSeparator.bottom()));
+  EXPECT_FALSE(IsInPinnedDropSection(150, kSeparator.bottom()));
+  EXPECT_FALSE(IsInPinnedDropSection(600, kSeparator.bottom()));
+}
+
+TEST(KoanSpaceDragLogicTest, EssentialDropsInTheSectionUnderThePointer) {
+  // Over the header: first, pinned, the line at the first row's top.
+  SpaceDropPlace place =
+      SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, -20);
+  EXPECT_TRUE(place.pinned);
+  EXPECT_EQ(0u, place.slot);
+  EXPECT_EQ(0, place.line_y);
+  // The second pinned row's lower half: after it, still pinned.
+  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 70);
+  EXPECT_TRUE(place.pinned);
+  EXPECT_EQ(2u, place.slot);
+  EXPECT_EQ(74, place.line_y);
+  // Over the separator: the end of the pinned tabs (the same slot as the top
+  // of the normal ones, which the section tells apart).
+  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 90);
+  EXPECT_TRUE(place.pinned);
+  EXPECT_EQ(2u, place.slot);
+  EXPECT_EQ(74, place.line_y);
+  // Over the New Tab row: the first normal tab.
+  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 100);
+  EXPECT_FALSE(place.pinned);
+  EXPECT_EQ(2u, place.slot);
+  EXPECT_EQ(136, place.line_y);
+  // The last normal row's lower half, and the empty space below: last.
+  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 200);
+  EXPECT_FALSE(place.pinned);
+  EXPECT_EQ(4u, place.slot);
+  EXPECT_EQ(210, place.line_y);
+  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 500);
+  EXPECT_EQ(4u, place.slot);
+}
+
+TEST(KoanSpaceDragLogicTest, EssentialDropsInAnEmptySection) {
+  // No pinned tabs: the separator and the New Tab row at the top (0-22,
+  // 22-58), then the normal rows.
+  const std::vector<gfx::Rect> rows = {{0, 60, 200, 36}, {0, 98, 200, 36}};
+  const gfx::Rect separator(0, 0, 200, 22);
+  SpaceDropPlace place = SpaceListDropPlace(rows, 0, separator, 58, 10);
+  EXPECT_TRUE(place.pinned);
+  EXPECT_EQ(0u, place.slot);
+  EXPECT_EQ(0, place.line_y);
+  place = SpaceListDropPlace(rows, 0, separator, 58, 30);
+  EXPECT_FALSE(place.pinned);
+  EXPECT_EQ(0u, place.slot);
+  EXPECT_EQ(60, place.line_y);
+  // No normal tabs: below the New Tab row.
+  place = SpaceListDropPlace({{0, 0, 200, 36}}, 1, gfx::Rect(0, 38, 200, 22),
+                             96, 300);
+  EXPECT_FALSE(place.pinned);
+  EXPECT_EQ(1u, place.slot);
+  EXPECT_EQ(96, place.line_y);
+}
+
+TEST(KoanSpaceDragLogicTest, DraggedTabsTakeTheirNeighboursSection) {
+  // Between two pinned tabs, or above the first pinned one: pinned, wherever
+  // the pointer is.
+  EXPECT_TRUE(DragDropsPinned(true, true, false));
+  EXPECT_TRUE(DragDropsPinned(std::nullopt, true, false));
+  // After a normal tab: normal.
+  EXPECT_FALSE(DragDropsPinned(false, false, true));
+  EXPECT_FALSE(DragDropsPinned(false, std::nullopt, true));
+  // A pinned tab below a normal one is out of the pinned tabs first.
+  EXPECT_FALSE(DragDropsPinned(false, true, true));
+}
+
+TEST(KoanSpaceDragLogicTest, DraggedTabsAtTheSeparatorGoByThePointer) {
+  // After the last pinned tab, before the first normal one.
+  EXPECT_TRUE(DragDropsPinned(true, false, true));
+  EXPECT_FALSE(DragDropsPinned(true, false, false));
+  // No pinned tabs yet: above the separator pins the first.
+  EXPECT_TRUE(DragDropsPinned(std::nullopt, false, true));
+  EXPECT_FALSE(DragDropsPinned(std::nullopt, false, false));
+  // Every other tab pinned, or none left.
+  EXPECT_TRUE(DragDropsPinned(true, std::nullopt, true));
+  EXPECT_FALSE(DragDropsPinned(true, std::nullopt, false));
+  EXPECT_FALSE(DragDropsPinned(std::nullopt, std::nullopt, false));
 }
 
 }  // namespace koan

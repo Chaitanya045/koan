@@ -126,6 +126,54 @@ gfx::Rect EssentialsTopDropZone(const gfx::Size& sidebar,
 // `rows` are top to bottom. Returns the slot, 0 to rows.size().
 size_t SpaceListDropSlot(const std::vector<gfx::Rect>& rows, int y);
 
+// Zen's two sections of a Space's list (ZenSpace.mjs): the pinned section
+// (.zen-workspace-pinned-tabs-section: the pinned tabs and folders, then the
+// separator with Clear) and the normal one (.zen-workspace-normal-tabs-section:
+// the "+ New Tab" row, then the normal tabs, then the empty space below).
+// A drop decides by the section under the pointer, not by the tabs around
+// the drop (ZenPinnedTabManager's moveToAnotherTabContainerIfNecessary()),
+// the Space header (.zen-current-workspace-indicator) counting as pinned.
+// The pinned section ends at the separator's bottom, `pinned_end` (the top
+// of the New Tab row).
+inline bool IsInPinnedDropSection(int y, int pinned_end) {
+  return y < pinned_end;
+}
+
+// Where tabs from outside the Space's list (Essentials) dropped at `y` go:
+// pinned or not by the section (IsInPinnedDropSection()), then before the
+// row under `y` in that section, or after it once past its middle
+// (SpaceListDropSlot() among the section's rows only). `rows` are the
+// Space's rows top to bottom, the first `pinned_count` of them its pinned
+// section's; `separator` is the separator row (zero height at the rows'
+// place when hidden) and `normal_start` the bottom of the New Tab row, where
+// the normal tabs begin. `slot` counts in all of `rows` (0 to rows.size()),
+// and `line_y` is where Zen's drop indicator goes: above the slot's row,
+// below the section's last row, or, in an empty section, on the separator's
+// top (pinned) or below the New Tab row (normal, Zen's
+// showIndicatorUnderNewTabButton).
+struct SpaceDropPlace {
+  bool pinned = false;
+  size_t slot = 0;
+  int line_y = 0;
+};
+SpaceDropPlace SpaceListDropPlace(const std::vector<gfx::Rect>& rows,
+                                  size_t pinned_count,
+                                  const gfx::Rect& separator,
+                                  int normal_start,
+                                  int y);
+
+// Whether tabs dragged within a Space (Chromium's drag places them among its
+// tabs as they go) drop pinned: between two pinned tabs, pinned; after a
+// normal tab, normal; at the edge between the sections (nothing before them
+// but pinned tabs, nothing pinned after them), by the section under the
+// pointer (`pointer_pinned`, IsInPinnedDropSection()), as Chromium's place
+// is the same on both sides of the separator. `prev_pinned` / `next_pinned`
+// say whether the Space's nearest tab before / after the dragged ones (not
+// dragged) is pinned, nullopt for none.
+bool DragDropsPinned(std::optional<bool> prev_pinned,
+                     std::optional<bool> next_pinned,
+                     bool pointer_pinned);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_DRAG_LOGIC_H_

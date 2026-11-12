@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_DRAG_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_DRAG_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -32,6 +33,7 @@ class View;
 namespace koan {
 
 class KoanEssentialsPromoView;
+class KoanPinnedTabController;
 class KoanTabDropIndicatorView;
 class KoanWorkspaceController;
 
@@ -49,10 +51,16 @@ class KoanWorkspaceController;
 // - tabs dropped on the Essentials grid become Essentials where they drop,
 //   before or after the tile under the pointer (before the first one from
 //   the sidebar above the grid, the URL bar included), while Zen's 12 fit;
-//   and Essentials dropped on the Space's list leave the Essentials for that
-//   place, pinned to the Space among its pinned tabs, else normal tabs
+//   and Essentials dropped on the Space's list (or its header) leave the
+//   Essentials for that place, pinned to the Space in its pinned section
+//   (above the separator's bottom), else normal tabs
 //   (ZenPinnedTabManager's moveToAnotherTabContainerIfNecessary()). A line
-//   shows where (#zen-drag-indicator).
+//   shows where (#zen-drag-indicator);
+// - Space tabs dragged across the separator are pinned or unpinned by the
+//   section they drop in (the same Zen function): upstream's drag places them
+//   among the Space's tabs, and at the separator, where that place is the
+//   same on both sides, the pointer decides; the sidebar shows them in that
+//   section while they are held (KoanPinnedTabController::DropInSpace()).
 // The dragged tabs go with the switch, so the drag goes on in the new Space
 // and drops there (Zen moves them on the drop; Chromium's drag needs them in
 // the Space it shows). Upstream's drag keeps the tabs in their own section
@@ -101,8 +109,16 @@ class KoanSpaceDrag {
   void RemovePromo();
   // Where a drop at `point` (in `region`) goes, with its indicator.
   void UpdateDropTarget(views::View* region, const gfx::Point& point);
-  // Whether `point` (in `region`) is over the active Space's list of tabs.
-  bool IsOverSpaceList(views::View* region, const gfx::Point& point) const;
+  // Whether `point` (in `region`) is over the active Space's list of tabs
+  // or its header.
+  bool IsOverSpace(views::View* region, const gfx::Point& point) const;
+  // Shows the dragged Space `tabs` in the section they would drop in
+  // (`pointer_pinned`: the section under the pointer; nullopt: their own).
+  void ShowDropPreview(KoanPinnedTabController* pinned,
+                       const std::vector<tabs::TabInterface*>& tabs,
+                       std::optional<bool> pointer_pinned);
+  // Lays the active Space's list out again (its sections changed).
+  void RelayoutSpace();
   // Shows the drop indicator at `bounds` (in `region`); empty hides it.
   void ShowDropIndicator(views::View* region, const gfx::Rect& bounds);
   void RemoveDropIndicator();
@@ -115,12 +131,16 @@ class KoanSpaceDrag {
     kEssentials,
     // Essentials over the Space's list of tabs.
     kSpace,
+    // Space tabs over the Space's list of tabs.
+    kWithinSpace,
   };
   // After the drop, once upstream's drag is over: the dragged `tabs` go to
-  // `target`, before `before` (none: at the end).
+  // `target`, before `before` (none: at the end), in the Space's pinned
+  // section or not (`pinned_section`, the section under the pointer).
   void FinishDrop(DropTarget target,
                   std::vector<tabs::TabHandle> tabs,
-                  tabs::TabHandle before);
+                  tabs::TabHandle before,
+                  bool pinned_section);
   bool IsSidebarCollapsed() const;
 
   const raw_ptr<KoanWorkspaceController> controller_;
@@ -135,6 +155,7 @@ class KoanSpaceDrag {
   // Where a drop at the pointer's last place goes.
   DropTarget drop_target_ = DropTarget::kNone;
   tabs::TabHandle drop_before_;
+  bool drop_pinned_ = false;
   base::WeakPtrFactory<KoanSpaceDrag> weak_factory_{this};
 };
 

@@ -5,6 +5,10 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_TABS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_TABS_H_
 
+#include <optional>
+
+#include "ui/gfx/geometry/rect.h"
+
 class TabStripView;
 
 namespace content {
@@ -75,6 +79,18 @@ int PlaceSpaceTabRows(const views::View* tab_group_view,
                       const views::SizeBounds& size_bounds,
                       int tab_padding,
                       views::ProposedLayout& layout);
+
+// The rows between the active Space's pinned and normal tabs, while they are
+// drawn in its tab list: their bounds (the separator, then the New Tab row)
+// in `target`'s coordinates, and how far down the separator ends (0 while it
+// is hidden), the end of Zen's pinned section (koan_space_drag_logic.h).
+struct SpaceSeparatorRows {
+  gfx::Rect rows;
+  int separator_height = 0;
+};
+std::optional<SpaceSeparatorRows> GetSpaceSeparatorRows(
+    const TabStripView* tab_strip_view,
+    const views::View* target);
 
 // Whether `view` is Koan's rows view. Clicks on the rows must reach them, so
 // they are never part of the window caption.
