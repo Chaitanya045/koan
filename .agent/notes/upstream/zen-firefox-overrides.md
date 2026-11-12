@@ -616,6 +616,7 @@ Items found by more than one source are merged. A: browser patches. B: platform 
   - **Why:** in Koan, typing another domain into the URL bar from a pinned tab navigates it away. Zen opens a new tab.
   - **Mac test:** on an Essential showing github.com, ⌘L, type `apple.com`, Enter. Expected: a new tab, and the Essential stays on github.com. A same-domain URL should load in place.
 - **Z9. Import from Chrome, Arc, Dia, Brave, Edge and Vivaldi on macOS** (A2, C, D).
+  - **Status (#348):** done for bookmarks, history and passwords (Zen through Chromium's Firefox importer; Arc, Dia, Chrome, Brave, Edge, Vivaldi, Chromium by Koan's reader); Arc's pinned tabs and Favorites arrive as bookmark folders, not yet as Koan Spaces and pinned tabs. Audit: [importer.md](importer.md).
   - **Why:** Chromium's Mac importer only knows Safari, Firefox and a bookmarks file. Zen's welcome imports Chromium-family browsers and Arc/Dia, with Arc's Spaces and pins.
   - **Mac test:** with Chrome and Arc installed, a fresh profile, welcome > Import. Expected: both are listed, and Arc's Spaces and pins arrive as Koan Spaces and pinned tabs.
 - **Z10. Tab hover cards** (C; `browser.tabs.hoverPreview.enabled`=false).

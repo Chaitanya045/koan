@@ -63,6 +63,16 @@ function initialTile(name) {
             (name.trim()[0] ?? '?').toUpperCase());
 }
 
+// A browser's app icon (a data: URL from the browser side), else its
+// initial.
+function browserTile(source) {
+  if (!source.icon) {
+    return initialTile(source.name);
+  }
+  return el('span', {className: 'tile app', 'aria-hidden': true},
+            el('img', {src: source.icon, alt: ''}));
+}
+
 // ---- The steps.
 
 // What the user picked, kept across Back and Next.
@@ -180,8 +190,10 @@ function importStep(data) {
         mark: el('span', {className: 'tile', 'aria-hidden': true},
                  icon('sparkles')),
       }));
-      // Only what Chromium's importer found (on macOS Safari, Firefox and a
-      // bookmarks file); with nothing found, the import dialog itself.
+      // Only what the importer found: Koan's browsers (Zen, Arc, Chrome...,
+      // the most recently used first), then Chromium's (on macOS Safari,
+      // Firefox and a bookmarks file); with nothing found, the import dialog
+      // itself.
       data.importSources.forEach((source, index) => {
         list.appendChild(choice({
           group: 'import',
@@ -189,7 +201,7 @@ function importStep(data) {
           checked: gChoices.importSource === String(index),
           title: source.name,
           detail: source.profile || null,
-          mark: initialTile(source.name),
+          mark: browserTile(source),
         }));
       });
       if (!data.importSources.length) {
@@ -214,9 +226,13 @@ function importStep(data) {
       chrome.send('import', [false]);
     },
     // Every Next says what is picked: a browser, then Back and "Start fresh",
-    // imports nothing.
+    // imports nothing. The dialog then opens on the picked browser.
     commit() {
-      chrome.send('import', [gChoices.importSource !== 'none']);
+      const index = Number.parseInt(gChoices.importSource, 10);
+      chrome.send('import', [
+        gChoices.importSource !== 'none',
+        Number.isInteger(index) ? index : -1,
+      ]);
     },
   };
 }

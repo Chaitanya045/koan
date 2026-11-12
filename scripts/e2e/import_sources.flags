@@ -1,0 +1,5 @@
+# The welcome shows on a first run only; the import looks for other browsers'
+# profiles under the test's own folder (fixtures the script writes), never
+# the user's ({profile} is this run's user data dir).
+--force-first-run
+--koan-import-test-root={profile}/import-root

@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/importer/external_process_importer_host.cc b/chrome/browser/importer/external_process_importer_host.cc
+index 051ffd1259dd1373470c56e8a49dd21ad8e57170..54d2108fb92d44bb5e002ca4a45e0dd8813a8c2e 100644
+--- a/chrome/browser/importer/external_process_importer_host.cc
++++ b/chrome/browser/importer/external_process_importer_host.cc
+@@ -18,6 +18,7 @@
+ #include "components/bookmarks/browser/bookmark_model.h"
+ #include "components/search_engines/template_url_service.h"
+ #include "content/public/browser/browser_thread.h"
++#include "koan/browser/importer/koan_chromium_profile_importer.h"
+ 
+ using bookmarks::BookmarkModel;
+ using content::BrowserThread;
+@@ -97,6 +98,14 @@ void ExternalProcessImporterHost::LaunchImportIfReady() {
+     return;
+   }
+ 
++  // Koan: a Chrome or Arc profile is read in this process (no utility
++  // process importer for it).
++  if (koan::importer::MaybeStartChromiumProfileImport(
++          source_profile_, items_, writer_.get(),
++          weak_ptr_factory_.GetWeakPtr())) {
++    return;
++  }
++
+   // This is the in-process half of the bridge, which catches data from the IPC
+   // pipe and feeds it to the ProfileWriter. The external process half of the
+   // bridge lives in the external process (see ProfileImportThread).
