@@ -11,6 +11,7 @@
 #include "base/timer/timer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 
@@ -21,7 +22,6 @@ class Point;
 }  // namespace gfx
 
 namespace views {
-class FocusManager;
 class WebView;
 }  // namespace views
 
@@ -48,6 +48,7 @@ namespace koan {
 // back.
 class KoanWelcome : public content::WebContentsObserver,
                     public ui::AcceleratorTarget,
+                    public views::FocusChangeListener,
                     public views::ViewObserver {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
@@ -81,6 +82,20 @@ class KoanWelcome : public content::WebContentsObserver,
   // handles its own).
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
+
+  // views::FocusChangeListener (the window's): the keyboard moved to another
+  // page in the window, under this one. BrowserView gives the startup tab's
+  // page the focus on the window's first activation (RestoreFocus()), which
+  // on macOS can come after the page showed (a window that becomes key
+  // late); so does a tab activated from outside (an extension, DevTools).
+  // While the page covers the window, the keyboard comes back to it; what
+  // shows over it (the floating URL bar) keeps the keyboard.
+  void OnDidChangeFocus(views::View* focused_before,
+                        views::View* focused_now) override;
+  // The keyboard on the page (its first button or choice has the focus).
+  void FocusPage();
+  // Whether another page in the window (a tab's) has the keyboard.
+  bool OtherPageHasFocus() const;
 
   // views::ViewObserver (the BrowserView): a view added or moved above the
   // page goes back under it.
@@ -132,6 +147,8 @@ class KoanWelcome : public content::WebContentsObserver,
   base::OneShotTimer load_timer_;
   base::ScopedObservation<views::View, views::ViewObserver>
       browser_view_observation_{this};
+  base::ScopedObservation<views::FocusManager, views::FocusChangeListener>
+      focus_observation_{this};
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };

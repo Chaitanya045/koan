@@ -1,10 +1,12 @@
 // End-to-end test of the welcome (onboarding v2, chrome://koan-welcome;
 // welcome.flags): on a first run the page covers the window; Get started,
-// then each step with Next, and "Start browsing" closes it. Linux only (the
-// Mac steps are scripts/mac/steps/welcome.md).
+// then each step with Next, and "Start browsing" closes it. The shortcuts
+// step shows on macOS only (koan_welcome_shortcuts.cc: no rows elsewhere).
+// The Mac's input checks are welcome_input.mjs and
+// scripts/mac/steps/welcome.md.
 //
 //   scripts/e2e/run.sh welcome
-import { CDP_PORT, check, evalIn, finish, shownViews, sleep, views } from './lib/koan.mjs';
+import { CDP_PORT, IS_MAC, check, evalIn, finish, shownViews, sleep, views } from './lib/koan.mjs';
 
 async function welcomePage() {
   for (let i = 0; i < 20; ++i) {
@@ -50,8 +52,17 @@ check('...in shadcn\'s tokens', await js(
     `getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() !== ''`));
 check('...with Skip setup', await js(`!document.getElementById('welcome-skip').hidden`));
 await next();
-// Off macOS there is no shortcuts step.
-check('Next: import (shortcuts are macOS only)', await step() === 'import', await step());
+if (IS_MAC) {
+  check('Next: shortcuts (macOS)', await step() === 'shortcuts', await step());
+  check('...Zen\'s shortcuts chosen', await js(
+      `document.querySelector('input[name=shortcut-preset]:checked')?.value`) === 'zen',
+      await js(`document.querySelector('input[name=shortcut-preset]:checked')?.value`));
+  await next();
+  check('Next: import', await step() === 'import', await step());
+} else {
+  // Off macOS there is no shortcuts step.
+  check('Next: import (shortcuts are macOS only)', await step() === 'import', await step());
+}
 check('..."Start fresh" chosen', await js(`document.querySelector('input[name=import]:checked')?.value`) === 'none');
 await next();
 check('Next: search engine', await step() === 'search', await step());

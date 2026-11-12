@@ -37,6 +37,7 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace koan {
@@ -190,14 +191,14 @@ void KoanWelcome::Show() {
   web_view_ = browser_view_->AddChildView(std::move(web_view));
   browser_view_observation_.Observe(browser_view_);
   LayoutWebView();
-  // The keyboard goes to the page (its first button has the focus); Esc
-  // anywhere else in the window still leaves.
-  web_view_->RequestFocus();
-  contents->Focus();
+  // The keyboard goes to the page, and stays there while it shows
+  // (OnDidChangeFocus()); Esc anywhere else in the window still leaves.
+  FocusPage();
   focus_manager_ = browser_view_->GetFocusManager();
   if (focus_manager_) {
     focus_manager_->RegisterAccelerator(
         EscapeAccelerator(), ui::AcceleratorManager::kNormalPriority, this);
+    focus_observation_.Observe(focus_manager_);
   }
   // Seen once it is on screen (not merely decided on); a crash in the middle
   // doesn't bring it back.
@@ -263,6 +264,42 @@ void KoanWelcome::FocusBrowser() {
                                            ->GetActiveWebContents()) {
     contents->Focus();
   }
+}
+
+void KoanWelcome::FocusPage() {
+  web_view_->RequestFocus();
+  web_view_->GetWebContents()->Focus();
+}
+
+void KoanWelcome::OnDidChangeFocus(views::View* focused_before,
+                                   views::View* focused_now) {
+  if (!OtherPageHasFocus()) {
+    return;
+  }
+  // Not from inside the focus change. Only if another page still has it
+  // then (⌘T focuses the new tab's page, then the floating URL bar), and
+  // only in the active window (never taking the keyboard from another app).
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<KoanWelcome> welcome) {
+                       views::Widget* window =
+                           welcome ? welcome->browser_view_->GetWidget()
+                                   : nullptr;
+                       if (welcome && welcome->OtherPageHasFocus() && window &&
+                           window->IsActive() && !welcome->IsWindowClosing()) {
+                         welcome->FocusPage();
+                       }
+                     },
+                     weak_factory_.GetWeakPtr()));
+}
+
+bool KoanWelcome::OtherPageHasFocus() const {
+  // Only another page (a tab's, under this one): what shows over the page,
+  // such as the floating URL bar, keeps the keyboard it takes.
+  const views::View* focused =
+      focus_manager_ ? focus_manager_->GetFocusedView() : nullptr;
+  return web_view_ && focused != web_view_ &&
+         views::IsViewClass<views::WebView>(focused);
 }
 
 bool KoanWelcome::AcceleratorPressed(const ui::Accelerator& accelerator) {
@@ -358,6 +395,8 @@ void KoanWelcome::Close(bool remove_page) {
   SetPending(false);
   load_timer_.Stop();
   Observe(nullptr);
+  // (Before the page goes: its focus moves on.)
+  focus_observation_.Reset();
   if (focus_manager_) {
     focus_manager_->UnregisterAccelerator(EscapeAccelerator(), this);
     focus_manager_ = nullptr;
