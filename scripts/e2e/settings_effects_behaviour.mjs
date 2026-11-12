@@ -10,10 +10,12 @@
 // - Close tab on Back with no history: the sidebar's Back button is enabled
 //   in a child tab and closes it, back to its opener; off, Back is off;
 // - Switch to the most recently used tab on close: on, the tab shown last;
-//   off, the neighbour;
+//   off, the neighbour (tabs shown by clicking their sidebar rows, as a user
+//   does: a CDP bringToFront isn't a gesture, so upstream keeps the openers);
 // - Ctrl+Tab: ignore pending tabs, within Essentials or the Space's tabs
 //   (CDP keys, and on the Mac bench real keys too: Chrome reserves the
-//   cycling keys on macOS, so a real key takes another path than a CDP one),
+//   cycling keys on macOS, so a real key takes another path than a CDP one;
+//   with both off, Chrome's own Next Tab is reached by a real key only),
 //   and Chromium's recently used order with Koan's note under the rows;
 // - Close Tab Shortcut Behavior, every option, on an Essential (Cmd+W is the
 //   main menu's on macOS: real input only);
@@ -41,11 +43,11 @@ import path from 'node:path';
 import {
   ACCEL, ALT, CDP_PORT, CTRL, IS_MAC, UI_PORT, browserCall, check, click, connect, evalIn,
   finish, front, key, onPage, pages, readPref, setChromePref, setKoanPref, settingsCall,
-  showPane, sleep, tabMenuCommand, typeInto, viewTree, visiblePage, waitFor,
+  showPane, sleep, tabMenuCommand, viewTree, visiblePage, waitFor,
 } from './lib/koan.mjs';
 import {
   askTestHelper, clickThroughRoot, createSpace, fatalInLog, realInput, realInputWhyNot,
-  realKey, skipped, spaceButtons, startServer,
+  realKey, skipped, spaceButtons, startServer, tabViewTitled,
 } from './lib/mac.mjs';
 
 const VK = { W: 87, TAB: 9, PGDN: 34, LEFT: 37, RIGHT: 39 };
@@ -342,24 +344,41 @@ async function closeTab(page) {
   await sleep(1000);
   return true;
 }
+// Shows `page` as the user does, by clicking its row in the sidebar (a user
+// gesture: Chromium forgets the tabs' openers then, which a CDP bringToFront
+// doesn't, and an opener comes before the recently used tab); `front()` if
+// the row isn't on screen.
+async function show(page, title) {
+  const vs = await viewTree();
+  const row = tabViewTitled(vs, title);
+  if (row) {
+    await clickThroughRoot(vs, row);
+  } else {
+    await front(page);
+  }
+  await sleep(500);
+}
+// The window's tabs, for a failure's detail.
+const strip = async () => (await listTabs())?.map(
+    t => `${titleOf(t)}${t.active ? '*' : ''}${t.pinned ? '(pinned)' : ''}`).join(' ') ?? '';
 const a = await openTab('A');
 const b = await openTab('B');
 const c = await openTab('C');
 let d = await openTab('D');
-await front(b);
-await front(d);
+await show(b, 'B');
+await show(d, 'D');
 if (!await closeTab(d)) {
   skipped('Switch to the most recently used tab on close', 'test_helper is not loaded');
 } else {
   check('MRU on close on (default): closing D shows B, the tab shown before it',
-        await waitFor(() => visible(b), 4000), await activeTitle());
+        await waitFor(() => visible(b), 4000), await strip());
   await change('koan.tabs.select_recently_used_on_close', false);
   d = await openTab('D');
-  await front(b);
-  await front(d);
+  await show(b, 'B');
+  await show(d, 'D');
   await closeTab(d);
   check('...off: closing D shows its neighbour C, as in Chrome',
-        await waitFor(() => visible(c), 4000), await activeTitle());
+        await waitFor(() => visible(c), 4000), await strip());
   await change('koan.tabs.select_recently_used_on_close', true);
 }
 
@@ -398,8 +417,17 @@ if (!pinned || !hasHelper) {
   await change('koan.tabs.ctrl_tab_skip_pending', false);
   await change('koan.tabs.ctrl_tab_within_kind', false);
   check('X is unloaded', await unload());
-  let to = await cycle(c, VK.PGDN, CTRL, 'PageDown');
-  check('Ctrl+PgDn by default goes to the next tab, an unloaded one too', to === 'X', to);
+  // With both off Koan passes the key on to Chrome's own Next Tab, which on
+  // macOS runs from the key-equivalent path only: a real key there (a CDP
+  // key leaves the tab as it is, seen on the Mac).
+  let to;
+  if (!IS_MAC || realInput()) {
+    to = IS_MAC ? await cycle(c, 0, 0, 'PageDown', 'k') : await cycle(c, VK.PGDN, CTRL, 'PageDown');
+    check('Ctrl+PgDn by default goes to the next tab, an unloaded one too', to === 'X', to);
+  } else {
+    skipped('Ctrl+PgDn by default goes to the next tab (Chrome\'s Next Tab)',
+            `a CDP key doesn't reach Chrome's own Next Tab on macOS; ${realInputWhyNot()}`);
+  }
   check('X is unloaded again', await unload());
   await change('koan.tabs.ctrl_tab_skip_pending', true);
   to = await cycle(c, VK.PGDN, CTRL, 'PageDown');
@@ -461,7 +489,33 @@ async function typeInUrlBar(from, text) {
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
   if (!field) return false;
-  await typeInto(field, text, 13);
+  // Each key to the field found again: the suggestions change the view tree,
+  // so a node id from before names another view.
+  const toField = async event => {
+    const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+    await ui.send('DOM.enable');
+    const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+    const find = n => {
+      const attrs = n.attributes ?? [];
+      if (n.nodeName === 'View' && attrs[attrs.indexOf('class') + 1] === 'OmniboxViewViews') {
+        return n.nodeId;
+      }
+      for (const child of n.children ?? []) {
+        const found = find(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    const nodeId = find(doc);
+    if (nodeId) await ui.send('DOM.dispatchKeyEvent', { nodeId, event });
+    ui.close();
+  };
+  for (const ch of text) {
+    await toField({ type: 'keyPressed', keyCode: 0, code: 0, flags: 0,
+                    key: ch.codePointAt(0), isChar: true });
+  }
+  await sleep(1000);
+  await toField({ type: 'keyPressed', keyCode: 13, code: 0, flags: 0, key: 0, isChar: false });
   await sleep(1500);
   return true;
 }
@@ -543,18 +597,32 @@ const created = await createSpace(a, 'Two') &&
 if (!created) {
   check('Create a second Space', false, J(await spacesOfMain()));
 } else {
-  await openTab('S2');
+  // The new Space's tab, a page of its own.
+  await onPage(await visiblePage(), cdp => cdp.send('Page.navigate', { url: url('S2') }));
+  await sleep(1000);
   const { names } = await spacesOfMain();
   const [first, last] = [names[0], names.at(-1)];
+  // change() ends on the test's first tab, in the first Space: each step
+  // starts from the Space it names. Clicking the Space's button gets there
+  // whatever wrap-around says.
+  const goTo = async name => {
+    const vs = await viewTree();
+    const button = spaceButtons(vs).find(n => n.name === name);
+    if (button) await clickThroughRoot(vs, button.view);
+    await sleep(1200);
+    return (await spacesOfMain()).active === name;
+  };
   await change('koan.workspaces.wrap_around_navigation', true);
+  check('At the last Space', await goTo(last), (await spacesOfMain()).active);
   let at = await moveSpace(true);
   check('Wrap around on (default): Next Space from the last goes to the first', at === first, at);
   at = await moveSpace(false);
   check('...and Previous Space from the first to the last', at === last, at);
   await change('koan.workspaces.wrap_around_navigation', false);
+  await goTo(last);
   at = await moveSpace(true);
   check('Wrap around off: Next Space from the last stays there', at === last, at);
-  await moveSpace(false);
+  await goTo(first);
   at = await moveSpace(false);
   check('...and Previous Space from the first stays there', at === first, at);
   await change('koan.workspaces.wrap_around_navigation', true);
