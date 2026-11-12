@@ -175,7 +175,10 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
                        .Set("profile", source.profile)
                        .Set("icon", bundle_id.empty()
                                         ? std::string()
-                                        : importer::AppIconDataUrl(bundle_id)));
+                                        : importer::AppIconDataUrl(bundle_id))
+                       // Zen's and Arc's Spaces and pinned tabs (#363).
+                       .Set("spaces", (source.services_supported &
+                                       importer::kSpacesImportItem) != 0));
     import_sources_.push_back(source);
   }
   importer_list_.reset();
@@ -285,16 +288,25 @@ void KoanWelcomeHandler::HandleSetShortcuts(const base::ListValue& args) {
 }
 
 void KoanWelcomeHandler::HandleImport(const base::ListValue& args) {
-  // [whether a browser is picked, its index in the list]: Chromium's import
-  // dialog after the screen, where the user picks what to bring along, opens
-  // on that browser (as Zen's welcome opens its wizard on one browser).
+  // [whether a browser is picked, its index in the list, whether to bring
+  // its Spaces and pinned tabs]: Chromium's import dialog after the screen,
+  // where the user picks what to bring along, opens on that browser (as
+  // Zen's welcome opens its wizard on one browser), with its Spaces
+  // checkbox as the step's.
   if (args.empty() || !args[0].is_bool()) {
     return;
   }
   if (args.size() > 1 && args[1].is_int() && args[1].GetInt() >= 0 &&
       static_cast<size_t>(args[1].GetInt()) < import_sources_.size() &&
       GetHost(web_ui())) {
-    importer::SetPreferredSource(import_sources_[args[1].GetInt()]);
+    const user_data_importer::SourceProfile& source =
+        import_sources_[static_cast<size_t>(args[1].GetInt())];
+    importer::SetPreferredSource(source);
+    if (args.size() > 2 && args[2].is_bool() &&
+        (source.services_supported & importer::kSpacesImportItem)) {
+      profile_->GetPrefs()->SetBoolean(prefs::kImportDialogSpaces,
+                                       args[2].GetBool());
+    }
   }
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().import) {

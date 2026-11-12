@@ -82,6 +82,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
   registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
+  registry->RegisterBooleanPref(kImportDialogSpaces, true);
   registry->RegisterIntegerPref(kResumedCrashes, 0);
   registry->RegisterTimePref(kLastResumedTime, base::Time());
   registry->RegisterDictionaryPref(kAgentSavedContainers);

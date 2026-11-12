@@ -22,6 +22,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "koan/browser/importer/koan_import_sources.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/color/koan_tokens.h"
@@ -263,12 +264,27 @@ void ExtendSettingsUI(content::WebUI& web_ui,
   // (zen-preferences.css).
   source.AddBoolean("koanShowHomeButtonRow", !profile->GetPrefs()->GetBoolean(
                                                  prefs::kUrlBarReplaceNewTab));
+  // The import dialog's Koan checkbox (Zen's migration-zen-spaces-option-
+  // label).
+  source.AddString("koanImportSpaces", "Spaces and pinned tabs");
   web_ui.AddMessageHandler(std::make_unique<KoanSettingsHandler>(
       *profile->GetPrefs(), *g_browser_process->local_state()));
 #if BUILDFLAG(IS_POSIX)
   web_ui.AddMessageHandler(
       std::make_unique<KoanAgentContainersHandler>(*profile));
 #endif
+}
+
+void AddImportDialogItems(uint16_t services_supported,
+                          base::DictValue& browser_profile) {
+  browser_profile.Set("koanSpaces",
+                      (services_supported & importer::kSpacesImportItem) != 0);
+}
+
+uint16_t GetImportDialogItems(const base::DictValue& types) {
+  return types.FindBool(prefs::kImportDialogSpaces).value_or(false)
+             ? importer::kSpacesImportItem
+             : 0;
 }
 
 }  // namespace koan::settings

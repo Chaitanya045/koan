@@ -103,6 +103,10 @@ bool IsAwayFromPinnedUrl(const tabs::TabInterface* tab);
 bool ShowsInPinnedSection(const tabs::TabInterface* tab);
 // Whether `tab` isn't loaded: unloaded, or restored and not shown yet.
 bool IsPendingTab(const tabs::TabInterface* tab);
+// The URL `contents` shows: its last committed entry's, which a tab restored
+// or imported unloaded has before it loads (WebContents::
+// GetLastCommittedURL() is its frame's, empty until then).
+GURL CurrentTabUrl(content::WebContents* contents);
 // Whether the close button of `tab` runs the close behaviour rather than
 // closing it: a loaded tab pinned to its Space, unless the behaviour is to
 // close. Zen shows its unload button ("Unload and switch to tab") there.

@@ -8,18 +8,17 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
-#include "base/memory/raw_ref.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/string_view_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "crypto/aes_cbc.h"
+#include "koan/browser/importer/koan_imported_spaces.h"
 #include "sql/database.h"
 #include "sql/statement.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
@@ -43,11 +42,10 @@ constexpr std::string_view kEncryptionPrefix = "v10";
 constexpr std::string_view kSalt = "saltysalt";
 constexpr uint32_t kIterations = 1003;
 
-// Folders deeper than this are cut (a cycle in Arc's sidebar, a hostile
-// file).
+// Bookmark folders deeper than this are cut (a hostile file).
 constexpr int kMaxDepth = 32;
 
-// The pages and pinned tabs worth importing (as Zen's Arc import).
+// The pages worth importing (as Zen's Arc import).
 bool IsImportableUrl(const GURL& url) {
   return url.is_valid() &&
          (url.SchemeIsHTTPOrHTTPS() || url.SchemeIs(url::kFtpScheme) ||
@@ -121,120 +119,26 @@ void AddBookmarkNode(const base::DictValue& node,
   path.pop_back();
 }
 
-// Arc stores Swift dictionaries as flat lists: key, value, key, value.
-template <typename Fn>
-void ForEachPair(const base::ListValue* list, Fn fn) {
-  if (!list) {
-    return;
-  }
-  for (size_t i = 0; i + 1 < list->size(); i += 2) {
-    fn((*list)[i], (*list)[i + 1]);
+// Arc's pinned tabs and folders (koan_imported_spaces.h) as bookmarks in
+// `path`, a folder for each of Arc's.
+void AddArcItems(const std::vector<ImportedItem>& items,
+                 std::vector<std::u16string>& path,
+                 std::vector<ImportedBookmarkEntry>& entries) {
+  for (const ImportedItem& item : items) {
+    if (item.is_folder) {
+      path.push_back(item.title.empty() ? u"Folder" : item.title);
+      AddArcItems(item.children, path, entries);
+      path.pop_back();
+      continue;
+    }
+    ImportedBookmarkEntry entry;
+    entry.url = item.url;
+    entry.path = path;
+    entry.title = item.title;
+    entry.creation_time = base::Time::Now();
+    entries.push_back(std::move(entry));
   }
 }
-
-// The profile folder an Arc profile marker names: {"default": {}} for the
-// main one, {"custom": {"_0": {"directoryBasename": ...}}} for the others.
-std::string ArcProfileOf(const base::Value& marker) {
-  if (const base::DictValue* dict = marker.GetIfDict()) {
-    if (const std::string* dir =
-            dict->FindStringByDottedPath("custom._0.directoryBasename");
-        dir && !dir->empty()) {
-      return *dir;
-    }
-  }
-  return "Default";
-}
-
-class ArcSidebarReader {
- public:
-  ArcSidebarReader(const base::DictValue& container,
-                   std::vector<ImportedBookmarkEntry>& entries)
-      : entries_(entries) {
-    ForEachPair(container.FindList("items"),
-                [this](const base::Value&, const base::Value& item) {
-                  if (const base::DictValue* dict = item.GetIfDict()) {
-                    if (const std::string* id = dict->FindString("id")) {
-                      items_.emplace(*id, dict);
-                      order_.push_back(dict);
-                    }
-                  }
-                });
-  }
-
-  // The tabs and folders under item `id`, as bookmarks in `path`.
-  void Add(const std::string& id,
-           std::vector<std::u16string>& path,
-           int depth) {
-    if (depth > kMaxDepth) {
-      return;
-    }
-    for (const base::DictValue* item : ChildrenOf(id)) {
-      const base::DictValue* data = item->FindDict("data");
-      const std::string* item_id = item->FindString("id");
-      const std::string* title = item->FindString("title");
-      if (!data || !item_id) {
-        continue;
-      }
-      if (const base::DictValue* tab = data->FindDict("tab")) {
-        const std::string* url = tab->FindString("savedURL");
-        const std::string* saved_title = tab->FindString("savedTitle");
-        ImportedBookmarkEntry entry;
-        entry.url = url ? GURL(*url) : GURL();
-        if (!IsImportableUrl(entry.url)) {
-          continue;
-        }
-        entry.path = path;
-        entry.title = base::UTF8ToUTF16(saved_title && !saved_title->empty()
-                                            ? *saved_title
-                                        : title ? *title
-                                                : std::string());
-        entry.creation_time = base::Time::Now();
-        entries_->push_back(std::move(entry));
-      } else if (data->FindDict("list")) {
-        // A folder; an empty one is left out.
-        path.push_back(title && !title->empty() ? base::UTF8ToUTF16(*title)
-                                                : u"Folder");
-        Add(*item_id, path, depth + 1);
-        path.pop_back();
-      } else if (data->FindDict("splitView")) {
-        // A split view's tabs, side by side in the folder.
-        Add(*item_id, path, depth + 1);
-      }
-    }
-  }
-
- private:
-  // An item's children in its childrenIds order, else the items whose
-  // parentID it is, in the file's order.
-  std::vector<const base::DictValue*> ChildrenOf(const std::string& id) {
-    std::vector<const base::DictValue*> children;
-    if (const auto it = items_.find(id); it != items_.end()) {
-      if (const base::ListValue* ids = it->second->FindList("childrenIds")) {
-        for (const base::Value& child_id : *ids) {
-          if (const std::string* child = child_id.GetIfString()) {
-            if (const auto child_it = items_.find(*child);
-                child_it != items_.end()) {
-              children.push_back(child_it->second);
-            }
-          }
-        }
-      }
-    }
-    if (children.empty()) {
-      for (const base::DictValue* item : order_) {
-        if (const std::string* parent = item->FindString("parentID");
-            parent && *parent == id) {
-          children.push_back(item);
-        }
-      }
-    }
-    return children;
-  }
-
-  const raw_ref<std::vector<ImportedBookmarkEntry>> entries_;
-  base::flat_map<std::string, const base::DictValue*> items_;
-  std::vector<const base::DictValue*> order_;
-};
 
 }  // namespace
 
@@ -309,70 +213,14 @@ std::vector<ImportedBookmarkEntry> ParseBookmarksJson(std::string_view json) {
 std::vector<ImportedBookmarkEntry> ParseArcSidebar(
     std::string_view json,
     std::string_view profile_dir_name) {
+  const ImportedSpaces plan = ParseArcSpaces(json, profile_dir_name);
   std::vector<ImportedBookmarkEntry> entries;
-  std::optional<base::DictValue> file =
-      base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
-  const base::ListValue* containers =
-      file ? file->FindListByDottedPath("sidebar.containers") : nullptr;
-  // The window's sidebar is the "global" container (the others are Little
-  // Arc windows' unpinned tabs).
-  ForEachPair(containers, [&](const base::Value& kind,
-                              const base::Value& value) {
-    const base::DictValue* container = value.GetIfDict();
-    if (!kind.is_dict() || !kind.GetDict().Find("global") || !container) {
-      return;
-    }
-    ArcSidebarReader reader(*container, entries);
-    // The Favorites (top apps, Zen's Essentials).
-    ForEachPair(
-        container->FindList("topAppsContainerIDs"),
-        [&](const base::Value& marker, const base::Value& id) {
-          if (id.is_string() && ArcProfileOf(marker) == profile_dir_name) {
-            std::vector<std::u16string> path = {u"Favorites"};
-            reader.Add(id.GetString(), path, 0);
-          }
-        });
-    // Each Space's pinned tabs, in a folder named after it.
-    int index = 0;
-    ForEachPair(container->FindList("spaces"), [&](const base::Value&,
-                                                   const base::Value& value) {
-      const base::DictValue* space = value.GetIfDict();
-      if (!space) {
-        return;
-      }
-      ++index;
-      const base::Value* profile = space->Find("profile");
-      if ((profile ? ArcProfileOf(*profile) : "Default") != profile_dir_name) {
-        return;
-      }
-      std::optional<std::string> pinned;
-      ForEachPair(space->FindList("containerIDs"),
-                  [&](const base::Value& key, const base::Value& id) {
-                    if (!pinned && key.is_string() &&
-                        key.GetString() == "pinned" && id.is_string()) {
-                      pinned = id.GetString();
-                    }
-                  });
-      if (!pinned) {
-        return;
-      }
-      const std::string* id = space->FindString("id");
-      const std::string* title = space->FindString("title");
-      std::u16string name;
-      if (title) {
-        name = base::UTF8ToUTF16(
-            base::TrimWhitespaceASCII(*title, base::TRIM_ALL));
-      }
-      if (name.empty()) {
-        name = id && *id == "thebrowser.company."
-                            "defaultPersonalSpaceID"
-                   ? u"Personal"
-                   : u"Space " + base::NumberToString16(index);
-      }
-      std::vector<std::u16string> path = {name};
-      reader.Add(*pinned, path, 0);
-    });
-  });
+  std::vector<std::u16string> path = {u"Favorites"};
+  AddArcItems(plan.essentials, path, entries);
+  for (const ImportedSpace& space : plan.spaces) {
+    path = {space.name};
+    AddArcItems(space.items, path, entries);
+  }
   return entries;
 }
 

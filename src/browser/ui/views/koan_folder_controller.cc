@@ -1614,8 +1614,9 @@ base::ListValue KoanFolderController::StoredFolders() const {
     base::ListValue tab_list;
     for (tabs::TabInterface* tab : GetTabs(folder.id, /*recursive=*/false)) {
       content::WebContents* contents = tab->GetContents();
+      // (Also while it isn't loaded: restored, unloaded or imported.)
       tab_list.Append(base::DictValue()
-                          .Set("url", contents->GetLastCommittedURL().spec())
+                          .Set("url", CurrentTabUrl(contents).spec())
                           .Set("title", contents->GetTitle())
                           .Set("pinned", GetTabSessionData(
                                              contents, kPinnedTabSessionKey)));

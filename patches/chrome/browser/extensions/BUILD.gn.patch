@@ -1,11 +1,12 @@
 diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
-index aa70420081ffc57b015f04839174f75b69e9ca16..5ca3e8142aedae4c6a8dbe88205547df97bee409 100644
+index aa70420081ffc57b015f04839174f75b69e9ca16..849bca1416b5e190cdf7ce6527ea5792321e2320 100644
 --- a/chrome/browser/extensions/BUILD.gn
 +++ b/chrome/browser/extensions/BUILD.gn
-@@ -643,6 +643,8 @@ source_set("extensions") {
+@@ -643,6 +643,9 @@ source_set("extensions") {
      "//extensions/common",
      "//extensions/strings",
      "//google_apis/common:request_util",
++    "//koan/browser:prefs",
 +    "//koan/browser/containers:partition",
 +    "//koan/browser/ui/views",
      "//net",

@@ -477,6 +477,10 @@ bool IsPendingTab(const tabs::TabInterface* tab) {
   return tab && IsPending(tab->GetContents());
 }
 
+GURL CurrentTabUrl(content::WebContents* contents) {
+  return CurrentUrl(contents);
+}
+
 bool CloseButtonUnloads(const tabs::TabInterface* tab) {
   // Like HandleCloseRequest(): an unloaded pinned tab closes.
   if (!features::IsPinnedTabsEnabled() || !IsPinnedInSpace(tab) ||

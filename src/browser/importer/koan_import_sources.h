@@ -32,6 +32,13 @@ namespace koan::importer {
 inline constexpr auto kChromiumImporterType =
     static_cast<user_data_importer::ImporterType>(7);
 
+// Koan's "Spaces and pinned tabs" item (#363; Zen's ZEN_SPACES migration
+// resource): a bit of SourceProfile::services_supported and of the items an
+// import asks for, past upstream's ImportItem bits. Never an ImportItem (the
+// enum's range ends at ALL) and never sent to the utility process
+// (koan_chromium_profile_importer.h takes it out).
+inline constexpr uint16_t kSpacesImportItem = 1 << 7;
+
 enum class Engine {
   // A Firefox profile layout (profiles.ini, places.sqlite).
   kGecko,
@@ -56,6 +63,9 @@ struct KnownBrowser {
   // Arc: its Spaces and pinned tabs are in StorableSidebar.json, beside
   // "User Data".
   bool arc_sidebar = false;
+  // Zen: its Spaces and pinned tabs are in the profile's session file
+  // (koan_imported_spaces.h).
+  bool zen_sessions = false;
 };
 
 // Every browser Koan looks for, in the order listed when none was used.
@@ -101,7 +111,9 @@ std::vector<ProfileDir> ParseLocalState(std::string_view json,
 // The sources found under `root`: one per profile with data (Gecko: a
 // places.sqlite; Chromium: Bookmarks or History), each browser's in its
 // profile order, the browsers most recently used first. A browser's only
-// profile has no name (as Chromium lists Firefox's).
+// profile has no name (as Chromium lists Firefox's). Zen's profiles with a
+// session file and Arc's with a StorableSidebar.json offer
+// kSpacesImportItem.
 std::vector<user_data_importer::SourceProfile> DetectSourceProfiles(
     const base::FilePath& root,
     const std::string& locale);

@@ -363,6 +363,12 @@ inline constexpr char kNewTabPageChromium[] = "chromium";
 // Whether the welcome screen was shown (zen.welcome-screen.seen).
 inline constexpr char kWelcomeScreenSeen[] = "koan.welcome_screen.seen";
 
+// Settings > Import's "Spaces and pinned tabs" checkbox (#363), as Chromium's
+// import_dialog_* prefs keep its other checkboxes: on by default, set by the
+// welcome's import step. Named in the hook patch to
+// import_data_dialog.html.ts: keep the name there.
+inline constexpr char kImportDialogSpaces[] = "koan.import_dialog.spaces";
+
 // How many crashes in a row were restored silently (koan_crash_restore.h):
 // 0 after a clean launch; and when the last silent restore was a while ago.
 inline constexpr char kResumedCrashes[] = "koan.session.resumed_crashes";

@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 98d7b6df1cd57d393e0d146f62ab58580edffd90..2ac2f9e56ecfee3fa71d6a69c0418cb732b3b40a 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -82,6 +82,7 @@
+ #include "extensions/browser/extension_system.h"
+ #include "extensions/browser/management_policy.h"
+ #include "extensions/common/extension.h"
++#include "koan/browser/koan_prefs.h"
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "ash/constants/ash_login_pref_names.h"
+@@ -1258,6 +1259,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kImportDialogSearchEngine] =
+       settings_api::PrefType::kBoolean;
++  // Koan: Spaces and pinned tabs (koan_settings_ui.h).
++  (*s_allowlist)[koan::prefs::kImportDialogSpaces] =
++      settings_api::PrefType::kBoolean;
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
+   // Supervised Users.  This setting is queried in our Tast tests (b/241943380).

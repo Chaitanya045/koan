@@ -5,6 +5,23 @@
 # Import from Zen, Arc, Chrome and the other browsers Koan users come from
 # (#348), on top of Chromium's importer (koan_import_sources.h).
 
+# Another browser's Spaces, pinned tabs, folders and Essentials as an import
+# plan: Arc's StorableSidebar.json, Zen's zen-sessions.jsonlz4 (#363). Pure,
+# unit-tested in //koan/test:koan_unittests.
+source_set("spaces") {
+  sources = [
+    "koan_imported_spaces.cc",
+    "koan_imported_spaces.h",
+    "koan_lz4.cc",
+    "koan_lz4.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+  deps = [ "//koan/browser:space_title" ]
+}
+
 # Which browsers and profiles there are (pure, unit-tested in
 # //koan/test:koan_unittests).
 source_set("sources") {
@@ -17,6 +34,7 @@ source_set("sources") {
     "//components/user_data_importer/common",
   ]
   deps = [
+    ":spaces",
     "//chrome/common:ini_parser",
     "//koan/browser:features",
   ]
@@ -33,6 +51,7 @@ source_set("reader") {
     "//components/user_data_importer/common",
   ]
   deps = [
+    ":spaces",
     "//crypto",
     "//sql",
     "//third_party/boringssl",
@@ -41,9 +60,10 @@ source_set("reader") {
 }
 
 # The hooks' side: Koan's sources in Chromium's ImporterList
-# (importer_list.cc), the Chromium-format import
+# (importer_list.cc), the Chromium-format import and the Spaces
 # (external_process_importer_host.cc), and the keychain and app icons on
-# macOS. Linked through //chrome/browser/importer:impl.
+# macOS. Linked through //chrome/browser/importer:impl; the Spaces are made
+# by //koan/browser/ui/views:impl (koan_space_import.h).
 source_set("importer") {
   sources = [
     "koan_chromium_profile_importer.cc",
@@ -57,9 +77,12 @@ source_set("importer") {
   ]
   deps = [
     ":reader",
+    ":spaces",
     "//chrome/browser/importer",
+    "//chrome/browser/profiles:profile",
     "//chrome/common/importer",
     "//koan/browser:features",
+    "//koan/browser/ui/views",
   ]
   if (is_mac) {
     sources += [ "koan_import_platform_mac.mm" ]

@@ -156,6 +156,15 @@ TEST(KoanImportSourcesTest, Detect) {
                 (BUILDFLAG(IS_MAC) ? user_data_importer::PASSWORDS : 0),
             sources[2].services_supported);
 
+  // Spaces and pinned tabs: Arc's sidebar is there, Zen has no session file
+  // yet, Chrome has no Spaces.
+  EXPECT_TRUE(sources[0].services_supported & kSpacesImportItem);
+  EXPECT_FALSE(sources[1].services_supported & kSpacesImportItem);
+  EXPECT_FALSE(sources[2].services_supported & kSpacesImportItem);
+  Write(zen.AppendASCII("zen-sessions.jsonlz4"), "");
+  EXPECT_TRUE(DetectSourceProfiles(root, "en-US")[1].services_supported &
+              kSpacesImportItem);
+
   const KnownBrowser* browser = FindBrowser(root, sources[2].source_path);
   ASSERT_TRUE(browser);
   EXPECT_EQ("Chrome Safe Storage", browser->keychain_service);

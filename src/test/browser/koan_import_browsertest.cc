@@ -6,11 +6,15 @@
 // importer: Koan's sources in its ImporterList, then an import through
 // ExternalProcessImporterHost and ProfileWriter, as the import dialog runs
 // it. Zen goes through Chromium's Firefox importer (the utility process),
-// Arc and Chrome through Koan's reader in the browser process. Fixture
+// Arc and Chrome through Koan's reader in the browser process; Arc's and
+// Zen's Spaces and pinned tabs (#363) through Koan's Spaces. Fixture
 // profiles only, under --koan-import-test-root: never the user's own.
 
 #include <algorithm>
+#include <optional>
+#include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/command_line.h"
@@ -20,7 +24,9 @@
 #include "base/functional/callback.h"
 #include "base/run_loop.h"
 #include "base/strings/cstring_view.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/run_until.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -31,6 +37,8 @@
 #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -38,12 +46,22 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/password_store_results_observer.h"
+#include "components/prefs/pref_service.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/user_data_importer/common/importer_data_types.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "koan/browser/importer/koan_import_sources.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_switches.h"
+#include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
+#include "koan/test/browser/koan_browser_test_utils.h"
 #include "sql/database.h"
 #include "sql/statement.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -58,6 +76,14 @@ constexpr char kChromeHistory[] = "https://chrome-history.example/";
 constexpr char kChromeBookmark[] = "https://chrome-bookmark.example/";
 constexpr char kChromeLogin[] = "https://chrome-login.example/";
 constexpr char kArcPinned[] = "https://arc-pinned.example/";
+constexpr char kArcFavorite[] = "https://arc-favorite.example/";
+constexpr char kArcFolderTab[] = "https://arc-folder.example/";
+constexpr char kArcWork[] = "https://arc-work.example/";
+constexpr char kZenEssential[] = "https://zen-essential.example/";
+constexpr char kZenPinned[] = "https://zen-pinned.example/";
+constexpr char kZenFolderTab[] = "https://zen-folder.example/";
+constexpr char kZenPlay[] = "https://zen-play.example/";
+constexpr char kZenUnpinned[] = "https://zen-unpinned.example/";
 // "hunter2" under the key of the Safe Storage secret "peanuts" (as in
 // koan_chromium_profile_reader_unittest.cc).
 constexpr char kHunter2[] = "7218b8ec8774bcaad0e8305f7a6cf965";
@@ -87,6 +113,25 @@ void Write(const base::FilePath& file, std::string_view contents) {
 
 void Exec(sql::Database& db, base::cstring_view statement) {
   ASSERT_TRUE(db.Execute(statement)) << statement.c_str();
+}
+
+// `json` as Firefox's mozLz4 (.jsonlz4): the magic, the size and an LZ4
+// block of literals only, which any LZ4 decoder reads.
+std::string MozLz4(std::string_view json) {
+  std::string file("mozLz40\0", 8);
+  const uint32_t size = static_cast<uint32_t>(json.size());
+  for (int shift = 0; shift < 32; shift += 8) {
+    file.push_back(static_cast<char>((size >> shift) & 0xff));
+  }
+  // The token: 15 literals or more, the rest in bytes of 255 and one less.
+  file.push_back(static_cast<char>(0xf0));
+  size_t rest = json.size() - 15;
+  for (; rest >= 255; rest -= 255) {
+    file.push_back(static_cast<char>(0xff));
+  }
+  file.push_back(static_cast<char>(rest));
+  file += json;
+  return file;
 }
 
 // Microseconds since 1970 (Firefox) and since 1601 (Chromium), now.
@@ -185,6 +230,38 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
       bookmarks.BindString(i, now);
     }
     ASSERT_TRUE(bookmarks.Run());
+    // Its Spaces, as Zen 1.24's session file has them (ZenSessionManager):
+    // two Spaces, an Essential, a pinned tab with its own label, a folder
+    // with a tab, and an unpinned tab.
+    Write(profile.AppendASCII("zen-sessions.jsonlz4"),
+          MozLz4(base::StrCat({R"({"spaces": [
+            {"uuid": "{z1}", "name": "Zen Work", "icon": "\ud83e\uddd8",
+             "theme": {"type": "gradient", "gradientColors": [{"c": [200, 100,
+               50], "isCustom": false, "algorithm": "", "isPrimary": true,
+               "lightness": 50, "type": "explicit-lightness"}],
+               "opacity": 0.5, "texture": 0}},
+            {"uuid": "{z2}", "name": "Zen Play"}],
+          "folders": [{"id": "zf", "name": "Zen folder", "collapsed": false,
+                       "parentId": null, "workspaceId": "{z1}"}],
+          "tabs": [
+            {"pinned": true, "zenEssential": true, "zenWorkspace": "{z1}",
+             "entries": [{"url": ")",
+                               kZenEssential, R"(",
+                          "title": "Zen essential"}], "index": 1},
+            {"pinned": true, "zenWorkspace": "{z1}", "zenStaticLabel": "Label",
+             "entries": [{"url": ")",
+                               kZenPinned, R"(", "title": "Zen pinned"}],
+             "index": 1},
+            {"pinned": true, "zenWorkspace": "{z1}", "groupId": "zf",
+             "entries": [{"url": ")",
+                               kZenFolderTab, R"(",
+                          "title": "Zen folder tab"}], "index": 1},
+            {"pinned": true, "zenWorkspace": "{z2}",
+             "entries": [{"url": ")",
+                               kZenPlay, R"("}], "index": 1},
+            {"pinned": false, "zenWorkspace": "{z1}",
+             "entries": [{"url": ")",
+                               kZenUnpinned, R"("}], "index": 1}]})"})));
   }
 
   // A Chrome profile: Local State, Bookmarks, History and Login Data, its
@@ -242,20 +319,41 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
           "peanuts\n");
   }
 
-  // Arc: a profile with a History, its pinned tabs in StorableSidebar.json.
+  // Arc: a profile with a History; its Spaces, pinned tabs (one in a
+  // folder) and Favorites in StorableSidebar.json.
   void WriteArc() {
     const base::FilePath arc = root_.GetPath().AppendASCII("Arc");
     Write(arc.AppendASCII("User Data/Default/Bookmarks"),
           R"({"roots": {}, "version": 1})");
     Write(arc.AppendASCII("StorableSidebar.json"),
-          std::string(R"({"sidebar": {"containers": [{"global": {}}, {
-            "spaces": ["s", {"id": "s", "title": "Reading",
-                             "profile": {"default": true},
-                             "containerIDs": ["pinned", "p"]}],
-            "items": ["p", {"id": "p", "childrenIds": ["t"]},
-                      "t", {"id": "t", "title": "Pinned", "data": {"tab": {
-                            "savedURL": ")") +
-              kArcPinned + R"("}}}]}]}})");
+          base::StrCat({R"({"sidebar": {"containers": [{"global": {}}, {
+            "topAppsContainerIDs": [{"default": true}, "top"],
+            "spaces": [
+              "s", {"id": "s", "title": "Reading",
+                    "profile": {"default": true},
+                    "containerIDs": ["pinned", "p"],
+                    "customInfo": {"iconType": {"emoji_v2": "\ud83d\udcda"}}},
+              "s2", {"id": "s2", "title": "Work",
+                     "containerIDs": ["pinned", "p2"]}],
+            "items": [
+              "top", {"id": "top", "childrenIds": ["fav"]},
+              "fav", {"id": "fav", "title": "Favorite", "data": {"tab": {
+                      "savedURL": ")",
+                        kArcFavorite, R"("}}},
+              "p", {"id": "p", "childrenIds": ["t", "f"]},
+              "t", {"id": "t", "title": "Pinned", "data": {"tab": {
+                    "savedURL": ")",
+                        kArcPinned, R"("}}},
+              "f", {"id": "f", "title": "Arc folder", "data": {"list": {}},
+                    "childrenIds": ["ft"]},
+              "ft", {"id": "ft", "data": {"tab": {
+                     "savedURL": ")",
+                        kArcFolderTab, R"(",
+                     "savedTitle": "In a folder"}}},
+              "p2", {"id": "p2", "childrenIds": ["w"]},
+              "w", {"id": "w", "data": {"tab": {
+                    "savedURL": ")",
+                        kArcWork, R"("}}}]}]}})"}));
   }
 
   std::vector<SourceProfile> Detect() {
@@ -302,6 +400,62 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
   bool IsBookmarked(const char* url) {
     return BookmarkModelFactory::GetForBrowserContext(browser()->GetProfile())
         ->IsBookmarked(GURL(url));
+  }
+
+  KoanBrowserViewController* Controller() {
+    return KoanBrowserViewController::From(
+        BrowserView::GetBrowserViewForBrowser(browser()));
+  }
+
+  // The window's tab pinned on `url` (an Essential or a Space's pinned
+  // tab), or null.
+  tabs::TabInterface* PinnedTab(const char* url) {
+    TabStripModel* model = browser()->GetTabStripModel();
+    for (int i = 0; i < model->count(); ++i) {
+      tabs::TabInterface* tab = model->GetTabAtIndex(i);
+      if (const KoanTabState* state = GetTabState(tab);
+          state && state->pinned_url == GURL(url)) {
+        return tab;
+      }
+    }
+    return nullptr;
+  }
+
+  std::optional<tab_groups::TabGroupId> SpaceOf(tabs::TabInterface* tab) {
+    return tab ? tab->GetGroup() : std::nullopt;
+  }
+
+  // Whether `url` is a tab of the window, pinned or not.
+  bool HasTab(const char* url) {
+    TabStripModel* model = browser()->GetTabStripModel();
+    for (int i = 0; i < model->count(); ++i) {
+      if (model->GetWebContentsAt(i)->GetVisibleURL() == GURL(url)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // The URLs of the tabs in the entries of the list pref `pref`, each
+  // entry's under `key` (koan.workspaces.list's "pinned", koan.folders.list's
+  // "tabs").
+  std::set<std::string> StoredUrls(const char* pref, const char* key) {
+    std::set<std::string> urls;
+    for (const base::Value& entry :
+         browser()->GetProfile()->GetPrefs()->GetList(pref)) {
+      const base::ListValue* tabs =
+          entry.is_dict() ? entry.GetDict().FindList(key) : nullptr;
+      if (!tabs) {
+        continue;
+      }
+      for (const base::Value& tab : *tabs) {
+        if (const std::string* url =
+                tab.is_dict() ? tab.GetDict().FindString("url") : nullptr) {
+          urls.insert(*url);
+        }
+      }
+    }
+    return urls;
   }
 
   bool InHistory(const char* url) {
@@ -354,6 +508,9 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsZen) {
   EXPECT_TRUE(std::ranges::contains(ended, user_data_importer::FAVORITES));
   EXPECT_TRUE(IsBookmarked(kZenBookmark));
   EXPECT_TRUE(InHistory(kZenHistory));
+  // Without "Spaces and pinned tabs", no Space changes.
+  EXPECT_THAT(SpaceNames(browser()), testing::ElementsAre(u"Space"));
+  EXPECT_FALSE(PinnedTab(kZenPinned));
 }
 
 // Chrome: bookmarks, history and the saved password (its key from the test
@@ -385,11 +542,141 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsChrome) {
   EXPECT_EQ(u"ana", logins[0].username_value);
 }
 
-// Arc: its pinned tabs arrive as bookmarks, in a folder named after the
-// Space.
+// Arc without "Spaces and pinned tabs": its pinned tabs arrive as
+// bookmarks, in a folder named after the Space, and no Space changes.
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsArcPinnedTabs) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
   Import(Find(u"Arc"), user_data_importer::FAVORITES);
   EXPECT_TRUE(IsBookmarked(kArcPinned));
+  EXPECT_TRUE(IsBookmarked(kArcFavorite));
+  EXPECT_THAT(SpaceNames(browser()), testing::ElementsAre(u"Space"));
+  EXPECT_FALSE(PinnedTab(kArcPinned));
+}
+
+// Zen and Arc offer their Spaces (a session file, a sidebar); Chrome doesn't.
+IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, OffersSpaces) {
+  EXPECT_TRUE(Find(u"Zen").services_supported & importer::kSpacesImportItem);
+  EXPECT_TRUE(Find(u"Arc").services_supported & importer::kSpacesImportItem);
+  EXPECT_FALSE(Find(u"Google Chrome").services_supported &
+               importer::kSpacesImportItem);
+}
+
+// Arc's Spaces as Koan's: the first takes the window's untouched Space, the
+// others come after it; their pinned tabs and folders, unloaded at their
+// pinned URL; the Favorites as Essentials. The window stays on its tab.
+IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsArcSpaces) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  tabs::TabInterface* active = browser()->GetTabStripModel()->GetActiveTab();
+  // Reported as the bookmarks' item: the import dialog counts an import that
+  // ended no item as failed.
+  EXPECT_EQ(
+      std::vector<user_data_importer::ImportItem>{
+          user_data_importer::FAVORITES},
+      Import(Find(u"Arc"), importer::kSpacesImportItem));
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  EXPECT_THAT(SpaceNames(browser()), testing::ElementsAre(u"Reading", u"Work"));
+  const std::vector<KoanWorkspaceController::SpaceInfo> infos =
+      spaces->GetSpaces();
+  EXPECT_EQ(u"\U0001F4DA", infos[0].icon);
+  EXPECT_TRUE(infos[0].active);
+  EXPECT_EQ(active, browser()->GetTabStripModel()->GetActiveTab());
+
+  tabs::TabInterface* favorite = PinnedTab(kArcFavorite);
+  ASSERT_TRUE(favorite);
+  EXPECT_TRUE(favorite->IsPinned());
+  EXPECT_TRUE(IsPendingTab(favorite));
+
+  tabs::TabInterface* pinned = PinnedTab(kArcPinned);
+  ASSERT_TRUE(pinned);
+  EXPECT_TRUE(IsPinnedInSpace(pinned));
+  EXPECT_EQ(infos[0].id, SpaceOf(pinned));
+  EXPECT_EQ(u"Pinned", pinned->GetContents()->GetTitle());
+  EXPECT_TRUE(IsPendingTab(pinned));
+  EXPECT_EQ(infos[1].id, SpaceOf(PinnedTab(kArcWork)));
+
+  KoanFolderController* folders = Controller()->folders();
+  ASSERT_TRUE(folders && folders->IsEnabled());
+  const std::vector<KoanFolderController::Entry> entries =
+      folders->GetFolders(infos[0].id);
+  ASSERT_EQ(1u, entries.size());
+  const KoanFolder* folder = folders->GetFolder(entries[0].id);
+  ASSERT_TRUE(folder);
+  EXPECT_EQ(u"Arc folder", folder->name);
+  // Zen's import shows Arc's folders collapsed.
+  EXPECT_TRUE(folder->collapsed);
+  tabs::TabInterface* in_folder = PinnedTab(kArcFolderTab);
+  ASSERT_TRUE(in_folder);
+  EXPECT_EQ(entries[0].id, folders->GetFolderOf(in_folder));
+  EXPECT_EQ(u"In a folder", in_folder->GetContents()->GetTitle());
+
+  // Not as bookmarks too.
+  EXPECT_FALSE(IsBookmarked(kArcPinned));
+
+  // Kept for a start that restores no session, though they never loaded:
+  // the Space's pinned tab with its Space, the folder's with its folder.
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return StoredUrls(prefs::kWorkspaceList, "pinned").contains(kArcPinned) &&
+           StoredUrls(prefs::kFolderList, "tabs").contains(kArcFolderTab);
+  }));
+}
+
+// Zen's Spaces alone (no utility process): its Spaces, Essentials, pinned
+// tabs with their labels and folders; never its unpinned tabs.
+IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsZenSpaces) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  EXPECT_EQ(
+      std::vector<user_data_importer::ImportItem>{
+          user_data_importer::FAVORITES},
+      Import(Find(u"Zen"), importer::kSpacesImportItem));
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  EXPECT_THAT(SpaceNames(browser()),
+              testing::ElementsAre(u"Zen Work", u"Zen Play"));
+  const std::vector<KoanWorkspaceController::SpaceInfo> infos =
+      spaces->GetSpaces();
+  EXPECT_EQ(u"\U0001F9D8", infos[0].icon);
+  // Zen's theme.
+  EXPECT_FALSE(infos[0].theme.is_default());
+  EXPECT_TRUE(infos[1].theme.is_default());
+
+  tabs::TabInterface* essential = PinnedTab(kZenEssential);
+  ASSERT_TRUE(essential);
+  EXPECT_TRUE(essential->IsPinned());
+  tabs::TabInterface* pinned = PinnedTab(kZenPinned);
+  ASSERT_TRUE(pinned);
+  EXPECT_TRUE(IsPinnedInSpace(pinned));
+  EXPECT_EQ(infos[0].id, SpaceOf(pinned));
+  EXPECT_EQ(u"Label", GetTabState(pinned)->custom_title);
+  EXPECT_EQ(infos[1].id, SpaceOf(PinnedTab(kZenPlay)));
+
+  KoanFolderController* folders = Controller()->folders();
+  ASSERT_TRUE(folders);
+  const std::vector<KoanFolderController::Entry> entries =
+      folders->GetFolders(infos[0].id);
+  ASSERT_EQ(1u, entries.size());
+  EXPECT_EQ(u"Zen folder", folders->GetFolder(entries[0].id)->name);
+  EXPECT_FALSE(folders->GetFolder(entries[0].id)->collapsed);
+  EXPECT_EQ(entries[0].id, folders->GetFolderOf(PinnedTab(kZenFolderTab)));
+
+  EXPECT_FALSE(HasTab(kZenUnpinned));
+}
+
+// Zen's Spaces next to its bookmarks (Chromium's Firefox importer brings
+// those, Koan the Spaces).
+IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsZenSpacesAndBookmarks) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  const std::vector<user_data_importer::ImportItem> ended =
+      Import(Find(u"Zen"),
+             user_data_importer::FAVORITES | importer::kSpacesImportItem);
+  EXPECT_TRUE(std::ranges::contains(ended, user_data_importer::FAVORITES));
+  EXPECT_TRUE(IsBookmarked(kZenBookmark));
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  EXPECT_THAT(SpaceNames(browser()),
+              testing::ElementsAre(u"Zen Work", u"Zen Play"));
+  EXPECT_TRUE(base::test::RunUntil([&] { return !!PinnedTab(kZenPinned); }));
 }
 
 // Only what was asked for.

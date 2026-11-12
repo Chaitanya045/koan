@@ -166,8 +166,9 @@ base::ListValue StoredPinnedTabs(TabStripModel* model,
   for (size_t index = range.start(); index < range.end(); ++index) {
     tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(index));
     content::WebContents* contents = tab ? tab->GetContents() : nullptr;
-    if (!contents || !IsPinnedInSpace(tab) ||
-        !contents->GetLastCommittedURL().is_valid()) {
+    // Also while it isn't loaded (restored, unloaded or imported).
+    const GURL url = contents ? CurrentTabUrl(contents) : GURL();
+    if (!contents || !IsPinnedInSpace(tab) || !url.is_valid()) {
       continue;
     }
     // A folder's tabs are stored with their folder (koan.folders.list), which
@@ -176,9 +177,9 @@ base::ListValue StoredPinnedTabs(TabStripModel* model,
         !GetTabSessionData(contents, kFolderSessionKey).empty()) {
       continue;
     }
-    list.Append(StoredTab(contents->GetLastCommittedURL(), contents->GetTitle(),
-                          GetTabSessionData(contents))
-                    .ToValue());
+    list.Append(
+        StoredTab(url, contents->GetTitle(), GetTabSessionData(contents))
+            .ToValue());
   }
   return list;
 }

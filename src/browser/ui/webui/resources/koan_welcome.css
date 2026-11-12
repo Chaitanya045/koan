@@ -458,6 +458,56 @@ kbd {
   background: var(--primary);
 }
 
+/* An option of the picked choice: shadcn's checkbox with its label. */
+.check-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 2px 14px;
+  cursor: pointer;
+}
+
+.check-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  border: 1px solid var(--input);
+  border-radius: var(--r-sm);
+  background: var(--background);
+  box-shadow: var(--shadow-xs);
+  color: var(--primary-foreground);
+}
+
+.checkbox .icon {
+  width: 12px;
+  height: 12px;
+  visibility: hidden;
+}
+
+.check-option:has(input:checked) .checkbox {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.check-option:has(input:checked) .checkbox .icon {
+  visibility: visible;
+}
+
+.check-option:has(input:focus-visible) .checkbox {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+  border-color: var(--ring);
+}
+
 /* A browser's or an engine's mark on a muted tile: the browser's app icon
  * (.tile.app) or the engine's logo (Simple Icons, in the text colour, as the
  * Lucide icons), else its initial. Chromium ships engine logos only in Google

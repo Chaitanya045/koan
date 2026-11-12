@@ -1,0 +1,13 @@
+diff --git a/chrome/browser/resources/settings/people_page/import_data_browser_proxy.ts b/chrome/browser/resources/settings/people_page/import_data_browser_proxy.ts
+index ca628e702953f73b9fbebcdc716b845c7978f1ba..533e87e64f11515014f9999d563788e27aa7edd7 100644
+--- a/chrome/browser/resources/settings/people_page/import_data_browser_proxy.ts
++++ b/chrome/browser/resources/settings/people_page/import_data_browser_proxy.ts
+@@ -19,6 +19,8 @@ export interface BrowserProfile {
+   passwords: boolean;
+   search: boolean;
+   autofillFormData: boolean;
++  // Koan: Spaces and pinned tabs (koan_settings_ui.h).
++  koanSpaces?: boolean;
+ }
+ 
+ /**

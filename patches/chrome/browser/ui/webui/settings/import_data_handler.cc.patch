@@ -1,0 +1,30 @@
+diff --git a/chrome/browser/ui/webui/settings/import_data_handler.cc b/chrome/browser/ui/webui/settings/import_data_handler.cc
+index 9e8523ea452d31c56e1109ef18818e210889e5ee..e33ab2da46b999737072a2d947c8e60d385af964 100644
+--- a/chrome/browser/ui/webui/settings/import_data_handler.cc
++++ b/chrome/browser/ui/webui/settings/import_data_handler.cc
+@@ -31,6 +31,7 @@
+ #include "chrome/common/pref_names.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/web_ui.h"
++#include "koan/browser/ui/webui/koan_settings_ui.h"
+ #include "ui/shell_dialogs/selected_file_info.h"
+ 
+ using content::BrowserThread;
+@@ -150,6 +151,8 @@ void ImportDataHandler::HandleImportData(const base::ListValue& args) {
+   if (*type_dict.FindBool(prefs::kImportDialogSearchEngine)) {
+     selected_items |= user_data_importer::SEARCH_ENGINES;
+   }
++  // Koan: its own items (Spaces and pinned tabs).
++  selected_items |= koan::settings::GetImportDialogItems(type_dict);
+ 
+   const user_data_importer::SourceProfile& source_profile =
+       importer_list_->GetSourceProfileAt(browser_index);
+@@ -231,6 +234,8 @@ void ImportDataHandler::SendBrowserProfileData(const std::string& callback_id) {
+     browser_profile.Set(
+         "autofillFormData",
+         (browser_services & user_data_importer::AUTOFILL_FORM_DATA) != 0);
++    // Koan: its own items (Spaces and pinned tabs).
++    koan::settings::AddImportDialogItems(browser_services, browser_profile);
+ 
+     browser_profiles.Append(std::move(browser_profile));
+   }
