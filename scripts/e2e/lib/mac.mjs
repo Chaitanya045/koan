@@ -28,7 +28,7 @@ const MAC_VK = {
   a: 0, s: 1, d: 2, f: 3, h: 4, g: 5, z: 6, x: 7, c: 8, v: 9, b: 11, q: 12,
   w: 13, e: 14, r: 15, y: 16, t: 17, 1: 18, 2: 19, 3: 20, 4: 21, 6: 22, 5: 23,
   9: 25, 7: 26, 8: 28, 0: 29, o: 31, u: 32, i: 34, p: 35, l: 37, j: 38,
-  k: 40, n: 45, m: 46, Enter: 36, Tab: 48, ' ': 49, Backspace: 51,
+  k: 40, n: 45, m: 46, '[': 33, ']': 30, Enter: 36, Tab: 48, ' ': 49, Backspace: 51,
   Escape: 53, ArrowLeft: 123, ArrowRight: 124, ArrowDown: 125, ArrowUp: 126,
   PageUp: 116, PageDown: 121,
 };
@@ -85,7 +85,12 @@ export async function key(page, name, modifiers = 0, settle = 600) {
 
 // --- The browser.
 
-export const KOAN_PID = Number(process.env.KOAN_PID || 0);
+// (A let: a script that starts Koan again hands the new pid to setKoanPid(),
+// so real input goes to it.)
+export let KOAN_PID = Number(process.env.KOAN_PID || 0);
+export function setKoanPid(pid) {
+  KOAN_PID = Number(pid || 0);
+}
 export const KOAN_LOG = process.env.KOAN_LOG;
 
 // Whether the test's Koan still runs (its exact pid, from suite.sh), or, with
@@ -381,6 +386,27 @@ export async function realKey(name, flags = '', settle = 500) {
   await sleep(settle);
   return true;
 }
+// A main-menu key for `page` (Cmd+W, Cmd+Shift+W, Cmd+L, Cmd+Shift+T, ...:
+// CDP keys never reach the menu bar on macOS), or one of Chrome's own key
+// equivalents outside Koan's shortcuts (Cmd+1, Ctrl+Shift+PageUp: a CDP
+// Ctrl+PageDown was seen not to reach Chrome's on the Mac). On macOS a real
+// key (realKey(), `flags` as keypress2's) once the page's window is key
+// (makeKey()); elsewhere `cdpKey()`, the CDP key the script sends there.
+// Returns whether the key went: false on macOS with real input off, where
+// the caller skips the checks that need it (menuKeyWhyNot() says why).
+export async function menuKey(page, name, flags, cdpKey, settle = 800) {
+  if (!IS_MAC) {
+    await cdpKey();
+    return true;
+  }
+  if (!realOk) return false;
+  if (!(await makeKey(page))) console.log(`  (${page?.url}: the page never got the focus)`);
+  return realKey(name, flags, settle);
+}
+export const menuKeyWhyNot = () =>
+  `needs a real key on macOS (the main menu's, or Chrome's own key equivalent: CDP keys ` +
+  `don't reach them); ${realWhyNot}`;
+
 // ptr <cmd> <args...> (see scripts/mac/tools/ptr.m), after the gate.
 export async function ptr(...args) {
   if (!gate()) return false;

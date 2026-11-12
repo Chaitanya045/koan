@@ -10,8 +10,10 @@ go to `<logs>/summary.txt`, and an agent reads only that file. Every test's full
    the browser tests).
 2. **e2e:** `suite/e2e.list`, each against a fresh `--user-data-dir` with `--use-mock-keychain`. The new Mac checks are
    `window_teardown` (#193), `window_sync` (#75), `space_drag` (#224), `welcome_input` (#174) and `agent_cli` (#180,
-   through the `koan` CLI). Then the existing scripts: `lib/koan.mjs` `key()` sends Mac key codes on macOS; scripts that
-   need a main-menu key (Cmd+W, Cmd+Shift+W, Cmd+Q, Cmd+L: CDP keys never reach the menu bar) SKIP there (#270).
+   through the `koan` CLI). Then the existing scripts: `lib/koan.mjs` `key()` sends Mac key codes on macOS. CDP keys
+   never reach the menu bar (Cmd+W, Cmd+Shift+W, Cmd+Q, Cmd+L, Cmd+Shift+T), so ported scripts send those as real keys
+   (`lib/mac.mjs` `menuKey()`; `empty_tab`, `layout`, `omnibox_lockdown`, `pinned`, `power`) and SKIP those steps with
+   real input off; scripts not ported yet SKIP on macOS (#270).
    `scripts/e2e/prefs/<name>.mac.json`, if it exists, seeds the profile instead of `prefs/<name>.json` (a setting that
    means something else on a Mac, e.g. Glance's trigger: Ctrl+click is a right-click there). Scripts whose `.flags`
    need headless Ozone (`{dump}`, `--ozone-*`) SKIP, unless the file has the line `# macos: without frame dumps`: then

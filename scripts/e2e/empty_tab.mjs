@@ -5,11 +5,17 @@
 // empty tab, and Cmd+W on the empty tab closes the window.
 //
 //   scripts/e2e/run.sh empty_tab
+//
+// On macOS (scripts/mac/suite.sh) Cmd+W and Cmd+1 are real keys (lib/mac.mjs
+// menuKey(): Cmd+W is the main menu's Close Tab, Cmd+1 one of Chrome's key
+// equivalents outside Koan's shortcuts (global_keyboard_shortcuts_mac.mm),
+// like Ctrl+PageDown, which a CDP key was seen not to reach on the Mac); with
+// real input off those steps are SKIPs.
 import {
   ACCEL, CTRL, SHIFT, check, finish, front, key, pages, shownViews, sleep, typeInto, viewTree,
-  views, waitFor, browserCall, onPage, evalIn, skipOnMac,
+  views, waitFor, browserCall, onPage, evalIn,
 } from './lib/koan.mjs';
-skipOnMac();
+import { menuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
 
 const VK = { T: 84, RETURN: 13, TAB: 9, ONE: 49 };
 // ACCEL (lib/koan.mjs): Cmd+1-9 select a tab on macOS (Ctrl+1-9 there
@@ -42,7 +48,7 @@ check('...and the "+ New Tab" row still there',
 // NEW tab: the empty tab never navigates (Zen's UrlbarChildController).
 const [page] = await pages();
 await front(page);
-await key(page, VK.T, CTRL, 't');
+await key(page, VK.T, ACCEL, 't');
 const omnibox = await waitFor(async () => (await viewTree()).find(
     v => v.cls === 'OmniboxViewViews' && v.shown));
 await typeInto(omnibox, 'example.com/?opened', VK.RETURN);
@@ -64,14 +70,27 @@ check('Ctrl+Tab skips the hidden empty tab', await isShown(opened));
 await key(opened, VK.TAB, CTRL | SHIFT, 'Tab');
 await sleep(500);
 check('...and so does Ctrl+Shift+Tab', await isShown(opened));
-await key(opened, VK.ONE, ACCEL, '1');
-await sleep(500);
-check('Cmd+1 selects the first listed tab, not the empty tab',
-      await isShown(opened));
+if (await menuKey(opened, '1', 'c', () => key(opened, VK.ONE, ACCEL, '1'))) {
+  await sleep(500);
+  check('Cmd+1 selects the first listed tab, not the empty tab',
+        await isShown(opened));
+} else {
+  skipped('Cmd+1 selects the first listed tab, not the empty tab', menuKeyWhyNot());
+}
 
+// Cmd+W (the main menu's Close Tab on macOS) on `page`.
+const closeTab = page => menuKey(page, 'w', 'c', () => key(page, 87, ACCEL, 'w'));
 // Cmd+W on the page that was opened: back to the empty state, then Cmd+W on
 // it closes the window.
-await key(after.find(p => p.url.includes('?opened')), 87, CTRL, 'w');
+if (!await closeTab(opened)) {
+  for (const what of ['Closing it shows the empty state again, with no row',
+                      'Back into the once-empty tab: it has its row (it is a tab now)',
+                      '...and Cmd+W closes that tab only: the window stays, with the empty tab',
+                      'Cmd+W on the empty tab closes the window']) {
+    skipped(what, menuKeyWhyNot());
+  }
+  finish();
+}
 await sleep(1000);
 check('Closing it shows the empty state again, with no row',
       await tabRows() === 0, String(await tabRows()));
@@ -87,14 +106,20 @@ await waitFor(async () => (await pages())[0]?.url.startsWith('chrome://'), 8000)
 await sleep(800);
 check('Back into the once-empty tab: it has its row (it is a tab now)',
       await tabRows() === 1, String(await tabRows()));
-await key((await pages())[0], 87, CTRL, 'w');
+if (!await closeTab((await pages())[0])) {
+  skipped('...and Cmd+W closes that tab only', menuKeyWhyNot());
+  finish();
+}
 await sleep(1500);
 check('...and Cmd+W closes that tab only: the window stays, with the empty tab',
       (await pages()).length === 1 && await tabRows() === 0,
       `${(await pages()).length} page(s), ${await tabRows()} row(s)`);
 
 const windowsBefore = (await pages()).length;
-await key((await pages())[0], 87, CTRL, 'w');
+if (!await closeTab((await pages())[0])) {
+  skipped('Cmd+W on the empty tab closes the window', menuKeyWhyNot());
+  finish();
+}
 await sleep(1500);
 check('Cmd+W on the empty tab closes the window',
       (await pages()).length < windowsBefore || (await pages()).length === 0,

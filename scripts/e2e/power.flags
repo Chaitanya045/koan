@@ -1,0 +1,5 @@
+# The test_helper extension: on macOS askTestHelper() and closeWindowOf() in
+# lib/mac.mjs make the Essential (the tab's menu is a native NSMenu there)
+# and, with real input off, close the window ({root} is the repo, suite.sh
+# expands it).
+--load-extension={root}/scripts/e2e/extensions/test_helper

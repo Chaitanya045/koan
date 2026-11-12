@@ -30,6 +30,11 @@ compact_close
 compact_flash
 compact_single
 download_animation
+# empty_tab, layout, omnibox_lockdown, pinned and power are ported (#270):
+# their main-menu keys (Cmd+W, Cmd+Shift+W, Cmd+L, Cmd+Shift+T) are real keys
+# (lib/mac.mjs menuKey()), SKIPs with real input off; their tab-menu steps
+# are SKIPs (a native NSMenu) or test_helper's.
+empty_tab timeout=180
 # Tab folders: the tab and folder menus are native NSMenus, picked through
 # Accessibility (System Events), with a real right-click when real input is on.
 folders timeout=600
@@ -41,6 +46,7 @@ fullscreen_single
 glance
 glance_activation
 glance_split timeout=420
+layout timeout=180
 library
 library_history
 # The Library's downloads: a dangerous download kept never opens by itself
@@ -49,7 +55,12 @@ library_history
 library_downloads timeout=300
 newtab
 newtab_custom
+omnibox_lockdown timeout=300
 omnibox_trailing_space
+# Pinned tabs and Essentials, two restarts.
+pinned timeout=600
+# Restores on demand, freezing and energy saver (a 150 s wait), a restart.
+power timeout=600
 scrollbars
 # The one Settings page: Koan's panes in chrome://settings, its search,
 # deep links and the old chrome://koan-settings (#297).

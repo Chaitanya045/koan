@@ -11,10 +11,21 @@
 //
 // The profile (prefs/pinned.json) turns off Zen's replace-newtab, so a new
 // Space (Zen's Create form, Ctrl+Alt+N) opens with a tab.
+//
+// On macOS (scripts/mac/suite.sh, pinned.flags loads test_helper):
+// - Cmd+W, Cmd+Shift+W, Cmd+Shift+T and Back (Cmd+[) are the main menu's and
+//   Ctrl+Shift+PageUp is Chrome's own key equivalent, which CDP keys don't
+//   reach: real keys there (lib/mac.mjs menuKey()), SKIPs with real input off.
+// - The tab's menu is a native NSMenu, which UI DevTools can't see or click
+//   (NATIVE_MENUS): its steps are SKIPs, except Add to Essentials, for which
+//   test_helper pins the tab (an extension's pin makes an Essential, as the
+//   menu item does), from a 127.0.0.1 page (test_helper answers those only).
 import {
-  browserCall, createSpace, evalIn, settingsCall, tabMenuCommand, waitFor, sendKey, skipOnMac,
+  ACCEL, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace, evalIn, settingsCall,
+  tabMenuCommand, waitFor, sendKey,
 } from './lib/koan.mjs';
-skipOnMac();
+import { askTestHelper, menuKey, menuKeyWhyNot, setKoanPid, skipped, startServer }
+    from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -200,6 +211,16 @@ async function keyTo(page, code, modifiers, keyName = '') {
   await sleep(1500);
 }
 const rowsWith = async url => (await rows()).filter(r => r.p.PinnedUrl === url);
+// A real key for `page` on macOS (lib/mac.mjs menuKey()), else the CDP key.
+// Whether it went.
+const realKeyTo = (page, name, flags, code, modifiers, keyName) =>
+  menuKey(page, name, flags, () => keyTo(page, code, modifiers, keyName), 1500);
+// Ctrl+W (Cmd+W, the main menu's Close Tab, on macOS).
+const closeTab = page => realKeyTo(page, 'w', 'c', VK.W, ACCEL, 'w');
+// Skips `checks` (names) for a key that couldn't go.
+const skipAll = (checks, why = menuKeyWhyNot()) => checks.forEach(c => skipped(c, why));
+// The tab menu's steps on macOS (NATIVE_MENUS): skipped.
+const skipMenu = checks => skipAll(checks, NATIVE_MENU_WHY);
 
 // The active Space's sidebar (Zen's layout): its header, the pinned tabs, the
 // divider (Clear), the New Tab row and the normal tabs, by their positions
@@ -242,7 +263,7 @@ const layoutSummary = l => ({
 const first = await activePage();
 const PIN_URL = first.url;
 const AWAY_URL = `${PIN_URL.split('#')[0]}${PIN_URL.includes('?') ? '&' : '?'}away`;
-await key(VK.D, CTRL | SHIFT, 'd');
+await key(VK.D, ACCEL | SHIFT, 'd');
 let list = await rows();
 let pinned = rowOf(list, PIN_URL);
 check('Ctrl+Shift+D pins the tab to its Space (not an Essential)',
@@ -294,33 +315,52 @@ check('Clicking it goes back to the pinned URL',
 // --- Ctrl+W on a pinned tab: reset, unload and switch, not close. ---
 await navigate((await pages()).find(p => p.url === PIN_URL), AWAY_URL);
 const tabsBefore = (await rows()).length;
-await key(VK.W, CTRL, 'w');
-unloaded.add(PIN_URL);
-unloaded.add(AWAY_URL);
-await sleep(3000);
-list = await rows();
-pinned = rowOf(list, PIN_URL);
-const active = await activePage();
-check('Ctrl+W on a pinned tab keeps it', list.length === tabsBefore,
-      `${list.length} of ${tabsBefore} tabs`);
-check('...switches to another tab', active && active.url !== AWAY_URL &&
-      active.url !== PIN_URL, active?.url);
-check('...resets it to its pinned URL', pinned?.p.AwayFromPinnedUrl === 'false',
-      JSON.stringify(pinned?.p.AwayFromPinnedUrl));
-check('...and unloads it', pinned?.p.Discarded === 'true',
-      JSON.stringify(pinned?.p.Discarded));
-check('...and, unloaded, it has a close button again (closing it closes it)',
-      pinned?.p.UnloadButton === 'false', JSON.stringify(pinned?.p.UnloadButton));
+if (await closeTab(await pageByUrl(AWAY_URL))) {
+  unloaded.add(PIN_URL);
+  unloaded.add(AWAY_URL);
+  await sleep(3000);
+  list = await rows();
+  pinned = rowOf(list, PIN_URL);
+  const active = await activePage();
+  check('Ctrl+W on a pinned tab keeps it', list.length === tabsBefore,
+        `${list.length} of ${tabsBefore} tabs`);
+  check('...switches to another tab', active && active.url !== AWAY_URL &&
+        active.url !== PIN_URL, active?.url);
+  check('...resets it to its pinned URL', pinned?.p.AwayFromPinnedUrl === 'false',
+        JSON.stringify(pinned?.p.AwayFromPinnedUrl));
+  check('...and unloads it', pinned?.p.Discarded === 'true',
+        JSON.stringify(pinned?.p.Discarded));
+  check('...and, unloaded, it has a close button again (closing it closes it)',
+        pinned?.p.UnloadButton === 'false', JSON.stringify(pinned?.p.UnloadButton));
+} else {
+  skipAll(['Ctrl+W on a pinned tab keeps it, switches, resets and unloads it']);
+  // Where the key would have left things: the pinned tab at its pinned URL,
+  // another tab active.
+  await navigate(await pageByUrl(AWAY_URL), PIN_URL);
+  await activate((await pages()).find(p => p.url !== PIN_URL));
+}
 
 // --- The context menu: Add to Essentials with Zen's "n / 12" badge. ---
-s = await uiSession();
-const otherRow = s.nodes.filter(n => n.cls === 'KoanTabRow')
-    .find(r => r.p.PinnedUrl === '');
-const otherTab = otherRow && tabViewOf(s, otherRow);
-s.close();
-const added = otherTab &&
-    await menuCommand(otherTab, 'kKoanAddToEssentialsMenuItem');
-check('The menu of a normal tab has "Add to Essentials"', !!added);
+// (On macOS test_helper's pin, from the active normal tab moved to a
+// 127.0.0.1 page.)
+let server = null;
+if (NATIVE_MENUS) {
+  skipMenu(['The menu of a normal tab has "Add to Essentials"']);
+  server = await startServer();
+  const other = await activePage();
+  await navigate(other, server.url('/p?t=Essential'));
+  const asked = await askTestHelper(await pageByUrl(server.url('/p?t=Essential')), 'pin-tab', 1500);
+  check('The active normal tab asks test_helper to pin it (an extension\'s pin)', asked);
+} else {
+  s = await uiSession();
+  const otherRow = s.nodes.filter(n => n.cls === 'KoanTabRow')
+      .find(r => r.p.PinnedUrl === '');
+  const otherTab = otherRow && tabViewOf(s, otherRow);
+  s.close();
+  const added = otherTab &&
+      await menuCommand(otherTab, 'kKoanAddToEssentialsMenuItem');
+  check('The menu of a normal tab has "Add to Essentials"', !!added);
+}
 list = await rows();
 const essential = list.find(r => r.path.includes('PinnedTabContainerView'));
 check('Add to Essentials moves the tab to the Essentials',
@@ -331,79 +371,100 @@ check('Add to Essentials moves the tab to the Essentials',
 // pinned tab, which loads again.
 const countBefore = list.length;
 const essentialUrl = (await activePage())?.url;
-await key(VK.W, CTRL, 'w');
-unloaded.clear();
-unloaded.add(essentialUrl);
-await sleep(2000);
-list = await rows();
-check('Ctrl+W on an Essential keeps it', list.length === countBefore &&
-      list.some(r => r.path.includes('PinnedTabContainerView')),
-      `${list.length} of ${countBefore} tabs`);
+if (await closeTab(await activePage())) {
+  unloaded.clear();
+  unloaded.add(essentialUrl);
+  await sleep(2000);
+  list = await rows();
+  check('Ctrl+W on an Essential keeps it', list.length === countBefore &&
+        list.some(r => r.path.includes('PinnedTabContainerView')),
+        `${list.length} of ${countBefore} tabs`);
+} else {
+  skipAll(['Ctrl+W on an Essential keeps it']);
+  // Where the key would have gone: the pinned tab, which loads again.
+  unloaded.clear();
+  await activate(await pageByUrl(PIN_URL));
+}
 
 // --- Change Label… edits the label in place. ---
-s = await uiSession();
-pinned = rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL);
-const pinnedTab = pinned && tabViewOf(s, pinned);
-s.close();
-const rename = pinnedTab && await menuCommand(pinnedTab, 'kKoanChangeLabelMenuItem');
-check('The menu of a pinned tab has "Change Label…"', !!rename);
-s = await uiSession();
-const editor = s.nodes.find(n => n.cls === 'KoanTabLabelEditor');
-if (editor) {
-  for (const ch of 'Mail') {
-    await s.keyEvent(editor, { type: 'keyPressed', keyCode: ch.charCodeAt(0), code: 0,
-                               flags: 0, key: ch.charCodeAt(0), isChar: true });
+if (NATIVE_MENUS) {
+  skipMenu(['The menu of a pinned tab has "Change Label…"', 'Change Label… renames the tab']);
+} else {
+  s = await uiSession();
+  pinned = rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL);
+  const pinnedTab = pinned && tabViewOf(s, pinned);
+  s.close();
+  const rename = pinnedTab && await menuCommand(pinnedTab, 'kKoanChangeLabelMenuItem');
+  check('The menu of a pinned tab has "Change Label…"', !!rename);
+  s = await uiSession();
+  const editor = s.nodes.find(n => n.cls === 'KoanTabLabelEditor');
+  if (editor) {
+    for (const ch of 'Mail') {
+      await s.keyEvent(editor, { type: 'keyPressed', keyCode: ch.charCodeAt(0), code: 0,
+                                 flags: 0, key: ch.charCodeAt(0), isChar: true });
+    }
+    for (const type of ['keyPressed', 'keyReleased']) {
+      await s.keyEvent(editor, { type, keyCode: VK.ENTER, code: 0, flags: 0, key: 0, isChar: false });
+    }
   }
-  for (const type of ['keyPressed', 'keyReleased']) {
-    await s.keyEvent(editor, { type, keyCode: VK.ENTER, code: 0, flags: 0, key: 0, isChar: false });
-  }
+  s.close();
+  await sleep(1500);
+  s = await uiSession();
+  pinned = rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL);
+  const title = pinned && titleOf(s, tabViewOf(s, pinned));
+  s.close();
+  check('Change Label… renames the tab', !!editor && title?.p.Text === 'Mail',
+        JSON.stringify(title?.p.Text));
 }
-s.close();
-await sleep(1500);
-s = await uiSession();
-pinned = rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL);
-const title = pinned && titleOf(s, tabViewOf(s, pinned));
-s.close();
-check('Change Label… renames the tab', !!editor && title?.p.Text === 'Mail',
-      JSON.stringify(title?.p.Text));
 
 
 // --- Menu: Reset Pinned Tab, Replace with Current URL, Unload. ---
-let a = await pageByUrl(PIN_URL);
-await navigate(a, AWAY_URL);
-s = await uiSession();
-let aTab = tabViewOf(s, rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL));
-s.close();
-await tabMenuCommand(aTab, 'kKoanResetPinnedTabMenuItem');
-await sleep(1500);
-check('"Reset Pinned Tab" goes back to the pinned URL',
-      !!await pageByUrl(PIN_URL) && !await pageByUrl(AWAY_URL),
-      JSON.stringify((await pages()).map(p => p.url)));
-await navigate(await pageByUrl(PIN_URL), AWAY_URL);
-await tabMenuCommand(aTab, 'kKoanReplaceWithCurrentUrlMenuItem',
-                     { via: 'kKoanEditPinnedUrlSubmenu' });
-check('"Edit Pinned URL" > "Replace with Current URL" makes it the pinned URL',
-      (await rowsWith(AWAY_URL)).length === 1, JSON.stringify((await rows()).map(r => r.p.PinnedUrl)));
-await navigate(await pageByUrl(AWAY_URL), PIN_URL);
-await tabMenuCommand(aTab, 'kKoanReplaceWithCurrentUrlMenuItem',
-                     { via: 'kKoanEditPinnedUrlSubmenu' });
-await tabMenuCommand(aTab, 'kKoanUnloadMenuItem');
-pinned = rowOf(await rows(), PIN_URL);
-check('"Unload" unloads it and switches away',
-      pinned?.p.Discarded === 'true' && pinned.p.PinnedUrl === PIN_URL,
-      JSON.stringify(pinned && { discarded: pinned.p.Discarded, url: pinned.p.PinnedUrl }));
+let aTab;
+if (NATIVE_MENUS) {
+  skipMenu(['"Reset Pinned Tab" goes back to the pinned URL',
+            '"Edit Pinned URL" > "Replace with Current URL" makes it the pinned URL',
+            '"Unload" unloads it and switches away']);
+} else {
+  let a = await pageByUrl(PIN_URL);
+  await navigate(a, AWAY_URL);
+  s = await uiSession();
+  aTab = tabViewOf(s, rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL));
+  s.close();
+  await tabMenuCommand(aTab, 'kKoanResetPinnedTabMenuItem');
+  await sleep(1500);
+  check('"Reset Pinned Tab" goes back to the pinned URL',
+        !!await pageByUrl(PIN_URL) && !await pageByUrl(AWAY_URL),
+        JSON.stringify((await pages()).map(p => p.url)));
+  await navigate(await pageByUrl(PIN_URL), AWAY_URL);
+  await tabMenuCommand(aTab, 'kKoanReplaceWithCurrentUrlMenuItem',
+                       { via: 'kKoanEditPinnedUrlSubmenu' });
+  check('"Edit Pinned URL" > "Replace with Current URL" makes it the pinned URL',
+        (await rowsWith(AWAY_URL)).length === 1, JSON.stringify((await rows()).map(r => r.p.PinnedUrl)));
+  await navigate(await pageByUrl(AWAY_URL), PIN_URL);
+  await tabMenuCommand(aTab, 'kKoanReplaceWithCurrentUrlMenuItem',
+                       { via: 'kKoanEditPinnedUrlSubmenu' });
+  await tabMenuCommand(aTab, 'kKoanUnloadMenuItem');
+  pinned = rowOf(await rows(), PIN_URL);
+  check('"Unload" unloads it and switches away',
+        pinned?.p.Discarded === 'true' && pinned.p.PinnedUrl === PIN_URL,
+        JSON.stringify(pinned && { discarded: pinned.p.Discarded, url: pinned.p.PinnedUrl }));
+}
 await activate(await pageByUrl(PIN_URL));
 unloaded.clear();
 
 // --- Reset doesn't ignore the fragment (hash-routed apps). ---
 const FRAG_URL = `${PIN_URL}#inbox`;
 await navigate(await pageByUrl(PIN_URL), FRAG_URL);
-await keyTo(await pageByUrl(FRAG_URL), VK.W, CTRL, 'w');
-await sleep(2500);
-pinned = rowOf(await rows(), PIN_URL);
-check('Ctrl+W resets a pinned tab that only changed its fragment',
-      pinned?.p.Url === PIN_URL && pinned.p.Discarded === 'true',
-      JSON.stringify(pinned && { url: pinned.p.Url, discarded: pinned.p.Discarded }));
+if (await closeTab(await pageByUrl(FRAG_URL))) {
+  await sleep(2500);
+  pinned = rowOf(await rows(), PIN_URL);
+  check('Ctrl+W resets a pinned tab that only changed its fragment',
+        pinned?.p.Url === PIN_URL && pinned.p.Discarded === 'true',
+        JSON.stringify(pinned && { url: pinned.p.Url, discarded: pinned.p.Discarded }));
+} else {
+  skipAll(['Ctrl+W resets a pinned tab that only changed its fragment']);
+  await navigate(await pageByUrl(FRAG_URL), PIN_URL);
+}
 await activate(await pageByUrl(PIN_URL));
 
 // --- Back with no history never closes a pinned tab. ---
@@ -411,41 +472,50 @@ const OPENED_URL = `${PIN_URL}?opened`;
 await evalIn(await pageByUrl(PIN_URL), `window.open(${JSON.stringify(OPENED_URL)}); 1`, true);
 await sleep(2500);
 let c = await pageByUrl(OPENED_URL);
-await keyTo(c, VK.D, CTRL | SHIFT, 'd');
+await keyTo(c, VK.D, ACCEL | SHIFT, 'd');
 check('A tab opened from a pinned tab can be pinned too',
       (await rowsWith(OPENED_URL))[0]?.p.PinnedInSpace === 'true');
-await keyTo(c, VK.LEFT, ALT, 'ArrowLeft');
-await sleep(1500);
-check('Back with no history keeps a pinned tab open (no back-to-opener)',
-      !!await pageByUrl(OPENED_URL), JSON.stringify((await pages()).map(p => p.url)));
+// Back: Alt+Left; on macOS Cmd+[ (the main menu's History > Back).
+if (await realKeyTo(c, '[', 'c', VK.LEFT, ALT, 'ArrowLeft')) {
+  await sleep(1500);
+  check('Back with no history keeps a pinned tab open (no back-to-opener)',
+        !!await pageByUrl(OPENED_URL), JSON.stringify((await pages()).map(p => p.url)));
+} else {
+  skipAll(['Back with no history keeps a pinned tab open (no back-to-opener)']);
+}
 
 // --- Close Other Tabs and Close Tabs Below leave pinned tabs. ---
-for (const q of ['?d', '?e']) {
-  await browserCall('Target.createTarget', { url: `${PIN_URL}${q}`, background: true });
+if (NATIVE_MENUS) {
+  skipMenu(['Close Other Tabs closes the other normal tabs only',
+            'Close Tabs Below on a pinned tab leaves the pinned tabs below it']);
+} else {
+  for (const q of ['?d', '?e']) {
+    await browserCall('Target.createTarget', { url: `${PIN_URL}${q}`, background: true });
+  }
+  await sleep(2500);
+  s = await uiSession();
+  const normal = s.nodes.filter(n => n.cls === 'KoanTabRow' && n.p.PinnedUrl === '' &&
+                                     n.path.includes('UnpinnedTabContainerView'));
+  s.close();
+  await tabMenuCommand(tabViewOf(null, normal[0]), 'kKoanCloseOtherTabsMenuItem');
+  await sleep(1500);
+  list = await rows();
+  check('Close Other Tabs closes the other normal tabs only',
+        list.filter(r => r.p.PinnedUrl === '').length === 1 &&
+        (await rowsWith(PIN_URL)).length === 1 && (await rowsWith(OPENED_URL)).length === 1 &&
+        list.some(r => r.path.includes('PinnedTabContainerView')),
+        JSON.stringify(list.map(r => r.p.PinnedUrl)));
+  s = await uiSession();
+  aTab = tabViewOf(s, rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL));
+  s.close();
+  await tabMenuCommand(aTab, 'kKoanCloseTabsBelowMenuItem');
+  await sleep(1500);
+  list = await rows();
+  check('Close Tabs Below on a pinned tab leaves the pinned tabs below it',
+        list.filter(r => r.p.PinnedUrl === '').length === 0 &&
+        (await rowsWith(OPENED_URL)).length === 1,
+        JSON.stringify(list.map(r => r.p.PinnedUrl)));
 }
-await sleep(2500);
-s = await uiSession();
-const normal = s.nodes.filter(n => n.cls === 'KoanTabRow' && n.p.PinnedUrl === '' &&
-                                   n.path.includes('UnpinnedTabContainerView'));
-s.close();
-await tabMenuCommand(tabViewOf(null, normal[0]), 'kKoanCloseOtherTabsMenuItem');
-await sleep(1500);
-list = await rows();
-check('Close Other Tabs closes the other normal tabs only',
-      list.filter(r => r.p.PinnedUrl === '').length === 1 &&
-      (await rowsWith(PIN_URL)).length === 1 && (await rowsWith(OPENED_URL)).length === 1 &&
-      list.some(r => r.path.includes('PinnedTabContainerView')),
-      JSON.stringify(list.map(r => r.p.PinnedUrl)));
-s = await uiSession();
-aTab = tabViewOf(s, rowOf(s.nodes.filter(n => n.cls === 'KoanTabRow'), PIN_URL));
-s.close();
-await tabMenuCommand(aTab, 'kKoanCloseTabsBelowMenuItem');
-await sleep(1500);
-list = await rows();
-check('Close Tabs Below on a pinned tab leaves the pinned tabs below it',
-      list.filter(r => r.p.PinnedUrl === '').length === 0 &&
-      (await rowsWith(OPENED_URL)).length === 1,
-      JSON.stringify(list.map(r => r.p.PinnedUrl)));
 
 // --- Each of Zen's close behaviours (Settings > Pinned Tabs). ---
 const settingsId = (await browserCall('Target.createTarget',
@@ -457,14 +527,15 @@ const setBehavior = async value => {
   await sleep(300);
 };
 const OPENED_AWAY = `${OPENED_URL}&away`;
-// Ctrl+W on the pinned tab C away from its pinned URL; returns what follows.
+// Ctrl+W on the pinned tab C away from its pinned URL; returns what follows
+// (null if the key couldn't go).
 async function closeAway(behavior) {
   await setBehavior(behavior);
   c = await pageByUrl(OPENED_URL) ?? await pageByUrl(OPENED_AWAY);
   await activate(c);
   await navigate(c, OPENED_AWAY);
   c = await pageByUrl(OPENED_AWAY);
-  await keyTo(c, VK.W, CTRL, 'w');
+  if (!await closeTab(c)) return null;
   await sleep(2500);
   const row = (await rowsWith(OPENED_URL))[0];
   const discarded = row?.p.Discarded === 'true';
@@ -473,26 +544,40 @@ async function closeAway(behavior) {
       await isVisible(await pageByUrl(row?.p.Url ?? OPENED_URL));
   return { url: row?.p.Url, discarded, active };
 }
-let r = await closeAway('reset');
-check('"Reset URL": stays on the tab, at its pinned URL',
-      r.url === OPENED_URL && r.active && !r.discarded, JSON.stringify(r));
-r = await closeAway('switch');
-check('"Switch to next tab": switches, the tab keeps its page',
-      r.url === OPENED_AWAY && !r.active && !r.discarded, JSON.stringify(r));
-r = await closeAway('reset-switch');
-check('"Reset URL and switch": switches, the tab is back at its pinned URL',
-      r.url === OPENED_URL && !r.active && !r.discarded, JSON.stringify(r));
-r = await closeAway('unload-switch');
-check('"Unload and switch": switches and unloads, keeping its page',
-      r.url === OPENED_AWAY && !r.active && r.discarded, JSON.stringify(r));
-r = await closeAway('close');
-check('"Close tab": closes it', (await rowsWith(OPENED_URL)).length === 0,
-      JSON.stringify((await rows()).map(t => t.p.PinnedUrl)));
-await keyTo(await pageByUrl(PIN_URL), VK.T, CTRL | SHIFT, 't');
-await sleep(1500);
-check('...and Ctrl+Shift+T brings it back, still pinned',
-      (await rowsWith(OPENED_URL))[0]?.p.PinnedInSpace === 'true',
-      JSON.stringify((await rows()).map(t => t.p.PinnedUrl)));
+const BEHAVIORS = [
+  ['reset', '"Reset URL": stays on the tab, at its pinned URL',
+   r => r.url === OPENED_URL && r.active && !r.discarded],
+  ['switch', '"Switch to next tab": switches, the tab keeps its page',
+   r => r.url === OPENED_AWAY && !r.active && !r.discarded],
+  ['reset-switch', '"Reset URL and switch": switches, the tab is back at its pinned URL',
+   r => r.url === OPENED_URL && !r.active && !r.discarded],
+  ['unload-switch', '"Unload and switch": switches and unloads, keeping its page',
+   r => r.url === OPENED_AWAY && !r.active && r.discarded],
+];
+let keyWent = true;
+for (const [behavior, name, ok] of BEHAVIORS) {
+  const r = keyWent && await closeAway(behavior);
+  if (!r) {
+    keyWent = false;
+    skipAll([name]);
+    continue;
+  }
+  check(name, ok(r), JSON.stringify(r));
+}
+if (keyWent && await closeAway('close')) {
+  check('"Close tab": closes it', (await rowsWith(OPENED_URL)).length === 0,
+        JSON.stringify((await rows()).map(t => t.p.PinnedUrl)));
+  if (await realKeyTo(await pageByUrl(PIN_URL), 't', 'cs', VK.T, ACCEL | SHIFT, 't')) {
+    await sleep(1500);
+    check('...and Ctrl+Shift+T brings it back, still pinned',
+          (await rowsWith(OPENED_URL))[0]?.p.PinnedInSpace === 'true',
+          JSON.stringify((await rows()).map(t => t.p.PinnedUrl)));
+  } else {
+    skipAll(['...and Ctrl+Shift+T brings it back, still pinned']);
+  }
+} else {
+  skipAll(['"Close tab": closes it', '...and Ctrl+Shift+T brings it back, still pinned']);
+}
 await setBehavior('reset-unload-switch');
 await browserCall('Target.closeTarget', { targetId: settingsId });
 await sleep(1000);
@@ -501,9 +586,11 @@ await sleep(1000);
 // change (pin, unpin, Add to / Remove from Essentials). ---
 const X = n => `${PIN_URL}?x${n}`;
 // Only the pinned tabs in the Space first (the close behaviours above may
-// have opened a new tab page), so x1, once pinned, is followed by x2.
+// have opened a new tab page), so x1, once pinned, is followed by x2. (On
+// macOS the Essential is a 127.0.0.1 page.)
 for (const page of await pages()) {
-  if (!page.url.startsWith('https://example.com')) {
+  if (!page.url.startsWith('https://example.com') &&
+      !(server && page.url.startsWith(server.url()))) {
     await browserCall('Target.closeTarget', { targetId: page.id });
   }
 }
@@ -537,8 +624,8 @@ const sidebarOrder = async () => (await rows())
 
 // Pin x1, then split it with the normal tab after it (Ctrl+Alt+V): both pinned.
 await activate(await pageByUrl(X(1)));
-await keyTo(await pageByUrl(X(1)), VK.D, CTRL | SHIFT, 'd');
-await keyTo(await pageByUrl(X(1)), VK.V, CTRL | ALT, 'v');
+await keyTo(await pageByUrl(X(1)), VK.D, ACCEL | SHIFT, 'd');
+await keyTo(await pageByUrl(X(1)), VK.V, ACCEL | ALT, 'v');
 await sleep(1000);
 let st = await statesOf([X(1), X(2)]);
 check('Splitting a pinned tab with a normal one pins the split view as one',
@@ -546,8 +633,8 @@ check('Splitting a pinned tab with a normal one pins the split view as one',
 // Split x4 + x5 (normal tabs below x3) and pin them: they go right after the
 // pinned split, which stays whole (upstream CHECKs a move between its tabs).
 await activate(await pageByUrl(X(4)));
-await keyTo(await pageByUrl(X(4)), VK.V, CTRL | ALT, 'v');
-await keyTo(await pageByUrl(X(4)), VK.D, CTRL | SHIFT, 'd');
+await keyTo(await pageByUrl(X(4)), VK.V, ACCEL | ALT, 'v');
+await keyTo(await pageByUrl(X(4)), VK.D, ACCEL | SHIFT, 'd');
 await sleep(1000);
 st = await statesOf([X(1), X(2), X(4), X(5)]);
 let order = (await sidebarOrder()).filter(u => u.includes('?x'));
@@ -557,7 +644,7 @@ check('Pinning a split view next to a pinned split keeps both whole, pinned in o
       JSON.stringify({ st, order }));
 // Unpin x1's split: both leave the pinned tabs, together, below them.
 await activate(await pageByUrl(X(1)));
-await keyTo(await pageByUrl(X(1)), VK.D, CTRL | SHIFT, 'd');
+await keyTo(await pageByUrl(X(1)), VK.D, ACCEL | SHIFT, 'd');
 await sleep(1000);
 st = await statesOf([X(1), X(2)]);
 order = (await sidebarOrder()).filter(u => u.includes('?x'));
@@ -566,15 +653,20 @@ check('Unpinning a split view unpins both and moves them below the pinned tabs',
       JSON.stringify(order) === JSON.stringify([X(4), X(5), X(1), X(2), X(3)]),
       JSON.stringify({ st, order }));
 // Add to Essentials / Remove from Essentials take the split along, whole.
-await tabMenuCommand(await tabShowing(X(1)), 'kKoanAddToEssentialsMenuItem');
-st = await statesOf([X(1), X(2)]);
-check('"Add to Essentials" on a split view makes both Essentials, still split',
-      allAre(st, { essential: true, split: true }), JSON.stringify(st));
-await tabMenuCommand(await tabShowing(X(1)), 'kKoanRemoveFromEssentialsMenuItem');
-st = await statesOf([X(1), X(2)]);
-check('...and "Remove from Essentials" makes both normal tabs again, still split',
-      allAre(st, { essential: false, pinned: false, split: true }) && await pinnedRunOk(),
-      JSON.stringify({ st, order: await sidebarOrder() }));
+if (NATIVE_MENUS) {
+  skipMenu(['"Add to Essentials" on a split view makes both Essentials, still split',
+            '...and "Remove from Essentials" makes both normal tabs again, still split']);
+} else {
+  await tabMenuCommand(await tabShowing(X(1)), 'kKoanAddToEssentialsMenuItem');
+  st = await statesOf([X(1), X(2)]);
+  check('"Add to Essentials" on a split view makes both Essentials, still split',
+        allAre(st, { essential: true, split: true }), JSON.stringify(st));
+  await tabMenuCommand(await tabShowing(X(1)), 'kKoanRemoveFromEssentialsMenuItem');
+  st = await statesOf([X(1), X(2)]);
+  check('...and "Remove from Essentials" makes both normal tabs again, still split',
+        allAre(st, { essential: false, pinned: false, split: true }) && await pinnedRunOk(),
+        JSON.stringify({ st, order: await sidebarOrder() }));
+}
 for (const n of [1, 2, 3, 4, 5]) {
   const page = await pageByUrl(X(n));
   if (page) await browserCall('Target.closeTarget', { targetId: page.id });
@@ -589,24 +681,27 @@ for (const n of [1, 2]) {
 }
 await sleep(2500);
 await activate(await pageByUrl(Y(1)));
-await keyTo(await pageByUrl(Y(1)), VK.D, CTRL | SHIFT, 'd');
+await keyTo(await pageByUrl(Y(1)), VK.D, ACCEL | SHIFT, 'd');
 await activate(await pageByUrl(Y(2)));
-await keyTo(await pageByUrl(Y(2)), VK.PAGE_UP, CTRL | SHIFT, 'PageUp');
-await sleep(1500);
-st = await statesOf([Y(2), Y(1)]);
-order = (await sidebarOrder()).filter(u => u.includes('?y'));
-check('A tab moved among the pinned tabs is pinned in place',
-      allAre(st, { pinned: true }) &&
-      JSON.stringify(order) === JSON.stringify([Y(2), Y(1)]),
-      JSON.stringify({ st, order }));
-// Unpinned, it moves down past the divider and the New Tab row, live.
-await keyTo(await pageByUrl(Y(2)), VK.D, CTRL | SHIFT, 'd');
-await sleep(1000);
-{
+// Ctrl+Shift+PageUp (Chrome's Move Tab Up, Ctrl on macOS too).
+if (await realKeyTo(await pageByUrl(Y(2)), 'PageUp', 'ks', VK.PAGE_UP, CTRL | SHIFT, 'PageUp')) {
+  await sleep(1500);
+  st = await statesOf([Y(2), Y(1)]);
+  order = (await sidebarOrder()).filter(u => u.includes('?y'));
+  check('A tab moved among the pinned tabs is pinned in place',
+        allAre(st, { pinned: true }) &&
+        JSON.stringify(order) === JSON.stringify([Y(2), Y(1)]),
+        JSON.stringify({ st, order }));
+  // Unpinned, it moves down past the divider and the New Tab row, live.
+  await keyTo(await pageByUrl(Y(2)), VK.D, ACCEL | SHIFT, 'd');
+  await sleep(1000);
   const l = await sidebarLayout();
   check('Unpinning moves the tab below the divider and the New Tab row',
         inZenOrder(l) && l.normal.some(t => t.url === Y(2)) &&
         l.pinned.some(t => t.url === Y(1)), JSON.stringify(layoutSummary(l)));
+} else {
+  skipAll(['A tab moved among the pinned tabs is pinned in place',
+           'Unpinning moves the tab below the divider and the New Tab row']);
 }
 for (const n of [1, 2]) {
   const page = await pageByUrl(Y(n));
@@ -620,7 +715,7 @@ const essentialRow = async () =>
 await createSpace(await pageByUrl(PIN_URL), 'Space 1');  // with a new tab
 let space = (await pages()).find(p => !p.url.startsWith('https://example.com'));
 await navigate(space, `${PIN_URL}?space1`);
-await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.D, CTRL | SHIFT, 'd');
+await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.D, ACCEL | SHIFT, 'd');
 // Whether the tab whose pinned URL is `url` shows in the sidebar.
 const tabShown = async url => !!(await rowsWith(url))[0]?.parent?.shown;
 const essentialShown = async () => !!(await essentialRow())?.parent?.shown;
@@ -645,7 +740,7 @@ check('In another Space, the first Space\'s pinned tab is hidden',
 check('...and the Essential still shows', await essentialShown());
 // Back to the first Space for the rest.
 for (let i = 0; i < 2; i++) {
-  await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.LEFT, CTRL | ALT);
+  await keyTo(await pageByUrl(`${PIN_URL}?space1`), VK.LEFT, ACCEL | ALT, 'ArrowLeft');
 }
 
 // --- After a restart: pinned URL, label and Essentials are kept. ---
@@ -672,6 +767,7 @@ const profileDir = chromeArgs.find(a => a.startsWith('--user-data-dir='))
     ?.slice('--user-data-dir='.length);
 async function relaunch() {
   browser = spawn(chromeArgs[0], chromeArgs.slice(1), { stdio: 'ignore' });
+  setKoanPid(browser.pid);  // real input goes to this Koan now
   for (let i = 0; i < 60 && !await cdpUp(); i++) await sleep(500);
   await sleep(5000);
 }
@@ -681,36 +777,45 @@ if (profileDir) {
   // the next start: unload the pinned tab away from its pinned URL, reset it
   // from the menu (it stays unloaded), select it (it loads the pinned URL).
   await activate(await pageByUrl(PIN_URL));
-  await navigate(await pageByUrl(PIN_URL), AWAY_URL);
-  await tabMenuCommand(await tabShowing(AWAY_URL), 'kKoanUnloadMenuItem');
-  unloaded.add(AWAY_URL);
-  await tabMenuCommand(await tabShowing(AWAY_URL), 'kKoanResetPinnedTabMenuItem');
-  pinned = await rowShowing(AWAY_URL);
-  check('"Reset Pinned Tab" on an unloaded tab leaves it unloaded',
-        pinned?.p.Discarded === 'true', JSON.stringify(pinned?.p.Discarded));
-  await activate(await pageByUrl(AWAY_URL));
-  unloaded.clear();
-  await sleep(1500);
-  check('...and selecting it goes to the pinned URL', !!await rowShowing(PIN_URL),
-        JSON.stringify((await rows()).map(t => t.p.Url)));
+  if (NATIVE_MENUS) {
+    skipMenu(['"Reset Pinned Tab" on an unloaded tab leaves it unloaded',
+              '...and selecting it goes to the pinned URL']);
+  } else {
+    await navigate(await pageByUrl(PIN_URL), AWAY_URL);
+    await tabMenuCommand(await tabShowing(AWAY_URL), 'kKoanUnloadMenuItem');
+    unloaded.add(AWAY_URL);
+    await tabMenuCommand(await tabShowing(AWAY_URL), 'kKoanResetPinnedTabMenuItem');
+    pinned = await rowShowing(AWAY_URL);
+    check('"Reset Pinned Tab" on an unloaded tab leaves it unloaded',
+          pinned?.p.Discarded === 'true', JSON.stringify(pinned?.p.Discarded));
+    await activate(await pageByUrl(AWAY_URL));
+    unloaded.clear();
+    await sleep(1500);
+    check('...and selecting it goes to the pinned URL', !!await rowShowing(PIN_URL),
+          JSON.stringify((await rows()).map(t => t.p.Url)));
+  }
 
   // An Essential's duplicate is an Essential whose pinned URL is the page it
   // was duplicated on, kept across the restart while it is away from it.
   const ESSENTIAL_PINNED = (await essentialRow()).p.PinnedUrl;
   const DUP_URL = `${ESSENTIAL_PINNED}&dup`;
-  await activate(await pageByUrl(ESSENTIAL_PINNED));
-  await navigate(await pageByUrl(ESSENTIAL_PINNED), DUP_URL);
-  const pagesBefore = new Set((await pages()).map(p => p.id));
-  await tabMenuCommand(await tabShowing(DUP_URL), 'kKoanDuplicateMenuItem');
-  await sleep(1500);
-  const dup = (await pages()).find(p => !pagesBefore.has(p.id));
-  const dupRow = (await rows()).filter(r => r.p.Essential === 'true' &&
-                                            r.p.PinnedUrl === DUP_URL);
-  check('Duplicating an Essential makes an Essential pinned on that page',
-        !!dup && dupRow.length === 1, JSON.stringify((await rows()).map(r => r.p.PinnedUrl)));
-  if (dup) await navigate(dup, `${DUP_URL}&away`);
-  // The original back at its pinned URL for the checks below.
-  await navigate(await pageByUrl(DUP_URL), ESSENTIAL_PINNED);
+  if (NATIVE_MENUS) {
+    skipMenu(['Duplicating an Essential makes an Essential pinned on that page']);
+  } else {
+    await activate(await pageByUrl(ESSENTIAL_PINNED));
+    await navigate(await pageByUrl(ESSENTIAL_PINNED), DUP_URL);
+    const pagesBefore = new Set((await pages()).map(p => p.id));
+    await tabMenuCommand(await tabShowing(DUP_URL), 'kKoanDuplicateMenuItem');
+    await sleep(1500);
+    const dup = (await pages()).find(p => !pagesBefore.has(p.id));
+    const dupRow = (await rows()).filter(r => r.p.Essential === 'true' &&
+                                              r.p.PinnedUrl === DUP_URL);
+    check('Duplicating an Essential makes an Essential pinned on that page',
+          !!dup && dupRow.length === 1, JSON.stringify((await rows()).map(r => r.p.PinnedUrl)));
+    if (dup) await navigate(dup, `${DUP_URL}&away`);
+    // The original back at its pinned URL for the checks below.
+    await navigate(await pageByUrl(DUP_URL), ESSENTIAL_PINNED);
+  }
   await navigate((await pages()).find(p => p.url === PIN_URL), AWAY_URL);
   // The Essential away from its pinned URL too.
   const ESSENTIAL_URL = ESSENTIAL_PINNED;
@@ -749,12 +854,17 @@ if (profileDir) {
         pinned.p.Url === AWAY_URL,
         JSON.stringify(pinned && { away: pinned.p.AwayFromPinnedUrl, url: pinned.p.Url,
                                    inSpace: pinned.p.PinnedInSpace }));
-  const dupAfter = (await rows()).find(r => r.p.Url === `${DUP_URL}&away`);
-  check('...and the Essential\'s duplicate keeps the pinned URL it got',
-        dupAfter?.p.Essential === 'true' && dupAfter.p.PinnedUrl === DUP_URL,
-        JSON.stringify(dupAfter && { pinned: dupAfter.p.PinnedUrl, essential: dupAfter.p.Essential }));
-  check('...and its label', restoredTitle?.p.Text === 'Mail',
-        JSON.stringify(restoredTitle?.p.Text));
+  if (NATIVE_MENUS) {
+    skipMenu(['...and the Essential\'s duplicate keeps the pinned URL it got',
+              '...and its label (Change Label…)']);
+  } else {
+    const dupAfter = (await rows()).find(r => r.p.Url === `${DUP_URL}&away`);
+    check('...and the Essential\'s duplicate keeps the pinned URL it got',
+          dupAfter?.p.Essential === 'true' && dupAfter.p.PinnedUrl === DUP_URL,
+          JSON.stringify(dupAfter && { pinned: dupAfter.p.PinnedUrl, essential: dupAfter.p.Essential }));
+    check('...and its label', restoredTitle?.p.Text === 'Mail',
+          JSON.stringify(restoredTitle?.p.Text));
+  }
   check('...and the Essential stays an Essential', !!restoredEssential,
         JSON.stringify(restoredEssential?.p.PinnedUrl));
   check('...and the window its session data', await windowData() === WINDOW_DATA,
@@ -794,26 +904,36 @@ if (profileDir) {
   check('A new window has session data of its own',
         !!OTHER_DATA && OTHER_DATA !== WINDOW_DATA && await dataOf(W_URL(2)) === OTHER_DATA,
         JSON.stringify([OTHER_DATA, await dataOf(W_URL(2)), WINDOW_DATA]));
-  await keyTo(await pageByUrl(W_URL(2)), VK.W, CTRL | SHIFT, 'w');  // Close Window
-  await sleep(2000);
-  check('...it closes', !await pageByUrl(W_URL(1)) && !await pageByUrl(W_URL(2)),
-        JSON.stringify((await pages()).map(p => p.url)));
-  // From a loaded tab of the main window (a key to a tab that isn't loaded
-  // yet goes nowhere).
-  await activate(await pageByUrl(PIN_URL));
-  await keyTo(await pageByUrl(PIN_URL), VK.T, CTRL | SHIFT, 't');
-  await sleep(2500);
-  check('...and Ctrl+Shift+T reopens it with its session data',
-        await dataOf(W_URL(1)) === OTHER_DATA,
-        JSON.stringify([await dataOf(W_URL(1)), OTHER_DATA,
-                        (await pages()).map(p => p.url)]));
-  await sleep(3000);  // The session is saved on a timer.
-  await quit();
-  await relaunch();
-  check('...which it keeps across a restart', await dataOf(W_URL(1)) === OTHER_DATA &&
-        await windowData() === WINDOW_DATA,
-        JSON.stringify([await dataOf(W_URL(1)), OTHER_DATA, await windowData()]));
+  const REOPEN_CHECKS = ['...it closes', '...and Ctrl+Shift+T reopens it with its session data',
+                         '...which it keeps across a restart'];
+  // Close Window: Ctrl+Shift+W (the main menu's Cmd+Shift+W on macOS).
+  if (!await realKeyTo(await pageByUrl(W_URL(2)), 'w', 'cs', VK.W, ACCEL | SHIFT, 'w')) {
+    skipAll(REOPEN_CHECKS);
+  } else {
+    await sleep(2000);
+    check('...it closes', !await pageByUrl(W_URL(1)) && !await pageByUrl(W_URL(2)),
+          JSON.stringify((await pages()).map(p => p.url)));
+    // From a loaded tab of the main window (a key to a tab that isn't loaded
+    // yet goes nowhere).
+    await activate(await pageByUrl(PIN_URL));
+    if (!await realKeyTo(await pageByUrl(PIN_URL), 't', 'cs', VK.T, ACCEL | SHIFT, 't')) {
+      skipAll(REOPEN_CHECKS.slice(1));
+    } else {
+      await sleep(2500);
+      check('...and Ctrl+Shift+T reopens it with its session data',
+            await dataOf(W_URL(1)) === OTHER_DATA,
+            JSON.stringify([await dataOf(W_URL(1)), OTHER_DATA,
+                            (await pages()).map(p => p.url)]));
+      await sleep(3000);  // The session is saved on a timer.
+      await quit();
+      await relaunch();
+      check('...which it keeps across a restart', await dataOf(W_URL(1)) === OTHER_DATA &&
+            await windowData() === WINDOW_DATA,
+            JSON.stringify([await dataOf(W_URL(1)), OTHER_DATA, await windowData()]));
+    }
+  }
 }
+server?.close();
 
 console.log(failures ? `${failures} check(s) failed` : 'all checks passed');
 process.exit(failures ? 1 : 0);
