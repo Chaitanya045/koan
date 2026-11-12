@@ -347,6 +347,19 @@ void KoanCompactModeController::OnBrowserViewLayout() {
   if (mode_ != DesiredMode()) {
     UpdateActiveSoon();
   }
+  // The page's own fullscreen starts and ends with a layout too, also where
+  // its notification (OnFullscreenStateChanged()) came before Chromium's
+  // state said so: place the top container after it, outside of layout.
+  if (IsTopContainerMisplaced()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<KoanCompactModeController> self) {
+                         if (self && !self->IsClosing()) {
+                           self->PlaceTopContainer();
+                         }
+                       },
+                       weak_factory_.GetWeakPtr()));
+  }
   InstallContextMenu();
   if (mode_ != Mode::kNone) {
     LayoutHotZones();
@@ -1317,11 +1330,32 @@ void KoanCompactModeController::Activate(Mode mode) {
 }
 
 bool KoanCompactModeController::ParksTopContainer() const {
+  if (hides_toolbar()) {
+    return true;
+  }
   // The page's own fullscreen hides everything (Zen's
   // `:not([inDOMFullscreen])`): the top container waits in the overlay, out
-  // of sight, also where the toolbar shows otherwise.
-  return hides_toolbar() || (KeepsTopContainerInFullscreen(browser_view_) &&
-                             IsContentFullscreen(browser_view_));
+  // of sight, also where the toolbar shows otherwise. Only in a normal window
+  // whose top container is the window's (Koan's layout keeps it there, see
+  // KeepsTopContainerInFullscreen()), not in Chromium's overlay widget.
+  if (!IsContentFullscreen(browser_view_) ||
+      !browser_view_->GetIsNormalType()) {
+    return false;
+  }
+  const views::View* parent = browser_view_->top_container()->parent();
+  return parent == browser_view_.get() ||
+         parent == GetTopContainerOverlayView(browser_view_);
+}
+
+bool KoanCompactModeController::IsTopContainerMisplaced() const {
+  const views::View* overlay = GetTopContainerOverlayView(browser_view_);
+  if (!overlay || IsClosing()) {
+    return false;
+  }
+  const bool parked = browser_view_->top_container()->parent() == overlay;
+  return parked != ParksTopContainer() ||
+         (parked &&
+          overlay->GetVisible() == IsContentFullscreen(browser_view_));
 }
 
 void KoanCompactModeController::ParkTopContainer() {
