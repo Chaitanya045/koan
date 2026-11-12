@@ -44,6 +44,8 @@ settings_effects_behaviour timeout=900
 shortcuts
 sidebar_animation
 sidebar_drag
+# Zen's audio badge on an Essentials tile (favicon kept, click mutes).
+essentials_audio
 spaces_switching
 tabs_right
 urlbar

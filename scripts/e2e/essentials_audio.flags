@@ -1,0 +1,4 @@
+# The test_helper extension: on macOS askTestHelper() in lib/mac.mjs pins the
+# tab (the tab's menu is a native NSMenu there; {root} is the repo, suite.sh
+# expands it).
+--load-extension={root}/scripts/e2e/extensions/test_helper

@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
+#include "components/tabs/public/tab_alert.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -185,6 +186,11 @@ tabs::VerticalTabStripCollapseState GetEssentialsCollapseState(
 
 bool IsEssentialsTile(bool pinned) {
   return pinned && features::IsSidebarEnabled();
+}
+
+bool HidesTabAlertIndicator(bool pinned, std::optional<tabs::TabAlert> alert) {
+  return IsEssentialsTile(pinned) && (alert == tabs::TabAlert::kAudioPlaying ||
+                                      alert == tabs::TabAlert::kAudioMuting);
 }
 
 void PaintEssentialsTile(gfx::Canvas* canvas,

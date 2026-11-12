@@ -79,6 +79,22 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
       dark ? ui::ColorTransform(kColorKoanEssentialsTileSelected)
            : ui::ColorTransform(SkColorSetA(SK_ColorBLACK, Alpha(0.1f)));
 
+  // The audio badge (Firefox's .tab-icon-overlay, tabs.css): opaque, the
+  // toolbox's background (the selected tab's background over it on the
+  // selected tile), the toolbox text; hovered and pressed, Firefox's
+  // --button-background-color-{hover,active} over it: rgba(207, 207, 216,
+  // 0.66 / 1) (0.2 / 0.4 in dark mode). Its outline is --button-border-color,
+  // transparent.
+  mixer[kColorKoanEssentialsAudioBadge] = {kColorToolbar};
+  mixer[kColorKoanEssentialsAudioBadgeSelected] =
+      ui::AlphaBlend(SK_ColorWHITE, kColorToolbar, Alpha(dark ? 0.2f : 0.85f));
+  mixer[kColorKoanEssentialsAudioBadgeHovered] = {
+      SkColorSetARGB(Alpha(dark ? 0.2f : 0.66f), 207, 207, 216)};
+  mixer[kColorKoanEssentialsAudioBadgePressed] = {
+      SkColorSetARGB(Alpha(dark ? 0.4f : 1.0f), 207, 207, 216)};
+  mixer[kColorKoanEssentialsAudioBadgeForeground] = {kColorToolbarText};
+  mixer[kColorKoanEssentialsAudioBadgeBorder] = {SK_ColorTRANSPARENT};
+
   // The Essentials promo (zen-essentials-promo.css): --zen-primary-color at
   // 60% (40% with a tab over it), bordered with it, the sidebar's text, a
   // shadow of black at 10%.

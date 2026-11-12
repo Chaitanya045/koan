@@ -35,6 +35,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_essentials_audio_badge.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
 #include "koan/browser/ui/views/koan_session_data.h"
@@ -821,20 +822,25 @@ void ShowTabIconPicker(views::View* anchor, tabs::TabInterface* tab) {
 
 void OnTabViewCreated(TabView* tab_view) {
   // The sidebar's rows only; horizontal tabs stay Chrome's.
-  if (!features::IsPinnedTabsEnabled() ||
-      tab_view->collection_node()->orientation() !=
-          TabStripOrientation::kVertical) {
+  if (tab_view->collection_node()->orientation() !=
+      TabStripOrientation::kVertical) {
     return;
   }
-  auto* sublabel = tab_view->AddChildView(std::make_unique<KoanTabSublabel>());
-  tab_view->AddChildView(std::make_unique<KoanTabRow>(tab_view, sublabel))
-      ->Update();
+  if (features::IsPinnedTabsEnabled()) {
+    auto* sublabel =
+        tab_view->AddChildView(std::make_unique<KoanTabSublabel>());
+    tab_view->AddChildView(std::make_unique<KoanTabRow>(tab_view, sublabel))
+        ->Update();
+  }
+  // Last, above the favicon and the reset button.
+  AddEssentialsAudioBadge(tab_view);
 }
 
 void OnTabViewColorsChanged(const TabView* tab_view) {
   if (KoanTabRow* row = RowFor(tab_view->GetTabInterface())) {
     row->UpdateCloseButton();
   }
+  UpdateEssentialsAudioBadge(tab_view);
 }
 
 }  // namespace koan

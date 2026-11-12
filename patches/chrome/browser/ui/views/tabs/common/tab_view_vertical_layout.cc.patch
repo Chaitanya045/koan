@@ -1,15 +1,16 @@
 --- a/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
 +++ b/chrome/browser/ui/views/tabs/common/tab_view_vertical_layout.cc
-@@ -14,6 +14,8 @@
+@@ -14,6 +14,9 @@
  #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
  #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
  #include "chrome/browser/ui/views/tabs/tab_style_views.h"
 +#include "koan/browser/koan_features.h"
++#include "koan/browser/ui/views/koan_essentials.h"
 +#include "koan/browser/ui/views/koan_sidebar_tabs.h"
  #include "ui/views/view_utils.h"
  
  namespace {
-@@ -37,7 +39,8 @@
+@@ -37,7 +40,8 @@
                       /*align_leading=*/false,
                       /*expand=*/false,
                       /*decorate_on_collapse=*/true),
@@ -19,7 +20,18 @@
                       /*align_leading=*/true,
                       /*expand=*/false),
        TabChildConfig(TabView().title_, kTitleMinWidth, kDefaultPadding,
-@@ -186,7 +189,9 @@
+@@ -153,6 +157,10 @@
+   if (child_view == TabView().alert_indicator_) {
+     const std::optional<tabs::TabAlert> current_alert_state =
+         TabView().alert_indicator_->showing_alert_state();
++    // Koan (Zen): an Essentials tile keeps its favicon, with audio as a badge.
++    if (koan::HidesTabAlertIndicator(TabView().pinned_, current_alert_state)) {
++      return false;
++    }
+     if (TabView().glic_tab_underline_view_ &&
+         (current_alert_state == tabs::TabAlert::kGlicAccessing ||
+          current_alert_state == tabs::TabAlert::kGlicSharing ||
+@@ -186,7 +194,9 @@
        return TabView().active_ && hovered_or_focused;
      }
  
