@@ -273,6 +273,22 @@ function gate() {
     return false;
   }
 }
+// Makes `page`'s window the key window (CDP's Page.bringToFront: the browser
+// window's Activate(), which orders it front and makes it key), and waits
+// until the page has the focus. Real input needs that: keypress2 posts to
+// Koan's pid, so a main-menu key (Cmd+Shift+W, Cmd+Q) goes to whatever window
+// is key, if any, and a page in a window that isn't key sees no mouse moves.
+// A window opened through CDP (Target.createTarget) isn't made key, and
+// bringing the app to the front (gate()) doesn't make one key either.
+// Returns whether the page got the focus.
+export async function makeKey(page, timeout = 3000) {
+  if (!page) return false;
+  await onPage(page, c => c.send('Page.bringToFront')).catch(() => {});
+  return !!(await waitFor(async () => (await onPage(page, c => c.send('Runtime.evaluate',
+      { expression: 'document.hasFocus()', returnByValue: true }))).result?.result?.value,
+      timeout));
+}
+
 // keypress2 flags: c cmd, s shift, k ctrl, a alt.
 export async function realKey(name, flags = '', settle = 500) {
   if (!gate()) return false;
