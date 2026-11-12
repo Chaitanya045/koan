@@ -21,7 +21,6 @@ class BrowserView;
 
 namespace views {
 class Button;
-class ImageButton;
 class ImageView;
 class Label;
 }  // namespace views
@@ -29,6 +28,7 @@ class Label;
 namespace koan {
 
 class KoanSidebarExtensionsView;
+class KoanSiteButton;
 
 // Zen's single-toolbar sidebar header is two pieces:
 // - KoanSidebarNavButtons (back / forward / reload) at the trailing end of
@@ -123,7 +123,7 @@ class KoanSidebarNavView : public views::View,
   raw_ptr<views::Label> url_label_ = nullptr;
   raw_ptr<views::Button> copy_button_ = nullptr;
   raw_ptr<KoanSidebarExtensionsView> extensions_ = nullptr;
-  raw_ptr<views::ImageButton> site_button_ = nullptr;
+  raw_ptr<KoanSiteButton> site_button_ = nullptr;
   bool editing_ = false;
   // Whether the pill shows a page (not an empty tab).
   bool has_page_ = false;

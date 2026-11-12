@@ -256,6 +256,54 @@ BEGIN_METADATA(KoanUrlPill)
 ADD_READONLY_PROPERTY_METADATA(bool, Hovered)
 END_METADATA
 
+// The pill's identity button (Zen's #identity-icon-box): the page's favicon,
+// or the magnifier. A plain image button: views'
+// CreateVectorImageButtonWithNativeTheme() puts its vector icon back in every
+// state on each theme change (a compact mode toggle, a look or Space colour
+// change), so a page's favicon became the magnifier until the next
+// navigation (#349), and the hovered and pressed states always showed it.
+class KoanSiteButton : public views::ImageButton {
+  METADATA_HEADER(KoanSiteButton, views::ImageButton)
+
+ public:
+  explicit KoanSiteButton(PressedCallback callback)
+      : views::ImageButton(std::move(callback)) {
+    views::ConfigureVectorImageButton(this);
+  }
+
+  // The favicon, or (null) the magnifier. Only the normal state's image:
+  // hovered and pressed show it too.
+  void SetIcon(const ui::ImageModel& favicon) {
+    SetImageModel(views::Button::STATE_NORMAL,
+                  !favicon.IsEmpty()
+                      ? favicon
+                      : ui::ImageModel::FromVectorIcon(
+                            kKoanUrlbarSearchGlassIcon,
+                            kColorKoanUrlPillForeground, kUrlPillIconSize));
+  }
+
+  // views::ImageButton:
+  void SetImageModel(ButtonState state,
+                     const ui::ImageModel& image_model) override {
+    views::ImageButton::SetImageModel(state, image_model);
+    if (state == views::Button::STATE_NORMAL) {
+      shows_favicon_ = !image_model.IsVectorIcon() ||
+                       image_model.GetVectorIcon().vector_icon() !=
+                           &kKoanUrlbarSearchGlassIcon;
+    }
+  }
+
+  // Whatever set the image (for scripts/e2e/compact_single.mjs).
+  bool GetShowsFavicon() const { return shows_favicon_; }
+
+ private:
+  bool shows_favicon_ = false;
+};
+
+BEGIN_METADATA(KoanSiteButton)
+ADD_READONLY_PROPERTY_METADATA(bool, ShowsFavicon)
+END_METADATA
+
 KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
     : browser_view_(browser_view) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -304,10 +352,11 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   // opens Chromium's page info for the site (security, permissions, cookies,
   // site settings), as Zen's site data panel does; a magnifier on an empty
   // tab. The image is set in UpdateUrl().
-  site_button_ =
-      pill_button(base::BindRepeating(&KoanSidebarNavView::OnSiteButtonPressed,
-                                      base::Unretained(this)),
-                  kKoanUrlbarSearchGlassIcon, u"Site information");
+  auto site_button = std::make_unique<KoanSiteButton>(base::BindRepeating(
+      &KoanSidebarNavView::OnSiteButtonPressed, base::Unretained(this)));
+  site_button->SetPreferredSize(
+      gfx::Size(kUrlPillButtonSize, kUrlPillButtonSize));
+  site_button_ = url_pill_->AddChildView(std::move(site_button));
 
   // Something is in use (camera, microphone ...): see UpdateInUse().
   in_use_ = url_pill_->AddChildView(std::make_unique<views::ImageView>());
@@ -527,12 +576,7 @@ void KoanSidebarNavView::UpdateUrl() {
       favicon = helper->GetFavicon();
     }
   }
-  site_button_->SetImageModel(
-      views::Button::STATE_NORMAL,
-      !favicon.IsEmpty() ? favicon
-                         : ui::ImageModel::FromVectorIcon(
-                               kKoanUrlbarSearchGlassIcon,
-                               kColorKoanUrlPillForeground, kUrlPillIconSize));
+  site_button_->SetIcon(favicon);
   const std::u16string site_name =
       has_page ? u"Site information" : u"Search or enter address";
   site_button_->SetTooltipText(site_name);

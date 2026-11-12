@@ -37,6 +37,13 @@ async function checkSingleToolbarCompact(when, onRight) {
         zone && `${zone.x}+${zone.w}`);
 }
 
+// The pill's site button shows the page's icon (a page with no favicon of its
+// own gets Chromium's globe), not the magnifier, which is the empty tab's.
+const siteButtonShowsFavicon = async () =>
+  (await views()).find(v => v.cls === 'KoanSiteButton' && v.shown)?.props.ShowsFavicon;
+const iconBefore = await siteButtonShowsFavicon();
+check('The URL pill shows the page\'s icon', iconBefore === 'true', iconBefore);
+
 await press(VK.S, ACCEL, 's');
 await checkSingleToolbarCompact('Ctrl+S', false);
 
@@ -73,6 +80,11 @@ vs = await views();
 check('Ctrl+S leaves compact mode, still single toolbar',
       findShown(vs, 'VerticalTabStripRegionView')?.w >= 200 &&
       findShown(vs, 'KoanSidebarNavButtons'));
+// #349: after compact mode on and off the pill showed the magnifier for the
+// page (the theme change put the button's vector icon back).
+const iconAfter = await siteButtonShowsFavicon();
+check('...and the URL pill still shows the page\'s icon, not the magnifier',
+      iconAfter === 'true', iconAfter);
 
 // A window opened while compact mode is on: Chromium starts it with the
 // sidebar collapsed (compact mode's collapse is the profile's sidebar
