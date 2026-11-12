@@ -4,7 +4,7 @@
 //
 // Contains material ported from Zen Browser, Copyright the Zen Browser
 // contributors (https://github.com/zen-browser/desktop), MPL-2.0:
-//   ZenSpaceCreation.mjs
+//   ZenSpaceCreation.mjs, create-workspace-form.css (the Profile row)
 //   zen-workspaces.ftl (strings)
 // Koan's changes, Copyright 2026 The Koan Authors, are under the same
 // licence.
@@ -19,12 +19,16 @@
 #include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/path_effect.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_space_menu.h"
+#include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/color/color_provider.h"
 #include "ui/events/event.h"
@@ -42,6 +46,7 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
@@ -53,6 +58,15 @@ namespace {
 
 // The title is a little larger (Zen's h1, font-size: large).
 constexpr int kTitleSizeDelta = 4;
+
+// Zen's Profile row (.zen-workspace-creation-profile-wrapper): 4px in, 4px
+// between the label and the button, the button 6px in.
+constexpr int kProfileRowPadding = 4;
+constexpr int kProfileButtonPadding = 6;
+// Zen's zen-workspace-creation-profile and its tooltip.
+constexpr char16_t kProfileLabel[] = u"Profile";
+constexpr char16_t kProfileTooltip[] =
+    u"Profiles are used to separate cookies and site data between spaces.";
 
 }  // namespace
 
@@ -143,6 +157,27 @@ class KoanSpaceFormButton : public views::LabelButton {
 BEGIN_METADATA(KoanSpaceFormButton)
 END_METADATA
 
+// The Profile row's button: the profile's name on a faint tint
+// (light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1))), 6px corners;
+// it opens the profile menu.
+class KoanSpaceProfileButton : public views::LabelButton {
+  METADATA_HEADER(KoanSpaceProfileButton, views::LabelButton)
+
+ public:
+  explicit KoanSpaceProfileButton(PressedCallback callback)
+      : views::LabelButton(std::move(callback)) {
+    SetBorder(views::CreateEmptyBorder(gfx::Insets(kProfileButtonPadding)));
+    SetEnabledTextColors(kColorKoanSpaceForeground);
+    SetTextSubpixelRenderingEnabled(false);
+    SetBackground(views::CreateRoundedRectBackground(
+        kColorKoanSpaceFormFieldHovered, SpaceFormIconCornerRadius()));
+    GetViewAccessibility().SetDescription(std::u16string(kProfileTooltip));
+  }
+};
+
+BEGIN_METADATA(KoanSpaceProfileButton)
+END_METADATA
+
 KoanSpaceCreationView::KoanSpaceCreationView(
     KoanWorkspaceController* controller)
     : controller_(controller) {
@@ -191,6 +226,31 @@ KoanSpaceCreationView::KoanSpaceCreationView(
   name_->SetController(this);
   name_->SetTextColorId(kColorKoanSpaceForeground);
   row->SetFlexForView(name_, 1);
+
+  // Zen's Profile row: "Profile" (its tooltip says what it is for), then the
+  // profile's name, which opens the menu.
+  auto* profile_row = AddChildView(std::make_unique<views::BoxLayoutView>());
+  profile_row->SetOrientation(views::BoxLayout::Orientation::kHorizontal);
+  profile_row->SetInsideBorderInsets(gfx::Insets(kProfileRowPadding));
+  profile_row->SetBetweenChildSpacing(kProfileRowPadding);
+  profile_row->SetCrossAxisAlignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  profile_row->SetBackground(views::CreateRoundedRectBackground(
+      kColorKoanSpaceFormField, SpaceFormFieldCornerRadius()));
+  profile_row->SetProperty(views::kMarginsKey,
+                           gfx::Insets::TLBR(0, 0, kSpaceFormFieldGap, 0));
+  auto* profile_label =
+      profile_row->AddChildView(std::make_unique<views::Label>(kProfileLabel));
+  profile_label->SetEnabledColor(kColorKoanSpaceForeground);
+  profile_label->SetTooltipText(kProfileTooltip);
+  profile_label->SetSubpixelRenderingEnabled(false);
+  profile_label->SetProperty(views::kMarginsKey,
+                             gfx::Insets::TLBR(0, kProfileButtonPadding, 0, 0));
+  profile_row->SetFlexForView(profile_label, 1);
+  profile_button_ = profile_row->AddChildView(
+      std::make_unique<KoanSpaceProfileButton>(base::BindRepeating(
+          &KoanSpaceCreationView::PickProfile, base::Unretained(this))));
+  SetProfile(std::string());
 
   theme_button_ = AddChildView(std::make_unique<KoanSpaceFormButton>(
       base::BindRepeating(&KoanSpaceCreationView::EditTheme,
@@ -297,6 +357,29 @@ void KoanSpaceCreationView::SetTheme(
   theme_ = theme;
 }
 
+void KoanSpaceCreationView::PickProfile() {
+  // (A menu still open goes first: it runs on the model below.)
+  profile_runner_.reset();
+  profile_menu_ = std::make_unique<KoanSpaceProfileMenu>(
+      controller_->browser_view()->browser(), container_,
+      base::BindRepeating(&KoanSpaceCreationView::SetProfile,
+                          weak_factory_.GetWeakPtr()));
+  profile_runner_ = std::make_unique<views::MenuRunner>(
+      profile_menu_->model(), views::MenuRunner::HAS_MNEMONICS);
+  // Below the button, like Zen's popup (openPopup(..., "after_start")).
+  gfx::Rect bounds = profile_button_->GetLocalBounds();
+  views::View::ConvertRectToScreen(profile_button_, &bounds);
+  profile_runner_->RunMenuAt(GetWidget(), nullptr, bounds,
+                             views::MenuAnchorPosition::kTopLeft,
+                             ui::mojom::MenuSourceType::kMouse);
+}
+
+void KoanSpaceCreationView::SetProfile(const std::string& container) {
+  container_ = container;
+  profile_button_->SetText(
+      SpaceProfileName(controller_->browser_view()->GetProfile(), container_));
+}
+
 void KoanSpaceCreationView::Finish(bool create) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&KoanSpaceCreationView::DoFinish,
@@ -309,9 +392,10 @@ void KoanSpaceCreationView::DoFinish(bool create) {
   const std::u16string name(name_->GetText());
   const std::u16string icon = icon_->GetIcon();
   const KoanWorkspaceController::SpaceTheme theme = theme_;
+  const std::string container = container_;
   controller->CloseCreateForm();
   if (create) {
-    controller->CreateSpace(name, icon, theme);
+    controller->CreateSpace(name, icon, theme, container);
   }
 }
 

@@ -40,6 +40,9 @@ struct SpaceRecord {
   std::u16string icon;
   // KoanWorkspaceController::SpaceTheme::stored (empty: Zen's default).
   std::string theme;
+  // KoanWorkspaceController::SpaceData::container, the Space's profile
+  // (#318; empty: none).
+  std::string container;
 
   bool operator==(const SpaceRecord&) const = default;
 };

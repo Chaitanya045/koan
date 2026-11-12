@@ -1,0 +1,14 @@
+{"koan": {
+  "urlbar": {"replace_newtab": false},
+  "containers": {"user": [
+    {"id": "salphaprofile", "name": "Alpha", "color": 1},
+    {"id": "sbetaprofile", "name": "Beta", "color": 7}
+  ]},
+  "workspaces": {"list": [
+    {"title": "Start", "color": 0, "theme": "", "active": true, "pinned": []},
+    {"title": "A", "color": 0, "theme": "", "container": "user:salphaprofile", "pinned": []},
+    {"title": "B", "color": 0, "theme": "", "container": "user:sbetaprofile", "pinned": []},
+    {"title": "A two", "color": 0, "theme": "", "container": "user:salphaprofile", "pinned": []},
+    {"title": "None", "color": 0, "theme": "", "pinned": []}
+  ]}
+}}

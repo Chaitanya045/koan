@@ -37,6 +37,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/vector_icons/vector_icons.h"
+#include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
@@ -52,11 +54,15 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_space_header.h"
+#include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkPath.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -72,7 +78,9 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -543,6 +551,70 @@ int PlaceRows(views::View* rows,
   return height;
 }
 
+// Zen's container indicator (Firefox's .tab-context-line, #318): a line in
+// the container's colour at the start edge of a tab in a container other
+// than its Space's (zen.workspaces.hide-default-container-indicator: the
+// Space's own tabs show none), 2px across a row inset by half the corner
+// radius, 3px down an Essentials tile clipped to its corners. An Essential
+// compares with the Space shown.
+void PaintContainerLine(gfx::Canvas* canvas,
+                        const views::View& view,
+                        const BrowserView* browser_view,
+                        bool pinned,
+                        float corner_radius) {
+  constexpr int kRowLineWidth = 2;
+  constexpr int kTileLineWidth = 3;
+  const TabView* tab_view = views::AsViewClass<TabView>(&view);
+  const tabs::TabInterface* tab =
+      tab_view ? tab_view->GetTabInterface() : nullptr;
+  const std::optional<containers::ContainerId> container =
+      tab ? containers::ContainerOf(tab->GetContents()) : std::nullopt;
+  // (Most tabs are in none: no Space to look up.)
+  if (!container || container->kind != containers::ContainerKind::kUser) {
+    return;
+  }
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  KoanWorkspaceController* spaces =
+      controller && controller->workspaces() &&
+              controller->workspaces()->IsEnabled()
+          ? controller->workspaces()
+          : nullptr;
+  const std::optional<tab_groups::TabGroupId> space =
+      !spaces ? std::nullopt
+              : (pinned ? spaces->GetActiveSpace() : tab->GetGroup());
+  const std::optional<containers::ContainerId> space_container =
+      space ? containers::SpaceContainerFromString(
+                  spaces->GetSpaceContainer(*space))
+            : std::nullopt;
+  if (!containers::ShowsContainerLine(container, space_container)) {
+    return;
+  }
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(view.GetColorProvider()->GetColor(ContainerLineColorId(
+      Profile::FromBrowserContext(tab->GetContents()->GetBrowserContext()),
+      *container,
+      view.GetWidget() && view.GetWidget()->ShouldPaintAsActive())));
+  const gfx::Rect bounds = view.GetLocalBounds();
+  if (pinned) {
+    gfx::ScopedCanvas scoped(canvas);
+    canvas->ClipPath(SkPath::RRect(gfx::RectFToSkRect(gfx::RectF(bounds)),
+                                   corner_radius, corner_radius),
+                     /*do_anti_alias=*/true);
+    canvas->DrawRect(
+        gfx::Rect(view.GetMirroredXWithWidthInView(0, kTileLineWidth), 0,
+                  kTileLineWidth, bounds.height()),
+        flags);
+    return;
+  }
+  const int inset = static_cast<int>(corner_radius / 2);
+  canvas->DrawRoundRect(
+      gfx::RectF(view.GetMirroredXWithWidthInView(0, kRowLineWidth), inset,
+                 kRowLineWidth, std::max(0, bounds.height() - 2 * inset)),
+      kRowLineWidth / 2.f, flags);
+}
+
 }  // namespace
 
 int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view) {
@@ -630,21 +702,22 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
   if (!features::IsSidebarEnabled() || !provider) {
     return false;
   }
+  const BrowserView* browser_view =
+      tab.GetWidget() ? BrowserView::GetBrowserViewForNativeWindow(
+                            tab.GetWidget()->GetNativeWindow())
+                      : nullptr;
   // Zen unselects the current tab while its URL bar is open for a new tab:
   // the "+ New Tab" row is the selected one then.
-  if (selected && tab.GetWidget()) {
-    if (const BrowserView* browser_view =
-            BrowserView::GetBrowserViewForNativeWindow(
-                tab.GetWidget()->GetNativeWindow())) {
-      if (const KoanBrowserViewController* controller =
-              KoanBrowserViewController::From(browser_view);
-          controller && controller->url_bar()->is_new_tab()) {
-        selected = false;
-      }
+  if (selected && browser_view) {
+    if (const KoanBrowserViewController* controller =
+            KoanBrowserViewController::From(browser_view);
+        controller && controller->url_bar()->is_new_tab()) {
+      selected = false;
     }
   }
   if (pinned) {
     PaintEssentialsTile(canvas, tab, selected, hover, corner_radius);
+    PaintContainerLine(canvas, tab, browser_view, pinned, corner_radius);
     return true;
   }
   SkColor color = SK_ColorTRANSPARENT;
@@ -662,6 +735,7 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
     canvas->DrawRoundRect(gfx::RectF(tab.GetLocalBounds()), corner_radius,
                           flags);
   }
+  PaintContainerLine(canvas, tab, browser_view, pinned, corner_radius);
   return true;
 }
 

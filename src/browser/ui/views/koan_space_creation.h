@@ -20,17 +20,20 @@ namespace views {
 class Label;
 class LabelButton;
 class MdTextButton;
+class MenuRunner;
 class Textfield;
 }  // namespace views
 
 namespace koan {
 
 class KoanSpaceIconField;
+class KoanSpaceProfileMenu;
 
 // Zen's Create-a-Space form (zen-workspace-creation), shown in the sidebar
 // in place of the Space: a title, the icon (Zen's emoji picker) and name of
-// the new Space, Theme..., and Create Space / Cancel. Create Space is
-// enabled once the Space has a name; Enter creates, Escape cancels.
+// the new Space, Zen's Profile row (its container, #318: Default, the user's
+// profiles, New Profile...), Theme..., and Create Space / Cancel. Create Space
+// is enabled once the Space has a name; Enter creates, Escape cancels.
 class KoanSpaceCreationView : public views::View,
                               public views::TextfieldController {
   METADATA_HEADER(KoanSpaceCreationView, views::View)
@@ -60,6 +63,8 @@ class KoanSpaceCreationView : public views::View,
   void SetIcon(const std::u16string& icon);
   void EditTheme();
   void SetTheme(const KoanWorkspaceController::SpaceTheme& theme);
+  void PickProfile();
+  void SetProfile(const std::string& container);
   // Closes the form (soon: it is usually one of its buttons asking) and
   // creates the Space if `create`.
   void Finish(bool create);
@@ -71,9 +76,15 @@ class KoanSpaceCreationView : public views::View,
   raw_ptr<views::Label> description_ = nullptr;
   raw_ptr<KoanSpaceIconField> icon_ = nullptr;
   raw_ptr<views::Textfield> name_ = nullptr;
+  raw_ptr<views::LabelButton> profile_button_ = nullptr;
   raw_ptr<views::LabelButton> theme_button_ = nullptr;
   raw_ptr<views::MdTextButton> create_ = nullptr;
   KoanWorkspaceController::SpaceTheme theme_;
+  // The new Space's container (SpaceData::container): Zen's form starts on
+  // Default.
+  std::string container_;
+  std::unique_ptr<KoanSpaceProfileMenu> profile_menu_;
+  std::unique_ptr<views::MenuRunner> profile_runner_;
   bool focus_name_pending_ = false;
   std::unique_ptr<KoanEmojiPicker::Bubble> picker_;
   base::WeakPtrFactory<KoanSpaceCreationView> weak_factory_{this};

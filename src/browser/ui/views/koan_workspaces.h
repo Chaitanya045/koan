@@ -121,6 +121,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
     // An emoji, or empty.
     std::u16string icon;
     SpaceTheme theme;
+    // Zen's profile (container) for the Space's new tabs (#318): one of the
+    // user's containers, Serialize()d (koan/browser/containers/
+    // koan_user_containers.h), or empty for none, the default partition.
+    std::string container;
   };
 
   // What the UI shows for a Space (the bottom bar, menus, the Library).
@@ -130,6 +134,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
     // An emoji, or empty: Zen shows a dot for a Space without an icon.
     std::u16string icon;
     SpaceTheme theme;
+    // SpaceData::container.
+    std::string container;
     bool active = false;
   };
 
@@ -220,10 +226,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   tabs::TabInterface* GetLastActiveTab(const tab_groups::TabGroupId& space);
 
   // Creates a Space (with a new tab, right after the active Space) and
-  // shows it.
+  // shows it. `container` is its profile (SpaceData::container).
   void CreateSpace(const std::u16string& name,
                    const std::u16string& icon,
-                   const SpaceTheme& theme);
+                   const SpaceTheme& theme,
+                   const std::string& container = std::string());
   // Makes the ungrouped tab at `index` a new Space with `data`, without
   // showing it or changing the active tab (an agent container's Space,
   // koan/browser/containers/koan_agent_containers.h).
@@ -240,6 +247,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void SetSpaceIcon(const tab_groups::TabGroupId& space,
                     const std::u16string& icon);
   SpaceTheme GetSpaceTheme(const tab_groups::TabGroupId& space) const;
+  // Zen's Set Profile (#318): the container the Space's new tabs open in
+  // (SpaceData::container; empty for none). The tabs it has keep theirs, as
+  // in Zen; its empty tab follows (MatchEmptyTabsToSpaceContainers()).
+  std::string GetSpaceContainer(const tab_groups::TabGroupId& space) const;
+  void SetSpaceContainer(const tab_groups::TabGroupId& space,
+                         const std::string& container);
   void SetSpaceTheme(const tab_groups::TabGroupId& space,
                      const SpaceTheme& theme);
   // A Space's stored data. The one place that knows how it is stored (in
@@ -378,6 +391,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
                                   const std::u16string& name);
 
   TabStripModel* tab_strip_model() const;
+  BrowserView* browser_view() const { return browser_view_; }
   base::WeakPtr<KoanWorkspaceController> GetWeakPtr();
 
   // The sidebar's Space views, while they are installed (null otherwise).
@@ -487,6 +501,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void UpdateViews();
   // Remembers the order and looks of the Spaces, to restore a closed one.
   void SnapshotSpaces();
+  // A Space's empty tab is in the Space's container (#318): a bookmark or a
+  // dropped link can still navigate it in place. One that isn't (made before
+  // its Space had its data, adopted, or the Space's container changed) is
+  // replaced by a new one in the right partition, at its place and with its
+  // selection.
+  void MatchEmptyTabsToSpaceContainers();
 
   tab_groups::TabGroupId NewSpaceGroup(const std::vector<int>& indices);
   // UnloadSpace() without the toast; returns how many tabs stayed loaded.
@@ -538,6 +558,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // ReadSpace()), or nullopt if none does.
   std::optional<std::string> ThemeOfTabs(
       const tab_groups::TabGroupId& space,
+      const tabs::TabInterface* except) const;
+  // The same for any per-Space value kept with the tabs under session data
+  // key `key` (the theme, the container).
+  std::optional<std::string> SessionValueOfTabs(
+      const tab_groups::TabGroupId& space,
+      const char* key,
       const tabs::TabInterface* except) const;
   // A swipe's travel or speed, turned round with Zen's natural-scroll
   // setting, so the Space follows the way it will switch.

@@ -53,7 +53,8 @@ KoanWorkspaceController::SpaceData ToSpaceData(
     const window_sync::SpaceRecord& record) {
   return {.name = record.name,
           .icon = record.icon,
-          .theme = {.stored = record.theme}};
+          .theme = {.stored = record.theme},
+          .container = record.container};
 }
 
 }  // namespace
@@ -251,7 +252,8 @@ std::vector<window_sync::SpaceRecord> KoanWindowSyncClient::LocalSpaces(
     records.push_back({.id = std::move(id),
                        .name = space.name,
                        .icon = space.icon,
-                       .theme = space.theme.stored});
+                       .theme = space.theme.stored,
+                       .container = space.container});
   }
   // Groups that are gone (or are an agent's) lose their id.
   if (assign_ids && (assigned || ids.size() != space_ids_.size())) {

@@ -399,6 +399,11 @@ inline constexpr char kAgentControlStrict[] = "koan.agent_control.strict";
 inline constexpr char kAgentSavedContainers[] =
     "koan.agent_control.saved_containers";
 
+// The user's own containers, Zen's "profiles" for Spaces (#318,
+// koan/browser/containers/koan_user_containers.h): [{id, name, color}], in
+// the order they were made. Each is a saved user container on disk.
+inline constexpr char kUserContainers[] = "koan.containers.user";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

@@ -30,6 +30,8 @@ class View;
 
 namespace koan {
 
+class KoanSpaceProfileMenu;
+
 // Zen's Space menu (zenWorkspaceMoreActions), for one Space or, opened from
 // the header, for the active Space with the list of Spaces to switch to.
 class KoanSpaceMenu : public ui::SimpleMenuModel::Delegate {
@@ -61,6 +63,8 @@ class KoanSpaceMenu : public ui::SimpleMenuModel::Delegate {
   const tab_groups::TabGroupId space_;
   // Opened from the header: also lists the Spaces.
   const bool from_header_;
+  // Zen's Set Profile submenu (#318).
+  std::unique_ptr<KoanSpaceProfileMenu> profile_menu_;
   ui::SimpleMenuModel model_{this};
   std::map<int, tab_groups::TabGroupId> switch_commands_;
   views::ViewTracker anchor_;

@@ -49,6 +49,20 @@ source_set("partition") {
   ]
 }
 
+# The user's own containers, Zen's per-Space profiles, and which one a new tab
+# opens in (koan_user_containers.h, #318). Pure logic.
+source_set("user_containers") {
+  sources = [
+    "koan_user_containers.cc",
+    "koan_user_containers.h",
+  ]
+  public_deps = [
+    ":partition",
+    "//base",
+    "//components/tab_groups",
+  ]
+}
+
 # Which paired client may use which saved container (koan_container_grants.h).
 # //base only.
 source_set("grants") {
@@ -92,6 +106,7 @@ source_set("impl") {
     ":containers",
     ":grants",
     ":partition",
+    ":user_containers",
     "//base",
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
@@ -130,10 +145,12 @@ test("koan_containers_unittests") {
     "koan_container_grants_unittest.cc",
     "koan_container_partition_unittest.cc",
     "koan_container_restore_unittest.cc",
+    "koan_user_containers_unittest.cc",
   ]
   deps = [
     ":grants",
     ":partition",
+    ":user_containers",
     "//base",
     "//base/test:test_support",
     "//components/prefs",

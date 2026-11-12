@@ -312,7 +312,8 @@ base::DictValue WindowSyncModel::ToValue() const {
                       .Set("id", space.id)
                       .Set("name", space.name)
                       .Set("icon", space.icon)
-                      .Set("theme", space.theme));
+                      .Set("theme", space.theme)
+                      .Set("container", space.container));
   }
   base::ListValue items;
   for (const ItemRecord& item : items_) {
@@ -369,7 +370,8 @@ void WindowSyncModel::FromValue(const base::DictValue& value) {
         {.id = string_of(*dict, "id"),
          .name = base::UTF8ToUTF16(string_of(*dict, "name")),
          .icon = base::UTF8ToUTF16(string_of(*dict, "icon")),
-         .theme = string_of(*dict, "theme")});
+         .theme = string_of(*dict, "theme"),
+         .container = string_of(*dict, "container")});
   }
   if (!SetSpaces(std::move(space_records))) {
     return;

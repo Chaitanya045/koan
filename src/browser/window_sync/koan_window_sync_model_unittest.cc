@@ -322,8 +322,12 @@ TEST(WindowSyncModelTest, ClosedOrUnpinnedItemsCloseEverywhere) {
 
 TEST(WindowSyncModelTest, RoundTripsThroughPrefs) {
   WindowSyncModel model;
-  model.SetSpaces(
-      {{.id = "a", .name = u"Work", .icon = u"💼", .theme = "{}"}, Space("b")});
+  model.SetSpaces({{.id = "a",
+                    .name = u"Work",
+                    .icon = u"💼",
+                    .theme = "{}",
+                    .container = "user:swork"},
+                   Space("b")});
   ItemRecord pinned = Pinned("p", "b");
   pinned.custom_title = u"Mail";
   pinned.custom_icon = u"✉️";
@@ -340,6 +344,8 @@ TEST(WindowSyncModelTest, RoundTripsThroughPrefs) {
   restored.FromValue(model.ToValue());
   EXPECT_TRUE(restored.seeded());
   EXPECT_EQ(model.spaces(), restored.spaces());
+  // A Space's profile syncs with it (#318).
+  EXPECT_EQ("user:swork", restored.spaces()[0].container);
   EXPECT_EQ(model.folders(), restored.folders());
   EXPECT_EQ(model.items(), restored.items());
   EXPECT_EQ("f", restored.items()[1].folder_id);

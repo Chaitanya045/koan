@@ -504,6 +504,24 @@ belongs to a Space, and new tabs open in the active one.
   matches. Right-click a tab > Add Route for Domain adds a route for its
   site (one per selected tab's site) and opens the settings. Essentials and
   pinned tabs are never routed.
+- **Profiles: separate logins per Space** (Zen's containers per Space).
+  Pick one with the Create-a-Space form's **Profile** row, or right-click
+  the header > **Set Profile**. You get Default (no profile), your profiles
+  (each with a colour) and **New Profile…** (name it, then Create). A
+  Space with a profile keeps its own cookies and site data: you can be
+  signed into a site in one Space and signed out, or signed in as someone
+  else, in another, and a site's saved settings (its localStorage) are kept
+  per profile. Spaces with the same profile share them. New tabs in the
+  Space open in its profile: ⌘T, the address bar, bookmarks, history,
+  links from other apps and New Split. Links you open from a page stay in
+  that page's profile, and a routed link takes its Space's. History,
+  bookmarks, passwords, site permissions, extensions and downloads stay
+  shared. A tab you move to another Space keeps its profile, and then shows
+  a thin line in its profile's colour at its edge. Changing a Space's
+  profile changes where its new tabs open; its open tabs keep theirs.
+  Deleting a Space keeps its profile and its data, so another Space can
+  use it. Clear browsing data doesn't clear profiles yet, and notifications
+  don't work in a profile. Incognito windows have no profiles.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in

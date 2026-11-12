@@ -74,6 +74,8 @@ is the restore hook's job, and it fails closed), and the blocks for agent contai
 
 Koan's #111 reuses the core: `ContainerKind::kUser`, the same partition helpers, C1-C5 and the restore hook (plus the
 restore-into-container row), and a Space's default container; none of the agent blocks apply.
+Built in #318: `.agent/notes/upstream/space-containers.md` (note: 1.24b's shipped `separate-essentials` is on, and
+`force-container-workspace` off).
 
 
 HEAD = 681cd621e82e (pristine). All refs `path:line` at HEAD. "VERIFIED" = read in source; "UNVERIFIED" = inferred, not traced to the end.
