@@ -90,11 +90,35 @@ double SpaceStripScrollProgress(base::TimeDelta elapsed);
 // (ZenPinnedTabManager.moveToAnotherTabContainerIfNecessary()): the tile
 // under `point` takes them before it, or after it once `point` is past its
 // horizontal middle (the far half: its left half in RTL); anywhere else in
-// the grid they go after the last tile. `tiles` are the tiles' bounds in grid
-// order (a split view is one tile). Returns the slot, 0 to tiles.size().
+// the grid they go after the last tile. Above the first row (the sidebar
+// above the grid, EssentialsTopDropZone()) they go before the first tile, as
+// above a Space's first row (SpaceListDropSlot()). `tiles` are the tiles'
+// bounds in grid order (a split view is one tile). Returns the slot, 0 to
+// tiles.size().
 size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
                           const gfx::Point& point,
                           bool rtl);
+
+// With no Essentials, the part of the sidebar a dragged tab is over them in
+// (the promo shows, lit, and a drop there makes the tab an Essential), in the
+// coordinates of the sidebar of `sidebar` size: its full width, from its top
+// down to the Space header's vertical middle (`header`) until the promo
+// shows, then down to the promo's bottom (`promo`, once laid out). Zen's
+// empty grid is only a 2px strip above the Space header
+// (.zen-essentials-container's min-height) and its URL bar is not part of
+// the tab strip; Koan takes the whole top of the sidebar, so that a tab
+// dragged straight up, past the strip and over the URL bar, still gets there.
+gfx::Rect EmptyEssentialsDropZone(const gfx::Size& sidebar,
+                                  const gfx::Rect& header,
+                                  const std::optional<gfx::Rect>& promo);
+
+// With Essentials, the part of the sidebar above the grid (`grid`, in the
+// sidebar's coordinates) that also counts as over them: its full width, from
+// its top down to the grid's (the window buttons' row and the URL bar). A
+// drop there goes before the first tile (EssentialsDropSlot()). Empty while
+// the grid is (no Essentials: EmptyEssentialsDropZone() instead).
+gfx::Rect EssentialsTopDropZone(const gfx::Size& sidebar,
+                                const gfx::Rect& grid);
 
 // The same for an Essential dropped on a Space's list of tabs: before the
 // row under `y`, after it once `y` is past its vertical middle; between rows
