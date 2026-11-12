@@ -288,8 +288,9 @@ its own tabs, and a new tab page you open later is an ordinary tab.
 
 A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
 horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
-above off) is an empty page in the window's look, like Zen's: near black (#09090b) in the
-dark shadcn look, white in the light one, and in the default Zen look Chromium's
+above off) is an empty page in the window's look, like Zen's empty tab, a card on the
+window: shadcn's `card` (#18181b on the #09090b window in the dark shadcn look,
+white in the light one), and in the default Zen look Chromium's
 theme colour for the page (Zen's empty tab shows its window gradient or glass
 there: not matched yet). It follows the window: a change of look or theme loads
 it again with the new colour. No Google logo, search box or shortcut tiles, and nothing to load, so it
@@ -1113,7 +1114,11 @@ space around the card drags the window.
   Chromium shows a search engine choice screen) the step *is* that choice
   screen: Chromium's list in its order, with nothing chosen for you, and Next
   records your choice so Chromium doesn't ask again. If you skip the step
-  there, Chromium asks later.
+  there, Chromium asks later. Each engine shows its logo (Brave, Google,
+  DuckDuckGo, Ecosia, Qwant, Startpage, Mojeek, Baidu, Naver), the others
+  their initial (Chromium's own logos are only in Google Chrome builds, and
+  nothing is fetched before you choose).
+- **Done**: "You're all set. Enjoy browsing." with **Start browsing**.
 
 ## Importing from another browser
 
