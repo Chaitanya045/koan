@@ -1081,9 +1081,9 @@ void KoanCompactModeController::CheckFullscreenEdges() {
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
   // (Also in macOS' native fullscreen, where the content card stays, see
-  // UseContentCard(): Chromium moves the top container to its own overlay
-  // widget then, and Koan takes it back, see OnImmersiveFullscreenChanged().
-  // Elsewhere fullscreen has no content card.)
+  // UseContentCard(), and Chromium leaves the top container to Koan, see
+  // KeepsTopContainerInFullscreen(). Elsewhere fullscreen has no content
+  // card.)
   if (!CanCompactMode()) {
     return Mode::kNone;
   }
@@ -1160,6 +1160,8 @@ void KoanCompactModeController::UpdateActive() {
   if (desired != Mode::kNone) {
     Activate(desired);
   }
+  // (Over the page's own fullscreen the top container stays out of sight.)
+  PlaceTopContainer();
   UpdateFullscreenTopChrome();
   OnContentCardChanged();
   KoanBrowserViewController::From(browser_view_)->url_bar()->OnModeChanged();
@@ -1283,14 +1285,22 @@ void KoanCompactModeController::Activate(Mode mode) {
   UpdateEmptyTabLock();
 }
 
+bool KoanCompactModeController::ParksTopContainer() const {
+  // The page's own fullscreen hides everything (Zen's
+  // `:not([inDOMFullscreen])`): the top container waits in the overlay, out
+  // of sight, also where the toolbar shows otherwise.
+  return hides_toolbar() || (KeepsTopContainerInFullscreen(browser_view_) &&
+                             IsContentFullscreen(browser_view_));
+}
+
 void KoanCompactModeController::ParkTopContainer() {
   views::View* top_container = browser_view_->top_container();
   views::View* overlay = GetTopContainerOverlayView(browser_view_);
-  if (!hides_toolbar() || !overlay || top_container->parent() == overlay) {
+  if (!ParksTopContainer() || !overlay || top_container->parent() == overlay) {
     return;
   }
-  // Where it goes back to (not from Chromium's overlay widget, whose
-  // fullscreen ends with it back in the BrowserView, and so another park).
+  // Where it goes back to. (Chromium's immersive fullscreen ends with it
+  // back in the BrowserView, and so another park.)
   if (top_container->parent() == browser_view_) {
     top_container_index_ = browser_view_->GetIndexOf(top_container);
   }
@@ -1299,6 +1309,51 @@ void KoanCompactModeController::ParkTopContainer() {
   top_container->SetProperty(views::kViewDoesNotLayOutChildren, false);
   overlay->AddChildView(top_container);
   overlay->SetVisible(true);
+}
+
+void KoanCompactModeController::RestoreTopContainer() {
+  // Mirrors BrowserView::ReparentTopContainerForEndOfImmersive().
+  views::View* top_container = browser_view_->top_container();
+  views::View* overlay = GetTopContainerOverlayView(browser_view_);
+  if (overlay && top_container->parent() == overlay && top_container_index_) {
+    if (top_container->layer()) {
+      top_container->layer()->GetAnimator()->AbortAllAnimations();
+    }
+    overlay->SetVisible(false);
+    top_container->SetCanProcessEventsWithinSubtree(true);
+    top_container->DestroyLayer();
+    browser_view_->AddChildViewAt(
+        top_container,
+        std::min(*top_container_index_, browser_view_->children().size()));
+    browser_view_->infobar_container()->InsertAfterInFocusList(top_container);
+    top_container->SetProperty(views::kViewDoesNotLayOutChildren, true);
+  }
+  top_container_index_.reset();
+}
+
+void KoanCompactModeController::PlaceTopContainer() {
+#if BUILDFLAG(IS_MAC)
+  // Koan depends on this (the BrowserView hook, see docs/REBASE.md): in
+  // Koan's layout Chromium's immersive fullscreen leaves the top container
+  // where it is.
+  LOG_IF(ERROR, KeepsTopContainerInFullscreen(browser_view_) &&
+                    browser_view_->overlay_widget() &&
+                    browser_view_->top_container()->parent() ==
+                        browser_view_->overlay_view())
+      << "Koan: the top container is in Chromium's fullscreen overlay";
+#endif
+  views::View* overlay = GetTopContainerOverlayView(browser_view_);
+  if (!overlay) {
+    return;
+  }
+  if (!ParksTopContainer()) {
+    RestoreTopContainer();
+    return;
+  }
+  ParkTopContainer();
+  if (browser_view_->top_container()->parent() == overlay) {
+    overlay->SetVisible(!IsContentFullscreen(browser_view_));
+  }
 }
 
 bool KoanCompactModeController::IsClosing() const {
@@ -1343,7 +1398,12 @@ void KoanCompactModeController::ClearHoverStates() {
 
 void KoanCompactModeController::OnFullscreenStateChanged() {
   // (A posted notification: it can arrive after the window started closing.)
-  if (IsClosing() || mode_ == Mode::kNone) {
+  if (IsClosing()) {
+    return;
+  }
+  // The page's own fullscreen hides the toolbar, in every mode.
+  PlaceTopContainer();
+  if (mode_ == Mode::kNone) {
     return;
   }
   ClearHoverStates();
@@ -1354,7 +1414,13 @@ void KoanCompactModeController::OnFullscreenStateChanged() {
 }
 
 void KoanCompactModeController::OnImmersiveFullscreenChanged() {
-  if (IsClosing() || mode_ == Mode::kNone) {
+  if (IsClosing()) {
+    return;
+  }
+  if (mode_ == Mode::kNone) {
+    // The toolbar shows, in the BrowserView, which Chromium left it in (see
+    // KeepsTopContainerInFullscreen()), unless the page is fullscreen.
+    PlaceTopContainer();
     return;
   }
   ClearHoverStates();
@@ -1368,13 +1434,14 @@ void KoanCompactModeController::OnImmersiveFullscreenChanged() {
   // the page: AppKit's come with the menu bar.)
   SetCaptionStripRevealed(false);
   UpdatePointerMonitor();
+  // Chromium has left the top container where Koan put it (see
+  // KeepsTopContainerInFullscreen()), or, as the fullscreen ends, put it
+  // back in the BrowserView, destroying its layer. Place it again, as when
+  // the mode was activated.
+  PlaceTopContainer();
   if (!hides_toolbar()) {
     return;
   }
-  // Chromium has just put the top container where it reveals it from the top
-  // edge (or taken it out of fullscreen, destroying its layer). Hide it
-  // again, as when the mode was activated.
-  ParkTopContainer();
   browser_view_->top_container()->SetCanProcessEventsWithinSubtree(
       toolbar_revealed_);
   ApplyToolbarTransform(/*animate=*/false);
@@ -1386,9 +1453,9 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
   if (!IsWindowFullscreen(browser_view_)) {
     return;
   }
-  // Dialogs and bubbles anchor to the window where Koan's toolbar is, not to
-  // Chromium's overlay widget (which holds its toolbar, and is out of sight
-  // while nothing is revealed).
+  // Dialogs and bubbles anchor to the window, where Koan's toolbar is, not to
+  // Chromium's overlay widget (empty, and out of sight: nothing is revealed
+  // there).
   if (MultiContentsView* contents = browser_view_->multi_contents_view()) {
     views::Widget* anchor = HidesFullscreenTopChrome(browser_view_)
                                 ? nullptr
@@ -1400,7 +1467,7 @@ void KoanCompactModeController::UpdateFullscreenTopChrome() {
   if (!IsClosing()) {
     ShowFullscreenTitlebar(browser_view_);
   }
-  // The toolbar style: "none" while Koan hides its toolbar, else the user's.
+  // The toolbar style: "none" in Koan's layout (HidesFullscreenTopChrome()).
   if (BrowserWidget* widget = browser_view_->browser_widget()) {
     if (BrowserFrameView* frame = widget->GetFrameView()) {
       frame->UpdateFullscreenTopUI();
@@ -1685,63 +1752,14 @@ void KoanCompactModeController::Deactivate() {
     browser_view_->RemoveChildViewT(std::exchange(toolbar_hot_zone_, nullptr));
   }
 
-  // Mirrors BrowserView::ReparentTopContainerForEndOfImmersive().
   views::View* top_container = browser_view_->top_container();
   if (caption_buttons_targeter_) {
     top_container->SetEventTargeter(nullptr);
     caption_buttons_targeter_.reset();
   }
-  bool restore_top_container =
-      top_container->parent() != browser_view_ && top_container_index_;
-#if BUILDFLAG(IS_MAC)
-  // Immersive fullscreen has the top container in its own overlay widget
-  // (Koan's overlay holds it in between, see
-  // OnImmersiveFullscreenChanged()): leave it there until the fullscreen
-  // ends, hide Koan's (now empty) overlay, and undo Koan's own state on the
-  // top container: the hidden toolbar's slide out of view and its ignoring
-  // the pointer. The layer stays; the overlay widget paints the top
-  // container with it.
-  const ImmersiveModeController* immersive_controller =
-      ImmersiveModeController::From(browser_view_->browser());
-  if (views::View* immersive = browser_view_->overlay_widget()
-                                   ? browser_view_->overlay_view()
-                                   : nullptr;
-      immersive && immersive_controller && immersive_controller->IsEnabled()) {
-    restore_top_container = false;
-    if (top_container->parent() != immersive) {
-      immersive->AddChildView(top_container);
-      immersive->SetVisible(true);
-    }
-    if (views::View* overlay = GetTopContainerOverlayView(browser_view_)) {
-      overlay->SetVisible(false);
-    }
-    if (ui::Layer* layer = top_container->layer()) {
-      layer->GetAnimator()->AbortAllAnimations();
-      layer->SetTransform(gfx::Transform());
-      // A hidden toolbar's layer is hidden (HideAwayToolbarLayer()): without
-      // this the toolbar stays invisible in the fullscreen toolbar, a blank
-      // grey band above the sidebar.
-      layer->SetVisible(true);
-    }
-    top_container->SetCanProcessEventsWithinSubtree(true);
-  }
-#endif
-  if (restore_top_container) {
-    if (top_container->layer()) {
-      top_container->layer()->GetAnimator()->AbortAllAnimations();
-    }
-    if (views::View* overlay = GetTopContainerOverlayView(browser_view_)) {
-      overlay->SetVisible(false);
-    }
-    top_container->SetCanProcessEventsWithinSubtree(true);
-    top_container->DestroyLayer();
-    browser_view_->AddChildViewAt(
-        top_container,
-        std::min(*top_container_index_, browser_view_->children().size()));
-    browser_view_->infobar_container()->InsertAfterInFocusList(top_container);
-    top_container->SetProperty(views::kViewDoesNotLayOutChildren, true);
-  }
-  top_container_index_.reset();
+  // (Also in macOS' native fullscreen, where Koan's layout keeps the top
+  // container in the window: see KeepsTopContainerInFullscreen().)
+  RestoreTopContainer();
   toolbar_revealed_ = false;
 
   // A closing window has no layout to do.

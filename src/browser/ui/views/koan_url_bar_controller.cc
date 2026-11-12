@@ -422,11 +422,13 @@ void KoanUrlBarController::UpdateKeyHandler() {
 
 bool KoanUrlBarController::CanOpenBar() const {
   LocationBarView* bar = location_bar();
-  // (In fullscreen, the toolbar is out of sight, except where Koan's stays
-  // hidden: on macOS, see HidesFullscreenTopChrome().)
+  // (In fullscreen, the toolbar is out of sight, except where Koan's hidden
+  // toolbar opens it, or Koan's layout stays: on macOS, see
+  // HidesFullscreenTopChrome().)
   return features::IsUrlBarEnabled() && browser_view_->GetIsNormalType() &&
          (!IsWindowFullscreen(browser_view_) ||
-          compact_mode_->hides_toolbar()) &&
+          compact_mode_->hides_toolbar() ||
+          HidesFullscreenTopChrome(browser_view_)) &&
          !IsContentFullscreen(browser_view_) &&
          !browser_view_->browser()->GetTabStripModel()->empty() && bar &&
          bar->omnibox_view();
@@ -960,9 +962,9 @@ bool KoanUrlBarController::IsPillAvailable() const {
 }
 
 KoanUrlBarController::Placement KoanUrlBarController::DesiredPlacement() const {
-  // In the multiple-toolbars layout the omnibox edits in the toolbar.
-  // (Also in macOS' fullscreen: Koan's toolbar stays hidden there, see
-  // HidesFullscreenTopChrome().)
+  // In the multiple-toolbars layout the omnibox edits in the toolbar (also
+  // in macOS' fullscreen, where the toolbar stays, see
+  // HidesFullscreenTopChrome()).
   if (!compact_mode_->hides_toolbar() || IsContentFullscreen(browser_view_)) {
     return Placement::kNone;
   }
@@ -1780,7 +1782,7 @@ views::View* GetBubbleAnchorView(const views::View* view) {
 bool IgnoresFullscreenToolbarToggle(BrowserWindowInterface* browser) {
   const BrowserView* browser_view =
       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
-  return browser_view && IsToolbarHidden(browser_view);
+  return browser_view && KeepsTopContainerInFullscreen(browser_view);
 }
 
 // The URL bar controller of the window `view` belongs to, if any: `view` is

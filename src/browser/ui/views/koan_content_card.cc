@@ -69,9 +69,9 @@ float ContentCardCornerRadius() {
 
 bool UseContentCard(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
-  // On macOS the card stays in fullscreen, as in Zen: the toolbar is hidden
-  // there (revealed from the top edge), so it is a card inset by the usual
-  // gutter, with the sidebar beside it.
+  // On macOS the card stays in fullscreen, as in Zen: Koan's layout stays
+  // there as in a window (see KeepsTopContainerInFullscreen()), so it is a
+  // card as usual, with the sidebar beside it.
   const bool allowed_in_fullscreen = true;
 #else
   // Elsewhere fullscreen is edge to edge.
@@ -88,23 +88,17 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
     // suspended, see koan_compact_mode.h).
     return gfx::Insets();
   }
-  if (IsWindowFullscreen(browser_view)) {
-    // (See UseContentCard().) Where Koan hides the toolbar (single toolbar,
-    // compact mode), the usual layout below applies: a gutter above the
-    // page (no strip for window buttons in fullscreen) and beside a hidden
-    // sidebar. Otherwise Chromium reveals the toolbar over the page from
-    // the top edge, so the page is a card inset by the gutter.
-    if (IsBorderlessFullscreen(browser_view)) {
-      // Zen measured the page at (0, 0) filling the screen. A hidden sidebar
-      // and toolbar are revealed by the pointer at the screen's edge, which
-      // compact mode watches itself (no gutter to hover).
-      return gfx::Insets();
-    }
-    if (!IsToolbarHidden(browser_view)) {
-      return SidebarSideInsets(
-          browser_view, kContentCardMargin,
-          IsCompactModeActive(browser_view) ? kContentCardMargin : 0);
-    }
+  // (See UseContentCard().) In fullscreen the usual layout below applies, as
+  // in Zen: the toolbar shown above the page (it stays, see
+  // KeepsTopContainerInFullscreen()), or, where Koan hides it, a gutter above
+  // the page (no strip for window buttons in fullscreen) and beside a hidden
+  // sidebar.
+  if (IsBorderlessFullscreen(browser_view)) {
+    // Zen measured the page at (0, 0) filling the screen (below a toolbar
+    // that compact mode shows). A hidden sidebar and toolbar are revealed by
+    // the pointer at the screen's edge, which compact mode watches itself (no
+    // gutter to hover).
+    return gfx::Insets();
   }
 #endif
   if (IsToolbarHidden(browser_view)) {

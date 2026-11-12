@@ -29,7 +29,7 @@ index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a77
  
  views::Widget* BrowserView::GetWidgetForAnchoring() {
  #if BUILDFLAG(IS_MAC)
-+  // Koan: not while Koan's toolbar is hidden, see HidesFullscreenTopChrome().
++  // Koan: the window itself in Koan's layout, see HidesFullscreenTopChrome().
    if (WindowFeatureController::From(browser())->UsesImmersiveFullscreenMode()) {
 -    return IsFullscreen() ? overlay_widget_.get() : GetWidget();
 +    return IsFullscreen() && !koan::HidesFullscreenTopChrome(this)
@@ -42,7 +42,7 @@ index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a77
    // In mac fullscreen the toolbar view is hosted in the overlay widget that has
    // a higher z-order level. This overlay widget should be used for anchoring
    // secondary UIs, otherwise they will be covered by the toolbar.
-+  // Koan: not while Koan's toolbar is hidden, see HidesFullscreenTopChrome().
++  // Koan: the window itself in Koan's layout, see HidesFullscreenTopChrome().
    views::Widget* widget_for_anchoring =
        WindowFeatureController::From(browser())->UsesImmersiveFullscreenMode() &&
 -              IsFullscreen()
@@ -63,3 +63,16 @@ index 7b568f6de760af21d6e9d2aa44415a7cef617c51..cccc856a12016b9b74ddff41db645a77
  #if BUILDFLAG(IS_MAC)
    // The top container while in immersive fullscreen on macOS lives in another
    // Widget (OverlayWidgetMac). This means that BrowserView does not need to
+@@ -6031,7 +6047,11 @@ void BrowserView::OnImmersiveFullscreenEntered() {
+     control->CloseMenu();
+   }
+ 
+-  ReparentTopContainerForStartOfImmersive();
++  // Koan: its layout keeps the top container in the window, see
++  // koan::KeepsTopContainerInFullscreen().
++  if (!koan::KeepsTopContainerInFullscreen(this)) {
++    ReparentTopContainerForStartOfImmersive();
++  }
+ 
+   InvalidateLayout();
+   GetWidget()->GetRootView()->DeprecatedLayoutImmediately();

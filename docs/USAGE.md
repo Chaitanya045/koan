@@ -174,15 +174,20 @@ toolbar in, and the lights with it.
 
 **Fullscreen on macOS** keeps the same layout, as in Zen: with the pointer
 at the top edge the menu bar comes down with AppKit's title bar strip (about
-32 pt, with the traffic lights), compact mode on or off; no Koan toolbar and
-no bookmarks bar. The sidebar's top row has the sidebar toggle and back / forward
-/ reload; Ctrl+L or the pill edits the address over the page.
+32 pt, with the traffic lights), compact mode on or off; no bookmarks bar.
+With single toolbar the sidebar's top row has the sidebar toggle and back /
+forward / reload; Ctrl+L or the pill edits the address over the page. With
+"Sidebar and Top Toolbar" the toolbar stays above the page, next to the
+sidebar, as in a window. Compact mode works as in a window too, also when
+you change it in fullscreen: "Hide Tab bar" keeps the toolbar and reveals the
+sidebar at the screen's side edge, "Hide Top bar" and "Hide Both" reveal the
+toolbar at the top edge. A page's own fullscreen (a video's) hides it all.
 
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
 and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
 > Appearance > Bookmarks bar); Chromium's own "Show bookmarks bar" setting
-and the View menu's "Always Show Toolbar in Full Screen" (disabled while the
-toolbar is hidden) don't change that.
+doesn't change that. (Chromium's View > "Always Show Toolbar in Full
+Screen" isn't offered: the toolbar shows in fullscreen as in a window.)
 
 ## URL bar
 

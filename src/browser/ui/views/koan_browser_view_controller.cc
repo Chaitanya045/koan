@@ -362,10 +362,19 @@ bool IsToolbarHidden(const views::View* browser_view) {
   return controller && controller->compact_mode()->hides_toolbar();
 }
 
+bool KeepsTopContainerInFullscreen(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  return browser_view && UseContentCard(browser_view);
+#else
+  return false;
+#endif
+}
+
 bool HidesFullscreenTopChrome(const views::View* browser_view) {
 #if BUILDFLAG(IS_MAC)
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
-  return view && IsWindowFullscreen(view) && IsToolbarHidden(view);
+  return view && IsWindowFullscreen(view) &&
+         KeepsTopContainerInFullscreen(view);
 #else
   return false;
 #endif

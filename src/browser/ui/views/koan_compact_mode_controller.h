@@ -80,11 +80,13 @@ class KoanTrafficLightsController;
 // In both, the omnibox opens out of the hidden toolbar as Zen's URL bar
 // (KoanUrlBarController) while it has focus.
 //
-// Both go on in macOS' native fullscreen, as in Zen: Chromium's immersive
-// mode would move the top container to its own overlay widget and reveal it
-// at the top edge (with a title bar strip), so Koan takes it back and the
-// fullscreen toolbar style is "none" (HidesFullscreenTopChrome()); only the
-// menu bar appears there.
+// Both go on in macOS' native fullscreen, as in Zen, and so does the
+// multiple-toolbars layout: Chromium's immersive mode would move the top
+// container to its own overlay widget and reveal it at the top edge (with a
+// title bar strip), so it leaves it to Koan (KeepsTopContainerInFullscreen())
+// and the fullscreen toolbar style is "none" (HidesFullscreenTopChrome()); the
+// toolbar shows or hides as in a window, and only the menu bar (with AppKit's
+// title bar) appears at the top edge.
 //
 // Tabs on the right (pref koan.tabs.on_right) mirrors the window: see
 // IsSidebarOnRight() in koan_compact_mode.h.
@@ -312,16 +314,23 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // The sidebar came or went, or the lights were laid out again.
   void OnTrafficLightsChanged();
 
-  // Hides the toolbar (single toolbar, compact mode): moves the top
-  // container, if it is not there already, into the overlay view of this
-  // window, above the page. Where the BrowserView or macOS' immersive
-  // fullscreen has it (see below), takes it from there.
+  // Whether the top container waits in the overlay view: where Koan hides
+  // the toolbar (single toolbar, compact mode), and over the page's own
+  // fullscreen.
+  bool ParksTopContainer() const;
+  // Hides the toolbar: moves the top container, if it is not there already
+  // and ParksTopContainer(), from the BrowserView into the overlay view of
+  // this window, above the page.
   void ParkTopContainer();
-  // macOS: native fullscreen moves the top container into Chromium's overlay
-  // widget, which reveals it from the top edge (with a title bar strip).
-  // Where Koan hides the toolbar, the top container goes back to Koan's
-  // overlay as the fullscreen starts and ends, and Chromium is told to
-  // reveal nothing (HidesFullscreenTopChrome()).
+  // Puts a parked top container back in the BrowserView.
+  void RestoreTopContainer();
+  // Parks or restores the top container, as ParksTopContainer() says; the
+  // overlay is out of sight over the page's own fullscreen.
+  void PlaceTopContainer();
+  // macOS: Chromium's native fullscreen leaves the top container to Koan
+  // (KeepsTopContainerInFullscreen()) and reveals nothing
+  // (HidesFullscreenTopChrome()); as it ends, it puts the top container back
+  // in the BrowserView. Places it again, as the fullscreen starts and ends.
   void OnImmersiveFullscreenChanged();
   // Tells Chromium that what Koan hides in fullscreen changed.
   void UpdateFullscreenTopChrome();
