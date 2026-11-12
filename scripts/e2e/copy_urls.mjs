@@ -9,8 +9,8 @@
 //   scripts/mac/suite.sh copy_urls   (its .flags load test_helper)
 import { execSync } from 'node:child_process';
 import { IS_MAC, browserCall, check, evalIn, finish, front, pages, sleep, typeInto,
-         viewEvent, viewTree, waitFor } from './lib/koan.mjs';
-import { askTestHelper, clickThroughRoot, startServer } from './lib/mac.mjs';
+         viewEvent, viewMouse, viewTree, waitFor } from './lib/koan.mjs';
+import { askTestHelper, startServer } from './lib/mac.mjs';
 
 const server = await startServer();
 const url = t => server.url(`/p?t=${t}`);
@@ -58,7 +58,11 @@ async function copyFromPalette(from) {
   const vs = await viewTree();
   const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown);
   if (!pill) return { error: 'no URL pill' };
-  await clickThroughRoot(vs, pill);
+  // As urlbar.mjs clicks it: to the pill itself at (10, 10). A click through
+  // the root view at 24 px in lands on the site's icon, which opens the site
+  // panel instead of editing the address.
+  for (const type of ['mousePressed', 'mouseReleased']) await viewMouse(pill, type, 10, 10);
+  await sleep(1000);
   await sleep(400);  // the click's select-all is posted
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
