@@ -185,9 +185,14 @@ toolbar at the top edge. A page's own fullscreen (a video's) hides it all.
 
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
 and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
-> Appearance > Bookmarks bar); Chromium's own "Show bookmarks bar" setting
-doesn't change that. (Chromium's View > "Always Show Toolbar in Full
-Screen" isn't offered: the toolbar shows in fullscreen as in a window.)
+> Appearance > Bookmarks bar) or with ⇧⌘B (View > Always Show Bookmarks Bar,
+whose check mark follows the setting); Chromium's own "Show bookmarks bar"
+setting doesn't change it. It then shows above every page, the new tab page
+too: below the toolbar with Sidebar and Top Toolbar, and with Only Sidebar in
+Zen's top bar above the page (34 px, beside the sidebar), also in compact mode
+and in fullscreen. While the URL bar floats over the page the bar is out of
+sight. (Chromium's View > "Always Show Toolbar in Full Screen" isn't offered:
+the toolbar shows in fullscreen as in a window.)
 
 ## URL bar
 

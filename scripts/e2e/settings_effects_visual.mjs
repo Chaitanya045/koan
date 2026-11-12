@@ -8,9 +8,10 @@
 //   scripts/e2e/run.sh settings_effects_visual
 //
 // On macOS too (scripts/mac/suite/e2e.list): every key it sends is one of
-// Koan's window shortcuts, which CDP keys reach. Native fullscreen is not
-// checked here (the layout rows there are fixed on fix/fullscreen-top-toolbar
-// and its fullscreen suites).
+// Koan's window shortcuts, which CDP keys reach; ⇧⌘B goes through the menu
+// bar. Native fullscreen for the layout rows is #311's suites
+// (fullscreen_multiple, fullscreen_single); this one checks the bookmarks
+// bar there.
 import {
   ACCEL, ALT, CTRL, IS_MAC, SHIFT, browserCall, check, evalIn, finish, front, key, onPage,
   pages, showPane, sleep, typeInto, viewEvent, viewMouse, viewTree, waitFor,
@@ -252,7 +253,7 @@ check('...back to Only Sidebar: no toolbar, the pill in the sidebar',
       !!await waitWin(v => v.shown('KoanUrlPill')) && await cardY() < toolbarCardY,
       `card y ${await cardY()} (with the toolbar ${toolbarCardY})`);
 skipped('Layout and What compact mode hides in macOS fullscreen',
-        'fixed on fix/fullscreen-top-toolbar, with its fullscreen suites');
+        '#311\'s fullscreen_multiple and fullscreen_single');
 
 // =========================================================================
 // Compact mode: enable, what it hides, the flash popup, the toast.
