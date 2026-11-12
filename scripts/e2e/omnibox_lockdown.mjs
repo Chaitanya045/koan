@@ -6,18 +6,20 @@
 //
 //   scripts/e2e/run.sh omnibox_lockdown
 //
-// The log checks need run.sh's KOAN_LOG. A Mac run: its checks that read
-// native views (class names) are from the Linux harness and need validating
-// once on the Mac.
+// The log checks need run.sh's KOAN_LOG (suite.sh sets it on the Mac). On
+// macOS Cmd+L (Open Location) and Shift+Cmd+A (Search Tabs) are the main
+// menu's, which a CDP key never reaches: they are real keys there
+// (lib/mac.mjs menuKey()), and with real input off their steps are SKIPs.
 import fs from 'node:fs';
 import {
-  CDP_PORT, CTRL, check, clickView, finish, front, key, pages, readPref, shownViews, sleep,
-  views, viewTree, typeInto, visiblePage, waitFor, browserCall, evalIn, skipOnMac,
+  ACCEL, CDP_PORT, SHIFT, check, clickView, finish, front, key, pages, readPref, shownViews,
+  sleep, views, viewTree, typeInto, visiblePage, waitFor, browserCall, evalIn,
 } from './lib/koan.mjs';
-skipOnMac();
+import { menuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
 
 const VK = { T: 84, L: 76, ESC: 27 };
-const MOD_SHIFT = 8;
+// Cmd+L (Ctrl+L off macOS) in `page`: whether it went.
+const openLocation = page => menuKey(page, 'l', 'c', () => key(page, VK.L, ACCEL, 'l'));
 
 // Every DevTools target, also the browser's own WebUI (the popup is one).
 const targets = async () =>
@@ -38,17 +40,20 @@ let [page] = await pages();
 await front(page);
 
 // O1: the Views popup, not WebUI (and O15's DCHECK didn't fire at startup).
-await key(page, VK.L, CTRL, 'l');
-check('Cmd+L opens the floating card (the keyboard floats)', await waitFor(floating),
-      'no backdrop');
-const rows = shownViews(await views(), 'OmniboxResultView');
-console.log(`INFO  ${rows.length} suggestion row(s) after Cmd+L`);
-check('The suggestions are Views rows, with no chrome://omnibox-popup WebUI target',
-      !(await targets()).some(t => t.url.startsWith('chrome://omnibox-popup')),
-      (await targets()).map(t => t.url).filter(u => u.startsWith('chrome://')).join(' '));
-await key(page, VK.ESC, 0, 'Escape');
-await sleep(500);
-check('Esc closes it', !(await floating()));
+if (await openLocation(page)) {
+  check('Cmd+L opens the floating card (the keyboard floats)', await waitFor(floating),
+        'no backdrop');
+  const rows = shownViews(await views(), 'OmniboxResultView');
+  console.log(`INFO  ${rows.length} suggestion row(s) after Cmd+L`);
+  check('The suggestions are Views rows, with no chrome://omnibox-popup WebUI target',
+        !(await targets()).some(t => t.url.startsWith('chrome://omnibox-popup')),
+        (await targets()).map(t => t.url).filter(u => u.startsWith('chrome://')).join(' '));
+  await key(page, VK.ESC, 0, 'Escape');
+  await sleep(500);
+  check('Esc closes it', !(await floating()));
+} else {
+  skipped('Cmd+L opens the floating card, with Views rows, and Esc closes it', menuKeyWhyNot());
+}
 
 // O2: a click on the pill edits in the pill.
 await clickView('KoanUrlPill');
@@ -59,9 +64,12 @@ check('A click on the sidebar URL bar shows no AI Mode, "Ask Google about this p
       aiAfterClick.length === 0,
       aiAfterClick.map(v => `${v.cls}:${aiText(v).trim()}`).join(' | '));
 // O2: Cmd+L while the bar is open in the pill floats it.
-await key(page, VK.L, CTRL, 'l');
-check('Cmd+L with the bar open in the pill floats it', await waitFor(floating),
-      'no backdrop');
+if (await openLocation(page)) {
+  check('Cmd+L with the bar open in the pill floats it', await waitFor(floating),
+        'no backdrop');
+} else {
+  skipped('Cmd+L with the bar open in the pill floats it', menuKeyWhyNot());
+}
 await key(page, VK.ESC, 0, 'Escape');
 await sleep(500);
 
@@ -75,7 +83,7 @@ await browserCall('Target.activateTarget', { targetId: page.id });
 await sleep(500);
 const tabCount = (await pages()).length;
 const secondTitle = (await pages()).find(p => p.id === second)?.title ?? '';
-await key(page, VK.T, CTRL, 't');
+await key(page, VK.T, ACCEL, 't');
 const tabRows = await waitFor(async () => {
   const rs = shownViews(await views(), 'OmniboxResultView');
   return rs.length >= 1 && rs;
@@ -113,7 +121,7 @@ check('Enter on the open tab\'s row switches to it: no new tab, that tab is acti
 const blank = (await browserCall('Target.createTarget', { url: 'about:blank' }))
     .result.targetId;
 await sleep(1000);
-await key((await pages()).find(p => p.id === blank) ?? page, VK.T, CTRL, 't');
+await key((await pages()).find(p => p.id === blank) ?? page, VK.T, ACCEL, 't');
 const blankRows = await waitFor(async () => {
   const rs = shownViews(await views(), 'OmniboxResultView');
   return rs.length >= 1 && rs;
@@ -130,22 +138,25 @@ await front(page);
 
 // O6: no @gemini / @aimode shortcuts (the filter runs after the search engines
 // load, off the notification: inside it, the browser died at startup).
-await key(page, VK.L, CTRL, 'l');
-await waitFor(floating);
-const box = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown);
-await typeInto(box, '@');
-const atRows = (await views()).filter(v => v.cls === 'OmniboxTextView' && v.shown)
-    .map(v => v.props?.Text ?? '');
-console.log(`INFO  '@' lists: ${atRows.join(' | ')}`);
-check('Typing @ lists no Gemini or AI Mode shortcut',
-      atRows.length > 0 && !atRows.some(t => /gemini|aimode|ai mode/i.test(t)),
-      atRows.join(' | '));
-await key(page, VK.ESC, 0, 'Escape');
-await sleep(500);
+if (await openLocation(page)) {
+  await waitFor(floating);
+  const box = (await viewTree()).find(v => v.cls === 'OmniboxViewViews' && v.shown);
+  await typeInto(box, '@');
+  const atRows = (await views()).filter(v => v.cls === 'OmniboxTextView' && v.shown)
+      .map(v => v.props?.Text ?? '');
+  console.log(`INFO  '@' lists: ${atRows.join(' | ')}`);
+  check('Typing @ lists no Gemini or AI Mode shortcut',
+        atRows.length > 0 && !atRows.some(t => /gemini|aimode|ai mode/i.test(t)),
+        atRows.join(' | '));
+  await key(page, VK.ESC, 0, 'Escape');
+  await sleep(500);
+} else {
+  skipped('Typing @ (after Cmd+L) lists no Gemini or AI Mode shortcut', menuKeyWhyNot());
+}
 
 // O5, issue #178: no AI Mode on any surface the user sees. (1) The floating
 // bar / New Tab overlay: no chip, button, hint or tooltip for it.
-await key(page, VK.T, CTRL, 't');
+await key(page, VK.T, ACCEL, 't');
 await waitFor(floating);
 await sleep(500);
 const aiViews = await aiOnScreen();
@@ -157,10 +168,12 @@ await sleep(500);
 
 // (2) Search Tabs (Shift+Cmd+A on macOS, Shift+Ctrl+A elsewhere): the tab
 // search bubble is a WebUI page; none of its text mentions AI Mode.
-await key(page, 65, MOD_SHIFT | CTRL, 'a');
-const tabSearch = await waitFor(async () => (await pages()).find(
+const searchedTabs = await menuKey(page, 'a', 'cs', () => key(page, 65, SHIFT | ACCEL, 'a'));
+const tabSearch = searchedTabs && await waitFor(async () => (await pages()).find(
     p => p.url.startsWith('chrome://tab-search')));
-if (tabSearch) {
+if (!searchedTabs) {
+  skipped('Search Tabs (Shift+Cmd+A) shows no AI Mode', menuKeyWhyNot());
+} else if (tabSearch) {
   await sleep(800);
   const text = await evalIn(tabSearch, `(() => {
       const out = [];
@@ -180,7 +193,15 @@ if (tabSearch) {
   await key(page, VK.ESC, 0, 'Escape');
   await sleep(500);
 } else {
-  console.log('INFO  no chrome://tab-search target found (the bubble is a popup; check by hand)');
+  // Koan's Search Tabs is Zen's: the URL bar in its tabs mode (#155), no
+  // bubble. It shows no AI Mode either; Esc closes it, so no bar is left
+  // open for the next step.
+  console.log('INFO  no chrome://tab-search target (Search Tabs opened the URL bar)');
+  const aiViews = await aiOnScreen();
+  check('Search Tabs (Shift+Cmd+A, the URL bar over the tabs) shows no AI Mode',
+        aiViews.length === 0, aiViews.map(v => `${v.cls}:${aiText(v).trim()}`).join(' | '));
+  await key(page, VK.ESC, 0, 'Escape');
+  await sleep(500);
 }
 
 // O3: a new tab page doesn't open the bar by itself.

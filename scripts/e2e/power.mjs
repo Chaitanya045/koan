@@ -5,12 +5,22 @@
 // tabs freeze, except pinned ones (also under energy saver).
 //
 //   scripts/e2e/run.sh power
+//
+// On macOS (scripts/mac/suite.sh): Close Window and Reopen Closed Tab
+// (Cmd+Shift+W, Cmd+Shift+T) are the main menu's, which a CDP key never
+// reaches, so they are real keys (lib/mac.mjs menuKey()); with real input
+// off the window is closed by the test_helper extension (power.flags), as
+// the menu item does, and the reopen steps are SKIPs. "Add to Essentials"
+// is in the tab's menu, a native NSMenu there: test_helper pins the tab
+// (an extension's pin makes an Essential, as the menu item does).
 import { spawn } from 'node:child_process';
-import { browserSession, connect, evaluate, key, pageTargets, sleep, traceUi, uiMouse,
+import { browserSession, connect, evaluate, pageTargets, sleep, traceUi, uiMouse,
          uiViews } from '../perf/cdp.mjs';
 import { servePages } from '../perf/pages_server.mjs';
-import { createSpace, tabMenuCommand, skipOnMac } from './lib/koan.mjs';
-skipOnMac();
+import { ACCEL, NATIVE_MENUS, createSpace, key as koanKey, tabMenuCommand, viewTree, waitFor }
+    from './lib/koan.mjs';
+import { askTestHelper, closeWindowOf, menuKey, menuKeyWhyNot, realInput, skipped }
+    from './lib/mac.mjs';
 
 const CDP_PORT = process.env.CDP_PORT;
 const UI_PORT = process.env.UI_PORT;
@@ -81,6 +91,30 @@ if (!pageLoads) {
 }
 check('A test page loads', pageLoads);
 const CTRL = 2, ALT = 1, SHIFT = 8;
+// Sends a key press to the page target matching `match` (lib/koan.mjs key():
+// on macOS the Mac's key codes, so Koan's shortcuts get it). Modifiers as
+// above; ACCEL is Cmd on macOS, Ctrl elsewhere.
+async function key(port, keyCode, modifiers, match) {
+  const target = (await pageTargets(port)).find(match);
+  if (!target) {
+    console.log(`  no page to send key ${keyCode} to`);
+    return;
+  }
+  await koanKey(target, keyCode, modifiers);
+}
+const target = async match => (await pageTargets(CDP_PORT)).find(match);
+// Close Window (Ctrl+Shift+W; the main menu's Cmd+Shift+W on macOS: a real
+// key, or test_helper's chrome.windows.remove(), which runs BrowserView::
+// Close() as the menu item does).
+async function closeWindow(match) {
+  const page = await target(match);
+  if (!page) return;
+  if (!realInput() && NATIVE_MENUS) {
+    await closeWindowOf(page);
+    return;
+  }
+  await menuKey(page, 'w', 'cs', () => key(CDP_PORT, 87, ACCEL | SHIFT, match));
+}
 const paintsOf = trace => Object.fromEntries(trace.paints);
 const koanTasks = trace =>
   trace.tasks.filter(([from]) => from.startsWith('koan_')).reduce((n, [, c]) => n + c, 0);
@@ -123,29 +157,36 @@ await sleep(3000);
 const other = (await browser.send('Target.createTarget',
                                   { url: count('w'), newWindow: true })).result.targetId;
 await sleep(2000);
-await key(CDP_PORT, 87, CTRL | SHIFT, byId(start.id));  // Ctrl+Shift+W
+await closeWindow(byId(start.id));  // Ctrl+Shift+W
 await sleep(2000);
-await key(CDP_PORT, 84, CTRL | SHIFT, byId(other));  // Ctrl+Shift+T
-await sleep(5000);
-let n = await loads(byId(other));
-check('A reopened window loads its active tab', n.a === 2, show(n));
-check('...but not its background tabs', n.b === 1 && n.c === 1 && n.d === 1, show(n));
-const b = (await pageTargets(CDP_PORT)).find(byUrl('count=b'));
-if (b) {
-  await browser.send('Target.activateTarget', { targetId: b.id });
-  await sleep(3000);
+const reopened = await menuKey(await target(byId(other)), 't', 'cs',
+                               () => key(CDP_PORT, 84, ACCEL | SHIFT, byId(other)));  // Ctrl+Shift+T
+let n;
+if (!reopened) {
+  skipped('A reopened window loads its active tab only, and a background tab when opened',
+          `Reopen Closed Tab (Cmd+Shift+T) ${menuKeyWhyNot()}`);
+} else {
+  await sleep(5000);
   n = await loads(byId(other));
-}
-check('A background tab loads when it is opened', n.b === 2, show(n));
-if (!(n.a === 2 && n.b === 2)) {
-  console.log(`  open pages: ${(await pageTargets(CDP_PORT)).map(t => t.url).join(' ')}`);
+  check('A reopened window loads its active tab', n.a === 2, show(n));
+  check('...but not its background tabs', n.b === 1 && n.c === 1 && n.d === 1, show(n));
+  const b = (await pageTargets(CDP_PORT)).find(byUrl('count=b'));
+  if (b) {
+    await browser.send('Target.activateTarget', { targetId: b.id });
+    await sleep(3000);
+    n = await loads(byId(other));
+  }
+  check('A background tab loads when it is opened', n.b === 2, show(n));
+  if (!(n.a === 2 && n.b === 2)) {
+    console.log(`  open pages: ${(await pageTargets(CDP_PORT)).map(t => t.url).join(' ')}`);
+  }
 }
 
 // After a restart only the active tab loads: not the window's other tabs,
 // nor a tab in another Space. Window: r1 (active), r2, r3, and s in a
 // Space of its own.
 if ((await pageTargets(CDP_PORT)).find(byUrl('count=b'))) {
-  await key(CDP_PORT, 87, CTRL | SHIFT, byUrl('count=b'));  // close the reopened window
+  await closeWindow(byUrl('count=b'));  // close the reopened window
   await sleep(2000);
 }
 await navigate((await pageTargets(CDP_PORT)).find(byId(other)), count('r1'));
@@ -217,7 +258,7 @@ const pinned = (await browser.send('Target.createTarget',
                                    { url: `${pages.origin}/power.html?busy&pinned` }))
     .result.targetId;
 await sleep(2000);
-await key(CDP_PORT, 68, CTRL | SHIFT, byId(pinned));
+await key(CDP_PORT, 68, ACCEL | SHIFT, byId(pinned));  // Ctrl+Shift+D: pin
 await sleep(1000);
 const essential = (await browser.send('Target.createTarget',
                                       { url: `${pages.origin}/power.html?busy&essential` }))
@@ -225,8 +266,14 @@ const essential = (await browser.send('Target.createTarget',
 await sleep(2000);
 await evaluate(CDP_PORT, byId(essential), 'document.title = "Koan Essential"');
 await sleep(1000);
-check('A busy tab can be made an Essential',
-      await tabMenuCommand({ title: 'Koan Essential' }, 'kKoanAddToEssentialsMenuItem'));
+check(NATIVE_MENUS ? 'A busy tab can be made an Essential (pinned by test_helper: the tab menu ' +
+                     'is a native NSMenu on macOS)'
+                   : 'A busy tab can be made an Essential',
+      NATIVE_MENUS
+          ? await askTestHelper(await target(byId(essential)), 'pin-tab', 1500) &&
+                !!await waitFor(async () => (await viewTree()).some(
+                    v => v.cls === 'KoanTabRow' && v.props.Essential === 'true'))
+          : await tabMenuCommand({ title: 'Koan Essential' }, 'kKoanAddToEssentialsMenuItem'));
 await browser.send('Target.activateTarget', { targetId: home.id });
 for (let i = 0; i < 8; i++) {
   await browser.send('Target.createTarget',
@@ -289,7 +336,7 @@ const pinned2 = (await browser.send('Target.createTarget',
                                     { url: `${pages.origin}/power.html?busy&burn&pinned2` }))
     .result.targetId;
 await sleep(2000);
-await key(CDP_PORT, 68, CTRL | SHIFT, byId(pinned2));  // Ctrl+Shift+D: pin
+await key(CDP_PORT, 68, ACCEL | SHIFT, byId(pinned2));  // Ctrl+Shift+D: pin
 await sleep(1000);
 await browser.send('Target.activateTarget', { targetId: home2.id });
 const busy2 = (await browser.send('Target.createTarget',
@@ -343,10 +390,10 @@ await sleep(1000);
 
 // Compact mode: a sidebar opened with Ctrl+Alt+S hides again without Koan
 // polling (it used to check the pointer every 100 ms while open).
-await key(CDP_PORT, 83, CTRL, byId(first.id));  // Ctrl+S
+await key(CDP_PORT, 83, ACCEL, byId(first.id));  // Ctrl+S
 await sleep(1500);
 const peek = await traceUi(browser, async () => {
-  await key(CDP_PORT, 83, CTRL | ALT, byId(first.id));  // Ctrl+Alt+S
+  await key(CDP_PORT, 83, ACCEL | ALT, byId(first.id));  // Ctrl+Alt+S
   await sleep(6000);
 });
 check('A peeked sidebar hides again without polling', koanTasks(peek) <= 3,
@@ -372,7 +419,7 @@ check('The toolbar slid back out does not repaint',
       `${paintsOf(reveal).ToolbarView ?? 0} toolbar paints while revealed; then toolbar ` +
       `${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}`);
 await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // back to single toolbar
-await key(CDP_PORT, 83, CTRL, byId(first.id));  // compact mode off
+await key(CDP_PORT, 83, ACCEL, byId(first.id));  // compact mode off
 await sleep(1500);
 
 browser.close();

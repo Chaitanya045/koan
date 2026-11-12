@@ -5,8 +5,12 @@
 // switching to the multiple-toolbars layout (Ctrl+Alt+B).
 //
 //   scripts/e2e/run.sh layout
-import { sendKey, skipOnMac } from './lib/koan.mjs';
-skipOnMac();
+//
+// On macOS (scripts/mac/suite.sh) Cmd+L, the main menu's Open Location, is a
+// real key (lib/mac.mjs menuKey(); a CDP key never reaches the menu bar);
+// with real input off its steps are SKIPs.
+import { ACCEL, sendKey } from './lib/koan.mjs';
+import { menuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -97,14 +101,19 @@ async function click(view) {
   await sleep(1000);
 }
 
+const firstPage = async () =>
+  (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
+      .filter(t => t.type === 'page')[0];
 // Sends a key press to the active page. Modifiers: Alt=1 Ctrl=2 Shift=8.
 async function key(code, modifiers, keyName = '') {
-  const page = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .filter(t => t.type === 'page')[0];
-  const c = await connect(page.webSocketDebuggerUrl);
+  const c = await connect((await firstPage()).webSocketDebuggerUrl);
   await sendKey(c, code, modifiers, keyName);
   c.close();
   await sleep(1200);
+}
+// Cmd+L (Ctrl+L off macOS): whether it went.
+async function openLocation() {
+  return menuKey(await firstPage(), 'l', 'c', () => key(VK.L, ACCEL, 'l'), 1200);
 }
 
 let failures = 0;
@@ -136,32 +145,37 @@ check('...the page reaches the top of the window (8px gutter)', card?.y === 8, `
 check('...with a hot zone for the window buttons along the top edge',
       vs.filter(v => v.cls === 'KoanHotZone' && v.shown).length === 1);
 
-await key(VK.L, CTRL, 'l');
-vs = await views();
-let bar = find(vs, 'TopContainerView');
-check('Ctrl+L opens the floating URL bar, centred and Zen-sized (Zen: the keyboard floats)',
-      bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
-      `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
-const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown);
-check('...showing just the location bar',
-      toolbarChildren.length === 1 && toolbarChildren[0].cls === 'LocationBarView',
-      toolbarChildren.map(v => v.cls).join(' '));
+let bar;
+if (await openLocation()) {
+  vs = await views();
+  bar = find(vs, 'TopContainerView');
+  check('Ctrl+L opens the floating URL bar, centred and Zen-sized (Zen: the keyboard floats)',
+        bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
+        `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
+  const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown);
+  check('...showing just the location bar',
+        toolbarChildren.length === 1 && toolbarChildren[0].cls === 'LocationBarView',
+        toolbarChildren.map(v => v.cls).join(' '));
 
-const omnibox = find(vs, 'OmniboxViewViews');
-await uiEvent(omnibox, 'DOM.dispatchKeyEvent',
-              { type: 'keyPressed', keyCode: 0, code: 0, flags: 0, key: 'w'.codePointAt(0), isChar: true });
-await sleep(1000);
-vs = await views();
-bar = find(vs, 'TopContainerView');
-check('...and typing keeps it so',
-      bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
-      `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
-await windowKey(VK.ESC);
-vs = await views();
-bar = find(vs, 'TopContainerView');
-check('Esc closes the URL bar', bar?.w === WINDOW_WIDTH, `width ${bar?.w}`);
-check('...and the toolbar is back to normal',
-      vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown).length > 1);
+  const omnibox = find(vs, 'OmniboxViewViews');
+  await uiEvent(omnibox, 'DOM.dispatchKeyEvent',
+                { type: 'keyPressed', keyCode: 0, code: 0, flags: 0, key: 'w'.codePointAt(0), isChar: true });
+  await sleep(1000);
+  vs = await views();
+  bar = find(vs, 'TopContainerView');
+  check('...and typing keeps it so',
+        bar?.w === FLOAT_WIDTH && bar.x === (WINDOW_WIDTH - FLOAT_WIDTH) / 2,
+        `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
+  await windowKey(VK.ESC);
+  vs = await views();
+  bar = find(vs, 'TopContainerView');
+  check('Esc closes the URL bar', bar?.w === WINDOW_WIDTH, `width ${bar?.w}`);
+  check('...and the toolbar is back to normal',
+        vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown).length > 1);
+} else {
+  skipped('Ctrl+L opens the floating URL bar (and typing, Esc)', menuKeyWhyNot());
+  vs = await views();
+}
 
 const urlPill = find(vs, 'KoanUrlPill');
 await click(find(vs, 'KoanUrlPill'));
@@ -184,14 +198,17 @@ vs = await views();
 check('Ctrl+Alt+B switches to multiple toolbars',
       !find(vs, 'KoanSidebarNavView') && !find(vs, 'KoanSidebarNavButtons') &&
       find(vs, 'TopContainerView')?.path.at(-1) === 'BrowserView');
-await key(VK.L, CTRL, 'l');
-vs = await views();
-bar = find(vs, 'TopContainerView');
-// The toolbar sits beside the sidebar there, so it is narrower than the
-// window, but it stays in place.
-check('...where Ctrl+L uses the toolbar in place',
-      bar?.path.at(-1) === 'BrowserView' && bar.w > FLOAT_WIDTH && bar.y === 0,
-      `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
+if (await openLocation()) {
+  vs = await views();
+  bar = find(vs, 'TopContainerView');
+  // The toolbar sits beside the sidebar there, so it is narrower than the
+  // window, but it stays in place.
+  check('...where Ctrl+L uses the toolbar in place',
+        bar?.path.at(-1) === 'BrowserView' && bar.w > FLOAT_WIDTH && bar.y === 0,
+        `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y}`);
+} else {
+  skipped('...where Ctrl+L uses the toolbar in place', menuKeyWhyNot());
+}
 await key(VK.B, CTRL | ALT, 'b');
 vs = await views();
 check('Ctrl+Alt+B switches back', find(vs, 'KoanSidebarNavView')?.shown === true);

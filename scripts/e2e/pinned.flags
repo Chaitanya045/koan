@@ -1,3 +1,7 @@
 # Each window gets random test data in its session data (koan_session_data.h),
 # to check it comes back after restarts and with a reopened window.
 --koan-test-window-data
+# The test_helper extension: on macOS askTestHelper() in lib/mac.mjs pins the
+# Essential (the tab's menu is a native NSMenu there; {root} is the repo,
+# suite.sh expands it).
+--load-extension={root}/scripts/e2e/extensions/test_helper
