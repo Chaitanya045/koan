@@ -634,6 +634,7 @@ source_set("impl") {
     "//components/web_modal",
     "//components/zoom",
     "//content/public/browser",
+    "//koan/browser:copy_urls",
     "//koan/browser:features",
     "//koan/browser:fuzzy_score",
     "//koan/browser:library_logic",

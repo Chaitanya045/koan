@@ -1,0 +1,3 @@
+# The test_helper extension: selects several tabs ({highlight: urls}) ({root}
+# is the repo; scripts/mac/suite.sh expands it).
+--load-extension={root}/scripts/e2e/extensions/test_helper

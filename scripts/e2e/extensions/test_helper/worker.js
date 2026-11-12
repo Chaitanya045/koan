@@ -3,7 +3,9 @@
 // action's name, or {discard: [urls]}: unload the tabs showing those URLs, as
 // Koan's Unload Space does (for the steps whose menu is a native NSMenu on
 // macOS), or {close: [tab ids]}: close those tabs, or {activate: url}: show
-// the tab showing that URL (an unloaded one loads). Actions answer true, except
+// the tab showing that URL (an unloaded one loads), or {highlight: urls}:
+// select the asking window's tabs showing those URLs (the first becomes the
+// active tab), as a Shift/Cmd+click in the sidebar does. Actions answer true, except
 // 'list-tabs', which answers the asking window's tabs in order (for
 // scripts/mac/video/flows: what the model has, next to what the sidebar
 // draws).
@@ -26,9 +28,17 @@ async function activate(url) {
   if (tab) await chrome.tabs.update(tab.id, { active: true });
   return !!tab;
 }
+async function highlight(windowId, urls) {
+  const tabs = await chrome.tabs.query({ windowId });
+  const indices = urls.map(u => tabs.find(t => (t.url || t.pendingUrl) === u)?.index);
+  if (indices.some(i => i === undefined)) return false;
+  await chrome.tabs.highlight({ windowId, tabs: indices });
+  return true;
+}
 chrome.runtime.onMessageExternal.addListener((message, sender, respond) => {
   const action = Array.isArray(message?.discard) ? () => discard(message.discard)
                : Array.isArray(message?.close) ? () => chrome.tabs.remove(message.close)
+               : Array.isArray(message?.highlight) ? tab => highlight(tab.windowId, message.highlight)
                : typeof message?.activate === 'string' ? () => activate(message.activate)
                                                : ACTIONS[message];
   if (!action || !sender.tab) {

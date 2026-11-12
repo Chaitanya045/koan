@@ -46,6 +46,15 @@ source_set("prefs") {
   ]
 }
 
+# Copy current URL's text for several selected tabs. Pure logic.
+source_set("copy_urls") {
+  sources = [
+    "koan_copy_urls.cc",
+    "koan_copy_urls.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
 # Which page chrome://newtab shows, called from chrome/browser/search/search.cc.
 source_set("new_tab_page") {
   sources = [
