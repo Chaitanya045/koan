@@ -29,7 +29,7 @@ import http from 'node:http';
 import { ACCEL, ALT, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, keyEventParams, sendKey,
          typeInto, viewTree, windowFrame }
     from './lib/koan.mjs';
-import { skipped } from './lib/mac.mjs';
+import { IS_MAC, makeKey, skipped } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -191,15 +191,47 @@ function check(name, ok, detail = '') {
 const glanceOpen = async () => shown(await views(), 'KoanGlanceView').length === 1;
 const pageAt = async path => (await tabs()).find(t => t.url === `${BASE}${path}`);
 
-// Start from one tab showing /a.
-const [first, ...rest] = await tabs();
+// Start from one tab showing /a: the window's active tab, as Glance opens
+// from that only (MaybeOpenGlance()). The runner's start tabs are
+// example.com; /json/list has other page targets too (Koan's WebUI) and
+// its order isn't the tab strip's (on macOS the first page was not the
+// active tab, and closing "the others" took the window's real tabs).
 const browserWs = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json())
     .webSocketDebuggerUrl;
 const browser = await connect(browserWs);
-for (const t of rest) await browser.send('Target.closeTarget', { targetId: t.id });
+const startTabs = (await tabs()).filter(t => t.url.startsWith('https://example.com/'));
+const isVisible = t => withPage(t, async c => (await c.send('Runtime.evaluate', {
+  expression: 'document.visibilityState', returnByValue: true,
+})).result?.result?.value === 'visible');
+let first = null;
+for (const t of startTabs) {
+  if (!first && await isVisible(t)) first = t;
+}
+first ??= startTabs[0] ?? (await tabs())[0];
+for (const t of startTabs) {
+  if (t.id !== first.id) await browser.send('Target.closeTarget', { targetId: t.id });
+}
 await withPage(first, c => c.send('Page.navigate', { url: `${BASE}/a` }));
 await sleep(2000);
+// The active tab of a key window: on macOS a window that isn't key gets no
+// shortcuts from CDP keys (#364).
+if (IS_MAC) {
+  await makeKey(first);
+} else {
+  await withPage(first, c => c.send('Page.bringToFront'));
+}
+await sleep(800);
 let tab = await pageAt('/a');
+// What the first click had to work with, for failure details.
+const clickState = async () => {
+  const state = tab && await withPage(tab, async c => (await c.send('Runtime.evaluate', {
+    expression: 'JSON.stringify({ visibility: document.visibilityState, focus: document.hasFocus(), ' +
+        'link: !!document.getElementById("glance") })',
+    returnByValue: true,
+  })).result?.result?.value);
+  return `test tab ${state ?? 'missing'}; pages: ` +
+      (await tabs()).map(t => t.url.replace(BASE, '')).join(' ');
+};
 // The test's pages: its tabs, plus the Glance page while it is open (other
 // page targets, like the omnibox popup's WebUI, come and go).
 const pages = async () => (await tabs()).filter(t => t.url.startsWith(BASE)).length;
@@ -209,13 +241,15 @@ const urls = async () => (await tabs()).filter(t => t.url.startsWith(BASE))
 // The card: 80% of the contents width, their full height, centred; Zen's
 // button column 12px right of it, 27px down, its buttons 32 x 32
 // (--size-item-large, measured on Zen 1.24b on the Mac, #235).
+const beforeClick = await clickState();
 await clickLink(tab, 'glance', ALT);
 let vs = await views();
 const overlay = shown(vs, 'KoanGlanceView')[0];
 const card = shown(inside(vs, 'KoanGlanceView'), 'WebView')[0];
 const cardBox = vs.find(v => v.nodeId === card?.parent);
 const buttons = shown(inside(vs, 'KoanGlanceView'), 'ImageButton');
-check('Alt+click opens Glance', !!overlay && !!card);
+check('Alt+click opens Glance', !!overlay && !!card,
+      overlay && card ? '' : `before: ${beforeClick}; after: ${await clickState()}`);
 if (overlay && cardBox) {
   check('The card is 80% wide, full height, centred',
         Math.abs(cardBox.w - overlay.w * 0.8) <= 1 && cardBox.h === overlay.h &&
@@ -259,7 +293,7 @@ if (glancePage) {
 check('Alt+click in the Glance page replaces its page',
       (await glanceOpen()) && (await targets()).some(t => t.url === `${BASE}/c`) &&
           (await pages()) === 2,
-      (await targets()).map(t => t.url.replace(BASE, '')).join(' '));
+      `glance ${await glanceOpen()}, pages ${(await tabs()).map(t => t.url.replace(BASE, '')).join(' ')}`);
 const replaced = (await targets()).find(t => t.url === `${BASE}/c`);
 if (replaced) {
   await keyTo(replaced, 27, 0, 'Escape');
