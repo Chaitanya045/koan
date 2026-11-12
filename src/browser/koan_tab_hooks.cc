@@ -28,6 +28,10 @@ struct Activation : public base::SupportsUserData::Data {
   base::TimeTicks time;
 };
 
+// OnTabLeft(): the tab was left (or opened in the background).
+constexpr char kLeftKey[] = "koan_tab_left";
+struct Left : public base::SupportsUserData::Data {};
+
 // Incognito's PrefService reads Koan's prefs through to the regular profile
 // (Koan never writes them there; see koan_prefs.h).
 bool GetBoolean(content::BrowserContext* context, const char* pref) {
@@ -39,6 +43,18 @@ bool GetBoolean(content::BrowserContext* context, const char* pref) {
 void OnTabActivated(content::WebContents* contents) {
   contents->SetUserData(kActivationKey,
                         std::make_unique<Activation>(base::TimeTicks::Now()));
+}
+
+void OnTabLeft(content::WebContents* contents) {
+  if (!contents->GetUserData(kLeftKey)) {
+    contents->SetUserData(kLeftKey, std::make_unique<Left>());
+  }
+}
+
+bool HandsOverToRecentlyUsedOnClose(content::BrowserContext* context,
+                                    content::WebContents* closing) {
+  return context && closing && closing->GetUserData(kLeftKey) &&
+         GetBoolean(context, prefs::kSelectRecentlyUsedOnClose);
 }
 
 std::optional<int> PickRecentlyUsedTab(

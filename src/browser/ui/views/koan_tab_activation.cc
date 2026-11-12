@@ -26,6 +26,18 @@ void KoanTabActivationTracker::OnTabStripModelChanged(
   if (selection.active_tab_changed() && selection.new_contents) {
     OnTabActivated(selection.new_contents);
   }
+  if (selection.active_tab_changed() && selection.old_contents) {
+    OnTabLeft(selection.old_contents);
+  }
+  // Opened in the background: no owner, as in Zen.
+  if (change.type() == TabStripModelChange::kInserted) {
+    for (const TabStripModelChange::ContentsWithIndex& inserted :
+         change.GetInsert()->contents) {
+      if (inserted.contents != tab_strip_model->GetActiveWebContents()) {
+        OnTabLeft(inserted.contents);
+      }
+    }
+  }
 }
 
 }  // namespace koan

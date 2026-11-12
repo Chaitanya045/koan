@@ -26,6 +26,21 @@ namespace koan {
 // PickRecentlyUsedTab(). Called by each window's KoanTabActivationTracker.
 void OnTabActivated(content::WebContents* contents);
 
+// Records that `contents` stopped being the active tab, or was opened in the
+// background: from then on it has no owner in Zen's sense (Firefox forgets a
+// tab's owner once another tab is selected, and a tab opened in the
+// background has none). Called by each window's KoanTabActivationTracker.
+void OnTabLeft(content::WebContents* contents);
+
+// Whether closing `closing` skips upstream's three opener rules (a tab it
+// opened, a tab its opener opened, its opener) for the most recently used
+// tab: prefs::kSelectRecentlyUsedOnClose is on and `closing` was left since
+// it opened (OnTabLeft()). Zen's order is the owner, then the most recently
+// used tab; upstream keeps openers after the user switched between tabs of
+// one opener, and its "a tab the opener opened" picked a neighbour.
+bool HandsOverToRecentlyUsedOnClose(content::BrowserContext* context,
+                                    content::WebContents* closing);
+
 // The tab to select when the active tab closes and its opener doesn't
 // decide: the most recently activated of the tabs `contents_at` returns (null
 // for tabs that can't be selected), if prefs::kSelectRecentlyUsedOnClose is
