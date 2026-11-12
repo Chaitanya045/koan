@@ -19,6 +19,13 @@ on:
         description: The Koan commit being built
         required: true
         type: string
+    secrets:
+      # castLabs EVS login for Widevine's VMP signature (docs/USAGE.md, "DRM
+      # video"). Optional: without them the app is built without VMP.
+      EVS_ACCOUNT_NAME:
+        required: false
+      EVS_PASSWD:
+        required: false
     outputs:
       status:
         description: finished, or running when the next job must go on
@@ -115,6 +122,10 @@ jobs:
       - name: Make the disk image
         id: package
         if: steps.build.outputs.status == 'finished'
+        env:
+          # Nightly and manual builds only: a PR's code never sees the login.
+          EVS_ACCOUNT_NAME: ${{ github.event_name != 'pull_request' && secrets.EVS_ACCOUNT_NAME || '' }}
+          EVS_PASSWD: ${{ github.event_name != 'pull_request' && secrets.EVS_PASSWD || '' }}
         run: scripts/ci/mac_package.sh "$ARTIFACTS/dmg"
 
       - name: Upload the disk image

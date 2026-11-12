@@ -1,0 +1,12 @@
+--- a/chrome/common/media/cdm_host_file_path.cc
++++ b/chrome/common/media/cdm_host_file_path.cc
+@@ -19,7 +19,8 @@
+ #include "base/apple/bundle_locations.h"
+ #endif
+ 
+-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
++// Koan: the Mac path too (VMP, scripts/mac/widevine_vmp_sign.sh).
++#if BUILDFLAG(GOOGLE_CHROME_BRANDING) || BUILDFLAG(IS_MAC)
+ 
+ namespace {
+ 

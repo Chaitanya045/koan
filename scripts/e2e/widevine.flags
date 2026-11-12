@@ -1,0 +1,3 @@
+# The component updater must run: it downloads the Widevine CDM
+# (scripts/mac/suite.sh drops --disable-component-update for this test).
+{component-update}

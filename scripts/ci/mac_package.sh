@@ -32,6 +32,13 @@ app="${KOAN_CI_APP:-chromium/src/out/Koan/$name.app}"
 [[ -d $app ]] || { echo "no $app" >&2; exit 1; }
 dmg="$name-$version-${sha:0:7}-arm64.dmg"
 
+# Widevine's VMP signature goes into the framework's Resources, which the
+# code signature below seals, so it comes first. Without the EVS secrets
+# (EVS_ACCOUNT_NAME, EVS_PASSWD) the app stays without VMP.
+if [[ -z ${KOAN_CI_APP:-} ]]; then
+  scripts/mac/widevine_vmp_sign.sh --if-configured "$app"
+fi
+
 # Last, after everything that changes the bundle: --deep signs the nested
 # frameworks, helper apps and libraries too, and --verify --deep --strict
 # fails if any nested code is unsigned or its seal doesn't match.

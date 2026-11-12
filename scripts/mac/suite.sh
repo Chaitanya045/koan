@@ -252,10 +252,13 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   [[ -f "$local_state" ]] && cp "$local_state" "$prof/Local State"
   local enable="ui-debug-tools-enable-synthetic-events" disable="MacAppCodeSignClone" extra=() flag
   local flags_file="$ROOT/scripts/e2e/$name.flags"
-  local file_flags=()
+  local file_flags=() updates=(--disable-component-update)
   if [[ -f "$flags_file" ]]; then
     while IFS= read -r flag || [[ -n "$flag" ]]; do
       [[ -z "$flag" || "$flag" == \#* ]] && continue
+      # {component-update}: let the component updater run (widevine: it
+      # downloads the CDM). Every other test keeps it off.
+      if [[ "$flag" == "{component-update}" ]]; then updates=(); continue; fi
       file_flags+=("${flag//\{root\}/$ROOT}")
     done <"$flags_file"
   fi
@@ -280,7 +283,7 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   [[ -f "$page" ]] && urls=("file://$page")
   # shellcheck disable=SC2054  # "1280,800" is one value
   local args=("$exe" --user-data-dir="$prof" --no-first-run --no-default-browser-check
-    --disable-component-update --use-mock-keychain --window-size=1280,800
+    ${updates[@]+"${updates[@]}"} --use-mock-keychain --window-size=1280,800
     --enable-logging=stderr --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
     --enable-features="$enable" --disable-features="$disable" ${extra[@]+"${extra[@]}"})
   "${args[@]}" "${urls[@]}" >"$koan_log" 2>&1 &

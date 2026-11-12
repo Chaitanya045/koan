@@ -13,7 +13,9 @@
 #   4. writes out/Koan/args.gn (build/koan-mac.gn: release, no symbols) and
 #      runs gn gen;
 #   5. builds at a laptop-friendly -j, under nice and caffeinate;
-#   6. copies Koan.app to ~/Applications (by default when KOAN_MAC is unset,
+#   6. Widevine: VMP-signs the framework when this Mac has an EVS login
+#      (scripts/mac/widevine_vmp_sign.sh, docs/USAGE.md "DRM video");
+#   7. copies Koan.app to ~/Applications (by default when KOAN_MAC is unset,
 #      i.e. on a friend's clone; --install / --no-install to choose).
 #
 #   Every step is skipped when already done, so after an interruption (a
@@ -344,6 +346,9 @@ if [[ $OS == mac ]]; then build=(caffeinate -i "${build[@]}"); fi
 if [[ $TARGET == chrome ]]; then
   if [[ $OS == mac ]]; then
     echo "built $PWD/$OUT/$(app_name).app"
+    # Widevine VMP (Netflix): only with an EVS login on this Mac.
+    "$ROOT/scripts/mac/widevine_vmp_sign.sh" --if-configured \
+      "$PWD/$OUT/$(app_name).app"
     if [[ $INSTALL == 1 ]]; then
       install_app
       echo "Open Koan from ~/Applications (Finder, Spotlight or Launchpad)."

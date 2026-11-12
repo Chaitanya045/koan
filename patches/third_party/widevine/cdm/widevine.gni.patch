@@ -1,0 +1,13 @@
+--- a/third_party/widevine/cdm/widevine.gni
++++ b/third_party/widevine/cdm/widevine.gni
+@@ -88,7 +88,9 @@
+       flags = 0
+     }
+ 
+-    script = "//third_party/widevine/scripts/signature_generator.py"
++    # Koan: Google's signer is internal; write a placeholder that
++    # scripts/mac/widevine_vmp_sign.sh replaces after the build.
++    script = "//koan/build/widevine_signature_placeholder.py"
+     sources = [ "$file" ]
+     outputs = [ "$signature_file" ]
+     args = [
