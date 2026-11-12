@@ -26,6 +26,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/referrer.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -198,6 +199,12 @@ void LoadSavedContainers(Profile* profile) {
       profile->GetStoragePartition(PartitionConfigFor(profile, container),
                                    /*can_create=*/true);
     }
+  }
+  // The user's own containers, the Spaces' (#318).
+  for (const UserContainer& container : ParseUserContainers(
+           profile->GetPrefs()->GetList(prefs::kUserContainers))) {
+    profile->GetStoragePartition(PartitionConfigFor(profile, container.id),
+                                 /*can_create=*/true);
   }
 }
 

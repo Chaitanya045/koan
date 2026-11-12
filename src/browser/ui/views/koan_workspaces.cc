@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/simple_message_box.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
@@ -67,8 +68,10 @@
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_containers.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_space_title.h"
@@ -105,6 +108,7 @@
 #include "ui/actions/actions.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/mojom/themes.mojom.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animator.h"
@@ -230,6 +234,19 @@ constexpr tab_groups::TabGroupColorId kSpaceGroupColor =
 // TabGroupedStateChanged()).
 constexpr char kSpaceThemeSessionKey[] = "koan.space_theme";
 constexpr char kDefaultThemeData[] = "{}";
+
+// Where a Space's container is kept (#318), in the same way: a Serialize()d
+// user container, "none" for none.
+constexpr char kSpaceContainerSessionKey[] = "koan.space_container";
+constexpr char kNoSpaceContainer[] = "none";
+
+// A Space's container as SpaceData has it: a valid saved user container,
+// Serialize()d, or empty.
+std::string NormalizeSpaceContainer(std::string_view stored) {
+  const std::optional<containers::ContainerId> container =
+      containers::SpaceContainerFromString(stored);
+  return container ? containers::Serialize(*container) : std::string();
+}
 
 // The ids of the Spaces deleted (Delete Space) since the browser started, in
 // any window: a tab reopened from one doesn't bring it back
@@ -734,6 +751,7 @@ KoanWorkspaceController::GetSpace(const tab_groups::TabGroupId& space) const {
                    .name = data->name.empty() ? kDefaultSpaceName : data->name,
                    .icon = data->icon,
                    .theme = data->theme,
+                   .container = data->container,
                    .active = GetActiveSpace() == space};
 }
 
@@ -849,7 +867,8 @@ PrefService* KoanWorkspaceController::GetPrefs() const {
 
 void KoanWorkspaceController::CreateSpace(const std::u16string& name,
                                           const std::u16string& icon,
-                                          const SpaceTheme& theme) {
+                                          const SpaceTheme& theme,
+                                          const std::string& container) {
   // Zen's new Space shows its empty state: the empty tab, with no row.
   tabs::TabInterface* tab =
       EnsureEmptyTab(browser_view_->browser(), std::nullopt,
@@ -858,8 +877,11 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
   if (!tab) {
     return;
   }
-  CreateSpaceFromTabs({tab_strip_model()->GetIndexOfTab(tab)},
-                      {.name = name, .icon = icon, .theme = theme});
+  // (Its empty tab, made before the Space has its container, moves into it
+  // with the next update: MatchEmptyTabsToSpaceContainers().)
+  CreateSpaceFromTabs(
+      {tab_strip_model()->GetIndexOfTab(tab)},
+      {.name = name, .icon = icon, .theme = theme, .container = container});
 }
 
 tab_groups::TabGroupId KoanWorkspaceController::CreateSpaceFromTabs(
@@ -931,11 +953,22 @@ KoanWorkspaceController::ReadSpace(const tab_groups::TabGroupId& space) const {
       .name = std::move(name),
       .icon = std::move(icon),
       .theme = SpaceTheme{.stored = theme == kDefaultThemeData ? std::string()
-                                                               : theme}};
+                                                               : theme},
+      .container = NormalizeSpaceContainer(
+          SessionValueOfTabs(space, kSpaceContainerSessionKey,
+                             /*except=*/nullptr)
+              .value_or(std::string()))};
 }
 
 std::optional<std::string> KoanWorkspaceController::ThemeOfTabs(
     const tab_groups::TabGroupId& space,
+    const tabs::TabInterface* except) const {
+  return SessionValueOfTabs(space, kSpaceThemeSessionKey, except);
+}
+
+std::optional<std::string> KoanWorkspaceController::SessionValueOfTabs(
+    const tab_groups::TabGroupId& space,
+    const char* key,
     const tabs::TabInterface* except) const {
   TabStripModel* model = tab_strip_model();
   TabGroupModel* groups = model->group_model();
@@ -948,8 +981,7 @@ std::optional<std::string> KoanWorkspaceController::ThemeOfTabs(
     if (tab == except || !tab->GetContents()) {
       continue;
     }
-    std::string data =
-        GetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey);
+    std::string data = GetTabSessionData(tab->GetContents(), key);
     if (!data.empty()) {
       return data;
     }
@@ -971,15 +1003,36 @@ void KoanWorkspaceController::WriteSpace(const tab_groups::TabGroupId& space,
                                             /*is_collapsed=*/false));
   const std::string theme =
       data.theme.is_default() ? kDefaultThemeData : data.theme.stored;
+  const std::string normalized = NormalizeSpaceContainer(data.container);
+  const std::string container =
+      normalized.empty() ? kNoSpaceContainer : normalized;
   TabStripModel* model = tab_strip_model();
   const gfx::Range range = groups->GetTabGroup(space)->ListTabs();
+  bool container_changed = false;
   for (size_t index = range.start(); index < range.end(); ++index) {
-    content::WebContents* contents =
-        model->GetTabAtIndex(static_cast<int>(index))->GetContents();
-    if (contents &&
-        GetTabSessionData(contents, kSpaceThemeSessionKey) != theme) {
+    tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(index));
+    content::WebContents* contents = tab->GetContents();
+    if (!contents) {
+      continue;
+    }
+    if (GetTabSessionData(contents, kSpaceThemeSessionKey) != theme) {
       SetTabSessionData(contents, kSpaceThemeSessionKey, theme);
     }
+    const std::string old_container =
+        GetTabSessionData(contents, kSpaceContainerSessionKey);
+    if (old_container == container) {
+      continue;
+    }
+    SetTabSessionData(contents, kSpaceContainerSessionKey, container);
+    if (NormalizeSpaceContainer(old_container) != normalized) {
+      // Its container line (PaintSidebarTab()) compares with the Space's.
+      model->NotifyTabChanged(tab, TabChangeType::kAll);
+      container_changed = true;
+    }
+  }
+  // The Space's empty tab moves into the new container.
+  if (container_changed) {
+    ScheduleUpdate();
   }
 }
 
@@ -1025,6 +1078,27 @@ void KoanWorkspaceController::SetSpaceIcon(const tab_groups::TabGroupId& space,
     data->name = kDefaultSpaceName;
   }
   data->icon = icon;
+  WriteSpace(space, *data);
+}
+
+std::string KoanWorkspaceController::GetSpaceContainer(
+    const tab_groups::TabGroupId& space) const {
+  std::optional<SpaceData> data = ReadSpace(space);
+  return data ? data->container : std::string();
+}
+
+void KoanWorkspaceController::SetSpaceContainer(
+    const tab_groups::TabGroupId& space,
+    const std::string& container) {
+  std::optional<SpaceData> data = ReadSpace(space);
+  if (!data) {
+    return;
+  }
+  // A Space without a name shows (and keeps) Zen's default one.
+  if (data->name.empty()) {
+    data->name = kDefaultSpaceName;
+  }
+  data->container = NormalizeSpaceContainer(container);
   WriteSpace(space, *data);
 }
 
@@ -1454,6 +1528,7 @@ void KoanWorkspaceController::Update() {
   InstallViews();
   MarkStartupEmptyTab();
   EnsureOneSpaceShown();
+  MatchEmptyTabsToSpaceContainers();
   DisconnectSavedGroups();
   KeepStartupEssential();
   SnapshotSpaces();
@@ -1757,6 +1832,53 @@ void KoanWorkspaceController::SnapshotSpaces() {
   }
 }
 
+void KoanWorkspaceController::MatchEmptyTabsToSpaceContainers() {
+  Profile* profile = browser_view_->GetProfile();
+  // A restore is still bringing the Spaces' tabs (and their data) back; it
+  // ends with an update.
+  if (profile->IsOffTheRecord() || SessionRestore::IsRestoring(profile)) {
+    return;
+  }
+  TabStripModel* model = tab_strip_model();
+  for (const SpaceInfo& space : GetSpaces()) {
+    const std::optional<containers::ContainerId> container =
+        containers::SpaceContainerFromString(space.container);
+    const gfx::Range range =
+        model->group_model()->GetTabGroup(space.id)->ListTabs();
+    tabs::TabInterface* empty = nullptr;
+    for (size_t i = range.start(); i < range.end() && !empty; ++i) {
+      tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(i));
+      if (IsEmptyTab(tab)) {
+        empty = tab;
+      }
+    }
+    if (!empty || containers::ContainerOf(empty->GetContents()) == container) {
+      continue;
+    }
+    // A new blank page in the Space's partition, where the old one is, then
+    // the old one goes (the Space never has no tab).
+    const bool active = model->GetActiveTab() == empty;
+    content::WebContents::CreateParams params(
+        profile,
+        container ? containers::CreateSiteInstance(profile, *container, GURL())
+                  : nullptr);
+    params.initially_hidden = !active;
+    std::unique_ptr<content::WebContents> contents =
+        content::WebContents::Create(params);
+    content::NavigationController::LoadURLParams load{
+        GURL(chrome::kChromeUINewTabURL)};
+    load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+    contents->GetController().LoadURLWithParams(load);
+    const int index = model->GetIndexOfTab(empty);
+    model->InsertWebContentsAt(
+        index, std::move(contents),
+        active ? AddTabTypes::ADD_ACTIVE : AddTabTypes::ADD_NONE, space.id);
+    MarkEmptyTab(model, index);
+    model->CloseWebContentsAt(model->GetIndexOfTab(empty),
+                              TabCloseTypes::CLOSE_NONE);
+  }
+}
+
 std::vector<int> KoanWorkspaceController::ReclaimUngroupedTabs(
     const tab_groups::TabGroupId& space) {
   TabStripModel* model = tab_strip_model();
@@ -1897,10 +2019,14 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
     // The Space's theme (Zen's theme object, as in its tabs' session data;
     // none before #62, whose group colours were only a stand-in tint).
     const std::string* theme = dict->FindString("theme");
+    // Its profile (#318; none before).
+    const std::string* container = dict->FindString("container");
     stored.emplace_back(
         SpaceData{.name = std::move(name),
                   .icon = std::move(icon),
-                  .theme = {.stored = theme ? *theme : std::string()}},
+                  .theme = {.stored = theme ? *theme : std::string()},
+                  .container = NormalizeSpaceContainer(
+                      container ? *container : std::string())},
         dict->FindBool("active").value_or(false));
     // Its id (none in an entry stored before Spaces had ids; a duplicate in
     // a hand-edited pref is dropped).
@@ -1971,6 +2097,7 @@ void KoanWorkspaceController::StoreSpaces() {
                     .Set("title", JoinTitle(data.icon, data.name))
                     .Set("color", static_cast<int>(kSpaceGroupColor))
                     .Set("theme", data.theme.stored)
+                    .Set("container", data.container)
                     .Set("active", GetActiveSpace() == id)
                     .Set("pinned", StoredPinnedTabs(model, id)));
   }
@@ -2783,6 +2910,24 @@ void KoanWorkspaceController::TabGroupedStateChanged(
         theme && GetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey) !=
                      *theme) {
       SetTabSessionData(tab->GetContents(), kSpaceThemeSessionKey, *theme);
+    }
+    // And its container (#318; the tab keeps its own partition). A Space
+    // whose other tabs carry none is one from before #318, with no
+    // container: the tab mustn't bring its old Space's.
+    const TabGroup* group =
+        tab_strip_model->group_model() &&
+                tab_strip_model->group_model()->ContainsTabGroup(*new_group)
+            ? tab_strip_model->group_model()->GetTabGroup(*new_group)
+            : nullptr;
+    const std::string container =
+        SessionValueOfTabs(*new_group, kSpaceContainerSessionKey, tab)
+            .value_or(group && group->tab_count() > 1 ? kNoSpaceContainer
+                                                      : std::string());
+    if (!container.empty() &&
+        GetTabSessionData(tab->GetContents(), kSpaceContainerSessionKey) !=
+            container) {
+      SetTabSessionData(tab->GetContents(), kSpaceContainerSessionKey,
+                        container);
     }
   }
   ScheduleUpdate();

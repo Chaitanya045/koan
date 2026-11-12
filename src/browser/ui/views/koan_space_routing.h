@@ -37,7 +37,8 @@ class KoanWorkspaceController;
 // placed in a Space other than the active one on purpose (agent containers).
 // A tab that opens empty and then navigates (window.open(), target=_blank)
 // is routed on its first navigation, as Zen's ZenSpaceRoutingNavigation.
-// Zen's container option is not copied: Chromium has no containers here.
+// A routed tab opens in its Space's container (koan_space_containers.h,
+// #318), as Zen's route container.
 class KoanSpaceRouting {
  public:
   KoanSpaceRouting(KoanWorkspaceController* controller,
@@ -56,6 +57,12 @@ class KoanSpaceRouting {
   // Zen's "Space Routing Settings" (Space menu, the command palette's "Open
   // Space Routing"): the routes and the default for external links.
   void ShowSettings();
+
+  // The Space a route sends a new tab for `url` to (`from_external`: a link
+  // from another app), or nullopt: the routes, then for an external link the
+  // default for them.
+  std::optional<tab_groups::TabGroupId> RouteFor(const GURL& url,
+                                                 bool from_external) const;
 
   void OnBrowserViewDestroying();
 

@@ -404,6 +404,19 @@ std::optional<tab_groups::TabGroupId> KoanSpaceRouting::SpaceNamed(
   return std::nullopt;
 }
 
+std::optional<tab_groups::TabGroupId> KoanSpaceRouting::RouteFor(
+    const GURL& url,
+    bool from_external) const {
+  if (destroying_ || !url.SchemeIsHTTPOrHTTPS()) {
+    return std::nullopt;
+  }
+  PrefService* prefs = PrefsOf(browser_view_);
+  const std::optional<std::u16string> name = RouteUrlToSpace(
+      url.spec(), ReadRoutes(prefs), from_external,
+      base::UTF8ToUTF16(prefs->GetString(prefs::kSpaceRoutingExternalDefault)));
+  return name ? SpaceNamed(*name) : std::nullopt;
+}
+
 void KoanSpaceRouting::RouteTab(tabs::TabHandle handle,
                                 const GURL& url,
                                 bool from_external,
@@ -417,17 +430,12 @@ void KoanSpaceRouting::RouteTab(tabs::TabHandle handle,
   if (index == TabStripModel::kNoTab) {
     return;
   }
-  PrefService* prefs = PrefsOf(browser_view_);
-  const std::optional<std::u16string> name = RouteUrlToSpace(
-      url.spec(), ReadRoutes(prefs), from_external,
-      base::UTF8ToUTF16(prefs->GetString(prefs::kSpaceRoutingExternalDefault)));
-  if (!name) {
-    return;
-  }
-  const std::optional<tab_groups::TabGroupId> target = SpaceNamed(*name);
+  const std::optional<tab_groups::TabGroupId> target =
+      RouteFor(url, from_external);
   if (!target || tab->GetGroup() == target) {
     return;
   }
+  const std::u16string name = controller_->GetSpace(*target)->name;
   // Zen opens a routed tab in the background (shouldDeferTabSelection()):
   // the tab it came from stays in front, in its Space.
   bool stays_in_front = false;
@@ -456,7 +464,7 @@ void KoanSpaceRouting::RouteTab(tabs::TabHandle handle,
   controller_->SetLastActiveTab(*target, tab);
   if (KoanBrowserViewController* window =
           KoanBrowserViewController::From(browser_view_)) {
-    window->toast()->Show(base::StrCat({u"New tab opened in ", *name}));
+    window->toast()->Show(base::StrCat({u"New tab opened in ", name}));
   }
 }
 

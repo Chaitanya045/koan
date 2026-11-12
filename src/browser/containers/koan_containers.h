@@ -66,8 +66,9 @@ void MarkAgentTab(content::WebContents* contents, const ContainerId& task);
 void InstallAgentTabOpener();
 
 // GarbageCollectStoragePartitionsCommand::DoGarbageCollection(), before it
-// lists the partitions to keep: loads `profile`'s saved containers, because a
-// loaded partition is never collected and nothing else lists Koan's.
+// lists the partitions to keep: loads `profile`'s saved containers (agents'
+// and the user's own, koan_user_containers.h), because a loaded partition is
+// never collected and nothing else lists Koan's.
 void LoadSavedContainers(Profile* profile);
 
 }  // namespace koan::containers

@@ -381,11 +381,12 @@ export async function calibrate(page, vs, webview) {
 
 // --- A local web server (no network needed). /p?t=<title>&b=<colour>
 // serves a page with that title and background; other paths come from
-// `routes` ({path: html}).
+// `routes` ({path: html, or a function of the request that returns it}).
 export async function startServer(routes = {}) {
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
-    const html = routes[u.pathname] ?? `<!doctype html><title>${
+    const route = routes[u.pathname];
+    const html = (typeof route === 'function' ? route(req) : route) ?? `<!doctype html><title>${
         (u.searchParams.get('t') ?? 'Page').replace(/[<&]/g, '')}</title>
         <body style="margin:0;background:${(u.searchParams.get('b') ?? '#fff').replace(/[^#\w]/g, '')}">
         <h1>${(u.searchParams.get('t') ?? 'Page').replace(/[<&]/g, '')}</h1></body>`;

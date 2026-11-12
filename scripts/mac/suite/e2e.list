@@ -11,6 +11,8 @@ window_teardown timeout=420
 window_sync timeout=420
 # Spaces across quits and starts on one profile (no Space made per start).
 spaces_relaunch timeout=300
+# Containers per Space (#318): a Space keeps its own logins, across a start.
+space_containers timeout=300
 space_drag timeout=420
 welcome_input timeout=240
 lights_hover_steady timeout=120

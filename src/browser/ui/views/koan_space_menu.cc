@@ -18,6 +18,9 @@
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_space_routing.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
@@ -41,6 +44,7 @@ enum SpaceMenuCommand {
   kCreateSpace,
   kDelete,
   kSpaceRouting,
+  kSetProfile,
   // The Spaces to switch to (opened from the header).
   kFirstSwitch = 100,
 };
@@ -80,6 +84,14 @@ KoanSpaceMenu::KoanSpaceMenu(KoanWorkspaceController* controller,
   if (active) {
     model_.AddItem(kEditTheme, u"Theme\u2026");
   }
+  // Zen's Set Profile (its containers, #318): the Space's new tabs open in
+  // the profile picked; the tabs it has keep theirs.
+  profile_menu_ = std::make_unique<KoanSpaceProfileMenu>(
+      controller_->browser_view()->browser(),
+      controller_->GetSpaceContainer(space_),
+      base::BindRepeating(&KoanWorkspaceController::SetSpaceContainer,
+                          controller_->GetWeakPtr(), space_));
+  model_.AddSubMenu(kSetProfile, u"Set Profile", profile_menu_->model());
   model_.AddSeparator(ui::NORMAL_SEPARATOR);
   if (from_header_) {
     int command = kFirstSwitch;

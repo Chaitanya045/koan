@@ -35,8 +35,8 @@ class WebContents;
 // - Agent containers, where agents work. Upstream code asks IsAgent*() below
 //   and blocks what an agent must never reach (permissions, passwords,
 //   extensions, ...).
-// - User containers, for Zen's containers per Space (#111). Nothing is blocked
-//   in them.
+// - User containers, for Zen's containers per Space (#318,
+//   koan_user_containers.h). Nothing is blocked in them.
 //
 // The kind and the id are in the partition's domain ("koanagent<id>"), so code
 // that has a process, a frame or a partition can tell an agent container
