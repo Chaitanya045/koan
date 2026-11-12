@@ -1,5 +1,4 @@
 diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
-index 9206fd4d913b49db0b11c799d4c529dc6711e7de..04619a0ad473289fcd8685557f3a0713a0741159 100644
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
 @@ -121,6 +121,10 @@
@@ -92,7 +91,7 @@ index 9206fd4d913b49db0b11c799d4c529dc6711e7de..04619a0ad473289fcd8685557f3a0713
        continue;
      }
  
-@@ -4426,6 +4456,11 @@ void TabStripModel::SelectRelativeTab(TabRelativeDirection direction,
+@@ -4427,6 +4457,11 @@ void TabStripModel::SelectRelativeTab(TabRelativeDirection direction,
        return true;
      }
  
@@ -104,14 +103,54 @@ index 9206fd4d913b49db0b11c799d4c529dc6711e7de..04619a0ad473289fcd8685557f3a0713
      // Do not select the tab if it is not part of the focused state.
      return focused_group.has_value() &&
             !tabs::TabStripModelSelectionState::IsTabValidInFocusedGroup(
-@@ -5993,6 +6028,16 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
+@@ -5970,21 +6005,33 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
+     };
+ 
+     // First preference is a tab the block opened.
++    // Koan: with Zen's "switch to the most recently used tab", none of the
++    // three opener rules once the tab was left (or opened in the background):
++    // Zen goes back to the owner only before that, else to the most recently
++    // used tab (below).
++    const bool koan_recent_first = koan::HandsOverToRecentlyUsedOnClose(
++        profile(), GetWebContentsAt(start_index));
+     int new_selected_index =
+-        GetIndexOfNextWebContentsOpenedBy(block_tabs, is_eligible);
++        koan_recent_first
++            ? kNoTab
++            : GetIndexOfNextWebContentsOpenedBy(block_tabs, is_eligible);
+     if (new_selected_index != kNoTab) {
+       return GetTabIndexAfterClosing(new_selected_index, block_tabs);
+     }
+ 
+     // Second preference is a tab the block's opener opened.
+     new_selected_index =
+-        GetIndexOfNextWebContentsOpenedByOpenerOf(block_tabs, is_eligible);
++        koan_recent_first
++            ? kNoTab
++            : GetIndexOfNextWebContentsOpenedByOpenerOf(block_tabs,
++                                                        is_eligible);
+     if (new_selected_index != kNoTab) {
+       return GetTabIndexAfterClosing(new_selected_index, block_tabs);
+     }
+ 
+     // Third preference is the block's opener.
+-    for (size_t i = block_tabs.start(); i < block_tabs.end(); ++i) {
++    for (size_t i = block_tabs.start();
++         !koan_recent_first && i < block_tabs.end(); ++i) {
+       tabs::TabInterface* opener = GetTabModelAtIndex(i)->opener();
+       int opener_index = opener ? GetIndexOfTab(opener) : kNoTab;
+       if (opener_index != kNoTab &&
+@@ -5994,6 +6041,19 @@ std::optional<int> TabStripModel::DetermineNewSelectedIndex(
        }
      }
  
 +    // Koan: Zen selects the most recently used tab, not a neighbour.
 +    if (std::optional<int> recent = koan::PickRecentlyUsedTab(
 +            profile(), count(), [&](int i) -> content::WebContents* {
-+              return block_tabs.Contains(gfx::Range(i)) || !is_eligible(i)
++              const bool closing = i >= static_cast<int>(block_tabs.start()) &&
++                                   i < static_cast<int>(block_tabs.end());
++              return closing || !is_eligible(i) ||
++                             koan::IsEmptyTab(GetTabAtIndex(i))
 +                         ? nullptr
 +                         : GetWebContentsAt(i);
 +            })) {
