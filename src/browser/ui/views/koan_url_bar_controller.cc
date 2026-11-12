@@ -591,6 +591,17 @@ void KoanUrlBarController::RetryEmptyList(int retries_left) {
   }
 }
 
+bool KoanUrlBarController::OpenForEmptySplit(
+    base::OnceCallback<void(bool picked)> on_closed) {
+  // Not Cmd+T's toggle: a new-tab bar open now ends first.
+  EndNewTabSession(/*committed=*/false);
+  if (!OpenForNewTab()) {
+    return false;
+  }
+  new_tab_closed_ = std::move(on_closed);
+  return true;
+}
+
 bool KoanUrlBarController::OpenForGlance(const GURL& url) {
   LocationBarView* bar = location_bar();
   if (!browser_view_->GetIsNormalType() || IsContentFullscreen(browser_view_) ||
@@ -964,6 +975,12 @@ void KoanUrlBarController::EndNewTabSession(bool committed) {
   text_was_empty_ = false;
   UpdateKeyHandler();
   SetNewTabRowSelected(false);
+  if (new_tab_closed_) {
+    // A pick ends the session before its tab opens; the callback looks at
+    // the tab strip after that, and never from inside its notifications.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(new_tab_closed_), committed));
+  }
   LocationBarView* bar = location_bar();
   if (!committed && user_input_in_progress_ && bar && bar->omnibox_view()) {
     last_search_ = bar->omnibox_view()->GetText();

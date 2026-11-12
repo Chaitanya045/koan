@@ -756,8 +756,17 @@ altogether.
 
 Besides the shortcuts above:
 
+- **New Empty Split View** (⌘⇧*, the palette's New Split View, the Create
+  menu's New Split, **Add Split View...** on the current tab) is Zen's
+  one-tab split: an empty pane opens on the
+  right with the URL bar over it. What you open from the URL bar fills the
+  pane; Esc (or clicking away) takes the empty pane away again. Not from an
+  Essential, a tab already in a split, or the empty pane itself.
+- Split panes have no toolbar of their own (Chromium's favicon, domain and
+  close over a pane's corner): close or swap a pane from the tab context
+  menu or ⌘⌥U.
 - Tab context menu: **Add Split View...** splits the tab with the current
-  one (or with a new tab, for the current tab), **Join 2 Tabs** splits a
+  one (or opens an empty split, for the current tab), **Join 2 Tabs** splits a
   two-tab selection, **Split Out Tab** separates a split (Zen's labels).
   Upstream's **Arrange split view** and **Move tab into split view** stay.
 - Link context menu: **Split Link to New Tab** opens the link beside the

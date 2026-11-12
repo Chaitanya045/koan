@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/ui/views/frame/multi_contents_view_mini_toolbar.cc b/chrome/browser/ui/views/frame/multi_contents_view_mini_toolbar.cc
+index 3d3d583887d6be2eca64ad91fef3e5b7d979b353..abd53d9bf3afc66a50c4d5ee123cfef83720fe87 100644
+--- a/chrome/browser/ui/views/frame/multi_contents_view_mini_toolbar.cc
++++ b/chrome/browser/ui/views/frame/multi_contents_view_mini_toolbar.cc
+@@ -30,6 +30,7 @@
+ #include "components/url_formatter/url_formatter.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
++#include "koan/browser/ui/views/koan_split_view.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/image_model.h"
+@@ -141,6 +142,14 @@ MultiContentsViewMiniToolbar::~MultiContentsViewMiniToolbar() = default;
+ 
+ void MultiContentsViewMiniToolbar::UpdateState(bool is_active,
+                                                bool is_highlighted) {
++  // Koan: no mini toolbar on Zen's split panes, and no size, so no notch for
++  // it in the pane's outline.
++  if (koan::HidesSplitMiniToolbar()) {
++    SetVisible(false);
++    SetPreferredSize(gfx::Size());
++    SetSize(gfx::Size());
++    return;
++  }
+   const int contents_container_outline_thickness =
+       ContentsContainerOutline::GetThickness(is_highlighted);
+ 

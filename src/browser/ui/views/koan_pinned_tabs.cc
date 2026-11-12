@@ -1657,6 +1657,12 @@ void KoanPinnedTabController::MatchSplitPinnedState(
   }
   const std::vector<tabs::TabInterface*> tabs =
       tab_strip_model()->GetSplitData(split)->ListTabs();
+  // An empty split's pane (koan_split_view.h) is the Space's empty tab for
+  // as long as the URL bar is open over it: never pinned. What replaces it
+  // is matched then (kContentsChanged).
+  if (std::ranges::any_of(tabs, &IsEmptyTab)) {
+    return;
+  }
   // A split view made of a pinned tab and a normal one (e.g. Ctrl+Alt+V on
   // the last pinned tab): pinned as one, like a split view Zen pins.
   const bool any = std::ranges::any_of(tabs, &IsPinnedInSpace);

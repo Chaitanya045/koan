@@ -3,7 +3,11 @@
 // replacing it, the link context menu's "Open Link in Glance" (also inside
 // a Glance page) and "Split Link to New Tab", Esc while typing, Glance
 // dropping on a tab switch, the split-view limit toast, the tab context
-// menu's "Split Out Tab", and a Glance expanded while it grows.
+// menu's "Split Out Tab", a Glance expanded while it grows, and Zen's
+// one-tab split (#288): New Empty Split View (Cmd+Shift+8) splits the tab
+// with an empty pane and opens the URL bar over it, what is typed there
+// fills the pane, Esc takes the pane away; and no upstream mini toolbar on a
+// split's panes.
 //
 //   scripts/e2e/run.sh glance_split
 //
@@ -22,7 +26,8 @@
 // step checks the expanded page's size instead of its pixels.
 import http from 'node:http';
 
-import { ACCEL, ALT, NATIVE_MENUS, NATIVE_MENU_WHY, keyEventParams, sendKey, windowFrame }
+import { ACCEL, ALT, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, keyEventParams, sendKey,
+         typeInto, viewTree, windowFrame }
     from './lib/koan.mjs';
 import { skipped } from './lib/mac.mjs';
 
@@ -398,6 +403,16 @@ if (NATIVE_MENUS) {
         `${shown(vs, 'SplitTabView').length} split(s), pages ${await urls()}`);
 }
 
+// Zen's split panes have no mini toolbar (upstream's favicon, domain and
+// close over a pane's corner), and so no notch for one in the outline: it
+// stays hidden with no size (koan::HidesSplitMiniToolbar()).
+{
+  const toolbars = (await viewTree()).filter(v => v.cls === 'MultiContentsViewMiniToolbar');
+  check('A split has no mini toolbar on its panes',
+        toolbars.length >= 2 && toolbars.every(v => !v.shown && v.w === 0 && v.h === 0),
+        toolbars.map(v => `${v.shown ? 'shown' : 'hidden'} ${v.w}x${v.h}`).join(', '));
+}
+
 // Glance over a split: "Split Glance" would be a third panel, so Zen's limit
 // toast shows and the page opens as a tab instead.
 tab = await pageAt('/b');
@@ -500,6 +515,86 @@ if (process.env.KOAN_DUMP_DIR) {
         `page view ${page?.w}x${page?.h}, viewport ${viewport}`);
   skipped('...its pixels (the grow transform is gone)',
           'needs the frame dumps of Linux\'s headless Ozone');
+}
+
+// Zen's one-tab split (createEmptySplit): New Empty Split View on a tab that
+// isn't split splits it with an empty pane on the right, selected, and opens
+// the URL bar over it (as for a new tab; never upstream's tab picker page).
+// What is typed there opens in the pane's place; Esc takes the pane away.
+// A key through the window holding the omnibox (its focus manager, then the
+// focused view and its handlers), like a real key press (as urlbar.mjs).
+async function omniboxWindowKey(keyCode) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const has = (n, cls) => {
+    const a = n.attributes ?? [];
+    return a[a.indexOf('class') + 1] === cls || (n.children ?? []).some(c => has(c, cls));
+  };
+  const findWidget = n => n.nodeName === 'Widget' && has(n, 'OmniboxViewViews') ? n
+      : (n.children ?? []).map(findWidget).find(Boolean);
+  const widget = findWidget(doc);
+  for (const type of ['keyPressed', 'keyReleased']) {
+    await ui.send('DOM.dispatchKeyEvent', { nodeId: widget?.nodeId,
+        event: { type, keyCode, code: 0, flags: 0, key: 0, isChar: false } });
+  }
+  ui.close();
+  await sleep(1500);
+}
+async function emptySplit(from) {
+  await keyTo(from, 56, ACCEL | SHIFT, '*');  // Cmd+Shift+8 (Ctrl+Shift+8)
+  const vs = await viewTree();
+  return {
+    vs,
+    splits: vs.filter(v => v.cls === 'SplitTabView' && v.shown).length,
+    omnibox: vs.find(v => v.cls === 'OmniboxViewViews' && v.shown && v.w > 0),
+    picker: (await targets()).some(t => t.url.startsWith('chrome://tab-search.top-chrome/split')),
+  };
+}
+const single = (await tabs()).find(t => t.url === `${BASE}/a`);
+if (single) {
+  await browser.send('Target.activateTarget', { targetId: single.id });
+  await sleep(1000);
+  const before = await pages();
+  let state = await emptySplit(single);
+  const backdrop = state.vs.some(v => v.cls === 'KoanUrlBarBackdrop' && v.shown);
+  check('One-tab split: New Empty Split View splits the tab with an empty pane',
+        state.splits === 1 && !state.picker && (await pages()) === before,
+        `${state.splits} split(s), tab picker ${state.picker}, pages ${await urls()}`);
+  check('...and opens the URL bar over it',
+        !!state.omnibox && backdrop, `omnibox ${!!state.omnibox}, backdrop ${backdrop}`);
+  if (state.omnibox) {
+    await typeInto(state.omnibox, `${BASE}/c?split`);
+    await omniboxWindowKey(13);  // Enter
+  }
+  let vs = await viewTree();
+  const filled = vs.filter(v => v.cls === 'SplitTabView' && v.shown).length;
+  check('One-tab split: what is typed in the URL bar fills the empty pane',
+        filled === 1 && (await pages()) === before + 1 &&
+            (await tabs()).some(t => t.url === `${BASE}/c?split`),
+        `${filled} split(s), pages ${await urls()}`);
+  // Separate it again (Zen's Unsplit, Cmd+Option+U), then Esc on a new one.
+  const filledPane = await pageAt('/c?split');
+  if (filledPane) {
+    await keyTo(filledPane, 85, ACCEL | ALT, 'u');
+  }
+  const again = (await tabs()).find(t => t.url === `${BASE}/a`);
+  if (again) {
+    await browser.send('Target.activateTarget', { targetId: again.id });
+    await sleep(1000);
+    const count = await pages();
+    state = await emptySplit(again);
+    if (state.omnibox) {
+      await omniboxWindowKey(27);  // Esc
+    }
+    vs = await viewTree();
+    check('One-tab split: Esc in the URL bar takes the empty pane away',
+          state.splits === 1 && vs.filter(v => v.cls === 'SplitTabView' && v.shown).length === 0 &&
+              !vs.some(v => v.cls === 'KoanUrlBarBackdrop' && v.shown) &&
+              (await pages()) === count,
+          `${state.splits} split(s) before, ` +
+              `${vs.filter(v => v.cls === 'SplitTabView' && v.shown).length} after, pages ${await urls()}`);
+  }
 }
 
 browser.close();

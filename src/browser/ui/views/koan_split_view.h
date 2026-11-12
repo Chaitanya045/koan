@@ -6,7 +6,13 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPLIT_VIEW_H_
 
 class BrowserView;
+class BrowserWindowInterface;
 class TabStripModel;
+
+namespace split_tabs {
+enum class SplitTabCreatedSource;
+enum class SplitTabLayout;
+}  // namespace split_tabs
 
 namespace ui {
 class SimpleMenuModel;
@@ -42,6 +48,32 @@ void SplitOutTab(TabStripModel* tab_strip, int index);
 // view!"), for a third panel joining a split (Zen takes four, Chromium two).
 // Koan-internal, not a hook.
 void ShowSplitLimitToast(BrowserView* browser_view);
+
+// Hook: chrome::NewSplitTab(), where every "new split" path ends
+// (IDC_NEW_SPLIT_TAB, Cmd+Shift+*, the palette, the Space's create menu,
+// "Add Split View..." on the active tab, the Mac menu): Zen's one-tab split
+// (ZenViewSplitter createEmptySplit()) in place of upstream's split view tab
+// picker page. The Space's empty tab (IsEmptyTab(), koan_spaces.h; a new
+// blank tab in a window without Spaces) joins the active tab in a split, on
+// its right (`layout` side by side) or below it (stacked), and is selected,
+// and the URL bar opens over it as for a new tab. What is opened from it
+// replaces the empty pane; the bar closed without opening anything takes the
+// pane away and selects the tab again. Returns true when Koan handled the
+// call: also when it did nothing, as Zen's command is disabled then (the
+// active tab is the empty tab or in a split; an Essential, which Zen
+// duplicates into a split instead, not done here). False leaves it to
+// upstream (no Koan URL bar in this window).
+bool OpenEmptySplit(BrowserWindowInterface* browser,
+                    split_tabs::SplitTabLayout layout,
+                    split_tabs::SplitTabCreatedSource source);
+
+// Hook: MultiContentsViewMiniToolbar::UpdateState(). Zen's split panes have
+// no mini toolbar (favicon, domain, menu and close over the pane's corner),
+// so Koan keeps upstream's hidden, with no size: ContentsContainerOutline
+// and ContentsCaptureBorderView cut a notch the toolbar's size into the
+// outline. A pane closes and swaps from the tab menu ("Split Out Tab",
+// "Arrange split view") and Cmd+Option+U.
+bool HidesSplitMiniToolbar();
 
 }  // namespace koan
 
