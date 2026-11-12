@@ -10,6 +10,10 @@
 // unsynced-window, so they are normal windows (Spaces, window sync), not New
 // Blank Windows.
 //
+// Chrome's hold-to-quit is off here (local_state/window_teardown.json), so
+// one real Cmd+Q quits; with it on (the default) a tap does nothing, a
+// held Cmd+Q or a double tap quits (a Mac step, see the PR / ZEN_PARITY).
+//
 // Layouts: single toolbar (the default), compact mode, native fullscreen,
 // compact + fullscreen, tabs on the right, multiple toolbars. On macOS each
 // also checks that File > Close Window is enabled (System Events), and the
@@ -147,7 +151,12 @@ await secondWindowCase('Multiple toolbars', { multiple: true });
     if (!(await makeKey(first))) console.log('  (the first window\'s page never got the focus)');
     checkMenuItem('Quit: the app menu\'s Quit is enabled', QUIT_ITEM);
   }
-  if (realInput()) {
+  const viaRealKey = realInput();
+  if (viaRealKey) {
+    // A real ⌘Q (keypress2: AppKit's key path, as a person's key), not the
+    // menu item. A tap quits only without Chrome's "Hold ⌘Q to Quit"
+    // (browser.confirm_to_quit, on by default: confirm_quit.cc), which a
+    // tap cancels; local_state/window_teardown.json turns it off.
     await realKey('q', 'c', 500);
   } else if (IS_MAC) {
     // Cmd+Q is the menu's too: CDP's Browser.close, which quits as the
@@ -158,7 +167,7 @@ await secondWindowCase('Multiple toolbars', { multiple: true });
     await key(first, 'q', ACCEL | SHIFT, 500).catch(() => {});
   }
   const exited = await waitFor(async () => !(await alive()), 30000);
-  check('Quit: Koan exits', !!exited);
+  check(`Quit: Koan exits${viaRealKey ? ' (a real Cmd+Q)' : ''}`, !!exited);
   check('Quit: both windows logged "window torn down"', torn() >= tornBefore + 2,
         `${tornBefore} -> ${torn()}`);
   check('Quit: ...never "(widget gone)"', gone() === goneBefore, `${goneBefore} -> ${gone()}`);
