@@ -18,7 +18,7 @@ import {
 } from './lib/koan.mjs';
 import { goFullscreen } from './lib/fullscreen.mjs';
 import {
-  KOAN_PID, browserWidgets, realInputWhyNot, realKey, skipped, startServer,
+  KOAN_PID, browserWidgets, realInput, realInputWhyNot, realKey, skipped, startServer,
 } from './lib/mac.mjs';
 import { execFileSync } from 'node:child_process';
 
@@ -403,34 +403,50 @@ check('...off in the page: gone, the page back at the top',
       await setCheckbox(bookmarks, false) && !!await waitWin(v => !barOf(v)) &&
       await cardY() < singleWith, `${await cardY()} (with the bar ${singleWith})`);
 
-// ⇧⌘B is View > Always Show Bookmarks Bar's key: run that menu item (the
-// command, IDC_SHOW_BOOKMARK_BAR) as AppKit does, through the menu bar
-// (System Events), or with a real ⇧⌘B; CDP keys never reach the menu bar.
-async function menuShowBookmarksBar() {
-  if (!IS_MAC || !KOAN_PID) return false;
+// ⇧⌘B is View > Always Show Bookmarks Bar's key; CDP keys never reach the
+// menu bar. One way is picked up front and used for every press, never
+// another one after it: a real ⇧⌘B (the bench's keypress tool), else a
+// click on the menu item through System Events. (A failed System Events
+// call may still have clicked the item, so falling back to the key after it
+// could switch the setting twice.)
+const viewMenuItem = 'first menu item of menu 1 of menu bar item "View" of menu bar 1 ' +
+    'whose name contains "Bookmarks Bar"';
+function systemEvents(action) {
   try {
     execFileSync('osascript', ['-e', `tell application "System Events"
       set p to first process whose unix id is ${KOAN_PID}
       set frontmost of p to true
-      tell p to click (first menu item of menu 1 of menu bar item "View" of menu bar 1 ` +
-        `whose name contains "Bookmarks Bar")
+      tell p to ${action}
     end tell`], { stdio: 'ignore', timeout: 8000 });
     return true;
   } catch {
-    return realKey('b', 'cs', 800);
+    return false;
   }
 }
-if (await menuShowBookmarksBar()) {
+const bookmarksKeyWay = !IS_MAC || !KOAN_PID ? null
+    : realInput() ? 'a real ⇧⌘B'
+    // A read first: whether System Events may see Koan's menu bar at all.
+    : systemEvents(`get name of ${viewMenuItem}`) ? 'the View menu item (System Events)'
+    : null;
+async function pressShowBookmarksBar() {
+  // The test page has the focus, as a person's ⇧⌘B would find it.
+  await front(testPage);
+  if (bookmarksKeyWay === 'a real ⇧⌘B') return realKey('b', 'cs', 800);
+  return systemEvents(`click ${viewMenuItem}`);
+}
+if (bookmarksKeyWay) {
+  const on = await pressShowBookmarksBar();
   check('⇧⌘B (View > Always Show Bookmarks Bar) turns Koan\'s setting on',
-        await waitFor(async () => await prefOf(bookmarks) === true) &&
-        !!await waitWin(v => barOf(v)));
+        on && await waitFor(async () => await prefOf(bookmarks) === true) &&
+        !!await waitWin(v => barOf(v)), bookmarksKeyWay);
   check('...the settings page shows it',
         await waitFor(() => evalIn(settings, `${row(bookmarks)}.querySelector('input').checked`)));
-  await menuShowBookmarksBar();
-  check('...and again off', await waitFor(async () => await prefOf(bookmarks) === false));
+  const off = await pressShowBookmarksBar();
+  check('...and again off', off && await waitFor(async () => await prefOf(bookmarks) === false) &&
+        !!await waitWin(v => !barOf(v)), `${bookmarksKeyWay}, pressed: ${off}`);
 } else {
   skipped('⇧⌘B / View > Always Show Bookmarks Bar',
-          IS_MAC ? `neither System Events nor real input can reach the menu bar (${realInputWhyNot()})`
+          IS_MAC ? `neither real input nor System Events reach the menu bar (${realInputWhyNot()})`
                  : 'the macOS menu bar item');
 }
 await setCheckbox(bookmarks, false);
