@@ -21,7 +21,7 @@ clang -fobjc-arc -framework Cocoa -o "$KOAN_MAC_TOOLS/hold" scripts/mac/tools/ho
 | `flows/clear.mjs` | the Clear button flow (below). Writes its marks and counts to `$MARKS`. |
 | `flows/essentials.mjs` | tabs becoming Essentials and going back, then compact mode on, the sidebar revealed, and off (below). Built on `flows/common.mjs` (the gates, the marks, the pages, the rows), which new flows share. |
 | `flows/essentials_drag.mjs` | Space tabs dragged into the Essentials with the real pointer (`hold`): straight up over the URL pill, over the Space name, above a grid, and released over the page (below). |
-| `flows/pin_drag.mjs` | pinning and unpinning by dragging (`hold`): normal tabs onto the separator and among the pinned tabs, a pinned tab onto + New Tab, Essentials onto the normal tabs, + New Tab and the separator, a pinned tab into the grid (its header says each round's check). |
+| `flows/pin_drag.mjs` | pinning and unpinning by dragging (`hold`): normal tabs onto the separator and among the pinned tabs, a pinned tab onto + New Tab, Essentials onto the normal tabs, + New Tab and the separator, pinned tabs onto the empty-Essentials promo and onto a tile (its header says each round's check). |
 | `frames.sh <video> <out dir> --marks <marks.json>` | builds contact sheets around the action marks, plus `diff.tsv` / `sheets.tsv` / `changed.tsv` (below). `sheet.mjs` is its node half. |
 
 ## The gates (do not bypass)
