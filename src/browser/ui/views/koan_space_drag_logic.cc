@@ -80,6 +80,9 @@ double SpaceStripScrollProgress(base::TimeDelta elapsed) {
 size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
                           const gfx::Point& point,
                           bool rtl) {
+  if (!tiles.empty() && point.y() < tiles.front().y()) {
+    return 0;
+  }
   for (size_t i = 0; i < tiles.size(); ++i) {
     const gfx::Rect& tile = tiles[i];
     if (!tile.Contains(point)) {
@@ -90,6 +93,26 @@ size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
     return far_half ? i + 1 : i;
   }
   return tiles.size();
+}
+
+gfx::Rect EmptyEssentialsDropZone(const gfx::Size& sidebar,
+                                  const gfx::Rect& header,
+                                  const std::optional<gfx::Rect>& promo) {
+  // (A promo not laid out yet is empty, and the header still where it was.)
+  const int bottom = promo && !promo->IsEmpty()
+                         ? promo->bottom()
+                         : header.y() + header.height() / 2;
+  return gfx::Rect(0, 0, sidebar.width(),
+                   std::clamp(bottom, 0, sidebar.height()));
+}
+
+gfx::Rect EssentialsTopDropZone(const gfx::Size& sidebar,
+                                const gfx::Rect& grid) {
+  if (grid.IsEmpty()) {
+    return gfx::Rect();
+  }
+  return gfx::Rect(0, 0, sidebar.width(),
+                   std::clamp(grid.y(), 0, sidebar.height()));
 }
 
 size_t SpaceListDropSlot(const std::vector<gfx::Rect>& rows, int y) {

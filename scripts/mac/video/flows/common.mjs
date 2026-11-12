@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import { CDP_PORT, UI_PORT, browserCall, connect, onPage, pages, sleep, viewTree,
          waitFor } from '../../../e2e/lib/koan.mjs';
-import { KOAN_PID, calibrate, ptr, realClick, realInput, realInputWhyNot,
+import { KOAN_PID, calibrate, hold, ptr, realClick, realInput, realInputWhyNot,
          windowOf } from '../../../e2e/lib/mac.mjs';
 
 export const TOOLS = process.env.KOAN_MAC_TOOLS;
@@ -34,6 +34,14 @@ export function mark(label, extra = {}, action = false) {
   return m;
 }
 export function stop(why, code = 3) {
+  // Never leave the button held: a drag stopped half way is let go where it
+  // is (not over a drop target the flow aimed for, which may count anyway).
+  if (heldAt) {
+    try {
+      execFileSync(`${TOOLS}/hold`, ['up', ...heldAt.map(String)], { timeout: 5000 });
+    } catch {}
+    heldAt = null;
+  }
   out.stopped = why;
   mark('stopped', { why });
   console.log(`STOPPED: ${why}`);
@@ -76,6 +84,15 @@ export async function pointer(...args) {
   const back = userBack();
   if (back) stop(`the user is back (${back})`);
   if (!(await ptr(...args))) stop(`real input stopped: ${realInputWhyNot()}`);
+}
+// A held-button drag, one step per call (hold.m): 'down' x y, 'to' x y [ms],
+// 'up' x y, each after the same gates.
+let heldAt = null;
+export async function drag(cmd, x, y, ms) {
+  const back = userBack();
+  if (back) stop(`the user is back (${back})`);
+  if (!(await hold(cmd, x, y, ms))) stop(`real input stopped: ${realInputWhyNot()}`);
+  heldAt = cmd === 'up' ? null : [Math.round(x), Math.round(y)];
 }
 export async function clickAt(x, y) {
   const back = userBack();

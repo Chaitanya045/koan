@@ -126,6 +126,41 @@ TEST(KoanSpaceDragLogicTest, EssentialsDropGoesBeforeOrAfterTheTileUnderIt) {
   EXPECT_EQ(0u, EssentialsDropSlot({}, {10, 10}, /*rtl=*/false));
 }
 
+TEST(KoanSpaceDragLogicTest, EssentialsDropFromAboveTheGridGoesFirst) {
+  // The grid at 132 in the sidebar, [0 1 2] [3]: a tab dragged straight up
+  // over the URL bar (98), or the gap above the grid, goes before the first
+  // tile, wherever it is across.
+  const std::vector<gfx::Rect> tiles = {{0, 132, 50, 44},
+                                        {54, 132, 50, 44},
+                                        {108, 132, 50, 44},
+                                        {0, 180, 50, 44}};
+  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {150, 98}, /*rtl=*/false));
+  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {200, 131}, /*rtl=*/false));
+  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {10, 98}, /*rtl=*/true));
+  // The grid's own rules from its top on.
+  EXPECT_EQ(3u, EssentialsDropSlot(tiles, {150, 132}, /*rtl=*/false));
+  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {200, 150}, /*rtl=*/false));
+}
+
+TEST(KoanSpaceDragLogicTest, EssentialsTopZoneIsTheSidebarAboveTheGrid) {
+  const gfx::Size sidebar(230, 800);
+  const gfx::Rect zone =
+      EssentialsTopDropZone(sidebar, gfx::Rect(0, 132, 230, 92));
+  EXPECT_EQ(gfx::Rect(0, 0, 230, 132), zone);
+  // The URL pill and the window buttons' row; not the grid, which has its
+  // own rules, or past the sidebar's side.
+  EXPECT_TRUE(zone.Contains(115, 98));
+  EXPECT_TRUE(zone.Contains(5, 10));
+  EXPECT_FALSE(zone.Contains(115, 132));
+  EXPECT_FALSE(zone.Contains(230, 98));
+  // No Essentials (the grid 0 high): nothing; the promo's zone does it.
+  EXPECT_TRUE(
+      EssentialsTopDropZone(sidebar, gfx::Rect(0, 132, 230, 0)).IsEmpty());
+  // A grid scrolled above the sidebar's top: nothing.
+  EXPECT_TRUE(
+      EssentialsTopDropZone(sidebar, gfx::Rect(0, -40, 230, 92)).IsEmpty());
+}
+
 TEST(KoanSpaceDragLogicTest, EssentialsDropMirrorsInRtl) {
   // RTL: the first tile is on the right.
   const std::vector<gfx::Rect> tiles = {{108, 0, 50, 44}, {54, 0, 50, 44}};
@@ -148,6 +183,51 @@ TEST(KoanSpaceDragLogicTest, SpaceListDropGoesAboveOrBelowTheRowUnderIt) {
   EXPECT_EQ(3u, SpaceListDropSlot(rows, 100));
   EXPECT_EQ(3u, SpaceListDropSlot(rows, 400));
   EXPECT_EQ(0u, SpaceListDropSlot({}, 10));
+}
+
+TEST(KoanSpaceDragLogicTest, EmptyEssentialsZoneIsTheTopOfTheSidebar) {
+  // The Mac's layout: a sidebar 230 wide, the URL pill at 78-124, the Space
+  // header at 132-176.
+  const gfx::Size sidebar(230, 800);
+  const gfx::Rect header(0, 132, 230, 44);
+  const gfx::Rect before = EmptyEssentialsDropZone(sidebar, header, {});
+  EXPECT_EQ(gfx::Rect(0, 0, 230, 154), before);
+  // Over the URL pill, the window buttons' row and the header's top half.
+  EXPECT_TRUE(before.Contains(115, 98));
+  EXPECT_TRUE(before.Contains(5, 10));
+  EXPECT_TRUE(before.Contains(115, 153));
+  // Not its bottom half, the Space's tabs, or past the sidebar's side.
+  EXPECT_FALSE(before.Contains(115, 154));
+  EXPECT_FALSE(before.Contains(115, 300));
+  EXPECT_FALSE(before.Contains(230, 98));
+  EXPECT_FALSE(before.Contains(-1, 98));
+}
+
+TEST(KoanSpaceDragLogicTest, EmptyEssentialsZoneEndsAtThePromo) {
+  const gfx::Size sidebar(230, 800);
+  // The promo (132-224) pushed the header down.
+  const gfx::Rect zone = EmptyEssentialsDropZone(
+      sidebar, gfx::Rect(0, 224, 230, 44), gfx::Rect(0, 132, 230, 92));
+  EXPECT_EQ(gfx::Rect(0, 0, 230, 224), zone);
+  EXPECT_TRUE(zone.Contains(115, 98));
+  EXPECT_TRUE(zone.Contains(115, 223));
+  // The header, below it, is the Space's again.
+  EXPECT_FALSE(zone.Contains(115, 230));
+  // Added but not laid out yet: the header's middle still.
+  EXPECT_EQ(gfx::Rect(0, 0, 230, 154),
+            EmptyEssentialsDropZone(sidebar, gfx::Rect(0, 132, 230, 44),
+                                    gfx::Rect(0, 0, 0, 0)));
+}
+
+TEST(KoanSpaceDragLogicTest, EmptyEssentialsZoneStaysInTheSidebar) {
+  // A header scrolled or laid out out of sight: nothing, or no more than the
+  // sidebar.
+  EXPECT_TRUE(
+      EmptyEssentialsDropZone({230, 800}, gfx::Rect(0, -60, 230, 44), {})
+          .IsEmpty());
+  EXPECT_EQ(
+      gfx::Rect(0, 0, 230, 400),
+      EmptyEssentialsDropZone({230, 400}, gfx::Rect(0, 900, 230, 44), {}));
 }
 
 }  // namespace koan

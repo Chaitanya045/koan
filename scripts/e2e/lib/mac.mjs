@@ -287,6 +287,19 @@ export async function ptr(...args) {
   execFileSync(`${TOOLS}/ptr`, args.map(String), { timeout: 30000 });
   return true;
 }
+// hold down|to|up x y [ms] (see scripts/mac/tools/hold.m: a held-button
+// drag, one step per call), after the gate.
+export async function hold(cmd, x, y, ms) {
+  if (!gate()) return false;
+  if (!fs.existsSync(`${TOOLS}/hold`)) {
+    realOk = false;
+    realWhyNot = `no ${TOOLS}/hold (build scripts/mac/tools/hold.m)`;
+    return false;
+  }
+  const args = [cmd, Math.round(x), Math.round(y), ...(ms === undefined ? [] : [Math.round(ms)])];
+  execFileSync(`${TOOLS}/hold`, args.map(String), { timeout: 30000 });
+  return true;
+}
 export const realClick = async (x, y, settle = 600) => {
   const ok = await ptr('click', Math.round(x), Math.round(y));
   await sleep(settle);

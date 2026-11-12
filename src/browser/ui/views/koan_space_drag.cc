@@ -266,10 +266,27 @@ void KoanSpaceDrag::SwitchWithDraggedTabs(const tab_groups::TabGroupId& space) {
   controller_->MoveDraggedTabsToSpace(tabs, space);
 }
 
+gfx::Rect KoanSpaceDrag::EmptyEssentialsZone(views::View* region) const {
+  KoanSpaceHeaderView* header = controller_->space_header();
+  if (!header || !header->GetVisible()) {
+    return gfx::Rect();
+  }
+  std::optional<gfx::Rect> promo;
+  if (promo_) {
+    promo = views::View::ConvertRectToTarget(promo_, region,
+                                             promo_->GetLocalBounds());
+  }
+  return EmptyEssentialsDropZone(region->size(),
+                                 views::View::ConvertRectToTarget(
+                                     header, region, header->GetLocalBounds()),
+                                 promo);
+}
+
 bool KoanSpaceDrag::IsOverEssentials(views::View* region,
                                      const gfx::Point& point) const {
+  // With the promo: it, or the sidebar above it.
   if (promo_ && promo_->GetVisible() &&
-      promo_->HitTestPoint(InView(region, promo_, point))) {
+      EmptyEssentialsZone(region).Contains(point)) {
     return true;
   }
   KoanSpaceHeaderView* header = controller_->space_header();
@@ -282,8 +299,17 @@ bool KoanSpaceDrag::IsOverEssentials(views::View* region,
   if (!essentials) {
     essentials = strip->GetPinnedTabsContainer();
   }
-  return essentials && essentials->GetVisible() &&
-         essentials->HitTestPoint(InView(region, essentials, point));
+  if (!essentials || !essentials->GetVisible()) {
+    return false;
+  }
+  // The grid, or the sidebar above it (a tab dragged straight up, over the
+  // URL bar).
+  return essentials->HitTestPoint(InView(region, essentials, point)) ||
+         EssentialsTopDropZone(
+             region->size(),
+             views::View::ConvertRectToTarget(essentials, region,
+                                              essentials->GetLocalBounds()))
+             .Contains(point);
 }
 
 TabStripView* KoanSpaceDrag::GetStrip() const {
@@ -413,10 +439,8 @@ void KoanSpaceDrag::UpdatePromo(views::View* region, const gfx::Point& point) {
   }
   if (!promo_) {
     // Zen shows it once the tab is over the (empty) Essentials: here, the
-    // part of the sidebar above the Space header's middle.
-    const gfx::Point in_header = InView(region, header, point);
-    if (in_header.y() >= header->height() / 2 ||
-        !strip->GetLocalBounds().Contains(InView(region, strip, point))) {
+    // top of the sidebar, down to the Space header's middle.
+    if (!EmptyEssentialsZone(region).Contains(point)) {
       return;
     }
     // Before the header, which PlaceSpaceHeader() puts below it.
@@ -424,9 +448,9 @@ void KoanSpaceDrag::UpdatePromo(views::View* region, const gfx::Point& point) {
                                    strip->GetIndexOf(header).value_or(0));
     strip->InvalidateLayout();
   }
-  // Like Zen's, it stays for the rest of the drag; lit while the tab is
-  // over it.
-  promo_->SetDragOver(promo_->HitTestPoint(InView(region, promo_, point)));
+  // Like Zen's, it stays for the rest of the drag; lit while a drop would
+  // land in it (over it, or the sidebar above it).
+  promo_->SetDragOver(IsOverEssentials(region, point));
 }
 
 void KoanSpaceDrag::RemovePromo() {

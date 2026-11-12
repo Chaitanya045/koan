@@ -5,8 +5,13 @@ our own Koan with the real pointer while ffmpeg records the window. Then the vid
 actions into timestamped contact sheets. A model reads only the sheets where pixels changed, plus the flow's counts.
 
 Everything runs on the Mac bench (`<user>@<mac-host>`, key `<ssh-key>`; see `../README.md` for `local.env`). The bench
-tools (`ptr`, `keypress2`, `activate`, `inputok.sh`, `usergate.sh`, `screen-granted`) are in `$KOAN_MAC_TOOLS`
-(default `~/work/koan-mac/tmp`). ffmpeg and node are Homebrew's (`/opt/homebrew/bin`).
+tools (`ptr`, `hold`, `keypress2`, `activate`, `inputok.sh`, `usergate.sh`, `screen-granted`) are in `$KOAN_MAC_TOOLS`
+(default `~/work/koan-mac/tmp`). ffmpeg and node are Homebrew's (`/opt/homebrew/bin`). `hold` (a held-button drag,
+one step per call, for `flows/essentials_drag.mjs`) is built from `scripts/mac/tools/hold.m` like `ptr`:
+
+```sh
+clang -fobjc-arc -framework Cocoa -o "$KOAN_MAC_TOOLS/hold" scripts/mac/tools/hold.m
+```
 
 | file | what |
 |---|---|
@@ -15,6 +20,7 @@ tools (`ptr`, `keypress2`, `activate`, `inputok.sh`, `usergate.sh`, `screen-gran
 | `record.sh start <out.mp4> --cdp 9741` / `record.sh stop <out.mp4>` | records the window's region from the screen (avfoundation, 30 fps, H.264 with the hardware encoder). Writes `<out>.rec.json` with the video's time 0 on the wall clock. |
 | `flows/clear.mjs` | the Clear button flow (below). Writes its marks and counts to `$MARKS`. |
 | `flows/essentials.mjs` | tabs becoming Essentials and going back, then compact mode on, the sidebar revealed, and off (below). Built on `flows/common.mjs` (the gates, the marks, the pages, the rows), which new flows share. |
+| `flows/essentials_drag.mjs` | Space tabs dragged into the Essentials with the real pointer (`hold`): straight up over the URL pill, over the Space name, above a grid, and released over the page (below). |
 | `frames.sh <video> <out dir> --marks <marks.json>` | builds contact sheets around the action marks, plus `diff.tsv` / `sheets.tsv` / `changed.tsv` (below). `sheet.mjs` is its node half. |
 
 ## The gates (do not bypass)
@@ -49,6 +55,8 @@ $H/record.sh start "$REC_DIR/clear.mp4" --cdp "$CDP_PORT"
 MARKS="$REC_DIR/clear.marks.json" node $H/flows/clear.mjs | tee "$REC_DIR/clear.log"   # or: ... clear.mjs 6,7
 # or the Essentials flow (same steps; its marks and log in essentials.*):
 # MARKS="$REC_DIR/essentials.marks.json" node $H/flows/essentials.mjs | tee "$REC_DIR/essentials.log"
+# or the Essentials drag flow (needs `hold`; a fresh launch.sh Koan, it starts from no Essentials):
+# MARKS="$REC_DIR/essentials_drag.marks.json" node $H/flows/essentials_drag.mjs | tee "$REC_DIR/essentials_drag.log"
 $H/record.sh stop "$REC_DIR/clear.mp4"
 $H/quit.sh "$KOAN_PID"
 $H/frames.sh "$REC_DIR/clear.mp4" "$REC_DIR/sheets" --marks "$REC_DIR/clear.marks.json"
@@ -115,6 +123,26 @@ It re-checks what the first recording (2026-11-11) caught. From the anchor tab a
 Each round records `after` (right away) and `after-1s`: `essentials` (the model's), `views` (shown rows of the tab: 1 once the
 transition is over), `inGrid`, `gridH`, `headerBelowGrid`, `clearShown`, `compact`; `ok` is the end state. The summary
 prints one line per round.
+
+## `flows/essentials_drag.mjs`: dragging tabs into the Essentials
+
+The bug the user hit (2026-11-12): with no Essentials the grid is 0 px tall, and the promo only came over the top half
+of the Space name, so a tab dragged straight up over the URL pill lit nothing and dropped nothing. From the anchor tab
+and 5 more, each round picks up the last Space row wholly in the visible list (never the anchor; the list may scroll),
+moves it past the drag threshold, takes it to the target in 700 ms, holds there and releases. Its marks are
+`drag-down`, `drag-over` and `drop` (action marks), `count-over` while held and `count-after` 1.5 s after the release.
+
+| round | drag (target) | expected (`ok`) |
+|---|---|---|
+| 1 `pill` | no Essentials, straight up over the URL pill's middle | the promo shows and is lit; the tab is the 1st Essential |
+| 2 `band` | back to no Essentials (test_helper unpins it), then over the Space name's top half | the promo, lit; one more Essential |
+| 3 `above` | with an Essential, straight up over the URL pill (above the grid) | no promo; the drop line upright before the first tile; one more Essential, the first (Koan's choice: the slot above the grid's first row, as above a Space's first row) |
+| 4 `page` | released over the page | no new Essential, the tab still in the window, no new window |
+
+Screen points come from `screenRect()`: UI DevTools' box model returns nothing for these views on the Mac, so it falls
+back to the root view's origin measured in `setup()` (and to the window's origin plus the view's `ax`/`ay` if that
+failed too: the window has no title bar). The summary prints one line per round, then `PASS` or `FAIL` (exit 1). If a
+gate stops it with the button held, it releases the button where it was.
 
 ## `frames.sh`: contact sheets and the changed-pixels list
 

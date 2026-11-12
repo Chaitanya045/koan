@@ -42,12 +42,14 @@ class KoanWorkspaceController;
 //   in a collapsed sidebar (#handle_sidebarDragOver());
 // - a tab over a Space button in the bottom bar switches to that Space at
 //   once, but not for Essentials (handle_spaceIconDragOver());
-// - with no Essentials, a tab over the top of the sidebar shows the
-//   Essentials promo, and dropping it there makes it an Essential
-//   (ZenEssentialsPromo.mjs);
+// - with no Essentials, a tab over the top of the sidebar (down to the Space
+//   header's middle, the URL bar included) shows the Essentials promo, and
+//   dropping it on the promo or anywhere above it makes it an Essential
+//   (ZenEssentialsPromo.mjs; Zen's own target is a 2px strip);
 // - tabs dropped on the Essentials grid become Essentials where they drop,
-//   before or after the tile under the pointer, while Zen's 12 fit; and
-//   Essentials dropped on the Space's list leave the Essentials for that
+//   before or after the tile under the pointer (before the first one from
+//   the sidebar above the grid, the URL bar included), while Zen's 12 fit;
+//   and Essentials dropped on the Space's list leave the Essentials for that
 //   place, pinned to the Space among its pinned tabs, else normal tabs
 //   (ZenPinnedTabManager's moveToAnotherTabContainerIfNecessary()). A line
 //   shows where (#zen-drag-indicator).
@@ -89,7 +91,11 @@ class KoanSpaceDrag {
   std::vector<tabs::TabInterface*> DraggedTabs() const;
   // Shows `space`, taking the dragged tabs there (Essentials stay put).
   void SwitchWithDraggedTabs(const tab_groups::TabGroupId& space);
-  // Whether `point` (in `region`) is over the Essentials grid or the promo.
+  // With no Essentials, the top of the sidebar that counts as them
+  // (EmptyEssentialsDropZone()), in `region`.
+  gfx::Rect EmptyEssentialsZone(views::View* region) const;
+  // Whether `point` (in `region`) is over the Essentials grid or the promo,
+  // or the sidebar above either.
   bool IsOverEssentials(views::View* region, const gfx::Point& point) const;
   void UpdatePromo(views::View* region, const gfx::Point& point);
   void RemovePromo();
