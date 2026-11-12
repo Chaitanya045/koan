@@ -1,0 +1,71 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Import from Zen, Arc, Chrome and the other browsers Koan users come from
+# (#348), on top of Chromium's importer (koan_import_sources.h).
+
+# Which browsers and profiles there are (pure, unit-tested in
+# //koan/test:koan_unittests).
+source_set("sources") {
+  sources = [
+    "koan_import_sources.cc",
+    "koan_import_sources.h",
+  ]
+  public_deps = [
+    "//base",
+    "//components/user_data_importer/common",
+  ]
+  deps = [
+    "//chrome/common:ini_parser",
+    "//koan/browser:features",
+  ]
+}
+
+# Reading a Chromium-format profile (pure, unit-tested).
+source_set("reader") {
+  sources = [
+    "koan_chromium_profile_reader.cc",
+    "koan_chromium_profile_reader.h",
+  ]
+  public_deps = [
+    "//base",
+    "//components/user_data_importer/common",
+  ]
+  deps = [
+    "//crypto",
+    "//sql",
+    "//third_party/boringssl",
+    "//url",
+  ]
+}
+
+# The hooks' side: Koan's sources in Chromium's ImporterList
+# (importer_list.cc), the Chromium-format import
+# (external_process_importer_host.cc), and the keychain and app icons on
+# macOS. Linked through //chrome/browser/importer:impl.
+source_set("importer") {
+  sources = [
+    "koan_chromium_profile_importer.cc",
+    "koan_chromium_profile_importer.h",
+    "koan_import_platform.h",
+  ]
+  public_deps = [
+    ":sources",
+    "//base",
+    "//components/user_data_importer/common",
+  ]
+  deps = [
+    ":reader",
+    "//chrome/browser/importer",
+    "//chrome/common/importer",
+    "//koan/browser:features",
+  ]
+  if (is_mac) {
+    sources += [ "koan_import_platform_mac.mm" ]
+    deps += [ "//crypto" ]
+    frameworks = [ "AppKit.framework" ]
+  } else {
+    sources += [ "koan_import_platform_other.cc" ]
+  }
+}

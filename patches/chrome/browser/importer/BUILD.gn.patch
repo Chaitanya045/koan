@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/importer/BUILD.gn b/chrome/browser/importer/BUILD.gn
+index ed8e8bf048399ccab50b1f44498ef40dd73e8921..4b13fb1c312a98b7efe16946747190117e4d4433 100644
+--- a/chrome/browser/importer/BUILD.gn
++++ b/chrome/browser/importer/BUILD.gn
+@@ -61,6 +61,7 @@ source_set("impl") {
+     "//components/favicon/core",
+     "//components/password_manager/core/browser:password_form",
+     "//components/password_manager/core/browser/password_store:password_store_interface",
++    "//koan/browser/importer",
+   ]
+ 
+   if (is_win) {

@@ -283,7 +283,9 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
       # {component-update}: let the component updater run (widevine: it
       # downloads the CDM). Every other test keeps it off.
       if [[ "$flag" == "{component-update}" ]]; then updates=(); continue; fi
-      file_flags+=("${flag//\{root\}/$ROOT}")
+      # {root}: the checkout; {profile}: this run's user data dir.
+      flag="${flag//\{root\}/$ROOT}"
+      file_flags+=("${flag//\{profile\}/$prof}")
     done <"$flags_file"
   fi
   # KOAN_FLAGS is a list of flags, split on spaces as in run.sh.

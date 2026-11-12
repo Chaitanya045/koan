@@ -15,6 +15,9 @@ spaces_relaunch timeout=300
 space_containers timeout=300
 space_drag timeout=420
 welcome_input timeout=240
+# Import from Zen, Arc and Chrome (#348): fixture profiles under the run's own
+# folder (--koan-import-test-root), the welcome's list and the dialog.
+import_sources timeout=240
 lights_hover_steady timeout=120
 agent_cli timeout=540
 # Copy current URL with several tabs selected (palette, test_helper).

@@ -31,6 +31,13 @@ inline constexpr char kIconTrace[] = "koan-icon-trace";
 // see).
 inline constexpr char kTestWindowGlass[] = "koan-test-window-glass";
 
+// For tests of the import from other browsers (koan_import_sources.h): the
+// folder that stands in for ~/Library/Application Support, where Koan looks
+// for Zen's, Arc's, Chrome's... profiles, so a test never reads the user's
+// own. With it, the browsers' Safe Storage keys come from files in its
+// Keychain/ folder, never from the keychain.
+inline constexpr char kImportTestRoot[] = "koan-import-test-root";
+
 }  // namespace koan::switches
 
 #endif  // KOAN_BROWSER_KOAN_SWITCHES_H_

@@ -15,7 +15,8 @@
 # argument per line), to restart Koan with the same profile.
 # scripts/e2e/<test>.flags, if it exists, adds browser flags too, one per
 # line; {dump} in them is a directory for frame dumps
-# (--ozone-dump-file={dump}), passed to the test as KOAN_DUMP_DIR.
+# (--ozone-dump-file={dump}), passed to the test as KOAN_DUMP_DIR, and
+# {profile} the profile's directory, passed as KOAN_PROFILE.
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -93,7 +94,8 @@ if [[ -f $KOAN_ROOT/scripts/e2e/$test_name.flags ]]; then
   mkdir -p "$KOAN_DUMP_DIR"
   while IFS= read -r flag; do
     [[ -z $flag || $flag == \#* ]] && continue
-    file_flags+=("${flag//\{dump\}/"$KOAN_DUMP_DIR"}")
+    flag="${flag//\{dump\}/"$KOAN_DUMP_DIR"}"
+    file_flags+=("${flag//\{profile\}/"$prof"}")
   done <"$KOAN_ROOT/scripts/e2e/$test_name.flags"
 fi
 for flag in ${KOAN_FLAGS:-} "${file_flags[@]}"; do
@@ -107,7 +109,7 @@ args=("$chrome" "${KOAN_HEADLESS_UI_FLAGS[@]}" --user-data-dir="$prof"
   --enable-features="$features" "${extra[@]}" "${dump[@]}")
 KOAN_CHROME_ARGS=$(printf '%s\n' "${args[@]}")
 export KOAN_CHROME_ARGS
-export KOAN_LOG="$prof.log"
+export KOAN_LOG="$prof.log" KOAN_PROFILE="$prof"
 "${args[@]}" "${urls[@]}" >"$prof.log" 2>&1 &
 pid=$!
 for _ in $(seq 1 60); do

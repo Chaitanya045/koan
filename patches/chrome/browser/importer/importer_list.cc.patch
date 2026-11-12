@@ -1,0 +1,21 @@
+diff --git a/chrome/browser/importer/importer_list.cc b/chrome/browser/importer/importer_list.cc
+index 1d7c9bca117843a2a869bac43de3b4e53ceedf65..1462e53dedb131edf716f63d0d575417799ecb88 100644
+--- a/chrome/browser/importer/importer_list.cc
++++ b/chrome/browser/importer/importer_list.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/common/importer/importer_bridge.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/user_data_importer/common/importer_data_types.h"
++#include "koan/browser/importer/koan_import_sources.h"
+ #include "ui/base/l10n/l10n_util.h"
+ 
+ #if BUILDFLAG(IS_MAC)
+@@ -186,6 +187,8 @@ std::vector<user_data_importer::SourceProfile> DetectSourceProfilesWorker(
+ #else
+   DetectFirefoxProfiles(locale, &profiles);
+ #endif
++  // Koan: Zen, Arc, Chrome... first (the welcome's pick first of all).
++  koan::importer::AddSourceProfiles(locale, profiles);
+   if (include_interactive_profiles) {
+     user_data_importer::SourceProfile bookmarks_profile;
+     bookmarks_profile.importer_name =

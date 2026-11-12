@@ -55,6 +55,7 @@ source_set("webui") {
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
     "//koan/browser/containers:access_prefs",
+    "//koan/browser/importer",
     "//koan/browser/ui/color:tokens",
     "//koan/browser/ui/fonts",
     "//koan/browser/ui/views",

@@ -6,11 +6,13 @@
 #define KOAN_BROWSER_UI_WEBUI_KOAN_WELCOME_HANDLER_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 class ImporterList;
@@ -21,7 +23,8 @@ namespace koan {
 
 // chrome://koan-welcome's messages (onboarding v2, #181):
 // - getWelcomeData: the shortcut rows with the user's side of each, the
-//   browsers to import from (Chromium's ImporterList), the search engines
+//   browsers to import from (Chromium's ImporterList, with Koan's: Zen, Arc,
+//   Chrome...; koan_import_sources.h) and their icons, the search engines
 //   (Brave first and chosen; in a choice screen region Chromium's list).
 // - setShortcuts, import, setSearchEngine: a step's choice, on its Next.
 // - finish, skip: close the screen (KoanWelcomeHost).
@@ -65,6 +68,9 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
 
   const raw_ptr<Profile> profile_;
   std::unique_ptr<ImporterList> importer_list_;
+  // The browsers the page was given, in its order (its import pick is an
+  // index).
+  std::vector<user_data_importer::SourceProfile> import_sources_;
   // Waits for the search engines to load (first run: maybe not yet).
   base::CallbackListSubscription engines_loaded_;
 

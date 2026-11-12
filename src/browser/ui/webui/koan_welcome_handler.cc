@@ -27,6 +27,8 @@
 #include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "koan/browser/importer/koan_import_platform.h"
+#include "koan/browser/importer/koan_import_sources.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_welcome_shortcuts.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
@@ -122,13 +124,21 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
     return;
   }
   base::ListValue sources;
+  import_sources_.clear();
   for (size_t i = 0; i < importer_list_->count(); ++i) {
     const user_data_importer::SourceProfile& source =
         importer_list_->GetSourceProfileAt(i);
-    // One entry per browser profile; the profile under the browser's name.
+    // One entry per browser profile; the profile under the browser's name,
+    // with the browser's app icon when it is installed (Zen's welcome shows
+    // each browser's logo).
+    const std::string_view bundle_id = importer::BundleIdOf(source);
     sources.Append(base::DictValue()
                        .Set("name", source.importer_name)
-                       .Set("profile", source.profile));
+                       .Set("profile", source.profile)
+                       .Set("icon", bundle_id.empty()
+                                        ? std::string()
+                                        : importer::AppIconDataUrl(bundle_id)));
+    import_sources_.push_back(source);
   }
   importer_list_.reset();
 
@@ -242,10 +252,16 @@ void KoanWelcomeHandler::HandleSetShortcuts(const base::ListValue& args) {
 }
 
 void KoanWelcomeHandler::HandleImport(const base::ListValue& args) {
-  // [whether a browser is picked]: Chromium's import dialog after the screen,
-  // where the user picks what to bring along.
+  // [whether a browser is picked, its index in the list]: Chromium's import
+  // dialog after the screen, where the user picks what to bring along, opens
+  // on that browser (as Zen's welcome opens its wizard on one browser).
   if (args.empty() || !args[0].is_bool()) {
     return;
+  }
+  if (args.size() > 1 && args[1].is_int() && args[1].GetInt() >= 0 &&
+      static_cast<size_t>(args[1].GetInt()) < import_sources_.size() &&
+      GetHost(web_ui())) {
+    importer::SetPreferredSource(import_sources_[args[1].GetInt()]);
   }
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().import) {

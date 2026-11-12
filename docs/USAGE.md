@@ -1100,18 +1100,57 @@ space around the card drags the window.
 
   Your choice is saved as your own keys in Settings > Keyboard Shortcuts,
   where you can change any of them later.
-- **Import**: the browsers Koan can import from on your Mac and finds there
-  (Safari, Firefox, or a bookmarks file; Chrome, Brave and Arc are not
-  supported yet), or, if it finds none, "Import from another browser…". Pick
-  one, then Next, and Chromium's import dialog opens once the setup is over,
-  where you choose what to bring. "Start fresh" (the first choice) or the
-  step's Skip imports nothing, even if you picked a browser before.
+- **Import**: the browsers Koan finds on your Mac, each with its app's icon
+  (Zen, Arc, Google Chrome and the others in [Importing from another
+  browser](#importing-from-another-browser), the one you used last first;
+  then Safari, Firefox and a bookmarks file), or, if it finds none, "Import
+  from another browser…". Pick one, then Next, and Chromium's import dialog
+  opens on that browser once the setup is over, where you choose what to
+  bring. "Start fresh" (the first choice) or the step's Skip imports
+  nothing, even if you picked a browser before.
 - **Search engine**: Brave Search is chosen; pick another if you like. It
   applies on Next. In the European Economic Area (and the other regions where
   Chromium shows a search engine choice screen) the step *is* that choice
   screen: Chromium's list in its order, with nothing chosen for you, and Next
   records your choice so Chromium doesn't ask again. If you skip the step
   there, Chromium asks later.
+
+## Importing from another browser
+
+The welcome's import step, and **Import bookmarks and settings** in
+Settings (also Koan > Import Bookmarks and Settings… in the menu bar),
+list the browsers whose data Koan finds in your Mac's
+`~/Library/Application Support`, the one you used most recently first:
+
+| Browser | What comes along |
+|---|---|
+| Zen (and Floorp, LibreWolf, Waterfox) | bookmarks, history, form entries |
+| Arc | bookmarks, history, saved passwords, and each Space's pinned tabs and your Favorites, as bookmarks: a folder per Space (Arc's folders inside it) and a "Favorites" folder |
+| Dia, Google Chrome, Brave, Microsoft Edge, Vivaldi, Chromium | bookmarks, history, saved passwords |
+| Safari, Firefox (Chromium's own) | bookmarks, history, and what Chromium brings from them |
+| A bookmarks HTML file | bookmarks |
+
+A browser with several profiles is listed once per profile, under the
+profile's name. Pick what to bring in the dialog, then Import. If the
+bookmarks bar is empty the bookmarks go on it; otherwise into an "Imported
+from …" folder on it.
+
+- **Passwords** from Arc, Chrome and the other Chromium browsers are
+  encrypted with that browser's key in your keychain ("Arc Safe Storage",
+  "Chrome Safe Storage"…). When you import them, macOS asks whether Koan may
+  use that key: choose **Allow** (or Always Allow). If you deny it, the
+  rest is imported without the passwords.
+- **Zen's passwords** can't be imported directly: Chromium can't decrypt
+  Firefox-based passwords on macOS. In Zen, open `about:logins`, then ⋯ >
+  Export Passwords, and import the CSV file in Koan's Password Manager
+  (Settings > Autofill and passwords > Password Manager > Settings >
+  Import passwords).
+- **Zen must be closed** to import from it (it locks its profile); Koan
+  asks you to close it. Arc and Chrome can stay open (Koan reads a copy of
+  their files), though closing them first brings the very latest.
+- Not imported yet: Zen's workspaces, Essentials and pinned tabs (they are
+  in its session file), Arc's Spaces as Koan Spaces (they arrive as bookmark
+  folders), cookies and open tabs.
 
 ## Updates
 
