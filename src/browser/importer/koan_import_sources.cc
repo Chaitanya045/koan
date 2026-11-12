@@ -290,9 +290,11 @@ std::vector<ProfileDir> ParseProfilesIni(const std::string& ini,
 std::vector<ProfileDir> ParseLocalState(std::string_view json,
                                         const base::FilePath& user_data_dir) {
   std::vector<std::string> order;
+  // Kept for the whole function: `info_cache` points into it.
+  const std::optional<base::DictValue> local_state =
+      base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
   const base::DictValue* info_cache = nullptr;
-  if (std::optional<base::DictValue> local_state =
-          base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC)) {
+  if (local_state) {
     if (const base::DictValue* profile = local_state->FindDict("profile")) {
       info_cache = profile->FindDict("info_cache");
       if (const std::string* last_used = profile->FindString("last_used")) {
