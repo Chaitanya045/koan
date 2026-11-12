@@ -1,8 +1,9 @@
 // Helpers for the theme picker's end-to-end tests (theme.mjs,
 // theme_glass.mjs): native views through UI DevTools, keys to a widget like
 // real keys, the command palette, the picker and its window background.
-import { UI_PORT, browserCall, connect, evalIn, key, pages, settingsCall, sleep, waitFor } from './koan.mjs';
-import { focusUrlBar } from './mac.mjs';
+import { UI_PORT, browserCall, connect, evalIn, key, keyToWidget, pages, settingsCall, sleep, waitFor }
+    from './koan.mjs';
+import { focusUrlBar, keyWindowReport } from './mac.mjs';
 
 export const unquote = v => (typeof v === 'string' ? v.replace(/^"(.*)"$/, '$1') : v);
 
@@ -174,17 +175,26 @@ export async function palette(action) {
   }
   for (let i = 0; i < 10 && index >= 0; i++) {
     if ((await paletteRows()).selected === index) break;
-    await widgetKey(browserWidget(await tree()), VK.DOWN);
+    await keyToWidget('BrowserView', VK.DOWN);
     await sleep(300);
   }
-  await widgetKey(browserWidget(await tree()), VK.ENTER);
+  const before = await paletteRows();
+  await keyToWidget('BrowserView', VK.ENTER);
   await sleep(1500);
+  // What Enter had to work with, should nothing come of it (the caller
+  // checks what it should have opened).
+  if (index >= 0 && !picker(await tree())) {
+    const t = await tree();
+    console.log(`  (palette: after Enter on "${action}": rows before ` +
+                `${before.labels.map((l, i) => (i === before.selected ? `*${l}` : l)).join(' / ')}; ` +
+                `URL bar now ${JSON.stringify(shown(t, 'OmniboxViewViews')[0]?.p.Text ?? null)}; ` +
+                `${await keyWindowReport()})`);
+  }
 }
 
 // A key to the picker's widget, which gives it to its focused view.
 export async function pickerKey(keyCode) {
-  const widget = pickerWidget(await tree());
-  if (widget) await widgetKey(widget, keyCode);
+  await keyToWidget('KoanThemePickerView', keyCode);
   await sleep(300);
 }
 
@@ -192,9 +202,7 @@ export async function pickerKey(keyCode) {
 export const bigDot = p => (p?.p.Dots ?? '').split(';')[0].split('@')[1]?.split(',').map(Number);
 
 export async function closePicker() {
-  const t = await tree();
-  const w = pickerWidget(t);
-  if (w) await widgetKey(w, VK.ESC);
+  await keyToWidget('KoanThemePickerView', VK.ESC);
   await sleep(1000);
 }
 

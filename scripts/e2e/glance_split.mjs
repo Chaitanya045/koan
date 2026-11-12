@@ -202,7 +202,8 @@ const urls = async () => (await tabs()).filter(t => t.url.startsWith(BASE))
     .map(t => t.url.replace(BASE, '')).join(' ');
 
 // The card: 80% of the contents width, their full height, centred; Zen's
-// button column 12px right of it, 27px down.
+// button column 12px right of it, 27px down, its buttons 32 x 32
+// (--size-item-large, measured on Zen 1.24b on the Mac, #235).
 await clickLink(tab, 'glance', ALT);
 let vs = await views();
 const overlay = shown(vs, 'KoanGlanceView')[0];
@@ -217,9 +218,10 @@ if (overlay && cardBox) {
         `card ${cardBox.w}x${cardBox.h}+${cardBox.x}, overlay ${overlay.w}x${overlay.h}`);
   const column = vs.find(v => v.nodeId === buttons[0]?.parent);
   check('Three buttons beside the card, Zen-sized',
-        buttons.length === 3 && buttons.every(b => b.w === 34 && b.h === 34) &&
+        buttons.length === 3 && buttons.every(b => b.w === 32 && b.h === 32) &&
             column?.x === cardBox.x + cardBox.w + 12 && column?.y === 27,
-        `${buttons.length} at ${column?.x},${column?.y}`);
+        `${buttons.length} at ${column?.x},${column?.y} (card ends at ${cardBox.x + cardBox.w}), ` +
+            `sized ${buttons.map(b => `${b.w}x${b.h}`).join(' ')}`);
 }
 
 // In compact mode the card sits over the contents area all the same.

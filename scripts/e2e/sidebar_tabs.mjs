@@ -218,11 +218,17 @@ check('...and no "+" button at the bottom of the sidebar',
 let clear = find(vs, 'KoanClearTabsRow');
 let newTab = find(vs, 'KoanNewTabRow');
 let clearButton = find(vs, 'KoanClearButton');
+// Zen pads the separator by 5px on either side on macOS only
+// (vertical-tabs.css .pinned-tabs-container-separator, -moz-platform: macos;
+// kSeparatorRowPadding), so Clear ends 5px before the row's end there.
+const SEPARATOR_PADDING = IS_MAC ? 5 : 0;
 check('The separator (22px) with Clear at its end, above the New Tab row (36px)',
       clear?.shown && clear.h === 22 && newTab?.shown && newTab.h === 36 &&
       clear.y + clear.h === newTab.y && clearButton?.shown && clearButton.w > 0 &&
-      clearButton.x + clearButton.w === clear.x + clear.w,
-      JSON.stringify({ clear: clear && [clear.y, clear.h], newTab: newTab && [newTab.y, newTab.h] }));
+      clearButton.x + clearButton.w === clear.x + clear.w - SEPARATOR_PADDING,
+      JSON.stringify({ clear: clear && [clear.x, clear.y, clear.w, clear.h],
+                       newTab: newTab && [newTab.y, newTab.h],
+                       button: clearButton && [clearButton.shown, clearButton.x, clearButton.w] }));
 const tabs = inContainer(vs, 'TabView', 'UnpinnedTabContainerView');
 check('Tab rows are 36px tall', tabs.length === 2 && tabs.every(t => t.h === 36),
       tabs.map(t => t.h).join(','));

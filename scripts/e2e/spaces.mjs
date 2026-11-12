@@ -184,8 +184,22 @@ await click(cells[0]);
 vs = await views();
 check('Picking an emoji sets the icon',
       one(vs, 'KoanSpaceIconField')?.props.Icon === ROCKET);
-check('...and closes the picker, which covered the form\'s Theme button',
-      !shown(vs, 'KoanEmojiPicker').length);
+// The bubble closes asynchronously (Widget::Close(), on macOS after its
+// window's fade-out), so give it a moment; its widget's views, if they
+// stay, say how it was left.
+const pickerGone = await waitFor(async () => !shown(await views(), 'KoanEmojiPicker').length, 3000);
+const pickerLeft = async () => {
+  const t = await views();
+  const picker = t.find(v => v.cls === 'KoanEmojiPicker');
+  const root = picker && t.find(v => v.widget === picker.widget && /RootView$/.test(v.cls));
+  return picker ? `the picker's views are still there, shown: ${picker.shown}, widget ` +
+                  `${picker.widget} (root ${root?.cls} ${root?.w}x${root?.h} visible ` +
+                  `${root?.props.Visible}), ${t.filter(v => v.cls === 'KoanEmojiCell').length} cells`
+                : 'gone';
+};
+check('...and closes the picker, which covered the form\'s Theme button', pickerGone,
+      pickerGone ? '' : await pickerLeft());
+vs = await views();
 
 const nameField = shown(vs, 'Textfield').find(t => t.path.includes('KoanSpaceCreationView'));
 await type(nameField, 'Research', VK.RETURN);

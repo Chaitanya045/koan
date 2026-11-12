@@ -22,11 +22,12 @@
 import fs from 'node:fs';
 import {
   ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, SHIFT, browserCall, check, click, clickView,
-  createSpace, evalIn, finish, front, key, onPage, pages, settingsCall, sleep, tabMenuCommand,
+  createSpace, evalIn, finish, front, key, onPage, pageList, pages, settingsCall, sleep,
+  tabMenuCommand,
   views, viewMouse, viewTree, waitFor, showPane,
 } from './lib/koan.mjs';
-import { askTestHelper, menuKey as macMenuKey, menuKeyWhyNot, skipped, startServer }
-    from './lib/mac.mjs';
+import { askTestHelper, keyWindowReport, makeKey, menuKey as macMenuKey, menuKeyWhyNot,
+         skipped, startServer } from './lib/mac.mjs';
 
 const VK = { T: 84, W: 87, D: 68, N: 78, P: 80, X: 88, TAB: 9, LEFT: 37, PGUP: 33, PGDN: 34 };
 // Back (Alt+Left; Cmd+Left on macOS) and Chromium's tab group keys
@@ -114,10 +115,17 @@ async function newTab(name, from = opener) {
     await browserCall('Target.createTarget', { url: 'about:blank' });
   }
   const tab = await waitFor(async () => (await pages()).find(p => !before.has(p.id)));
+  if (!tab) return missing(`Cmd+T from ${from.url} opens the tab "${name}"`);
   await onPage(tab, c => c.send('Page.navigate',
       { url: `data:text/html,${encodeURIComponent(`<title>${name}</title>`)}` }));
   await waitFor(async () => await title(tab) === name);
   return tab;
+}
+// A tab that never came: a failed check that says so, and the end (every
+// step after uses it).
+async function missing(what) {
+  check(what, false, `no new page; pages: ${await pageList()}; ${await keyWindowReport()}`);
+  finish();
 }
 
 // Close the most recently used tab, not a neighbour (Zen's default: on).
@@ -210,6 +218,7 @@ const popupBefore = new Set((await pages()).map(p => p.id));
 await evalIn(opener,
     `window.open('tab_management.html?popup', '', 'popup,width=500,height=400')`, true);
 const popup = await waitFor(async () => (await pages()).find(p => !popupBefore.has(p.id)));
+if (!popup) await missing('window.open() opens a popup window');
 await waitFor(() => evalIn(popup, 'Array.isArray(window.keys)'));
 await key(popup, VK.PGDN, CTRL, 'PageDown');
 await key(popup, VK.TAB, CTRL, 'Tab');
@@ -224,6 +233,7 @@ async function newWorkspace(name, from) {
   const before = new Set((await pages()).map(p => p.id));
   await createSpace(from, name);
   const tab = await waitFor(async () => (await pages()).find(p => !before.has(p.id)));
+  if (!tab) return missing(`Ctrl+Alt+N from ${from.url} creates the Space "${name}" with a tab`);
   await onPage(tab, c => c.send('Page.navigate',
       { url: `data:text/html,${encodeURIComponent(`<title>${name}</title>`)}` }));
   await waitFor(async () => await title(tab) === name);
@@ -271,7 +281,16 @@ const opened = async action => {
 const shownHeaders = async () => (await viewTree())
     .filter(v => v.cls === 'TabGroupHeaderView' && v.shown && v.h > 0);
 const headers = async () => (await shownHeaders()).length;
-const p1 = await opened(() => key(opener, VK.P, ACCEL | SHIFT, 'p'));
+// (Cmd+Shift+P is the File menu's New Private Window on macOS: a real key
+// there with real input, else a CDP key to the key window, which Koan's
+// shortcut takes: CDP keys reach the shortcuts of the key window only.)
+const p1 = await opened(async () => {
+  if (!await macMenuKey(opener, 'p', 'cs', () => key(opener, VK.P, ACCEL | SHIFT, 'p'), 1500)) {
+    await makeKey(opener);
+    await key(opener, VK.P, ACCEL | SHIFT, 'p');
+  }
+});
+if (!p1) await missing('Cmd+Shift+P opens a private window');
 // Chromium's Shift+Alt+P: a new tab in a new group (in a Spaces window it
 // would be a new Space).
 const g1 = await opened(() => key(p1, VK.P, GROUP, 'p'));

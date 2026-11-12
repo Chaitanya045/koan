@@ -12,10 +12,10 @@
 // (lib/mac.mjs menuKey()), and with real input off their steps are SKIPs.
 import fs from 'node:fs';
 import {
-  ACCEL, CDP_PORT, SHIFT, check, clickView, finish, front, key, pages, readPref, shownViews,
-  sleep, views, viewTree, typeInto, visiblePage, waitFor, browserCall, evalIn,
+  ACCEL, CDP_PORT, IS_MAC, SHIFT, check, clickView, finish, front, key, keyToWidget, pages,
+  readPref, shownViews, sleep, views, viewTree, typeInto, visiblePage, waitFor, browserCall, evalIn,
 } from './lib/koan.mjs';
-import { menuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
+import { keyWindowReport, menuKey, menuKeyWhyNot, realInput, realKey, skipped } from './lib/mac.mjs';
 
 const VK = { T: 84, L: 76, ESC: 27 };
 // Cmd+L (Ctrl+L off macOS) in `page`: whether it went.
@@ -36,6 +36,19 @@ const aiOnScreen = async () => (await views()).filter(
     v => v.shown && (/AiMode|AIM|Gemini|AddContext|Composebox/i.test(v.cls) ||
                      AI_PATTERN.test(aiText(v))));
 
+// Esc in the URL bar (see the Cmd+L step); how it went.
+async function escInUrlBar(page) {
+  if (!IS_MAC) {
+    await key(page, VK.ESC, 0, 'Escape');
+    await sleep(500);
+    return 'a CDP Esc';
+  }
+  if (realInput() && await realKey('Escape')) return 'a real Esc';
+  await keyToWidget('OmniboxViewViews', VK.ESC);
+  await sleep(500);
+  return 'an Esc to the window\'s widget';
+}
+
 let [page] = await pages();
 await front(page);
 
@@ -48,9 +61,14 @@ if (await openLocation(page)) {
   check('The suggestions are Views rows, with no chrome://omnibox-popup WebUI target',
         !(await targets()).some(t => t.url.startsWith('chrome://omnibox-popup')),
         (await targets()).map(t => t.url).filter(u => u.startsWith('chrome://')).join(' '));
-  await key(page, VK.ESC, 0, 'Escape');
-  await sleep(500);
-  check('Esc closes it', !(await floating()));
+  // Esc where the keyboard is, the URL bar's field. Elsewhere a CDP Esc to
+  // the page reaches the browser's handlers as the page's unhandled key; on
+  // macOS that key is redispatched to the key window's first responder,
+  // which needn't be the field: a real Esc there (the window is key from
+  // Cmd+L), or one to the window's widget through UI DevTools.
+  const how = await escInUrlBar(page);
+  check('Esc closes it', await waitFor(async () => !(await floating()), 2000),
+        `still floating after ${how}; ${await keyWindowReport()}`);
 } else {
   skipped('Cmd+L opens the floating card, with Views rows, and Esc closes it', menuKeyWhyNot());
 }

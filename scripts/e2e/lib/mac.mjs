@@ -20,8 +20,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT, browserCall, connect, decodePng, onPage, pages, sleep,
-         typeInto, viewTree, waitFor } from './koan.mjs';
+import { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT, browserCall, connect, createSpace as koanCreateSpace,
+         decodePng, onPage, pages, sleep, viewTree, waitFor } from './koan.mjs';
 
 export { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT };
 
@@ -258,13 +258,10 @@ export async function focusUrlBar(page) {
 // --- Spaces.
 
 // Creates a Space named `name` with Zen's Create-a-Space form (Ctrl+Alt+N,
-// Ctrl on macOS too), from `page`. Whether the form came up.
+// Ctrl on macOS too), from `page` (lib/koan.mjs createSpace(): the window
+// is made key first on macOS). Whether the form came up.
 export async function createSpace(page, name) {
-  await key(page, 'n', CTRL | ALT, 1200);
-  const field = await waitFor(async () => (await viewTree()).find(
-      v => v.cls === 'Textfield' && v.shown && v.path.includes('KoanSpaceCreationView')), 5000);
-  if (!field) return false;
-  await typeInto(field, name, 13);
+  if (!await koanCreateSpace(page, name)) return false;
   await sleep(1200);
   return true;
 }
@@ -334,6 +331,34 @@ export async function makeKey(page, timeout = 3000) {
       timeout));
 }
 
+// Which window has the keyboard, for failure details: on macOS a CDP key
+// reaches the browser's shortcuts, and a UI DevTools key a widget's focused
+// view, only in the key window. Whether Koan is the frontmost app and its
+// focused window's title (Accessibility, read only), and the pages whose
+// document has the focus (none while a view, e.g. the URL bar, has it).
+export async function keyWindowReport(pid = KOAN_PID) {
+  const focusedPages = [];
+  for (const p of await pages().catch(() => [])) {
+    const r = await onPage(p, c => c.send('Runtime.evaluate',
+        { expression: 'document.hasFocus()', returnByValue: true })).catch(() => null);
+    if (r?.result?.result?.value) focusedPages.push(p.url);
+  }
+  let ax = '';
+  if (IS_MAC && pid) {
+    try {
+      ax = execFileSync('osascript', ['-l', 'JavaScript', '-e',
+          `const p = Application('System Events').applicationProcesses.whose({ unixId: ${pid} })[0];
+           let w = '(none)';
+           try { w = p.attributes.byName('AXFocusedWindow').value().name(); } catch (e) {}
+           JSON.stringify({ frontmost: p.frontmost(), windows: p.windows().length, focusedWindow: w })`],
+          { encoding: 'utf8', timeout: 10000 }).trim();
+    } catch (e) {
+      ax = `(Accessibility: ${String(e.stderr || e.message).trim().split('\n')[0]})`;
+    }
+  }
+  return `key window: ${ax || 'n/a'}; pages with the focus: ${focusedPages.join(' ') || 'none'}`;
+}
+
 // Whether the menu bar item `item` (an AppleScript specifier within the menu
 // bar of Koan's process, e.g. 'menu item "Close Window" of menu 1 of menu
 // bar item "File"') is enabled, as Accessibility (System Events) reads it:
@@ -391,6 +416,21 @@ export async function waitNativeMenu(open = true, pid = KOAN_PID, timeout = 4000
     await sleep(250);
   }
 }
+// Why no native menu was seen, for failure details: what Accessibility read
+// (System Events' answer, or its error) and whether the browser answers
+// CDP. While an NSMenu is open its tracking loop runs no Chromium tasks, so
+// a browser that doesn't answer has a menu open that Accessibility didn't
+// find; one that answers has none.
+export async function nativeMenuReport(pid = KOAN_PID) {
+  const ax = nativeMenu('read', [], pid);
+  const port = process.env.CDP_PORT;
+  const answers = await fetch(`http://127.0.0.1:${port}/json/version`,
+                              { signal: AbortSignal.timeout(2000) })
+      .then(r => r.ok, () => false);
+  return `Accessibility read ${JSON.stringify(ax)}; the browser ${answers ? 'answers' :
+      'does not answer (a menu is open, or it hangs)'}`;
+}
+
 // Closes the open native menu, if any (AXCancel, then a real Escape where
 // real input is on). Whether none is open now.
 export async function closeNativeMenu(pid = KOAN_PID) {
