@@ -22,6 +22,10 @@ namespace gfx {
 class Rect;
 }
 
+namespace ui {
+class ImageModel;
+}  // namespace ui
+
 namespace views {
 class View;
 }
@@ -152,6 +156,18 @@ bool HidesBookmarkStar();
 // layout. Screen readers still hear the security state (the icon's
 // description). Called from LocationIconView::GetText().
 bool HidesSecurityChipText();
+
+// Zen's identity box while the address is being typed or there is none
+// (#identity-box[pageproxystate="invalid"]: search-glass.svg): the
+// magnifier, not Chromium's icon for the default suggestion (a page icon for
+// an address), which made the field look like a second copy of the address's
+// suggestion row under it (#349). Sets `icon` and returns true when it does,
+// for `icon_view` (a LocationIconView) in a Koan window with the Koan URL bar,
+// with `editing_or_empty` its LocationIconView::Delegate::IsEditingOrEmpty().
+// Called from LocationIconView::UpdateIcon().
+bool AdjustLocationIcon(const views::View* icon_view,
+                        bool editing_or_empty,
+                        ui::ImageModel& icon);
 
 // Whether `view` (the location bar, or a row of its omnibox popup) is in a
 // window whose floating URL bar is Zen's card: only then do the suggestion

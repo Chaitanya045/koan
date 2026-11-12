@@ -302,6 +302,11 @@ const bar = vs => find(vs, 'TopContainerView');
 const isFloating = vs => bar(vs)?.w === FLOAT_WIDTH &&
     bar(vs).x === Math.floor((WINDOW_WIDTH - FLOAT_WIDTH) / 2) && shown(vs, 'KoanUrlBarBackdrop');
 const omniboxText = vs => find(vs, 'OmniboxViewViews')?.p.Text ?? '';
+// The bar edits over the pill: inside it, kept clear of the window's edge by
+// as much as Chromium's suggestions frame reaches past the field (its
+// alignment inset and shadow, #349), so the pill's start or a little in.
+const overPill = (vs, pill) => !!bar(vs) && !!pill && bar(vs).x >= pill.x &&
+    bar(vs).x <= pill.x + 24 && bar(vs).x < pill.x + pill.w;
 
 // Zen: one Esc closes the bar.
 const closeBar = () => windowKey(VK.ESC);
@@ -316,7 +321,9 @@ const pill = find(vs, 'KoanUrlPill');
 const pillLabel = vs.find(v => v.cls === 'Label' && v.path.at(-1) === 'KoanUrlPill');
 check('The pill shows the site, like Zen', pillLabel?.p.Text === 'example.com',
       JSON.stringify(pillLabel?.p.Text));
-const pillButtons = () => vs.filter(v => v.path.at(-1) === 'KoanUrlPill' && v.cls === 'ImageButton');
+// (The site button is a KoanSiteButton, an image button.)
+const pillButtons = () => vs.filter(v => v.path.at(-1) === 'KoanUrlPill' &&
+    (v.cls === 'ImageButton' || v.cls === 'KoanSiteButton'));
 const pillButton = name => pillButtons().find(b => b.p.TooltipText === name);
 // Zen's pill (zen-mac-spec.md 2A, 4.1): the sidebar's width less 8 on either
 // side, 36 high; the identity button (the favicon) first, 4 in.
@@ -374,7 +381,8 @@ if (BEHAVIOR === 'float') {
         `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
 } else {
   check('Clicking the pill edits the address in the pill',
-        bar(vs)?.x === pillNow.x && bar(vs)?.w === pillNow.w && !isFloating(vs),
+        overPill(vs, pillNow) && bar(vs).x + bar(vs).w === pillNow.x + pillNow.w &&
+            !isFloating(vs),
         `bar ${bar(vs)?.x}+${bar(vs)?.w}, pill ${pillNow.x}+${pillNow.w}`);
   check('...with the address to edit', omniboxText(vs).includes('example.com'),
         JSON.stringify(omniboxText(vs)));
@@ -414,8 +422,24 @@ if (BEHAVIOR === 'float') {
   // Zen's test_Click_Shoudnt_FLoat_Urlbar: a mouse press never floats the
   // bar, not even once you type (#openPopover decides once, when it opens).
   check('Typing keeps the bar in place, widened over the page (a click never floats it)',
-        bar(vs)?.x === pillNow.x && bar(vs)?.w > pillNow.w && !isFloating(vs),
+        overPill(vs, pillNow) && bar(vs).x + bar(vs).w > pillNow.x + pillNow.w &&
+            !isFloating(vs),
         `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
+  // #349: the suggestions (Chromium's frame, a child window on macOS) started
+  // 14pt left of the window: the frame reaches past the field by its
+  // alignment inset and shadow, and the field was 8pt from the edge.
+  const tree = await waitFor(async () => {
+    const t = await viewTree();
+    return t.some(v => v.cls === 'RoundedOmniboxResultsFrame' && v.shown && v.h > 0) && t;
+  });
+  const rects = await widgetRects();
+  const frame = tree && tree.find(v => v.cls === 'RoundedOmniboxResultsFrame' && v.shown && v.h > 0);
+  const browserWidget = tree && tree.find(v => v.cls === 'BrowserView')?.widget;
+  const popup = frame && rects[frame.widget];
+  const win = browserWidget && rects[browserWidget];
+  check('...and its suggestions stay inside the window',
+        !!popup && !!win && popup.x >= win.x && popup.x + popup.w <= win.x + win.w,
+        `popup ${JSON.stringify(popup)}, window ${JSON.stringify(win)}`);
 }
 shot('typing');
 await closeBar();
@@ -431,7 +455,7 @@ check('...and the pill shows the site again',
 const tabsBefore = (await pages()).length;
 await key(VK.T, ACCEL, 't');
 vs = await views();
-const newTabPlaced = BEHAVIOR === 'normal' ? bar(vs)?.x === pillNow.x : isFloating(vs);
+const newTabPlaced = BEHAVIOR === 'normal' ? overPill(vs, pillNow) : isFloating(vs);
 check('Ctrl+T opens the URL bar' + (BEHAVIOR === 'normal' ? ' in the pill' : ', floating'),
       newTabPlaced, `${bar(vs)?.w}x${bar(vs)?.h} at ${bar(vs)?.x},${bar(vs)?.y}`);
 check('...empty', omniboxText(vs) === '', JSON.stringify(omniboxText(vs)));
@@ -497,7 +521,7 @@ if (BEHAVIOR !== 'normal') {
 await click(find(await views(), 'KoanNewTabRow'));
 vs = await views();
 check('The New Tab row opens the URL bar too, without a tab',
-      (BEHAVIOR === 'normal' ? bar(vs)?.x === pillNow.x : isFloating(vs)) &&
+      (BEHAVIOR === 'normal' ? overPill(vs, pillNow) : isFloating(vs)) &&
           omniboxText(vs) === '' && (await pages()).length === tabsBefore,
       `${bar(vs)?.w} at ${bar(vs)?.x}, ${(await pages()).length} tab(s)`);
 await closeBar();
