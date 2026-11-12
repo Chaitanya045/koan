@@ -236,6 +236,12 @@ if [[ $skip_cxx == 0 ]]; then
 fi
 
 # --- Koan for one e2e script.
+# Whether a script's .flags need Linux's headless Ozone ({dump}, --ozone-*),
+# unless the file says the script runs on macOS without them (a line
+# "# macos: without frame dumps"; the script checks KOAN_DUMP_DIR itself).
+needs_ozone() {  # <flags file>
+  [[ -f "$1" ]] && grep -qE '\{dump\}|--ozone' "$1" && ! grep -qx '# macos: without frame dumps' "$1"
+}
 serial=0
 # Launches Koan with a fresh profile for test <name>, runs node <script>
 # with a timeout, stops that Koan. Sets $e2e_status and $e2e_log.
@@ -248,6 +254,9 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   e2e_log="$logs/e2e-$name.log"
   local koan_log="$logs/koan-$name.log"
   local prefs="$ROOT/scripts/e2e/prefs/$name.json" local_state="$ROOT/scripts/e2e/local_state/$name.json"
+  # prefs/<name>.mac.json, if it exists, replaces prefs/<name>.json here
+  # (a setting that means something else on the Mac, e.g. a click modifier).
+  [[ -f "$ROOT/scripts/e2e/prefs/$name.mac.json" ]] && prefs="$ROOT/scripts/e2e/prefs/$name.mac.json"
   [[ -f "$prefs" ]] && sed "s|{profile}|$prof|g" "$prefs" >"$prof/Default/Preferences"
   [[ -f "$local_state" ]] && cp "$local_state" "$prof/Local State"
   local enable="ui-debug-tools-enable-synthetic-events" disable="MacAppCodeSignClone" extra=() flag
@@ -256,6 +265,9 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   if [[ -f "$flags_file" ]]; then
     while IFS= read -r flag || [[ -n "$flag" ]]; do
       [[ -z "$flag" || "$flag" == \#* ]] && continue
+      # Frame dumps are headless Ozone's: a script that runs without them
+      # (needs_ozone() above) gets the rest of its flags.
+      [[ "$flag" == *"{dump}"* || "$flag" == --ozone* ]] && continue
       # {component-update}: let the component updater run (widevine: it
       # downloads the CDM). Every other test keeps it off.
       if [[ "$flag" == "{component-update}" ]]; then updates=(); continue; fi
@@ -357,7 +369,7 @@ if [[ $skip_e2e == 0 ]]; then
       secs=300
       [[ "$entry" == *timeout=* ]] && secs="${entry##*timeout=}" && secs="${secs%% *}"
       wanted "$name" || continue
-      if [[ -f "$ROOT/scripts/e2e/$name.flags" ]] && grep -qE '\{dump\}|--ozone' "$ROOT/scripts/e2e/$name.flags"; then
+      if needs_ozone "$ROOT/scripts/e2e/$name.flags"; then
         report SKIP "$name" "needs Linux's headless Ozone (its .flags)"
         continue
       fi

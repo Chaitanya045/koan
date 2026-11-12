@@ -1,12 +1,27 @@
 // End-to-end test of the Glance trigger method (koan.glance.activation_method,
-// seeded to Ctrl + Click by scripts/e2e/prefs/glance_activation.json):
-// Ctrl+click opens Glance, Shift+click and Alt+click keep their normal
+// seeded to Ctrl + Click by scripts/e2e/prefs/glance_activation.json, and on
+// macOS to Meta (Command) + Click by prefs/glance_activation.mac.json):
+// that click opens Glance, Shift+click and Alt+click keep their normal
 // meanings, the settings page shows and changes the method (for pages in
 // new renderer processes), and a plain click navigates as usual.
 //
+// Not Ctrl+click on macOS: there it is a right-click. Blink dispatches no
+// click for it (MouseEventManager::DispatchMouseClickIfNeeded), so no link
+// follows it and nothing can trigger Glance. (Gecko makes it a right-click
+// too, so Zen's Ctrl trigger, which wants button 0, never fires on a Mac.)
+// Koan's settings don't offer it there; Cmd+click is the Mac's Ctrl+click
+// (a background tab), and Zen offers Cmd on macOS only.
+//
 //   scripts/e2e/run.sh glance_activation
 //   (loads scripts/e2e/pages/glance.html)
-import { readPref } from './lib/koan.mjs';
+//   scripts/mac/suite.sh --only glance_activation <Koan.app>
+import { CTRL, IS_MAC, META, readPref, sendKey } from './lib/koan.mjs';
+
+// The seeded trigger: its modifier, its name in the checks and its label in
+// the settings.
+const TRIGGER = IS_MAC ? META : CTRL;
+const TRIGGER_NAME = IS_MAC ? 'Cmd' : 'Ctrl';
+const TRIGGER_LABEL = IS_MAC ? 'Meta (Command) + Click' : 'Ctrl + Click';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -68,8 +83,8 @@ async function withPage(target, fn) {
   try { return await fn(c); } finally { c.close(); }
 }
 
-// Clicks the element with `id` in the (first) test page. Ctrl=2, Shift=8,
-// Alt=1.
+// Clicks the element with `id` in the (first) test page. Alt=1, Ctrl=2,
+// Meta=4, Shift=8.
 async function clickLink(id, modifiers,
                          page = undefined) {
   page ??= (await tabs()).find(t => t.url.endsWith('/glance.html'));
@@ -86,13 +101,10 @@ async function clickLink(id, modifiers,
   await sleep(2000);
 }
 
-// Sends a plain key to the page target (used for Esc).
+// Sends a plain key to the page target (used for Esc; lib/koan.mjs sends the
+// Mac key code on macOS).
 async function keyTo(target, code, key = '') {
-  await withPage(target, async c => {
-    const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, key };
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-    await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
-  });
+  await withPage(target, c => sendKey(c, code, 0, key || undefined));
   await sleep(1500);
 }
 
@@ -109,9 +121,10 @@ await withPage((await tabs())[0], c => c.send('Page.navigate', {
 }));
 await sleep(2000);
 
-// Ctrl+click opens Glance (the activation method), and Esc closes it.
-await clickLink('glance', 2);
-check('Ctrl+click opens Glance', await glanceOpen());
+// Ctrl+click (Cmd+click) opens Glance (the activation method), and Esc
+// closes it.
+await clickLink('glance', TRIGGER);
+check(`${TRIGGER_NAME}+click opens Glance`, await glanceOpen());
 const glancePage = (await targets()).find(t => t.url.includes('glance=1'));
 check('Glance hosts the linked page', !!glancePage, glancePage?.url ?? 'no target');
 if (glancePage) {
@@ -131,13 +144,13 @@ await clickLink('glance', 1);
 check('Alt+click does not open Glance',
       !(await glanceOpen()) && (await windowCount()) === windows + 1);
 
-// Ctrl+click on a link Glance doesn't open (not a web link) does what
-// Ctrl+click does without Glance: a background tab, not a popup window.
+// Ctrl+click (Cmd+click) on a link Glance doesn't open (not a web link) does
+// what that click does without Glance: a background tab, not a popup window.
 {
   const tabsBefore = (await tabs()).length;
   const windowsBefore = await windowCount();
-  await clickLink('local', 2);
-  check('Ctrl+click on a file link opens a background tab',
+  await clickLink('local', TRIGGER);
+  check(`${TRIGGER_NAME}+click on a file link opens a background tab`,
         !(await glanceOpen()) && (await tabs()).length === tabsBefore + 1 &&
             (await windowCount()) === windowsBefore,
         `${tabsBefore} -> ${(await tabs()).length} tab(s), ` +
@@ -152,10 +165,10 @@ check('Alt+click does not open Glance',
   }
 }
 
-// Ctrl+click on a download link stays a download, like Alt+click does with
-// the default method (no glance).
-await clickLink('download', 2);
-check('Ctrl+click on a download link does not open Glance', !(await glanceOpen()));
+// Ctrl+click (Cmd+click) on a download link stays a download, like Alt+click
+// does with the default method (no glance).
+await clickLink('download', TRIGGER);
+check(`${TRIGGER_NAME}+click on a download link does not open Glance`, !(await glanceOpen()));
 
 // The settings page shows the method and changes it. Renderers get it when
 // they start, so a page opened afterwards in a new process uses it.
@@ -171,7 +184,7 @@ const trigger = `koanSettingsRoot.querySelector(
 const shownMethod = await withPage(settings, async c => (await c.send('Runtime.evaluate', {
   expression: `${trigger}?.selectedOptions[0]?.textContent`, returnByValue: true,
 })).result?.result?.value);
-check('Settings show the trigger method', shownMethod === 'Ctrl + Click', shownMethod);
+check('Settings show the trigger method', shownMethod === TRIGGER_LABEL, shownMethod);
 await withPage(settings, c => c.send('Runtime.evaluate', {
   expression: `(() => { const s = ${trigger};
       s.selectedIndex = [...s.options].findIndex(o => o.text === 'Alt + Click');

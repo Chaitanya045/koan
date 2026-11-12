@@ -1,2 +1,5 @@
 # Frame dumps, to check what the page looks like (scripts/e2e/run.sh).
 --ozone-dump-file={dump}
+# macOS (scripts/mac/suite.sh) has no frame dumps; the script checks the
+# page's size there instead (see its header).
+# macos: without frame dumps
