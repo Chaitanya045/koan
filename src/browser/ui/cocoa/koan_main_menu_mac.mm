@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/apple/foundation_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
@@ -70,6 +72,31 @@ koan::KoanBrowserViewController* ActiveController() {
     return nullptr;
   }
   return koan::KoanBrowserViewController::From(view);
+}
+
+// The window File > Close Window acts on, as AppController finds it
+// (-windowForPerformClose): the target of -performClose: (a popover's
+// window), or its topmost parent if that is a child window (a bubble).
+NSWindow* WindowForPerformClose() {
+  id target = [NSApp targetForAction:@selector(performClose:)];
+  NSWindow* window = nil;
+  if (NSPopover* popover = base::apple::ObjCCast<NSPopover>(target)) {
+    window = popover.contentViewController.view.window;
+  } else {
+    window = base::apple::ObjCCast<NSWindow>(target);
+  }
+  while (window.parentWindow) {
+    window = window.parentWindow;
+  }
+  return window;
+}
+
+// The browser window of `window`, if it is one.
+BrowserWindowInterface* BrowserOfWindow(NSWindow* window) {
+  BrowserView* view = window ? BrowserView::GetBrowserViewForNativeWindow(
+                                   gfx::NativeWindow(window))
+                             : nullptr;
+  return view ? view->browser() : nullptr;
 }
 
 const koan::shortcuts::Info* FindInfo(Action action) {
@@ -221,6 +248,9 @@ NSMenuItem* ChromeItem(NSString* title, int command) {
 // Spaces menu, whose items follow the window's Spaces.
 @interface KoanMenuTarget : NSObject <NSMenuDelegate, NSMenuItemValidation>
 + (KoanMenuTarget*)shared;
+// File > Close Window (⇧⌘W): Chrome's command for a browser window, else
+// AppKit's -performClose: on the window (see the File menu below).
+- (void)performClose:(id)sender;
 // Runs the Koan shortcut in the item's tag.
 - (void)perform:(NSMenuItem*)item;
 // Switches the active window to the Space at the item's tag (an index).
@@ -272,6 +302,15 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   }
 }
 
+- (void)performClose:(id)sender {
+  NSWindow* window = WindowForPerformClose();
+  if (BrowserWindowInterface* browser = BrowserOfWindow(window)) {
+    chrome::ExecuteCommand(browser, IDC_CLOSE_WINDOW);
+    return;
+  }
+  [window performClose:sender];
+}
+
 - (void)switchSpace:(NSMenuItem*)item {
   koan::KoanBrowserViewController* controller = ActiveController();
   if (!controller) {
@@ -319,6 +358,13 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
 
 // NSMenuItemValidation:
 - (BOOL)validateMenuItem:(NSMenuItem*)item {
+  if (item.action == @selector(performClose:)) {
+    NSWindow* window = WindowForPerformClose();
+    if (BrowserWindowInterface* browser = BrowserOfWindow(window)) {
+      return chrome::IsCommandEnabled(browser, IDC_CLOSE_WINDOW);
+    }
+    return window && (window.styleMask & NSWindowStyleMaskClosable);
+  }
   koan::KoanBrowserViewController* controller = ActiveController();
   if (!controller) {
     return NO;
@@ -535,6 +581,23 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
     HideItems(file, {IDC_NEW_ISOLATED_WINDOW});
     InsertAfter(file, IDC_NEW_WINDOW,
                 @[ ActionItem(Action::kNewBlankWindow, target) ]);
+    // Close Window (⇧⌘W) sends -performClose: to the key window, which AppKit
+    // validates and runs against the window's own close button. Koan hides
+    // and fades AppKit's traffic lights (koan_traffic_lights_mac.mm), and on
+    // the Mac the item was disabled in Koan's windows, its key doing
+    // nothing. So Koan's target takes it: Chrome's Close Window command for
+    // a browser window (what the red button does), AppKit's path for any
+    // other. Only Chrome's own Close Window item, the ⇧⌘W one:
+    // AppController sets its title, tag and action again
+    // (-updateMenuItemKeyEquivalents, which for a window without tabs hides
+    // it and turns ⌘W's item into Close Window, with no target) but never
+    // its target.
+    for (NSMenuItem* item in file.itemArray) {
+      if (item.tag == IDC_CLOSE_WINDOW &&
+          item.action == @selector(performClose:)) {
+        item.target = target;
+      }
+    }
   }
 
   // View: Zen's starts with Appearance > Automatic / Light / Dark. Chrome's

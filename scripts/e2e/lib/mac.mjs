@@ -289,6 +289,27 @@ export async function makeKey(page, timeout = 3000) {
       timeout));
 }
 
+// Whether the menu bar item `item` (an AppleScript specifier within the menu
+// bar of Koan's process, e.g. 'menu item "Close Window" of menu 1 of menu
+// bar item "File"') is enabled, as Accessibility (System Events) reads it:
+// what a person sees in the menu, and whether its key works. true / false,
+// or null off macOS or where it can't be read (no Accessibility grant for
+// osascript). Reading it is not input.
+export function menuItemEnabled(item) {
+  if (!IS_MAC || !KOAN_PID) return null;
+  try {
+    const out = execFileSync('osascript', ['-e', 'tell application "System Events" to tell ' +
+        `(first process whose unix id is ${KOAN_PID}) to get enabled of ${item} of menu bar 1`],
+        { encoding: 'utf8', timeout: 10000 }).trim();
+    return out === 'true' ? true : out === 'false' ? false : null;
+  } catch {
+    return null;
+  }
+}
+export const CLOSE_WINDOW_ITEM = 'menu item "Close Window" of menu 1 of menu bar item "File"';
+// The app menu's Quit item (its title has the app's name).
+export const QUIT_ITEM = '(first menu item of menu 1 of menu bar item 2 whose name starts with "Quit")';
+
 // keypress2 flags: c cmd, s shift, k ctrl, a alt.
 export async function realKey(name, flags = '', settle = 500) {
   if (!gate()) return false;
