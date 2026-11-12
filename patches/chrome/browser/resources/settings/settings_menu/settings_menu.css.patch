@@ -1,0 +1,22 @@
+--- a/chrome/browser/resources/settings/settings_menu/settings_menu.css
++++ b/chrome/browser/resources/settings/settings_menu/settings_menu.css
+@@ -103,3 +103,19 @@
+   transition-delay: 0ms;
+   opacity: 0;
+ }
++
++/* Koan: the look's selected and hovered item (shadcn's sidebar-accent), when
++ * Koan's look stylesheet sets them (koan_settings_ui.cc LookStylesheet()). */
++.cr-nav-menu-item:hover {
++  background: var(--koan-nav-item-hover-background,
++      var(--cr-nav-menu-item-background-color-hover));
++}
++
++.cr-nav-menu-item[selected] {
++  --iron-icon-fill-color: var(--koan-nav-item-selected-color,
++      var(--cr-nav-menu-item-icon-color-selected));
++  background: var(--koan-nav-item-selected-background,
++      var(--cr-nav-menu-item-background-color-selected));
++  color: var(--koan-nav-item-selected-color,
++      var(--cr-nav-menu-item-color-selected));
++}

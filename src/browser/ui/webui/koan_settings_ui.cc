@@ -17,6 +17,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/prefs/pref_service.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "koan/browser/ui/color/koan_look.h"
@@ -121,6 +123,11 @@ std::string LookStylesheet() {
       "  --cr-focus-outline-color: var(--ring);\n"
       "  --cr-hover-background-color: var(--accent);\n"
       "  --cr-menu-background-color: var(--popover);\n"
+      // The left menu's selected and hovered item: shadcn's sidebar menu
+      // item (settings_menu.css.patch), not Chromium's light blue.
+      "  --koan-nav-item-selected-background: var(--sidebar-accent);\n"
+      "  --koan-nav-item-selected-color: var(--sidebar-accent-foreground);\n"
+      "  --koan-nav-item-hover-background: var(--sidebar-accent);\n"
       "  background: var(--background);\n}\n";
   return css;
 }
@@ -166,6 +173,14 @@ void ExtendSettingsUI(content::WebUI& web_ui,
   // Koan's settings are the regular profile's (chrome://settings never opens
   // in an incognito one).
   Profile* profile = Profile::FromWebUI(&web_ui)->GetOriginalProfile();
+  // Koan has no Google account (browser sign-in is off by default,
+  // koan_prefs.cc): the People section and its menu item are the profile's,
+  // not "You and Google" (IDS_SETTINGS_PEOPLE, which this replaces: the
+  // localized strings are added before this hook runs). Its rows stay (#300):
+  // "Sync and Google services" holds the switch that turns sign-in on.
+  if (!profile->GetPrefs()->GetBoolean(::prefs::kSigninAllowed)) {
+    source.AddString("peoplePageTitle", "Profile");
+  }
   web_ui.AddMessageHandler(std::make_unique<KoanSettingsHandler>(
       *profile->GetPrefs(), *g_browser_process->local_state()));
 #if BUILDFLAG(IS_POSIX)

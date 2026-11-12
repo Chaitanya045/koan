@@ -43,8 +43,8 @@ constexpr base::TimeDelta kMinReloadInterval = base::Milliseconds(250);
 // style inline (the only request), so it paints on the first frame. The
 // colour is the new tab page colour of the colour provider of the tab that
 // asks, so each window gets its own look's colour: Koan's shadcn mixer maps
-// kColorNewTabPageBackground to the look's `--background` (near black,
-// #09090b, in the default dark shadcn look), and in the Zen look it is
+// kColorNewTabPageBackground to the look's `--card` (#18181b on the #09090b
+// window in the default dark shadcn look), and in the Zen look it is
 // Chromium's theme colour for the page, not Zen's window gradient.
 SkColor PageColor(const ui::ColorProvider& provider) {
   return provider.GetColor(kColorNewTabPageBackground);

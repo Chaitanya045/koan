@@ -377,8 +377,12 @@ void AddShadcnChromiumColors(ui::ColorMixer& mixer,
   mixer[kColorOmniboxResultsUrlSelected] = {t[Token::kMutedForeground]};
   mixer[kColorOmniboxResultsTextSelected] = {t[Token::kForeground]};
   mixer[kColorFindBarBackground] = {t[Token::kPopover]};
-  // The new tab page is the page's own surface.
-  mixer[kColorNewTabPageBackground] = {t[Token::kBackground]};
+  // The new tab page (the empty tab's page) is a `card` on the window's
+  // `sidebar`, as Zen's empty tab is its content card (zen-browser-
+  // container.css: light-dark(white, rgb(32 32 32)) over the window): in the
+  // dark looks `background` is the sidebar's colour, and the empty tab read
+  // as a black void with nothing in it.
+  mixer[kColorNewTabPageBackground] = {t[Token::kCard]};
   // The URL bar's card: Koan's floating-card colour, hovered or not.
   mixer[kColorLocationBarBackground] = {card};
   mixer[kColorLocationBarBackgroundHovered] = {card};

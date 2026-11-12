@@ -38,6 +38,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_controller.h"
 #include "chrome/browser/ui/omnibox/omnibox_edit_model.h"
@@ -49,6 +50,7 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
+#include "chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
@@ -87,6 +89,7 @@
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
@@ -1554,14 +1557,35 @@ gfx::Rect KoanUrlBarController::CardBounds() const {
     return gfx::Rect();
   }
   views::View* pill = nav->url_pill();
-  const gfx::Rect pill_bounds =
+  gfx::Rect pill_bounds =
       views::View::ConvertRectToTarget(pill, overlay, pill->GetLocalBounds());
   // "normal" widens it over the page, away from the sidebar's edge.
   const bool sidebar_on_right = IsSidebarOnRight(browser_view_);
+  // Chromium's suggestions frame (a child window on macOS) reaches past the
+  // location bar by its alignment inset and shadow: over a pill near the
+  // window's edge it started 14pt outside the window (#349), where Zen's
+  // results, part of the window, can't go. So the field keeps that far from
+  // the window's edge, inside the pill.
+  const gfx::Insets popup_outset =
+      RoundedOmniboxResultsFrame::GetLocationBarAlignmentInsets() +
+      RoundedOmniboxResultsFrame::GetShadowInsets();
+  const gfx::Rect window = views::View::ConvertRectToTarget(
+      overlay->GetWidget()->GetRootView(), overlay,
+      overlay->GetWidget()->GetRootView()->GetLocalBounds());
+  const int start = std::max(pill_bounds.x(), window.x() + popup_outset.left());
+  const int end =
+      std::min(pill_bounds.right(), window.right() - popup_outset.right());
+  if (end - start >= pill_bounds.width() / 2) {
+    pill_bounds.SetHorizontalBounds(start, end);
+  }
   int width = pill_bounds.width();
   if (user_input_in_progress_) {
-    const int room = sidebar_on_right ? pill_bounds.right() - area.x()
-                                      : area.right() - pill_bounds.x();
+    const int room =
+        sidebar_on_right
+            ? pill_bounds.right() -
+                  std::max(area.x(), window.x() + popup_outset.left())
+            : std::min(area.right(), window.right() - popup_outset.right()) -
+                  pill_bounds.x();
     width = std::max(
         width, std::min({area.width() * 9 / 10, kUrlBarOpenMaxWidth, room}));
   }
@@ -1921,6 +1945,19 @@ bool HidesBookmarkStar() {
 
 bool HidesSecurityChipText() {
   return features::IsUrlBarEnabled();
+}
+
+bool AdjustLocationIcon(const views::View* icon_view,
+                        bool editing_or_empty,
+                        ui::ImageModel& icon) {
+  if (!editing_or_empty || !features::IsUrlBarEnabled() ||
+      !UrlBarOf(icon_view)) {
+    return false;
+  }
+  icon = ui::ImageModel::FromVectorIcon(
+      kKoanUrlbarSearchGlassIcon, kColorKoanUrlPillForeground,
+      GetLayoutConstant(LayoutConstant::kLocationBarIconSize));
+  return true;
 }
 
 SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color) {

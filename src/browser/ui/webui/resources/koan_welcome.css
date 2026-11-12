@@ -92,6 +92,42 @@ kbd {
   --icon: url(icons/check.svg);
 }
 
+.icon[data-icon='engine-baidu'] {
+  --icon: url(icons/engine-baidu.svg);
+}
+
+.icon[data-icon='engine-brave'] {
+  --icon: url(icons/engine-brave.svg);
+}
+
+.icon[data-icon='engine-duckduckgo'] {
+  --icon: url(icons/engine-duckduckgo.svg);
+}
+
+.icon[data-icon='engine-ecosia'] {
+  --icon: url(icons/engine-ecosia.svg);
+}
+
+.icon[data-icon='engine-google'] {
+  --icon: url(icons/engine-google.svg);
+}
+
+.icon[data-icon='engine-mojeek'] {
+  --icon: url(icons/engine-mojeek.svg);
+}
+
+.icon[data-icon='engine-naver'] {
+  --icon: url(icons/engine-naver.svg);
+}
+
+.icon[data-icon='engine-qwant'] {
+  --icon: url(icons/engine-qwant.svg);
+}
+
+.icon[data-icon='engine-startpage'] {
+  --icon: url(icons/engine-startpage.svg);
+}
+
 #welcome {
   display: flex;
   flex-direction: column;
@@ -422,8 +458,10 @@ kbd {
   background: var(--primary);
 }
 
-/* A browser's or an engine's mark: its initial on a muted tile (Chromium
- * ships engine logos only in Google Chrome builds; nothing is fetched). */
+/* A browser's or an engine's mark on a muted tile: the browser's app icon
+ * (.tile.app) or the engine's logo (Simple Icons, in the text colour, as the
+ * Lucide icons), else its initial. Chromium ships engine logos only in Google
+ * Chrome builds, and nothing is fetched. */
 .tile {
   display: flex;
   align-items: center;
@@ -450,6 +488,11 @@ kbd {
 .tile.app img {
   width: 32px;
   height: 32px;
+}
+
+.tile .icon.mark {
+  width: 18px;
+  height: 18px;
 }
 
 .badge {

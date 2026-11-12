@@ -19,3 +19,14 @@
    return location_bar::GetSecurityChipText(delegate_->GetLocationBarModel(),
                                             delegate_->GetWebContents(),
                                             delegate_->IsEditingOrEmpty());
+@@ -299,6 +304,10 @@
+   ui::ImageModel icon = delegate_->GetLocationIcon(
+       base::BindOnce(&LocationIconView::OnIconFetched,
+                      icon_fetch_weak_ptr_factory_.GetWeakPtr()));
++  // Koan: Zen's identity box shows the magnifier while the address is typed.
++  if (koan::AdjustLocationIcon(this, delegate_->IsEditingOrEmpty(), icon)) {
++    icon_fetch_weak_ptr_factory_.InvalidateWeakPtrs();
++  }
+ 
+   if (icon.IsEmpty()) {
+     return;

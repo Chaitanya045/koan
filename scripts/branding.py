@@ -104,6 +104,14 @@ LOGOS = {
     'product_logo_name_22_white.png': 'wordmark_44_white.png',
 }
 
+# chromium/src path -> source under branding/, copied as it is (no render),
+# on every platform. WebUI's toolbars (cr-toolbar, cr-drawer, the extensions
+# page) show the product logo in light mode (chrome://theme/current-channel-
+# logo, branded above) but this Chromium SVG in dark mode, Koan's default.
+SVG_LOGOS = {
+    'ui/webui/resources/images/chrome_logo_dark.svg': 'logo.svg',
+}
+
 # Linux only: desktop and installer icons.
 LINUX_LOGOS = {
     'chrome/app/theme/chromium/linux/product_logo_24.png': 'logo_24.png',
@@ -140,7 +148,7 @@ def logos_for(platform):
 # Every platform's files: apply_patches.sh export must skip all of them.
 BRANDED_FILES = STRING_FILES + [
     CR_ICONS_FILE, BRANDING_FILE, INFO_PLIST_FILE
-] + sorted({**LOGOS, **LINUX_LOGOS, **MAC_LOGOS})
+] + sorted({**LOGOS, **LINUX_LOGOS, **MAC_LOGOS, **SVG_LOGOS})
 
 # The macOS app icon set in the asset catalog, as (points, scale): the
 # sizes actool expects for the mac idiom.
@@ -541,6 +549,12 @@ def apply(platform):
     save_pristine(rel)
     if (SRC / rel).read_bytes() != (ART / art).read_bytes():
       shutil.copyfile(ART / art, SRC / rel)
+      changed += 1
+      print(f'logo       {rel}')
+  for rel, source in SVG_LOGOS.items():
+    save_pristine(rel)
+    if (SRC / rel).read_bytes() != (ROOT / 'branding' / source).read_bytes():
+      shutil.copyfile(ROOT / 'branding' / source, SRC / rel)
       changed += 1
       print(f'logo       {rel}')
   print(f'{changed} file(s) changed' if changed else 'already branded')

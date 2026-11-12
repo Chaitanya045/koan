@@ -5,10 +5,13 @@
 #include "koan/browser/ui/views/koan_zero_suggest.h"
 
 #include <string>
+#include <utility>
 
 #include "base/memory/scoped_refptr.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "components/history/core/browser/history_types.h"
+#include "components/history/core/browser/top_sites.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
@@ -19,6 +22,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -39,6 +43,44 @@ class TabsClient : public FakeAutocompleteProviderClient {
 
  private:
   FakeTabMatcher tabs_;
+};
+
+// Top sites that answer at once: the visited `sites`, then the prepopulated
+// pages, as TopSitesImpl lists them (AddPrepopulatedPages()).
+class FakeTopSites : public history::TopSites {
+ public:
+  FakeTopSites(history::MostVisitedURLList sites,
+               history::PrepopulatedPageList prepopulated)
+      : sites_(std::move(sites)), prepopulated_(std::move(prepopulated)) {}
+
+  // history::TopSites:
+  void GetMostVisitedURLs(GetMostVisitedURLsCallback callback) override {
+    history::MostVisitedURLList all = sites_;
+    for (const history::PrepopulatedPage& page : prepopulated_) {
+      all.push_back(page.most_visited);
+    }
+    std::move(callback).Run(std::move(all));
+  }
+  void SyncWithHistory() override {}
+  bool HasBlockedUrls() const override { return false; }
+  void AddBlockedUrl(const GURL& url) override {}
+  void RemoveBlockedUrl(const GURL& url) override {}
+  bool IsBlocked(const GURL& url) override { return false; }
+  void ClearBlockedUrls() override {}
+  int NumBlockedSites() const override { return 0; }
+  bool IsFull() override { return false; }
+  bool loaded() const override { return true; }
+  history::PrepopulatedPageList GetPrepopulatedPages() override {
+    return prepopulated_;
+  }
+  void OnNavigationCommitted(const GURL& url) override {}
+  void ShutdownOnUIThread() override {}
+
+ private:
+  ~FakeTopSites() override = default;
+
+  history::MostVisitedURLList sites_;
+  history::PrepopulatedPageList prepopulated_;
 };
 
 class KoanZeroSuggestTest : public testing::Test {
@@ -233,6 +275,21 @@ TEST_F(KoanZeroSuggestTest, OnlyTheProvidersOwnMatchesAreLocal) {
   AddTab(u"Tab", "https://tab.example/", 1);
   ASSERT_EQ(1u, Run(Input()).size());
   EXPECT_TRUE(IsLocalZeroSuggestMatch(provider_->matches()[0]));
+}
+
+TEST_F(KoanZeroSuggestTest, VisitedTopSitesButNotChromiumsPrepopulatedOnes) {
+  // A fresh profile's top sites are Chromium's prepopulated Web Store page
+  // (TopSitesFactory) until history has some: Zen lists only visited sites.
+  client_.set_top_sites(base::MakeRefCounted<FakeTopSites>(
+      history::MostVisitedURLList{
+          {GURL("https://visited.example/"), u"Visited"}},
+      history::PrepopulatedPageList{history::PrepopulatedPage(
+          GURL("https://chrome.google.com/webstore?hl=en-GB"), u"Web Store",
+          /*favicon_id=*/0, SK_ColorBLUE)}));
+  const ACMatches& matches = Run(Input());
+  ASSERT_EQ(1u, matches.size());
+  EXPECT_EQ(GURL("https://visited.example/"), matches[0].destination_url);
+  EXPECT_EQ(omnibox::AutocompleteMatchType::kNavsuggest, matches[0].type);
 }
 
 TEST_F(KoanZeroSuggestTest, ACopiedLinkComesFirstTwiceThenNotAgain) {

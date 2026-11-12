@@ -73,6 +73,14 @@ function browserTile(source) {
             el('img', {src: source.icon, alt: ''}));
 }
 
+// A search engine's mark (icons/<mark>.svg) on the tile, else its initial.
+function engineTile(engine) {
+  return engine.mark ?
+      el('span', {className: 'tile', 'aria-hidden': true},
+         el('span', {className: 'icon mark', 'data-icon': engine.mark})) :
+      initialTile(engine.name);
+}
+
 // ---- The steps.
 
 // What the user picked, kept across Back and Next.
@@ -261,7 +269,7 @@ function searchStep(data) {
           value: String(engine.id),
           checked: String(engine.id) === String(gChoices.engine),
           title: engine.name,
-          mark: initialTile(engine.name),
+          mark: engineTile(engine),
         }));
       }
       list.addEventListener('change', event => {
@@ -297,7 +305,7 @@ function getSteps(data) {
       id: 'done',
       icon: 'circle-check-big',
       title: 'You\'re all set',
-      description: 'Enjoy the calm.',
+      description: 'Enjoy browsing.',
     },
   ];
 }
