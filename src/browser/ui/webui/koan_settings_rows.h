@@ -66,8 +66,8 @@ struct Row {
   const char* label;
   // RAW_PTR_EXCLUSION: #global-scope (rows live in a constexpr table).
   RAW_PTR_EXCLUSION base::span<const Option> options = {};
-  // A boolean pref (in this table) that greys this row out while false,
-  // like Zen's dependent checkboxes.
+  // A boolean pref (in this table, a profile or a local-state one) that
+  // greys this row out while false, like Zen's dependent checkboxes.
   const char* depends_on = nullptr;
   // Whether the setting applies at all, e.g. its feature is on in
   // chrome://flags. Rows that don't apply are hidden. Null: always.
@@ -75,8 +75,8 @@ struct Row {
   // Indented under the row above, like Zen's sub-options.
   bool indent = false;
   // `pref` is a local-state pref (browser-wide, e.g. one of Chromium's
-  // performance settings) rather than a profile pref. `depends_on` and
-  // `note_pref` are always profile prefs.
+  // performance settings) rather than a profile pref. `note_pref` is always
+  // a profile pref.
   bool local_state = false;
   // A note shown under the row, like Zen's warnings. With `note_pref` (a
   // boolean pref, e.g. one of Chromium's), only while the row's pref and

@@ -137,11 +137,19 @@ void KoanShortcutController::RegisterAccelerators() {
   }
   // Chrome's tab cycling keys: Koan cycles itself while one of Zen's Ctrl+Tab
   // settings is on, and passes the keys on to Chrome otherwise. No binding
-  // uses them (shortcuts::IsValidCustomAccelerator()).
+  // uses them (shortcuts::IsValidCustomAccelerator()). On macOS they are
+  // Chrome's reserved Next / Previous Tab keys, which a real key press runs
+  // before any normal priority accelerator (see above): high priority, or
+  // the settings would only work for keys sent to a page.
   for (const shortcuts::CycleKey& key : shortcuts::CycleKeys()) {
-    focus_manager_->RegisterAccelerator(ui::Accelerator(key.key, key.modifiers),
-                                        ui::AcceleratorManager::kNormalPriority,
-                                        this);
+    const ui::Accelerator accelerator(key.key, key.modifiers);
+    auto priority = ui::AcceleratorManager::kNormalPriority;
+#if BUILDFLAG(IS_MAC)
+    if (shortcuts::IsReservedOnMac(accelerator)) {
+      priority = ui::AcceleratorManager::kHighPriority;
+    }
+#endif
+    focus_manager_->RegisterAccelerator(accelerator, priority, this);
   }
 }
 

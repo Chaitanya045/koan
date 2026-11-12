@@ -38,6 +38,9 @@ scrollbars
 # The one Settings page: Koan's panes in chrome://settings, its search,
 # deep links and the old chrome://koan-settings (#297).
 settings timeout=420
+# Each behaviour row's effect, Chromium's rows Koan overrides, two restarts
+# (docs/SETTINGS_AUDIT.md).
+settings_effects_behaviour timeout=900
 shortcuts
 sidebar_animation
 sidebar_drag

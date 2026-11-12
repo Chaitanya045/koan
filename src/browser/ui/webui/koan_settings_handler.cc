@@ -314,9 +314,11 @@ base::DictValue KoanSettingsHandler::Settings() const {
                                 // E.g. set by enterprise policy.
                                 .Set("managed", !pref->IsUserModifiable());
     values.Set(row.pref, pref->GetValue()->Clone());
-    if (row.depends_on && prefs_->FindPreference(row.depends_on)) {
+    if (row.depends_on &&
+        PrefsFor(row.depends_on).FindPreference(row.depends_on)) {
       entry.Set("dependsOn", row.depends_on);
-      values.Set(row.depends_on, prefs_->GetValue(row.depends_on).Clone());
+      values.Set(row.depends_on,
+                 PrefsFor(row.depends_on).GetValue(row.depends_on).Clone());
     }
     if (row.note && !row.note_pref) {
       entry.Set("note", row.note);

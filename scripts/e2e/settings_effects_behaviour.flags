@@ -1,0 +1,3 @@
+# The test_helper extension: lib/mac.mjs askTestHelper() pins, unloads,
+# closes, shows and lists tabs ({root} is the repo; suite.sh expands it).
+--load-extension={root}/scripts/e2e/extensions/test_helper

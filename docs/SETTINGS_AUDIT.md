@@ -1,0 +1,66 @@
+# Settings audit
+
+Does every row of the one Settings page (`chrome://settings`: Koan's panes,
+then Chromium's sections) do what it says in Koan? For each row: the pref and
+every reader, whether a change applies at once to every window, new windows
+and after a restart, whether the control shows the real value, its dependent
+rows, and whether its label matches the behaviour and Zen 1.24b's
+(`zen-preferences.ftl`, `prefs/*.yaml`). A row that silently did nothing was
+fixed, hidden or made to say so.
+
+## Behaviour and Chromium rows
+
+Audited 2026-11-12 (fix/settings-audit-behaviour). "e2e" is
+`scripts/e2e/settings_effects_behaviour.mjs` unless named otherwise; every
+row there is changed through the page's own control. "Mac only" steps need
+the macOS suite's test_helper extension; "real input" steps need the Mac
+bench's keypress tools (`KOAN_INPUT=real`).
+
+### Koan's rows
+
+| Row (pane > group) | Pref (where) | Readers | Live / new windows / restart | Was broken? | Fix | Checked by |
+|---|---|---|---|---|---|---|
+| Check for updates (Look and Feel > Updates) | `koan.updates.check_enabled` (local state) | `koan_updates.cc` `Updater::CanCheck`, observed (`ScheduleCheck`) | live; browser-wide | Yes: an "Update Available!" found before the check was turned off still showed at the next start | the notice waits while the check is off (`ShowPending`) | e2e round trip; effect needs GitHub (skipped), `koan_update_logic_unittest` |
+| Show a notification after Koan was updated | `koan.updates.show_update_notification` (local state) | `Updater::Start` (once per launch, as Zen's `checkForZenUpdates`) | next launch of a new build, which is when it can show | No | - | e2e round trip; effect needs a new build (skipped) |
+| Close tab and switch to its owner tab ... when going back with no history (Tab Management > Workspaces) | `koan.tabs.close_on_back_with_no_history` | `koan::ShouldCloseTabOnBack` (back_to_opener patch, read each time); `KoanShortcutController` refreshes Back's enabled state on change, per window | live in every window; Zen's label and default (on) | No | - | e2e: Back enabled/disabled live, Back closes the child and shows its opener (Mac too: the sidebar's Back button); `tab_management.mjs` (Linux) |
+| Ignore Pending tabs when cycling with Ctrl+Tab | `koan.tabs.ctrl_tab_skip_pending` | `KoanShortcutController::CycleTabs` (read per key) | live | **Yes, on macOS:** a real Ctrl+Tab / Ctrl+Page Down is one of Chrome's reserved commands there, which `prePerformKeyEquivalent` runs before normal-priority accelerators, so Koan never saw the key and both Ctrl+Tab rows (and Koan's recently-used walk) did nothing with a real keyboard. CDP keys take the views path, where Koan comes first, so the e2e passed | the cycling keys are registered high priority on macOS (`koan_shortcuts.cc`), guarded by `KoanShortcutTable.TabCyclingKeysAreReservedOnMac` | e2e (Mac only): skips the unloaded tab; real Ctrl+Page Down / Ctrl+Tab (real input) |
+| Ctrl+Tab cycles within Essential or Workspace tabs only | `koan.tabs.ctrl_tab_within_kind` | `CycleTabs` | live | Yes, on macOS (as above) | as above | e2e (Mac only): stays among the Essentials, wraps within the Space; real keys; `tab_management.mjs` |
+| Ctrl+Tab note ("Ctrl+Tab will cycle by recently used order ...") | shown while the row's pref and Chromium's `browser.ctrl_tab_mru` are on | `KoanSettingsHandler` observes both | live | No (the note's pref was named by string: now `::prefs::kCtrlTabMru`, so a rename breaks the build) | symbol | e2e: Chromium's row on → Ctrl+Tab goes to the tab shown before, and the note shows; off → it goes |
+| When closing a tab, switch to the most recently used tab | `koan.tabs.select_recently_used_on_close` | `koan::PickRecentlyUsedTab` (tab_strip_model patch; `KoanPinnedTabController::SelectAnotherTab`) | live | No | - | e2e (Mac: closed through test_helper): on → the tab shown before, off → the neighbour |
+| Go from the last Space to the first (and back) | `koan.workspaces.wrap_around_navigation` | `KoanWorkspaceController::WrapsAround` (shortcuts, wheel, swipe, Space drag) | live | No | - | e2e: Next/Previous Space wrap on, stop off |
+| Natural scrolling | `koan.workspaces.natural_scroll` | `SwipeAmount`, `OnSpaceWheel` | live | No | - | e2e (not on macOS: needs native wheel events) |
+| Key to hold to switch Spaces with the mouse wheel | `koan.workspaces.scroll_modifier_key` | `IsSpaceScrollModifierDown` | live | No | - | e2e round trip (each option); effect: `koan_space_navigation_unittest` |
+| Restore pinned tabs to their originally pinned URL on startup (Pinned Tabs) | `koan.pinned_tabs.restore_to_pinned_url` | `koan_pinned_tabs.cc` (session restore of each pinned tab) | next start, as it says; with On startup other than "Continue", pinned tabs come back at their pinned URL anyway (`ZEN_PARITY.md`) | No | - | e2e (Mac only): two restarts, on and off |
+| Open other sites from a pinned tab's URL bar in a new tab | `koan.tabs.open_pinned_in_new_tab` | `koan_url_bar_controller.cc` omnibox disposition (read per navigation) | live | No | - | e2e: another site from an Essential's URL bar opens a new tab; off, the Essential goes there |
+| Close Tab Shortcut Behavior (all six options) | `koan.pinned_tabs.close_shortcut_behavior` | `KoanPinnedTabController::HandleCloseShortcut` / `HandleCloseRequest`, `CloseButtonUnloads` (read per press) | live | No | - | e2e: each option on a new Essential (Ctrl+W; on macOS Cmd+W is the main menu's: real input); `pinned.mjs` (Linux) |
+| Freeze background tabs (Performance) | `performance_tuning.tab_freezing.enabled` (local state, Chromium's) | `UserPerformanceTuningManager` → `FreezingPolicy::SetFreezingEnabledByUser` (observed) | live | No | - | e2e round trip; effect: `power.mjs` (freezing takes minutes) |
+| Agent ready (Agent Control) | `koan.agent_control.enabled` (local state) | `AgentControlService::Update` (observed: starts / stops the gateway, ends tasks) | live | No | - | e2e: the gateway's `AgentControl/agent.json` comes and goes |
+| Strict | `koan.agent_control.strict` (profile) | `koan_agent_containers.cc`, approval dialog (per task) | next task, as the group says | Partly: an indented sub-option of Agent ready that stayed enabled while Agent ready was off (a row could only depend on a profile pref) | `depends_on` takes a local-state pref; Strict greys out with Agent ready | e2e: greyed out and back |
+| Your logins / Saved passwords / Addresses and cards / Your extensions / History / Limit a taken-over tab to its site | `koan.agent_control.use.*`, `koan.agent_control.limit_take_over_to_site` (profile) | `koan_agent_access.cc` (next task or page, as the group says) | as described | No | - | e2e round trip; effect: `agent_cli.mjs` (needs the koan CLI) |
+| Awake agent tabs at a time / Fewer in Low Power Mode / Approval requests per minute / Failed connection attempts | `koan.agent_control.max_leased_tabs`, `low_power_halves`, `max_prompts_per_minute`, `max_auth_failures` (local state) | `koan_agent_lease.cc` (observed), `AgentControlService` limits (observed) | new connections and new awake tabs, as the group says | No | - | e2e: every option of each menu; effect needs an agent |
+| Keyboard Shortcuts (rebind, conflicts, clear, reset) | `koan.shortcuts` | `KoanShortcutController::OnShortcutsChanged` (every window re-registers; macOS menu bar keys refreshed) | live | No | - | `settings.mjs` (each by what the key then does) |
+
+### Chromium's rows that Koan's layout or behaviour overrides
+
+| Chromium row (section) | Pref | What Koan does with it | Was broken? | Fix | Checked by |
+|---|---|---|---|---|---|
+| Show bookmarks bar / Bookmarks bar visibility (Appearance) | `bookmark_bar.show_on_all_tabs`, `bookmark_bar.visibility_state` | ignored: the bar shows only with Koan's own row (Look and Feel > Bookmarks bar), as Zen has none (`bookmark_bar_controller.cc` patch) | **Yes**: the toggle did nothing | hidden (`appearance_page.html.ts` patch); Koan's row is found by the search | e2e: not shown |
+| Show tab search button (Appearance; either variant) | `tab_search.pinned_to_tabstrip` | the sidebar's tab search / tab groups button is hidden for good (`vertical_tab_strip_top_container.cc` patch); Koan has no horizontal strip | **Yes**: did nothing | hidden | e2e: not shown |
+| Automatically pin new tab groups (Appearance) | `auto_pin_new_tab_groups` | Spaces are tab groups that are never saved (`koan::SavesTabGroups()`), so there is never a new saved group to pin | **Yes**: did nothing | hidden | e2e: not shown |
+| Show tab groups in bookmarks bar (Appearance) | `bookmark_bar.show_tab_groups` | default off in Koan; shows Chrome's saved groups of an old profile on the bar (when Koan's bar is on) | No | - (kept: it still does what it says) | - |
+| Tab hover cards: previews / memory usage (Appearance) | `browser.hovercard.image_previews_enabled`, `browser.hovercard.memory_usage_enabled` | the sidebar shows no hover cards (Zen: `browser.tabs.hoverPreview.enabled`=false; `koan::ShowsTabHoverCards()`) | **Yes**: did nothing | hidden | e2e: not shown |
+| Tab strip position, Expand tabs on hover (Appearance) | `vertical_tabs.enabled`, `vertical_tabs.expand_on_hover` | always the sidebar | No (hidden before, #154) | - | e2e: not shown |
+| Mode: Light / Dark / Device (Appearance), and Koan's macOS View > Appearance menu | `browser.theme.color_scheme2` | in the shadcn style (the default) the look's mode (Look and Feel > Mode, `koan.look.mode`, default Dark) set every window's colour mode over it | **Yes**: in the default look both did nothing, and the row showed Device while the windows were dark | `KoanColorSchemeSync` keeps them in step both ways while the shadcn style is on (one setting, two places); the Zen style uses Chromium's alone, as before | e2e: Koan's Light → Chromium's Light; Chromium's Dark → Koan's Dark |
+| Theme / Reset to default, Show home button (Appearance) | `extensions.theme.id`, `browser.show_home_button` | issue #300 (Z28) hides them | - | #300 (not duplicated here) | - |
+| Cycle through the most recently used tabs with Ctrl+Tab (Appearance) | `browser.ctrl_tab_mru` | Koan walks its own recently used list (the Space's tabs and the Essentials) while it is on; Koan's Ctrl+Tab rows note it | No (the macOS key path is the Ctrl+Tab fix above) | - | e2e |
+| Side panel position (Appearance) | `side_panel.is_right_aligned` | upstream lays the side panel out on either side, next to Koan's sidebar | No | - | Mac step (below) |
+| Font size, Customize fonts, Page zoom, Warn before quitting (Appearance) | `webkit.webprefs.*`, zoom, `browser.confirm_to_quit` | untouched | No | - | - |
+| Allow dragging a tab into split view (Appearance) | `browser.split_view_drag_and_drop_enabled` | upstream's drop target in the page (`multi_contents_view.cc`), which Koan's sidebar drags use | No | - | Mac step (below) |
+| On startup (Continue where you left off / New Tab page / pages) | `session.restore_on_startup` | Koan defaults to Continue (Zen's `browser.startup.page`=3); with the others, Spaces (`koan.workspaces.list`) and pinned tabs still come back | No | - | `spaces_relaunch.mjs` (New Tab page start) |
+| Search engine, Manage search engines | `default_search_provider*` | Koan's URL bar uses Chromium's `TemplateURLService`; the welcome page only picks the default | No | - | - |
+| Memory Saver, Energy Saver, tab discard exceptions (Performance) | `performance_tuning.*` | untouched; pinned tabs and Essentials are exempt from discarding and freezing, and so are agent tabs | No | - | `power.mjs` |
+
+Mac steps for the rows no script can drive: put the side panel on the left
+and on the right with tabs on the left and on the right (it opens beside the
+sidebar, on the side it says); drag a tab from the sidebar onto the page with
+"Allow dragging..." on and off (a split only while on).

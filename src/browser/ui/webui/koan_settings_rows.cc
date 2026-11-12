@@ -117,9 +117,8 @@ bool IsAgentControlAllowed() {
          local_state->GetBoolean(::prefs::kDevToolsRemoteDebuggingAllowed);
 }
 
-// Chromium's "Ctrl+Tab in recently used order" (prefs::kCtrlTabMru,
+// Chromium's "Ctrl+Tab in recently used order" (::prefs::kCtrlTabMru,
 // chrome://settings > Appearance) takes Ctrl+Tab over Koan's settings.
-constexpr char kCtrlTabMru[] = "browser.ctrl_tab_mru";
 constexpr char kCtrlTabMruNote[] =
     "Ctrl+Tab will cycle by recently used order, as it is enabled in "
     "Chromium's settings (Appearance); Ctrl+Page Up/Down still follow this "
@@ -475,13 +474,13 @@ constexpr Row kRows[] = {
      .pref = prefs::kCtrlTabSkipPending,
      .label = "Ignore Pending tabs when cycling with Ctrl+Tab",
      .note = kCtrlTabMruNote,
-     .note_pref = kCtrlTabMru},
+     .note_pref = ::prefs::kCtrlTabMru},
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kCtrlTabWithinKind,
      .label = "Ctrl+Tab cycles within Essential or Workspace tabs only",
      .note = kCtrlTabMruNote,
-     .note_pref = kCtrlTabMru},
+     .note_pref = ::prefs::kCtrlTabMru},
     {.group = "workspaces",
      .control = Control::kCheckbox,
      .pref = prefs::kSelectRecentlyUsedOnClose,
@@ -546,6 +545,7 @@ constexpr Row kRows[] = {
      .label = "Strict: each task in a hidden profile of its own (slower to "
               "start; shares none of your settings, extensions or "
               "permissions)",
+     .depends_on = prefs::kAgentControlEnabled,
      .is_available = IsAgentControlAllowed,
      .indent = true},
     // "What agents can use" (koan_agent_access_prefs.h; user, 2026-11-11).

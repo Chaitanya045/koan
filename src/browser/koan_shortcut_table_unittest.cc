@@ -232,6 +232,17 @@ TEST(KoanShortcutTable, ReservedAndSystemKeysOnMac) {
 #endif
 }
 
+// KoanShortcutController registers the tab cycling keys high priority on
+// macOS because Chrome reserves them there (Next / Previous Tab): with normal
+// priority, a real Ctrl+Tab or Ctrl+Page Down ran Chrome's command and Zen's
+// Ctrl+Tab settings did nothing. Every cycling key must stay in the list.
+TEST(KoanShortcutTable, TabCyclingKeysAreReservedOnMac) {
+  for (const CycleKey& key : CycleKeys()) {
+    EXPECT_TRUE(IsReservedOnMac(ui::Accelerator(key.key, key.modifiers)))
+        << key.key << " " << key.modifiers;
+  }
+}
+
 // Zen's notation: KeyShortcut.toDisplayString() and keyToDisplayString().
 TEST(KoanShortcutTable, DisplayTextMatchesZen) {
   EXPECT_EQ(DisplayText(Key(ui::VKEY_C, kCmd | kShift), /*macos=*/true),
