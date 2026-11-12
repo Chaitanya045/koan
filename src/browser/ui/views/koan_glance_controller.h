@@ -18,6 +18,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/page_transition_types.h"
@@ -334,6 +335,10 @@ class KoanGlanceController : public content::WebContentsDelegate,
   bool applying_commands_ = false;
   bool reapply_pending_ = false;
   std::vector<base::CallbackListSubscription> command_subscriptions_;
+
+  // Glance on or off and its trigger, which pages read when their renderer
+  // starts (koan::DropSpareRenderers()).
+  PrefChangeRegistrar pref_change_registrar_;
 
   base::WeakPtrFactory<KoanGlanceController> weak_factory_{this};
 };
