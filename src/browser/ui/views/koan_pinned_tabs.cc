@@ -693,6 +693,10 @@ bool KoanPinnedTabController::DropsPinned(
 bool KoanPinnedTabController::PreviewDropInSpace(
     const std::vector<tabs::TabInterface*>& tabs,
     std::optional<bool> pointer_pinned) {
+  // (Without Koan's pinned tabs a Space has one section.)
+  if (!features::IsPinnedTabsEnabled()) {
+    pointer_pinned.reset();
+  }
   const std::vector<tabs::TabInterface*> dragged = SpaceTabsWithSplits(tabs);
   bool changed = false;
   // (Every tab, so that none keeps a preview from an earlier selection.)
@@ -718,6 +722,9 @@ bool KoanPinnedTabController::PreviewDropInSpace(
 void KoanPinnedTabController::DropInSpace(
     const std::vector<tabs::TabInterface*>& tabs,
     bool pointer_pinned) {
+  if (!features::IsPinnedTabsEnabled()) {
+    return;
+  }
   const std::vector<tabs::TabInterface*> dragged = SpaceTabsWithSplits(tabs);
   // Decided for all first, from where the drag left them.
   std::vector<std::pair<tabs::TabInterface*, bool>> drops;
@@ -1094,6 +1101,7 @@ void KoanPinnedTabController::DropEssentialInSpace(tabs::TabInterface* tab,
   // Zen's removeEssentials(tab, unpin), by the section it was dropped in
   // (the place alone can't tell the end of the pinned tabs from the top of
   // the normal ones).
+  pinned = pinned && features::IsPinnedTabsEnabled();
   for (tabs::TabInterface* each : WithSplit(tab)) {
     if (!pinned) {
       ClearPinnedState(each);
