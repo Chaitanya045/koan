@@ -325,6 +325,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // the toolbar (single toolbar, compact mode), and over the page's own
   // fullscreen.
   bool ParksTopContainer() const;
+  // Whether the top container (or the overlay's visibility) disagrees with
+  // ParksTopContainer(): PlaceTopContainer() is due.
+  bool IsTopContainerMisplaced() const;
   // Hides the toolbar: moves the top container, if it is not there already
   // and ParksTopContainer(), from the BrowserView into the overlay view of
   // this window, above the page.
