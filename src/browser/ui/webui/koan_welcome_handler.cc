@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -49,6 +50,43 @@ bool IsExcludedEngine(const std::u16string& name) {
 // Chromium's (prepopulated_engines.json), in most regions' lists already.
 const TemplateURLPrepopulateData::PrepopulatedEngine& BraveEngine() {
   return TemplateURLPrepopulateData::brave;
+}
+
+// The engine's mark on the search step (welcome_icons/engine-<name>.svg,
+// Simple Icons), by Chromium's prepopulated engine. Chromium's own choice
+// screen shows logos only in Google Chrome builds (IDR_*_IMAGE from the
+// internal search_engines_data resources), and nothing is fetched here before
+// the user chooses, so the rest (Bing and Yahoo among them, which Simple Icons
+// left out at their owners' request) keep their initial.
+std::string_view EngineMark(int prepopulate_id) {
+  namespace data = TemplateURLPrepopulateData;
+  static constexpr std::pair<const data::PrepopulatedEngine*, std::string_view>
+      kMarks[] = {
+          {&data::baidu, "engine-baidu"},
+          {&data::brave, "engine-brave"},
+          {&data::duckduckgo, "engine-duckduckgo"},
+          {&data::ecosia, "engine-ecosia"},
+          {&data::google, "engine-google"},
+          {&data::mojeek, "engine-mojeek"},
+          {&data::naver, "engine-naver"},
+          {&data::qwant, "engine-qwant"},
+          {&data::startpage, "engine-startpage"},
+      };
+  for (const auto& [engine, mark] : kMarks) {
+    if (engine->id == prepopulate_id) {
+      return mark;
+    }
+  }
+  return std::string_view();
+}
+
+// The search step's row for an engine: its id, name and mark (empty for the
+// initial).
+base::DictValue EngineRow(int prepopulate_id, std::u16string_view name) {
+  return base::DictValue()
+      .Set("id", prepopulate_id)
+      .Set("name", name)
+      .Set("mark", EngineMark(prepopulate_id));
 }
 
 const KoanWelcomeHost* GetHost(content::WebUI* web_ui) {
@@ -209,18 +247,15 @@ base::ListValue KoanWelcomeHandler::SearchEngines() const {
     for (const std::unique_ptr<TemplateURL>& engine :
          service->GetChoiceScreenData()->search_engines()) {
       if (engine->prepopulate_id() > 0) {
-        engines.Append(base::DictValue()
-                           .Set("id", engine->prepopulate_id())
-                           .Set("name", engine->short_name()));
+        engines.Append(
+            EngineRow(engine->prepopulate_id(), engine->short_name()));
       }
     }
     return engines;
   }
   // Brave first, whether or not the region lists it (upstream's setter
   // resolves it from the full list).
-  engines.Append(base::DictValue()
-                     .Set("id", BraveEngine().id)
-                     .Set("name", BraveEngine().name));
+  engines.Append(EngineRow(BraveEngine().id, BraveEngine().name));
   for (const TemplateURL* engine : service->GetTemplateURLs()) {
     if (engine->prepopulate_id() <= 0 ||
         engine->prepopulate_id() == BraveEngine().id ||
@@ -228,9 +263,7 @@ base::ListValue KoanWelcomeHandler::SearchEngines() const {
         IsExcludedEngine(engine->short_name())) {
       continue;
     }
-    engines.Append(base::DictValue()
-                       .Set("id", engine->prepopulate_id())
-                       .Set("name", engine->short_name()));
+    engines.Append(EngineRow(engine->prepopulate_id(), engine->short_name()));
   }
   return engines;
 }

@@ -91,11 +91,20 @@ https://github.com/shadcn-ui/ui (MIT, Copyright (c) 2023 shadcn).
 
 ## Lucide (ISC)
 
-`src/browser/ui/webui/resources/welcome_icons/*.svg`, the welcome screen's
-icons, are from [Lucide](https://lucide.dev) (`lucide-static` 1.67.0, the
+`src/browser/ui/webui/resources/welcome_icons/*.svg` (but `engine-*.svg`,
+below), the welcome screen's icons, are from [Lucide](https://lucide.dev) (`lucide-static` 1.67.0, the
 version #110 vendors), ISC licensed, Copyright (c) Lucide Icons and
 Contributors; some derive from Feather (MIT, Copyright (c) Cole Bemis). The
 full notice is in `src/browser/ui/webui/resources/welcome_icons/LICENSE`.
+
+## Simple Icons (CC0 1.0)
+
+`src/browser/ui/webui/resources/welcome_icons/engine-*.svg`, the search
+engines' marks on the welcome screen's search step, are from
+[Simple Icons](https://simpleicons.org) 13.21.0, released under CC0 1.0
+Universal (public domain dedication). The marks themselves are their owners'
+trademarks, shown to name the engine (as a browser's search engine choice
+screen does).
 
 ## Geist (SIL Open Font License 1.1)
 

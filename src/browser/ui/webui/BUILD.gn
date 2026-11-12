@@ -47,6 +47,7 @@ source_set("webui") {
     "//components/prefs",
     "//components/regional_capabilities",
     "//components/search_engines",
+    "//components/signin/public/base",
     "//components/strings",
     "//components/tab_groups",
     "//components/user_data_importer/common",
@@ -127,7 +128,8 @@ action("resources") {
 }
 
 # chrome://koan-welcome's files as C++ strings (koan_welcome_resources.h):
-# the page and its Lucide icons (ISC, see THIRD_PARTY_NOTICES.md).
+# the page, its Lucide icons (ISC) and the search engines' marks (Simple
+# Icons, CC0; see THIRD_PARTY_NOTICES.md).
 action("welcome_resources") {
   script = "embed_resources.py"
   sources = [
@@ -138,6 +140,15 @@ action("welcome_resources") {
     "resources/welcome_icons/arrow-right.svg",
     "resources/welcome_icons/check.svg",
     "resources/welcome_icons/circle-check-big.svg",
+    "resources/welcome_icons/engine-baidu.svg",
+    "resources/welcome_icons/engine-brave.svg",
+    "resources/welcome_icons/engine-duckduckgo.svg",
+    "resources/welcome_icons/engine-ecosia.svg",
+    "resources/welcome_icons/engine-google.svg",
+    "resources/welcome_icons/engine-mojeek.svg",
+    "resources/welcome_icons/engine-naver.svg",
+    "resources/welcome_icons/engine-qwant.svg",
+    "resources/welcome_icons/engine-startpage.svg",
     "resources/welcome_icons/hard-drive-download.svg",
     "resources/welcome_icons/keyboard.svg",
     "resources/welcome_icons/search.svg",
@@ -161,6 +172,29 @@ action("welcome_resources") {
         rebase_path("resources/welcome_icons/check.svg", root_build_dir),
     "kKoanWelcomeIconCircleCheckBig=" +
         rebase_path("resources/welcome_icons/circle-check-big.svg",
+                    root_build_dir),
+    "kKoanWelcomeIconEngineBaidu=" +
+        rebase_path("resources/welcome_icons/engine-baidu.svg", root_build_dir),
+    "kKoanWelcomeIconEngineBrave=" +
+        rebase_path("resources/welcome_icons/engine-brave.svg", root_build_dir),
+    "kKoanWelcomeIconEngineDuckDuckGo=" +
+        rebase_path("resources/welcome_icons/engine-duckduckgo.svg",
+                    root_build_dir),
+    "kKoanWelcomeIconEngineEcosia=" +
+        rebase_path("resources/welcome_icons/engine-ecosia.svg",
+                    root_build_dir),
+    "kKoanWelcomeIconEngineGoogle=" +
+        rebase_path("resources/welcome_icons/engine-google.svg",
+                    root_build_dir),
+    "kKoanWelcomeIconEngineMojeek=" +
+        rebase_path("resources/welcome_icons/engine-mojeek.svg",
+                    root_build_dir),
+    "kKoanWelcomeIconEngineNaver=" +
+        rebase_path("resources/welcome_icons/engine-naver.svg", root_build_dir),
+    "kKoanWelcomeIconEngineQwant=" +
+        rebase_path("resources/welcome_icons/engine-qwant.svg", root_build_dir),
+    "kKoanWelcomeIconEngineStartpage=" +
+        rebase_path("resources/welcome_icons/engine-startpage.svg",
                     root_build_dir),
     "kKoanWelcomeIconHardDriveDownload=" +
         rebase_path("resources/welcome_icons/hard-drive-download.svg",

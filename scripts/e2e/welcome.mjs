@@ -67,9 +67,27 @@ check('..."Start fresh" chosen', await js(`document.querySelector('input[name=im
 await next();
 check('Next: search engine', await step() === 'search', await step());
 check('...Brave chosen', await js(
-    `document.querySelector('input[name=engine]:checked')?.closest('label')?.textContent.trim()`) === 'B' + 'Brave');
+    `document.querySelector('input[name=engine]:checked')?.closest('label')?.textContent.trim()`) === 'Brave');
+// The engines' logos (Simple Icons, welcome_icons/engine-*.svg), not a letter
+// (#349), where Koan has one: Brave's and Google's at least, whatever the
+// region; the others keep their initial.
+const marks = await js(`[...document.querySelectorAll('input[name=engine]')].map(input => {
+  const label = input.closest('label');
+  const mark = label.querySelector('.tile .icon.mark');
+  return { name: label.textContent.trim(), mark: mark?.dataset.icon ?? null,
+           masked: !!mark && getComputedStyle(mark).maskImage.includes('engine-') };
+})`);
+const brave = marks?.find(m => m.mark === 'engine-brave');
+check('...with Brave\'s logo on its tile', !!brave?.masked, JSON.stringify(marks));
+check('...and Google\'s on Google\'s', !!marks?.find(m => m.mark === 'engine-google' && m.masked),
+      JSON.stringify(marks));
+const markSvg = await js(`fetch('icons/engine-brave.svg').then(r => r.text())`);
+check('...a served SVG', /<svg[^>]*viewBox/.test(markSvg ?? ''), markSvg?.slice(0, 80));
 await next();
 check('Next: done', await step() === 'done', await step());
+check('...which says "Enjoy browsing."', await js(
+    `document.querySelector('#welcome-card p')?.textContent.trim()`) === 'Enjoy browsing.',
+    await js(`document.querySelector('#welcome-card p')?.textContent.trim()`));
 await next();
 await sleep(1000);
 vs = await views();

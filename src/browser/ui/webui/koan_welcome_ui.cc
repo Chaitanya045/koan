@@ -58,13 +58,23 @@ std::string TokensStylesheet() {
   return css;
 }
 
-// The Lucide icons (welcome_icons/, ISC), by name.
+// The Lucide icons (welcome_icons/, ISC) and the search engines' marks
+// (Simple Icons, CC0; the "mark" koan_welcome_handler.cc sends), by name.
 std::string_view Icon(std::string_view name) {
   static constexpr std::pair<std::string_view, std::string_view> kIcons[] = {
       {"arrow-left", kKoanWelcomeIconArrowLeft},
       {"arrow-right", kKoanWelcomeIconArrowRight},
       {"check", kKoanWelcomeIconCheck},
       {"circle-check-big", kKoanWelcomeIconCircleCheckBig},
+      {"engine-baidu", kKoanWelcomeIconEngineBaidu},
+      {"engine-brave", kKoanWelcomeIconEngineBrave},
+      {"engine-duckduckgo", kKoanWelcomeIconEngineDuckDuckGo},
+      {"engine-ecosia", kKoanWelcomeIconEngineEcosia},
+      {"engine-google", kKoanWelcomeIconEngineGoogle},
+      {"engine-mojeek", kKoanWelcomeIconEngineMojeek},
+      {"engine-naver", kKoanWelcomeIconEngineNaver},
+      {"engine-qwant", kKoanWelcomeIconEngineQwant},
+      {"engine-startpage", kKoanWelcomeIconEngineStartpage},
       {"hard-drive-download", kKoanWelcomeIconHardDriveDownload},
       {"keyboard", kKoanWelcomeIconKeyboard},
       {"search", kKoanWelcomeIconSearch},
