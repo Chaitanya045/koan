@@ -758,8 +758,8 @@ altogether.
 Besides the shortcuts above:
 
 - **New Empty Split View** (⌘⇧*, the palette's New Split View, the Create
-  menu's New Split, **Add Split View...** on the current tab, Tab > Add Tab
-  to New Split View) is Zen's one-tab split: an empty pane opens on the
+  menu's New Split, **Add Split View...** on the current tab) is Zen's
+  one-tab split: an empty pane opens on the
   right with the URL bar over it. What you open from the URL bar fills the
   pane; Esc (or clicking away) takes the empty pane away again. Not from an
   Essential, a tab already in a split, or the empty pane itself.
