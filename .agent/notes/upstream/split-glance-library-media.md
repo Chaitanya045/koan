@@ -211,6 +211,15 @@ Session restore of splits is upstream's, and it works for Koan's 2-pane model as
 - **SV15, reuse:** session and tab restore of splits, `CloseTab` on a split, the extension `splitViewId` exposure, `UpdateSplitRatio` / `UpdateSplitLayout`, the stacked layout, and the 2-pane limit plus toast (a documented Zen divergence: 3-4 panes and grid are out of scope at 2 panes).
 - **SV16, detector:** in debug builds, a DCHECK in `KoanBrowserViewController` that no `MultiContentsViewMiniToolbar`, `SplitTabsToolbarButton` or split-NTP URL is visible or committed in a Koan window. Run it in the Mac e2e pass (cross-cutting item 6).
 
+**Status (2026-11-12, #288):** SV1 done as planned (a hook at the top of
+`chrome::NewSplitTab` in `browser_commands.cc.patch`, `koan::OpenEmptySplit`):
+the split NTP (`kChromeUISplitViewNewTabPageURL`) has no other loader, so it
+is locked. The empty pane is the Space's empty tab; the URL bar's new-tab
+session ends in `FinishEmptySplit` (replace with `UpdateTabInSplit(kReplace)`
+or remove). SV10's hide is done (`MultiContentsViewMiniToolbar::UpdateState`
+hook, the toolbar hidden with no size so the outline has no notch); Zen's
+hover header is still to build.
+
 ### 1.4 Mac tests
 
 - **S1.** Cmd+Shift+\*, the palette's "New Split View", and the Space create menu's "New Split": an empty right pane plus the floating URL bar, never the "tab search" list page. Enter a URL: the pane loads and is selected. Repeat and press Esc: back to one pane, original selected (SV1).

@@ -11,6 +11,7 @@
 
 #include "base/callback_list.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
@@ -97,6 +98,12 @@ class KoanUrlBarController
   // closes it if it is already open for one, like Zen. Returns false if the
   // window should open a tab as usual (replace-newtab off, ...).
   bool OpenForNewTab();
+  // Zen's one-tab split (koan_split_view.h): the bar opens as for a new tab
+  // (OpenForNewTab()), over the split's empty pane. When that session ends,
+  // `on_closed` runs, posted (after what was opened is in the tab strip),
+  // with whether a row was taken. Returns false, and drops `on_closed`, if
+  // the bar can't open.
+  bool OpenForEmptySplit(base::OnceCallback<void(bool picked)> on_closed);
   // Zen's "search tabs" (Shift+Cmd+A): the bar opens with the open tabs as its
   // scope (Chromium's "@tabs"). False if the bar can't open now (the caller
   // falls back to focusing the omnibox).
@@ -257,6 +264,9 @@ class KoanUrlBarController
   bool edit_in_pill_ = false;
 
   bool new_tab_ = false;
+  // Runs when the new-tab session ends, for an empty split's
+  // (OpenForEmptySplit()).
+  base::OnceCallback<void(bool picked)> new_tab_closed_;
   // Whether the omnibox text was empty at the last change: the empty list is
   // asked for on the change from text to none only.
   bool text_was_empty_ = false;
