@@ -26,6 +26,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/common/ini_parser.h"
+#include "koan/browser/importer/koan_imported_spaces.h"
 #include "koan/browser/koan_switches.h"
 
 namespace koan::importer {
@@ -39,6 +40,8 @@ using user_data_importer::SourceProfile;
 static_assert(user_data_importer::TYPE_BOOKMARKS_FILE >= 4);
 static_assert(user_data_importer::TYPE_FIREFOX != kChromiumImporterType &&
               user_data_importer::TYPE_BOOKMARKS_FILE != kChromiumImporterType);
+// Koan's Spaces item is none of upstream's.
+static_assert(user_data_importer::ALL < kSpacesImportItem);
 
 // Zen first: Koan is for people leaving Zen and Arc (#348). Data folders and
 // keychain items as the browsers' own (Zen's ChromeMigrationUtils patch for
@@ -47,7 +50,8 @@ constexpr KnownBrowser kBrowsers[] = {
     {.name = u"Zen",
      .engine = Engine::kGecko,
      .data_dir = "zen",
-     .bundle_id = "app.zen-browser.zen"},
+     .bundle_id = "app.zen-browser.zen",
+     .zen_sessions = true},
     {.name = u"Arc",
      .engine = Engine::kChromium,
      .data_dir = "Arc/User Data",
@@ -381,9 +385,18 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
       if (browser.engine == Engine::kGecko) {
         source.importer_type = user_data_importer::TYPE_FIREFOX;
         source.services_supported = kGeckoServices;
+        if (browser.zen_sessions &&
+            base::PathExists(
+                source.source_path.AppendASCII(kZenSessionsFile))) {
+          source.services_supported |= kSpacesImportItem;
+        }
       } else {
         source.importer_type = kChromiumImporterType;
         source.services_supported = ChromiumServices();
+        if (browser.arc_sidebar &&
+            base::PathExists(data_dir.DirName().AppendASCII(kArcSidebarFile))) {
+          source.services_supported |= kSpacesImportItem;
+        }
       }
       entry.sources.push_back(std::move(source));
     }
@@ -398,7 +411,7 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
       // Arc keeps its Spaces and pinned tabs beside "User Data".
       entry.last_used = std::max(
           entry.last_used,
-          LastModified(data_dir.DirName().AppendASCII("StorableSidebar.json")));
+          LastModified(data_dir.DirName().AppendASCII(kArcSidebarFile)));
     }
     found.push_back(std::move(entry));
   }

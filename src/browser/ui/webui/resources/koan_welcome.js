@@ -87,6 +87,9 @@ function engineTile(engine) {
 const gChoices = {
   shortcuts: {},  // row id -> 'zen' | 'chrome'
   importSource: 'none',
+  // Zen's and Arc's Spaces and pinned tabs, where the picked browser has
+  // them (the import dialog's checkbox starts as this).
+  importSpaces: true,
   engine: null,
 };
 
@@ -223,10 +226,32 @@ function importStep(data) {
                    icon('hard-drive-download')),
         }));
       }
+      // Zen's import option: "Spaces and pinned tabs", for a browser that
+      // has them (Zen, Arc).
+      const spacesInput = el('input', {type: 'checkbox', name: 'import-spaces'});
+      spacesInput.checked = gChoices.importSpaces;
+      spacesInput.addEventListener('change', () => {
+        gChoices.importSpaces = spacesInput.checked;
+      });
+      const spaces = el(
+          'label', {className: 'check-option'}, spacesInput,
+          el('span', {className: 'checkbox', 'aria-hidden': true},
+             icon('check')),
+          el('span', {className: 'choice-text'},
+             el('span', {className: 'choice-title'}, 'Spaces and pinned tabs'),
+             el('span', {className: 'choice-detail'},
+                'Your Spaces, their pinned tabs and folders, and your ' +
+                    'Essentials.')));
+      const showSpaces = () => {
+        const index = Number.parseInt(gChoices.importSource, 10);
+        spaces.hidden = !data.importSources[index]?.spaces;
+      };
+      showSpaces();
       list.addEventListener('change', event => {
         gChoices.importSource = event.target.value;
+        showSpaces();
       });
-      body.appendChild(list);
+      body.append(list, spaces);
     },
     // Skip: nothing to import, whatever an earlier Next said.
     onSkip() {
@@ -240,6 +265,7 @@ function importStep(data) {
       chrome.send('import', [
         gChoices.importSource !== 'none',
         Number.isInteger(index) ? index : -1,
+        gChoices.importSpaces,
       ]);
     },
   };

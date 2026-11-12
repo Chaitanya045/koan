@@ -1153,8 +1153,9 @@ list the browsers whose data Koan finds in your Mac's
 
 | Browser | What comes along |
 |---|---|
-| Zen (and Floorp, LibreWolf, Waterfox) | bookmarks, history, form entries |
-| Arc | bookmarks, history, saved passwords, and each Space's pinned tabs and your Favorites, as bookmarks: a folder per Space (Arc's folders inside it) and a "Favorites" folder |
+| Zen | bookmarks, history, form entries, and its Spaces and pinned tabs (below) |
+| Floorp, LibreWolf, Waterfox | bookmarks, history, form entries |
+| Arc | bookmarks, history, saved passwords, and its Spaces and pinned tabs (below) |
 | Dia, Google Chrome, Brave, Microsoft Edge, Vivaldi, Chromium | bookmarks, history, saved passwords |
 | Safari, Firefox (Chromium's own) | bookmarks, history, and what Chromium brings from them |
 | A bookmarks HTML file | bookmarks |
@@ -1177,9 +1178,20 @@ from …" folder on it.
 - **Zen must be closed** to import from it (it locks its profile); Koan
   asks you to close it. Arc and Chrome can stay open (Koan reads a copy of
   their files), though closing them first brings the very latest.
-- Not imported yet: Zen's workspaces, Essentials and pinned tabs (they are
-  in its session file), Arc's Spaces as Koan Spaces (they arrive as bookmark
-  folders), cookies and open tabs.
+- **Spaces and pinned tabs** (Zen and Arc; on in the welcome's import step
+  and in the dialog, where it shows for those two): each of the browser's
+  Spaces becomes a Koan Space, with its name, emoji and colours, its pinned
+  tabs and its folders, and its Essentials (Arc's Favorites) become Koan's
+  Essentials. The first Space takes your window's own Space while that has
+  no pinned tabs yet; the others are added after your Spaces, and the window
+  stays where it is. The tabs don't load until you open them. Koan has room
+  for 12 Essentials: the rest are pinned in the first imported Space. From
+  Zen this comes from its session file (Zen must be closed, as for the
+  rest); unpinned tabs, Glance tabs and live folders stay behind, and Zen's
+  drawn Space icons (Koan's are emoji) too. Without this option, Arc's
+  pinned tabs and Favorites arrive as bookmarks instead: a folder per Space
+  (Arc's folders inside it) and a "Favorites" folder.
+- Not imported yet: cookies and open (unpinned) tabs.
 
 ## Updates
 

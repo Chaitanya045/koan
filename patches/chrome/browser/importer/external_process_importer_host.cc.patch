@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/importer/external_process_importer_host.cc b/chrome/browser/importer/external_process_importer_host.cc
-index 051ffd1259dd1373470c56e8a49dd21ad8e57170..54d2108fb92d44bb5e002ca4a45e0dd8813a8c2e 100644
+index 051ffd1259dd1373470c56e8a49dd21ad8e57170..e1eabee301d2f73af133c1c3ecce4bfae6a74ac3 100644
 --- a/chrome/browser/importer/external_process_importer_host.cc
 +++ b/chrome/browser/importer/external_process_importer_host.cc
 @@ -18,6 +18,7 @@
@@ -15,10 +15,10 @@ index 051ffd1259dd1373470c56e8a49dd21ad8e57170..54d2108fb92d44bb5e002ca4a45e0dd8
    }
  
 +  // Koan: a Chrome or Arc profile is read in this process (no utility
-+  // process importer for it).
-+  if (koan::importer::MaybeStartChromiumProfileImport(
-+          source_profile_, items_, writer_.get(),
-+          weak_ptr_factory_.GetWeakPtr())) {
++  // process importer for it), and Spaces (Arc's, Zen's) are Koan's.
++  if (koan::importer::MaybeStartKoanImport(source_profile_, items_, profile_,
++                                           writer_.get(),
++                                           weak_ptr_factory_.GetWeakPtr())) {
 +    return;
 +  }
 +

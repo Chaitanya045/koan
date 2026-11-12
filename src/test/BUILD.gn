@@ -12,6 +12,8 @@ test("koan_unittests") {
   sources = [
     "//koan/browser/importer/koan_chromium_profile_reader_unittest.cc",
     "//koan/browser/importer/koan_import_sources_unittest.cc",
+    "//koan/browser/importer/koan_imported_spaces_unittest.cc",
+    "//koan/browser/importer/koan_lz4_unittest.cc",
     "//koan/browser/koan_copy_urls_unittest.cc",
     "//koan/browser/koan_fuzzy_score_unittest.cc",
     "//koan/browser/koan_library_logic_unittest.cc",
@@ -39,6 +41,7 @@ test("koan_unittests") {
     "//koan/browser:space_title",
     "//koan/browser/importer:reader",
     "//koan/browser/importer:sources",
+    "//koan/browser/importer:spaces",
     "//koan/browser/ui/webui:settings_url",
     "//koan/browser/updates:update_logic",
     "//koan/browser/window_sync:model",

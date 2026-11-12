@@ -5,6 +5,10 @@
 #ifndef KOAN_BROWSER_UI_WEBUI_KOAN_SETTINGS_UI_H_
 #define KOAN_BROWSER_UI_WEBUI_KOAN_SETTINGS_UI_H_
 
+#include <stdint.h>
+
+#include "base/values.h"
+
 namespace content {
 class WebUI;
 class WebUIDataSource;
@@ -26,6 +30,16 @@ namespace koan::settings {
 // the plugin's files (koan_settings_page.js, koan_settings.css, koan_tokens.css
 // and the fonts) from chrome://settings.
 void ExtendSettingsUI(content::WebUI& web_ui, content::WebUIDataSource& source);
+
+// Settings > Import, Chromium's import dialog (#363; import_data_handler.cc
+// hook): Koan's own items of a source with `services_supported`, in the
+// dialog's BrowserProfile ("koanSpaces": Spaces and pinned tabs, the
+// checkbox of import_data_dialog.html.ts's hook); and the Koan items the
+// dialog's checkboxes ask for (`types`: each checkbox's pref name, whether
+// it is checked).
+void AddImportDialogItems(uint16_t services_supported,
+                          base::DictValue& browser_profile);
+uint16_t GetImportDialogItems(const base::DictValue& types);
 
 }  // namespace koan::settings
 

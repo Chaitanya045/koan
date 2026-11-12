@@ -1,0 +1,17 @@
+diff --git a/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts b/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts
+index 89321068222f0387855a126a3fd8ea2deca1a4bf..bd6f8a98d16ce75f5c81bd10c99452fe8c9d943b 100644
+--- a/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts
++++ b/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts
+@@ -70,6 +70,12 @@ export function getHtml(this: SettingsImportDataDialogElement) {
+                 pref-key="import_dialog_autofill_form_data"
+                 label="$i18n{importAutofillFormData}" no-set-pref>
+             </settings-checkbox>
++            <!-- Koan: Spaces and pinned tabs (koan_settings_ui.h). -->
++            <settings-checkbox id="koanImportDialogSpaces"
++                ?hidden="${!this.selected_.koanSpaces}"
++                pref-key="koan.import_dialog.spaces"
++                label="$i18n{koanImportSpaces}" no-set-pref>
++            </settings-checkbox>
+           </div>
+         </div>
+       </div>

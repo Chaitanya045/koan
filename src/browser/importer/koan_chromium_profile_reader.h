@@ -50,7 +50,9 @@ std::vector<user_data_importer::ImportedBookmarkEntry> ParseBookmarksJson(
 // Arc's pinned tabs of profile `profile_dir_name` (its folder in "User
 // Data", "Default" for the main one) from StorableSidebar.json, as
 // bookmarks: each Space's pinned tabs in a folder named after the Space
-// (Arc's folders inside it), the Favorites (top apps) in "Favorites".
+// (Arc's folders inside it), the Favorites (top apps) in "Favorites"
+// (ParseArcSpaces(), koan_imported_spaces.h). What the import brings when
+// "Spaces and pinned tabs" isn't asked for.
 std::vector<user_data_importer::ImportedBookmarkEntry> ParseArcSidebar(
     std::string_view json,
     std::string_view profile_dir_name);
