@@ -7,8 +7,9 @@
 // sidebar's URL bar (no menu-bar key: those don't reach on macOS).
 //
 //   scripts/mac/suite.sh copy_urls   (its .flags load test_helper)
-import { browserCall, check, evalIn, finish, front, pages, sleep, typeInto,
-         viewTree, waitFor } from './lib/koan.mjs';
+import { execSync } from 'node:child_process';
+import { IS_MAC, browserCall, check, evalIn, finish, front, pages, sleep, typeInto,
+         viewEvent, viewTree, waitFor } from './lib/koan.mjs';
 import { askTestHelper, clickThroughRoot, startServer } from './lib/mac.mjs';
 
 const server = await startServer();
@@ -24,9 +25,35 @@ await browserCall('Browser.grantPermissions', {
   origin: server.url('').replace(/\/$/, ''),
   permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] });
 
+// The palette's rows: each shown OmniboxResultView's first text (as in
+// palette.mjs).
+async function rowLabels() {
+  const out = [];
+  let row = null;
+  for (const v of await viewTree()) {
+    if (v.cls === 'OmniboxResultView') {
+      row = v.shown ? { texts: [] } : null;
+      if (row) out.push(row);
+    } else if (row && v.cls === 'OmniboxTextView' && v.shown && v.props?.Text?.trim()) {
+      row.texts.push(v.props.Text.trim());
+    }
+  }
+  return out.filter(r => r.texts.length).map(r => r.texts[0]);
+}
+
+// The clipboard's text: pbpaste on macOS (a page's clipboard read needs the
+// window to be key), else navigator.clipboard from `from`.
+async function clipboardText(from) {
+  if (IS_MAC) return execSync('pbpaste', { encoding: 'utf8' });
+  await front(from);
+  return evalIn(from, 'navigator.clipboard.readText().catch(e => "ERR " + e)', true);
+}
+
 // Runs "Copy Current URL" from the palette, typed into the sidebar's URL
-// bar, then reads the clipboard from `from` (a 127.0.0.1 page).
+// bar: the action row must be the first (Enter runs it only then), and
+// Enter goes in only once it is. Returns the clipboard and the toast.
 async function copyFromPalette(from) {
+  if (IS_MAC) execSync('pbcopy', { input: '' });
   await front(from);
   const vs = await viewTree();
   const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown);
@@ -35,13 +62,19 @@ async function copyFromPalette(from) {
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
   if (!field) return { error: 'no URL bar' };
-  await typeInto(field, '>Copy Current URL', 13);
-  await sleep(800);
-  const toast = (await viewTree()).filter(v => v.cls === 'Label' && v.shown &&
-      /^Copied /.test(v.props?.Text ?? '')).map(v => v.props.Text)[0] ?? '';
-  await front(from);
-  const text = await evalIn(from, 'navigator.clipboard.readText().catch(e => "ERR " + e)', true);
-  return { text, toast };
+  await typeInto(field, '>Copy Current URL');
+  const rows = await waitFor(async () => {
+    const rs = await rowLabels();
+    return rs[0] === 'Copy Current URL' && rs;
+  }, 5000) || await rowLabels();
+  if (rows[0] !== 'Copy Current URL') return { error: 'no action row first', rows };
+  for (const type of ['keyPressed', 'keyReleased']) {
+    await viewEvent(field, 'DOM.dispatchKeyEvent',
+                    { type, keyCode: 13, code: 0, flags: 0, key: 0, isChar: false });
+  }
+  const toast = await waitFor(async () => (await viewTree()).find(v => v.cls === 'Label' &&
+      v.shown && /^Copied /.test(v.props?.Text ?? ''))?.props.Text, 2500) ?? '';
+  return { text: await clipboardText(from), toast };
 }
 
 // Two tabs selected, picked in reverse: the clipboard keeps the sidebar's order.
@@ -51,7 +84,7 @@ check('test_helper selected Gamma and Alpha',
 let r = await copyFromPalette(await pageAt(C));
 check('Two selected tabs: both URLs, one per line, in the sidebar\'s order',
       r.text === `${A}\n${C}`, JSON.stringify(r));
-check('...with the plural toast', !r.toast || r.toast === 'Copied 2 URLs!',
+check('...with the plural toast', r.toast === 'Copied 2 URLs!',
       JSON.stringify(r.toast));
 
 // One tab selected: just its URL, Zen's toast.
@@ -59,7 +92,7 @@ page = await pageAt(B);
 await askTestHelper(page, { highlight: [B] }, 1200);
 r = await copyFromPalette(await pageAt(B));
 check('One selected tab: only its URL', r.text === B, JSON.stringify(r));
-check('...with Zen\'s toast', !r.toast || r.toast === 'Copied current URL!',
+check('...with Zen\'s toast', r.toast === 'Copied current URL!',
       JSON.stringify(r.toast));
 
 server.close();
