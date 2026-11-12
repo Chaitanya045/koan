@@ -1,3 +1,6 @@
-# Right-to-left UI, and frame dumps to see which side things are on.
+# Right-to-left UI, and frame dumps to see which side things are on (Linux's
+# headless Ozone; scripts/mac/suite.sh leaves the dump line out, and
+# tabs_right_rtl.mjs captures the window there).
 --force-ui-direction=rtl
 --ozone-dump-file={dump}
+# macOS: run

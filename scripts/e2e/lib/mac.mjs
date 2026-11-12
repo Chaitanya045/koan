@@ -426,21 +426,39 @@ export async function realKey(name, flags = '', settle = 500) {
   await sleep(settle);
   return true;
 }
-// A main-menu key for `page` (Cmd+W, Cmd+Shift+W, Cmd+L, Cmd+Shift+T, ...:
-// CDP keys never reach the menu bar on macOS), or one of Chrome's own key
-// equivalents outside Koan's shortcuts (Cmd+1, Ctrl+Shift+PageUp: a CDP
-// Ctrl+PageDown was seen not to reach Chrome's on the Mac). On macOS a real
-// key (realKey(), `flags` as keypress2's) once the page's window is key
-// (makeKey()); elsewhere `cdpKey()`, the CDP key the script sends there.
-// Returns whether the key went: false on macOS with real input off, where
-// the caller skips the checks that need it (menuKeyWhyNot() says why).
+// The shown tab (its page) of `page`'s window, or null.
+export async function shownTabOf(page) {
+  const windowId = (await windowOf(page.id).catch(() => null))?.windowId;
+  if (!windowId) return null;
+  for (const p of await pages()) {
+    if ((await windowOf(p.id).catch(() => null))?.windowId !== windowId) continue;
+    const r = await onPage(p, c => c.send('Runtime.evaluate',
+        { expression: 'document.visibilityState', returnByValue: true })).catch(() => null);
+    if (r?.result?.result?.value === 'visible') return p;
+  }
+  return null;
+}
+
+// A main-menu key for `page` (Cmd+W, Cmd+Shift+W, Cmd+L, Cmd+T,
+// Cmd+Shift+T, Ctrl+Tab, ...: CDP keys never reach the menu bar on macOS),
+// or one of Chrome's own key equivalents outside Koan's shortcuts (Cmd+1,
+// Ctrl+Shift+PageUp: a CDP Ctrl+PageDown was seen not to reach Chrome's on
+// the Mac). On macOS a real key (realKey(), `flags` as keypress2's) once
+// the page's window is key (makeKey() on the window's shown tab, so making
+// the window key selects no other tab: the key acts on the window, as a
+// CDP key to a background tab's page does elsewhere); elsewhere `cdpKey()`,
+// the CDP key the script sends there. Returns whether the key went: false
+// on macOS with real input off, where the caller skips the checks that
+// need it (menuKeyWhyNot() says why).
 export async function menuKey(page, name, flags, cdpKey, settle = 800) {
   if (!IS_MAC) {
     await cdpKey();
     return true;
   }
   if (!realOk) return false;
-  if (!(await makeKey(page))) console.log(`  (${page?.url}: the page never got the focus)`);
+  if (!(await makeKey(await shownTabOf(page) ?? page))) {
+    console.log(`  (${page?.url}: the page's window never got the focus)`);
+  }
   return realKey(name, flags, settle);
 }
 export const menuKeyWhyNot = () =>

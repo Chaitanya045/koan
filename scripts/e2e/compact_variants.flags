@@ -1,2 +1,5 @@
-# Frame dumps, for a screenshot of the revealed toolbar (SHOTS=<dir>).
+# Frame dumps, for a screenshot of the revealed toolbar (SHOTS=<dir>; Linux's
+# headless Ozone only: scripts/mac/suite.sh leaves this line out, and the
+# checks run on the real window there).
 --ozone-dump-file={dump}
+# macOS: run

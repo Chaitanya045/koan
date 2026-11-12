@@ -26,7 +26,9 @@ go to `<logs>/summary.txt`, and an agent reads only that file. Every test's full
 
 A script whose `.flags` need Linux's headless Ozone (`{dump}`, `--ozone-*`) is skipped, unless the file has a
 `# macOS: run` line (ported: those flag lines are left out and the script reads the window another way, e.g.
-`lib/mac.mjs captureWindow()`); `# macOS: skip: <why>` skips a script with that reason.
+`lib/mac.mjs captureWindow()`); `# macOS: skip: <why>` skips a script with that reason. On the Mac
+`scripts/e2e/<name>.mac.flags`, if it exists, replaces `<name>.flags` (flags only the Mac run takes, e.g. the
+test_helper extension for `sidebar_tabs` and `tab_management`); the markers are read from that file then.
 
 `--only a,b`, `--skip-cxx|e2e|visual|crash`, `--all-e2e` (every `scripts/e2e/*.mjs`, for porting more of them) and
 `--input real|synthetic` are explained in the script's header. **Real input** (the bench's `keypress2` and `ptr`, for the
