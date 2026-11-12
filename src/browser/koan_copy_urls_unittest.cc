@@ -45,7 +45,7 @@ TEST(KoanCopyUrlsTest, MarkdownEscapesTitleAndUrl) {
   EXPECT_EQ(EscapeMarkdownLinkText(u"two\nlines\r"), u"two lines ");
   EXPECT_EQ(FormatCopiedUrls({{u"Foo](x) [y", u"https://w.test/A_(b)"}},
                              /*markdown=*/true),
-            u"[Foo\\](x\\) \\[y](https://w.test/A_%28b%29)");
+            u"[Foo\\]\\(x\\) \\[y](https://w.test/A_%28b%29)");
 }
 
 }  // namespace koan
