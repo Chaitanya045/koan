@@ -8,6 +8,59 @@ rows, and whether its label matches the behaviour and Zen 1.24b's
 (`zen-preferences.ftl`, `prefs/*.yaml`). A row that silently did nothing was
 fixed, hidden or made to say so.
 
+## Visual rows
+
+The e2e suite `scripts/e2e/settings_effects_visual.mjs` (in the Mac suite,
+`scripts/mac/suite/e2e.list`) changes each row through the settings page's
+own control, checks the effect in the window (UI DevTools) or in a page
+(CDP), and puts the row back. "Skip" means the effect can't be seen from
+UI DevTools or CDP on macOS. The suite does not check native fullscreen: the
+layout rows' fullscreen bug (the top toolbar never showing) is fixed on
+`fix/fullscreen-top-toolbar`, with its own fullscreen suites.
+
+All profile prefs here are read from the original profile, so private
+windows follow the same settings (`settings.mjs` checks compact mode in a
+private window). A pref is read again whenever a window is created, so new
+windows and restarts follow it. The suite checks that for tabs on the right
+in a new window.
+
+| Row | Pref | Readers | Live? | What was wrong | Fixed in | Test |
+|---|---|---|---|---|---|---|
+| Look | `koan.look.style` (local state) | `koan_look_controller.cc` (`LookController`, a pref observer that re-themes every profile's windows); the `look::IsShadcnStyle()` callers | Yes, every window; the font only after a restart (the description says so) | The group's description said Zen's look was the default. It is shadcn's (#296) | This PR (text) | `Look:` |
+| Mode | `koan.look.mode` (local state) | `AdjustColorProviderKey()` (shadcn only, not in private windows) | Yes | Did nothing in the Zen look, but stayed enabled there | This PR: greyed out in the Zen look (`Row::look`) | `Mode:`, `...greys out the shadcn colour rows` |
+| Base colour | `koan.look.base` (local state) | `LookController::Reload()` → shadcn tokens | Yes | Same as Mode | This PR | `Base colour:` |
+| Accent colour | `koan.look.accent` (local state) | as Base colour | Yes | Same as Mode | This PR | `Accent colour:` |
+| Paste a theme | `koan.look.custom_css` (local state) | `look::ParseThemeCss()` (the handler refuses CSS without a token) | Yes | Same as Mode | This PR | `Theme:` |
+| Browser Layout | `koan.single_toolbar` | `KoanCompactModeController` (observer → `UpdateActiveSoon()`), `InitialSidebarCollapsed()`, `KoanLoadingIndicator` (on layout) | Yes; the cards follow Ctrl+Alt+B | Windowed: nothing. macOS fullscreen: the top toolbar never showed with Sidebar and Top Toolbar | Fullscreen: `fix/fullscreen-top-toolbar` | `Layout:` (windowed) |
+| Enable compact mode | `koan.compact_mode.enabled` | compact controller, `koan_content_card.cc` (borderless fullscreen), `InitialSidebarCollapsed()` | Yes; the checkbox follows ⌘S | Nothing | | `Compact mode:` |
+| What compact mode hides | `koan.compact_mode.hide` | compact controller (`PrefHidesSidebar/Toolbar()`), `InitialSidebarCollapsed()` | Yes | Windowed: nothing (with Only Sidebar every choice hides the sidebar, as the note says). macOS fullscreen: as Browser Layout | Fullscreen: `fix/fullscreen-top-toolbar` | `What compact mode hides:` (all three, and Only Sidebar) |
+| Flash popup | `koan.compact_mode.toolbar_flash_popup` | compact controller, on each tab selection | Yes | Nothing. (Zen also skips the flash while a Glance animates; Koan doesn't: minor) | | `Flash popup:` |
+| Background tab toast | `koan.compact_mode.show_background_tab_toast` | compact controller, on each inserted tab | Yes (Zen reads it once at startup) | Nothing | | `Background tab toast:` |
+| Show the bookmarks bar | `koan.bookmarks_bar.show` | `bookmark_bar_controller.cc.patch` (observer; original profile) | Yes, with Sidebar and Top Toolbar | **With Only Sidebar (the default layout) the bar never shows.** It is in the top container, which that layout keeps out of the window (`ApplyToolbarTransform()`); Zen shows a bar above the page then (`zen-has-bookmarks`). Also ⇧⌘B does nothing (its View menu item is hidden, `koan_main_menu_mac.mm`), and Chromium's own "Show bookmarks bar" setting switches Chromium's pref, which Koan ignores (planned redirect LB6, `.agent/notes/upstream/split-glance-library-media.md`) | This PR: the row's note says so. The bar in Only Sidebar and the ⇧⌘B redirect are follow-ups (layout work in the compact controller, which `fix/fullscreen-top-toolbar` is changing) | `Bookmarks bar:` (shows in Sidebar and Top Toolbar; no room in Only Sidebar) |
+| Show New Tab Button on Tab List | `koan.tabs.show_newtab_vertical` | `KoanSidebarTabsController::UpdateNewTabRow()` (observer) | Yes | Nothing | | `Show New Tab Button:` |
+| Move the new tab button to the top | `koan.view.show_newtab_button_top` | sidebar tabs (the row, `OpenNewTab()`), `koan_workspaces.cc` (new tab index) | Yes | Nothing. It stays enabled with the button hidden, as in Zen | | `Move the new tab button to the top:` |
+| Tabs on the right | `koan.tabs.on_right` | compact controller `OnTabsOnRightChanged()` (re-activates, lays out again) | Yes, new windows too | Nothing | | `Tabs on the right:` (also a new window) |
+| Translucent window | `glass_frame.enabled` (local state, Chromium's) | `GlassFrameService` (observer; `glass_frame_service.cc.patch`: every window) | Yes | Nothing found | | Skip: the blur is an NSVisualEffectView, not a view |
+| Allow dragging the window from web pages | `koan.view.drag_window_from_content` | `KoanWindowDragController`, on each press | Yes | Nothing | | `Window dragging:` |
+| Haptic feedback | `koan.haptic_feedback` (local state) | `koan_haptics_mac.mm`, on each tick | Yes | Nothing | | Skip: nothing to observe |
+| Dark theme style | `koan.theme.dark_style` | `KoanThemeController` (observer) | Yes | **Did nothing in the shadcn look (the default)**: Space themes, and so their dark styles, are the Zen look's (`KoanThemeController::IsEnabled()`), but the row stayed enabled | This PR: greyed out in the shadcn look, with a note | `...the Zen-only Dark theme style is greyed out`; the colours: skip (need a Space theme, set from a native menu on macOS) |
+| Enable Glance | `koan.glance.enabled` | `koan_renderer_switches.cc` (when a page's renderer process starts), `IsGlanceOn()` (each click), `koan_pinned_glance.cc` | Turning it off: at once. Turning it on: pages opened after the change | The row didn't say that turning it on needs new pages | This PR: note | `Glance:` |
+| Trigger method | `koan.glance.activation_method` | renderer switch (process start), `FallbackDisposition()` | Pages opened after the change (the note says so) | Nothing | | `Trigger method:` |
+| Open links from Essentials and pinned tabs to other sites in Glance | `koan.glance.open_essential_external_links` | `OpenNewTabInGlance()`, on each link | Yes | Nothing | | `Pinned tabs' links to other sites:` |
+| Open "Search for" in Glance | `koan.glance.enable_contextmenu_search` | `OnContextMenuCommand()` | Yes | Nothing found | | Skip: the context menu is a native NSMenu on macOS |
+| URL bar: Behavior | `koan.urlbar.behavior` | `KoanUrlBarController::Behavior()` (each open), compact controller (observer) | Yes | Nothing | | `URL bar Behavior:` (all three) |
+| Open the URL bar instead of a new tab page | `koan.urlbar.replace_newtab` | `OpenForNewTab()`, `OpenOnStartup()`, `SuppressesDefaultUrlBarFocus()` | Yes | Nothing | | `Replace new tab:` |
+| Show the copy URL button | `koan.urlbar.show_copy_url` | `KoanSidebarNavView::UpdateUrl()` | **Was not live**: the button changed only at the next navigation or tab switch | This PR: the view observes the pref | `Copy URL button:` |
+| Glass URL bar | `koan.look.acrylic_urlbar` (local state) | `KoanUrlBarController::UpdateGlassCard()` (observer) | Yes | Only the floating card is glass (not the URL bar in the top toolbar, nor in the pill); the row didn't say so | This PR: note | `Glass URL bar:` (reads `KoanUrlBarCardFill`'s new `Glass` property) |
+| New tab page | `koan.newtab.page` | `search.cc.patch` → `GetNewTabPageURL()`, each new tab page | New tabs | Nothing | | `New tab page:` |
+| Show the active Space's theme | `koan.workspaces.tint` | `KoanThemeController` and `KoanWorkspaceController::OnTintPrefChanged()` (observers) | Yes | **Did nothing in the shadcn look**, as Dark theme style | This PR: greyed out in the shadcn look, with a note | `...where the Space theme row is greyed out` |
+
+### Not covered here
+
+- The window's own colours for the look rows: `look.mjs` reads frame dumps,
+  which only Linux's headless Ozone makes. (`look.mjs` still expects Zen's
+  look as the default, and isn't in the Mac suite.)
+
 ## Behaviour and Chromium rows
 
 Audited 2026-11-12 (fix/settings-audit-behaviour). "e2e" is

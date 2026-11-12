@@ -93,7 +93,10 @@ async function setPref(row, value) {
 
 function renderRow(row) {
   let el;
-  const disabled = () => row.managed ||
+  // In the other look (Row::look) a look's own setting does nothing.
+  const otherLook = () =>
+      row.look !== undefined && prefValue(row.lookPref) !== row.look;
+  const disabled = () => row.managed || otherLook() ||
       (row.dependsOn !== undefined && prefValue(row.dependsOn) !== true);
   switch (row.control) {
     case 'checkbox': {
@@ -203,8 +206,10 @@ function renderRow(row) {
   const note = h('p', {class: 'description row-note', dataset: {note: row.pref}},
                  row.note);
   updaters.push(() => {
-    note.hidden = row.notePref !== undefined &&
-        !(prefValue(row.pref) === true && prefValue(row.notePref) === true);
+    note.hidden = (row.notePref !== undefined &&
+                   !(prefValue(row.pref) === true &&
+                     prefValue(row.notePref) === true)) ||
+        (row.look !== undefined && !otherLook());
   });
   const fragment = document.createDocumentFragment();
   fragment.append(el, note);

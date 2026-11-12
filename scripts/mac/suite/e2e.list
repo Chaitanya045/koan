@@ -41,6 +41,9 @@ settings timeout=420
 # Each behaviour row's effect, Chromium's rows Koan overrides, two restarts
 # (docs/SETTINGS_AUDIT.md).
 settings_effects_behaviour timeout=900
+# Each visual setting changed through the page, and its effect in the window
+# (docs/SETTINGS_AUDIT.md).
+settings_effects_visual timeout=600
 shortcuts
 sidebar_animation
 sidebar_drag

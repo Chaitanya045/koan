@@ -69,6 +69,10 @@ struct Row {
   // A boolean pref (in this table, a profile or a local-state one) that
   // greys this row out while false, like Zen's dependent checkboxes.
   const char* depends_on = nullptr;
+  // The look (a koan.look.style value, prefs::kLookStyle) the setting
+  // applies to, e.g. Zen's Space themes; greyed out in the other look, and
+  // `note` (if any) shows only then. Null: both looks.
+  const char* look = nullptr;
   // Whether the setting applies at all, e.g. its feature is on in
   // chrome://flags. Rows that don't apply are hidden. Null: always.
   bool (*is_available)() = nullptr;

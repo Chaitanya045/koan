@@ -43,8 +43,8 @@ constexpr Pane kPanes[] = {
 constexpr Group kGroups[] = {
     // Koan's own (Zen has no such setting): the shadcn look (#48).
     {"look", "looks", "Appearance", "Style",
-     "Koan's default look is Zen's. shadcn/ui's design system (dark, with "
-     "Geist) is available too. Changes apply at once; the font changes "
+     "Koan's default look is shadcn/ui's design system (dark, with Geist). "
+     "Zen's look is available too. Changes apply at once; the font changes "
      "after a restart."},
     {"look-colors", "looks", "Appearance", "shadcn colours",
      "For the shadcn style: light or dark, a base colour, an accent colour, "
@@ -130,6 +130,15 @@ bool IsTabFreezingAvailable() {
   return base::FeatureList::IsEnabled(
       performance_manager::features::kInfiniteTabsFreezing);
 }
+
+// The look (prefs::kLookStyle) a row applies to (Row::look).
+constexpr char kShadcnLook[] = "shadcn";
+constexpr char kZenLook[] = "zen";
+// Zen's Space themes, and so their dark styles, are the Zen look's
+// (KoanThemeController::IsEnabled()); the shadcn look is flat.
+constexpr char kZenLookOnlyNote[] =
+    "Only in the Zen look (Look and Feel > Appearance > Style): the shadcn "
+    "look has no Space themes";
 
 constexpr Option kLayouts[] = {
     {"true", "Only Sidebar", "single"},
@@ -275,18 +284,21 @@ constexpr Row kRows[] = {
      .pref = prefs::kLookMode,
      .label = "Mode",
      .options = kLookModes,
+     .look = kShadcnLook,
      .local_state = true},
     {.group = "look-colors",
      .control = Control::kMenu,
      .pref = prefs::kLookBase,
      .label = "Base colour",
      .options = kLookBases,
+     .look = kShadcnLook,
      .local_state = true},
     {.group = "look-colors",
      .control = Control::kMenu,
      .pref = prefs::kLookAccent,
      .label = "Accent colour",
      .options = kLookAccents,
+     .look = kShadcnLook,
      .local_state = true},
     {.group = "look-colors",
      .control = Control::kTextArea,
@@ -294,6 +306,7 @@ constexpr Row kRows[] = {
      .label =
          "Paste a theme (:root and .dark variables, as ui.shadcn.com/themes "
          "or tweakcn.com make them)",
+     .look = kShadcnLook,
      .local_state = true},
     {.group = "layout",
      .control = Control::kLayoutPicker,
@@ -332,7 +345,13 @@ constexpr Row kRows[] = {
     {.group = "bookmarks-bar",
      .control = Control::kCheckbox,
      .pref = prefs::kBookmarksBarShow,
-     .label = "Show the bookmarks bar"},
+     .label = "Show the bookmarks bar",
+     // It is in the top container, which the Only Sidebar layout keeps out
+     // of the window (koan_compact_mode_controller.cc
+     // ApplyToolbarTransform()); Zen adds a bar above the page for it.
+     .note = "Shown above the page with the Sidebar and Top Toolbar layout "
+             "(in compact mode, with the toolbar when it shows). The Only "
+             "Sidebar layout has no bar for it yet"},
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kShowNewTabVertical,
@@ -376,12 +395,17 @@ constexpr Row kRows[] = {
      .label = "Dark theme style",
      .options = kDarkThemeStyles,
      .depends_on = prefs::kWorkspaceTint,
-     .is_available = features::IsWorkspacesEnabled},
+     .look = kZenLook,
+     .is_available = features::IsWorkspacesEnabled,
+     .note = kZenLookOnlyNote},
     {.group = "glance",
      .control = Control::kCheckbox,
      .pref = prefs::kGlanceEnabled,
      .label = "Enable Glance",
-     .is_available = features::IsGlanceEnabled},
+     .is_available = features::IsGlanceEnabled,
+     // As the trigger: Blink reads it when a page's renderer process starts
+     // (koan_renderer_switches.cc); turned off, the browser declines at once.
+     .note = "Turned on, it applies to pages opened after the change"},
     {.group = "glance",
      .control = Control::kMenu,
      .pref = prefs::kGlanceActivationMethod,
@@ -438,8 +462,9 @@ constexpr Row kRows[] = {
      .label = "Glass URL bar (translucent, with the page blurred behind it)",
      .is_available = features::IsUrlBarEnabled,
      .local_state = true,
-     .note = "Off while macOS's Reduce Transparency is on, and in a window "
-             "that isn't active"},
+     .note = "For the URL bar floating over the page (not in the top "
+             "toolbar); off while macOS's Reduce Transparency is on, and in "
+             "a window that isn't active"},
     {.group = "newtab",
      .control = Control::kMenu,
      .pref = prefs::kNewTabPage,
@@ -462,7 +487,9 @@ constexpr Row kRows[] = {
      .control = Control::kCheckbox,
      .pref = prefs::kWorkspaceTint,
      .label = "Show the active Space's theme",
-     .is_available = features::IsWorkspacesEnabled},
+     .look = kZenLook,
+     .is_available = features::IsWorkspacesEnabled,
+     .note = kZenLookOnlyNote},
     // Zen keeps its tab behaviours in the workspaces group too.
     {.group = "workspaces",
      .control = Control::kCheckbox,
