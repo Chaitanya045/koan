@@ -52,5 +52,5 @@ light and dark; not Zen's colours, no glass. Audit: `.agent/notes/upstream/welco
 | W-16 | Right-click on the page and on the card | No context menu (W9). |
 | W-17 | After the setup, type `chrome://koan-welcome` in a tab | A blank page; nothing changes (W7). |
 | W-18 | `--incognito` on a fresh profile; a guest window | No setup (W21). |
-| W-19 | Keyboard only: Tab, Shift+Tab, arrows in each choice list, Space, Enter on the buttons | Every control is reachable with a visible focus ring; arrows move within a list; the first control of each step has the keyboard. VoiceOver announces the step's title, each choice and each button. |
+| W-19 | Keyboard only: Tab, Shift+Tab, arrows in each choice list, Space, Enter on the buttons | Every control is reachable with a visible focus ring; Tab after the last control wraps to the first (Shift+Tab the other way), never into the window under the page; arrows move within a list; the first control of each step has the keyboard. VoiceOver announces the step's title, each choice and each button. |
 | W-20 | Settings > Look and Feel set to the Zen style, then a fresh first run | The setup is still in shadcn's look (W-1). |

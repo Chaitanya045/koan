@@ -471,10 +471,55 @@ function skipSetup() {
   }
 }
 document.getElementById('welcome-skip').addEventListener('click', skipSetup);
+// The page's Tab stops in order: a radio group is one stop (its checked
+// radio, else its first).
+function tabStops() {
+  const groups = new Set();
+  return [...document.querySelectorAll(
+              'button:not([disabled]), input:not([disabled]), a[href], ' +
+              '[tabindex]:not([tabindex="-1"])')]
+      .filter(element => element.getClientRects().length)
+      .filter(element => {
+        if (element.type !== 'radio') {
+          return true;
+        }
+        if (groups.has(element.name)) {
+          return false;
+        }
+        const checked = document.querySelector(
+            `input[type=radio][name="${CSS.escape(element.name)}"]:checked`);
+        if (checked && checked !== element) {
+          return false;
+        }
+        groups.add(element.name);
+        return true;
+      });
+}
+
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
     event.preventDefault();
     skipSetup();
+    return;
+  }
+  // The page covers the window, as a modal dialog: Tab wraps within it.
+  // Past its last control the window would move the keyboard on to the
+  // browser's own views under the page (the URL bar, which then opens over
+  // the page and takes its clicks).
+  if (event.key === 'Tab' && !event.altKey && !event.ctrlKey &&
+      !event.metaKey) {
+    const stops = tabStops();
+    if (!stops.length) {
+      event.preventDefault();
+      return;
+    }
+    const at = stops.indexOf(document.activeElement);
+    const wrap = event.shiftKey ? at <= 0
+                                : at === -1 || at === stops.length - 1;
+    if (wrap) {
+      event.preventDefault();
+      stops.at(event.shiftKey ? -1 : 0).focus();
+    }
   }
 });
 document.getElementById('welcome').hidden = false;
