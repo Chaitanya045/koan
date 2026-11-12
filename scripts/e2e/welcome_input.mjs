@@ -47,17 +47,18 @@ const overlay = async () => (await viewTree()).find(
 
 const real = realInput();
 let origin = null;
+// The window's tab under the welcome (see below).
+let tab = null;
+const windowBounds = async () =>
+  (tab ? (await windowOf(tab.id).catch(() => null))?.bounds : null) ??
+  (await windowOf(page.id).catch(() => null))?.bounds;
 if (real) {
   // A page in a window that isn't key sees no mouse moves (and the window's
   // keys go elsewhere): make the welcome's window key first, through its
-  // tab (the welcome's own view isn't a tab).
-  const windowId = (await windowOf(page.id))?.windowId;
-  const tabs = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .filter(t => t.type === 'page' && !t.url.startsWith('chrome://koan-welcome'));
-  let tab = null;
-  for (const t of tabs) {
-    if ((await windowOf(t.id))?.windowId === windowId) { tab = t; break; }
-  }
+  // tab. The welcome's own view isn't a tab, and Browser.getWindowForTarget
+  // doesn't know it (so its window is the tab's: a first run has one).
+  tab = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
+      .find(t => t.type === 'page' && !t.url.startsWith('chrome://koan-welcome')) ?? null;
   await makeKey(tab);
   console.log(`  (the welcome has the focus: ${await js('document.hasFocus()')})`);
   // Where a real move lands if not on the welcome: the tab under it (its
@@ -67,10 +68,10 @@ if (real) {
   await tabMove?.(`window.__koanTabMove = null; addEventListener('mousemove', e => {
       window.__koanTabMove = { sx: e.screenX, sy: e.screenY }; }, true); 1`);
   const o = await overlay();
-  origin = await calibrate(page, await viewTree(), o);
+  origin = await calibrate(page, await viewTree(), o, tab);
   check('Real pointer: the page saw the pointer move (calibration)', !!origin,
         origin ? '' : JSON.stringify({ pointer: realPointer(),
-                                       window: (await windowOf(page.id))?.bounds,
+                                       window: await windowBounds(),
                                        welcome: o && { x: o.ax, y: o.ay, w: o.w, h: o.h },
                                        tabSawIt: await tabMove?.('window.__koanTabMove') }));
 }
@@ -142,11 +143,11 @@ check('...the page saw a trusted click', s.click >= 1, JSON.stringify(s));
 // doesn't drag the window (real pointer only: CDP clicks never hit-test the
 // window's caption).
 if (realOk()) {
-  const w0 = (await windowOf(page.id))?.bounds;
+  const w0 = await windowBounds();
   const md0 = (await seen()).mousedown;
   const o = await overlay();
   await realClick(origin.x + o.ax + o.w / 2, origin.y + o.ay + 12, 900);
-  const w1 = (await windowOf(page.id))?.bounds;
+  const w1 = await windowBounds();
   check('W-1c: a click in the top band reaches the page', (await seen()).mousedown > md0);
   check('...and the window did not move', w0 && w1 && w0.left === w1.left && w0.top === w1.top,
         `${JSON.stringify(w0)} -> ${JSON.stringify(w1)}`);

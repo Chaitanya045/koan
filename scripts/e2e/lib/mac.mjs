@@ -394,9 +394,12 @@ export async function checkSlidesAway(check, name, ok, detail, width = 230) {
 // gives screenX - clientX, the page's origin on screen; minus the page view's
 // position in the root view (`webview`, from viewTree(): by default the
 // biggest shown ContentsWebView). {x, y} or null.
-export async function calibrate(page, vs, webview) {
+export async function calibrate(page, vs, webview, windowTarget) {
   vs ??= await viewTree();
-  const w = await windowOf(page.id);
+  // (`windowTarget`: a tab of the window, for a page that isn't a tab, e.g.
+  // the welcome, which Browser.getWindowForTarget doesn't know.)
+  const w = await windowOf((windowTarget ?? page).id).catch(() => null);
+  if (!w?.bounds) return null;
   webview ??= vs.filter(v => v.cls === 'ContentsWebView' && v.shown && v.w > 100)
       .sort((a, b) => b.w * b.h - a.w * a.h)[0];
   if (!w || !webview) return null;
