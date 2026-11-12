@@ -181,7 +181,8 @@ class KoanZeroSuggestProvider : public AutocompleteProvider {
                               const std::u16string& title,
                               int relevance,
                               omnibox::AutocompleteMatchType type);
-  void OnTopSites(std::set<GURL> open_urls,
+  // `skipped`: the open tabs already listed and Chromium's prepopulated pages.
+  void OnTopSites(std::set<GURL> skipped,
                   const history::MostVisitedURLList& sites);
   void OnClipboardText(std::u16string text);
   void OnURLOpened(OmniboxLog* log);
@@ -284,8 +285,16 @@ void KoanZeroSuggestProvider::Start(const AutocompleteInput& input,
   done_ = pending_ == 0;
   base::WeakPtr<KoanZeroSuggestProvider> weak = weak_factory_.GetWeakPtr();
   if (wants_top_sites) {
+    // Not Chromium's prepopulated top sites (the Web Store, TopSitesFactory's
+    // kRawPrepopulatedPages), which TopSites lists until history fills it:
+    // Zen's list has only sites the user visited (no default sites).
+    std::set<GURL> skipped = std::move(open_urls);
+    for (const history::PrepopulatedPage& page :
+         top_sites->GetPrepopulatedPages()) {
+      skipped.insert(page.most_visited.url);
+    }
     top_sites->GetMostVisitedURLs(base::BindOnce(
-        &KoanZeroSuggestProvider::OnTopSites, weak, std::move(open_urls)));
+        &KoanZeroSuggestProvider::OnTopSites, weak, std::move(skipped)));
   }
   if (clipboard && weak) {
     clipboard->ReadText(
@@ -336,7 +345,7 @@ void KoanZeroSuggestProvider::OnURLOpened(OmniboxLog* log) {
 }
 
 void KoanZeroSuggestProvider::OnTopSites(
-    std::set<GURL> open_urls,
+    std::set<GURL> skipped,
     const history::MostVisitedURLList& sites) {
   size_t added = 0;
   for (const history::MostVisitedURL& site : sites) {
@@ -344,7 +353,7 @@ void KoanZeroSuggestProvider::OnTopSites(
       break;
     }
     if (!site.url.is_valid() || !site.url.SchemeIsHTTPOrHTTPS() ||
-        open_urls.contains(site.url)) {
+        skipped.contains(site.url)) {
       continue;
     }
     matches_.push_back(MakeMatch(site.url, site.title,
