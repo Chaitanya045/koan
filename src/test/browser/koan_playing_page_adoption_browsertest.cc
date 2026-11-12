@@ -231,8 +231,12 @@ IN_PROC_BROWSER_TEST_F(KoanPlayingPageAdoptionBrowserTest,
     return false;
   }));
 
+  // Closed right after the report that pinned it: the page must already be
+  // the live one there (the first report after a pin used to leave it with
+  // no live window, so the closing window's page closed with it).
   CloseBrowserSynchronously(other);
-  // The page moved here, still playing.
+  // The page moved here (synchronously, UnloadController::OnWindowClosing()),
+  // still playing.
   ASSERT_NE(tab_strip->GetIndexOfWebContents(page), TabStripModel::kNoTab);
 
   ASSERT_TRUE(content::ExecJs(page, kPauseVideo));

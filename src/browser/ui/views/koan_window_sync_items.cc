@@ -300,9 +300,10 @@ void KoanWindowSyncClient::ReportItems() {
   sync_->ReportFolders(this, LocalFolders(/*assign_ids=*/true));
   std::vector<window_sync::ItemRecord> items = LocalItems(/*assign_ids=*/true);
   // The pages this window has, so the others' placeholders copy them.
+  std::vector<std::string> live;
   for (const window_sync::ItemRecord& record : items) {
     if (!IsPlaceholder(PageOf(record.id))) {
-      sync_->SetLive(this, record.id);
+      live.push_back(record.id);
     }
   }
   // A tab that stopped being synced here (unpinned, or out of the Essentials
@@ -329,6 +330,14 @@ void KoanWindowSyncClient::ReportItems() {
     }
   }
   sync_->ReportItems(this, std::move(items), closed);
+  // After the report: the model only takes a live page for an item it
+  // knows, so a tab pinned since the last report would stay without a live
+  // window (its page lost when this window closes, loaded again where it is
+  // selected) until the next one. The others are reconciled after this
+  // task, so their placeholders still copy it.
+  for (const std::string& item : live) {
+    sync_->SetLive(this, item);
+  }
 }
 
 void KoanWindowSyncClient::MaybeRequestActivePage() {
