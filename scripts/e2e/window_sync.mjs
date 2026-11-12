@@ -157,7 +157,12 @@ check('P1: a title change in A shows in B\'s placeholder row', !!titled);
   const page = await pageByUrl(PIN2);
   await browserCall('Target.closeTarget', { targetId: page.id });
   const gone = await waitFor(async () => !rowFor(await widgetB(), PIN2), 4000);
-  check('C1: a pinned tab closed in A goes from B', !!gone);
+  // If not: did A put it back (a reconcile before its report), and is B's a
+  // placeholder or a page?
+  check('C1: a pinned tab closed in A goes from B', !!gone,
+        gone ? '' : `A has it again: ${!!rowFor(await widgetA(), PIN2)}, ` +
+                    `live pages: ${(await livePages(PIN2)).length}`);
+  check('...and stays closed in A', !rowFor(await widgetA(), PIN2));
 }
 // #264 step 3: unpinning in A keeps it in A as a normal tab, closes it in B.
 {

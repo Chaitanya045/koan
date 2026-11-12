@@ -292,8 +292,19 @@ void KoanWindowSyncClient::ScheduleItemsReport() {
 void KoanWindowSyncClient::ReportItems() {
   // What was closed counts only with the report it came before.
   std::set<std::string> closed = std::exchange(closed_items_, {});
-  if (!sync_ || !sync_->IsInSync(this) ||
-      browser_view_->browser()->GetTabStripModel()->closing_all()) {
+  if (!sync_ || browser_view_->browser()->GetTabStripModel()->closing_all()) {
+    return;
+  }
+  if (!sync_->IsInSync(this)) {
+    // Out of date: another window's change is being applied here. Its closes
+    // wait for a report once it is in sync again; dropped, the item would
+    // stay in the model, every other window would keep its tab and the
+    // reconcile would add it back here.
+    if (!closed.empty()) {
+      closed_items_ = std::move(closed);
+      items_report_timer_.Start(FROM_HERE, kItemsReportDelay, this,
+                                &KoanWindowSyncClient::ReportItems);
+    }
     return;
   }
   // Its folders first: the items name them.
@@ -491,6 +502,10 @@ void KoanWindowSyncClient::ApplyItems(
   }
 
   for (const auto& [record, index] : plan.add) {
+    // Closed here since the last report (which will say so): not back.
+    if (closed_items_.contains(record.id)) {
+      continue;
+    }
     std::optional<tab_groups::TabGroupId> group;
     if (record.kind == window_sync::ItemRecord::Kind::kPinned) {
       for (const auto& [space, id] : space_ids_) {
