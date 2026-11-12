@@ -11,7 +11,9 @@
 // Blank Windows.
 //
 // Layouts: single toolbar (the default), compact mode, native fullscreen,
-// compact + fullscreen, tabs on the right. The window closes with the Close
+// compact + fullscreen, tabs on the right, multiple toolbars. On macOS each
+// also checks that File > Close Window is enabled (System Events), and the
+// quit that Quit is. The window closes with the Close
 // Window shortcut (Cmd+Shift+W on macOS; the red button runs the same
 // BrowserView::Close path) through the real keyboard when suite.sh allows
 // real input, after making that window key (makeKey(): a window opened
@@ -22,7 +24,8 @@
 // macOS, without fullscreen).
 import { browserCall, check, finish, onPage, pages, setKoanPref, sleep,
          waitFor } from './lib/koan.mjs';
-import { ACCEL, IS_MAC, SHIFT, alive, closeWindowOf, countInLog, fatalInLog, key, makeKey,
+import { ACCEL, CLOSE_WINDOW_ITEM, IS_MAC, QUIT_ITEM, SHIFT, alive, closeWindowOf, countInLog,
+         fatalInLog, key, makeKey, menuItemEnabled,
          openWindow, realInput, realKey, setWindowState, startServer, windowOf,
          windows } from './lib/mac.mjs';
 
@@ -35,11 +38,24 @@ const gone = () => countInLog(GONE);
 check('The browser\'s log is readable (KOAN_LOG)', !!process.env.KOAN_LOG,
       process.env.KOAN_LOG ?? 'no KOAN_LOG');
 
+// Whether the menu bar's `item` is enabled, checked as `name` where
+// Accessibility can read it (macOS, with the window key).
+function checkMenuItem(name, item) {
+  const enabled = menuItemEnabled(item);
+  if (enabled !== null) check(name, enabled);
+  else if (IS_MAC) console.log(`SKIP  ${name}: System Events can't read the menu bar`);
+}
+
 // Closes window `windowId` with the Close Window shortcut, typed into its
-// active page (or closeWindowOf() it); waits until it is gone.
-async function closeWindow(windowId) {
+// active page (or closeWindowOf() it); waits until it is gone. On macOS File >
+// Close Window must be enabled for it first (Koan's lights once disabled it).
+async function closeWindow(windowId, name = 'The window') {
   const page = (await windows()).find(w => w.windowId === windowId)?.pages
       .find(p => !p.url.startsWith('devtools:'));
+  if (IS_MAC) {
+    if (!(await makeKey(page))) console.log(`  (window ${windowId}'s page never got the focus)`);
+    checkMenuItem(`${name}: File > Close Window is enabled`, CLOSE_WINDOW_ITEM);
+  }
   if (realInput()) {
     // The real key goes to the key window: make it this one (a window opened
     // through CDP isn't key).
@@ -52,9 +68,11 @@ async function closeWindow(windowId) {
 }
 
 let serial = 0;
-async function secondWindowCase(name, { compact = false, fullscreen = false, right = false } = {}) {
+async function secondWindowCase(name, { compact = false, fullscreen = false, right = false,
+                                        multiple = false } = {}) {
   const tornBefore = torn(), goneBefore = gone();
   if (compact) await setKoanPref('koan.compact_mode.enabled', true);
+  if (multiple) await setKoanPref('koan.single_toolbar', false);
   if (right) await setKoanPref('koan.tabs.on_right', true);
   const w = await openWindow(server.url(`/p?t=Second%20${++serial}`));
   check(`${name}: a second window opened`, !!w.windowId && (await windows()).length === 2,
@@ -65,7 +83,7 @@ async function secondWindowCase(name, { compact = false, fullscreen = false, rig
     check(`${name}: ...in native fullscreen`, !!full);
     await sleep(2000);
   }
-  const closed = await closeWindow(w.windowId);
+  const closed = await closeWindow(w.windowId, name);
   await sleep(1500);
   check(`${name}: Close Window closed it`, !!closed, `${(await windows()).length} windows left`);
   check(`${name}: Koan keeps running`, await alive());
@@ -75,6 +93,7 @@ async function secondWindowCase(name, { compact = false, fullscreen = false, rig
   check(`${name}: nothing fatal in the log`, !fatalInLog(), fatalInLog());
   if (compact) await setKoanPref('koan.compact_mode.enabled', false);
   if (right) await setKoanPref('koan.tabs.on_right', false);
+  if (multiple) await setKoanPref('koan.single_toolbar', true);
   await sleep(800);
 }
 
@@ -85,6 +104,7 @@ if (IS_MAC) {
   await secondWindowCase('Compact + fullscreen', { compact: true, fullscreen: true });
 }
 await secondWindowCase('Tabs on the right', { right: true });
+await secondWindowCase('Multiple toolbars', { multiple: true });
 
 // The last tab of a second window closed: like Zen (browser.tabs.
 // closeWindowWithLastTab is off), the window stays, on Zen's empty tab
@@ -107,7 +127,7 @@ await secondWindowCase('Tabs on the right', { right: true });
     await sleep(1500);
     const page = (await windows()).find(x => x.windowId === w.windowId)?.pages
         .find(p => !p.url.startsWith('devtools:'));
-    const closed = page && await closeWindow(w.windowId);
+    const closed = page && await closeWindow(w.windowId, 'Last tab of a second window');
     await sleep(1500);
     check('...Close Window then closes it', !!closed, `${(await windows()).length} windows left`);
     check('..."window torn down" once more, no "(widget gone)"',
@@ -122,9 +142,12 @@ await secondWindowCase('Tabs on the right', { right: true });
   await openWindow(server.url('/p?t=Quit%20two'));
   check('Quit: two windows open', (await windows()).length === 2);
   const first = (await pages()).find(p => !p.url.includes('Quit%20two') && p.type === 'page');
-  if (realInput()) {
+  if (IS_MAC) {
     // (Cmd+Q is the main menu's: some window of Koan's must be key.)
     if (!(await makeKey(first))) console.log('  (the first window\'s page never got the focus)');
+    checkMenuItem('Quit: the app menu\'s Quit is enabled', QUIT_ITEM);
+  }
+  if (realInput()) {
     await realKey('q', 'c', 500);
   } else if (IS_MAC) {
     // Cmd+Q is the menu's too: CDP's Browser.close, which quits as the

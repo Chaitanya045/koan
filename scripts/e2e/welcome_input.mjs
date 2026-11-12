@@ -15,7 +15,7 @@
 // welcome_input.flags forces the first run. Run by scripts/mac/suite.sh.
 import { CDP_PORT, check, evalIn, finish, onPage, sleep, viewTree, waitFor } from './lib/koan.mjs';
 import { IS_MAC, alive, calibrate, fatalInLog, key, makeKey, realClick, realInput,
-         realInputWhyNot, realKey, skipped, windowOf } from './lib/mac.mjs';
+         realInputWhyNot, realKey, realPointer, skipped, windowOf } from './lib/mac.mjs';
 
 async function welcomePage() {
   return waitFor(async () => (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
@@ -60,8 +60,19 @@ if (real) {
   }
   await makeKey(tab);
   console.log(`  (the welcome has the focus: ${await js('document.hasFocus()')})`);
-  origin = await calibrate(page, await viewTree(), await overlay());
-  check('Real pointer: the page saw the pointer move (calibration)', !!origin);
+  // Where a real move lands if not on the welcome: the tab under it (its
+  // native view above the welcome's), or nowhere in Koan (the point is off).
+  const tabMove = tab && (async expression => (await onPage(tab, c => c.send('Runtime.evaluate',
+      { expression, returnByValue: true }))).result?.result?.value);
+  await tabMove?.(`window.__koanTabMove = null; addEventListener('mousemove', e => {
+      window.__koanTabMove = { sx: e.screenX, sy: e.screenY }; }, true); 1`);
+  const o = await overlay();
+  origin = await calibrate(page, await viewTree(), o);
+  check('Real pointer: the page saw the pointer move (calibration)', !!origin,
+        origin ? '' : JSON.stringify({ pointer: realPointer(),
+                                       window: (await windowOf(page.id))?.bounds,
+                                       welcome: o && { x: o.ax, y: o.ay, w: o.w, h: o.h },
+                                       tabSawIt: await tabMove?.('window.__koanTabMove') }));
 }
 const realOk = () => real && origin && realInput();
 // The page's point (x, y) on the screen: the overlay's place in the root
