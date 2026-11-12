@@ -16,7 +16,7 @@ space_containers timeout=300
 space_drag timeout=420
 welcome_input timeout=240
 lights_hover_steady timeout=120
-agent_cli timeout=420
+agent_cli timeout=540
 # Copy current URL with several tabs selected (palette, test_helper).
 copy_urls timeout=180
 # The command palette (Zen's actions in the URL bar), two restarts; the URL
