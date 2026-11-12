@@ -112,8 +112,9 @@ export const MAIN_MENU_ONLY_ON_MAC =
 // Space header's, a tab's, the Library's tab and row menus) are native
 // NSMenus (MenuRunnerImplMac). UI DevTools can't see them, and while one is
 // open its nested run loop keeps UI DevTools from answering, so a script
-// that opens one hangs until the suite's timeout. Scripts skip those steps
-// (or reach the command another way) when NATIVE_MENUS is set.
+// that opens one hangs until the suite's timeout. Scripts skip those steps,
+// reach the command another way, or pick the menu's items through
+// Accessibility (lib/mac.mjs nativeMenu()) when NATIVE_MENUS is set.
 export const NATIVE_MENUS = IS_MAC;
 export const NATIVE_MENU_WHY =
   'needs a context menu, a native NSMenu on macOS that UI DevTools can\'t see or click';

@@ -12,15 +12,28 @@
 //
 // Menus are driven through UI DevTools: their items are found by element
 // identifier (DOM.performSearch "id:...") and clicked through the menu
-// widget's root view, like a real click.
+// widget's root view, like a real click. On macOS the tab and folder menus
+// are native NSMenus: the same right-click opens them, and their items are
+// pressed through Accessibility (lib/folders.mjs, lib/mac.mjs nativeMenu());
+// Reopen Closed Tab (Cmd+Shift+T, a main-menu key there) is a real key.
 import { spawn } from 'node:child_process';
-import { CDP_PORT, check, createSpace, evalIn, finish, pages, sleep } from './lib/koan.mjs';
+import {
+  ACCEL, CDP_PORT, IS_MAC, SHIFT, check, createSpace, evalIn, finish, pages, sleep, visiblePage,
+} from './lib/koan.mjs';
 import {
   activate, browserCdp, click, clickMenuItem, cls, findAll, folderMenu, loosest,
   moveToFolder, openCreateMenu, origin, pageKey, pagesInCollapsedFolders, pressKey,
-  props, rowNamed, rows, shown, shownTabs, spaceButtons, switcher, typeInto,
+  props, rowNamed, rows, setMenuPid, shown, shownTabs, spaceButtons, switcher, typeInto,
   visibleTabs, withView,
 } from './lib/folders.mjs';
+import {
+  makeKey, nativeMenusWhyNot, realInput, realInputWhyNot, realKey, skip, skipped,
+} from './lib/mac.mjs';
+
+if (IS_MAC) {
+  const why = nativeMenusWhyNot();
+  if (why) skip(`on macOS the tab and folder menus are native NSMenus: ${why}`);
+}
 
 const names = rs => rs.map(r => `${r.name}${r.collapsed ? '[c]' : ''}:${r.count}`).join(' ');
 
@@ -49,8 +62,14 @@ r = await rows();
 check('Typing a name and Enter renames it', r[0]?.name === 'Work' && !r[0]?.renaming,
       names(r));
 
+// Right-clicks the shown tab `i` (top to bottom).
+const tabMenu = i => withView(/^TabView$/, 0, async (s) => {
+  const t = (await shownTabs(s))[i];
+  if (t) await click(s, t.node, 'right');
+});
+
 // Tab menu: Move to Folder > Work, for the second tab.
-await withView(/^TabView$/, 1, (s, n) => click(s, n, 'right'));
+await tabMenu(1);
 check('The tab menu has "Move to Folder"', await clickMenuItem('kKoanMoveToFolderItem'));
 check('...listing the folder', await clickMenuItem('kKoanTabFolderItem'));
 r = await rows();
@@ -66,7 +85,7 @@ check('The folder row comes first, its tab indented 14px below it',
 
 // Tab menu: Move to Folder > New Folder, for the third tab (now the
 // third row of tabs too: [two (in Work), one, three, four]).
-await withView(/^TabView$/, 2, (s, n) => click(s, n, 'right'));
+await tabMenu(2);
 await clickMenuItem('kKoanMoveToFolderItem');
 check('"New Folder" in the tab menu', await clickMenuItem('kKoanTabNewFolderItem'));
 await pressKey(/^KoanFolderNameField$/, VK.ESCAPE);
@@ -247,7 +266,7 @@ check('...removes the folder and closes its tab (and only it)',
 // group, which would go with its last tab; Zen's Space stays): Delete,
 // Change Space and Convert to Space each leave it a fresh tab.
 const spaceTwo = 'Two';
-await createSpace((await pages())[0], spaceTwo);
+await createSpace(await visiblePage(), spaceTwo);
 await sleep(1500);
 async function folderOfOnlyTab() {
   await moveToFolder(ts => ts[0], 'kKoanTabNewFolderItem');
@@ -296,7 +315,7 @@ await sleep(800);
 const kept = (await pages()).filter(p => p.url.endsWith('?c2')).map(p => p.url);
 const c1 = (await pages()).find(p => p.url.endsWith('?c1'));
 if (c1) await activate(c1);
-await pageKey(c1 ?? (await pages())[0], 75, 2 | 8, 'K');  // Ctrl+Shift+K
+await pageKey(c1 ?? (await pages())[0], 75, ACCEL | SHIFT, 'K');  // Ctrl+Shift+K, Cmd on macOS
 const urls = (await pages()).map(p => p.url);
 r = await rows();
 check('Clear keeps the folder\'s tab', kept.length === 1 && urls.includes(kept[0]) &&
@@ -327,7 +346,7 @@ const order = () => withView(/^TabView$/, 0, async (s) => {
   return { ts: ts.map(t => t.ay), row };
 });
 await activate(c1);
-await pageKey(c1, 68, 2 | 8, 'D');
+await pageKey(c1, 68, ACCEL | SHIFT, 'D');
 await sleep(1500);
 let o = await order();
 check('A pinned tab goes above the folders, loose tabs below',
@@ -345,11 +364,26 @@ await browserCdp('Target.closeTarget', { targetId: c1Now?.id });
 await sleep(1000);
 r = await rows();
 const closedOk = r.find(x => x.name === 'Keep')?.count === 0;
-await pageKey((await pages()).find(p => p.url.endsWith('?c2')), 84, 2 | 8, 'T');
+const reopenName = 'A folder tab closed and reopened comes back in its folder';
+const c2 = (await pages()).find(p => p.url.endsWith('?c2'));
+// Ctrl+Shift+T; on macOS Cmd+Shift+T, the main menu's (a real key).
+let reopened = true;
+if (!IS_MAC) {
+  await pageKey(c2, 84, ACCEL | SHIFT, 'T');
+} else {
+  reopened = realInput() && await makeKey(c2) && await realKey('t', 'cs', 1500);
+}
 await sleep(1500);
 r = await rows();
-check('A folder tab closed and reopened comes back in its folder',
-      closedOk && r.find(x => x.name === 'Keep')?.count === 1, names(r));
+if (reopened) {
+  check(reopenName, closedOk && r.find(x => x.name === 'Keep')?.count === 1, names(r));
+} else {
+  skipped(reopenName, `Cmd+Shift+T is a main-menu key on macOS: ${realInputWhyNot() ||
+                      'its window did not become key'}`);
+  // The tab the steps below expect (loose, so there is nothing to remove).
+  await browserCdp('Target.createTarget', { url: 'https://example.com/?c1', background: false });
+  await sleep(1500);
+}
 await moveToFolder(ts => ts.find(t => t.x > Math.min(...ts.map(u => u.x))),
                    'kKoanTabRemoveFromFolderItem');
 
@@ -396,6 +430,7 @@ for (const time of ['first', 'second']) {
   await sleep(2000);
   const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean);
   relaunched = spawn(args[0], args.slice(1), { stdio: 'ignore' });
+  setMenuPid(relaunched.pid);
   for (let i = 0; i < 60; i++) {
     await sleep(500);
     if (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`).catch(() => null)) break;

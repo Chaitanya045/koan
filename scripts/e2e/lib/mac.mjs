@@ -306,7 +306,70 @@ export function menuItemEnabled(item) {
     return null;
   }
 }
-export const CLOSE_WINDOW_ITEM = 'menu item "Close Window" of menu 1 of menu bar item "File"';
+// --- Native context menus. On macOS the menus Koan builds from a menu model
+// (a tab's, a folder's, the Library rows') are NSMenus (lib/koan.mjs
+// NATIVE_MENUS); while one is open, its tracking loop runs no Chromium
+// tasks, so neither CDP nor UI DevTools answers until it closes. Scripts open
+// one (a right-click, which UI DevTools then answers only once the menu has
+// closed) and pick its items through Accessibility (lib/native_menu_ax.js),
+// which AppKit answers inside the menu, like a person reading and clicking
+// it. Reading and pressing a menu item there is not real input.
+const NATIVE_MENU_AX = new URL('./native_menu_ax.js', import.meta.url).pathname;
+// lib/native_menu_ax.js `op` for Koan's process `pid` (it changes when a
+// script restarts Koan): its JSON answer, or {error}.
+export function nativeMenu(op, path = [], pid = KOAN_PID) {
+  if (!IS_MAC || !pid) return { error: 'not macOS, or no Koan pid' };
+  try {
+    const out = execFileSync('osascript', ['-l', 'JavaScript', NATIVE_MENU_AX,
+                                           JSON.stringify({ op, path, pid })],
+                             { encoding: 'utf8', timeout: 15000 });
+    return JSON.parse(out.trim() || '{}');
+  } catch (e) {
+    return { error: String(e.stderr || e.message).trim().split('\n')[0] };
+  }
+}
+// Why scripts can't drive Koan's native menus here ('' when they can):
+// System Events must be allowed to read Koan (Accessibility).
+export function nativeMenusWhyNot(pid = KOAN_PID) {
+  if (!IS_MAC || !pid) return 'not macOS, or no Koan pid';
+  const r = nativeMenu('probe', [], pid);
+  return r.ok ? '' : `System Events can't read Koan's menus (${r.error ?? 'no menu bar'})`;
+}
+// Waits until a native context menu is open (or, `open` false, none is):
+// the last read, or null on a timeout.
+export async function waitNativeMenu(open = true, pid = KOAN_PID, timeout = 4000) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const r = nativeMenu('read', [], pid);
+    if (!r.error && !!r.open === open) return r;
+    if (Date.now() > end) return null;
+    await sleep(250);
+  }
+}
+// Closes the open native menu, if any (AXCancel, then a real Escape where
+// real input is on). Whether none is open now.
+export async function closeNativeMenu(pid = KOAN_PID) {
+  if (await waitNativeMenu(false, pid, 0)) return true;
+  nativeMenu('cancel', [], pid);
+  if (await waitNativeMenu(false, pid, 2000)) return true;
+  if (pid === KOAN_PID && realInput()) await realKey('Escape');
+  return !!(await waitNativeMenu(false, pid, 2000));
+}
+// Presses the item at `path` (titles, or positions with separators counted,
+// through submenus) of the open native menu, and waits for the menu to
+// close. A miss closes the menu. {ok, detail}.
+export async function pickNativeMenu(path, pid = KOAN_PID) {
+  const r = nativeMenu('click', path, pid);
+  if (!r.clicked) {
+    await closeNativeMenu(pid);
+    return { ok: false, detail: JSON.stringify({ path, ...r }) };
+  }
+  const closed = await waitNativeMenu(false, pid);
+  if (!closed) await closeNativeMenu(pid);
+  return { ok: !!closed, detail: closed ? r.clicked : `${r.clicked}: the menu stayed open` };
+}
+
+export const CLOSE_WINDOW_ITEM ='menu item "Close Window" of menu 1 of menu bar item "File"';
 // The app menu's Quit item (its title has the app's name).
 export const QUIT_ITEM = '(first menu item of menu 1 of menu bar item 2 whose name starts with "Quit")';
 

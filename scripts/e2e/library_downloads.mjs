@@ -12,14 +12,25 @@
 // chrome://downloads, and checks nothing was opened. Then, as a control,
 // it opens a safe download from the row menu, which must be logged.
 //
+// On macOS files open through NSWorkspace, which nothing can stand in for,
+// so Koan isn't restarted: what was opened is DownloadItem's opened flag
+// (OpenDownload() sets it before handing the file to the system), read from
+// the History database once Koan has quit (it is locked while Koan runs).
+// The control there is an .html file, which Chromium opens in a tab rather
+// than in another app. The row menu is a native NSMenu there, picked through
+// Accessibility (lib/mac.mjs nativeMenu()).
+//
 //   scripts/e2e/run.sh library_downloads
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import {
   CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, key as keyTo,
-  pages, sleep, visiblePage, waitFor, IS_MAC, META,
+  pages, sleep, visiblePage, waitFor, IS_MAC, META, NATIVE_MENUS,
 } from './lib/koan.mjs';
+import {
+  KOAN_PID, closeNativeMenu, nativeMenusWhyNot, pickNativeMenu, skipped, waitNativeMenu,
+} from './lib/mac.mjs';
 // Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
 const DOWNLOADS_KEY = IS_MAC ? [74, META, 'j'] : [89, CTRL | SHIFT, 'Y'];
 
@@ -106,7 +117,8 @@ async function pickMenu(index) {
   return null;
 }
 
-// --- Koan again on the same profile, with a fake xdg-open on the PATH. ---
+// --- Koan again on the same profile, with a fake xdg-open on the PATH
+// (not on macOS: see the top). ---
 const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean);
 const profile = args.find(a => a.startsWith('--user-data-dir=')).split('=')[1];
 const bin = `${profile}/fake-bin`;
@@ -119,7 +131,7 @@ const opened = () => (existsSync(openLog) ? readFileSync(openLog, 'utf8') : '');
 let relaunched = null;
 process.on('exit', () => relaunched?.kill());
 const up = () => fetch(`http://127.0.0.1:${CDP_PORT}/json/version`).then(() => true, () => false);
-{
+if (!IS_MAC) {
   step = 'restarting Koan';
   const v = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
   const b = await connect(v.webSocketDebuggerUrl);
@@ -139,6 +151,7 @@ const up = () => fetch(`http://127.0.0.1:${CDP_PORT}/json/version`).then(() => t
 
 // --- A server that holds the end of a download until told to send it. ---
 const LATER = 'MZ koan library later';  // Its hash is in library_downloads.flags.
+const SAFE = IS_MAC ? 'koan-safe.html' : 'koan-safe.txt';
 let release;
 const released = new Promise(r => { release = r; });
 const server = http.createServer(async (req, res) => {
@@ -149,10 +162,11 @@ const server = http.createServer(async (req, res) => {
     res.write(LATER.slice(0, 8));
     await released;
     res.end(LATER.slice(8));
-  } else if (req.url === '/safe.txt') {
+  } else if (req.url === '/safe') {
     res.writeHead(200, { 'Content-Type': 'application/octet-stream',
-                         'Content-Disposition': 'attachment; filename="koan-safe.txt"' });
-    res.end('Koan Library open test');
+                         'Content-Disposition': `attachment; filename="${SAFE}"` });
+    res.end(IS_MAC ? '<!doctype html><title>Koan Library open test</title>'
+                   : 'Koan Library open test');
   } else {
     res.writeHead(404);
     res.end();
@@ -224,30 +238,86 @@ if (item) {
   item = await laterItem();
   check('Keep keeps it', item && !item.dangerous, JSON.stringify(item));
   await sleep(3000);
-  check('...and it does not open by itself', !opened().includes('koan-later.exe'),
-        opened().trim() || 'nothing opened');
+  // (On macOS once Koan has quit, below.)
+  if (!IS_MAC) {
+    check('...and it does not open by itself', !opened().includes('koan-later.exe'),
+          opened().trim() || 'nothing opened');
+  }
 }
 await browserCall('Target.closeTarget', { targetId: page.id });
 await sleep(1000);
 
 // --- Control: opening a download from the row menu is seen. ---
 step = 'opening a safe download from the row menu';
-await browserCall('Target.createTarget', { url: `${base}/safe.txt`, background: true });
+await browserCall('Target.createTarget', { url: `${base}/safe`, background: true });
 await sleep(2000);
 await key(...DOWNLOADS_KEY);
 const safe = await waitFor(async () => {
-  const r = await row('koan-safe.txt');
+  const r = await row(SAFE);
   return r && !/\//.test(r.p.Subtitle ?? '/') ? r : null;
-}, 8000) ?? await row('koan-safe.txt');
-if (safe) {
+}, 8000) ?? await row(SAFE);
+const nativeWhyNot = NATIVE_MENUS ? nativeMenusWhyNot() : '';
+if (safe && NATIVE_MENUS && !nativeWhyNot) {
+  // A native menu: its press is answered once the menu has closed, its
+  // release goes after (lib/folders.mjs openNativeMenu()).
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.getDocument', { depth: -1 });
+  const event = type => ({ nodeId: safe.nodeId,
+                           event: { type, x: 20, y: 20, button: 'right', wheelDirection: 'none' } });
+  ui.send('DOM.dispatchMouseEvent', event('mousePressed'));
+  const menu = await waitNativeMenu(true);
+  // The menu of a finished download: "Open koan-safe.html" first.
+  const picked = menu ? await pickNativeMenu([`Open ${SAFE}`])
+                      : { ok: false, detail: 'no native menu opened' };
+  await closeNativeMenu();
+  await ui.send('DOM.dispatchMouseEvent', event('mouseReleased'));
+  ui.close();
+  check('A finished download\'s menu opens', picked.ok, picked.detail);
+} else if (safe && NATIVE_MENUS) {
+  skipped('A finished download\'s menu opens (Open, from the row menu)', nativeWhyNot);
+} else if (safe) {
   await click(safe, 'right');
   await sleep(800);
   // The menu of a finished download: "Open koan-safe.txt" first.
   const error = await pickMenu(0);
   check('A finished download\'s menu opens', !error, error ?? '');
 }
-const control = await waitFor(() => opened().includes('koan-safe.txt'), 8000);
-check('...and Open there opens it (the check above would see an open)', Boolean(control),
-      opened().trim() || 'nothing opened');
+if (!IS_MAC) {
+  const control = await waitFor(() => opened().includes(SAFE), 8000);
+  check('...and Open there opens it (the check above would see an open)', Boolean(control),
+        opened().trim() || 'nothing opened');
+  finish();
+}
 
+// --- macOS: the opened flags, from the History database once Koan has quit.
+const menuRan = safe && !nativeWhyNot;
+if (menuRan) {
+  const tab = await waitFor(async () => (await pages()).find(p => p.url.endsWith(`/${SAFE}`)), 8000);
+  check('...and Open there opens it (in a tab: an .html file)', Boolean(tab),
+        JSON.stringify((await pages()).map(p => p.url)));
+}
+step = 'quitting Koan to read the History database';
+await browserCall('Browser.close').catch(() => {});
+await waitFor(async () => !(await up()), 20000);
+const alive = () => { try { return KOAN_PID > 0 && process.kill(KOAN_PID, 0); } catch { return false; } };
+await waitFor(() => !alive(), 20000);
+let rows = [];
+let dbError = '';
+try {
+  rows = execFileSync('sqlite3', ['-readonly', '-separator', '\t', `${profile}/Default/History`,
+                                  'SELECT target_path, opened FROM downloads'],
+                      { encoding: 'utf8', timeout: 10000 })
+      .trim().split('\n').filter(Boolean).map(l => l.split('\t'))
+      .map(([path, flag]) => ({ name: path.split('/').pop(), opened: flag === '1' }));
+} catch (e) {
+  dbError = String(e.stderr || e.message).trim().split('\n')[0];
+}
+const flags = JSON.stringify(rows) + (dbError ? ` ${dbError}` : '');
+const laterRow = rows.find(r => r.name === 'koan-later.exe');
+check('...and it does not open by itself (DownloadItem never opened it)',
+      Boolean(laterRow) && !laterRow.opened, flags);
+if (menuRan) {
+  check('...while the one opened from the menu is (the check above would see an open)',
+        rows.some(r => r.name === SAFE && r.opened), flags);
+}
 finish();
