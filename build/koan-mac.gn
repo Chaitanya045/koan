@@ -25,3 +25,10 @@ ffmpeg_branding = "Chrome"
 # Ship stable feature defaults, not Chromium's experiment config (which, for
 # example, turns on the WebUI toolbar).
 disable_fieldtrial_testing_config = true
+# Widevine DRM (issue #315). The CDM itself is Google's: Chromium can't bundle
+# it unbranded, so the component updater downloads it into the profile's
+# WidevineCdm/ on first run (chrome://components). Host verification makes
+# the CDM read Koan Framework.sig, the VMP signature that
+# scripts/mac/widevine_vmp_sign.sh writes (docs/USAGE.md, "DRM video").
+enable_widevine = true
+enable_cdm_host_verification = true

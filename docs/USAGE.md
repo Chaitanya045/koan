@@ -962,6 +962,81 @@ progress bar Left/Right seek by 5 seconds, Home/End jump to the ends.
 
 ![Media card, collapsed and on hover](screenshots/media-cards.png)
 
+## DRM video
+
+Koan plays DRM-protected video and music (Widevine), as Zen does with
+Firefox's Widevine plug-in. Chromium can't ship Google's Widevine CDM
+inside an unbranded app, so, as in Chromium, Koan downloads it from
+Google's component update server shortly after the first launch (about
+10 MB, into the profile's `WidevineCdm` folder). Until then, and when you
+are offline on the first launch, DRM sites say the browser isn't supported;
+wait a minute or open `chrome://components` and click **Check for update**
+under **Widevine Content Decryption Module**. It updates itself from then
+on.
+
+**Settings > Privacy and security > Site settings > Additional content
+settings > Protected content** ("Sites can play protected content") turns
+it on or off; it is on by default, and works in Incognito windows too.
+
+**Netflix needs more:** on macOS, Netflix (and some other services) only
+licenses video to a browser whose framework carries a Widevine **VMP**
+(Verified Media Path) signature. Koan's builds can carry one
+(`Koan Framework.framework/.../Resources/Koan Framework.sig`), but don't
+yet: without it the CDM still plays content that doesn't require VMP
+(for example Bitmovin's DRM demo), and Netflix shows an error (M7121 or
+similar). See "VMP signing" below for where that stands.
+
+### Checking it (Mac)
+
+1. Start Koan with a fresh profile, wait a minute, and open
+   `chrome://components`: **Widevine Content Decryption Module** has a
+   version (not `0.0.0.0`).
+2. <https://bitmovin.com/demos/drm>: the Widevine stream plays.
+3. Spotify Web (<https://open.spotify.com>, signed in) plays a song.
+4. Netflix: expected to fail with an error until Koan is VMP-signed; with a
+   VMP signature it plays.
+5. Scripted: `scripts/mac/suite.sh --all-e2e --only widevine --skip-cxx
+   --skip-visual <Koan.app>` (`scripts/e2e/widevine.mjs`: the component
+   installs and `requestMediaKeySystemAccess('com.widevine.alpha')`
+   resolves). It needs the network, so it isn't part of the regular suite.
+
+### VMP signing
+
+`scripts/mac/widevine_vmp_sign.sh <Koan.app>` writes the VMP signature with
+castLabs' EVS service (the `castlabs-evs` Python package, installed by the
+script into a virtualenv). It must run after the app is built and
+**before** Apple code signing, because the signature file sits in the
+framework's sealed Resources (the VMP hash itself doesn't cover the code
+signature, so re-signing ad hoc later, as above, keeps it valid). The
+packaging step (`scripts/ci/mac_package.sh`) and `scripts/build.sh` run
+it themselves when an EVS login is available, and skip it otherwise.
+
+**Known limit:** EVS's free tier signs the binaries it recognises: castLabs'
+own Electron for Content Security releases. A Chromium fork's framework is
+expected to be refused ("Binary signature denied"); the script then keeps
+the unsigned app, prints a warning, and the build goes on
+(`KOAN_VMP_REQUIRED=1` makes it fail instead). A VMP signature for Koan
+itself needs a Widevine agreement: Google's Widevine programme (as Brave
+and Vivaldi have) or castLabs' commercial 3PL service. The signing step
+stays the same.
+
+To set it up (maintainer):
+
+1. On the Mac, in a plain Terminal: `python3 -m pip install --user
+   castlabs-evs`, then `python3 -m castlabs_evs.account signup` (email,
+   name, organisation, an account name and a password; then the code
+   castLabs emails). This caches the login in `~/.config/evs/config.json`.
+2. Local builds: `scripts/build.sh` now signs after each build. To sign an
+   existing build: `scripts/mac/widevine_vmp_sign.sh
+   chromium/src/out/Koan/Koan.app`, and check it with `--verify`. Tokens
+   expire after about a month; `python3 -m castlabs_evs.account reauth`
+   renews them.
+3. Nightly builds: in the GitHub repository, **Settings > Secrets and
+   variables > Actions > New repository secret**, add `EVS_ACCOUNT_NAME`
+   (the account name) and `EVS_PASSWD` (its password). The nightly and
+   manual macOS runs pass them to the packaging step only; pull request
+   runs never get them.
+
 ## Downloads
 
 With the system's reduced motion setting on, Koan skips its animations

@@ -163,6 +163,9 @@ jobs:
     with:
       slice: 1
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-02:
     needs: [fetch, build-01]
@@ -173,6 +176,9 @@ jobs:
     with:
       slice: 2
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-03:
     needs: [fetch, build-02]
@@ -183,6 +189,9 @@ jobs:
     with:
       slice: 3
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-04:
     needs: [fetch, build-03]
@@ -193,6 +202,9 @@ jobs:
     with:
       slice: 4
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-05:
     needs: [fetch, build-04]
@@ -203,6 +215,9 @@ jobs:
     with:
       slice: 5
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-06:
     needs: [fetch, build-05]
@@ -213,6 +228,9 @@ jobs:
     with:
       slice: 6
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-07:
     needs: [fetch, build-06]
@@ -223,6 +241,9 @@ jobs:
     with:
       slice: 7
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-08:
     needs: [fetch, build-07]
@@ -233,6 +254,9 @@ jobs:
     with:
       slice: 8
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-09:
     needs: [fetch, build-08]
@@ -243,6 +267,9 @@ jobs:
     with:
       slice: 9
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-10:
     needs: [fetch, build-09]
@@ -253,6 +280,9 @@ jobs:
     with:
       slice: 10
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-11:
     needs: [fetch, build-10]
@@ -263,6 +293,9 @@ jobs:
     with:
       slice: 11
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-12:
     needs: [fetch, build-11]
@@ -273,6 +306,9 @@ jobs:
     with:
       slice: 12
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-13:
     needs: [fetch, build-12]
@@ -283,6 +319,9 @@ jobs:
     with:
       slice: 13
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-14:
     needs: [fetch, build-13]
@@ -293,6 +332,9 @@ jobs:
     with:
       slice: 14
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-15:
     needs: [fetch, build-14]
@@ -303,6 +345,9 @@ jobs:
     with:
       slice: 15
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   build-16:
     needs: [fetch, build-15]
@@ -313,6 +358,9 @@ jobs:
     with:
       slice: 16
       sha: ${{ needs.fetch.outputs.sha }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   # Fails the run when a build job failed or the last one ran out of time
   # unfinished. Skipped with the chain (fork PRs, unchanged nightlies).
