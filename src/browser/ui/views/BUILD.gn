@@ -126,6 +126,7 @@ source_set("essentials_audio") {
     "koan_essentials_audio.cc",
     "koan_essentials_audio.h",
   ]
+  deps = [ "//base" ]
   public_deps = [ "//ui/gfx/geometry" ]
 }
 
