@@ -74,9 +74,9 @@ bool IsFoldersEnabled();
 bool IsNewTabEnabled();
 
 // Whether a click with these modifiers opens Glance: Glance is on and the
-// trigger modifier (koan_switches.h, Alt by default) is the only one held. Read
-// by the blink navigation-policy hook (renderer process only, see kKoanGlance's
-// users).
+// renderer's trigger modifier (koan/common/koan_glance_trigger.h, Alt by
+// default) is the only one held. Read by the blink navigation-policy hook
+// (renderer process only, see kKoanGlance's users).
 bool IsGlanceActivationClick(bool ctrl, bool shift, bool alt, bool meta);
 
 }  // namespace koan::features

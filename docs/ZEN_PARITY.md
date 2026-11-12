@@ -232,7 +232,7 @@ folder.
 |---|---|---|
 | Alt+click a link opens Glance | Same | |
 | Glance on/off | Same | "Enable Glance" in Koan's settings (Glance group); the "Koan Glance" flag removes it altogether. |
-| Trigger method Alt / Ctrl / Shift / Meta + click | Different | Same choices (no Ctrl on macOS, where Ctrl+click is a right-click; Alt = Option, Zen's default everywhere), but a change only reaches pages in renderer processes started afterwards; Zen applies it at once. |
+| Trigger method Alt / Ctrl / Shift / Meta + click | Same | Same choices (no Ctrl on macOS, where Ctrl+click is a right-click; Alt = Option, Zen's default everywhere). A change applies at once in every open page, as in Zen (#326: the browser pushes it to every renderer process, `koan::UpdateRendererSettings()`). |
 | "Open Link in Glance" in the link context menu | Same | |
 | Card grows from the clicked link, shrinks back on close | Similar | Zen's 350 ms, similar easing (no overshoot), card size (80% × full height) and fade timings. Zen grows a snapshot of the link's own rect along a small arc; Koan grows a small card straight out of the click (the browser doesn't know the link's rect). |
 | Page behind fades to 30% and shrinks to 97% | Similar | Same fade (the window background laid over the page at 70%); no shrink, which would show the page's square container behind its rounded corners. |

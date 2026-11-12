@@ -228,8 +228,9 @@ KoanGlanceController* GlanceControllerFor(content::WebContents* contents) {
 // What a click with the trigger modifier means without Glance (blink's
 // NavigationPolicyFromEventModifiers): Ctrl (Cmd on macOS) opens a
 // background tab, Shift a window; Alt downloads, which can't be recovered
-// here, so the link opens in place. A renderer started before a trigger
-// change may still use the old modifier; this follows the current one.
+// here, so the link opens in place. A click a renderer sent just before a
+// trigger change reached it may still use the old modifier; this follows the
+// current one.
 WindowOpenDisposition FallbackDisposition(const PrefService* pref_service) {
   const std::string& method =
       pref_service->GetString(prefs::kGlanceActivationMethod);
@@ -724,7 +725,8 @@ KoanGlanceController::KoanGlanceController(BrowserView* browser_view)
       browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
   for (const char* pref :
        {prefs::kGlanceEnabled, prefs::kGlanceActivationMethod}) {
-    pref_change_registrar_.Add(pref, base::BindRepeating(&DropSpareRenderers));
+    pref_change_registrar_.Add(pref,
+                               base::BindRepeating(&UpdateRendererSettings));
   }
 }
 

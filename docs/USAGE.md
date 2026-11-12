@@ -745,9 +745,8 @@ yet).
 **Settings** (Koan's settings, Look and Feel → Glance; Zen's
 `zen.glance.enabled` and `zen.glance.activation-method`): **Enable Glance**,
 and **Trigger method**: Ctrl + Click, Alt + Click (the default), Shift +
-Click or Meta (Command) + Click. The trigger method reaches pages opened
-after the change (pages already open, and new ones that share their
-renderer, keep the old method until Koan restarts). With another trigger
+Click or Meta (Command) + Click. Both apply at once, in the pages already
+open too, as in Zen. With another trigger
 method, a click Glance can't open (not a web link, an app window) does
 what that modifier does without Glance (Ctrl: a background tab; Shift: a
 window). The "Koan Glance" flag in `chrome://flags` removes Glance

@@ -13,6 +13,7 @@ source_set("features") {
     "koan_switches.h",
   ]
   public_deps = [ "//base" ]
+  deps = [ "//koan/common:glance_trigger" ]
 }
 
 # chrome://flags entries for the Koan features; included only by
@@ -216,8 +217,9 @@ source_set("vertical_tabs") {
   ]
 }
 
-# Koan switches for renderer processes, appended from
-# ChromeContentBrowserClient::AppendExtraCommandLineSwitches().
+# Koan settings for renderer processes: switches appended from
+# ChromeContentBrowserClient::AppendExtraCommandLineSwitches(), and the
+# changes pushed to running processes.
 source_set("renderer_switches") {
   sources = [
     "koan_renderer_switches.cc",
@@ -230,6 +232,10 @@ source_set("renderer_switches") {
     "//components/prefs",
     "//components/user_prefs",
     "//content/public/browser",
+    "//ipc",
+    "//koan/common:glance_trigger",
+    "//koan/common:renderer_settings_mojom",
+    "//mojo/public/cpp/bindings",
   ]
 }
 

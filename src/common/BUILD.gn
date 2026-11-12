@@ -2,6 +2,8 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//mojo/public/tools/bindings/mojom.gni")
+
 # Koan product constants (header-only), usable from any layer.
 source_set("branding") {
   sources = [ "koan_branding.h" ]
@@ -10,4 +12,23 @@ source_set("branding") {
 # Koan's chrome:// URLs (header-only).
 source_set("url_constants") {
   sources = [ "koan_url_constants.h" ]
+}
+
+# The Glance trigger a renderer process uses. A component: blink core reads it
+# (through //koan/browser:features) and chrome's renderer code sets it, so a
+# component build must have one copy.
+component("glance_trigger") {
+  output_name = "koan_glance_trigger"
+  sources = [
+    "koan_glance_trigger.cc",
+    "koan_glance_trigger.h",
+  ]
+  defines = [ "IS_KOAN_GLANCE_TRIGGER_IMPL" ]
+  deps = [ "//base" ]
+}
+
+# Koan's settings the browser pushes to every renderer process
+# (koan/browser/koan_renderer_switches.h, koan/renderer).
+mojom("renderer_settings_mojom") {
+  sources = [ "koan_renderer_settings.mojom" ]
 }
