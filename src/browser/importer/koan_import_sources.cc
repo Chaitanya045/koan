@@ -116,9 +116,13 @@ uint16_t ChromiumServices() {
       user_data_importer::HISTORY | user_data_importer::FAVORITES;
   // Saved passwords need the browser's Safe Storage key from the keychain
   // (macOS), or a test's key file.
-  if (BUILDFLAG(IS_MAC) || HasTestRoot()) {
+#if BUILDFLAG(IS_MAC)
+  services |= user_data_importer::PASSWORDS;
+#else
+  if (HasTestRoot()) {
     services |= user_data_importer::PASSWORDS;
   }
+#endif
   return services;
 }
 
