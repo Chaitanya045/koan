@@ -60,7 +60,7 @@ check('The page is empty: no content, script or extra requests',
 // against Zen's window gradient, ZEN_PARITY): chrome://theme/colors.css has it
 // as --color-new-tab-page-background. As a computed style: 'rgb(r, g, b)', or
 // the start of 'rgba(r, g, b, a)'; null if the page doesn't say.
-const providerBackground = async () => {
+const providerColour = async (name = 'new-tab-page-background') => {
   const id = (await browserCall('Target.createTarget', {
       url: 'chrome://theme/colors.css?sets=ui,chrome', background: true })).result.targetId;
   await sleep(800);
@@ -68,24 +68,30 @@ const providerBackground = async () => {
   const text = page && await evalIn(page, 'document.body?.innerText');
   await browserCall('Target.closeTarget', { targetId: id });
   // #rrggbb, or #rrggbbaa (opaque in practice; an alpha below ff reads as rgba).
-  const hex = text?.match(/--color-new-tab-page-background:\s*#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?/);
+  const hex = text?.match(new RegExp(`--color-${name}:\\s*#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?`));
   if (!hex) return null;
   const [r, g, b] = [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16));
   return !hex[2] || parseInt(hex[2], 16) === 255 ? `rgb(${r}, ${g}, ${b})`
                                                  : `rgba(${r}, ${g}, ${b},`;
 };
+const providerBackground = () => providerColour();
 const isBackground = (colour, wanted) => !!colour &&
     (wanted ? colour === wanted || (wanted.startsWith('rgba') && colour.startsWith(wanted))
             : /^rgb\(\d+, \d+, \d+\)$/.test(colour));
-// The default look is shadcn's, dark: its background (#09090b), which is the
-// window provider's new tab page colour too. (The target opens in the window
-// the user is in, as the new tab pages above do, so the colour is that
-// window's.)
-const SHADCN_DARK = 'rgb(9, 9, 11)';
+// The default look is shadcn's, dark: its card (#18181b) on the window's
+// near-black sidebar (#09090b), which is the window provider's new tab page
+// colour too. (The target opens in the window the user is in, as the new tab
+// pages above do, so the colour is that window's.) Zen's empty tab is its
+// content card, lighter than the window (#349: it was the window's #09090b,
+// a black void).
+const SHADCN_DARK = 'rgb(24, 24, 27)';
 const wanted = await providerBackground();
-check('...in the default look\'s colour, shadcn dark (#09090b), the window provider\'s',
+check('...in the default look\'s colour, shadcn dark\'s card (#18181b), the window provider\'s',
       facts?.background === SHADCN_DARK && isBackground(facts?.background, wanted),
       `${facts?.background} vs ${wanted}`);
+const frame = await providerColour('frame-active');
+check('...which is not the window\'s own colour (the page stands out as a card)',
+      !!frame && !isBackground(facts?.background, frame), `${facts?.background} vs ${frame}`);
 if (process.env.SHOTS) {
   const r = await onPage(tab.page, c => c.send('Page.captureScreenshot', { format: 'png' }));
   fs.writeFileSync(`${process.env.SHOTS}/newtab.png`, Buffer.from(r.result.data, 'base64'));
@@ -108,7 +114,7 @@ check('A new tab page reloaded after another one closed keeps its colour',
 
 // It follows the window's look, live, and the open page loads again with the
 // change: the Zen look is the theme's new tab page colour (the window
-// provider's, not shadcn's), shadcn light bright, shadcn dark #09090b.
+// provider's, not shadcn's), shadcn light bright, shadcn dark #18181b.
 await setKoanPref('koan.look.mode', 'dark');
 await setKoanPref('koan.look.style', 'zen');
 const zen = await providerBackground();

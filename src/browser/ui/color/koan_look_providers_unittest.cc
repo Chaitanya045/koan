@@ -183,6 +183,22 @@ TEST_P(KoanLookProvidersTest, StatusBubbleTextIsReadable) {
             4.5f);
 }
 
+TEST_P(KoanLookProvidersTest, TheEmptyTabIsACardOnTheWindow) {
+  if (std::get<0>(GetParam()) != look::Style::kShadcn ||
+      std::get<2>(GetParam()) != Variant::kDefault) {
+    GTEST_SKIP() << "shadcn's own palettes only";
+  }
+  Build();
+  // The empty tab's page (koan_new_tab_ui.cc) is shadcn's `card`, not the
+  // window's colour: in the dark looks `background` is the sidebar's colour,
+  // and the empty tab after the welcome or in a new Space read as one black
+  // area (#349). Zen's empty tab is its content card on the window.
+  const look::TokenSet& tokens = look::CurrentTokens(dark());
+  const SkColor page = provider_.GetColor(kColorNewTabPageBackground);
+  EXPECT_EQ(tokens[look::Token::kCard], page);
+  EXPECT_NE(provider_.GetColor(ui::kColorSysHeader), page);
+}
+
 TEST_P(KoanLookProvidersTest, SidebarOffBuildsToo) {
   base::test::ScopedFeatureList features;
   features.InitAndDisableFeature(features::kKoanSidebar);

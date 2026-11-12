@@ -5,7 +5,7 @@ and `empty_tab.mjs` are the Linux drivers for several rows; they run nowhere now
 
 | # | Do | Expect |
 |---|---|---|
-| 1 | A new window (⌘N) | The page is blank in the look's colour (Zen look: opaque theme colour; set Settings > Look to shadcn dark: #09090b), no flash of another colour. The New Tab bar is open (Zen's open-on-startup). |
+| 1 | A new window (⌘N) | The page is blank in the look's colour (Zen look: opaque theme colour; set Settings > Look to shadcn dark: #18181b, a card lighter than the #09090b sidebar and gutter), no flash of another colour. The New Tab bar is open (Zen's open-on-startup). |
 | 2 | Relaunch with the previous session restored | The restored tabs, no New Tab bar. |
 | 3 | Open a new tab page A and B (two windows, or two Spaces), close B, reload A | A keeps its colour (never white or empty). With B still open, A has its own window's colour. |
 | 4 | With a new tab page open: switch Space; edit the theme; switch the look between shadcn dark / light / Zen | The page loads again in the new colour (Space switch: report if it stays stale). |
