@@ -19,8 +19,11 @@ namespace koan {
 // the macOS View > Appearance menu (both ThemeService::SetBrowserColorScheme).
 // So that they do what they say, and show the mode in use, this keeps the
 // two in step for one window's profile while the shadcn style is on: a
-// change of the scheme becomes the look's mode, and the look's mode (also at
-// start) becomes the scheme. In the Zen style the scheme decides by itself.
+// change of the scheme becomes the look's mode, and a change of the look's
+// mode (or a switch to the shadcn style) becomes the scheme. Not at start:
+// the scheme is also web pages' prefers-color-scheme, which the look's
+// default must not change by itself. In the Zen style the scheme decides by
+// itself.
 // Each window has one; they agree, so the second write is a no-op.
 class KoanColorSchemeSync {
  public:

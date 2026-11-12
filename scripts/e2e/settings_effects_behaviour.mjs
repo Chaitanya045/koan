@@ -21,8 +21,8 @@
 //   scrolling (a sideways wheel over the sidebar, not on macOS);
 // - Chromium's Appearance rows Koan overrides are hidden (bookmarks bar, tab
 //   search button, auto-pin new tab groups, hover cards, tab strip
-//   position), and its Mode menu and Koan's Look > Mode stay in step both
-//   ways;
+//   position), and its Mode menu and Koan's Look > Mode follow a change of
+//   the other (nothing is written at start: websites follow the scheme);
 // - Restore pinned tabs to their pinned URL: after a quit and a start, with
 //   the setting on and off.
 // Steps that can't be driven say SKIP with the reason. The test_helper
@@ -625,12 +625,17 @@ for (const [selector, what] of [
   check(`Chromium's Appearance: "${what}" is not shown`, s !== 'shown', s);
 }
 
-// Mode: Chromium's menu and Koan's Look > Mode agree, both ways (the shadcn
-// style, Koan's default; in the Zen style Chromium's alone decides).
+// Mode: a change of Chromium's menu or of Koan's Look > Mode becomes the
+// other's (the shadcn style, Koan's default; in the Zen style Chromium's
+// alone decides). Nothing is written at start: a fresh profile keeps
+// Chromium's scheme (Device), which web pages' prefers-color-scheme follows.
 const SCHEME = 'browser.theme.color_scheme2';
 await openSettings();
 const [lookStyle, lookMode] = [await prefValue('koan.look.style'), await prefValue('koan.look.mode')];
 await closeSettings();
+// Before this test changes a mode (section 1 doesn't touch the look).
+check('At start Koan leaves Chromium\'s colour scheme alone (websites keep Device)',
+      await readPref(SCHEME) === 0, J(await readPref(SCHEME)));
 if (lookStyle !== 'shadcn') {
   skipped('Chromium\'s Mode and Koan\'s Look > Mode', `the look is ${lookStyle}, not shadcn`);
 } else {

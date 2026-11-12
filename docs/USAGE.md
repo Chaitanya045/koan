@@ -858,7 +858,9 @@ new tab groups (Spaces are never saved tab groups), the tab hover card rows
 (the sidebar shows no hover cards) and the tab strip position. In the shadcn
 style, Chromium's Appearance > Mode, Koan's Look and Feel > Mode and the
 macOS View > Appearance menu are one setting: changing one changes the
-others (and a switch to the Zen style keeps that mode). Not hidden yet: the Chromium rows Zen hides in Firefox (the AI page,
+others (and a switch to the Zen style keeps that mode). Until you change
+one, Chromium's row shows Device: Koan doesn't change it by itself, since
+websites follow it too. Not hidden yet: the Chromium rows Zen hides in Firefox (the AI page,
 ad privacy, the theme and home-button rows, sign-in), a follow-up (#300).
 Every row's audit: `docs/SETTINGS_AUDIT.md`.
 

@@ -78,8 +78,10 @@ KoanColorSchemeSync::KoanColorSchemeSync(Profile* profile) {
         pref, base::BindRepeating(&KoanColorSchemeSync::OnLookChanged,
                                   base::Unretained(this)));
   }
-  // The look's mode is what the windows show.
-  OnLookChanged();
+  // Nothing is written at start: the scheme is also what web pages get as
+  // prefers-color-scheme, and the look's default (Dark) would turn every site
+  // dark on a Mac in light mode. Until either is changed, Chromium's Mode row
+  // shows its own value (Device).
 }
 
 KoanColorSchemeSync::~KoanColorSchemeSync() = default;
