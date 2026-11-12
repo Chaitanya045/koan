@@ -97,8 +97,10 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
     // Zen measured the page at (0, 0) filling the screen (below a toolbar
     // that compact mode shows). A hidden sidebar and toolbar are revealed by
     // the pointer at the screen's edge, which compact mode watches itself (no
-    // gutter to hover).
-    return gfx::Insets();
+    // gutter to hover). The bookmarks bar docked above the page (Zen's top
+    // bar) keeps its strip.
+    return gfx::Insets::TLBR(GetDockedBookmarksBarHeight(browser_view), 0, 0,
+                             0);
   }
 #endif
   if (IsToolbarHidden(browser_view)) {
@@ -106,12 +108,15 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
     // only a gutter, or (while revealed) the strip where the frame draws its
     // caption buttons; they paint above the client view and would otherwise
     // sit on the page.
-    const int top =
+    // The bookmarks bar docked above the page (Zen's top bar, 34 high) is
+    // the gap there: the card starts below it.
+    const int top = std::max(
+        GetDockedBookmarksBarHeight(browser_view),
         IsCaptionStripCollapsed(browser_view)
             ? kContentCardMargin
             : std::max(kContentCardMargin,
                        GetHiddenToolbarRowHeight(
-                           GetCaptionButtonAreaSize(browser_view).height()));
+                           GetCaptionButtonAreaSize(browser_view).height())));
     // Compact mode may hide the sidebar: then a gutter on its side too.
     const int sidebar_side =
         IsCompactModeActive(browser_view) ? kContentCardMargin : 0;

@@ -185,9 +185,14 @@ toolbar at the top edge. A page's own fullscreen (a video's) hides it all.
 
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
 and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
-> Appearance > Bookmarks bar); Chromium's own "Show bookmarks bar" setting
-doesn't change that. (Chromium's View > "Always Show Toolbar in Full
-Screen" isn't offered: the toolbar shows in fullscreen as in a window.)
+> Appearance > Bookmarks bar) or with ⇧⌘B (View > Always Show Bookmarks Bar,
+whose check mark follows the setting); Chromium's own "Show bookmarks bar"
+setting doesn't change it. It then shows above every page, the new tab page
+too: below the toolbar with Sidebar and Top Toolbar, and with Only Sidebar in
+Zen's top bar above the page (34 px, beside the sidebar), also in compact mode
+and in fullscreen. While the URL bar floats over the page the bar is out of
+sight. (Chromium's View > "Always Show Toolbar in Full Screen" isn't offered:
+the toolbar shows in fullscreen as in a window.)
 
 ## URL bar
 
@@ -643,7 +648,9 @@ buttons, and the palette's "Switch to ... Appearance / Mode".
 **Settings > Look and Feel > Dark Theme Styles** picks Default, Night (a
 black window) or Colorful (dark surfaces tinted with the accent); Night and
 Colorful are Koan's own (Zen has only the setting's name so far).
-**Settings > Tab Management > Workspaces** turns Space themes off. The
+**Settings > Tab Management > Workspaces** turns Space themes off. Both
+rows are the Zen look's: in the shadcn look (the default) they are greyed
+out, with a note. The
 custom colour list of Zen's picker is off by default, as in Zen; turn it on
 with the pref `koan.theme.gradient.show_custom_colors`.
 
@@ -755,7 +762,8 @@ every window):
 
 - **Look**: shadcn/ui (default) or Zen. A profile that never chose a look
   follows the default; one that picked Zen keeps it. Zen has its gradient themes and the
-  theme picker's per-Space colours; the choices below are shadcn's.
+  theme picker's per-Space colours; the choices below are shadcn's, and
+  greyed out in the Zen look.
 - **Mode** (shadcn only; Zen follows the system): Dark (default), Light, or Automatic (follow the system). The
   mode is the window's colour mode, so on macOS the title bar, scrollbars and
   native menus follow it. Websites keep their own colour scheme

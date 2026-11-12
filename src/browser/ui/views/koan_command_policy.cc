@@ -11,6 +11,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/actions/chrome_action_properties.h"
 #include "chrome/browser/ui/browser_actions.h"
@@ -19,8 +20,10 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/common/page_zoom.h"
 #include "koan/browser/koan_features.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
@@ -75,6 +78,11 @@ enum class Owner {
   // HandleNewWindowCommand(): Zen's prefer-unsynced-windows makes New Window
   // a New Blank Window (koan_window_sync.h).
   kNewWindow,
+  // ToggleBookmarksBar(): ⇧⌘B and View > Always Show Bookmarks Bar switch
+  // Koan's bookmarks bar setting (kBookmarksBarShow), the one that shows the
+  // bar (bookmark_bar_controller.cc.patch), as Firefox's Ctrl+Shift+B does in
+  // Zen; upstream's pref is ignored (audit 3, LB6).
+  kBookmarksBar,
 };
 
 struct Row {
@@ -202,6 +210,9 @@ constexpr Row kRows[] = {
        chrome::NewWindow(browser);
      }},
 
+    // The bookmarks bar: ⇧⌘B, View > Always Show Bookmarks Bar.
+    {kActionShowBookmarkBar, IDC_SHOW_BOOKMARK_BAR, Owner::kBookmarksBar},
+
 #if BUILDFLAG(IS_MAC)
     // Fullscreen: View > Always Show Toolbar in Full Screen, ⇧⌘F.
     {kActionToggleFullscreenToolbar, IDC_TOGGLE_FULLSCREEN_TOOLBAR,
@@ -211,6 +222,20 @@ constexpr Row kRows[] = {
      }},
 #endif
 };
+
+// Koan's bookmarks bar setting, the profile's (private windows share it).
+PrefService* BookmarksBarPrefs(BrowserWindowInterface* browser) {
+  return browser ? browser->GetProfile()->GetOriginalProfile()->GetPrefs()
+                 : nullptr;
+}
+
+void ToggleBookmarksBar(BrowserWindowInterface* browser) {
+  if (PrefService* prefs = BookmarksBarPrefs(browser)) {
+    base::RecordAction(base::UserMetricsAction("ShowBookmarksBar"));
+    prefs->SetBoolean(prefs::kBookmarksBarShow,
+                      !prefs->GetBoolean(prefs::kBookmarksBarShow));
+  }
+}
 
 KoanBrowserViewController* ControllerOf(BrowserWindowInterface* browser) {
   BrowserView* browser_view =
@@ -236,6 +261,8 @@ bool Installs(Owner owner, BrowserView* browser_view) {
       return OwnsSidebar() && browser_view->GetIsNormalType();
     case Owner::kNewWindow:
       return browser_view->GetIsNormalType();
+    case Owner::kBookmarksBar:
+      return true;
   }
 }
 
@@ -281,6 +308,9 @@ bool Takes(const Row& row, BrowserWindowInterface* browser) {
     }
     case Owner::kNewWindow:
       return HandleNewWindowCommand(browser);
+    case Owner::kBookmarksBar:
+      ToggleBookmarksBar(browser);
+      return true;
   }
 }
 
@@ -358,6 +388,16 @@ bool HandlesBrowserCommand(BrowserWindowInterface* browser, int command_id) {
     }
   }
   return false;
+}
+
+std::optional<bool> MenuCommandCheckState(BrowserView* browser_view,
+                                          int command_id) {
+  if (command_id != IDC_SHOW_BOOKMARK_BAR || !browser_view) {
+    return std::nullopt;
+  }
+  // The setting the command switches (kBookmarksBar), not upstream's pref.
+  const PrefService* prefs = BookmarksBarPrefs(browser_view->browser());
+  return prefs && prefs->GetBoolean(prefs::kBookmarksBarShow);
 }
 
 std::optional<bool> HidesMenuCommand(BrowserView* browser_view,

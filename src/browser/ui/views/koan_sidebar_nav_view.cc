@@ -354,6 +354,11 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   UpdateInUse();
 
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
+  pref_change_registrar_.Init(
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
+  pref_change_registrar_.Add(prefs::kUrlBarShowCopyUrl,
+                             base::BindRepeating(&KoanSidebarNavView::UpdateUrl,
+                                                 base::Unretained(this)));
   ObserveActiveTab();
 }
 

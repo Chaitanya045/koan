@@ -256,6 +256,8 @@ class KoanUrlBarCardFill : public views::View {
       SchedulePaint();
     }
   }
+  // For UI DevTools (scripts/e2e/settings_effects_visual.mjs).
+  bool GetGlass() const { return glass_; }
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
@@ -270,6 +272,7 @@ class KoanUrlBarCardFill : public views::View {
 };
 
 BEGIN_METADATA(KoanUrlBarCardFill)
+ADD_READONLY_PROPERTY_METADATA(bool, Glass)
 END_METADATA
 
 // Over the floating card, in a layer of its own so that it is above the

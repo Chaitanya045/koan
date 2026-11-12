@@ -320,6 +320,13 @@ base::DictValue KoanSettingsHandler::Settings() const {
       values.Set(row.depends_on,
                  PrefsFor(row.depends_on).GetValue(row.depends_on).Clone());
     }
+    if (row.look) {
+      // Greyed out in the other look (koan_settings_rows.h).
+      entry.Set("look", row.look);
+      entry.Set("lookPref", prefs::kLookStyle);
+      values.Set(prefs::kLookStyle,
+                 local_state_->GetValue(prefs::kLookStyle).Clone());
+    }
     if (row.note && !row.note_pref) {
       entry.Set("note", row.note);
     } else if (row.note && prefs_->FindPreference(row.note_pref)) {

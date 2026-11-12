@@ -11,6 +11,7 @@
 #include "base/scoped_observation.h"
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/view.h"
@@ -137,6 +138,9 @@ class KoanSidebarNavView : public views::View,
   // the toolbar).
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       chips_observation_{this};
+  // The copy button's setting (kUrlBarShowCopyUrl), so a change shows at
+  // once in every window.
+  PrefChangeRegistrar pref_change_registrar_;
 };
 
 }  // namespace koan

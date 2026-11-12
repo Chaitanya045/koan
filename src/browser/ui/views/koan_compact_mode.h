@@ -107,6 +107,11 @@ void InsetLayoutChildren(Layout& layout, int inset) {
   }
 }
 
+// The height of the strip above the page where the bookmarks bar docks
+// while Koan hides the toolbar in the single-toolbar layout (Zen's top bar,
+// KoanCompactModeController::docked_bookmarks_bar_height()); 0 without it.
+int GetDockedBookmarksBarHeight(const views::View* browser_view);
+
 // Where compact mode hides the toolbar but not the sidebar, the width the
 // revealed toolbar leaves for the sidebar (Zen's navbar is above the page
 // only); otherwise 0. Called when the top container is laid out on its own.
