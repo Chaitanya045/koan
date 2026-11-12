@@ -462,7 +462,8 @@ bool StartHolder(const Command& command, std::string* error) {
   std::string line = read_line();
   // Koan asks the user before it lets the connection in: say why, and wait.
   while (line.starts_with("wait ")) {
-    fprintf(stderr, "koan: %s; approve it in Koan...\n", line.c_str() + 5);
+    const std::string reason = line.substr(5);
+    fprintf(stderr, "koan: %s; approve it in Koan...\n", reason.c_str());
     line = read_line();
   }
   if (line == "ok") {
