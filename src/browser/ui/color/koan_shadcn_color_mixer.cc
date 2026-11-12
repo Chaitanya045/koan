@@ -420,6 +420,19 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
       t.Over(Token::kSidebarForeground, Token::kSidebarAccent, 0.08f)};
   mixer[kColorKoanEssentialsTileSelected] = {
       t.Over(Token::kSidebarForeground, Token::kSidebarAccent, 0.16f)};
+  // The audio badge on a tile: a round `sidebar` chip ringed with
+  // `sidebar-border`, the selected tile's colour on the selected tile, and
+  // like the tiles a shade of `sidebar-foreground` while hovered or pressed.
+  mixer[kColorKoanEssentialsAudioBadge] = {t[Token::kSidebar]};
+  mixer[kColorKoanEssentialsAudioBadgeSelected] = {
+      kColorKoanEssentialsTileSelected};
+  mixer[kColorKoanEssentialsAudioBadgeHovered] = {
+      t.Alpha(Token::kSidebarForeground, 0.08f)};
+  mixer[kColorKoanEssentialsAudioBadgePressed] = {
+      t.Alpha(Token::kSidebarForeground, 0.16f)};
+  mixer[kColorKoanEssentialsAudioBadgeForeground] = {
+      t[Token::kSidebarForeground]};
+  mixer[kColorKoanEssentialsAudioBadgeBorder] = {t[Token::kSidebarBorder]};
 
   // The Essentials promo: a sidebar accent drop zone with a primary ring.
   mixer[kColorKoanEssentialsPromo] = {t[Token::kSidebarAccent]};

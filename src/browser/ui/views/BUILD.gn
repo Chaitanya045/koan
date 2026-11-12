@@ -119,6 +119,16 @@ source_set("lights_geometry") {
   ]
 }
 
+# Zen's audio badge on an Essentials tile (koan_essentials_audio.h): what it
+# shows and where, plain logic for the unit tests.
+source_set("essentials_audio") {
+  sources = [
+    "koan_essentials_audio.cc",
+    "koan_essentials_audio.h",
+  ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 source_set("glass_tint") {
   sources = [
     "koan_glass_tint.cc",
@@ -243,6 +253,7 @@ source_set("stored_space") {
 test("koan_views_unittests") {
   sources = [
     "koan_content_radius_unittest.cc",
+    "koan_essentials_audio_unittest.cc",
     "koan_extension_drop_unittest.cc",
     "koan_glass_tint_unittest.cc",
     "koan_library_motion_unittest.cc",
@@ -263,6 +274,7 @@ test("koan_views_unittests") {
   ]
   deps = [
     ":content_radius",
+    ":essentials_audio",
     ":extension_drop",
     ":glass_tint",
     ":lights_geometry",
@@ -366,6 +378,8 @@ source_set("impl") {
     "koan_emoji_picker.cc",
     "koan_emoji_picker.h",
     "koan_essentials.cc",
+    "koan_essentials_audio_badge.cc",
+    "koan_essentials_audio_badge.h",
     "koan_essentials_promo.cc",
     "koan_essentials_promo.h",
     "koan_folder_controller.cc",
@@ -498,6 +512,7 @@ source_set("impl") {
   public_deps = [ ":space_theme" ]
   deps = [
     ":content_radius",
+    ":essentials_audio",
     ":extension_drop",
     ":glass_tint",
     ":grain_png",
@@ -554,6 +569,7 @@ source_set("impl") {
     "//chrome/browser/ui/immersive:immersive_mode_controller",
     "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/tabs",
+    "//chrome/browser/ui/tabs/alert:tab_alert",
     "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/ui/tabs:tab_strip",
     "//chrome/browser/ui/tabs:utils",

@@ -390,7 +390,9 @@ As in Zen there are two kinds of pinned tab:
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
   Dragging a tab into the grid also makes it an Essential. With no
   Essentials yet, dragging a tab to the top of the sidebar shows Zen's
-  "Add to Essentials" drop target; drop it there.
+  "Add to Essentials" drop target; drop it there. An Essential that plays
+  sound keeps its icon, with a small speaker badge on its corner: click
+  the badge to mute or unmute the tab (it doesn't switch to it).
 
 Both remember the URL they were pinned on, the **pinned URL**. When a pinned
 tab goes elsewhere, a slash appears after its icon: hover it to see the

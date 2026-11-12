@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_ESSENTIALS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_ESSENTIALS_H_
 
+#include <optional>
+
 class TabStripView;
 
 namespace gfx {
@@ -12,6 +14,7 @@ class Canvas;
 }  // namespace gfx
 
 namespace tabs {
+enum class TabAlert;
 enum class VerticalTabStripCollapseState;
 }  // namespace tabs
 
@@ -85,6 +88,15 @@ tabs::VerticalTabStripCollapseState GetEssentialsCollapseState(
 // collapsed strip is out on hover (TabView::IsInExpandOnHover()); a tile stays
 // a tile, its icon centred, in compact mode's reveal.
 bool IsEssentialsTile(bool pinned);
+
+// Whether the vertical tab view's layout hides upstream's alert indicator
+// (tab_view_vertical_layout.cc), given whether the tab is `pinned` and the
+// `alert` the indicator shows. Upstream shows a pinned tab's alert instead of
+// its favicon; Zen's Essentials tile keeps its favicon and shows audio
+// (playing, muted) as a badge over it (koan_essentials_audio_badge.h), so on
+// a tile an audio alert hides the indicator. Other alerts (recording,
+// sharing, ...) keep upstream's indicator.
+bool HidesTabAlertIndicator(bool pinned, std::optional<tabs::TabAlert> alert);
 
 // Paints the background of the pinned tab `tab` as an Essentials tile
 // (`selected`: active or multi-selected; `hover`: the hover animation's

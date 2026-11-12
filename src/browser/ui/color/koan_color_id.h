@@ -48,6 +48,16 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanEssentialsTile,
   kColorKoanEssentialsTileHovered,
   kColorKoanEssentialsTileSelected,
+  // The audio badge over an Essentials tile's favicon
+  // (koan_essentials_audio_badge.cc): its fill, on the selected tile, the
+  // layer over it while the badge is hovered and pressed, the glyph and the
+  // ring around it.
+  kColorKoanEssentialsAudioBadge,
+  kColorKoanEssentialsAudioBadgeSelected,
+  kColorKoanEssentialsAudioBadgeHovered,
+  kColorKoanEssentialsAudioBadgePressed,
+  kColorKoanEssentialsAudioBadgeForeground,
+  kColorKoanEssentialsAudioBadgeBorder,
   // Zen's Essentials drop promo (koan_essentials_promo.cc): its fill, lit
   // while a tab is over it, border, text and outline, shadow.
   kColorKoanEssentialsPromo,
