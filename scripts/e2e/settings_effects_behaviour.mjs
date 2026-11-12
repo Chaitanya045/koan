@@ -348,6 +348,7 @@ async function closeTab(page) {
 // gesture: Chromium forgets the tabs' openers then, which a CDP bringToFront
 // doesn't, and an opener comes before the recently used tab); `front()` if
 // the row isn't on screen.
+// Returns whether `title` is then the active tab.
 async function show(page, title) {
   const vs = await viewTree();
   const row = tabViewTitled(vs, title);
@@ -356,29 +357,42 @@ async function show(page, title) {
   } else {
     await front(page);
   }
-  await sleep(500);
+  return !!await waitFor(async () => await activeTitle() === title, 3000);
 }
-// The window's tabs, for a failure's detail.
-const strip = async () => (await listTabs())?.map(
-    t => `${titleOf(t)}${t.active ? '*' : ''}${t.pinned ? '(pinned)' : ''}`).join(' ') ?? '';
+// The window's tabs, for a failure's detail: title, * if active, and the
+// order Chromium last showed them in (1 = most recently).
+async function strip() {
+  const tabs = await listTabs() ?? [];
+  const order = [...tabs].sort((x, y) => y.lastAccessed - x.lastAccessed);
+  return tabs.map(t => `${titleOf(t)}${t.active ? '*' : ''}${t.pinned ? '(pinned)' : ''}` +
+                       `#${order.indexOf(t) + 1}`).join(' ');
+}
+// The recently used tab and the neighbour must differ, and neither may be
+// the tab made last before the closing one: A is shown before D, while C is
+// both D's neighbour and the tab made just before it.
 const a = await openTab('A');
 const b = await openTab('B');
 const c = await openTab('C');
 let d = await openTab('D');
-await show(b, 'B');
-await show(d, 'D');
-if (!await closeTab(d)) {
+let shownFirst = await show(a, 'A');
+let shownThen = await show(d, 'D');
+let before = await strip();
+if (!shownFirst || !shownThen) {
+  check('MRU on close: A and then D are shown (sidebar clicks)', false, before);
+} else if (!await closeTab(d)) {
   skipped('Switch to the most recently used tab on close', 'test_helper is not loaded');
 } else {
-  check('MRU on close on (default): closing D shows B, the tab shown before it',
-        await waitFor(() => visible(b), 4000), await strip());
+  check('MRU on close on (default): closing D shows A, the tab shown before it',
+        await waitFor(() => visible(a), 4000), `before: ${before}; after: ${await strip()}`);
   await change('koan.tabs.select_recently_used_on_close', false);
   d = await openTab('D');
-  await show(b, 'B');
-  await show(d, 'D');
+  shownFirst = await show(a, 'A');
+  shownThen = await show(d, 'D');
+  before = await strip();
   await closeTab(d);
   check('...off: closing D shows its neighbour C, as in Chrome',
-        await waitFor(() => visible(c), 4000), await strip());
+        shownFirst && shownThen && await waitFor(() => visible(c), 4000),
+        `before: ${before}; after: ${await strip()}`);
   await change('koan.tabs.select_recently_used_on_close', true);
 }
 

@@ -16,7 +16,8 @@ const ACTIONS = {
   'list-tabs': async tab => (await chrome.tabs.query({ windowId: tab.windowId })).map(t => ({
     id: t.id, index: t.index, url: t.url || t.pendingUrl || '', title: t.title ?? '',
     pinned: t.pinned, groupId: t.groupId, active: t.active, status: t.status,
-    discarded: t.discarded, audible: !!t.audible, asker: t.id === tab.id })),
+    discarded: t.discarded, audible: !!t.audible, asker: t.id === tab.id,
+    lastAccessed: t.lastAccessed ?? 0 })),
 };
 async function discard(urls) {
   const tabs = await chrome.tabs.query({});

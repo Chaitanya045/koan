@@ -16,6 +16,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -25,6 +27,8 @@
 #include "content/public/test/browser_test.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
+#include "ui/base/page_transition_types.h"
+#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -113,6 +117,42 @@ IN_PROC_BROWSER_TEST_F(
     return model()->GetIndexOfWebContents(closing) == TabStripModel::kNoTab;
   }));
   EXPECT_EQ(model()->GetActiveTab(), b);
+}
+
+// The e2e suite's setup (settings_effects_behaviour.mjs): a second window
+// opened and closed first (its settings page), tabs opened the way DevTools'
+// Target.createTarget opens them (Navigate, AUTO_TOPLEVEL, a new foreground
+// tab), A and then D shown with a click, D closed through
+// WebContents::Close() (chrome.tabs.remove). C is D's neighbour and the tab
+// made just before it; the recently used one is A.
+IN_PROC_BROWSER_TEST_F(
+    KoanTabManagementBrowserTest,
+    ClosingAfterTabsOpenedLikeDevToolsSelectsTheRecentlyUsed) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  BrowserWindowInterface* other = CreateBrowser(browser()->GetProfile());
+  CloseBrowserSynchronously(other);
+  const auto open = [&](const std::string& title) {
+    NavigateParams params(browser()->GetProfile(), Page(title),
+                          ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    params.disposition = WindowOpenDisposition::kNewForegroundTab;
+    Navigate(&params);
+    tabs::TabInterface* tab = model()->GetActiveTab();
+    EXPECT_TRUE(
+        base::test::RunUntil([&] { return tab->GetGroup().has_value(); }));
+    return tab;
+  };
+  tabs::TabInterface* a = open("A");
+  open("B");
+  open("C");
+  tabs::TabInterface* d = open("D");
+  Show(a);
+  Show(d);
+  content::WebContents* closing = d->GetContents();
+  closing->Close();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model()->GetIndexOfWebContents(closing) == TabStripModel::kNoTab;
+  }));
+  EXPECT_EQ(model()->GetActiveTab(), a);
 }
 
 }  // namespace koan
