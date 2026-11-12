@@ -1411,13 +1411,23 @@ void KoanCompactModeController::PlaceTopContainer() {
   if (!overlay) {
     return;
   }
+  const views::View* top_container = browser_view_->top_container();
+  const views::View* parent_before = top_container->parent();
+  const bool overlay_shown_before = overlay->GetVisible();
   if (!ParksTopContainer()) {
     RestoreTopContainer();
-    return;
+  } else {
+    ParkTopContainer();
+    if (top_container->parent() == overlay) {
+      overlay->SetVisible(!IsContentFullscreen(browser_view_));
+    }
   }
-  ParkTopContainer();
-  if (browser_view_->top_container()->parent() == overlay) {
-    overlay->SetVisible(!IsContentFullscreen(browser_view_));
+  // Moving the top container out of the BrowserView or back doesn't lay the
+  // window out: the page would keep the toolbar's space above it (over the
+  // page's own fullscreen) or stay under the toolbar that came back.
+  if (!IsClosing() && (top_container->parent() != parent_before ||
+                       overlay->GetVisible() != overlay_shown_before)) {
+    OnContentCardChanged();
   }
 }
 
