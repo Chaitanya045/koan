@@ -56,6 +56,7 @@
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_renderer_switches.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -719,6 +720,12 @@ KoanGlanceController::KoanGlanceController(BrowserView* browser_view)
     : browser_view_(browser_view) {
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
   TrackActiveTab();
+  pref_change_registrar_.Init(
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
+  for (const char* pref :
+       {prefs::kGlanceEnabled, prefs::kGlanceActivationMethod}) {
+    pref_change_registrar_.Add(pref, base::BindRepeating(&DropSpareRenderers));
+  }
 }
 
 KoanGlanceController::~KoanGlanceController() = default;

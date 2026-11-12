@@ -640,6 +640,7 @@ source_set("impl") {
     "//koan/browser:fuzzy_score",
     "//koan/browser:library_logic",
     "//koan/browser:prefs",
+    "//koan/browser:renderer_switches",
     "//koan/browser:shortcut_table",
     "//koan/browser:space_title",
     "//koan/browser:tab_hooks",

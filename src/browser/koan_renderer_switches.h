@@ -22,6 +22,13 @@ namespace koan {
 void AppendRendererSwitches(base::CommandLine* command_line,
                             content::RenderProcessHost& process);
 
+// Called when a setting AppendRendererSwitches() passes on changes (Glance
+// on or off, its trigger). A page sees it only in a renderer process started
+// after the change, and content keeps a spare process started in advance,
+// with the old switches, for the next page: this drops it, so the next page
+// gets a process with the new ones, as the settings page says.
+void DropSpareRenderers();
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_KOAN_RENDERER_SWITCHES_H_

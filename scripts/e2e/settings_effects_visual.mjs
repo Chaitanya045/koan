@@ -13,8 +13,8 @@
 // (fullscreen_multiple, fullscreen_single); this one checks the bookmarks
 // bar there.
 import {
-  ACCEL, ALT, CTRL, IS_MAC, SHIFT, browserCall, check, evalIn, finish, front, key, onPage,
-  pages, showPane, sleep, typeInto, viewEvent, viewMouse, viewTree, waitFor,
+  ACCEL, ALT, CTRL, IS_MAC, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, front,
+  key, onPage, pages, showPane, sleep, typeInto, viewMouse, viewTree, waitFor,
 } from './lib/koan.mjs';
 import { goFullscreen } from './lib/fullscreen.mjs';
 import {
@@ -594,13 +594,35 @@ async function typeInBar(text) {
   if (field) await typeInto(field, text);
   return win();
 }
+// Whether the URL bar is closed: the pill shows the page again (it is
+// empty while the bar edits over it) and nothing floats.
+const pillText = v => v.views.find(x => x.cls === 'Label' && x.path.at(-1) === 'KoanUrlPill')
+    ?.props.Text;
+const barClosed = v => !floating(v) && !!pillText(v);
+// Esc to the window with the omnibox, pressed and released, as urlbar.mjs
+// does (Zen: one Esc closes the bar; a second clears nothing), until the bar
+// is closed.
+async function windowEsc() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const has = (n, cls) => {
+    const a = n.attributes ?? [];
+    return a[a.indexOf('class') + 1] === cls || (n.children ?? []).some(c => has(c, cls));
+  };
+  const findWidget = n => n.nodeName === 'Widget' && has(n, 'OmniboxViewViews') ? n
+      : (n.children ?? []).map(findWidget).find(Boolean);
+  const widget = findWidget(doc);
+  for (const type of widget ? ['keyPressed', 'keyReleased'] : []) {
+    await ui.send('DOM.dispatchKeyEvent', { nodeId: widget.nodeId,
+        event: { type, keyCode: VK.ESC, code: 0, flags: 0, key: 0, isChar: false } });
+  }
+  ui.close();
+  await sleep(800);
+}
 async function closeBar() {
-  for (let i = 0; i < 2; i++) {
-    const field = (await win()).views.find(x => x.cls === 'OmniboxViewViews' && x.shown);
-    if (!field) break;
-    await viewEvent(field, 'DOM.dispatchKeyEvent', { type: 'keyPressed', keyCode: VK.ESC,
-                                                     code: 0, flags: 0, key: 0, isChar: false });
-    await sleep(600);
+  for (let i = 0; i < 3 && !barClosed(await win()); i++) {
+    await windowEsc();
   }
   await front(testPage);
 }
@@ -608,7 +630,11 @@ const behavior = 'koan.urlbar.behavior';
 check('URL bar Behavior: Floating only when typing by default',
       await prefOf(behavior) === 'floating-on-type');
 check('...a click edits in the pill', !floating(await openBar()));
-check('...typing floats it', floating(await typeInBar('k')));
+// Zen's test_Click_Shoudnt_FLoat_Urlbar: a bar a click opened never floats,
+// not even once you type (urlbar.mjs); the keyboard's does ("+ New Tab"
+// below).
+check('...typing there keeps it in the pill (a click never floats it)',
+      !floating(await typeInBar('k')));
 await closeBar();
 check('Behavior: Always floating, in the page', await setMenu(behavior, 'float'));
 check('...a click floats it', floating(await openBar()));
@@ -645,7 +671,9 @@ await front(testPage);
 const copyButton = v => v.views.find(x => x.cls === 'ImageButton' && x.shown &&
                                           x.path.at(-1) === 'KoanUrlPill' &&
                                           x.props.TooltipText === 'Copy URL');
-check('Copy URL button: in the pill by default', !!copyButton(await win()));
+// (Zen: only for a page, and not while the bar edits over the pill.)
+check('Copy URL button: in the pill by default, for a page',
+      !!await waitWin(v => barClosed(v) && copyButton(v)), pillText(await win()));
 check('...off in the page removes it at once', await setCheckbox('koan.urlbar.show_copy_url', false) &&
       !!await waitWin(v => !copyButton(v)));
 check('...on brings it back', await setCheckbox('koan.urlbar.show_copy_url', true) &&
