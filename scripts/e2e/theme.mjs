@@ -15,11 +15,18 @@
 // Native views are read and driven through UI DevTools; keys go to a
 // widget's node, so they take the path of real keys (Esc closes the panel,
 // Enter runs a palette action).
+//
+// On macOS (scripts/mac/suite.sh): the Space header's menu is a native
+// NSMenu (skipped: the palette opens the picker), the panel is placed and
+// sized as Zen's NSPopover on macOS, and local_state/theme.json turns the
+// translucent window off (theme_glass.mjs checks the glass; macOS 26+ has
+// it on by default).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { CDP_PORT, UI_PORT, browserCall, connect, createSpace, evalIn, menuMouse,
-         openMenus, pages, settingsCall, sleep, typeInto, viewMouse, viewTree,
-         waitFor, check, finish } from './lib/koan.mjs';
+import { ACCEL, CDP_PORT, IS_MAC, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace,
+         menuMouse, openMenus, pages, sleep, typeInto, viewMouse, viewTree, waitFor, check,
+         finish } from './lib/koan.mjs';
+import { skipped } from './lib/mac.mjs';
 import {
   ALT, CTRL, VK, appearance, bigDot, browserWidget, button, click, closePicker, drag,
   lastPage, mouse, navigateShowing, pagePrefersDark, palette, paletteRows, picker,
@@ -71,17 +78,23 @@ const ZEN_LIGHT_BACKGROUND = 'rgba(200, 194, 177, 1)';
 const ZEN_LIGHT_BACKGROUND_DEFAULT_OPACITY = 'rgba(134, 130, 121, 1)';
 const ZEN_DRAGGED_DOT = '252,207,207@200,180';
 
-// Where Zen 1.24b opens the panel off macOS (ZenGradientGenerator.mjs
-// openThemePicker(): a XUL popup at #TabsToolbar's top-right, "topright
-// topleft", x -10): #TabsToolbar is the sidebar below the URL pill inside
-// the toolbox's 5px padding. Returns [ok, details].
+// Where Zen 1.24b opens the panel (ZenGradientGenerator.mjs
+// openThemePicker(), at #TabsToolbar: the sidebar below the URL pill inside
+// the toolbox's padding, 5px, 6px on macOS). Off macOS a XUL popup at its
+// top-right, "topright topleft", x -10. On macOS an NSPopover on its right
+// edge (the x offset unused), centred on it along that edge, 13pt from it
+// (the hidden arrow's distance; koan_theme_picker.cc PlaceBeside()).
+// Returns [ok, details].
 function placement(t) {
   const [x, y, w, h] = (picker(t)?.p.PanelInWindow ?? '').split(',').map(Number);
   const region = shown(t, 'VerticalTabStripRegionView')[0];
   const nav = shown(t, 'KoanSidebarNavView')[0];
   if (!region || !nav || Number.isNaN(x)) return [false, `${picker(t)?.p.PanelInWindow} no sidebar`];
-  const wantX = region.ax + region.w - 5 - 10;
-  const wantY = nav.ay + nav.h;
+  const padding = IS_MAC ? 6 : 5;
+  const top = nav.ay + nav.h;
+  const bottom = region.ay + region.h - padding;
+  const wantX = IS_MAC ? region.ax + region.w - padding + 13 : region.ax + region.w - padding - 10;
+  const wantY = IS_MAC ? top + Math.trunc((bottom - top - h) / 2) : top;
   return [Math.abs(x - wantX) <= 1 && Math.abs(y - wantY) <= 1,
           `panel ${x},${y} ${w}x${h}; want ${wantX},${wantY}`];
 }
@@ -102,9 +115,9 @@ async function spaceName() {
   const header = (await viewTree()).find(v => v.cls === 'KoanSpaceHeaderView' && v.shown);
   return header?.props.Name?.replace(/^"(.*)"$/, '$1') ?? '';
 }
-// Ctrl+Alt+Left/Right, until the header shows `name`.
+// Ctrl+Alt+Left/Right (Cmd+Option on macOS), until the header shows `name`.
 async function switchSpace(code, name) {
-  await shortcut(code, CTRL | ALT);
+  await shortcut(code, ACCEL | ALT, code === VK.LEFT ? 'ArrowLeft' : 'ArrowRight');
   const ok = await waitFor(async () => await spaceName() === name);
   check(`Switched to the Space "${name}"`, ok, await spaceName());
   await sleep(500);
@@ -116,7 +129,9 @@ async function switchSpace(code, name) {
 await createSpace(await showingTab(), 'Second');
 await sleep(1500);
 await navigateShowing('data:text/html,<title>Space 1</title>A website');
-{
+if (NATIVE_MENUS) {
+  skipped('The Space header\'s "Theme…" opens the theme picker', NATIVE_MENU_WHY);
+} else {
   const menu = await headerMenu();
   check('The Space header has a menu', menu?.items.length >= 3, `${menu?.items.length} item(s)`);
   if (menu) await menuMouse(menu, menu.items[2]);  // Theme…
@@ -133,8 +148,11 @@ check('The palette\'s "Open Theme Picker" opens the theme picker', !!p);
 if (!p) finish();
 check('...in the same place', ...placement(t));
 
+// 426 + the grain dial (73px, 66px on macOS: Zen's macOS panel is 380 x 514
+// with its padding and border).
+const PANEL_HEIGHT = IS_MAC ? 492 : 499;
 check("The panel has Zen's size (358px wide inside 10px padding)",
-      p.w === 358 && p.h === 499, `${p.w}x${p.h}`);
+      p.w === 358 && p.h === PANEL_HEIGHT, `${p.w}x${p.h}`);
 const field = shown(t, 'KoanThemeGradientField')[0];
 check('The colour field is 358x358', field?.w === 358 && field?.h === 358,
       `${field?.w}x${field?.h}`);
@@ -189,8 +207,10 @@ p = picker(t);
 check('The opacity slider goes up to 0.8', Math.abs(+p.p.Opacity - 0.8) < 0.001, p.p.Opacity);
 
 const dial = shown(t, 'KoanThemeGrainDial')[0];
-// The handle sits at the top of the dial (8px margin, 73px dial).
-await drag(dial, [44, 8], [dial.w - 2, 44]);
+// The handle sits at the top of the dial (8px margin around the dial, 73px,
+// 66px on macOS): from there to 3 o'clock.
+const dialCentre = Math.floor(dial.w / 2);
+await drag(dial, [dialCentre, 8], [dial.w - 2, dialCentre]);
 t = await tree();
 p = picker(t);
 check("Dragging the grain handle to 3 o'clock sets 25% grain", +p.p.Texture === 0.25, p.p.Texture);

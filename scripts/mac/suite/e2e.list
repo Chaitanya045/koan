@@ -19,6 +19,14 @@ lights_hover_steady timeout=120
 agent_cli timeout=420
 # Copy current URL with several tabs selected (palette, test_helper).
 copy_urls timeout=180
+# The command palette (Zen's actions in the URL bar), two restarts; the URL
+# bar opens with a pill click, or a real Cmd+L in compact mode.
+palette timeout=480
+# Zen's theme picker (from the palette), a restart; on glass.
+theme timeout=420
+theme_glass timeout=180
+# The look (shadcn default, Zen style) in the window's pixels (screencapture).
+look timeout=180
 # Existing scripts. lib/koan.mjs key() sends Mac key codes on macOS (and the
 # scripts ACCEL, Cmd there), so these mean the same on the Mac. Scripts that
 # need a main-menu key (Cmd+W, Cmd+Shift+W, Cmd+Q, Cmd+L, Cmd+Shift+T: CDP

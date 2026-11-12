@@ -1,25 +1,34 @@
-// End-to-end test of Koan's look (issue #48): the default is Zen's, and the
-// shadcn style (dark mode), drawn from shadcn's tokens everywhere (the window's frame as
-// pixels, the settings page as computed styles), and the look switches live:
-// light mode, the Zen style, a base colour, an accent and a pasted theme.
+// End-to-end test of Koan's look (issues #48, #296): the default is the
+// shadcn style (dark mode), drawn from shadcn's tokens everywhere (the
+// window's frame as pixels, the settings page as computed styles), and the
+// look switches live: light mode, the Zen style, a base colour, an accent
+// and a pasted theme.
 //
 //   scripts/e2e/run.sh look
+//
+// The window's pixels: headless Ozone's frame dumps off macOS (look.flags);
+// on macOS (scripts/mac/suite.sh) a screencapture of the window
+// (lib/mac.mjs captureWindow()), with the translucent window off
+// (local_state/look.json) so the sidebar's colour is Koan's alone. The
+// settings tab opens through CDP there (Cmd+, is a main-menu key).
 //
 // Koan's default "Black" base colour (shadcn's Zinc with near-black dark
 // surfaces), as sRGB: dark background and sidebar #09090b, card #18181b,
 // border #27272a; light background #ffffff, sidebar #fafafa. Neutral's dark
 // background is #0a0a0a.
 import {
-  CTRL, check, evalIn, finish, front, key, pages, settingsCall, sleep, waitFor, windowFrame,
-  ACCEL,
+  ACCEL, IS_MAC, browserCall, check, evalIn, finish, front, key, pages, settingsCall, sleep,
+  waitFor, windowFrame,
 } from './lib/koan.mjs';
+import { captureWindow } from './lib/mac.mjs';
 
 const settingsPages = async () =>
   (await pages()).filter(p => p.url.startsWith('chrome://settings'));
 
 let [other] = await pages();
 await front(other);
-await key(other, 188, ACCEL, ',');
+if (IS_MAC) await browserCall('Target.createTarget', { url: 'chrome://settings/' });
+else await key(other, 188, ACCEL, ',');
 let [settings] = await waitFor(settingsPages);
 await waitFor(() => evalIn(settings, `koanSettingsRoot?.getElementById('pane')?.childElementCount > 0`));
 
@@ -28,21 +37,28 @@ const pref = name => evalIn(settings, `import('chrome://resources/js/cr.js').the
 const set = (name, value) => settingsCall(settings, 'koanSetPref', name, value);
 // The page's background: the look paints it on the root (koan_tokens.css).
 const bg = () => evalIn(settings, `getComputedStyle(document.documentElement).backgroundColor`);
-const near = ([r, g, b], [er, eg, eb], tolerance = 3) =>
-    Math.abs(r - er) <= tolerance && Math.abs(g - eg) <= tolerance &&
-    Math.abs(b - eb) <= tolerance;
-// A pixel of the sidebar's left edge, in the middle of the window's height.
+// A pixel of the sidebar's left edge (3 points in), in the middle of the
+// window's height; null (and the reason printed) if the window couldn't be
+// captured.
 const sidebarPixel = async () => {
   await sleep(1500);
-  const frame = windowFrame();
-  return frame.pixel(3, Math.floor(frame.height / 2));
+  let frame = null;
+  if (IS_MAC) {
+    const shot = await captureWindow(settings);
+    if (shot.error) console.log(`  (no capture of the window: ${shot.error})`);
+    frame = shot.frame ?? null;
+  } else {
+    frame = { ...windowFrame(), scale: 1 };
+  }
+  return frame && frame.pixel(Math.round(3 * frame.scale), Math.floor(frame.height / 2));
 };
+const near = (pixel, [er, eg, eb], tolerance = 3) => !!pixel &&
+    Math.abs(pixel[0] - er) <= tolerance && Math.abs(pixel[1] - eg) <= tolerance &&
+    Math.abs(pixel[2] - eb) <= tolerance;
 
-check('The default style is Zen', await pref('koan.look.style') === 'zen');
-const zenDefault = await sidebarPixel();
-check('...and the window is Zen\'s, not shadcn\'s near-black',
-      !near(zenDefault, [9, 9, 11], 1), `${zenDefault}`);
-check('Switching to shadcn works', await set('koan.look.style', 'shadcn'));
+// The default look is shadcn's (the user's decision, 2026-11-11: #296).
+check('The default style is shadcn', await pref('koan.look.style') === 'shadcn',
+      await pref('koan.look.style'));
 check('...dark', await pref('koan.look.mode') === 'dark');
 check('...with the Black base colour', await pref('koan.look.base') === 'black');
 check('The page draws from shadcn\'s dark background',
@@ -103,7 +119,7 @@ check('...the page keeps Zen\'s own colours',
       await waitFor(async () => (await bg()) !== 'rgb(9, 9, 11)'), await bg());
 const zen = await sidebarPixel();
 check('...and the window leaves shadcn\'s sidebar colour',
-      !near(zen, [9, 9, 11], 1), `${zen}`);
+      !!zen && !near(zen, [9, 9, 11], 1), `${zen}`);
 await set('koan.look.style', 'shadcn');
 check('Back to shadcn', await waitFor(async () => await bg() === 'rgb(9, 9, 11)'));
 

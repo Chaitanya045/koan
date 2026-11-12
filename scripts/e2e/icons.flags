@@ -1,2 +1,3 @@
 # Every icon the UI asks for, and whether Koan's icon was painted for it.
 --koan-icon-trace={dump}/icon-trace.txt
+# macOS: skip: the icon trace (--koan-icon-trace) is compiled into DCHECK builds only, and the Mac build (build/koan-mac.gn) has dcheck_always_on = false; koan_icons_unittests checks the icon table there

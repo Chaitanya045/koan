@@ -1,7 +1,8 @@
 // Helpers for the theme picker's end-to-end tests (theme.mjs,
 // theme_glass.mjs): native views through UI DevTools, keys to a widget like
 // real keys, the command palette, the picker and its window background.
-import { CDP_PORT, UI_PORT, browserCall, connect, evalIn, pages, settingsCall, sleep, waitFor } from './koan.mjs';
+import { UI_PORT, browserCall, connect, evalIn, key, pages, settingsCall, sleep, waitFor } from './koan.mjs';
+import { focusUrlBar } from './mac.mjs';
 
 export const unquote = v => (typeof v === 'string' ? v.replace(/^"(.*)"$/, '$1') : v);
 
@@ -108,38 +109,32 @@ export async function showingTab() {
   return null;
 }
 
-// The URL bar's suggestion rows, by their first line (the omnibox popup is
-// WebUI: chrome://omnibox-popup.top-chrome), and the selected one.
+// The URL bar's suggestion rows, by their first line, and the selected one.
+// They are Chromium's Views popup (Koan turns the WebUI one off: omnibox
+// lockdown O1): an OmniboxResultView per row (MatchSelected), its
+// OmniboxTextViews' texts, the label first (as palette.mjs reads them).
 export async function paletteRows() {
-  const popup = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .find(t => t.url.startsWith('chrome://omnibox-popup'));
-  if (!popup) return { labels: [], selected: -1 };
-  return (await evalIn(popup, `(() => {
-    const matches = [];
-    const walk = root => {
-      for (const el of root.querySelectorAll('*')) {
-        if (el.localName === 'cr-searchbox-match') matches.push(el);
-        if (el.shadowRoot) walk(el.shadowRoot);
-      }
-    };
-    walk(document);
-    const shown = matches.filter(m => m.getClientRects().length);
-    return {
-      labels: shown.map(m => m.shadowRoot.getElementById('primaryText')?.textContent.trim() ?? ''),
-      selected: shown.findIndex(m => m.hasAttribute('selected')),
-    };
-  })()`)) ?? { labels: [], selected: -1 };
+  const rows = [];
+  let row = null;
+  for (const v of await tree()) {
+    if (v.cls === 'OmniboxResultView') {
+      row = v.shown ? { texts: [], selected: v.p.MatchSelected === 'true' } : null;
+      if (row) rows.push(row);
+    } else if (row && v.cls === 'OmniboxTextView' && v.shown) {
+      const text = (v.p.Text ?? '').trim();
+      if (text && !/^[-\u2013\u2014]$/.test(text)) row.texts.push(text);
+    }
+  }
+  const shownRows = rows.filter(r => r.texts.length);
+  return { labels: shownRows.map(r => r.texts[0]), selected: shownRows.findIndex(r => r.selected) };
 }
 
-// A shortcut, sent to the page: unhandled keys reach the browser's
-// accelerators. Modifiers: Alt=1 Ctrl=2.
-export async function shortcut(code, modifiers, key = '') {
-  const c = await connect((await showingTab()).webSocketDebuggerUrl);
-  const base = { windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers, key };
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'rawKeyDown' });
-  await c.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
-  c.close();
-  await sleep(1500);
+// A shortcut, sent to the showing tab (lib/koan.mjs key(): the Mac's key
+// codes on macOS): unhandled keys reach the browser's accelerators.
+// Modifiers: Alt=1 Ctrl=2 Meta=4.
+export async function shortcut(code, modifiers, keyName = '') {
+  await key(await showingTab(), code, modifiers, keyName);
+  await sleep(1200);
 }
 
 export const VK = { TAB: 9, ENTER: 13, ESC: 27, END: 35, HOME: 36, LEFT: 37, RIGHT: 39, DOWN: 40,
@@ -158,16 +153,25 @@ export const pickerWidget = t => {
   return p && t.slice(0, t.indexOf(p)).filter(v => v.node === 'Widget').at(-1);
 };
 
-// The command palette: Ctrl+L, type the action, select its row (by its
-// label: where it is depends on what was used before), Enter.
+// The command palette: the URL bar (lib/mac.mjs focusUrlBar(): Ctrl+L, or on
+// macOS a click on the pill), type the action, select its row (by its
+// label: where it is depends on what was used before), Enter. Returns
+// whether the row was there; the reason it wasn't is printed.
 export async function palette(action) {
-  await shortcut(VK.L, CTRL, 'l');
+  const bar = await focusUrlBar(await showingTab());
+  if (!bar.field || !bar.selectedAll) {
+    console.log(`  (palette: the URL bar didn't open with the address selected, via ${bar.how}: ` +
+                `${bar.field ? `${bar.field.props?.SelectedRange} of ${bar.field.props?.Text}` : 'none'})`);
+  }
   await typeIntoOmnibox(action);
   const target = (await waitFor(async () => {
     const { labels } = await paletteRows();
     return labels.indexOf(action) >= 0 && labels;
   })) || [];
   const index = target.indexOf(action);
+  if (index < 0) {
+    console.log(`  (palette: no "${action}" row; rows: ${(await paletteRows()).labels.join(' / ')})`);
+  }
   for (let i = 0; i < 10 && index >= 0; i++) {
     if ((await paletteRows()).selected === index) break;
     await widgetKey(browserWidget(await tree()), VK.DOWN);

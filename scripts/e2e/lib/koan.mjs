@@ -720,6 +720,12 @@ export function windowFrame() {
   const file = fs.readdirSync(dir).filter(f => f.endsWith('.png'))
       .map(f => path.join(dir, f))
       .sort((a, b) => fs.statSync(b).size - fs.statSync(a).size)[0];
+  return decodePng(file);
+}
+
+// A PNG file decoded: {width, height, pixel(x, y) -> [r, g, b]}. 8-bit,
+// non-interlaced RGB(A) only (it throws on others).
+export function decodePng(file) {
   const png = fs.readFileSync(file);
   let pos = 8, width = 0, height = 0, channels = 0;
   const data = [];
@@ -731,6 +737,9 @@ export function windowFrame() {
       width = chunk.readUInt32BE(0);
       height = chunk.readUInt32BE(4);
       channels = chunk[9] === 6 ? 4 : 3;
+      if (chunk[8] !== 8 || ![2, 6].includes(chunk[9]) || chunk[12] !== 0) {
+        throw new Error(`decodePng: ${file} is not an 8-bit non-interlaced RGB(A) PNG`);
+      }
     } else if (type === 'IDAT') {
       data.push(chunk);
     }

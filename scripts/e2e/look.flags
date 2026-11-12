@@ -1,2 +1,5 @@
-# Frame dumps, to check the colours the window really draws.
+# Frame dumps, to check the colours the window really draws (Linux's
+# headless Ozone; scripts/mac/suite.sh leaves this line out, look.mjs
+# captures the window there).
 --ozone-dump-file={dump}
+# macOS: run

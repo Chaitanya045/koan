@@ -7,9 +7,9 @@
 // with the Space. Without glass the paint stays opaque (theme.mjs).
 //
 //   scripts/e2e/run.sh theme_glass
-import { check, finish } from './lib/koan.mjs';
+import { IS_MAC, check, finish } from './lib/koan.mjs';
 import {
-  VK, click, closePicker, palette, picker, pickerKey, tree,
+  VK, click, closePicker, pagePrefersDark, palette, picker, pickerKey, tree,
 } from './lib/theme_picker.mjs';
 
 const background = async () => picker(await tree())?.p.WindowBackground ?? '';
@@ -25,10 +25,15 @@ if (!picker(await tree())) {
 }
 
 // Zen 1.24b's default theme on a transparent window: nothing opaque, black
-// at 40% in dark mode (white at 40% on Linux in light mode).
+// at 40% in dark mode; in light mode white at 40%, nothing at all on macOS
+// (gh-15334). The mode is the browser's (System by default), which the
+// showing website follows.
+const dark = await pagePrefersDark();
+const want = dark ? 'glass: rgba(0, 0, 0, 0.4)'
+                  : IS_MAC ? 'glass: ' : 'glass: rgba(255, 255, 255, 0.4)';
 let text = await background();
-check("The default theme on glass is Zen's (no base, black or white at 40%)",
-      /^glass: rgba\((0, 0, 0|255, 255, 255), 0\.4\)$/.test(text), text);
+check(`The default theme on glass is Zen's (no base; ${dark ? 'dark' : 'light'}: ${JSON.stringify(want)})`,
+      text === want, JSON.stringify(text));
 
 // The slider works without colours on glass. Tab to it; End is 1.
 let found = false;

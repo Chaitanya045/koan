@@ -24,6 +24,10 @@ go to `<logs>/summary.txt`, and an agent reads only that file. Every test's full
 4. **Crashes:** new `.ips` reports from this app or out dir since the run started, and a grep of every Koan log for
    `FATAL`, `Check failed` and `DCHECK`.
 
+A script whose `.flags` need Linux's headless Ozone (`{dump}`, `--ozone-*`) is skipped, unless the file has a
+`# macOS: run` line (ported: those flag lines are left out and the script reads the window another way, e.g.
+`lib/mac.mjs captureWindow()`); `# macOS: skip: <why>` skips a script with that reason.
+
 `--only a,b`, `--skip-cxx|e2e|visual|crash`, `--all-e2e` (every `scripts/e2e/*.mjs`, for porting more of them) and
 `--input real|synthetic` are explained in the script's header. **Real input** (the bench's `keypress2` and `ptr`, for the
 AppKit checks in `welcome_input` and `space_drag`) is used only when `$KOAN_MAC_TOOLS` (default `~/work/koan-mac/tmp`)
