@@ -510,10 +510,20 @@ async function typeInUrlBar(from, text) {
   const vs = await viewTree();
   const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown);
   if (!pill) return false;
-  await clickThroughRoot(vs, pill);
+  // On the host label: clickThroughRoot()'s default, 24 px in, is the site
+  // icon (4 px inset, a 26 px button), which opens the site panel and leaves
+  // the omnibox unfocused, so the typed text lands in the shown address.
+  await clickThroughRoot(vs, pill, { at: { x: Math.round(pill.w / 2), y: Math.round(pill.h / 2) } });
+  await sleep(400);  // the click's select-all is posted
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);
   if (!field) return false;
+  // Zen's clickSelectsAll, on this (pinned, Essential) tab too.
+  const shownText = field.props?.Text ?? '';
+  const sel = (field.props?.SelectedRange ?? '').match(/\d+/g)?.map(Number) ?? [];
+  check('A pill click selects the whole address (here on an Essential)',
+        !!shownText && Math.min(...sel) === 0 && Math.max(...sel) === shownText.length,
+        `${field.props?.SelectedRange} of ${JSON.stringify(shownText)}`);
   // Each key to the field found again: the suggestions change the view tree,
   // so a node id from before names another view.
   const toField = async event => {
