@@ -7,11 +7,14 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/time/time.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/vector2d.h"
 
 namespace koan {
 
@@ -92,7 +95,7 @@ double SpaceStripScrollProgress(base::TimeDelta elapsed);
 // horizontal middle (the far half: its left half in RTL); anywhere else in
 // the grid they go after the last tile. Above the first row (the sidebar
 // above the grid, EssentialsTopDropZone()) they go before the first tile, as
-// above a Space's first row (SpaceListDropSlot()). `tiles` are the tiles'
+// above a Space's first row (PlaceInSpaceList()). `tiles` are the tiles'
 // bounds in grid order (a split view is one tile). Returns the slot, 0 to
 // tiles.size().
 size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
@@ -120,12 +123,6 @@ gfx::Rect EmptyEssentialsDropZone(const gfx::Size& sidebar,
 gfx::Rect EssentialsTopDropZone(const gfx::Size& sidebar,
                                 const gfx::Rect& grid);
 
-// The same for an Essential dropped on a Space's list of tabs: before the
-// row under `y`, after it once `y` is past its vertical middle; between rows
-// as for the nearest one, above the first first, below the last last.
-// `rows` are top to bottom. Returns the slot, 0 to rows.size().
-size_t SpaceListDropSlot(const std::vector<gfx::Rect>& rows, int y);
-
 // Zen's two sections of a Space's list (ZenSpace.mjs): the pinned section
 // (.zen-workspace-pinned-tabs-section: the pinned tabs and folders, then the
 // separator with Clear) and the normal one (.zen-workspace-normal-tabs-section:
@@ -139,40 +136,108 @@ inline bool IsInPinnedDropSection(int y, int pinned_end) {
   return y < pinned_end;
 }
 
-// Where tabs from outside the Space's list (Essentials) dropped at `y` go:
-// pinned or not by the section (IsInPinnedDropSection()), then before the
-// row under `y` in that section, or after it once past its middle
-// (SpaceListDropSlot() among the section's rows only). `rows` are the
-// Space's rows top to bottom, the first `pinned_count` of them its pinned
-// section's; `separator` is the separator row (zero height at the rows'
-// place when hidden) and `normal_start` the bottom of the New Tab row, where
-// the normal tabs begin. `slot` counts in all of `rows` (0 to rows.size()),
-// and `line_y` is where Zen's drop indicator goes: above the slot's row,
-// below the section's last row, or, in an empty section, on the separator's
-// top (pinned) or below the New Tab row (normal, Zen's
-// showIndicatorUnderNewTabButton).
-struct SpaceDropPlace {
+// One row of a Space's list as Koan's drag places a drop
+// (ZenDragAndDrop.js #applyDragoverIndicator()): a tab's row (a split view's
+// two tabs as one) or a folder's row (its label), in the sidebar's
+// coordinates.
+struct SpaceListRow {
+  enum class Kind { kTab, kFolder };
+  Kind kind = Kind::kTab;
+  gfx::Rect bounds;
+  // In the Space's pinned section (a folder's row always is).
   bool pinned = false;
+  // A tab: the folder holding it; a folder: the folder it is in (0: none).
+  int folder = 0;
+  // A folder's row: the folder, whether it is collapsed, how many items
+  // (tabs and subfolders) it has, and the index of the first row after the
+  // ones it shows (its subtree).
+  int folder_id = 0;
+  bool collapsed = false;
+  size_t items = 0;
+  size_t end = 0;
+};
+
+// The Space's list around its rows, in the sidebar's coordinates: the Space
+// header (empty if none), the separator's row (its top is where the line of
+// an empty pinned section goes; its bottom ends the pinned section,
+// IsInPinnedDropSection()) and the bottom of the New Tab row (where the line
+// of an empty normal section goes).
+struct SpaceListLayout {
+  gfx::Rect header;
+  gfx::Rect separator;
+  int normal_start = 0;
+};
+
+// zen.tabs.folder-dragover-threshold-percent: a folder's row is split into
+// its top fifth, its bottom fifth and the middle.
+inline constexpr float kFolderDragoverThreshold = 0.2f;
+
+// Where over a folder's row (`fraction` of its height from its top) a drop
+// goes: above the folder (its top fifth), below it (its bottom fifth, while
+// it is collapsed or has fewer than two items) or into it (the rest), Zen's
+// zones.
+enum class FolderZone { kBefore, kInto, kAfter };
+FolderZone FolderRowZone(float fraction, bool collapsed, size_t items);
+
+// Zen's moveOverThresholdPercent (50): over a row's top half a drop goes
+// before it, over its bottom half after it.
+bool DropsBefore(const gfx::Rect& row, int y);
+
+// Where tabs dropped at `y` on a Space's list go, Zen's rules
+// (#applyDragoverIndicator(), moveToAnotherTabContainerIfNecessary()):
+// - over the Space header: first in the pinned section, the header lit;
+// - pinned or not by the section under the pointer (IsInPinnedDropSection());
+// - over a tab's row, before it or after it by its halves (DropsBefore()), in
+//   the folder holding it; between rows as over the nearest one;
+// - over a folder's row by its zones (FolderRowZone()): above or below the
+//   folder, in the folder holding it, or into it (first), the row lit;
+// - past a section's last row (the separator, the empty space below the
+//   tabs), at the end of the section outside folders, and in an empty section
+//   at the separator's top or below the New Tab row.
+// `rows` are top to bottom, the pinned section's first.
+struct SpaceListDrop {
+  bool pinned = false;
+  // Before rows[slot]; rows.size(): after the last.
   size_t slot = 0;
+  // The folder the tabs go in (0: none).
+  int folder = 0;
+  // A drop into a folder lights its row, a drop on the Space header the
+  // header: no line then.
+  std::optional<size_t> lit_row;
+  bool lit_header = false;
+  // Otherwise the line goes across `line_row` at `line_y`.
+  gfx::Rect line_row;
   int line_y = 0;
 };
-SpaceDropPlace SpaceListDropPlace(const std::vector<gfx::Rect>& rows,
-                                  size_t pinned_count,
-                                  const gfx::Rect& separator,
-                                  int normal_start,
-                                  int y);
+SpaceListDrop PlaceInSpaceList(const std::vector<SpaceListRow>& rows,
+                               const SpaceListLayout& layout,
+                               int y);
 
-// Whether tabs dragged within a Space (Chromium's drag places them among its
-// tabs as they go) drop pinned: between two pinned tabs, pinned; after a
-// normal tab, normal; at the edge between the sections (nothing before them
-// but pinned tabs, nothing pinned after them), by the section under the
-// pointer (`pointer_pinned`, IsInPinnedDropSection()), as Chromium's place
-// is the same on both sides of the separator. `prev_pinned` / `next_pinned`
-// say whether the Space's nearest tab before / after the dragged ones (not
-// dragged) is pinned, nullopt for none.
-bool DragDropsPinned(std::optional<bool> prev_pinned,
-                     std::optional<bool> next_pinned,
-                     bool pointer_pinned);
+// Zen's #zen-drag-indicator across a row (vertical-tabs.css): a 2px line from
+// 10px in from the row's start to 2px before its end, its top at `y`, with a
+// hollow ring (2px wide, 8px across) centred 2px before the line's start.
+// Returns the indicator's bounds, the ring included: the line is its last
+// `width - kDropLineRingRoom` px at kDropLineTop.
+inline constexpr int kDropLineThickness = 2;
+inline constexpr int kDropLineRingSize = 8;
+inline constexpr int kDropLineRingRoom = 6;
+inline constexpr int kDropLineTop = 3;
+gfx::Rect DropLineBounds(const gfx::Rect& row, int y);
+
+// Zen's drag image (#appendDragImageClone(), #getDragImageOffset()): up to
+// three rows, each 4px right of and below the one before at 20% opacity
+// behind it; the label cut to a character per 6px of its width; the pointer
+// where the tab was grabbed (`grab`, in its row), or at (18, 18) with several
+// tabs; their count on a 16px dot off the top-left corner.
+inline constexpr size_t kDragImageMaxRows = 3;
+inline constexpr int kDragImageRowOffset = 4;
+inline constexpr float kDragImageBackRowOpacity = 0.2f;
+inline constexpr int kDragImageCountDotSize = 16;
+inline constexpr int kDragImageCountDotLeft = -16;
+inline constexpr int kDragImageCountDotTop = -10;
+inline constexpr int kDragImageCountFontSize = 10;
+std::u16string TruncateDragLabel(std::u16string_view title, int label_width);
+gfx::Vector2d DragImageGrab(size_t tab_count, const gfx::Vector2d& grab);
 
 }  // namespace koan
 

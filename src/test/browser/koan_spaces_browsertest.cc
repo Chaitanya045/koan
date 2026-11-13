@@ -18,10 +18,12 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_tab_drag.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -270,17 +272,12 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, ManySpacesStayInTheSwitcher) {
   }
 }
 
-// Zen's tab drag across Spaces (koan_space_drag.h) moves the dragged tabs
-// into the Space it switches to while upstream's drag goes on. Upstream's
-// drag takes the selection to be its tabs: entering a container,
-// TabDragHandler::HandleDraggedTabsIntoNode() counts every dragged tab
-// before the index it moves to, then calls MoveSelectedTabsTo(). With only
-// the shown tab selected after the switch, that index fell inside the new
-// Space while the move was to no group, and
-// TabCollection::FindMovePositionRecursive() CHECKed (a crash on the Mac,
-// dragging two tabs to another Space). Guards that upstream behaviour too.
+// Koan's tab drag (koan_tab_drag.h) only shows another Space while it goes
+// on: the tabs move there when they drop, so Esc (or any cancel) has nothing
+// to undo but the switch. A cancelled drag used to leave them in the other
+// Space (upstream's drag needed them in the Space it showed).
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
-                       DragToAnotherSpaceKeepsTheDraggedTabsSelected) {
+                       ACancelledDragGoesBackToItsSpace) {
   KoanWorkspaceController* spaces = GetSpaces(browser());
   ASSERT_TRUE(spaces);
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
@@ -294,13 +291,10 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   const tab_groups::TabGroupId home = spaces->GetSpaces()[0].id;
   spaces->CreateSpace(u"Work", u"", {});
   ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
-  spaces->CreateSpace(u"Play", u"", {});
-  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
-  // Work is the middle Space, so tabs come after it.
   const tab_groups::TabGroupId work = spaces->GetSpaces()[1].id;
   spaces->SwitchTo(home);
 
-  // Two of Home's tabs (rows, not its empty tab) are dragged, the second one
+  // Two of Home's tabs (rows, not its empty tab) selected, the second one
   // picked up.
   std::vector<int> home_tabs = TabsOfSpace(model, home);
   std::erase_if(home_tabs, [&](int index) {
@@ -315,39 +309,69 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   selection.set_active(static_cast<size_t>(home_tabs[1]));
   selection.set_anchor(static_cast<size_t>(home_tabs[1]));
   model->SetSelectionFromModel(std::move(selection));
-  const std::vector<tabs::TabInterface*> dragged = {first, picked};
+  const int first_index = model->GetIndexOfTab(first);
 
-  // Held over Work's Space button.
-  spaces->MoveDraggedTabsToSpace(dragged, work);
+  KoanTabDrag* drag = spaces->tab_drag();
+  ASSERT_TRUE(drag->StartForTesting(picked));
+  EXPECT_TRUE(drag->IsDragging());
+  // Held over Work's Space button: Work shows, the tabs stay in Home.
+  drag->SwitchSpaceForTesting(work);
   EXPECT_EQ(work, *spaces->GetActiveSpace());
+  EXPECT_EQ(home, first->GetGroup());
+  EXPECT_EQ(home, picked->GetGroup());
+
+  // Esc: Home again, on the picked-up tab, both still selected, nothing
+  // moved.
+  drag->CancelForTesting();
+  EXPECT_EQ(home, *spaces->GetActiveSpace());
   EXPECT_EQ(picked, model->GetActiveTab());
-  EXPECT_EQ(work, first->GetGroup());
-  EXPECT_EQ(work, picked->GetGroup());
   EXPECT_TRUE(model->IsTabSelected(model->GetIndexOfTab(first)));
   EXPECT_TRUE(model->IsTabSelected(model->GetIndexOfTab(picked)));
   EXPECT_EQ(2u, model->selection_model().size());
+  EXPECT_EQ(first_index, model->GetIndexOfTab(first));
+  EXPECT_EQ(first_index + 1, model->GetIndexOfTab(picked));
+  EXPECT_TRUE(base::test::RunUntil([&] { return !drag->IsDragging(); }));
+}
 
-  // What upstream's drag then does on entering the tab strip's container
-  // (not a group's) with the picked-up tab in a group: the dragged tabs go
-  // after that group.
-  const auto dragged_before = [&](int index) {
-    return static_cast<int>(std::ranges::count_if(
-        dragged, [&](auto* tab) { return model->GetIndexOfTab(tab) < index; }));
-  };
-  const int work_end = TabsOfSpace(model, work).back() + 1;
-  model->MoveSelectedTabsTo(
-      std::clamp(work_end - dragged_before(work_end), 0, model->count() - 1),
-      std::nullopt);
-  EXPECT_EQ(model->GetIndexOfTab(first) + 1, model->GetIndexOfTab(picked));
-  EXPECT_EQ(TabsOfSpace(model, work).back() + 1, model->GetIndexOfTab(first));
+// A drop in another Space: the tabs join the Space shown, keeping their
+// selection, the picked-up one active (Zen's drop after a Space switch).
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, TabsDroppedInAnotherSpaceJoinIt) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* model = browser()->GetTabStripModel();
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+        browser(), GURL(url::kAboutBlankURL),
+        WindowOpenDisposition::kNewForegroundTab,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  }
+  const tab_groups::TabGroupId home = spaces->GetSpaces()[0].id;
+  spaces->CreateSpace(u"Work", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  const tab_groups::TabGroupId work = spaces->GetSpaces()[1].id;
+  spaces->SwitchTo(home);
+  std::vector<int> home_tabs = TabsOfSpace(model, home);
+  std::erase_if(home_tabs, [&](int index) {
+    return IsEmptyTab(model->GetTabAtIndex(index));
+  });
+  ASSERT_GE(home_tabs.size(), 2u);
+  tabs::TabInterface* first = model->GetTabAtIndex(home_tabs[0]);
+  tabs::TabInterface* picked = model->GetTabAtIndex(home_tabs[1]);
 
-  // And on entering Work's own container again, from after it: they go in
-  // at its end.
-  const int work_end_now = TabsOfSpace(model, work).back() + 1;
-  model->MoveSelectedTabsTo(work_end_now - dragged_before(work_end_now), work);
+  // What the drop does (the pointer's part needs the Mac): Work shows, the
+  // tabs move to it, then to their place in it.
+  spaces->SwitchTo(work);
+  spaces->MoveDraggedTabsToSpace({first, picked}, work);
+  GetPinnedTabs(browser())->DropTabsInSpace({first, picked}, nullptr,
+                                            /*pinned=*/false);
+  EXPECT_EQ(work, *spaces->GetActiveSpace());
   EXPECT_EQ(work, first->GetGroup());
   EXPECT_EQ(work, picked->GetGroup());
+  EXPECT_EQ(picked, model->GetActiveTab());
+  EXPECT_TRUE(model->IsTabSelected(model->GetIndexOfTab(first)));
   EXPECT_EQ(model->GetIndexOfTab(first) + 1, model->GetIndexOfTab(picked));
+  EXPECT_EQ(TabsOfSpace(model, work).back(), model->GetIndexOfTab(picked));
 }
 
 // Zen's Clear empties the Space's list: what is left is its hidden empty

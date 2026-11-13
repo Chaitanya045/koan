@@ -2,16 +2,17 @@
 // scripts/mac/steps/space_drag.md, the maintainer's high-risk step): one
 // tab, then a 3-tab selection, dragged to another Space over its button in
 // the bottom bar and by holding at the sidebar's edge, then dropped; and a
-// drag ended with Esc at the edge. Pass: Koan alive, nothing fatal in its log
-// (KoanSpaceDrag::SwitchWithDraggedTabs moves tabs while TabDragController
-// is active), the Space that shows is the one dragged to, and the dragged
-// tabs are in it and no longer in the Space they came from.
+// drag cancelled with Esc at the edge (#372: Koan's own drag, koan_tab_drag.h,
+// which moves the tabs only on the drop). Pass: Koan alive, nothing fatal in
+// its log, the Space that shows is the one dragged to, and the dragged tabs
+// are in it and no longer in the Space they came from; after Esc, the Space
+// it started in, with the tab still there.
 //
 // The drag is a held-button drag of the real pointer (ptr down / dragto /
 // up) when suite.sh allows real input. Without it the events go to the
 // window's root view through UI DevTools, which routes them like real
-// input (the sidebar's pre-target handler, the tab's drag controller); a
-// probe checks first that such a drag reaches the drag controller at all,
+// input (the sidebar's pre-target handler, Koan's drag and its capture); a
+// probe checks first that such a drag reaches the drag at all,
 // and the multi-select (Cmd+click) and Esc legs, which need AppKit's
 // events, are skipped. Run by scripts/mac/suite.sh.
 import { browserCall, check, finish, pages, sleep, viewTree, waitFor } from './lib/koan.mjs';
@@ -195,11 +196,11 @@ if (canDrag) {
     check('The three selected again, in Space 3', await select());
     await dragCase('Three selected tabs held at the left edge', {
       from: S3, tabs: sel, target: w => edgePoint(w, 'left'), holdMs: 750, expect: S2 });
-    // Esc at the edge after the switch: the drag ends and the tab stays in
-    // the Space it was carried to (SD7). No crash is the point.
+    // Esc at the edge after the switch: the drag is cancelled, the switch
+    // too: Space 2 again, the tab still in it (SD7).
     await dragCase('Esc mid-drag at the edge', {
       from: S2, tabs: ['Drag three'], target: w => edgePoint(w, 'right'), holdMs: 750,
-      esc: true, expect: S3 });
+      esc: true, expect: S2 });
   } else {
     skipped('3-tab selection and Esc mid-drag', `need the real pointer and keyboard: ${realInputWhyNot()}`);
   }

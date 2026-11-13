@@ -115,51 +115,122 @@ gfx::Rect EssentialsTopDropZone(const gfx::Size& sidebar,
                    std::clamp(grid.y(), 0, sidebar.height()));
 }
 
-size_t SpaceListDropSlot(const std::vector<gfx::Rect>& rows, int y) {
-  // The rows are top to bottom, so the slot is the number of rows whose
-  // middle is above the pointer.
-  size_t slot = 0;
-  while (slot < rows.size() && rows[slot].CenterPoint().y() < y) {
-    ++slot;
+FolderZone FolderRowZone(float fraction, bool collapsed, size_t items) {
+  if (fraction < kFolderDragoverThreshold) {
+    return FolderZone::kBefore;
   }
-  return slot;
+  // An open folder with two or more items shows them below its row: a drop
+  // there goes into it (among them).
+  if (fraction > 1 - kFolderDragoverThreshold && (collapsed || items < 2)) {
+    return FolderZone::kAfter;
+  }
+  return FolderZone::kInto;
 }
 
-SpaceDropPlace SpaceListDropPlace(const std::vector<gfx::Rect>& rows,
-                                  size_t pinned_count,
-                                  const gfx::Rect& separator,
-                                  int normal_start,
-                                  int y) {
-  pinned_count = std::min(pinned_count, rows.size());
-  SpaceDropPlace place;
-  place.pinned = IsInPinnedDropSection(y, separator.bottom());
-  const auto first = rows.begin() + (place.pinned ? 0 : pinned_count);
-  const auto last = place.pinned ? rows.begin() + pinned_count : rows.end();
-  const std::vector<gfx::Rect> section(first, last);
-  const size_t slot = SpaceListDropSlot(section, y);
-  place.slot = static_cast<size_t>(first - rows.begin()) + slot;
-  if (slot < section.size()) {
-    place.line_y = section[slot].y();
-  } else if (!section.empty()) {
-    place.line_y = section.back().bottom();
-  } else {
-    place.line_y = place.pinned ? separator.y() : normal_start;
-  }
-  return place;
+bool DropsBefore(const gfx::Rect& row, int y) {
+  return y < row.y() + row.height() / 2;
 }
 
-bool DragDropsPinned(std::optional<bool> prev_pinned,
-                     std::optional<bool> next_pinned,
-                     bool pointer_pinned) {
-  // (Checked in this order, as KoanPinnedTabController::Normalize() does: a
-  // pinned tab below a normal one leaves the pinned tabs first.)
-  if (prev_pinned == false) {
-    return false;
+SpaceListDrop PlaceInSpaceList(const std::vector<SpaceListRow>& rows,
+                               const SpaceListLayout& layout,
+                               int y) {
+  SpaceListDrop drop;
+  const size_t pinned_count = static_cast<size_t>(
+      std::ranges::find_if_not(rows, &SpaceListRow::pinned) - rows.begin());
+  // Zen's .zen-current-workspace-indicator: first among the pinned tabs.
+  if (!layout.header.IsEmpty() && y >= layout.header.y() &&
+      y < layout.header.bottom()) {
+    drop.pinned = true;
+    drop.lit_header = true;
+    return drop;
   }
-  if (next_pinned == true) {
-    return true;
+  drop.pinned = IsInPinnedDropSection(y, layout.separator.bottom());
+  const size_t first = drop.pinned ? 0 : pinned_count;
+  const size_t last = drop.pinned ? pinned_count : rows.size();
+  if (first == last) {
+    // An empty section: on the separator's top, or below the New Tab row.
+    drop.slot = first;
+    drop.line_row = layout.separator;
+    drop.line_y = drop.pinned ? layout.separator.y() : layout.normal_start;
+    return drop;
   }
-  return pointer_pinned;
+  // The row under the pointer, or the nearest one between two rows.
+  size_t row = first;
+  while (row < last && rows[row].bounds.bottom() <= y) {
+    ++row;
+  }
+  if (row == last) {
+    // Past the section's last row: its end, outside folders
+    // (#tabbrowser-arrowscrollbox-periphery, the separator, the empty
+    // space).
+    drop.slot = last;
+    drop.line_row = rows[last - 1].bounds;
+    drop.line_y = rows[last - 1].bounds.bottom();
+    return drop;
+  }
+  if (y < rows[row].bounds.y() && row > first &&
+      y - rows[row - 1].bounds.bottom() < rows[row].bounds.y() - y) {
+    --row;
+  }
+  const SpaceListRow& target = rows[row];
+  const int inside =
+      std::clamp(y, target.bounds.y(),
+                 std::max(target.bounds.y(), target.bounds.bottom() - 1));
+  drop.line_row = target.bounds;
+  if (target.kind == SpaceListRow::Kind::kTab) {
+    const bool before = DropsBefore(target.bounds, inside);
+    drop.slot = before ? row : row + 1;
+    drop.folder = target.folder;
+    drop.line_y = before ? target.bounds.y() : target.bounds.bottom();
+    return drop;
+  }
+  const float fraction = target.bounds.height() > 0
+                             ? static_cast<float>(inside - target.bounds.y()) /
+                                   target.bounds.height()
+                             : 0.f;
+  switch (FolderRowZone(fraction, target.collapsed, target.items)) {
+    case FolderZone::kBefore:
+      drop.slot = row;
+      drop.folder = target.folder;
+      drop.line_y = target.bounds.y();
+      break;
+    case FolderZone::kAfter:
+      drop.slot = std::clamp(target.end, row + 1, rows.size());
+      drop.folder = target.folder;
+      drop.line_y = target.bounds.bottom();
+      break;
+    case FolderZone::kInto:
+      drop.slot = row + 1;
+      drop.folder = target.folder_id;
+      drop.lit_row = row;
+      break;
+  }
+  return drop;
+}
+
+gfx::Rect DropLineBounds(const gfx::Rect& row, int y) {
+  // The line from 10px in to 2px before the end (Zen's 2px separation, the
+  // ring's 4px and 4px more), the ring's room before it.
+  const int line_x = row.x() + 10;
+  const int line_width = std::max(0, row.width() - 12);
+  return gfx::Rect(line_x - kDropLineRingRoom, y - kDropLineTop,
+                   line_width + kDropLineRingRoom, kDropLineRingSize);
+}
+
+std::u16string TruncateDragLabel(std::u16string_view title, int label_width) {
+  size_t keep = static_cast<size_t>(std::max(0, label_width) / 6);
+  if (title.size() <= keep) {
+    return std::u16string(title);
+  }
+  // (Not half a surrogate pair.)
+  if (keep > 0 && (title[keep - 1] & 0xFC00) == 0xD800) {
+    --keep;
+  }
+  return std::u16string(title.substr(0, keep));
+}
+
+gfx::Vector2d DragImageGrab(size_t tab_count, const gfx::Vector2d& grab) {
+  return tab_count > 1 ? gfx::Vector2d(18, 18) : grab;
 }
 
 }  // namespace koan

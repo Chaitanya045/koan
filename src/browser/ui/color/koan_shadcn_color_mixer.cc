@@ -446,6 +446,15 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanEssentialsPromoShadow] = {SK_ColorTRANSPARENT};
   // A drop indicator is the ring colour.
   mixer[kColorKoanTabDropIndicator] = {t[Token::kRing]};
+  // A tab drag: the row a drop goes into lights as a hovered row; the drag
+  // image is the selected row, opaque on the sidebar; its count a
+  // destructive badge.
+  mixer[kColorKoanTabDragOverBackground] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanTabDragImage] = {
+      t.Opaque(Token::kSidebarAccent, Token::kSidebar)};
+  mixer[kColorKoanTabDragImageForeground] = {t[Token::kSidebarForeground]};
+  mixer[kColorKoanTabDragCount] = {t[Token::kDestructive]};
+  mixer[kColorKoanTabDragCountForeground] = {t.OnDestructive()};
 
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.

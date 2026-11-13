@@ -12,6 +12,7 @@
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
+#include "koan/browser/ui/views/koan_space_drag_logic.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
@@ -146,10 +147,13 @@ BEGIN_METADATA(KoanEssentialsPromoView)
 ADD_READONLY_PROPERTY_METADATA(bool, DragOver)
 END_METADATA
 
-KoanTabDropIndicatorView::KoanTabDropIndicatorView() {
-  // Above the tiles and rows, which scroll on layers of their own.
-  SetPaintToLayer();
-  layer()->SetFillsBoundsOpaquely(false);
+KoanTabDropIndicatorView::KoanTabDropIndicatorView(bool background)
+    : style_(background ? Style::kBackground : Style::kAcross) {
+  if (!background) {
+    // Above the tiles and rows, which scroll on layers of their own.
+    SetPaintToLayer();
+    layer()->SetFillsBoundsOpaquely(false);
+  }
   SetCanProcessEventsWithinSubtree(false);
   GetViewAccessibility().SetIsIgnored(true);
   SetVisible(false);
@@ -157,24 +161,47 @@ KoanTabDropIndicatorView::KoanTabDropIndicatorView() {
 
 KoanTabDropIndicatorView::~KoanTabDropIndicatorView() = default;
 
-void KoanTabDropIndicatorView::SetSlot(const gfx::Rect& slot) {
-  if (slot_ == slot) {
+void KoanTabDropIndicatorView::SetSlot(const gfx::Rect& slot, Style style) {
+  if (slot_ == slot && style_ == style) {
     return;
   }
   slot_ = slot;
+  style_ = style;
+  // (Zen moves it with no transition: it snaps to the new place.)
+  SchedulePaint();
   if (parent()) {
     parent()->InvalidateLayout();
   }
 }
 
 void KoanTabDropIndicatorView::OnPaint(gfx::Canvas* canvas) {
-  // Zen's background with border-radius 5px (a pill this thin).
+  const ui::ColorProvider* colors = GetColorProvider();
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(GetColorProvider()->GetColor(kColorKoanTabDropIndicator));
   const gfx::RectF bounds(GetLocalBounds());
-  canvas->DrawRoundRect(bounds, std::min(bounds.width(), bounds.height()) / 2,
-                        flags);
+  if (style_ == Style::kBackground) {
+    // The primary colour, square, behind the row.
+    flags.setColor(colors->GetColor(kColorKoanTabDragOverBackground));
+    canvas->DrawRect(bounds, flags);
+    return;
+  }
+  flags.setColor(colors->GetColor(kColorKoanTabDropIndicator));
+  if (style_ == Style::kUpright) {
+    // Zen's background with border-radius 5px (a pill this thin).
+    canvas->DrawRoundRect(bounds, std::min(bounds.width(), bounds.height()) / 2,
+                          flags);
+    return;
+  }
+  // The line after the ring's room, the ring (border 2px, 4px inside) centred
+  // 2px before the line's start, on the line's middle.
+  const gfx::RectF line(kDropLineRingRoom, kDropLineTop,
+                        bounds.width() - kDropLineRingRoom, kThickness);
+  canvas->DrawRoundRect(line, kThickness / 2.f, flags);
+  flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(kThickness);
+  canvas->DrawCircle(gfx::PointF(kDropLineRingRoom - kThickness,
+                                 kDropLineTop + kThickness / 2.f),
+                     (kDropLineRingSize - kThickness) / 2.f, flags);
 }
 
 BEGIN_METADATA(KoanTabDropIndicatorView)

@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 // Zen's tab drops between a Space and the Essentials
-// (ZenPinnedTabManager.moveToAnotherTabContainerIfNecessary()), as
-// KoanSpaceDrag makes them once a tab drag is over: the drop itself needs a
+// (ZenPinnedTabManager.moveToAnotherTabContainerIfNecessary()), as Koan's
+// tab drag (koan_tab_drag.h) makes them at the drop: the drop itself needs a
 // real pointer (the Mac steps in the PR), these check what it does to the
 // tabs. And that a drag in Koan's sidebar never tears off into a new window.
 
@@ -221,12 +221,11 @@ IN_PROC_BROWSER_TEST_F(KoanEssentialsDropBrowserTest,
   EXPECT_FALSE(IsPinnedForUser(tabs[3]));
 }
 
-// Zen's drags across the separator: a tab dropped among the pinned tabs is
-// pinned where it is, one dropped among the normal tabs unpinned, and at the
-// separator the side the pointer is on decides (Chromium's drag gives both
-// sides the same place).
+// Zen's drops on a Space's list: the section under the pointer pins or
+// unpins the tabs, and they go before the row the line is at (or to the end
+// of the section), in their order.
 IN_PROC_BROWSER_TEST_F(KoanEssentialsDropBrowserTest,
-                       DraggedTabsTakeTheSectionTheyDropIn) {
+                       DroppedTabsTakeTheSectionTheyDropIn) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
   KoanPinnedTabController* pinned = GetPinnedTabs(browser());
   ASSERT_TRUE(pinned);
@@ -237,80 +236,71 @@ IN_PROC_BROWSER_TEST_F(KoanEssentialsDropBrowserTest,
   const auto at = [&](int offset) {
     return model->GetTabAtIndex(first + offset);
   };
+  tabs::TabInterface* p = at(0);
   tabs::TabInterface* a = at(1);
   tabs::TabInterface* b = at(2);
+  tabs::TabInterface* c = at(3);
   ASSERT_FALSE(IsPinnedForUser(a) || IsPinnedForUser(b));
 
-  // At the separator, the pointer below it: still normal.
-  pinned->DropInSpace({a}, /*pointer_pinned=*/false);
-  EXPECT_FALSE(IsPinnedForUser(a));
-  // Above it: pinned where it is, on its current page.
-  pinned->DropInSpace({a}, /*pointer_pinned=*/true);
+  // At the end of the pinned section: pinned, after the pinned tab, on its
+  // current page.
+  pinned->DropTabsInSpace({a}, nullptr, /*pinned=*/true);
   EXPECT_TRUE(IsPinnedInSpace(a));
   EXPECT_EQ(a, at(1));
   ASSERT_TRUE(GetTabState(a));
   EXPECT_TRUE(GetTabState(a)->pinned_url.is_valid());
-  // Back below it: unpinned, its pinned URL gone (Zen's unpinTab()).
-  pinned->DropInSpace({a}, /*pointer_pinned=*/false);
+  // Before the first normal tab: unpinned, its pinned URL gone (Zen's
+  // unpinTab()), where it was.
+  pinned->DropTabsInSpace({a}, b, /*pinned=*/false);
   EXPECT_FALSE(IsPinnedForUser(a));
   EXPECT_EQ(a, at(1));
   EXPECT_FALSE(GetTabState(a)->pinned_url.is_valid());
 
-  // Two selected tabs dropped together above it: both pinned.
-  pinned->DropInSpace({a, b}, /*pointer_pinned=*/true);
-  EXPECT_TRUE(IsPinnedInSpace(a));
+  // Two dropped together before the pinned tab: both pinned, above it, in
+  // their order.
+  pinned->DropTabsInSpace({b, c}, p, /*pinned=*/true);
   EXPECT_TRUE(IsPinnedInSpace(b));
-
-  // Among the pinned tabs (before the first), wherever the pointer is:
-  // pinned. Among the normal ones: normal.
-  tabs::TabInterface* c = at(3);
-  ASSERT_FALSE(IsPinnedForUser(c));
-  model->MoveWebContentsAt(model->GetIndexOfTab(c), first,
-                           /*select_after_move=*/false);
-  pinned->DropInSpace({c}, /*pointer_pinned=*/false);
   EXPECT_TRUE(IsPinnedInSpace(c));
-  model->MoveWebContentsAt(model->GetIndexOfTab(b), first + 4,
-                           /*select_after_move=*/false);
-  ASSERT_FALSE(IsPinnedForUser(at(3)));
-  pinned->DropInSpace({b}, /*pointer_pinned=*/true);
+  EXPECT_EQ(b, at(0));
+  EXPECT_EQ(c, at(1));
+  EXPECT_EQ(p, at(2));
+
+  // The pinned one dropped at the end of the normal section: last, unpinned.
+  pinned->DropTabsInSpace({b}, nullptr, /*pinned=*/false);
   EXPECT_FALSE(IsPinnedForUser(b));
+  const auto last_of_space = [&] {
+    return model->GetTabAtIndex(TabsOfSpace(model, *b->GetGroup()).back());
+  };
+  EXPECT_EQ(b, last_of_space());
 
   // Where they were dropped, once Koan re-checks the moved tabs.
   base::RunLoop run_loop;
   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), base::Seconds(1));
   run_loop.Run();
-  EXPECT_TRUE(IsPinnedInSpace(c));
   EXPECT_EQ(c, at(0));
-  EXPECT_TRUE(IsPinnedInSpace(a));
+  EXPECT_EQ(p, at(1));
+  EXPECT_TRUE(IsPinnedInSpace(c));
+  EXPECT_TRUE(IsPinnedInSpace(p));
+  EXPECT_FALSE(IsPinnedForUser(a));
   EXPECT_FALSE(IsPinnedForUser(b));
-  EXPECT_EQ(b, at(4));
+  EXPECT_EQ(b, last_of_space());
 }
 
-// While a tab is held over the Space, the sidebar shows it in the section it
-// would drop in; the model's state doesn't change until the drop.
+// Essentials dropped on the grid again: a reorder, before the tile the line
+// is at, or last.
 IN_PROC_BROWSER_TEST_F(KoanEssentialsDropBrowserTest,
-                       AHeldTabShowsInTheSectionItWouldDropIn) {
+                       EssentialsDroppedOnTheGridReorder) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
   KoanPinnedTabController* pinned = GetPinnedTabs(browser());
   ASSERT_TRUE(pinned);
-  TabStripModel* model = browser()->GetTabStripModel();
   const std::vector<tabs::TabInterface*> tabs = OpenTabs(3);
-  pinned->PinInSpace(tabs[0]);
-  tabs::TabInterface* a =
-      model->GetTabAtIndex(model->GetIndexOfTab(tabs[0]) + 1);
-  ASSERT_FALSE(IsPinnedForUser(a));
-
-  EXPECT_TRUE(pinned->PreviewDropInSpace({a}, /*pointer_pinned=*/true));
-  EXPECT_TRUE(ShowsInPinnedSection(a));
-  EXPECT_FALSE(IsPinnedForUser(a));
-  EXPECT_FALSE(pinned->PreviewDropInSpace({a}, /*pointer_pinned=*/true));
-  // The pinned tab shows where it is.
-  EXPECT_TRUE(ShowsInPinnedSection(tabs[0]));
-  // The pointer gone from the Space: its own section again.
-  EXPECT_TRUE(pinned->PreviewDropInSpace({a}, std::nullopt));
-  EXPECT_FALSE(ShowsInPinnedSection(a));
-  EXPECT_FALSE(pinned->PreviewDropInSpace({}, std::nullopt));
+  pinned->DropInEssentials(tabs, nullptr);
+  ASSERT_THAT(Essentials(), testing::ElementsAre(tabs[0], tabs[1], tabs[2]));
+  pinned->DropInEssentials({tabs[2]}, tabs[0]);
+  EXPECT_THAT(Essentials(), testing::ElementsAre(tabs[2], tabs[0], tabs[1]));
+  pinned->DropInEssentials({tabs[2], tabs[0]}, nullptr);
+  EXPECT_THAT(Essentials(), testing::ElementsAre(tabs[1], tabs[2], tabs[0]));
 }
 
 // Zen's addToEssentials() for a pinned tab dropped on the grid: Koan's

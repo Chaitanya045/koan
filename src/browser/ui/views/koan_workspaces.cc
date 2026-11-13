@@ -90,7 +90,6 @@
 #include "koan/browser/ui/views/koan_space_add_swipe.h"
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_space_creation.h"
-#include "koan/browser/ui/views/koan_space_drag.h"
 #include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_space_menu.h"
 #include "koan/browser/ui/views/koan_space_navigation.h"
@@ -99,6 +98,7 @@
 #include "koan/browser/ui/views/koan_space_swipe.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_stored_tab.h"
+#include "koan/browser/ui/views/koan_tab_drag.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
@@ -370,8 +370,8 @@ class SpaceWheelHandler : public ui::EventHandler {
 #endif
 
   void OnMouseEvent(ui::MouseEvent* event) override {
-    // A tab dragged over the sidebar (Zen's drag across Spaces).
-    controller_->OnSidebarMouseEvent(*event);
+    // A tab pressed and dragged (Koan's tab drag, koan_tab_drag.h).
+    controller_->OnSidebarMouseEvent(event);
 #if BUILDFLAG(IS_MAC)
     // Wheels are handled above; what comes here is touchpad scrolling,
     // which Zen leaves alone (only line scrolling switches).
@@ -462,7 +462,7 @@ KoanWorkspaceController::CreateMenuEntry::~CreateMenuEntry() = default;
 
 KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
     : browser_view_(browser_view),
-      space_drag_(std::make_unique<KoanSpaceDrag>(this, browser_view)),
+      tab_drag_(std::make_unique<KoanTabDrag>(this, browser_view)),
       space_routing_(std::make_unique<KoanSpaceRouting>(this, browser_view)),
       swipe_(std::make_unique<KoanSpaceSwipe>(this)) {
   if (IsEnabled()) {
@@ -593,7 +593,7 @@ void KoanWorkspaceController::OnBrowserViewDestroying() {
   tab_menu_submenu_.reset();
   view_observations_.RemoveAllObservations();
   // Its promo is one of the sidebar's views.
-  space_drag_->Reset();
+  tab_drag_->Reset();
   // Null the pointers first, so none dangles while the views go.
   const std::array<views::View*, 3> views = {creation_form_.get(),
                                              header_.get(), bar_.get()};
@@ -654,9 +654,9 @@ void KoanWorkspaceController::InstallViews() {
   }
 }
 
-void KoanWorkspaceController::OnSidebarMouseEvent(const ui::MouseEvent& event) {
+void KoanWorkspaceController::OnSidebarMouseEvent(ui::MouseEvent* event) {
   if (region_ && !destroying_ && IsEnabled()) {
-    space_drag_->OnRegionMouseEvent(region_, event);
+    tab_drag_->OnRegionMouseEvent(region_, event);
   }
 }
 

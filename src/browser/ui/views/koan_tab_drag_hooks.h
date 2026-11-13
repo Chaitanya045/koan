@@ -8,7 +8,7 @@
 // Hooks for upstream's tab drag (TabDragController), called from
 // chrome/browser/ui/views/tabs/dragging/ (see patches/). Declarations only,
 // so upstream targets can depend on them cheaply; the definitions live in
-// //koan/browser/ui/views:impl (koan_space_drag.cc), linked through
+// //koan/browser/ui/views:impl (koan_tab_drag.cc), linked through
 // //chrome/browser:browser.
 
 namespace views {
