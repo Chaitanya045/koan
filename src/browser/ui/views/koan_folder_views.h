@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
+#include "koan/browser/ui/views/koan_tab_drag_image.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/context_menu_controller.h"
@@ -53,6 +54,11 @@ class KoanFolderRowView : public views::Button,
 
   // Pulls the folder's state from the controller.
   void Update();
+  // Koan's tab drag (koan_tab_drag.h) would drop into the folder: a closed
+  // folder's icon opens meanwhile (ZenFolders.mjs highlightGroupOnDragOver()).
+  void SetDragOver(bool drag_over);
+  // What the drag image shows of the row, dragged by it.
+  KoanTabDragImage::Label GetDragLabel() const;
   void StartRename();
 
   // For UI DevTools and tests.
@@ -96,6 +102,7 @@ class KoanFolderRowView : public views::Button,
   bool collapsed_ = false;
   bool has_active_ = false;
   bool removing_ = false;
+  bool drag_over_ = false;
   int tab_count_ = 0;
   // Opens the folder icon (0: closed, 1: open), like Zen's 0.3s transition.
   gfx::SlideAnimation open_animation_{this};

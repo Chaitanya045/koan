@@ -18,6 +18,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_pinned_tabs_hooks.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
@@ -372,6 +373,132 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, TabsDroppedInAnotherSpaceJoinIt) {
   EXPECT_TRUE(model->IsTabSelected(model->GetIndexOfTab(first)));
   EXPECT_EQ(model->GetIndexOfTab(first) + 1, model->GetIndexOfTab(picked));
   EXPECT_EQ(TabsOfSpace(model, work).back(), model->GetIndexOfTab(picked));
+}
+
+// A folder dragged by its row (koan_tab_drag.h): the drop puts it among its
+// new parent's subfolders, and its tabs follow it in the tab strip.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, ADroppedFolderTakesItsTabsAlong) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* model = browser()->GetTabStripModel();
+  KoanFolderController* folders = KoanFolderController::FromBrowser(browser());
+  ASSERT_TRUE(folders);
+  std::vector<tabs::TabInterface*> pages;
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+        browser(), GURL(kPage), WindowOpenDisposition::kNewForegroundTab,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+    pages.push_back(model->GetActiveTab());
+  }
+  const int first = folders->CreateFolder({pages[0]}, /*parent=*/0,
+                                          folders->GetActiveSpace(), u"First",
+                                          /*rename=*/false);
+  const int second =
+      folders->CreateFolder({pages[1]}, /*parent=*/0, folders->GetActiveSpace(),
+                            u"Second", /*rename=*/false);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->GetIndexOfTab(pages[0]) < model->GetIndexOfTab(pages[1]);
+  }));
+
+  // Second above First, at the top level: its tab goes first too.
+  folders->DropFolder(second, /*parent=*/0, /*before=*/first);
+  std::vector<KoanFolderController::Entry> entries =
+      folders->GetFolders(folders->GetActiveSpace());
+  ASSERT_EQ(2u, entries.size());
+  EXPECT_EQ(second, entries[0].id);
+  EXPECT_EQ(first, entries[1].id);
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return model->GetIndexOfTab(pages[1]) < model->GetIndexOfTab(pages[0]);
+  }));
+
+  // First into Second: a subfolder of it, its tab still in First.
+  folders->DropFolder(first, /*parent=*/second, /*before=*/0);
+  entries = folders->GetFolders(folders->GetActiveSpace());
+  ASSERT_EQ(2u, entries.size());
+  EXPECT_EQ(second, entries[0].id);
+  EXPECT_EQ(first, entries[1].id);
+  EXPECT_EQ(1, entries[1].depth);
+  EXPECT_EQ(first, folders->GetFolderOf(pages[0]));
+  EXPECT_TRUE(IsPinnedInSpace(pages[0]));
+
+  // Never into itself or a folder of its own.
+  EXPECT_FALSE(folders->CanHoldFolder(first, first));
+  EXPECT_FALSE(folders->CanHoldFolder(first, second));
+  folders->DropFolder(second, /*parent=*/first, /*before=*/0);
+  EXPECT_EQ(0, folders->GetFolder(second)->parent);
+}
+
+// Zen's zen.folders.max-subfolders for a dropped folder: it and its
+// subfolders stay within five levels.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, ADroppedFolderNestsAtMostFive) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanFolderController* folders = KoanFolderController::FromBrowser(browser());
+  ASSERT_TRUE(folders);
+  // A chain of five (depths 0 to 4), and a folder with one subfolder.
+  std::vector<int> chain;
+  for (int i = 0; i < KoanFolderController::kMaxDepth; ++i) {
+    chain.push_back(folders->CreateFolder(
+        {}, chain.empty() ? 0 : chain.back(), folders->GetActiveSpace(),
+        base::NumberToString16(i), /*rename=*/false));
+  }
+  ASSERT_EQ(KoanFolderController::kMaxDepth - 1,
+            folders->GetDepth(chain.back()));
+  const int outer = folders->CreateFolder({}, 0, folders->GetActiveSpace(),
+                                          u"Outer", /*rename=*/false);
+  folders->CreateFolder({}, outer, folders->GetActiveSpace(), u"Inner",
+                        /*rename=*/false);
+  const int leaf = folders->CreateFolder({}, 0, folders->GetActiveSpace(),
+                                         u"Leaf", /*rename=*/false);
+  // Its subfolder would be at depth 4 under the third: fine; at 5 under the
+  // fourth: refused. Nothing goes into the deepest.
+  EXPECT_TRUE(folders->CanHoldFolder(chain[2], outer));
+  EXPECT_FALSE(folders->CanHoldFolder(chain[3], outer));
+  EXPECT_TRUE(folders->CanHoldFolder(chain[3], leaf));
+  EXPECT_FALSE(folders->CanHoldFolder(chain[4], leaf));
+  EXPECT_TRUE(folders->CanHoldFolder(0, outer));
+  folders->DropFolder(outer, chain[3], 0);
+  EXPECT_EQ(0, folders->GetFolder(outer)->parent);
+  folders->DropFolder(outer, chain[2], 0);
+  EXPECT_EQ(chain[2], folders->GetFolder(outer)->parent);
+}
+
+// Zen's collapsedByDrag: an open folder closes while it is dragged by its
+// row, and opens again after it, unless it holds the active tab.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       ADraggedFolderClosesForTheDragOnly) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* model = browser()->GetTabStripModel();
+  KoanFolderController* folders = KoanFolderController::FromBrowser(browser());
+  KoanTabDrag* drag = GetSpaces(browser())->tab_drag();
+  ASSERT_TRUE(folders && drag);
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(kPage), WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  tabs::TabInterface* in_folder = model->GetActiveTab();
+  const int folder = folders->CreateFolder({in_folder}, 0,
+                                           folders->GetActiveSpace(), u"Folder",
+                                           /*rename=*/false);
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(kPage), WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  ASSERT_NE(in_folder, model->GetActiveTab());
+  ASSERT_FALSE(folders->GetFolder(folder)->collapsed);
+
+  // (Its row shows once the folders are synced to the sidebar.)
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return drag->StartFolderForTesting(folder); }));
+  EXPECT_TRUE(drag->IsDragging());
+  EXPECT_TRUE(folders->GetFolder(folder)->collapsed);
+  drag->CancelForTesting();
+  EXPECT_FALSE(folders->GetFolder(folder)->collapsed);
+  EXPECT_TRUE(base::test::RunUntil([&] { return !drag->IsDragging(); }));
+
+  // Holding the active tab, it stays closed (showing that tab).
+  model->ActivateTabAt(model->GetIndexOfTab(in_folder));
+  ASSERT_TRUE(drag->StartFolderForTesting(folder));
+  EXPECT_TRUE(folders->GetFolder(folder)->collapsed);
+  drag->CancelForTesting();
+  EXPECT_TRUE(folders->GetFolder(folder)->collapsed);
+  EXPECT_TRUE(base::test::RunUntil([&] { return !drag->IsDragging(); }));
 }
 
 // Zen's Clear empties the Space's list: what is left is its hidden empty

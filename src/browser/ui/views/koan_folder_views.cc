@@ -28,6 +28,7 @@
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_folder_zen_assets.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
+#include "koan/browser/ui/views/koan_tab_drag_image.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -40,6 +41,7 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
+#include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -131,6 +133,25 @@ void PaintFolderIcon(gfx::Canvas* canvas,
   }
 }
 
+// A closed folder's icon as an image (for Koan's tab drag image), painted at
+// each scale it is drawn at.
+class FolderIconSource : public gfx::CanvasImageSource {
+ public:
+  FolderIconSource(bool dots, const FolderColors& colors)
+      : gfx::CanvasImageSource(gfx::Size(kFolderIconSize, kFolderIconSize)),
+        dots_(dots),
+        colors_(colors) {}
+
+  // gfx::CanvasImageSource:
+  void Draw(gfx::Canvas* canvas) override {
+    PaintFolderIcon(canvas, gfx::PointF(), /*open=*/0, dots_, colors_);
+  }
+
+ private:
+  const bool dots_;
+  const FolderColors colors_;
+};
+
 // The rename field: commits when it loses focus, like Zen's tab renamer.
 class KoanFolderNameField : public views::Textfield {
   METADATA_HEADER(KoanFolderNameField, views::Textfield)
@@ -204,12 +225,51 @@ void KoanFolderRowView::Update() {
                     has_active_ ? u", showing the active tab" : u""}));
   if (collapsed_) {
     GetViewAccessibility().SetIsCollapsed();
-    open_animation_.Hide();
   } else {
     GetViewAccessibility().SetIsExpanded();
+  }
+  // Zen's updateFolderIcon(): a closed folder's icon opens while a drag
+  // would drop into it.
+  if (collapsed_ && !drag_over_) {
+    open_animation_.Hide();
+  } else {
     open_animation_.Show();
   }
   SchedulePaint();
+}
+
+void KoanFolderRowView::SetDragOver(bool drag_over) {
+  if (drag_over_ == drag_over) {
+    return;
+  }
+  drag_over_ = drag_over;
+  Update();
+}
+
+KoanTabDragImage::Label KoanFolderRowView::GetDragLabel() const {
+  KoanTabDragImage::Label label;
+  // The folder closed for the drag (with its dots while it shows the active
+  // tab) and its name, where the row paints them.
+  const bool dots = controller_ && controller_->HasActiveTab(folder_id_);
+  label.icon = ui::ImageModel::FromImageGenerator(
+      base::BindRepeating(
+          [](bool dots, const ui::ColorProvider* provider) {
+            return gfx::CanvasImageSource::MakeImageSkia<FolderIconSource>(
+                dots,
+                FolderColors{provider->GetColor(kColorKoanFolderIconBack),
+                             provider->GetColor(kColorKoanFolderIconFront),
+                             provider->GetColor(kColorKoanFolderIconStroke)});
+          },
+          dots),
+      gfx::Size(kFolderIconSize, kFolderIconSize));
+  label.icon_bounds = gfx::Rect(kFolderIconX, (height() - kFolderIconSize) / 2,
+                                kFolderIconSize, kFolderIconSize);
+  label.title = name_;
+  label.font = gfx::FontList().DeriveWithWeight(gfx::Font::Weight::SEMIBOLD);
+  label.title_bounds = gfx::Rect(
+      kFolderLabelX, 0,
+      std::max(0, width() - kFolderTrailingPadding - kFolderLabelX), height());
+  return label;
 }
 
 void KoanFolderRowView::StartRename() {

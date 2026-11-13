@@ -17,7 +17,10 @@ Prepare: a Space with tabs A, B, C (A shown), one split view S of D and E, an Es
 | SP6 | Drag the shown tab onto its own page's edge and drop | Zen's empty split: the new pane on that edge, the URL bar over it. |
 | SP7 | Show S and drag a tab onto the page's edge | Zen's toast "Can't add more panels to the split view!" once; no pane. Over D's or E's row: no fake tab. |
 | SP8 | Drag two selected tabs, or an Essential, over a row's middle and the page's edge | No fake tab, no pane. |
-| SP9 | Drag D (one half of S's row) down among the normal tabs, drop | D leaves the split and lands there; E stays, alone. Drag E back next to its old place (just above or below): nothing changes if dropped in its own place. |
+| SP9 | Press D (one half of S's row) and drag it down among the normal tabs, drop (#380) | The image is S's whole row, both tabs' icons and titles. S moves there whole, still split; nothing unsplits. Same pressing E. |
 | SP10 | Esc while the fake tab or the fake pane shows | It goes; nothing splits; the tab shown before the drag is selected again. |
 | SP11 | Reduced motion on: SP4 | The pane shows at once, no slide. |
+| SP13 | Show S, drag D's pane grip (its header's left button) onto the sidebar, over C's row's top half (#380) | The drop zone over the other pane goes; the line shows above C (a tick as it moves, not the first); over a folder's middle the folder lights. Back over E's pane: the drop zone again, no line. |
+| SP14 | Drop it there | D leaves the split, lands above C, selected; E alone. With Shift held at the drop: same, the selection stays on E. |
+| SP15 | SP13, then Esc, or drop over the Essentials or the Space buttons | Nothing changes; the line goes. While a sidebar tab drag's image lands (drop a tab, then move over S at once), S's headers stay hidden until it has landed. |
 | SP12 | Side by side with Zen, light and dark, both styles: SP1, SP4 | Same colours, sizes and timing. Known difference: Zen pads the page aside for its fake pane; Koan's covers the page. |

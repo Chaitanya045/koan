@@ -172,6 +172,16 @@ class KoanFolderController : public TabStripModelObserver,
   // `id` 0 (or a folder of another Space) leave their folder. Their place in
   // the Space is the drop's; the folders' order is kept (ArrangeFolders()).
   void DropInFolder(const std::vector<tabs::TabInterface*>& tab_list, int id);
+  // Whether folder `id`, dragged by its row, may drop into folder `parent`
+  // (0: the Space's top level): not into itself or one of its subfolders,
+  // and with its subfolders no deeper than kMaxDepth (Zen's
+  // highlightGroupOnDragOver() refuses a folder at zen.folders.max-subfolders).
+  bool CanHoldFolder(int parent, int id) const;
+  // Koan's tab drag dropped folder `id` (koan_tab_drag.h) into `parent`,
+  // before its subfolder `before` (0: after its last). Dropped in another
+  // Space than its own, it goes to that one first (ChangeSpace()). Its tabs
+  // follow it (ArrangeFolders()).
+  void DropFolder(int id, int parent, int before);
   void ActivateTab(tabs::TabInterface* tab);
 
   // The folder's context menu (Zen's zenFolderActions).

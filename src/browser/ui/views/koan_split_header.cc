@@ -29,6 +29,8 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_tab_drag.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -185,7 +187,7 @@ class KoanSplitHeaderButton : public views::View {
     if (kind_ == Kind::kRearrange) {
       if (dragging_) {
         dragging_ = false;
-        controller_->FinishRearrange(ScreenPoint(event));
+        controller_->FinishRearrange(ScreenPoint(event), event.IsShiftDown());
       }
       return;
     }
@@ -607,7 +609,11 @@ void KoanSplitHeaderController::UpdateRearrange(
   const Pane& other = panes_[1 - rearrange_->dragged];
   rearrange_->side.reset();
   std::optional<gfx::RectF> zone;
-  if (other.container) {
+  // Over the sidebar: the line where the tab would go, no drop zone.
+  KoanTabDrag* drag = GetTabDrag();
+  rearrange_->over_sidebar =
+      drag && drag->UpdatePaneDrag(rearrange_->tab.Get(), screen_point);
+  if (other.container && !rearrange_->over_sidebar) {
     const gfx::Rect bounds = other.container->GetBoundsInScreen();
     // Zen's drop zone is off over the dragged pane, and between the panes.
     if (bounds.Contains(screen_point)) {
@@ -625,25 +631,34 @@ void KoanSplitHeaderController::UpdateRearrange(
   rearrange_view_->SetPointer(pointer);
 }
 
-void KoanSplitHeaderController::FinishRearrange(
-    const gfx::Point& screen_point) {
+void KoanSplitHeaderController::FinishRearrange(const gfx::Point& screen_point,
+                                                bool keep_selection) {
   if (!rearrange_) {
     return;
   }
   UpdateRearrange(screen_point);
-  EndRearrange(/*drop=*/true);
+  EndRearrange(/*drop=*/true, keep_selection);
 }
 
 void KoanSplitHeaderController::CancelRearrange() {
   EndRearrange(/*drop=*/false);
 }
 
-void KoanSplitHeaderController::EndRearrange(bool drop) {
+void KoanSplitHeaderController::EndRearrange(bool drop, bool keep_selection) {
   if (!rearrange_) {
     return;
   }
   const Rearrange rearrange = *rearrange_;
   rearrange_.reset();
+  if (KoanTabDrag* drag = GetTabDrag()) {
+    if (drop && rearrange.over_sidebar) {
+      // Zen's handleTabDrop() of a pane: out of the split, where the line
+      // showed (the split going away updates the headers).
+      drag->DropPane(rearrange.tab.Get(), keep_selection);
+    } else {
+      drag->EndPaneDrag();
+    }
+  }
   if (rearrange_view_) {
     rearrange_view_->Reset();
     ui::Layer* layer = rearrange_view_->layer();
@@ -738,6 +753,14 @@ void KoanSplitHeaderController::PostUpdate() {
                      weak_factory_.GetWeakPtr()));
 }
 
+KoanTabDrag* KoanSplitHeaderController::GetTabDrag() const {
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return controller && controller->workspaces()
+             ? controller->workspaces()->tab_drag()
+             : nullptr;
+}
+
 bool KoanSplitHeaderController::IsActive() const {
   if (destroying_ || !browser_view_->GetIsNormalType() ||
       !browser_view_->GetWidget()) {
@@ -794,7 +817,12 @@ void KoanSplitHeaderController::UpdateHover() {
   if (destroying_) {
     return;
   }
-  const bool active = IsActive() && !TabDragController::IsActive();
+  // (Koan's tab drag keeps upstream's waiting one, so IsActive() is true
+  // during it, but not while its image lands; upstream's alone moves tabs to
+  // another window.)
+  const KoanTabDrag* drag = GetTabDrag();
+  const bool active = IsActive() && !TabDragController::IsActive() &&
+                      !(drag && drag->IsDragging());
   const gfx::Point cursor = display::Screen::Get()->GetCursorScreenPoint();
   for (size_t i = 0; i < panes_.size(); ++i) {
     Pane& pane = panes_[i];

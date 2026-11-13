@@ -161,34 +161,66 @@ TabView* PressedTabView(views::View* region, views::View* target) {
   return nullptr;
 }
 
-// What the row `view` (showing `tab`) looks like, for the drag image.
+// The folder's row `target` (a view in `region`) is in, unless it is being
+// renamed or the press is on another button inside it.
+KoanFolderRowView* PressedFolderRow(views::View* region, views::View* target) {
+  for (views::View* view = target; view && view != region;
+       view = view->parent()) {
+    if (auto* row = views::AsViewClass<KoanFolderRowView>(view)) {
+      return row->GetRenaming() || row->removing() ? nullptr : row;
+    }
+    if (views::Button::AsButton(view)) {
+      return nullptr;
+    }
+  }
+  return nullptr;
+}
+
+// What the row (or tile) `row_view` looks like, for the drag image: the icon
+// and title of each tab it shows (a split view's two).
 KoanTabDragImage::Row ImageRow(BrowserView* browser_view,
-                               tabs::TabInterface* tab,
-                               views::View* row_view,
-                               views::View* tab_view) {
+                               views::View* row_view) {
   KoanTabDragImage::Row row;
   row.size = row_view->size();
   row.corner_radius =
       static_cast<float>(look::StyleRadius(kDragImageRadius, look::Step::kMd));
-  for (views::View* child : tab_view->children()) {
-    if (!child->GetVisible()) {
-      continue;
-    }
-    if (views::IsViewClass<TabIcon>(child)) {
-      const gfx::Rect icon = views::View::ConvertRectToTarget(
-          child, row_view, child->GetLocalBounds());
-      row.icon_bounds = gfx::Rect(icon.CenterPoint().x() - kPinnedIconSize / 2,
-                                  icon.CenterPoint().y() - kPinnedIconSize / 2,
-                                  kPinnedIconSize, kPinnedIconSize);
-    } else if (auto* title = views::AsViewClass<TabTitle>(child)) {
-      row.title = std::u16string(title->GetText());
-      row.font = title->font_list();
-      row.title_bounds = views::View::ConvertRectToTarget(
-          child, row_view, child->GetLocalBounds());
+  std::vector<TabView*> tab_views;
+  if (auto* tab_view = views::AsViewClass<TabView>(row_view)) {
+    tab_views.push_back(tab_view);
+  } else {
+    for (views::View* child : row_view->children()) {
+      if (auto* half = views::AsViewClass<TabView>(child);
+          half && half->GetVisible()) {
+        tab_views.push_back(half);
+      }
     }
   }
-  if (TabStripRegionView* strip = browser_view->tab_strip_view()) {
-    row.icon = strip->GetTabData(tab->GetHandle()).favicon;
+  TabStripRegionView* strip = browser_view->tab_strip_view();
+  for (TabView* tab_view : tab_views) {
+    KoanTabDragImage::Label label;
+    for (views::View* child : tab_view->children()) {
+      if (!child->GetVisible()) {
+        continue;
+      }
+      if (views::IsViewClass<TabIcon>(child)) {
+        const gfx::Rect icon = views::View::ConvertRectToTarget(
+            child, row_view, child->GetLocalBounds());
+        label.icon_bounds =
+            gfx::Rect(icon.CenterPoint().x() - kPinnedIconSize / 2,
+                      icon.CenterPoint().y() - kPinnedIconSize / 2,
+                      kPinnedIconSize, kPinnedIconSize);
+      } else if (auto* title = views::AsViewClass<TabTitle>(child)) {
+        label.title = std::u16string(title->GetText());
+        label.font = title->font_list();
+        label.title_bounds = views::View::ConvertRectToTarget(
+            child, row_view, child->GetLocalBounds());
+      }
+    }
+    if (const tabs::TabInterface* tab = tab_view->GetTabInterface();
+        tab && strip) {
+      label.icon = strip->GetTabData(tab->GetHandle()).favicon;
+    }
+    row.labels.push_back(std::move(label));
   }
   return row;
 }
@@ -274,13 +306,18 @@ void KoanTabDrag::OnRegionMouseEvent(views::View* region,
       if (!event->IsOnlyLeftMouseButton() || !features::IsSidebarEnabled()) {
         return;
       }
-      TabView* tab_view =
-          PressedTabView(region, static_cast<views::View*>(event->target()));
-      if (!tab_view || !tab_view->GetTabInterface()) {
+      auto* target = static_cast<views::View*>(event->target());
+      views::View* pressed = PressedTabView(region, target);
+      if (!pressed ||
+          !views::AsViewClass<TabView>(pressed)->GetTabInterface()) {
+        // A folder's row drags its folder.
+        pressed = folders() ? PressedFolderRow(region, target) : nullptr;
+      }
+      if (!pressed) {
         return;
       }
       region_.SetView(region);
-      pressed_.SetView(tab_view);
+      pressed_.SetView(pressed);
       press_point_ = views::View::ConvertPointToScreen(
           static_cast<views::View*>(event->target()), event->location());
       // (Before the press selects the tab: upstream's handler comes after.)
@@ -294,9 +331,11 @@ void KoanTabDrag::OnRegionMouseEvent(views::View* region,
       if (state_ != State::kPressed) {
         return;
       }
-      // Upstream's drag waits on the press (TabView::OnMousePressed() starts
-      // one only for a press that drags): its moves are Koan's from here.
-      if (!GetWaitingUpstreamDrag() || !pressed_.view()) {
+      // Upstream's drag waits on a tab's press (TabView::OnMousePressed()
+      // starts one only for a press that drags): its moves are Koan's from
+      // here. A folder's row has none.
+      auto* folder_row = views::AsViewClass<KoanFolderRowView>(pressed_.view());
+      if (!pressed_.view() || (!folder_row && !GetWaitingUpstreamDrag())) {
         state_ = State::kIdle;
         return;
       }
@@ -306,7 +345,8 @@ void KoanTabDrag::OnRegionMouseEvent(views::View* region,
       if (!views::View::ExceededDragThreshold(point - press_point_)) {
         return;
       }
-      if (!Start(pressed_.view(), /*for_testing=*/false)) {
+      if (folder_row ? !StartFolder(folder_row, /*for_testing=*/false)
+                     : !Start(pressed_.view(), /*for_testing=*/false)) {
         state_ = State::kIdle;
         return;
       }
@@ -325,7 +365,10 @@ void KoanTabDrag::OnRegionMouseEvent(views::View* region,
 
 void KoanTabDrag::Reset() {
   // The window's views go: nothing moves, nothing lands.
+  EndPaneDrag();
   StopFeedback();
+  dragged_folder_ = 0;
+  folder_closed_by_drag_ = false;
   image_.Hide();
   ShowHiddenViews();
   landing_failsafe_.Stop();
@@ -368,6 +411,17 @@ bool KoanTabDrag::StartForTesting(tabs::TabInterface* tab) {
   region_.SetView(region);
   press_point_ = view->GetBoundsInScreen().CenterPoint();
   return Start(view, /*for_testing=*/true);
+}
+
+bool KoanTabDrag::StartFolderForTesting(int id) {
+  views::View* region = browser_view_->tab_strip_view();
+  KoanFolderRowView* row = FolderRowFor(id);
+  if (!region || !row) {
+    return false;
+  }
+  region_.SetView(region);
+  press_point_ = row->GetBoundsInScreen().CenterPoint();
+  return StartFolder(row, /*for_testing=*/true);
 }
 
 void KoanTabDrag::SwitchSpaceForTesting(const tab_groups::TabGroupId& space) {
@@ -419,8 +473,9 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   }
   tabs::TabInterface* source = model->GetTabAtIndex(source_index);
   // The selection, as upstream's drag takes it: the tabs that are Essentials
-  // or not like the pressed one (a split view's two are both selected).
+  // or not like the pressed one.
   dragged_.clear();
+  dragged_folder_ = 0;
   const ui::ListSelectionModel selection =
       model->selection_model().GetListSelectionModel();
   for (size_t index : selection.selected_indices()) {
@@ -432,45 +487,28 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   if (!std::ranges::contains(dragged_, source->GetHandle())) {
     dragged_.push_back(source->GetHandle());
   }
-  // One tab of a split view (the split's two are the selection): that tab
-  // alone, which the drop takes out of the split.
-  if (source->IsSplit() && !source->IsPinned() &&
-      std::ranges::all_of(dragged_, [&](const tabs::TabHandle& handle) {
-        return handle.Get() && handle.Get()->GetSplit() == source->GetSplit();
-      })) {
-    dragged_ = {source->GetHandle()};
+  // A tab of a split view takes its whole split along, one row (Zen's
+  // elementToMove() moves the split's group).
+  for (size_t i = 0, count = dragged_.size(); i < count; ++i) {
+    tabs::TabInterface* tab = dragged_[i].Get();
+    if (!tab || !tab->GetSplit()) {
+      continue;
+    }
+    for (tabs::TabInterface* other :
+         model->GetSplitData(*tab->GetSplit())->ListTabs()) {
+      if (!std::ranges::contains(dragged_, other->GetHandle())) {
+        dragged_.push_back(other->GetHandle());
+      }
+    }
   }
   source_ = source->GetHandle();
-
-  // What a cancel goes back to.
-  origin_space_ = controller_->GetActiveSpace();
-  origin_active_ = model->GetActiveTab() ? model->GetActiveTab()->GetHandle()
-                                         : tabs::TabHandle();
-  origin_selection_.clear();
-  for (size_t index : selection.selected_indices()) {
-    origin_selection_.push_back(
-        model->GetTabAtIndex(static_cast<int>(index))->GetHandle());
-  }
-  origin_anchor_ =
-      selection.anchor()
-          ? model->GetTabAtIndex(static_cast<int>(*selection.anchor()))
-                ->GetHandle()
-          : tabs::TabHandle();
-
-  if (!for_testing) {
-    views::View* capture = capture_.view();
-    if (!capture || capture->parent() != region) {
-      capture =
-          region->AddChildView(std::make_unique<KoanTabDragCaptureView>(this));
-      capture_.SetView(capture);
-    }
-    widget->SetCapture(capture);
-    if (!widget->HasCapture()) {
-      return false;
-    }
+  RememberOrigin();
+  if (!TakeCapture(widget, for_testing)) {
+    return false;
   }
 
-  // The image: the pressed tab's row, then the others' behind it.
+  // The image: the pressed tab's row, then the others' behind it (a split
+  // view's row with both its tabs).
   const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
   std::vector<tabs::TabInterface*> order = {source};
   for (tabs::TabInterface* tab : tabs) {
@@ -485,23 +523,16 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   }
   std::vector<KoanTabDragImage::Row> rows;
   TabDragContext* context = GetDragContext();
-  // (A tab taken out of its split shows its own half.)
-  const bool lone = !!LoneSplitTab();
-  views::View* source_row =
-      lone && context ? context->GetTabForContents(source->GetContents())
-                      : RowViewFor(source);
+  views::View* source_row = RowViewFor(source);
   // The tile the image becomes over the Essentials, and the row an Essential
   // becomes out of them (Zen sizes it like the first normal tab): a Space
   // row's look, with the Essential's icon and title.
-  TabStripModel* tab_model = controller_->tab_strip_model();
-  views::View* first_tile = tab_model->IndexOfFirstNonPinnedTab() > 0
-                                ? RowViewFor(tab_model->GetTabAtIndex(0))
+  views::View* first_tile = model->IndexOfFirstNonPinnedTab() > 0
+                                ? RowViewFor(model->GetTabAtIndex(0))
                                 : nullptr;
-  views::View* region_view = this->region();
   tile_size_ = EssentialDragTileSize(
       first_tile ? std::make_optional(first_tile->size()) : std::nullopt,
-      region_view ? region_view->width() : 0,
-      source_row ? source_row->height() : 0);
+      region->width(), source_row ? source_row->height() : 0);
   std::optional<KoanTabDragImage::Row> normal_row;
   if (source->IsPinned()) {
     std::vector<tabs::TabHandle> firsts;
@@ -512,27 +543,26 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
                               ? context->GetTabForContents(tab->GetContents())
                               : nullptr;
       if (view) {
-        normal_row = ImageRow(browser_view_, tab, view, view);
+        normal_row = ImageRow(browser_view_, view);
       }
     }
   }
   for (tabs::TabInterface* tab : order) {
-    views::View* tab_view =
-        context ? context->GetTabForContents(tab->GetContents()) : nullptr;
-    views::View* row_view = lone ? tab_view : RowViewFor(tab);
-    if (!row_view || !tab_view || rows.size() >= kDragImageMaxRows) {
+    views::View* row_view = RowViewFor(tab);
+    if (!row_view || rows.size() >= kDragImageMaxRows) {
       continue;
     }
-    KoanTabDragImage::Row row =
-        ImageRow(browser_view_, tab, row_view, tab_view);
-    if (tab->IsPinned() && normal_row) {
+    KoanTabDragImage::Row row = ImageRow(browser_view_, row_view);
+    if (tab->IsPinned() && normal_row && !normal_row->labels.empty()) {
       // Its tile shows no title: the row's place for it, with its own.
-      const KoanTabDragImage::Row tile_row = row;
-      row = *normal_row;
-      row.icon = tile_row.icon;
+      KoanTabDragImage::Label label = normal_row->labels.front();
+      label.icon =
+          row.labels.empty() ? ui::ImageModel() : row.labels.front().icon;
       if (TabStripRegionView* strip = browser_view_->tab_strip_view()) {
-        row.title = strip->GetTabData(tab->GetHandle()).title;
+        label.title = strip->GetTabData(tab->GetHandle()).title;
       }
+      row = *normal_row;
+      row.labels = {std::move(label)};
     }
     rows.push_back(std::move(row));
   }
@@ -549,6 +579,81 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
       HideView(RowViewFor(tab));
     }
   }
+  BeginDragging(widget);
+  return true;
+}
+
+bool KoanTabDrag::StartFolder(KoanFolderRowView* row, bool for_testing) {
+  views::View* region = this->region();
+  views::Widget* widget = region ? region->GetWidget() : nullptr;
+  KoanFolderController* folders = this->folders();
+  const KoanFolder* folder =
+      folders && row ? folders->GetFolder(row->folder_id()) : nullptr;
+  if (!widget || !folder) {
+    return false;
+  }
+  dragged_.clear();
+  dragged_folder_ = folder->id;
+  source_ = tabs::TabHandle();
+  RememberOrigin();
+  if (!TakeCapture(widget, for_testing)) {
+    dragged_folder_ = 0;
+    return false;
+  }
+  // The pressed row gets no release (the capture has the pointer).
+  row->SetState(views::Button::STATE_NORMAL);
+  KoanTabDragImage::Row image_row;
+  image_row.size = row->size();
+  image_row.corner_radius =
+      static_cast<float>(look::StyleRadius(kDragImageRadius, look::Step::kMd));
+  image_row.labels = {row->GetDragLabel()};
+  grab_ = DragImageGrab(1, press_point_ - row->GetBoundsInScreen().origin());
+  image_.Show({std::move(image_row)}, 1, grab_, press_point_);
+  // Zen closes an open folder for the drag (collapsedByDrag), its rows
+  // folding away.
+  folder_closed_by_drag_ = !folder->collapsed;
+  if (folder_closed_by_drag_) {
+    folders->SetCollapsed(folder->id, true);
+  }
+  BeginDragging(widget);
+  return true;
+}
+
+void KoanTabDrag::RememberOrigin() {
+  TabStripModel* model = controller_->tab_strip_model();
+  const ui::ListSelectionModel selection =
+      model->selection_model().GetListSelectionModel();
+  origin_space_ = controller_->GetActiveSpace();
+  origin_active_ = model->GetActiveTab() ? model->GetActiveTab()->GetHandle()
+                                         : tabs::TabHandle();
+  origin_selection_.clear();
+  for (size_t index : selection.selected_indices()) {
+    origin_selection_.push_back(
+        model->GetTabAtIndex(static_cast<int>(index))->GetHandle());
+  }
+  origin_anchor_ =
+      selection.anchor()
+          ? model->GetTabAtIndex(static_cast<int>(*selection.anchor()))
+                ->GetHandle()
+          : tabs::TabHandle();
+}
+
+bool KoanTabDrag::TakeCapture(views::Widget* widget, bool for_testing) {
+  if (for_testing) {
+    return true;
+  }
+  views::View* region = this->region();
+  views::View* capture = capture_.view();
+  if (!capture || capture->parent() != region) {
+    capture =
+        region->AddChildView(std::make_unique<KoanTabDragCaptureView>(this));
+    capture_.SetView(capture);
+  }
+  widget->SetCapture(capture);
+  return widget->HasCapture();
+}
+
+void KoanTabDrag::BeginDragging(views::Widget* widget) {
   hold_ = HoldSidebarOpen(browser_view_);
   escape_monitor_ = views::EventMonitor::CreateWindowMonitor(
       this, widget->GetNativeWindow(),
@@ -558,7 +663,6 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   limit_toast_shown_ = false;
   edge_ = 0;
   state_ = State::kDragging;
-  return true;
 }
 
 void KoanTabDrag::DragTo(const gfx::Point& screen_point,
@@ -596,7 +700,7 @@ void KoanTabDrag::DragTo(const gfx::Point& screen_point,
   {
     KoanPinnedTabController* pinned = pinned_tabs();
     const bool over_grid =
-        !IsSidebarCollapsed() && IsOverEssentials(point) &&
+        !IsSidebarCollapsed() && !DragsFolder() && IsOverEssentials(point) &&
         (essentials || (pinned && pinned->CanAddToEssentials()));
     image_.SetTile(over_grid ? tile_size_ : gfx::Size(),
                    essentials ? grab_ : EssentialTileGrab(grab_));
@@ -634,6 +738,10 @@ void KoanTabDrag::Drop() {
   const bool essentials = DragsEssentials();
   StopFeedback();
   ReleaseUpstreamAndCapture();
+  if (DragsFolder()) {
+    DropFolder(target);
+    return;
+  }
   KoanPinnedTabController* pinned = pinned_tabs();
   views::View* region = this->region();
   const std::optional<tab_groups::TabGroupId> active =
@@ -680,14 +788,6 @@ void KoanTabDrag::Drop() {
     OnLanded();
     return;
   }
-  // One tab of a split view dragged elsewhere: out of the split first.
-  if (tabs::TabInterface* lone = LoneSplitTab()) {
-    if (DropsBackInSplit(target)) {
-      Land(source_);
-      return;
-    }
-    controller_->tab_strip_model()->RemoveSplit(*lone->GetSplit());
-  }
   tabs::TabInterface* before = target.before.Get();
   if (target.kind == DropTarget::Kind::kEssentials) {
     pinned->DropInEssentials(tabs, before);
@@ -719,7 +819,46 @@ void KoanTabDrag::Cancel() {
   StopFeedback();
   ReleaseUpstreamAndCapture();
   RestoreOrigin();
+  if (DragsFolder()) {
+    const int folder = dragged_folder_;
+    ReopenFolder();
+    Land(tabs::TabHandle(), folder);
+    return;
+  }
   Land(source_);
+}
+
+void KoanTabDrag::DropFolder(const DropTarget& target) {
+  const int folder = dragged_folder_;
+  KoanFolderController* folders = this->folders();
+  const KoanFolder* dragged = folders ? folders->GetFolder(folder) : nullptr;
+  views::View* region = this->region();
+  const std::optional<tab_groups::TabGroupId> active =
+      controller_->GetActiveSpace();
+  if (dragged && target.kind == DropTarget::Kind::kFolder) {
+    folders->DropFolder(folder, target.folder, target.before_folder);
+  } else if (dragged && region &&
+             region->GetLocalBounds().Contains(last_point_) && active &&
+             dragged->space != active) {
+    // Elsewhere on the sidebar after a switch: into the Space shown, as tabs
+    // go (#handle_dropSwitchSpace()).
+    folders->ChangeSpace(folder, *active);
+  } else {
+    RestoreOrigin();
+  }
+  ReopenFolder();
+  Land(tabs::TabHandle(), folder);
+}
+
+void KoanTabDrag::ReopenFolder() {
+  const int folder = std::exchange(dragged_folder_, 0);
+  KoanFolderController* folders = this->folders();
+  // Zen's _expandGroupOnDrop(): open again, unless it holds the active tab
+  // (which a closed folder shows).
+  if (std::exchange(folder_closed_by_drag_, false) && folders &&
+      folders->GetFolder(folder) && !folders->HasActiveTab(folder)) {
+    folders->SetCollapsed(folder, false);
+  }
 }
 
 void KoanTabDrag::StopFeedback() {
@@ -733,6 +872,7 @@ void KoanTabDrag::StopFeedback() {
                gfx::Rect());
   RemovePromo();
   ClearRowSplit();
+  SetLitFolder(0);
   if (page_edge_) {
     page_edge_.reset();
     image_.SetCard(false);
@@ -753,7 +893,7 @@ void KoanTabDrag::ReleaseUpstreamAndCapture() {
   }
 }
 
-void KoanTabDrag::Land(tabs::TabHandle tab) {
+void KoanTabDrag::Land(tabs::TabHandle tab, int folder) {
   ShowHiddenViews();
   landing_ = true;
   views::Widget* widget = browser_view_->GetWidget();
@@ -762,7 +902,7 @@ void KoanTabDrag::Land(tabs::TabHandle tab) {
       image_.IsShowing()) {
     // Where the drop put it, once the sidebar has laid it out.
     widget->LayoutRootViewIfNecessary();
-    row = tab.Get() ? RowViewFor(tab.Get()) : nullptr;
+    row = folder ? FolderRowFor(folder) : RowViewFor(tab.Get());
   }
   if (!row || !row->IsDrawn()) {
     OnLanded();
@@ -776,12 +916,13 @@ void KoanTabDrag::Land(tabs::TabHandle tab) {
   // (`image_` is a member: the callback never outlives this.)
   image_.Land(
       base::BindRepeating(&KoanTabDrag::LandingTarget, base::Unretained(this),
-                          tab),
+                          tab, folder),
       base::BindOnce(&KoanTabDrag::OnLanded, weak_factory_.GetWeakPtr()));
 }
 
-std::optional<gfx::Rect> KoanTabDrag::LandingTarget(tabs::TabHandle tab) const {
-  views::View* row = tab.Get() ? RowViewFor(tab.Get()) : nullptr;
+std::optional<gfx::Rect> KoanTabDrag::LandingTarget(tabs::TabHandle tab,
+                                                    int folder) const {
+  views::View* row = folder ? FolderRowFor(folder) : RowViewFor(tab.Get());
   if (!row || !row->IsDrawn()) {
     return std::nullopt;
   }
@@ -798,9 +939,12 @@ void KoanTabDrag::OnLanded() {
 }
 
 views::View* KoanTabDrag::RowViewFor(const tabs::TabInterface* tab) const {
+  if (!tab) {
+    return nullptr;
+  }
   TabDragContext* context = GetDragContext();
   views::View* view =
-      context && tab ? context->GetTabForContents(tab->GetContents()) : nullptr;
+      context ? context->GetTabForContents(tab->GetContents()) : nullptr;
   if (view && view->parent() &&
       views::IsViewClass<SplitTabView>(view->parent())) {
     return view->parent();
@@ -1073,37 +1217,6 @@ void KoanTabDrag::ClearRowSplit() {
   split_row_ = tabs::TabHandle();
 }
 
-tabs::TabInterface* KoanTabDrag::LoneSplitTab() const {
-  const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
-  return tabs.size() == 1 && tabs.front()->IsSplit() &&
-                 !tabs.front()->IsPinned()
-             ? tabs.front()
-             : nullptr;
-}
-
-bool KoanTabDrag::DropsBackInSplit(const DropTarget& target) const {
-  tabs::TabInterface* tab = LoneSplitTab();
-  if (!tab || target.kind != DropTarget::Kind::kSpace ||
-      target.pinned != IsPinnedForUser(tab)) {
-    return false;
-  }
-  // Right before the split, inside it or right after it: its own place.
-  TabStripModel* model = controller_->tab_strip_model();
-  int last = TabStripModel::kNoTab;
-  for (tabs::TabInterface* other : *model) {
-    if (other->GetSplit() == tab->GetSplit()) {
-      last = model->GetIndexOfTab(other);
-    }
-  }
-  tabs::TabInterface* next =
-      model->ContainsIndex(last + 1) &&
-              model->GetTabAtIndex(last + 1)->GetGroup() == tab->GetGroup()
-          ? model->GetTabAtIndex(last + 1)
-          : nullptr;
-  tabs::TabInterface* before = target.before.Get();
-  return before == next || (before && before->GetSplit() == tab->GetSplit());
-}
-
 void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
   DropTarget target;
   gfx::Rect line;
@@ -1111,6 +1224,7 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
   KoanTabDropIndicatorView::Style line_style =
       KoanTabDropIndicatorView::Style::kAcross;
   bool on_row = false;
+  int lit_folder = 0;
   views::View* region = this->region();
   KoanPinnedTabController* pinned = pinned_tabs();
   TabDragContext* context = GetDragContext();
@@ -1119,8 +1233,8 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
   if (region && pinned && context && !IsSidebarCollapsed()) {
     // Zen: tabs over the grid only while one more fits
     // (canEssentialBeAdded()); a tab over a full grid drops back into the
-    // Space.
-    if (IsOverEssentials(point) &&
+    // Space. Not a folder, nor a split pane from its grip.
+    if (IsOverEssentials(point) && !DragsFolder() && !pane_drag_ &&
         (essentials || pinned->CanAddToEssentials())) {
       target.kind = DropTarget::Kind::kEssentials;
       const std::vector<DropUnit> tiles =
@@ -1164,6 +1278,23 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
           break;
         }
       }
+      // A folder dragged by its row: among the pinned tabs and folders
+      // only, where it lands.
+      std::optional<FolderDrop> folder_drop;
+      if (KoanFolderController* folders = this->folders();
+          folders && DragsFolder()) {
+        folder_drop = PlaceFolderInSpaceList(
+            rows, layout, drop, dragged_folder_, [&](int parent) {
+              return folders->CanHoldFolder(parent, dragged_folder_);
+            });
+        target = DropTarget();
+        if (folder_drop) {
+          target.kind = DropTarget::Kind::kFolder;
+          target.pinned = true;
+          target.folder = folder_drop->parent;
+          target.before_folder = folder_drop->before;
+        }
+      }
       // Held over the middle of a tab's row: Zen's split, after its delay.
       for (size_t i = 0; i < rows.size(); ++i) {
         if (rows[i].kind != SpaceListRow::Kind::kTab ||
@@ -1183,17 +1314,24 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
         }
         break;
       }
-      if (target.kind == DropTarget::Kind::kSplitTab) {
-        // (The fake tab instead of the line.)
+      if (target.kind == DropTarget::Kind::kSplitTab ||
+          target.kind == DropTarget::Kind::kNone) {
+        // (The fake tab instead of the line; or nowhere for a folder.)
       } else if (drop.lit_header || drop.lit_row) {
         const gfx::Rect lit =
             drop.lit_row ? rows[*drop.lit_row].bounds : layout.header;
         bar = gfx::Rect(0, lit.y() + kDragOverMargin, region->width(),
                         std::max(0, lit.height() - 2 * kDragOverMargin));
+        if (drop.lit_row) {
+          lit_folder = rows[*drop.lit_row].folder_id;
+        }
+      } else if (folder_drop) {
+        line = DropLineBounds(folder_drop->line_row, folder_drop->line_y);
       } else {
         line = DropLineBounds(drop.line_row, drop.line_y);
       }
-      if (target.kind == DropTarget::Kind::kSpace) {
+      if (target.kind == DropTarget::Kind::kSpace ||
+          target.kind == DropTarget::Kind::kFolder) {
         target.feedback = bar.IsEmpty() ? line : bar;
       }
     }
@@ -1202,6 +1340,7 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
     ClearRowSplit();
   }
   ShowFeedback(line, line_style, bar);
+  SetLitFolder(lit_folder);
   // A tick for each new place, but the first (Zen finds it too much).
   if (!target.feedback.IsEmpty() && target.feedback != target_.feedback &&
       !target_.feedback.IsEmpty()) {
@@ -1376,6 +1515,100 @@ void KoanTabDrag::ShowFeedback(const gfx::Rect& line,
        KoanTabDropIndicatorView::Style::kBackground);
 }
 
+void KoanTabDrag::SetLitFolder(int id) {
+  if (id == lit_folder_) {
+    return;
+  }
+  if (KoanFolderRowView* old = FolderRowFor(lit_folder_)) {
+    old->SetDragOver(false);
+  }
+  lit_folder_ = id;
+  if (KoanFolderRowView* row = FolderRowFor(id)) {
+    row->SetDragOver(true);
+  }
+}
+
+KoanFolderRowView* KoanTabDrag::FolderRowFor(int id) const {
+  TabStripView* strip = id ? GetStrip() : nullptr;
+  views::View* container = strip ? strip->GetUnpinnedTabsContainer() : nullptr;
+  for (views::View* child :
+       container ? container->children() : views::View::Views()) {
+    const auto* group = views::AsViewClass<TabGroupView>(child);
+    if (!group || !group->IsGroupFocused()) {
+      continue;
+    }
+    for (views::View* row : child->children()) {
+      if (auto* folder_row = views::AsViewClass<KoanFolderRowView>(row);
+          folder_row && folder_row->folder_id() == id &&
+          !folder_row->removing()) {
+        return folder_row;
+      }
+    }
+  }
+  return nullptr;
+}
+
+bool KoanTabDrag::UpdatePaneDrag(tabs::TabInterface* tab,
+                                 const gfx::Point& screen_point) {
+  views::View* region = browser_view_->tab_strip_view();
+  if (state_ == State::kDragging || landing_ || !tab || !tab->IsSplit() ||
+      !region || !region->IsDrawn() || IsSidebarCollapsed() ||
+      !region->GetBoundsInScreen().Contains(screen_point)) {
+    EndPaneDrag();
+    return false;
+  }
+  region_.SetView(region);
+  gfx::Point point = screen_point;
+  views::View::ConvertPointFromScreen(region, &point);
+  if (!IsOverSpace(point)) {
+    EndPaneDrag();
+    return false;
+  }
+  if (!pane_drag_) {
+    pane_drag_ = true;
+    dragged_ = {tab->GetHandle()};
+    dragged_folder_ = 0;
+    target_ = DropTarget();
+    haptic_skipped_ = false;
+  }
+  last_point_ = point;
+  UpdateTarget(point);
+  return target_.kind == DropTarget::Kind::kSpace;
+}
+
+void KoanTabDrag::DropPane(tabs::TabInterface* tab, bool keep_selection) {
+  const DropTarget target = target_;
+  const bool over_sidebar = pane_drag_;
+  EndPaneDrag();
+  KoanPinnedTabController* pinned = pinned_tabs();
+  TabStripModel* model = controller_->tab_strip_model();
+  if (!over_sidebar || target.kind != DropTarget::Kind::kSpace || !pinned ||
+      !tab || !tab->IsSplit() ||
+      model->GetIndexOfTab(tab) == TabStripModel::kNoTab) {
+    return;
+  }
+  // Zen's removeTabFromSplit(), then the tab where the line showed.
+  model->RemoveSplit(*tab->GetSplit());
+  pinned->DropTabsInSpace({tab}, target.before.Get(), target.pinned);
+  if (KoanFolderController* folders = this->folders()) {
+    folders->DropInFolder({tab}, target.pinned ? target.folder : 0);
+  }
+  if (!keep_selection) {
+    model->ActivateTabAt(model->GetIndexOfTab(tab));
+  }
+}
+
+void KoanTabDrag::EndPaneDrag() {
+  if (!std::exchange(pane_drag_, false)) {
+    return;
+  }
+  dragged_.clear();
+  target_ = DropTarget();
+  ShowFeedback(gfx::Rect(), KoanTabDropIndicatorView::Style::kAcross,
+               gfx::Rect());
+  SetLitFolder(0);
+}
+
 void KoanTabDrag::HideView(views::View* view) {
   if (!view) {
     return;
@@ -1472,7 +1705,7 @@ void KoanTabDrag::UpdatePromo(const gfx::Point& point) {
   // in an expanded sidebar.
   const bool can_promo = strip && header && pinned &&
                          pinned->EssentialsCount() == 0 && !DragsEssentials() &&
-                         !IsSidebarCollapsed();
+                         !DragsFolder() && !pane_drag_ && !IsSidebarCollapsed();
   if (!can_promo) {
     RemovePromo();
     return;
@@ -1522,6 +1755,14 @@ TabDragController* KoanTabDrag::GetWaitingUpstreamDrag() const {
 
 views::View* KoanTabDrag::region() const {
   return region_.view();
+}
+
+KoanFolderController* KoanTabDrag::folders() const {
+  KoanBrowserViewController* koan =
+      KoanBrowserViewController::From(browser_view_);
+  return koan && koan->folders() && koan->folders()->IsEnabled()
+             ? koan->folders()
+             : nullptr;
 }
 
 KoanPinnedTabController* KoanTabDrag::pinned_tabs() const {

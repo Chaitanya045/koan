@@ -34,6 +34,7 @@ namespace koan {
 
 class KoanSplitHeaderView;
 class KoanSplitRearrangeView;
+class KoanTabDrag;
 
 // Zen's pane header unsplit (removeTabFromSplit()): `tab` leaves its split
 // and is selected, unless `keep_selection` (Shift held): then the selection
@@ -62,13 +63,17 @@ void RearrangeSplitPanes(TabStripModel* tab_strip,
 // other pane a drop zone covers its half on the side the pointer is near
 // (koan_split_rearrange.h) or all of it; the drop swaps the panes or puts
 // the dragged one on that side, switching between side by side and stacked.
+// Over the window's sidebar the line shows where the pane's tab would go,
+// and the drop there takes it out of the split, to that place (Zen's
+// handleTabDrop() of a pane, through KoanTabDrag::UpdatePaneDrag()).
 // Esc, a tab change or the split going away cancel it.
 //
 // Each header is a child widget over the page (as the loading indicator
 // and the toast), so it takes the pointer before the page does, and with it
 // before the window drag from the page's top (koan_window_drag.h). Not in
 // the page's own fullscreen (Zen's inDOMFullscreen), not while Glance is
-// open over the split (its card covers the panes) or a tab is dragged.
+// open over the split (its card covers the panes) or a tab is dragged (until
+// its image has landed).
 class KoanSplitHeaderController : public TabStripModelObserver,
                                   public views::ViewObserver,
                                   public ui::EventObserver {
@@ -93,7 +98,8 @@ class KoanSplitHeaderController : public TabStripModelObserver,
   void OnUnsplitPressed(int pane, bool keep_selection);
   void StartRearrange(int pane);
   void UpdateRearrange(const gfx::Point& screen_point);
-  void FinishRearrange(const gfx::Point& screen_point);
+  // (`keep_selection`: Shift, for a drop on the sidebar.)
+  void FinishRearrange(const gfx::Point& screen_point, bool keep_selection);
   void CancelRearrange();
 
  private:
@@ -119,6 +125,8 @@ class KoanSplitHeaderController : public TabStripModelObserver,
     tabs::TabHandle tab;
     // The other pane's side under the pointer, if it is over that pane.
     std::optional<RearrangeSide> side;
+    // Over the sidebar, where the line shows.
+    bool over_sidebar = false;
   };
 
   // TabStripModelObserver:
@@ -154,7 +162,9 @@ class KoanSplitHeaderController : public TabStripModelObserver,
   void LayoutRearrangeView();
   tabs::TabInterface* TabOf(const Pane& pane) const;
   // Ends the rearrange view; `drop` applies the drop the pointer is over.
-  void EndRearrange(bool drop);
+  void EndRearrange(bool drop, bool keep_selection = false);
+  // The window's tab drag (koan_tab_drag.h), if any.
+  KoanTabDrag* GetTabDrag() const;
   void CaptureThumbnail(content::WebContents* contents, int generation);
   void OnThumbnail(int generation,
                    float scale,

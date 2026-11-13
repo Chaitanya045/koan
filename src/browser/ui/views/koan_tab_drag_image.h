@@ -42,7 +42,23 @@ class KoanTabDragImageView;
 // nsZenDropLandingCocoa.mm).
 class KoanTabDragImage : public gfx::AnimationDelegate {
  public:
-  // One row of the image: what the tab's row shows, in its own coordinates.
+  // A tab's icon and title in a row of the image.
+  struct Label {
+    Label();
+    Label(const Label&);
+    Label& operator=(const Label&);
+    ~Label();
+
+    ui::ImageModel icon;
+    gfx::Rect icon_bounds;
+    std::u16string title;
+    gfx::Rect title_bounds;
+    gfx::FontList font;
+  };
+
+  // One row of the image: what the tab's row shows, in its own coordinates:
+  // a label for each of its tabs (a split view's row shows both), or a
+  // folder's icon and name.
   struct Row {
     Row();
     Row(const Row&);
@@ -50,11 +66,7 @@ class KoanTabDragImage : public gfx::AnimationDelegate {
     ~Row();
 
     gfx::Size size;
-    ui::ImageModel icon;
-    gfx::Rect icon_bounds;
-    std::u16string title;
-    gfx::Rect title_bounds;
-    gfx::FontList font;
+    std::vector<Label> labels;
     float corner_radius = 0;
   };
 

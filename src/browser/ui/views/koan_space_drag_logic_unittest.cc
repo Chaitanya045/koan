@@ -411,6 +411,86 @@ TEST(KoanSpaceDragLogicTest, DropsOnAFolderGoIntoItOrBesideIt) {
   EXPECT_EQ(0, drop.folder);
 }
 
+namespace {
+
+// Folder 7 (0-36) open with a tab (38-74) and its collapsed subfolder 8
+// (76-112), folder 9 (114-150, collapsed), a pinned tab outside folders
+// (152-188), the separator (190-212), a normal tab (240-276).
+std::vector<SpaceListRow> FolderList() {
+  std::vector<SpaceListRow> list = {
+      FolderRow({0, 0, 200, 36}, 7, false, 2, 3),
+      TabRow({0, 38, 200, 36}, true, 7),
+      FolderRow({0, 76, 200, 36}, 8, true, 0, 3),
+      FolderRow({0, 114, 200, 36}, 9, true, 0, 4),
+      TabRow({0, 152, 200, 36}, true),
+      TabRow({0, 240, 200, 36}, false),
+  };
+  list[2].folder = 7;
+  return list;
+}
+
+SpaceListLayout FolderLayout() {
+  return {.header = gfx::Rect(0, -44, 200, 44),
+          .separator = gfx::Rect(0, 190, 200, 22),
+          .normal_start = 230};
+}
+
+std::optional<FolderDrop> PlaceFolder(int id, int y, int refused = -1) {
+  const std::vector<SpaceListRow> rows = FolderList();
+  return PlaceFolderInSpaceList(
+      rows, FolderLayout(), PlaceInSpaceList(rows, FolderLayout(), y), id,
+      [&](int parent) { return parent != id && parent != refused; });
+}
+
+}  // namespace
+
+TEST(KoanSpaceDragLogicTest, AFolderDropsAmongItsNewParentsSubfolders) {
+  // Above folder 7: first at the top level.
+  std::optional<FolderDrop> drop = PlaceFolder(9, 2);
+  ASSERT_TRUE(drop);
+  EXPECT_EQ(0, drop->parent);
+  EXPECT_EQ(7, drop->before);
+  EXPECT_EQ(0, drop->line_y);
+  // The Space header: the same.
+  drop = PlaceFolder(9, -20);
+  ASSERT_TRUE(drop);
+  EXPECT_EQ(0, drop->parent);
+  EXPECT_EQ(7, drop->before);
+  // Into folder 7, or after its tab: before its subfolder 8 (a folder's
+  // tabs come first), the line on 8's top.
+  for (int y : {18, 70}) {
+    drop = PlaceFolder(9, y);
+    ASSERT_TRUE(drop);
+    EXPECT_EQ(7, drop->parent);
+    EXPECT_EQ(8, drop->before);
+    EXPECT_EQ(76, drop->line_y);
+  }
+  // Among the pinned tabs outside folders: after the last folder, the line
+  // on the first such tab.
+  drop = PlaceFolder(7, 160);
+  ASSERT_TRUE(drop);
+  EXPECT_EQ(0, drop->parent);
+  EXPECT_EQ(0, drop->before);
+  EXPECT_EQ(152, drop->line_y);
+}
+
+TEST(KoanSpaceDragLogicTest, AFolderDroppedOnItsOwnPlaceStaysThere) {
+  // Right above itself: before the folder after it, the line where it is.
+  const std::optional<FolderDrop> drop = PlaceFolder(7, 2);
+  ASSERT_TRUE(drop);
+  EXPECT_EQ(0, drop->parent);
+  EXPECT_EQ(9, drop->before);
+  EXPECT_EQ(0, drop->line_y);
+}
+
+TEST(KoanSpaceDragLogicTest, AFolderNeverDropsAmongNormalTabsOrInARefusal) {
+  EXPECT_FALSE(PlaceFolder(9, 250));
+  // Into one of its own subfolders (the controller refuses it).
+  EXPECT_FALSE(PlaceFolder(7, 94, /*refused=*/8));
+  // Into itself.
+  EXPECT_FALSE(PlaceFolder(7, 18));
+}
+
 TEST(KoanSpaceDragLogicTest, TheDropLineHasZensInsetsAndRing) {
   // A row 200 wide at x 10: the line from 20 to 208, the ring before it.
   const gfx::Rect bounds = DropLineBounds(gfx::Rect(10, 40, 200, 36), 76);
