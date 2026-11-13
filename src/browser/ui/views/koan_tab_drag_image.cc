@@ -49,15 +49,7 @@ class KoanTabDragImageView : public views::View {
     layer()->SetFillsBoundsOpaquely(false);
     SetCanProcessEventsWithinSubtree(false);
     GetViewAccessibility().SetIsIgnored(true);
-    gfx::Size size;
-    for (size_t i = 0; i < rows_.size(); ++i) {
-      const int offset = static_cast<int>(i) * kDragImageRowOffset;
-      size.SetToMax(gfx::Size(rows_[i].size.width() + offset,
-                              rows_[i].size.height() + offset));
-    }
-    size.Enlarge(first_row_offset().x(), first_row_offset().y());
-    rows_size_ = size;
-    SetSize(size);
+    SetSize(StackSize());
   }
   KoanTabDragImageView(const KoanTabDragImageView&) = delete;
   KoanTabDragImageView& operator=(const KoanTabDragImageView&) = delete;
@@ -74,7 +66,20 @@ class KoanTabDragImageView : public views::View {
       return;
     }
     card_ = card;
-    SetSize(card_ ? kSplitDragCardSize : rows_size_);
+    SetSize(card_ ? kSplitDragCardSize : StackSize());
+    SchedulePaint();
+  }
+
+  // Zen's #makeDragImageEssential(): each row as an Essentials tile of
+  // `tile` size (empty: rows again).
+  void SetTile(const gfx::Size& tile) {
+    if (tile_ == tile) {
+      return;
+    }
+    tile_ = tile;
+    if (!card_) {
+      SetSize(StackSize());
+    }
     SchedulePaint();
   }
 
@@ -93,7 +98,7 @@ class KoanTabDragImageView : public views::View {
         canvas->SaveLayerAlpha(
             static_cast<uint8_t>(255 * kDragImageBackRowOpacity));
       }
-      PaintRow(canvas, colors, rows_[i]);
+      PaintRow(canvas, colors, rows_[i], tile_);
       if (i > 0) {
         canvas->Restore();
       }
@@ -118,12 +123,39 @@ class KoanTabDragImageView : public views::View {
   }
 
  private:
+  // The size of the stack of rows (or tiles), the dot's room included.
+  gfx::Size StackSize() const {
+    gfx::Size size;
+    for (size_t i = 0; i < rows_.size(); ++i) {
+      const int offset = static_cast<int>(i) * kDragImageRowOffset;
+      const gfx::Size unit = tile_.IsEmpty() ? rows_[i].size : tile_;
+      size.SetToMax(gfx::Size(unit.width() + offset, unit.height() + offset));
+    }
+    size.Enlarge(first_row_offset().x(), first_row_offset().y());
+    return size;
+  }
+
   static void PaintRow(gfx::Canvas* canvas,
                        const ui::ColorProvider* colors,
-                       const KoanTabDragImage::Row& row) {
+                       const KoanTabDragImage::Row& row,
+                       const gfx::Size& tile) {
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(colors->GetColor(kColorKoanTabDragImage));
+    if (!tile.IsEmpty()) {
+      // A tile: the favicon in its middle (Zen's Essential-style icon).
+      canvas->DrawRoundRect(gfx::RectF(gfx::Rect(tile)), row.corner_radius,
+                            flags);
+      if (!row.icon.IsEmpty()) {
+        const gfx::ImageSkia icon = row.icon.Rasterize(colors);
+        const int size = kDragImageTileIconSize;
+        canvas->DrawImageInt(icon, 0, 0, icon.width(), icon.height(),
+                             (tile.width() - size) / 2,
+                             (tile.height() - size) / 2, size, size,
+                             /*filter=*/true);
+      }
+      return;
+    }
     canvas->DrawRoundRect(gfx::RectF(gfx::Rect(row.size)), row.corner_radius,
                           flags);
     if (!row.icon.IsEmpty() && !row.icon_bounds.IsEmpty()) {
@@ -177,7 +209,7 @@ class KoanTabDragImageView : public views::View {
 
   const std::vector<KoanTabDragImage::Row> rows_;
   const size_t count_;
-  gfx::Size rows_size_;
+  gfx::Size tile_;
   bool card_ = false;
 };
 
@@ -264,6 +296,7 @@ void KoanTabDragImage::Show(std::vector<Row> rows,
   widget_->SetBounds(
       browser_view_->ConvertRectToWidget(browser_view_->GetLocalBounds()));
   grab_ = grab;
+  row_grab_ = grab;
   PlaceAt(screen_point - grab_);
   widget_->ShowInactive();
 }
@@ -279,6 +312,17 @@ void KoanTabDragImage::SetCard(bool card) {
     view_->SetCard(card);
     PlaceAt(origin_);
   }
+}
+
+void KoanTabDragImage::SetTile(const gfx::Size& tile,
+                               const gfx::Vector2d& grab) {
+  if (!view_) {
+    return;
+  }
+  const gfx::Point pointer = origin_ + grab_;
+  view_->SetTile(tile);
+  grab_ = tile.IsEmpty() ? row_grab_ : grab;
+  PlaceAt(pointer - grab_);
 }
 
 void KoanTabDragImage::ShowFakePane(const gfx::Rect& bounds, int edge) {

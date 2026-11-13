@@ -18,6 +18,7 @@
 #include "koan/browser/ui/views/koan_tab_drag_image.h"
 #include "ui/events/event_observer.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/view_tracker.h"
 
@@ -252,6 +253,8 @@ class KoanTabDrag : public ui::EventObserver {
   views::ViewTracker capture_;
   gfx::Point press_point_;
   gfx::Vector2d grab_;
+  // The tile the image becomes over the Essentials.
+  gfx::Size tile_size_;
   // The pointer's last place, in the region.
   gfx::Point last_point_;
 
