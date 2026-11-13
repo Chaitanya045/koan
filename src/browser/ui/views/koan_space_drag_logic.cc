@@ -77,22 +77,26 @@ double SpaceStripScrollProgress(base::TimeDelta elapsed) {
   return 1 - (1 + wt) * std::exp(-wt);
 }
 
-size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
-                          const gfx::Point& point,
-                          bool rtl) {
-  if (!tiles.empty() && point.y() < tiles.front().y()) {
+size_t EssentialsGapSlot(const std::vector<gfx::Rect>& slots,
+                         const gfx::Point& centre,
+                         bool rtl,
+                         size_t current) {
+  if (slots.empty() || centre.y() < slots.front().y()) {
     return 0;
   }
-  for (size_t i = 0; i < tiles.size(); ++i) {
-    const gfx::Rect& tile = tiles[i];
-    if (!tile.Contains(point)) {
-      continue;
+  for (size_t i = 0; i < slots.size(); ++i) {
+    if (slots[i].Contains(centre)) {
+      return i;
     }
-    const bool far_half = rtl ? point.x() < tile.CenterPoint().x()
-                              : point.x() > tile.CenterPoint().x();
-    return far_half ? i + 1 : i;
   }
-  return tiles.size();
+  const gfx::Rect& last = slots.back();
+  const bool past_last =
+      centre.y() >= last.y() &&
+      (rtl ? centre.x() < last.x() : centre.x() >= last.right());
+  if (centre.y() >= last.bottom() || past_last) {
+    return slots.size() - 1;
+  }
+  return std::min(current, slots.size() - 1);
 }
 
 gfx::Rect EmptyEssentialsDropZone(const gfx::Size& sidebar,

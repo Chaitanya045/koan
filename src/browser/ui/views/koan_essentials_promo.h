@@ -44,7 +44,6 @@ class KoanEssentialsPromoView : public views::View {
 // events:
 // - kAcross: #zen-drag-indicator between rows, a 2px line with a hollow ring
 //   at its start (DropLineBounds(), koan_space_drag_logic.h);
-// - kUpright: the same line upright between the Essentials tiles;
 // - kBackground: #zen-dragover-background, the bar behind a row a drop goes
 //   into (a folder, the Space header), the sidebar's width;
 // - kSplitTab: <zen-split-fake-tab>, half a row a held tab would split.
@@ -54,7 +53,7 @@ class KoanTabDropIndicatorView : public views::View {
   METADATA_HEADER(KoanTabDropIndicatorView, views::View)
 
  public:
-  enum class Style { kAcross, kUpright, kBackground, kSplitTab };
+  enum class Style { kAcross, kBackground, kSplitTab };
 
   // Zen's --zen-drag-indicator-height.
   static constexpr int kThickness = 2;
@@ -64,8 +63,8 @@ class KoanTabDropIndicatorView : public views::View {
   KoanTabDropIndicatorView& operator=(const KoanTabDropIndicatorView&) = delete;
   ~KoanTabDropIndicatorView() override;
 
-  // Where it shows, in the TabStripView, and how (a line view takes kAcross,
-  // kUpright or kSplitTab); empty hides it.
+  // Where it shows, in the TabStripView, and how (a line view takes kAcross
+  // or kSplitTab); empty hides it.
   void SetSlot(const gfx::Rect& slot, Style style);
   const gfx::Rect& slot() const { return slot_; }
   Style style() const { return style_; }

@@ -5,6 +5,9 @@
 #include "koan/browser/ui/views/koan_essentials.h"
 
 #include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
@@ -24,9 +27,11 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/layout_types.h"
+#include "ui/views/layout/proposed_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/view_utils.h"
@@ -52,21 +57,105 @@ struct EssentialsHeight {
   bool bar_hidden = false;
 };
 
+// The grid's gap while a tab is dragged over it (SetEssentialsDragGap()),
+// kept on the grid.
+struct EssentialsDragGap {
+  size_t slot = 0;
+  std::vector<std::unique_ptr<views::ViewTracker>> moving;
+};
+
 }  // namespace koan
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(koan::EssentialsHeight*)
+DEFINE_UI_CLASS_PROPERTY_TYPE(koan::EssentialsDragGap*)
 
 namespace koan {
 
 namespace {
 
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(EssentialsHeight, kEssentialsHeightKey)
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(EssentialsDragGap, kEssentialsDragGapKey)
 
 // Zen's Essentials grid (.zen-essentials-container) fits at most four tiles
 // across (each at least 23.7% of the row).
 constexpr int kMaxEssentialsColumns = 4;
 
 }  // namespace
+
+void SetEssentialsDragGap(views::View* grid,
+                          const std::vector<views::View*>& moving,
+                          size_t slot) {
+  auto gap = std::make_unique<EssentialsDragGap>();
+  gap->slot = slot;
+  for (views::View* view : moving) {
+    if (view && view->parent() == grid) {
+      gap->moving.push_back(std::make_unique<views::ViewTracker>(view));
+    }
+  }
+  grid->SetProperty(kEssentialsDragGapKey, std::move(gap));
+  grid->InvalidateLayout();
+}
+
+void ClearEssentialsDragGap(views::View* grid) {
+  if (grid->GetProperty(kEssentialsDragGapKey)) {
+    grid->ClearProperty(kEssentialsDragGapKey);
+    grid->InvalidateLayout();
+  }
+}
+
+std::vector<gfx::Rect> GetEssentialsSlots(const views::View* grid) {
+  if (!grid || !grid->GetProperty(kHasAnimatingLayoutManagerKey)) {
+    return {};
+  }
+  // The target its animation goes to (upstream keeps the vertical layout
+  // as the animating layout's target layout manager), worked out afresh.
+  const views::ProposedLayout layout =
+      static_cast<const TabCollectionAnimatingLayoutManager*>(
+          grid->GetLayoutManager())
+          ->target_layout_manager()
+          ->GetProposedLayout(grid->size());
+  std::vector<gfx::Rect> slots;
+  for (const views::ChildLayout& child : layout.child_layouts) {
+    if (child.visible) {
+      slots.push_back(grid->GetMirroredRect(child.bounds));
+    }
+  }
+  return slots;
+}
+
+std::vector<views::View*> OrderWithGap(
+    const std::vector<views::View*>& children,
+    const std::vector<views::View*>& moving,
+    size_t slot) {
+  std::vector<views::View*> order;
+  for (views::View* child : children) {
+    if (!std::ranges::contains(moving, child)) {
+      order.push_back(child);
+    }
+  }
+  order.insert(
+      order.begin() + static_cast<std::ptrdiff_t>(std::min(slot, order.size())),
+      moving.begin(), moving.end());
+  return order;
+}
+
+std::vector<views::View*> EssentialsLayoutChildren(
+    const views::View* grid,
+    std::vector<views::View*> children) {
+  const EssentialsDragGap* gap = grid && features::IsSidebarEnabled()
+                                     ? grid->GetProperty(kEssentialsDragGapKey)
+                                     : nullptr;
+  if (!gap) {
+    return children;
+  }
+  std::vector<views::View*> moving;
+  for (const std::unique_ptr<views::ViewTracker>& tracker : gap->moving) {
+    if (views::View* view = tracker->view(); view && view->parent() == grid) {
+      moving.push_back(view);
+    }
+  }
+  return OrderWithGap(children, moving, gap->slot);
+}
 
 int ClampEssentialsColumns(int columns) {
   if (!features::IsSidebarEnabled()) {

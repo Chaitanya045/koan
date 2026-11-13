@@ -36,11 +36,13 @@
 #include "content/public/test/browser_test.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_essentials.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/animation/animation.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
@@ -355,6 +357,70 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
             model->GetIndexOfTab(tabs[0]));
   EXPECT_TRUE(IsPinnedInSpace(tabs[0]));
   EXPECT_EQ(space, model->GetFocusedGroup());
+}
+
+// Zen's gap in the Essentials grid while a tab is dragged over it
+// (koan_essentials.h, through the grid layout's patch): the grid lays its
+// tiles out in the order the gap gives, a placeholder child takes a slot of
+// its own, and GetEssentialsSlots() says where they go. Guards the upstream
+// behaviour the gap relies on: the vertical grid lays out the children the
+// hook returns, in that order (the animating layout moving them there), and
+// its target layout manager works out their slots.
+IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
+                       TheEssentialsGapMovesTheTilesAside) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanPinnedTabController* pinned = GetPinnedTabs(browser());
+  ASSERT_TRUE(pinned);
+  const std::vector<tabs::TabInterface*> tabs = OpenTabs(2);
+  pinned->AddToEssentials(tabs[0]);
+  pinned->AddToEssentials(tabs[1]);
+  TabStripView* strip = FindView<TabStripView>(browser_view());
+  ASSERT_TRUE(strip);
+  PinnedTabContainerView* grid = strip->GetPinnedTabsContainer();
+  ASSERT_TRUE(grid);
+  const auto settled = [&] {
+    views::test::RunScheduledLayout(browser_view());
+    return !TabCollectionAnimatingLayoutManager::IsViewAnimating(grid);
+  };
+  std::vector<TabView*> first;
+  std::vector<TabView*> second;
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    first.clear();
+    second.clear();
+    CollectTabViews(grid, tabs[0], first);
+    CollectTabViews(grid, tabs[1], second);
+    return settled() && first.size() == 1u && second.size() == 1u;
+  }));
+  const gfx::Rect first_slot = first[0]->bounds();
+  const gfx::Rect second_slot = second[0]->bounds();
+  ASSERT_LT(first_slot.x(), second_slot.x());
+
+  // The first tile in the second slot: the second moves aside into the
+  // first.
+  SetEssentialsDragGap(grid, {first[0]}, 1);
+  EXPECT_EQ((std::vector<gfx::Rect>{first_slot, second_slot}),
+            GetEssentialsSlots(grid));
+  ASSERT_TRUE(base::test::RunUntil(settled));
+  EXPECT_EQ(second_slot, first[0]->bounds());
+  EXPECT_EQ(first_slot, second[0]->bounds());
+
+  // A placeholder in the first slot: three slots, the tiles after it.
+  views::View* placeholder =
+      grid->AddChildView(std::make_unique<views::View>());
+  placeholder->SetPreferredSize(gfx::Size(0, first_slot.height()));
+  SetEssentialsDragGap(grid, {placeholder}, 0);
+  EXPECT_EQ(3u, GetEssentialsSlots(grid).size());
+  ASSERT_TRUE(base::test::RunUntil(settled));
+  EXPECT_LT(placeholder->x(), first[0]->x());
+  EXPECT_LT(first[0]->x(), second[0]->x());
+  EXPECT_EQ(placeholder->y(), first[0]->y());
+
+  // No gap: as before.
+  ClearEssentialsDragGap(grid);
+  grid->RemoveChildViewT(placeholder);
+  ASSERT_TRUE(base::test::RunUntil(settled));
+  EXPECT_EQ(first_slot, first[0]->bounds());
+  EXPECT_EQ(second_slot, second[0]->bounds());
 }
 
 }  // namespace koan

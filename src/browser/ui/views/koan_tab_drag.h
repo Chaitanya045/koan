@@ -64,7 +64,9 @@ bool IsUpstreamTabDragRunning();
 //   (KoanTabDragImage);
 // - nothing reorders while it moves: Zen's line shows where the tabs drop,
 //   before or after the row under the pointer by its halves, a bar lights the
-//   folder (or the Space header) they drop into (PlaceInSpaceList());
+//   folder (or the Space header) they drop into (PlaceInSpaceList()); over
+//   the Essentials the tiles move aside for them instead, Zen's gap
+//   (#animateVerticalPinnedGridDragOver()), a haptic tick as it moves;
 // - the section under the pointer pins or unpins them, a drop on the
 //   Essentials grid or the promo makes them Essentials, an Essential dropped
 //   on the Space's list leaves the grid (#319, #357);
@@ -257,6 +259,14 @@ class KoanTabDrag : public ui::EventObserver {
 
   // Where the pointer at `point` (in the region) drops, with its feedback.
   void UpdateTarget(const gfx::Point& point);
+  // Over the Essentials grid (with tiles): Zen's gap at the slot under the
+  // dragged tile (a placeholder tile for tabs that would become Essentials,
+  // the dragged Essentials' own hidden tiles otherwise), and the tile the
+  // tabs would drop before (`before`, none at the end). Returns the slot's
+  // bounds (in the region), none without the grid.
+  std::optional<gfx::Rect> UpdateGridGap(const gfx::Point& point,
+                                         tabs::TabHandle& before);
+  void ClearGridGap();
   void UpdatePromo(const gfx::Point& point);
   void RemovePromo();
   gfx::Rect EmptyEssentialsZone() const;
@@ -312,6 +322,10 @@ class KoanTabDrag : public ui::EventObserver {
   // A split pane's grip is over the sidebar (UpdatePaneDrag()).
   bool pane_drag_ = false;
   int lit_folder_ = 0;
+  // The grid with Zen's gap, its slot and its placeholder tile.
+  views::ViewTracker gap_grid_;
+  std::optional<size_t> gap_slot_;
+  views::ViewTracker gap_tile_;
   tabs::TabHandle source_;
   std::optional<tab_groups::TabGroupId> origin_space_;
   tabs::TabHandle origin_active_;

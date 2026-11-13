@@ -139,7 +139,7 @@ moves it past the drag threshold, takes it to the target in 700 ms, holds there 
 |---|---|---|
 | 1 `pill` | no Essentials, straight up over the URL pill's middle | the promo shows and is lit; the tab is the 1st Essential |
 | 2 `band` | back to no Essentials (test_helper unpins it), then over the Space name's top half | the promo, lit; one more Essential |
-| 3 `above` | with an Essential, straight up over the URL pill (above the grid) | no promo; the drop line upright before the first tile; one more Essential, the first (Koan's choice: the slot above the grid's first row, as above a Space's first row) |
+| 3 `above` | with an Essential, straight up over the URL pill (above the grid) | no promo; Zen's gap (the placeholder tile) in the first slot, the tiles moved aside, no line; one more Essential, the first (Koan's choice: the slot above the grid's first row, as above a Space's first row) |
 | 4 `page` | released over the page | no new Essential, the tab still in the window, no new window |
 
 Screen points come from `screenRect()`: UI DevTools' box model returns nothing for these views on the Mac, so it falls

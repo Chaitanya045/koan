@@ -5,12 +5,16 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_ESSENTIALS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_ESSENTIALS_H_
 
+#include <cstddef>
 #include <optional>
+#include <utility>
+#include <vector>
 
 class TabStripView;
 
 namespace gfx {
 class Canvas;
+class Rect;
 }  // namespace gfx
 
 namespace tabs {
@@ -82,6 +86,46 @@ int GetEssentialsMinHeight(int min_height, int preferred_height);
 // Koan's sidebar the grid is always laid out as expanded.
 tabs::VerticalTabStripCollapseState GetEssentialsCollapseState(
     tabs::VerticalTabStripCollapseState state);
+
+// Zen's gap in the Essentials grid while a tab is dragged over it
+// (ZenDragAndDrop.js #animateVerticalPinnedGridDragOver()): the tiles
+// `moving` (the dragged Essentials, hidden, or a placeholder tile for a tab
+// that would become one) take the vertical grid `grid`'s slots from `slot`
+// on, and the other tiles move aside to make room, wrapping at a row's end
+// (upstream's animating layout, kHorizontalWrappingVertically). Set and
+// cleared by Koan's tab drag (koan_tab_drag.h).
+void SetEssentialsDragGap(views::View* grid,
+                          const std::vector<views::View*>& moving,
+                          size_t slot);
+void ClearEssentialsDragGap(views::View* grid);
+
+// The slots of `grid`'s layout as it is set (with its gap), in grid order:
+// where its tiles go once its animation is over, in its own coordinates.
+std::vector<gfx::Rect> GetEssentialsSlots(const views::View* grid);
+
+// `children` (a grid's tiles in their order) less `moving`, with `moving` at
+// `slot` (at most at the end): the order with Zen's gap.
+std::vector<views::View*> OrderWithGap(
+    const std::vector<views::View*>& children,
+    const std::vector<views::View*>& moving,
+    size_t slot);
+
+// The children the vertical grid `grid` lays out, in order
+// (pinned_tab_container_view_vertical_layout.cc), given upstream's
+// `children` (its collection's tiles): with a gap, OrderWithGap().
+std::vector<views::View*> EssentialsLayoutChildren(
+    const views::View* grid,
+    std::vector<views::View*> children);
+template <typename Children>
+std::vector<views::View*> GetEssentialsLayoutChildren(
+    const views::View* grid,
+    const Children& children) {
+  std::vector<views::View*> list;
+  for (views::View* child : children) {
+    list.push_back(child);
+  }
+  return EssentialsLayoutChildren(grid, std::move(list));
+}
 
 // Whether a tab view that is `pinned` is an Essentials tile (with Koan's
 // sidebar). Upstream lays a pinned tab out as a row with its title while the
