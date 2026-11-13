@@ -37,6 +37,7 @@ class KoanLibraryController;
 class KoanLoadingIndicator;
 class KoanMediaController;
 class KoanShortcutController;
+class KoanSplitHeaderController;
 class KoanSidebarTabsController;
 class KoanTabActivationTracker;
 class KoanToast;
@@ -99,6 +100,9 @@ class KoanBrowserViewController : public views::ViewObserver,
   KoanFolderController* folders() const { return folders_.get(); }
   KoanThemeController* theme() const { return theme_.get(); }
   KoanGlanceController* glance() const { return glance_.get(); }
+  KoanSplitHeaderController* split_header() const {
+    return split_header_.get();
+  }
   KoanLibraryController* library() const { return library_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
   KoanMediaController* media() const { return media_.get(); }
@@ -157,6 +161,8 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanMediaController> media_;
   std::unique_ptr<KoanDownloadAnimation> download_animation_;
   std::unique_ptr<KoanLoadingIndicator> loading_indicator_;
+  // After Glance, which it asks whether it is open.
+  std::unique_ptr<KoanSplitHeaderController> split_header_;
   std::unique_ptr<KoanWindowDragController> window_drag_;
   std::unique_ptr<KoanWelcome> welcome_;
   // Zen's window sync: after the Spaces and pinned tabs it reconciles.

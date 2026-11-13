@@ -763,8 +763,17 @@ Besides the shortcuts above:
   pane; Esc (or clicking away) takes the empty pane away again. Not from an
   Essential, a tab already in a split, or the empty pane itself.
 - Split panes have no toolbar of their own (Chromium's favicon, domain and
-  close over a pane's corner): close or swap a pane from the tab context
-  menu or ⌘⌥U.
+  close over a pane's corner). Instead, as in Zen, a small header hangs from
+  the middle of a pane's top edge while the pointer is over the pane:
+  - its **expand** button takes that pane's tab out of the split and selects
+    it (Shift-click keeps the selection where it was);
+  - drag its **grip** to rearrange: the panes dim, the dragged one most, a
+    thumbnail of it follows the pointer, and over the other pane a drop zone
+    shows where it goes. Dropped on the other pane's middle the two swap; on
+    one of its edges the dragged pane goes on that side, side by side or
+    stacked, at half the space. Esc (or switching tabs) cancels.
+  The header doesn't show in a page's own fullscreen or under Glance. A pane
+  also closes and swaps from the tab context menu, and ⌘⌥U unsplits.
 - Tab context menu: **Add Split View...** splits the tab with the current
   one (or opens an empty split, for the current tab), **Join 2 Tabs** splits a
   two-tab selection, **Split Out Tab** separates a split (Zen's labels).

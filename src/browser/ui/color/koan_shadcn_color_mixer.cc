@@ -570,6 +570,20 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanLoadingBar] = {t[Token::kPrimary]};
   mixer[kColorKoanLoadingBarTrack] = {t[Token::kSecondary]};
 
+  // Split view: the pane header in the active pane's outline colour with
+  // contrasting glyphs and shadcn's `shadow-sm`; rearranging dims the panes
+  // over the window, the drop zone is `secondary` at 30% (Zen's), the drag
+  // image backed by the card.
+  mixer[kColorKoanSplitHeader] = {kColorMultiContentsViewActiveContentOutline};
+  mixer[kColorKoanSplitHeaderIcon] =
+      ui::SetAlpha(ui::GetColorWithMaxContrast(kColorKoanSplitHeader),
+                   static_cast<SkAlpha>(0xcc));
+  mixer[kColorKoanSplitHeaderShadow] =
+      ui::SetAlpha(ui::kColorShadowBase, static_cast<SkAlpha>(0x1a));
+  mixer[kColorKoanSplitRearrangeDim] = {kColorToolbar};
+  mixer[kColorKoanSplitDropZone] = {t.Alpha(Token::kSecondary, 0.3f)};
+  mixer[kColorKoanSplitDragImage] = {t[Token::kCard]};
+
   // Folders: the folder glyph in `primary` over the sidebar, with
   // `muted-foreground` counts and an `accent` selected search row.
   mixer[kColorKoanFolderIconBack] = {

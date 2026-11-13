@@ -9,6 +9,7 @@
 
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -27,6 +28,8 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_split_header.h"
+#include "koan/browser/ui/views/koan_split_rearrange.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "ui/base/window_open_disposition.h"
@@ -63,6 +66,44 @@ std::vector<tabs::TabInterface*> SplitTabs(TabStripModel* tab_strip,
                                            tabs::TabInterface* tab) {
   return tab->IsSplit() ? tab_strip->GetSplitData(*tab->GetSplit())->ListTabs()
                         : std::vector<tabs::TabInterface*>();
+}
+
+// Two pages, `first` and `second`, in a side by side split at `ratio`, the
+// second selected.
+struct TwoPanes {
+  raw_ptr<tabs::TabInterface> first = nullptr;
+  raw_ptr<tabs::TabInterface> second = nullptr;
+};
+TwoPanes SplitTwoPages(BrowserWindowInterface* browser, double ratio) {
+  TabStripModel* tab_strip = browser->GetTabStripModel();
+  TwoPanes panes;
+  if (!ui_test_utils::NavigateToURL(browser, GURL("chrome://version/"))) {
+    return panes;
+  }
+  panes.first = tab_strip->GetActiveTab();
+  if (!ui_test_utils::NavigateToURLWithDisposition(
+          browser, GURL("chrome://chrome-urls/"),
+          WindowOpenDisposition::kNewForegroundTab,
+          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP)) {
+    return panes;
+  }
+  panes.second = tab_strip->GetActiveTab();
+  tab_strip->AddToNewSplit({tab_strip->GetIndexOfTab(panes.first)},
+                           split_tabs::SplitTabVisualData(
+                               split_tabs::SplitTabLayout::kSideBySide, ratio),
+                           split_tabs::SplitTabCreatedSource::kTabContextMenu);
+  if (SplitTabs(tab_strip, panes.second) !=
+      std::vector<tabs::TabInterface*>{panes.first, panes.second}) {
+    // AddToNewSplit() put the active tab first.
+    tab_strip->ReverseTabsInSplit(*panes.second->GetSplit());
+  }
+  tab_strip->ActivateTabAt(tab_strip->GetIndexOfTab(panes.second));
+  return panes;
+}
+
+const split_tabs::SplitTabVisualData& VisualData(TabStripModel* tab_strip,
+                                                 tabs::TabInterface* tab) {
+  return *tab_strip->GetSplitData(*tab->GetSplit())->visual_data();
 }
 
 }  // namespace
@@ -194,6 +235,75 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
   // The Space's empty tab stays, hidden, as before.
   EXPECT_FALSE(pane->IsSplit());
   EXPECT_TRUE(IsEmptyTab(pane));
+}
+
+// The pane header's unsplit button (Zen's removeTabFromSplit()): the pane's
+// tab leaves the split and is selected; with Shift the selection stays.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       HeaderUnsplitSelectsThePaneUnlessShift) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  TwoPanes panes = SplitTwoPages(browser(), 0.5);
+  ASSERT_TRUE(panes.first && panes.second && panes.first->IsSplit());
+  ASSERT_EQ(tab_strip->GetActiveTab(), panes.second);
+
+  UnsplitFromHeader(tab_strip, panes.first, /*keep_selection=*/false);
+  EXPECT_FALSE(panes.first->IsSplit());
+  EXPECT_FALSE(panes.second->IsSplit());
+  EXPECT_EQ(tab_strip->GetActiveTab(), panes.first);
+
+  tab_strip->AddToNewSplit({tab_strip->GetIndexOfTab(panes.second)},
+                           split_tabs::SplitTabVisualData(),
+                           split_tabs::SplitTabCreatedSource::kTabContextMenu);
+  ASSERT_TRUE(panes.first->IsSplit());
+  UnsplitFromHeader(tab_strip, panes.second, /*keep_selection=*/true);
+  EXPECT_FALSE(panes.first->IsSplit());
+  EXPECT_EQ(tab_strip->GetActiveTab(), panes.first);
+}
+
+// Zen's rearrange drop through upstream's split APIs. The centre swaps the
+// panes and each slot keeps its size: this also guards the upstream
+// behaviour Koan relies on, that ReverseTabsInSplit() moves the tabs and
+// leaves the split's ratio (the first slot's share) alone. An edge stacks or
+// sets side by side at half, the dragged pane on that side.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       HeaderRearrangeSwapsOrMovesThePane) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  TwoPanes panes = SplitTwoPages(browser(), 0.3);
+  ASSERT_TRUE(panes.first && panes.second && panes.first->IsSplit());
+  tabs::TabInterface* first = panes.first;
+  tabs::TabInterface* second = panes.second;
+
+  RearrangeSplitPanes(tab_strip, first, RearrangeSide::kCenter,
+                      /*rtl=*/false);
+  EXPECT_EQ(SplitTabs(tab_strip, first),
+            (std::vector<tabs::TabInterface*>{second, first}));
+  EXPECT_EQ(VisualData(tab_strip, first),
+            split_tabs::SplitTabVisualData(
+                split_tabs::SplitTabLayout::kSideBySide, 0.3));
+  // The selection doesn't move.
+  EXPECT_EQ(tab_strip->GetActiveTab(), second);
+
+  // `first` (now on the right) dropped on the top of `second`: stacked,
+  // `first` on top.
+  RearrangeSplitPanes(tab_strip, first, RearrangeSide::kTop, false);
+  EXPECT_EQ(SplitTabs(tab_strip, first),
+            (std::vector<tabs::TabInterface*>{first, second}));
+  EXPECT_EQ(VisualData(tab_strip, first),
+            split_tabs::SplitTabVisualData(split_tabs::SplitTabLayout::kStacked,
+                                           0.5));
+
+  // `first` dropped on the right of `second`: side by side again, `first`
+  // on the right.
+  RearrangeSplitPanes(tab_strip, first, RearrangeSide::kRight, false);
+  EXPECT_EQ(SplitTabs(tab_strip, first),
+            (std::vector<tabs::TabInterface*>{second, first}));
+  EXPECT_EQ(VisualData(tab_strip, first),
+            split_tabs::SplitTabVisualData(
+                split_tabs::SplitTabLayout::kSideBySide, 0.5));
+  EXPECT_TRUE(first->IsSplit());
+  EXPECT_EQ(first->GetSplit(), second->GetSplit());
 }
 
 }  // namespace koan

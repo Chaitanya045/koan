@@ -330,6 +330,27 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
                   Alpha(0.65f))};
   mixer[kColorKoanLoadingBarTrack] = {SkColorSetA(loading_mix, Alpha(0.1f))};
 
+  // Split view (zen-split-view.css): the pane header is
+  // --zen-active-split-outline-color, the active pane's outline (here
+  // Chromium's), with contrast-color() glyphs at 80% and a shadow of black
+  // at 10%. Rearranging dims the panes over the window background (as
+  // Glance's backdrop); the drop zone is --zen-colors-secondary at 30%, and
+  // the drag image is drawn on white (Zen's canvas).
+  mixer[kColorKoanSplitHeader] = {kColorMultiContentsViewActiveContentOutline};
+  mixer[kColorKoanSplitHeaderIcon] = ui::SetAlpha(
+      ui::GetColorWithMaxContrast(kColorKoanSplitHeader), Alpha(0.8f));
+  mixer[kColorKoanSplitHeaderShadow] = {
+      SkColorSetA(SK_ColorBLACK, Alpha(0.1f))};
+  mixer[kColorKoanSplitRearrangeDim] = {kColorToolbar};
+  const SkColor zen_secondary =
+      dark ? color_utils::AlphaBlend(primary, SkColorSetRGB(0x10, 0x10, 0x10),
+                                     0.3f)
+           : color_utils::AlphaBlend(
+                 color_utils::AlphaBlend(primary, SK_ColorBLACK, 0.5f),
+                 SK_ColorWHITE, 0.2f);
+  mixer[kColorKoanSplitDropZone] = {SkColorSetA(zen_secondary, Alpha(0.3f))};
+  mixer[kColorKoanSplitDragImage] = {SK_ColorWHITE};
+
   // Folders (zen-folders.css), from the accent colour (the active Space's
   // tint): the folder behind is the accent at 60% over grey (#c1c1c1 in dark
   // mode), its cover the accent at 30% over white (60% over black in dark
