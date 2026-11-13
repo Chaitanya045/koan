@@ -42,6 +42,8 @@ class View;
 
 namespace koan {
 
+class KoanFolderController;
+class KoanFolderRowView;
 class KoanPinnedTabController;
 class KoanTabDragCaptureView;
 class KoanWorkspaceController;
@@ -80,8 +82,15 @@ bool IsUpstreamTabDragRunning();
 //   Zen's fake tab shows in the row and the drop splits the two (the side by
 //   the row's half); over the page's edge the image turns into Zen's card, a
 //   fake pane opens there and the drop splits the dragged tab with the one
-//   the page showed; one tab of a split view dragged elsewhere leaves the
-//   split.
+//   the page showed;
+// - a tab of a split view drags its whole split, one row (Zen's
+//   elementToMove()); a split pane's grip (KoanSplitHeaderController)
+//   dragged onto the sidebar shows the line, and its drop takes the pane's
+//   tab out of the split, there (ZenViewSplitter.mjs handleTabDrop());
+// - a folder drags by its row: it closes for the drag and opens again where
+//   it drops unless it holds the active tab (Zen's collapsedByDrag), among
+//   the pinned tabs and folders only, no deeper than Zen's five levels; a
+//   closed folder's icon opens while a drop would go into it.
 //
 // Upstream's drag (TabDragController) stays for one thing: tabs dragged to
 // another Koan window's sidebar. A press on a tab starts upstream's drag
@@ -110,6 +119,17 @@ class KoanTabDrag : public ui::EventObserver {
   // Whether Koan's drag is on, from its start until its image has landed.
   bool IsDragging() const;
 
+  // A split pane's grip dragged over the window (KoanSplitHeaderController),
+  // Zen's drop of a pane on the sidebar (ZenViewSplitter.mjs
+  // handleTabDrop()): over the active Space's list it shows the line (and
+  // the lit folder) where the pane's `tab` would go, and returns true.
+  bool UpdatePaneDrag(tabs::TabInterface* tab, const gfx::Point& screen_point);
+  // Released there: the tab leaves its split and goes where the line showed,
+  // selected unless `keep_selection` (Shift, as Zen's removeTabFromSplit()).
+  void DropPane(tabs::TabInterface* tab, bool keep_selection);
+  // The grip's drag left the sidebar or ended: the line goes.
+  void EndPaneDrag();
+
   // The promo, while it shows (for tests).
   KoanEssentialsPromoView* promo() const { return promo_; }
 
@@ -120,6 +140,8 @@ class KoanTabDrag : public ui::EventObserver {
   // and a move would, without the pointer; switches Space as a Space button
   // would; cancels as Esc does.
   bool StartForTesting(tabs::TabInterface* tab);
+  // Drags folder `id` by its row as a press on it and a move would.
+  bool StartFolderForTesting(int id);
   void SwitchSpaceForTesting(const tab_groups::TabGroupId& space);
   void CancelForTesting();
 
@@ -136,14 +158,23 @@ class KoanTabDrag : public ui::EventObserver {
   // Where a drop at the pointer's place goes.
   struct DropTarget {
     // kSplitTab: onto a tab's row, to split with it; kSplitPage: onto the
-    // page's edge, to split with the tab it shows.
-    enum class Kind { kNone, kEssentials, kSpace, kSplitTab, kSplitPage };
+    // page's edge, to split with the tab it shows; kFolder: a dragged folder
+    // into `folder` (0: the Space's top level), before `before_folder`.
+    enum class Kind {
+      kNone,
+      kEssentials,
+      kSpace,
+      kSplitTab,
+      kSplitPage,
+      kFolder
+    };
     Kind kind = Kind::kNone;
     // Before this tab (none: at the end of the grid or the section).
     tabs::TabHandle before;
     // A drop on the Space's list: its section and folder.
     bool pinned = false;
     int folder = 0;
+    int before_folder = 0;
     // A split: the tab to split with, and whether the dragged tab goes first
     // (left or top). A split on the page's edge stacks it on the top or
     // bottom edge.
@@ -164,6 +195,14 @@ class KoanTabDrag : public ui::EventObserver {
   // Starts dragging the selection from `tab_view` (pressed at press_point_),
   // taking the mouse capture unless `for_testing`.
   bool Start(views::View* tab_view, bool for_testing);
+  // Starts dragging the folder of `row` (pressed at press_point_).
+  bool StartFolder(KoanFolderRowView* row, bool for_testing);
+  // What Start() and StartFolder() share: the origin a cancel goes back to,
+  // the mouse capture unless `for_testing`; then (BeginDragging(), once the
+  // image shows) the sidebar held out, Esc and the state.
+  void RememberOrigin();
+  bool TakeCapture(views::Widget* widget, bool for_testing);
+  void BeginDragging(views::Widget* widget);
   void DragTo(const gfx::Point& screen_point, const ui::MouseEvent* event);
   void Drop();
   void Cancel();
@@ -172,17 +211,24 @@ class KoanTabDrag : public ui::EventObserver {
   void StopFeedback();
   // Lets go of upstream's waiting drag and of the capture, before a drop.
   void ReleaseUpstreamAndCapture();
-  // The image glides to the row of `tab` (where it dropped, or back home).
-  void Land(tabs::TabHandle tab);
-  std::optional<gfx::Rect> LandingTarget(tabs::TabHandle tab) const;
+  // The image glides to the row of `tab` (where it dropped, or back home),
+  // or of `folder`'s row.
+  void Land(tabs::TabHandle tab, int folder = 0);
+  std::optional<gfx::Rect> LandingTarget(tabs::TabHandle tab, int folder) const;
   void OnLanded();
   // The view of the row (or tile) that shows `tab`: its TabView, or its split
   // view's.
   views::View* RowViewFor(const tabs::TabInterface* tab) const;
+  // The row of folder `id` in the active Space's list.
+  KoanFolderRowView* FolderRowFor(int id) const;
 
   // The tabs dragged, in tab strip order.
   std::vector<tabs::TabInterface*> DraggedTabs() const;
   bool DragsEssentials() const;
+  bool DragsFolder() const { return dragged_folder_ != 0; }
+  // The dragged folder's drop (Drop()), and opening it again after it.
+  void DropFolder(const DropTarget& target);
+  void ReopenFolder();
   // Shows `space` (the tabs join it when they drop).
   void SwitchSpace(const tab_groups::TabGroupId& space);
   void OnSwitchTimer();
@@ -208,10 +254,6 @@ class KoanTabDrag : public ui::EventObserver {
                       const gfx::Point& point);
   void OnSplitTimer();
   void ClearRowSplit();
-  // The dragged tab is one tab of a split view: the drag takes it out of the
-  // split, unless it drops back in its place.
-  tabs::TabInterface* LoneSplitTab() const;
-  bool DropsBackInSplit(const DropTarget& target) const;
 
   // Where the pointer at `point` (in the region) drops, with its feedback.
   void UpdateTarget(const gfx::Point& point);
@@ -230,6 +272,9 @@ class KoanTabDrag : public ui::EventObserver {
   void ShowFeedback(const gfx::Rect& line,
                     KoanTabDropIndicatorView::Style line_style,
                     const gfx::Rect& bar);
+  // The folder a drop would go into, its row lit (0: none): a closed one's
+  // icon opens meanwhile.
+  void SetLitFolder(int id);
 
   // Hides `view` (a tab's row or tile) by its layer while the drag or the
   // landing needs it hidden; ShowHiddenViews() brings them back.
@@ -242,6 +287,7 @@ class KoanTabDrag : public ui::EventObserver {
   TabDragController* GetWaitingUpstreamDrag() const;
   views::View* region() const;
   KoanPinnedTabController* pinned_tabs() const;
+  KoanFolderController* folders() const;
   bool IsSidebarCollapsed() const;
 
   const raw_ptr<KoanWorkspaceController> controller_;
@@ -258,8 +304,14 @@ class KoanTabDrag : public ui::EventObserver {
   // The pointer's last place, in the region.
   gfx::Point last_point_;
 
-  // The drag.
+  // The drag: its tabs, or the folder dragged by its row (and whether the
+  // drag closed it).
   std::vector<tabs::TabHandle> dragged_;
+  int dragged_folder_ = 0;
+  bool folder_closed_by_drag_ = false;
+  // A split pane's grip is over the sidebar (UpdatePaneDrag()).
+  bool pane_drag_ = false;
+  int lit_folder_ = 0;
   tabs::TabHandle source_;
   std::optional<tab_groups::TabGroupId> origin_space_;
   tabs::TabHandle origin_active_;

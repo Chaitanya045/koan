@@ -59,6 +59,7 @@
 #include "koan/browser/ui/views/koan_space_drag_logic.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_stored_space.h"
+#include "koan/browser/ui/views/koan_tab_drag.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -963,6 +964,11 @@ void KoanFolderController::ShowSearch(int id, views::View* anchor) {
       focus && views::IsViewClass<views::Textfield>(focus->GetFocusedView())) {
     return;
   }
+  // Nor during Koan's tab drag (the hovered folder's row pressed to drag it).
+  if (KoanWorkspaceController* spaces = Spaces();
+      spaces && spaces->tab_drag() && spaces->tab_drag()->IsDragging()) {
+    return;
+  }
   search_.reset();
   // In compact mode, the peeked sidebar stays out while the popup is open.
   KoanBrowserViewController::From(browser_view_)
@@ -1300,6 +1306,56 @@ void KoanFolderController::DropInFolder(
       arrange_ = true;
     }
   }
+  Changed();
+}
+
+bool KoanFolderController::CanHoldFolder(int parent, int id) const {
+  if (!GetFolder(id)) {
+    return false;
+  }
+  if (!parent) {
+    return true;
+  }
+  for (const KoanFolder* folder = GetFolder(parent); folder;
+       folder = GetFolder(folder->parent)) {
+    if (folder->id == id) {
+      return false;
+    }
+  }
+  // How many levels `id`'s subfolders add below it.
+  const auto height = [this](const auto& self, int folder) -> int {
+    int levels = 0;
+    for (int sub : GetSubfolders(folder)) {
+      levels = std::max(levels, 1 + self(self, sub));
+    }
+    return levels;
+  };
+  return GetDepth(parent) + 1 + height(height, id) < kMaxDepth;
+}
+
+void KoanFolderController::DropFolder(int id, int parent, int before) {
+  if (!IsEnabled() || !CanHoldFolder(parent, id)) {
+    return;
+  }
+  if (const std::optional<tab_groups::TabGroupId> space = GetActiveSpace();
+      space && GetFolder(id)->space != space) {
+    ChangeSpace(id, *space);
+  }
+  const KoanFolder* holder = GetFolder(parent);
+  if (parent && (!holder || holder->space != GetFolder(id)->space)) {
+    return;
+  }
+  // A folder's subfolders show in the order of `folders_`.
+  const auto from = std::ranges::find(folders_, id, &KoanFolder::id);
+  KoanFolder moved = std::move(*from);
+  folders_.erase(from);
+  moved.parent = parent;
+  auto to = std::ranges::find(folders_, before, &KoanFolder::id);
+  if (!before || to == folders_.end() || to->parent != parent) {
+    to = folders_.end();
+  }
+  folders_.insert(to, std::move(moved));
+  arrange_ = true;
   Changed();
 }
 

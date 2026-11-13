@@ -17,6 +17,9 @@
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_context.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -31,9 +34,12 @@
 #include "koan/browser/ui/views/koan_split_header.h"
 #include "koan/browser/ui/views/koan_split_rearrange.h"
 #include "koan/browser/ui/views/koan_split_view.h"
+#include "koan/browser/ui/views/koan_tab_drag.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -353,6 +359,56 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
   EXPECT_EQ(split_tabs::SplitTabLayout::kStacked,
             split->visual_data()->split_layout());
   EXPECT_EQ(c, model->GetActiveTab());
+}
+
+// Zen's drop of a split pane on the sidebar (handleTabDrop()), from the
+// pane header's grip: over a tab's row the line shows, and the drop takes
+// the pane's tab out of the split to that place, selected.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       APaneDroppedOnTheSidebarLeavesTheSplitThere) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* model = browser()->GetTabStripModel();
+  TwoPanes panes = SplitTwoPages(browser(), 0.5);
+  ASSERT_TRUE(panes.first && panes.second && panes.first->IsSplit());
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("chrome://version/"),
+      WindowOpenDisposition::kNewBackgroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  tabs::TabInterface* third = model->GetTabAtIndex(model->count() - 1);
+  ASSERT_FALSE(third->IsSplit());
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  KoanTabDrag* drag = GetSpaces(browser())->tab_drag();
+  ASSERT_TRUE(drag);
+
+  // The top of the third tab's row: the line above it.
+  views::View* row = nullptr;
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    browser_view->GetWidget()->LayoutRootViewIfNecessary();
+    TabDragContext* context = browser_view->tab_strip_view()->GetDragContext();
+    row = context ? context->GetTabForContents(third->GetContents()) : nullptr;
+    return row && row->IsDrawn() && !row->bounds().IsEmpty();
+  }));
+  const gfx::Rect bounds = row->GetBoundsInScreen();
+  const gfx::Point point(bounds.CenterPoint().x(), bounds.y() + 4);
+  EXPECT_TRUE(drag->UpdatePaneDrag(panes.first, point));
+  EXPECT_FALSE(drag->IsDragging());
+
+  drag->DropPane(panes.first, /*keep_selection=*/false);
+  EXPECT_FALSE(panes.first->IsSplit());
+  EXPECT_FALSE(panes.second->IsSplit());
+  EXPECT_EQ(model->GetIndexOfTab(panes.first) + 1, model->GetIndexOfTab(third));
+  EXPECT_EQ(panes.first, model->GetActiveTab());
+
+  // Off the sidebar nothing shows, and a drop does nothing.
+  model->AddToNewSplit({model->GetIndexOfTab(panes.second)},
+                       split_tabs::SplitTabVisualData(),
+                       split_tabs::SplitTabCreatedSource::kTabContextMenu);
+  ASSERT_TRUE(panes.first->IsSplit());
+  const gfx::Point page =
+      browser_view->multi_contents_view()->GetBoundsInScreen().CenterPoint();
+  EXPECT_FALSE(drag->UpdatePaneDrag(panes.first, page));
+  drag->DropPane(panes.first, /*keep_selection=*/false);
+  EXPECT_TRUE(panes.first->IsSplit());
 }
 
 }  // namespace koan

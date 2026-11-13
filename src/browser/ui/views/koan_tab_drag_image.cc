@@ -146,8 +146,8 @@ class KoanTabDragImageView : public views::View {
       // A tile: the favicon in its middle (Zen's Essential-style icon).
       canvas->DrawRoundRect(gfx::RectF(gfx::Rect(tile)), row.corner_radius,
                             flags);
-      if (!row.icon.IsEmpty()) {
-        const gfx::ImageSkia icon = row.icon.Rasterize(colors);
+      if (!row.labels.empty() && !row.labels.front().icon.IsEmpty()) {
+        const gfx::ImageSkia icon = row.labels.front().icon.Rasterize(colors);
         const int size = kDragImageTileIconSize;
         canvas->DrawImageInt(icon, 0, 0, icon.width(), icon.height(),
                              (tile.width() - size) / 2,
@@ -158,17 +158,21 @@ class KoanTabDragImageView : public views::View {
     }
     canvas->DrawRoundRect(gfx::RectF(gfx::Rect(row.size)), row.corner_radius,
                           flags);
-    if (!row.icon.IsEmpty() && !row.icon_bounds.IsEmpty()) {
-      const gfx::ImageSkia icon = row.icon.Rasterize(colors);
-      canvas->DrawImageInt(icon, 0, 0, icon.width(), icon.height(),
-                           row.icon_bounds.x(), row.icon_bounds.y(),
-                           row.icon_bounds.width(), row.icon_bounds.height(),
-                           /*filter=*/true);
-    }
-    if (!row.title_bounds.IsEmpty()) {
-      canvas->DrawStringRect(
-          TruncateDragLabel(row.title, row.title_bounds.width()), row.font,
-          colors->GetColor(kColorKoanTabDragImageForeground), row.title_bounds);
+    for (const KoanTabDragImage::Label& label : row.labels) {
+      if (!label.icon.IsEmpty() && !label.icon_bounds.IsEmpty()) {
+        const gfx::ImageSkia icon = label.icon.Rasterize(colors);
+        canvas->DrawImageInt(icon, 0, 0, icon.width(), icon.height(),
+                             label.icon_bounds.x(), label.icon_bounds.y(),
+                             label.icon_bounds.width(),
+                             label.icon_bounds.height(),
+                             /*filter=*/true);
+      }
+      if (!label.title_bounds.IsEmpty()) {
+        canvas->DrawStringRect(
+            TruncateDragLabel(label.title, label.title_bounds.width()),
+            label.font, colors->GetColor(kColorKoanTabDragImageForeground),
+            label.title_bounds);
+      }
     }
   }
 
@@ -178,10 +182,10 @@ class KoanTabDragImageView : public views::View {
     flags.setColor(colors->GetColor(kColorKoanTabDragCard));
     canvas->DrawRoundRect(gfx::RectF(GetLocalBounds()), kSplitDragCardRadius,
                           flags);
-    if (rows_.empty()) {
+    if (rows_.empty() || rows_.front().labels.empty()) {
       return;
     }
-    const KoanTabDragImage::Row& row = rows_.front();
+    const KoanTabDragImage::Label& row = rows_.front().labels.front();
     // The icon above the title, centred together (justify-content and
     // align-items: center, gap 20px), within the padding.
     const gfx::FontList font =
@@ -251,6 +255,12 @@ END_METADATA
 
 BEGIN_METADATA(KoanTabDragImageView)
 END_METADATA
+
+KoanTabDragImage::Label::Label() = default;
+KoanTabDragImage::Label::Label(const Label&) = default;
+KoanTabDragImage::Label& KoanTabDragImage::Label::operator=(const Label&) =
+    default;
+KoanTabDragImage::Label::~Label() = default;
 
 KoanTabDragImage::Row::Row() = default;
 KoanTabDragImage::Row::Row(const Row&) = default;

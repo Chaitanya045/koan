@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/functional/function_ref.h"
 #include "base/time/time.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -212,6 +213,29 @@ struct SpaceListDrop {
 SpaceListDrop PlaceInSpaceList(const std::vector<SpaceListRow>& rows,
                                const SpaceListLayout& layout,
                                int y);
+
+// Zen's drop of a folder dragged by its row (#applyDragoverIndicator() for a
+// folder's label): where the drop `drop` (PlaceInSpaceList() over `rows`)
+// puts folder `id`. Koan shows a folder's own tabs before its subfolders and
+// a Space's folders before its other pinned tabs (KoanFolderController), so
+// the folder goes into `drop.folder` (its `parent`), before the first of that
+// folder's subfolders from the drop's slot on (`before`; 0: after the last),
+// and the line shows where it lands: on the top of the row it goes before,
+// else under the last row before it. None among the normal tabs (Zen: a
+// folder never drops there) or into a folder `can_hold` refuses (the folder
+// itself, one of its subfolders, too deep).
+struct FolderDrop {
+  int parent = 0;
+  int before = 0;
+  gfx::Rect line_row;
+  int line_y = 0;
+};
+std::optional<FolderDrop> PlaceFolderInSpaceList(
+    const std::vector<SpaceListRow>& rows,
+    const SpaceListLayout& layout,
+    const SpaceListDrop& drop,
+    int id,
+    base::FunctionRef<bool(int parent)> can_hold);
 
 // Zen's #zen-drag-indicator across a row (vertical-tabs.css): a 2px line from
 // 10px in from the row's start to 2px before its end, its top at `y`, with a

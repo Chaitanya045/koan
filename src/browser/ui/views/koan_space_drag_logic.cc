@@ -208,6 +208,77 @@ SpaceListDrop PlaceInSpaceList(const std::vector<SpaceListRow>& rows,
   return drop;
 }
 
+std::optional<FolderDrop> PlaceFolderInSpaceList(
+    const std::vector<SpaceListRow>& rows,
+    const SpaceListLayout& layout,
+    const SpaceListDrop& drop,
+    int id,
+    base::FunctionRef<bool(int parent)> can_hold) {
+  if (!drop.pinned || !can_hold(drop.folder)) {
+    return std::nullopt;
+  }
+  FolderDrop result;
+  result.parent = drop.folder;
+  const size_t pinned_count = static_cast<size_t>(
+      std::ranges::find_if_not(rows, &SpaceListRow::pinned) - rows.begin());
+  // The rows the parent holds: all of the pinned section at the top level.
+  size_t begin = 0;
+  size_t end = pinned_count;
+  if (result.parent) {
+    const auto parent_row = std::ranges::find_if(rows, [&](const auto& row) {
+      return row.kind == SpaceListRow::Kind::kFolder &&
+             row.folder_id == result.parent;
+    });
+    if (parent_row == rows.end()) {
+      return std::nullopt;
+    }
+    begin = static_cast<size_t>(parent_row - rows.begin()) + 1;
+    end = std::clamp(parent_row->end, begin, pinned_count);
+  }
+  const auto is_subfolder = [&](size_t i) {
+    return rows[i].kind == SpaceListRow::Kind::kFolder &&
+           rows[i].folder == result.parent;
+  };
+  // Where it lands: before the next subfolder (the dragged one's own place
+  // keeps it there), else after the last subfolder's rows (a folder's own
+  // tabs, the top level's other pinned tabs, come after none).
+  std::optional<size_t> landing;
+  for (size_t i = std::max(drop.slot, begin); i < end; ++i) {
+    if (!is_subfolder(i)) {
+      continue;
+    }
+    if (rows[i].folder_id == id) {
+      landing = landing.value_or(i);
+      i = std::max(i + 1, rows[i].end) - 1;
+      continue;
+    }
+    result.before = rows[i].folder_id;
+    landing = landing.value_or(i);
+    break;
+  }
+  if (!landing) {
+    landing = result.parent ? end : begin;
+    if (!result.parent) {
+      for (size_t i = begin; i < end; ++i) {
+        if (is_subfolder(i)) {
+          landing = std::max(i + 1, rows[i].end);
+        }
+      }
+    }
+  }
+  if (*landing < pinned_count) {
+    result.line_row = rows[*landing].bounds;
+    result.line_y = rows[*landing].bounds.y();
+  } else if (*landing > 0) {
+    result.line_row = rows[*landing - 1].bounds;
+    result.line_y = rows[*landing - 1].bounds.bottom();
+  } else {
+    result.line_row = layout.separator;
+    result.line_y = layout.separator.y();
+  }
+  return result;
+}
+
 gfx::Rect DropLineBounds(const gfx::Rect& row, int y) {
   // The line from 10px in to 2px before the end (Zen's 2px separation, the
   // ring's 4px and 4px more), the ring's room before it.

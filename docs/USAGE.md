@@ -619,6 +619,14 @@ at most).
 - **Take tabs out:** drag the tab among the pinned tabs above the folders
   (it stays pinned) or among the normal tabs (it's unpinned), unpin it
   (⌃⇧D), or use **Move to Folder > Remove from Folder** (it stays pinned).
+- **Move a folder:** drag its row. It closes for the drag; the line shows
+  where it will land (a folder's own tabs come before its subfolders, and
+  folders before the Space's other pinned tabs), a lit row means into that
+  folder, and it opens again where you drop it unless it holds the active
+  tab. Never among the normal tabs, into itself or deeper than five levels.
+  Over a Space button or a sidebar edge it switches Space, as tabs do, and
+  dropped there it moves to that Space. While a dragged tab or folder would
+  drop into a closed folder, that folder's icon opens.
 - **Collapse / expand:** click the folder's row. A collapsed folder shows
   its tab count, and still shows its tab if that's the active one (the
   icon gets three dots).
@@ -804,8 +812,13 @@ Besides the shortcuts above:
   empty, with the URL bar). The top and bottom edges stack. Not for several
   tabs, Essentials or tabs already split; a split that would take a third
   pane shows Zen's toast instead.
-- **Unsplit by dragging:** drag one tab of a split view out of its row in
-  the sidebar; it leaves the split where you drop it.
+- **Move a split by dragging:** a split view's row drags whole, as in
+  Zen: the drag image shows both its tabs, and the split keeps together
+  where you drop it.
+- **Unsplit by dragging:** drag a pane's grip (the header's left button)
+  onto the sidebar: the line shows where its tab will go, and letting go
+  takes the tab out of the split, to that place, selected (hold Shift to
+  keep the selection). The header's unsplit button does it in place.
 - Chromium's split views have two panes (Zen's take four, in a grid): a
   third panel (Split Glance over a split, a split shortcut with more tabs
   selected) shows Zen's "Can't add more panels to the split view!" toast.
