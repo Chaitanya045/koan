@@ -14,6 +14,10 @@ enum class SplitTabCreatedSource;
 enum class SplitTabLayout;
 }  // namespace split_tabs
 
+namespace tabs {
+class TabInterface;
+}
+
 namespace ui {
 class SimpleMenuModel;
 }
@@ -48,6 +52,18 @@ void SplitOutTab(TabStripModel* tab_strip, int index);
 // view!"), for a third panel joining a split (Zen takes four, Chromium two).
 // Koan-internal, not a hook.
 void ShowSplitLimitToast(BrowserView* browser_view);
+
+// Koan's tab drag dropped `dragged` to split with `other` (koan_tab_drag.h):
+// Zen's splitTabs() for a drop on a tab's row or the page's edge. The two
+// make a split view in `layout`, `dragged` first (left or top) or second, and
+// `dragged` is selected. A tab already in a split gets Zen's limit toast
+// instead (Koan's splits take two); an Essential or the same tab, nothing.
+// `dragged` joins the Space of `other` first. Returns whether it split.
+bool SplitByDrag(BrowserView* browser_view,
+                 tabs::TabInterface* dragged,
+                 tabs::TabInterface* other,
+                 split_tabs::SplitTabLayout layout,
+                 bool dragged_first);
 
 // Hook: chrome::NewSplitTab(), where every "new split" path ends
 // (IDC_NEW_SPLIT_TAB, Cmd+Shift+*, the palette, the Space's create menu,

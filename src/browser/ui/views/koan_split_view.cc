@@ -22,6 +22,7 @@
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/menus/simple_menu_model.h"
 
 namespace koan {
@@ -112,6 +113,45 @@ void SplitOutTab(TabStripModel* tab_strip, int index) {
   if (CanSplitOutTab(tab_strip, index)) {
     tab_strip->RemoveSplit(*tab_strip->GetTabAtIndex(index)->GetSplit());
   }
+}
+
+bool SplitByDrag(BrowserView* browser_view,
+                 tabs::TabInterface* dragged,
+                 tabs::TabInterface* other,
+                 split_tabs::SplitTabLayout layout,
+                 bool dragged_first) {
+  TabStripModel* model = browser_view->browser()->GetTabStripModel();
+  if (!dragged || !other || dragged == other || dragged->IsPinned() ||
+      other->IsPinned() ||
+      model->GetIndexOfTab(dragged) == TabStripModel::kNoTab ||
+      model->GetIndexOfTab(other) == TabStripModel::kNoTab) {
+    return false;
+  }
+  if (dragged->IsSplit() || other->IsSplit()) {
+    ShowSplitLimitToast(browser_view);
+    return false;
+  }
+  if (other->GetGroup() && dragged->GetGroup() != other->GetGroup()) {
+    if (KoanBrowserViewController* controller =
+            KoanBrowserViewController::From(browser_view);
+        controller && controller->workspaces()) {
+      controller->workspaces()->MoveTabsToSpace({dragged}, *other->GetGroup());
+    }
+  }
+  // `other` is the pivot: `dragged` comes next to it.
+  const split_tabs::SplitTabId split = model->AddToNewSplit(
+      {model->GetIndexOfTab(other), model->GetIndexOfTab(dragged)},
+      split_tabs::SplitTabVisualData(layout),
+      split_tabs::SplitTabCreatedSource::kDragAndDropTab);
+  if (!dragged->IsSplit()) {
+    return false;
+  }
+  if ((model->GetSplitData(split)->ListTabs().front() == dragged) !=
+      dragged_first) {
+    model->ReverseTabsInSplit(split);
+  }
+  model->ActivateTabAt(model->GetIndexOfTab(dragged));
+  return true;
 }
 
 void ShowSplitLimitToast(BrowserView* browser_view) {

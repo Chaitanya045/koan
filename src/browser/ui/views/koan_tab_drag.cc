@@ -18,11 +18,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
 #include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
@@ -35,13 +37,17 @@
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_icon.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
+#include "components/split_tabs/split_tab_visual_data.h"
+#include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_essentials_promo.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_folder_views.h"
+#include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_haptics.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
@@ -53,6 +59,7 @@
 #include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_space_navigation.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_tab_drag_hooks.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -276,6 +283,10 @@ void KoanTabDrag::OnRegionMouseEvent(views::View* region,
       pressed_.SetView(tab_view);
       press_point_ = views::View::ConvertPointToScreen(
           static_cast<views::View*>(event->target()), event->location());
+      // (Before the press selects the tab: upstream's handler comes after.)
+      tabs::TabInterface* shown =
+          controller_->tab_strip_model()->GetActiveTab();
+      shown_before_press_ = shown ? shown->GetHandle() : tabs::TabHandle();
       state_ = State::kPressed;
       return;
     }
@@ -421,6 +432,14 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   if (!std::ranges::contains(dragged_, source->GetHandle())) {
     dragged_.push_back(source->GetHandle());
   }
+  // One tab of a split view (the split's two are the selection): that tab
+  // alone, which the drop takes out of the split.
+  if (source->IsSplit() && !source->IsPinned() &&
+      std::ranges::all_of(dragged_, [&](const tabs::TabHandle& handle) {
+        return handle.Get() && handle.Get()->GetSplit() == source->GetSplit();
+      })) {
+    dragged_ = {source->GetHandle()};
+  }
   source_ = source->GetHandle();
 
   // What a cancel goes back to.
@@ -466,11 +485,15 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   }
   std::vector<KoanTabDragImage::Row> rows;
   TabDragContext* context = GetDragContext();
-  views::View* source_row = RowViewFor(source);
+  // (A tab taken out of its split shows its own half.)
+  const bool lone = !!LoneSplitTab();
+  views::View* source_row =
+      lone && context ? context->GetTabForContents(source->GetContents())
+                      : RowViewFor(source);
   for (tabs::TabInterface* tab : order) {
-    views::View* row_view = RowViewFor(tab);
     views::View* tab_view =
         context ? context->GetTabForContents(tab->GetContents()) : nullptr;
+    views::View* row_view = lone ? tab_view : RowViewFor(tab);
     if (row_view && tab_view && rows.size() < kDragImageMaxRows) {
       rows.push_back(ImageRow(browser_view_, tab, row_view, tab_view));
     }
@@ -494,6 +517,7 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
       {ui::EventType::kKeyPressed, ui::EventType::kMouseReleased});
   target_ = DropTarget();
   haptic_skipped_ = false;
+  limit_toast_shown_ = false;
   edge_ = 0;
   state_ = State::kDragging;
   return true;
@@ -529,6 +553,12 @@ void KoanTabDrag::DragTo(const gfx::Point& screen_point,
     }
   }
 
+  // Over the page's edge: Zen's split there.
+  if (UpdatePageSplit(screen_point)) {
+    switch_timer_.Stop();
+    edge_ = 0;
+    return;
+  }
   UpdatePromo(point);
   UpdateTarget(point);
 
@@ -576,6 +606,40 @@ void KoanTabDrag::Drop() {
     Land(source_);
     return;
   }
+  if (target.kind == DropTarget::Kind::kSplitTab ||
+      target.kind == DropTarget::Kind::kSplitPage) {
+    // Zen: a drop into a split takes the image away at once.
+    image_.Hide();
+    tabs::TabInterface* dragged = tabs.size() == 1 ? tabs.front() : nullptr;
+    tabs::TabInterface* other = target.split_with.Get();
+    const split_tabs::SplitTabLayout layout =
+        target.split_stacked ? split_tabs::SplitTabLayout::kStacked
+                             : split_tabs::SplitTabLayout::kSideBySide;
+    if (dragged && other == dragged) {
+      // The page showed the dragged tab: Zen's createEmptySplit(), the new
+      // pane on the side it was dropped on.
+      OpenEmptySplit(browser_view_->browser(), layout,
+                     split_tabs::SplitTabCreatedSource::kDragAndDropTab);
+      TabStripModel* model = controller_->tab_strip_model();
+      if (target.split_first && dragged->IsSplit() &&
+          model->GetSplitData(*dragged->GetSplit())->ListTabs().front() ==
+              dragged) {
+        model->ReverseTabsInSplit(*dragged->GetSplit());
+      }
+    } else {
+      SplitByDrag(browser_view_, dragged, other, layout, target.split_first);
+    }
+    OnLanded();
+    return;
+  }
+  // One tab of a split view dragged elsewhere: out of the split first.
+  if (tabs::TabInterface* lone = LoneSplitTab()) {
+    if (DropsBackInSplit(target)) {
+      Land(source_);
+      return;
+    }
+    controller_->tab_strip_model()->RemoveSplit(*lone->GetSplit());
+  }
   tabs::TabInterface* before = target.before.Get();
   if (target.kind == DropTarget::Kind::kEssentials) {
     pinned->DropInEssentials(tabs, before);
@@ -617,8 +681,15 @@ void KoanTabDrag::StopFeedback() {
   escape_monitor_.reset();
   target_ = DropTarget();
   // Zen: the drop is done, so its line goes before the tabs land.
-  ShowFeedback(gfx::Rect(), false, gfx::Rect());
+  ShowFeedback(gfx::Rect(), KoanTabDropIndicatorView::Style::kAcross,
+               gfx::Rect());
   RemovePromo();
+  ClearRowSplit();
+  if (page_edge_) {
+    page_edge_.reset();
+    image_.SetCard(false);
+    image_.ShowFakePane(gfx::Rect(), 0);
+  }
 }
 
 void KoanTabDrag::ReleaseUpstreamAndCapture() {
@@ -742,14 +813,18 @@ void KoanTabDrag::OnSwitchTimer() {
 }
 
 void KoanTabDrag::RestoreOrigin() {
-  if (!origin_space_ || controller_->GetActiveSpace() == origin_space_) {
-    return;
-  }
-  controller_->SwitchTo(*origin_space_);
-  // The tab and the selection the drag started with (the switch showed the
-  // Space's remembered tab).
   TabStripModel* model = controller_->tab_strip_model();
   tabs::TabInterface* active = origin_active_.Get();
+  const bool switched =
+      origin_space_ && controller_->GetActiveSpace() != origin_space_;
+  if (!switched && model->GetActiveTab() == active) {
+    return;
+  }
+  if (switched) {
+    controller_->SwitchTo(*origin_space_);
+  }
+  // The tab and the selection the drag started with (a switch showed the
+  // Space's remembered tab, a page split the tab shown before).
   const int active_index =
       active ? model->GetIndexOfTab(active) : TabStripModel::kNoTab;
   if (active_index == TabStripModel::kNoTab) {
@@ -835,11 +910,159 @@ bool KoanTabDrag::DragsWholeSpace() const {
   });
 }
 
+tabs::TabInterface* KoanTabDrag::SplittableTab() const {
+  const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
+  // Zen: one tab, not an Essential, not in a split.
+  return tabs.size() == 1 && !tabs.front()->IsPinned() &&
+                 !tabs.front()->IsSplit()
+             ? tabs.front()
+             : nullptr;
+}
+
+bool KoanTabDrag::UpdatePageSplit(const gfx::Point& screen_point) {
+  TabStripModel* model = controller_->tab_strip_model();
+  tabs::TabInterface* dragged = SplittableTab();
+  MultiContentsView* contents = browser_view_->multi_contents_view();
+  KoanBrowserViewController* koan =
+      KoanBrowserViewController::From(browser_view_);
+  const bool glance = koan && koan->glance() && koan->glance()->is_open();
+  tabs::TabInterface* shown = shown_before_press_.Get();
+  if (!shown || model->GetIndexOfTab(shown) == TabStripModel::kNoTab) {
+    shown = model->GetActiveTab();
+  }
+  std::optional<SplitEdge> edge;
+  gfx::Rect panels;
+  if (dragged && contents && contents->IsDrawn() && !glance && shown &&
+      !shown->IsPinned() && !IsEmptyTab(shown)) {
+    panels = contents->GetBoundsInScreen();
+    edge = PageSplitEdge(panels, screen_point);
+    if (edge && shown->IsSplit()) {
+      // Koan's splits take two panes: Zen's toast for a third, once.
+      if (!limit_toast_shown_) {
+        limit_toast_shown_ = true;
+        ShowSplitLimitToast(browser_view_);
+      }
+      edge.reset();
+    }
+  }
+  if (!edge) {
+    if (page_edge_) {
+      page_edge_.reset();
+      image_.SetCard(false);
+      image_.ShowFakePane(gfx::Rect(), 0);
+    }
+    return false;
+  }
+  const int edge_value = static_cast<int>(*edge);
+  if (page_edge_ != edge_value) {
+    if (!page_edge_) {
+      // Zen: the card, a tick, and the page the tab was dragged from.
+      image_.SetCard(true);
+      PlayHapticFeedback();
+      if (shown != model->GetActiveTab()) {
+        model->ActivateTabAt(model->GetIndexOfTab(shown));
+      }
+    }
+    page_edge_ = edge_value;
+    image_.ShowFakePane(FakePaneBounds(panels, *edge, 2, kContentCardMargin),
+                        edge_value);
+  }
+  ClearRowSplit();
+  RemovePromo();
+  ShowFeedback(gfx::Rect(), KoanTabDropIndicatorView::Style::kAcross,
+               gfx::Rect());
+  DropTarget target;
+  target.kind = DropTarget::Kind::kSplitPage;
+  target.split_with = shown->GetHandle();
+  target.split_first = *edge == SplitEdge::kLeft || *edge == SplitEdge::kTop;
+  target.split_stacked =
+      *edge == SplitEdge::kTop || *edge == SplitEdge::kBottom;
+  target_ = target;
+  return true;
+}
+
+bool KoanTabDrag::UpdateRowSplit(const SpaceListRow& row,
+                                 tabs::TabInterface* tab,
+                                 const gfx::Point& point) {
+  tabs::TabInterface* dragged = SplittableTab();
+  const std::optional<bool> first =
+      dragged && tab && tab != dragged && !tab->IsSplit() && !tab->IsPinned() &&
+              !IsEmptyTab(tab)
+          ? SplitBandSide(row.bounds, point, base::i18n::IsRTL())
+          : std::nullopt;
+  if (!first) {
+    ClearRowSplit();
+    return false;
+  }
+  if (split_row_.Get() == tab && split_row_first_ == *first) {
+    return true;
+  }
+  if (split_candidate_.Get() == tab && split_candidate_first_ == *first &&
+      split_timer_.IsRunning()) {
+    return false;
+  }
+  // A new row or side: Zen's delay again.
+  ClearRowSplit();
+  split_candidate_ = tab->GetHandle();
+  split_candidate_first_ = *first;
+  split_timer_.Start(FROM_HERE, kSplitDragDelay, this,
+                     &KoanTabDrag::OnSplitTimer);
+  return false;
+}
+
+void KoanTabDrag::OnSplitTimer() {
+  if (state_ != State::kDragging) {
+    return;
+  }
+  split_row_ = split_candidate_;
+  split_row_first_ = split_candidate_first_;
+  UpdateTarget(last_point_);
+}
+
+void KoanTabDrag::ClearRowSplit() {
+  split_timer_.Stop();
+  split_candidate_ = tabs::TabHandle();
+  split_row_ = tabs::TabHandle();
+}
+
+tabs::TabInterface* KoanTabDrag::LoneSplitTab() const {
+  const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
+  return tabs.size() == 1 && tabs.front()->IsSplit() &&
+                 !tabs.front()->IsPinned()
+             ? tabs.front()
+             : nullptr;
+}
+
+bool KoanTabDrag::DropsBackInSplit(const DropTarget& target) const {
+  tabs::TabInterface* tab = LoneSplitTab();
+  if (!tab || target.kind != DropTarget::Kind::kSpace ||
+      target.pinned != IsPinnedForUser(tab)) {
+    return false;
+  }
+  // Right before the split, inside it or right after it: its own place.
+  TabStripModel* model = controller_->tab_strip_model();
+  int last = TabStripModel::kNoTab;
+  for (tabs::TabInterface* other : *model) {
+    if (other->GetSplit() == tab->GetSplit()) {
+      last = model->GetIndexOfTab(other);
+    }
+  }
+  tabs::TabInterface* next =
+      model->ContainsIndex(last + 1) &&
+              model->GetTabAtIndex(last + 1)->GetGroup() == tab->GetGroup()
+          ? model->GetTabAtIndex(last + 1)
+          : nullptr;
+  tabs::TabInterface* before = target.before.Get();
+  return before == next || (before && before->GetSplit() == tab->GetSplit());
+}
+
 void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
   DropTarget target;
   gfx::Rect line;
   gfx::Rect bar;
-  bool upright = false;
+  KoanTabDropIndicatorView::Style line_style =
+      KoanTabDropIndicatorView::Style::kAcross;
+  bool on_row = false;
   views::View* region = this->region();
   KoanPinnedTabController* pinned = pinned_tabs();
   TabDragContext* context = GetDragContext();
@@ -867,7 +1090,7 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
         line =
             gfx::Rect(edge - KoanTabDropIndicatorView::kThickness / 2, tile.y(),
                       KoanTabDropIndicatorView::kThickness, tile.height());
-        upright = true;
+        line_style = KoanTabDropIndicatorView::Style::kUpright;
         if (!after) {
           target.before = tiles[slot].first;
         }
@@ -893,7 +1116,28 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
           break;
         }
       }
-      if (drop.lit_header || drop.lit_row) {
+      // Held over the middle of a tab's row: Zen's split, after its delay.
+      for (size_t i = 0; i < rows.size(); ++i) {
+        if (rows[i].kind != SpaceListRow::Kind::kTab ||
+            !rows[i].bounds.Contains(point)) {
+          continue;
+        }
+        on_row = true;
+        if (UpdateRowSplit(rows[i], firsts[i].Get(), point)) {
+          target = DropTarget();
+          target.kind = DropTarget::Kind::kSplitTab;
+          target.split_with = split_row_;
+          target.split_first = split_row_first_;
+          line = SplitFakeTabBounds(rows[i].bounds, split_row_first_,
+                                    base::i18n::IsRTL());
+          line_style = KoanTabDropIndicatorView::Style::kSplitTab;
+          target.feedback = line;
+        }
+        break;
+      }
+      if (target.kind == DropTarget::Kind::kSplitTab) {
+        // (The fake tab instead of the line.)
+      } else if (drop.lit_header || drop.lit_row) {
         const gfx::Rect lit =
             drop.lit_row ? rows[*drop.lit_row].bounds : layout.header;
         bar = gfx::Rect(0, lit.y() + kDragOverMargin, region->width(),
@@ -901,10 +1145,15 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
       } else {
         line = DropLineBounds(drop.line_row, drop.line_y);
       }
-      target.feedback = bar.IsEmpty() ? line : bar;
+      if (target.kind == DropTarget::Kind::kSpace) {
+        target.feedback = bar.IsEmpty() ? line : bar;
+      }
     }
   }
-  ShowFeedback(line, upright, bar);
+  if (!on_row) {
+    ClearRowSplit();
+  }
+  ShowFeedback(line, line_style, bar);
   // A tick for each new place, but the first (Zen finds it too much).
   if (!target.feedback.IsEmpty() && target.feedback != target_.feedback &&
       !target_.feedback.IsEmpty()) {
@@ -1050,7 +1299,7 @@ SpaceListLayout KoanTabDrag::SpaceLayout(
 }
 
 void KoanTabDrag::ShowFeedback(const gfx::Rect& line,
-                               bool upright,
+                               KoanTabDropIndicatorView::Style line_style,
                                const gfx::Rect& bar) {
   TabStripView* strip = GetStrip();
   views::View* region = this->region();
@@ -1074,9 +1323,7 @@ void KoanTabDrag::ShowFeedback(const gfx::Rect& line,
     view->SetSlot(views::View::ConvertRectToTarget(region, strip, bounds),
                   style);
   };
-  show(line_, line, /*background=*/false,
-       upright ? KoanTabDropIndicatorView::Style::kUpright
-               : KoanTabDropIndicatorView::Style::kAcross);
+  show(line_, line, /*background=*/false, line_style);
   show(bar_, bar, /*background=*/true,
        KoanTabDropIndicatorView::Style::kBackground);
 }

@@ -433,4 +433,50 @@ TEST(KoanSpaceDragLogicTest, SeveralTabsAreHeldAtZensPoint) {
   EXPECT_EQ(gfx::Vector2d(18, 18), DragImageGrab(3, gfx::Vector2d(40, 12)));
 }
 
+TEST(KoanSpaceDragLogicTest, ASplitShowsOverTheMiddleBandOfARow) {
+  const gfx::Rect row(0, 100, 200, 40);
+  // 40% to 60% of the height: 116 to 124.
+  EXPECT_FALSE(SplitBandSide(row, {50, 115}, false));
+  EXPECT_EQ(true, SplitBandSide(row, {50, 116}, false));
+  EXPECT_EQ(true, SplitBandSide(row, {99, 120}, false));
+  EXPECT_EQ(false, SplitBandSide(row, {100, 120}, false));
+  EXPECT_EQ(false, SplitBandSide(row, {150, 124}, false));
+  EXPECT_FALSE(SplitBandSide(row, {150, 125}, false));
+  // Mirrored: the right half is the start one.
+  EXPECT_EQ(true, SplitBandSide(row, {150, 120}, true));
+  EXPECT_FALSE(SplitBandSide(row, {250, 120}, false));
+}
+
+TEST(KoanSpaceDragLogicTest, TheFakeTabTakesHalfTheRow) {
+  const gfx::Rect row(10, 100, 200, 40);
+  EXPECT_EQ(gfx::Rect(12, 102, 98, 36), SplitFakeTabBounds(row, true, false));
+  EXPECT_EQ(gfx::Rect(110, 102, 98, 36), SplitFakeTabBounds(row, false, false));
+  EXPECT_EQ(gfx::Rect(110, 102, 98, 36), SplitFakeTabBounds(row, true, true));
+}
+
+TEST(KoanSpaceDragLogicTest, PageEdgesSplitWithinAQuarter) {
+  const gfx::Rect panels(100, 0, 800, 600);
+  // The outer 10px and the middle: nothing.
+  EXPECT_FALSE(PageSplitEdge(panels, {105, 300}));
+  EXPECT_FALSE(PageSplitEdge(panels, {500, 300}));
+  EXPECT_FALSE(PageSplitEdge(panels, {500, 595}));
+  EXPECT_EQ(SplitEdge::kLeft, PageSplitEdge(panels, {150, 300}));
+  EXPECT_EQ(SplitEdge::kRight, PageSplitEdge(panels, {850, 300}));
+  EXPECT_EQ(SplitEdge::kTop, PageSplitEdge(panels, {500, 100}));
+  EXPECT_EQ(SplitEdge::kBottom, PageSplitEdge(panels, {500, 500}));
+  // In a corner, the nearer edge.
+  EXPECT_EQ(SplitEdge::kTop, PageSplitEdge(panels, {200, 40}));
+  EXPECT_EQ(SplitEdge::kLeft, PageSplitEdge(panels, {130, 100}));
+}
+
+TEST(KoanSpaceDragLogicTest, TheFakePaneTakesItsShare) {
+  const gfx::Rect panels(100, 0, 800, 600);
+  EXPECT_EQ(gfx::Rect(100, 0, 392, 600),
+            FakePaneBounds(panels, SplitEdge::kLeft, 2, 8));
+  EXPECT_EQ(gfx::Rect(508, 0, 392, 600),
+            FakePaneBounds(panels, SplitEdge::kRight, 2, 8));
+  EXPECT_EQ(gfx::Rect(100, 308, 800, 292),
+            FakePaneBounds(panels, SplitEdge::kBottom, 2, 8));
+}
+
 }  // namespace koan

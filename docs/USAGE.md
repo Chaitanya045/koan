@@ -795,8 +795,17 @@ Besides the shortcuts above:
 - Link context menu: **Split Link to New Tab** opens the link beside the
   page; in a split, "Open link in left/right view" loads it in the other
   view.
-- Drag a tab onto the left or right edge of the page to split with it
-  (Chromium's split view drop targets).
+- **Split by dragging**, as in Zen: hold a dragged tab over the middle of
+  another tab's row for half a second; half the row lights up, and letting
+  go splits the two side by side, the dragged tab on that half. Or drag it
+  onto the page, near an edge (not the outer 10 px): the drag image turns
+  into a card, a pane opens on that edge, and letting go splits the dragged
+  tab with the page you were on (dragged onto its own page, the new pane is
+  empty, with the URL bar). The top and bottom edges stack. Not for several
+  tabs, Essentials or tabs already split; a split that would take a third
+  pane shows Zen's toast instead.
+- **Unsplit by dragging:** drag one tab of a split view out of its row in
+  the sidebar; it leaves the split where you drop it.
 - Chromium's split views have two panes (Zen's take four, in a grid): a
   third panel (Split Glance over a split, a split shortcut with more tabs
   selected) shows Zen's "Can't add more panels to the split view!" toast.

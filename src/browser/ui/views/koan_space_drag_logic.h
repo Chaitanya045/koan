@@ -239,6 +239,52 @@ inline constexpr int kDragImageCountFontSize = 10;
 std::u16string TruncateDragLabel(std::u16string_view title, int label_width);
 gfx::Vector2d DragImageGrab(size_t tab_count, const gfx::Vector2d& grab);
 
+// Zen's split by drag (ZenDragAndDrop.js _handle_tabDragOverToSplit(),
+// ZenViewSplitter.mjs onBrowserDragOverToSplit()).
+//
+// zen.splitView.drag-over-split-threshold (40) and
+// zen.splitView.drag-over-split-delayMC (500): a tab held over the middle of
+// another tab's row (from 40% to 60% of its height) for half a second shows
+// the split there.
+inline constexpr float kSplitDragThreshold = 0.4f;
+inline constexpr base::TimeDelta kSplitDragDelay = base::Milliseconds(500);
+// Whether `point` is in that middle band of `row`, and on which half of it
+// (true: the start half, where the dragged tab goes first). nullopt outside
+// the band.
+std::optional<bool> SplitBandSide(const gfx::Rect& row,
+                                  const gfx::Point& point,
+                                  bool rtl);
+// <zen-split-fake-tab> in the row (zen-split-view.css): its start or end half
+// less the tab's block margin.
+inline constexpr int kSplitFakeTabMargin = 2;
+gfx::Rect SplitFakeTabBounds(const gfx::Rect& row, bool start, bool rtl);
+
+// The page's edges: within a quarter of the panels' width (height) from one,
+// but not its outer 10px; the nearest edge wins.
+enum class SplitEdge { kLeft, kRight, kTop, kBottom };
+inline constexpr int kSplitEdgeIgnored = 10;
+std::optional<SplitEdge> PageSplitEdge(const gfx::Rect& panels,
+                                       const gfx::Point& point);
+// #zen-split-view-fake-browser once open: its share of the panels on `edge`,
+// 1 / `panes` of them (the panes after the split), less the element
+// separation `gap`.
+gfx::Rect FakePaneBounds(const gfx::Rect& panels,
+                         SplitEdge edge,
+                         int panes,
+                         int gap);
+// Zen's page-edge drag image (#zen-split-view-drag-image): a 200x250 card,
+// 16px corners, 20px padding, the 24px favicon above the 14px bold title,
+// 20px apart, centred.
+inline constexpr gfx::Size kSplitDragCardSize(200, 250);
+inline constexpr int kSplitDragCardRadius = 16;
+inline constexpr int kSplitDragCardPadding = 20;
+inline constexpr int kSplitDragCardIconSize = 24;
+inline constexpr int kSplitDragCardGap = 20;
+inline constexpr int kSplitDragCardFontSize = 14;
+// The fake pane opens (and closes) in 100 ms, easing out.
+inline constexpr base::TimeDelta kSplitFakePaneDuration =
+    base::Milliseconds(100);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_DRAG_LOGIC_H_

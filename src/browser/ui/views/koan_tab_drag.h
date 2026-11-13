@@ -14,6 +14,7 @@
 #include "base/timer/timer.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
+#include "koan/browser/ui/views/koan_essentials_promo.h"
 #include "koan/browser/ui/views/koan_tab_drag_image.h"
 #include "ui/events/event_observer.h"
 #include "ui/gfx/geometry/point.h"
@@ -40,10 +41,8 @@ class View;
 
 namespace koan {
 
-class KoanEssentialsPromoView;
 class KoanPinnedTabController;
 class KoanTabDragCaptureView;
-class KoanTabDropIndicatorView;
 class KoanWorkspaceController;
 class SidebarHold;
 struct SpaceListLayout;
@@ -75,7 +74,13 @@ bool IsUpstreamTabDragRunning();
 //   or a drop off the sidebar puts everything back, the Space included, the
 //   image gliding home;
 // - a haptic tick on each new place but the first; the sidebar stays out
-//   while it runs (compact mode).
+//   while it runs (compact mode);
+// - split by drag: held half a second over the middle of another tab's row,
+//   Zen's fake tab shows in the row and the drop splits the two (the side by
+//   the row's half); over the page's edge the image turns into Zen's card, a
+//   fake pane opens there and the drop splits the dragged tab with the one
+//   the page showed; one tab of a split view dragged elsewhere leaves the
+//   split.
 //
 // Upstream's drag (TabDragController) stays for one thing: tabs dragged to
 // another Koan window's sidebar. A press on a tab starts upstream's drag
@@ -129,13 +134,21 @@ class KoanTabDrag : public ui::EventObserver {
 
   // Where a drop at the pointer's place goes.
   struct DropTarget {
-    enum class Kind { kNone, kEssentials, kSpace };
+    // kSplitTab: onto a tab's row, to split with it; kSplitPage: onto the
+    // page's edge, to split with the tab it shows.
+    enum class Kind { kNone, kEssentials, kSpace, kSplitTab, kSplitPage };
     Kind kind = Kind::kNone;
     // Before this tab (none: at the end of the grid or the section).
     tabs::TabHandle before;
     // A drop on the Space's list: its section and folder.
     bool pinned = false;
     int folder = 0;
+    // A split: the tab to split with, and whether the dragged tab goes first
+    // (left or top). A split on the page's edge stacks it on the top or
+    // bottom edge.
+    tabs::TabHandle split_with;
+    bool split_first = false;
+    bool split_stacked = false;
     // Where its line or bar shows (in the region): a haptic ticks as it
     // moves (Zen: a new line place or lit row).
     gfx::Rect feedback;
@@ -181,6 +194,24 @@ class KoanTabDrag : public ui::EventObserver {
   // Space's group itself).
   bool DragsWholeSpace() const;
 
+  // Split by drag (Zen's _handle_tabDragOverToSplit(),
+  // onBrowserDragOverToSplit()). The tab the drag can split: one tab, not an
+  // Essential nor in a split.
+  tabs::TabInterface* SplittableTab() const;
+  // Over the page's edge: shows the card and the fake pane and returns true.
+  bool UpdatePageSplit(const gfx::Point& screen_point);
+  // Over the middle band of the row `rows[row]` (its first tab `tab`), at
+  // `point`: whether the held split shows there (after Zen's delay).
+  bool UpdateRowSplit(const SpaceListRow& row,
+                      tabs::TabInterface* tab,
+                      const gfx::Point& point);
+  void OnSplitTimer();
+  void ClearRowSplit();
+  // The dragged tab is one tab of a split view: the drag takes it out of the
+  // split, unless it drops back in its place.
+  tabs::TabInterface* LoneSplitTab() const;
+  bool DropsBackInSplit(const DropTarget& target) const;
+
   // Where the pointer at `point` (in the region) drops, with its feedback.
   void UpdateTarget(const gfx::Point& point);
   void UpdatePromo(const gfx::Point& point);
@@ -194,7 +225,10 @@ class KoanTabDrag : public ui::EventObserver {
   SpaceListLayout SpaceLayout(const std::vector<SpaceListRow>& rows) const;
   // Shows the line at `line` or the bar at `bar` (in the region); empty
   // hides them.
-  void ShowFeedback(const gfx::Rect& line, bool upright, const gfx::Rect& bar);
+  // (`line` in `line_style`: across, upright or Zen's fake tab.)
+  void ShowFeedback(const gfx::Rect& line,
+                    KoanTabDropIndicatorView::Style line_style,
+                    const gfx::Rect& bar);
 
   // Hides `view` (a tab's row or tile) by its layer while the drag or the
   // landing needs it hidden; ShowHiddenViews() brings them back.
@@ -234,6 +268,18 @@ class KoanTabDrag : public ui::EventObserver {
   // The edge the pointer is at (-1 left, 1 right, 0 neither).
   int edge_ = 0;
   base::OneShotTimer switch_timer_;
+  // The tab the page showed before the press selected the dragged one
+  // (Zen's _lastOpenedTab): a page-edge split is with it.
+  tabs::TabHandle shown_before_press_;
+  // A row split waiting for Zen's delay, and the one showing.
+  base::OneShotTimer split_timer_;
+  tabs::TabHandle split_candidate_;
+  bool split_candidate_first_ = false;
+  tabs::TabHandle split_row_;
+  bool split_row_first_ = false;
+  // The page edge showing the fake pane, if any (a SplitEdge).
+  std::optional<int> page_edge_;
+  bool limit_toast_shown_ = false;
   std::unique_ptr<views::EventMonitor> escape_monitor_;
   std::unique_ptr<SidebarHold> hold_;
   KoanTabDragImage image_;

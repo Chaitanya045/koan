@@ -75,6 +75,14 @@ class KoanTabDragImage : public gfx::AnimationDelegate {
             const gfx::Vector2d& grab,
             const gfx::Point& screen_point);
   void MoveTo(const gfx::Point& screen_point);
+  // Over the page's split edge the image is Zen's card (the first row's icon
+  // and title, #zen-split-view-drag-image), at once; else the rows.
+  void SetCard(bool card);
+  // Zen's fake pane (#zen-split-view-fake-browser) at `bounds` (screen
+  // coordinates), opening from `edge` (its SplitEdge, koan_space_drag_logic.h:
+  // 0 left, 1 right, 2 top, 3 bottom) in 100 ms; empty bounds close it the
+  // same way.
+  void ShowFakePane(const gfx::Rect& bounds, int edge);
   // Glides the first row onto `target` (the tab's row in screen coordinates,
   // asked again on every frame as the sidebar settles; nullopt: it went), then
   // hides and runs `done`. Without animations (reduced motion) it hides at
@@ -92,6 +100,8 @@ class KoanTabDragImage : public gfx::AnimationDelegate {
   // Places the image's first row's origin at `origin`, in screen coordinates.
   void PlaceAt(const gfx::Point& origin);
   void FinishLanding();
+  // The fake pane's bounds `value` of the way open.
+  void LayoutFakePane(double value);
 
   const raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<views::Widget> widget_;
@@ -103,6 +113,10 @@ class KoanTabDragImage : public gfx::AnimationDelegate {
   TargetCallback landing_target_;
   base::OnceClosure landing_done_;
   gfx::SlideAnimation landing_{this};
+  raw_ptr<views::View> fake_pane_ = nullptr;
+  gfx::Rect fake_pane_bounds_;
+  int fake_pane_edge_ = 0;
+  gfx::SlideAnimation fake_pane_animation_{this};
 };
 
 }  // namespace koan
