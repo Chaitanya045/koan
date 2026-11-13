@@ -185,6 +185,13 @@ void KoanTabDropIndicatorView::OnPaint(gfx::Canvas* canvas) {
     canvas->DrawRect(bounds, flags);
     return;
   }
+  if (style_ == Style::kSplitTab) {
+    // --border-radius-medium.
+    flags.setColor(colors->GetColor(kColorKoanSplitFakeTab));
+    canvas->DrawRoundRect(bounds, look::StyleRadius(kRadius, look::Step::kMd),
+                          flags);
+    return;
+  }
   flags.setColor(colors->GetColor(kColorKoanTabDropIndicator));
   if (style_ == Style::kUpright) {
     // Zen's background with border-radius 5px (a pill this thin).

@@ -30,6 +30,7 @@
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_header.h"
 #include "koan/browser/ui/views/koan_split_rearrange.h"
+#include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "ui/base/window_open_disposition.h"
@@ -304,6 +305,54 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
                 split_tabs::SplitTabLayout::kSideBySide, 0.5));
   EXPECT_TRUE(first->IsSplit());
   EXPECT_EQ(first->GetSplit(), second->GetSplit());
+}
+
+// Zen's split by drag (koan_tab_drag.h): the dragged tab and the one it was
+// dropped on (a row's half, or the page the tab came from) make a split, the
+// dragged one on its side and selected; a tab already split gets the limit
+// toast instead (Koan's splits take two).
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       DroppingATabToSplitPutsItOnItsSide) {
+  TabStripModel* model = browser()->GetTabStripModel();
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+        browser(), GURL("about:blank"),
+        WindowOpenDisposition::kNewForegroundTab,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  }
+  const int count = model->count();
+  tabs::TabInterface* a = model->GetTabAtIndex(count - 3);
+  tabs::TabInterface* b = model->GetTabAtIndex(count - 2);
+  tabs::TabInterface* c = model->GetTabAtIndex(count - 1);
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+
+  // Dropped on b's right half: b then a, side by side, a selected.
+  ASSERT_TRUE(SplitByDrag(browser_view, a, b,
+                          split_tabs::SplitTabLayout::kSideBySide,
+                          /*dragged_first=*/false));
+  ASSERT_TRUE(a->IsSplit());
+  EXPECT_EQ(a->GetSplit(), b->GetSplit());
+  const split_tabs::SplitTabData* split = model->GetSplitData(*a->GetSplit());
+  EXPECT_EQ(b, split->ListTabs().front());
+  EXPECT_EQ(split_tabs::SplitTabLayout::kSideBySide,
+            split->visual_data()->split_layout());
+  EXPECT_EQ(a, model->GetActiveTab());
+
+  // c onto the split: no third pane.
+  EXPECT_FALSE(SplitByDrag(browser_view, c, a,
+                           split_tabs::SplitTabLayout::kSideBySide, true));
+  EXPECT_FALSE(c->IsSplit());
+
+  // Unsplit, then c on the page's top edge over b: c on top, stacked.
+  model->RemoveSplit(*a->GetSplit());
+  ASSERT_TRUE(SplitByDrag(browser_view, c, b,
+                          split_tabs::SplitTabLayout::kStacked,
+                          /*dragged_first=*/true));
+  split = model->GetSplitData(*c->GetSplit());
+  EXPECT_EQ(c, split->ListTabs().front());
+  EXPECT_EQ(split_tabs::SplitTabLayout::kStacked,
+            split->visual_data()->split_layout());
+  EXPECT_EQ(c, model->GetActiveTab());
 }
 
 }  // namespace koan

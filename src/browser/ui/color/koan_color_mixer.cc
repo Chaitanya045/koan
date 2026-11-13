@@ -124,6 +124,16 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanTabDragImageForeground] = {kColorToolbarText};
   mixer[kColorKoanTabDragCount] = {SK_ColorRED};
   mixer[kColorKoanTabDragCountForeground] = {SK_ColorWHITE};
+  // Split by drag (zen-split-view.css): the fake tab the primary button's
+  // colour at 60%; the card white (black in dark mode) with the other for its
+  // text; the fake pane white at 10% in a --zen-primary-color border.
+  mixer[kColorKoanSplitFakeTab] = {
+      SkColorSetA(ZenPrimaryColor(key), Alpha(0.6f))};
+  mixer[kColorKoanTabDragCard] = {dark ? SK_ColorBLACK : SK_ColorWHITE};
+  mixer[kColorKoanTabDragCardForeground] = {dark ? SK_ColorWHITE
+                                                 : SK_ColorBLACK};
+  mixer[kColorKoanSplitFakePane] = {SkColorSetA(SK_ColorWHITE, Alpha(0.1f))};
+  mixer[kColorKoanSplitFakePaneBorder] = {ZenPrimaryColor(key)};
 
   // The URL pill (zen-omnibox.css .urlbar-background): the Essentials tiles'
   // tint (--zen-toolbar-element-bg), on hover --zen-toolbar-element-bg-hover

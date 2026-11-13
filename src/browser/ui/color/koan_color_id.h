@@ -75,6 +75,14 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanTabDragImageForeground,
   kColorKoanTabDragCount,
   kColorKoanTabDragCountForeground,
+  // Split by drag (koan_tab_drag.h): <zen-split-fake-tab> in a row, the page
+  // edge's card image and its text, the fake pane's fill and border
+  // (#zen-split-view-fake-browser).
+  kColorKoanSplitFakeTab,
+  kColorKoanTabDragCard,
+  kColorKoanTabDragCardForeground,
+  kColorKoanSplitFakePane,
+  kColorKoanSplitFakePaneBorder,
 
   // The URL bar (koan_sidebar_nav_view.cc, koan_url_bar_controller.cc): the
   // sidebar's URL pill (its fill, hovered fill and text) and the floating URL

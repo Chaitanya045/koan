@@ -455,6 +455,13 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanTabDragImageForeground] = {t[Token::kSidebarForeground]};
   mixer[kColorKoanTabDragCount] = {t[Token::kDestructive]};
   mixer[kColorKoanTabDragCountForeground] = {t.OnDestructive()};
+  // Split by drag: the fake tab and pane in the sidebar's primary colour, the
+  // card a popover.
+  mixer[kColorKoanSplitFakeTab] = {t.Alpha(Token::kSidebarPrimary, 0.6f)};
+  mixer[kColorKoanTabDragCard] = {t[Token::kPopover]};
+  mixer[kColorKoanTabDragCardForeground] = {t[Token::kPopoverForeground]};
+  mixer[kColorKoanSplitFakePane] = {t.Alpha(Token::kSidebarPrimary, 0.1f)};
+  mixer[kColorKoanSplitFakePaneBorder] = {t[Token::kSidebarPrimary]};
 
   // The URL pill is an Input; the floating bar a popover with shadcn's
   // `shadow-lg`.

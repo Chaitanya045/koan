@@ -233,4 +233,86 @@ gfx::Vector2d DragImageGrab(size_t tab_count, const gfx::Vector2d& grab) {
   return tab_count > 1 ? gfx::Vector2d(18, 18) : grab;
 }
 
+std::optional<bool> SplitBandSide(const gfx::Rect& row,
+                                  const gfx::Point& point,
+                                  bool rtl) {
+  if (row.IsEmpty() || !row.Contains(point)) {
+    return std::nullopt;
+  }
+  const float ratio = static_cast<float>(point.y() - row.y()) /
+                      static_cast<float>(row.height());
+  if (ratio < kSplitDragThreshold || ratio > 1 - kSplitDragThreshold) {
+    return std::nullopt;
+  }
+  const bool left = point.x() < row.x() + row.width() / 2;
+  return left != rtl;
+}
+
+gfx::Rect SplitFakeTabBounds(const gfx::Rect& row, bool start, bool rtl) {
+  gfx::Rect half = row;
+  half.Inset(kSplitFakeTabMargin);
+  half.set_width(half.width() / 2);
+  if (start == rtl) {
+    half.set_x(row.right() - kSplitFakeTabMargin - half.width());
+  }
+  return half;
+}
+
+std::optional<SplitEdge> PageSplitEdge(const gfx::Rect& panels,
+                                       const gfx::Point& point) {
+  gfx::Rect inner = panels;
+  inner.Inset(kSplitEdgeIgnored);
+  if (inner.IsEmpty() || !inner.Contains(point)) {
+    return std::nullopt;
+  }
+  const int quarter_width = panels.width() / 4;
+  const int quarter_height = panels.height() / 4;
+  struct Candidate {
+    SplitEdge edge;
+    int distance;
+    int threshold;
+  };
+  const Candidate candidates[] = {
+      {SplitEdge::kLeft, point.x() - panels.x(), quarter_width},
+      {SplitEdge::kRight, panels.right() - point.x(), quarter_width},
+      {SplitEdge::kTop, point.y() - panels.y(), quarter_height},
+      {SplitEdge::kBottom, panels.bottom() - point.y(), quarter_height},
+  };
+  std::optional<SplitEdge> nearest;
+  int best = 0;
+  for (const Candidate& candidate : candidates) {
+    if (candidate.distance < candidate.threshold &&
+        (!nearest || candidate.distance < best)) {
+      nearest = candidate.edge;
+      best = candidate.distance;
+    }
+  }
+  return nearest;
+}
+
+gfx::Rect FakePaneBounds(const gfx::Rect& panels,
+                         SplitEdge edge,
+                         int panes,
+                         int gap) {
+  panes = std::max(panes, 1);
+  gfx::Rect pane = panels;
+  switch (edge) {
+    case SplitEdge::kLeft:
+    case SplitEdge::kRight:
+      pane.set_width(std::max(0, panels.width() / panes - gap));
+      if (edge == SplitEdge::kRight) {
+        pane.set_x(panels.right() - pane.width());
+      }
+      break;
+    case SplitEdge::kTop:
+    case SplitEdge::kBottom:
+      pane.set_height(std::max(0, panels.height() / panes - gap));
+      if (edge == SplitEdge::kBottom) {
+        pane.set_y(panels.bottom() - pane.height());
+      }
+      break;
+  }
+  return pane;
+}
+
 }  // namespace koan
