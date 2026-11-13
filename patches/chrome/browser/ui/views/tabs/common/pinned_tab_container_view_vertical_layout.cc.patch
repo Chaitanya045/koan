@@ -20,7 +20,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_verti
    const int num_children =
        PinnedTabContainerView().collection_node_->GetDirectChildren().size();
    const float min_rows = std::min(
-@@ -47,7 +50,10 @@
+@@ -47,12 +50,18 @@
  
  views::ProposedLayout
  PinnedTabContainerViewVerticalLayout::CalculateProposedLayout(
@@ -30,9 +30,18 @@ diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_verti
 +  const views::SizeBounds size_bounds = koan::GetEssentialsLayoutBounds(
 +      upstream_size_bounds, &PinnedTabContainerView());
    views::ProposedLayout layouts;
-   const auto children =
+-  const auto children =
++  const auto upstream_children =
        PinnedTabContainerView().collection_node_
-@@ -62,7 +68,9 @@
+           ? PinnedTabContainerView().collection_node_->GetDirectChildren()
+           : TabCollectionNode::ChildViews();
++  // Koan: Zen's gap where a tab dragged over the grid would drop.
++  const std::vector<views::View*> children = koan::GetEssentialsLayoutChildren(
++      &PinnedTabContainerView(), upstream_children);
+ 
+   int total_width = 0;
+   int total_height = 0;
+@@ -62,7 +71,9 @@
    int children_on_row = children.size();
  
    if (children_on_row == 0) {
@@ -43,7 +52,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_verti
      return layouts;
    }
  
-@@ -80,7 +88,8 @@
+@@ -80,7 +91,8 @@
    // Since all children are allocated the same width this will be the same for
    // every row.
    if (size_bounds.width().is_bounded() && size_bounds.width().value() > 0) {
@@ -53,7 +62,7 @@ diff --git a/chrome/browser/ui/views/tabs/common/pinned_tab_container_view_verti
  
      // Apply horizontal padding immediately at start of collapse animation by
      // including collapsing state.
-@@ -99,6 +108,8 @@
+@@ -99,6 +111,8 @@
                                        (child_width +
                                         PinnedTabContainerView::kTabPadding)) +
                             1));

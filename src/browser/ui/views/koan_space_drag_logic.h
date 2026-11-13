@@ -90,18 +90,19 @@ inline constexpr base::TimeDelta kSpaceStripScrollDuration =
     base::Milliseconds(600);
 double SpaceStripScrollProgress(base::TimeDelta elapsed);
 
-// Zen's drop of tabs on the Essentials grid
-// (ZenPinnedTabManager.moveToAnotherTabContainerIfNecessary()): the tile
-// under `point` takes them before it, or after it once `point` is past its
-// horizontal middle (the far half: its left half in RTL); anywhere else in
-// the grid they go after the last tile. Above the first row (the sidebar
-// above the grid, EssentialsTopDropZone()) they go before the first tile, as
-// above a Space's first row (PlaceInSpaceList()). `tiles` are the tiles'
-// bounds in grid order (a split view is one tile). Returns the slot, 0 to
-// tiles.size().
-size_t EssentialsDropSlot(const std::vector<gfx::Rect>& tiles,
-                          const gfx::Point& point,
-                          bool rtl);
+// Zen's gap in the Essentials grid (#animateVerticalPinnedGridDragOver()):
+// the slot the dragged tile takes, by its centre `centre` (Zen's search on
+// the dragged tile's centre): the slot under it; above the grid (the sidebar
+// above it, EssentialsTopDropZone()) the first, as above a Space's first row
+// (PlaceInSpaceList()); below the last row, or in it past its last slot, the
+// last; between slots (the gaps between tiles) the one it has, `current`, as
+// Zen's search keeps its index when it finds none. `slots` are the grid's
+// slots with the gap, in grid order (a split view is one). Returns 0 to
+// slots.size() - 1 (0 without slots).
+size_t EssentialsGapSlot(const std::vector<gfx::Rect>& slots,
+                         const gfx::Point& centre,
+                         bool rtl,
+                         size_t current);
 
 // With no Essentials, the part of the sidebar a dragged tab is over them in
 // (the promo shows, lit, and a drop there makes the tab an Essential), in the
@@ -119,7 +120,7 @@ gfx::Rect EmptyEssentialsDropZone(const gfx::Size& sidebar,
 // With Essentials, the part of the sidebar above the grid (`grid`, in the
 // sidebar's coordinates) that also counts as over them: its full width, from
 // its top down to the grid's (the window buttons' row and the URL bar). A
-// drop there goes before the first tile (EssentialsDropSlot()). Empty while
+// drop there goes before the first tile (EssentialsGapSlot()). Empty while
 // the grid is (no Essentials: EmptyEssentialsDropZone() instead).
 gfx::Rect EssentialsTopDropZone(const gfx::Size& sidebar,
                                 const gfx::Rect& grid);

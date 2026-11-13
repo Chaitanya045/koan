@@ -4,7 +4,6 @@
 
 #include "koan/browser/ui/views/koan_essentials_promo.h"
 
-#include <algorithm>
 #include <cmath>
 
 #include "cc/paint/paint_flags.h"
@@ -193,12 +192,6 @@ void KoanTabDropIndicatorView::OnPaint(gfx::Canvas* canvas) {
     return;
   }
   flags.setColor(colors->GetColor(kColorKoanTabDropIndicator));
-  if (style_ == Style::kUpright) {
-    // Zen's background with border-radius 5px (a pill this thin).
-    canvas->DrawRoundRect(bounds, std::min(bounds.width(), bounds.height()) / 2,
-                          flags);
-    return;
-  }
   // The line after the ring's room, the ring (border 2px, 4px inside) centred
   // 2px before the line's start, on the line's middle.
   const gfx::RectF line(kDropLineRingRoom, kDropLineTop,

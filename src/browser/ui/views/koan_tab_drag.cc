@@ -44,6 +44,7 @@
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
+#include "koan/browser/ui/views/koan_essentials.h"
 #include "koan/browser/ui/views/koan_essentials_promo.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_folder_views.h"
@@ -86,10 +87,6 @@ namespace {
 // Zen's failsafe: a dropped tab hidden for its landing shows again after
 // this, landed or not.
 constexpr base::TimeDelta kLandingFailsafe = base::Milliseconds(1000);
-
-// Half the gap between two Essentials tiles (Zen's 4px), where the line goes
-// between them.
-constexpr int kTileGapHalf = 2;
 
 // #zen-dragover-background's margin above and below the row it lights.
 constexpr int kDragOverMargin = 2;
@@ -135,14 +132,6 @@ std::vector<DropUnit> DropUnits(TabStripModel* model,
     units.push_back({tab->GetHandle(), bounds});
   }
   return units;
-}
-
-std::vector<gfx::Rect> UnitBounds(const std::vector<DropUnit>& units) {
-  std::vector<gfx::Rect> bounds;
-  for (const DropUnit& unit : units) {
-    bounds.push_back(unit.bounds);
-  }
-  return bounds;
 }
 
 // The tab whose row `target` (a view in `region`) is in, unless it is a
@@ -283,6 +272,33 @@ class KoanTabDragCaptureView : public views::View {
 BEGIN_METADATA(KoanTabDragCaptureView)
 END_METADATA
 
+// Zen's placeholder tile (_fakeEssentialTab) in the Essentials grid for tabs
+// that would become Essentials: an empty slot of the grid, a tile high.
+class KoanEssentialsGapView : public views::View {
+  METADATA_HEADER(KoanEssentialsGapView, views::View)
+
+ public:
+  explicit KoanEssentialsGapView(int height) : height_(height) {
+    SetCanProcessEventsWithinSubtree(false);
+    GetViewAccessibility().SetIsIgnored(true);
+  }
+  KoanEssentialsGapView(const KoanEssentialsGapView&) = delete;
+  KoanEssentialsGapView& operator=(const KoanEssentialsGapView&) = delete;
+  ~KoanEssentialsGapView() override = default;
+
+  // views::View:
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
+    return gfx::Size(0, height_);
+  }
+
+ private:
+  const int height_;
+};
+
+BEGIN_METADATA(KoanEssentialsGapView)
+END_METADATA
+
 KoanTabDrag::KoanTabDrag(KoanWorkspaceController* controller,
                          BrowserView* browser_view)
     : controller_(controller),
@@ -367,6 +383,7 @@ void KoanTabDrag::Reset() {
   // The window's views go: nothing moves, nothing lands.
   EndPaneDrag();
   StopFeedback();
+  ClearGridGap();
   dragged_folder_ = 0;
   folder_closed_by_drag_ = false;
   image_.Hide();
@@ -894,6 +911,8 @@ void KoanTabDrag::ReleaseUpstreamAndCapture() {
 }
 
 void KoanTabDrag::Land(tabs::TabHandle tab, int folder) {
+  // The grid closes its gap as the drop's tiles take their places.
+  ClearGridGap();
   ShowHiddenViews();
   landing_ = true;
   views::Widget* widget = browser_view_->GetWidget();
@@ -930,6 +949,7 @@ std::optional<gfx::Rect> KoanTabDrag::LandingTarget(tabs::TabHandle tab,
 }
 
 void KoanTabDrag::OnLanded() {
+  ClearGridGap();
   landing_failsafe_.Stop();
   image_.Hide();
   ShowHiddenViews();
@@ -1080,6 +1100,7 @@ bool KoanTabDrag::MaybeHandOff(const gfx::Point& screen_point,
   // starts from the press, takes the capture and the tabs (to that window,
   // as before Koan's drag).
   StopFeedback();
+  ClearGridGap();
   RestoreOrigin();
   image_.Hide();
   ShowHiddenViews();
@@ -1160,6 +1181,7 @@ bool KoanTabDrag::UpdatePageSplit(const gfx::Point& screen_point) {
                         edge_value);
   }
   ClearRowSplit();
+  ClearGridGap();
   RemovePromo();
   ShowFeedback(gfx::Rect(), KoanTabDropIndicatorView::Style::kAcross,
                gfx::Rect());
@@ -1224,11 +1246,11 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
   KoanTabDropIndicatorView::Style line_style =
       KoanTabDropIndicatorView::Style::kAcross;
   bool on_row = false;
+  bool over_grid = false;
   int lit_folder = 0;
   views::View* region = this->region();
   KoanPinnedTabController* pinned = pinned_tabs();
   TabDragContext* context = GetDragContext();
-  TabStripModel* model = controller_->tab_strip_model();
   const bool essentials = DragsEssentials();
   if (region && pinned && context && !IsSidebarCollapsed()) {
     // Zen: tabs over the grid only while one more fits
@@ -1237,30 +1259,15 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
     if (IsOverEssentials(point) && !DragsFolder() && !pane_drag_ &&
         (essentials || pinned->CanAddToEssentials())) {
       target.kind = DropTarget::Kind::kEssentials;
-      const std::vector<DropUnit> tiles =
-          DropUnits(model, context, region,
-                    gfx::Range(0, model->IndexOfFirstNonPinnedTab()));
-      if (!tiles.empty()) {
-        const bool rtl = base::i18n::IsRTL();
-        const size_t slot = EssentialsDropSlot(UnitBounds(tiles), point, rtl);
-        // Upright between two tiles: before the slot's tile, or after the
-        // last one.
-        const bool after = slot == tiles.size();
-        const gfx::Rect& tile = tiles[after ? slot - 1 : slot].bounds;
-        const int edge = after != rtl ? tile.right() + kTileGapHalf
-                                      : tile.x() - kTileGapHalf;
-        line =
-            gfx::Rect(edge - KoanTabDropIndicatorView::kThickness / 2, tile.y(),
-                      KoanTabDropIndicatorView::kThickness, tile.height());
-        line_style = KoanTabDropIndicatorView::Style::kUpright;
-        if (!after) {
-          target.before = tiles[slot].first;
-        }
-      }
-      target.feedback = line.IsEmpty() && promo_
-                            ? views::View::ConvertRectToTarget(
-                                  promo_, region, promo_->GetLocalBounds())
-                            : line;
+      // With tiles, Zen's gap shows where they go (no line); else the promo.
+      const std::optional<gfx::Rect> slot =
+          pinned->EssentialsCount() > 0 ? UpdateGridGap(point, target.before)
+                                        : std::nullopt;
+      over_grid = !!slot;
+      target.feedback = slot     ? *slot
+                        : promo_ ? views::View::ConvertRectToTarget(
+                                       promo_, region, promo_->GetLocalBounds())
+                                 : gfx::Rect();
     } else if (IsOverSpace(point)) {
       std::vector<tabs::TabHandle> firsts;
       const std::vector<SpaceListRow> rows = SpaceRows(firsts);
@@ -1338,6 +1345,9 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
   }
   if (!on_row) {
     ClearRowSplit();
+  }
+  if (!over_grid) {
+    ClearGridGap();
   }
   ShowFeedback(line, line_style, bar);
   SetLitFolder(lit_folder);
@@ -1695,6 +1705,99 @@ bool KoanTabDrag::IsOverSpace(const gfx::Point& point) const {
       strip ? strip->unpinned_tabs_scroll_view() : nullptr;
   return list && region && list->IsDrawn() &&
          list->HitTestPoint(InView(region, list, point));
+}
+
+std::optional<gfx::Rect> KoanTabDrag::UpdateGridGap(const gfx::Point& point,
+                                                    tabs::TabHandle& before) {
+  TabStripView* strip = GetStrip();
+  views::View* grid = strip ? strip->GetPinnedTabsContainer() : nullptr;
+  views::View* region = this->region();
+  TabDragContext* context = GetDragContext();
+  TabStripModel* model = controller_->tab_strip_model();
+  if (!grid || !region || !context) {
+    ClearGridGap();
+    return std::nullopt;
+  }
+  if (gap_grid_.view() && gap_grid_.view() != grid) {
+    ClearGridGap();
+  }
+  // The tiles (a split view's two as one), the dragged ones apart.
+  const bool essentials = DragsEssentials();
+  std::vector<tabs::TabHandle> others;
+  std::vector<views::View*> moving;
+  std::optional<size_t> own_slot;
+  for (const DropUnit& unit :
+       DropUnits(model, context, region,
+                 gfx::Range(0, model->IndexOfFirstNonPinnedTab()))) {
+    if (essentials && std::ranges::contains(dragged_, unit.first)) {
+      own_slot = own_slot.value_or(others.size());
+      if (views::View* tile = RowViewFor(unit.first.Get());
+          tile && !std::ranges::contains(moving, tile)) {
+        moving.push_back(tile);
+      }
+      continue;
+    }
+    others.push_back(unit.first);
+  }
+  if (!essentials) {
+    // Zen's placeholder, a tile high, added at the grid's end.
+    if (!gap_tile_.view()) {
+      views::View* first =
+          others.empty() ? nullptr : RowViewFor(others[0].Get());
+      gap_tile_.SetView(
+          grid->AddChildView(std::make_unique<KoanEssentialsGapView>(
+              first ? first->height() : tile_size_.height())));
+    }
+    moving = {gap_tile_.view()};
+  }
+  if (moving.empty()) {
+    ClearGridGap();
+    return std::nullopt;
+  }
+  if (!gap_slot_) {
+    // A dragged Essential's gap starts at its own place, the placeholder at
+    // the end.
+    gap_slot_ = own_slot.value_or(others.size());
+    gap_grid_.SetView(grid);
+    SetEssentialsDragGap(grid, moving, *gap_slot_);
+  }
+  // The slots with the gap, wherever it is (the grid's target layout), and
+  // the slot under the dragged tile's centre (the image's tile).
+  std::vector<gfx::Rect> slots;
+  for (const gfx::Rect& slot : GetEssentialsSlots(grid)) {
+    slots.push_back(views::View::ConvertRectToTarget(grid, region, slot));
+  }
+  if (slots.empty()) {
+    ClearGridGap();
+    return std::nullopt;
+  }
+  const gfx::Vector2d tile_grab = essentials ? grab_ : EssentialTileGrab(grab_);
+  const gfx::Point centre =
+      point - tile_grab +
+      gfx::Vector2d(tile_size_.width() / 2, tile_size_.height() / 2);
+  const size_t slot = std::min(
+      EssentialsGapSlot(slots, centre, base::i18n::IsRTL(), *gap_slot_),
+      others.size());
+  if (slot != *gap_slot_) {
+    gap_slot_ = slot;
+    SetEssentialsDragGap(grid, moving, slot);
+  }
+  if (slot < others.size()) {
+    before = others[slot];
+  }
+  return slots[std::min(slot, slots.size() - 1)];
+}
+
+void KoanTabDrag::ClearGridGap() {
+  gap_slot_.reset();
+  if (views::View* grid = gap_grid_.view()) {
+    ClearEssentialsDragGap(grid);
+  }
+  gap_grid_.SetView(nullptr);
+  if (views::View* tile = gap_tile_.view()) {
+    gap_tile_.SetView(nullptr);
+    tile->parent()->RemoveChildViewT(tile);
+  }
 }
 
 void KoanTabDrag::UpdatePromo(const gfx::Point& point) {

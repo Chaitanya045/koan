@@ -107,42 +107,45 @@ TEST(KoanSpaceDragLogicTest, StripScrollSettlesLikeFirefox) {
   EXPECT_EQ(1, SpaceStripScrollProgress(kSpaceStripScrollDuration));
 }
 
-// Zen's Essentials grid: a 2nd, 3rd... tab goes where it is dropped. Two
-// rows of tiles 50 wide and 44 high with 4 between them: [0 1 2] [3].
-TEST(KoanSpaceDragLogicTest, EssentialsDropGoesBeforeOrAfterTheTileUnderIt) {
-  const std::vector<gfx::Rect> tiles = {
+// Zen's gap in the Essentials grid: the dragged tile's centre picks the
+// slot. Two rows of slots 50 wide and 44 high with 4 between them:
+// [0 1 2] [3].
+TEST(KoanSpaceDragLogicTest, TheEssentialsGapIsTheSlotUnderTheTile) {
+  const std::vector<gfx::Rect> slots = {
       {0, 0, 50, 44}, {54, 0, 50, 44}, {108, 0, 50, 44}, {0, 48, 50, 44}};
-  // The first tile's left half: first; its right half: second.
-  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {10, 20}, /*rtl=*/false));
-  EXPECT_EQ(1u, EssentialsDropSlot(tiles, {40, 20}, /*rtl=*/false));
-  // Between the second and third tiles, on the third's near half.
-  EXPECT_EQ(2u, EssentialsDropSlot(tiles, {110, 20}, /*rtl=*/false));
-  // The last tile of the first row, its far half: before the second row.
-  EXPECT_EQ(3u, EssentialsDropSlot(tiles, {150, 20}, /*rtl=*/false));
-  // The second row's tile.
-  EXPECT_EQ(3u, EssentialsDropSlot(tiles, {5, 60}, /*rtl=*/false));
-  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {45, 60}, /*rtl=*/false));
-  // Empty grid space (beside the last tile, in a gap): after the last.
-  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {120, 60}, /*rtl=*/false));
-  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {52, 20}, /*rtl=*/false));
-  // No tiles yet (the promo): the first.
-  EXPECT_EQ(0u, EssentialsDropSlot({}, {10, 10}, /*rtl=*/false));
+  EXPECT_EQ(0u, EssentialsGapSlot(slots, {10, 20}, /*rtl=*/false, 3));
+  EXPECT_EQ(1u, EssentialsGapSlot(slots, {80, 20}, /*rtl=*/false, 3));
+  EXPECT_EQ(2u, EssentialsGapSlot(slots, {150, 40}, /*rtl=*/false, 0));
+  EXPECT_EQ(3u, EssentialsGapSlot(slots, {5, 60}, /*rtl=*/false, 0));
+  // Between two slots: it stays where it is (Zen's search finds none).
+  EXPECT_EQ(1u, EssentialsGapSlot(slots, {52, 20}, /*rtl=*/false, 1));
+  EXPECT_EQ(2u, EssentialsGapSlot(slots, {80, 46}, /*rtl=*/false, 2));
+  // Past the end of the last row, or below it: the last slot.
+  EXPECT_EQ(3u, EssentialsGapSlot(slots, {120, 60}, /*rtl=*/false, 0));
+  EXPECT_EQ(3u, EssentialsGapSlot(slots, {20, 300}, /*rtl=*/false, 0));
+  // A stale index is kept in the grid.
+  EXPECT_EQ(3u, EssentialsGapSlot(slots, {52, 20}, /*rtl=*/false, 9));
+  EXPECT_EQ(0u, EssentialsGapSlot({}, {10, 10}, /*rtl=*/false, 2));
 }
 
-TEST(KoanSpaceDragLogicTest, EssentialsDropFromAboveTheGridGoesFirst) {
-  // The grid at 132 in the sidebar, [0 1 2] [3]: a tab dragged straight up
-  // over the URL bar (98), or the gap above the grid, goes before the first
-  // tile, wherever it is across.
-  const std::vector<gfx::Rect> tiles = {{0, 132, 50, 44},
+TEST(KoanSpaceDragLogicTest, TheEssentialsGapFromAboveTheGridIsFirst) {
+  // The grid at 132 in the sidebar: a tab dragged straight up over the URL
+  // bar (98), or the space above the grid, takes the first slot.
+  const std::vector<gfx::Rect> slots = {{0, 132, 50, 44},
                                         {54, 132, 50, 44},
                                         {108, 132, 50, 44},
                                         {0, 180, 50, 44}};
-  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {150, 98}, /*rtl=*/false));
-  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {200, 131}, /*rtl=*/false));
-  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {10, 98}, /*rtl=*/true));
-  // The grid's own rules from its top on.
-  EXPECT_EQ(3u, EssentialsDropSlot(tiles, {150, 132}, /*rtl=*/false));
-  EXPECT_EQ(4u, EssentialsDropSlot(tiles, {200, 150}, /*rtl=*/false));
+  EXPECT_EQ(0u, EssentialsGapSlot(slots, {150, 98}, /*rtl=*/false, 2));
+  EXPECT_EQ(0u, EssentialsGapSlot(slots, {200, 131}, /*rtl=*/false, 2));
+  EXPECT_EQ(0u, EssentialsGapSlot(slots, {10, 98}, /*rtl=*/true, 2));
+}
+
+TEST(KoanSpaceDragLogicTest, TheEssentialsGapMirrorsInRtl) {
+  // RTL: the first slot is on the right; the last row ends on the left.
+  const std::vector<gfx::Rect> slots = {{108, 0, 50, 44}, {54, 0, 50, 44}};
+  EXPECT_EQ(0u, EssentialsGapSlot(slots, {150, 20}, /*rtl=*/true, 1));
+  EXPECT_EQ(1u, EssentialsGapSlot(slots, {60, 20}, /*rtl=*/true, 0));
+  EXPECT_EQ(1u, EssentialsGapSlot(slots, {10, 20}, /*rtl=*/true, 0));
 }
 
 TEST(KoanSpaceDragLogicTest, EssentialsTopZoneIsTheSidebarAboveTheGrid) {
@@ -162,15 +165,6 @@ TEST(KoanSpaceDragLogicTest, EssentialsTopZoneIsTheSidebarAboveTheGrid) {
   // A grid scrolled above the sidebar's top: nothing.
   EXPECT_TRUE(
       EssentialsTopDropZone(sidebar, gfx::Rect(0, -40, 230, 92)).IsEmpty());
-}
-
-TEST(KoanSpaceDragLogicTest, EssentialsDropMirrorsInRtl) {
-  // RTL: the first tile is on the right.
-  const std::vector<gfx::Rect> tiles = {{108, 0, 50, 44}, {54, 0, 50, 44}};
-  // The first tile's right half is its near half.
-  EXPECT_EQ(0u, EssentialsDropSlot(tiles, {150, 20}, /*rtl=*/true));
-  EXPECT_EQ(1u, EssentialsDropSlot(tiles, {115, 20}, /*rtl=*/true));
-  EXPECT_EQ(2u, EssentialsDropSlot(tiles, {60, 20}, /*rtl=*/true));
 }
 
 TEST(KoanSpaceDragLogicTest, EmptyEssentialsZoneIsTheTopOfTheSidebar) {

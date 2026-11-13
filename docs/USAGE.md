@@ -409,7 +409,9 @@ As in Zen there are two kinds of pinned tab:
   where it lands (nothing moves until you let go).
 - **Essentials** are shared by all Spaces, up to 12: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
-  Dragging a tab into the grid also makes it an Essential. With no
+  Dragging a tab into the grid also makes it an Essential: the tiles move
+  aside to open a gap where it will go (as when you drag an Essential to
+  reorder the grid). With no
   Essentials yet, dragging a tab to the top of the sidebar shows Zen's
   "Add to Essentials" drop target; drop it there. Drag an Essential out of
   the grid onto the Space's list to take it out: above the line it becomes

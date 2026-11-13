@@ -11,12 +11,12 @@
 //   2 band      back to no Essentials (test_helper unpins it), held over the
 //               Space name's top half: the promo, lit; the drop makes it one
 //   3 above     with an Essential, straight up over the URL pill, above the
-//               grid: the drop line before the first tile, the tab the first
-//               Essential (Koan's choice: the slot above the grid's first
-//               row, as above a Space's first row)
+//               grid: Zen's gap (the placeholder tile) before the first tile,
+//               the tab the first Essential (Koan's choice: the slot above
+//               the grid's first row, as above a Space's first row; #380)
 //   4 page      released over the page: no new Essential, no new window, the
 //               tab still in the window
-// Each round records `over` (while held: promo shown and lit, the drop line)
+// Each round records `over` (while held: promo shown and lit, the gap)
 // and `after` (1.5 s after the release: the model's Essentials, the dragged
 // tab's pinned state and place, the windows); `ok` is the round's verdict.
 //
@@ -73,14 +73,17 @@ async function over(label) {
   const indicator = shown(vs, 'KoanTabDropIndicatorView');
   const tiles = vs.filter(v => v.cls === 'TabView' && v.shown && v.w > 0 && v.path.includes('PinnedTabContainerView'))
       .sort((a, b) => a.ay - b.ay || a.ax - b.ax);
+  const gap = vs.find(v => v.cls === 'KoanEssentialsGapView' && v.shown && v.w > 0);
   const s = {
     label,
     promo: !!promo,
     promoLit: promo ? String(promo.props.DragOver) === 'true' : false,
     indicator: indicator ? { x: indicator.ax, y: indicator.ay, w: indicator.w, h: indicator.h } : null,
-    // The line is upright just before the first tile (its left in LTR).
-    indicatorBeforeFirst: !!indicator && !!tiles[0] && indicator.h > indicator.w &&
-        Math.abs(indicator.ay - tiles[0].ay) <= 2 && indicator.ax <= tiles[0].ax + 2,
+    gap: gap ? { x: gap.ax, y: gap.ay, w: gap.w, h: gap.h } : null,
+    // Zen's gap: the placeholder tile takes the first slot, the tiles moved
+    // aside (its left in LTR), and no line over the grid.
+    gapFirst: !!gap && !!tiles[0] && !indicator && Math.abs(gap.ay - tiles[0].ay) <= 2 &&
+        gap.ax < tiles[0].ax,
   };
   mark(`count-${label}`, s);
   return s;
@@ -195,7 +198,7 @@ await dragRound('band', async (vs, from) => {
 
 // 3: with an Essential, straight up over the URL pill (above the grid).
 await dragRound('above', overPill, r =>
-  !r.over.promo && r.over.indicatorBeforeFirst && r.after.essentials === r.before.essentials + 1 &&
+  !r.over.promo && r.over.gapFirst && r.after.essentials === r.before.essentials + 1 &&
   r.after.pinned === true && r.after.essentialIndex === 0);
 
 // 4: released over the page.
@@ -208,11 +211,11 @@ await dragRound('page', async vs => {
 
 // --- Summary: one line per round.
 mark('end');
-console.log('\nround  drag    ok     promo  lit    line-first  essentials  windows');
+console.log('\nround  drag    ok     promo  lit    gap-first   essentials  windows');
 for (const r of out.rounds) {
   console.log(`${String(r.round).padStart(5)}  ${r.name.padEnd(6)}  ${String(r.ok ?? r.skipped).padEnd(6)} ` +
               `${String(r.over?.promo ?? '-').padEnd(6)} ${String(r.over?.promoLit ?? '-').padEnd(6)} ` +
-              `${String(r.over?.indicatorBeforeFirst ?? '-').padEnd(11)} ` +
+              `${String(r.over?.gapFirst ?? '-').padEnd(11)} ` +
               `${r.before?.essentials ?? '-'}->${r.after?.essentials ?? '-'}`.padEnd(11) +
               ` ${r.after?.windows ?? '-'}`);
 }
