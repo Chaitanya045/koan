@@ -56,6 +56,7 @@
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
+#include "koan/browser/ui/views/koan_space_drag_logic.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_stored_space.h"
 #include "koan/browser/ui/views/koan_tab_menu.h"
@@ -90,12 +91,6 @@ DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanTabNewFolderItem);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanTabRemoveFromFolderItem);
 
 namespace {
-
-// zen.tabs.folder-dragover-threshold-percent: a tab dropped on a folder's row
-// goes before or after the folder in the row's top and bottom fifths (the
-// bottom one only while the folder shows at least two items), into it
-// elsewhere.
-constexpr float kFolderDragoverThreshold = 0.2f;
 
 // Folder names are cut to this many characters.
 constexpr size_t kMaxFolderNameLength = 200;
@@ -1207,10 +1202,9 @@ KoanFolderController::RowDrop KoanFolderController::RowDropAt(
           static_cast<float>(screen_point.y() - bounds.y()) / bounds.height();
       const size_t items = GetTabs(folder->id, /*recursive=*/false).size() +
                            GetSubfolders(folder->id).size();
-      const bool bottom_is_into = !folder->collapsed && items >= 2;
       drop.folder = folder->id;
-      drop.into = fraction >= kFolderDragoverThreshold &&
-                  (fraction <= 1 - kFolderDragoverThreshold || bottom_is_into);
+      drop.into = FolderRowZone(fraction, folder->collapsed, items) ==
+                  FolderZone::kInto;
     }
   };
   find(find, region);
@@ -1276,6 +1270,37 @@ void KoanFolderController::SetFolder(
         ->PinInSpace(unit.front());
   }
   arrange_ = true;
+}
+
+void KoanFolderController::DropInFolder(
+    const std::vector<tabs::TabInterface*>& tab_list,
+    int id) {
+  if (!IsEnabled()) {
+    return;
+  }
+  std::vector<tabs::TabInterface*> done;
+  for (tabs::TabInterface* tab : tab_list) {
+    if (std::ranges::contains(done, tab) ||
+        tab_strip_model()->GetIndexOfTab(tab) == TabStripModel::kNoTab) {
+      continue;
+    }
+    const std::vector<tabs::TabInterface*> unit = WithSplit(tab);
+    done.insert(done.end(), unit.begin(), unit.end());
+    const KoanFolder* folder = GetFolder(id);
+    if (folder && folder->space == tab->GetGroup() && !tab->IsPinned()) {
+      // (Pins it, where it was dropped.)
+      SetFolder(unit, id);
+    } else if (GetFolderOf(tab)) {
+      // Out of its folder, pinned or not as the drop left it.
+      for (KoanFolder& each : folders_) {
+        std::erase_if(each.tabs, [&unit](const tabs::TabHandle& handle) {
+          return std::ranges::contains(unit, handle.Get());
+        });
+      }
+      arrange_ = true;
+    }
+  }
+  Changed();
 }
 
 void KoanFolderController::ApplyDragRule(

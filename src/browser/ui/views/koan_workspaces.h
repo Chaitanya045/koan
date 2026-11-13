@@ -72,7 +72,7 @@ class KoanSpaceSwipe;
 
 class KoanCreateMenu;
 class KoanSpaceBarView;
-class KoanSpaceDrag;
+class KoanTabDrag;
 class KoanSpaceRouting;
 class KoanSpaceCreationView;
 class KoanSpaceHeaderView;
@@ -286,13 +286,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // To" in the tab context menu).
   void MoveTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
                        const tab_groups::TabGroupId& space);
-  // The same for the tabs of a tab drag that goes on in `space` (Zen's
-  // drag across Spaces, koan_space_drag.h): they stay the selection, with
-  // the last one active. Upstream's drag takes the selection to be the tabs
-  // it drags (TabDragHandler::HandleDraggedTabsIntoNode() counts every
-  // dragged tab before the index it moves to, then moves the selected ones);
-  // a selection of one of them would make that index point inside the
-  // Space, and TabStripCollection::GetMovePosition() CHECKs.
+  // The same for the tabs of a tab drag dropped in `space` (Zen's drag
+  // across Spaces, koan_tab_drag.h): they stay the selection, with the last
+  // one active.
   void MoveDraggedTabsToSpace(const std::vector<tabs::TabInterface*>& tabs,
                               const tab_groups::TabGroupId& space);
 
@@ -397,10 +393,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The sidebar's Space views, while they are installed (null otherwise).
   KoanSpaceHeaderView* space_header() const { return header_; }
   KoanSpaceBarView* space_bar() const { return bar_; }
-  // Zen's tab drag across Spaces (koan_space_drag.h).
-  KoanSpaceDrag* space_drag() const { return space_drag_.get(); }
+  // Koan's tab drag in the sidebar (koan_tab_drag.h).
+  KoanTabDrag* tab_drag() const { return tab_drag_.get(); }
   // A mouse event on its way to a view in the sidebar.
-  void OnSidebarMouseEvent(const ui::MouseEvent& event);
+  void OnSidebarMouseEvent(ui::MouseEvent* event);
 
   // Zen's Space routing (koan_space_routing.h).
   KoanSpaceRouting* space_routing() const { return space_routing_.get(); }
@@ -582,7 +578,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The sidebar (the vertical tab strip region), with the wheel handler.
   raw_ptr<views::View> region_ = nullptr;
   std::unique_ptr<ui::EventHandler> wheel_handler_;
-  std::unique_ptr<KoanSpaceDrag> space_drag_;
+  std::unique_ptr<KoanTabDrag> tab_drag_;
   std::unique_ptr<KoanSpaceRouting> space_routing_;
   // Keeps a collapsed sidebar expanded while the Create form is open.
   std::unique_ptr<ExpandOnHoverLock> create_form_lock_;

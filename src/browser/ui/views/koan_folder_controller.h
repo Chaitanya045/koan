@@ -167,6 +167,11 @@ class KoanFolderController : public TabStripModelObserver,
   void MoveTabsToFolder(const std::vector<tabs::TabInterface*>& tab_list,
                         int id);
   void RemoveTabsFromFolder(const std::vector<tabs::TabInterface*>& tab_list);
+  // Koan's tab drag dropped `tab_list` (with their splits) where the drop
+  // puts them in folder `id` (koan_tab_drag.h): they join it, pinned, or with
+  // `id` 0 (or a folder of another Space) leave their folder. Their place in
+  // the Space is the drop's; the folders' order is kept (ArrangeFolders()).
+  void DropInFolder(const std::vector<tabs::TabInterface*>& tab_list, int id);
   void ActivateTab(tabs::TabInterface* tab);
 
   // The folder's context menu (Zen's zenFolderActions).

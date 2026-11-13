@@ -173,21 +173,6 @@ TEST(KoanSpaceDragLogicTest, EssentialsDropMirrorsInRtl) {
   EXPECT_EQ(2u, EssentialsDropSlot(tiles, {60, 20}, /*rtl=*/true));
 }
 
-TEST(KoanSpaceDragLogicTest, SpaceListDropGoesAboveOrBelowTheRowUnderIt) {
-  // Three rows 36 high with 2 between them.
-  const std::vector<gfx::Rect> rows = {
-      {0, 0, 200, 36}, {0, 38, 200, 36}, {0, 76, 200, 36}};
-  EXPECT_EQ(0u, SpaceListDropSlot(rows, -10));
-  EXPECT_EQ(0u, SpaceListDropSlot(rows, 10));
-  EXPECT_EQ(1u, SpaceListDropSlot(rows, 30));
-  // In the gap: below the first row's middle, above the second's.
-  EXPECT_EQ(1u, SpaceListDropSlot(rows, 37));
-  EXPECT_EQ(2u, SpaceListDropSlot(rows, 60));
-  EXPECT_EQ(3u, SpaceListDropSlot(rows, 100));
-  EXPECT_EQ(3u, SpaceListDropSlot(rows, 400));
-  EXPECT_EQ(0u, SpaceListDropSlot({}, 10));
-}
-
 TEST(KoanSpaceDragLogicTest, EmptyEssentialsZoneIsTheTopOfTheSidebar) {
   // The Mac's layout: a sidebar 230 wide, the URL pill at 78-124, the Space
   // header at 132-176.
@@ -257,82 +242,195 @@ TEST(KoanSpaceDragLogicTest, PinnedSectionEndsAtTheSeparatorsBottom) {
   EXPECT_FALSE(IsInPinnedDropSection(600, kSeparator.bottom()));
 }
 
-TEST(KoanSpaceDragLogicTest, EssentialDropsInTheSectionUnderThePointer) {
-  // Over the header: first, pinned, the line at the first row's top.
-  SpaceDropPlace place =
-      SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, -20);
-  EXPECT_TRUE(place.pinned);
-  EXPECT_EQ(0u, place.slot);
-  EXPECT_EQ(0, place.line_y);
-  // The second pinned row's lower half: after it, still pinned.
-  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 70);
-  EXPECT_TRUE(place.pinned);
-  EXPECT_EQ(2u, place.slot);
-  EXPECT_EQ(74, place.line_y);
-  // Over the separator: the end of the pinned tabs (the same slot as the top
-  // of the normal ones, which the section tells apart).
-  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 90);
-  EXPECT_TRUE(place.pinned);
-  EXPECT_EQ(2u, place.slot);
-  EXPECT_EQ(74, place.line_y);
-  // Over the New Tab row: the first normal tab.
-  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 100);
-  EXPECT_FALSE(place.pinned);
-  EXPECT_EQ(2u, place.slot);
-  EXPECT_EQ(136, place.line_y);
-  // The last normal row's lower half, and the empty space below: last.
-  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 200);
-  EXPECT_FALSE(place.pinned);
-  EXPECT_EQ(4u, place.slot);
-  EXPECT_EQ(210, place.line_y);
-  place = SpaceListDropPlace(SpaceRows(), 2, kSeparator, kNormalStart, 500);
-  EXPECT_EQ(4u, place.slot);
+namespace {
+
+SpaceListRow TabRow(const gfx::Rect& bounds, bool pinned, int folder = 0) {
+  SpaceListRow row;
+  row.bounds = bounds;
+  row.pinned = pinned;
+  row.folder = folder;
+  return row;
 }
 
-TEST(KoanSpaceDragLogicTest, EssentialDropsInAnEmptySection) {
+SpaceListRow FolderRow(const gfx::Rect& bounds,
+                       int id,
+                       bool collapsed,
+                       size_t items,
+                       size_t end) {
+  SpaceListRow row;
+  row.kind = SpaceListRow::Kind::kFolder;
+  row.bounds = bounds;
+  row.pinned = true;
+  row.folder_id = id;
+  row.collapsed = collapsed;
+  row.items = items;
+  row.end = end;
+  return row;
+}
+
+std::vector<SpaceListRow> ListRows() {
+  std::vector<SpaceListRow> rows;
+  for (size_t i = 0; i < SpaceRows().size(); ++i) {
+    rows.push_back(TabRow(SpaceRows()[i], /*pinned=*/i < 2));
+  }
+  return rows;
+}
+
+SpaceListLayout ListLayout() {
+  return {.header = gfx::Rect(0, -44, 200, 44),
+          .separator = kSeparator,
+          .normal_start = kNormalStart};
+}
+
+}  // namespace
+
+TEST(KoanSpaceDragLogicTest, ADropGoesBeforeOrAfterTheRowByItsHalves) {
+  EXPECT_TRUE(DropsBefore(gfx::Rect(0, 38, 200, 36), 38));
+  EXPECT_TRUE(DropsBefore(gfx::Rect(0, 38, 200, 36), 55));
+  EXPECT_FALSE(DropsBefore(gfx::Rect(0, 38, 200, 36), 56));
+  EXPECT_FALSE(DropsBefore(gfx::Rect(0, 38, 200, 36), 73));
+}
+
+TEST(KoanSpaceDragLogicTest, ADropTakesTheSectionUnderThePointer) {
+  // The first pinned row's top half: before it.
+  SpaceListDrop drop = PlaceInSpaceList(ListRows(), ListLayout(), 5);
+  EXPECT_TRUE(drop.pinned);
+  EXPECT_EQ(0u, drop.slot);
+  EXPECT_EQ(0, drop.line_y);
+  // The second pinned row's lower half: after it, still pinned.
+  drop = PlaceInSpaceList(ListRows(), ListLayout(), 70);
+  EXPECT_TRUE(drop.pinned);
+  EXPECT_EQ(2u, drop.slot);
+  EXPECT_EQ(74, drop.line_y);
+  // In the gap between two rows: as over the nearer one.
+  drop = PlaceInSpaceList(ListRows(), ListLayout(), 37);
+  EXPECT_EQ(1u, drop.slot);
+  EXPECT_EQ(38, drop.line_y);
+  // The separator: the end of the pinned section.
+  drop = PlaceInSpaceList(ListRows(), ListLayout(), 90);
+  EXPECT_TRUE(drop.pinned);
+  EXPECT_EQ(2u, drop.slot);
+  EXPECT_EQ(74, drop.line_y);
+  // The New Tab row: the top of the normal tabs.
+  drop = PlaceInSpaceList(ListRows(), ListLayout(), 100);
+  EXPECT_FALSE(drop.pinned);
+  EXPECT_EQ(2u, drop.slot);
+  EXPECT_EQ(136, drop.line_y);
+  // The last row's lower half, and the empty space below: last.
+  drop = PlaceInSpaceList(ListRows(), ListLayout(), 200);
+  EXPECT_FALSE(drop.pinned);
+  EXPECT_EQ(4u, drop.slot);
+  EXPECT_EQ(210, drop.line_y);
+  drop = PlaceInSpaceList(ListRows(), ListLayout(), 500);
+  EXPECT_EQ(4u, drop.slot);
+  EXPECT_EQ(210, drop.line_y);
+  EXPECT_EQ(SpaceRows()[3], drop.line_row);
+}
+
+TEST(KoanSpaceDragLogicTest, TheSpaceHeaderTakesADropFirstInThePinnedTabs) {
+  const SpaceListDrop drop = PlaceInSpaceList(ListRows(), ListLayout(), -20);
+  EXPECT_TRUE(drop.pinned);
+  EXPECT_TRUE(drop.lit_header);
+  EXPECT_EQ(0u, drop.slot);
+  EXPECT_EQ(0, drop.folder);
+}
+
+TEST(KoanSpaceDragLogicTest, AnEmptySectionTakesADropAtItsEdge) {
   // No pinned tabs: the separator and the New Tab row at the top (0-22,
   // 22-58), then the normal rows.
-  const std::vector<gfx::Rect> rows = {{0, 60, 200, 36}, {0, 98, 200, 36}};
-  const gfx::Rect separator(0, 0, 200, 22);
-  SpaceDropPlace place = SpaceListDropPlace(rows, 0, separator, 58, 10);
-  EXPECT_TRUE(place.pinned);
-  EXPECT_EQ(0u, place.slot);
-  EXPECT_EQ(0, place.line_y);
-  place = SpaceListDropPlace(rows, 0, separator, 58, 30);
-  EXPECT_FALSE(place.pinned);
-  EXPECT_EQ(0u, place.slot);
-  EXPECT_EQ(60, place.line_y);
+  const std::vector<SpaceListRow> rows = {TabRow({0, 60, 200, 36}, false),
+                                          TabRow({0, 98, 200, 36}, false)};
+  const SpaceListLayout layout = {.separator = gfx::Rect(0, 0, 200, 22),
+                                  .normal_start = 58};
+  SpaceListDrop drop = PlaceInSpaceList(rows, layout, 10);
+  EXPECT_TRUE(drop.pinned);
+  EXPECT_EQ(0u, drop.slot);
+  EXPECT_EQ(0, drop.line_y);
+  drop = PlaceInSpaceList(rows, layout, 30);
+  EXPECT_FALSE(drop.pinned);
+  EXPECT_EQ(0u, drop.slot);
+  EXPECT_EQ(60, drop.line_y);
   // No normal tabs: below the New Tab row.
-  place = SpaceListDropPlace({{0, 0, 200, 36}}, 1, gfx::Rect(0, 38, 200, 22),
-                             96, 300);
-  EXPECT_FALSE(place.pinned);
-  EXPECT_EQ(1u, place.slot);
-  EXPECT_EQ(96, place.line_y);
+  drop = PlaceInSpaceList(
+      {TabRow({0, 0, 200, 36}, true)},
+      {.separator = gfx::Rect(0, 38, 200, 22), .normal_start = 96}, 300);
+  EXPECT_FALSE(drop.pinned);
+  EXPECT_EQ(1u, drop.slot);
+  EXPECT_EQ(96, drop.line_y);
 }
 
-TEST(KoanSpaceDragLogicTest, DraggedTabsTakeTheirNeighboursSection) {
-  // Between two pinned tabs, or above the first pinned one: pinned, wherever
-  // the pointer is.
-  EXPECT_TRUE(DragDropsPinned(true, true, false));
-  EXPECT_TRUE(DragDropsPinned(std::nullopt, true, false));
-  // After a normal tab: normal.
-  EXPECT_FALSE(DragDropsPinned(false, false, true));
-  EXPECT_FALSE(DragDropsPinned(false, std::nullopt, true));
-  // A pinned tab below a normal one is out of the pinned tabs first.
-  EXPECT_FALSE(DragDropsPinned(false, true, true));
+TEST(KoanSpaceDragLogicTest, FolderRowsHaveZensZones) {
+  EXPECT_EQ(FolderZone::kBefore, FolderRowZone(0.1f, false, 3));
+  EXPECT_EQ(FolderZone::kInto, FolderRowZone(0.2f, false, 3));
+  EXPECT_EQ(FolderZone::kInto, FolderRowZone(0.5f, false, 3));
+  // An open folder with two items or more: its bottom is into it.
+  EXPECT_EQ(FolderZone::kInto, FolderRowZone(0.9f, false, 2));
+  // Collapsed, or with fewer than two: below it.
+  EXPECT_EQ(FolderZone::kAfter, FolderRowZone(0.9f, true, 5));
+  EXPECT_EQ(FolderZone::kAfter, FolderRowZone(0.9f, false, 1));
+  EXPECT_EQ(FolderZone::kInto, FolderRowZone(0.8f, true, 5));
 }
 
-TEST(KoanSpaceDragLogicTest, DraggedTabsAtTheSeparatorGoByThePointer) {
-  // After the last pinned tab, before the first normal one.
-  EXPECT_TRUE(DragDropsPinned(true, false, true));
-  EXPECT_FALSE(DragDropsPinned(true, false, false));
-  // No pinned tabs yet: above the separator pins the first.
-  EXPECT_TRUE(DragDropsPinned(std::nullopt, false, true));
-  EXPECT_FALSE(DragDropsPinned(std::nullopt, false, false));
-  // Every other tab pinned, or none left.
-  EXPECT_TRUE(DragDropsPinned(true, std::nullopt, true));
-  EXPECT_FALSE(DragDropsPinned(true, std::nullopt, false));
-  EXPECT_FALSE(DragDropsPinned(std::nullopt, std::nullopt, false));
+TEST(KoanSpaceDragLogicTest, DropsOnAFolderGoIntoItOrBesideIt) {
+  // A pinned tab (0-36), folder 7 (38-74) open with a tab (76-112) and a
+  // collapsed subfolder 8 (114-150), then the separator (152-174).
+  std::vector<SpaceListRow> list = {
+      TabRow({0, 0, 200, 36}, true),
+      FolderRow({0, 38, 200, 36}, 7, false, 2, 4),
+      TabRow({0, 76, 200, 36}, true, 7),
+      FolderRow({0, 114, 200, 36}, 8, true, 3, 4),
+  };
+  list[3].folder = 7;
+  const SpaceListLayout layout = {.separator = gfx::Rect(0, 152, 200, 22),
+                                  .normal_start = 210};
+  // Folder 7's top fifth: above it, outside it.
+  SpaceListDrop drop = PlaceInSpaceList(list, layout, 40);
+  EXPECT_EQ(1u, drop.slot);
+  EXPECT_EQ(0, drop.folder);
+  EXPECT_EQ(38, drop.line_y);
+  EXPECT_FALSE(drop.lit_row);
+  // Its middle: into it, first, its row lit.
+  drop = PlaceInSpaceList(list, layout, 56);
+  EXPECT_EQ(2u, drop.slot);
+  EXPECT_EQ(7, drop.folder);
+  EXPECT_EQ(1u, drop.lit_row);
+  // Its tab's bottom half: after it, in folder 7.
+  drop = PlaceInSpaceList(list, layout, 105);
+  EXPECT_EQ(3u, drop.slot);
+  EXPECT_EQ(7, drop.folder);
+  EXPECT_EQ(112, drop.line_y);
+  // The collapsed subfolder's bottom fifth: below it, in folder 7.
+  drop = PlaceInSpaceList(list, layout, 145);
+  EXPECT_EQ(4u, drop.slot);
+  EXPECT_EQ(7, drop.folder);
+  EXPECT_EQ(150, drop.line_y);
+  // The separator: the end of the pinned section, out of the folders.
+  drop = PlaceInSpaceList(list, layout, 160);
+  EXPECT_TRUE(drop.pinned);
+  EXPECT_EQ(4u, drop.slot);
+  EXPECT_EQ(0, drop.folder);
+}
+
+TEST(KoanSpaceDragLogicTest, TheDropLineHasZensInsetsAndRing) {
+  // A row 200 wide at x 10: the line from 20 to 208, the ring before it.
+  const gfx::Rect bounds = DropLineBounds(gfx::Rect(10, 40, 200, 36), 76);
+  EXPECT_EQ(gfx::Rect(14, 73, 194, 8), bounds);
+  // The line itself: its last 188px, 3px down.
+  EXPECT_EQ(20, bounds.x() + kDropLineRingRoom);
+  EXPECT_EQ(76, bounds.y() + kDropLineTop);
+}
+
+TEST(KoanSpaceDragLogicTest, TheDragImageLabelIsCutLikeZens) {
+  EXPECT_EQ(u"Hello", TruncateDragLabel(u"Hello", 120));
+  EXPECT_EQ(u"Hello wor", TruncateDragLabel(u"Hello world", 59));
+  EXPECT_EQ(u"", TruncateDragLabel(u"Hello", 5));
+  // Never half a surrogate pair.
+  EXPECT_EQ(u"a", TruncateDragLabel(u"a\U0001F600b", 12));
+}
+
+TEST(KoanSpaceDragLogicTest, SeveralTabsAreHeldAtZensPoint) {
+  EXPECT_EQ(gfx::Vector2d(40, 12), DragImageGrab(1, gfx::Vector2d(40, 12)));
+  EXPECT_EQ(gfx::Vector2d(18, 18), DragImageGrab(3, gfx::Vector2d(40, 12)));
 }
 
 }  // namespace koan

@@ -33,9 +33,8 @@
 //   9 to-grid      the other pinned row onto the Essential's tile: the
 //                  second Essential, after or before it
 // While held, `over` records how far the separator moved since the pick-up
-// (Zen's separator moves past a row that would drop on its other side: down
-// for one going into the pinned section, up for one leaving it) and, for an
-// Essential, the drop line; `after` (1.5 s after the release) the tab's
+// (none since #372: nothing moves until the drop, Koan's drag shows Zen's
+// line, koan_tab_drag.h) and the drop line; `after` (1.5 s after the release) the tab's
 // kind, its pinned URL and its place among the Space's rows, and the
 // windows. `ok` is the round's verdict.
 //
@@ -95,6 +94,8 @@ async function over(label, pickedUp) {
     promoLit: promo ? String(promo.props.DragOver) === 'true' : false,
     separatorShift: top !== null && pickedUp !== null ? top - pickedUp : null,
     indicator: indicator ? { y: indicator.ay, h: indicator.h, w: indicator.w } : null,
+    // Koan's drag image (koan_tab_drag_image.h) under the pointer.
+    image: !!shown(vs, 'KoanTabDragImageView'),
     separator: s.separator ? [s.separator.ay, s.separator.h] : null,
     newTab: s.newTab ? [s.newTab.ay, s.newTab.h] : null,
   };
@@ -207,7 +208,7 @@ const windows0 = (await windows()).length;
 // 1: onto the separator with no pinned tabs yet.
 await dragRound('sep-pin', lastNormal, (s, from) => down(s.separator, 0.5, from),
                 r => r.after.pinned === true && r.after.hasPinnedUrl && r.after.index === 0 &&
-                     r.over.separatorShift > 10);
+                     !!r.over.indicator && r.over.image && Math.abs(r.over.separatorShift ?? 0) < 2);
 
 // 2: over the pinned row's top quarter.
 await dragRound('between', lastNormal, (s, from) => down(s.rows.find(x => x.pinned)?.tabView, 0.25, from),
@@ -221,7 +222,8 @@ await dragRound('reorder', s => s.rows.filter(r => r.pinned)[1],
 // 4: the last pinned row onto the New Tab row.
 await dragRound('unpin', lastPinned, (s, from) => down(s.newTab, 0.5, from),
                 r => r.after.pinned === false && !r.after.hasPinnedUrl && r.after.essential === false &&
-                     r.after.index === r.after.pinnedCount && r.over.separatorShift < -10);
+                     r.after.index === r.after.pinnedCount && !!r.over.indicator &&
+                     Math.abs(r.over.separatorShift ?? 0) < 2);
 
 // 5: an Essential onto the last normal row's lower half.
 await toEssential(urls[0]);

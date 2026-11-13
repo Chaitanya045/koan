@@ -115,6 +115,16 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
                                    : SkColorSetA(SK_ColorBLACK, Alpha(0.85f)),
                               0.5f)};
 
+  // Koan's tab drag (ZenDragAndDrop.js): #zen-dragover-background is
+  // --zen-primary-color; the drag image is the selected row, opaque over the
+  // toolbar, with its text; the count dot red with white text.
+  mixer[kColorKoanTabDragOverBackground] = {ZenPrimaryColor(key)};
+  mixer[kColorKoanTabDragImage] = {
+      ui::GetResultingPaintColor(kColorKoanSidebarTabSelected, kColorToolbar)};
+  mixer[kColorKoanTabDragImageForeground] = {kColorToolbarText};
+  mixer[kColorKoanTabDragCount] = {SK_ColorRED};
+  mixer[kColorKoanTabDragCountForeground] = {SK_ColorWHITE};
+
   // The URL pill (zen-omnibox.css .urlbar-background): the Essentials tiles'
   // tint (--zen-toolbar-element-bg), on hover --zen-toolbar-element-bg-hover
   // (black at 8%, white at 10% in dark mode); its text the toolbar text at

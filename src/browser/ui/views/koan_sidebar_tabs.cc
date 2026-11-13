@@ -58,6 +58,7 @@
 #include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_tab_drag.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -146,21 +147,20 @@ void PaintSeparatorLine(gfx::Canvas* canvas,
 // Whether `view`, a child of a Space's tab group view, is in the Space's
 // pinned section: a pinned tab's row, a split view of pinned tabs (a split
 // view's tabs are pinned together), or a folder's row (folder tabs are
-// pinned, koan_folders.h). A dragged tab is where it would drop
-// (ShowsInPinnedSection()).
+// pinned, koan_folders.h).
 bool IsInPinnedSection(const views::View* view) {
   if (IsFolderRowView(view)) {
     return true;
   }
   if (const auto* tab_view = views::AsViewClass<TabView>(view)) {
-    return ShowsInPinnedSection(tab_view->GetTabInterface());
+    return IsPinnedForUser(tab_view->GetTabInterface());
   }
   if (!views::IsViewClass<SplitTabView>(view)) {
     return false;
   }
   return std::ranges::any_of(view->children(), [](const views::View* child) {
     const auto* tab_view = views::AsViewClass<TabView>(child);
-    return tab_view && ShowsInPinnedSection(tab_view->GetTabInterface());
+    return tab_view && IsPinnedForUser(tab_view->GetTabInterface());
   });
 }
 
@@ -1255,8 +1255,10 @@ void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
     OnSidebarPressed(event);
     return;
   }
+  // Upstream's drag (to another window): Koan's own holds the sidebar
+  // itself (koan_tab_drag.h).
   if (event->type() == ui::EventType::kMouseDragged &&
-      TabDragController::IsActive()) {
+      IsUpstreamTabDragRunning()) {
     if (KoanBrowserViewController* controller =
             KoanBrowserViewController::From(browser_view_)) {
       controller->compact_mode()->HoldSidebarForTabDrag();

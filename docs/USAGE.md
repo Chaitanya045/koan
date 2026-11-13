@@ -385,6 +385,16 @@ compact mode was set to hide just the toolbar, the drag makes it hide both.
 
 ## Pinned tabs and Essentials
 
+**Dragging tabs** works as in Zen: the tab stays where it is (an Essential's
+tile hides) and a copy of its row follows the pointer; with several selected
+tabs, up to three stacked copies with their number on a red dot. Nothing
+moves while you drag: a thin line with a ring shows where the tabs land,
+before or after the row under the pointer, and a bar lights a folder they
+drop into. When you let go the copy glides into the tab's new place. Esc
+cancels. Dragged over another Koan window's sidebar, the tabs move to that
+window as before; out of the sidebar or the window they never tear off into
+a window of their own.
+
 As in Zen there are two kinds of pinned tab:
 
 - **Pinned tabs** belong to their Space and sit in its pinned section,
@@ -395,8 +405,8 @@ As in Zen there are two kinds of pinned tab:
   Or drag a tab across the line: dropped above it (on the line, among the
   pinned tabs or on the Space header) it is pinned; dropped below it (on
   **+ New Tab**, among the other tabs or below them) it is a normal tab
-  again. While you hold it, the line moves past the tab to show which side
-  it lands on.
+  again. While you hold it, a thin line with a ring at its start shows
+  where it lands (nothing moves until you let go).
 - **Essentials** are shared by all Spaces, up to 12: "Add to
   Essentials" in the tab's context menu shows how many are used ("3 / 12").
   Dragging a tab into the grid also makes it an Essential. With no
@@ -502,8 +512,10 @@ belongs to a Space, and new tabs open in the active one.
   selected tabs) to another Space and shows it. Or drag it: hold a dragged
   tab at the sidebar's left or right edge for half a second to go to the
   previous or next Space (again every half second while you stay), or over
-  a Space button in the bottom bar to go there at once; the tab comes along
-  and drops where you let go. Essentials only switch at the edges.
+  a Space button in the bottom bar to go there at once; the tab joins that
+  Space where you let go (at its end if you let go over the button).
+  Essentials only switch at the edges. Esc, or letting go over the page,
+  puts everything back, the Space you started in included.
 - **Reorder** Spaces by dragging their buttons in the bottom bar (the
   others fade while you do; on a Mac the trackpad ticks at each step).
 - **Space routing** (right-click the header > Space Routing Settings, or
@@ -599,9 +611,11 @@ at most).
   New Folder** (the folder takes the selected tabs). Type its name and
   press Enter.
 - **Add tabs:** right-click a tab, **Move to Folder** and pick the folder;
-  drop a tab on the folder's row (it becomes the folder's first tab), or
-  among its tabs. A tab moved in is pinned; an Essential leaves the
-  Essentials and keeps its pinned URL.
+  drop a tab on the folder's row (it lights up; the tab becomes the
+  folder's first tab), or among its tabs. Near the row's top (or, for a
+  closed folder or one with a single item, its bottom) the line shows
+  instead, and the tab goes above or below the folder. A tab moved in is
+  pinned; an Essential leaves the Essentials and keeps its pinned URL.
 - **Take tabs out:** drag the tab among the pinned tabs above the folders
   (it stays pinned) or among the normal tabs (it's unpinned), unpin it
   (⌃⇧D), or use **Move to Folder > Remove from Folder** (it stays pinned).
@@ -1227,7 +1241,8 @@ Koan has no binary releases: you build it from your clone, and updating is
 
 ## Haptic feedback (macOS)
 
-As in Zen, the trackpad ticks as a dragged tab moves to another slot, as a
+As in Zen, the trackpad ticks as a dragged tab's drop line moves to another
+slot or another row lights up (not the first time), as a
 Space button passes another while you reorder them, and as the theme picker's
 sliders pass a step. Turn it off with "Haptic feedback on the trackpad" in
 Settings (Look and Feel, Theme Settings).

@@ -39,34 +39,42 @@ class KoanEssentialsPromoView : public views::View {
   bool drag_over_ = false;
 };
 
-// Zen's #zen-drag-indicator (vertical-tabs.css): the line that shows where
-// a dragged tab drops, here between the Essentials tiles (upright) or between
-// a Space's rows when an Essential is dragged out to them. Upstream's drag
-// moves the dragged rows themselves within their own section; this marks
-// the drops Koan makes at the end of the drag (koan_space_drag.h). A child
-// of the TabStripView, laid out at `slot()` by PlaceSpaceHeader(), on a layer
-// above the tiles, and takes no events.
+// Zen's drop feedback during Koan's tab drag (koan_tab_drag.h), a child of
+// the TabStripView laid out at `slot()` by PlaceSpaceHeader(), taking no
+// events:
+// - kAcross: #zen-drag-indicator between rows, a 2px line with a hollow ring
+//   at its start (DropLineBounds(), koan_space_drag_logic.h);
+// - kUpright: the same line upright between the Essentials tiles;
+// - kBackground: #zen-dragover-background, the bar behind a row a drop goes
+//   into (a folder, the Space header), the sidebar's width.
+// The lines are on a layer above the tiles and rows; the bar paints in the
+// strip, below them (the strip's first child).
 class KoanTabDropIndicatorView : public views::View {
   METADATA_HEADER(KoanTabDropIndicatorView, views::View)
 
  public:
+  enum class Style { kAcross, kUpright, kBackground };
+
   // Zen's --zen-drag-indicator-height.
   static constexpr int kThickness = 2;
 
-  KoanTabDropIndicatorView();
+  explicit KoanTabDropIndicatorView(bool background = false);
   KoanTabDropIndicatorView(const KoanTabDropIndicatorView&) = delete;
   KoanTabDropIndicatorView& operator=(const KoanTabDropIndicatorView&) = delete;
   ~KoanTabDropIndicatorView() override;
 
-  // Where it shows, in the TabStripView; empty hides it.
-  void SetSlot(const gfx::Rect& slot);
+  // Where it shows, in the TabStripView, and how (a line view takes kAcross
+  // or kUpright); empty hides it.
+  void SetSlot(const gfx::Rect& slot, Style style);
   const gfx::Rect& slot() const { return slot_; }
+  Style style() const { return style_; }
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
 
  private:
   gfx::Rect slot_;
+  Style style_;
 };
 
 }  // namespace koan

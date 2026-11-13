@@ -352,7 +352,7 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
       promo = promo_view;
     } else if (auto* indicator =
                    views::AsViewClass<KoanTabDropIndicatorView>(child)) {
-      // Where the drag's drop goes (koan_space_drag.h), over the rest.
+      // Where the drag's drop goes, or the row it goes into (koan_tab_drag.h).
       layouts.child_layouts.emplace_back(
           indicator, !indicator->slot().IsEmpty(), indicator->slot());
     } else if (auto* form_view =
@@ -367,7 +367,7 @@ int PlaceSpaceHeader(const views::View* tab_strip_view,
   int height = 0;
   if (promo) {
     // Zen's Essentials promo, where the (empty) Essentials are, during a
-    // tab drag (koan_space_drag.h). Not in a collapsed sidebar.
+    // tab drag (koan_tab_drag.h). Not in a collapsed sidebar.
     const int promo_height =
         collapsed || form ? 0 : promo->GetPreferredSize().height();
     layouts.child_layouts.emplace_back(promo, promo_height > 0,
