@@ -172,6 +172,19 @@ source_set("loading_bar") {
   public_deps = [ "//ui/gfx/geometry" ]
 }
 
+# Zen's split view rearrange for two panes (koan_split_rearrange.h): pure,
+# for the unit tests.
+source_set("split_rearrange") {
+  sources = [
+    "koan_split_rearrange.cc",
+    "koan_split_rearrange.h",
+  ]
+  public_deps = [
+    "//components/split_tabs",
+    "//ui/gfx/geometry",
+  ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -267,6 +280,7 @@ test("koan_views_unittests") {
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
     "koan_space_routes_unittest.cc",
+    "koan_split_rearrange_unittest.cc",
     "koan_stored_space_unittest.cc",
     "koan_stored_tab_unittest.cc",
     "koan_strip_on_share_unittest.cc",
@@ -287,6 +301,7 @@ test("koan_views_unittests") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_rearrange",
     ":stored_space",
     ":stored_tab",
     ":strip_on_share",
@@ -462,6 +477,8 @@ source_set("impl") {
     "koan_space_routing.h",
     "koan_space_swipe.cc",
     "koan_space_swipe.h",
+    "koan_split_header.cc",
+    "koan_split_header.h",
     "koan_split_view.cc",
     "koan_status_bubble.cc",
     "koan_system_accent.h",
@@ -517,7 +534,10 @@ source_set("impl") {
     ]
   }
   sources += get_target_outputs(":grain_png")
-  public_deps = [ ":space_theme" ]
+  public_deps = [
+    ":space_theme",
+    ":split_rearrange",
+  ]
   deps = [
     ":content_radius",
     ":essentials_audio",
@@ -531,6 +551,7 @@ source_set("impl") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_rearrange",
     ":stored_space",
     ":stored_tab",
     ":strip_on_share",
@@ -641,6 +662,7 @@ source_set("impl") {
     "//components/url_formatter",
     "//components/user_prefs",
     "//components/vector_icons",
+    "//components/viz/common",
     "//components/web_modal",
     "//components/zoom",
     "//content/public/browser",

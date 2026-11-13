@@ -232,6 +232,17 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanLoadingBar,
   kColorKoanLoadingBarTrack,
 
+  // Split view (koan_split_header.cc): a pane's hover header (its
+  // background, glyphs and shadow), and in the rearrange view the window
+  // background seen through the dimmed panes, the drop zone, and the drag
+  // image's backing.
+  kColorKoanSplitHeader,
+  kColorKoanSplitHeaderIcon,
+  kColorKoanSplitHeaderShadow,
+  kColorKoanSplitRearrangeDim,
+  kColorKoanSplitDropZone,
+  kColorKoanSplitDragImage,
+
   kKoanColorsEnd,
 };
 

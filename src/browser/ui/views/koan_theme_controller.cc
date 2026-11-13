@@ -34,6 +34,7 @@
 #include "koan/browser/ui/views/koan_glass_state.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_space_background.h"
+#include "koan/browser/ui/views/koan_split_header.h"
 #include "koan/browser/ui/views/koan_system_accent.h"
 #include "koan/browser/ui/views/koan_theme_picker.h"
 #include "koan/browser/ui/views/koan_theme_platform.h"
@@ -401,8 +402,9 @@ void KoanThemeController::AdjustChildColorKey(const views::Widget* child,
   // with the sidebar and toolbar, Glance and the Library (zen-glance.css,
   // zen-library.css: --toolbar-color-scheme), and the toast (inside
   // #browser; on the window's scheme only for the default theme, where no
-  // mode is applied). A panel anchored in one of those (a bubble in the
-  // fullscreen overlay, in Glance) is back on the window's scheme.
+  // mode is applied), and the split view's pane headers (inside #browser). A
+  // panel anchored in one of those (a bubble in the fullscreen overlay, in
+  // Glance) is back on the window's scheme.
   if (!applied_mode_ || IsWindowChrome(child)) {
     return;
   }
@@ -421,7 +423,9 @@ bool KoanThemeController::IsWindowChrome(const views::Widget* child) const {
   return controller &&
          ((controller->glance() && child == controller->glance()->widget()) ||
           (controller->library() && child == controller->library()->widget()) ||
-          (controller->toast() && child == controller->toast()->widget()));
+          (controller->toast() && child == controller->toast()->widget()) ||
+          (controller->split_header() &&
+           controller->split_header()->OwnsWidget(child)));
 }
 
 bool KoanThemeController::SetWindowColors() {

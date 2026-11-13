@@ -90,6 +90,8 @@ shortcuts
 sidebar_animation
 sidebar_drag
 sidebar_tabs timeout=300
+# Zen's split pane header (#373): hover, unsplit, rearrange (real input).
+split_header timeout=240
 # Zen's audio badge on an Essentials tile (favicon kept, click mutes).
 essentials_audio
 spaces timeout=420

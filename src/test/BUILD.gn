@@ -123,6 +123,7 @@ source_set("browsertests_impl") {
     "//koan/browser/containers:user_containers",
     "//koan/browser/importer",
     "//koan/browser/ui/views:impl",
+    "//koan/browser/ui/views:split_rearrange",
     "//koan/common:renderer_settings_mojom",
     "//mojo/public/cpp/bindings",
     "//net",

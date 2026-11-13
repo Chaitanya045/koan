@@ -51,6 +51,7 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_split_header.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
@@ -157,6 +158,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       download_animation_(
           std::make_unique<KoanDownloadAnimation>(browser_view)),
       loading_indicator_(std::make_unique<KoanLoadingIndicator>(browser_view)),
+      split_header_(std::make_unique<KoanSplitHeaderController>(browser_view)),
       // Page presses are where downloads fly from. Unretained: the
       // animation outlives the drag controller (declared before it).
       window_drag_(std::make_unique<KoanWindowDragController>(
@@ -238,6 +240,7 @@ void KoanBrowserViewController::TearDown() {
   media_->OnBrowserViewDestroying();
   download_animation_->OnBrowserViewDestroying();
   loading_indicator_->OnBrowserViewDestroying();
+  split_header_->OnBrowserViewDestroying();
   window_drag_->OnBrowserViewDestroying();
   welcome_->OnBrowserViewDestroying();
 }
@@ -286,6 +289,8 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     updates::OnBrowserWindowShown(browser_view_);
     download_animation_->OnAddedToWidget();
     loading_indicator_->OnAddedToWidget();
+    // After the loading indicator: the headers go above it.
+    split_header_->OnAddedToWidget();
     welcome_->OnAddedToWidget();
     // After the welcome: both post a task, and the URL bar's must run after
     // the welcome's (FIFO) so it sees whether the welcome is showing.
@@ -305,6 +310,7 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   media_->OnBrowserViewLayout();
   download_animation_->OnBrowserViewLayout();
   loading_indicator_->OnBrowserViewLayout();
+  split_header_->OnBrowserViewLayout();
   welcome_->OnBrowserViewLayout();
   agent_indicator_->OnBrowserViewLayout();
 }
