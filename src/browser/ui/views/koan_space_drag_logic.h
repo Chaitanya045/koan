@@ -236,6 +236,16 @@ inline constexpr int kDragImageCountDotSize = 16;
 inline constexpr int kDragImageCountDotLeft = -16;
 inline constexpr int kDragImageCountDotTop = -10;
 inline constexpr int kDragImageCountFontSize = 10;
+// Over the Essentials the image is a tile (#makeDragImageEssential()): the
+// first tile's size, or with none Zen's max(23.7% of the grid's width, the
+// row's height + 4) by the row's height, its 16px icon in the middle, held
+// (for a tab that wasn't an Essential) 16px up and left of its corner moved
+// by half of what the grab was short of Zen's 54 x 50 (EssentialTileGrab()).
+inline constexpr int kDragImageTileIconSize = 16;
+gfx::Size EssentialDragTileSize(const std::optional<gfx::Size>& first_tile,
+                                int grid_width,
+                                int row_height);
+gfx::Vector2d EssentialTileGrab(const gfx::Vector2d& row_grab);
 std::u16string TruncateDragLabel(std::u16string_view title, int label_width);
 gfx::Vector2d DragImageGrab(size_t tab_count, const gfx::Vector2d& grab);
 

@@ -78,6 +78,10 @@ class KoanTabDragImage : public gfx::AnimationDelegate {
   // Over the page's split edge the image is Zen's card (the first row's icon
   // and title, #zen-split-view-drag-image), at once; else the rows.
   void SetCard(bool card);
+  // Over the Essentials grid the image is a tile of `tile` size (Zen's
+  // #makeDragImageEssential()), held at `grab`; an empty size turns it back
+  // into rows, held where it was grabbed.
+  void SetTile(const gfx::Size& tile, const gfx::Vector2d& grab);
   // Zen's fake pane (#zen-split-view-fake-browser) at `bounds` (screen
   // coordinates), opening from `edge` (its SplitEdge, koan_space_drag_logic.h:
   // 0 left, 1 right, 2 top, 3 bottom) in 100 ms; empty bounds close it the
@@ -107,6 +111,7 @@ class KoanTabDragImage : public gfx::AnimationDelegate {
   std::unique_ptr<views::Widget> widget_;
   raw_ptr<KoanTabDragImageView> view_ = nullptr;
   gfx::Vector2d grab_;
+  gfx::Vector2d row_grab_;
   // The first row's origin, in screen coordinates.
   gfx::Point origin_;
   gfx::Point landing_from_;

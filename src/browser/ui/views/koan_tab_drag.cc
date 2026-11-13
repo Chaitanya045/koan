@@ -490,13 +490,51 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   views::View* source_row =
       lone && context ? context->GetTabForContents(source->GetContents())
                       : RowViewFor(source);
+  // The tile the image becomes over the Essentials, and the row an Essential
+  // becomes out of them (Zen sizes it like the first normal tab): a Space
+  // row's look, with the Essential's icon and title.
+  TabStripModel* tab_model = controller_->tab_strip_model();
+  views::View* first_tile = tab_model->IndexOfFirstNonPinnedTab() > 0
+                                ? RowViewFor(tab_model->GetTabAtIndex(0))
+                                : nullptr;
+  views::View* region_view = this->region();
+  tile_size_ = EssentialDragTileSize(
+      first_tile ? std::make_optional(first_tile->size()) : std::nullopt,
+      region_view ? region_view->width() : 0,
+      source_row ? source_row->height() : 0);
+  std::optional<KoanTabDragImage::Row> normal_row;
+  if (source->IsPinned()) {
+    std::vector<tabs::TabHandle> firsts;
+    const std::vector<SpaceListRow> space_rows = SpaceRows(firsts);
+    for (size_t i = 0; i < space_rows.size() && !normal_row; ++i) {
+      tabs::TabInterface* tab = firsts[i].Get();
+      views::View* view = tab && !tab->IsSplit() && context
+                              ? context->GetTabForContents(tab->GetContents())
+                              : nullptr;
+      if (view) {
+        normal_row = ImageRow(browser_view_, tab, view, view);
+      }
+    }
+  }
   for (tabs::TabInterface* tab : order) {
     views::View* tab_view =
         context ? context->GetTabForContents(tab->GetContents()) : nullptr;
     views::View* row_view = lone ? tab_view : RowViewFor(tab);
-    if (row_view && tab_view && rows.size() < kDragImageMaxRows) {
-      rows.push_back(ImageRow(browser_view_, tab, row_view, tab_view));
+    if (!row_view || !tab_view || rows.size() >= kDragImageMaxRows) {
+      continue;
     }
+    KoanTabDragImage::Row row =
+        ImageRow(browser_view_, tab, row_view, tab_view);
+    if (tab->IsPinned() && normal_row) {
+      // Its tile shows no title: the row's place for it, with its own.
+      const KoanTabDragImage::Row tile_row = row;
+      row = *normal_row;
+      row.icon = tile_row.icon;
+      if (TabStripRegionView* strip = browser_view_->tab_strip_view()) {
+        row.title = strip->GetTabData(tab->GetHandle()).title;
+      }
+    }
+    rows.push_back(std::move(row));
   }
   // Held where it was grabbed (Zen's offset from the row's top-left).
   const gfx::Vector2d grab =
@@ -553,6 +591,16 @@ void KoanTabDrag::DragTo(const gfx::Point& screen_point,
     }
   }
 
+  // Over the Essentials: a tile, else a row (Zen's
+  // #makeDragImageEssential() / #makeDragImageNonEssential(), at once).
+  {
+    KoanPinnedTabController* pinned = pinned_tabs();
+    const bool over_grid =
+        !IsSidebarCollapsed() && IsOverEssentials(point) &&
+        (essentials || (pinned && pinned->CanAddToEssentials()));
+    image_.SetTile(over_grid ? tile_size_ : gfx::Size(),
+                   essentials ? grab_ : EssentialTileGrab(grab_));
+  }
   // Over the page's edge: Zen's split there.
   if (UpdatePageSplit(screen_point)) {
     switch_timer_.Stop();

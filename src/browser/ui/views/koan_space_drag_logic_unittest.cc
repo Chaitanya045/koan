@@ -479,4 +479,14 @@ TEST(KoanSpaceDragLogicTest, TheFakePaneTakesItsShare) {
             FakePaneBounds(panels, SplitEdge::kBottom, 2, 8));
 }
 
+TEST(KoanSpaceDragLogicTest, OverTheEssentialsTheImageIsATile) {
+  EXPECT_EQ(gfx::Size(52, 48),
+            EssentialDragTileSize(gfx::Size(52, 48), 230, 36));
+  // No tile yet: 23.7% of the grid, at least the row's height and 4.
+  EXPECT_EQ(gfx::Size(54, 36), EssentialDragTileSize(std::nullopt, 230, 36));
+  EXPECT_EQ(gfx::Size(40, 36), EssentialDragTileSize(std::nullopt, 100, 36));
+  // Grabbed at (30, 18): the tile 28 px right and 32 down of the pointer.
+  EXPECT_EQ(gfx::Vector2d(-28, -32), EssentialTileGrab(gfx::Vector2d(30, 18)));
+}
+
 }  // namespace koan

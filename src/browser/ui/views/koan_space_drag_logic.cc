@@ -229,6 +229,24 @@ std::u16string TruncateDragLabel(std::u16string_view title, int label_width) {
   return std::u16string(title.substr(0, keep));
 }
 
+gfx::Size EssentialDragTileSize(const std::optional<gfx::Size>& first_tile,
+                                int grid_width,
+                                int row_height) {
+  if (first_tile && !first_tile->IsEmpty()) {
+    return *first_tile;
+  }
+  return gfx::Size(
+      std::max(static_cast<int>(grid_width * 0.237f), row_height + 4),
+      row_height);
+}
+
+gfx::Vector2d EssentialTileGrab(const gfx::Vector2d& row_grab) {
+  // Zen's clone moves by ((54 - x) / 2, (50 - y) / 2) in its wrapper, which
+  // is held at (-16, -16).
+  return gfx::Vector2d(-16 - (54 - row_grab.x()) / 2,
+                       -16 - (50 - row_grab.y()) / 2);
+}
+
 gfx::Vector2d DragImageGrab(size_t tab_count, const gfx::Vector2d& grab) {
   return tab_count > 1 ? gfx::Vector2d(18, 18) : grab;
 }
