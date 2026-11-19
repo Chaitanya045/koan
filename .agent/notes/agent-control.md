@@ -896,6 +896,33 @@ window, other macOS Space and Cmd+H: by code a detached tab owns its compositor 
 T-keep-1..4. The `kNotifyCompositorOf*OnMacOs` features must stay off, or an agent tab in the *active slot* of a hidden
 window needs the window-level video-capture lock, which capture takes automatically (A§3).
 
+**End-to-end verification (2026-11-20).** `scripts/e2e/agent_lease.mjs` (Mac suite) checks a background agent tab
+with the user's tab in front, with Koan's window covered by another app's window and minimised, release after the
+hold-off, the cap (halved on battery in Low Power Mode), and the user's own background tab staying throttled. It also
+prints a table of rAF/s, timers/s and renderer CPU. `scripts/mac/steps/agent_lease.md` covers another Desktop, a
+locked screen, display sleep, ⌘H and Low Power Mode by hand. The audit against 158 behind it, with gaps that remain:
+
+* **Display sleep:** the window-less tab's compositor runs from the display's `CVDisplayLink`
+  (`external_begin_frame_source_mac.cc`), which stops when the display sleeps. The lease takes no display-sleep
+  assertion (`stay_awake` is off, by decision), so rAF is expected to stop then. Follow-up: the opt-in `keep-awake`
+  capability passes `stay_awake=true` while a command is in flight.
+* **Holds are not wired up:** nothing calls `AgentLeaseManager::BeginHold()`, `KeepAlive()` or `SetLiveAlways()`.
+  `Page.startScreencast` takes no capturer of its own (B§3), so an agent-browser screencast or recording of an agent
+  tab stalls 3 s after the last command. Follow-up: the facade tells the backend when a `Page.startScreencast`
+  succeeds and when `Page.stopScreencast` is sent or the session ends. `AgentDevToolsClient` then holds the lease
+  (`BeginHold`/`EndHold`, ended in its destructor and in `AgentHostClosed`). Then add `Koan.keepAlive` to the policy
+  table.
+* **Freezing votes:** Koan's patch drops `kPinnedTab` for `FreezingType::kVoting`, so a freezing vote (upstream casts
+  one for a collapsed tab group, `browser_tab_strip_controller.cc`) would freeze an agent tab between commands. Koan's
+  Spaces never collapse their groups (a DCHECK in `koan_workspaces.cc` says so), so nothing reaches this today. While
+  the capturer is held, Blink refuses the freeze anyway.
+* **Energy Saver** throttles every frame sink to 30 Hz (`battery_saver_mode_manager.cc`), agent tabs included. The
+  e2e threshold (25/s) allows for it.
+* **App Nap:** the browser process opts out (`mac_init.mm`). Renderers run no `NSApplication`, so macOS's App Nap is not expected to touch them (UNVERIFIED; the suite prints
+  their `ps` PRI to show it). Chromium's own
+  `kBestEffort` suppression is what the `GlicActuationState` vote prevents: it maps to `kUserVisible`, which
+  `render_process_host_impl.cc` raises to `kUserBlocking`, so the renderer runs at full foreground priority.
+
 ## 9. Take-over and hand-back
 
 ### 9.1 Tab states (per client, per tab)

@@ -122,5 +122,7 @@ held-button drag, used by `scripts/e2e/space_drag.mjs`; `mods` prints the modifi
 releases them: `lib/mac.mjs` checks before every real press, and `suite.sh` says after which script one was left held;
 every pointer event carries only its own modifiers), `hold down x y|to x y ms|up x y` (the same drag one step per
 call, a person's pace, for `video/flows/essentials_drag.mjs`), `winid <pid>` (that pid's on-screen CGWindowIDs and bounds,
-for `screencapture -l`; `suite.sh` builds it into its run dir if it isn't there), `crashdlg list|dismiss`, `idle.sh`,
+for `screencapture -l`; `suite.sh` builds it into its run dir if it isn't there), `cover x y w h [secs]` (an opaque
+window of its own over that rectangle, brought to the front, for `scripts/e2e/agent_lease.mjs`'s covered-window case,
+which builds it; it quits when its stdin closes or after `secs`, 120 by default), `crashdlg list|dismiss`, `idle.sh`,
 `front.sh`, `frontpid.sh`.
