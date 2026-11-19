@@ -9,6 +9,7 @@
 // Space follows. The frames in between are the video flow's
 // (scripts/mac/video/flows/essentials.mjs).
 
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "chrome/browser/ui/animation/browser_animation_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
@@ -24,12 +26,14 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/common/pinned_tab_container_view.h"
+#include "chrome/browser/ui/views/tabs/common/split_tab_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_collection_animating_layout_manager.h"
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
@@ -95,6 +99,35 @@ void CollectTabViews(views::View* root,
   }
 }
 
+// Whether a row under `root` (itself included) still animates to its
+// place.
+bool LayoutAnimates(views::View* root) {
+  if (TabCollectionAnimatingLayoutManager::IsViewAnimating(root)) {
+    return true;
+  }
+  for (views::View* child : root->children()) {
+    if (LayoutAnimates(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The view that takes a press at `point` in `root`, and its parents up to
+// `root`, for failure messages.
+std::string ViewsAt(views::View* root, const gfx::Point& point) {
+  std::string names;
+  for (const views::View* view = root->GetEventHandlerForPoint(point);
+       view && view != root; view = view->parent()) {
+    if (!names.empty()) {
+      names += " < ";
+    }
+    names.append(view->GetClassName());
+    names += " " + view->bounds().ToString();
+  }
+  return names;
+}
+
 class KoanSidebarTransitionsBrowserTest : public InProcessBrowserTest {
  protected:
   BrowserView* browser_view() {
@@ -131,42 +164,100 @@ class KoanSidebarTransitionsBrowserTest : public InProcessBrowserTest {
 // RootView hands it on to the tab's parents, through the sidebar's press
 // handler again, and the Space's group view, a parent of every row, counted
 // as the empty space that moves the window (and where a double-click opens a
-// tab). The empty space is decided by the view under the point now.
+// tab). The empty space is decided by the view under the point now. Every
+// kind of row: a pinned tab and a normal one (both in the Space's list), an
+// Essential (in the grid) and a split view (its panes and the gap between).
+// (Mac cycle 17: checked while the rows still animated in, the newest row
+// was 0 high, so its middle was its parents' and empty space. The rows
+// settle first now.)
 IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
                        EmptySpaceIsWhereNoRowIsWhateverGetsThePress) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
-  const std::vector<tabs::TabInterface*> tabs = OpenTabs(2);
+  KoanPinnedTabController* pinned = GetPinnedTabs(browser());
+  ASSERT_TRUE(pinned);
+  const std::vector<tabs::TabInterface*> tabs = OpenTabs(5);
+  tabs::TabInterface* const pinned_tab = tabs[0];
+  tabs::TabInterface* const essential = tabs[1];
+  tabs::TabInterface* const normal = tabs[2];
+  pinned->PinInSpace(pinned_tab);
+  pinned->AddToEssentials(essential);
+  TabStripModel* model = browser()->GetTabStripModel();
+  model->ActivateTabAt(model->GetIndexOfTab(tabs[4]));
+  model->AddToNewSplit({model->GetIndexOfTab(tabs[3])},
+                       split_tabs::SplitTabVisualData(),
+                       split_tabs::SplitTabCreatedSource::kTabContextMenu);
+  ASSERT_TRUE(tabs[3]->IsSplit());
+  ASSERT_TRUE(essential->IsPinned());
+  ASSERT_FALSE(pinned_tab->IsPinned());
+
   views::View* region = browser_view()->tab_strip_view();
   TabStripView* strip = FindView<TabStripView>(browser_view());
   ASSERT_TRUE(region);
   ASSERT_TRUE(strip);
-  views::test::RunScheduledLayout(browser_view());
-  std::vector<TabView*> rows;
-  CollectTabViews(region, tabs.back(), rows);
-  ASSERT_EQ(1u, rows.size());
-  TabView* row = rows.front();
-  ASSERT_TRUE(row->IsDrawn());
-  const gfx::Point on_row = views::View::ConvertPointToTarget(
-      row, region, row->GetLocalBounds().CenterPoint());
+  // The rows' last layout: upstream animates rows in, from 0 high.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    views::test::RunScheduledLayout(browser_view());
+    return !LayoutAnimates(strip);
+  }));
+  auto row_of = [&](tabs::TabInterface* tab) -> TabView* {
+    std::vector<TabView*> rows;
+    CollectTabViews(region, tab, rows);
+    return rows.size() == 1u ? rows.front() : nullptr;
+  };
+  // The middle of `row` (and of each `row`'s half for a split) is no empty
+  // space.
+  auto expect_no_empty_space = [&](views::View* row, std::string_view what) {
+    ASSERT_TRUE(row) << what;
+    ASSERT_TRUE(row->IsDrawn()) << what;
+    ASSERT_FALSE(row->GetLocalBounds().IsEmpty()) << what;
+    const gfx::Point point = views::View::ConvertPointToTarget(
+        row, region, row->GetLocalBounds().CenterPoint());
+    EXPECT_FALSE(IsSidebarEmptySpace(strip, region, point))
+        << what << " at " << point.ToString()
+        << ", the view there: " << ViewsAt(region, point);
+  };
 
+  TabView* row = row_of(normal);
+  ASSERT_TRUE(row);
   // The row's parents (where the press goes when the row turns it down) are
   // inside the scroll view: by them alone the row's middle would be empty
   // space.
   const views::ScrollView* scroll = strip->unpinned_tabs_scroll_view();
   ASSERT_TRUE(scroll);
   ASSERT_TRUE(scroll->Contains(row->parent()));
-  EXPECT_FALSE(IsSidebarEmptySpace(strip, region, on_row));
+  expect_no_empty_space(row, "a normal tab");
+  TabView* pinned_row = row_of(pinned_tab);
+  ASSERT_TRUE(pinned_row);
+  EXPECT_TRUE(scroll->Contains(pinned_row));
+  expect_no_empty_space(pinned_row, "a pinned tab");
+  expect_no_empty_space(row_of(essential), "an Essential");
+  TabView* pane = row_of(tabs[3]);
+  ASSERT_TRUE(pane);
+  views::View* split = pane->parent();
+  ASSERT_TRUE(views::IsViewClass<SplitTabView>(split));
+  EXPECT_TRUE(scroll->Contains(split));
+  expect_no_empty_space(split, "a split view");
+  expect_no_empty_space(pane, "a split view's first tab");
+  expect_no_empty_space(row_of(tabs[4]), "a split view's second tab");
 
   // Below the last row, in the scroll view: the empty space.
   const gfx::Rect scroll_bounds = views::View::ConvertRectToTarget(
       scroll, region, scroll->GetLocalBounds());
+  views::View* last = row;
+  for (views::View* each : {static_cast<views::View*>(pinned_row), split}) {
+    if (each->GetBoundsInScreen().bottom() >
+        last->GetBoundsInScreen().bottom()) {
+      last = each;
+    }
+  }
   const gfx::Rect row_bounds =
-      views::View::ConvertRectToTarget(row, region, row->GetLocalBounds());
+      views::View::ConvertRectToTarget(last, region, last->GetLocalBounds());
   ASSERT_GT(scroll_bounds.bottom() - row_bounds.bottom(), 20);
-  EXPECT_TRUE(IsSidebarEmptySpace(
-      strip, region,
-      gfx::Point(row_bounds.CenterPoint().x(),
-                 (row_bounds.bottom() + scroll_bounds.bottom()) / 2)));
+  const gfx::Point below(row_bounds.CenterPoint().x(),
+                         (row_bounds.bottom() + scroll_bounds.bottom()) / 2);
+  EXPECT_TRUE(IsSidebarEmptySpace(strip, region, below))
+      << "below the rows at " << below.ToString()
+      << ", the view there: " << ViewsAt(region, below);
   // And nothing outside the region.
   EXPECT_FALSE(
       IsSidebarEmptySpace(strip, region, gfx::Point(-1, row_bounds.y())));

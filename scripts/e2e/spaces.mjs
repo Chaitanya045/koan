@@ -25,8 +25,8 @@ import {
   pages as pageTargets, readPref, sleep, typeInto, viewEvent, viewMouse, viewTree, visiblePage,
   waitFor, windowTints,
 } from './lib/koan.mjs';
-import { menuKey as macMenuKey, menuKeyWhyNot, ptr, realInput, realPointer,
-         realPointerHoldsSidebar, skipped, windowOf } from './lib/mac.mjs';
+import { keyWindowReport, makeKey, menuKey as macMenuKey, menuKeyWhyNot, ptr, realInput,
+         realPointer, realPointerHoldsSidebar, skipped, windowOf } from './lib/mac.mjs';
 
 const views = viewTree;
 // The node of the view tagged with element identifier `id`, if one shows.
@@ -425,15 +425,20 @@ if (await closeTabKey(opened ? CLOSE_LAST : null) && opened) {
 }
 
 // ---- The Create form from a collapsed sidebar: the sidebar expands over
-// the page while the form is open.
+// the page while the form is open. (The sidebar button is Zen's: it toggles
+// compact mode, KoanVerticalTabsPolicy::OnSidebarButtonAction(), whose
+// hidden sidebar leaves the strip region no width. Upstream's icon rail,
+// which this once checked for, is gone.)
 // The sidebar toggle, found again each time: collapsing moves the toolbar.
 const toggle = async () => (await views()).find(v => v.shown && v.w > 0 &&
     v.path.at(-1) === 'VerticalTabStripTopContainer' && v.cls !== 'KoanSidebarNavButtons');
 await click(await toggle());
 await sleep(1000);
-// (The bar's width once collapsed, for the details below: the check after
-// Cancel wants it narrow again.)
-const collapsedBar = one((await sidebar()).vs, 'KoanSpaceBarView')?.w;
+// The strip region's width (0 while compact mode hides the sidebar), shown
+// or not; once collapsed, for the details below: the check after Cancel
+// wants it hidden again.
+const regionWidth = vs => vs.find(v => v.cls === 'VerticalTabStripRegionView')?.w;
+const collapsedRegion = regionWidth((await sidebar()).vs);
 await key(VK.N, CTRL | ALT, 'n');
 s = await sidebar();
 form = one(s.vs, 'KoanSpaceCreationView');
@@ -459,15 +464,16 @@ s = await sidebar();
 {
   const CANCEL_COLLAPSED = '...and Cancel goes back to the collapsed sidebar with the tabs';
   const ok = !one(s.vs, 'KoanSpaceCreationView') && s.tabs === 0 &&
-             (one(s.vs, 'KoanSpaceBarView')?.w ?? 999) < 150;
+             regionWidth(s.vs) === 0;
   const held = !ok && await realPointerHoldsSidebar(230);
   if (held) {
     skipped(CANCEL_COLLAPSED, held);
   } else {
     const p = IS_MAC ? realPointer() : null;
     check(CANCEL_COLLAPSED, ok,
-          JSON.stringify({ tabs: s.tabs, bar: one(s.vs, 'KoanSpaceBarView')?.w,
-                           form: !!one(s.vs, 'KoanSpaceCreationView'), barCollapsed: collapsedBar,
+          JSON.stringify({ tabs: s.tabs, region: regionWidth(s.vs),
+                           form: !!one(s.vs, 'KoanSpaceCreationView'),
+                           regionCollapsed: collapsedRegion,
                            pointer: p && [Math.round(p.x), Math.round(p.y)] }));
   }
 }
@@ -644,13 +650,28 @@ check('...and No keeps it, with its tabs', s.buttons.length === 3 &&
       s.header?.name === 'Clicked' && s.tabs === clickedTabs,
       JSON.stringify({ spaces: s.buttons.map(b => b.name), tabs: `${clickedTabs} -> ${s.tabs}` }));
 // G4: "New tab in group" is Koan's new tab (the URL bar), which opens no tab
-// by itself.
+// by itself. The URL bar takes the focus only in the key window on macOS,
+// else Koan opens a tab after all (KoanUrlBarController::OpenForNewTab()),
+// and the window may not be key after the question's sheet: made key first,
+// as for ⌘T. (Until cycle 17 the question stayed open, and the key did
+// nothing.) Esc goes to the URL bar: on macOS a CDP key reaches the page
+// only.
 const tabsBefore = s.tabs;
+const keyed = IS_MAC ? await makeKey(await visiblePage()) : true;
 await key(KEY.C, GROUP, 'C');
-await key(VK.ESCAPE);
+if (IS_MAC) {
+  await keyToWidget('BrowserView', VK.ESCAPE);
+  await sleep(500);
+} else {
+  await key(VK.ESCAPE);
+}
 s = await sidebar();
-check('G4: New tab in group opens Koan\'s new tab, not an NTP tab',
-      s.tabs === tabsBefore && noEditor(s.vs), `${tabsBefore} -> ${s.tabs}`);
+{
+  const ok = s.tabs === tabsBefore && noEditor(s.vs);
+  check('G4: New tab in group opens Koan\'s new tab, not an NTP tab', ok,
+        `${tabsBefore} -> ${s.tabs}${ok ? '' : `; the window ${keyed ? 'was' : 'was not'} key` +
+            (IS_MAC ? ` (${await keyWindowReport()})` : '')}`);
+}
 
 // G2: a tab in another Space keeps running (no focus-mode freezing vote;
 // Koan's background-tab policy keeps the 5 most recently used running).

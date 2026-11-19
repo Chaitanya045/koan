@@ -7,8 +7,8 @@ import {
   NATIVE_MENUS, UI_PORT, browserCall, check, connect, finish, pages, sendKey, sleep, visiblePage,
 } from './koan.mjs';
 import {
-  KOAN_PID, calibrate, closeNativeMenu, nativeMenuReport, pickNativeMenu, ptr, realInput,
-  waitNativeMenu, windowOf,
+  KOAN_PID, calibrate, closeNativeMenu, keyWindowReport, makeKey, nativeMenuReport,
+  pickNativeMenu, ptr, realInput, waitNativeMenu, windowOf,
 } from './mac.mjs';
 
 // Koan's pid, for the native menus (folders.mjs restarts Koan).
@@ -101,12 +101,18 @@ async function openNativeMenu(event, at) {
   // (Real input is Koan's first pid's only: the gate checks that pid.)
   const bounds = realInput() && menuPid === KOAN_PID &&
       (await windowOf((await pages())[0]?.id).catch(() => null))?.bounds;
-  if (bounds && !rootOnScreen) {
-    const page = await visiblePage().catch(() => null);
+  // The window in front first: a real click goes to whatever is on top, and
+  // the calibration's moves reach the page only there. (Mac cycle 17: the
+  // calibration failed and no right-click opened a menu, with the browser
+  // answering.) A guessed origin is measured again the next time.
+  const page = bounds ? await visiblePage().catch(() => null) : null;
+  const keyed = !!page && await makeKey(page, 1500);
+  if (bounds && (!rootOnScreen || rootOnScreen.guessed)) {
     const measured = page && await calibrate(page).catch(() => null);
     rootOnScreen = measured ?? { x: bounds.left, y: bounds.top, guessed: true };
     console.log(`  (the window's root view on screen: ${JSON.stringify(rootOnScreen)}, ` +
-                `its bounds ${bounds.left},${bounds.top})`);
+                `its bounds ${bounds.left},${bounds.top}, the window ` +
+                `${keyed ? 'key' : 'not key'})`);
   }
   const screen = bounds && [Math.round(rootOnScreen.x + at.x), Math.round(rootOnScreen.y + at.y)];
   const real = !!bounds && await ptr('rclick', ...screen);
@@ -123,7 +129,9 @@ async function openNativeMenu(event, at) {
   if (!menu) {
     console.log(`  (no native menu opened by ${real ? `a real right-click at ${screen}` :
                                                   'a UI DevTools press'}: ` +
-                `${await nativeMenuReport(menuPid)})`);
+                `${await nativeMenuReport(menuPid)}` +
+                `${real ? `; the window ${keyed ? 'was' : 'was not'} key: ` +
+                          `${await keyWindowReport(menuPid)}` : ''})`);
     await endNativeMenu();
   }
 }
@@ -199,8 +207,10 @@ export async function clickMenuItem(id, nth = 0) {
   const search = (await s.c.send('DOM.performSearch', { query: `id:${id}` })).result;
   let ok = false;
   if (search?.resultCount > nth) {
+    // (No result when the search is gone: the menu closed meanwhile.)
     const ids = (await s.c.send('DOM.getSearchResults', {
-      searchId: search.searchId, fromIndex: 0, toIndex: search.resultCount })).result.nodeIds;
+      searchId: search.searchId, fromIndex: 0, toIndex: search.resultCount })).result?.nodeIds ??
+        [];
     const node = s.byId.get(ids[nth]);
     if (node) { await click(s, node); ok = true; }
   }

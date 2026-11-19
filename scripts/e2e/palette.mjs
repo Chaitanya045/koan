@@ -100,8 +100,17 @@ async function pages() {
   return (await targets()).filter(t => t.type === 'page' && !t.url.includes('.top-chrome'));
 }
 
+// (undefined for a page that closed meanwhile: the list may still name a tab
+// that is closing, e.g. settingsShortcut()'s right after Target.closeTarget.
+// A page still listed that can't be reached is an error: Koan may be gone.)
 async function evalIn(page, expression) {
-  const c = await connect(page.webSocketDebuggerUrl);
+  let c;
+  try {
+    c = await connect(page.webSocketDebuggerUrl);
+  } catch (e) {
+    if (!(await targets()).some(t => t.id === page.id)) return undefined;
+    throw new Error(`${e.message}, the page ${page.url}`);
+  }
   const r = await c.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
   c.close();
   return r.result?.result?.value;
@@ -281,6 +290,9 @@ async function settingsShortcut(id) {
       `window.koanSettingsRoot?.querySelector('#shortcut-${id}')?.value`), Boolean);
   await b.send('Target.closeTarget', { targetId });
   b.close();
+  // Gone from the list before the checks look for the tab on screen.
+  await waitFor(async () => (await targets()).some(t => t.id === targetId), listed => !listed,
+                3000);
   return value;
 }
 
