@@ -15,10 +15,11 @@ const env = { ...process.env, HOME: AGENT_HOME, KOAN_USER_DATA_DIR: PROFILE };
 // Runs `koan args...`; resolves {code, out, err}. `whileRunning` runs once
 // the command started (e.g. to answer a dialog it waits for), with a
 // function that returns what the command printed so far; koan() resolves
-// once both are done.
-export function koan(args, { timeout = 60000, whileRunning } = {}) {
+// once both are done. `extraEnv` adds to its environment (PATH for a stand-in
+// agent-browser).
+export function koan(args, { timeout = 60000, whileRunning, extraEnv } = {}) {
   return new Promise(resolve => {
-    const child = spawn(CLI, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(CLI, args, { env: { ...env, ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '';
     child.stdout.on('data', d => (out += d));
     child.stderr.on('data', d => (err += d));
@@ -32,6 +33,8 @@ export function koan(args, { timeout = 60000, whileRunning } = {}) {
     });
   });
 }
+// Starts `koan args...` that runs until it is killed (`koan watch`).
+export const spawnKoan = args => spawn(CLI, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
 export const brief = r => `exit ${r.code}; ${(r.err || r.out).split('\n')[0].slice(0, 160)}`;
 
 // Presses the Allow button of the dialog whose title matches `title`, once

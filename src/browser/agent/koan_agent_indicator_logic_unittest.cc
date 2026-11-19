@@ -65,6 +65,16 @@ TEST(KoanAgentIndicatorLogicTest, ChipSaysWhoIsConnected) {
             u"2 agents connected");
 }
 
+// The tooltip says while Koan keeps the display awake for an agent; the chip's
+// text does not change, and with no agent there is nothing to say.
+TEST(KoanAgentIndicatorLogicTest, ChipSaysWhenTheDisplayIsKeptAwake) {
+  const IndicatorContent awake = IndicatorFor(Claude(), {}, {}, true);
+  EXPECT_EQ(awake.chip.accessible_name,
+            u"Claude Code is connected; keeping the display awake");
+  EXPECT_EQ(awake.chip.text, IndicatorFor(Claude(), {}, {}).chip.text);
+  EXPECT_EQ(IndicatorFor({}, {}, {}, true).chip, ChipContent());
+}
+
 // The user's complaint: the pill showed on every tab. A tab no agent holds
 // gets the chip only.
 TEST(KoanAgentIndicatorLogicTest, AnotherTabShowsTheChipNotThePill) {

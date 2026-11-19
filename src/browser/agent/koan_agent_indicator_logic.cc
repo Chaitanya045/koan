@@ -89,7 +89,8 @@ PillContent TabPill(const IndicatorTab& tab) {
 
 IndicatorContent IndicatorFor(const std::vector<IndicatorClient>& clients,
                               const std::vector<IndicatorTab>& tabs,
-                              const std::vector<IndicatorPrompt>& prompts) {
+                              const std::vector<IndicatorPrompt>& prompts,
+                              bool keeping_display_awake) {
   IndicatorContent content;
   const std::vector<const IndicatorClient*> distinct = Distinct(clients);
   if (distinct.empty()) {
@@ -154,6 +155,9 @@ IndicatorContent IndicatorFor(const std::vector<IndicatorClient>& clients,
         &chip.accessible_name,
         {u"; ", count, chip.waiting == 1 ? u" tab waits" : u" tabs wait",
          u" for you"});
+  }
+  if (keeping_display_awake) {
+    base::StrAppend(&chip.accessible_name, {u"; keeping the display awake"});
   }
   return content;
 }

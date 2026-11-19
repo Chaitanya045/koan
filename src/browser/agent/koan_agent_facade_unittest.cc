@@ -5,6 +5,7 @@
 #include "koan/browser/agent/koan_agent_facade.h"
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -17,6 +18,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "koan/browser/agent/koan_agent_registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,6 +62,24 @@ class FakeBackend : public FacadeBackend {
     EXPECT_EQ(sent.back().command.FindInt("id"), command_id);
   }
   void CommandAnswered(const std::string& target_id) override { ++answered; }
+  void HoldTab(const std::string& target_id, bool hold) override {
+    holds[target_id] += hold ? 1 : -1;
+    EXPECT_GE(holds[target_id], 0) << target_id;
+  }
+  std::optional<LowPowerLimits> KeepTabAlive(
+      const std::string& target_id,
+      const std::string& key,
+      base::TimeDelta duration) override {
+    if (low_power && duration > base::Seconds(60)) {
+      return LowPowerLimits{.max_leases = 2, .max_keep_alive_seconds = 60};
+    }
+    if (duration.is_zero()) {
+      keep_alives.erase(key);
+    } else {
+      keep_alives[key] = {target_id, duration};
+    }
+    return std::nullopt;
+  }
   void OpenTab(const std::string& task,
                const std::string& saved_container,
                const GURL& url,
@@ -126,6 +146,14 @@ class FakeBackend : public FacadeBackend {
   std::vector<std::string> resume_asked;
   std::vector<AuditRecord> audits;
   int answered = 0;
+  // Screencast holds per tab, and the keep-alives by key.
+  std::map<std::string, int> holds;
+  struct KeptAlive {
+    std::string target_id;
+    base::TimeDelta duration;
+  };
+  std::map<std::string, KeptAlive> keep_alives;
+  bool low_power = false;
 };
 
 class KoanAgentFacadeTest : public testing::Test {
@@ -947,6 +975,209 @@ TEST_F(KoanAgentFacadeTest, ACommandThePauseOvertookIsNotSent) {
   registry_.Pause("T1");
   Send(2, "Page.captureScreenshot", base::DictValue(), session);
   EXPECT_TRUE(facade_.MayDispatch(*backend_.sent.back().command.FindInt("id")));
+}
+
+// --- Keeping a tab rendering (design section 8) ------------------------------
+
+// A screencast holds the tab's lease from Page.startScreencast until
+// Page.stopScreencast; a second start is not a second hold, and a stop with
+// none open releases nothing.
+TEST_F(KoanAgentFacadeTest, AScreencastHoldsTheTabUntilItStops) {
+  const std::string session = AttachTo("T1");
+  Send(1, "Page.startScreencast", base::DictValue().Set("format", "jpeg"),
+       session);
+  EXPECT_EQ(backend_.holds["T1"], 1);
+  AnswerLast(base::DictValue());
+  Send(2, "Page.startScreencast", base::DictValue(), session);
+  EXPECT_EQ(backend_.holds["T1"], 1);
+  Send(3, "Page.stopScreencast", base::DictValue(), session);
+  EXPECT_EQ(backend_.holds["T1"], 0);
+  Send(4, "Page.stopScreencast", base::DictValue(), session);
+  EXPECT_EQ(backend_.holds["T1"], 0);
+}
+
+TEST_F(KoanAgentFacadeTest, AFailedScreencastReleasesItsHold) {
+  const std::string session = AttachTo("T1");
+  Send(1, "Page.startScreencast", base::DictValue(), session);
+  ASSERT_EQ(backend_.holds["T1"], 1);
+  base::DictValue answer;
+  answer.Set("id", *backend_.sent.back().command.FindInt("id"));
+  answer.Set("error",
+             base::DictValue().Set("code", -32000).Set("message", "no"));
+  facade_.OnTabMessage("T1", *base::WriteJson(answer));
+  EXPECT_EQ(backend_.holds["T1"], 0);
+  EXPECT_TRUE(Answer(1)->FindDict("error"));
+}
+
+// The release paths of a screencast's hold: the agent detaches its session,
+// content detaches the client (the tab navigated where the agent may not
+// follow), the tab leaves the agent (closed, Stop, the task ended).
+TEST_F(KoanAgentFacadeTest, AScreencastEndsWithItsSession) {
+  std::string session = AttachTo("T1");
+  Send(1, "Page.startScreencast", base::DictValue(), session);
+  Send(2, "Target.detachFromTarget",
+       base::DictValue().Set("sessionId", session));
+  EXPECT_EQ(backend_.holds["T1"], 0);
+
+  session = AttachTo("T1");
+  Send(3, "Page.startScreencast", base::DictValue(), session);
+  ASSERT_EQ(backend_.holds["T1"], 1);
+  facade_.OnTabDetached("T1");
+  EXPECT_EQ(backend_.holds["T1"], 0);
+
+  session = AttachTo("T1");
+  Send(4, "Page.startScreencast", base::DictValue(), session);
+  ASSERT_EQ(backend_.holds["T1"], 1);
+  registry_.Remove("T1");
+  facade_.OnTargetRemoved("T1");
+  EXPECT_EQ(backend_.holds["T1"], 0);
+}
+
+// The connection goes (the agent disconnected or was revoked, Agent ready
+// off): every screencast hold and keep-alive of it ends before its clients
+// are detached.
+TEST_F(KoanAgentFacadeTest, EverythingHeldEndsWithTheConnection) {
+  auto facade = std::make_unique<CdpFacade>(
+      8, "alice", &registry_, &backend_, &clock_,
+      base::BindLambdaForTesting(
+          [this](std::string json) { OnSend(std::move(json)); }));
+  AgentMessage attach;
+  attach.id = 1;
+  attach.method = "Target.attachToTarget";
+  attach.params = base::DictValue().Set("targetId", "T1").Set("flatten", true);
+  attach.client_id = "alice";
+  facade->OnClientMessage(std::move(attach));
+  const std::string* session =
+      Answer(1)->FindStringByDottedPath("result.sessionId");
+  ASSERT_TRUE(session);
+  AgentMessage start;
+  start.id = 2;
+  start.method = "Page.startScreencast";
+  start.session_id = *session;
+  start.client_id = "alice";
+  facade->OnClientMessage(std::move(start));
+  AgentMessage keep;
+  keep.id = 3;
+  keep.method = "Koan.keepAlive";
+  keep.params = base::DictValue().Set("targetId", "T1").Set("seconds", 30);
+  keep.client_id = "alice";
+  facade->OnClientMessage(std::move(keep));
+  ASSERT_EQ(backend_.holds["T1"], 1);
+  ASSERT_EQ(backend_.keep_alives.size(), 1u);
+
+  facade.reset();
+  EXPECT_EQ(backend_.holds["T1"], 0);
+  EXPECT_TRUE(backend_.keep_alives.empty());
+  EXPECT_FALSE(backend_.attached.contains("T1"));
+}
+
+TEST_F(KoanAgentFacadeTest, KeepAliveIsGrantedRenewedAndEnded) {
+  Send(1, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 30));
+  const std::string* hold = Answer(1)->FindStringByDottedPath("result.holdId");
+  ASSERT_TRUE(hold);
+  const std::string hold_id = *hold;
+  EXPECT_EQ(backend_.keep_alives[hold_id].target_id, "T1");
+  EXPECT_EQ(backend_.keep_alives[hold_id].duration, base::Seconds(30));
+  // No session needed: a CLI waiting on the tab may hold it on its own.
+  EXPECT_FALSE(backend_.attached.contains("T1"));
+
+  // A second one is a hold of its own, so ending one does not end the other.
+  Send(2, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 30));
+  const std::string other = *Answer(2)->FindStringByDottedPath("result.holdId");
+  EXPECT_NE(other, hold_id);
+
+  clock_.Advance(base::Seconds(20));
+  Send(3, "Koan.keepAlive",
+       base::DictValue().Set("holdId", hold_id).Set("seconds", 45.5));
+  EXPECT_EQ(*Answer(3)->FindStringByDottedPath("result.holdId"), hold_id);
+  EXPECT_EQ(backend_.keep_alives[hold_id].duration, base::Seconds(45.5));
+
+  Send(4, "Koan.keepAlive",
+       base::DictValue().Set("holdId", hold_id).Set("seconds", 0));
+  EXPECT_TRUE(Answer(4)->FindDict("result"));
+  EXPECT_FALSE(backend_.keep_alives.contains(hold_id));
+  EXPECT_TRUE(backend_.keep_alives.contains(other));
+  // Ended: it cannot be renewed.
+  Send(5, "Koan.keepAlive",
+       base::DictValue().Set("holdId", hold_id).Set("seconds", 10));
+  EXPECT_EQ(ErrorCode(5), "Koan.invalidParams");
+  EXPECT_FALSE(backend_.keep_alives.contains(hold_id));
+}
+
+TEST_F(KoanAgentFacadeTest, KeepAliveIsRefusedWhereItMustBe) {
+  // Not the client's tab, or none.
+  Send(1, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T2").Set("seconds", 30));
+  EXPECT_EQ(ErrorCode(1), "Koan.unknownTarget");
+  Send(2, "Koan.keepAlive", base::DictValue().Set("seconds", 30));
+  EXPECT_EQ(ErrorCode(2), "Koan.unknownTarget");
+  // Seconds out of range, or missing.
+  for (int id : {3, 4, 5}) {
+    base::DictValue params;
+    params.Set("targetId", "T1");
+    if (id == 3) {
+      params.Set("seconds", -1);
+    } else if (id == 4) {
+      params.Set("seconds", 601);
+    }
+    Send(id, "Koan.keepAlive", std::move(params));
+    EXPECT_EQ(ErrorCode(id), "Koan.invalidParams") << id;
+  }
+  // Someone else's hold id is not found by guessing.
+  Send(6, "Koan.keepAlive",
+       base::DictValue().Set("holdId", "1.1").Set("seconds", 30));
+  EXPECT_EQ(ErrorCode(6), "Koan.invalidParams");
+  EXPECT_TRUE(backend_.keep_alives.empty());
+
+  // On battery in Low Power Mode: refused above 60 s, with the event.
+  backend_.low_power = true;
+  Send(7, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 120));
+  EXPECT_EQ(ErrorCode(7), "Koan.lowPower");
+  ASSERT_EQ(Events("Koan.lowPower").size(), 1u);
+  const base::DictValue& event = *Events("Koan.lowPower")[0];
+  EXPECT_EQ(*event.FindStringByDottedPath("params.reason"),
+            "battery-low-power-mode");
+  EXPECT_EQ(event.FindIntByDottedPath("params.maxLeases"), 2);
+  EXPECT_EQ(event.FindIntByDottedPath("params.maxKeepAliveSeconds"), 60);
+  EXPECT_TRUE(backend_.keep_alives.empty());
+  Send(8, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 60));
+  EXPECT_TRUE(Answer(8)->FindDict("result"));
+}
+
+// At most 16 open per connection; one that lapsed, or whose tab went, no
+// longer counts.
+TEST_F(KoanAgentFacadeTest, KeepAlivesAreLimited) {
+  for (int id = 1; id <= 16; ++id) {
+    Send(id, "Koan.keepAlive",
+         base::DictValue().Set("targetId", "T1").Set("seconds", 10));
+    ASSERT_TRUE(Answer(id)->FindDict("result")) << id;
+  }
+  Send(17, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 10));
+  EXPECT_EQ(ErrorCode(17), "Koan.tooManyHolds");
+  clock_.Advance(base::Seconds(10));
+  Send(18, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 600));
+  EXPECT_TRUE(Answer(18)->FindDict("result"));
+
+  registry_.AddAgentTab("T3", "alice", "task");
+  backend_.tabs["T3"] = TabFacts{"Third", GURL("https://example.com/c")};
+  for (int id = 19; id <= 33; ++id) {
+    Send(id, "Koan.keepAlive",
+         base::DictValue().Set("targetId", "T3").Set("seconds", 600));
+  }
+  Send(34, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 10));
+  EXPECT_EQ(ErrorCode(34), "Koan.tooManyHolds");
+  registry_.Remove("T3");
+  facade_.OnTargetRemoved("T3");
+  Send(35, "Koan.keepAlive",
+       base::DictValue().Set("targetId", "T1").Set("seconds", 10));
+  EXPECT_TRUE(Answer(35)->FindDict("result"));
 }
 
 }  // namespace

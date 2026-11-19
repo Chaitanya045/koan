@@ -73,11 +73,14 @@ source_set("limits") {
   public_deps = [ "//base" ]
 }
 
-# When an agent tab holds the visible capturer of its keep-alive lease.
+# When an agent tab holds the visible capturer of its keep-alive lease, and
+# which power assertion Koan takes while an agent is at work.
 source_set("lease_scheduler") {
   sources = [
     "koan_agent_lease_scheduler.cc",
     "koan_agent_lease_scheduler.h",
+    "koan_agent_wake_policy.cc",
+    "koan_agent_wake_policy.h",
   ]
   public_deps = [
     ":limits",
@@ -232,6 +235,8 @@ if (is_posix) {
       "//base",
       "//components/prefs",
       "//content/public/browser",
+      "//mojo/public/cpp/bindings",
+      "//services/device/public/mojom",
     ]
     deps = [
       ":auth",
@@ -396,6 +401,7 @@ test("koan_agent_unittests") {
     "koan_agent_redact_unittest.cc",
     "koan_agent_registry_unittest.cc",
     "koan_agent_session_unittest.cc",
+    "koan_agent_wake_policy_unittest.cc",
   ]
   deps = [
     ":admission",

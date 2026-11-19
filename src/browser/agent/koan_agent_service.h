@@ -71,6 +71,11 @@ class AgentControlService {
   bool listening() const { return listening_; }
   const std::vector<ConnectedClient>& clients() const { return clients_; }
 
+  // Koan holds the display-sleep assertion for an agent at work (the
+  // `keep-awake` capability; design section 8), which the chip's tooltip
+  // says.
+  bool keeping_display_awake() const;
+
   // "Stop all agents": every connection is closed and every pairing
   // forgotten; the gateway keeps listening if Agent ready is on.
   void StopAllAgents();

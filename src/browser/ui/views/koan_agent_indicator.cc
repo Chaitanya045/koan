@@ -524,7 +524,9 @@ void KoanAgentIndicator::Update() {
   }
   const Snapshot snapshot = TakeSnapshot();
   IndicatorContent content = koan::agent::IndicatorFor(
-      snapshot.clients, snapshot.tabs, snapshot.prompts);
+      snapshot.clients, snapshot.tabs, snapshot.prompts,
+      AgentControlService::Get() &&
+          AgentControlService::Get()->keeping_display_awake());
   ShowEventToasts(koan::agent::EventStateFor(snapshot.clients, snapshot.tabs));
 
   std::set<const content::WebContents*> marked;

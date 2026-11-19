@@ -11,6 +11,8 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/token.h"
 #include "koan/browser/agent/koan_agent_contexts.h"
@@ -74,6 +76,8 @@ struct CdpFacade::TabSession {
   std::string parent_session_id;
   std::string child_target_id;
   std::string child_type;
+  // Page.startScreencast was sent and not stopped: the tab's lease is held.
+  bool screencast = false;
   bool is_child() const { return !child_session.empty(); }
 };
 
@@ -81,6 +85,11 @@ namespace {
 
 // Children per tab the facade keeps (a page can make frames in a loop).
 constexpr size_t kMaxChildSessions = 64;
+
+// Koan.keepAlive: open keep-alives per connection, and the longest one
+// (LeaseScheduler::kMaxKeepAlive).
+constexpr size_t kMaxKeepAlives = 16;
+constexpr int kMaxKeepAliveSeconds = 600;
 
 // The child targets an agent may have: frames and the page's own workers.
 // Shared and service workers outlive the tab and serve the user's other tabs
@@ -118,8 +127,17 @@ CdpFacade::CdpFacade(uint64_t connection_id,
       send_(std::move(send)) {}
 
 CdpFacade::~CdpFacade() {
-  // The backend's clients go with the connection: detach them, so that no
-  // lease or command is left behind.
+  // The backend's clients go with the connection: end its keep-alives and
+  // screencasts and detach them, so that no lease, hold or command is left
+  // behind.
+  for (const auto& [hold_id, hold] : keep_alives_) {
+    backend_->KeepTabAlive(hold.target_id, hold_id, base::TimeDelta());
+  }
+  for (const auto& [session_id, session] : sessions_) {
+    if (session->screencast) {
+      backend_->HoldTab(session->target_id, false);
+    }
+  }
   for (const auto& [target_id, session_id] : session_by_target_) {
     backend_->DetachTab(target_id);
   }
@@ -292,6 +310,22 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
   if (!Forward(message.id, session, method, summary,
                std::move(message.params))) {
     deny("Koan.invalidParams", "the parameters could not be encoded");
+    return;
+  }
+  // A screencast keeps the tab rendering until it stops (design section 8):
+  // without it the frames stop with the capturer, 3 s after the last command.
+  if (method == "Page.startScreencast" && !session.screencast) {
+    session.screencast = true;
+    backend_->HoldTab(session.target_id, true);
+  } else if (method == "Page.stopScreencast") {
+    EndScreencastHold(session);
+  }
+}
+
+void CdpFacade::EndScreencastHold(TabSession& session) {
+  if (session.screencast) {
+    session.screencast = false;
+    backend_->HoldTab(session.target_id, false);
   }
 }
 
@@ -403,6 +437,8 @@ void CdpFacade::HandleKoanMethod(AgentMessage& message) {
     Release(message);
   } else if (message.method == "Koan.resume") {
     Resume(message);
+  } else if (message.method == "Koan.keepAlive") {
+    KeepAlive(message);
   } else {
     AuditCommand(message.method, "", "", AuditOutcome::kDenied,
                  base::TimeDelta());
@@ -827,6 +863,88 @@ void CdpFacade::Resume(const AgentMessage& message) {
         base::DictValue().Set("state", "paused").Set("asked", true));
 }
 
+void CdpFacade::KeepAlive(const AgentMessage& message) {
+  const std::string* hold_param = message.params.FindString("holdId");
+  const std::string* target_param = message.params.FindString("targetId");
+  const std::optional<double> seconds = message.params.FindDouble("seconds");
+  auto deny = [&](std::string_view target_id, std::string_view code,
+                  std::string_view text) {
+    AuditCommand(message.method, target_id, "", AuditOutcome::kDenied,
+                 base::TimeDelta());
+    ReplyError(message.id, message.session_id, code, text);
+  };
+  if (!seconds || !(*seconds >= 0) || *seconds > kMaxKeepAliveSeconds) {
+    deny(target_param ? *target_param : "", "Koan.invalidParams",
+         "seconds must be 0 to 600 (0 ends the keep-alive)");
+    return;
+  }
+  const base::TimeTicks now = tick_clock_->NowTicks();
+  // What lapsed by itself no longer counts.
+  std::erase_if(keep_alives_,
+                [&](const auto& item) { return item.second.until <= now; });
+
+  std::string hold_id;
+  std::string target_id;
+  if (hold_param) {
+    auto it = keep_alives_.find(*hold_param);
+    if (it == keep_alives_.end() ||
+        (target_param && *target_param != it->second.target_id)) {
+      deny(target_param ? *target_param : "", "Koan.invalidParams",
+           "no keep-alive with this holdId (it ended, or lapsed); ask for a "
+           "new one with targetId");
+      return;
+    }
+    hold_id = it->first;
+    target_id = it->second.target_id;
+  } else {
+    if (!target_param || !InScope(*target_param)) {
+      deny(target_param ? *target_param : "", "Koan.unknownTarget",
+           "no target with this id");
+      return;
+    }
+    if (*seconds == 0) {
+      // Nothing to end.
+      Reply(message.id, message.session_id, base::DictValue());
+      return;
+    }
+    if (keep_alives_.size() >= kMaxKeepAlives) {
+      deny(*target_param, "Koan.tooManyHolds",
+           "this connection keeps as many tabs alive as it may; end one "
+           "(seconds 0) first");
+      return;
+    }
+    hold_id = base::StrCat({base::NumberToString(connection_id_), ".",
+                            base::NumberToString(next_hold_++)});
+    target_id = *target_param;
+  }
+
+  const base::TimeDelta duration = base::Seconds(*seconds);
+  if (std::optional<FacadeBackend::LowPowerLimits> refused =
+          backend_->KeepTabAlive(target_id, hold_id, duration)) {
+    deny(target_id, "Koan.lowPower",
+         base::StrCat({"on battery in Low Power Mode a tab is kept alive for "
+                       "at most ",
+                       base::NumberToString(refused->max_keep_alive_seconds),
+                       " s; ask for less, or plug in"}));
+    base::DictValue params;
+    params.Set("reason", "battery-low-power-mode");
+    params.Set("maxLeases", refused->max_leases);
+    params.Set("maxKeepAliveSeconds", refused->max_keep_alive_seconds);
+    SendEvent("Koan.lowPower", std::move(params), std::nullopt);
+    return;
+  }
+  AuditCommand(message.method, target_id, "", AuditOutcome::kOk,
+               base::TimeDelta());
+  if (duration.is_zero()) {
+    keep_alives_.erase(hold_id);
+    Reply(message.id, message.session_id, base::DictValue());
+    return;
+  }
+  keep_alives_[hold_id] = {target_id, now + duration};
+  Reply(message.id, message.session_id,
+        base::DictValue().Set("holdId", hold_id).Set("seconds", *seconds));
+}
+
 void CdpFacade::OnTargetStateChanged(const std::string& target_id,
                                      std::string_view event,
                                      std::string_view reason) {
@@ -937,6 +1055,8 @@ void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
   } else {
     session_by_target_.erase(session->target_id);
   }
+  // Its screencast stops with it.
+  EndScreencastHold(*session);
   // Commands in flight are answered: the tab will not.
   for (auto pending = pending_.begin(); pending != pending_.end();) {
     if (pending->second.session_id != session_id) {
@@ -1002,6 +1122,10 @@ void CdpFacade::OnTargetAdded(const std::string& target_id) {
 
 void CdpFacade::OnTargetRemoved(const std::string& target_id) {
   OnTabDetached(target_id);
+  // The tab's lease went with it, and its keep-alives with the lease.
+  std::erase_if(keep_alives_, [&](const auto& item) {
+    return item.second.target_id == target_id;
+  });
   if (discover_targets_) {
     base::DictValue params;
     params.Set("targetId", target_id);
@@ -1203,6 +1327,9 @@ void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
   }
   if (result && pending.method == "IO.close" && !pending.stream.empty()) {
     session.streams.Remove(pending.stream);
+  }
+  if (!result && pending.method == "Page.startScreencast") {
+    EndScreencastHold(session);
   }
 
   if (!pending.client_message_id) {

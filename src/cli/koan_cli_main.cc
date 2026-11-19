@@ -55,6 +55,7 @@
 #include "koan/cli/koan_cli_batch.h"
 #include "koan/cli/koan_cli_client.h"
 #include "koan/cli/koan_cli_io.h"
+#include "koan/cli/koan_cli_keepalive.h"
 #include "koan/cli/koan_cli_protocol.h"
 #include "koan/cli/koan_cli_router.h"
 #include "koan/cli/koan_cli_settle.h"
@@ -2003,8 +2004,12 @@ bool WaitUntil(Link& link,
                std::string* line) {
   const base::TimeDelta wait = base::Seconds(command.timeout_seconds);
   const base::TimeTicks deadline = base::TimeTicks::Now() + wait;
+  // The tab keeps rendering while it is waited on, even between polls and
+  // with the user's window covered (design section 8).
+  TabKeepAlive keep_alive(link, target);
   std::string shows;
   while (true) {
+    keep_alive.RenewIfDue();
     if (std::optional<std::string> stop = gate.StopReason()) {
       *line = *stop;
       return false;
@@ -2573,13 +2578,52 @@ int RunOnHolder(Link& link, const Command& command) {
                  : exit_code;
     }
     case CommandKind::kWatch: {
+      std::optional<std::string> target;
+      if (!command.tab.empty()) {
+        target = ResolveTabId(link, command.tab, &exit_code);
+        if (!target) {
+          return exit_code;
+        }
+      }
       if (!Expect(link.Call("Hold.watch", base::DictValue()), &exit_code)) {
         return exit_code;
       }
-      while (std::optional<std::string> frame =
-                 link.channel().Read(base::TimeDelta::Max())) {
-        printf("%s\n", frame->c_str());
+      auto print = [](std::string_view json) {
+        printf("%.*s\n", static_cast<int>(json.size()), json.data());
         fflush(stdout);
+      };
+      // `koan watch <tab>`: the tab keeps rendering while it is watched, and
+      // the events that come while a renewal waits are printed too.
+      std::optional<TabKeepAlive> keep_alive;
+      if (target) {
+        keep_alive.emplace(link, *target,
+                           base::BindRepeating(
+                               [](decltype(print) print, const Message& event) {
+                                 base::DictValue json;
+                                 json.Set("method", event.method);
+                                 json.Set("params", event.params.Clone());
+                                 if (!event.session_id.empty()) {
+                                   json.Set("sessionId", event.session_id);
+                                 }
+                                 print(base::WriteJson(json).value_or("{}"));
+                               },
+                               print));
+      }
+      while (true) {
+        const base::TimeDelta timeout =
+            keep_alive
+                ? std::max(keep_alive->next_renewal() - base::TimeTicks::Now(),
+                           base::TimeDelta())
+                : base::TimeDelta::Max();
+        std::optional<std::string> frame = link.channel().Read(timeout);
+        if (frame) {
+          print(*frame);
+        } else if (link.closed()) {
+          break;
+        }
+        if (keep_alive) {
+          keep_alive->RenewIfDue();
+        }
       }
       return kOk;
     }

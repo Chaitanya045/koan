@@ -51,6 +51,8 @@ source_set("client") {
   sources = [
     "koan_cli_client.cc",
     "koan_cli_client.h",
+    "koan_cli_keepalive.cc",
+    "koan_cli_keepalive.h",
   ]
   public_deps = [
     ":cli_lib",

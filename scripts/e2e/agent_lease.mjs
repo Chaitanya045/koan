@@ -23,19 +23,30 @@
 // cap of 4 from local_state/agent_lease.json, halved on battery in Low Power
 // Mode: exactly that many live, the others' commands wait); the user's own
 // background tab with the same page, throttled throughout (the battery
-// guarantee). Other Desktops, a locked screen, display sleep and Low Power
-// Mode are scripts/mac/steps/agent_lease.md.
+// guarantee). Then the holds (the gaps #403 found), with Koan's
+// window covered: a screencast through koan-relay (agent-browser's way in;
+// a stand-in agent-browser takes the relay's URL) that is no longer acked,
+// and `koan watch <tab>`, each keep the tab rendering for more than 10 s
+// after the last command, and release it when they end (stopScreencast; the
+// watch killed, its keep-alive lapsing). `pmset -g assertions` shows Koan's
+// "Koan: an agent is working" assertion while a hold is on (display sleep,
+// or idle sleep only on battery in Low Power Mode) and not after, and the
+// chip's tooltip says "keeping the display awake". Last, Stop (the pill's
+// button) ends everything at once: the assertion goes, the screencast's
+// connection and the watch end, the agent's tabs close. Other Desktops, a
+// locked screen, display sleep and Low Power Mode are
+// scripts/mac/steps/agent_lease.md.
 // macOS only (the CLI's holder needs the Mac's peer resolver). Run by
 // scripts/mac/suite.sh.
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan } from './lib/agent.mjs';
-import { browserCall, check, decodePng, evalIn, finish, front, pages, sleep, waitFor }
+import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan, spawnKoan } from './lib/agent.mjs';
+import { browserCall, check, decodePng, evalIn, finish, front, pages, sleep, viewTree, waitFor }
     from './lib/koan.mjs';
-import { IS_MAC, KOAN_PID, alive, fatalInLog, realInput, realInputWhyNot, setWindowState, skip,
-         skipped, startServer, windowOf } from './lib/mac.mjs';
+import { IS_MAC, KOAN_PID, alive, fatalInLog, realInput, realInputWhyNot, rootMouse, rootOf,
+         setWindowState, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('the agent CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 if (!CLI || !fs.existsSync(CLI)) skip(`no koan CLI (KOAN_CLI=${CLI ?? ''})`);
@@ -304,6 +315,191 @@ async function releaseCase(name) {
 await liveCase('Background tab');
 await releaseCase('Release (3 s idle)');
 
+// --- The holds' tools. Koan's power assertions for agents, by type
+// (`pmset -g assertions` lists each with the reason it was taken with).
+const WAKE_REASON = 'Koan: an agent is working';
+function koanAssertions() {
+  try {
+    return execFileSync('pmset', ['-g', 'assertions'], { encoding: 'utf8' }).split('\n')
+        .filter(line => line.includes(`"${WAKE_REASON}"`))
+        .map(line => (line.match(/\b(Prevent\w+|NoIdleSleepAssertion|NoDisplaySleepAssertion)\b/) ?? [])[1]
+                     ?? 'unknown');
+  } catch {
+    return null;
+  }
+}
+let saving = false;
+try {
+  saving = /'Battery Power'/.test(execFileSync('pmset', ['-g', 'batt'], { encoding: 'utf8' })) &&
+           /lowpowermode\s+1/.test(execFileSync('pmset', ['-g'], { encoding: 'utf8' }));
+} catch {}
+// On battery in Low Power Mode: idle sleep only, never the display.
+const wantedAssertion = saving ? /PreventUserIdleSystemSleep|NoIdleSleep/
+                               : /PreventUserIdleDisplaySleep|NoDisplaySleep/;
+async function chipTooltip() {
+  const vs = await viewTree();
+  return vs.find(v => v.cls === 'KoanAgentChipButton' && v.shown)?.props.TooltipText ?? '';
+}
+function checkAssertionHeld(name) {
+  const held = koanAssertions();
+  check(`${name}: pmset shows Koan's assertion "${WAKE_REASON}" (${saving ? 'idle sleep only, ' +
+        'Low Power Mode on battery' : 'display sleep'})`,
+        !!held && held.some(type => wantedAssertion.test(type)) &&
+        (!saving || !held.some(type => /Display/.test(type))), `assertions: ${JSON.stringify(held)}`);
+}
+async function checkAssertionGone(name) {
+  // The assertion follows the 3 s hold-off; the 1 s tick adds up to a second.
+  const gone = await waitFor(() => koanAssertions()?.length === 0, 6000);
+  check(`${name}: pmset shows no Koan assertion any more`, !!gone,
+        `assertions: ${JSON.stringify(koanAssertions())}`);
+}
+// The page's rates over a window that starts `after` ms past the last
+// command and lasts `ms`.
+async function heldWindow(page, lastCommand, { after = 1000, ms = 11000 } = {}) {
+  await sleep(Math.max(0, lastCommand + after - Date.now()));
+  const from = Date.now();
+  await sleep(ms);
+  return rates(page, from, Date.now());
+}
+
+// koan-relay, as `koan agent-browser` starts it, with a stand-in
+// agent-browser that hands the test the relay's URL (AGENT_BROWSER_CDP; a
+// 0600 file, never printed). The relay is a client of its own: approved
+// once.
+const relay = await (async () => {
+  const bin = fs.mkdtempSync(path.join(AGENT_HOME, 'ab-'));
+  const urlFile = path.join(bin, 'cdp');
+  fs.writeFileSync(path.join(bin, 'agent-browser'),
+                   `#!/bin/sh\numask 077\nprintf %s "$AGENT_BROWSER_CDP" > '${urlFile}'\n`, { mode: 0o700 });
+  const relayClients = path.join(AGENT_HOME, '.koan', 'relay', 'clients');
+  const paired = fs.existsSync(relayClients) && fs.readdirSync(relayClients).length > 0;
+  let relayAllowed = paired;
+  const a = await koan(['agent-browser', '--session', 'lease', 'get', 'url'], {
+    timeout: 90000, extraEnv: { PATH: `${bin}:${process.env.PATH}` },
+    whileRunning: paired ? undefined : async printed => {
+      relayAllowed = await allow(/^Allow .*control Koan\?$/, printed);
+    } });
+  const url = fs.existsSync(urlFile) ? fs.readFileSync(urlFile, 'utf8').trim() : '';
+  fs.rmSync(urlFile, { force: true });
+  check('koan-relay: approved and started for the screencast cases (stand-in agent-browser)',
+        a.code === 0 && relayAllowed && /^ws:\/\/127\.0\.0\.1:/.test(url),
+        `${paired ? 'paired before' : allowWhy()}; ${brief(a)}`);
+  if (!url) return null;
+  // A CDP client over the relay's WebSocket (Node's own).
+  const ws = new WebSocket(url);
+  const opened = await new Promise(resolve => {
+    ws.onopen = () => resolve(true);
+    ws.onerror = () => resolve(false);
+  });
+  if (!opened) return null;
+  let nextId = 1;
+  const waiting = new Map(), listeners = [];
+  const state = { closed: false };
+  ws.onclose = () => { state.closed = true; };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.id && waiting.has(m.id)) {
+      waiting.get(m.id)(m);
+      waiting.delete(m.id);
+    } else if (m.method) {
+      for (const l of listeners) l(m);
+    }
+  };
+  const send = (method, params = {}, sessionId) => new Promise(resolve => {
+    const id = nextId++;
+    waiting.set(id, resolve);
+    ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
+    setTimeout(() => waiting.has(id) && (waiting.delete(id), resolve({ error: { message: 'timeout' } })),
+               30000);
+  });
+  return { ws, send, listeners, state };
+})();
+
+// A screencast of a new relay tab: started, its first two frames acked,
+// then nothing more is sent. Returns the tab's page, its session and when
+// the last command went.
+async function startScreencast(n) {
+  if (!relay) return null;
+  const created = await relay.send('Target.createTarget', { url: agentUrl(n), background: true });
+  const targetId = created.result?.targetId;
+  const attached = targetId && await relay.send('Target.attachToTarget', { targetId, flatten: true });
+  const sessionId = attached?.result?.sessionId;
+  const page = sessionId && await pageFor(agentUrl(n));
+  if (!page) return null;
+  let frames = 0, acked = 0, lastCommand = Date.now();
+  relay.listeners.push(m => {
+    if (m.method !== 'Page.screencastFrame' || m.sessionId !== sessionId) return;
+    frames++;
+    if (acked < 2) {
+      acked++;
+      lastCommand = Date.now();
+      relay.send('Page.screencastFrameAck', { sessionId: m.params.sessionId }, sessionId);
+    }
+  });
+  const started = await relay.send('Page.startScreencast', { format: 'jpeg', quality: 20 }, sessionId);
+  lastCommand = Date.now();
+  await waitFor(() => acked >= 2, 5000);
+  return { page, sessionId, started: !started.error, lastCommand: () => lastCommand,
+           frames: () => frames };
+}
+
+// Case: a screencast keeps the tab rendering with nothing sent for > 10 s.
+async function screencastCase(name) {
+  const sc = await startScreencast('s');
+  if (!sc?.started) {
+    check(`${name}: a screencast started over koan-relay`, false, relay ? 'no tab or no session' : 'no relay');
+    return;
+  }
+  const v = await heldWindow(sc.page, sc.lastCommand());
+  const ok = !!v && v.rafPerS > LIVE_PER_S && v.timersPerS > LIVE_PER_S;
+  check(`${name}: a screencast holds the tab: it renders for 11 s from 1 s after the last command ` +
+        `(rAF and timers > ${LIVE_PER_S}/s)`, ok,
+        `rAF ${fmt(v?.rafPerS)}/s, timers ${fmt(v?.timersPerS)}/s, longest frame gap ${v?.gap} ms, ` +
+        `${v?.visibility}`);
+  row(name, { raf: v?.rafPerS, timers: v?.timersPerS, ok });
+  checkAssertionHeld(name);
+  const tip = await chipTooltip();
+  check(`${name}: the chip's tooltip says "keeping the display awake"${saving ? ' (not in Low Power Mode)' : ''}`,
+        saving ? !/keeping the display awake/.test(tip) : /keeping the display awake/.test(tip), tip);
+  // Stopped: released after the hold-off.
+  await relay.send('Page.stopScreencast', {}, sc.sessionId);
+  await sleep(4500);
+  const i = await idle(sc.page, 4000);
+  const released = !!i.harness && i.harness.rafPerS < THROTTLED_RAF_PER_S &&
+                   i.harness.timersPerS < THROTTLED_TIMERS_PER_S;
+  check(`${name}: Page.stopScreencast releases it (throttled again after the hold-off)`, released,
+        `rAF ${fmt(i.harness?.rafPerS)}/s, timers ${fmt(i.harness?.timersPerS)}/s`);
+  row(`${name}, stopped`, { raf: i.harness?.rafPerS, timers: i.harness?.timersPerS, ok: released });
+  await checkAssertionGone(`${name}, stopped`);
+}
+
+// Case: `koan watch <tab>` keeps the tab rendering while it runs; killed,
+// its keep-alive lapses (at most 30 s: renewed every 10 s for 30 s).
+async function watchCase(name) {
+  const watch = spawnKoan(['watch', tabA]);
+  let said = '';
+  watch.stderr.on('data', d => (said += d));
+  // It resolves the tab and takes the keep-alive before it streams.
+  await sleep(2000);
+  const v = await heldWindow(agentA, Date.now() - 1000, { after: 1000, ms: 11000 });
+  const ok = !!v && v.rafPerS > LIVE_PER_S && v.timersPerS > LIVE_PER_S;
+  check(`${name}: \`koan watch <tab>\` holds the tab: it renders for 11 s with no command ` +
+        `(rAF and timers > ${LIVE_PER_S}/s)`, ok,
+        `rAF ${fmt(v?.rafPerS)}/s, timers ${fmt(v?.timersPerS)}/s, longest frame gap ${v?.gap} ms` +
+        `${said ? `; koan watch: ${said.split('\n')[0]}` : ''}`);
+  row(name, { raf: v?.rafPerS, timers: v?.timersPerS, ok });
+  checkAssertionHeld(name);
+  watch.kill('SIGKILL');
+  await sleep(31000);
+  const i = await idle(agentA, 4000);
+  const released = !!i.harness && i.harness.rafPerS < THROTTLED_RAF_PER_S &&
+                   i.harness.timersPerS < THROTTLED_TIMERS_PER_S;
+  check(`${name}: killed, its keep-alive lapses within 30 s (throttled again)`, released,
+        `rAF ${fmt(i.harness?.rafPerS)}/s, timers ${fmt(i.harness?.timersPerS)}/s`);
+  row(`${name}, lapsed`, { raf: i.harness?.rafPerS, timers: i.harness?.timersPerS, ok: released });
+  await checkAssertionGone(`${name}, lapsed`);
+}
+
 // --- 2 and 3: the window covered by another app's window, and minimised.
 // Both change what is on the screen: only with the Mac to itself.
 if (!realInput() || windowId === undefined) {
@@ -329,7 +525,11 @@ if (!realInput() || windowId === undefined) {
   const covered = cover && await waitFor(async () => await visibility(frontPage) === 'hidden', 8000);
   check('Covered window: another app\'s window covers Koan\'s (its shown tab went hidden)', !!covered,
         cover ? `the front tab is ${await visibility(frontPage)}` : 'the cover tool did not start');
-  if (covered) await liveCase('Covered window');
+  if (covered) {
+    await liveCase('Covered window');
+    await screencastCase('Covered window, screencast');
+    await watchCase('Covered window, koan watch');
+  }
   if (cover) {
     cover.stdin.end();
     cover.kill('SIGTERM');
@@ -410,10 +610,42 @@ if (!realInput() || windowId === undefined) {
   row('user\'s tab, whole test', { raf: u?.rafPerS, timers: u?.timersPerS, ok });
 }
 
-// --- End: the task's tabs close; Koan is fine.
-r = await koan(['end']);
-const left = await waitFor(async () => !(await pages()).some(p => p.url.startsWith(server.url('/lease'))), 8000);
-check('koan end: the agent\'s tabs closed', r.code === 0 && left, brief(r));
+// --- End: Stop (the pill's button on the agent's tab) while a screencast
+// and a watch hold tabs: everything is released at once.
+{
+  const sc = await startScreencast('stop');
+  const watch = spawnKoan(['watch', tabA]);
+  let watchEnded = false;
+  watch.on('close', () => (watchEnded = true));
+  await sleep(2500);
+  check('Stop: before it, Koan holds its assertion for the screencast and the watch',
+        (koanAssertions() ?? []).length > 0, `assertions: ${JSON.stringify(koanAssertions())}`);
+  await front(agentA);
+  // The pill's widgets are made as the tab shows; read the tree once settled.
+  await sleep(1500);
+  const vs = await viewTree();
+  const pill = vs.find(v => v.cls === 'KoanAgentIndicatorView' && v.shown);
+  const stop = pill && vs.find(v => v.widget === pill.widget && v.shown && v.cls === 'LabelButton' &&
+                                   v.props.Text === 'Stop');
+  if (stop) {
+    const root = rootOf({ views: vs.filter(v => v.widget === stop.widget) });
+    await rootMouse(root, ['mousePressed', 'mouseReleased'], stop.ax + stop.w / 2, stop.ay + stop.h / 2);
+  }
+  check('Stop: the pill on the agent\'s tab has Stop, and it was pressed', !!stop, pill ? 'no Stop' : 'no pill');
+  // No lease is left: no hold-off.
+  const gone = await waitFor(() => koanAssertions()?.length === 0, 3000);
+  check('Stop: the assertion goes at once', !!gone, `assertions: ${JSON.stringify(koanAssertions())}`);
+  const closed = await waitFor(async () =>
+    !(await pages()).some(p => p.url.startsWith(server.url('/lease'))), 8000);
+  check('Stop: the agents\' tabs closed (nothing of theirs renders any more)', !!closed,
+        (await pages()).filter(p => p.url.startsWith(server.url('/lease'))).map(p => p.url).join(' '));
+  await waitFor(() => relay?.state.closed !== false && watchEnded, 8000);
+  check('Stop: the screencast\'s connection (koan-relay) and `koan watch` ended',
+        (!relay || relay.state.closed) && watchEnded && !!sc,
+        `relay closed: ${relay?.state.closed}, watch ended: ${watchEnded}, screencast: ${!!sc?.started}`);
+  if (!watchEnded) watch.kill('SIGKILL');
+  row('Stop: assertion gone, tabs closed', { ok: !!gone && !!closed });
+}
 check('Koan alive, nothing fatal in its log', await alive() && !fatalInLog(), fatalInLog());
 
 console.log('\nSUMMARY  case | screenshots differ | rAF/s | timers/s | renderer CPU % | verdict');

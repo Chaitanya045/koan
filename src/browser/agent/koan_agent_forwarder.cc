@@ -243,6 +243,39 @@ class AgentForwarder::Connection final : public FacadeBackend {
     }
   }
 
+  void HoldTab(const std::string& target_id, bool hold) override {
+    // On the tab's client, so that it ends with the client whatever happens.
+    auto it = clients_.find(target_id);
+    if (it == clients_.end()) {
+      return;
+    }
+    if (hold) {
+      it->second->Hold();
+    } else {
+      it->second->Release();
+    }
+  }
+
+  std::optional<LowPowerLimits> KeepTabAlive(
+      const std::string& target_id,
+      const std::string& key,
+      base::TimeDelta duration) override {
+    // The lease ends the keep-alive with the tab's attachment; the facade
+    // ends it with the connection.
+    content::WebContents* contents = forwarder_->ContentsFor(target_id);
+    if (!contents) {
+      return std::nullopt;
+    }
+    std::optional<LeaseScheduler::LowPowerRefusal> refused =
+        AgentLeaseManager::Get().KeepAlive(contents, key, duration);
+    if (!refused) {
+      return std::nullopt;
+    }
+    return LowPowerLimits{
+        .max_leases = refused->max_leases,
+        .max_keep_alive_seconds = refused->max_keep_alive_seconds};
+  }
+
   void OpenTab(const std::string& task,
                const std::string& saved_container,
                const GURL& url,
@@ -451,6 +484,9 @@ void AgentForwarder::OnClientMessage(uint64_t connection_id,
                                      AgentMessage message) {
   if (Connection* connection =
           ConnectionFor(connection_id, message.client_id)) {
+    // Every message carries what the user allows the client now.
+    AgentLeaseManager::Get().SetKeepAwake(message.client_id,
+                                          message.capabilities.keep_awake);
     connection->facade().OnClientMessage(std::move(message));
   }
 }
@@ -484,6 +520,9 @@ void AgentForwarder::Reset(bool end_tasks) {
   }
   for (const std::string& target_id : targets) {
     RemoveTab(target_id, /*destroyed=*/false);
+  }
+  for (const auto& [client_id, label] : labels_) {
+    AgentLeaseManager::Get().ForgetClient(client_id);
   }
   labels_.clear();
   std::map<std::string, std::map<std::string, std::string>, std::less<>> tasks =
@@ -545,6 +584,7 @@ void AgentForwarder::EndTask(const std::string& client_id,
 }
 
 void AgentForwarder::EndClient(const std::string& client_id) {
+  AgentLeaseManager::Get().ForgetClient(client_id);
   for (const std::string& target_id : registry_.TargetsFor(client_id)) {
     RemoveTab(target_id, /*destroyed=*/false);
   }

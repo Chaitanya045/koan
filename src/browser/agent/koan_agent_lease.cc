@@ -17,11 +17,13 @@
 #include "components/performance_manager/public/decorators/page_live_state_decorator.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/device_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/buildflags.h"
 #include "koan/browser/agent/koan_agent_limits.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/koan_prefs.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace koan::agent {
@@ -256,6 +258,7 @@ void AgentLeaseManager::EndCommand(content::WebContents* contents) {
   if (AgentTabLease* lease =
           contents ? AgentTabLease::FromWebContents(contents) : nullptr) {
     scheduler_->EndCommand(lease->lease_id(), base::TimeTicks::Now());
+    UpdateWake();
   }
 }
 
@@ -282,11 +285,13 @@ void AgentLeaseManager::EndHold(content::WebContents* contents) {
   if (AgentTabLease* lease =
           contents ? AgentTabLease::FromWebContents(contents) : nullptr) {
     scheduler_->EndHold(lease->lease_id(), base::TimeTicks::Now());
+    UpdateWake();
   }
 }
 
 std::optional<LeaseScheduler::LowPowerRefusal> AgentLeaseManager::KeepAlive(
     content::WebContents* contents,
+    const std::string& key,
     base::TimeDelta duration) {
   AgentTabLease* lease =
       contents ? AgentTabLease::FromWebContents(contents) : nullptr;
@@ -294,7 +299,7 @@ std::optional<LeaseScheduler::LowPowerRefusal> AgentLeaseManager::KeepAlive(
     return std::nullopt;
   }
   LeaseScheduler::Changes changes;
-  auto refusal = scheduler_->KeepAlive(lease->lease_id(), duration,
+  auto refusal = scheduler_->KeepAlive(lease->lease_id(), key, duration,
                                        base::TimeTicks::Now(), changes);
   Apply(std::move(changes));
   return refusal;
@@ -312,6 +317,24 @@ std::optional<LeaseScheduler::LowPowerRefusal> AgentLeaseManager::SetLiveAlways(
   auto refusal = scheduler_->SetLiveAlways(lease->lease_id(), live, changes);
   Apply(std::move(changes));
   return refusal;
+}
+
+void AgentLeaseManager::SetKeepAwake(const std::string& client_id,
+                                     bool keep_awake) {
+  const bool changed = keep_awake ? keep_awake_.insert(client_id).second
+                                  : keep_awake_.erase(client_id) > 0;
+  if (changed) {
+    UpdateWake();
+  }
+}
+
+void AgentLeaseManager::ForgetClient(const std::string& client_id) {
+  SetKeepAwake(client_id, false);
+}
+
+void AgentLeaseManager::SetWakeChangedCallback(
+    base::RepeatingClosure callback) {
+  on_wake_changed_ = std::move(callback);
 }
 
 bool AgentLeaseManager::IsAgentTab(content::WebContents* contents) {
@@ -356,6 +379,7 @@ void AgentLeaseManager::Apply(LeaseScheduler::Changes changes) {
       it->second->SetCapturing(true);
     }
   }
+  UpdateWake();
 }
 
 void AgentLeaseManager::OnTick() {
@@ -386,6 +410,48 @@ void AgentLeaseManager::StartOrStopTicking() {
     tick_.Start(FROM_HERE, base::Seconds(1),
                 base::BindRepeating(&AgentLeaseManager::OnTick,
                                     base::Unretained(this)));
+  }
+}
+
+void AgentLeaseManager::UpdateWake() {
+  const base::TimeTicks now = base::TimeTicks::Now();
+  WakeInputs inputs{.leased = !leases_.empty(), .power = scheduler_->power()};
+  for (const auto& [id, lease] : leases_) {
+    if (scheduler_->IsActive(id, now)) {
+      inputs.active = true;
+      inputs.keep_awake |= keep_awake_.contains(lease->client_id());
+    }
+  }
+  const WakeBlock block = wake_policy_.Update(inputs, now);
+  if (block == wake_held_) {
+    return;
+  }
+  const bool display_changed = (block == WakeBlock::kDisplaySleep) !=
+                               (wake_held_ == WakeBlock::kDisplaySleep);
+  wake_held_ = block;
+  if (wake_lock_) {
+    wake_lock_->CancelWakeLock();
+    wake_lock_.reset();
+  }
+  if (block != WakeBlock::kNone) {
+    // The device service's WakeLock is Chromium's PowerSaveBlocker (on macOS
+    // an IOPMAssertion named by the reason), as video playback takes it.
+    // PowerSaveBlocker itself is visible to a few upstream targets only.
+    mojo::Remote<device::mojom::WakeLockProvider> provider;
+    content::GetDeviceService().BindWakeLockProvider(
+        provider.BindNewPipeAndPassReceiver());
+    provider->GetWakeLockWithoutContext(
+        block == WakeBlock::kDisplaySleep
+            ? device::mojom::WakeLockType::kPreventDisplaySleep
+            : device::mojom::WakeLockType::kPreventAppSuspension,
+        device::mojom::WakeLockReason::kOther, kWakeReason,
+        wake_lock_.BindNewPipeAndPassReceiver());
+    wake_lock_->RequestWakeLock();
+  }
+  if (display_changed && on_wake_changed_) {
+    // Posted: this runs inside a lease's detach, even its tab's destruction.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                             on_wake_changed_);
   }
 }
 
