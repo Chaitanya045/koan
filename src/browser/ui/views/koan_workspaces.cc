@@ -1721,18 +1721,24 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     WriteSpace(closed.id, closed.data);
     // Zen shows the empty tab only when nothing else is left to show: with
     // Essentials the window keeps what it shows (zen.workspaces.open-new-tab-
-    // if-last-unpinned-tab-is-closed is off by default).
-    bool has_essentials = false;
-    for (int i = 0; i < model->count() && !has_essentials; ++i) {
-      has_essentials = model->IsTabPinned(i);
-    }
-    if (closed.was_active && !model->GetFocusedGroup() && !has_essentials) {
-      // Zen stays on an Essential that was selected when the Space emptied.
+    // if-last-unpinned-tab-is-closed is off by default), the Essential that
+    // closing selected, and the emptied Space stays the one shown. That has
+    // to happen here: left to the end of this function, SwitchTo() would
+    // select the Space's only tab, the empty tab.
+    if (closed.was_active && !model->GetFocusedGroup()) {
       tabs::TabInterface* active_tab = model->GetActiveTab();
       const bool on_essential = active_tab && active_tab->IsPinned();
-      SwitchTo(closed.id);
-      if (on_essential) {
-        model->ActivateTabAt(model->GetIndexOfTab(active_tab));
+      bool has_essentials = false;
+      for (int i = 0; i < model->count() && !has_essentials; ++i) {
+        has_essentials = model->IsTabPinned(i);
+      }
+      if (on_essential || !has_essentials) {
+        SwitchTo(closed.id);
+        // Entering the Space selected its tab; an Essential may stay
+        // selected in a shown Space (IsTabValidInFocusedGroup()).
+        if (on_essential) {
+          model->ActivateTabAt(model->GetIndexOfTab(active_tab));
+        }
       }
     }
   }
