@@ -103,6 +103,15 @@ size_t EssentialsGapSlot(const std::vector<gfx::Rect>& slots,
                          const gfx::Point& centre,
                          bool rtl,
                          size_t current);
+// The point EssentialsGapSlot() goes by: the dragged tile's centre
+// `tile_centre`, or the pointer `pointer` while it is above the grid's first
+// row (`slots`), so that a tab dragged straight up over the URL bar takes the
+// first slot, as a drop there does (Koan's, EssentialsTopDropZone()): the
+// tile hangs below-right of the pointer (EssentialTileGrab()), over the first
+// row already.
+gfx::Point EssentialsGapProbe(const std::vector<gfx::Rect>& slots,
+                              const gfx::Point& pointer,
+                              const gfx::Point& tile_centre);
 
 // With no Essentials, the part of the sidebar a dragged tab is over them in
 // (the promo shows, lit, and a drop there makes the tab an Essential), in the
