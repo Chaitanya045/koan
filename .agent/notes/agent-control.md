@@ -1158,7 +1158,7 @@ koan take-over [tab]             ask to drive the user's current tab (the user a
 koan hand-back [tab]             release the tab; a moved tab goes home
 koan agent-browser <args…>       relay + exec agent-browser against Koan (session-scoped relay)
 koan relay env|stop --session S  write the relay env to a 0600 file / stop it (never prints the secret)
-koan shell                       (phase 3) one long-lived connection, JSON lines on stdin/stdout
+koan shell                       one long-lived connection: command lines or JSON lines on stdin, answers on stdout
 koan skill                       print the usage guide generated from the installed version
 koan log [--follow]              the audit log
 koan revoke [id|--all]
@@ -1216,6 +1216,42 @@ real proof, but nothing is asked, pinned, touched or authenticated, and a failed
 app's tool) and writes `koan-browser/SKILL.md` into each installed agent's skills directory (one table,
 `AgentSkillHomes()`), never over a file that is not Koan's, and leaves a link someone else made (`npx skills`) alone;
 *Remove* undoes only what is Koan's. `$KOAN_AGENT_SETUP_HOME` points it at a test HOME (scripts/mac/suite.sh).
+
+**Speed (2026-11-20).** An agent filling a job site's profile form over ssh needed ~40 commands and 6 minutes for 3
+form steps: a `sleep` and a separate snapshot after every act, a new ssh connection and `koan` process per command, a
+navigate to a slow 504 page that blocked 60 s and ended in "no answer", and retries on custom dropdowns. So:
+*Settle and return* (`koan_cli_settle.*`, pure, unit tested): every act follows the tab's Page and Network events
+(`Hold.follow {sessionId}` routes that session's events to the command; `Page.enable`/`Network.enable` around the
+action, disabled after; the events are the facade's allowlisted, scrubbed ones) and probes the DOM with a
+MutationObserver (`Runtime.evaluate`, main world, as the other act functions); it prints `ok` once a navigation the
+action started (main-frame load within 300 ms) has committed and loaded, nothing is in flight (WebSocket, EventSource and
+media do not count) and nothing ended for 250 ms, and the DOM was quiet for 250 ms since then; or at the cap, 3 s after
+the action or the commit. A JS dialog, `Koan.userNeeded`/`Koan.paused` for the tab, or the tab closing stop the wait: the
+action's `ok`, then the reason as an error (exit 1). `--snapshot` prints the compact snapshot (refs remembered as
+`koan snapshot` does) after the line. *Navigate* answers at commit (Page.navigate's own answer): a 4xx/5xx is
+`ok (HTTP 504 Gateway Timeout)`, exit 0, because the tab shows the server's page and the snapshot reads it (also when
+Chromium shows its own error page for an empty body, `net::ERR_HTTP_RESPONSE_CODE_FAILURE`); no response within
+`--timeout` (15 s) is `Koan.timeout`, the tab left loading. *Clicks*: `Input.dispatchMouseEvent` defaults `buttons` to 0
+(content/browser/devtools/protocol/input_handler.cc), so pointerdown/mousedown said no button was down, which pages that
+check it ignore; and after `DOM.scrollIntoViewIfNeeded` a popup positioned by script (floating-ui, popper) moves a frame
+later, and an opening list's transition moves it for a few hundred ms, so the quad read at once missed: the two reasons a
+first click on an option did not take. A click now waits (in the page, up to 1 s) until the node's box is still for two
+frames, reads the quad, notes what covers the centre if something does, and sends move, press (buttons 1), release.
+*Popups*: the compact snapshot prints, before the page, every dialog and every listbox or menu that an expanded control
+names (aria-controls, aria-owns, details) or that sits outside the page's layout while something is expanded (a
+portal), under `popup of <role> "<name>" @ref (open; ...)`, so a long page never cuts them off. Top-layer popovers are
+found only through those relations (`DOM.getTopLayerElements` is denied). *choose*: a `<select>` as `select`; otherwise
+opens the control unless its list shows, finds the list as a screen reader does (aria-controls/owns, a list inside it,
+else the last shown listbox or menu: a portal), matches the option (exact, any case, the only prefix, the only
+substring), types the text first if the control is a text field and the option is not shown, clicks it, and after the
+settle checks that the control (its value, its text or its box's) shows it; if not, one more click, then
+`Koan.notChosen`. *koan shell*: the holder already kept the browser connection between commands, so a command costs
+ssh (~250 ms) plus starting `koan` and its admission (a peer lookup and a signature check per connection) plus about ten
+local round trips (listTabs, the cached attach, the ref check, follow and enable, the action, the probe). `koan shell` pays the first two once per session: one admission for the connection (`Unchanged()` is
+still asked before each request), commands parsed by `ParseShellLine()` (shell quoting, or a JSON array or
+`{id, args}`), each answer ending `--- exit N` or one JSON line. Batching is the same thing with stdin from a heredoc
+(`--stop-on-error`), so there is no `koan batch`. `watch`, `agent-browser` and `shell` are refused inside it; `--client`
+and `--user-data-dir` are the shell's own.
 
 **Skill file** (ego's integration model: shell commands, no SDK, no remote-debugging setup). The installed entry skill
 is a few lines ("run `koan skill` and follow it"); `koan skill` prints the guide from the installed version so it is

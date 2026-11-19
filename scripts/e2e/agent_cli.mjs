@@ -15,6 +15,14 @@
 //   (KOAN_AGENT_SETUP_HOME), and Remove takes them out again;
 // - open, snapshot (an outline with @refs), act (click lands), screenshot
 //   (a PNG), on a local page, in the agent's own background tab;
+// - settle and return: act waits for the page (a slow fetch after a click
+//   shows in act --snapshot with no sleep); navigate returns with the
+//   server's status (504) at once, and a server that never answers is a
+//   Koan.timeout after --timeout; a Material-style dropdown of divs whose
+//   listbox is a portal: its open list comes first in the snapshot, its
+//   option takes on the first click, and act choose works; koan shell runs
+//   several commands on one connection; per-command times, old against new
+//   (INFO lines);
 // - a form (#340): act select sets a dropdown (and fill on it does too), the
 //   form submits the value; fill on a checkbox fails instead of "ok";
 //   checkbox and radio states show in the snapshot; a ref from before a
@@ -48,6 +56,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
@@ -329,6 +338,195 @@ check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).t
   const after = await koan(['snapshot', form]);
   check('Compact snapshot: its ref works (the heading says Pressed)',
         r.code === 0 && /heading "Pressed"/.test(after.out), brief(r));
+}
+
+// --- Settle and return (#cli-speed): act waits for the page, so --snapshot
+// shows what the action did with no sleep; navigate returns with the
+// server's status, fast, and a server that never answers is a Koan.timeout
+// after --timeout, not "no answer"; a Material-style dropdown of plain divs
+// whose listbox is a portal at the end of a long page: its open list is the
+// snapshot's first lines, its option takes on the first click, and choose
+// works; koan shell runs several commands over one connection. Each step
+// prints how long it took (INFO lines), old way against new, for the PR.
+{
+  const COUNTRIES = ['Argentina', 'Brazil', 'Chile', 'India', 'Uganda', 'United Kingdom',
+                     'United States', 'Zambia'];
+  const PAGES = {
+    '/fetch': `<!doctype html><title>Fetch</title><h1>Fetch</h1>
+      <button onclick="fetch('/slow-data').then(r => r.text()).then(t => {
+        document.getElementById('out').textContent = t; })">Load</button>
+      <p id=out>Nothing yet</p>`,
+    // Like Material UI's Select: a div with role=combobox that opens on
+    // mousedown, a listbox appended to the body (after a page longer than
+    // the compact snapshot's 1500 lines), which grows in (a transform
+    // transition) and scrolls; an option takes a click only after a
+    // pointerdown with the left button down (buttons 1), as libraries that
+    // check it do.
+    '/mui': `<!doctype html><title>Profile</title><h1>Profile</h1>
+      <label id=cl>Country</label>
+      <div id=cb role=combobox tabindex=0 aria-labelledby=cl aria-haspopup=listbox
+           aria-expanded=false aria-controls=menu style="border:1px solid;width:200px">Choose</div>
+      <h2 id=picked>Picked: none</h2>
+      ${Array.from({ length: 1600 }, (_, i) => `<p>Filler ${i}</p>`).join('')}
+      <script>
+        const cb = document.getElementById('cb');
+        let pop = null;
+        function close() { pop?.remove(); pop = null; cb.setAttribute('aria-expanded', 'false'); }
+        cb.addEventListener('mousedown', e => {
+          if (e.button !== 0 || pop) return;
+          e.preventDefault();
+          pop = document.createElement('div');
+          pop.style = 'position:fixed;inset:0';
+          pop.addEventListener('click', e => { if (e.target === pop) close(); });
+          const list = document.createElement('ul');
+          list.id = 'menu';
+          list.setAttribute('role', 'listbox');
+          list.setAttribute('aria-labelledby', 'cl');
+          list.style = 'position:absolute;left:20px;top:90px;margin:0;padding:4px;list-style:none;' +
+                       'background:#fff;border:1px solid #888;max-height:120px;overflow:auto;' +
+                       'transform:scale(0.6);transform-origin:top left;transition:transform 300ms';
+          for (const name of ${JSON.stringify(COUNTRIES)}) {
+            const li = document.createElement('li');
+            li.setAttribute('role', 'option');
+            li.textContent = name;
+            li.style = 'padding:6px 12px';
+            li.addEventListener('pointerdown', e => { li.dataset.down = String(e.buttons); });
+            li.addEventListener('click', () => {
+              if (li.dataset.down !== '1') return;
+              cb.textContent = name;
+              document.getElementById('picked').textContent = 'Picked: ' + name;
+              close();
+            });
+            list.append(li);
+          }
+          pop.append(list);
+          document.body.append(pop);
+          cb.setAttribute('aria-expanded', 'true');
+          requestAnimationFrame(() => requestAnimationFrame(() => { list.style.transform = 'scale(1)'; }));
+        });
+      </script>`,
+  };
+  const pagesServer = http.createServer((q, s) => {
+    const u = new URL(q.url, 'http://x');
+    if (u.pathname === '/slow-data') {
+      setTimeout(() => s.end('Loaded late'), 1500);
+    } else if (u.pathname === '/504') {
+      s.writeHead(504, { 'content-type': 'text/html' });
+      s.end('<!doctype html><title>Gateway</title><h1>Upstream timed out</h1>');
+    } else if (u.pathname === '/504-empty') {
+      s.writeHead(504);
+      s.end();
+    } else if (u.pathname === '/hang') {
+      // Never answers (until the server closes).
+    } else {
+      s.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      s.end(PAGES[u.pathname] ?? '<!doctype html><title>Page</title><h1>Page</h1>');
+    }
+  });
+  await new Promise(res => pagesServer.listen(0, '127.0.0.1', res));
+  const at = p => `http://127.0.0.1:${pagesServer.address().port}${p}`;
+  const timed = async (args, opts) => {
+    const t0 = Date.now();
+    const result = await koan(args, opts);
+    return { ...result, ms: Date.now() - t0 };
+  };
+  const refOf = (text, re) => text.split('\n').find(l => re.test(l))?.match(/@(\d+)\s*$/)?.[0];
+
+  // A click whose result comes from a slow fetch.
+  r = await koan(['open', at('/fetch')]);
+  const ft = r.out.split('\n').at(-1);
+  r = await koan(['act', ft, 'navigate', at('/fetch'), '--snapshot']);
+  const load = refOf(r.out, /^\s*button "Load"/);
+  check('Settle: act navigate --snapshot prints ok and the page\'s snapshot',
+        r.code === 0 && /^ok$/m.test(r.out) && !!load, brief(r));
+  // The old way: act, sleep 1.5 s, snapshot (three steps, the sleep a guess).
+  let t0 = Date.now();
+  r = await koan(['act', ft, 'click', load ?? '@0']);
+  await sleep(1500);
+  let snap = await koan(['snapshot', ft]);
+  const oldMs = Date.now() - t0;
+  r = await koan(['act', ft, 'navigate', at('/fetch'), '--snapshot']);
+  const load2 = refOf(r.out, /^\s*button "Load"/);
+  const clicked = await timed(['act', ft, 'click', load2 ?? '@0', '--snapshot']);
+  check('Settle: act click --snapshot shows the slow fetch\'s result, no sleep',
+        clicked.code === 0 && /^ok\n/.test(clicked.out) && /"Loaded late"/.test(clicked.out),
+        brief(clicked));
+  console.log(`INFO  click + slow fetch: old (act, sleep 1.5, snapshot) ${oldMs} ms` +
+              ` (${/Loaded late/.test(snap.out) ? 'saw it' : 'missed it'}); new (act --snapshot) ${clicked.ms} ms`);
+
+  // Navigate: a server's error status, at once.
+  let nav = await timed(['act', ft, 'navigate', at('/504'), '--snapshot']);
+  check('Navigate: a 504 page returns fast with its status (ok (HTTP 504 ...), exit 0)',
+        nav.code === 0 && /^ok \(HTTP 504/.test(nav.out) && /Upstream timed out/.test(nav.out) &&
+        nav.ms < 5000, `${nav.ms} ms; ${brief(nav)}`);
+  nav = await timed(['act', ft, 'navigate', at('/504-empty')]);
+  check('Navigate: a 504 with no body (Chromium\'s error page) says the status too',
+        nav.code === 0 && /^ok \(HTTP 504/.test(nav.out) && nav.ms < 5000, `${nav.ms} ms; ${brief(nav)}`);
+  nav = await timed(['act', ft, 'navigate', at('/hang'), '--timeout', '3']);
+  check('Navigate: a server that never answers is Koan.timeout after --timeout, not "no answer"',
+        nav.code !== 0 && /Koan\.timeout/.test(nav.err) && !/no answer/.test(nav.err) &&
+        nav.ms >= 3000 && nav.ms < 8000, `${nav.ms} ms; ${brief(nav)}`);
+
+  // A Material-style dropdown in a portal.
+  r = await koan(['act', ft, 'navigate', at('/mui'), '--snapshot']);
+  let combo = refOf(r.out, /^\s*combobox "Country"/);
+  check('Dropdown: the snapshot has the custom combobox', r.code === 0 && !!combo, brief(r));
+  let opened = await timed(['act', ft, 'click', combo ?? '@0', '--snapshot']);
+  const lines = opened.out.split('\n');
+  check('Dropdown: after opening it, the snapshot starts with its listbox (a portal past the 1500th line)',
+        opened.code === 0 && /^popup of combobox "Country" @\d+/.test(lines[1] ?? '') &&
+        lines.slice(1, 14).some(l => /option "Uganda" @\d+/.test(l)),
+        lines.slice(0, 4).join(' | '));
+  const uganda = refOf(opened.out, /^\s*option "Uganda"/);
+  r = await koan(['act', ft, 'click', uganda ?? '@0', '--snapshot']);
+  check('Dropdown: the option takes on the first click (buttons 1, after its list stopped growing)',
+        r.code === 0 && /heading "Picked: Uganda"/.test(r.out), brief(r));
+  const chose = await timed(['act', ft, 'choose', combo ?? '@0', 'Zambia', '--snapshot']);
+  check('Dropdown: act choose opens it, scrolls to the option, clicks it and checks it',
+        chose.code === 0 && /^ok: chose "Zambia"/.test(chose.out) && /heading "Picked: Zambia"/.test(chose.out),
+        brief(chose));
+  console.log(`INFO  custom dropdown: choose --snapshot ${chose.ms} ms (one command; before: click, sleep, snapshot, click, sleep, snapshot)`);
+  r = await koan(['act', ft, 'choose', combo ?? '@0', 'Atlantis']);
+  check('Dropdown: choose of an option it lacks fails naming the options (Koan.noOption)',
+        r.code !== 0 && /Koan\.noOption/.test(r.err) && /"Argentina", "Brazil"/.test(r.err), brief(r));
+  await koan(['act', ft, 'press', 'Escape']);
+
+  // koan shell: several commands, one connection; and what a command costs.
+  function shell(lines) {
+    return new Promise(resolve => {
+      const t0 = Date.now();
+      const child = spawn(CLI, ['shell'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+      let out = '';
+      child.stdout.on('data', d => (out += d));
+      child.on('close', code => resolve({ code, out, ms: Date.now() - t0 }));
+      child.stdin.end(lines.join('\n') + '\n');
+    });
+  }
+  r = await koan(['act', ft, 'navigate', at('/fetch')]);
+  const sh = await shell([`koan tabs`, `snapshot ${ft}`, `# a note`,
+                          JSON.stringify({ id: 'j1', args: ['act', ft, 'press', 'Tab'] }),
+                          `act ${ft} fill @999999 "x"`]);
+  const ends = sh.out.match(/^--- exit \d+$/gm) ?? [];
+  const json = sh.out.split('\n').find(l => l.startsWith('{"id":"j1"'));
+  check('koan shell: each plain command answered, ending "--- exit N" (a failure is one too)',
+        ends.length === 3 && ends[0] === '--- exit 0' && ends[1] === '--- exit 0' && ends[2] !== '--- exit 0' &&
+        /button "Load" @\d+/.test(sh.out) && /Koan\.staleRef/.test(sh.out), sh.out.slice(0, 200));
+  let parsed;
+  try { parsed = JSON.parse(json ?? ''); } catch {}
+  check('koan shell: a JSON line gets one JSON answer with its id', parsed?.exit === 0 && parsed?.out === 'ok',
+        json ?? 'none');
+  const N = 10;
+  t0 = Date.now();
+  for (let i = 0; i < N; ++i) await koan(['snapshot', ft]);
+  const separate = (Date.now() - t0) / N;
+  const many = await shell(Array.from({ length: N }, () => `snapshot ${ft}`));
+  const together = many.ms / N;
+  check('koan shell: N snapshots in one shell all succeed',
+        (many.out.match(/^--- exit 0$/gm) ?? []).length === N, `${many.out.slice(0, 120)}`);
+  console.log(`INFO  per command (koan snapshot, this Mac, no ssh): separate processes ${separate.toFixed(1)} ms,` +
+              ` koan shell ${together.toFixed(1)} ms`);
+  pagesServer.closeAllConnections?.();
+  pagesServer.close();
 }
 
 // --- Extensions and permissions in an agent tab (`agentTab`), against a

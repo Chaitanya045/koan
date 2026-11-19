@@ -200,6 +200,13 @@ class Outline {
       }
       if (const std::string* id = node->FindString("nodeId")) {
         by_id_.emplace(*id, node);
+        if (const base::ListValue* children = node->FindList("childIds")) {
+          for (const base::Value& child : *children) {
+            if (child.is_string()) {
+              parent_.emplace(child.GetString(), *id);
+            }
+          }
+        }
       }
       if (std::optional<int> backend = node->FindInt("backendDOMNodeId")) {
         refs_.insert(*backend);
@@ -212,7 +219,10 @@ class Outline {
 
   Snapshot Build() {
     if (root_) {
-      Walk();
+      if (!options_.full) {
+        WalkPopups();
+      }
+      Walk(root_, 0);
     }
     Snapshot snapshot;
     snapshot.text = std::move(out_);
@@ -241,11 +251,178 @@ class Outline {
     std::string within;
   };
 
+  // Open popups first (compact only), so that the options a click has just
+  // shown are on top and never cut off a long page: a listbox or menu that
+  // an expanded control names (aria-controls, aria-owns, a popover's
+  // details) or, while a control is expanded, one that sits outside the
+  // page's layout (a portal: nothing but wrappers between it and the
+  // document), and every dialog. Each is
+  // walked here, under a "popup" line naming its opener, and not again
+  // where the page has it.
+  void WalkPopups() {
+    // Backend id -> the expanded control that names it.
+    std::map<int, const base::DictValue*> opened;
+    bool any_expanded = false;
+    for (const auto& [id, node] : by_id_) {
+      if (Property(*node, "expanded") != "true") {
+        continue;
+      }
+      any_expanded = true;
+      for (int named : Related(*node, {"controls", "owns", "details"})) {
+        opened.emplace(named, node);
+      }
+    }
+    std::vector<const base::DictValue*> popups;
+    for (const auto& [id, node] : by_id_) {
+      if (node->FindBool("ignored").value_or(false) || node == root_) {
+        continue;
+      }
+      const std::string role = AxString(*node, "role");
+      const std::optional<int> backend = node->FindInt("backendDOMNodeId");
+      const bool named = backend && opened.contains(*backend);
+      const bool popup = role == "dialog" || role == "alertdialog" ||
+                         ((role == "listbox" || role == "menu") &&
+                          (named || (any_expanded && AtTop(id))));
+      if (popup && !InsidePopupRole(id)) {
+        popups.push_back(node);
+      }
+    }
+    // In the page's order (node ids are not), by the order of a walk.
+    std::sort(popups.begin(), popups.end(),
+              [&](auto* a, auto* b) { return Order(a) < Order(b); });
+    for (const base::DictValue* popup : popups) {
+      const std::optional<int> backend = popup->FindInt("backendDOMNodeId");
+      auto opener = backend ? opened.find(*backend) : opened.end();
+      std::string header = "popup";
+      if (opener != opened.end()) {
+        const base::DictValue& by = *opener->second;
+        header += " of " + AxString(by, "role");
+        const std::string name = Collapse(AxString(by, "name"));
+        if (!name.empty()) {
+          header += " " + Quoted(name, kMaxName);
+        }
+        if (std::optional<int> id = by.FindInt("backendDOMNodeId")) {
+          header += " @" + base::NumberToString(*id);
+        }
+      }
+      header += " (open; shown first, the page has it further down):";
+      Flush();
+      Emit(0, header);
+      Walk(popup, 1);
+      Flush();
+      last_name_.clear();
+    }
+  }
+
+  // The backend ids an AX relation property (an idref list) names.
+  static std::vector<int> Related(
+      const base::DictValue& node,
+      std::initializer_list<std::string_view> names) {
+    std::vector<int> ids;
+    const base::ListValue* properties = node.FindList("properties");
+    if (!properties) {
+      return ids;
+    }
+    for (const base::Value& property : *properties) {
+      const base::DictValue* dict = property.GetIfDict();
+      const std::string* key = dict ? dict->FindString("name") : nullptr;
+      if (!key || std::find(names.begin(), names.end(), *key) == names.end()) {
+        continue;
+      }
+      const base::ListValue* related =
+          dict->FindListByDottedPath("value.relatedNodes");
+      if (!related) {
+        continue;
+      }
+      for (const base::Value& entry : *related) {
+        const base::DictValue* r = entry.GetIfDict();
+        if (std::optional<int> id =
+                r ? r->FindInt("backendDOMNodeId") : std::nullopt) {
+          ids.push_back(*id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  // Only wrappers between the node and the document.
+  bool AtTop(const std::string& id) const {
+    std::string at = id;
+    for (int hops = 0; hops < 64; ++hops) {
+      auto up = parent_.find(at);
+      if (up == parent_.end()) {
+        return false;
+      }
+      auto node = by_id_.find(up->second);
+      if (node == by_id_.end()) {
+        return false;
+      }
+      if (node->second == root_) {
+        return true;
+      }
+      const std::string role = AxString(*node->second, "role");
+      if (!node->second->FindBool("ignored").value_or(false) &&
+          !IsQuietRole(role)) {
+        return false;
+      }
+      at = up->second;
+    }
+    return false;
+  }
+
+  // Inside another dialog, listbox or menu: shown with it.
+  bool InsidePopupRole(const std::string& id) const {
+    std::string at = id;
+    for (int hops = 0; hops < 256; ++hops) {
+      auto up = parent_.find(at);
+      if (up == parent_.end()) {
+        return false;
+      }
+      auto node = by_id_.find(up->second);
+      if (node == by_id_.end()) {
+        return false;
+      }
+      const std::string role = AxString(*node->second, "role");
+      if (role == "dialog" || role == "alertdialog" || role == "listbox" ||
+          role == "menu") {
+        return true;
+      }
+      at = up->second;
+    }
+    return false;
+  }
+
+  // A node's place in a depth-first walk of the tree, computed once.
+  size_t Order(const base::DictValue* node) {
+    if (order_.empty() && root_) {
+      std::vector<const base::DictValue*> stack = {root_.get()};
+      std::set<const base::DictValue*> seen;
+      while (!stack.empty()) {
+        const base::DictValue* at = stack.back();
+        stack.pop_back();
+        if (!seen.insert(at).second) {
+          continue;
+        }
+        order_.emplace(at, order_.size());
+        if (const base::ListValue* children = at->FindList("childIds")) {
+          for (const base::Value& child : base::Reversed(*children)) {
+            const std::string* child_id = child.GetIfString();
+            auto it = child_id ? by_id_.find(*child_id) : by_id_.end();
+            if (it != by_id_.end()) {
+              stack.push_back(it->second);
+            }
+          }
+        }
+      }
+    }
+    auto it = order_.find(node);
+    return it == order_.end() ? order_.size() : it->second;
+  }
+
   // Depth-first, without recursion (a hostile page can nest deeply).
-  void Walk() {
+  void Walk(const base::DictValue* start, int start_depth) {
     std::vector<Step> stack;
-    stack.push_back({root_, 0, Step::kNode, std::string()});
-    std::set<const base::DictValue*> seen;
+    stack.push_back({start, start_depth, Step::kNode, std::string()});
     while (!stack.empty() && !truncated_) {
       Step step = std::move(stack.back());
       stack.pop_back();
@@ -257,7 +434,7 @@ class Outline {
         word_break_ = true;
         continue;
       }
-      if (!seen.insert(step.node.get()).second) {
+      if (!seen_.insert(step.node.get()).second) {
         continue;
       }
       const base::DictValue& node = *step.node;
@@ -444,6 +621,11 @@ class Outline {
 
   const SnapshotOptions options_;
   std::map<std::string, const base::DictValue*> by_id_;
+  // Node id -> its parent's.
+  std::map<std::string, std::string> parent_;
+  std::map<const base::DictValue*, size_t> order_;
+  // Walked already (a popup, before the page).
+  std::set<const base::DictValue*> seen_;
   raw_ptr<const base::DictValue> root_ = nullptr;
   std::set<int> refs_;
   std::string out_;

@@ -135,10 +135,19 @@ std::vector<Router::Delivery> Router::FromBrowser(std::string_view json) {
     }
   }
   // Watchers get the agent's own events and the tab list's, not every page
-  // event of every session.
-  if (method->starts_with("Koan.") || method->starts_with("Target.")) {
+  // event of every session; a follower gets those and its tab's.
+  const bool client_event =
+      method->starts_with("Koan.") || method->starts_with("Target.");
+  if (client_event) {
     for (ConnectionId watcher : watchers_) {
       deliveries.push_back({watcher, text});
+    }
+  }
+  const std::string* session = message->FindString("sessionId");
+  for (const auto& [follower, followed] : followers_) {
+    if ((client_event && !watchers_.contains(follower)) ||
+        (session && *session == followed && !client_event)) {
+      deliveries.push_back({follower, text});
     }
   }
   return deliveries;
@@ -148,8 +157,17 @@ void Router::AddWatcher(ConnectionId connection) {
   watchers_.insert(connection);
 }
 
+void Router::Follow(ConnectionId connection, std::string session_id) {
+  if (session_id.empty()) {
+    followers_.erase(connection);
+  } else {
+    followers_[connection] = std::move(session_id);
+  }
+}
+
 void Router::RemoveConnection(ConnectionId connection) {
   watchers_.erase(connection);
+  followers_.erase(connection);
   // Its answers still come, and go nowhere.
   for (auto& [id, pending] : pending_) {
     if (pending.connection == connection) {

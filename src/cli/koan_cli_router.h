@@ -27,7 +27,7 @@
 // command's id. Tab sessions are kept: a second Target.attachToTarget for the
 // same tab is answered from the cache, so that commands share one session per
 // tab. Events are kept in a short ring for `koan status`, and go to every
-// `koan watch`.
+// `koan watch`; a tab's page events go only to a command that follows it.
 namespace koan::cli {
 
 class Router {
@@ -61,6 +61,11 @@ class Router {
   std::vector<Delivery> FromBrowser(std::string_view json);
 
   void AddWatcher(ConnectionId connection);
+  // `koan act` waiting for the page to settle (koan_cli_settle.h): the
+  // events of the tab's `session_id` go to `connection` too, with the Koan.*
+  // and Target.* ones a watcher gets, until Unfollow() or it goes. Empty
+  // `session_id`: unfollow.
+  void Follow(ConnectionId connection, std::string session_id);
   void RemoveConnection(ConnectionId connection);
 
   // The tasks the client opened tabs in through this holder (from
@@ -85,6 +90,8 @@ class Router {
   std::map<std::string, std::string> sessions_;
   std::set<std::string> tasks_;
   std::set<ConnectionId> watchers_;
+  // Connection -> the session it follows.
+  std::map<ConnectionId, std::string> followers_;
   std::deque<std::string> events_;
 };
 

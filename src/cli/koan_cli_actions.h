@@ -5,8 +5,10 @@
 #ifndef KOAN_CLI_KOAN_CLI_ACTIONS_H_
 #define KOAN_CLI_KOAN_CLI_ACTIONS_H_
 
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/values.h"
 
@@ -81,6 +83,83 @@ SelectOutcome ReadSelectOutcome(const base::Value* returned,
 // Whether a select's answer says the node is no <select> or <option> (a click
 // on it then reports its own error).
 bool IsNotSelect(const base::Value* returned);
+
+// --- Clicks -----------------------------------------------------------------
+
+// Runs on the node before a click (awaitPromise, returnByValue): waits until
+// its box has stopped moving for two frames (a popup that is still opening,
+// a list that repositions itself after the scroll into view: why a click on
+// the option of a list just opened could land beside it), at most about a
+// second, then says what is at its centre: {stable, covered}, `covered`
+// describing what is drawn over the node there ("" if the node, something in
+// it or one of its labels), as the page could see it.
+extern const char kClickReadyFunction[];
+struct ClickReadiness {
+  bool stable = true;
+  std::string covered;
+};
+ClickReadiness ReadClickReadiness(const base::Value* returned);
+
+// --- choose: any dropdown --------------------------------------------------
+
+// On the ref's node: {kind: "select"} for a <select> (or one of its
+// options), {kind: "popup", expanded, editable} for what opens a list (a
+// combobox, a button with aria-haspopup, an element that controls a
+// listbox), else {kind: "other", what}.
+extern const char kChooseKindFunction[];
+// On the ref's node, function(pick, label): the list of options it opened,
+// found as a screen reader finds it: the elements its (or its descendants')
+// aria-controls and aria-owns name, a listbox inside it, else the last shown
+// listbox or menu of the document (a portal, appended at the end of the
+// body). pick < 0: {found, mine, options: [{label, disabled}], more}
+// (`mine`: one of the first two kinds); else the
+// option at `pick` (not by value) if its label is still `label`, else null.
+extern const char kListOptionsFunction[];
+// On the ref's node, function(label): {has, now}: whether the control (its
+// value, its text, or its box's, a few levels up) shows `label` now, and
+// what it shows.
+extern const char kChosenValueFunction[];
+
+enum class ChooseKind { kSelect, kPopup, kRefused };
+struct ChooseTarget {
+  ChooseKind kind = ChooseKind::kRefused;
+  bool expanded = false;
+  // A text field (an autocomplete): typing filters its options.
+  bool editable = false;
+  std::string refusal;
+};
+ChooseTarget ReadChooseTarget(const base::Value* returned,
+                              std::string_view ref);
+
+struct OptionList {
+  bool found = false;
+  // The list is the control's own (named by it, or inside it), not just
+  // the last one the page shows.
+  bool mine = false;
+  std::vector<std::string> labels;
+  std::vector<bool> disabled;
+  int more = 0;
+};
+OptionList ReadOptionList(const base::Value* returned);
+
+struct OptionMatch {
+  std::optional<size_t> index;
+  // No index: the error, naming the options.
+  std::string error;
+};
+// The option `wanted` names: the first whose label is it (whitespace
+// collapsed), else the first that is it in any case, else the only one that
+// starts with it, else the only one that contains it (any case). A disabled
+// match, several partial ones, or none, is an error that lists the options.
+OptionMatch MatchOption(const OptionList& list,
+                        std::string_view wanted,
+                        std::string_view ref);
+// No list of options appeared after `ref` was opened.
+std::string NoListText(std::string_view ref);
+// The option was clicked, but the control does not show it (`now`).
+std::string NotChosenText(std::string_view ref,
+                          std::string_view label,
+                          std::string_view now);
 
 // An error as an agent is shown it: Koan's own errors as they are, a raw CDP
 // error (a number, or CDP's own data) as the Koan error it amounts to, with

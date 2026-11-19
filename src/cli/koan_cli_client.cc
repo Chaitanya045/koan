@@ -205,8 +205,37 @@ std::optional<Message> Link::Call(
     if (message->id == id || (!message->id && message->is_error())) {
       return message;
     }
-    if (!message->id && on_event) {
-      on_event.Run(*message);
+    if (!message->id) {
+      if (on_event) {
+        on_event.Run(*message);
+      } else if (sink_) {
+        sink_.Run(*message);
+      }
+    }
+  }
+}
+
+int Link::Send(std::string_view method,
+               base::DictValue params,
+               std::string_view session_id) {
+  const int id = next_id_++;
+  return channel_->Write(Request(id, method, std::move(params), session_id))
+             ? id
+             : 0;
+}
+
+std::optional<Message> Link::Next(base::TimeTicks deadline) {
+  while (true) {
+    const base::TimeDelta left = deadline - base::TimeTicks::Now();
+    if (left <= base::TimeDelta()) {
+      return std::nullopt;
+    }
+    std::optional<std::string> frame = channel_->Read(left);
+    if (!frame) {
+      return std::nullopt;
+    }
+    if (std::optional<Message> message = ParseMessage(*frame)) {
+      return message;
     }
   }
 }

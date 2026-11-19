@@ -5,8 +5,11 @@
 #include "koan/cli/koan_cli_args.h"
 
 #include <map>
+#include <optional>
 #include <utility>
 
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -37,6 +40,7 @@ const std::map<std::string_view, CommandKind>& Commands() {
       {"skill", CommandKind::kSkill},
       {"__hold", CommandKind::kHold},
       {"relay", CommandKind::kRelayEnv},
+      {"shell", CommandKind::kShell},
   };
   return *commands;
 }
@@ -81,8 +85,19 @@ std::optional<std::string> ResolveTab(std::string_view given,
 ParseResult ParseArgs(const std::vector<std::string>& args) {
   Command command;
   std::vector<std::string> positional;
+  bool act_option = false;
   for (size_t i = 0; i < args.size(); ++i) {
     const std::string& arg = args[i];
+    // Where an act's text goes (fill's text, a key, a URL), an argument is
+    // the text even if it looks like an option.
+    const bool act_text =
+        positional.size() >= 3 && positional[0] == "act" &&
+        (positional.size() == 4
+             ? (positional[2] == "fill" || positional[2] == "select" ||
+                positional[2] == "choose")
+             : (positional.size() == 3 &&
+                (positional[2] == "press" || positional[2] == "navigate" ||
+                 positional[2] == "scroll")));
     // Everything after `agent-browser` is agent-browser's, untouched.
     if (arg == "agent-browser" && positional.empty()) {
       command.kind = CommandKind::kAgentBrowser;
@@ -158,6 +173,25 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       command.json = true;
       continue;
     }
+    if (!act_text && arg == "--snapshot") {
+      command.snapshot_after = true;
+      act_option = true;
+      continue;
+    }
+    if (!act_text) {
+      if (std::optional<bool> got = value_of("--timeout", &value)) {
+        if (!*got || !base::StringToInt(value, &command.timeout_seconds) ||
+            command.timeout_seconds < 1 || command.timeout_seconds > 600) {
+          return Error("--timeout needs a number of seconds (1 to 600)");
+        }
+        act_option = true;
+        continue;
+      }
+    }
+    if (arg == "--stop-on-error") {
+      command.stop_on_error = true;
+      continue;
+    }
     // (An act's text may be "--full".)
     if (arg == "--full" &&
         !(positional.size() >= 3 && positional[0] == "act")) {
@@ -209,6 +243,12 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   if (command.full && command.kind != CommandKind::kSnapshot) {
     return Error("--full is koan snapshot's");
   }
+  if (act_option && command.kind != CommandKind::kAct) {
+    return Error("--snapshot and --timeout are koan act's");
+  }
+  if (command.stop_on_error && command.kind != CommandKind::kShell) {
+    return Error("--stop-on-error is koan shell's");
+  }
 
   switch (command.kind) {
     case CommandKind::kHelp:
@@ -219,6 +259,7 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
     case CommandKind::kEnd:
     case CommandKind::kWatch:
     case CommandKind::kSkill:
+    case CommandKind::kShell:
       if (!expect(0, 0)) {
         return Error("koan " + positional[0] + " takes no arguments");
       }
@@ -265,24 +306,28 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       if (rest.size() < 2) {
         return Error(
             "usage: koan act <tab> click @ref | fill @ref <text> | select "
-            "@ref <option> | press <key> | scroll <pixels> | navigate <url>");
+            "@ref <option> | choose @ref <option> | press <key> | scroll "
+            "<pixels> | navigate <url> [--snapshot] [--timeout <seconds>]");
       }
       command.tab = rest[0];
       const std::string& verb = rest[1];
       const std::vector<std::string> act_args(rest.begin() + 2, rest.end());
-      if (verb == "click" || verb == "fill" || verb == "select") {
+      if (verb == "click" || verb == "fill" || verb == "select" ||
+          verb == "choose") {
         const size_t want = verb == "click" ? 1 : 2;
+        const bool option = verb == "select" || verb == "choose";
         if (act_args.size() != want || !ParseRef(act_args[0]) ||
-            (verb == "select" && act_args[1].empty())) {
+            (option && act_args[1].empty())) {
           return Error(verb == "click" ? "usage: koan act <tab> click @ref"
                        : verb == "fill"
                            ? "usage: koan act <tab> fill @ref <text>"
-                           : "usage: koan act <tab> select @ref "
-                             "<option label or value>");
+                           : "usage: koan act <tab> " + verb +
+                                 " @ref <option text>");
         }
-        command.act = verb == "click"  ? ActKind::kClick
-                      : verb == "fill" ? ActKind::kFill
-                                       : ActKind::kSelect;
+        command.act = verb == "click"    ? ActKind::kClick
+                      : verb == "fill"   ? ActKind::kFill
+                      : verb == "select" ? ActKind::kSelect
+                                         : ActKind::kChoose;
         command.ref = act_args[0];
         command.text = verb == "click" ? "" : act_args[1];
       } else if (verb == "press") {
@@ -305,8 +350,9 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
         command.act = ActKind::kNavigate;
         command.text = act_args[0];
       } else {
-        return Error("unknown action \"" + verb +
-                     "\" (click, fill, select, press, scroll, navigate)");
+        return Error(
+            "unknown action \"" + verb +
+            "\" (click, fill, select, choose, press, scroll, navigate)");
       }
       break;
     }
@@ -331,7 +377,13 @@ std::string UsageText() {
                          shows every node of the tree (same refs)
   koan screenshot <tab> [-o file.png]
   koan act <tab> click @ref | fill @ref <text> | select @ref <option>
-               | press <key> | scroll <pixels> | navigate <url>
+               | choose @ref <option> | press <key> | scroll <pixels>
+               | navigate <url>   [--snapshot] [--timeout <seconds>]
+                         waits until the page settles, then prints ok
+                         (ok (HTTP 504 ...) for a server's error page);
+                         --snapshot prints the new snapshot with it.
+                         choose opens a custom dropdown and clicks the
+                         option. --timeout: for a navigation (15)
   koan take-over [tab]   ask to control a tab of yours (you approve in Koan)
   koan release <tab>     give a tab of yours back
   koan end [--task T]    end one task, or (no --task) every task: its tabs
@@ -342,12 +394,104 @@ std::string UsageText() {
                          approved once in Koan as koan-relay)
   koan relay env|stop [--session S]
                          where the relay's env file is / stop the relay
+  koan shell [--stop-on-error]
+                         run commands from stdin, one per line, over one
+                         connection; each answer ends with a line
+                         "--- exit N" (JSON lines in, JSON lines out)
   koan skill             the guide for agents
 
 Options: --json, --user-data-dir DIR, --client ID (default: the newest
 pairing of this agent with this Koan). <tab> is an id from
 koan tabs or open, or a unique prefix of one (4 characters or more).
 )";
+}
+
+ShellLine ParseShellLine(std::string_view line) {
+  ShellLine parsed;
+  std::string_view text = base::TrimWhitespaceASCII(line, base::TRIM_ALL);
+  if (text.empty() || text.front() == '#') {
+    parsed.empty = true;
+    return parsed;
+  }
+  if (text.front() == '[' || text.front() == '{') {
+    parsed.json = true;
+    std::optional<base::Value> value =
+        base::JSONReader::Read(text, base::JSON_PARSE_RFC);
+    const base::ListValue* args = nullptr;
+    if (value && value->is_list()) {
+      args = &value->GetList();
+    } else if (value && value->is_dict()) {
+      if (const base::Value* id = value->GetDict().Find("id")) {
+        parsed.id = base::WriteJson(*id).value_or("null");
+      }
+      args = value->GetDict().FindList("args");
+    }
+    if (!args) {
+      parsed.error =
+          "a JSON line is an array of arguments, or {\"id\", \"args\": [...]}";
+      return parsed;
+    }
+    for (const base::Value& arg : *args) {
+      if (!arg.is_string()) {
+        parsed.error = "every argument is a string";
+        return parsed;
+      }
+      parsed.args.push_back(arg.GetString());
+    }
+  } else {
+    std::string word;
+    bool in_word = false;
+    char quote = 0;
+    for (size_t i = 0; i < text.size(); ++i) {
+      const char c = text[i];
+      if (quote == '\'') {
+        if (c == '\'') {
+          quote = 0;
+        } else {
+          word += c;
+        }
+      } else if (c == '\\' && i + 1 < text.size() &&
+                 (quote == 0 || std::string_view("\"\\$`").find(text[i + 1]) !=
+                                    std::string_view::npos)) {
+        word += text[++i];
+        in_word = true;
+      } else if (quote == '"') {
+        if (c == '"') {
+          quote = 0;
+        } else {
+          word += c;
+        }
+      } else if (c == '\'' || c == '"') {
+        quote = c;
+        in_word = true;
+      } else if (base::IsAsciiWhitespace(c)) {
+        if (in_word) {
+          parsed.args.push_back(std::move(word));
+          word.clear();
+          in_word = false;
+        }
+      } else {
+        word += c;
+        in_word = true;
+      }
+    }
+    if (quote) {
+      parsed.error = std::string("unclosed ") +
+                     (quote == '"' ? "double" : "single") + " quote";
+      return parsed;
+    }
+    if (in_word) {
+      parsed.args.push_back(std::move(word));
+    }
+  }
+  // As typed in a terminal.
+  if (!parsed.args.empty() && parsed.args.front() == "koan") {
+    parsed.args.erase(parsed.args.begin());
+  }
+  if (parsed.args.empty()) {
+    parsed.error = "no command";
+  }
+  return parsed;
 }
 
 }  // namespace koan::cli

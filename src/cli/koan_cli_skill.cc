@@ -39,16 +39,39 @@ the way in, and it is the one the user approved.
    [collapsed], [disabled], [required], ...). `--full` prints every node of
    the tree (same refs) when you need more. `koan screenshot <tab> -o
    shot.png` saves what it shows.
-4. Act: `koan act <tab> click @12`, `koan act <tab> fill @34 "text"`,
-   `koan act <tab> select @56 "Option label or value"` (a dropdown:
-   <select>; fill on one does the same), `koan act <tab> press Enter`,
-   `koan act <tab> scroll 600`, `koan act <tab> navigate <url>`. An action
-   that changed nothing fails and says why; it never prints "ok". Take a new
-   snapshot after each change: refs belong to the page as it was, and a ref
-   from before a navigation or reload fails with Koan.staleRef (take a new
-   snapshot and use its refs). Other errors say what to do next
+4. Act, and see the result in the same reply: `koan act <tab> click @12
+   --snapshot`. Every act waits until the page has settled (a navigation
+   committed and loaded, the network and the DOM quiet for a moment, at
+   most about 3 s), then prints `ok`; with `--snapshot` (use it) the new
+   snapshot follows, so never `sleep` and never run a separate snapshot
+   after an act. The actions: `click @12`, `fill @34 "text"`, `select @56
+   "Option"` (a native <select>; fill on one does the same), `choose @56
+   "Option text"` (any dropdown: a <select>, or a custom one such as a
+   Material or react-select dropdown, which it opens, finds the option in,
+   clicks, and checks; it fails naming the options there are), `press
+   Enter`, `scroll 600`, `navigate <url>`. For every dropdown, use
+   `koan act <tab> choose @56 "Option text" --snapshot`.
+   `navigate` returns once the server answers: `ok (HTTP 504 Gateway
+   Timeout)` (exit 0) means the server sent an error page, which the
+   snapshot shows; Koan.loadFailed means no page at all (a bad address, a
+   refused connection); Koan.timeout means the server did not answer in
+   15 s (`--timeout 60` waits longer; the tab keeps waiting meanwhile).
+   An open dropdown's list, a menu or a dialog is printed first in a
+   snapshot, under a "popup" line naming the control that opened it.
+   An action that changed nothing fails and says why; it never prints
+   "ok". Refs belong to the page as it was: a ref from before a
+   navigation or reload fails with Koan.staleRef (use the refs of the
+   snapshot the act printed). Other errors say what to do next
    (Koan.notVisible: open or scroll to what hides it; Koan.pageChanged:
-   snapshot again).
+   snapshot again). If "ok" is followed by an error (Koan.userNeeded,
+   Koan.paused), the action was done, and then the page needed the user.
+   Many commands in a row: `koan shell` reads one command per line on
+   stdin (`act ab12 fill @3 "Ada" --snapshot`; a leading `koan` is fine)
+   over one connection, and ends each answer with a line `--- exit N`;
+   `koan shell --stop-on-error <<'EOF'` with several lines is a batch that
+   stops at the first failure. JSON lines work too: `{"id": 1, "args":
+   ["act", "ab12", "click", "@4"]}` is answered with `{"id": 1, "exit":
+   0, "out": "...", "err": ""}`.
    With agent-browser installed, `koan agent-browser <its usual args>` runs
    it against Koan instead (the first time, the user approves koan-relay).
 5. A tab of the user's (to work on a page they have open, signed in): tell
@@ -94,7 +117,10 @@ Pair the same way, over ssh; the user approves in Koan on the Mac. Files
 are on the Mac: `koan screenshot <tab> -o /tmp/shot.png` saves the PNG
 there, so copy it back (`scp <mac>:/tmp/shot.png .`) to look at it. Every
 command of a task must come from the same agent: keep using the same ssh
-login rather than mixing it with other programs.
+login rather than mixing it with other programs. Each ssh connection costs
+a few hundred milliseconds: reuse one for every command (`ssh -o
+ControlMaster=auto -o ControlPath=/tmp/koan-ssh-%C -o ControlPersist=10m
+<mac> ...`), or send many commands through one `ssh <mac> <koan path> shell`.
 )";
 }
 

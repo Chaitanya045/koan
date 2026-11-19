@@ -82,9 +82,26 @@ class Link {
       base::TimeDelta wait = kAnswerWait,
       base::RepeatingCallback<void(const Message&)> on_event = {});
 
+  // For waiting on several things at once (koan act's settle): sends a
+  // request and returns its id, or 0 if it could not be sent; Next() then
+  // reads answers and events as they come, until `deadline`. nullopt on the
+  // deadline or a close (closed() says which).
+  int Send(std::string_view method,
+           base::DictValue params,
+           std::string_view session_id = {});
+  std::optional<Message> Next(base::TimeTicks deadline);
+  bool closed() const { return channel_->closed(); }
+
+  // Where Call() sends the events that come while it waits, when it is not
+  // given an `on_event` of its own (koan act feeds them to its Settle).
+  void SetEventSink(base::RepeatingCallback<void(const Message&)> sink) {
+    sink_ = std::move(sink);
+  }
+
  private:
   std::unique_ptr<FrameChannel> channel_;
   int next_id_ = 1;
+  base::RepeatingCallback<void(const Message&)> sink_;
 };
 
 std::string Describe(const std::optional<Message>& answer);

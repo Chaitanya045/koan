@@ -88,6 +88,143 @@ const char kSelectOptionFunction[] = R"(function(wanted) {
           value: String(option.value)};
 })";
 
+const char kClickReadyFunction[] = R"(async function() {
+  const frame = () => new Promise(resolve => {
+    let done = false;
+    const once = () => { if (!done) { done = true; resolve(); } };
+    requestAnimationFrame(once);
+    setTimeout(once, 50);
+  });
+  const box = () => {
+    const r = this.getBoundingClientRect();
+    return [r.left, r.top, r.width, r.height];
+  };
+  const same = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 0.5);
+  let last = box(), still = 0, stable = false;
+  const until = Date.now() + 1000;
+  while (Date.now() < until) {
+    await frame();
+    const now = box();
+    still = same(now, last) ? still + 1 : 0;
+    last = now;
+    if (still >= 2) { stable = true; break; }
+  }
+  const [left, top, width, height] = last;
+  const root = this.getRootNode && this.getRootNode().elementFromPoint
+                   ? this.getRootNode() : document;
+  const at = root.elementFromPoint(left + width / 2, top + height / 2);
+  const labels = Array.from(this.labels || []);
+  let covered = '';
+  if (at && at !== this && !this.contains(at) && !at.contains(this) &&
+      !labels.some(l => l === at || l.contains(at))) {
+    const cls = typeof at.className === 'string' ? at.className.trim() : '';
+    covered = '<' + at.localName + (at.id ? ' id=' + at.id : '') +
+              (cls ? ' class="' + cls.slice(0, 40) + '"' : '') + '>';
+  }
+  return {stable, covered};
+})";
+
+const char kChooseKindFunction[] = R"(function() {
+  const tag = this.localName || '';
+  if (tag === 'select' || (tag === 'option' && this.closest('select'))) {
+    return {kind: 'select'};
+  }
+  if (!tag) return {kind: 'other', what: 'not an element'};
+  const attr = name => this.getAttribute(name) || '';
+  const popup = attr('aria-haspopup');
+  const inner = this.querySelector(
+      '[role=combobox],[aria-haspopup]:not([aria-haspopup=false])');
+  if (attr('role') === 'combobox' || (popup && popup !== 'false') ||
+      attr('aria-controls') || attr('aria-owns') || inner ||
+      tag === 'button' || attr('role') === 'button') {
+    return {kind: 'popup',
+            expanded: attr('aria-expanded') === 'true' ||
+                      (!!inner && inner.getAttribute('aria-expanded') === 'true'),
+            editable: tag === 'input' || tag === 'textarea' ||
+                      this.isContentEditable};
+  }
+  return {kind: 'other', what: '<' + tag + '>'};
+})";
+
+const char kListOptionsFunction[] = R"(function(pick, label) {
+  const norm = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+  const shown = el => {
+    if (!el.getClientRects || !el.getClientRects().length) return false;
+    const style = getComputedStyle(el);
+    return style.visibility !== 'hidden' && style.display !== 'none';
+  };
+  const doc = this.ownerDocument || document;
+  const root = this.getRootNode ? this.getRootNode() : doc;
+  const byId = id => (root.getElementById && root.getElementById(id)) ||
+                     doc.getElementById(id);
+  const LISTS = '[role=listbox],[role=menu],[role=tree],[role=grid]';
+  const OPTIONS = '[role=option],[role=menuitem],[role=menuitemradio],' +
+                  '[role=menuitemcheckbox],[role=treeitem]';
+  const named = [];
+  const holders = [this, ...Array.from(
+      this.querySelectorAll('[aria-controls],[aria-owns]')).slice(0, 20)];
+  for (const el of holders) {
+    for (const attr of ['aria-controls', 'aria-owns']) {
+      for (const id of norm(el.getAttribute(attr)).split(' ')) {
+        const found = id && byId(id);
+        if (found && !named.includes(found)) named.push(found);
+      }
+    }
+  }
+  let lists = named.filter(shown);
+  let mine = lists.length > 0;
+  if (!lists.length) lists = Array.from(this.querySelectorAll(LISTS)).filter(shown);
+  mine = mine || lists.length > 0;
+  if (!lists.length) {
+    const all = Array.from(doc.querySelectorAll(LISTS)).filter(shown);
+    if (all.length) lists = [all[all.length - 1]];
+  }
+  const options = [];
+  for (const list of lists) {
+    const inside = list.matches(OPTIONS) ? [list]
+                                         : Array.from(list.querySelectorAll(OPTIONS));
+    for (const option of inside) {
+      if (!options.includes(option) && shown(option)) options.push(option);
+    }
+  }
+  const labelOf = o => norm(o.getAttribute('aria-label') || o.innerText ||
+                            o.textContent);
+  if (pick >= 0) {
+    const option = options[pick];
+    return option && labelOf(option) === label ? option : null;
+  }
+  return {found: lists.length > 0, mine,
+          options: options.slice(0, 200).map(o => ({
+            label: labelOf(o),
+            disabled: o.getAttribute('aria-disabled') === 'true' ||
+                      o.hasAttribute('disabled')})),
+          more: Math.max(0, options.length - 200)};
+})";
+
+const char kChosenValueFunction[] = R"(function(label) {
+  const norm = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+  // An open list's options are not what the control shows.
+  const textOf = el => {
+    let text = el.innerText || '';
+    for (const list of el.querySelectorAll('[role=listbox],[role=menu]')) {
+      if (list.innerText) text = text.replace(list.innerText, ' ');
+    }
+    return norm(text);
+  };
+  const want = norm(label).toLowerCase();
+  const own = norm(typeof this.value === 'string' ? this.value : '') ||
+              textOf(this);
+  const texts = [own, norm(this.getAttribute('aria-valuetext'))];
+  let el = this.parentElement;
+  for (let i = 0; el && i < 3 && el !== document.body;
+       ++i, el = el.parentElement) {
+    const text = textOf(el);
+    if (text.length <= 300) texts.push(text);
+  }
+  return {has: !!want && texts.some(t => t.toLowerCase().includes(want)),
+          now: own.slice(0, 120)};
+})";
+
 namespace {
 
 std::string Str(const base::DictValue& dict, std::string_view key) {
@@ -244,6 +381,171 @@ SelectOutcome ReadSelectOutcome(const base::Value* returned,
 bool IsNotSelect(const base::Value* returned) {
   const base::DictValue* dict = returned ? returned->GetIfDict() : nullptr;
   return dict && Str(*dict, "error") == "notSelect";
+}
+
+ClickReadiness ReadClickReadiness(const base::Value* returned) {
+  ClickReadiness readiness;
+  if (const base::DictValue* dict =
+          returned ? returned->GetIfDict() : nullptr) {
+    readiness.stable = dict->FindBool("stable").value_or(true);
+    readiness.covered = Str(*dict, "covered");
+  }
+  return readiness;
+}
+
+ChooseTarget ReadChooseTarget(const base::Value* returned,
+                              std::string_view ref) {
+  ChooseTarget target;
+  const base::DictValue* dict = returned ? returned->GetIfDict() : nullptr;
+  if (!dict) {
+    target.refusal = "Koan.pageError: the page did not let " +
+                     std::string(ref) +
+                     " be read; take a new snapshot and retry";
+    return target;
+  }
+  const std::string kind = Str(*dict, "kind");
+  if (kind == "select") {
+    target.kind = ChooseKind::kSelect;
+  } else if (kind == "popup") {
+    target.kind = ChooseKind::kPopup;
+    target.expanded = dict->FindBool("expanded").value_or(false);
+    target.editable = dict->FindBool("editable").value_or(false);
+  } else {
+    target.refusal =
+        "Koan.notSelect: " + std::string(ref) + " is " + Str(*dict, "what") +
+        ", which opens no list of options; choose on the dropdown itself "
+        "(a combobox, a <select>, or the button that opens the list)";
+  }
+  return target;
+}
+
+OptionList ReadOptionList(const base::Value* returned) {
+  OptionList list;
+  const base::DictValue* dict = returned ? returned->GetIfDict() : nullptr;
+  if (!dict) {
+    return list;
+  }
+  list.found = dict->FindBool("found").value_or(false);
+  list.mine = dict->FindBool("mine").value_or(false);
+  list.more = dict->FindInt("more").value_or(0);
+  if (const base::ListValue* options = dict->FindList("options")) {
+    for (const base::Value& option : *options) {
+      if (const base::DictValue* entry = option.GetIfDict()) {
+        list.labels.push_back(Str(*entry, "label"));
+        list.disabled.push_back(entry->FindBool("disabled").value_or(false));
+      }
+    }
+  }
+  return list;
+}
+
+namespace {
+
+std::string Normalized(std::string_view text) {
+  std::string out;
+  bool space = false;
+  for (char c : text) {
+    if (base::IsAsciiWhitespace(c)) {
+      space = !out.empty();
+      continue;
+    }
+    if (space) {
+      out += ' ';
+      space = false;
+    }
+    out += c;
+  }
+  return out;
+}
+
+std::string OptionsText(const std::vector<std::string>& labels,
+                        int more,
+                        size_t max) {
+  std::vector<std::string> shown;
+  for (size_t i = 0; i < labels.size() && i < max; ++i) {
+    shown.push_back(Shown(labels[i]));
+  }
+  std::string text = shown.empty() ? "none" : base::JoinString(shown, ", ");
+  const size_t left = labels.size() - shown.size() + static_cast<size_t>(more);
+  if (left > 0) {
+    text += " and " + base::NumberToString(left) + " more";
+  }
+  return text;
+}
+
+}  // namespace
+
+OptionMatch MatchOption(const OptionList& list,
+                        std::string_view wanted,
+                        std::string_view ref) {
+  OptionMatch match;
+  const std::string want = Normalized(wanted);
+  const std::string want_lower = base::ToLowerASCII(want);
+  std::vector<size_t> found;
+  // Exact, then in any case: the first such (a list may repeat a label).
+  for (size_t i = 0; i < list.labels.size() && found.empty(); ++i) {
+    if (Normalized(list.labels[i]) == want) {
+      found.push_back(i);
+    }
+  }
+  for (size_t i = 0; i < list.labels.size() && found.empty(); ++i) {
+    if (base::ToLowerASCII(Normalized(list.labels[i])) == want_lower) {
+      found.push_back(i);
+    }
+  }
+  // Partial: only if one option fits.
+  for (bool prefix : {true, false}) {
+    if (!found.empty() || want_lower.empty()) {
+      break;
+    }
+    for (size_t i = 0; i < list.labels.size(); ++i) {
+      const std::string label = base::ToLowerASCII(Normalized(list.labels[i]));
+      if (prefix ? label.starts_with(want_lower)
+                 : label.find(want_lower) != std::string::npos) {
+        found.push_back(i);
+      }
+    }
+    if (found.size() > 1) {
+      std::vector<std::string> labels;
+      for (size_t i : found) {
+        labels.push_back(list.labels[i]);
+      }
+      match.error = "Koan.ambiguousOption: several options of " +
+                    std::string(ref) + " " +
+                    (prefix ? "start with " : "contain ") + Shown(want) + ": " +
+                    OptionsText(labels, 0, 10) + "; give the whole label";
+      return match;
+    }
+  }
+  if (found.empty()) {
+    match.error = "Koan.noOption: " + std::string(ref) + " has no option " +
+                  Shown(want) +
+                  "; its options: " + OptionsText(list.labels, list.more, 20);
+    return match;
+  }
+  const size_t index = found.front();
+  if (index < list.disabled.size() && list.disabled[index]) {
+    match.error = "Koan.disabled: " + Shown(list.labels[index]) + " in " +
+                  std::string(ref) + " is disabled";
+    return match;
+  }
+  match.index = index;
+  return match;
+}
+
+std::string NoListText(std::string_view ref) {
+  return "Koan.noList: no list of options appeared after " + std::string(ref) +
+         " was opened (none named by aria-controls or aria-owns, none in it, "
+         "none shown on the page); take a snapshot to see what opened, then "
+         "click the option's ref";
+}
+
+std::string NotChosenText(std::string_view ref,
+                          std::string_view label,
+                          std::string_view now) {
+  return "Koan.notChosen: " + Shown(label) + " was clicked, but " +
+         std::string(ref) + " shows " + (now.empty() ? "nothing" : Shown(now)) +
+         "; take a snapshot to see the list, and click the option's ref";
 }
 
 AgentError MapError(std::string_view code, std::string_view message) {
