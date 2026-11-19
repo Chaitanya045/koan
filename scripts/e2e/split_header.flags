@@ -1,0 +1,3 @@
+# KoanSplitHeaderController logs each header's show and hide, and each exit
+# the window's monitor hears (VLOG 1), for the hover checks' details.
+--vmodule=koan_split_header=1
