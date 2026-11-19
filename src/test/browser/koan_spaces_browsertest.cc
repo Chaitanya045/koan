@@ -6,9 +6,14 @@
 #include <optional>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/run_until.h"
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -16,7 +21,10 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test.h"
+#include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
@@ -198,6 +206,58 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, OnlyTheMarkedTabIsTheEmptyTab) {
   ASSERT_TRUE(base::test::RunUntil([&] {
     return model->count() == 1 && IsEmptyTab(model->GetActiveTab());
   }));
+}
+
+// Cmd+W (IDC_CLOSE_TAB, what the Mac's File > Close Tab runs) on the only
+// listed tab, opened from the empty state: back to the empty state, and the
+// window stays (Zen: browser.tabs.closeWindowWithLastTab is false; only
+// Cmd+W on the empty tab itself closes the window,
+// zen.tabs.close-window-with-empty). empty_tab.mjs saw the Mac's window
+// close here.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       CloseTabOnTheLastListedTabKeepsTheWindow) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TabStripModel* model = browser()->GetTabStripModel();
+  // The empty state, as after closing every tab.
+  while (model->count() > 1) {
+    model->CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
+  }
+  model->CloseWebContentsAt(0, TabCloseTypes::CLOSE_USER_GESTURE);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->count() == 1 && IsEmptyTab(model->GetActiveTab());
+  }));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(kPage), WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  ASSERT_EQ(2, model->count());
+  ASSERT_FALSE(IsEmptyTab(model->GetActiveTab()));
+
+  base::WeakPtr<BrowserWindowInterface> window = browser()->GetWeakPtr();
+  chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
+  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 1; }));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(window);
+  EXPECT_FALSE(browser()->IsDeleteScheduled());
+  EXPECT_TRUE(IsEmptyTab(model->GetActiveTab()));
+}
+
+// The New Tab shortcut (⌘T) with Zen's replace-newtab off: a new tab. On
+// macOS the shortcut has the key, not File > New Tab (koan_main_menu_mac.mm
+// takes Koan's keys off Chrome's items), so it has to open the tab itself
+// (tab_management.mjs and spaces.mjs found no tab after a real ⌘T).
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       NewTabShortcutOpensATabWithoutReplaceNewTab) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kUrlBarReplaceNewTab,
+                                                  false);
+  TabStripModel* model = browser()->GetTabStripModel();
+  const int before = model->count();
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  ASSERT_TRUE(browser_view);
+  EXPECT_TRUE(KoanBrowserViewController::From(browser_view)
+                  ->shortcuts()
+                  ->Run(shortcuts::Action::kNewTab));
+  EXPECT_EQ(before + 1, model->count());
 }
 
 // A new window opens on its empty tab too.

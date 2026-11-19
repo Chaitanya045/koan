@@ -325,7 +325,12 @@ bool KoanShortcutController::Run(Action action) {
     case Action::kNewEmptySplit:
       return Command(IDC_NEW_SPLIT_TAB);
     case Action::kNewTab:
-      return controller_->url_bar()->OpenForNewTab();
+      // Chrome's New Tab command, where the command policy opens Zen's URL
+      // bar in place of the tab (MaybeOpenUrlBarForNewTab()), or a tab with
+      // replace-newtab off. Not the URL bar alone: on macOS Koan's ⌘T takes
+      // the key from File > New Tab (refreshKeysIn:), so nothing else would
+      // open the tab then.
+      return Command(IDC_NEW_TAB);
     case Action::kCopyUrl:
       return CopyUrl(/*markdown=*/false);
     case Action::kCopyUrlMarkdown:
