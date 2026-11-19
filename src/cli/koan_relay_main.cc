@@ -182,9 +182,12 @@ int Pair(const Options& options) {
   const std::string label =
       options.label.empty() ? "koan-relay (agent-browser)" : options.label;
   fprintf(stderr, "koan-relay: approve \"%s\" in Koan...\n", label.c_str());
+  // Everything unless --capabilities narrows it, as `koan pair` asks
+  // (#397): agent-browser drives pages and holds screencasts, which need
+  // drive and keep-awake; the user can untick any of it in the dialog.
   std::optional<base::DictValue> result =
       PairNewClient(link, Home(), UserDataDir(options.user_data_dir), label,
-                    options.capabilities, &error);
+                    PairCapabilities(options.capabilities), &error);
   if (!result) {
     return Fail(error);
   }
