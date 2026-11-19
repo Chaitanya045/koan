@@ -236,6 +236,24 @@ class KoanAgentSessionTest : public testing::Test {
     return *delegate().LastResult().FindString("clientId");
   }
 
+  // A probe proof (`koan status`) from `signer`; returns whether a nonce was
+  // given.
+  bool SendProbe(Session& session,
+                 const Client& signer,
+                 const std::string& client_id) {
+    Send(session, AuthenticateFrame(client_id));
+    if (session.state() != Session::State::kAwaitingProof) {
+      return false;
+    }
+    const std::vector<uint8_t> nonce =
+        *base::Base64Decode(*delegate().LastResult().FindString("nonce"));
+    Send(session, R"({"id":11,"method":"Koan.authenticate","params":)"
+                  R"({"probe":true,"clientId":")" +
+                      client_id + R"(","signature":")" +
+                      signer.Sign(client_id, nonce) + R"("}})");
+    return true;
+  }
+
   // Runs the handshake on `session`; returns whether it authenticated.
   bool Authenticate(Session& session,
                     const Client& client,
@@ -688,6 +706,39 @@ TEST_F(KoanAgentSessionTest, AStalledFrameAfterAuthenticationIsNotAFailure) {
   }
   // Six stalls and the peer is still not blocked.
   EXPECT_FALSE(limiter_.IsBlocked(PeerKey(Peer()), ticks_.NowTicks()));
+}
+
+TEST_F(KoanAgentSessionTest, AProbeSaysWhetherThePairingIsGoodAndAsksNothing) {
+  Client client;
+  const std::string id = Pair(client);
+  const base::Time paired_last_used = store_.Find(id)->last_used;
+  wall_.Advance(base::Hours(1));
+  auto session = NewSession();
+  ASSERT_TRUE(SendProbe(*session, client, id));
+  EXPECT_EQ(*delegate().LastResult().FindBool("paired"), true);
+  EXPECT_EQ(*delegate().LastResult().FindBool("approvalNeeded"), false);
+  // Not authenticated, not touched, and it can still prove itself for real.
+  EXPECT_EQ(session->state(), Session::State::kUnauthenticated);
+  EXPECT_EQ(store_.Find(id)->last_used, paired_last_used);
+  EXPECT_TRUE(Authenticate(*session, client, id));
+
+  // From another agent: it would be asked about, but the probe asks nothing.
+  PeerIdentity other_chain = Peer();
+  other_chain.ancestors[1] = Process("/opt/tools/codex", "OPENAI");
+  auto other = NewSession(other_chain);
+  ASSERT_TRUE(SendProbe(*other, client, id));
+  EXPECT_EQ(*delegate().LastResult().FindBool("approvalNeeded"), true);
+  EXPECT_NE(delegate().LastResult().FindString("reason"), nullptr);
+  EXPECT_TRUE(delegate().approvals.empty());
+  EXPECT_NE(other->state(), Session::State::kAuthenticated);
+  EXPECT_TRUE(chains_.empty());
+
+  // A pairing Koan does not know fails as a proof does (`koan` then removes
+  // its record).
+  Client stranger;
+  auto unknown = NewSession();
+  ASSERT_TRUE(SendProbe(*unknown, stranger, std::string(32, 'a')));
+  EXPECT_EQ(delegate().LastError(), "Koan.authFailed");
 }
 
 TEST_F(KoanAgentSessionTest, APairedClientAuthenticatesWithItsKey) {

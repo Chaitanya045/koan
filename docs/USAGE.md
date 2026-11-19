@@ -1472,7 +1472,33 @@ Agents use Koan through `koan`, in `Koan.app/Contents/Resources/bin/`
 (`out/Koan/koan` in a build). `koan pair --label "Claude Code"` asks you to
 approve the agent; then `koan open <url>`, `koan snapshot <tab>`,
 `koan act <tab> click @12`, `koan screenshot <tab>`, `koan take-over` (asks
-you for the tab you're on) and `koan end`.
+you, then takes the tab you have in front) and `koan end`.
+
+A plain `koan pair` asks for everything an agent can do: tabs of its own,
+listing your tabs, looking at and controlling a tab you give it, and keeping
+the display awake. The dialog has a switch, on, for each; turn off what it
+shouldn't have. `--capabilities space` (or another list) asks for less. Each
+take-over still asks you. `koan status` asks Koan whether the pairing is
+still good: "paired: no (Koan forgot this pairing; run koan pair)" after you
+revoked it, it went unused for 30 days, or Koan's profile was replaced.
+`koan` then removes that record by itself, and uses the newest pairing of
+the agent that runs it, so `--client` is only for several agents that pair
+from the same program.
+
+**Set up agents on this Mac** (Settings > Agent Control) lets the coding
+agents on your Mac find Koan without being told, as ego lite does. One
+click links `~/.local/bin/koan` to the `koan` in this app and writes a small
+`koan-browser` skill into the skills folder of each agent it finds installed:
+`~/.claude/skills` (Claude Code), `~/.agents/skills` (Codex, and the folder
+Amp, Cline, Pi and `npx skills` share) and `~/.cursor/skills` (Cursor). It
+only writes when you click, never over a file that isn't Koan's, and says
+which agents it set up; **Remove** takes it out again. Set up again after
+moving Koan. The same skill is in the repo for `npx skills add
+Chaitanya045/koan`. The skill only says what Koan is and "run `koan skill`",
+whose guide comes from the installed Koan. An agent on another machine runs
+`koan` on the Mac over ssh, by its full path
+(`~/Applications/Koan.app/Contents/Resources/bin/koan`); screenshots are
+saved on the Mac.
 
 `koan snapshot` prints the page as a compact outline: controls, links,
 landmarks and headings with `@refs`, each block's text on one line, and
@@ -1493,8 +1519,8 @@ of the new page has that number. Errors are Koan's, with what to do next
 If `koan` is started by another program than the agent you approved (the
 approval pins that agent), Koan asks you again and `koan` says why while it
 waits. `koan skill` prints the guide
-agents follow; `src/cli/skill/SKILL.md` is the entry for an agent's skills
-folder. The agent's tabs stay open between its commands, for as long as its
+agents follow; `skills/koan-browser/SKILL.md` is the entry for an agent's
+skills folder. The agent's tabs stay open between its commands, for as long as its
 task lasts: `koan end`, or 30 minutes without a command, closes them.
 `koan open --saved <name>` uses a saved container you allowed that agent;
 otherwise it is refused, never opened in a throwaway one instead.

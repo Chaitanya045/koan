@@ -53,6 +53,11 @@
 //     nonce is given for any well-formed id and the one answer to a failed
 //     proof is Koan.authFailed, so nothing tells an unknown id, an expired
 //     pairing and a wrong signature apart.
+//   Koan.authenticate {clientId, signature, probe: true}
+//     -> {paired: true, approvalNeeded, reason?}
+//     the same proof, for `koan status`: says whether the pairing is good
+//     and whether a connection from this peer would be asked about, without
+//     asking, pinning or authenticating. A failed probe fails as above.
 //   Koan.status (after authentication)        -> {clientId, capabilities}
 //
 // The order is: verify the proof, then ask the user, then pin. A prompt about a

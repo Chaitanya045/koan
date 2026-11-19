@@ -10,7 +10,9 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -22,6 +24,7 @@
 #include "koan/cli/koan_cli_io.h"
 #include "koan/cli/koan_cli_protocol.h"
 #include "koan/cli/koan_cli_router.h"
+#include "koan/cli/koan_cli_skill.h"
 #include "koan/cli/koan_cli_snapshot.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -255,14 +258,167 @@ TEST(KoanCliProtocolTest, ClientsAndChoosingOne) {
   EXPECT_FALSE(
       ParseClient(R"({"clientId":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"})"));
 
+  // The profile and the time of the pairing go there and back; a record
+  // from before them has neither.
+  ClientInfo dated{id, "Claude Code", std::nullopt,
+                   base::FilePath("/Users/me/Library/Application Support/Koan"),
+                   base::Time::FromMillisecondsSinceUnixEpoch(1763500000000)};
+  read = ParseClient(SerializeClient(dated));
+  ASSERT_TRUE(read);
+  EXPECT_EQ(read->user_data_dir, dated.user_data_dir);
+  EXPECT_EQ(read->paired_at, dated.paired_at);
+  EXPECT_TRUE(client->user_data_dir.empty());
+  EXPECT_TRUE(client->paired_at.is_null());
+}
+
+// Plain `koan pair` asks for everything (the user's rule: agents use the
+// browser as the user does), so that take-over works without knowing about
+// --capabilities; --capabilities narrows it.
+TEST(KoanCliProtocolTest, PairAsksForEveryCapabilityByDefault) {
+  EXPECT_EQ(PairCapabilities({}),
+            (std::vector<std::string>{"space", "observe", "read", "drive",
+                                      "keep-awake"}));
+  EXPECT_EQ(PairCapabilities({"space"}), std::vector<std::string>{"space"});
+  // Every default is a name the browser takes.
+  EXPECT_TRUE(agent::ParseCapabilities(PairCapabilities({}))->drive);
+  EXPECT_EQ(Parse({"pair", "--label", "x"}).capabilities.size(), 0u);
+  EXPECT_EQ(Parse({"pair", "--capabilities", "space"}).capabilities,
+            std::vector<std::string>{"space"});
+}
+
+TEST(KoanCliProtocolTest, ChoosingAClient) {
+  const base::FilePath koan("/Users/me/Library/Application Support/Koan");
+  const base::FilePath test("/tmp/profile");
+  const agent::ProcessInfo claude{"/opt/claude", "ANTHROPIC"};
+  const agent::ProcessInfo codex{"/opt/codex", "OPENAI"};
+  auto client = [](char c, base::FilePath dir, int minutes,
+                   std::optional<agent::ProcessInfo> agent = std::nullopt) {
+    ClientInfo info{std::string(32, c), "x", std::nullopt, dir,
+                    base::Time::UnixEpoch() + base::Minutes(minutes)};
+    if (agent) {
+      info.pinned = agent::PinnedIdentity{{"/koan", "T"}, *agent};
+    }
+    return info;
+  };
   std::string error;
-  EXPECT_EQ(ChooseClient({id}, "", &error), id);
-  EXPECT_FALSE(ChooseClient({}, "", &error));
+  EXPECT_FALSE(ChooseClient({}, "", koan, std::nullopt, &error));
   EXPECT_NE(error.find("koan pair"), std::string::npos);
-  EXPECT_FALSE(ChooseClient({id, std::string(32, 'b')}, "", &error));
+
+  // Several pairings: the newest is used, so a new `koan pair` needs no
+  // --client (the 2026-11-19 agent: "several paired clients ...").
+  const std::vector<ClientInfo> two = {client('a', koan, 1),
+                                       client('b', koan, 2)};
+  EXPECT_EQ(ChooseClient(two, "", koan, std::nullopt, &error),
+            std::string(32, 'b'));
+  EXPECT_EQ(ChooseClient(two, std::string(32, 'a'), koan, std::nullopt, &error),
+            std::string(32, 'a'));
+  EXPECT_FALSE(
+      ChooseClient(two, std::string(32, 'c'), koan, std::nullopt, &error));
+
+  // Only pairings with the Koan dialled, or ones that do not say.
+  const std::vector<ClientInfo> profiles = {client('a', koan, 1),
+                                            client('b', test, 2)};
+  EXPECT_EQ(ChooseClient(profiles, "", koan, std::nullopt, &error),
+            std::string(32, 'a'));
+  EXPECT_EQ(ChooseClient(profiles, "", test, std::nullopt, &error),
+            std::string(32, 'b'));
+  EXPECT_FALSE(
+      ChooseClient({client('b', test, 2)}, "", koan, std::nullopt, &error));
+  EXPECT_NE(error.find(koan.value()), std::string::npos);
+  EXPECT_EQ(ChooseClient({client('a', base::FilePath(), 1)}, "", koan,
+                         std::nullopt, &error),
+            std::string(32, 'a'));
+
+  // Two agents: each gets its own pairing, newest first; an agent with none
+  // gets the newest.
+  const std::vector<ClientInfo> agents = {client('a', koan, 1, claude),
+                                          client('b', koan, 2, codex),
+                                          client('c', koan, 3, claude)};
+  EXPECT_EQ(ChooseClient(agents, "", koan, claude, &error),
+            std::string(32, 'c'));
+  EXPECT_EQ(ChooseClient(agents, "", koan, codex, &error),
+            std::string(32, 'b'));
   EXPECT_EQ(
-      ChooseClient({id, std::string(32, 'b')}, std::string(32, 'b'), &error),
-      std::string(32, 'b'));
+      ChooseClient(agents, "", koan,
+                   agent::ProcessInfo{"/opt/cursor", "ANYSPHERE"}, &error),
+      std::string(32, 'c'));
+}
+
+// A pairing the browser refused as unknown is removed only if it paired
+// with that browser: one of another profile's may still be good there.
+TEST(KoanCliProtocolTest, WhichStalePairingsAreForgotten) {
+  const base::FilePath koan("/Users/me/Library/Application Support/Koan");
+  const base::FilePath test("/tmp/profile");
+  ClientInfo record{std::string(32, 'a'), "x", std::nullopt, koan,
+                    base::Time()};
+  EXPECT_TRUE(ShouldForget(record, koan, koan));
+  EXPECT_FALSE(ShouldForget(record, test, koan));
+  record.user_data_dir = test;
+  EXPECT_TRUE(ShouldForget(record, test, koan));
+  EXPECT_FALSE(ShouldForget(record, koan, koan));
+  // A record from before pairings said which profile: only Koan's own.
+  record.user_data_dir = base::FilePath();
+  EXPECT_TRUE(ShouldForget(record, koan, koan));
+  EXPECT_FALSE(ShouldForget(record, test, koan));
+}
+
+TEST(KoanCliClientTest, PairedClientsAndForgettingOne) {
+  base::ScopedTempDir home;
+  ASSERT_TRUE(home.CreateUniqueTempDir());
+  const base::FilePath koan_home = home.GetPath().Append(".koan");
+  const std::string a(32, 'a'), b(32, 'b');
+  for (const std::string& id : {a, b}) {
+    ASSERT_TRUE(base::CreateDirectory(ClientDir(koan_home, id)));
+    ASSERT_TRUE(base::WriteFile(ClientDir(koan_home, id).Append("key"), "k"));
+  }
+  // `a` is from before pairings kept their time: it gets its file's.
+  ASSERT_TRUE(base::WriteFile(ClientDir(koan_home, a).Append("client.json"),
+                              SerializeClient({a, "old"})));
+  ClientInfo dated{b, "new", std::nullopt, base::FilePath("/p"),
+                   base::Time::Now() + base::Days(1)};
+  ASSERT_TRUE(base::WriteFile(ClientDir(koan_home, b).Append("client.json"),
+                              SerializeClient(dated)));
+  std::vector<ClientInfo> clients = PairedClients(koan_home);
+  ASSERT_EQ(clients.size(), 2u);
+  EXPECT_EQ(clients[0].client_id, a);
+  EXPECT_FALSE(clients[0].paired_at.is_null());
+  EXPECT_EQ(clients[1].paired_at, dated.paired_at);
+
+  EXPECT_TRUE(ForgetClient(koan_home, b));
+  EXPECT_FALSE(base::PathExists(ClientDir(koan_home, b)));
+  clients = PairedClients(koan_home);
+  ASSERT_EQ(clients.size(), 1u);
+  EXPECT_EQ(clients[0].client_id, a);
+  // Never a path made of something that is not a client id.
+  EXPECT_FALSE(ForgetClient(koan_home, "../.."));
+  EXPECT_TRUE(base::PathExists(ClientDir(koan_home, a)));
+}
+
+// What the guide must tell an agent (the 2026-11-19 agent that failed): a
+// plain pair, take-over of the tab in front, what the tabs use, no
+// AppleScript or debugging port, and how to run koan from another machine.
+TEST(KoanCliSkillTest, TheGuideCoversPairingTakeOverAndSsh) {
+  const std::string guide = SkillGuide();
+  for (const char* needed : {
+           "koan pair --label",
+           "koan take-over",
+           "bring that tab to the front",
+           "capability drive",
+           "logins, extensions",
+           "What agents can use",
+           "AppleScript",
+           "debugging port",
+           "ssh",
+           "~/Applications/Koan.app/Contents/Resources/bin/koan",
+           "/Applications/Koan.app/Contents/Resources/bin/koan",
+           "saves the PNG",
+           "never read or edit ~/.koan",
+       }) {
+    EXPECT_NE(guide.find(needed), std::string::npos) << needed;
+  }
+  // Not the old advice: agent tabs never saw the user's logins.
+  EXPECT_EQ(guide.find("never see the user's logins"), std::string::npos);
+  EXPECT_EQ(guide.find("--capabilities"), std::string::npos);
 }
 
 TEST(KoanCliProtocolTest, MessagesAndErrors) {

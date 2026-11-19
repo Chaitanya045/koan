@@ -490,6 +490,13 @@ sequence). Nothing starts the gateway yet (no preference, no window hook): that 
 | `incognito` | **does not exist in v1** (decision 5) | |
 | `keep-awake` | off | `stay_awake` (display-sleep prevention) for unattended runs |
 
+**What `koan pair` requests (2026-11-19):** a plain `koan pair` requests the full set (`space`, `observe`, `read`, `drive`,
+`keep-awake`), per the user's rule that agents use the browser as the user does (§7.0, the access toggles default on, user,
+2026-11-11). The dialog adds one switch per requested capability, each on, so the user still turns off what an agent should not
+have, and every take-over still asks per tab. `--capabilities` narrows the request (`--capabilities space`: its own tabs only).
+Before, a plain `koan pair` requested nothing, and an agent that followed the guide failed at `koan take-over` with
+`Koan.notPermitted (capability drive)`.
+
 "Asks on first use" shows a bubble anchored to the URL pill of the tab concerned: *Allow once*, *Allow for this
 client*, *Deny*. A missing capability returns the CDP error `Koan.notPermitted {capability}`.
 
@@ -1171,14 +1178,30 @@ nodes from 1, so an old ref would name some node of the new page). `select` (and
 popup is needed; `fill` checks the node takes text first and reads the field back, and fails (`Koan.notFilled`) when
 nothing changed. Raw CDP errors go through `MapError()` (`koan_cli_actions.*`) into Koan codes with a hint. A changed
 program or chain sends `Koan.approvalPending {reason, message}` while the dialog is open, which `koan` prints (the holder
-passes it up its ready pipe), and the timeout and denial errors carry the same reason. Not built: `watch` filtering, `log`, `revoke`, `relay`/`agent-browser` (§11),
-and the settings button that installs `~/.local/bin/koan` and the skill.
+passes it up its ready pipe), and the timeout and denial errors carry the same reason. Not built: `watch` filtering, `log`, `revoke`, `relay`/`agent-browser` (§11).
+**Stale pairings and status (2026-11-19):** `client.json` records the profile it paired with (`userDataDir`, made absolute)
+and when (`pairedAt`). Without `--client`, `ChooseClient()` takes the pairings with the Koan dialled (or ones that do not
+say), prefers those of the agent running this `koan` (`ThisAgent()`), and takes the newest, so a new `koan pair` is the
+default and "several paired clients" is gone. When the browser answers `Koan.authFailed` (revoked, expired, profile
+replaced), `koan` removes that client's directory if `ShouldForget()` says it paired with that Koan (a record that does not
+say: only Koan's default profile), and tries the next one. `koan status` asks the browser with a **probe proof**
+(`Koan.authenticate {clientId, signature, probe: true}` → `{paired, approvalNeeded, reason?}`): the key is verified as for a
+real proof, but nothing is asked, pinned, touched or authenticated, and a failed probe counts as a failure like any proof.
+**Set up agents (2026-11-19):** Settings > Agent Control > *Set up agents on this Mac* (`koan_agent_setup.*`,
+`KoanAgentSetupHandler`, off the UI thread) links `~/.local/bin/koan` to this app's tool (replacing only a link to a Koan
+app's tool) and writes `koan-browser/SKILL.md` into each installed agent's skills directory (one table,
+`AgentSkillHomes()`), never over a file that is not Koan's, and leaves a link someone else made (`npx skills`) alone;
+*Remove* undoes only what is Koan's. `$KOAN_AGENT_SETUP_HOME` points it at a test HOME (scripts/mac/suite.sh).
 
 **Skill file** (ego's integration model: shell commands, no SDK, no remote-debugging setup). The installed entry skill
 is a few lines ("run `koan skill` and follow it"); `koan skill` prints the guide from the installed version so it is
-never stale, written from Koan's own command set. Koan writes `~/.claude/skills/koan-browser/SKILL.md` (and
-`~/.agents/skills/koan-browser/`) **only when the user clicks "Install agent skill" in settings** (decision 10), never
-silently. The guide tells the agent: run `koan status`; if not paired, `koan pair` and wait for the user to approve;
+never stale, written from Koan's own command set. Koan writes `koan-browser/SKILL.md` into `~/.claude/skills` (Claude
+Code), `~/.agents/skills` (Codex's current user directory, also the one Amp, Cline, Pi and `npx skills -g` share) and
+`~/.cursor/skills` (Cursor), for each agent whose home directory exists, **only when the user clicks "Set Up Agents" in
+settings** (decision 10), never silently. Codex's older `~/.codex/skills` is not written, so that a Codex reading both does
+not list the skill twice. The same file is `skills/koan-browser/SKILL.md` in the repo, which `npx skills add
+Chaitanya045/koan` finds (the skills CLI looks for `skills/<name>/SKILL.md`); `scripts/tests/test_agent_skill.py` keeps the
+two the same. The guide tells the agent: run `koan status`; if not paired, `koan pair` and wait for the user to approve;
 open tabs with `koan open` (they land in the agent's Space, never the user's); use `koan agent-browser` for page work;
 use `koan watch`; if `userNeeded` or `Koan.paused` appears, stop and tell the user; never ask the user for keys, never
 read `~/.koan`. `koan` is **one command prefix a user can allow-list**, so the agent works in normal permission modes,

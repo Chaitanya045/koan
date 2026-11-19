@@ -41,6 +41,9 @@ let query = '';
 // Settings > Agent Control > Saved containers (KoanAgentContainersHandler);
 // null where agent control isn't built.
 let agentContainers = null;
+// Settings > Agent Control > Set up agents on this Mac
+// (KoanAgentSetupHandler); null where agent control isn't built.
+let agentSetup = null;
 // Functions that bring the controls on screen up to date with the prefs.
 let updaters = [];
 
@@ -499,6 +502,82 @@ function renderShortcuts(query) {
   ];
 }
 
+// Agent Control: set up agents ----------------------------------------------
+
+// One button that lets agents on this Mac find Koan: it links
+// ~/.local/bin/koan to the koan tool in this app and writes a small
+// koan-browser skill into each installed agent's skills directory. Only on
+// a click (design decision 10); run it again after an update.
+function renderAgentSetup(query) {
+  if (!agentSetup ||
+      (query && !matches(query, 'set up agents on this mac', 'agent skill',
+                         'command line tool', 'koan command',
+                         ...agentSetup.agents.map(a => a.name)))) {
+    return [];
+  }
+  const status = h('span', {class: 'theme-status', id: 'agent-setup-status'});
+  // What a click did, said after the pane is drawn again.
+  const run = async (request, done) => {
+    status.textContent = 'Working…';
+    for (const button of root.querySelectorAll('#group-agent-setup button')) {
+      button.disabled = true;
+    }
+    agentSetup = await request();
+    render();
+    const problems = agentSetup.problems;
+    const shown = root.getElementById('agent-setup-status');
+    if (shown) {
+      shown.textContent = problems.length ? problems.join(' ') : done;
+      shown.classList.toggle('error', problems.length > 0);
+    }
+  };
+  const installed = agentSetup.agents.filter(a => a.installed);
+  const anySetUp = agentSetup.linked || agentSetup.agents.some(a => a.setUp);
+  const agentLines = agentSetup.agents.filter(a => a.installed || a.setUp)
+      .map(a => h('p', {class: 'description indent'},
+                  `${a.setUp ? '✓' : '–'} ${a.name}: ` +
+                      (a.setUp ? `knows Koan (${a.path})` : 'not set up')));
+  const link = agentSetup.linked ?
+      `✓ The koan command: ${agentSetup.link}` +
+          (agentSetup.onPath ? '' :
+               '. ~/.local/bin doesn’t seem to be on your shell’s PATH: ' +
+                   'agents use the full path instead, or add ' +
+                   'export PATH="$HOME/.local/bin:$PATH" to ~/.zshrc') :
+      `– The koan command: not linked (${agentSetup.link})`;
+  return [
+    h('section', {class: 'group', id: 'group-agent-setup'},
+      h('h2', {}, 'Set up agents on this Mac'),
+      h('p', {class: 'description'},
+        'Lets the coding agents on this Mac (Claude Code, Codex, Cursor and ' +
+            'others) find Koan on their own: it links the koan command and ' +
+            'adds a small “koan-browser” skill to each agent’s skills ' +
+            'folder. Agents still ask you before they connect. Set up again ' +
+            'after you move Koan.'),
+      agentSetup.cliExists ? null :
+          h('p', {class: 'description'},
+            'This build of Koan has no koan command.'),
+      h('p', {class: 'description indent'}, link),
+      ...agentLines,
+      installed.length || agentLines.length ? null :
+          h('p', {class: 'description indent'},
+            'No agents found. Install one, then set up again.'),
+      h('div', {class: 'row theme-paste'},
+        h('div', {class: 'theme-actions'},
+          h('button', {
+            id: 'agent-setup-button',
+            disabled: !agentSetup.cliExists,
+            onclick: () => run(() => sendWithPromise('koanSetUpAgents'),
+                               'Set up.'),
+          }, anySetUp ? 'Set Up Again' : 'Set Up Agents'),
+          anySetUp ? h('button', {
+            id: 'agent-setup-remove',
+            onclick: () => run(() => sendWithPromise('koanRemoveAgentSetup'),
+                               'Removed.'),
+          }, 'Remove') : null,
+          status))),
+  ];
+}
+
 // Agent Control: saved containers --------------------------------------------
 
 // The saved agent containers, with Add and Delete, and which agent client may
@@ -595,7 +674,8 @@ function renderPane(pane, query) {
   }
   const groups = renderGroups(pane, query);
   return pane.id === 'agents' ?
-      [...groups, ...renderAgentContainers(query)] : groups;
+      [...groups, ...renderAgentSetup(query), ...renderAgentContainers(query)] :
+      groups;
 }
 
 // Page ------------------------------------------------------------------------
@@ -651,6 +731,10 @@ const ready = (async () => {
   // Not awaited: where agent control isn't built nothing answers.
   sendWithPromise('koanGetAgentContainers').then(containers => {
     agentContainers = containers;
+    render();
+  });
+  sendWithPromise('koanGetAgentSetup').then(setup => {
+    agentSetup = setup;
     render();
   });
   addWebUiListener('koan-pref-changed', (pref, value) => {

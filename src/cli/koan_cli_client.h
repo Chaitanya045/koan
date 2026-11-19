@@ -38,7 +38,8 @@ inline constexpr base::TimeDelta kAnswerWait = base::Seconds(30);
 base::FilePath HomeDir();
 // ~/.koan.
 base::FilePath KoanDir();
-// The browser profile: `given`, else $KOAN_USER_DATA_DIR, else Koan's.
+// The browser profile: `given`, else $KOAN_USER_DATA_DIR, else Koan's; made
+// absolute if it exists, so that a pairing records one name for it.
 base::FilePath UserDataDir(const std::string& given);
 
 // A directory of the user's alone: made 0700 if missing, refused if it is a
@@ -46,15 +47,23 @@ base::FilePath UserDataDir(const std::string& given);
 bool PrivateDir(const base::FilePath& dir);
 bool WritePrivateFile(const base::FilePath& path, const std::string& data);
 
-std::vector<std::string> PairedClients(const base::FilePath& home);
+// The clients paired under `home`. A record from before pairings kept their
+// time gets its file's.
+std::vector<ClientInfo> PairedClients(const base::FilePath& home);
 std::optional<ClientInfo> LoadClient(const base::FilePath& home,
                                      const std::string& client_id);
+// Removes a client's directory (its key and record). For a pairing the
+// browser has forgotten: the key is this client's own and opens nothing.
+bool ForgetClient(const base::FilePath& home, const std::string& client_id);
 
 // This process as the OS describes it (its executable, signature and
 // ancestors), through the gateway's own resolver: the peer of one end of a
 // socket pair is the process that holds both ends.
 std::optional<agent::PeerIdentity> ResolveSelf(
     const agent::PeerResolver& resolver);
+// The agent that started this process (AgentAncestor()), nullopt where the
+// OS cannot say.
+std::optional<agent::ProcessInfo> ThisAgent();
 
 // Requests and their answers over a framed connection.
 class Link {
@@ -87,19 +96,43 @@ std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
 // Proves the client to the browser (design section 5.2). If the browser asks
 // the user first (the program or the agent that started it is not the one
 // that paired), `on_asked` gets the browser's reason while the user decides.
+// If the browser does not know the client (Koan.authFailed), its record is
+// removed when ShouldForget() says so; `user_data_dir` is the profile dialled.
 bool Authenticate(
     Link& link,
     const base::FilePath& home,
     const std::string& client_id,
+    const base::FilePath& user_data_dir,
     std::string* error,
     base::RepeatingCallback<void(const std::string&)> on_asked = {});
 
+// What `koan status` learns of a pairing from the browser, without
+// connecting as it or asking the user anything (a probe proof).
+enum class PairingCheck {
+  kValid,
+  // Valid, but the next connection from here is asked about (`reason`).
+  kApprovalNeeded,
+  // The browser does not know it; its record was removed (ShouldForget()).
+  kForgotten,
+  // The browser does not know it; the record is kept (another profile's).
+  kUnknown,
+  // No answer, or one the probe did not expect (`reason`).
+  kUnchecked,
+};
+PairingCheck CheckPairing(Link& link,
+                          const base::FilePath& home,
+                          const std::string& client_id,
+                          const base::FilePath& user_data_dir,
+                          std::string* reason);
+
 // Pairs a new client (the user approves it in Koan) and stores its key and
-// record, with the pin of this process, under `home`. The browser's answer,
-// or nullopt with `error`.
+// record, with the pin of this process and the profile it paired with
+// (`user_data_dir`), under `home`. The browser's answer, or nullopt with
+// `error`.
 std::optional<base::DictValue> PairNewClient(
     Link& link,
     const base::FilePath& home,
+    const base::FilePath& user_data_dir,
     const std::string& label,
     const std::vector<std::string>& capabilities,
     std::string* error);

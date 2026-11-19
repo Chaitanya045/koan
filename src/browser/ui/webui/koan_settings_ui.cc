@@ -34,6 +34,7 @@
 
 #if BUILDFLAG(IS_POSIX)
 #include "koan/browser/ui/webui/koan_agent_containers_handler.h"
+#include "koan/browser/ui/webui/koan_agent_setup_handler.h"
 #endif
 
 namespace koan::settings {
@@ -275,6 +276,7 @@ void ExtendSettingsUI(content::WebUI& web_ui,
 #if BUILDFLAG(IS_POSIX)
   web_ui.AddMessageHandler(
       std::make_unique<KoanAgentContainersHandler>(*profile));
+  web_ui.AddMessageHandler(std::make_unique<KoanAgentSetupHandler>());
 #endif
 }
 

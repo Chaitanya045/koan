@@ -336,7 +336,9 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
     ${updates[@]+"${updates[@]}"} --use-mock-keychain --window-size=1280,800
     --enable-logging=stderr --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
     --enable-features="$enable" --disable-features="$disable" ${extra[@]+"${extra[@]}"})
-  "${args[@]}" "${urls[@]}" >"$koan_log" 2>&1 &
+  # KOAN_AGENT_SETUP_HOME: Settings > Agent Control > Set up agents writes
+  # under the test's throw-away HOME, never the user's ~/.claude.
+  KOAN_AGENT_SETUP_HOME="$agent_home" "${args[@]}" "${urls[@]}" >"$koan_log" 2>&1 &
   local pid=$!
   local up=0
   for _ in $(seq 1 80); do

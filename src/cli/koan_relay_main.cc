@@ -183,7 +183,8 @@ int Pair(const Options& options) {
       options.label.empty() ? "koan-relay (agent-browser)" : options.label;
   fprintf(stderr, "koan-relay: approve \"%s\" in Koan...\n", label.c_str());
   std::optional<base::DictValue> result =
-      PairNewClient(link, Home(), label, options.capabilities, &error);
+      PairNewClient(link, Home(), UserDataDir(options.user_data_dir), label,
+                    options.capabilities, &error);
   if (!result) {
     return Fail(error);
   }
@@ -364,8 +365,10 @@ class Relay : public net::HttpServer::Delegate {
 // The background half of `serve`. Says "ok" or "error ..." on `ready`.
 int Serve(const Options& options, base::ScopedFD ready) {
   std::string error;
+  const base::FilePath user_data_dir = UserDataDir(options.user_data_dir);
   std::optional<std::string> client_id =
-      ChooseClient(PairedClients(Home()), options.client, &error);
+      ChooseClient(PairedClients(Home()), options.client, user_data_dir,
+                   ThisAgent(), &error);
   if (!client_id) {
     SayReady(std::move(ready), "error the relay is not paired: " + error);
     return kNotConnected;
@@ -390,14 +393,13 @@ int Serve(const Options& options, base::ScopedFD ready) {
 
   // Proved as the relay's own client, while `koan agent-browser` (and the
   // agent that ran it) are still its ancestors, as when it paired.
-  std::unique_ptr<FrameChannel> channel =
-      DialBrowser(UserDataDir(options.user_data_dir), &error);
+  std::unique_ptr<FrameChannel> channel = DialBrowser(user_data_dir, &error);
   if (!channel) {
     SayReady(std::move(ready), "error " + error);
     return kNotConnected;
   }
   auto browser = std::make_unique<Link>(std::move(channel));
-  if (!Authenticate(*browser, Home(), *client_id, &error)) {
+  if (!Authenticate(*browser, Home(), *client_id, user_data_dir, &error)) {
     SayReady(std::move(ready), "error " + error);
     return kNotConnected;
   }

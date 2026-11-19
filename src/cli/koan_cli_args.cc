@@ -138,10 +138,10 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       }
       for (std::string& name : base::SplitString(
                value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
-        if (name != "observe" && name != "read" && name != "drive" &&
-            name != "keep-awake") {
+        if (name != "space" && name != "observe" && name != "read" &&
+            name != "drive" && name != "keep-awake") {
           return Error("unknown capability \"" + name +
-                       "\" (observe, read, drive, keep-awake)");
+                       "\" (space, observe, read, drive, keep-awake)");
         }
         command.capabilities.push_back(std::move(name));
       }
@@ -317,8 +317,10 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
 std::string UsageText() {
   return R"(koan: let an agent use Koan, in tabs of its own
 
-  koan pair [--label NAME] [--capabilities observe,read,drive]
-                         ask Koan to let this agent in (you approve in Koan)
+  koan pair [--label NAME] [--capabilities space,observe,read,drive,keep-awake]
+                         ask Koan to let this agent in (you approve in Koan);
+                         asks for all of these unless --capabilities narrows
+                         it (space alone: only tabs of its own)
   koan status            Koan, the connection, tasks, tabs, what waits for you
   koan tabs              the tabs this agent may see
   koan open [url] [--task T] [--saved NAME]
@@ -342,7 +344,8 @@ std::string UsageText() {
                          where the relay's env file is / stop the relay
   koan skill             the guide for agents
 
-Options: --json, --user-data-dir DIR, --client ID. <tab> is an id from
+Options: --json, --user-data-dir DIR, --client ID (default: the newest
+pairing of this agent with this Koan). <tab> is an id from
 koan tabs or open, or a unique prefix of one (4 characters or more).
 )";
 }

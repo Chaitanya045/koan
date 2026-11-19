@@ -110,6 +110,13 @@ std::string SerializeClient(const ClientInfo& client) {
   base::DictValue dict;
   dict.Set("clientId", client.client_id);
   dict.Set("label", client.label);
+  if (!client.user_data_dir.empty()) {
+    dict.Set("userDataDir", client.user_data_dir.value());
+  }
+  if (!client.paired_at.is_null()) {
+    dict.Set("pairedAt", static_cast<double>(
+                             client.paired_at.InMillisecondsSinceUnixEpoch()));
+  }
   if (client.pinned) {
     base::DictValue pinned;
     pinned.Set("process", ProcessDict(client.pinned->process));
@@ -138,6 +145,12 @@ std::optional<ClientInfo> ParseClient(std::string_view json) {
   if (const std::string* label = dict->FindString("label")) {
     client.label = *label;
   }
+  if (const std::string* dir = dict->FindString("userDataDir")) {
+    client.user_data_dir = base::FilePath(*dir);
+  }
+  if (std::optional<double> at = dict->FindDouble("pairedAt")) {
+    client.paired_at = base::Time::FromMillisecondsSinceUnixEpoch(*at);
+  }
   if (const base::DictValue* pinned = dict->FindDict("pinned")) {
     client.pinned =
         agent::PinnedIdentity{ProcessFrom(pinned->FindDict("process")),
@@ -146,28 +159,71 @@ std::optional<ClientInfo> ParseClient(std::string_view json) {
   return client;
 }
 
-std::optional<std::string> ChooseClient(const std::vector<std::string>& paired,
-                                        std::string_view wanted,
-                                        std::string* error) {
+std::vector<std::string> PairCapabilities(
+    const std::vector<std::string>& given) {
+  if (!given.empty()) {
+    return given;
+  }
+  return {"space", "observe", "read", "drive", "keep-awake"};
+}
+
+std::optional<std::string> ChooseClient(
+    const std::vector<ClientInfo>& paired,
+    std::string_view wanted,
+    const base::FilePath& user_data_dir,
+    const std::optional<agent::ProcessInfo>& agent,
+    std::string* error) {
   if (!wanted.empty()) {
-    for (const std::string& id : paired) {
-      if (id == wanted) {
-        return id;
+    for (const ClientInfo& client : paired) {
+      if (client.client_id == wanted) {
+        return client.client_id;
       }
     }
     *error = "no paired client " + std::string(wanted) + " in ~/.koan/clients";
     return std::nullopt;
   }
-  if (paired.empty()) {
-    *error = "not paired: run koan pair, and approve it in Koan";
+  std::vector<const ClientInfo*> candidates;
+  for (const ClientInfo& client : paired) {
+    if (client.user_data_dir.empty() || client.user_data_dir == user_data_dir) {
+      candidates.push_back(&client);
+    }
+  }
+  if (candidates.empty()) {
+    *error = paired.empty()
+                 ? "not paired: run koan pair, and approve it in Koan"
+                 : "not paired with the Koan at " + user_data_dir.value() +
+                       ": run koan pair, and approve it in Koan";
     return std::nullopt;
   }
-  if (paired.size() > 1) {
-    *error =
-        "several paired clients in ~/.koan/clients; pick one with --client";
-    return std::nullopt;
+  // This agent's own pairings first: another agent's would be turned away by
+  // its holder (koan_cli_admission.h).
+  if (agent) {
+    std::vector<const ClientInfo*> own;
+    for (const ClientInfo* client : candidates) {
+      if (client->pinned && client->pinned->agent == *agent) {
+        own.push_back(client);
+      }
+    }
+    if (!own.empty()) {
+      candidates = std::move(own);
+    }
   }
-  return paired.front();
+  const ClientInfo* newest = candidates.front();
+  for (const ClientInfo* client : candidates) {
+    if (client->paired_at > newest->paired_at ||
+        (client->paired_at == newest->paired_at &&
+         client->client_id > newest->client_id)) {
+      newest = client;
+    }
+  }
+  return newest->client_id;
+}
+
+bool ShouldForget(const ClientInfo& client,
+                  const base::FilePath& dialled,
+                  const base::FilePath& default_user_data_dir) {
+  return client.user_data_dir.empty() ? dialled == default_user_data_dir
+                                      : client.user_data_dir == dialled;
 }
 
 std::string Request(int id,

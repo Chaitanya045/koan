@@ -124,9 +124,11 @@ std::string RefusalText(LocalClientVerdict verdict,
 
 int RunHolder(const Command& command) {
   std::string error;
-  const std::vector<std::string> paired = PairedClients(KoanDir());
+  // The koan that starts a holder names its client (Holder()).
+  const base::FilePath user_data_dir = UserDataDir(command.user_data_dir);
   std::optional<std::string> client_id =
-      ChooseClient(paired, command.client, &error);
+      ChooseClient(PairedClients(KoanDir()), command.client, user_data_dir,
+                   ThisAgent(), &error);
   int ready_fd = command.ready_fd;
   if (!client_id) {
     SayReady(ready_fd, "error " + error);
@@ -146,8 +148,7 @@ int RunHolder(const Command& command) {
              "so koan cannot keep a connection open");
     return kFailed;
   }
-  std::unique_ptr<FrameChannel> browser =
-      DialBrowser(UserDataDir(command.user_data_dir), &error);
+  std::unique_ptr<FrameChannel> browser = DialBrowser(user_data_dir, &error);
   if (!browser) {
     SayReady(ready_fd, "error " + error);
     return kNotConnected;
@@ -155,7 +156,7 @@ int RunHolder(const Command& command) {
   Link link(std::move(browser));
   // If Koan asks the user first, the koan that started this says why while
   // they decide.
-  if (!Authenticate(link, KoanDir(), *client_id, &error,
+  if (!Authenticate(link, KoanDir(), *client_id, user_data_dir, &error,
                     base::BindRepeating(
                         [](int fd, const std::string& why) {
                           std::string line;
@@ -488,25 +489,42 @@ std::unique_ptr<Link> ConnectHolder(const std::string& client_id) {
 std::unique_ptr<Link> Holder(const Command& command,
                              bool start,
                              std::string* error) {
-  std::optional<std::string> client_id =
-      ChooseClient(PairedClients(KoanDir()), command.client, error);
-  if (!client_id) {
-    return nullptr;
+  const base::FilePath user_data_dir = UserDataDir(command.user_data_dir);
+  const std::optional<agent::ProcessInfo> agent = ThisAgent();
+  std::string forgotten;
+  // A pairing Koan has forgotten is removed when its holder cannot prove it
+  // (Authenticate()); then the next one is tried, so that a stale record
+  // never stands in the way of a good one.
+  while (true) {
+    std::optional<std::string> client_id = ChooseClient(
+        PairedClients(KoanDir()), command.client, user_data_dir, agent, error);
+    if (!client_id) {
+      if (!forgotten.empty()) {
+        *error = forgotten;
+      }
+      return nullptr;
+    }
+    if (std::unique_ptr<Link> link = ConnectHolder(*client_id)) {
+      return link;
+    }
+    if (!start) {
+      return nullptr;
+    }
+    Command held = command;
+    held.client = *client_id;
+    if (StartHolder(held, error)) {
+      std::unique_ptr<Link> link = ConnectHolder(*client_id);
+      if (!link) {
+        *error = "the connection to Koan started but cannot be reached";
+      }
+      return link;
+    }
+    if (!command.client.empty() || LoadClient(KoanDir(), *client_id)) {
+      return nullptr;
+    }
+    forgotten = *error;
+    fprintf(stderr, "koan: %s\n", error->c_str());
   }
-  if (std::unique_ptr<Link> link = ConnectHolder(*client_id)) {
-    return link;
-  }
-  if (!start) {
-    return nullptr;
-  }
-  if (!StartHolder(command, error)) {
-    return nullptr;
-  }
-  std::unique_ptr<Link> link = ConnectHolder(*client_id);
-  if (!link) {
-    *error = "the connection to Koan started but cannot be reached";
-  }
-  return link;
 }
 
 // --- Output
@@ -586,29 +604,95 @@ int Pair(const Command& command) {
   const std::string label = command.label.empty() ? "koan" : command.label;
   fprintf(stderr, "koan: approve \"%s\" in Koan...\n", label.c_str());
   std::optional<base::DictValue> result =
-      PairNewClient(link, KoanDir(), label, command.capabilities, &error);
+      PairNewClient(link, KoanDir(), UserDataDir(command.user_data_dir), label,
+                    PairCapabilities(command.capabilities), &error);
   if (!result) {
     return Fail(error);
   }
   if (command.json) {
     PrintJson(*result);
-  } else {
-    printf("paired as %s (%s)\n", result->FindString("clientId")->c_str(),
-           label.c_str());
+    return kOk;
   }
+  std::vector<std::string> granted;
+  if (const base::ListValue* list = result->FindList("capabilities")) {
+    for (const base::Value& name : *list) {
+      if (name.is_string()) {
+        granted.push_back(name.GetString());
+      }
+    }
+  }
+  printf("paired as %s (%s); allowed: %s\n",
+         result->FindString("clientId")->c_str(), label.c_str(),
+         base::JoinString(granted, ", ").c_str());
   return kOk;
+}
+
+// The "paired:" line of `koan status`.
+std::string PairingLine(const std::string& pairing, const std::string& why) {
+  if (pairing == "valid") {
+    return "yes";
+  }
+  if (pairing == "approvalNeeded") {
+    return "yes (Koan will ask you to approve it again" +
+           (why.empty() ? std::string() : ": " + why) + ")";
+  }
+  if (pairing == "unchecked") {
+    return "yes (not checked: " + why + ")";
+  }
+  if (pairing == "forgotten") {
+    return "no (Koan forgot this pairing; run koan pair)";
+  }
+  if (pairing == "unknown") {
+    return "no (this Koan does not know the pairing; run koan pair)";
+  }
+  return "no (koan pair)";
 }
 
 int Status(const Command& command) {
   base::DictValue status;
   std::string error;
-  std::unique_ptr<FrameChannel> probe =
-      DialBrowser(UserDataDir(command.user_data_dir), &error);
+  const base::FilePath user_data_dir = UserDataDir(command.user_data_dir);
+  std::unique_ptr<FrameChannel> probe = DialBrowser(user_data_dir, &error);
   status.Set("koanRunning", static_cast<bool>(probe));
-  probe.reset();
-  const std::vector<std::string> paired = PairedClients(KoanDir());
-  status.Set("paired", !paired.empty());
   std::unique_ptr<Link> holder = Holder(command, /*start=*/false, &error);
+  // Whether Koan still knows the pairing: an open connection says so;
+  // otherwise Koan is asked (a probe proof, which neither connects nor asks
+  // the user), and a pairing it forgot is removed and the next one asked
+  // about.
+  std::string pairing = holder ? "valid" : "none";
+  std::string why;
+  if (!holder) {
+    const std::optional<agent::ProcessInfo> agent = ThisAgent();
+    std::unique_ptr<Link> link =
+        probe ? std::make_unique<Link>(std::move(probe)) : nullptr;
+    while (std::optional<std::string> client_id =
+               ChooseClient(PairedClients(KoanDir()), command.client,
+                            user_data_dir, agent, &error)) {
+      if (!link) {
+        pairing = "unchecked";
+        why = "Koan is not reachable";
+        break;
+      }
+      const PairingCheck check =
+          CheckPairing(*link, KoanDir(), *client_id, user_data_dir, &why);
+      if (check == PairingCheck::kForgotten) {
+        fprintf(stderr, "koan: Koan forgot pairing %s; koan removed it\n",
+                client_id->substr(0, 8).c_str());
+        pairing = "forgotten";
+        continue;
+      }
+      pairing = check == PairingCheck::kValid            ? "valid"
+                : check == PairingCheck::kApprovalNeeded ? "approvalNeeded"
+                : check == PairingCheck::kUnknown        ? "unknown"
+                                                         : "unchecked";
+      break;
+    }
+  }
+  probe.reset();
+  const bool paired = pairing == "valid" || pairing == "approvalNeeded" ||
+                      pairing == "unchecked";
+  status.Set("paired", paired);
+  status.Set("pairing", pairing);
   status.Set("connected", static_cast<bool>(holder));
   int exit_code = kOk;
   if (holder) {
@@ -628,7 +712,7 @@ int Status(const Command& command) {
   printf("Koan: %s\n", status.FindBool("koanRunning").value_or(false)
                            ? "running, Agent ready"
                            : "not reachable (not running, or Agent ready off)");
-  printf("paired: %s\n", paired.empty() ? "no (koan pair)" : "yes");
+  printf("paired: %s\n", PairingLine(pairing, why).c_str());
   printf("connection: %s\n",
          holder ? "open" : "none (the next koan open starts one)");
   if (const base::ListValue* tasks = status.FindList("tasks")) {

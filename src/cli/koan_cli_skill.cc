@@ -9,18 +9,30 @@ namespace koan::cli {
 std::string SkillGuide() {
   return R"(# Using Koan, the user's browser
 
-You can open and work in tabs of your own in Koan, in a Space and a container
-of your own: your tabs never see the user's logins, and the user's tabs are
-not yours unless they give you one. Every command is `koan ...`.
+Koan is the user's own web browser. With `koan`, you open and work in tabs
+of your own in it, and, when the user agrees, in a tab of theirs. Your tabs
+are in a Space of your own, and they use the browser as the user does: the
+user's logins, extensions, saved passwords and site permissions (unless the
+user turned some of that off in Koan: Settings > Agent Control > What agents
+can use). Every command is `koan ...`.
+
+Never use AppleScript ("Allow JavaScript from Apple Events"), a remote
+debugging port, or another browser to get at the user's pages: `koan` is
+the way in, and it is the one the user approved.
 
 1. `koan status`. If it says "paired: no", run `koan pair --label "<your
-   name>"` and tell the user to approve it in Koan; wait for it. Never ask the
-   user for keys and never read ~/.koan.
+   name>"` and tell the user to approve it in Koan (a dialog there); wait
+   for it. A plain `koan pair` asks for everything an agent can do (its own
+   tabs, listing the user's tabs, looking at and controlling the tab they
+   give you, keeping the display awake); the user can untick any of it.
+   Never ask the user for keys and never read or edit ~/.koan: `koan` looks
+   after it (a pairing Koan has forgotten is removed, and the newest pairing
+   is used, so you never need --client unless several agents share it).
 2. `koan open <url>` opens a background tab and prints its id (the first 4+
    characters of it are enough later). `--task <name>` groups tabs into a
    task; `--saved <name>` uses a saved container the user allowed you (it
-   keeps logins). If that is refused (Koan.notGranted), tell the user: only
-   they can allow it, in Settings > Agent Control.
+   keeps its own logins). If that is refused (Koan.notGranted), tell the
+   user: only they can allow it, in Settings > Agent Control.
 3. Look: `koan snapshot <tab>` prints the page as a compact outline:
    controls, links, landmarks and headings with @refs, each block's text on
    one line, states in brackets ([checked], [selected], [expanded],
@@ -39,8 +51,14 @@ not yours unless they give you one. Every command is `koan ...`.
    snapshot again).
    With agent-browser installed, `koan agent-browser <its usual args>` runs
    it against Koan instead (the first time, the user approves koan-relay).
-5. A tab of the user's: `koan take-over` asks them for the tab they are on
-   (only its site); `koan release <tab>` gives it back when you are done.
+5. A tab of the user's (to work on a page they have open, signed in): tell
+   the user to bring that tab to the front in Koan, then run
+   `koan take-over`. Koan asks them; once they allow it, you get the tab
+   that is in front at that moment, and it prints its id. Each take-over asks
+   again. If it fails with Koan.notPermitted (capability drive), the user
+   turned that off for you: ask them to allow it in Settings > Agent
+   Control, or pair again with a plain `koan pair`. `koan release <tab>`
+   gives it back when you are done.
 6. When you are done: `koan end` closes your tabs and clears what they
    stored. `koan end --task <name>` ends one task.
 
@@ -59,6 +77,24 @@ Your tabs stay open between commands for as long as your task lasts (30
 minutes without a command ends it). Some agents sandbox shell commands:
 `koan` needs your home directory (~/.koan) and the socket in Koan's profile
 directory (~/Library/Application Support/Koan/AgentControl).
+
+## If `koan` is not found
+
+Run it by its full path, inside the app:
+`~/Applications/Koan.app/Contents/Resources/bin/koan` or
+`/Applications/Koan.app/Contents/Resources/bin/koan`. Settings > Agent
+Control > "Set up agents on this Mac" links it as ~/.local/bin/koan.
+
+## From another machine (you run on a server, the user's Koan is on their Mac)
+
+Run `koan` on the Mac over ssh, by its full path (a non-interactive ssh
+shell may not have ~/.local/bin on its PATH), for example
+`ssh <mac> ~/Applications/Koan.app/Contents/Resources/bin/koan status`.
+Pair the same way, over ssh; the user approves in Koan on the Mac. Files
+are on the Mac: `koan screenshot <tab> -o /tmp/shot.png` saves the PNG
+there, so copy it back (`scp <mac>:/tmp/shot.png .`) to look at it. Every
+command of a task must come from the same agent: keep using the same ssh
+login rather than mixing it with other programs.
 )";
 }
 
