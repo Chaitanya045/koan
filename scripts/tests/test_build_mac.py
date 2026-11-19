@@ -161,6 +161,13 @@ class DryRunTest(unittest.TestCase):
     self.assertIn('10 (--fast)', out)
     self.assertIn('install      skip', out)
 
+  def test_signs_before_install_unless_koan_sign_is_0(self):
+    out = self.plan()
+    self.assertIn('sign         would: scripts/mac_sign.sh', out)
+    self.assertLess(out.index('sign         would'),
+                    out.index('install      would'))
+    self.assertIn('sign         skip', self.plan(KOAN_SIGN='0'))
+
   def test_maintainer_folder_does_not_install(self):
     out = self.plan(KOAN_MAC='/Users/<user>/work/koan-mac')
     self.assertIn('install      skip', out)
