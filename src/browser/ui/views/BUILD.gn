@@ -105,6 +105,12 @@ source_set("content_radius") {
   sources = [ "koan_content_radius.h" ]
 }
 
+# Whether upstream's floating corners beside the sidebar show
+# (koan_sidebar_corners.h): pure, for the unit tests.
+source_set("sidebar_corners") {
+  sources = [ "koan_sidebar_corners.h" ]
+}
+
 # Where a sidebar button goes to clear the macOS traffic lights: geometry only.
 source_set("lights_geometry") {
   sources = [
@@ -276,6 +282,7 @@ test("koan_views_unittests") {
     "koan_lights_geometry_unittest.cc",
     "koan_loading_bar_unittest.cc",
     "koan_pinned_site_unittest.cc",
+    "koan_sidebar_corners_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
@@ -297,6 +304,7 @@ test("koan_views_unittests") {
     ":lights_geometry",
     ":loading_bar",
     ":pinned_site",
+    ":sidebar_corners",
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
@@ -549,6 +557,7 @@ source_set("impl") {
     ":lights_geometry",
     ":loading_bar",
     ":pinned_site",
+    ":sidebar_corners",
     ":sidebar_curve",
     ":space_drag_logic",
     ":space_navigation",
