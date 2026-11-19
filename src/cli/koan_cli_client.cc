@@ -252,6 +252,9 @@ namespace {
 // Asks for a nonce and sends the proof (with "probe" for CheckPairing());
 // the browser's answer to the proof, or nullopt and `error` if there was no
 // nonce. Events while the browser waits for the user go to `on_event`.
+// `late` says the proof went out so long after the nonce was asked for that
+// the browser may have let the nonce expire: its Koan.authFailed then says
+// nothing about the pairing (the browser answers both alike, on purpose).
 std::optional<Message> Prove(
     Link& link,
     const base::FilePath& home,
@@ -259,7 +262,9 @@ std::optional<Message> Prove(
     bool probe,
     base::TimeDelta wait,
     base::RepeatingCallback<void(const Message&)> on_event,
+    bool* late,
     std::string* error) {
+  *late = false;
   std::optional<Key> key = LoadKey(home, client_id);
   if (!key) {
     *error = "the key of client " + client_id + " is missing or unreadable";
@@ -267,6 +272,7 @@ std::optional<Message> Prove(
   }
   base::DictValue ask;
   ask.Set("clientId", client_id);
+  const base::TimeTicks asked = base::TimeTicks::Now();
   std::optional<Message> nonce_answer =
       link.Call("Koan.authenticate", std::move(ask));
   const std::string* nonce_text =
@@ -282,6 +288,9 @@ std::optional<Message> Prove(
   base::DictValue proof;
   proof.Set("clientId", client_id);
   proof.Set("signature", Sign(*key, agent::ProofMessage(client_id, *nonce)));
+  // Half the browser's nonce lifetime (Session::kNonceLifetime, 10 s): a
+  // machine that slept or stalled in between.
+  *late = base::TimeTicks::Now() - asked > base::Seconds(5);
   if (probe) {
     proof.Set("probe", true);
   }
@@ -319,6 +328,7 @@ bool Authenticate(Link& link,
                   base::RepeatingCallback<void(const std::string&)> on_asked) {
   // A changed program or chain is asked about in Koan: wait for the user. The
   // browser says why it asks (Koan.approvalPending) before it waits.
+  bool late = false;
   std::optional<Message> answer = Prove(
       link, home, client_id, /*probe=*/false, kApprovalWait,
       base::BindRepeating(
@@ -330,13 +340,15 @@ bool Authenticate(Link& link,
             }
           },
           on_asked),
-      error);
+      &late, error);
   if (!answer) {
     return false;
   }
   if (answer->is_error() || !answer->result) {
     if (answer->error_code != "Koan.authFailed") {
       *error = "authentication failed: " + Describe(answer);
+    } else if (late) {
+      *error = "Koan did not accept a late proof: run the command again";
     } else if (ForgetIfStale(home, client_id, user_data_dir)) {
       *error = kForgotten;
     } else {
@@ -352,10 +364,15 @@ PairingCheck CheckPairing(Link& link,
                           const std::string& client_id,
                           const base::FilePath& user_data_dir,
                           std::string* reason) {
+  bool late = false;
   std::optional<Message> answer =
       Prove(link, home, client_id, /*probe=*/true, base::Seconds(10),
-            base::RepeatingCallback<void(const Message&)>(), reason);
+            base::RepeatingCallback<void(const Message&)>(), &late, reason);
   if (!answer) {
+    return PairingCheck::kUnchecked;
+  }
+  if (answer->error_code == "Koan.authFailed" && late) {
+    *reason = "Koan did not accept a late proof";
     return PairingCheck::kUnchecked;
   }
   if (answer->error_code == "Koan.authFailed") {

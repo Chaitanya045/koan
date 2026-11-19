@@ -56,8 +56,8 @@ the way in, and it is the one the user approved.
    `koan take-over`. Koan asks them; once they allow it, you get the tab
    that is in front at that moment, and it prints its id. Each take-over asks
    again. If it fails with Koan.notPermitted (capability drive), the user
-   turned that off for you: ask them to allow it in Settings > Agent
-   Control, or pair again with a plain `koan pair`. `koan release <tab>`
+   unticked it when you paired: pair again with a plain `koan pair` and ask
+   them to leave it on (Settings has no switch for it). `koan release <tab>`
    gives it back when you are done.
 6. When you are done: `koan end` closes your tabs and clears what they
    stored. `koan end --task <name>` ends one task.
