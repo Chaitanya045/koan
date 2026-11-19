@@ -11,6 +11,9 @@
 //           (trimmed) or positions (separators count) from the top menu down
 //           through submenus; else {missing, items} or {disabled}.
 //   cancel  {cancelled}: closes the open menu (AXCancel).
+//   dump    {app, focused, windows}: the roles Accessibility sees (the
+//           application's children, the focused element's, each window's
+//           down to MENU_DEPTH), for failure details when no menu is found.
 // While an NSMenu is open its event-tracking loop runs no Chromium tasks, so
 // CDP and UI DevTools can't answer; AppKit still answers Accessibility.
 function run(argv) {
@@ -40,10 +43,35 @@ function run(argv) {
       se.click(e);
     }
   };
+  const kids = e => { try { return e.uiElements(); } catch (x) { return []; } };
   // A context menu is a child of the application (or of a window); else
-  // the top menu above the focused item.
+  // the top menu above the focused item. AppKit makes a context menu the
+  // child of the view it pops up for (popUpContextMenu:withEvent:forView:,
+  // Chromium's window's content view), so windows are searched a few levels
+  // down too.
+  const MENU_DEPTH = 3;
+  const menuBelow = (e, depth) => {
+    for (const c of kids(e)) {
+      if (role(c) === 'AXMenu') return c;
+      if (depth > 1) {
+        const m = menuBelow(c, depth - 1);
+        if (m) return m;
+      }
+    }
+    return null;
+  };
+  const focusedRole = () => {
+    try { return role(p.attributes.byName('AXFocusedUIElement').value()); } catch (x) { return ''; }
+  };
+  if (a.op === 'dump') {
+    const tree = (e, depth) => kids(e).map(c => (depth > 1 ? { [role(c)]: tree(c, depth - 1) }
+                                                            : role(c)));
+    let windows = [];
+    try { windows = p.windows().map(w => tree(w, MENU_DEPTH - 1)); } catch (x) {}
+    return out({ app: kids(p).map(role), focused: focusedRole(), windows });
+  }
   const openMenu = () => {
-    for (const e of p.uiElements()) if (role(e) === 'AXMenu') return e;
+    for (const e of kids(p)) if (role(e) === 'AXMenu') return e;
     try {
       let e = p.attributes.byName('AXFocusedUIElement').value();
       let menu = null;
@@ -53,9 +81,12 @@ function run(argv) {
       }
       if (menu) return menu;
     } catch (x) {}
-    for (const w of p.windows()) {
-      for (const e of w.uiElements()) if (role(e) === 'AXMenu') return e;
-    }
+    try {
+      for (const w of p.windows()) {
+        const m = menuBelow(w, MENU_DEPTH);
+        if (m) return m;
+      }
+    } catch (x) {}
     return null;
   };
   let menu = openMenu();

@@ -81,8 +81,19 @@ const brave = marks?.find(m => m.mark === 'engine-brave');
 check('...with Brave\'s logo on its tile', !!brave?.masked, JSON.stringify(marks));
 check('...and Google\'s on Google\'s', !!marks?.find(m => m.mark === 'engine-google' && m.masked),
       JSON.stringify(marks));
-const markSvg = await js(`fetch('icons/engine-brave.svg').then(r => r.text())`);
-check('...a served SVG', typeof markSvg === 'string' && /<svg[^>]*viewBox/.test(markSvg),
+// As the tile's mask loads it: an image. (fetch() refuses chrome:// URLs, "URL
+// scheme "chrome" is not supported", so it can't read the file's text.)
+const markSvg = await js(`(async () => {
+  const img = new Image();
+  img.src = 'icons/engine-brave.svg';
+  try {
+    await img.decode();
+  } catch (e) {
+    return 'not an image: ' + e.message;
+  }
+  return { decoded: true, size: img.naturalWidth + 'x' + img.naturalHeight };
+})()`);
+check('...a served SVG (it decodes as an image)', markSvg?.decoded === true,
       JSON.stringify(markSvg)?.slice(0, 80));
 await next();
 check('Next: done', await step() === 'done', await step());

@@ -560,11 +560,17 @@ export async function viewTree() {
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const out = [];
   let widget = 0;
+  // (Each view's widget's name and its place among the widgets of that name:
+  // lib/mac.mjs rootMouse() finds the widget again in a later document.)
+  const named = {};
+  let wname = '', wn = 0;
   const walk = async (n, shown, path, ox, oy) => {
     const a = n.attributes ?? [];
     const cls = a[a.indexOf('class') + 1];
     if (n.nodeName === 'Widget') {
       widget++;
+      wname = a[a.indexOf('name') + 1] ?? '';
+      wn = named[wname] = (named[wname] ?? -1) + 1;
       path = [];
       ox = 0;
       oy = 0;
@@ -581,7 +587,7 @@ export async function viewTree() {
         oy += +p.Y;
       }
       out.push({ cls, nodeId: n.nodeId, shown, x: +p.X, y: +p.Y, w: +p.Width,
-                 h: +p.Height, ax: ox, ay: oy, widget, path, props: p });
+                 h: +p.Height, ax: ox, ay: oy, widget, wname, wn, path, props: p });
       path = [...path, cls];
     }
     for (const c of n.children ?? []) await walk(c, shown, path, ox, oy);

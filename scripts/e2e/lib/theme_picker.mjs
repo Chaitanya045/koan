@@ -127,7 +127,10 @@ export async function paletteRows() {
     }
   }
   const shownRows = rows.filter(r => r.texts.length);
-  return { labels: shownRows.map(r => r.texts[0]), selected: shownRows.findIndex(r => r.selected) };
+  // A search row's first line is the typed text, which is the action's name
+  // here: its second ends in "<engine> Search" (as palette.mjs tells them).
+  return { labels: shownRows.map(r => r.texts[0]), selected: shownRows.findIndex(r => r.selected),
+           search: shownRows.map(r => /Search$/.test(r.texts[1] ?? '')) };
 }
 
 // A shortcut, sent to the showing tab (lib/koan.mjs key(): the Mac's key
@@ -165,11 +168,13 @@ export async function palette(action) {
                 `${bar.field ? `${bar.field.props?.SelectedRange} of ${bar.field.props?.Text}` : 'none'})`);
   }
   await typeIntoOmnibox(action);
-  const target = (await waitFor(async () => {
-    const { labels } = await paletteRows();
-    return labels.indexOf(action) >= 0 && labels;
-  })) || [];
-  const index = target.indexOf(action);
+  // The action's row, not the search for its name (which comes first, as
+  // soon as the text is typed).
+  const actionRow = ({ labels, search }) => labels.findIndex((l, i) => l === action && !search[i]);
+  const index = (await waitFor(async () => {
+    const i = actionRow(await paletteRows());
+    return i >= 0 && i + 1;
+  }) || 0) - 1;
   if (index < 0) {
     console.log(`  (palette: no "${action}" row; rows: ${(await paletteRows()).labels.join(' / ')})`);
   }
@@ -186,7 +191,8 @@ export async function palette(action) {
   if (index >= 0 && !picker(await tree())) {
     const t = await tree();
     console.log(`  (palette: after Enter on "${action}": rows before ` +
-                `${before.labels.map((l, i) => (i === before.selected ? `*${l}` : l)).join(' / ')}; ` +
+                `${before.labels.map((l, i) => `${i === before.selected ? '*' : ''}${l}${
+                    before.search[i] ? ' (search)' : ''}`).join(' / ')}; ` +
                 `URL bar now ${JSON.stringify(shown(t, 'OmniboxViewViews')[0]?.p.Text ?? null)}; ` +
                 `${await keyWindowReport()})`);
   }

@@ -4,7 +4,9 @@
 // each colour at the opacity slider's value, Zen 1.24b's default theme),
 // the slider goes on to 1 there and fades the opaque paint in until the
 // blur is covered, it works without colours too, and the value is saved
-// with the Space. Without glass the paint stays opaque (theme.mjs).
+// with the Space. Without glass the paint stays opaque (theme.mjs). In the
+// Zen look (local_state/theme_glass.json): the default shadcn style has no
+// Space themes (KoanThemeController::IsEnabled()).
 //
 //   scripts/e2e/run.sh theme_glass
 import { IS_MAC, check, finish } from './lib/koan.mjs';

@@ -3,10 +3,12 @@
 // tab and folder menus are native NSMenus (NATIVE_MENUS): they open with the
 // same right-click and are read and clicked through Accessibility
 // (lib/mac.mjs nativeMenu()).
-import { NATIVE_MENUS, UI_PORT, browserCall, connect, pages, sendKey, sleep } from './koan.mjs';
 import {
-  KOAN_PID, closeNativeMenu, nativeMenuReport, pickNativeMenu, ptr, realInput, waitNativeMenu,
-  windowOf,
+  NATIVE_MENUS, UI_PORT, browserCall, check, connect, finish, pages, sendKey, sleep, visiblePage,
+} from './koan.mjs';
+import {
+  KOAN_PID, calibrate, closeNativeMenu, nativeMenuReport, pickNativeMenu, ptr, realInput,
+  waitNativeMenu, windowOf,
 } from './mac.mjs';
 
 // Koan's pid, for the native menus (folders.mjs restarts Koan).
@@ -85,20 +87,29 @@ export async function click(s, n, button = 'left') {
 }
 
 // macOS: the native menu the last right-click opened, {items, c, release},
-// or null. With real input it is a real right-click at `at` on the screen
-// (the window has no title bar: its bounds' origin is the root view's).
-// Else a UI DevTools press, which is answered only once the menu closes (its
-// tracking loop runs no Chromium tasks), so it isn't waited for; its release
-// goes to the root view once the menu has closed, as the press and release
-// do elsewhere.
+// or null. With real input it is a real right-click at `at` on the screen:
+// the root view's screen origin is measured once (lib/mac.mjs calibrate();
+// the window's bounds' origin is only a guess at it). Else a UI DevTools
+// press, which is answered only once the menu closes (its tracking loop runs
+// no Chromium tasks), so it isn't waited for; its release goes to the root
+// view once the menu has closed, as the press and release do elsewhere.
 let nativeOpen = null;
+let rootOnScreen = null;
 async function openNativeMenu(event, at) {
   if (nativeOpen) await endNativeMenu();
   let c = null;
   // (Real input is Koan's first pid's only: the gate checks that pid.)
   const bounds = realInput() && menuPid === KOAN_PID &&
       (await windowOf((await pages())[0]?.id).catch(() => null))?.bounds;
-  const real = !!bounds && await ptr('rclick', bounds.left + at.x, bounds.top + at.y);
+  if (bounds && !rootOnScreen) {
+    const page = await visiblePage().catch(() => null);
+    const measured = page && await calibrate(page).catch(() => null);
+    rootOnScreen = measured ?? { x: bounds.left, y: bounds.top, guessed: true };
+    console.log(`  (the window's root view on screen: ${JSON.stringify(rootOnScreen)}, ` +
+                `its bounds ${bounds.left},${bounds.top})`);
+  }
+  const screen = bounds && [Math.round(rootOnScreen.x + at.x), Math.round(rootOnScreen.y + at.y)];
+  const real = !!bounds && await ptr('rclick', ...screen);
   if (!real) {
     c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
     await c.send('DOM.getDocument', { depth: -1 });
@@ -110,8 +121,8 @@ async function openNativeMenu(event, at) {
   const away = !c && [bounds.left + bounds.width - 60, bounds.top + bounds.height / 2];
   nativeOpen = { items: menu?.items ?? null, c, release: event('mouseReleased'), away };
   if (!menu) {
-    console.log(`  (no native menu opened by ${real ? `a real right-click at ${
-        Math.round(bounds.left + at.x)},${Math.round(bounds.top + at.y)}` : 'a UI DevTools press'}: ` +
+    console.log(`  (no native menu opened by ${real ? `a real right-click at ${screen}` :
+                                                  'a UI DevTools press'}: ` +
                 `${await nativeMenuReport(menuPid)})`);
     await endNativeMenu();
   }
@@ -120,7 +131,13 @@ async function endNativeMenu() {
   const open = nativeOpen;
   nativeOpen = null;
   if (!open) return;
-  await closeNativeMenu(menuPid);
+  if (!(await closeNativeMenu(menuPid))) {
+    // A menu Accessibility doesn't find keeps the browser from answering,
+    // and without real input nothing closes it: stop, not time out.
+    check('A native menu that Accessibility can\'t find closes again', false,
+          `${await nativeMenuReport(menuPid)}; real input ${realInput() ? 'on' : 'off'}`);
+    finish();
+  }
   if (open.c) {
     await open.c.send('DOM.dispatchMouseEvent', open.release);
     open.c.close();

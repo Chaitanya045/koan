@@ -206,12 +206,38 @@ export async function clickThroughRoot(vs, view, { button = 'left', at } = {}) {
   await rootMouse(root, ['mousePressed', 'mouseReleased'], x, y, button);
   await sleep(800);
 }
+// UI DevTools numbers the nodes again on each DOM.getDocument, in tree
+// order, and on macOS the widgets come in NSApp.windows' order: a widget
+// made since `root` was read (a drag's image, a header, a toast) can come
+// before it and move its number. So the events go to the root view of the
+// widget `root` was in (its name and place among the widgets of that name,
+// from viewTree()), as this document numbers it.
+export function freshRootId(doc, root) {
+  if (root.wname === undefined) return root.nodeId;
+  const roots = [];
+  const walk = n => {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'Widget' && (a[a.indexOf('name') + 1] ?? '') === root.wname) {
+      const view = (n.children ?? []).find(c => {
+        const ca = c.attributes ?? [];
+        return c.nodeName === 'View' && /RootView$/.test(ca[ca.indexOf('class') + 1] ?? '');
+      });
+      if (view) roots.push(view.nodeId);
+    }
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(doc);
+  // (Its old number, if that is still a root view of a widget of the name.)
+  if (roots.includes(root.nodeId)) return root.nodeId;
+  return roots[root.wn ?? 0] ?? root.nodeId;
+}
 export async function rootMouse(root, types, x, y, button = 'left') {
   const ui = await connect(`ws://127.0.0.1:${process.env.UI_PORT}/0`);
   await ui.send('DOM.enable');
-  await ui.send('DOM.getDocument', { depth: -1 });
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result?.root;
+  const nodeId = doc ? freshRootId(doc, root) : root.nodeId;
   for (const type of types) {
-    await ui.send('DOM.dispatchMouseEvent', { nodeId: root.nodeId,
+    await ui.send('DOM.dispatchMouseEvent', { nodeId,
         event: { type, x: Math.round(x), y: Math.round(y), button, wheelDirection: 'none' } });
   }
   ui.close();
@@ -416,29 +442,37 @@ export async function waitNativeMenu(open = true, pid = KOAN_PID, timeout = 4000
     await sleep(250);
   }
 }
+// Whether the browser answers CDP (its /json/version) within `timeout` ms.
+// While an NSMenu is open its tracking loop runs no Chromium tasks, so it
+// doesn't.
+export const browserAnswers = (timeout = 2000) =>
+  fetch(`http://127.0.0.1:${process.env.CDP_PORT}/json/version`,
+        { signal: AbortSignal.timeout(timeout) }).then(r => r.ok, () => false);
 // Why no native menu was seen, for failure details: what Accessibility read
 // (System Events' answer, or its error) and whether the browser answers
-// CDP. While an NSMenu is open its tracking loop runs no Chromium tasks, so
-// a browser that doesn't answer has a menu open that Accessibility didn't
-// find; one that answers has none.
+// CDP. A browser that doesn't answer has a menu open that Accessibility
+// didn't find (then what Accessibility sees, lib/native_menu_ax.js dump);
+// one that answers has none.
 export async function nativeMenuReport(pid = KOAN_PID) {
   const ax = nativeMenu('read', [], pid);
-  const port = process.env.CDP_PORT;
-  const answers = await fetch(`http://127.0.0.1:${port}/json/version`,
-                              { signal: AbortSignal.timeout(2000) })
-      .then(r => r.ok, () => false);
+  const answers = await browserAnswers();
   return `Accessibility read ${JSON.stringify(ax)}; the browser ${answers ? 'answers' :
-      'does not answer (a menu is open, or it hangs)'}`;
+      `does not answer (a menu is open, or it hangs; Accessibility sees ${
+          JSON.stringify(nativeMenu('dump', [], pid))})`}`;
 }
 
 // Closes the open native menu, if any (AXCancel, then a real Escape where
-// real input is on). Whether none is open now.
+// real input is on). Whether none is open now: Accessibility finds none and
+// the browser answers (a menu Accessibility doesn't find still keeps the
+// browser from answering; only a real Escape closes that one).
 export async function closeNativeMenu(pid = KOAN_PID) {
-  if (await waitNativeMenu(false, pid, 0)) return true;
+  const closed = async (timeout, answer = 2000) => !!(await waitNativeMenu(false, pid, timeout)) &&
+      (pid !== KOAN_PID || await browserAnswers(answer));
+  if (await closed(0)) return true;
   nativeMenu('cancel', [], pid);
-  if (await waitNativeMenu(false, pid, 2000)) return true;
+  if (await closed(2000)) return true;
   if (pid === KOAN_PID && realInput()) await realKey('Escape');
-  return !!(await waitNativeMenu(false, pid, 2000));
+  return closed(2000, 8000);
 }
 // Presses the item at `path` (titles, or positions with separators counted,
 // through submenus) of the open native menu, and waits for the menu to

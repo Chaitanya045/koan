@@ -449,8 +449,13 @@ if (NATIVE_MENUS) {
 
 // Glance over a split: "Split Glance" would be a third panel, so Zen's limit
 // toast shows and the page opens as a tab instead.
+// Glance opens from the active tab only (MaybeOpenGlance()), and after
+// Split Glance the split's active pane is /a: a real click in /b's pane
+// selects it first (MultiContentsView), a CDP click goes to the page only.
 tab = await pageAt('/b');
 if (tab) {
+  await browser.send('Target.activateTarget', { targetId: tab.id });
+  await sleep(1000);
   await clickLink(tab, 'next', ALT);
   vs = await views();
   const split = shown(inside(vs, 'KoanGlanceView'), 'ImageButton')[2];
@@ -473,13 +478,17 @@ const wasSplit = shown(vs, 'SplitTabView').length === 1;
 if (NATIVE_MENUS) {
   skipped('"Split Out Tab" separates the split', NATIVE_MENU_WHY);
   // Zen's Unsplit key instead (split-view-unsplit, Cmd+Option+U), from a
-  // tab of the split.
+  // tab of the split, selected (the limit toast's tab is active now, and
+  // Unsplit acts on the active tab).
   const inSplit = await pageAt('/b');
   if (inSplit) {
+    await browser.send('Target.activateTarget', { targetId: inSplit.id });
+    await sleep(1000);
     await keyTo(inSplit, 85, ACCEL | ALT, 'u');
   }
   check('Unsplit (Cmd+Option+U) separates the split',
-        wasSplit && shown(await views(), 'SplitTabView').length === 0);
+        wasSplit && shown(await views(), 'SplitTabView').length === 0,
+        `split before ${wasSplit}, pages ${await urls()}`);
 } else {
   const splitTab = inside(vs, 'SplitTabView').find(v => v.cls === 'TabView' && v.shown);
   if (splitTab) {

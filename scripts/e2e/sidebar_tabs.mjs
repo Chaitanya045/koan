@@ -62,7 +62,8 @@ async function views() {
       shown = shown && p.Visible !== 'false';
       ox += +p.X;
       oy += +p.Y;
-      out.push({ cls, nodeId: n.nodeId, shown, x: ox, y: oy, w: +p.Width, h: +p.Height, path });
+      out.push({ cls, nodeId: n.nodeId, shown, x: ox, y: oy, w: +p.Width, h: +p.Height, path,
+                 props: p });
       path = [...path, cls];
     }
     for (const c of n.children ?? []) await walk(c, depth + 1, shown, path, ox, oy);
@@ -74,28 +75,36 @@ async function views() {
 
 const find = (vs, cls) => vs.find(v => v.cls === cls);
 
-// The size of the first view of class `cls`, without walking every view's
-// styles (the toast only lives for two seconds).
+// The size of the first view of class `cls` and its labels' texts, without
+// walking every view's styles (the toast only lives for two seconds).
 async function sizeOf(cls) {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('CSS.enable');
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const classOf = n => { const a = n.attributes ?? []; return a[a.indexOf('class') + 1]; };
   let node = null;
   const walk = n => {
-    const a = n.attributes ?? [];
-    if (!node && a[a.indexOf('class') + 1] === cls) node = n;
+    if (!node && classOf(n) === cls) node = n;
     (n.children ?? []).forEach(walk);
   };
   walk(doc);
-  let size = null;
-  if (node) {
-    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: node.nodeId });
+  const stylesOf = async n => {
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
     const p = {};
     for (const rule of r.result?.matchedCSSRules ?? []) {
       for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
     }
-    size = { w: +p.Width, h: +p.Height, visible: p.Visible !== 'false' };
+    return p;
+  };
+  let size = null;
+  if (node) {
+    const p = await stylesOf(node);
+    const text = [];
+    for (const c of node.children ?? []) {
+      if (classOf(c) === 'Label') text.push((await stylesOf(c)).Text);
+    }
+    size = { w: +p.Width, h: +p.Height, visible: p.Visible !== 'false', text: text.join(' ') };
   }
   ui.close();
   return size;
@@ -304,8 +313,10 @@ check('...which has no row, and there is nothing left to clear',
       inContainer(vs, 'TabView', 'UnpinnedTabContainerView').length === 0 &&
       !find(vs, 'KoanClearTabsRow')?.shown,
       `${inContainer(vs, 'TabView', 'UnpinnedTabContainerView').length} row(s)`);
-check('...and toasts "Tabs Closed!"', toast?.visible && toast.h === 42 && toast.w > 0,
-      JSON.stringify(toast));
+// Zen's toast is 42px tall, 48px on macOS (zen-popup.css
+// --zen-toast-max-height; kToastHeight).
+check('...and toasts "Tabs Closed!"', toast?.visible && toast.h === (IS_MAC ? 48 : 42) &&
+      toast.w > 0 && toast.text.startsWith('Tabs Closed!'), JSON.stringify(toast));
 vs = await views();
 const REOPEN = IS_MAC ? '⇧⌘T' : 'Ctrl+Shift+T';
 if (await menuKey(await visiblePage(), VK.T, CTRL | SHIFT, 't', 'cs')) {

@@ -40,9 +40,15 @@ async function views() {
   await ui.send('CSS.enable');
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const out = [];
-  const walk = async (n, depth, shown, path) => {
+  // ax/ay: relative to the widget's root view, to compare views of
+  // different parents.
+  const walk = async (n, depth, shown, path, ox = 0, oy = 0) => {
     const a = n.attributes ?? [];
     const cls = a[a.indexOf('class') + 1];
+    if (n.nodeName !== 'View') {
+      ox = 0;
+      oy = 0;
+    }
     if (depth > 0 && n.nodeName === 'View' && cls) {
       const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
       const p = {};
@@ -50,10 +56,15 @@ async function views() {
         for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
       }
       shown = shown && p.Visible !== 'false';
-      out.push({ cls, nodeId: n.nodeId, shown, x: +p.X, y: +p.Y, w: +p.Width, h: +p.Height, path });
+      const root = !path.length;
+      const ax = root ? 0 : ox + +p.X, ay = root ? 0 : oy + +p.Y;
+      out.push({ cls, nodeId: n.nodeId, shown, x: +p.X, y: +p.Y, w: +p.Width, h: +p.Height,
+                 ax, ay, path });
       path = [...path, cls];
+      ox = ax;
+      oy = ay;
     }
-    for (const c of n.children ?? []) await walk(c, depth + 1, shown, path);
+    for (const c of n.children ?? []) await walk(c, depth + 1, shown, path, ox, oy);
   };
   await walk(doc, 0, true, []);
   ui.close();
@@ -163,7 +174,10 @@ if (await openLocation()) {
             'card: 55% of the window, centred, above the middle',
         isFloatingCard(bar),
         `${bar?.w}x${bar?.h} at ${bar?.x},${bar?.y} in ${WINDOW_WIDTH}x${WINDOW_HEIGHT}`);
-  const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown);
+  // Koan's card fill (KoanUrlBarCardFill, the card's surface behind the
+  // location bar) is a toolbar child too.
+  const toolbarChildren = vs.filter(v => v.path.at(-1) === 'ToolbarView' && v.shown &&
+                                         v.cls !== 'KoanUrlBarCardFill');
   check('...showing just the location bar',
         toolbarChildren.length === 1 && toolbarChildren[0].cls === 'LocationBarView',
         toolbarChildren.map(v => v.cls).join(' '));
@@ -187,20 +201,27 @@ if (await openLocation()) {
   vs = await views();
 }
 
+// Over the pill: its bounds, less what keeps Chromium's suggestions frame
+// inside the window (KoanUrlBarController::CardBounds(), #349: on macOS the
+// field keeps ~14pt from the window's edge, within the pill), and at least
+// half the pill.
 const urlPill = find(vs, 'KoanUrlPill');
 await click(find(vs, 'KoanUrlPill'));
 vs = await views();
 bar = find(vs, 'TopContainerView');
+const pillAt = p => `${p?.w} at ${p?.ax} (pill ${urlPill?.w} at ${urlPill?.ax})`;
 check('Clicking the URL pill opens the URL bar there (Zen: a click never floats it)',
-      bar?.x === urlPill?.x && bar?.w === urlPill?.w, `${bar?.w} at ${bar?.x}`);
+      !!bar && !!urlPill && bar.ax >= urlPill.ax && bar.ax + bar.w <= urlPill.ax + urlPill.w &&
+          bar.w >= urlPill.w / 2 && !isFloatingCard(bar),
+      pillAt(bar));
+const clickedX = bar?.ax;
 await uiEvent(find(vs, 'OmniboxViewViews'), 'DOM.dispatchKeyEvent',
               { type: 'keyPressed', keyCode: 0, code: 0, flags: 0, key: 'w'.codePointAt(0), isChar: true });
 await sleep(1000);
 vs = await views();
 bar = find(vs, 'TopContainerView');
 check('...and typing keeps it in place, not floating',
-      bar?.x === urlPill?.x && bar?.x !== FLOAT_X,
-      `${bar?.w} at ${bar?.x}`);
+      bar?.ax === clickedX && !isFloatingCard(bar), pillAt(bar));
 await windowKey(VK.ESC);
 
 await key(VK.B, CTRL | ALT, 'b');

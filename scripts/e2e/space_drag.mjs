@@ -15,7 +15,7 @@
 // probe checks first that such a drag reaches the drag at all,
 // and the multi-select (Cmd+click) and Esc legs, which need AppKit's
 // events, are skipped. Run by scripts/mac/suite.sh.
-import { browserCall, check, finish, pages, sleep, viewTree, waitFor } from './lib/koan.mjs';
+import { browserCall, check, finish, pages, sleep, viewTree, visiblePage, waitFor } from './lib/koan.mjs';
 import { alive, calibrate, createSpace, fatalInLog, ptr, realInput, realInputWhyNot, realKey,
          rootMouse, rootOf, skipped, spaceButtons, startServer, tabViewTitled } from './lib/mac.mjs';
 
@@ -52,20 +52,39 @@ async function show(name) {
 }
 const shownTitles = v => v.filter(x => x.cls === 'TabTitle' && x.shown).map(x => x.props.Text);
 
-// Real pointer: where the root view is on screen.
+// Real pointer: where the root view is on screen, measured on the page that
+// shows (a new Space shows its own new tab: Space 1's pages are hidden and
+// get no mousemove), so from Space 1.
 let origin = null;
 if (realInput()) {
-  origin = await calibrate(await anyPage(), await viewTree());
-  if (!origin) skipped('real pointer', 'calibration failed; using synthetic drags');
+  await show(S1);
+  const page = await visiblePage();
+  origin = page && await calibrate(page, await viewTree());
+  if (!origin) {
+    skipped('real pointer', `calibration failed (${page ? `on ${page.url}` : 'no page shows'}); ` +
+            'using synthetic drags');
+  }
 }
 const real = () => realInput() && origin;
 
+// While the button is still held: the Space that shows and whether Koan's
+// drag runs (its image shows), for the checks' details: a Space that showed
+// during the drag but not after it points at the drop, one that never
+// showed at the switch.
+async function duringDrag() {
+  const v = await viewTree();
+  const image = v.some(x => x.cls === 'KoanTabDragImageView' && x.shown);
+  return `mid-drag: ${active(v) ?? '(none)'} shows, ${image ? 'the image shows' : 'no drag image'}`;
+}
+
 // A drag from the tab titled `title` to `to` (root view coordinates), held
 // there `holdMs` with a 1 px wiggle, then dropped (or ended with Esc).
+// {error} if it couldn't start, {during} (duringDrag()) otherwise.
 async function drag(title, to, { holdMs = 0, esc = false } = {}) {
   const v = await viewTree();
   const tab = tabViewTitled(v, title);
-  if (!tab) return `no tab "${title}"`;
+  if (!tab) return { error: `no tab "${title}"` };
+  let during = '';
   const root = rootOf({ views: v.filter(x => x.widget === tab.widget) });
   const from = { x: tab.ax + Math.min(40, tab.w / 2), y: tab.ay + tab.h / 2 };
   if (real()) {
@@ -78,6 +97,7 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
       await ptr('dragto', X(to) + (t / 100) % 2, Y(to), 16);
       await sleep(84);
     }
+    during = await duringDrag();
     if (esc) await realKey('Escape', '', 300);
     await ptr('up', X(to), Y(to));
   } else {
@@ -103,10 +123,11 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
         await rootMouse(root, ['mouseDragged'], to.x + t % 2, to.y);
       }
     }
+    during = await duringDrag();
     await rootMouse(root, ['mouseReleased'], to.x, to.y);
   }
   await sleep(1500);
-  return null;
+  return { during };
 }
 const buttonPoint = (v, name) => {
   const b = spaceButtons(v).find(x => x.name === name)?.view;
@@ -121,20 +142,24 @@ const edgePoint = (v, side) => {
 // A drag case: `tabs` dragged from `from` (the first is pressed), then
 // checks the Space that shows and where the tabs are.
 async function dragCase(name, { from, tabs, target, expect, holdMs, esc }) {
-  await show(from);
+  // (A click on its Space button; nothing below means anything without it.)
+  const started = await show(from) || active(await viewTree()) === from;
+  check(`${name}: ${from} shows before the drag`, started,
+        `showing ${active(await viewTree())}`);
   let v = await viewTree();
   const to = target(v);
   if (!to) {
     check(`${name}: the drop point is there`, false);
     return;
   }
-  const why = await drag(tabs[0], to, { holdMs, esc });
+  const { error, during } = await drag(tabs[0], to, { holdMs, esc });
   v = await viewTree();
   const now = active(v);
   const here = shownTitles(v);
   check(`${name}: Koan is alive, nothing fatal in the log`, (await alive()) && !fatalInLog(),
-        fatalInLog() || why || '');
-  check(`${name}: ${expect} shows`, now === expect, `showing ${now}`);
+        fatalInLog() || error || '');
+  check(`${name}: ${expect} shows`, now === expect,
+        `showing ${now}; ${during ?? error}; ${real() ? 'the real pointer' : 'synthetic events'}`);
   check(`${name}: the tab${tabs.length > 1 ? 's are' : ' is'} in it`,
         tabs.every(t => here.includes(t)), `here: ${here.join(', ')}`);
   if (now !== from) {

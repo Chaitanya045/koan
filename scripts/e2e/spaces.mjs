@@ -21,8 +21,9 @@
 //   scripts/e2e/run.sh spaces
 import {
   ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
-  check, connect, evalIn, finish, key as pageKey, menuMouse, openMenus, pages as pageTargets,
-  readPref, sleep, typeInto, viewEvent, viewMouse, viewTree, visiblePage, waitFor, windowTints,
+  check, connect, evalIn, finish, key as pageKey, keyToWidget, menuMouse, openMenus,
+  pages as pageTargets, readPref, sleep, typeInto, viewEvent, viewMouse, viewTree, visiblePage,
+  waitFor, windowTints,
 } from './lib/koan.mjs';
 import { menuKey as macMenuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
 
@@ -184,10 +185,15 @@ await click(cells[0]);
 vs = await views();
 check('Picking an emoji sets the icon',
       one(vs, 'KoanSpaceIconField')?.props.Icon === ROCKET);
-// The bubble closes asynchronously (Widget::Close(), on macOS after its
-// window's fade-out), so give it a moment; its widget's views, if they
-// stay, say how it was left.
-const pickerGone = await waitFor(async () => !shown(await views(), 'KoanEmojiPicker').length, 3000);
+// Zen 1.24b keeps the picker open in the form (ZenSpaceCreation.mjs:
+// closeOnSelect: false; koan_space_creation.cc PickIcon()): a click
+// outside or Esc closes it. Esc goes to the picker's widget (its focus
+// manager, so the dialog's Esc accelerator), which works on macOS too: a
+// UI DevTools click elsewhere doesn't take key status from the bubble's
+// NSWindow, which is what closes it there. The bubble closes
+// asynchronously (Widget::Close(), on macOS after its window's fade-out),
+// so give it a moment; its widget's views, if they stay, say how it was
+// left.
 const pickerLeft = async () => {
   const t = await views();
   const picker = t.find(v => v.cls === 'KoanEmojiPicker');
@@ -197,8 +203,13 @@ const pickerLeft = async () => {
                   `${root?.props.Visible}), ${t.filter(v => v.cls === 'KoanEmojiCell').length} cells`
                 : 'gone';
 };
-check('...and closes the picker, which covered the form\'s Theme button', pickerGone,
-      pickerGone ? '' : await pickerLeft());
+check('...and keeps the picker open, as Zen\'s form does',
+      shown(await views(), 'KoanEmojiPicker').length > 0, await pickerLeft());
+const escSent = await keyToWidget('KoanEmojiPicker', VK.ESCAPE);
+const pickerGone = await waitFor(async () => !shown(await views(), 'KoanEmojiPicker').length, 3000);
+check('...until Esc closes it, uncovering the form\'s Theme button', pickerGone,
+      pickerGone ? '' : `Esc ${escSent ? 'sent to the picker\'s widget' : 'not sent (no widget)'}; ` +
+                        await pickerLeft());
 vs = await views();
 
 const nameField = shown(vs, 'Textfield').find(t => t.path.includes('KoanSpaceCreationView'));
