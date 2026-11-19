@@ -9,7 +9,9 @@
 
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/logging.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
@@ -240,6 +242,7 @@ void KoanToast::ShowView(std::unique_ptr<KoanToastView> view,
                          const std::u16string& announcement,
                          base::TimeDelta timeout) {
   Close();
+  VLOG(1) << "Koan toast: " << base::UTF16ToUTF8(announcement);
   ++shown_;
   timeout_ = timeout;
   views::Widget* browser_widget = browser_view_->GetWidget();

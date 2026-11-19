@@ -947,6 +947,7 @@ void KoanGlanceController::ExpandToTab() {
   if (!is_open() || closing_ || awaiting_beforeunload_) {
     return;
   }
+  VLOG(1) << "Koan Glance: expanding to a tab";
   TabStripModel* model = browser_view_->browser()->GetTabStripModel();
   const int source_index = model->GetIndexOfWebContents(source());
   const std::optional<tab_groups::TabGroupId> group =
@@ -970,6 +971,7 @@ void KoanGlanceController::OpenInSplit() {
       model->GetTabAtIndex(source_index)->IsSplit()) {
     // A third panel for the split: over Chromium's limit. Zen shows its
     // toast; the page opens as a tab next to the split instead.
+    VLOG(1) << "Koan Glance: Split Glance over a split: the limit toast";
     ShowSplitLimitToast(browser_view_);
     ExpandToTab();
     return;
