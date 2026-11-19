@@ -3155,7 +3155,16 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
-  if (!controller || !controller->workspaces()->IsEnabled()) {
+  if (!controller) {
+    return false;
+  }
+  // A window without Spaces, Zen's New Blank Window (an unsynced window,
+  // also what a link or CDP opens in a new window with Zen's
+  // open-link-in-new-unsynced-window on): it closes with its last tab, as
+  // Zen's gZenWorkspaces.shouldCloseWindow() closes an unsynced window.
+  if (!controller->workspaces()->IsEnabled()) {
+    VLOG(1) << "Koan: the last tab closed in a window without Spaces (a New "
+               "Blank Window): it closes";
     return false;
   }
   // The tab strip also empties when its last tab moves to another window: a
