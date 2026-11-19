@@ -93,21 +93,37 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
     // (hold.m, not ptr's down/dragto/up: the bench's ptr can predate them,
     // and hold is the drag the essentials_drag flow runs there.)
     const X = p => Math.round(origin.x + p.x), Y = p => Math.round(origin.y + p.y);
+    // A hold at an edge: Zen switches after 500 ms there, and again every
+    // 500 ms while the tab stays (KoanTabDrag::OnSwitchTimer()). So the
+    // approach ends 30 px inside the edge, out of its padding
+    // (kSpaceDragSwitchPadding, 20 px), the hold there is timed by the clock
+    // (each hold call is a process, slower than its own duration), and the
+    // pointer leaves the edge before the slow read mid-drag (a full view
+    // tree takes a second or more on macOS: the Mac cycles 16 and 17 saw
+    // three switches, back where they started). The drop is there, over the
+    // tab list of the Space shown.
+    const via = holdMs ? { x: to.x + Math.sign(from.x - to.x) * 30, y: to.y } : to;
     if (!(await hold('down', X(from), Y(from)))) return { error: realInputWhyNot() };
     try {
       await sleep(150);
       await hold('to', X(from) + 6, Y(from) + 4, 120);
-      await hold('to', X(to), Y(to), 450);
-      for (let t = 0; t < holdMs; t += 100) {
-        await hold('to', X(to) + (t / 100) % 2, Y(to), 24);
-        await sleep(76);
+      await hold('to', X(via), Y(via), 450);
+      if (holdMs) {
+        // One switch: past its 500 ms, well before the next.
+        const inZone = Math.min(holdMs, 650);
+        const start = Date.now();
+        for (let t = 0; Date.now() - start < inZone; t++) {
+          await hold('to', X(to) + t % 2, Y(to), 24);
+          await sleep(50);
+        }
+        await hold('to', X(via), Y(via), 24);
       }
       during = await duringDrag();
       if (esc) await realKey('Escape', '', 300);
     } finally {
       // Never leave the button held (the next drag, and the person, would
       // find it down).
-      await hold('up', X(to), Y(to));
+      await hold('up', X(via), Y(via));
     }
   } else {
     // A hold at an edge: the approach stays out of the edge's padding

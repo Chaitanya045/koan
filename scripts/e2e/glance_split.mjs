@@ -121,6 +121,45 @@ async function views() {
 }
 
 const shown = (vs, cls) => vs.filter(v => v.cls === cls && v.shown && v.h > 0);
+
+// The views of the toast's widget ("KoanToast", koan_toast.cc) alone, with
+// when they were read. views() reads every view's style in turn, which on
+// macOS takes longer than the toast stays (2.4 s): a toast gone before the
+// walk reaches it reads as hidden (no height).
+async function toastViews() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const out = [];
+  const walk = async (n, parentShown) => {
+    const a = n.attributes ?? [];
+    const cls = a[a.indexOf('class') + 1];
+    let shownHere = parentShown;
+    if (n.nodeName === 'View' && cls) {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: n.nodeId });
+      const p = {};
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+      }
+      shownHere = shownHere && p.Visible !== 'false';
+      out.push({ cls, shown: shownHere, w: +p.Width, h: +p.Height });
+    }
+    for (const c of n.children ?? []) await walk(c, shownHere);
+  };
+  let widgets = 0;
+  for (const w of doc.children ?? []) {
+    const a = w.attributes ?? [];
+    if (w.nodeName === 'Widget' && a[a.indexOf('name') + 1] === 'KoanToast') {
+      widgets++;
+      await walk(w, true);
+    }
+  }
+  ui.close();
+  out.widgets = widgets;
+  return out;
+}
+
 const inside = (vs, ancestorCls) => {
   const ids = new Set(vs.filter(v => v.cls === ancestorCls).map(v => v.nodeId));
   let grew = true;
@@ -135,7 +174,7 @@ const inside = (vs, ancestorCls) => {
 
 // Clicks inside `view` the way a real click arrives: at its root view, so
 // the root view targets it (context menus, menu items).
-async function clickView(view, button = 'left') {
+async function clickView(view, button = 'left', after = 1200) {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('DOM.getDocument', { depth: -1 });
@@ -148,7 +187,7 @@ async function clickView(view, button = 'left') {
     });
   }
   ui.close();
-  await sleep(1200);
+  await sleep(after);
 }
 
 // The open menu's items, top to bottom.
@@ -469,22 +508,28 @@ if (tab) {
       `glance ${await glanceOpen()}, ${cards.length} Glance view(s) ` +
       `(${cards.filter(v => v.shown).length} shown), buttons ` +
       `${cardButtons.map(b => JSON.stringify(b.tip)).join(' ') || 'none'}, pages ${await urls()}`;
+  const clicked = Date.now();
   if (split) {
-    await clickView(split);
+    await clickView(split, 'left', 0);
   }
-  // The toast shows from a posted action (KoanGlanceController::PostAction()).
+  // The toast shows from a posted action (KoanGlanceController::PostAction())
+  // and stays 2.4 s: read its widget alone, often.
   let toasts = 0;
-  for (let i = 0; i < 10 && !toasts; i++) {
-    vs = await views();
-    toasts = shown(vs, 'KoanToastView').length;
-    if (!toasts) await sleep(300);
+  const reads = [];
+  while (!toasts && Date.now() - clicked < 3000) {
+    const tv = await toastViews();
+    toasts = shown(tv, 'KoanToastView').length;
+    reads.push(`+${Date.now() - clicked}ms ${tv.widgets}w/` +
+               `${tv.filter(v => v.cls === 'KoanToastView').length}v/${toasts}`);
+    if (!toasts) await sleep(100);
   }
+  vs = await views();
   check('Split Glance over a split shows the limit toast and opens a tab',
         !(await glanceOpen()) && toasts === 1 &&
             shown(vs, 'SplitTabView').length === 1 &&
             (await pages()) === 3,
-      `glance ${await glanceOpen()}, toast ${toasts} ` +
-          `(${vs.filter(v => v.cls === 'KoanToastView').length} in the tree), ` +
+      `glance ${await glanceOpen()}, toast ${toasts} (reads: toast widgets/views/shown ` +
+          `${reads.slice(0, 6).join(' ')}${reads.length > 6 ? ` ... ${reads.at(-1)}` : ''}), ` +
           `${shown(vs, 'SplitTabView').length} split(s), pages ${await urls()}; clicked ` +
           `${split ? JSON.stringify(split.tip) : 'nothing'}; ${before}`);
 }

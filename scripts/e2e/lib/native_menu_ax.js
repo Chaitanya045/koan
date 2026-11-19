@@ -40,12 +40,35 @@ function rawAx(pid) {
   ObjC.import('CoreGraphics');
   const obj = v => { try { return ObjC.castRefToObject(v); } catch (x) { return v; } };
   const call = (f, ...args) => { try { return f(...args); } catch (x) { return -1; } };
+  // Attribute and action names as CFStrings (the API's CFStringRef): the
+  // bridge may not turn a JS string or an NSString into one. (The Mac cycles
+  // 16 and 17: the hit test found an element over the menu, AXError 0, yet
+  // every role read was '', the system-wide focused element's too, which
+  // System Events saw as an AXTextField.) kCFStringEncodingUTF8.
+  const names = {};
+  const cfName = s => {
+    if (!(s in names)) {
+      try { names[s] = $.CFStringCreateWithCString(null, s, 0x08000100) ?? null; } catch (x) {
+        names[s] = null;
+      }
+    }
+    return names[s];
+  };
+  // The last attribute read's AXError (-1: the bridge threw on every form of
+  // the name), for the report.
+  let copyError = null;
   const copy = (e, attr) => {
     if (!e) return null;
-    const ref = Ref();
-    let err = call($.AXUIElementCopyAttributeValue, e, attr, ref);
-    if (err === -1) err = call($.AXUIElementCopyAttributeValue, e, $(attr), ref);
-    return err === 0 ? ref[0] : null;
+    for (const name of [cfName(attr), attr, $(attr)]) {
+      if (name === null || name === undefined) continue;
+      const ref = Ref();
+      const err = call($.AXUIElementCopyAttributeValue, e, name, ref);
+      copyError = err;
+      if (err === 0) return ref[0];
+      // An AXError is the element's answer; -1 is the bridge: try the next form.
+      if (err !== -1) return null;
+    }
+    return null;
   };
   const value = (e, attr) => {
     const v = copy(e, attr);
@@ -112,15 +135,26 @@ function rawAx(pid) {
   };
   const report = () => {
     const wins = menuWindows();
-    const at = wins.slice(0, 4).map(w => chain(hit(...points(w)[0])).map(c => c.role).join('<'));
+    const roleErrors = [];
+    const at = wins.slice(0, 4).map(w => {
+      const up = chain(hit(...points(w)[0]));
+      roleErrors.push(copyError);
+      return up.map(c => c.role).join('<');
+    });
     let trusted;
     try { trusted = !!$.AXIsProcessTrusted(); } catch (x) { trusted = `? (${x})`; }
+    const focused = role(copy(wide, 'AXFocusedUIElement'));
     return {
       windows: wins.map(w => `${w.x},${w.y} ${w.w}x${w.h} layer ${w.layer}`),
       at,
       errors: { ...errors },
+      // The last attribute read's AXError up each chain at `at`, and the
+      // focused element's.
+      roleErrors,
+      focusedError: copyError,
+      cfNames: cfName('AXRole') !== null,
       trusted,
-      focused: role(copy(wide, 'AXFocusedUIElement')),
+      focused,
     };
   };
   return {
@@ -128,7 +162,9 @@ function rawAx(pid) {
     items: m => kids(m).filter(i => role(i) === 'AXMenuItem'),
     menus: i => kids(i).filter(c => role(c) === 'AXMenu'),
     enabled: i => value(i, 'AXEnabled') !== false,
-    perform: (e, action) => call($.AXUIElementPerformAction, e, action) === 0,
+    perform: (e, action) => [cfName(action), action].some(
+        name => name !== null && name !== undefined &&
+                call($.AXUIElementPerformAction, e, name) === 0),
   };
 }
 

@@ -3,3 +3,6 @@
 # to Essentials" (the tab's menu is a native NSMenu there). {root} is the
 # repo; suite.sh expands it.
 --load-extension={root}/scripts/e2e/extensions/test_helper
+# Which way ⌘W went on the window's only tab (VLOG 1: "Koan close tab: ...",
+# "Koan: the last tab ..."), for the ⌘W checks (koan-sidebar_tabs.log).
+--vmodule=koan_pinned_tabs=1,koan_workspaces=1
