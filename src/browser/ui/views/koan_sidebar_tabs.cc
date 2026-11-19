@@ -54,6 +54,7 @@
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_space_header.h"
@@ -843,6 +844,11 @@ bool IsSidebarClientArea(const views::View* tab_strip_view,
                          const views::View* region,
                          const gfx::Point& point) {
   if (IsInSpaceForm(tab_strip_view, region, point)) {
+    return true;
+  }
+  // Koan's navigation buttons in the top row: upstream's row knows only its
+  // own buttons and makes the rest of itself caption.
+  if (IsOnSidebarHeaderView(region, point)) {
     return true;
   }
 #if BUILDFLAG(IS_MAC)

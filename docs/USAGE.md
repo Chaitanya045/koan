@@ -125,7 +125,11 @@ Koan starts in Zen's default layout, **single toolbar**: there is no toolbar
 across the top, and the page reaches the top of the window. The top row of
 the sidebar has the sidebar toggle, back / forward / reload and the tab
 groups / tab search buttons; below it is a rounded grey pill with the
-current site's icon and name (just the host, like Zen).
+current site's icon and name (just the host, like Zen). While the pointer is
+over the sidebar, the pill also shows your pinned extensions (click one for
+its popup), **Copy URL** (copies the address, with a "Copied" toast) and
+**Extensions** (the sliders icon: the extensions menu, to manage them or
+their access to the site).
 
 ![Single toolbar](screenshots/desktop-single-toolbar.png)
 

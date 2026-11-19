@@ -46,6 +46,7 @@
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_site_panel_actions.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_url_pill_buttons.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -58,6 +59,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/button/button_controller.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/highlight_path_generator.h"
@@ -65,6 +67,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/proposed_layout.h"
+#include "ui/views/view_utils.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -95,7 +98,7 @@ std::u16string DisplayUrl(content::WebContents* contents, Profile* profile) {
 }
 
 bool IsTrailingView(const views::View* view) {
-  return view->GetClassName() == "KoanSidebarNavButtons";
+  return views::IsViewClass<KoanSidebarNavButtons>(view);
 }
 
 }  // namespace
@@ -126,6 +129,26 @@ void LayoutSidebarHeaderTrailingViews(const views::View* host,
       right = bounds.x() - kTrailingGap;
     }
   }
+}
+
+bool IsOnSidebarHeaderView(const views::View* region, const gfx::Point& point) {
+  // The rows of the region (the top row among them), then their trailing
+  // views: the ones LayoutSidebarHeaderTrailingViews() placed.
+  for (const views::View* row : region->children()) {
+    if (!row->GetVisible() ||
+        !row->HitTestPoint(
+            views::View::ConvertPointToTarget(region, row, point))) {
+      continue;
+    }
+    for (const views::View* child : row->children()) {
+      if (IsTrailingView(child) && child->GetVisible() &&
+          child->HitTestPoint(
+              views::View::ConvertPointToTarget(region, child, point))) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 bool ShowsExpandedSidebarHeader(const views::View* host) {
@@ -313,8 +336,9 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
       views::BoxLayout::CrossAxisAlignment::kStretch);
 
   // Zen's single-toolbar URL bar: the site identity button (the favicon),
-  // the site's name, then the copy-URL button (on hover). Chromium's page
-  // actions (site settings, install, bookmark star) are not in it.
+  // the site's name, then, on the sidebar's hover, the pinned extensions, the
+  // copy-URL button and the Extensions button. Chromium's page actions (site
+  // settings, install, bookmark star) are not in it.
   auto pill = std::make_unique<KoanUrlPill>(
       base::BindRepeating(&KoanSidebarNavView::FocusOmnibox,
                           base::Unretained(this)),
@@ -388,11 +412,29 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
                                       base::Unretained(browser_view_.get()),
                                       /*markdown=*/false),
                   kKoanLinkIcon, u"Copy URL");
-  // Like Zen's (opacity 0 until hovered), it keeps its place, so Tab and
-  // screen readers reach it.
-  copy_button_->SetPaintToLayer();
-  copy_button_->layer()->SetFillsBoundsOpaquely(false);
-  copy_button_observation_.Observe(copy_button_.get());
+  // Zen's Extensions button (#zen-site-data-icon-button, permissions.svg, last
+  // in the pill): Chromium's extensions menu, the one the toolbar's puzzle
+  // button opens (the extensions, their access to the site, Manage
+  // Extensions), as Zen's opens its extensions panel.
+  extensions_button_ = pill_button(
+      base::BindRepeating(&KoanSidebarNavView::OnExtensionsButtonPressed,
+                          base::Unretained(this)),
+      kKoanPermissionsIcon, u"Extensions");
+  // On the press, as the toolbar's menu buttons: a press while the menu is
+  // open closes it, before the menu's own close on deactivation (posted) has
+  // run and the release would open it again.
+  extensions_button_->button_controller()->set_notify_action(
+      views::ButtonController::NotifyAction::kOnPress);
+  // Like Zen's (opacity 0 until the sidebar is hovered), they keep their
+  // place, so Tab and screen readers reach them.
+  for (views::Button* button : {copy_button_.get(), extensions_button_.get()}) {
+    button->SetPaintToLayer();
+    button->layer()->SetFillsBoundsOpaquely(false);
+    pill_buttons_observation_.AddObservation(button);
+  }
+  sidebar_hover_subscription_ =
+      extensions_->AddSidebarHoverCallback(base::BindRepeating(
+          &KoanSidebarNavView::UpdatePillButtons, base::Unretained(this)));
   if (LocationBarView* location_bar = browser_view_->GetLocationBarView()) {
     if (PermissionDashboardView* dashboard =
             location_bar->permission_dashboard_view()) {
@@ -417,7 +459,7 @@ KoanSidebarNavView::~KoanSidebarNavView() {
 
 void KoanSidebarNavView::OnPillHovered(bool hovered) {
   hovered_ = hovered;
-  UpdateCopyButtonOpacity();
+  UpdatePillButtons();
 }
 
 void KoanSidebarNavView::OnViewVisibilityChanged(views::View* observed_view,
@@ -430,9 +472,14 @@ void KoanSidebarNavView::OnViewIsDeleting(views::View* observed_view) {
   if (chips_observation_.IsObservingSource(observed_view)) {
     chips_observation_.RemoveObservation(observed_view);
   }
-  if (copy_button_observation_.IsObservingSource(observed_view)) {
-    copy_button_observation_.Reset();
+  if (pill_buttons_observation_.IsObservingSource(observed_view)) {
+    pill_buttons_observation_.RemoveObservation(observed_view);
   }
+}
+
+void KoanSidebarNavView::OnWidgetDestroying(views::Widget* widget) {
+  menu_observation_.Reset();
+  UpdatePillButtons();
 }
 
 void KoanSidebarNavView::UpdateInUse() {
@@ -483,16 +530,44 @@ void KoanSidebarNavView::UpdateInUse() {
 }
 
 void KoanSidebarNavView::OnViewFocused(views::View* observed_view) {
-  UpdateCopyButtonOpacity();
+  UpdatePillButtons();
 }
 
 void KoanSidebarNavView::OnViewBlurred(views::View* observed_view) {
-  UpdateCopyButtonOpacity();
+  UpdatePillButtons();
 }
 
-void KoanSidebarNavView::UpdateCopyButtonOpacity() {
-  copy_button_->layer()->SetOpacity(
-      hovered_ || copy_button_->HasFocus() ? 1.0f : 0.0f);
+void KoanSidebarNavView::UpdatePillButtons() {
+  UrlPillButtonsState state;
+  state.has_page = has_page_;
+  state.editing = editing_;
+  state.show_copy_url =
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs()->GetBoolean(
+          prefs::kUrlBarShowCopyUrl);
+  state.sidebar_hovered = extensions_->sidebar_hovered();
+  state.pill_hovered = hovered_;
+  state.button_focused =
+      copy_button_->HasFocus() || extensions_button_->HasFocus();
+  state.menu_open = menu_observation_.IsObserving();
+  const UrlPillButtons buttons = GetUrlPillButtons(state);
+  copy_button_->SetVisible(buttons.copy_url);
+  extensions_button_->SetVisible(buttons.extensions);
+  for (views::Button* button : {copy_button_.get(), extensions_button_.get()}) {
+    button->layer()->SetOpacity(buttons.revealed ? 1.0f : 0.0f);
+  }
+}
+
+void KoanSidebarNavView::OnExtensionsButtonPressed() {
+  // A second press closes the menu, as Zen's button toggles its panel.
+  if (menu_observation_.IsObserving()) {
+    menu_observation_.GetSource()->Close();
+    return;
+  }
+  if (views::Widget* menu =
+          extensions_->ShowExtensionsMenuAt(extensions_button_.get())) {
+    menu_observation_.Observe(menu);
+  }
+  UpdatePillButtons();
 }
 
 views::View* KoanSidebarNavView::bubble_anchor() const {
@@ -557,14 +632,11 @@ void KoanSidebarNavView::UpdateUrl() {
   // The pill reads as the site it shows.
   url_pill_->GetViewAccessibility().SetName(
       text.empty() ? u"Search or enter address" : text);
-  // Like Zen, the copy button is only there for a page (not an empty tab).
+  // Like Zen, the copy and Extensions buttons are only there for a page (not
+  // an empty tab).
   const bool has_page = !editing_ && !text.empty();
   has_page_ = !text.empty();
-  copy_button_->SetVisible(
-      has_page &&
-      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs()->GetBoolean(
-          prefs::kUrlBarShowCopyUrl));
-  UpdateCopyButtonOpacity();
+  UpdatePillButtons();
   // The identity button: the page's favicon, a magnifier on an empty tab, and
   // nothing while the URL bar edits over the pill (it has its own icon).
   site_button_->SetVisible(!editing_);

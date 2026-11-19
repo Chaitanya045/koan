@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Koan e2e action popup",
+  "version": "1.0",
+  "description": "scripts/e2e/sidebar_top_row.mjs: a toolbar action with a popup and a badge (135, like uBlock's count), pinned by the test's prefs so its button is in the sidebar's URL pill. The key fixes the id.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApA1fupMOqFWDn77PfzPFfG0hLFyPuNv2rqSd2ziicCitpcR8e10JBM7CjcHtsmOsxqzdnxwqPLVCmVi79MXDNxwOtMKwoJRWgPB1J4ye3Zx43yE8m5aKigWdgvPFBgfSFjGSsTjeKzr86wPdPZ4x2Ah5wjYL7qq2PgzwJWYZ3okZizjK9qX907p7gYXsbOA54O+ztCHesIry/DS+1wVMz/kaF2q/Oc7Zu1hx0sQzoYJfuu93WGWWRzxq0/tX8ZxS5wV8To3+CNOxjlKECvfTDEDllGmh8ZJtOdDft+OCc3Fo9sDA/CfOIE0StRJ6NGmXPOLAB5JQT+u/6jYRZLiqqQIDAQAB",
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_title": "Koan e2e action popup",
+    "default_popup": "popup.html"
+  }
+}

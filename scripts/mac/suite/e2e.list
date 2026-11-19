@@ -25,6 +25,10 @@ agent_cli timeout=540
 agent_indicator timeout=420
 # Copy current URL with several tabs selected (palette, test_helper).
 copy_urls timeout=180
+# The sidebar's top row and URL pill with real clicks: back / forward /
+# reload (they were window caption), the pinned extension's popup, Copy URL
+# and its toast, the Extensions menu.
+sidebar_top_row timeout=240
 # The command palette (Zen's actions in the URL bar), two restarts; the URL
 # bar opens with a pill click, or a real Cmd+L in compact mode.
 palette timeout=480

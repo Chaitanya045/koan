@@ -255,6 +255,12 @@ source_set("extension_drop") {
   sources = [ "koan_extension_drop.h" ]
 }
 
+# Zen's rules for the URL pill's copy-URL and Extensions buttons
+# (koan_url_pill_buttons.h): pure, like :extension_drop.
+source_set("url_pill_buttons") {
+  sources = [ "koan_url_pill_buttons.h" ]
+}
+
 # Which recreated Space a stored per-Space entry (a folder) belongs to.
 source_set("stored_space") {
   sources = [
@@ -286,6 +292,7 @@ test("koan_views_unittests") {
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_edge_actions_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
+    "koan_url_pill_buttons_unittest.cc",
     "koan_window_edges_unittest.cc",
     "koan_zen_logic_unittest.cc",
   ]
@@ -306,6 +313,7 @@ test("koan_views_unittests") {
     ":stored_tab",
     ":strip_on_share",
     ":swipe_tracker",
+    ":url_pill_buttons",
     ":window_edges",
     ":zen_logic",
     "//base",
@@ -558,6 +566,7 @@ source_set("impl") {
     ":stored_tab",
     ":strip_on_share",
     ":swipe_tracker",
+    ":url_pill_buttons",
     ":views",
     ":window_edges",
     ":zen_logic",

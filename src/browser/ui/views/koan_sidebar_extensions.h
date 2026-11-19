@@ -12,6 +12,8 @@
 #include <string_view>
 #include <vector>
 
+#include "base/callback_list.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -28,6 +30,10 @@ class BrowserView;
 class ExtensionsContainer;
 class ExtensionsMenuCoordinator;
 class ToolbarActionViewModel;
+
+namespace views {
+class Widget;
+}
 
 namespace content {
 class WebContents;
@@ -77,6 +83,15 @@ class KoanSidebarExtensionsView : public views::View,
   // Zen's site panel's Extensions section, from the site panel's Extensions
   // row.
   void ShowExtensionsMenu();
+  // The same menu at `anchor` (the pill's Extensions button). Returns its
+  // widget, or null if it couldn't show.
+  views::Widget* ShowExtensionsMenuAt(views::View* anchor);
+
+  // Whether the pointer is over the sidebar (Zen's zen-has-implicit-hover),
+  // and a callback for each change: the pill's other buttons show with these.
+  bool sidebar_hovered() const { return sidebar_hovered_; }
+  base::CallbackListSubscription AddSidebarHoverCallback(
+      base::RepeatingClosure callback);
 
   base::WeakPtr<KoanSidebarExtensionsView> GetWeakPtr();
 
@@ -186,6 +201,7 @@ class KoanSidebarExtensionsView : public views::View,
   // The extensions menu where kExtensionsMenuAccessControl is on.
   std::unique_ptr<ExtensionsMenuCoordinator> menu_coordinator_;
   bool rebuild_pending_ = false;
+  base::RepeatingClosureList sidebar_hover_callbacks_;
   // The extension whose button is being dragged from here, and where it
   // would drop.
   std::optional<std::string> dragged_id_;
