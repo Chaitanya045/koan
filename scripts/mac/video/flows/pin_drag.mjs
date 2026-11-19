@@ -30,8 +30,9 @@
 //                  header's top quarter (#319's zone): the promo shows, lit,
 //                  and the drop makes it the first Essential, its pinned URL
 //                  kept
-//   9 to-grid      the other pinned row onto the Essential's tile: the
-//                  second Essential, after or before it
+//   9 to-grid      the other pinned row onto the Essential's tile: Zen's gap
+//                  (no line, #380), then the second Essential, after or
+//                  before it
 // While held, `over` records how far the separator moved since the pick-up
 // (none since #372: nothing moves until the drop, Koan's drag shows Zen's
 // line, koan_tab_drag.h) and the drop line; `after` (1.5 s after the release) the tab's
@@ -88,12 +89,15 @@ async function over(label, pickedUp) {
   const indicator = shown(vs, 'KoanTabDropIndicatorView');
   const top = separatorTop(s);
   const promo = shown(vs, 'KoanEssentialsPromoView');
+  // Zen's gap in the Essentials grid (#380): the placeholder tile.
+  const gap = shown(vs, 'KoanEssentialsGapView');
   const r = {
     label,
     promo: !!promo,
     promoLit: promo ? String(promo.props.DragOver) === 'true' : false,
     separatorShift: top !== null && pickedUp !== null ? top - pickedUp : null,
     indicator: indicator ? { y: indicator.ay, h: indicator.h, w: indicator.w } : null,
+    gap: gap ? { x: gap.ax, y: gap.ay, w: gap.w, h: gap.h } : null,
     // Koan's drag image (koan_tab_drag_image.h) under the pointer.
     image: !!shown(vs, 'KoanTabDragImageView'),
     separator: s.separator ? [s.separator.ay, s.separator.h] : null,
@@ -261,7 +265,7 @@ await dragRound('to-promo', lastPinned, async (s, from) => {
 await dragRound('to-grid', lastPinned, (s, from) => {
   const tile = s.tiles[0]?.tabView;
   return tile ? at(tile).then(r => ({ x: r.x + r.w * 0.75, y: r.mid.y })) : null;
-}, r => !r.over.promo && !!r.over.indicator && r.after.essential === true &&
+}, r => !r.over.promo && !!r.over.gap && !r.over.indicator && r.after.essential === true &&
         r.after.pinnedCount === r.before.pinnedCount - 1);
 
 // --- Summary: one line per round.
