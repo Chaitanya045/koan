@@ -25,8 +25,8 @@ import {
   pages as pageTargets, readPref, sleep, typeInto, viewEvent, viewMouse, viewTree, visiblePage,
   waitFor, windowTints,
 } from './lib/koan.mjs';
-import { menuKey as macMenuKey, menuKeyWhyNot, ptr, realInput, realPointerHoldsSidebar,
-         skipped, windowOf } from './lib/mac.mjs';
+import { menuKey as macMenuKey, menuKeyWhyNot, ptr, realInput, realPointer,
+         realPointerHoldsSidebar, skipped, windowOf } from './lib/mac.mjs';
 
 const views = viewTree;
 // The node of the view tagged with element identifier `id`, if one shows.
@@ -431,6 +431,9 @@ const toggle = async () => (await views()).find(v => v.shown && v.w > 0 &&
     v.path.at(-1) === 'VerticalTabStripTopContainer' && v.cls !== 'KoanSidebarNavButtons');
 await click(await toggle());
 await sleep(1000);
+// (The bar's width once collapsed, for the details below: the check after
+// Cancel wants it narrow again.)
+const collapsedBar = one((await sidebar()).vs, 'KoanSpaceBarView')?.w;
 await key(VK.N, CTRL | ALT, 'n');
 s = await sidebar();
 form = one(s.vs, 'KoanSpaceCreationView');
@@ -461,8 +464,11 @@ s = await sidebar();
   if (held) {
     skipped(CANCEL_COLLAPSED, held);
   } else {
+    const p = IS_MAC ? realPointer() : null;
     check(CANCEL_COLLAPSED, ok,
-          JSON.stringify({ tabs: s.tabs, bar: one(s.vs, 'KoanSpaceBarView')?.w }));
+          JSON.stringify({ tabs: s.tabs, bar: one(s.vs, 'KoanSpaceBarView')?.w,
+                           form: !!one(s.vs, 'KoanSpaceCreationView'), barCollapsed: collapsedBar,
+                           pointer: p && [Math.round(p.x), Math.round(p.y)] }));
   }
 }
 await click(await toggle());
@@ -612,13 +618,17 @@ s = await sidebar();
 check('G4: Focus previous group goes back', s.header?.name === 'Clicked',
       s.header?.name);
 // G4: "Close group" asks to delete the Space (Zen's question); No keeps it.
+// (Zen asks with Services.prompt.confirm(), OK and Cancel; Koan's question
+// box says Yes and, since Chromium 158, Cancel for No: IDS_CANCEL in
+// message_box_dialog.cc.)
 // ("Clicked" was made by the form, on its empty tab: no rows since #292.)
 const clickedTabs = s.tabs;
 const wPage = await visiblePage();
 await key(KEY.W, GROUP, 'W');
 // The question can take a moment (a sheet on macOS).
-const findNo = vs => shown(vs, 'MdTextButton').find(b => b.props.Text === 'No') ??
-                     shown(vs, 'LabelButton').find(b => b.props.Text === 'No');
+const isNo = b => ['No', 'Cancel'].includes(b.props.Text) &&
+                  b.path.includes('DialogClientView');
+const findNo = vs => shown(vs, 'MdTextButton').find(isNo) ?? shown(vs, 'LabelButton').find(isNo);
 let no = null;
 await waitFor(async () => (no = findNo(await views())), 3000);
 vs = await views();

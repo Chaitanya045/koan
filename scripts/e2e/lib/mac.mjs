@@ -561,6 +561,44 @@ export const menuKeyWhyNot = () =>
   `needs a real key on macOS (the main menu's, or Chrome's own key equivalent: CDP keys ` +
   `don't reach them); ${realWhyNot}`;
 
+// Whether no modifier key is held on the Mac before a real press. Pointer
+// events made from a NULL source take the modifiers the HID system holds, and
+// on 2026-11-19 a held ⌘ turned every real press into a ⌘-click (tabs
+// multi-selected, a press that deselected a tab and dragged nothing:
+// pin_drag, space_drag). ptr.m and hold.m now give their events no
+// modifiers; a held one is still released here (ptr release-mods) and said,
+// and real input stops if it stays held. true where this ptr can't tell
+// (built before `mods`).
+let modsUnknownSaid = false;
+function noHeldModifiers() {
+  if (!ptrHas('release-mods')) {
+    if (!modsUnknownSaid) {
+      modsUnknownSaid = true;
+      console.log(`  (real input: ${TOOLS}/ptr can't tell held modifier keys; rebuild it from ` +
+                  'scripts/mac/tools/ptr.m)');
+    }
+    return true;
+  }
+  const run = op => {
+    try {
+      return execFileSync(`${TOOLS}/ptr`, [op], { encoding: 'utf8', timeout: 5000 }).trim();
+    } catch (e) {
+      return String(e.stdout ?? '').trim() || `ptr ${op}: exit ${e.status}`;
+    }
+  };
+  const held = out => out.match(/held=(\S+)/)?.[1] ?? 'none';
+  const before = run('mods');
+  if (held(before) === 'none') return true;
+  const after = run('release-mods');
+  console.log(`  (real input: the Mac held ${held(before)} before a press (${before}); ` +
+              `released: ${after})`);
+  if (held(after) === 'none') return true;
+  realOk = false;
+  realWhyNot = `a modifier key stays held on the Mac (${after}): every real press would carry it`;
+  return false;
+}
+const PRESSES = new Set(['click', 'rclick', 'altclick', 'cmdclick', 'down']);
+
 // ptr <cmd> <args...> (see scripts/mac/tools/ptr.m), after the gate. A
 // failure throws with why: ptr exits 2 for a command it doesn't know, which a
 // bench binary built before that command was added does (down, dragto, up
@@ -568,6 +606,7 @@ export const menuKeyWhyNot = () =>
 // scripts/mac/README.md "Tools").
 export async function ptr(...args) {
   if (!gate()) return false;
+  if (PRESSES.has(args[0]) && !noHeldModifiers()) return false;
   try {
     execFileSync(`${TOOLS}/ptr`, args.map(String), { timeout: 30000 });
   } catch (e) {
@@ -597,6 +636,7 @@ export async function hold(cmd, x, y, ms) {
     realWhyNot = `no ${TOOLS}/hold (build scripts/mac/tools/hold.m)`;
     return false;
   }
+  if (cmd === 'down' && !noHeldModifiers()) return false;
   const args = [cmd, Math.round(x), Math.round(y), ...(ms === undefined ? [] : [Math.round(ms)])];
   execFileSync(`${TOOLS}/hold`, args.map(String), { timeout: 30000 });
   return true;

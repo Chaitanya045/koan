@@ -356,6 +356,17 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   stop_koans "$prof"
   wait "$pid" 2>/dev/null
   rm -rf "$prof" "$agent_home"
+  # A modifier key left held turns the real presses after it into modified
+  # ones (2026-11-19: a held ⌘ made them ⌘-clicks, lib/mac.mjs
+  # noHeldModifiers()): say after which script. (ptr mods reads, posts
+  # nothing; a ptr built before it prints no "mods" line.)
+  if [[ $input_mode == real && -x "$TOOLS/ptr" ]]; then
+    local mods
+    mods="$("$TOOLS/ptr" mods 2>/dev/null || true)"
+    if [[ $mods == mods* && $mods != *held=none* ]]; then
+      echo "suite.sh: after $name the Mac holds a modifier key ($mods)" | tee -a "$e2e_log" >&2
+    fi
+  fi
 }
 # Reports an e2e run: PASS (with its skips), SKIP (exit 77) or FAIL with the
 # first failing check, else what the Koan log says, else the exit code.

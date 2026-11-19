@@ -224,6 +224,9 @@ async function shownPage() {
 // check after it.
 const urlBarFailures = new Set();
 async function openUrlBar() {
+  // On macOS a UI DevTools key reaches a widget's focused view only in the
+  // key window (lib/mac.mjs keyWindowReport()); the checks press keys.
+  if (IS_MAC) await makeKey(await shownPage(), 1500);
   const { field, how, selectedAll } = await focusUrlBar(await shownPage());
   if ((!field || !selectedAll) && !urlBarFailures.has(how)) {
     urlBarFailures.add(how);
@@ -400,8 +403,14 @@ check('...and Enter runs it (URL copied)', clip === pageUrl, JSON.stringify(clip
 // Availability follows the state, like Zen's: only the other appearances.
 await openUrlBar();
 rs = await suggest('>dark mode', rs => label(rs[0]) === 'Switch to Dark Mode');
+// (No rows at all here once, on macOS, though Enter then ran the action: the
+// details say whether the popup's rows were there and who had the keyboard.)
 check('"Switch to Dark Mode" is offered', label(rs[0]) === 'Switch to Dark Mode',
-      `${rowsText(rs)}; URL bar ${JSON.stringify((await ui()).omnibox?.text)}`);
+      label(rs[0]) === 'Switch to Dark Mode' ? rowsText(rs)
+          : `${rowsText(rs)}; URL bar ${JSON.stringify((await ui()).omnibox?.text)}; ` +
+            `${(await views()).filter(v => v.cls === 'OmniboxResultView').length} result view(s) ` +
+            `(${(await views()).filter(v => v.cls === 'OmniboxResultView' && v.shown).length} shown); ` +
+            `${await keyWindowReport()}`);
 await press(VK.ENTER);
 await sleep(800);
 await openUrlBar();
@@ -448,7 +457,7 @@ if (opened === false) {
         `${JSON.stringify(space2)} with ${space2Tabs} tab(s); the URL bar opened by ` +
         `${openedHow}; before Enter row ${beforeEnter.findIndex(r => r.selected)} of ${focus} ` +
         `was selected, after it row ${(await rows()).findIndex(r => r.selected)}; URL bar ` +
-        `${JSON.stringify((await ui()).omnibox?.text)}`);
+        `${JSON.stringify((await ui()).omnibox?.text)}; ${await keyWindowReport()}`);
 }
 
 // Folder actions (#42): "New Folder" makes one in the active Space; then

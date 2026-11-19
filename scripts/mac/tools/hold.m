@@ -5,7 +5,9 @@
 // down/dragto/up, the press settles for 150 ms and the steps are slower, as a person's drag: the flow can look at
 // the sidebar between calls while the tab is still held.
 #import <Cocoa/Cocoa.h>
-static void post(CGEventType t, CGPoint p){ CGEventRef e=CGEventCreateMouseEvent(NULL,t,p,kCGMouseButtonLeft); CGEventSetIntegerValueField(e,kCGMouseEventClickState,1); CGEventPost(kCGHIDEventTap,e); CFRelease(e); }
+// (No modifiers: an event from a NULL source takes the ones the HID system holds, and a held ⌘ makes each press a
+// ⌘-click; ptr mods / release-mods report and clear them.)
+static void post(CGEventType t, CGPoint p){ CGEventRef e=CGEventCreateMouseEvent(NULL,t,p,kCGMouseButtonLeft); CGEventSetIntegerValueField(e,kCGMouseEventClickState,1); CGEventSetFlags(e,0); CGEventPost(kCGHIDEventTap,e); CFRelease(e); }
 int main(int c,char**v){@autoreleasepool{
  { char path[1024]; const char*r=getenv("KOAN_MAC_ROOT"); const char*h=getenv("HOME"); if(r&&*r) snprintf(path,sizeof path,"%s/tmp/own-input.ts",r); else snprintf(path,sizeof path,"%s/work/koan-mac/tmp/own-input.ts",h?h:"."); FILE*o=fopen(path,"w"); if(o){fprintf(o,"%ld\n",(long)time(NULL)); fclose(o);} }
  if(c<4)return 2; NSString*cmd=@(v[1]); CGPoint to=CGPointMake(atof(v[2]),atof(v[3]));

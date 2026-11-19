@@ -1,14 +1,39 @@
 // ptr pos | move x y [ms] | click x y | rclick x y | altclick x y | cmdclick x y
-//     | down x y | dragto x y [ms] | up x y   -- global pointer control (CG coordinates, points). Only used while the user is away.
+//     | down x y | dragto x y [ms] | up x y | mods | release-mods
+//     -- global pointer control (CG coordinates, points). Only used while the user is away.
+// Every event carries exactly its own modifiers (none, or altclick's/cmdclick's): an event made from a NULL source
+// otherwise takes the modifiers the HID system holds, and a held ⌘ turns each press into a ⌘-click (the 2026-11-19
+// pin_drag run: multi-selected tabs, a press that deselects and drags nothing). `mods` prints the modifiers the HID
+// system and the session hold ("mods hid=<hex> session=<hex> held=cmd,shift" or "held=none"); `release-mods` posts a
+// key-up for each held modifier key and prints the state after, in the same form (exit 1 if one is still held).
 // down/dragto/up make a held-button drag: down presses at (x, y), dragto moves there in steps with the left button held
 // (kCGEventLeftMouseDragged), up releases. scripts/e2e/space_drag.mjs uses them.
 #import <Cocoa/Cocoa.h>
-static void post(CGEventType t, CGPoint p, CGMouseButton b){ CGEventRef e=CGEventCreateMouseEvent(NULL,t,p,b); CGEventSetIntegerValueField(e,kCGMouseEventClickState,1); CGEventPost(kCGHIDEventTap,e); CFRelease(e); }
+static void post(CGEventType t, CGPoint p, CGMouseButton b){ CGEventRef e=CGEventCreateMouseEvent(NULL,t,p,b); CGEventSetIntegerValueField(e,kCGMouseEventClickState,1); CGEventSetFlags(e,0); CGEventPost(kCGHIDEventTap,e); CFRelease(e); }
+// The modifier keys (kVK_*: Command, RightCommand, Shift, RightShift, Option, RightOption, Control, RightControl,
+// Function) and their flags.
+static const CGKeyCode kModKeys[]={0x37,0x36,0x38,0x3C,0x3A,0x3D,0x3B,0x3E,0x3F};
+static const CGEventFlags kModFlags[]={kCGEventFlagMaskCommand,kCGEventFlagMaskCommand,kCGEventFlagMaskShift,kCGEventFlagMaskShift,
+  kCGEventFlagMaskAlternate,kCGEventFlagMaskAlternate,kCGEventFlagMaskControl,kCGEventFlagMaskControl,kCGEventFlagMaskSecondaryFn};
+static const CGEventFlags kAllMods=kCGEventFlagMaskCommand|kCGEventFlagMaskShift|kCGEventFlagMaskAlternate|kCGEventFlagMaskControl|kCGEventFlagMaskSecondaryFn;
+static CGEventFlags held(void){ return (CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState)|CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState))&kAllMods; }
+static int printMods(void){ CGEventFlags h=CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState), s=CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState), f=held();
+  printf("mods hid=%llx session=%llx held=",(unsigned long long)h,(unsigned long long)s);
+  if(!f){ printf("none\n"); return 0; }
+  const char*names[]={"cmd","shift","alt","ctrl","fn"}; const CGEventFlags masks[]={kCGEventFlagMaskCommand,kCGEventFlagMaskShift,kCGEventFlagMaskAlternate,kCGEventFlagMaskControl,kCGEventFlagMaskSecondaryFn};
+  int n=0; for(int i=0;i<5;i++) if(f&masks[i]) printf("%s%s",n++?",":"",names[i]); printf("\n"); return 1; }
 int main(int c,char**v){@autoreleasepool{
+ // (Reading the modifiers is no input: before own-input.ts.)
+ if(c>=2 && !strcmp(v[1],"mods")){ printMods(); return 0; }
  { char path[1024]; const char*r=getenv("KOAN_MAC_ROOT"); const char*h=getenv("HOME"); if(r&&*r) snprintf(path,sizeof path,"%s/tmp/own-input.ts",r); else snprintf(path,sizeof path,"%s/work/koan-mac/tmp/own-input.ts",h?h:"."); FILE*o=fopen(path,"w"); if(o){fprintf(o,"%ld\n",(long)time(NULL)); fclose(o);} }
  if(c<2)return 2; NSString*cmd=@(v[1]);
  CGEventRef cur=CGEventCreate(NULL); CGPoint p=CGEventGetLocation(cur); CFRelease(cur);
  if([cmd isEqual:@"pos"]){ printf("%d %d\n",(int)p.x,(int)p.y); return 0; }
+ if([cmd isEqual:@"release-mods"]){ for(size_t i=0;i<sizeof kModKeys/sizeof kModKeys[0];i++){
+     if(!CGEventSourceKeyState(kCGEventSourceStateHIDSystemState,kModKeys[i]) && !CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState,kModKeys[i]) && !(held()&kModFlags[i])) continue;
+     CGEventRef e=CGEventCreateKeyboardEvent(NULL,kModKeys[i],false); CGEventSetFlags(e,0); CGEventPost(kCGHIDEventTap,e); CFRelease(e); usleep(30000); }
+   CGEventRef e=CGEventCreate(NULL); CGEventSetType(e,kCGEventFlagsChanged); CGEventSetFlags(e,0); CGEventPost(kCGHIDEventTap,e); CFRelease(e); usleep(100000);
+   return printMods(); }
  if(c<4)return 2; CGPoint to=CGPointMake(atof(v[2]),atof(v[3]));
  if([cmd isEqual:@"move"]){ int ms=c>4?atoi(v[4]):300; int steps=MAX(1,ms/8);
    for(int i=1;i<=steps;i++){ double f=(double)i/steps; CGPoint q=CGPointMake(p.x+(to.x-p.x)*f,p.y+(to.y-p.y)*f); post(kCGEventMouseMoved,q,kCGMouseButtonLeft); usleep(8000);} return 0; }
