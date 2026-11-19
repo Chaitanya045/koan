@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -232,13 +233,28 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   ASSERT_EQ(2, model->count());
   ASSERT_FALSE(IsEmptyTab(model->GetActiveTab()));
 
+  // The empty state left the window idle: Chromium's UnloadController took
+  // the empty strip for the window's close, and the next closed tab finished
+  // that close (KeepWindowOnLastTabClosed() in koan_workspaces.cc).
+  const UnloadController* unload = UnloadController::From(browser());
+  ASSERT_TRUE(unload);
+  EXPECT_FALSE(unload->is_attempting_to_close_browser());
+
+  // The model goes with the window: read it only while the window is there,
+  // so a closed window fails the test instead of crashing it.
   base::WeakPtr<BrowserWindowInterface> window = browser()->GetWeakPtr();
   chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
-  ASSERT_TRUE(base::test::RunUntil([&] { return model->count() == 1; }));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !window || window->IsDeleteScheduled() ||
+           window->GetTabStripModel()->count() == 1;
+  }));
   base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(window);
-  EXPECT_FALSE(browser()->IsDeleteScheduled());
-  EXPECT_TRUE(IsEmptyTab(model->GetActiveTab()));
+  ASSERT_TRUE(window) << "Cmd+W closed the window";
+  ASSERT_FALSE(window->IsDeleteScheduled()) << "Cmd+W closed the window";
+  ASSERT_EQ(1, window->GetTabStripModel()->count());
+  EXPECT_TRUE(IsEmptyTab(window->GetTabStripModel()->GetActiveTab()));
+  EXPECT_FALSE(
+      UnloadController::From(window.get())->is_attempting_to_close_browser());
 }
 
 // The New Tab shortcut (⌘T) with Zen's replace-newtab off: a new tab. On

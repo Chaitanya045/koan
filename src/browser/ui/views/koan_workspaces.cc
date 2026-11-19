@@ -49,6 +49,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
@@ -3159,6 +3160,14 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   if (!controller->workspaces()->LastTabsWereClosed()) {
     return false;
   }
+  // A window whose close is under way (its tabs' beforeunload or unload
+  // handlers run) closes, as upstream's. Asked before UnloadController sees
+  // the empty strip: Browser observes the tab strip first (its constructor,
+  // before BrowserWindowFeatures makes the UnloadController).
+  if (const UnloadController* unload = UnloadController::From(browser);
+      unload && unload->is_attempting_to_close_browser()) {
+    return false;
+  }
   controller->workspaces()->ExpectEmptyTab();
   // Not from inside the tab strip's close: it can't be modified there.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -3166,9 +3175,20 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
       base::BindOnce(
           [](base::WeakPtr<BrowserWindowInterface> window,
              base::WeakPtr<KoanBrowserViewController> controller) {
-            if (!window || !controller ||
+            if (!window || !controller || window->IsDeleteScheduled() ||
                 !window->GetTabStripModel()->empty()) {
               return;
+            }
+            // UnloadController::TabStripEmpty() took the empty strip for the
+            // window's close (kUnloadCompleted, "attempting to close"). The
+            // window stays, so it is idle again; else the next tab closed
+            // finishes that close (TabDetachedImpl() -> ProcessPendingTabs()
+            // -> OnWindowClosing()), and Cmd+W on the page opened from the
+            // empty state closed the window. As upstream does when a close
+            // like this is cancelled (its download warning).
+            if (UnloadController* unload = UnloadController::From(window.get());
+                unload && unload->is_attempting_to_close_browser()) {
+              unload->CancelWindowClose();
             }
             // Marked at once, so it never shows a row.
             if (tabs::TabInterface* tab =
