@@ -18,8 +18,8 @@
 // pins the tab for "Add to Essentials" (an Essential is a pinned tab), from
 // a local page it can hear.
 import { ACCEL, IS_MAC, NATIVE_MENUS, tabMenuCommand, sendKey, visiblePage } from './lib/koan.mjs';
-import { askTestHelper, menuKey as macMenuKey, menuKeyWhyNot, skipped, startServer, windowOf }
-    from './lib/mac.mjs';
+import { askTestHelper, menuKey as macMenuKey, menuKeyWhyNot, skipped, startServer, windowOf,
+         windows } from './lib/mac.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -432,11 +432,24 @@ check('Clear in a Space keeps the Space, with no rows left',
       await sleep(3000);
     }, 3000);
   };
+  // Every page and its window, for the details: whether the window closed or
+  // only its page isn't listed, and whether it was the window's only tab
+  // (a CDP window is a synced window since #385: its Space may list others).
+  const where = async () => {
+    const out = [];
+    for (const t of (await list() ?? []).filter(t => t.type === 'page')) {
+      out.push(`${t.url.slice(0, 40)}@${(await windowOf(t.id).catch(() => null))?.windowId ?? '?'}`);
+    }
+    return out.join(' ');
+  };
+  const before = await where();
   if (!await close()) {
     skipped(`${CLOSE} on a window's only tab, then on its empty tab`, menuKeyWhyNot());
   } else {
+    const kept = !!await pageOfWindow();
     check(`${CLOSE} on a window's only tab (a blank page) keeps the window, on its empty tab`,
-          !!await pageOfWindow(), `window ${windowId}`);
+          kept, kept ? '' : `window ${windowId}; pages before ${CLOSE}: ${before}; after: ` +
+                            `${await where()}; ${(await windows()).length} window(s)`);
     const sent = await close();
     const after = await list();
     check(`...and ${CLOSE} on the empty tab closes the window, and Koan keeps running`,

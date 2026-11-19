@@ -37,7 +37,11 @@
 // (none since #372: nothing moves until the drop, Koan's drag shows Zen's
 // line, koan_tab_drag.h) and the drop line; `after` (1.5 s after the release) the tab's
 // kind, its pinned URL and its place among the Space's rows, and the
-// windows. `ok` is the round's verdict.
+// windows. `selected` (also while held) is the tabs selected after the press:
+// the picked one alone (a plain press selects it alone; on 2026-11-19 a held
+// ⌘ made each press a ⌘-click, which toggled the tab into a multi-selection
+// that dragged two tabs, or out of it, so nothing dragged). `ok` is the
+// round's verdict.
 //
 // Needs what essentials_drag.mjs needs (launch.sh's koan.env, the user away
 // for 600 s, the screen granted, `hold` in $KOAN_MAC_TOOLS).
@@ -154,6 +158,7 @@ async function dragRound(name, pick, target, check) {
   await drag('to', from.x + 4, from.y + (from.y > 300 ? -12 : 12), 200);
   await sleep(300);
   s = space(await viewTree());
+  rec.selected = ((await modelTabs(anchor)) ?? []).filter(t => t.highlighted).map(t => t.url);
   const pickedUp = separatorTop(s);
   const to = await target(s, from);
   if (!to) {
@@ -171,8 +176,11 @@ async function dragRound(name, pick, target, check) {
   await drag('up', to.x, to.y);
   await sleep(1500);
   rec.after = await after('after', rec.url);
-  rec.ok = !!check(rec) && rec.after.windows === windows0 && rec.after.sectionsOk;
-  mark('round-result', { ok: rec.ok });
+  const selectedAlone = rec.selected.length === 1 && rec.selected[0] === rec.url;
+  rec.ok = !!check(rec) && rec.after.windows === windows0 && rec.after.sectionsOk && selectedAlone;
+  mark('round-result', { ok: rec.ok, selected: rec.selected.length,
+                         ...(selectedAlone ? {} : { why: `${rec.selected.length} tab(s) selected after the press, ` +
+                                                         'not the picked one alone: a modifier key held?' }) });
   out.rounds.push(rec);
   save();
   return rec;
@@ -270,10 +278,11 @@ await dragRound('to-grid', lastPinned, (s, from) => {
 
 // --- Summary: one line per round.
 mark('end');
-console.log('\nround  drag        ok     sep-shift  line  promo  kind-after  index  order');
+console.log('\nround  drag        ok     sel  sep-shift  line  promo  kind-after  index  order');
 for (const r of out.rounds) {
   const kind = r.after ? (r.after.essential ? 'essential' : r.after.pinned ? 'pinned' : 'normal') : '-';
   console.log(`${String(r.round).padStart(5)}  ${r.name.padEnd(10)}  ${String(r.ok ?? r.skipped).padEnd(6)} ` +
+              `${String(r.selected?.length ?? '-').padEnd(4)} ` +
               `${String(r.over?.separatorShift ?? '-').padEnd(10)} ${String(!!r.over?.indicator).padEnd(5)} ` +
               `${String(r.over ? (r.over.promo ? (r.over.promoLit ? 'lit' : 'shown') : 'no') : '-').padEnd(6)} ` +
               `${kind.padEnd(11)} ${String(r.after?.index ?? '-').padEnd(6)} ${(r.after?.order ?? []).join(' ')}`);

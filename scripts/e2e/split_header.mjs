@@ -79,10 +79,27 @@ const middle = v => ({ x: screen(v).x + v.w / 2, y: screen(v).y + v.h / 2 });
 // the grip 7 in, the unsplit button 8 after it (koan_split_header.cc).
 const grip = v => ({ x: screen(v).x + v.w / 2 - 12, y: screen(v).y + 7 });
 const unsplit = v => ({ x: screen(v).x + v.w / 2 + 12, y: screen(v).y + 7 });
+// The local time to the ms, as the Koan log's VLOG lines print it
+// (HHMMSS.mmm), to set the checks against "Koan: split header N shows".
+const stamp = () => {
+  const d = new Date();
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0'))
+      .join('') + `.${String(d.getMilliseconds()).padStart(3, '0')}`;
+};
 const move = async p => {
+  move.started = stamp();
   await ptr('move', Math.round(p.x), Math.round(p.y), 150);
+  move.ended = stamp();
   await sleep(500);
 };
+// The view tree once one header shows (Zen's shows 0.1 s after the hover,
+// its transition-delay; the header's widget may take a frame more), waited
+// for up to 1.5 s, and when the move and that read were.
+async function afterHover() {
+  let vs = [];
+  await waitFor(async () => headers(vs = await viewTree()).length === 1, 1500);
+  return { vs, times: `moved ${move.started}..${move.ended}, read until ${stamp()}` };
+}
 // Why no header shows over `pane`, for the details: the header views UI
 // DevTools has (each pane's is made on its first hover), where the real
 // pointer is against the pane on screen, and how many show after a second
@@ -103,7 +120,7 @@ async function noHeaderWhy(pane) {
 // header's).
 async function dragGrip(from, to, between = async () => {}) {
   await move(from);
-  dragGrip.before = headers(await viewTree()).length;
+  dragGrip.before = headers((await afterHover()).vs).length;
   await hold('down', from.x, from.y);
   await hold('to', from.x + 20, from.y + 20, 150);
   await hold('to', to.x, to.y, 500);
@@ -123,13 +140,17 @@ if (!realInput() || !calibration) {
 
   // Zen's .browserSidebarContainer:hover: over a pane, its header only.
   await move(middle(left));
-  vs = await viewTree();
+  let hover = await afterHover();
+  vs = hover.vs;
   check('The pointer over a pane shows one header', headers(vs).length === 1,
-        `${headers(vs).length} shown${headers(vs).length ? '' : `; ${await noHeaderWhy(left)}`}`);
+        `${headers(vs).length} shown${headers(vs).length === 1 ? ''
+            : `; ${hover.times}; ${await noHeaderWhy(left)} (${stamp()})`}`);
   await move(middle(right));
-  vs = await viewTree();
+  hover = await afterHover();
+  vs = hover.vs;
   check('Over the other pane: one header still (the other pane\'s)', headers(vs).length === 1,
-        `${headers(vs).length} shown${headers(vs).length ? '' : `; ${await noHeaderWhy(right)}`}`);
+        `${headers(vs).length} shown${headers(vs).length === 1 ? ''
+            : `; ${hover.times}; ${await noHeaderWhy(right)} (${stamp()})`}`);
   await move({ x: calibration.x + 20, y: middle(left).y });
   await sleep(300);
   vs = await viewTree();

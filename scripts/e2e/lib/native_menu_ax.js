@@ -60,10 +60,16 @@ function rawAx(pid) {
   };
   const app = $.AXUIElementCreateApplication(pid);
   const wide = $.AXUIElementCreateSystemWide();
+  // The last hit test's AXError per root (-1: the call itself threw, i.e.
+  // the bridge; -25211 kAXErrorAPIDisabled: this process isn't trusted for
+  // Accessibility; -25205 kAXErrorCannotComplete), for the report.
+  const errors = {};
   const hit = (x, y) => {
-    for (const root of [app, wide]) {
+    for (const [name, root] of [['app', app], ['wide', wide]]) {
       const ref = Ref();
-      if (call($.AXUIElementCopyElementAtPosition, root, x, y, ref) === 0 && ref[0]) return ref[0];
+      const err = call($.AXUIElementCopyElementAtPosition, root, x, y, ref);
+      errors[name] = err;
+      if (err === 0 && ref[0]) return ref[0];
     }
     return null;
   };
@@ -106,9 +112,14 @@ function rawAx(pid) {
   };
   const report = () => {
     const wins = menuWindows();
+    const at = wins.slice(0, 4).map(w => chain(hit(...points(w)[0])).map(c => c.role).join('<'));
+    let trusted;
+    try { trusted = !!$.AXIsProcessTrusted(); } catch (x) { trusted = `? (${x})`; }
     return {
       windows: wins.map(w => `${w.x},${w.y} ${w.w}x${w.h} layer ${w.layer}`),
-      at: wins.slice(0, 4).map(w => chain(hit(...points(w)[0])).map(c => c.role).join('<')),
+      at,
+      errors: { ...errors },
+      trusted,
       focused: role(copy(wide, 'AXFocusedUIElement')),
     };
   };

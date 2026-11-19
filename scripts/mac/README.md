@@ -117,8 +117,10 @@ on the Mac itself and starts Koan with `--no-startup-window`, so nothing is draw
 ## Tools (`tools/`, copy to `~/work/koan-mac/tmp/` on the Mac and compile the `.m` files with `clang -framework ...`)
 
 `keypress2 <pid> <keycode> '<flags>'` (flags: `c` cmd, `s` shift, `k` ctrl, `a` alt; CGEventPostToPid),
-`ptr pos|move x y ms|click|rclick|altclick|cmdclick x y|down x y|dragto x y ms|up x y` (`down`/`dragto`/`up` make a
-held-button drag, used by `scripts/e2e/space_drag.mjs`), `hold down x y|to x y ms|up x y` (the same drag one step per
+`ptr pos|move x y ms|click|rclick|altclick|cmdclick x y|down x y|dragto x y ms|up x y|mods|release-mods` (`down`/`dragto`/`up` make a
+held-button drag, used by `scripts/e2e/space_drag.mjs`; `mods` prints the modifier keys the Mac holds, `release-mods`
+releases them: `lib/mac.mjs` checks before every real press, and `suite.sh` says after which script one was left held;
+every pointer event carries only its own modifiers), `hold down x y|to x y ms|up x y` (the same drag one step per
 call, a person's pace, for `video/flows/essentials_drag.mjs`), `winid <pid>` (that pid's on-screen CGWindowIDs and bounds,
 for `screencapture -l`; `suite.sh` builds it into its run dir if it isn't there), `crashdlg list|dismiss`, `idle.sh`,
 `front.sh`, `frontpid.sh`.

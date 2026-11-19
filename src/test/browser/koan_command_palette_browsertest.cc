@@ -35,11 +35,16 @@ class KoanCommandPaletteBrowserTest : public InProcessBrowserTest {
     return browser_view()->toolbar()->location_bar_view()->omnibox_view();
   }
 
-  // A plain Tab through the omnibox's own pre-target handlers, in the order
-  // and with the stop EventDispatcher uses: where both of Koan's handlers see
-  // a key before the omnibox does.
+  // A plain Tab through the omnibox's pre-target handlers (its own and its
+  // ancestors'), in the order and with the stop EventDispatcher uses: where
+  // both of Koan's handlers see a key before the omnibox does. With the
+  // target and the phase the dispatcher gives it: RootView's handler CHECKs
+  // the phase (an event without it crashed the test).
   void PressTab() {
     ui::KeyEvent event(ui::EventType::kKeyPressed, ui::VKEY_TAB, ui::EF_NONE);
+    ui::Event::DispatcherApi dispatch(&event);
+    dispatch.set_target(omnibox());
+    dispatch.set_phase(ui::EP_PRETARGET);
     ui::EventTargetTestApi api(omnibox());
     for (ui::EventHandler* handler : api.GetPreTargetHandlers()) {
       handler->OnEvent(&event);

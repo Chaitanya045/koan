@@ -310,16 +310,18 @@ if (!keyboardFocus(p)) {
   skipped('The opacity slider and the grain dial from the keyboard (Tab, Home, Left, Right)',
           NO_KEYBOARD_FOCUS);
 } else {
+  // Zen's minimum: 0.30 on macOS, 0.25 elsewhere (PickerModel::kMinOpacity).
+  const min = IS_MAC ? 0.3 : 0.25;
   let found = false;
   for (let i = 0; i < 20 && !found; i++) {
     await pickerKey(VK.TAB);
     await pickerKey(VK.HOME);
-    found = Math.abs(+picker(await tree())?.p.Opacity - 0.25) < 0.001;
+    found = Math.abs(+picker(await tree())?.p.Opacity - min) < 0.001;
   }
-  check('Tab reaches the opacity slider; Home sets 0.25', found);
+  check(`Tab reaches the opacity slider; Home sets ${min}`, found);
   await pickerKey(VK.RIGHT);
   p = picker(await tree());
-  check('...Right adds 0.05', Math.abs(+p?.p.Opacity - 0.3) < 0.001, p?.p.Opacity);
+  check('...Right adds 0.05', Math.abs(+p?.p.Opacity - (min + 0.05)) < 0.001, p?.p.Opacity);
   await pickerKey(VK.TAB);
   await pickerKey(VK.HOME);
   await pickerKey(VK.LEFT);

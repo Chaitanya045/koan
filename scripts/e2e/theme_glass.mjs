@@ -26,6 +26,9 @@ const opacity = async () => +picker(await tree())?.p.Opacity;
 // The alphas of the colours a background description paints.
 const alphas = text => [...text.matchAll(/rgba\(\d+, \d+, \d+, ([\d.]+)\)/g)].map(m => +m[1]);
 const near = (a, b) => Math.abs(a - b) < 0.006;
+// The slider's minimum: Zen's 0.30 on macOS, 0.25 elsewhere (theme-picker.inc;
+// PickerModel::kMinOpacity, koan_space_theme.h).
+const MIN = IS_MAC ? 0.3 : 0.25;
 
 await palette('Open Theme Picker');
 if (!picker(await tree())) {
@@ -56,10 +59,10 @@ if (!keys) {
 const pressSlider = async value => {
   const t = await tree();
   const slider = t.find(v => v.cls === 'KoanThemeOpacitySlider' && v.shown);
-  const progress = v => Math.min(Math.max((v - 0.25) / (1 - 0.25), 0), 1);
-  const thumb = 10 + 15 * progress(+picker(t)?.p.Opacity || 0.25);
+  const progress = v => Math.min(Math.max((v - MIN) / (1 - MIN), 0), 1);
+  const thumb = 10 + 15 * progress(+picker(t)?.p.Opacity || MIN);
   // The ends exactly: a press past them.
-  const x = value <= 0.25 ? 0 : value >= 1 ? slider.w - 1
+  const x = value <= MIN ? 0 : value >= 1 ? slider.w - 1
                           : Math.round(5 + thumb / 2 + progress(value) * (slider.w - 10 - thumb));
   await click(slider, x, Math.round(slider.h / 2));
 };
@@ -81,10 +84,10 @@ check(keys ? 'On glass the opacity slider takes the focus without colours and go
 text = await background();
 check('...where the opaque paint covers the blur', text.includes(' / cover 100%: '), text);
 if (keys) await pickerKey(VK.HOME);
-else await pressSlider(0.25);
+else await pressSlider(MIN);
 const min = await opacity();
 text = await background();
-check("Home is Zen's minimum, with no cover", near(min, 0.25) && !text.includes('cover'),
+check(`Home is Zen's minimum (${MIN}), with no cover`, near(min, MIN) && !text.includes('cover'),
       `${min} ${text}`);
 
 // A preset: its colour at the slider's opacity, over the blur (Linux has no
