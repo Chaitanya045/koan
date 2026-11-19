@@ -5,12 +5,15 @@
 #include "koan/browser/ui/views/koan_split_header.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
@@ -520,6 +523,7 @@ void KoanSplitHeaderController::OnBrowserViewDestroying() {
   fullscreen_subscription_ = {};
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
   container_observations_.RemoveAllObservations();
+  widget_observations_.RemoveAllObservations();
   monitor_.reset();
   rearrange_.reset();
   rearrange_hide_timer_.Stop();
@@ -602,12 +606,14 @@ void KoanSplitHeaderController::StartRearrange(int pane) {
     // Hidden with its view: on macOS a control widget is shown by Init()
     // (NativeWidgetMacNSWindowHost::InitWindow()).
     rearrange_widget_->Hide();
+    widget_observations_.AddObservation(rearrange_widget_.get());
   }
   rearrange_hide_timer_.Stop();
   rearrange_view_->Reset();
   LayoutRearrangeView();
   ui::Layer* layer = rearrange_view_->layer();
-  if (!rearrange_widget_->IsVisible()) {
+  // (The view too: a widget AppKit showed again may hold a hidden one.)
+  if (!rearrange_widget_->IsVisible() || !rearrange_view_->GetVisible()) {
     layer->SetOpacity(0);
     rearrange_view_->SetVisible(true);
     rearrange_widget_->ShowInactive();
@@ -744,6 +750,44 @@ void KoanSplitHeaderController::OnViewIsDeleting(views::View* observed_view) {
       pane.container = nullptr;
     }
   }
+}
+
+void KoanSplitHeaderController::OnWidgetVisibilityChanged(views::Widget* widget,
+                                                          bool visible) {
+  if (!visible || destroying_) {
+    return;
+  }
+  for (size_t i = 0; i < panes_.size(); ++i) {
+    if (widget == panes_[i].widget.get() && !panes_[i].wanted) {
+      VLOG(1) << "Koan: split header " << i
+              << "'s window was shown from outside; hidden again";
+      // Not from inside the widget's own notification.
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&KoanSplitHeaderController::HideHeader,
+                         weak_factory_.GetWeakPtr(), static_cast<int>(i)));
+      return;
+    }
+  }
+  if (widget == rearrange_widget_.get() && !rearrange_ &&
+      !rearrange_hide_timer_.IsRunning()) {
+    VLOG(1) << "Koan: the rearrange view's window was shown from outside; "
+               "hidden again";
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](base::WeakPtr<KoanSplitHeaderController> controller) {
+                         if (controller && !controller->rearrange_ &&
+                             controller->rearrange_widget_) {
+                           controller->rearrange_view_->SetVisible(false);
+                           controller->rearrange_widget_->Hide();
+                         }
+                       },
+                       weak_factory_.GetWeakPtr()));
+  }
+}
+
+void KoanSplitHeaderController::OnWidgetDestroying(views::Widget* widget) {
+  widget_observations_.RemoveObservation(widget);
 }
 
 void KoanSplitHeaderController::OnEvent(const ui::Event& event) {
@@ -892,6 +936,25 @@ bool KoanSplitHeaderController::IsPointerOverPane(
   return target && pane.container->Contains(target);
 }
 
+std::string KoanSplitHeaderController::PaneOnScreen(const Pane& pane) const {
+  if (!pane.container || !pane.container->GetWidget()) {
+    return "nowhere";
+  }
+  int index = -1;
+  if (const MultiContentsView* contents =
+          browser_view_->multi_contents_view()) {
+    const auto& containers = contents->contents_container_views();
+    for (size_t i = 0; i < containers.size(); ++i) {
+      if (containers[i].get() == pane.container.get()) {
+        index = static_cast<int>(i);
+      }
+    }
+  }
+  return base::StrCat({pane.container->GetBoundsInScreen().ToString(),
+                       " (container ", base::NumberToString(index),
+                       pane.container->GetVisible() ? ")" : ", hidden)"});
+}
+
 void KoanSplitHeaderController::SetWanted(Pane& pane, bool wanted) {
   if (pane.wanted == wanted) {
     return;
@@ -901,14 +964,19 @@ void KoanSplitHeaderController::SetWanted(Pane& pane, bool wanted) {
   const int index = &pane == &panes_[0] ? 0 : 1;
   VLOG(1) << "Koan: split header " << index << (wanted ? " shows" : " hides")
           << " (pointer in the window: " << pointer_in_window_
-          << ", over the header: " << pane.header_hovered << ")";
+          << ", over the header: " << pane.header_hovered
+          << "; its window shown: " << (pane.widget && pane.widget->IsVisible())
+          << ", its view: " << (pane.view && pane.view->GetVisible())
+          << "; the pane at " << PaneOnScreen(pane) << ")";
   if (wanted) {
     EnsureWidget(index);
     if (!pane.widget) {
       return;
     }
     LayoutHeaders();
-    if (!pane.widget->IsVisible()) {
+    // (The view too: a widget AppKit showed again may hold a hidden one,
+    // and showed nothing then.)
+    if (!pane.widget->IsVisible() || !pane.view->GetVisible()) {
       pane.view->layer()->SetOpacity(0);
       pane.view->SetVisible(true);
       pane.widget->ShowInactive();
@@ -989,6 +1057,7 @@ void KoanSplitHeaderController::EnsureWidget(int index) {
   // (NativeWidgetMacNSWindowHost::InitWindow()), and SetWanted() would leave
   // the view hidden in a shown widget, as the Mac's first header was.
   pane.widget->Hide();
+  widget_observations_.AddObservation(pane.widget.get());
 }
 
 void KoanSplitHeaderController::LayoutHeaders() {

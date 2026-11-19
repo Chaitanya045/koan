@@ -8,6 +8,7 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <string>
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
@@ -21,6 +22,7 @@
 #include "ui/events/event_observer.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/view_observer.h"
+#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 class ContentsContainerView;
@@ -76,6 +78,7 @@ void RearrangeSplitPanes(TabStripModel* tab_strip,
 // its image has landed).
 class KoanSplitHeaderController : public TabStripModelObserver,
                                   public views::ViewObserver,
+                                  public views::WidgetObserver,
                                   public ui::EventObserver {
  public:
   explicit KoanSplitHeaderController(BrowserView* browser_view);
@@ -140,6 +143,15 @@ class KoanSplitHeaderController : public TabStripModelObserver,
   void OnViewBoundsChanged(views::View* observed_view) override;
   void OnViewIsDeleting(views::View* observed_view) override;
 
+  // views::WidgetObserver (the headers' and the rearrange view's widgets):
+  // on macOS AppKit can order a hidden child window back on screen with
+  // its parent, and Widget::IsVisible() then says shown
+  // (NativeWidgetNSWindowBridge::OnVisibilityChanged() "rolls with it"),
+  // over a hidden view: an invisible window over the pane's top. One shown
+  // while it isn't wanted is hidden again.
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
+  void OnWidgetDestroying(views::Widget* widget) override;
+
   // ui::EventObserver:
   void OnEvent(const ui::Event& event) override;
 
@@ -154,6 +166,11 @@ class KoanSplitHeaderController : public TabStripModelObserver,
   // Which headers the pointer asks for.
   void UpdateHover();
   bool IsPointerOverPane(const Pane& pane, const gfx::Point& screen) const;
+  // For the log: where `pane`'s container is on screen, and its index in
+  // MultiContentsView::contents_container_views(), which upstream swaps in
+  // place (SwapContentsInSplitView(), e.g. when a split closes from its
+  // second pane).
+  std::string PaneOnScreen(const Pane& pane) const;
   void SetWanted(Pane& pane, bool wanted);
   // Hides the header of panes_[index] once it has faded out.
   void HideHeader(int index);
@@ -185,6 +202,9 @@ class KoanSplitHeaderController : public TabStripModelObserver,
   base::CallbackListSubscription fullscreen_subscription_;
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       container_observations_{this};
+  // (After the widgets: let go of before they are destroyed.)
+  base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
+      widget_observations_{this};
   bool update_posted_ = false;
   bool destroying_ = false;
   base::WeakPtrFactory<KoanSplitHeaderController> weak_factory_{this};
