@@ -22,7 +22,8 @@ import {
 } from './lib/koan.mjs';
 import {
   activate, browserCdp, click, clickMenuItem, cls, findAll, folderMenu, loosest,
-  moveToFolder, openCreateMenu, origin, pageKey, pagesInCollapsedFolders, pressKey,
+  moveToFolder, nativeMenuStuck, openCreateMenu, origin, pageKey, pagesInCollapsedFolders,
+  pressKey,
   props, rowNamed, rows, setMenuPid, shown, shownTabs, spaceButtons, switcher, typeInto,
   visibleTabs, withView,
 } from './lib/folders.mjs';
@@ -70,6 +71,15 @@ const tabMenu = i => withView(/^TabView$/, 0, async (s) => {
 
 // Tab menu: Move to Folder > Work, for the second tab.
 await tabMenu(1);
+// On macOS: a tab menu that opened but that Accessibility can't drive from
+// the bench (lib/mac.mjs nativeMenuStuckWhy()). Every check below needs the
+// tab or folder menus, so the rest is done by hand
+// (scripts/mac/steps/folders.md). A menu that doesn't open still fails.
+if (nativeMenuStuck()) {
+  skip(`the tab and folder menus from here on: ${nativeMenuStuck()}. By hand on the Mac: ` +
+       'scripts/mac/steps/folders.md (right-click a tab > Move to Folder > Work, then each ' +
+       'folder menu item)');
+}
 check('The tab menu has "Move to Folder"', await clickMenuItem('kKoanMoveToFolderItem'));
 check('...listing the folder', await clickMenuItem('kKoanTabFolderItem'));
 r = await rows();

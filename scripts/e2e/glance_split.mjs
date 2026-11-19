@@ -29,11 +29,17 @@ import http from 'node:http';
 import { ACCEL, ALT, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, keyEventParams, sendKey,
          typeInto, viewTree, windowFrame }
     from './lib/koan.mjs';
-import { IS_MAC, makeKey, skipped } from './lib/mac.mjs';
+import { IS_MAC, log, makeKey, skipped } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// A time as Koan's log lines print it (local HHMMSS.mmm).
+const clock = ms => {
+  const d = new Date(ms);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0'))
+      .join('') + `.${String(d.getMilliseconds()).padStart(3, '0')}`;
+};
 
 const link = (id, href, top) =>
   `<a id="${id}" href="${href}" style="position: absolute; left: 200px; ` +
@@ -126,10 +132,13 @@ const shown = (vs, cls) => vs.filter(v => v.cls === cls && v.shown && v.h > 0);
 // when they were read. views() reads every view's style in turn, which on
 // macOS takes longer than the toast stays (2.4 s): a toast gone before the
 // walk reaches it reads as hidden (no height).
-async function toastViews() {
-  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
-  await ui.send('DOM.enable');
-  await ui.send('CSS.enable');
+// Over one UI DevTools session (`ui`, enabled once): on macOS the document
+// lists the widgets the DOM agent holds, which it takes from NSApp.windows
+// only when it holds none, and adds to only while enabled
+// (ui_devtools/views/dom_agent_mac.mm). A session per read, enabled and
+// disabled every 100 ms, read no toast widget in 3 s in the Mac cycle 18
+// (each read in ~6 ms) while Koan's log had the toast.
+async function toastViews(ui) {
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const out = [];
   const walk = async (n, parentShown) => {
@@ -147,16 +156,28 @@ async function toastViews() {
     }
     for (const c of n.children ?? []) await walk(c, shownHere);
   };
+  // The toast's widget anywhere in the document (a child widget may sit
+  // under its parent's node, not at the top: the Mac cycle 18 read no
+  // "KoanToast" widget at the top in 3 s while Koan's log had the toast),
+  // and every widget's name, for the details.
   let widgets = 0;
-  for (const w of doc.children ?? []) {
-    const a = w.attributes ?? [];
-    if (w.nodeName === 'Widget' && a[a.indexOf('name') + 1] === 'KoanToast') {
-      widgets++;
-      await walk(w, true);
+  const names = [];
+  const find = async n => {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'Widget') {
+      const name = a[a.indexOf('name') + 1] ?? '';
+      names.push(name || '?');
+      if (name === 'KoanToast') {
+        widgets++;
+        await walk(n, true);
+        return;
+      }
     }
-  }
-  ui.close();
+    for (const c of n.children ?? []) await find(c);
+  };
+  await find(doc);
   out.widgets = widgets;
+  out.names = names;
   return out;
 }
 
@@ -516,20 +537,33 @@ if (tab) {
   // and stays 2.4 s: read its widget alone, often.
   let toasts = 0;
   const reads = [];
+  let widgetNames = [];
+  const toastUi = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await toastUi.send('DOM.enable');
+  await toastUi.send('CSS.enable');
   while (!toasts && Date.now() - clicked < 3000) {
-    const tv = await toastViews();
+    const tv = await toastViews(toastUi);
     toasts = shown(tv, 'KoanToastView').length;
     reads.push(`+${Date.now() - clicked}ms ${tv.widgets}w/` +
                `${tv.filter(v => v.cls === 'KoanToastView').length}v/${toasts}`);
+    if (reads.length === 2) widgetNames = tv.names;
     if (!toasts) await sleep(100);
   }
+  toastUi.close();
+  // When Koan's log says the toast showed (koan_toast.cc: "Koan toast: ..."),
+  // against when the reads ran (both local time, HHMMSS.mmm), for the details.
+  const toastLogged = IS_MAC ? log().split('\n').filter(l => l.includes('Koan toast: Can\'t add more'))
+      .map(l => l.match(/\/(\d{6}\.\d{3})/)?.[1]).filter(Boolean) : [];
+  const readsRan = `${clock(clicked)}..${clock(Date.now())}`;
   vs = await views();
   check('Split Glance over a split shows the limit toast and opens a tab',
         !(await glanceOpen()) && toasts === 1 &&
             shown(vs, 'SplitTabView').length === 1 &&
             (await pages()) === 3,
       `glance ${await glanceOpen()}, toast ${toasts} (reads: toast widgets/views/shown ` +
-          `${reads.slice(0, 6).join(' ')}${reads.length > 6 ? ` ... ${reads.at(-1)}` : ''}), ` +
+          `${reads.slice(0, 6).join(' ')}${reads.length > 6 ? ` ... ${reads.at(-1)}` : ''}; ` +
+          `the widgets at the second read: ${widgetNames.join(', ') || 'none'}; read ` +
+          `${readsRan}, Koan's log has the toast at ${toastLogged.join(' ') || 'no time'}), ` +
           `${shown(vs, 'SplitTabView').length} split(s), pages ${await urls()}; clicked ` +
           `${split ? JSON.stringify(split.tip) : 'nothing'}; ${before}`);
 }

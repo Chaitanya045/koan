@@ -18,8 +18,8 @@
 // pins the tab for "Add to Essentials" (an Essential is a pinned tab), from
 // a local page it can hear.
 import { ACCEL, IS_MAC, NATIVE_MENUS, tabMenuCommand, sendKey, visiblePage } from './lib/koan.mjs';
-import { askTestHelper, menuKey as macMenuKey, menuKeyWhyNot, skipped, startServer, windowOf,
-         windows } from './lib/mac.mjs';
+import { askTestHelper, menuKey as macMenuKey, menuKeyWhyNot, parkPointer, pointerNotParkedWhy,
+         skipped, startServer, windowOf, windows } from './lib/mac.mjs';
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -251,12 +251,31 @@ check('No close button until a tab is hovered, the active one included',
 
 // Clear shows as a line until the pointer is over the sidebar or the
 // button. (Synthetic events reach the button but not the sidebar's own
-// enter/exit, so only the button's hover is driven here.)
-check('Clear is a line until hovered', (await props(clearButton)).Revealed === 'false');
+// enter/exit, so only the button's hover is driven here.) On macOS the real
+// pointer counts too: it goes over the page first (lib/mac.mjs
+// parkPointer(); the Mac cycle 18 left it over the sidebar).
+const parked = await parkPointer(await visiblePage());
+{
+  const LINE = 'Clear is a line until hovered';
+  const line = (await props(clearButton)).Revealed === 'false';
+  if (!line && !parked) {
+    skipped(LINE, await pointerNotParkedWhy(await visiblePage(), 'over the sidebar it reveals Clear'));
+  } else {
+    check(LINE, line);
+  }
+}
 await mouse(clearButton, ['mouseEntered']);
 check('...and shows while hovered', (await props(clearButton)).Revealed === 'true');
 await mouse(clearButton, ['mouseExited']);
-check('...and is a line again after', (await props(clearButton)).Revealed === 'false');
+{
+  const AGAIN = '...and is a line again after';
+  const line = (await props(clearButton)).Revealed === 'false';
+  if (!line && !parked) {
+    skipped(AGAIN, await pointerNotParkedWhy(await visiblePage(), 'over the sidebar it reveals Clear'));
+  } else {
+    check(AGAIN, line);
+  }
+}
 
 let before = await pages();
 await click(newTab);

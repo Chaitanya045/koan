@@ -429,6 +429,15 @@ if (await closeTabKey(opened ? CLOSE_LAST : null) && opened) {
 // compact mode, KoanVerticalTabsPolicy::OnSidebarButtonAction(), whose
 // hidden sidebar leaves the strip region no width. Upstream's icon rail,
 // which this once checked for, is gone.)
+// From Home, which has tabs: Scratch shows only its empty tab now, and on
+// the empty tab compact mode keeps the sidebar out (Zen's
+// [zen-has-empty-tab], sidebar.inc.css; Koan's empty-tab lock,
+// koan_compact_mode_controller.cc), so it would never collapse there (the
+// Mac cycles 16 to 18: 230 wide collapsed and after Cancel).
+await click(s.buttons[0].view);
+s = await sidebar();
+const collapseSpace = s.header?.name;
+const collapseTabs = s.tabs;
 // The sidebar toggle, found again each time: collapsing moves the toolbar.
 const toggle = async () => (await views()).find(v => v.shown && v.w > 0 &&
     v.path.at(-1) === 'VerticalTabStripTopContainer' && v.cls !== 'KoanSidebarNavButtons');
@@ -438,7 +447,9 @@ await sleep(1000);
 // or not; once collapsed, for the details below: the check after Cancel
 // wants it hidden again.
 const regionWidth = vs => vs.find(v => v.cls === 'VerticalTabStripRegionView')?.w;
-const collapsedRegion = regionWidth((await sidebar()).vs);
+const collapsedSidebar = await sidebar();
+const collapsedRegion = regionWidth(collapsedSidebar.vs);
+const collapsedTabs = collapsedSidebar.tabs;
 await key(VK.N, CTRL | ALT, 'n');
 s = await sidebar();
 form = one(s.vs, 'KoanSpaceCreationView');
@@ -463,7 +474,9 @@ await sleep(1000);
 s = await sidebar();
 {
   const CANCEL_COLLAPSED = '...and Cancel goes back to the collapsed sidebar with the tabs';
-  const ok = !one(s.vs, 'KoanSpaceCreationView') && s.tabs === 0 &&
+  // (Collapsed, the region has no width; its tab rows stay as they were
+  // before the form, which hid them.)
+  const ok = !one(s.vs, 'KoanSpaceCreationView') && s.tabs === collapsedTabs &&
              regionWidth(s.vs) === 0;
   const held = !ok && await realPointerHoldsSidebar(230);
   if (held) {
@@ -471,7 +484,8 @@ s = await sidebar();
   } else {
     const p = IS_MAC ? realPointer() : null;
     check(CANCEL_COLLAPSED, ok,
-          JSON.stringify({ tabs: s.tabs, region: regionWidth(s.vs),
+          JSON.stringify({ space: collapseSpace, spaceTabs: collapseTabs, tabs: s.tabs,
+                           tabsCollapsed: collapsedTabs, region: regionWidth(s.vs),
                            form: !!one(s.vs, 'KoanSpaceCreationView'),
                            regionCollapsed: collapsedRegion,
                            pointer: p && [Math.round(p.x), Math.round(p.y)] }));

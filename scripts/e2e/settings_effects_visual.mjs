@@ -18,7 +18,8 @@ import {
 } from './lib/koan.mjs';
 import { goFullscreen } from './lib/fullscreen.mjs';
 import {
-  KOAN_PID, browserWidgets, realInput, realInputWhyNot, realKey, skipped, startServer,
+  KOAN_PID, browserWidgets, parkPointer, pointerNotParkedWhy, realInput, realInputWhyNot, realKey,
+  skipped, startServer,
 } from './lib/mac.mjs';
 import { execFileSync } from 'node:child_process';
 
@@ -311,13 +312,26 @@ const flashes = async () => {
   await sleep(1500);
   return { popped: Math.max(...widths) > 100, after, widths };
 };
+// On macOS the real pointer over the sidebar keeps it out (upstream's
+// expand-on-hover reads it): it goes over the page first (lib/mac.mjs
+// parkPointer(); in the Mac cycle 18 it rested over the sidebar, 230 wide
+// throughout). Where it can't, a failure for that alone is a skip.
+const parked = await parkPointer(testPage);
+const sidebarCheck = async (name, ok, detail) => {
+  if (!ok && !parked) {
+    skipped(name, await pointerNotParkedWhy(testPage, 'over the sidebar it keeps it out'));
+  } else {
+    check(name, ok, detail);
+  }
+};
 check('Flash popup: on in the page', await setCheckbox(flash, true));
 let f = await flashes();
-check('...a new tab pops the sidebar up, and it slides away again', f.popped && f.after === 0,
-      `${f.widths.join(',')} then ${f.after}`);
+await sidebarCheck('...a new tab pops the sidebar up, and it slides away again',
+                   f.popped && f.after === 0, `${f.widths.join(',')} then ${f.after}`);
 await setCheckbox(flash, false);
 f = await flashes();
-check('Flash popup off: a new tab leaves the sidebar hidden', !f.popped, f.widths.join(','));
+await sidebarCheck('Flash popup off: a new tab leaves the sidebar hidden', !f.popped,
+                   f.widths.join(','));
 
 // The background tab toast.
 const toast = 'koan.compact_mode.show_background_tab_toast';
@@ -334,8 +348,10 @@ const toastShown = async () => {
 };
 check('Background tab toast: on by default', await prefOf(toast) === true);
 let text = await toastShown();
-check('...a link opened in the background shows Zen\'s toast',
-      text === 'New background tab opened!', text);
+// (Zen's toast only while the sidebar is hidden: a pointer that holds it
+// out hides the toast too.)
+await sidebarCheck('...a link opened in the background shows Zen\'s toast',
+                   text === 'New background tab opened!', text);
 check('...off in the page', await setCheckbox(toast, false));
 text = await toastShown();
 check('...then no toast', text === '', text);
