@@ -10,22 +10,32 @@
 // gesture, as a click in the sidebar does, which makes upstream forget the
 // openers (an opener still comes first, as in Zen).
 
+#include <optional>
 #include <string>
+#include <vector>
 
+#include "base/run_loop.h"
 #include "base/test/run_until.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -203,6 +213,45 @@ IN_PROC_BROWSER_TEST_F(KoanTabManagementBrowserTest,
   Show(b);
   CloseActive();
   EXPECT_EQ(model()->GetActiveTab(), c);
+}
+
+// Closing a Space's only tab (Cmd+W, IDC_CLOSE_TAB) with an Essential used
+// before it: Zen selects the Essential and stays in the Space, which keeps
+// its empty tab (zen.workspaces.open-new-tab-if-last-unpinned-tab-is-closed
+// is off). tab_management.mjs saw the empty tab selected on the Mac: the
+// Space came back on it after its group closed.
+IN_PROC_BROWSER_TEST_F(KoanTabManagementBrowserTest,
+                       ClosingTheLastTabOfASpaceSelectsTheRecentEssential) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  tabs::TabInterface* essential = AddTab("Essential");
+  model()->SetTabPinned(model()->GetIndexOfTab(essential), true);
+  ASSERT_TRUE(essential->IsPinned());
+  Show(essential);
+
+  spaces->CreateSpace(u"X1", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  const std::optional<tab_groups::TabGroupId> space = spaces->GetActiveSpace();
+  ASSERT_TRUE(space);
+  // The new Space's empty tab, navigated in place: an ordinary tab, its
+  // only one.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Page("X1")));
+  ASSERT_EQ(1u, TabsOfSpace(model(), *space).size());
+  ASSERT_FALSE(IsEmptyTab(model()->GetActiveTab()));
+
+  chrome::ExecuteCommand(browser(), IDC_CLOSE_TAB);
+  // The Space is back with its empty tab.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    if (!model()->group_model()->ContainsTabGroup(*space)) {
+      return false;
+    }
+    const std::vector<int> tabs = TabsOfSpace(model(), *space);
+    return tabs.size() == 1u && IsEmptyTab(model()->GetTabAtIndex(tabs[0]));
+  }));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(model()->GetActiveTab(), essential);
+  EXPECT_EQ(spaces->GetActiveSpace(), space);
 }
 
 }  // namespace koan

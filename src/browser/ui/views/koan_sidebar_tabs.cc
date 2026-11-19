@@ -1192,6 +1192,7 @@ void KoanSidebarTabsController::OnTabStripModelChanged(
   if (change.type() == TabStripModelChange::kRemoved) {
     for (const auto& removed : change.GetRemove()->contents) {
       empty_tab_by_id_.erase(removed.tab->GetHandle().raw_value());
+      pinned_tab_by_id_.erase(removed.tab->GetHandle().raw_value());
     }
   } else if (change.type() == TabStripModelChange::kInserted) {
     // Seeded here too, so a tab that never gets a full change (a restored,
@@ -1199,6 +1200,8 @@ void KoanSidebarTabsController::OnTabStripModelChanged(
     for (const auto& inserted : change.GetInsert()->contents) {
       empty_tab_by_id_[inserted.tab->GetHandle().raw_value()] =
           IsEmptyTab(inserted.tab);
+      pinned_tab_by_id_[inserted.tab->GetHandle().raw_value()] =
+          IsPinnedForUser(inserted.tab);
     }
   }
 }
@@ -1220,8 +1223,17 @@ void KoanSidebarTabsController::OnTabChangedAt(tabs::TabInterface* tab,
   if (change_type == TabChangeType::kAll) {
     UpdateClearRow();
     // So does pinning a tab in place, and it moves the rows in the focus
-    // order.
-    ScheduleUpdateRowsHost();
+    // order. Only when that changes (or for a tab not seen before): this runs
+    // for every title, icon and load change, and a page that changes its
+    // title four times a second would post a task each time.
+    const int32_t tab_id = tab->GetHandle().raw_value();
+    const bool pinned = IsPinnedForUser(tab);
+    const auto pinned_known = pinned_tab_by_id_.find(tab_id);
+    if (pinned_known == pinned_tab_by_id_.end() ||
+        pinned_known->second != pinned) {
+      pinned_tab_by_id_[tab_id] = pinned;
+      ScheduleUpdateRowsHost();
+    }
     // A Space's only tab showing a page, or an empty one, shows or hides its
     // row (IsEmptyTab()); the layouts are not told by the tab's URL. Only
     // when that changes: this runs for every title, icon and load change of

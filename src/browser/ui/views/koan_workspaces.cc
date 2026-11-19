@@ -49,6 +49,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
@@ -1720,18 +1721,24 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     WriteSpace(closed.id, closed.data);
     // Zen shows the empty tab only when nothing else is left to show: with
     // Essentials the window keeps what it shows (zen.workspaces.open-new-tab-
-    // if-last-unpinned-tab-is-closed is off by default).
-    bool has_essentials = false;
-    for (int i = 0; i < model->count() && !has_essentials; ++i) {
-      has_essentials = model->IsTabPinned(i);
-    }
-    if (closed.was_active && !model->GetFocusedGroup() && !has_essentials) {
-      // Zen stays on an Essential that was selected when the Space emptied.
+    // if-last-unpinned-tab-is-closed is off by default), the Essential that
+    // closing selected, and the emptied Space stays the one shown. That has
+    // to happen here: left to the end of this function, SwitchTo() would
+    // select the Space's only tab, the empty tab.
+    if (closed.was_active && !model->GetFocusedGroup()) {
       tabs::TabInterface* active_tab = model->GetActiveTab();
       const bool on_essential = active_tab && active_tab->IsPinned();
-      SwitchTo(closed.id);
-      if (on_essential) {
-        model->ActivateTabAt(model->GetIndexOfTab(active_tab));
+      bool has_essentials = false;
+      for (int i = 0; i < model->count() && !has_essentials; ++i) {
+        has_essentials = model->IsTabPinned(i);
+      }
+      if (on_essential || !has_essentials) {
+        SwitchTo(closed.id);
+        // Entering the Space selected its tab; an Essential may stay
+        // selected in a shown Space (IsTabValidInFocusedGroup()).
+        if (on_essential) {
+          model->ActivateTabAt(model->GetIndexOfTab(active_tab));
+        }
       }
     }
   }
@@ -3159,6 +3166,14 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   if (!controller->workspaces()->LastTabsWereClosed()) {
     return false;
   }
+  // A window whose close is under way (its tabs' beforeunload or unload
+  // handlers run) closes, as upstream's. Asked before UnloadController sees
+  // the empty strip: Browser observes the tab strip first (its constructor,
+  // before BrowserWindowFeatures makes the UnloadController).
+  if (const UnloadController* unload = UnloadController::From(browser);
+      unload && unload->is_attempting_to_close_browser()) {
+    return false;
+  }
   controller->workspaces()->ExpectEmptyTab();
   // Not from inside the tab strip's close: it can't be modified there.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -3166,9 +3181,20 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
       base::BindOnce(
           [](base::WeakPtr<BrowserWindowInterface> window,
              base::WeakPtr<KoanBrowserViewController> controller) {
-            if (!window || !controller ||
+            if (!window || !controller || window->IsDeleteScheduled() ||
                 !window->GetTabStripModel()->empty()) {
               return;
+            }
+            // UnloadController::TabStripEmpty() took the empty strip for the
+            // window's close (kUnloadCompleted, "attempting to close"). The
+            // window stays, so it is idle again; else the next tab closed
+            // finishes that close (TabDetachedImpl() -> ProcessPendingTabs()
+            // -> OnWindowClosing()), and Cmd+W on the page opened from the
+            // empty state closed the window. As upstream does when a close
+            // like this is cancelled (its download warning).
+            if (UnloadController* unload = UnloadController::From(window.get());
+                unload && unload->is_attempting_to_close_browser()) {
+              unload->CancelWindowClose();
             }
             // Marked at once, so it never shows a row.
             if (tabs::TabInterface* tab =

@@ -69,9 +69,11 @@
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/focus/focus_manager.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
@@ -424,11 +426,22 @@ class KoanThemePickerView : public views::View {
     return base::StringPrintf("%d,%d,%d,%d", bounds.x(), bounds.y(),
                               bounds.width(), bounds.height());
   }
+  // For tests: whether Tab and a click can focus the panel's controls
+  // (FocusSearch::IsFocusable()). On macOS they are focusable for
+  // accessibility only (PlatformStyle::kDefaultFocusBehavior), so only with
+  // Full Keyboard Access (FocusManager::keyboard_accessible()), as Zen's
+  // range inputs are reached by Tab there only with it.
+  bool GetKeyboardFocusable() const {
+    const views::FocusManager* focus_manager = GetFocusManager();
+    return (focus_manager && focus_manager->keyboard_accessible()) ||
+           field_->GetFocusBehavior() == FocusBehavior::ALWAYS;
+  }
 
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
+  void ChildPreferredSizeChanged(views::View* child) override;
   void OnThemeChanged() override;
 
  private:
@@ -1823,6 +1836,34 @@ void KoanThemePickerView::Layout(PassKey) {
   }
 }
 
+void KoanThemePickerView::ChildPreferredSizeChanged(views::View* child) {
+  views::View::ChildPreferredSizeChanged(child);
+  // Zen's panel sizes to its contents, so it grows with each custom colour
+  // row and shrinks when one goes; a bubble keeps its size unless told
+  // (KoanThemePicker::OnWidgetBoundsChanged() then fits the material).
+  views::Widget* widget = GetWidget();
+  if (!widget || widget->IsClosed() || !widget->IsVisible() || height() == 0) {
+    return;
+  }
+  views::BubbleDialogDelegate* bubble =
+      widget->widget_delegate()->AsBubbleDialogDelegate();
+  const int delta = GetPreferredSize().height() - height();
+  if (!bubble || delta == 0) {
+    return;
+  }
+#if BUILDFLAG(IS_MAC)
+  // An NSPopover stays centred on its rect along the edge
+  // (KoanThemePicker::PlaceBeside()), as the FLOAT bubble does.
+  bubble->SizeToContents();
+#else
+  // A popup keeps its top-left corner: the panel is centred on the anchor
+  // rect, so that grows downward by as much.
+  gfx::Rect anchor = bubble->GetAnchorRect();
+  anchor.set_height(anchor.height() + delta);
+  bubble->SetAnchorRect(anchor);
+#endif
+}
+
 BEGIN_METADATA(KoanThemePickerView)
 ADD_READONLY_PROPERTY_METADATA(std::string, Dots)
 ADD_READONLY_PROPERTY_METADATA(std::string, Algorithm)
@@ -1833,6 +1874,7 @@ ADD_READONLY_PROPERTY_METADATA(std::string, WindowBackground)
 ADD_READONLY_PROPERTY_METADATA(std::string, WindowMode)
 ADD_READONLY_PROPERTY_METADATA(std::string, PanelInWindow)
 ADD_READONLY_PROPERTY_METADATA(std::string, CustomColors)
+ADD_READONLY_PROPERTY_METADATA(bool, KeyboardFocusable)
 END_METADATA
 
 KoanThemePicker::KoanThemePicker(KoanThemeController* controller,
