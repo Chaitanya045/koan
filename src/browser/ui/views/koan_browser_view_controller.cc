@@ -243,6 +243,7 @@ void KoanBrowserViewController::TearDown() {
   split_header_->OnBrowserViewDestroying();
   window_drag_->OnBrowserViewDestroying();
   welcome_->OnBrowserViewDestroying();
+  agent_indicator_->OnBrowserViewDestroying();
 }
 
 // static
@@ -285,6 +286,8 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     command_palette_->OnAddedToWidget();
     // After the workspace switcher: the media cards go above it.
     media_->OnAddedToWidget();
+    // The agent chip too.
+    agent_indicator_->OnAddedToWidget();
     // Zen's update notification goes above the switcher too.
     updates::OnBrowserWindowShown(browser_view_);
     download_animation_->OnAddedToWidget();

@@ -5,80 +5,145 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_AGENT_INDICATOR_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_AGENT_INDICATOR_H_
 
+#include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "koan/browser/agent/koan_agent_indicator_logic.h"
 #include "koan/browser/agent/koan_agent_service.h"
+#include "ui/menus/simple_menu_model.h"
+#include "ui/views/view_tracker.h"
 
 class BrowserView;
 
-namespace views {
-class Widget;
+namespace content {
+class WebContents;
 }
+
+namespace views {
+class MenuRunner;
+class View;
+class Widget;
+}  // namespace views
 
 namespace koan {
 
 // "An agent is connected" for one window (.agent/notes/agent-control.md
-// section 6.2, threat T10): a pill in the window's bottom corner away from the
-// sidebar, in the toast's colours, shown for as long as any client is
-// connected: "● Claude Code is connected · Stop". It is a child widget above
-// the page, so it shows in every layout: compact mode with the sidebar hidden,
-// full screen, and every window. Stop closes every agent connection and
-// forgets every pairing (AgentControlService::StopAllAgents()).
-//
-// This is the first layer of the indicator; the agent Space glow, the banner
-// on a driven tab and the menu-bar item come with the features they belong to.
-class KoanAgentIndicator : public koan::agent::AgentControlService::Observer {
+// section 6.2, threat T10), in layers (koan_agent_indicator_logic.h decides
+// which shows):
+// - the pill, on the tab an agent controls while it is the one shown: a
+//   child widget in the page's bottom corner away from the sidebar, in the
+//   toast's colours, "● Claude Code is controlling this tab · Take back ·
+//   Stop", and an accent border round that page (a child widget that takes
+//   no events); a page waiting for the user there shows Open and Dismiss;
+// - the chip, in the sidebar above the Spaces' bottom bar, while any agent
+//   is connected: a dot and the agent's name, how many tabs wait for the user
+//   elsewhere, and a menu that goes to them or stops every agent. While the
+//   sidebar is hidden (compact mode, full screen, no sidebar) and no pill
+//   shows, a dot pill in the page's corner stands in for it, with the same
+//   menu, so one layer shows in every layout;
+// - the agent's tabs in the sidebar carry the same dot
+//   (PaintSidebarTab(), IsAgentTab());
+// - toasts (KoanToast) when an agent connects or disconnects (in the front
+//   window) and when the user's input pauses a tab of this window.
+// Stop closes every agent connection and forgets every pairing
+// (AgentControlService::StopAllAgents()).
+class KoanAgentIndicator : public koan::agent::AgentControlService::Observer,
+                           public TabStripModelObserver,
+                           public ui::SimpleMenuModel::Delegate {
  public:
   explicit KoanAgentIndicator(BrowserView* browser_view);
   KoanAgentIndicator(const KoanAgentIndicator&) = delete;
   KoanAgentIndicator& operator=(const KoanAgentIndicator&) = delete;
   ~KoanAgentIndicator() override;
 
-  // Keeps the pill in its corner.
+  // Called by KoanBrowserViewController.
+  void OnAddedToWidget();
+  // Keeps the pill, the border and the corner dot in place, and puts the chip
+  // back in a rebuilt sidebar.
   void OnBrowserViewLayout();
+  void OnBrowserViewDestroying();
 
-  // What the pill shows: its text, and the Hand back / Take back buttons for
-  // one tab of this window (design section 9.2), or Open / Dismiss for what a
-  // page in an agent tab waits to show (section 9.4).
-  struct Content {
-    std::u16string text;
-    std::string target_id;
-    bool hand_back = false;
-    bool take_back = false;
-    uint64_t prompt_id = 0;
-    bool operator==(const Content&) const = default;
-  };
+  // Whether an agent holds `contents`, a tab of this window: the sidebar
+  // marks it.
+  bool IsAgentTab(const content::WebContents* contents) const;
 
-  // What the pill says, or empty when nothing is connected. Public for tests.
-  static std::u16string TextFor(
-      const std::vector<koan::agent::ConnectedClient>& clients);
-  // The pill for those clients, this window's controlled tabs and every
-  // held prompt (an agent tab may be in a window of its own, so each window
-  // shows them).
-  static Content ContentFor(
-      const std::vector<koan::agent::ConnectedClient>& clients,
-      const std::vector<koan::agent::ControlledTab>& tabs_in_window,
-      const std::vector<koan::agent::HeldPrompt>& prompts);
+  // Opens the chip's menu at `anchor` (a view of this window).
+  void ShowMenu(views::View* anchor);
 
   bool IsShowingForTesting() const;
 
  private:
+  // What agent control reports, for this window.
+  struct Snapshot {
+    std::vector<koan::agent::IndicatorClient> clients;
+    std::vector<koan::agent::IndicatorTab> tabs;
+    std::vector<koan::agent::IndicatorPrompt> prompts;
+    std::set<const content::WebContents*> tabs_in_window;
+    // The tab of each target and of each prompt.
+    std::map<std::string, content::WebContents*> tab_contents;
+    std::map<uint64_t, content::WebContents*> prompt_contents;
+  };
+  Snapshot TakeSnapshot() const;
+
   // koan::agent::AgentControlService::Observer:
   void OnAgentControlChanged() override;
 
-  void Show(const Content& content);
-  void Hide();
+  // TabStripModelObserver: the shown tab changed.
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
+  void OnSplitTabChanged(const SplitTabChange& change) override;
+
+  // ui::SimpleMenuModel::Delegate (the chip's menu):
+  void ExecuteCommand(int command_id, int event_flags) override;
+
+  void Update();
+  void ShowEventToasts(const koan::agent::EventState& state);
+  void ShowPill(const koan::agent::PillContent& content);
+  void HidePill();
+  void UpdateBorder();
+  void InstallChip();
+  void UpdateChip();
+  // The corner dot, while the sidebar's chip can't be seen.
+  void UpdateCornerDot();
+  // Runs UpdateCornerDot() and installs the chip after the layout under way.
+  void ScheduleLayoutUpdate();
+  // Repaints the sidebar's tabs whose mark changed.
+  void RepaintTabs();
+  // Puts `widget` in the page's bottom corner away from the sidebar, at its
+  // contents' preferred size.
+  void PlaceInCorner(views::Widget* widget);
 
   const raw_ptr<BrowserView> browser_view_;
-  std::unique_ptr<views::Widget> widget_;
-  Content shown_;
+  bool torn_down_ = false;
+  koan::agent::IndicatorContent content_;
+  koan::agent::EventState events_;
+  std::set<const content::WebContents*> marked_;
+  raw_ptr<content::WebContents> pill_contents_ = nullptr;
+  bool layout_update_pending_ = false;
+
+  std::unique_ptr<views::Widget> pill_;
+  std::unique_ptr<views::Widget> border_;
+  std::unique_ptr<views::Widget> corner_;
+  views::ViewTracker chip_;
+
+  // The chip's menu, and what its items go to.
+  std::vector<koan::agent::MenuEntry> menu_entries_;
+  std::unique_ptr<ui::SimpleMenuModel> menu_model_;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
+
   base::ScopedObservation<koan::agent::AgentControlService,
                           koan::agent::AgentControlService::Observer>
       observation_{this};
+  base::WeakPtrFactory<KoanAgentIndicator> weak_factory_{this};
 };
 
 }  // namespace koan

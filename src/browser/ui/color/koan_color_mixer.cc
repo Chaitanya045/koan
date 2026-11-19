@@ -373,6 +373,15 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanSplitDropZone] = {SkColorSetA(zen_secondary, Alpha(0.3f))};
   mixer[kColorKoanSplitDragImage] = {SK_ColorWHITE};
 
+  // Agent control (Koan's own; Zen has none): the accent colour, as the
+  // toasts, for the dot and, at 60%, the border round the page; the chip is a
+  // hovered sidebar row with the sidebar's text.
+  mixer[kColorKoanAgentAccent] = {ui::kColorSysPrimary};
+  mixer[kColorKoanAgentBorder] =
+      ui::SetAlpha(kColorKoanAgentAccent, Alpha(0.6f));
+  mixer[kColorKoanAgentChip] = {kColorKoanSidebarRowHovered};
+  mixer[kColorKoanAgentChipForeground] = {kColorKoanToolboxText};
+
   // Folders (zen-folders.css), from the accent colour (the active Space's
   // tint): the folder behind is the accent at 60% over grey (#c1c1c1 in dark
   // mode), its cover the accent at 30% over white (60% over black in dark

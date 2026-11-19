@@ -1405,8 +1405,18 @@ install a new nightly. Click **Always Allow**. The profile is in
 such as Claude Code or a script, open and work in background tabs. Koan listens
 on a private unix socket in `~/Library/Application Support/Koan/AgentControl/`,
 and **every new program has to be approved in a dialog that names it** before
-it can do anything. While an agent is connected, a pill in the bottom corner of
-every window says so; **Stop** closes every agent connection and forgets every
+it can do anything. While an agent is connected, a **chip** at the bottom of the
+sidebar, above the Spaces, shows a dot and the agent's name (and how many tabs
+wait for you, if any); click it to go to an agent's tab or to **Stop all
+agents**. Tabs an agent holds carry the same dot in the sidebar. With compact
+mode hiding the sidebar, a small dot in the page's bottom corner stands in for
+the chip. On the tab an agent controls, while you look at it, a pill in the
+page's bottom corner says so ("Claude Code is controlling this tab") with
+**Take back** (your tab) or **Take over** (the agent's own tab: pauses it),
+**Hand back** once you paused it, and **Stop**, and the page gets a thin accent
+border; a page there that waits for you shows **Open** and **Dismiss** in the
+pill instead. A short toast says when an agent connects or disconnects and when
+your input pauses it. **Stop** closes every agent connection and forgets every
 approval. Turning Agent ready off closes everything at once. It is off in
 Incognito and Guest launches and with another `--user-data-dir` unless you turn
 it on there. Your organisation's `RemoteDebuggingAllowed` policy turns it off.
