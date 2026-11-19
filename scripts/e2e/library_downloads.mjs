@@ -29,8 +29,8 @@ import {
   pages, sleep, visiblePage, waitFor, IS_MAC, META, NATIVE_MENUS,
 } from './lib/koan.mjs';
 import {
-  KOAN_PID, closeNativeMenu, nativeMenuReport, nativeMenusWhyNot, pickNativeMenu, realInput,
-  skipped, waitNativeMenu,
+  KOAN_PID, closeNativeMenu, nativeMenuReport, nativeMenuStuckWhy, nativeMenusWhyNot,
+  pickNativeMenu, realInput, skipped, waitNativeMenu,
 } from './lib/mac.mjs';
 // Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
 const DOWNLOADS_KEY = IS_MAC ? [74, META, 'j'] : [89, CTRL | SHIFT, 'Y'];
@@ -258,6 +258,12 @@ const safe = await waitFor(async () => {
   return r && !/\//.test(r.p.Subtitle ?? '/') ? r : null;
 }, 8000) ?? await row(SAFE);
 const nativeWhyNot = NATIVE_MENUS ? nativeMenusWhyNot() : '';
+// Why the row's menu opened but couldn't be driven (lib/mac.mjs
+// nativeMenuStuckWhy()), and what to do on the Mac by hand then.
+let menuStuck = '';
+const MENU_BY_HAND = `By hand on the Mac: in the Library's Downloads, right-click ${SAFE}; ` +
+    `the menu starts with "Open ${SAFE}"; choose it: the file opens in a tab, and after a ` +
+    'quit the History database has opened = 1 for it (and 0 for koan-later.exe)';
 if (safe && NATIVE_MENUS && !nativeWhyNot) {
   // A native menu: its press is answered once the menu has closed, its
   // release goes after (lib/folders.mjs openNativeMenu()).
@@ -287,16 +293,25 @@ if (safe && NATIVE_MENUS && !nativeWhyNot) {
                            event: { type, x: 20, y: 20, button: 'right', wheelDirection: 'none' } });
   ui.send('DOM.dispatchMouseEvent', event('mousePressed'));
   const menu = await waitNativeMenu(true);
+  // A menu that opened but that Accessibility can't drive from here: the
+  // checks that need it skip, with the steps to do by hand.
+  menuStuck = menu ? '' : await nativeMenuStuckWhy();
   // The menu of a finished download: "Open koan-safe.html" first.
   const picked = menu ? await pickNativeMenu([`Open ${SAFE}`])
-                      : { ok: false, detail: `no native menu opened by a right press on the row (` +
-                              `${nodeId ? 'found again' : `not found again of ${rowNodes.length}`}): ` +
-                              await nativeMenuReport() };
+      : menuStuck ? { ok: false }
+      : { ok: false, detail: `no native menu opened by a right press on the row (` +
+              `${nodeId ? 'found again' : `not found again of ${rowNodes.length}`}): ` +
+              await nativeMenuReport() };
   // A menu Accessibility doesn't find still keeps the browser from
   // answering; closeNativeMenu() closes it with a real Escape where real
   // input is on. Without that nothing closes it: stop, not time out.
   const closed = await closeNativeMenu();
-  check('A finished download\'s menu opens', picked.ok, picked.detail);
+  if (menuStuck) {
+    skipped('A finished download\'s menu opens, and Open there opens it', `${menuStuck}. ` +
+            MENU_BY_HAND);
+  } else {
+    check('A finished download\'s menu opens', picked.ok, picked.detail);
+  }
   if (!closed) {
     check('...and closes again', false, `still open: ${await nativeMenuReport()}; ` +
           `real input ${realInput() ? 'on' : 'off'}`);
@@ -321,7 +336,7 @@ if (!IS_MAC) {
 }
 
 // --- macOS: the opened flags, from the History database once Koan has quit.
-const menuRan = safe && !nativeWhyNot;
+const menuRan = safe && !nativeWhyNot && !menuStuck;
 if (menuRan) {
   const tab = await waitFor(async () => (await pages()).find(p => p.url.endsWith(`/${SAFE}`)), 8000);
   check('...and Open there opens it (in a tab: an .html file)', Boolean(tab),

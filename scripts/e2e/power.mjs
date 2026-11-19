@@ -19,8 +19,8 @@ import { browserSession, connect, evaluate, pageTargets, sleep, traceUi, uiMouse
 import { servePages } from '../perf/pages_server.mjs';
 import { ACCEL, NATIVE_MENUS, createSpace, key as koanKey, tabMenuCommand, viewTree, waitFor }
     from './lib/koan.mjs';
-import { askTestHelper, closeWindowOf, menuKey, menuKeyWhyNot, realInput, skipped }
-    from './lib/mac.mjs';
+import { askTestHelper, closeWindowOf, menuKey, menuKeyWhyNot, parkPointer, pointerNotParkedWhy,
+         realInput, skipped } from './lib/mac.mjs';
 
 const CDP_PORT = process.env.CDP_PORT;
 const UI_PORT = process.env.UI_PORT;
@@ -417,6 +417,10 @@ check('A peeked sidebar hides again without polling', koanTasks(peek) <= 3,
 await setKoanPref('koan.compact_mode.hide', 'both');
 await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // Ctrl+Alt+B
 await sleep(1500);
+// On macOS the real pointer over the revealed toolbar keeps it out
+// (View::IsMouseHovered() reads it): it goes over the page first (lib/mac.mjs
+// parkPointer(); in the Mac cycle 18 it rested at the window's top).
+const parked = await parkPointer(first);
 const zones = (await uiViews(UI_PORT))
     .filter(v => v.cls === 'KoanHotZone' && v.shown && v.w > v.h);
 const reveal = await traceUi(browser, async () => {
@@ -424,10 +428,17 @@ const reveal = await traceUi(browser, async () => {
   await sleep(2000);
 });
 paints = paintsOf(await traceUi(browser, () => sleep(4000)));
-check('The toolbar slid back out does not repaint',
-      paintsOf(reveal).ToolbarView > 0 && !paints.ToolbarView && !paints.LocationBarView,
-      `${paintsOf(reveal).ToolbarView ?? 0} toolbar paints while revealed; then toolbar ` +
-      `${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}`);
+{
+  const SLID = 'The toolbar slid back out does not repaint';
+  const ok = paintsOf(reveal).ToolbarView > 0 && !paints.ToolbarView && !paints.LocationBarView;
+  if (!ok && !parked) {
+    skipped(SLID, await pointerNotParkedWhy(first, 'over the top bar it keeps the toolbar out'));
+  } else {
+    check(SLID, ok,
+          `${paintsOf(reveal).ToolbarView ?? 0} toolbar paints while revealed; then toolbar ` +
+          `${paints.ToolbarView ?? 0}, location bar ${paints.LocationBarView ?? 0}`);
+  }
+}
 await key(CDP_PORT, 66, CTRL | ALT, byId(first.id));  // back to single toolbar
 await key(CDP_PORT, 83, ACCEL, byId(first.id));  // compact mode off
 await sleep(1500);

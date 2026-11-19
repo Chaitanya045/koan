@@ -477,6 +477,27 @@ export async function nativeMenuReport(pid = KOAN_PID) {
           JSON.stringify(nativeMenu('dump', [], pid))})`}`;
 }
 
+// Why a native menu that opened can't be driven from the bench ('' when it
+// can, or when none opened): the browser doesn't answer (an NSMenu's
+// tracking loop holds it) and Koan has a menu-level window on screen, yet
+// neither the Accessibility tree, nor a walk up from a hit test, nor a hit
+// scan of that window reads an item (lib/native_menu_ax.js). Call it before
+// closing the menu. The Mac cycles 16 to 18: the hit test reads the item
+// under a point, but no element read from an attribute can be used again
+// (the JavaScript for Automation bridge throws on it).
+export async function nativeMenuStuckWhy(pid = KOAN_PID) {
+  if (!IS_MAC || !pid || (pid === KOAN_PID && await browserAnswers())) return '';
+  const r = nativeMenu('read', [], pid);
+  if (r.open) return '';
+  const hit = nativeMenu('dump', [], pid).hit;
+  const wins = Array.isArray(hit?.windows) ? hit.windows : [];
+  if (!wins.length) return '';
+  return `a native menu opened (Koan's ${wins[0]} window), but Accessibility from the ` +
+      `bench can't read its items (the walk up from the hit test stops at ` +
+      `${JSON.stringify(hit.at)}, the hit scan read ${JSON.stringify(hit.scanned ?? null)}; ` +
+      `trusted ${hit.trusted})`;
+}
+
 // Closes the open native menu, if any (AXCancel, then a real Escape where
 // real input is on). Whether none is open now: Accessibility finds none and
 // the browser answers (a menu Accessibility doesn't find still keeps the
@@ -685,6 +706,44 @@ export async function realPointerHoldsSidebar(width, onRight = false) {
   return over ? `the real pointer rests over the sidebar (${Math.round(x)},${Math.round(y)} ` +
                 'in the window): upstream keeps it out under the pointer' : '';
 }
+// Where the real pointer is in `page`'s window, in points from the window's
+// top-left ({x, y}, with the window's bounds `b`), or null (off macOS, or
+// unknown).
+export async function realPointerInWindow(page) {
+  const p = realPointer();
+  const b = p && page && (await windowOf(page.id).catch(() => null))?.bounds;
+  return b ? { x: p.x - b.left, y: p.y - b.top, b } : null;
+}
+// With real input, moves the real pointer to the middle of `page`'s window,
+// 2/3 down: over the page, away from the sidebar (on either side) and the
+// top bar, whose reveals upstream keeps while the real pointer is over them
+// (View::IsMouseHovered(), whatever synthetic events say). The Mac cycle 18:
+// a pointer left at 93,66 in the window held the sidebar out in
+// settings_effects_visual, revealed Clear in sidebar_tabs and kept compact
+// mode's toolbar in power. Whether the pointer rests there now: off macOS
+// always; without real input only if it happens to.
+export async function parkPointer(page) {
+  if (!IS_MAC) return true;
+  let at = await realPointerInWindow(page);
+  if (!at) return false;
+  const x = Math.round(at.b.width / 2), y = Math.round(at.b.height * 2 / 3);
+  const near = a => Math.abs(a.x - x) < 120 && Math.abs(a.y - y) < 120;
+  if (!near(at) && realInput()) {
+    await ptr('move', at.b.left + x, at.b.top + y, 100);
+    await sleep(300);
+    at = await realPointerInWindow(page);
+  }
+  return !!at && near(at);
+}
+// Why a check after parkPointer() returned false may fail for the pointer
+// alone: where it rests in the window.
+export async function pointerNotParkedWhy(page, what) {
+  const at = await realPointerInWindow(page);
+  return `the real pointer rests ${at ? `at ${Math.round(at.x)},${Math.round(at.y)} in the window` :
+                                        'where it can\'t be read'} and real input is ` +
+         `${realInput() ? 'on but could not move it' : `off (${realInputWhyNot()})`}: ${what}`;
+}
+
 // check(name, ok, detail), or a skip when the real pointer holds the
 // sidebar out (realPointerHoldsSidebar()).
 export async function checkSlidesAway(check, name, ok, detail, width = 230) {

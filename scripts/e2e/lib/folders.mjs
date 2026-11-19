@@ -8,7 +8,7 @@ import {
 } from './koan.mjs';
 import {
   KOAN_PID, calibrate, closeNativeMenu, keyWindowReport, makeKey, nativeMenuReport,
-  pickNativeMenu, ptr, realInput, waitNativeMenu, windowOf,
+  nativeMenuStuckWhy, pickNativeMenu, ptr, realInput, waitNativeMenu, windowOf,
 } from './mac.mjs';
 
 // Koan's pid, for the native menus (folders.mjs restarts Koan).
@@ -87,51 +87,66 @@ export async function click(s, n, button = 'left') {
 }
 
 // macOS: the native menu the last right-click opened, {items, c, release},
-// or null. With real input it is a real right-click at `at` on the screen:
-// the root view's screen origin is measured once (lib/mac.mjs calibrate();
-// the window's bounds' origin is only a guess at it). Else a UI DevTools
-// press, which is answered only once the menu closes (its tracking loop runs
-// no Chromium tasks), so it isn't waited for; its release goes to the root
-// view once the menu has closed, as the press and release do elsewhere.
+// or null. First a UI DevTools press, which is answered only once the menu
+// closes (its tracking loop runs no Chromium tasks), so it isn't waited for;
+// its release goes to the root view once the menu has closed, as the press
+// and release do elsewhere. (It opens the menu: library_downloads.mjs's did
+// in the Mac cycle 18, where folders' real right-clicks at the measured or
+// guessed origin opened none in cycles 14 to 18, the browser answering.)
+// If that opens none, a real right-click at `at` on the screen, with real
+// input: the root view's screen origin is measured once (lib/mac.mjs
+// calibrate(); the window's bounds' origin is only a guess at it).
 let nativeOpen = null;
 let rootOnScreen = null;
+// Why the last menu opened but couldn't be driven (lib/mac.mjs
+// nativeMenuStuckWhy()), or ''.
+let menuStuck = '';
+export const nativeMenuStuck = () => menuStuck;
 async function openNativeMenu(event, at) {
   if (nativeOpen) await endNativeMenu();
-  let c = null;
-  // (Real input is Koan's first pid's only: the gate checks that pid.)
-  const bounds = realInput() && menuPid === KOAN_PID &&
-      (await windowOf((await pages())[0]?.id).catch(() => null))?.bounds;
-  // The window in front first: a real click goes to whatever is on top, and
-  // the calibration's moves reach the page only there. (Mac cycle 17: the
-  // calibration failed and no right-click opened a menu, with the browser
-  // answering.) A guessed origin is measured again the next time.
-  const page = bounds ? await visiblePage().catch(() => null) : null;
-  const keyed = !!page && await makeKey(page, 1500);
-  if (bounds && (!rootOnScreen || rootOnScreen.guessed)) {
-    const measured = page && await calibrate(page).catch(() => null);
-    rootOnScreen = measured ?? { x: bounds.left, y: bounds.top, guessed: true };
-    console.log(`  (the window's root view on screen: ${JSON.stringify(rootOnScreen)}, ` +
-                `its bounds ${bounds.left},${bounds.top}, the window ` +
-                `${keyed ? 'key' : 'not key'})`);
+  let c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await c.send('DOM.getDocument', { depth: -1 });
+  c.send('DOM.dispatchMouseEvent', event('mousePressed'));
+  let menu = await waitNativeMenu(true, menuPid);
+  menuStuck = menu ? '' : await nativeMenuStuckWhy(menuPid);
+  let real = false, keyed = false, screen = null, bounds = null;
+  if (!menu && !menuStuck) {
+    // None opened: the press's release, then a real right-click instead.
+    await c.send('DOM.dispatchMouseEvent', event('mouseReleased'));
+    c.close();
+    c = null;
+    // (Real input is Koan's first pid's only: the gate checks that pid.)
+    bounds = realInput() && menuPid === KOAN_PID &&
+        (await windowOf((await pages())[0]?.id).catch(() => null))?.bounds;
+    // The window in front first: a real click goes to whatever is on top,
+    // and the calibration's moves reach the page only there. A guessed
+    // origin is measured again the next time.
+    const page = bounds ? await visiblePage().catch(() => null) : null;
+    keyed = !!page && await makeKey(page, 1500);
+    if (bounds && (!rootOnScreen || rootOnScreen.guessed)) {
+      const measured = page && await calibrate(page).catch(() => null);
+      rootOnScreen = measured ?? { x: bounds.left, y: bounds.top, guessed: true };
+      console.log(`  (the window's root view on screen: ${JSON.stringify(rootOnScreen)}, ` +
+                  `its bounds ${bounds.left},${bounds.top}, the window ` +
+                  `${keyed ? 'key' : 'not key'})`);
+    }
+    screen = bounds && [Math.round(rootOnScreen.x + at.x), Math.round(rootOnScreen.y + at.y)];
+    real = !!bounds && await ptr('rclick', ...screen);
+    if (real) {
+      menu = await waitNativeMenu(true, menuPid);
+      menuStuck = menu ? '' : await nativeMenuStuckWhy(menuPid);
+    }
   }
-  const screen = bounds && [Math.round(rootOnScreen.x + at.x), Math.round(rootOnScreen.y + at.y)];
-  const real = !!bounds && await ptr('rclick', ...screen);
-  if (!real) {
-    c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
-    await c.send('DOM.getDocument', { depth: -1 });
-    c.send('DOM.dispatchMouseEvent', event('mousePressed'));
-  }
-  const menu = await waitNativeMenu(true, menuPid);
   // After a real right-click the pointer leaves the sidebar again (resting on
   // a collapsed folder would open its search).
-  const away = !c && [bounds.left + bounds.width - 60, bounds.top + bounds.height / 2];
+  const away = real && [bounds.left + bounds.width - 60, bounds.top + bounds.height / 2];
   nativeOpen = { items: menu?.items ?? null, c, release: event('mouseReleased'), away };
   if (!menu) {
-    console.log(`  (no native menu opened by ${real ? `a real right-click at ${screen}` :
-                                                  'a UI DevTools press'}: ` +
+    console.log(`  (no native menu ${menuStuck ? 'to drive' : 'opened'}: ${menuStuck ||
+                `a UI DevTools press${real ? `, then a real right-click at ${screen}` : ''}: ` +
                 `${await nativeMenuReport(menuPid)}` +
                 `${real ? `; the window ${keyed ? 'was' : 'was not'} key: ` +
-                          `${await keyWindowReport(menuPid)}` : ''})`);
+                          `${await keyWindowReport(menuPid)}` : ''}`})`);
     await endNativeMenu();
   }
 }

@@ -6,7 +6,8 @@
 #
 # Runs, in order, each with a timeout and its full log in a file:
 #   (a) the C++ test binaries in the app's out dir (koan_*unittests,
-#       koan_browsertests) with --gtest_brief=1;
+#       koan_browsertests), the launcher's output (a line per test, the
+#       full output of each failing one);
 #   (b) the e2e scripts of scripts/mac/suite/e2e.list against a fresh
 #       --user-data-dir each (--use-mock-keychain), through CDP and UI
 #       DevTools; scripts/e2e/<name>.mac.flags, if it exists, replaces
@@ -190,6 +191,8 @@ gtest_failure() {  # <log>
 # --- Real input: only when the bench says the Mac is free.
 input_mode=synthetic
 input_why="synthetic (--input synthetic)"
+# Set by run_koan_script() when someone used the Mac while a script ran.
+user_during=""
 if [[ "$input" != synthetic ]]; then
   if [[ ! -x "$TOOLS/keypress2" || ! -x "$TOOLS/ptr" || ! -x "$TOOLS/inputok.sh" ]]; then
     input_why="synthetic (no keypress2/ptr/inputok.sh in $TOOLS)"
@@ -220,10 +223,17 @@ if [[ $skip_cxx == 0 ]]; then
     wanted "$name" || continue
     secs=900
     [[ "$name" == koan_browsertests ]] && secs=3600
-    args=(--gtest_brief=1)
+    # No --gtest_brief=1: the launcher passes it on to the test processes,
+    # whose output then has no "[ RUN      ]" line, and the launcher finds a
+    # failing test's output by that line (GetTestOutputSnippet() in
+    # base/test/launcher/test_launcher.cc): the Mac cycle 18's failure had
+    # no output but the test's own file:line. The launcher's own lines are
+    # one per test.
+    args=()
     [[ -n "$gtest_filter" ]] && args+=(--gtest_filter="$gtest_filter")
     log="$logs/$name.log"
-    run_timeout "$secs" "$log" "$bin" "${args[@]}"
+    # (Safe when empty under set -u in the Mac's bash 3.2.)
+    run_timeout "$secs" "$log" "$bin" ${args[@]+"${args[@]}"}
     status=$?
     if [[ $status == 0 ]]; then
       report PASS "$name" "$(grep -m1 -E '^\[==========\] [0-9]+ tests? from' "$log" | sed -E 's/^\[=+\] //')"
@@ -261,7 +271,9 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
   local name="$1" script="$2" secs="$3"
   shift 3
   serial=$((serial + 1))
-  local prof="$work/p$serial" agent_home="$work/h$serial"
+  local prof="$work/p$serial" agent_home="$work/h$serial" started
+  started="$(date +%s)"
+  user_during=""
   mkdir -p "$prof/Default" "$agent_home"
   e2e_log="$logs/e2e-$name.log"
   local koan_log="$logs/koan-$name.log"
@@ -367,6 +379,19 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
       echo "suite.sh: after $name the Mac holds a modifier key ($mods)" | tee -a "$e2e_log" >&2
     fi
   fi
+  # Someone at the Mac while the script ran (usergate.sh: the seconds since
+  # the last input that wasn't the bench's own) can fail its checks alone:
+  # keys typed into Koan, the pointer left over the sidebar (2026-11-19, the
+  # palette's URL bar held someone's typing, and a pointer resting at the
+  # sidebar's top kept it out for the scripts after). Its FAIL says so.
+  if [[ $input_mode == real && -x "$TOOLS/usergate.sh" ]]; then
+    local away
+    away="$("$TOOLS/usergate.sh" 2>/dev/null || true)"
+    if [[ $away =~ ^[0-9]+$ ]] && (( away <= $(date +%s) - started )); then
+      user_during="someone used the Mac ${away}s before $name ended: rerun it"
+      echo "suite.sh: $user_during" | tee -a "$e2e_log" >&2
+    fi
+  fi
 }
 # Reports an e2e run: PASS (with its skips), SKIP (exit 77) or FAIL with the
 # first failing check, else what the Koan log says, else the exit code.
@@ -382,7 +407,7 @@ report_e2e() {  # <name> <secs>
       [[ -z "$first" ]] && first="$(crash_line "$logs/koan-$name.log")"
       [[ -z "$first" ]] && first="$(grep -m1 -E 'Error|error' "$e2e_log")"
       [[ $e2e_status == 124 ]] && first="timed out after ${secs}s${first:+; $first}"
-      report FAIL "$name" "${first:-exit $e2e_status}"
+      report FAIL "$name" "${user_during:+[$user_during] }${first:-exit $e2e_status}"
       ;;
   esac
 }

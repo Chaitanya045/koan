@@ -199,7 +199,15 @@ async function type(text) {
                  key: ch.codePointAt(0), isChar: true } });
     c.close();
   }
-  await waitFor(ui, u => u.omnibox?.text?.endsWith(text));
+  const u = await waitFor(ui, u => u.omnibox?.text?.endsWith(text));
+  // Text that isn't the test's (the Mac cycle 18: a name, then an address,
+  // where "new s" was typed): real keys typed into Koan
+  // while the suite ran. Said once per text, for the failures it explains.
+  const got = u?.omnibox?.text;
+  if (got !== undefined && !got.endsWith(text)) {
+    console.log(`  (the URL bar holds ${JSON.stringify(got)} after typing ${JSON.stringify(text)}: ` +
+                'keys from outside the test, e.g. someone at the Mac)');
+  }
 }
 
 // Types `text` and waits for the popup to have settled on rows `ok` accepts.
@@ -343,7 +351,7 @@ check('Enter runs it (compact mode on)', await waitFor(compactOn, Boolean));
 await openUrlBar();
 rs = await suggest('toggle compact', rs => indexOf(rs, 'Toggle Compact Mode') >= 0);
 check('A used action stays a suggestion, not the default, for part of its name',
-      indexOf(rs, 'Toggle Compact Mode') === 1 && !ours([rs[0]]).length, rowsText(rs));
+      indexOf(rs, 'Toggle Compact Mode') === 1 && !ours(rs.slice(0, 1)).length, rowsText(rs));
 await closeUrlBar();
 await openUrlBar();
 rs = await suggest('toggle compact mode', rs => label(rs[0]) === 'Toggle Compact Mode');
@@ -390,7 +398,7 @@ check('Tab in an empty URL bar switches to actions (">")', u.omnibox?.text === '
       JSON.stringify(u.omnibox?.text));
 rs = await waitFor(rows, rs => ours(rs).length >= 6);
 check('...listing actions', ours(rs).length >= 6, rowsText(rs));
-check('...none of which Enter would run yet', !ours([rs[0]]).length, rowsText(rs));
+check('...none of which Enter would run yet', !ours(rs.slice(0, 1)).length, rowsText(rs));
 await press(VK.TAB);
 u = await waitFor(ui, u => u.omnibox?.text === '');
 // (The rows, which is selected, and who has the keyboard tell a Tab that
@@ -400,10 +408,10 @@ check('A second Tab leaves', u.omnibox?.text === '', u.omnibox?.text === '' ? ''
           r => `${r.selected ? '*' : ''}${r.texts[0]}`).join(' / ')}; ${await keyWindowReport()}`);
 await press(VK.TAB);
 rs = await suggest('c', rs => indexOf(rs, 'Copy Current URL') >= 0);
-check('One character doesn\'t pick an action', !ours([rs[0]]).length, rowsText(rs));
+check('One character doesn\'t pick an action', !ours(rs.slice(0, 1)).length, rowsText(rs));
 // The best match, most used first (Zen's order): Toggle Compact Mode.
-rs = await suggest('o', rs => ours([rs[0]]).length > 0);
-check('Two do', ours([rs[0]]).length > 0, rowsText(rs));
+rs = await suggest('o', rs => ours(rs.slice(0, 1)).length > 0);
+check('Two do', ours(rs.slice(0, 1)).length > 0, rowsText(rs));
 rs = await suggest('py', rs => label(rs[0]) === 'Copy Current URL');
 const pageUrl = (await shownPage()).url;
 if (IS_MAC) execSync('pbcopy', { input: '' });

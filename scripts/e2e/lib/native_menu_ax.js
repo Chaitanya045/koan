@@ -31,6 +31,13 @@
 // on-screen window of the process above the normal window layer (the menu's
 // own window, kCGPopUpMenuWindowLevel), up through AXParent to the outermost
 // AXMenu. That one is driven through the raw AXUIElement API (rawAx()).
+// The Mac cycle 18 showed how far that goes: the hit test's element reads
+// (AXRole AXMenuItem), but an element read from an attribute (its AXParent,
+// the system-wide AXFocusedUIElement) can't be passed back to the API: the
+// bridge throws on every read of it. So when the walk up fails, the menu is
+// read by hit tests alone ("hit scan": each item under a point down the
+// menu's window, pressed where it was found; a submenu is the menu window
+// its item's press adds).
 
 // The raw Accessibility API (HIServices), for a menu System Events can't
 // name: elements are AXUIElementRefs (CF types, which the bridge hands out
@@ -57,17 +64,38 @@ function rawAx(pid) {
   // The last attribute read's AXError (-1: the bridge threw on every form of
   // the name), for the report.
   let copyError = null;
+  // The forms of an element to pass the API: as handed out, and cast to a
+  // ref (an element read from an attribute comes back as an object).
+  const forms = e => {
+    const out = [e];
+    try {
+      const ref = ObjC.castObjectToRef(e);
+      if (ref && ref !== e) out.push(ref);
+    } catch (x) {}
+    return out;
+  };
+  // Which form of an attribute's element the API took (0 as handed out, 1
+  // cast, -1 none), for the report.
+  let elementForm = null;
   const copy = (e, attr) => {
     if (!e) return null;
-    for (const name of [cfName(attr), attr, $(attr)]) {
-      if (name === null || name === undefined) continue;
-      const ref = Ref();
-      const err = call($.AXUIElementCopyAttributeValue, e, name, ref);
-      copyError = err;
-      if (err === 0) return ref[0];
-      // An AXError is the element's answer; -1 is the bridge: try the next form.
-      if (err !== -1) return null;
+    const each = forms(e);
+    for (let k = 0; k < each.length; k++) {
+      for (const name of [cfName(attr), attr, $(attr)]) {
+        if (name === null || name === undefined) continue;
+        const ref = Ref();
+        const err = call($.AXUIElementCopyAttributeValue, each[k], name, ref);
+        copyError = err;
+        if (err === 0) {
+          elementForm = k;
+          return ref[0];
+        }
+        // An AXError is the element's answer; -1 is the bridge: try the next
+        // form.
+        if (err !== -1) return null;
+      }
     }
+    elementForm = -1;
     return null;
   };
   const value = (e, attr) => {
@@ -133,6 +161,53 @@ function rawAx(pid) {
     }
     return null;
   };
+  // The menu by hit tests alone: the items under points every SCAN_STEP
+  // down the middle of a menu window, top to bottom ({e, title, y}; a
+  // separator is an item titled ''), each element as the hit test handed it
+  // out, which the API takes.
+  const SCAN_STEP = 3;
+  const key = w => `${w.x},${w.y},${w.w},${w.h}`;
+  const scanItems = w => {
+    const out = [];
+    let last = null;
+    for (let y = w.y + 1; y < w.y + w.h - 1; y += SCAN_STEP) {
+      const e = hit(w.x + w.w / 2, y);
+      if (!e || role(e) !== 'AXMenuItem') {
+        last = null;
+        continue;
+      }
+      const t = title(e);
+      if (last !== null && last.title === t) continue;
+      last = { e, title: t, y };
+      out.push(last);
+    }
+    return out;
+  };
+  // A menu window of the process, as a menu: {win, known} (`known`, the
+  // menu windows there were when it was found: a submenu is a new one).
+  const scanMenu = () => {
+    const wins = menuWindows();
+    for (const w of wins) {
+      if (scanItems(w).length) return { win: w, known: new Set(wins.map(key)) };
+    }
+    return null;
+  };
+  const scan = {
+    title: i => i.title,
+    items: m => scanItems(m.win).map(i => ({ ...i, known: m.known })),
+    // The menu window the item's press added (its submenu), if any.
+    menus: i => {
+      const wins = menuWindows();
+      const added = wins.filter(w => !i.known.has(key(w)));
+      return added.length ? [{ win: added[0], known: new Set(wins.map(key)) }] : [];
+    },
+    enabled: i => value(i.e, 'AXEnabled') !== false,
+    // A menu found by the scan has no element of its own (AXCancel on it
+    // fails, and the caller presses a real Escape instead).
+    perform: (i, action) => !!i.e && [cfName(action), action].some(
+        name => name !== null && name !== undefined &&
+                call($.AXUIElementPerformAction, i.e, name) === 0),
+  };
   const report = () => {
     const wins = menuWindows();
     const roleErrors = [];
@@ -144,6 +219,9 @@ function rawAx(pid) {
     let trusted;
     try { trusted = !!$.AXIsProcessTrusted(); } catch (x) { trusted = `? (${x})`; }
     const focused = role(copy(wide, 'AXFocusedUIElement'));
+    const focusedForm = elementForm;
+    // What the scan reads in the front menu window (titles, '' a separator).
+    const scanned = wins.length ? scanItems(wins[0]).map(i => i.title) : [];
     return {
       windows: wins.map(w => `${w.x},${w.y} ${w.w}x${w.h} layer ${w.layer}`),
       at,
@@ -155,10 +233,12 @@ function rawAx(pid) {
       cfNames: cfName('AXRole') !== null,
       trusted,
       focused,
+      focusedForm,
+      scanned,
     };
   };
   return {
-    findMenu, report, role, title, kids,
+    findMenu, scanMenu, scan, report, role, title, kids,
     items: m => kids(m).filter(i => role(i) === 'AXMenuItem'),
     menus: i => kids(i).filter(c => role(c) === 'AXMenu'),
     enabled: i => value(i, 'AXEnabled') !== false,
@@ -255,7 +335,13 @@ function run(argv) {
     try {
       const raw = rawAx(a.pid);
       menu = raw.findMenu();
-      if (menu) { A = raw; via = 'hit test'; }
+      if (menu) {
+        A = raw;
+        via = 'hit test';
+      } else {
+        menu = raw.scanMenu();
+        if (menu) { A = raw.scan; via = 'hit scan'; }
+      }
     } catch (x) {
       menu = null;
     }
