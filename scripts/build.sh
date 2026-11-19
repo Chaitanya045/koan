@@ -41,6 +41,8 @@
 #                 nothing (runs on Linux too; CI uses it)
 #   --gen         only gn gen (CI uses it to check the build files before
 #                 the long build); no other step
+#   --sync-only   macOS: only steps 1-3 (prerequisites, fetch, patches and
+#                 branding); scripts/mac/build_official.sh uses it
 #
 # JOBS (parallel compile jobs) defaults to 2, 4 or 6 depending on the memory
 # available right now, so a build fits next to other apps in 16 GB of RAM.
@@ -73,6 +75,7 @@ while (($#)); do
     --check) MODE=check ;;
     --dry-run) MODE=dry ;;
     --gen) MODE=gen ;;
+    --sync-only) MODE=sync ;;
     -h | --help) usage; exit 0 ;;
     -*) echo "unknown option $1 (scripts/build.sh --help)" >&2; exit 2 ;;
     *) TARGET=$1 ;;
@@ -314,11 +317,12 @@ case $MODE in
     koan_check_prereqs "$ROOT"
     exit
     ;;
+  sync) [[ $OS == mac ]] || { echo "--sync-only is for macOS" >&2; exit 2; } ;;
 esac
 
 if [[ $OS == mac ]]; then
   echo "Xcode: $DEVELOPER_DIR"
-  if [[ $MODE == build && $SYNC == 1 ]]; then
+  if [[ ($MODE == build || $MODE == sync) && $SYNC == 1 ]]; then
     mkdir -p "$ROOT/logs" "$STATE"
     log="$ROOT/logs/build-$(date +%Y%m%d-%H%M%S).log"
     exec > >(tee "$log") 2>&1
@@ -334,6 +338,7 @@ if [[ $OS == mac ]]; then
     fetch_chromium
     sync_koan
   fi
+  if [[ $MODE == sync ]]; then exit 0; fi
 fi
 
 echo "$JOBS compile jobs (set JOBS to change$([[ $FAST == 1 ]] || echo ', --fast for all cores'))"

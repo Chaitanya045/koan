@@ -246,6 +246,9 @@ source_set("feature_overrides") {
     "koan_feature_overrides.cc",
     "koan_feature_overrides.h",
   ]
+
+  # The official build's cap on ThinLTO link threads (//koan/build/BUILD.gn).
+  all_dependent_configs = [ "//koan/build:thin_lto_jobs" ]
   deps = [
     "//base",
     "//chrome/browser/ui:ui_features",

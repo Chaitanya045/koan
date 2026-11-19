@@ -14,8 +14,8 @@ are allowed over SSH: `ls`, `cat`, `grep`, `sw_vers`, `which`,
 
 ## Machine
 
-- MacBook Air, Apple M4 (arm64), 10 cores, 16 GB RAM, 256 GB SSD
-  (~220 GB free when this was written).
+- MacBook Air, Apple M4 (arm64), 10 cores (4 performance + 6 efficiency),
+  no fan, 16 GB RAM, 256 GB SSD (~167 GB free on 2026-11-20).
 - macOS 27.0. Xcode 27.1 at `/Applications/Xcode.app` (SDK
   `MacOSX27.0.sdk`, which is Chromium 158's `mac_sdk_official_version`;
   `actool` 27.1). Since Xcode 26 the **Metal toolchain** is a separate
@@ -104,8 +104,8 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
 ```
 
 - `build/koan-mac.gn`: arm64, optimised, not a component build, no DCHECKs,
-  `symbol_level = 0`. No `is_official_build` yet (ThinLTO + PGO later, if
-  build time and memory allow). Every incremental change relinks the whole
+  `symbol_level = 0`. No `is_official_build`: the official build (ThinLTO +
+  PGO) is separate, in `out/KoanOfficial` (below, "Official build"). Every incremental change relinks the whole
   framework; a component `koan-mac-dev.gn` could come later for iterating
   on Mac-only code. `out/Koan` is estimated at 10-15 GB.
 - `JOBS` defaults to 2, 4 or 6 by the memory free at the start (free,
@@ -132,6 +132,200 @@ scripts/run_mac.sh             # test run, profile in $KOAN_MAC/profile
   keychain item after every rebuild. `scripts/mac_signing_identity.sh create`
   once, and `scripts/build.sh` signs every build with one local identity
   (below, "Signing builds with one identity (#141)").
+
+## Official build (ThinLTO + PGO)
+
+`scripts/mac/build_official.sh` builds `chromium/src/out/KoanOfficial/Koan.app`
+from `build/koan-mac-official.gn`. It is a separate out dir: `out/Koan` (the
+everyday and test build) and `~/Applications/Koan.app` (the daily app) are
+never touched. Why: the everyday build is `is_official_build = false`, so it
+has no ThinLTO and no PGO, and Speedometer 3.1 gave 41.8 against Arc's 57
+(bench2, 2026-11-19).
+
+```sh
+source ~/work/koan-mac/env.sh && cd ~/work/koan-mac/koan
+scripts/mac/build_official.sh --dry-run   # the plan, changes nothing
+scripts/mac/build_official.sh --check     # the Mac's checks only
+scripts/mac/build_official.sh             # user at the Mac: -j 4, background QoS
+scripts/mac/build_official.sh --away      # user said they're away: -j 8
+```
+
+Rerun the same command after any interruption: every step is skipped when it
+is done, siso resumes, and the ThinLTO cache keeps a link's finished modules.
+
+### What Chromium 158 does in an official build (pristine source)
+
+- `is_official_build = true` is the switch. From it, on mac-arm64:
+  - `use_thin_lto` is true (`build/config/compiler/compiler.gni`:
+    `is_apple && use_lld`) and so is `thin_lto_enable_optimizations`
+    (`--lto-O2` on the main binaries);
+  - `chrome_pgo_phase` is 2 (`build/config/compiler/pgo/pgo.gni`, only with
+    `dcheck_always_on = false`, since the profiles come from DCHECK-off
+    builds);
+  - `enable_stripping` and `enable_dsyms` are true
+    (`build/config/apple/symbols.gni`);
+  - `default_symbol_level` is 2 (full DWARF). Koan sets 0;
+  - CHECK messages are compiled out (`base/check.h`, `CHECK_WILL_STREAM()`
+    false), LOG(FATAL) prints no stack (`base/logging.cc`), no PCH
+    (`build/config/pch.gni`), `exclude_unwind_tables`, the raw_ptr plugin is
+    off, and `use_dummy_lastchange` is false (the real LASTCHANGE, so a
+    Chromium version bump rebuilds a few thousand targets).
+- PGO: `pgo_optimization_flags` picks the target `mac-arm` for arm64 and
+  reads its profile through `tools/update_pgo_profiles.py get_profile_path`:
+  `chrome/build/mac-arm.pgo.txt` names it (at 158.0.8127.2:
+  `chrome-mac-arm-8127-1793742285-3b43597c…-21743ca0….profdata`) and the
+  file lives in `chrome/build/pgo_profiles/`. The DEPS hook "Fetch PGO
+  profiles for mac arm" downloads it from
+  `gs://chromium-optimization-profiles/pgo_profiles` only when the gclient
+  custom var `checkout_pgo_profiles` is true (default false). Without the
+  file, gn gen fails with a message that says exactly that. The script sets
+  the var in `chromium/.gclient` (a copy of the old file is kept as
+  `.gclient.before-pgo`), so update_chromium.sh's syncs fetch each new
+  milestone's profile, and runs only that one hook. A separate renderer
+  profile (`_renderer.profdata`) is only used with
+  `enable_separate_renderer_binary`, false in 158.
+- Every PGO target gets `-Wno-profile-instr-unprofiled`,
+  `-Wno-profile-instr-out-of-date` and `-Wno-backend-plugin`
+  (crbug.com/978401): stale or missing profile data is normal, never an error.
+- Chromium's own mac-arm64 official configs (`tools/mb/mb_config.pyl`:
+  `official_remoteexec_mac_arm_perf_pgo`, `official_mac_arm_pgo_with_symbols`)
+  are `official` (which adds `is_chrome_branded = true`), `remoteexec`,
+  `no_widevine_cdm_host_verification` (`ignore_missing_widevine_signing_cert
+  = true`), `minimal_symbols`, `arm64`. Koan takes the same minus branding,
+  remote execution and symbols.
+- `is_chrome_branded` stays false. Most "official Chrome" behaviour that
+  would break Koan is gated on branding, not on official: `--load-extension`
+  is ignored only under `GOOGLE_CHROME_BRANDING`
+  (`extension_service.cc`), and so is the default-profile check of
+  `--remote-debugging-port` (`remote_debugging_server.cc`).
+- `ignore_missing_widevine_signing_cert` defaults to `!is_official_build`, so
+  an official build would fail without Google's cert. Koan's placeholder
+  signer ignores the cert anyway (`//koan/build/widevine_signature_placeholder.py`);
+  the arg is set as Chromium's bots do. The VMP signature still comes from
+  `scripts/mac/widevine_vmp_sign.sh` after the build, before code signing.
+- `enable_nacl` no longer exists; `use_remoteexec` stays false (siso runs
+  locally); every `v8_enable_*` stays at its default (official builds get
+  `v8_logging_level = 0` and no fast mksnapshot by themselves).
+
+### What other forks ship
+
+- **Brave** (`brave-core` `build/commands/lib/buildArgs.ts`, `config.ts`):
+  `is_official_build` for release builds; `checkout_pgo_profiles` only for
+  real releases (`isBraveReleaseBuild`), otherwise `chrome_pgo_phase = 0`
+  and, on Mac, `enable_dsyms = false`. It uses Chromium's profiles on its
+  patched code, as Koan will.
+- **ungoogled-chromium-macos** (`flags.macos.gn`): `is_official_build`,
+  `use_thin_lto`, `chrome_pgo_phase = 2`, `symbol_level = 1`,
+  `fatal_linker_warnings = false`. Their build moved from GitHub's runners
+  (3 days, didn't finish) to bigger Depot runners (~9 h).
+- **Thorium** (`other/Mac/mac_ARM_args.gn`): `is_official_build`,
+  `use_thin_lto`, `thin_lto_enable_optimizations`, `chrome_pgo_phase = 2`,
+  `symbol_level = 0`, `thin_lto_enable_cache = false`,
+  `ignore_missing_widevine_signing_cert = true`.
+
+### Memory: one link, four ThinLTO threads
+
+- **Links at a time.** With ThinLTO, `build/toolchain/concurrent_links.gni`
+  asserts that `concurrent_links` isn't set, and computes it as
+  `(RAM - 10 GB) / 20 GB`, at least 1: **1** on 16 GB. GN writes it as the
+  depth of `build_toolchain_link_pool`, which siso honours. The script reads
+  the depth back after gn gen and stops if it isn't 1 on a machine with up to
+  24 GB.
+- **Threads in that link.** Upstream adds `-Wl,--thinlto-jobs=all` (one
+  backend thread per CPU: 10 on the Air) in `//build/config/compiler`, with
+  no GN arg. The ThinLTO link of the framework holds the combined index
+  (a few GB) plus one module's optimisation per thread (around 1 GB each for
+  Blink/V8-sized modules; estimate), so 10 threads would want ~13-19 GB and
+  swap the Air. Koan caps it without a patch: `//koan/build:thin_lto_jobs`
+  adds `-Wl,--thinlto-jobs=$koan_thin_lto_jobs`, applied to every link that
+  contains Koan through `all_dependent_configs` on
+  `//koan/browser:feature_overrides` (which `//chrome/browser` depends on).
+  GN puts flags from dependencies' `all_dependent_configs` after the
+  target's own configs, and lld takes the last `--thinlto-jobs`. The script
+  sets it from the RAM: 4 up to 16 GB (about 6-9 GB at peak; estimate), 6 up
+  to 24, 8 up to 32, Chromium's `all` above. It depends on the machine, not
+  on `--away`, so switching modes never relinks. After gn gen the script
+  checks that the framework's link line ends with the cap and stops if not
+  (upstream moved the flag). `KOAN_THIN_LTO_JOBS` overrides it.
+- **Compile jobs.** At most `-j 4` under `nice -n 19` and `taskpolicy -b`
+  (background QoS: mostly the efficiency cores, throttled I/O) while the user
+  may be at the Mac, fewer when little memory is free; `-j 8` without
+  `taskpolicy -b` only with `--away`. A watchdog samples the 1-minute load
+  every 30 s and, after four samples in a row above 8 (16 with `--away`),
+  sends SIGSTOP to the build's whole process group, then SIGCONT once it has
+  stayed below 60% of that for a minute. It logs load, free memory and swap
+  every 10 minutes.
+- **The lock.** The whole run holds `$KOAN_MAC/tmp/e2e.lock` (flock(2), the
+  same lock as the Mac loop's stand-in `flock.py`, via
+  `scripts/mac/tools/flock_run.py`): builds and e2e runs on the shared
+  `chromium/src` never overlap. It waits for the lock (`KOAN_LOCK_WAIT=0`:
+  fail at once).
+
+### Expected results (estimates unless a source is given)
+
+| | Estimate | Basis |
+|---|---|---|
+| First build, `--away` (`-j 8`) | 10-16 h | Measured: the non-official build took ~16 h on CI's 3-core M1 runners (`.agent/notes/macos-ci.md`). The Air's 4 P + 6 E cores are faster, but it is fanless and throttles, and the official build has no PCH, reads the profile and emits bitcode (+20-40% compile, estimate) |
+| First build, default (`-j 4`, `taskpolicy -b`) | 24-40 h | Same work on mostly the efficiency cores. Start it with `--away` overnight instead |
+| The framework's ThinLTO link (4 threads) | 1-2 h (`--away`), 2-4 h (default) | Estimate; the ThinLTO cache makes a relink after a small change far shorter |
+| Incremental rebuild after a Koan change | 30-90 min | Mostly the framework relink: every change relinks it, and ThinLTO re-optimises the changed modules and what imports them |
+| Disk at peak | 45-65 GB; the check asks for 70 GB free | Objects (bitcode, no symbols) 25-35 GB, ThinLTO cache ≤ 10% of the free disk (Chromium's policy), link temporaries in `$TMPDIR` 2-5 GB, app + `.unstripped` copies ~2 GB, the profile < 1 GB, swap growth 2-8 GB. With ~167 GB free that leaves ~100 GB |
+| Speedometer 3.1 | 41.8 → about 48-55 (+15-30%) | Chromium's numbers: PGO gave "up to 10% faster page loads" (median) when Chrome 85 shipped it on Mac and Windows ([Chromium blog, M85 post under the "speed" label](https://blog.chromium.org/search/label/speed)) and "up to 15%" on Windows in 2016 ([Chromium blog](https://blog.chromium.org/2016/10/making-chrome-on-windows-faster-with-pgo.html)); Chrome 99 turned on ThinLTO on Mac, one of the changes behind its Speedometer jump on Apple Silicon ([Chromium blog, 2022](https://blog.chromium.org/2022/03/how-chrome-became-highest-scoring.html)); `compiler/BUILD.gn` tunes `import_instr_limit` by Speedometer. Arc ships Google's official build with both; the rest of the gap may be Koan's own work (bench2: 11% idle CPU against Arc's 1.9%) |
+
+### Risks
+
+1. **Koan's code under LTO.** Koan's `BUILD.gn` files change no compiler
+   configs (no `configs -=`, no cflags; the only ldflags are `-Wl,-ObjC` in
+   `//koan/test` and the cap above), so its objects are built exactly like
+   upstream's. ThinLTO can surface ODR violations (two different
+   definitions of the same inline function or class: the linker keeps one,
+   silently), which non-LTO builds also have but rarely show; Koan's code is
+   in `namespace koan` and `.mm` files compile with LTO like any other.
+   `fatal_linker_warnings` stays true: if the link stops on a linker
+   warning, rerun with `KOAN_GN_EXTRA='fatal_linker_warnings = false'`
+   (ungoogled-chromium-macos's setting; relinks, no recompile) and file
+   the warning.
+2. **Stale PGO data.** The profile is Chromium's for 158.0.8127; Koan's new
+   code has no profile data (treated as unprofiled, not cold, on Mac) and the
+   few upstream functions Koan's hook patches change lose theirs (CFG hash
+   mismatch, `-Wno-backend-plugin`). That costs only those functions. After a
+   rebase the new `.pgo.txt` names a new profile, which the next gclient
+   sync fetches (the custom var is set). Never use `dcheck_always_on = true`
+   with the profile (pgo.gni: very long compiles).
+3. **Tests on an official build.**
+   - Work unchanged: `--remote-debugging-port` and `--load-extension`
+     (gated on branding only), UI DevTools (`--enable-ui-devtools` and the
+     `ui-debug-tools-enable-synthetic-events` feature), `--enable-features`,
+     Koan's test switches (`koan_switches.h`: runtime switches, not
+     build-gated). DCHECK-only paths (`--koan-icon-trace`) are already off in
+     the everyday Mac build.
+   - Changes: CHECK failures print no message and LOG(FATAL) no stack, so
+     `suite.sh`'s log grep for "Check failed" finds nothing; crashes show up
+     only as `.ips` reports, with addresses (stripped). Symbolise them with
+     `atos -o "out/KoanOfficial/Koan Framework.unstripped" -l <load address>`.
+   - Don't build `koan_unittests`/`koan_browsertests` in `out/KoanOfficial`:
+     each test binary would be another ThinLTO link of most of Chromium.
+     They stay in `out/Koan`. Run the e2e suite against the official app
+     with `scripts/mac/suite.sh --skip-cxx out/KoanOfficial/Koan.app`.
+4. **Symbols for crash reports.** No DWARF (`symbol_level = 0`) and no dSYMs
+   keeps the out dir and the link's memory small. With stripping on and
+   dSYMs off, `build/config/mac` saves `<binary>.unstripped` next to each
+   stripped binary: function names, no line numbers. Keep those files with
+   every build that is installed (match them by `dwarfdump --uuid`). Line
+   numbers later need `symbol_level = 1` and `enable_dsyms = true`: a full
+   rebuild, more disk and more link memory; only once this build is proven.
+5. **The Mac itself.** Closing the Air's lid sleeps it even under
+   `caffeinate -i`; keep it open and on power. siso doesn't mind being
+   stopped by the watchdog, but a run of many pauses makes the build longer
+   than the estimates.
+
+### Order of signing
+
+The script VMP-signs (Widevine) first and code-signs after, as
+`scripts/mac/widevine_vmp_sign.sh` asks and `scripts/ci/mac_package.sh`
+does: the `.sig` file sits in the framework's Resources, which the code
+signature seals. (`scripts/build.sh` does it the other way round; its VMP
+step only runs with an EVS login on the Mac.)
 
 ## What differs from Linux in the code
 

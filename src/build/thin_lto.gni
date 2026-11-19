@@ -1,0 +1,11 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # ThinLTO backend threads per link. 0 keeps Chromium's own choice,
+  # -Wl,--thinlto-jobs=all (one thread per CPU), which on a 16 GB Mac takes
+  # the framework's link past the RAM it has. scripts/mac/build_official.sh
+  # sets it from the Mac's RAM (.agent/notes/mac.md, "Official build").
+  koan_thin_lto_jobs = 0
+}

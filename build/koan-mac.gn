@@ -5,10 +5,10 @@
 # Optimised, one binary (no component build), no DCHECKs, and no debug
 # symbols, which keeps out/Koan small on a 256 GB disk.
 #
-# Not enabled yet: is_official_build. Official builds add ThinLTO and PGO
-# (with Chromium's mac-arm64 profiles), which make the browser faster but
-# take far longer to link and need much more memory. They may come later,
-# once this plain build is known to work (issue #51).
+# Not is_official_build: ThinLTO and PGO make the browser faster but take
+# far longer to build and link. The official build is separate:
+# build/koan-mac-official.gn, built by scripts/mac/build_official.sh into
+# out/KoanOfficial (.agent/notes/mac.md, "Official build").
 #
 # Only args that apply to macOS: no use_sysroot (a Linux sysroot).
 target_cpu = "arm64"
