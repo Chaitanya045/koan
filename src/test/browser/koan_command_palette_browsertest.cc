@@ -55,10 +55,17 @@ class KoanCommandPaletteBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(KoanCommandPaletteBrowserTest, SecondTabLeaves) {
   // The URL bar open for a new tab (Zen's replace-newtab, on by default):
   // both the palette's and the URL bar's key handlers are on the omnibox.
+  // The window's first tab is empty, so the bar may already be open for it
+  // (KoanUrlBarController::OpenOnStartup()). OpenForNewTab() would then close
+  // it again (Zen's toggle), back to the page's address.
   KoanUrlBarController* url_bar =
       KoanBrowserViewController::From(browser_view())->url_bar();
-  ASSERT_TRUE(url_bar->OpenForNewTab());
-  ASSERT_TRUE(omnibox()->GetText().empty());
+  if (!url_bar->is_new_tab()) {
+    ASSERT_TRUE(url_bar->OpenForNewTab());
+  }
+  ASSERT_TRUE(url_bar->is_new_tab());
+  ASSERT_TRUE(omnibox()->HasFocus());
+  ASSERT_EQ(u"", omnibox()->GetText());
 
   PressTab();
   EXPECT_EQ(u">", omnibox()->GetText());

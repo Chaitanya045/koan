@@ -106,7 +106,7 @@ async function views() {
         shown: (parent ? parent.shown : true) && p.Visible !== 'false',
         ax: (parent ? parent.ax : 0) + (parent ? +p.X : 0),
         ay: (parent ? parent.ay : 0) + (parent ? +p.Y : 0),
-        parent: parent?.nodeId ?? null,
+        parent: parent?.nodeId ?? null, tip: p.Tooltip ?? '',
       };
       self.root = parent ? parent.root : self;
       out.push(self);
@@ -456,19 +456,37 @@ tab = await pageAt('/b');
 if (tab) {
   await browser.send('Target.activateTarget', { targetId: tab.id });
   await sleep(1000);
+  const bShows = await isVisible(tab);
   await clickLink(tab, 'next', ALT);
   vs = await views();
-  const split = shown(inside(vs, 'KoanGlanceView'), 'ImageButton')[2];
+  // What there is to click: every Glance view (a card still closing counts
+  // too, and makes glanceOpen() false) and the card's buttons, by their
+  // tooltip (koan_glance_controller.cc AddButton()), else the third.
+  const cards = vs.filter(v => v.cls === 'KoanGlanceView');
+  const cardButtons = shown(inside(vs, 'KoanGlanceView'), 'ImageButton');
+  const split = cardButtons.find(b => b.tip === 'Split Glance') ?? cardButtons[2];
+  const before = `after the Alt+click (/b ${bShows ? 'showing' : 'not showing'}): ` +
+      `glance ${await glanceOpen()}, ${cards.length} Glance view(s) ` +
+      `(${cards.filter(v => v.shown).length} shown), buttons ` +
+      `${cardButtons.map(b => JSON.stringify(b.tip)).join(' ') || 'none'}, pages ${await urls()}`;
   if (split) {
     await clickView(split);
   }
-  vs = await views();
+  // The toast shows from a posted action (KoanGlanceController::PostAction()).
+  let toasts = 0;
+  for (let i = 0; i < 10 && !toasts; i++) {
+    vs = await views();
+    toasts = shown(vs, 'KoanToastView').length;
+    if (!toasts) await sleep(300);
+  }
   check('Split Glance over a split shows the limit toast and opens a tab',
-        !(await glanceOpen()) && shown(vs, 'KoanToastView').length === 1 &&
+        !(await glanceOpen()) && toasts === 1 &&
             shown(vs, 'SplitTabView').length === 1 &&
             (await pages()) === 3,
-      `glance ${await glanceOpen()}, toast ${shown(vs, 'KoanToastView').length}, ` +
-          `pages ${await urls()}`);
+      `glance ${await glanceOpen()}, toast ${toasts} ` +
+          `(${vs.filter(v => v.cls === 'KoanToastView').length} in the tree), ` +
+          `${shown(vs, 'SplitTabView').length} split(s), pages ${await urls()}; clicked ` +
+          `${split ? JSON.stringify(split.tip) : 'nothing'}; ${before}`);
 }
 
 // Tab context menu of a split tab: "Split Out Tab" (after "New tab below")

@@ -354,22 +354,22 @@ check('Compact: the Clear row stays, for the revealed sidebar',
 await toggleCompact();
 check('Compact off: the Clear row is back', find(await views(), 'KoanClearTabsRow')?.shown);
 
-// Horizontal tabs and back: the rows go with the vertical tab strip and come
-// back with it; tab changes in between are fine.
-check('Switching to horizontal tabs', (await setPref('vertical_tabs.enabled', false)) === true);
+// Chromium's horizontal tabs: Koan owns the sidebar since #155 and keeps it
+// vertical (KoanVerticalTabsPolicy::RemoveOldPrefs() puts
+// vertical_tabs.enabled back), so the rows stay; tab changes after are fine.
+// (vertical_tabs_old_profile.mjs checks the rest of the lockdown.)
+check('Chromium\'s "horizontal tabs" pref can be written', (await setPref('vertical_tabs.enabled', false)) === true);
 vs = await views();
-check('...removes the rows', !find(vs, 'KoanSidebarTabRowsView')?.shown);
+check('...and the sidebar keeps its rows',
+      find(vs, 'KoanSidebarTabRowsView')?.shown && find(vs, 'KoanNewTabRow')?.shown &&
+      !find(vs, 'NewTabButton')?.shown);
 before = await pages();
 if (await menuKey(await visiblePage(), VK.T, CTRL, 't', 'c')) {
   check('...and tabs still open', (await pages()) === before + 1, `${before} -> ${await pages()}`);
 } else {
   skipped('...and tabs still open (⌘T)', menuKeyWhyNot());
 }
-check('...and back', (await setPref('vertical_tabs.enabled', true)) === true);
-vs = await views();
-check('Back to vertical tabs: the rows are back',
-      find(vs, 'KoanSidebarTabRowsView')?.shown && find(vs, 'KoanNewTabRow')?.shown &&
-      !find(vs, 'NewTabButton')?.shown);
+await setPref('vertical_tabs.enabled', true);
 
 // In a Space with an Essential selected, Clear empties the Space but keeps
 // it, on its empty tab: no row. (A window always shows one Space.)
@@ -392,11 +392,28 @@ check('Clear in a Space keeps the Space, with no rows left',
 // on; HandleCloseTabCommand() in koan_pinned_tabs.cc).
 {
   const CLOSE = IS_MAC ? '⌘W' : 'Ctrl+W';
-  const targetId = await newTarget({ url: 'about:blank', newWindow: true });
+  // A new window opens on Zen's empty tab (a blank page it was made with,
+  // MarkStartupEmptyTab(), #252), where Ctrl+W closes the window. The user's
+  // own blank page as the window's only tab: about:blank opened from a page
+  // in that window, which then closes.
+  const firstId = await newTarget({ url: 'data:text/html,<title>First</title>', newWindow: true });
   await sleep(1000);
-  const { windowId } = await windowOf(targetId);
+  const { windowId } = await windowOf(firstId);
   const list = () => fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)
       .then(r => r.json()).catch(() => null);
+  {
+    const first = (await list() ?? []).find(t => t.id === firstId);
+    const c = await connect(first.webSocketDebuggerUrl);
+    await c.send('Runtime.evaluate',
+                 { expression: `window.open('about:blank', '_blank'); 0`, userGesture: true });
+    c.close();
+    await sleep(1500);
+    const version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
+    const browser = await connect(version.webSocketDebuggerUrl);
+    await browser.send('Target.closeTarget', { targetId: firstId });
+    browser.close();
+    await sleep(1500);
+  }
   // The window's page (its active tab), or null once the window is gone.
   const pageOfWindow = async () => {
     for (const t of (await list() ?? []).filter(t => t.type === 'page')) {

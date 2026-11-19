@@ -118,6 +118,10 @@ async function closeWindow(match) {
 const paintsOf = trace => Object.fromEntries(trace.paints);
 const koanTasks = trace =>
   trace.tasks.filter(([from]) => from.startsWith('koan_')).reduce((n, [, c]) => n + c, 0);
+// Where they were posted from, most first (file:function), for the details.
+const koanTaskSources = trace =>
+  trace.tasks.filter(([from]) => from.startsWith('koan_')).slice(0, 4)
+      .map(([from, c]) => `${c}x ${from}`).join(', ');
 
 // --- Defaults -----------------------------------------------------------
 
@@ -403,8 +407,8 @@ const peek = await traceUi(browser, async () => {
   await sleep(6000);
 });
 check('A peeked sidebar hides again without polling', koanTasks(peek) <= 3,
-      `${koanTasks(peek)} Koan task(s) in 6 s; ${paintsOf(peek).TabView ?? 0} tab paints ` +
-      'show the sidebar opened');
+      `${koanTasks(peek)} Koan task(s) in 6 s (${koanTaskSources(peek) || 'none'}); ` +
+      `${paintsOf(peek).TabView ?? 0} tab paints show the sidebar opened`);
 
 // Compact mode with multiple toolbars, hiding the toolbar too (by default
 // it hides just the sidebar, like Zen): the toolbar slides in from the top

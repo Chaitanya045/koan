@@ -413,16 +413,32 @@ export function menuItemEnabled(item) {
 const NATIVE_MENU_AX = new URL('./native_menu_ax.js', import.meta.url).pathname;
 // lib/native_menu_ax.js `op` for Koan's process `pid` (it changes when a
 // script restarts Koan): its JSON answer, or {error}.
+// The script also hit-tests the process's menu-level windows (a menu no walk
+// of the tree reaches: see there); if that part fails the script (the raw
+// Accessibility bridge), the op runs again without it, as before.
+let menuHitTest = true;
 export function nativeMenu(op, path = [], pid = KOAN_PID) {
   if (!IS_MAC || !pid) return { error: 'not macOS, or no Koan pid' };
-  try {
-    const out = execFileSync('osascript', ['-l', 'JavaScript', NATIVE_MENU_AX,
-                                           JSON.stringify({ op, path, pid })],
-                             { encoding: 'utf8', timeout: 15000 });
-    return JSON.parse(out.trim() || '{}');
-  } catch (e) {
-    return { error: String(e.stderr || e.message).trim().split('\n')[0] };
+  const ask = hit => {
+    try {
+      const out = execFileSync('osascript', ['-l', 'JavaScript', NATIVE_MENU_AX,
+                                             JSON.stringify({ op, path, pid, hit })],
+                               { encoding: 'utf8', timeout: 15000 });
+      return JSON.parse(out.trim() || '{}');
+    } catch (e) {
+      return { error: String(e.stderr || e.message).trim().split('\n')[0] };
+    }
+  };
+  let r = ask(menuHitTest);
+  if (r.error && menuHitTest && op !== 'probe') {
+    const without = ask(false);
+    if (!without.error) {
+      menuHitTest = false;
+      console.log(`  (native menus: the hit test fails (${r.error}); without it from now on)`);
+    }
+    r = without;
   }
+  return r;
 }
 // Why scripts can't drive Koan's native menus here ('' when they can):
 // System Events must be allowed to read Koan (Accessibility).
@@ -465,14 +481,20 @@ export async function nativeMenuReport(pid = KOAN_PID) {
 // real input is on). Whether none is open now: Accessibility finds none and
 // the browser answers (a menu Accessibility doesn't find still keeps the
 // browser from answering; only a real Escape closes that one).
+// A real Escape goes to the tracking menu (keypress2 posts to Koan's pid);
+// one closes the innermost (sub)menu, so up to three are pressed.
 export async function closeNativeMenu(pid = KOAN_PID) {
   const closed = async (timeout, answer = 2000) => !!(await waitNativeMenu(false, pid, timeout)) &&
       (pid !== KOAN_PID || await browserAnswers(answer));
   if (await closed(0)) return true;
   nativeMenu('cancel', [], pid);
   if (await closed(2000)) return true;
-  if (pid === KOAN_PID && realInput()) await realKey('Escape');
-  return closed(2000, 8000);
+  if (pid !== KOAN_PID || !realInput()) return closed(0, 8000);
+  for (let i = 0; i < 3; i++) {
+    if (!(await realKey('Escape'))) break;
+    if (await closed(1000, i === 2 ? 8000 : 3000)) return true;
+  }
+  return false;
 }
 // Presses the item at `path` (titles, or positions with separators counted,
 // through submenus) of the open native menu, and waits for the menu to
@@ -539,11 +561,32 @@ export const menuKeyWhyNot = () =>
   `needs a real key on macOS (the main menu's, or Chrome's own key equivalent: CDP keys ` +
   `don't reach them); ${realWhyNot}`;
 
-// ptr <cmd> <args...> (see scripts/mac/tools/ptr.m), after the gate.
+// ptr <cmd> <args...> (see scripts/mac/tools/ptr.m), after the gate. A
+// failure throws with why: ptr exits 2 for a command it doesn't know, which a
+// bench binary built before that command was added does (down, dragto, up
+// and cmdclick came in #265: the bench copies and builds the tools by hand,
+// scripts/mac/README.md "Tools").
 export async function ptr(...args) {
   if (!gate()) return false;
-  execFileSync(`${TOOLS}/ptr`, args.map(String), { timeout: 30000 });
+  try {
+    execFileSync(`${TOOLS}/ptr`, args.map(String), { timeout: 30000 });
+  } catch (e) {
+    const how = e.status === 2 ? `exit 2: this ptr has no "${args[0]}"; rebuild ${TOOLS}/ptr ` +
+                                 'from scripts/mac/tools/ptr.m'
+        : e.signal ? `killed by ${e.signal}` : `exit ${e.status}`;
+    const err = String(e.stderr ?? '').trim();
+    throw new Error(`ptr ${args.join(' ')} failed (${how})${err ? `: ${err}` : ''}`);
+  }
   return true;
+}
+// Whether the bench's ptr binary knows `cmd` (its name is a string in the
+// binary; read, not run, so no input). false without the tool.
+export function ptrHas(cmd) {
+  try {
+    return fs.readFileSync(`${TOOLS}/ptr`).includes(Buffer.from(`${cmd}\0`));
+  } catch {
+    return false;
+  }
 }
 // hold down|to|up x y [ms] (see scripts/mac/tools/hold.m: a held-button
 // drag, one step per call), after the gate.

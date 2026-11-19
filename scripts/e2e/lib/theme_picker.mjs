@@ -204,6 +204,16 @@ export async function pickerKey(keyCode) {
   await sleep(300);
 }
 
+// Whether Tab (and a click) can focus the panel's controls: the picker's
+// KeyboardFocusable. On macOS they are focusable for accessibility only
+// (Chromium's PlatformStyle::kDefaultFocusBehavior), which needs Full
+// Keyboard Access (System Settings > Keyboard > Keyboard navigation); Zen's
+// range inputs aren't Tab stops there without it either. A build without the
+// property: assumed yes.
+export const keyboardFocus = p => p?.p.KeyboardFocusable !== 'false';
+export const NO_KEYBOARD_FOCUS =
+    "the panel's controls take the focus only with macOS's Full Keyboard Access, which is off";
+
 // "x,y" of the first (big) dot.
 export const bigDot = p => (p?.p.Dots ?? '').split(';')[0].split('@')[1]?.split(',').map(Number);
 

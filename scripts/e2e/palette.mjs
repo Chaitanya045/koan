@@ -20,7 +20,7 @@
 // the new tab is a real Cmd+T, and the clipboard is read with pbpaste.
 import { execSync, spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { IS_MAC, createSpace, views } from './lib/koan.mjs';
+import { IS_MAC, createSpace, viewTree, views } from './lib/koan.mjs';
 import { focusUrlBar, keyWindowReport, makeKey, realInput, realKey } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
@@ -232,6 +232,7 @@ async function openUrlBar() {
   }
   await waitFor(ui, u => u.omnibox?.text !== undefined);
   await sleep(300);
+  return how;
 }
 
 // A new tab in the active Space: Ctrl+T, or on macOS a real Cmd+T (a
@@ -409,31 +410,45 @@ check('...and not once dark', indexOf(rs, 'Switch to Dark Mode') < 0 &&
       indexOf(rs, 'Switch to Light Mode') >= 0, rowsText(rs));
 await closeUrlBar();
 
-// "Focus on" another Space, found by its name, announced with it.
+// "Focus on" another Space, found by its name, announced with it. A new
+// Space shows Zen's empty state: its empty tab has no row
+// (KoanWorkspaceController::CreateSpace()), so Space 1 has one row, its Cmd+T
+// tab, and Space 2 none.
 const tabsShown = async () => (await ui()).views.filter(v => v.cls === 'TabView' && v.shown && v.h > 1).length;
+const activeSpace = async () => {
+  const button = (await viewTree()).find(
+      v => v.cls === 'KoanSpaceButton' && v.shown && v.props.Active === 'true');
+  return button ? `${button.props.Label ?? ''} ${button.props.TooltipText ?? ''}`.trim() || '?' : '(none)';
+};
 await createSpace(await shownPage(), 'Space 1');  // Zen's Create form
-await waitFor(tabsShown, n => n === 1);
-const opened = await newTab();          // a second tab in it
-await waitFor(tabsShown, n => n === 2);
+await waitFor(activeSpace, name => name.includes('Space 1'));
+const opened = await newTab();          // a tab in it
+const space1Tabs = await waitFor(tabsShown, n => n === 1);
 await createSpace(await shownPage(), 'Space 2');  // now active
-await waitFor(tabsShown, n => n === 1);
-await openUrlBar();
+const space2 = await waitFor(activeSpace, name => name.includes('Space 2'));
+const space2Tabs = await waitFor(tabsShown, n => n === 0);
+const openedHow = await openUrlBar();
 rs = await suggest('space 1', rs => rs.some(r => label(r) === 'Focus on'));
 const focus = rs.findIndex(r => label(r) === 'Focus on' && r.texts[1]?.includes('Space 1'));
 check('"Focus on" the other Space is suggested', focus > 0, rowsText(rs));
 check('...announced with the Space\'s name', rs[focus]?.a11y.includes('Focus on') &&
       rs[focus]?.a11y.includes('Space 1'), JSON.stringify(rs[focus]?.a11y));
 for (let i = 0; i < focus; i++) await press(VK.DOWN);
-await waitFor(rows, rs => rs[focus]?.selected);
+const beforeEnter = await waitFor(rows, rs => rs[focus]?.selected);
 await press(VK.ENTER);
 if (opened === false) {
-  console.log('SKIP  ...and Enter switches to it: its second tab needs real input on macOS ' +
+  console.log('SKIP  ...and Enter switches to it: its tab needs real input on macOS ' +
               '(Cmd+T is a main-menu key)');
 } else {
-  const shownAfter = await waitFor(tabsShown, n => n === 2);
-  check('...and Enter switches to it', shownAfter === 2,
-        `${shownAfter} tab(s) shown; selected row ${(await rows()).findIndex(r => r.selected)} of ` +
-        `${focus}; URL bar ${JSON.stringify((await ui()).omnibox?.text)}`);
+  const after = await waitFor(async () => ({ space: await activeSpace(), tabs: await tabsShown() }),
+                              a => a.space.includes('Space 1') && a.tabs === space1Tabs);
+  check('...and Enter switches to it', after.space.includes('Space 1') && after.tabs === space1Tabs,
+        `active Space ${JSON.stringify(after.space)}, ${after.tabs} tab(s) shown, ` +
+        `Space 1 had ${space1Tabs} (1 expected: its Cmd+T tab); before: ` +
+        `${JSON.stringify(space2)} with ${space2Tabs} tab(s); the URL bar opened by ` +
+        `${openedHow}; before Enter row ${beforeEnter.findIndex(r => r.selected)} of ${focus} ` +
+        `was selected, after it row ${(await rows()).findIndex(r => r.selected)}; URL bar ` +
+        `${JSON.stringify((await ui()).omnibox?.text)}`);
 }
 
 // Folder actions (#42): "New Folder" makes one in the active Space; then

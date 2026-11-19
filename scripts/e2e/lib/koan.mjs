@@ -18,7 +18,22 @@ export const IS_MAC = process.platform === 'darwin';
 // platform (Koan's Ctrl+Alt+B / Ctrl+Alt+N, Ctrl+Tab, Ctrl+PageDown) keep CTRL.
 export const ACCEL = IS_MAC ? META : CTRL;
 
-export async function connect(url) {
+// The last DevTools calls (what a script that stops waits on): see the
+// watchdog below.
+const recentCalls = [];
+function noteCall(what) {
+  recentCalls.push(`${new Date().toISOString().slice(11, 23)} ${what}`);
+  if (recentCalls.length > 6) recentCalls.shift();
+}
+export const lastCalls = () => recentCalls.join(' | ') || 'none';
+
+// A WebSocket that never opens (its target gone: DevTools refuses the
+// upgrade) rejects, after `openTimeout` ms at the latest, instead of
+// leaving the script waiting with nothing else to do (node then exits 13,
+// "unsettled top-level await", with no line saying where) or, with a
+// server or another socket open, until the suite's timeout.
+export async function connect(url, openTimeout = 15000) {
+  noteCall(`connect ${url}`);
   const ws = new WebSocket(url);
   let id = 0;
   const pending = new Map();
@@ -26,9 +41,24 @@ export async function connect(url) {
     const m = JSON.parse(e.data);
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
   };
-  await new Promise(r => (ws.onopen = r));
+  await new Promise((resolve, reject) => {
+    const fail = why => {
+      clearTimeout(timer);
+      reject(new Error(`connect(): ${url} ${why} (the target is gone, or the browser ` +
+                       'does not answer)'));
+    };
+    const timer = setTimeout(() => {
+      fail(`did not open in ${openTimeout} ms`);
+      try { ws.close(); } catch {}
+    }, openTimeout);
+    ws.onopen = () => { clearTimeout(timer); resolve(); };
+    ws.onerror = () => fail('failed to open');
+    ws.onclose = () => fail('closed before it opened');
+  });
+  ws.onerror = ws.onclose = null;
   // Times out instead of hanging when a command closes this target.
   const send = (method, params = {}) => new Promise(resolve => {
+    noteCall(`${method} on ${url}`);
     pending.set(++id, resolve);
     ws.send(JSON.stringify({ id, method, params }));
     setTimeout(() => resolve({ timedOut: true }), 5000);
@@ -36,9 +66,17 @@ export async function connect(url) {
   return { send, close: () => ws.close() };
 }
 
+// The DevTools HTTP endpoint (/json/list, /json/version), with a timeout: a
+// browser stuck (e.g. in a native menu's tracking loop) throws rather than
+// leaving the script waiting.
+async function cdpJson(endpoint) {
+  noteCall(`GET /json/${endpoint}`);
+  return (await fetch(`http://127.0.0.1:${CDP_PORT}/json/${endpoint}`,
+                      { signal: AbortSignal.timeout(30000) })).json();
+}
+
 export async function pages() {
-  return (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
-      .filter(t => t.type === 'page');
+  return (await cdpJson('list')).filter(t => t.type === 'page');
 }
 
 // The pages now, for failure details: "url (id)" each, or why not.
@@ -65,9 +103,41 @@ function reportCrash(e) {
 }
 process.on('uncaughtException', reportCrash);
 process.on('unhandledRejection', reportCrash);
+// Node exits 13 when the script's top-level await never settles (nothing
+// left that could settle it): say so, with what it last waited on, as a
+// FAIL line suite.sh reports.
+process.on('exit', code => {
+  if (code === 13) {
+    console.log(`FAIL  The script stopped: a top-level await never settled (exit 13; ` +
+                `the last DevTools calls: ${lastCalls()})`);
+  }
+});
+// The suite's timeout for this script (scripts/mac/suite.sh sets
+// KOAN_E2E_SECS): 20 s before it, a script still running says what it waits
+// on (the last check and DevTools calls; on macOS then whether a native menu
+// holds the browser, which it closes, so the next script finds Koan free)
+// and stops, instead of the bare "timed out" (the suite stops it at its
+// timeout if closing the menu takes longer: the FAIL line is out first).
+const SUITE_SECS = Number(process.env.KOAN_E2E_SECS || 0);
+if (SUITE_SECS > 60) {
+  setTimeout(async () => {
+    console.log(`FAIL  The script hung: still running after ${SUITE_SECS - 20} s ` +
+                `(after the check "${lastCheck || 'none'}"; the last DevTools calls: ${lastCalls()})`);
+    if (IS_MAC) {
+      try {
+        const mac = await import('./mac.mjs');
+        console.log(`  (${await mac.nativeMenuReport()})`);
+        console.log(`  (the native menu ${await mac.closeNativeMenu() ? 'is closed' : 'stays open'})`);
+      } catch (e) {
+        console.log(`  (no native menu report: ${e.message})`);
+      }
+    }
+    process.exit(1);
+  }, (SUITE_SECS - 20) * 1000).unref();
+}
 
 export async function browserCall(method, params = {}) {
-  const v = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
+  const v = await cdpJson('version');
   const c = await connect(v.webSocketDebuggerUrl);
   const r = await c.send(method, params);
   c.close();
@@ -82,7 +152,12 @@ export async function onPage(page, fn) {
     throw new Error(`onPage(): no such page (${page === undefined ? 'undefined' :
         JSON.stringify(page)}); the pages now: ${await pageList()}`);
   }
-  const c = await connect(page.webSocketDebuggerUrl);
+  let c;
+  try {
+    c = await connect(page.webSocketDebuggerUrl);
+  } catch (e) {
+    throw new Error(`onPage(): ${e.message}; the pages now: ${await pageList()}`);
+  }
   try {
     return await fn(c);
   } finally {
@@ -738,7 +813,9 @@ export async function windowTints() {
 }
 
 let failures = 0;
+let lastCheck = '';
 export function check(name, ok, detail = '') {
+  lastCheck = name;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
   if (!ok) failures++;
 }

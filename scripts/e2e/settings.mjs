@@ -330,7 +330,12 @@ await key(other, VK.B, CTRL | ALT, 'b');
 await waitFor(async () => await navViews() === 1);
 
 // Search: Chromium's one search box finds Koan's settings and shortcuts and
-// Chromium's own.
+// Chromium's own. In the showing tab, as a person searches: Chromium's
+// sections search in requestIdleCallback() tasks (search_settings.ts
+// TaskQueue), which a hidden page stops running 10 s after it is hidden
+// (Blink's kEndIdleWhenHiddenDelay), so in the background tab (`other` is in
+// front for the keys above) they finish only if the search came soon enough.
+await front(settings);
 await evalIn(settings, searchSettings('compact'));
 const paneText = () => evalIn(settings, `koanSettingsRoot.querySelector('#pane').textContent`);
 const found = await waitFor(async () => {
@@ -359,7 +364,8 @@ check('A search for both lists Koan\'s matches and Chromium\'s ("cookies")',
       await waitFor(async () => await koanShown() && await sectionFound('privacy') &&
           await koanCookies(), 10000),
       `Koan shown ${await koanShown()}, its rows say cookies ${await koanCookies()}, ` +
-      `Privacy found ${await sectionFound('privacy')}`);
+      `Privacy found ${await sectionFound('privacy')}; the page is ` +
+      `${await evalIn(settings, 'document.visibilityState')}`);
 // "proxy" is only in Chromium's System section.
 await evalIn(settings, searchSettings('proxy'));
 check('...a Chromium-only search ("proxy") shows Chromium\'s and no Koan block',

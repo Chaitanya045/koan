@@ -6,7 +6,14 @@
 // link's new window (WindowOpenDisposition::kNewWindow), a New Blank Window
 // otherwise, which has no Spaces and so no new-Space form. A second window is
 // opened and closed in each state the sidebar can be in, and after each the
-// browser must still answer, with the first window as it was:
+// browser must still answer, with the first window as it was. A synced
+// window holds every synced tab (Zen's window sync), so closing its tab
+// (CDP Target.closeTarget) leaves it open with the others, and another
+// window's page can move into it: each window is closed as a window
+// (lib/mac.mjs closeWindowOf(): on macOS the test_helper extension of
+// compact_close.mac.flags, chrome.windows.remove, which runs
+// BrowserView::Close like Close Window; elsewhere Ctrl+Shift+W), and its
+// page is served on 127.0.0.1 for the extension to answer:
 // - a plain close;
 // - a close with the sidebar revealed by the edge hot zone;
 // - a close after Ctrl+Alt+S (the sidebar pinned out);
@@ -20,6 +27,7 @@ import { spawn } from 'node:child_process';
 import { ALT, CDP_PORT, browserCall, check, connect, finish, front, key, mouseOn, openSpaceForm,
          pages, sleep, views, waitFor }
     from './lib/koan.mjs';
+import { closeWindowOf, startServer, windowOf } from './lib/mac.mjs';
 
 const VK = { S: 83 };
 const alive = async () => !!(await browserCall('Browser.getVersion')).result?.product;
@@ -30,10 +38,11 @@ const windows = vs => {
 const stripWidths = async () => (await views())
     .filter(v => v.cls === 'VerticalTabStripRegionView').map(v => v.w);
 
+const server = await startServer();
 let serial = 0;
 async function openWindow() {
   const r = await browserCall('Target.createTarget',
-      { url: `https://example.com/?close${++serial}`, newWindow: true });
+      { url: server.url(`/?t=close${++serial}`), newWindow: true });
   const id = r.result.targetId;
   await sleep(2000);
   const page = (await pages()).find(p => p.id === id);
@@ -43,8 +52,18 @@ async function openWindow() {
   await sleep(300);
   return { id, page };
 }
-async function closeWindow(w) {
-  await browserCall('Target.closeTarget', { targetId: w.id });
+// The ids of the windows that have pages.
+const windowIds = async () => new Set((await Promise.all((await pages())
+    .map(p => windowOf(p.id).catch(() => null)))).map(b => b?.windowId).filter(Boolean));
+// Closes w's window (not just its tab, see above) and checks it went.
+async function closeWindow(w, name) {
+  const windowId = (await windowOf(w.id).catch(() => null))?.windowId;
+  const asked = !!w.page && await closeWindowOf(w.page);
+  const gone = asked && !!windowId && await waitFor(async () => !(await windowIds()).has(windowId),
+                                                     8000);
+  check(`${name}: the window closes`, gone,
+        !asked ? `the test_helper extension did not answer (${w.page?.url ?? 'no page'})`
+               : `window ${windowId} still open; the windows: ${[...await windowIds()].join(' ')}`);
   await sleep(1000);
 }
 const first = (await stripWidths())[0];
@@ -52,7 +71,7 @@ const [firstPage] = await pages();
 
 // A plain close.
 let w = await openWindow();
-await closeWindow(w);
+await closeWindow(w, 'A plain close');
 check('A plain close doesn\'t crash', await alive());
 
 // The sidebar revealed by the edge hot zone.
@@ -65,14 +84,14 @@ w = await openWindow();
   if (zone) await mouseOn(zone, 'mouseEntered');
   await sleep(700);
 }
-await closeWindow(w);
+await closeWindow(w, 'A close with the sidebar revealed');
 check('A close with the sidebar revealed doesn\'t crash', await alive());
 
 // Pinned out with Ctrl+Alt+S.
 w = await openWindow();
 await key(w.page, VK.S, ACCEL | ALT, 's');
 await sleep(700);
-await closeWindow(w);
+await closeWindow(w, 'A close with the sidebar pinned out');
 check('A close with the sidebar pinned out doesn\'t crash', await alive());
 
 // Right after the compact toggle, while it animates. Compact mode is the
@@ -80,7 +99,7 @@ check('A close with the sidebar pinned out doesn\'t crash', await alive());
 w = await openWindow();
 await key(w.page, VK.S, ACCEL, 's');
 await sleep(50);
-await closeWindow(w);
+await closeWindow(w, 'A close during the compact toggle');
 check('A close during the compact toggle doesn\'t crash', await alive());
 await key(firstPage, VK.S, ACCEL, 's');
 await sleep(1000);
@@ -97,7 +116,7 @@ const opened = await openSpaceForm(w.page);
 // window's if it goes with it.
 const form = opened.field || await waitFor(async () => (await views())
     .find(v => v.cls === 'KoanSpaceCreationView' && v.shown), 1000);
-await closeWindow(w);
+await closeWindow(w, 'A close with the new-Space form open');
 const formLeft = (await views()).some(v => v.cls === 'KoanSpaceCreationView' && v.shown);
 check('The new-Space form opens in the new window', !!form && !formLeft,
       form ? (formLeft ? 'it stayed: it was in the first window' : opened.how)
