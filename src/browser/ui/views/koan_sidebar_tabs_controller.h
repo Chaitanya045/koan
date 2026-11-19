@@ -119,6 +119,10 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // decides whether a change needs a layout (OnTabChangedAt()). Dropped with
   // the tab.
   std::map<int32_t, bool> empty_tab_by_id_;
+  // Likewise whether each tab was pinned for the user (IsPinnedForUser()):
+  // pinning in place moves the rows in the focus order, a title change
+  // doesn't (power.mjs: no task per title change of a busy page).
+  std::map<int32_t, bool> pinned_tab_by_id_;
   // Z50: the moves of the tab drag started by the last press in the sidebar.
   // Each one after the first is a haptic tick, as Zen's drop target changes
   // are (ZenDragAndDrop: the first is skipped, "too annoying").
