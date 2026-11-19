@@ -669,17 +669,20 @@ void KoanAgentIndicator::InstallChip() {
   chip_.SetView(row);
 }
 
+// The chip and the corner dot are hidden rather than destroyed until the
+// window goes: their menu runs inside their button's callback (a nested loop
+// on the Mac), where what it does (Go to, Stop) updates the indicator.
 void KoanAgentIndicator::UpdateChip() {
   if (!content_.connected) {
     if (views::View* chip = chip_.view()) {
-      chip_.SetView(nullptr);
-      chip->parent()->RemoveChildViewT(chip);
+      chip->SetVisible(false);
     }
     return;
   }
   InstallChip();
   if (auto* row = static_cast<KoanAgentChipRow*>(chip_.view())) {
     row->chip()->SetContent(content_.chip.text, content_.chip.accessible_name);
+    row->SetVisible(true);
   }
 }
 
@@ -694,7 +697,10 @@ void KoanAgentIndicator::UpdateCornerDot() {
   const bool chip_seen = chip && chip->IsDrawn() && !chip->size().IsEmpty() &&
                          !(compact && compact->hides_sidebar());
   if (!content_.connected || content_.pill || chip_seen) {
-    corner_.reset();
+    if (corner_) {
+      corner_->GetContentsView()->SetVisible(false);
+      corner_->Hide();
+    }
     return;
   }
   // The dot, with how many tabs wait.
@@ -718,9 +724,14 @@ void KoanAgentIndicator::UpdateCornerDot() {
     corner_->Show();
     return;
   }
-  static_cast<KoanAgentCornerDot*>(corner_->GetContentsView())
-      ->SetContent(text, content.accessible_name);
+  views::View* dot = corner_->GetContentsView();
+  static_cast<KoanAgentCornerDot*>(dot)->SetContent(text,
+                                                    content.accessible_name);
+  dot->SetVisible(true);
   PlaceInCorner(corner_.get());
+  if (!corner_->IsVisible()) {
+    corner_->Show();
+  }
 }
 
 void KoanAgentIndicator::ScheduleLayoutUpdate() {
@@ -816,7 +827,7 @@ void KoanAgentIndicator::OnBrowserViewLayout() {
   if (pill_) {
     PlaceInCorner(pill_.get());
   }
-  if (corner_) {
+  if (corner_ && corner_->IsVisible()) {
     PlaceInCorner(corner_.get());
   }
   UpdateBorder();
