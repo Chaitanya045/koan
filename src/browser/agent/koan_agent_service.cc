@@ -34,6 +34,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "koan/browser/agent/koan_agent_auth.h"
 #include "koan/browser/agent/koan_agent_forwarder.h"
+#include "koan/browser/agent/koan_agent_frame.h"
 #include "koan/browser/agent/koan_agent_gateway.h"
 #include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/agent/koan_agent_limits.h"
@@ -67,6 +68,7 @@ void WriteDiscoveryFile(base::FilePath file, base::FilePath socket_path) {
   info.Set("socket", socket_path.AsUTF8Unsafe());
   info.Set("pid", static_cast<int>(base::GetCurrentProcId()));
   info.Set("version", version_info::GetVersionNumber());
+  info.Set("agentVersion", kAgentInterfaceVersion);
   const std::optional<std::string> json = base::WriteJson(info);
   // The socket's directory is made 0700 by the gateway before it listens; the
   // fallback socket path (a long --user-data-dir) is elsewhere, so make sure.

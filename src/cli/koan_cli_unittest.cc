@@ -487,7 +487,7 @@ TEST(KoanCliClientTest, PairedClientsAndForgettingOne) {
 // plain pair, take-over of the tab in front, what the tabs use, no
 // AppleScript or debugging port, and how to run koan from another machine.
 TEST(KoanCliSkillTest, TheGuideCoversPairingTakeOverAndSsh) {
-  const std::string guide = SkillGuide();
+  const std::string guide = SkillGuide("");
   for (const char* needed : {
            "koan pair --label",
            "koan take-over",

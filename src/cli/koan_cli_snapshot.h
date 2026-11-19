@@ -25,7 +25,31 @@ struct SnapshotOptions {
   // Every node the tree shows (inline text boxes, line breaks, each text
   // run, a ref on every node), instead of the compact outline.
   bool full = false;
+  // Only what an agent acts on (controls, links, focusable and editable
+  // nodes, with their names, values and states), the headings and dialogs
+  // around them, and the text of alerts and status messages. A closed
+  // dropdown's options are left out (its value is on its line; `choose`
+  // finds an option by its text).
+  bool interactive = false;
+  // Only the subtree of the node with this backend DOM node id (0: the
+  // whole page). Open popups are not put first then.
+  int root = 0;
+  // After each ref, a locator (loc:role=...[name="..."]) when no other
+  // node of the tree has that role and name.
+  bool locators = false;
   size_t max_lines = 1500;
+};
+
+// One line of the outline.
+struct SnapshotLine {
+  // The backend DOM node id of what the line shows (a text line: its first
+  // run's), 0 if none (a popup's heading).
+  int node = 0;
+  int depth = 0;
+  // Without the indent.
+  std::string text;
+  // Shown whatever the scope: the page's own line and open popups.
+  bool pinned = false;
 };
 
 struct Snapshot {
@@ -34,15 +58,16 @@ struct Snapshot {
   // not: a ref is the node's id in both outlines, so a ref from --full works
   // after a compact snapshot of the same page, and the other way round.
   std::vector<int> refs;
+  std::vector<SnapshotLine> lines;
+  // The outline stopped at max_lines.
+  bool truncated = false;
+  // `root` is not a node of the tree.
+  bool root_missing = false;
 };
 
-// The outline: one line per node, indented by depth,
-//   role "name" = "value" [states] @ref
-// Compact (the default) leaves out inline text boxes and line breaks, joins
-// the text runs of a block into one line, drops text that only repeats the
-// name of the node it is in, flattens unnamed containers, and shows a ref
-// only on what an agent acts on or finds its way by (controls, links,
-// focusable and editable nodes, landmarks, headings, frames).
+// Whitespace runs as one space, none at the ends.
+std::string CollapseSpace(std::string_view text);
+
 Snapshot BuildSnapshot(const base::DictValue& ax_tree,
                        const SnapshotOptions& options);
 
@@ -51,6 +76,50 @@ Snapshot BuildSnapshot(const base::DictValue& ax_tree,
 // set: checked, mixed, pressed, selected, expanded / collapsed, disabled,
 // required, readonly, invalid, focused, modal, and a heading's level.
 std::string StatesText(const base::DictValue& ax_node);
+
+// The outline cut to lines [first, end) of `snapshot.lines` (the viewport,
+// ViewportSearch), with its pinned lines wherever they are, and "[more
+// above: N nodes]" and "[more below: N nodes]" for what was cut.
+std::string RenderWindow(const Snapshot& snapshot, size_t first, size_t end);
+
+// --- Diffs: what changed since the last snapshot ----------------------------
+
+// What the holder keeps of a tab's last snapshot, to compare the next one
+// with: its document (a new one resets the baseline), what kind of outline
+// it was (compact, interactive, full, and the scope root), and its lines.
+struct Baseline {
+  std::string document;
+  std::string kind;
+  std::vector<SnapshotLine> lines;
+};
+// The kind of outline `options` gives, for Baseline::kind.
+std::string BaselineKind(const SnapshotOptions& options);
+base::DictValue BaselineToValue(const Baseline& baseline);
+std::optional<Baseline> BaselineFromValue(const base::DictValue& value);
+
+// The holder's baselines: the last snapshot of each tab, of this client.
+class Baselines {
+ public:
+  Baselines();
+  Baselines(const Baselines&) = delete;
+  Baselines& operator=(const Baselines&) = delete;
+  ~Baselines();
+
+  // Keeps `next` for `target`, and returns the one it replaces.
+  std::optional<Baseline> Swap(const std::string& target, Baseline next);
+
+ private:
+  std::map<std::string, Baseline> pages_;
+};
+
+// What `--diff` prints: the lines added ("+ "), changed ("~ ", as they are
+// now) and removed ("- ", as they were) since `previous`, under a count; or,
+// when there is nothing to compare with (no snapshot before, another page,
+// another kind of outline), "baseline reset (why)" and `full_text`, the
+// whole outline.
+std::string DiffText(const std::optional<Baseline>& previous,
+                     const Baseline& now,
+                     std::string_view full_text);
 
 // --- Refs: which page a ref belongs to ---------------------------------------
 

@@ -248,6 +248,18 @@ std::string Describe(const std::optional<Message>& answer) {
   return error.code + ": " + error.message;
 }
 
+std::optional<Discovery> ReadDiscovery(const base::FilePath& user_data_dir) {
+  std::string json;
+  if (!base::ReadFileToString(DiscoveryFile(user_data_dir), &json)) {
+    return std::nullopt;
+  }
+  std::optional<Discovery> discovery = ParseDiscovery(json);
+  if (!discovery || (kill(discovery->pid, 0) != 0 && errno == ESRCH)) {
+    return std::nullopt;
+  }
+  return discovery;
+}
+
 std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
                                           std::string* error) {
   const base::FilePath file = DiscoveryFile(user_data_dir);

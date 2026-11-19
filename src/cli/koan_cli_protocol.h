@@ -28,8 +28,16 @@ struct Discovery {
   std::string socket;
   int pid = 0;
   std::string version;
+  // agent::kAgentInterfaceVersion of the browser; 0 if it does not say (an
+  // older one).
+  int agent_version = 0;
 };
 std::optional<Discovery> ParseDiscovery(std::string_view json);
+
+// The [koan:notice] line for a browser whose interface version differs from
+// this koan's (`ours`), or "" if they agree. `discovery`: nullopt if Koan
+// is not running (nothing to compare with).
+std::string VersionNotice(const std::optional<Discovery>& discovery, int ours);
 
 // The browser's profile directory: $KOAN_USER_DATA_DIR, else Koan's default
 // (~/Library/Application Support/Koan on the Mac, ~/.config/koan elsewhere).

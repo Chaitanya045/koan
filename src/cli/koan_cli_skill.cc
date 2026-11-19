@@ -4,10 +4,15 @@
 
 #include "koan/cli/koan_cli_skill.h"
 
+#include "base/strings/string_number_conversions.h"
+#include "koan/browser/agent/koan_agent_frame.h"
+
 namespace koan::cli {
 
-std::string SkillGuide() {
-  return R"(# Using Koan, the user's browser
+std::string SkillGuide(const std::string& notice) {
+  // The notice first, so that an agent reads it before it trusts the rest;
+  // the end line last, so that it knows it read all of it.
+  return notice + R"(# Using Koan, the user's browser
 
 Koan is the user's own web browser. With `koan`, you open and work in tabs
 of your own in it, and, when the user agrees, in a tab of theirs. Your tabs
@@ -33,45 +38,84 @@ the way in, and it is the one the user approved.
    task; `--saved <name>` uses a saved container the user allowed you (it
    keeps its own logins). If that is refused (Koan.notGranted), tell the
    user: only they can allow it, in Settings > Agent Control.
-3. Look: `koan snapshot <tab>` prints the page as a compact outline:
-   controls, links, landmarks and headings with @refs, each block's text on
-   one line, states in brackets ([checked], [selected], [expanded],
-   [collapsed], [disabled], [required], ...). `--full` prints every node of
-   the tree (same refs) when you need more. `koan screenshot <tab> -o
-   shot.png` saves what it shows.
-4. Act, and see the result in the same reply: `koan act <tab> click @12
-   --snapshot`. Every act waits until the page has settled (a navigation
-   committed and loaded, the network and the DOM quiet for a moment, at
-   most about 3 s), then prints `ok`; with `--snapshot` (use it) the new
-   snapshot follows, so never `sleep` and never run a separate snapshot
-   after an act. The actions: `click @12`, `fill @34 "text"`, `select @56
-   "Option"` (a native <select>; fill on one does the same), `choose @56
-   "Option text"` (any dropdown: a <select>, or a custom one such as a
-   Material or react-select dropdown, which it opens, finds the option in,
-   clicks, and checks; it fails naming the options there are), `press
-   Enter`, `scroll 600`, `navigate <url>`. For every dropdown, use
-   `koan act <tab> choose @56 "Option text" --snapshot`.
+3. Look: `koan snapshot <tab> --interactive` prints what you can act on:
+   controls, links, focusable and editable elements with their names,
+   values and states in brackets ([checked], [selected], [expanded],
+   [collapsed], [disabled], [required], [invalid], ...), each with an
+   @ref, plus the headings and dialogs around them and the text of alerts
+   and status messages. Plain `koan snapshot <tab>` adds the page's text
+   (each block on one line); `--full` prints every node of the tree (same
+   refs). A long page (over 250 lines) is cut to what the viewport shows,
+   with `[more above: N nodes]` / `[more below: N nodes]`; `--scope full`
+   prints all of it, `--scope @12` only that element and what is in it.
+   An open dropdown's list, a menu or a dialog is printed first, under a
+   "popup" line naming the control that opened it. `koan screenshot <tab>
+   -o shot.png` saves what the tab shows.
+   Refs are the page's own node ids: they stay while the element stays
+   (typing, clicks, changes elsewhere), and refs from before a navigation
+   or reload fail (Koan.staleRef). A page that re-creates an element gives
+   it a new ref; a locator finds it by what it is:
+   `'loc:role=button[name="Continue"]'` (single quotes in a shell) works
+   wherever @ref does, and must name exactly one element (else it fails,
+   listing the candidates).
+   `--locators` prints one after each ref that has one.
+4. Act in batches. One `koan act` runs several steps in order, each once
+   the page has settled from the one before (a navigation committed and
+   loaded, the network and the DOM quiet for a moment, at most about 3 s),
+   so never `sleep`. The steps: `click @12`, `fill @34 "text"` (several:
+   `fill @34="Ada" @35="Lovelace"`), `select @56 "Option"` (a native
+   <select>), `choose @56 "Option text"` (any dropdown, a <select> or a
+   custom one such as a Material or react-select dropdown: it opens it,
+   clicks the option, and checks; it fails naming the options there are;
+   use it for every dropdown: `koan act <tab> choose @56 "Option text"`),
+   `press Enter`, `scroll 600`, `navigate <url>`. Up to 50 steps.
+   Each step prints one line (`2/4 fill @13: ok`). The batch stops at the
+   first step that fails, and before any step if the user has taken the
+   tab (Koan.paused) or the page waits for them (Koan.userNeeded): it says
+   where it stopped, why, and which steps did not run. `--until
+   url~/step-2` (or `text~Saved`, `@12~Saved`, `"@31 gone"`) waits after
+   the last step until that holds (Koan.untilTimeout if not within
+   `--timeout`, 15 s). `--snapshot` prints the snapshot after it;
+   `--diff` prints only what changed since your last snapshot of the tab
+   (+ added, ~ changed, - removed), or "baseline reset" and the whole
+   snapshot on a new page. `koan help act` lists every option.
    `navigate` returns once the server answers: `ok (HTTP 504 Gateway
    Timeout)` (exit 0) means the server sent an error page, which the
    snapshot shows; Koan.loadFailed means no page at all (a bad address, a
    refused connection); Koan.timeout means the server did not answer in
    15 s (`--timeout 60` waits longer; the tab keeps waiting meanwhile).
-   An open dropdown's list, a menu or a dialog is printed first in a
-   snapshot, under a "popup" line naming the control that opened it.
    An action that changed nothing fails and says why; it never prints
-   "ok". Refs belong to the page as it was: a ref from before a
-   navigation or reload fails with Koan.staleRef (use the refs of the
-   snapshot the act printed). Other errors say what to do next
-   (Koan.notVisible: open or scroll to what hides it; Koan.pageChanged:
-   snapshot again). If "ok" is followed by an error (Koan.userNeeded,
-   Koan.paused), the action was done, and then the page needed the user.
-   Many commands in a row: `koan shell` reads one command per line on
-   stdin (`act ab12 fill @3 "Ada" --snapshot`; a leading `koan` is fine)
-   over one connection, and ends each answer with a line `--- exit N`;
-   `koan shell --stop-on-error <<'EOF'` with several lines is a batch that
-   stops at the first failure. JSON lines work too: `{"id": 1, "args":
-   ["act", "ab12", "click", "@4"]}` is answered with `{"id": 1, "exit":
-   0, "out": "...", "err": ""}`.
+   "ok". Other errors say what to do next (Koan.notVisible: open or scroll
+   to what hides it; Koan.pageChanged: snapshot again). If "ok" is
+   followed by an error (Koan.userNeeded, Koan.paused), the action was
+   done, and then the page needed the user.
+
+   The loop that takes the fewest turns:
+     a. `koan snapshot <tab> --interactive`
+     b. `koan act <tab> fill @12 "Ada" fill @13 "Lovelace" choose @20 "UK"
+        click @31 --until url~/step-2 --interactive --diff`
+     c. read what it printed: did --until hold, what does the page say now
+        (an error next to a field, a new heading)? Then the next batch.
+   Rules:
+   - Verify by reading the result (the snapshot or diff after the batch,
+     the URL, an alert's or a field's text), never by a step's "ok": "ok"
+     means the click or the typing happened and the page settled, not that
+     the site accepted it.
+   - Never retry blindly. When a step fails or the page is not what you
+     expected, look first (`koan snapshot <tab> --interactive`, or
+     `--scope @ref` for one part), then change what you do. Running the
+     same thing again fails the same way, or does it twice (a second
+     submit, a second order).
+   - A familiar URL does not tell you whose account it is: before changing
+     anything, check the name or email the page shows.
+
+   Many commands over one connection: `koan shell` reads one command per
+   line on stdin (`act ab12 fill @3 "Ada" --snapshot`; a leading `koan` is
+   fine) and ends each answer with a line `--- exit N`; `koan shell
+   --stop-on-error <<'EOF'` with several lines stops at the first failure.
+   JSON lines work too: `{"id": 1, "args": ["act", "ab12", "click",
+   "@4"]}` is answered with `{"id": 1, "exit": 0, "out": "...", "err":
+   ""}`.
    With agent-browser installed, `koan agent-browser <its usual args>` runs
    it against Koan instead (the first time, the user approves koan-relay).
 5. A tab of the user's (to work on a page they have open, signed in): tell
@@ -121,7 +165,8 @@ login rather than mixing it with other programs. Each ssh connection costs
 a few hundred milliseconds: reuse one for every command (`ssh -o
 ControlMaster=auto -o ControlPath=/tmp/koan-ssh-%C -o ControlPersist=10m
 <mac> ...`), or send many commands through one `ssh <mac> <koan path> shell`.
-)";
+)" + "[koan:skill] end of guide v" +
+         base::NumberToString(agent::kAgentInterfaceVersion) + "\n";
 }
 
 }  // namespace koan::cli

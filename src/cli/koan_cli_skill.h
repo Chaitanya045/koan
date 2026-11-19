@@ -11,8 +11,9 @@ namespace koan::cli {
 
 // The guide `koan skill` prints (.agent/notes/agent-control.md section 12):
 // written from this version's commands, so the installed skill, which only
-// says "run koan skill", is never stale.
-std::string SkillGuide();
+// says "run koan skill", is never stale. `notice` (VersionNotice(), or "")
+// comes first; the last line is "[koan:skill] end of guide v<version>".
+std::string SkillGuide(const std::string& notice);
 
 }  // namespace koan::cli
 

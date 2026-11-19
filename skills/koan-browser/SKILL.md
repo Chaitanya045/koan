@@ -9,7 +9,16 @@ Koan is the user's web browser. Agents use it with the `koan` command,
 never with AppleScript or a remote debugging port.
 
 Before any browser task, run `koan skill` and follow the guide it prints.
-It comes from the installed Koan, so it is always current.
+It comes from the installed Koan, so it is always current. Its last line is
+`[koan:skill] end of guide v<N>`: if that is missing, the output was cut,
+so read it again. A `[koan:notice]` line means this `koan` and the running
+Koan disagree on versions: tell the user. `koan help <command>` gives a
+command's exact options.
+
+The loop that takes the fewest turns: `koan snapshot <tab> --interactive`,
+then one `koan act <tab> <step> <step> ... --until <condition> --diff` for
+a whole page of a form, then read what it printed (not just "ok") before
+the next batch.
 
 If `koan` is not found, use its full path:
 `~/.local/bin/koan`, `~/Applications/Koan.app/Contents/Resources/bin/koan`

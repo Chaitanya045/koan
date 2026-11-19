@@ -47,7 +47,27 @@ std::optional<Discovery> ParseDiscovery(std::string_view json) {
   if (const std::string* version = dict->FindString("version")) {
     discovery.version = *version;
   }
+  discovery.agent_version = dict->FindInt("agentVersion").value_or(0);
   return discovery;
+}
+
+std::string VersionNotice(const std::optional<Discovery>& discovery, int ours) {
+  if (!discovery || discovery->agent_version == ours) {
+    return std::string();
+  }
+  const std::string theirs =
+      discovery->agent_version
+          ? "v" + base::NumberToString(discovery->agent_version)
+          : "an older one";
+  return "[koan:notice] this koan speaks agent interface v" +
+         base::NumberToString(ours) + ", the running Koan (" +
+         (discovery->version.empty() ? std::string("version unknown")
+                                     : discovery->version) +
+         ") speaks " + theirs +
+         ": this koan is not the one that came with it (an old "
+         "~/.local/bin/koan, or another Koan.app). Some commands may fail; "
+         "run the koan inside the running Koan.app, or tell the user to "
+         "update Koan or set up agents again (Settings > Agent Control).\n";
 }
 
 base::FilePath DefaultUserDataDir(const base::FilePath& home,

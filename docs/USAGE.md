@@ -1547,6 +1547,18 @@ even when the page renders it at the end of the body. `koan shell` runs
 commands read from stdin, one per line, over one connection (each answer
 ends with `--- exit N`; JSON lines get JSON answers), which is how an
 agent on another machine sends many commands through one ssh session.
+One `koan act` can also run several steps (`koan act <tab> fill @12 "Ada"
+fill @13 "Lovelace" choose @20 "UK" click @31 --until url~/step-2
+--snapshot`, at most 50), each once the page settled from the one before.
+Before each step it checks the tab: when you start using it (or press Take
+over) or the page waits for you, the batch stops there and says which steps
+did not run, so it never keeps typing after you take the mouse. A step can
+name its element by a locator, `loc:role=button[name="Continue"]`, which
+must match exactly one. `koan snapshot --interactive` prints only what can
+be acted on, `--diff` only what changed since the agent's last snapshot of
+the tab, and a long page is cut to the viewport with `[more below: N
+nodes]` (`--scope full` prints all of it). `koan help <command>` lists a
+command's options.
 If `koan` is started by another program than the agent you approved (the
 approval pins that agent), Koan asks you again and `koan` says why while it
 waits. `koan skill` prints the guide

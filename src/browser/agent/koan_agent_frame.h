@@ -32,6 +32,15 @@ inline constexpr size_t kMaxPreAuthPayload = 4 * 1024;
 // as IO stream reads in chunks.
 inline constexpr size_t kMaxPayload = 32 * 1024 * 1024;
 
+// The version of agent control's interface, shared by the `koan` tool and
+// the browser it was built with: the browser writes it into its discovery
+// file (AgentControl/agent.json, "agentVersion"), and koan prints a
+// [koan:notice] when the running browser's differs from its own (an old
+// ~/.local/bin/koan, another Koan.app). Raise it when either starts to
+// expect something new of the other. 2: koan act batches, snapshot
+// --interactive, --scope, --diff and locators.
+inline constexpr int kAgentInterfaceVersion = 2;
+
 // A peer that has not authenticated gets this many frames, in total, before the
 // decoder fails: pairing and authentication need two or three.
 inline constexpr int kMaxPreAuthFrames = 4;

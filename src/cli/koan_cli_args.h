@@ -10,6 +10,8 @@
 #include <string_view>
 #include <vector>
 
+#include "koan/cli/koan_cli_batch.h"
+
 // The command line of the `koan` tool (.agent/notes/agent-control.md section
 // 12). Pure: no I/O, so that every way of calling it is unit tested.
 namespace koan::cli {
@@ -48,20 +50,6 @@ enum class CommandKind {
   kShell,
 };
 
-enum class ActKind {
-  kClick,
-  kFill,
-  // Chooses an option of a dropdown (<select>), by its label or value.
-  kSelect,
-  // Chooses an option of any dropdown: a <select> as kSelect does, a custom
-  // one (an ARIA combobox, a button with a listbox) by opening it and
-  // clicking the option, by its text.
-  kChoose,
-  kPress,
-  kScroll,
-  kNavigate,
-};
-
 struct Command {
   CommandKind kind = CommandKind::kHelp;
 
@@ -90,10 +78,25 @@ struct Command {
   std::string output;
   // snapshot: --full, every node of the tree instead of the compact outline.
   bool full = false;
+  // snapshot, and act's snapshot after: --interactive (only what an agent
+  // acts on), --scope (viewport, full, auto, or @ref; "" is auto: the whole
+  // page unless it is long, then the viewport), --diff (what changed since
+  // the last snapshot of the tab), --locators (a locator after each ref
+  // that names one node).
+  bool interactive = false;
+  std::string scope;
+  bool diff = false;
+  bool locators = false;
 
-  // act.
+  // act: its steps, in order (koan_cli_batch.h). `act`, `ref`, `text` and
+  // `scroll_by` are the step being run (the first one, once parsed).
+  std::vector<Step> steps;
+  // --steps FILE ("-": stdin): more steps, read when the command runs.
+  std::string steps_file;
+  // --until: what the batch waits for after its last step.
+  std::optional<Until> until;
   ActKind act = ActKind::kClick;
-  // click, fill, select: "@123" from a snapshot.
+  // click, fill, select, choose: "@123" from a snapshot, or a locator.
   std::string ref;
   // fill: the text; select, choose: the option; press: the key; navigate:
   // the URL.
@@ -101,9 +104,10 @@ struct Command {
   // scroll: pixels down (negative: up).
   int scroll_by = 0;
   // --snapshot: print the compact snapshot after "ok", once the page has
-  // settled.
+  // settled (also set by the snapshot options above).
   bool snapshot_after = false;
-  // --timeout: how long a navigation may take to commit, in seconds.
+  // --timeout: how long a navigation may take to commit, and --until may
+  // wait, in seconds.
   int timeout_seconds = 15;
 
   // shell: --stop-on-error, stop at the first command that fails.
@@ -111,6 +115,9 @@ struct Command {
 
   // __hold: the fd to say "ready" on.
   int ready_fd = -1;
+
+  // help: the command to explain ("" for all of them).
+  std::string help_topic;
 
   // agent-browser: its arguments, as given. relay: --session.
   std::vector<std::string> passthrough;
@@ -135,6 +142,9 @@ std::optional<std::string> ResolveTab(std::string_view given,
                                       const std::vector<std::string>& ids);
 
 std::string UsageText();
+// `koan help <command>`: its exact form and every option; nullopt for a
+// command it does not know.
+std::optional<std::string> HelpText(std::string_view command);
 
 // One line of `koan shell`'s input. Either a command line as a shell would
 // split it ('single' and "double" quotes, \ escapes; a leading "koan" is

@@ -23,6 +23,8 @@ source_set("cli_lib") {
     "koan_cli_admission.h",
     "koan_cli_args.cc",
     "koan_cli_args.h",
+    "koan_cli_batch.cc",
+    "koan_cli_batch.h",
     "koan_cli_io.cc",
     "koan_cli_io.h",
     "koan_cli_protocol.cc",
@@ -123,6 +125,7 @@ if (is_mac) {
 #   out/Koan/koan_cli_unittests
 test("koan_cli_unittests") {
   sources = [
+    "koan_cli_batch_unittest.cc",
     "koan_cli_settle_unittest.cc",
     "koan_cli_unittest.cc",
     "koan_relay_gate_unittest.cc",

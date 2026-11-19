@@ -97,6 +97,12 @@ class Link {
   void SetEventSink(base::RepeatingCallback<void(const Message&)> sink) {
     sink_ = std::move(sink);
   }
+  // Gives an event read with Next() to the sink, as Call() would.
+  void PassEvent(const Message& event) {
+    if (sink_) {
+      sink_.Run(event);
+    }
+  }
 
  private:
   std::unique_ptr<FrameChannel> channel_;
@@ -105,6 +111,10 @@ class Link {
 };
 
 std::string Describe(const std::optional<Message>& answer);
+
+// The running browser's discovery file; nullopt if there is none, or the
+// browser that wrote it is gone.
+std::optional<Discovery> ReadDiscovery(const base::FilePath& user_data_dir);
 
 // Dials the browser's socket from its discovery file.
 std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
